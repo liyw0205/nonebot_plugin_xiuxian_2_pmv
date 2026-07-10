@@ -9,6 +9,7 @@ from ..adapter_compat import (
     get_user_id,
 )
 from ..adapter_message_actions import delete_message_compat
+from ..adapter_message_records import record_send_message
 from ..adapter_message_sender import send_group_message, send_private_message
 from .models import SendRequest, SendResult
 
@@ -19,6 +20,8 @@ class MessageDeliveryService:
     async def send(self, bot: Any, request: SendRequest, **kwargs: Any) -> SendResult:
         if request.reference_id:
             kwargs.setdefault("message_reference_id", request.reference_id)
+        if request.source_message_id:
+            kwargs.setdefault("source_message_id", request.source_message_id)
         if request.revoke_after:
             kwargs.setdefault("revoke_after", request.revoke_after)
 
@@ -36,9 +39,77 @@ class MessageDeliveryService:
                 message=request.message,
                 **kwargs,
             )
+        elif request.scene == "channel_group":
+            source_message_id = str(kwargs.pop("source_message_id", "") or "")
+            kwargs.pop("message_reference_id", None)
+            kwargs.pop("msg_seq", None)
+            if source_message_id:
+                kwargs.setdefault("msg_id", source_message_id)
+            raw = await bot.send_to_channel(
+                channel_id=request.target_id,
+                message=request.message,
+                **kwargs,
+            )
+            result = SendResult.from_raw(raw)
+            record_send_message(
+                bot,
+                scene=request.scene,
+                message=request.message,
+                message_id=result.message_id or "",
+                source_message_id=source_message_id,
+                group_id=request.target_id,
+                raw_result=raw,
+            )
+        elif request.scene == "channel_private":
+            source_message_id = str(kwargs.pop("source_message_id", "") or "")
+            kwargs.pop("message_reference_id", None)
+            kwargs.pop("msg_seq", None)
+            if source_message_id:
+                kwargs.setdefault("msg_id", source_message_id)
+            raw = await bot.send_to_dms(
+                guild_id=request.target_id,
+                message=request.message,
+                **kwargs,
+            )
+            result = SendResult.from_raw(raw)
+            record_send_message(
+                bot,
+                scene=request.scene,
+                message=request.message,
+                message_id=result.message_id or "",
+                source_message_id=source_message_id,
+                user_id=request.target_id,
+                raw_result=raw,
+            )
         else:
             raise ValueError(f"不支持的消息场景: {request.scene}")
-        return SendResult.from_raw(raw)
+        return result if request.scene.startswith("channel_") else SendResult.from_raw(raw)
+
+    async def send_to_channel(
+        self,
+        bot: Any,
+        channel_id: Any,
+        message: Any,
+        **kwargs: Any,
+    ) -> SendResult:
+        return await self.send(
+            bot,
+            SendRequest("channel_group", str(channel_id), message),
+            **kwargs,
+        )
+
+    async def send_to_channel_user(
+        self,
+        bot: Any,
+        guild_id: Any,
+        message: Any,
+        **kwargs: Any,
+    ) -> SendResult:
+        return await self.send(
+            bot,
+            SendRequest("channel_private", str(guild_id), message),
+            **kwargs,
+        )
 
     async def send_to_group(
         self,
@@ -76,15 +147,20 @@ class MessageDeliveryService:
         scene = get_chat_scene(event)
         if scene in {"group", "channel_group"}:
             request = SendRequest(
-                "group",
+                scene,
                 str(get_group_id(event)),
                 message,
                 reference_id=get_message_reference_id(event),
             )
         elif scene in {"private", "channel_private"}:
+            target_id = (
+                getattr(event, "guild_id", None)
+                if scene == "channel_private"
+                else get_user_id(event)
+            )
             request = SendRequest(
-                "private",
-                str(get_user_id(event)),
+                scene,
+                str(target_id),
                 message,
                 reference_id=get_message_reference_id(event),
             )

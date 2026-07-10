@@ -166,6 +166,34 @@ await send_private_message(bot, user_id=user_id, message="私聊内容")
 - QQ 普通群/C2C 支持 `reference_id`、`msg_ref_id` 等引用参数。
 - 新业务代码不要再直接依赖 `bot.send_group_msg(...)` / `bot.send_private_msg(...)` 作为跨适配器接口。
 
+## 统一消息投递门面
+
+新增业务和 Web 面板发送优先使用 `messaging.delivery_service`。该门面复用现有
+`adapter_message_sender.py`、`adapter_message_actions.py` 和
+`adapter_message_records.py`，不直接实现第二套 Adapter 发送逻辑：
+
+```python
+from .messaging import SendRequest, delivery_service
+
+result = await delivery_service.send(
+    bot,
+    SendRequest(
+        scene="group",
+        target_id=group_id,
+        message="通知内容",
+        reference_id=reference_id,
+        source_message_id=source_message_id,
+    ),
+)
+```
+
+当前支持 `group`、`private`、`channel_group` 和 `channel_private`。返回值统一为
+`SendResult`，包含 `message_id`、`reference_id` 和原始 Adapter 响应。Web 消息发送
+与撤回已经接入该门面；OneBot 合并转发仍作为平台特有能力保留专用路径。
+
+`source_message_id` 用于 QQ 回复窗口和消息记录回复计数，`reference_id` 用于引用
+回复。两者语义不同，不应互相替代。
+
 ## 引用回复
 
 QQ 官方普通群与 C2C 的引用回复必须使用平台返回的 `REFIDX`，不是普通消息 ID。兼容层会在 `patch_event_inplace()` 时把它补到 `event.message_reference_id` / `event.reference_id`。通用业务发送可通过配置 `reference_reply=True` 走 `send_reference_reply(...)`；开启后 `send_msg_handler` 会避开合并转发 API，改走普通消息发送。底层仍支持显式传 `auto_reference=True` 或引用参数。

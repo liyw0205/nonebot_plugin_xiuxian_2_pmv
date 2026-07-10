@@ -122,6 +122,23 @@ class SourceQualityTests(unittest.TestCase):
             "Web modules importing core with *: " + ", ".join(violations),
         )
 
+    def test_web_message_send_uses_delivery_service(self) -> None:
+        messages = SOURCE_ROOT / "xiuxian" / "xiuxian_web" / "messages.py"
+        source = messages.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(messages))
+        send_route = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "api_messages_send"
+        )
+        send_source = ast.get_source_segment(source, send_route) or ""
+
+        self.assertIn("delivery_service.send", send_source)
+        self.assertNotIn("bot.send_to_group", send_source)
+        self.assertNotIn("bot.send_to_c2c", send_source)
+        self.assertNotIn("bot.send_to_channel", send_source)
+        self.assertNotIn("bot.send_to_dms", send_source)
+
     def test_activity_rule_helpers_have_explicit_dependencies(self) -> None:
         activity_rules = SOURCE_ROOT / "xiuxian" / "xiuxian_activity" / "activity_rules.py"
         tree = ast.parse(

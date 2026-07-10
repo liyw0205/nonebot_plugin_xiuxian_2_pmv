@@ -11,9 +11,7 @@ from .core import (
     build_web_message_segment,
     datetime,
     db_backend,
-    delete_message_compat,
     extract_result_message_id,
-    extract_result_reference_id,
     get_bot_by_adapter,
     get_bot_id,
     get_bots,
@@ -41,6 +39,7 @@ from .core import (
     url_for,
 )
 from ..broadcast_manager import format_broadcast_status, start_broadcast
+from ..messaging import SendRequest, delivery_service
 from ..xiuxian_utils import message_db as message_db_config
 
 
@@ -141,16 +140,6 @@ def _prepare_session_rows(rows: list[dict], conn=None) -> list[dict]:
         r["avatar_text"] = str(title)[:1] if title else "?"
 
     return rows
-
-
-def _run_qq_send_with_optional_msg_ref(send_func, **kwargs):
-    try:
-        return run_async(send_func(**kwargs))
-    except TypeError as e:
-        if "msg_ref_id" not in str(e):
-            raise
-        kwargs.pop("msg_ref_id", None)
-        return run_async(send_func(**kwargs))
 
 
 @app.route('/messages')
@@ -970,57 +959,31 @@ def api_messages_send():
             )
 
             if scene == "group":
-                result = run_async(
-                    bot.call_api(
-                        "send_group_msg",
-                        group_id=int(target_id),
-                        message=message_obj,
+                send_result = run_async(
+                    delivery_service.send(
+                        bot,
+                        SendRequest("group", target_id, message_obj),
                     )
-                )
-
-                message_id = extract_result_message_id(result)
-
-                record_web_send_message(
-                    bot,
-                    scene="group",
-                    message_id=message_id,
-                    source_message_id="",
-                    group_id=target_id,
-                    user_id="",
-                    message=content or f"[{media_type}]",
                 )
 
                 return jsonify({
                     "success": True,
                     "message": "发送成功",
-                    "message_id": message_id,
+                    "message_id": send_result.message_id,
                 })
 
             elif scene == "private":
-                result = run_async(
-                    bot.call_api(
-                        "send_private_msg",
-                        user_id=int(target_id),
-                        message=message_obj,
+                send_result = run_async(
+                    delivery_service.send(
+                        bot,
+                        SendRequest("private", target_id, message_obj),
                     )
-                )
-
-                message_id = extract_result_message_id(result)
-
-                record_web_send_message(
-                    bot,
-                    scene="private",
-                    message_id=message_id,
-                    source_message_id="",
-                    group_id="",
-                    user_id=target_id,
-                    message=content or f"[{media_type}]",
                 )
 
                 return jsonify({
                     "success": True,
                     "message": "发送成功",
-                    "message_id": message_id,
+                    "message_id": send_result.message_id,
                 })
 
             return jsonify({
@@ -1114,84 +1077,31 @@ def api_messages_send():
 
                     qq_message_obj = build_qq_message_obj(message_reference_id)
 
-                    if scene == "group":
-                        send_kwargs = {
-                            "group_openid": target_id,
-                            "message": qq_message_obj,
-                            "msg_seq": random.randint(1, 900000),
-                            "msg_ref_id": message_reference_id or None,
-                        }
-                        if source_message_id:
-                            send_kwargs["msg_id"] = source_message_id
-                        result = _run_qq_send_with_optional_msg_ref(bot.send_to_group, **send_kwargs)
-
-                        group_id = target_id
-                        user_id = ""
-
-                    elif scene == "private":
-                        send_kwargs = {
-                            "openid": target_id,
-                            "message": qq_message_obj,
-                            "msg_seq": random.randint(1, 900000),
-                            "msg_ref_id": message_reference_id or None,
-                        }
-                        if source_message_id:
-                            send_kwargs["msg_id"] = source_message_id
-                        result = _run_qq_send_with_optional_msg_ref(bot.send_to_c2c, **send_kwargs)
-
-                        group_id = ""
-                        user_id = target_id
-
-                    elif scene == "channel_group":
-                        send_kwargs = {
-                            "channel_id": target_id,
-                            "message": qq_message_obj,
-                        }
-                        if source_message_id:
-                            send_kwargs["msg_id"] = source_message_id
-                        result = run_async(bot.send_to_channel(**send_kwargs))
-
-                        group_id = target_id
-                        user_id = ""
-
-                    elif scene == "channel_private":
-                        send_kwargs = {
-                            "guild_id": target_id,
-                            "message": qq_message_obj,
-                        }
-                        if source_message_id:
-                            send_kwargs["msg_id"] = source_message_id
-                        result = run_async(bot.send_to_dms(**send_kwargs))
-
-                        group_id = ""
-                        user_id = target_id
-
-                    else:
+                    if scene not in ("group", "private", "channel_group", "channel_private"):
                         return jsonify({
                             "success": False,
                             "error": "无效 QQ scene",
                         })
 
-                    message_id = extract_result_message_id(result)
-                    result_reference_id = extract_result_reference_id(result)
-
-                    record_web_send_message(
-                        bot,
-                        scene=scene,
-                        message_id=message_id,
-                        reference_id=result_reference_id,
-                        source_message_id=source_message_id,
-                        group_id=group_id,
-                        user_id=user_id,
-                        message=content or f"[{media_type}]",
-                        raw_result=result,
+                    send_result = run_async(
+                        delivery_service.send(
+                            bot,
+                            SendRequest(
+                                scene,
+                                target_id,
+                                qq_message_obj,
+                                reference_id=message_reference_id or None,
+                                source_message_id=source_message_id or None,
+                            ),
+                            msg_seq=random.randint(1, 900000),
+                        )
                     )
 
                     return jsonify({
                         "success": True,
                         "message": "QQ 主动发送成功",
-                        "message_id": message_id,
-                        "reference_id": result_reference_id,
+                        "message_id": send_result.message_id,
+                        "reference_id": send_result.reference_id,
                         "source_message_id": source_message_id,
                         "quote_reference_id": message_reference_id,
                     })
@@ -1245,82 +1155,31 @@ def api_messages_send():
                     source_reference_id = str(candidate.get("reference_id") or "")
                     qq_message_obj = build_qq_message_obj(message_reference_id)
 
-                    if scene == "group":
-                        result = _run_qq_send_with_optional_msg_ref(
-                            bot.send_to_group,
-                            group_openid=target_id,
-                            message=qq_message_obj,
-                            msg_id=source_message_id,
-                            msg_seq=random.randint(1, 900000),
-                            msg_ref_id=message_reference_id or None,
-                        )
-
-                        group_id = target_id
-                        user_id = ""
-
-                    elif scene == "private":
-                        result = _run_qq_send_with_optional_msg_ref(
-                            bot.send_to_c2c,
-                            openid=target_id,
-                            message=qq_message_obj,
-                            msg_id=source_message_id,
-                            msg_seq=random.randint(1, 900000),
-                            msg_ref_id=message_reference_id or None,
-                        )
-
-                        group_id = ""
-                        user_id = target_id
-
-                    elif scene == "channel_group":
-                        result = run_async(
-                            bot.send_to_channel(
-                                channel_id=target_id,
-                                message=qq_message_obj,
-                                msg_id=source_message_id,
-                            )
-                        )
-
-                        group_id = target_id
-                        user_id = ""
-
-                    elif scene == "channel_private":
-                        result = run_async(
-                            bot.send_to_dms(
-                                guild_id=target_id,
-                                message=qq_message_obj,
-                                msg_id=source_message_id,
-                            )
-                        )
-
-                        group_id = ""
-                        user_id = target_id
-
-                    else:
+                    if scene not in ("group", "private", "channel_group", "channel_private"):
                         return jsonify({
                             "success": False,
                             "error": "无效 QQ scene",
                         })
 
-                    message_id = extract_result_message_id(result)
-                    result_reference_id = extract_result_reference_id(result)
-
-                    record_web_send_message(
-                        bot,
-                        scene=scene,
-                        message_id=message_id,
-                        reference_id=result_reference_id,
-                        source_message_id=source_message_id,
-                        group_id=group_id,
-                        user_id=user_id,
-                        message=content or f"[{media_type}]",
-                        raw_result=result,
+                    send_result = run_async(
+                        delivery_service.send(
+                            bot,
+                            SendRequest(
+                                scene,
+                                target_id,
+                                qq_message_obj,
+                                reference_id=message_reference_id or None,
+                                source_message_id=source_message_id,
+                            ),
+                            msg_seq=random.randint(1, 900000),
+                        )
                     )
 
                     return jsonify({
                         "success": True,
                         "message": "发送成功",
-                        "message_id": message_id,
-                        "reference_id": result_reference_id,
+                        "message_id": send_result.message_id,
+                        "reference_id": send_result.reference_id,
                         "source_message_id": source_message_id,
                         "source_reference_id": source_reference_id,
                         "quote_reference_id": message_reference_id,
@@ -1452,7 +1311,7 @@ def api_messages_revoke():
             return jsonify({"success": False, "error": f"未找到在线 {adapter} Bot"})
 
         run_async(
-            delete_message_compat(
+            delivery_service.recall(
                 bot,
                 scene=scene,
                 message_id=message_id,

@@ -67,6 +67,7 @@ def _record_send(
     result: Any,
     group_id: str = "",
     user_id: str = "",
+    source_message_id: str = "",
     revoke_time: int | float = 0,
 ):
     message_id = extract_result_message_id(result)
@@ -75,6 +76,7 @@ def _record_send(
         scene=scene,
         message=message,
         message_id=message_id,
+        source_message_id=source_message_id,
         group_id=group_id,
         user_id=user_id,
         raw_result=result,
@@ -92,6 +94,7 @@ def _record_send(
 async def send_group_message(bot: Any, *, group_id: Any, message: Any, **kwargs):
     """主动发送群消息，按适配器调用实际接口。"""
     revoke_time = _pop_revoke_time(kwargs)
+    source_message_id = str(kwargs.pop("source_message_id", "") or "")
 
     if _is_ob11_bot(bot):
         patched = bool(getattr(bot, "__message_db_ob11_send_patched__", False))
@@ -111,6 +114,7 @@ async def send_group_message(bot: Any, *, group_id: Any, message: Any, **kwargs)
                 message=message,
                 result=result,
                 group_id=str(group_id or ""),
+                source_message_id=source_message_id,
                 revoke_time=revoke_time,
             )
         return result
@@ -118,6 +122,8 @@ async def send_group_message(bot: Any, *, group_id: Any, message: Any, **kwargs)
     if _is_qq_bot(bot):
         msg_ref_id = _pop_reference_id(kwargs)
         msg_seq = kwargs.pop("msg_seq", random.randint(1, 900000))
+        if source_message_id:
+            kwargs.setdefault("msg_id", source_message_id)
         result = await _call_qq_send(
             bot.send_to_group,
             group_openid=str(group_id),
@@ -132,6 +138,7 @@ async def send_group_message(bot: Any, *, group_id: Any, message: Any, **kwargs)
             message=message,
             result=result,
             group_id=str(group_id or ""),
+            source_message_id=source_message_id,
             revoke_time=revoke_time,
         )
         return result
@@ -149,6 +156,7 @@ async def send_group_message(bot: Any, *, group_id: Any, message: Any, **kwargs)
             message=message,
             result=result,
             group_id=str(group_id or ""),
+            source_message_id=source_message_id,
             revoke_time=revoke_time,
         )
         return result
@@ -159,6 +167,7 @@ async def send_group_message(bot: Any, *, group_id: Any, message: Any, **kwargs)
 async def send_private_message(bot: Any, *, user_id: Any, message: Any, **kwargs):
     """主动发送私聊消息，按适配器调用实际接口。"""
     revoke_time = _pop_revoke_time(kwargs)
+    source_message_id = str(kwargs.pop("source_message_id", "") or "")
 
     if _is_ob11_bot(bot):
         patched = bool(getattr(bot, "__message_db_ob11_send_patched__", False))
@@ -178,6 +187,7 @@ async def send_private_message(bot: Any, *, user_id: Any, message: Any, **kwargs
                 message=message,
                 result=result,
                 user_id=str(user_id or ""),
+                source_message_id=source_message_id,
                 revoke_time=revoke_time,
             )
         return result
@@ -185,6 +195,8 @@ async def send_private_message(bot: Any, *, user_id: Any, message: Any, **kwargs
     if _is_qq_bot(bot):
         msg_ref_id = _pop_reference_id(kwargs)
         msg_seq = kwargs.pop("msg_seq", random.randint(1, 900000))
+        if source_message_id:
+            kwargs.setdefault("msg_id", source_message_id)
         result = await _call_qq_send(
             bot.send_to_c2c,
             openid=str(user_id),
@@ -199,6 +211,7 @@ async def send_private_message(bot: Any, *, user_id: Any, message: Any, **kwargs
             message=message,
             result=result,
             user_id=str(user_id or ""),
+            source_message_id=source_message_id,
             revoke_time=revoke_time,
         )
         return result
@@ -216,6 +229,7 @@ async def send_private_message(bot: Any, *, user_id: Any, message: Any, **kwargs
             message=message,
             result=result,
             user_id=str(user_id or ""),
+            source_message_id=source_message_id,
             revoke_time=revoke_time,
         )
         return result

@@ -12,6 +12,7 @@ from nonebot_plugin_xiuxian_2.xiuxian.adapter_message_records import (
     extract_result_message_id,
     extract_result_reference_id,
 )
+from nonebot_plugin_xiuxian_2.xiuxian.adapter_message_sender import send_private_message
 from nonebot_plugin_xiuxian_2.xiuxian.messaging import (
     ButtonSpec,
     KeyboardSpec,
@@ -74,6 +75,43 @@ class MessageResultTests(unittest.TestCase):
 
 
 class DeliveryServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_qq_sender_maps_source_message_to_adapter_reply_id(self) -> None:
+        bot = SimpleNamespace(
+            send_to_c2c=AsyncMock(return_value={"id": "message-0"})
+        )
+        with (
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.adapter_message_sender._is_qq_bot",
+                return_value=True,
+            ),
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.adapter_message_sender._record_send"
+            ) as record,
+        ):
+            await send_private_message(
+                bot,
+                user_id="user-0",
+                message="reply",
+                source_message_id="source-0",
+                msg_seq=7,
+            )
+
+        bot.send_to_c2c.assert_awaited_once_with(
+            openid="user-0",
+            message="reply",
+            msg_seq=7,
+            msg_id="source-0",
+        )
+        record.assert_called_once_with(
+            bot,
+            scene="private",
+            message="reply",
+            result={"id": "message-0"},
+            user_id="user-0",
+            source_message_id="source-0",
+            revoke_time=0,
+        )
+
     async def test_group_delivery_reuses_existing_sender(self) -> None:
         service = MessageDeliveryService()
         with patch(
@@ -98,6 +136,65 @@ class DeliveryServiceTests(unittest.IsolatedAsyncioTestCase):
             message="hello",
             message_reference_id="ref-1",
             revoke_after=5,
+        )
+
+    async def test_reply_source_is_forwarded_for_recording(self) -> None:
+        service = MessageDeliveryService()
+        with patch(
+            "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery.send_private_message",
+            new=AsyncMock(return_value={"id": "message-2", "ref_idx": "ref-2"}),
+        ) as sender:
+            result = await service.send(
+                object(),
+                SendRequest(
+                    "private",
+                    "user-1",
+                    "reply",
+                    source_message_id="source-1",
+                ),
+            )
+
+        self.assertEqual(result.reference_id, "ref-2")
+        sender.assert_awaited_once_with(
+            unittest.mock.ANY,
+            user_id="user-1",
+            message="reply",
+            source_message_id="source-1",
+        )
+
+    async def test_channel_delivery_uses_adapter_and_records_result(self) -> None:
+        service = MessageDeliveryService()
+        bot = SimpleNamespace(
+            send_to_channel=AsyncMock(return_value={"message_id": "message-3"})
+        )
+        with patch(
+            "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery.record_send_message"
+        ) as record:
+            result = await service.send(
+                bot,
+                SendRequest(
+                    "channel_group",
+                    "channel-1",
+                    "hello",
+                    source_message_id="source-2",
+                ),
+                msg_seq=123,
+            )
+
+        self.assertEqual(result.message_id, "message-3")
+        bot.send_to_channel.assert_awaited_once_with(
+            channel_id="channel-1",
+            message="hello",
+            msg_id="source-2",
+        )
+        record.assert_called_once_with(
+            bot,
+            scene="channel_group",
+            message="hello",
+            message_id="message-3",
+            source_message_id="source-2",
+            group_id="channel-1",
+            raw_result={"message_id": "message-3"},
         )
 
 

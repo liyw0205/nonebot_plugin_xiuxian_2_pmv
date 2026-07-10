@@ -9,7 +9,7 @@ from ..adapter_message_records import (
 )
 
 
-DeliveryScene = Literal["group", "private"]
+DeliveryScene = Literal["group", "private", "channel_group", "channel_private"]
 
 
 @dataclass(frozen=True)
@@ -33,6 +33,7 @@ class SendRequest:
     target_id: str
     message: Any
     reference_id: str | None = None
+    source_message_id: str | None = None
     revoke_after: int | float = 0
 
 
