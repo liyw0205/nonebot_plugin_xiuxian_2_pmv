@@ -93,6 +93,174 @@ class BreakthroughService:
             """
         )
 
+    @staticmethod
+    def _ensure_continuous_tribulation_operations(conn) -> None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS continuous_tribulation_operations (
+                operation_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                from_level TEXT NOT NULL,
+                to_level TEXT NOT NULL,
+                attempts INTEGER NOT NULL,
+                fail_count INTEGER NOT NULL,
+                item_id INTEGER NOT NULL,
+                item_count INTEGER NOT NULL,
+                exp_gain INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+    def apply_continuous_tribulation(
+        self,
+        operation_id,
+        user_id,
+        expected_level,
+        expected_exp,
+        expected_hp,
+        expected_mp,
+        expected_rate,
+        final_level,
+        final_exp,
+        final_rate,
+        attempts,
+        fail_count,
+        item_id,
+        item_count,
+        exp_gain,
+        *,
+        root_rate=0.0,
+        level_spend=0.0,
+        occurred_at: datetime | None = None,
+    ) -> ContinuousBreakthroughResult:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            raise ValueError("operation_id must not be empty")
+        user_id = str(user_id)
+        expected_level = str(expected_level)
+        final_level = str(final_level)
+        expected_exp = int(expected_exp)
+        expected_hp = int(expected_hp)
+        expected_mp = int(expected_mp)
+        expected_rate = int(expected_rate)
+        final_exp = max(int(final_exp), 0)
+        final_rate = max(int(final_rate), 0)
+        attempts = max(int(attempts), 0)
+        fail_count = max(int(fail_count), 0)
+        item_id = int(item_id)
+        item_count = max(int(item_count), 0)
+        exp_gain = max(int(exp_gain), 0)
+        occurred_at = occurred_at or datetime.now()
+
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._ensure_continuous_tribulation_operations(conn)
+                previous = conn.execute(
+                    "SELECT from_level, to_level, attempts, fail_count, exp_gain "
+                    "FROM continuous_tribulation_operations WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if previous:
+                    conn.rollback()
+                    return ContinuousBreakthroughResult(
+                        "duplicate", user_id, str(previous[0]), str(previous[1]),
+                        int(previous[2]), int(previous[3]), -int(previous[4]),
+                    )
+
+                user = conn.execute(
+                    "SELECT level, exp, hp, mp, level_up_rate "
+                    "FROM user_xiuxian WHERE user_id=%s",
+                    (user_id,),
+                ).fetchone()
+                if user is None:
+                    conn.rollback()
+                    return ContinuousBreakthroughResult(
+                        "user_missing", user_id, expected_level, final_level,
+                        attempts, fail_count, -exp_gain,
+                    )
+                if (
+                    str(user[0]) != expected_level
+                    or int(user[1] or 0) != expected_exp
+                    or int(user[2] or 0) != expected_hp
+                    or int(user[3] or 0) != expected_mp
+                    or int(user[4] or 0) != expected_rate
+                ):
+                    conn.rollback()
+                    return ContinuousBreakthroughResult(
+                        "state_changed", user_id, str(user[0]), str(user[0]),
+                        attempts, fail_count, -exp_gain,
+                    )
+
+                item = conn.execute(
+                    "SELECT goods_num FROM back WHERE user_id=%s AND goods_id=%s",
+                    (user_id, item_id),
+                ).fetchone()
+                if item_count <= 0 or item is None or int(item[0] or 0) < item_count:
+                    conn.rollback()
+                    return ContinuousBreakthroughResult(
+                        "item_missing", user_id, expected_level, final_level,
+                        attempts, fail_count, -exp_gain,
+                    )
+
+                if final_level != expected_level:
+                    conn.execute(
+                        "UPDATE user_xiuxian SET level=%s, exp=%s, "
+                        "power=ROUND(%s*%s*%s, 0), level_up_cd=%s, "
+                        "level_up_rate=0, hp=%s/2, mp=%s, atk=%s/10 "
+                        "WHERE user_id=%s",
+                        (
+                            final_level, final_exp, final_exp, float(root_rate),
+                            float(level_spend), occurred_at, final_exp, final_exp,
+                            final_exp, user_id,
+                        ),
+                    )
+                else:
+                    conn.execute(
+                        "UPDATE user_xiuxian SET exp=%s, level_up_rate=%s, "
+                        "level_up_cd=%s WHERE user_id=%s",
+                        (final_exp, final_rate, occurred_at, user_id),
+                    )
+
+                consumed = conn.execute(
+                    "UPDATE back SET update_time=%s, action_time=%s, "
+                    "day_num=CASE WHEN goods_type='丹药' "
+                    "THEN COALESCE(day_num, 0)+%s ELSE COALESCE(day_num, 0) END, "
+                    "all_num=CASE WHEN goods_type='丹药' "
+                    "THEN COALESCE(all_num, 0)+%s ELSE COALESCE(all_num, 0) END, "
+                    "goods_num=goods_num-%s, "
+                    "bind_num=MIN(COALESCE(bind_num, 0), goods_num-%s) "
+                    "WHERE user_id=%s AND goods_id=%s "
+                    "AND COALESCE(goods_num, 0)>=%s",
+                    (
+                        occurred_at, occurred_at, item_count, item_count,
+                        item_count, item_count, user_id, item_id, item_count,
+                    ),
+                )
+                if consumed.rowcount != 1:
+                    raise db_backend.IntegrityError(
+                        "continuous tribulation items changed concurrently"
+                    )
+                conn.execute(
+                    "INSERT INTO continuous_tribulation_operations "
+                    "(operation_id, user_id, from_level, to_level, attempts, "
+                    "fail_count, item_id, item_count, exp_gain) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    (
+                        operation_id, user_id, expected_level, final_level,
+                        attempts, fail_count, item_id, item_count, exp_gain,
+                    ),
+                )
+                conn.commit()
+                return ContinuousBreakthroughResult(
+                    "applied", user_id, expected_level, final_level,
+                    attempts, fail_count, -exp_gain,
+                )
+            except Exception:
+                conn.rollback()
+                raise
+
     def apply_continuous(
         self,
         operation_id,

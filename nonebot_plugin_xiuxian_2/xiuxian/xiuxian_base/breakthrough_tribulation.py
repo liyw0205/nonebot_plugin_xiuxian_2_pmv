@@ -1451,13 +1451,11 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
             if le == "失败":
                 # 突破失败，使用渡厄丹
                 pills_used += 1
-                sql_message.update_back_j(user_id, 1999, 1)  # 消耗1个渡厄丹
                 fail_count += 1
                 
                 update_rate = 1 if int(level_rate * XiuConfig().level_up_probability) <= 1 else int(
-                    level_rate * XiuConfig().level_up_probability)
+                level_rate * XiuConfig().level_up_probability)
                 leveluprate += update_rate
-                sql_message.update_levelrate(user_id, leveluprate)
                 
                 result_msg += f"第{attempts}次突破失败，下次突破成功率增加{update_rate}%\n"
                 
@@ -1473,13 +1471,6 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
         elif isinstance(le, list):
             # 突破成功
             pills_used += 1
-            sql_message.update_back_j(user_id, 1999, 1)  # 消耗1个渡厄丹
-            sql_message.updata_level(user_id, le[0])
-            share_msg = trigger_breakthrough_relation_rewards(user_id, le[0])
-            sql_message.update_power2(user_id)
-            sql_message.update_levelrate(user_id, 0)
-            sql_message.update_user_hp(user_id)
-            result_msg += f"第{attempts}次突破成功，达到{le[0]}境界！{share_msg}\n"
             success = True
             target_level = le[0]
             break
@@ -1487,8 +1478,37 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
     if not success and attempts == max_attempts and "修为不足以突破" not in result_msg:
         result_msg += f"连续渡厄突破失败，未能突破成功。"
     
-    # 更新突破CD
-    sql_message.updata_level_cd(user_id)
+    final_level = target_level or level_name
+    root_rate = 0.0
+    level_spend = 0.0
+    if success:
+        root_rate = sql_message.get_root_rate(user_msg["root_type"], user_id)
+        level_spend = jsondata.level_data()[final_level]["spend"]
+    result = breakthrough_service.apply_continuous_tribulation(
+        _breakthrough_operation_id(event, "continuous_tribulation", user_id),
+        user_id,
+        level_name,
+        user_msg["exp"],
+        user_msg["hp"],
+        user_msg["mp"],
+        int(user_msg["level_up_rate"]),
+        final_level,
+        exp,
+        0 if success else leveluprate,
+        attempts,
+        fail_count,
+        1999,
+        pills_used,
+        0,
+        root_rate=root_rate,
+        level_spend=level_spend,
+    )
+    if not result.applied:
+        await handle_send(bot, event, "本次连续渡厄突破已经处理或角色状态、丹药库存已经变化，请刷新后重试。")
+        await level_up_dr_lx.finish()
+    if success:
+        share_msg = trigger_breakthrough_relation_rewards(user_id, final_level)
+        result_msg += f"第{attempts}次突破成功，达到{final_level}境界！{share_msg}\n"
     
     # 添加消耗统计
     result_msg += f"\n本次连续突破共消耗{pills_used}个渡厄丹，剩余{dr_pill_count - pills_used}个"
@@ -1498,7 +1518,6 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
         item_name="渡厄丹", item_count=pills_used
     )
     
-    await handle_send(bot, event, result_msg)
     await handle_send(bot, event, result_msg, md_type="修仙", k1="速锁", v1="突破", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
     await level_up_dr_lx.finish()
 
