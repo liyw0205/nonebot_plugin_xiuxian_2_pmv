@@ -44,7 +44,7 @@ if /i "%choice%"=="A" (
     )
     call "%DIR%\myenv\Scripts\activate.bat"
     cd /d "%DIR%\xiu2"
-    nb run --reload
+    nb run
     goto zhuye
 )
 
@@ -229,7 +229,7 @@ echo color 07
 echo cd /d "%DIR%"
 echo call "%DIR%\myenv\Scripts\activate.bat"
 echo cd /d "%DIR%\xiu2"
-echo nb run --reload
+echo nb run
 ) > "%DIR%\启动修仙.bat"
 
 echo.

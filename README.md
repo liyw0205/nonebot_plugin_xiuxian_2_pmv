@@ -335,7 +335,7 @@ EOF
 ```bash
 source ~/myenv/bin/activate
 cd ~/xiu2
-nb run --reload
+nb run
 ```
 
 📺 [B站安装教程](https://m.bilibili.com/video/BV1ZuesekEYy)
@@ -415,7 +415,7 @@ echo PORT = 8080
 ```bat
 call myenv\Scripts\activate
 cd xiu2
-nb run --reload
+nb run
 ```
 
 双击运行即可。

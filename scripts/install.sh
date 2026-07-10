@@ -1067,7 +1067,7 @@ fi
 
 source "$VENV_PATH/bin/activate"
 cd "$DIR" || exit 1
-nb run --reload
+exec nb run
 EOF
 
     # 激活虚拟环境并配置 pip 镜像

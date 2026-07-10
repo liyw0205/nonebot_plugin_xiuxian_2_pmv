@@ -34,6 +34,11 @@ class InstallerScriptTests(unittest.TestCase):
             self.assertIn("data/xiuxian/message.db*", source)
             self.assertIn("data/xiuxian/activity/activity.db*", source)
 
+    def test_managed_start_commands_disable_development_reloader(self) -> None:
+        for name in ("install.sh", "install_termux.sh", "install.bat"):
+            source = (SCRIPTS / name).read_text(encoding="utf-8")
+            self.assertNotIn("nb run --reload", source)
+
     def test_git_archive_layout_is_extracted_without_losing_top_directory(self) -> None:
         for name in ("install.sh", "install_termux.sh"):
             with self.subTest(installer=name), tempfile.TemporaryDirectory() as temp:

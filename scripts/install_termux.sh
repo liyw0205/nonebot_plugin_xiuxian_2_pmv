@@ -636,7 +636,7 @@ write_command_scripts() {
 export TZ=Asia/Shanghai
 source "$VENV_PATH/bin/activate"
 cd "$DIR" || exit 1
-nb run --reload
+exec nb run
 EOF
 
     cat > "$COMMAND_PATH" <<EOF
