@@ -13,10 +13,10 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 import random
 import time
 from datetime import datetime
-import json
 import os
 from pathlib import Path
 from ..xiuxian_config import convert_rank
+from ..xiuxian_utils.json_store import load_json_file, save_json_file
 sql_message = XiuxianDateManage()
 
 # 创建数据存储目录
@@ -26,21 +26,16 @@ os.makedirs(DATA_PATH, exist_ok=True)
 # 加载或初始化计数数据
 def load_count_data():
     count_file = DATA_PATH / "count_data.json"
-    if count_file.exists():
-        with open(count_file, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    else:
-        return {
-            "morning_count": 0,
-            "night_count": 0,
-            "morning_users": {},  # 存储用户ID和日期
-            "night_users": {}     # 存储用户ID和日期
-        }
+    return load_json_file(count_file, {
+        "morning_count": 0,
+        "night_count": 0,
+        "morning_users": {},
+        "night_users": {},
+    }, dict)
 
 def save_count_data(data):
     count_file = DATA_PATH / "count_data.json"
-    with open(count_file, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    save_json_file(count_file, data)
 
 async def reset_data_by_time():
     """根据当前时间重置早安或晚安数据"""
@@ -186,17 +181,12 @@ FORTUNE_DESCRIPTIONS = {
 # 加载运势数据
 def load_fortune_data():
     fortune_file = DATA_PATH / "fortune_data.json"
-    if fortune_file.exists():
-        with open(fortune_file, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    else:
-        return {}
+    return load_json_file(fortune_file, {}, dict)
 
 # 保存运势数据
 def save_fortune_data(data):
     fortune_file = DATA_PATH / "fortune_data.json"
-    with open(fortune_file, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    save_json_file(fortune_file, data)
 
 # 生成运势星号显示
 def generate_fortune_stars(fortune_type):
@@ -261,18 +251,13 @@ interaction_command = on_command("互动", priority=30, block=True)
 
 GIVE_DATA_PATH = DATA_PATH / "give_data.json"
 def load_give_data():
-    if GIVE_DATA_PATH.exists():
-        with open(GIVE_DATA_PATH, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    else:
-        return {
-            "last_reset_date": datetime.now().strftime("%Y-%m-%d"),
-            "stone_users": {},  # 存储领取灵石的用户ID和日期
-            "exp_users": {}     # 存储领取修为的用户ID和日期
-        }
+    return load_json_file(GIVE_DATA_PATH, {
+        "last_reset_date": datetime.now().strftime("%Y-%m-%d"),
+        "stone_users": {},
+        "exp_users": {},
+    }, dict)
 def save_give_data(data):
-    with open(GIVE_DATA_PATH, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    save_json_file(GIVE_DATA_PATH, data)
 
 def has_user_received_today(user_id, reward_type):
     """检查用户今天是否已经获得过指定的给予

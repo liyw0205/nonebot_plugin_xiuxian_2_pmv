@@ -3,6 +3,7 @@ from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from ...paths import get_paths
+from ..xiuxian_utils.json_store import load_json_file, save_json_file
 
 from ..xiuxian_utils.activity_helpers import default_stage_features as _default_stage_features
 from .activity_utils import _as_float, _as_int, _clean_text, _normalize_activity_key
@@ -150,8 +151,7 @@ def _migrate_config(config: dict) -> tuple[dict, bool]:
 
 def load_config() -> dict:
     _ensure_activity_files()
-    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-        config = json.load(f)
+    config = load_json_file(CONFIG_PATH, _load_default_config(), dict)
     config, changed = _migrate_config(config)
     if changed:
         save_config(config)
@@ -160,8 +160,7 @@ def load_config() -> dict:
 
 def save_config(config: dict):
     _ensure_activity_files()
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(config, f, ensure_ascii=False, indent=2)
+    save_json_file(CONFIG_PATH, config, indent=2)
 
 
 def parse_time(value, *, is_start: bool):

@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 from ..on_compat import on_command
@@ -7,6 +6,7 @@ from nonebot.permission import SUPERUSER
 
 from ..adapter_compat import Bot, Message, MessageEvent, GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
+from ..xiuxian_utils.json_store import load_json_file, save_json_file
 from ..xiuxian_utils.utils import check_user, send_msg_handler, handle_send, number_to, send_help_message
 
 from .common import (
@@ -27,8 +27,7 @@ INVITATION_DATA_PATH.mkdir(parents=True, exist_ok=True)
 
 def init_file(path: Path):
     if not path.exists():
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump({}, f, ensure_ascii=False, indent=4)
+        save_json_file(path, {})
 
 
 init_file(INVITATION_REWARDS_FILE)
@@ -37,13 +36,11 @@ init_file(INVITATION_CLAIMED_FILE)
 
 
 def load_json(path: Path):
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    return load_json_file(path, {}, dict)
 
 
 def save_json(path: Path, data):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    save_json_file(path, data)
 
 
 def load_invitation_rewards():

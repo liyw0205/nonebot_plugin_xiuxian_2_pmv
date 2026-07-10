@@ -64,8 +64,10 @@ def save_json_file(path: str | Path, data: Any, **dump_kwargs) -> None:
         file_path.parent.mkdir(parents=True, exist_ok=True)
         temp_path = file_path.with_name(f".{file_path.name}.{os.getpid()}.tmp")
         try:
+            dump_options = {"ensure_ascii": False, "indent": 4}
+            dump_options.update(dump_kwargs)
             with temp_path.open("w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=4, **dump_kwargs)
+                json.dump(data, f, **dump_options)
                 f.flush()
                 os.fsync(f.fileno())
             temp_path.replace(file_path)

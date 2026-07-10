@@ -1,7 +1,3 @@
-try:
-    import ujson as json
-except ImportError:
-    import json
 import random
 from pathlib import Path
 from datetime import datetime
@@ -12,6 +8,7 @@ from nonebot.params import CommandArg
 
 from ..adapter_compat import Bot, GroupMessageEvent, PrivateMessageEvent, Message
 from ..xiuxian_utils.item_json import Items
+from ..xiuxian_utils.json_store import load_json_file, save_json_file
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import check_user, handle_send, number_to, send_help_message
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
@@ -41,20 +38,12 @@ XIANGYUAN_RECEIVE_LIMIT = 3        # 每日抢仙缘次数限制
 def get_xiangyuan_data(group_id):
     """获取群仙缘数据"""
     file_path = XIANGYUAN_DATA_PATH / f"xiangyuan_{group_id}.json"
-    try:
-        if file_path.exists():
-            with open(file_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return data
-    except Exception:
-        pass
-    return {"gifts": {}, "last_id": 1}
+    return load_json_file(file_path, {"gifts": {}, "last_id": 1}, dict)
 
 def save_xiangyuan_data(group_id, data):
     """保存群仙缘数据"""
     file_path = XIANGYUAN_DATA_PATH / f"xiangyuan_{group_id}.json"
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    save_json_file(file_path, data)
 
 def get_user_name(user_id):
     """根据用户 ID 获取道号"""
@@ -539,8 +528,11 @@ async def clear_all_xiangyuan():
         
         try:
             # 读取该群的仙缘数据
-            with open(file_path, "r", encoding="utf-8") as f:
-                xiangyuan_data = json.load(f)
+            xiangyuan_data = load_json_file(
+                file_path,
+                {"gifts": {}, "last_id": 1},
+                dict,
+            )
             
             if not xiangyuan_data.get("gifts"):
                 continue
@@ -579,8 +571,7 @@ async def clear_all_xiangyuan():
             xiangyuan_data["last_id"] = 1  # 重置 ID 计数器
             
             # 保存清空后的数据
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(xiangyuan_data, f, ensure_ascii=False, indent=4)
+            save_json_file(file_path, xiangyuan_data)
             
             total_groups += 1
             total_gifts += group_gifts

@@ -296,6 +296,45 @@ class SourceQualityTests(unittest.TestCase):
                 violations.append(relative)
         self.assertEqual(violations, [])
 
+    def test_high_risk_mutable_json_uses_central_store(self) -> None:
+        checked = (
+            "xiuxian_compensation/common.py",
+            "xiuxian_compensation/invitation.py",
+            "xiuxian_Interactive/__init__.py",
+            "xiuxian_activity/activity_config.py",
+            "xiuxian_base/xiangyuan.py",
+        )
+        violations = []
+        for relative in checked:
+            source = (SOURCE_ROOT / "xiuxian" / relative).read_text(encoding="utf-8")
+            tree = ast.parse(source, filename=relative)
+            direct_calls = [
+                node.lineno
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "json"
+                and node.func.attr in {"load", "dump"}
+            ]
+            if relative == "xiuxian_activity/activity_config.py":
+                direct_calls = [
+                    line for line in direct_calls
+                    if line != next(
+                        child.lineno
+                        for node in tree.body
+                        if isinstance(node, ast.FunctionDef)
+                        and node.name == "_load_default_config"
+                        for child in ast.walk(node)
+                        if isinstance(child, ast.Call)
+                        and isinstance(child.func, ast.Attribute)
+                        and child.func.attr == "load"
+                    )
+                ]
+            if direct_calls:
+                violations.append(f"{relative}:{direct_calls}")
+        self.assertEqual(violations, [])
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")

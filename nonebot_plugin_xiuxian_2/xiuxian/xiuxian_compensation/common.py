@@ -1,4 +1,3 @@
-import json
 import os
 import random
 import string
@@ -11,6 +10,7 @@ from nonebot.log import logger
 from ..adapter_compat import Bot, MessageEvent, GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.item_json import Items
+from ..xiuxian_utils.json_store import load_json_file, save_json_file
 from ..xiuxian_utils.utils import (
     check_user,
     handle_send,
@@ -54,35 +54,29 @@ def init_data_files():
         config["records_folder"].mkdir(parents=True, exist_ok=True)
 
         if not config["data_path"].exists():
-            with open(config["data_path"], "w", encoding="utf-8") as f:
-                json.dump({}, f, ensure_ascii=False, indent=4)
+            save_json_file(config["data_path"], {})
 
         if not config["claimed_path"].exists():
-            with open(config["claimed_path"], "w", encoding="utf-8") as f:
-                json.dump({}, f, ensure_ascii=False, indent=4)
+            save_json_file(config["claimed_path"], {})
 
 
 init_data_files()
 
 
 def load_data(config: Dict[str, Any]) -> Dict[str, dict]:
-    with open(config["data_path"], "r", encoding="utf-8") as f:
-        return json.load(f)
+    return load_json_file(config["data_path"], {}, dict)
 
 
 def save_data(config: Dict[str, Any], data: Dict[str, dict]):
-    with open(config["data_path"], "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    save_json_file(config["data_path"], data)
 
 
 def load_claimed_data(config: Dict[str, Any]) -> Dict[str, List[str]]:
-    with open(config["claimed_path"], "r", encoding="utf-8") as f:
-        return json.load(f)
+    return load_json_file(config["claimed_path"], {}, dict)
 
 
 def save_claimed_data(config: Dict[str, Any], data: Dict[str, List[str]]):
-    with open(config["claimed_path"], "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    save_json_file(config["claimed_path"], data)
 
 
 def generate_unique_id(existing_ids: List[str]) -> str:
