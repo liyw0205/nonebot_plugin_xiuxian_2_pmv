@@ -95,6 +95,36 @@ class StoneItemRewardServiceTests(unittest.TestCase):
         self.assertEqual(self.scalar("SELECT stone FROM user_xiuxian"), 100)
         self.assertEqual(self.scalar("SELECT goods_num FROM back"), 3)
 
+    def test_tianji_reward_uses_same_transaction_boundary(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "INSERT INTO back VALUES (%s, %s, %s, %s)",
+                ("user-1", 20021, 2, 0),
+            )
+
+        result = self.service.apply(
+            "tianji-1",
+            "user-1",
+            reward_type="tianji_stone_trigger",
+            item_id=20021,
+            rewards=(10_000_001, 99_999_999),
+        )
+        duplicate = self.service.apply(
+            "tianji-1",
+            "user-1",
+            reward_type="tianji_stone_trigger",
+            item_id=20021,
+            rewards=(10_000_000, 10_000_000),
+        )
+
+        self.assertEqual(result.status, "applied")
+        self.assertEqual(duplicate.status, "duplicate")
+        self.assertEqual(duplicate.rewards, (10_000_001, 99_999_999))
+        self.assertEqual(self.scalar("SELECT stone FROM user_xiuxian"), 110_000_100)
+        self.assertEqual(
+            self.scalar("SELECT goods_num FROM back WHERE goods_id=20021"), 0
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

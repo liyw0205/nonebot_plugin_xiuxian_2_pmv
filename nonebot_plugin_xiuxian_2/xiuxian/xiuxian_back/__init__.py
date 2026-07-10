@@ -1322,13 +1322,20 @@ async def use_tianji_stone_trigger(bot: Bot, event: GroupMessageEvent | PrivateM
 
     MIN_STONE = 10_000_000
     MAX_STONE = 100_000_000
-    total_stone = 0
+    rolled_rewards = [random.randint(MIN_STONE, MAX_STONE) for _ in range(num)]
+    reward = stone_reward_service.apply(
+        _stone_reward_operation_id(event, "tianji_stone_trigger", user_id),
+        user_id,
+        reward_type="tianji_stone_trigger",
+        item_id=item_id,
+        rewards=rolled_rewards,
+    )
+    if not reward.succeeded:
+        await handle_send(bot, event, "天机灵石引数量或角色状态已发生变化，请重新查看背包。")
+        return
+
     results = []
-
-    for i in range(num):
-        roll = random.randint(MIN_STONE, MAX_STONE)
-        total_stone += roll
-
+    for i, roll in enumerate(reward.rewards):
         if roll <= 15_000_000:
             desc = "微薄"
         elif roll <= 50_000_000:
@@ -1340,14 +1347,10 @@ async def use_tianji_stone_trigger(bot: Bot, event: GroupMessageEvent | PrivateM
 
         results.append(f"第{i+1}次：{desc} → {number_to(roll)} 灵石")
 
-    # 增加用户灵石 & 扣除道具
-    sql_message.update_ls(user_id, total_stone, 1)
-    sql_message.update_back_j(user_id, item_id, num=num)
-
     # 构造消息
     lines = [
-        f"【天机灵石引 ×{num}】",
-        f"累计获得：{number_to(total_stone)} 灵石",
+        f"【天机灵石引 ×{reward.quantity}】",
+        f"累计获得：{number_to(reward.total_stone)} 灵石",
         *results,
         "天机莫测，道友保重～"
     ]
