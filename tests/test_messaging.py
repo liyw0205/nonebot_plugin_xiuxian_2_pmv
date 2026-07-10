@@ -15,6 +15,7 @@ from nonebot_plugin_xiuxian_2.xiuxian.adapter_message_records import (
 from nonebot_plugin_xiuxian_2.xiuxian.adapter_message_sender import send_private_message
 from nonebot_plugin_xiuxian_2.xiuxian.messaging import (
     ButtonSpec,
+    DeliveryError,
     KeyboardSpec,
     MessageDeliveryService,
     SendRequest,
@@ -81,7 +82,7 @@ class DeliveryServiceTests(unittest.IsolatedAsyncioTestCase):
         )
         with (
             patch(
-                "nonebot_plugin_xiuxian_2.xiuxian.adapter_message_sender._is_qq_bot",
+                "nonebot_plugin_xiuxian_2.xiuxian.adapter_message_sender.is_qq_bot",
                 return_value=True,
             ),
             patch(
@@ -137,6 +138,101 @@ class DeliveryServiceTests(unittest.IsolatedAsyncioTestCase):
             message_reference_id="ref-1",
             revoke_after=5,
         )
+
+    async def test_qq_delivery_retries_msg_seq_conflict(self) -> None:
+        service = MessageDeliveryService(max_msg_seq_retries=2)
+
+        class MsgSeqConflict(RuntimeError):
+            code = 40054005
+
+        sender = AsyncMock(
+            side_effect=[MsgSeqConflict("消息被去重"), {"id": "message-retried"}]
+        )
+        with (
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery.is_qq_bot",
+                return_value=True,
+            ),
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery.send_group_message",
+                new=sender,
+            ),
+            patch.object(service._sequences, "next", side_effect=[101, 102]),
+        ):
+            result = await service.send(
+                SimpleNamespace(self_id="bot-1"),
+                SendRequest("group", "group-1", "hello"),
+            )
+
+        self.assertEqual(result.message_id, "message-retried")
+        self.assertEqual(sender.await_count, 2)
+        self.assertEqual(sender.await_args_list[0].kwargs["msg_seq"], 101)
+        self.assertEqual(sender.await_args_list[1].kwargs["msg_seq"], 102)
+
+    async def test_explicit_msg_seq_is_preserved_without_retry_generation(self) -> None:
+        service = MessageDeliveryService()
+        with (
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery.is_qq_bot",
+                return_value=True,
+            ),
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery.send_private_message",
+                new=AsyncMock(return_value={"id": "message-explicit"}),
+            ) as sender,
+            patch.object(service._sequences, "next") as next_sequence,
+        ):
+            await service.send(
+                SimpleNamespace(self_id="bot-1"),
+                SendRequest("private", "user-1", "hello"),
+                msg_seq=77,
+            )
+
+        next_sequence.assert_not_called()
+        sender.assert_awaited_once_with(
+            unittest.mock.ANY,
+            user_id="user-1",
+            message="hello",
+            msg_seq=77,
+        )
+
+    async def test_audit_exception_returns_pending_result(self) -> None:
+        service = MessageDeliveryService()
+
+        class AuditException(RuntimeError):
+            audit_id = "audit-1"
+
+        with patch(
+            "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery.send_group_message",
+            new=AsyncMock(side_effect=AuditException()),
+        ):
+            result = await service.send(
+                object(),
+                SendRequest("group", "group-1", "hello"),
+            )
+
+        self.assertEqual(result.status, "pending_audit")
+        self.assertEqual(result.audit_id, "audit-1")
+        self.assertIsNone(result.message_id)
+
+    async def test_rate_limit_error_is_classified_as_retryable(self) -> None:
+        service = MessageDeliveryService()
+
+        class RateLimitException(RuntimeError):
+            status_code = 429
+
+        with patch(
+            "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery.send_group_message",
+            new=AsyncMock(side_effect=RateLimitException("rate limit")),
+        ):
+            with self.assertRaises(DeliveryError) as raised:
+                await service.send(
+                    object(),
+                    SendRequest("group", "group-1", "hello"),
+                )
+
+        self.assertEqual(raised.exception.kind, "rate_limited")
+        self.assertTrue(raised.exception.retryable)
 
     async def test_reply_source_is_forwarded_for_recording(self) -> None:
         service = MessageDeliveryService()

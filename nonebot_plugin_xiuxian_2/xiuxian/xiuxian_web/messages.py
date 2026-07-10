@@ -26,7 +26,6 @@ from .core import (
     json,
     jsonify,
     logger,
-    random,
     re,
     record_web_send_message,
     redirect,
@@ -1093,7 +1092,6 @@ def api_messages_send():
                                 reference_id=message_reference_id or None,
                                 source_message_id=source_message_id or None,
                             ),
-                            msg_seq=random.randint(1, 900000),
                         )
                     )
 
@@ -1171,7 +1169,6 @@ def api_messages_send():
                                 reference_id=message_reference_id or None,
                                 source_message_id=source_message_id,
                             ),
-                            msg_seq=random.randint(1, 900000),
                         )
                     )
 

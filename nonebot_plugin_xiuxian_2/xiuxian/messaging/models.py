@@ -10,6 +10,7 @@ from ..adapter_message_records import (
 
 
 DeliveryScene = Literal["group", "private", "channel_group", "channel_private"]
+DeliveryStatus = Literal["sent", "pending_audit"]
 
 
 @dataclass(frozen=True)
@@ -17,6 +18,8 @@ class SendResult:
     message_id: str | None
     reference_id: str | None
     raw: Any
+    status: DeliveryStatus = "sent"
+    audit_id: str | None = None
 
     @classmethod
     def from_raw(cls, raw: Any) -> "SendResult":
@@ -35,6 +38,7 @@ class SendRequest:
     reference_id: str | None = None
     source_message_id: str | None = None
     revoke_after: int | float = 0
+    audit_timeout: float = 0
 
 
-__all__ = ["DeliveryScene", "SendRequest", "SendResult"]
+__all__ = ["DeliveryScene", "DeliveryStatus", "SendRequest", "SendResult"]

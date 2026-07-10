@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from ..adapter_compat import (
@@ -10,12 +11,80 @@ from ..adapter_compat import (
 )
 from ..adapter_message_actions import delete_message_compat
 from ..adapter_message_records import record_send_message
-from ..adapter_message_sender import send_group_message, send_private_message
+from ..adapter_message_sender import is_qq_bot, send_group_message, send_private_message
 from .models import SendRequest, SendResult
+from .reliability import (
+    DeliveryError,
+    MessageSequenceStrategy,
+    classify_delivery_error,
+    is_msg_seq_conflict,
+)
 
 
 class MessageDeliveryService:
     """收敛主动发送与回复入口，底层继续复用现有 Adapter 兼容实现。"""
+
+    def __init__(self, *, max_msg_seq_retries: int = 3) -> None:
+        self._sequences = MessageSequenceStrategy()
+        self._max_msg_seq_retries = max(0, int(max_msg_seq_retries))
+
+    async def _send_with_policy(
+        self,
+        bot: Any,
+        request: SendRequest,
+        kwargs: dict[str, Any],
+    ) -> Any:
+        generated_sequence = (
+            is_qq_bot(bot)
+            and request.scene in {"group", "private"}
+            and "msg_seq" not in kwargs
+        )
+        attempts = self._max_msg_seq_retries + 1 if generated_sequence else 1
+        for attempt in range(attempts):
+            call_kwargs = dict(kwargs)
+            if generated_sequence:
+                call_kwargs["msg_seq"] = self._sequences.next(
+                    bot, request.scene, request.target_id
+                )
+            try:
+                if request.scene == "group":
+                    return await send_group_message(
+                        bot,
+                        group_id=request.target_id,
+                        message=request.message,
+                        **call_kwargs,
+                    )
+                return await send_private_message(
+                    bot,
+                    user_id=request.target_id,
+                    message=request.message,
+                    **call_kwargs,
+                )
+            except Exception as exc:
+                if generated_sequence and is_msg_seq_conflict(exc) and attempt + 1 < attempts:
+                    await asyncio.sleep(0)
+                    continue
+                raise
+        raise RuntimeError("消息投递重试流程异常结束")
+
+    async def _audit_result(self, exc: BaseException, timeout: float) -> SendResult:
+        audit_id = str(getattr(exc, "audit_id", "") or "") or None
+        if timeout <= 0 or not callable(getattr(exc, "get_audit_result", None)):
+            return SendResult(None, None, exc, status="pending_audit", audit_id=audit_id)
+        try:
+            raw = await exc.get_audit_result(timeout=timeout)  # type: ignore[attr-defined]
+        except Exception as audit_exc:
+            kind, retryable = classify_delivery_error(audit_exc)
+            raise DeliveryError(kind, retryable, audit_exc) from audit_exc
+        event_type = str(
+            getattr(raw, "__type__", "")
+            or getattr(raw, "event_type", "")
+            or ""
+        ).upper()
+        if "MESSAGE_AUDIT_PASS" not in event_type:
+            rejected = RuntimeError(f"消息审核未通过: {event_type or 'unknown'}")
+            raise DeliveryError("audit_rejected", False, rejected)
+        return SendResult.from_raw(raw)
 
     async def send(self, bot: Any, request: SendRequest, **kwargs: Any) -> SendResult:
         if request.reference_id:
@@ -25,65 +94,61 @@ class MessageDeliveryService:
         if request.revoke_after:
             kwargs.setdefault("revoke_after", request.revoke_after)
 
-        if request.scene == "group":
-            raw = await send_group_message(
-                bot,
-                group_id=request.target_id,
-                message=request.message,
-                **kwargs,
-            )
-        elif request.scene == "private":
-            raw = await send_private_message(
-                bot,
-                user_id=request.target_id,
-                message=request.message,
-                **kwargs,
-            )
-        elif request.scene == "channel_group":
-            source_message_id = str(kwargs.pop("source_message_id", "") or "")
-            kwargs.pop("message_reference_id", None)
-            kwargs.pop("msg_seq", None)
-            if source_message_id:
-                kwargs.setdefault("msg_id", source_message_id)
-            raw = await bot.send_to_channel(
-                channel_id=request.target_id,
-                message=request.message,
-                **kwargs,
-            )
-            result = SendResult.from_raw(raw)
-            record_send_message(
-                bot,
-                scene=request.scene,
-                message=request.message,
-                message_id=result.message_id or "",
-                source_message_id=source_message_id,
-                group_id=request.target_id,
-                raw_result=raw,
-            )
-        elif request.scene == "channel_private":
-            source_message_id = str(kwargs.pop("source_message_id", "") or "")
-            kwargs.pop("message_reference_id", None)
-            kwargs.pop("msg_seq", None)
-            if source_message_id:
-                kwargs.setdefault("msg_id", source_message_id)
+        try:
+            if request.scene in {"group", "private"}:
+                raw = await self._send_with_policy(bot, request, kwargs)
+            elif request.scene == "channel_group":
+                return await self._send_channel(bot, request, kwargs, private=False)
+            elif request.scene == "channel_private":
+                return await self._send_channel(bot, request, kwargs, private=True)
+            else:
+                raise ValueError(f"不支持的消息场景: {request.scene}")
+        except Exception as exc:
+            if exc.__class__.__name__ == "AuditException" or hasattr(exc, "audit_id"):
+                return await self._audit_result(exc, request.audit_timeout)
+            if isinstance(exc, DeliveryError):
+                raise
+            kind, retryable = classify_delivery_error(exc)
+            raise DeliveryError(kind, retryable, exc) from exc
+        return SendResult.from_raw(raw)
+
+    async def _send_channel(
+        self,
+        bot: Any,
+        request: SendRequest,
+        kwargs: dict[str, Any],
+        *,
+        private: bool,
+    ) -> SendResult:
+        kwargs = dict(kwargs)
+        source_message_id = str(kwargs.pop("source_message_id", "") or "")
+        kwargs.pop("message_reference_id", None)
+        kwargs.pop("msg_seq", None)
+        if source_message_id:
+            kwargs.setdefault("msg_id", source_message_id)
+        if private:
             raw = await bot.send_to_dms(
                 guild_id=request.target_id,
                 message=request.message,
                 **kwargs,
             )
-            result = SendResult.from_raw(raw)
-            record_send_message(
-                bot,
-                scene=request.scene,
-                message=request.message,
-                message_id=result.message_id or "",
-                source_message_id=source_message_id,
-                user_id=request.target_id,
-                raw_result=raw,
-            )
         else:
-            raise ValueError(f"不支持的消息场景: {request.scene}")
-        return result if request.scene.startswith("channel_") else SendResult.from_raw(raw)
+            raw = await bot.send_to_channel(
+                channel_id=request.target_id,
+                message=request.message,
+                **kwargs,
+            )
+        result = SendResult.from_raw(raw)
+        record_kwargs = {
+            "scene": request.scene,
+            "message": request.message,
+            "message_id": result.message_id or "",
+            "source_message_id": source_message_id,
+            "raw_result": raw,
+        }
+        record_kwargs["user_id" if private else "group_id"] = request.target_id
+        record_send_message(bot, **record_kwargs)
+        return result
 
     async def send_to_channel(
         self,

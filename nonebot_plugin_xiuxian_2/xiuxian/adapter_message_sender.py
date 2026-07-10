@@ -21,7 +21,7 @@ def _is_ob11_bot(bot: Any) -> bool:
         return False
 
 
-def _is_qq_bot(bot: Any) -> bool:
+def is_qq_bot(bot: Any) -> bool:
     try:
         from .adapter_compat import HAS_QQ, QQBot
 
@@ -119,7 +119,7 @@ async def send_group_message(bot: Any, *, group_id: Any, message: Any, **kwargs)
             )
         return result
 
-    if _is_qq_bot(bot):
+    if is_qq_bot(bot):
         msg_ref_id = _pop_reference_id(kwargs)
         msg_seq = kwargs.pop("msg_seq", random.randint(1, 900000))
         if source_message_id:
@@ -192,7 +192,7 @@ async def send_private_message(bot: Any, *, user_id: Any, message: Any, **kwargs
             )
         return result
 
-    if _is_qq_bot(bot):
+    if is_qq_bot(bot):
         msg_ref_id = _pop_reference_id(kwargs)
         msg_seq = kwargs.pop("msg_seq", random.randint(1, 900000))
         if source_message_id:
@@ -238,6 +238,7 @@ async def send_private_message(bot: Any, *, user_id: Any, message: Any, **kwargs
 
 
 __all__ = [
+    "is_qq_bot",
     "send_group_message",
     "send_private_message",
 ]
