@@ -384,6 +384,15 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("sect_operations", service_source)
 
+    def test_sign_in_uses_transactional_idempotent_service(self) -> None:
+        base_root = SOURCE_ROOT / "xiuxian" / "xiuxian_base"
+        command_source = (base_root / "__init__.py").read_text(encoding="utf-8")
+        service_source = (base_root / "sign_service.py").read_text(encoding="utf-8")
+        self.assertIn("sign_in_service.sign(", command_source)
+        self.assertNotIn("sql_message.get_sign(user_id)", command_source)
+        self.assertIn("BEGIN IMMEDIATE", service_source)
+        self.assertIn("sign_in_operations", service_source)
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")

@@ -6,6 +6,7 @@ import re
 import os
 import random
 import asyncio
+import time
 from datetime import datetime
 from nonebot.typing import T_State
 from ...paths import get_paths
@@ -46,11 +47,13 @@ from ..xiuxian_utils.season_rank_service import (
 from ..xiuxian_tasks.task_data import record_task_progress
 from .stone_limit import stone_limit
 from .lottery_pool import lottery_pool
+from .sign_service import SignInService
 from .breakthrough_tribulation import *  # noqa: F401,F403
 from .xiangyuan import clear_all_xiangyuan, reset_xiangyuan_daily  # noqa: F401
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
+sign_in_service = SignInService(get_paths().game_db)
 player_data_manager = PlayerDataManager()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 PLAYERSDATA = get_paths().players
@@ -78,6 +81,15 @@ level2_help = on_command("境界帮助", aliases={"境界列表"}, priority=15, 
 view_logs = on_command("修仙日志", aliases={"查看日志", "我的日志", "查日志", "日志记录"}, priority=5, block=True)
 
 view_data = on_command("修仙数据", aliases={"统计数据", "我的数据", "查数据", "数据记录", "统计信息"}, priority=5, block=True)
+
+
+def _sign_operation_id(event, user_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"sign:{event_id}:{user_id}"
+    return f"sign:{user_id}:{time.time_ns()}"
 xiuxian_world_info = on_command("修仙界信息", priority=5, block=True)
 
 __level_help__ = """
@@ -606,12 +618,23 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await sign_in.finish()
     user_id = user_info['user_id']
     
-    # 1. 执行签到逻辑
-    result = sql_message.get_sign(user_id)
-    if user_info['is_sign'] == 1:
+    sign_result = sign_in_service.sign(
+        _sign_operation_id(event, user_id),
+        user_id,
+        XiuConfig().sign_in_lingshi_lower_limit,
+        XiuConfig().sign_in_lingshi_upper_limit,
+    )
+    if not sign_result.applied:
+        result = (
+            f"签到成功，获取{sign_result.stone}块灵石!"
+            if sign_result.status == "duplicate"
+            else "贪心的人是不会有好运的！"
+        )
         await handle_send(bot, event, result)
         await sign_in.finish()
-     # 2. 自动参与"鸿运"抽奖
+    result = f"签到成功，获取{sign_result.stone}块灵石!"
+
+    # 仅首次成功签到参与鸿运，重复事件不会重复写奖池或派奖。
     lottery_result = await handle_lottery(user_info)
     
     # 3. 组合签到结果和抽奖结果
