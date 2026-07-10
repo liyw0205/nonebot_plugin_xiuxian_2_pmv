@@ -35,7 +35,6 @@ from .core import (
     timedelta,
     url_for,
     web_auth_is_enabled,
-    web_feature_enabled,
 )
 
 
@@ -431,8 +430,7 @@ def upload_api_image():
     """
     供外部/其他插件调用的图片上传接口
     """
-    # 安全检查：默认要求管理员登录；如需本机免登录调用，可显式开启 web_allow_local_upload。
-    local_upload_allowed = web_feature_enabled("web_allow_local_upload") and is_local_web_request()
+    local_upload_allowed = is_local_web_request()
     if 'admin_id' not in session and not local_upload_allowed:
         return jsonify({"success": False, "error": "Unauthorized"}), 403
 

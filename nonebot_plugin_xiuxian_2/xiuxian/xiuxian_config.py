@@ -111,21 +111,6 @@ class XiuConfig:
         # Web 管理面板会话有效期（分钟）
         self.web_allowed_hosts = []
         # Host 白名单，留空不限制；示例 ["127.0.0.1", "example.com"]
-        self.web_enable_terminal = False
-        # 是否启用 Web 终端
-        self.web_enable_update = False
-        # 是否启用在线更新入口
-        self.web_enable_database_write = False
-        # 是否允许 Web 数据库编辑、指令中心、活动数据和发放记录写入
-        self.web_enable_backup_restore = False
-        # 是否允许 Web 备份、同步、恢复、下载和删除
-        self.web_enable_message_send = False
-        # 是否允许 Web 消息面板主动发送/广播/撤回
-        self.web_enable_scheduler_manage = False
-        # 是否允许 Web 管理定时任务的启停、手动执行和计划调整
-        self.web_allow_local_upload = False
-        # 是否允许本机免登录调用 /upload_image
-
         self.cloud_backup_enabled = False
         # 是否开启云备份（True 才会上传）
         self.webdav_url = ""

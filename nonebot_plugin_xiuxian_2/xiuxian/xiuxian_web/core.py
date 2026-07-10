@@ -226,21 +226,6 @@ def terminal_authorization_is_valid() -> bool:
         return False
 
 
-_WEB_FEATURE_DEFAULTS = {
-    "web_enable_terminal": False,
-    "web_enable_update": False,
-    "web_enable_database_write": False,
-    "web_enable_backup_restore": False,
-    "web_enable_message_send": False,
-    "web_enable_scheduler_manage": False,
-    "web_allow_local_upload": False,
-}
-
-
-def web_feature_enabled(feature: str) -> bool:
-    return _config_bool(feature, _WEB_FEATURE_DEFAULTS.get(feature, False))
-
-
 def safe_path_under(base_dir, *parts) -> Path:
     base = Path(base_dir).resolve()
     candidate = base.joinpath(*[str(part) for part in parts]).resolve()
@@ -251,17 +236,6 @@ def safe_path_under(base_dir, *parts) -> Path:
     return candidate
 
 
-_PERMISSION_FEATURES = {
-    WebPermission.DATABASE_WRITE: ("web_enable_database_write", "数据库写入功能未启用"),
-    WebPermission.MESSAGE: ("web_enable_message_send", "Web 消息发送功能未启用"),
-    WebPermission.BACKUP: ("web_enable_backup_restore", "备份恢复/删除功能未启用"),
-    WebPermission.UPDATE: ("web_enable_update", "在线更新功能未启用"),
-    WebPermission.SCHEDULER: ("web_enable_scheduler_manage", "定时任务管理未启用"),
-    WebPermission.TERMINAL_CONFIRM: ("web_enable_terminal", "Web 终端未启用"),
-    WebPermission.TERMINAL: ("web_enable_terminal", "Web 终端未启用"),
-}
-
-
 def _authorization_error():
     permission = get_endpoint_permission()
     if permission is None:
@@ -270,15 +244,12 @@ def _authorization_error():
     if permission == WebPermission.PUBLIC:
         return None
     if permission == WebPermission.LOCAL_UPLOAD:
-        if web_feature_enabled("web_allow_local_upload") and _is_local_request():
+        if _is_local_request():
             return None
     if not is_admin_logged_in():
         if request.endpoint in {"home", "logout", "update", "backups", "database", "commands", "logs", "messages_page", "activity_management", "reward_center", "command_registry", "config_management", "economy_logs", "terminal", "terminal_confirm"}:
             return redirect(url_for("login"))
         return api_error("未登录", status=401)
-    feature = _PERMISSION_FEATURES.get(permission)
-    if feature and not web_feature_enabled(feature[0]):
-        return web_error(feature[1], 403)
     if permission == WebPermission.TERMINAL and not terminal_authorization_is_valid():
         if request.endpoint == "terminal":
             return redirect(url_for("terminal_confirm"))
@@ -298,7 +269,7 @@ def _csrf_exempt_for_request() -> bool:
     if request.endpoint == "static":
         return True
     if request.endpoint == "upload_api_image" and _is_local_request():
-        return _config_bool("web_allow_local_upload", False)
+        return True
     return False
 
 

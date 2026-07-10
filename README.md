@@ -585,12 +585,6 @@ Web 会话密钥会优先读取环境变量 `XIUXIAN_WEB_SECRET_KEY`，否则读
 | `web_require_csrf` | `True` | Web 写请求 CSRF 校验 |
 | `web_allowed_hosts` | `[]` | Host 白名单，留空不限制 |
 | `web_session_cookie_secure` | `False` | HTTPS 反代时建议开启 |
-| `web_enable_terminal` | `False` | Web 终端入口 |
-| `web_enable_update` | `False` | 在线检测更新与执行更新 |
-| `web_enable_database_write` | `False` | 数据库编辑、指令中心、活动数据和发放记录写入 |
-| `web_enable_backup_restore` | `False` | 备份、同步、恢复、下载和删除 |
-| `web_enable_message_send` | `False` | Web 消息主动发送、广播和撤回 |
-| `web_allow_local_upload` | `False` | 本机免登录调用 `/upload_image` |
 
 ### 功能一览
 

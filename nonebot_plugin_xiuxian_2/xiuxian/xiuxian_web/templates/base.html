@@ -75,15 +75,9 @@
                 <ul>
                     <li><a href="{{ url_for('logs') }}" data-refresh-page="true" {% if is_active('logs') %}class="active"{% endif %}><i class="fas fa-file-lines"></i><span>日志查看</span></a></li>
                     <li><a href="{{ url_for('backups') }}" data-refresh-page="true" {% if is_active('backups') %}class="active"{% endif %}><i class="fas fa-box-archive"></i><span>备份管理</span></a></li>
-                    {% if web_feature_enabled('web_enable_update') %}
                     <li><a href="{{ url_for('update') }}" data-refresh-page="true" {% if is_active('update') %}class="active"{% endif %}><i class="fas fa-rotate"></i><span>检测更新</span></a></li>
-                    {% endif %}
-                    {% if web_feature_enabled('web_enable_terminal') %}
                     <li><a href="{{ url_for('terminal') }}" data-refresh-page="true" {% if is_active('terminal') %}class="active"{% endif %}><i class="fas fa-terminal"></i><span>Web 终端</span></a></li>
-                    {% endif %}
-                    {% if web_feature_enabled('web_enable_scheduler_manage') %}
                     <li><a href="{{ url_for('scheduler_management') }}" data-refresh-page="true" {% if is_active('scheduler_management') %}class="active"{% endif %}><i class="fas fa-clock"></i><span>定时任务</span></a></li>
-                    {% endif %}
                 </ul>
             </nav>
 

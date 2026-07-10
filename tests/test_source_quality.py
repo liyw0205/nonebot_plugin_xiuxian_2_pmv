@@ -267,13 +267,13 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("max_instances=1", decorator)
         self.assertIn("misfire_grace_time=300", decorator)
 
-    def test_web_defaults_are_local_and_high_risk_features_are_disabled(self) -> None:
+    def test_web_defaults_are_local_and_have_no_feature_gates(self) -> None:
         config_path = SOURCE_ROOT / "xiuxian" / "xiuxian_config.py"
         source = config_path.read_text(encoding="utf-8")
         self.assertIn('self.web_host = "127.0.0.1"', source)
-        self.assertIn("self.web_enable_database_write = False", source)
-        self.assertIn("self.web_enable_backup_restore = False", source)
-        self.assertIn("self.web_enable_message_send = False", source)
+        self.assertNotIn("self.web_enable_database_write", source)
+        self.assertNotIn("self.web_enable_backup_restore", source)
+        self.assertNotIn("self.web_enable_message_send", source)
 
         web_entrypoint = SOURCE_ROOT / "xiuxian" / "xiuxian_web" / "__init__.py"
         entrypoint_source = web_entrypoint.read_text(encoding="utf-8")

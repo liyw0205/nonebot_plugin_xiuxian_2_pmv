@@ -85,25 +85,9 @@ class WebAuthorizationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
         self.assertFalse(response.get_json()["success"])
 
-    def test_database_write_requires_feature_flag(self) -> None:
-        self._login_session()
-        with (
-            patch.object(core, "ADMIN_IDS", {"admin-1"}),
-            patch.object(core, "web_feature_enabled", return_value=False),
-        ):
-            response = self.client.post(
-                "/execute_command",
-                json={"command": "status"},
-                headers={"X-CSRF-Token": "csrf-token"},
-            )
-        self.assertEqual(response.status_code, 403)
-
     def test_terminal_confirmation_uses_superuser_session(self) -> None:
         self._login_session()
-        with (
-            patch.object(core, "ADMIN_IDS", {"admin-1"}),
-            patch.object(core, "web_feature_enabled", return_value=True),
-        ):
+        with patch.object(core, "ADMIN_IDS", {"admin-1"}):
             response = self.client.get("/terminal")
             self.assertEqual(response.status_code, 302)
             self.assertTrue(response.headers["Location"].endswith("/terminal/confirm"))
@@ -146,25 +130,13 @@ class WebAuthorizationTests(unittest.TestCase):
         self.assertEqual(processes[0]["memory_mb"], 8.0)
 
     def test_local_upload_uses_direct_peer_address(self) -> None:
-        with (
-            patch.object(core, "ADMIN_IDS", {"admin-1"}),
-            patch.object(core, "web_feature_enabled", return_value=True),
-        ):
+        with patch.object(core, "ADMIN_IDS", {"admin-1"}):
             response = self.client.post(
                 "/upload_image",
                 headers={"X-Forwarded-For": "127.0.0.1"},
                 environ_base={"REMOTE_ADDR": "203.0.113.5"},
             )
         self.assertEqual(response.status_code, 401)
-
-    def test_scheduler_management_requires_its_feature_flag(self) -> None:
-        self._login_session()
-        with (
-            patch.object(core, "ADMIN_IDS", {"admin-1"}),
-            patch.object(core, "web_feature_enabled", return_value=False),
-        ):
-            response = self.client.get("/scheduler")
-        self.assertEqual(response.status_code, 403)
 
     def test_scheduler_api_can_toggle_and_queue_registered_job(self) -> None:
         class FakeJobManager:
@@ -183,7 +155,6 @@ class WebAuthorizationTests(unittest.TestCase):
         self._login_session()
         with (
             patch.object(core, "ADMIN_IDS", {"admin-1"}),
-            patch.object(core, "web_feature_enabled", return_value=True),
             patch.object(scheduler, "job_manager", FakeJobManager()),
         ):
             response = self.client.get("/api/scheduler/jobs")
@@ -213,10 +184,7 @@ class WebAuthorizationTests(unittest.TestCase):
 
     def test_scheduler_write_requires_csrf_token(self) -> None:
         self._login_session()
-        with (
-            patch.object(core, "ADMIN_IDS", {"admin-1"}),
-            patch.object(core, "web_feature_enabled", return_value=True),
-        ):
+        with patch.object(core, "ADMIN_IDS", {"admin-1"}):
             response = self.client.post(
                 "/api/scheduler/jobs/daily-reset/enabled",
                 json={"enabled": False},

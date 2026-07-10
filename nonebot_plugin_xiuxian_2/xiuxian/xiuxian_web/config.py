@@ -13,7 +13,6 @@ from .core import (
     request,
     session,
     url_for,
-    web_feature_enabled,
 )
 
 CONFIG_EDITABLE_FIELDS = {
@@ -237,48 +236,6 @@ CONFIG_EDITABLE_FIELDS = {
         "name": "Host白名单",
         "description": "允许访问面板的 Host，留空不限制，多个用逗号分隔",
         "type": "list[str]",
-        "category": "Web安全"
-    },
-    "web_enable_terminal": {
-        "name": "Web终端",
-        "description": "是否启用 Web 终端入口",
-        "type": "bool",
-        "category": "Web安全"
-    },
-    "web_enable_update": {
-        "name": "在线更新",
-        "description": "是否启用在线检测更新和执行更新",
-        "type": "bool",
-        "category": "Web安全"
-    },
-    "web_enable_database_write": {
-        "name": "数据库写入",
-        "description": "是否允许 Web 数据库编辑、指令中心、活动数据和发放记录写入",
-        "type": "bool",
-        "category": "Web安全"
-    },
-    "web_enable_backup_restore": {
-        "name": "备份恢复删除",
-        "description": "是否允许 Web 执行备份、同步、恢复、下载和删除操作",
-        "type": "bool",
-        "category": "Web安全"
-    },
-    "web_enable_message_send": {
-        "name": "消息主动发送",
-        "description": "是否允许 Web 消息面板主动发送、广播和撤回消息",
-        "type": "bool",
-        "category": "Web安全"
-    },
-    "web_enable_scheduler_manage": {
-        "name": "定时任务管理",
-        "description": "是否允许 Web 启停、手动执行和修改定时任务",
-        "type": "bool",
-        "category": "Web安全"
-    },
-    "web_allow_local_upload": {
-        "name": "本机免登上传",
-        "description": "是否允许本机免登录调用 /upload_image",
-        "type": "bool",
         "category": "Web安全"
     },
     "level_up_cd": {
@@ -839,8 +796,7 @@ def inject_navigation():
         get_command_icon=get_command_icon,
         get_config_category_icon=get_config_category_icon,
         is_active=is_active,
-        csrf_token=get_csrf_token,
-        web_feature_enabled=web_feature_enabled
+        csrf_token=get_csrf_token
     )
 
 def get_root_rate(root_type, user_id):
