@@ -449,6 +449,16 @@ class SourceQualityTests(unittest.TestCase):
             source,
         )
 
+    def test_command_disable_uses_central_json_store(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "command_disable.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("json.loads(", source)
+        self.assertNotIn("json.dumps(", source)
+        self.assertNotIn("with open(", source)
+        self.assertIn("load_json_file(", source)
+        self.assertIn("save_json_file(", source)
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")

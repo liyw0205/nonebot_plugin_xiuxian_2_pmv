@@ -2,13 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-try:
-    import ujson as json
-except ImportError:
-    import json
-
 from nonebot.log import logger
 from ..paths import get_paths
+from .xiuxian_utils.json_store import load_json_file, save_json_file
 
 XIUXIAN_DATABASE = get_paths().data
 
@@ -18,10 +14,6 @@ COMMAND_DISABLE_EXEMPT_MODULE = "xiuxian_admin"
 _COMMAND_ENTRIES: dict[str, dict[str, Any]] = {}
 # 触发词（含别名）-> 主指令名
 _ALIAS_TO_PRIMARY: dict[str, str] = {}
-
-
-def _ensure_parent() -> None:
-    COMMAND_DISABLE_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 
 def _normalize_entry(value: Any, *, module: str = "") -> dict[str, Any]:
@@ -38,15 +30,7 @@ def load_command_disable_memory() -> dict[str, dict[str, Any]]:
     if not COMMAND_DISABLE_FILE.exists():
         _COMMAND_ENTRIES = {}
         return _COMMAND_ENTRIES
-    try:
-        with open(COMMAND_DISABLE_FILE, "r", encoding="utf-8") as fp:
-            raw = json.loads(fp.read())
-    except Exception as e:
-        logger.warning("[修仙 指令禁用] 读取 {} 失败：{}", COMMAND_DISABLE_FILE, e)
-        return _COMMAND_ENTRIES
-    if not isinstance(raw, dict):
-        _COMMAND_ENTRIES = {}
-        return _COMMAND_ENTRIES
+    raw = load_json_file(COMMAND_DISABLE_FILE, {}, dict)
 
     commands_raw = raw.get("commands", raw)
     if not isinstance(commands_raw, dict):
@@ -63,7 +47,6 @@ def load_command_disable_memory() -> dict[str, dict[str, Any]]:
 
 
 def save_command_disable_memory() -> None:
-    _ensure_parent()
     payload = {
         "commands": {
             name: {
@@ -73,8 +56,7 @@ def save_command_disable_memory() -> None:
             for name, info in sorted(_COMMAND_ENTRIES.items())
         }
     }
-    with open(COMMAND_DISABLE_FILE, "w", encoding="utf-8") as fp:
-        fp.write(json.dumps(payload, ensure_ascii=False, indent=2))
+    save_json_file(COMMAND_DISABLE_FILE, payload, indent=2)
 
 
 def rebuild_alias_index(alias_map: dict[str, str]) -> None:
