@@ -13,6 +13,7 @@ from ..adapter_message_actions import delete_message_compat
 from ..adapter_message_records import record_send_message
 from ..adapter_message_sender import is_qq_bot, send_group_message, send_private_message
 from ..qq_compat import QQCapabilityRegistry
+from ..infrastructure import RuntimeMetrics, runtime_metrics
 from .models import SendRequest, SendResult
 from .reliability import (
     DeliveryError,
@@ -30,10 +31,12 @@ class MessageDeliveryService:
         *,
         max_msg_seq_retries: int = 3,
         capabilities: QQCapabilityRegistry | None = None,
+        metrics: RuntimeMetrics | None = None,
     ) -> None:
         self._sequences = MessageSequenceStrategy()
         self._max_msg_seq_retries = max(0, int(max_msg_seq_retries))
         self._capabilities = capabilities or QQCapabilityRegistry()
+        self._metrics = metrics or runtime_metrics
 
     async def _send_with_policy(
         self,
@@ -69,6 +72,7 @@ class MessageDeliveryService:
                 )
             except Exception as exc:
                 if generated_sequence and is_msg_seq_conflict(exc) and attempt + 1 < attempts:
+                    self._metrics.increment("delivery.retry.msg_seq_conflict")
                     await asyncio.sleep(0)
                     continue
                 raise
@@ -77,10 +81,13 @@ class MessageDeliveryService:
     async def _audit_result(self, exc: BaseException, timeout: float) -> SendResult:
         audit_id = str(getattr(exc, "audit_id", "") or "") or None
         if timeout <= 0 or not callable(getattr(exc, "get_audit_result", None)):
+            self._metrics.increment("delivery.audit.pending")
             return SendResult(None, None, exc, status="pending_audit", audit_id=audit_id)
         try:
             raw = await exc.get_audit_result(timeout=timeout)  # type: ignore[attr-defined]
         except Exception as audit_exc:
+            if isinstance(audit_exc, (asyncio.TimeoutError, TimeoutError)):
+                self._metrics.increment("delivery.audit.timeout")
             kind, retryable = classify_delivery_error(audit_exc)
             raise DeliveryError(kind, retryable, audit_exc) from audit_exc
         event_type = str(
@@ -89,6 +96,7 @@ class MessageDeliveryService:
             or ""
         ).upper()
         if "MESSAGE_AUDIT_PASS" not in event_type:
+            self._metrics.increment("delivery.audit.rejected")
             rejected = RuntimeError(f"消息审核未通过: {event_type or 'unknown'}")
             raise DeliveryError("audit_rejected", False, rejected)
         return SendResult.from_raw(raw)

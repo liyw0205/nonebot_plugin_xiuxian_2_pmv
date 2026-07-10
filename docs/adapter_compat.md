@@ -217,6 +217,13 @@ QQ 好友、C2C 和群生命周期事件已接入 `LifecycleStateRegistry`。群
 `xiuxian_lifecycle_result` 属性；成员离群时后者的 `member_left` 为 `True`，业务可据此
 执行邀请等关联状态清理。生命周期事件不会进入普通消息命令限流链路。
 
+运行时提供 `background_jobs` 和 `critical_jobs` 两类有界任务队列。非关键统计、缓存、
+日志和清理任务可通过 `submit_background_job()` 提交并允许容量满时丢弃；经济变更、
+奖励和交易等关键任务必须同步等待，或通过 `submit_critical_job()` 提交，后者即使队列
+已满也会等待容量，不能静默丢失。队列的 size、drop、retry、success/failure，QQ 事件
+去重命中，以及消息序号重试和审核 pending/timeout/rejected 均记录在
+`infrastructure.runtime_metrics` 中。
+
 ## 引用回复
 
 QQ 官方普通群与 C2C 的引用回复必须使用平台返回的 `REFIDX`，不是普通消息 ID。兼容层会在 `patch_event_inplace()` 时把它补到 `event.message_reference_id` / `event.reference_id`。通用业务发送可通过配置 `reference_reply=True` 走 `send_reference_reply(...)`；开启后 `send_msg_handler` 会避开合并转发 API，改走普通消息发送。底层仍支持显式传 `auto_reference=True` 或引用参数。

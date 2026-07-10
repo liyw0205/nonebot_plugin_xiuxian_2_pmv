@@ -11,6 +11,7 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.infrastructure import (
     BackgroundJobQueue,
     QQEventDeduplicator,
+    RuntimeMetrics,
     TTLStore,
 )
 
@@ -43,7 +44,8 @@ class InfrastructureRuntimeTests(unittest.IsolatedAsyncioTestCase):
             def get_message(self):
                 return self.content
 
-        dedup = QQEventDeduplicator()
+        metrics = RuntimeMetrics()
+        dedup = QQEventDeduplicator(metrics=metrics)
         bot = SimpleNamespace(self_id="bot-1")
         self.assertFalse(await dedup.is_duplicate(bot, Event()))
         self.assertTrue(await dedup.is_duplicate(bot, Event()))
@@ -52,7 +54,10 @@ class InfrastructureRuntimeTests(unittest.IsolatedAsyncioTestCase):
         event_without_id = Event()
         event_without_id.id = ""
         self.assertFalse(await dedup.is_duplicate(bot, event_without_id))
+        self.assertEqual(metrics.get("dedup.checked"), 3)
+        self.assertEqual(metrics.get("dedup.hit"), 1)
         self.assertFalse(await dedup.is_duplicate(bot, event_without_id))
+        self.assertEqual(metrics.get("dedup.skipped_no_stable_id"), 2)
 
     async def test_background_queue_runs_jobs_and_tracks_drops(self) -> None:
         gate = asyncio.Event()
@@ -70,6 +75,50 @@ class InfrastructureRuntimeTests(unittest.IsolatedAsyncioTestCase):
         gate.set()
         await queue.stop(drain=True)
         self.assertEqual(executed, [1])
+        self.assertEqual(queue.completed, 1)
+
+    async def test_critical_job_waits_for_capacity_instead_of_dropping(self) -> None:
+        queue = BackgroundJobQueue("critical-test", max_size=1, workers=1)
+        gate = asyncio.Event()
+        executed: list[int] = []
+
+        async def first():
+            await gate.wait()
+            executed.append(1)
+
+        async def second():
+            executed.append(2)
+
+        self.assertTrue(await queue.submit(first))
+        submit_task = asyncio.create_task(queue.submit(second, critical=True))
+        await asyncio.sleep(0)
+        self.assertFalse(submit_task.done())
+        await queue.start()
+        self.assertTrue(await submit_task)
+        gate.set()
+        await queue.stop(drain=True)
+        self.assertEqual(executed, [1, 2])
+        self.assertEqual(queue.dropped, 0)
+
+    async def test_background_queue_retries_and_reports_metrics(self) -> None:
+        metrics = RuntimeMetrics()
+        queue = BackgroundJobQueue("retry-test", metrics=metrics)
+        attempts = 0
+
+        async def flaky():
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise RuntimeError("temporary")
+
+        await queue.start()
+        self.assertTrue(await queue.submit(flaky, max_retries=1))
+        await queue.stop(drain=True)
+        self.assertEqual(attempts, 2)
+        self.assertEqual(queue.retried, 1)
+        self.assertEqual(queue.completed, 1)
+        self.assertEqual(queue.failed, 0)
+        self.assertEqual(queue.metrics_snapshot()["queue.retry-test.size"], 0)
 
 
 if __name__ == "__main__":

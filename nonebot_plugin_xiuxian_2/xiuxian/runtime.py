@@ -7,8 +7,34 @@ from typing import Any
 from nonebot import get_driver
 from nonebot.log import logger
 
+from .infrastructure import BackgroundJobQueue
+
 
 driver = get_driver()
+background_jobs = BackgroundJobQueue(
+    "background",
+    max_size=1000,
+    workers=2,
+    overflow_policy="drop",
+)
+critical_jobs = BackgroundJobQueue(
+    "critical",
+    max_size=500,
+    workers=2,
+    overflow_policy="wait",
+)
+
+
+async def submit_background_job(operation, *, max_retries: int = 0) -> bool:
+    return await background_jobs.submit(operation, max_retries=max_retries)
+
+
+async def submit_critical_job(operation, *, max_retries: int = 0) -> bool:
+    return await critical_jobs.submit(
+        operation,
+        critical=True,
+        max_retries=max_retries,
+    )
 
 
 def _config_bool(name: str, default: bool) -> bool:
@@ -68,3 +94,12 @@ async def initialize_xiuxian_runtime() -> None:
             await _run_blocking("整理数据库", _maintain_database)
         except Exception as exc:
             logger.warning(f"修仙插件数据库整理失败：{exc}")
+
+    await background_jobs.start()
+    await critical_jobs.start()
+
+
+@driver.on_shutdown
+async def shutdown_xiuxian_runtime() -> None:
+    await background_jobs.stop(drain=True)
+    await critical_jobs.stop(drain=True)

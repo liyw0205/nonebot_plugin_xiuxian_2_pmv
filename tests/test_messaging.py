@@ -24,6 +24,7 @@ from nonebot_plugin_xiuxian_2.xiuxian.messaging import (
     keyboard_plain_text,
     render_markdown_template,
 )
+from nonebot_plugin_xiuxian_2.xiuxian.infrastructure import RuntimeMetrics
 from nonebot_plugin_xiuxian_2.xiuxian.qq_compat import (
     QQCapabilities,
     QQCapabilityRegistry,
@@ -140,7 +141,8 @@ class DeliveryServiceTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_qq_delivery_retries_msg_seq_conflict(self) -> None:
-        service = MessageDeliveryService(max_msg_seq_retries=2)
+        metrics = RuntimeMetrics()
+        service = MessageDeliveryService(max_msg_seq_retries=2, metrics=metrics)
 
         class MsgSeqConflict(RuntimeError):
             code = 40054005
@@ -168,6 +170,7 @@ class DeliveryServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sender.await_count, 2)
         self.assertEqual(sender.await_args_list[0].kwargs["msg_seq"], 101)
         self.assertEqual(sender.await_args_list[1].kwargs["msg_seq"], 102)
+        self.assertEqual(metrics.get("delivery.retry.msg_seq_conflict"), 1)
 
     async def test_explicit_msg_seq_is_preserved_without_retry_generation(self) -> None:
         service = MessageDeliveryService()
@@ -197,7 +200,8 @@ class DeliveryServiceTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_audit_exception_returns_pending_result(self) -> None:
-        service = MessageDeliveryService()
+        metrics = RuntimeMetrics()
+        service = MessageDeliveryService(metrics=metrics)
 
         class AuditException(RuntimeError):
             audit_id = "audit-1"
@@ -214,6 +218,29 @@ class DeliveryServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status, "pending_audit")
         self.assertEqual(result.audit_id, "audit-1")
         self.assertIsNone(result.message_id)
+        self.assertEqual(metrics.get("delivery.audit.pending"), 1)
+
+    async def test_audit_timeout_is_reported(self) -> None:
+        metrics = RuntimeMetrics()
+        service = MessageDeliveryService(metrics=metrics)
+
+        class AuditException(RuntimeError):
+            audit_id = "audit-timeout"
+
+            async def get_audit_result(self, timeout):
+                raise TimeoutError(f"audit timeout after {timeout}")
+
+        with patch(
+            "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery.send_group_message",
+            new=AsyncMock(side_effect=AuditException()),
+        ):
+            with self.assertRaises(DeliveryError):
+                await service.send(
+                    object(),
+                    SendRequest("group", "group-1", "hello", audit_timeout=0.1),
+                )
+
+        self.assertEqual(metrics.get("delivery.audit.timeout"), 1)
 
     async def test_rate_limit_error_is_classified_as_retryable(self) -> None:
         service = MessageDeliveryService()
