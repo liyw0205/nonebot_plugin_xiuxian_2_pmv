@@ -1682,40 +1682,30 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, forbid_reason, md_type="交易", k1="求购", v1="鬼市求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_qiugou.finish()
 
-    # 检查订单数量限制
-    qiugou_orders = trade_manager.get_guishi_orders(user_id=user_id, type="qiugou")
-    if qiugou_orders and len(qiugou_orders) >= MAX_QIUGOU_ORDERS:
+    result = xianshi_repository.create_guishi_qiugou_order(
+        get_paths().trade_db,
+        user_id,
+        goods_id,
+        item_name,
+        price,
+        quantity,
+        max_orders=MAX_QIUGOU_ORDERS,
+    )
+    if result.status == "limit_reached":
         msg = f"您的求购订单已达上限({MAX_QIUGOU_ORDERS})，请明日再来！"
         await handle_send(bot, event, msg, md_type="交易", k1="求购", v1="鬼市求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_qiugou.finish()
-    
-    # 检查鬼市账户余额是否足够
-    user_stored_stone = trade_manager.get_stored_stone(user_id)
-    total_cost = price * quantity
-    if user_stored_stone < total_cost:
-        msg = f"鬼市账户余额不足！需要 {number_to(total_cost)} 灵石，当前余额 {number_to(user_stored_stone)} 灵石"
+    if result.status == "stone_insufficient":
+        msg = f"鬼市账户余额不足！需要 {number_to(result.total_cost)} 灵石"
         await handle_send(bot, event, msg, md_type="交易", k1="求购", v1="鬼市求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_qiugou.finish()
-    
-    # 冻结相应灵石 (从鬼市账户扣除)
-    if not trade_manager.try_update_stored_stone(user_id, total_cost, 'subtract'):
-        msg = "鬼市账户余额不足，求购失败！"
-        await handle_send(bot, event, msg, md_type="交易", k1="求购", v1="鬼市求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
-        await guishi_qiugou.finish()
-
-    # 添加求购订单
-    try:
-        order_id = trade_manager.add_guishi_order(user_id, item_id=goods_id, item_name=item_name, item_type="qiugou", price=price, quantity=quantity)
-    except Exception as e:
-        logger.error(f"鬼市求购发布失败，已退回冻结灵石: {e}")
-        trade_manager.update_stored_stone(user_id, total_cost, 'add')
-        msg = "求购订单发布失败，已退回冻结灵石！"
-        await handle_send(bot, event, msg, md_type="交易", k1="求购", v1="鬼市求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
-        await guishi_qiugou.finish()
+    if not result.created:
+        raise RuntimeError(f"unexpected guishi qiugou status: {result.status}")
+    order_id = result.order_id
     
     msg = f"成功发布求购订单！\n"
     msg += f"物品：{item_name}\n"
-    msg += f"总价：{number_to(quantity * price)} 灵石\n"
+    msg += f"总价：{number_to(result.total_cost)} 灵石\n"
     msg += f"单价：{number_to(price)} 灵石\n"
     msg += f"数量：{quantity}\n"
     msg += f"订单ID：{order_id}\n"
@@ -1723,8 +1713,8 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     record_trade_event(
         user_id,
         "鬼市求购",
-        f"发布求购{item_name}x{quantity}，单价{number_to(price)}灵石，冻结{number_to(total_cost)}灵石，订单ID:{order_id}",
-        {"鬼市求购次数": 1, "鬼市求购数量": quantity, "鬼市求购冻结灵石": total_cost}
+        f"发布求购{item_name}x{quantity}，单价{number_to(price)}灵石，冻结{number_to(result.total_cost)}灵石，订单ID:{order_id}",
+        {"鬼市求购次数": 1, "鬼市求购数量": quantity, "鬼市求购冻结灵石": result.total_cost}
     )
     
     # 立即尝试进行交易匹配，避免等待调度器

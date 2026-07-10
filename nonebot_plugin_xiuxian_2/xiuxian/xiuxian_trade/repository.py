@@ -125,6 +125,17 @@ class GuishiMatch:
         return self.status == "matched"
 
 
+@dataclass(frozen=True)
+class GuishiQiugouCreate:
+    status: str
+    order_id: str = ""
+    total_cost: int = 0
+
+    @property
+    def created(self) -> bool:
+        return self.status == "created"
+
+
 class TradeRepository:
     """Atomic marketplace operations stored with player economy data."""
 
@@ -459,6 +470,90 @@ class TradeRepository:
                     user_id,
                     refunded_stone=refund_stone,
                 )
+            except Exception:
+                conn.rollback()
+                raise
+
+    def create_guishi_qiugou_order(
+        self,
+        trade_database: str | Path,
+        user_id,
+        item_id,
+        item_name,
+        price,
+        quantity,
+        *,
+        max_orders: int,
+    ) -> GuishiQiugouCreate:
+        import secrets
+
+        user_id = str(user_id)
+        item_id = int(item_id)
+        item_name = str(item_name)
+        price = max(int(price), 0)
+        quantity = max(int(quantity), 1)
+        total_cost = price * quantity
+        with self._lock, closing(db_backend.connect(trade_database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                count = conn.execute(
+                    """
+                    SELECT COUNT(*) FROM guishi_item
+                    WHERE user_id=%s AND (item_type=%s OR item_type=%s)
+                    """,
+                    (user_id, "qiugou", "求购"),
+                ).fetchone()[0]
+                if int(count) >= max(int(max_orders), 1):
+                    conn.rollback()
+                    return GuishiQiugouCreate("limit_reached", total_cost=total_cost)
+                balance = conn.execute(
+                    "SELECT COALESCE(stored_stone, 0) FROM guishi_info WHERE user_id=%s",
+                    (user_id,),
+                ).fetchone()
+                if balance is None or int(balance[0]) < total_cost:
+                    conn.rollback()
+                    return GuishiQiugouCreate("stone_insufficient", total_cost=total_cost)
+
+                for _ in range(20):
+                    order_id = str(
+                        secrets.randbelow(9_000_000_000_000) + 1_000_000_000_000
+                    )
+                    try:
+                        conn.execute(
+                            """
+                            INSERT INTO guishi_item (
+                                id, user_id, item_id, item_name, item_type,
+                                price, quantity
+                            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            """,
+                            (
+                                order_id,
+                                user_id,
+                                item_id,
+                                item_name,
+                                "qiugou",
+                                price,
+                                quantity,
+                            ),
+                        )
+                        break
+                    except db_backend.IntegrityError:
+                        existing = conn.execute(
+                            "SELECT 1 FROM guishi_item WHERE id=%s", (order_id,)
+                        ).fetchone()
+                        if existing:
+                            continue
+                        raise
+                else:
+                    conn.rollback()
+                    raise RuntimeError("failed to allocate guishi order id")
+
+                conn.execute(
+                    "UPDATE guishi_info SET stored_stone=stored_stone-%s WHERE user_id=%s",
+                    (total_cost, user_id),
+                )
+                conn.commit()
+                return GuishiQiugouCreate("created", order_id, total_cost)
             except Exception:
                 conn.rollback()
                 raise

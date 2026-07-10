@@ -147,6 +147,70 @@ class GuishiOrderMatchingTests(unittest.TestCase):
         self.assertEqual(tuple(self.order("sell")), (10, 6))
         self.assertEqual(self.info("buyer"), (99, {"1002": 1}))
 
+    def test_create_qiugou_freezes_stone_and_inserts_order_together(self) -> None:
+        result = self.repository.create_guishi_qiugou_order(
+            self.trade_database,
+            "buyer",
+            1003,
+            "灵石草",
+            20,
+            3,
+            max_orders=10,
+        )
+
+        self.assertTrue(result.created)
+        self.assertEqual(result.total_cost, 60)
+        self.assertEqual(self.info("buyer")[0], 39)
+        with db_backend.connection(self.trade_database) as conn:
+            order = conn.execute(
+                "SELECT user_id, item_id, price, quantity FROM guishi_item WHERE id=%s",
+                (result.order_id,),
+            ).fetchone()
+        self.assertEqual(tuple(order), ("buyer", 1003, 20, 3))
+
+    def test_create_qiugou_rejects_insufficient_stone_without_order(self) -> None:
+        result = self.repository.create_guishi_qiugou_order(
+            self.trade_database,
+            "buyer",
+            1003,
+            "灵石草",
+            40,
+            3,
+            max_orders=10,
+        )
+
+        self.assertEqual(result.status, "stone_insufficient")
+        self.assertEqual(self.info("buyer")[0], 99)
+        with db_backend.connection(self.trade_database) as conn:
+            self.assertEqual(
+                conn.execute("SELECT COUNT(*) FROM guishi_item").fetchone()[0], 2
+            )
+
+    def test_create_qiugou_insert_failure_rolls_back_stone(self) -> None:
+        with db_backend.transaction(self.trade_database) as conn:
+            conn.execute(
+                """
+                CREATE TRIGGER reject_qiugou_insert
+                BEFORE INSERT ON guishi_item WHEN NEW.item_type='qiugou'
+                BEGIN
+                    SELECT RAISE(ABORT, 'reject insert');
+                END
+                """
+            )
+
+        with self.assertRaises(db_backend.IntegrityError):
+            self.repository.create_guishi_qiugou_order(
+                self.trade_database,
+                "buyer",
+                1003,
+                "灵石草",
+                20,
+                3,
+                max_orders=10,
+            )
+
+        self.assertEqual(self.info("buyer")[0], 99)
+
 
 if __name__ == "__main__":
     unittest.main()
