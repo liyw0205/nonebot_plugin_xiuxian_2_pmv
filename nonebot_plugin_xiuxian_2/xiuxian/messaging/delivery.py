@@ -17,6 +17,7 @@ from ..adapter_message_sender import is_qq_bot, send_group_message, send_private
 from ..qq_compat import QQCapabilityRegistry
 from ..infrastructure import RuntimeMetrics, runtime_metrics
 from .models import SendRequest, SendResult
+from .media import MediaInput, MediaResolver, media_resolver
 from .reliability import (
     DeliveryError,
     MessageSequenceStrategy,
@@ -34,11 +35,13 @@ class MessageDeliveryService:
         max_msg_seq_retries: int = 3,
         capabilities: QQCapabilityRegistry | None = None,
         metrics: RuntimeMetrics | None = None,
+        media: MediaResolver | None = None,
     ) -> None:
         self._sequences = MessageSequenceStrategy()
         self._max_msg_seq_retries = max(0, int(max_msg_seq_retries))
         self._capabilities = capabilities or QQCapabilityRegistry()
         self._metrics = metrics or runtime_metrics
+        self._media = media or media_resolver
 
     async def _send_with_policy(
         self,
@@ -308,6 +311,24 @@ class MessageDeliveryService:
                 include_reference=False,
                 **kwargs,
             )
+
+    async def reply_media(
+        self,
+        bot: Any,
+        event: Any,
+        media: MediaInput,
+        *,
+        include_reference: bool = False,
+        **kwargs: Any,
+    ) -> SendResult:
+        segment = await self._media.build_segment(bot, media)
+        return await self.reply(
+            bot,
+            event,
+            segment,
+            include_reference=include_reference,
+            **kwargs,
+        )
 
     async def recall(
         self,

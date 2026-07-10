@@ -231,6 +231,12 @@ QQ Markdown、keyboard、interaction 和全量消息能力可通过
 `MarkdownTemplateRegistry` 仅从指定 JSON 文件按 mtime 有限热加载，并限制模板数量、
 名称和长度；变量始终经过 Markdown 转义。
 
+媒体发送使用 `messaging.MediaInput` 和 `MediaResolver` 统一 URL、bytes、本地路径及
+二进制 stream。解析器实施大小、超时和 SSRF 边界，以 SHA-256 内容键缓存并支持 TTL
+清理；构造消息段继续复用 Adapter 的 `MessageSegment.image/audio/video/file` 能力。
+娱乐模块通过原有 `run_media_send` 控制并发和超时，再调用
+`delivery_service.reply_media()`，未建立第二套发送运行时或官方上传客户端。
+
 ## 引用回复
 
 QQ 官方普通群与 C2C 的引用回复必须使用平台返回的 `REFIDX`，不是普通消息 ID。兼容层会在 `patch_event_inplace()` 时把它补到 `event.message_reference_id` / `event.reference_id`。通用业务发送可通过配置 `reference_reply=True` 走 `send_reference_reply(...)`；开启后 `send_msg_handler` 会避开合并转发 API，改走普通消息发送。底层仍支持显式传 `auto_reference=True` 或引用参数。

@@ -252,6 +252,15 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("from ..qq_compat import bot_selector", source)
         self.assertIn("return bot_selector.select(adapter=", source)
 
+    def test_entertainment_media_uses_delivery_media_facade(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_entertainment" / "command.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("MediaInput(media, media_names[media_type])", source)
+        self.assertIn("lambda: delivery_service.reply_media(", source)
+        runtime = (SOURCE_ROOT / "xiuxian" / "runtime.py").read_text(encoding="utf-8")
+        self.assertIn("await submit_background_job(media_resolver.cleanup)", runtime)
+
     def test_activity_rule_helpers_have_explicit_dependencies(self) -> None:
         activity_rules = SOURCE_ROOT / "xiuxian" / "xiuxian_activity" / "activity_rules.py"
         tree = ast.parse(

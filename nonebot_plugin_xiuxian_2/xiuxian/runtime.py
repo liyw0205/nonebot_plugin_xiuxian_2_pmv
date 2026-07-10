@@ -8,6 +8,7 @@ from nonebot import get_driver
 from nonebot.log import logger
 
 from .infrastructure import BackgroundJobQueue
+from .messaging.media import media_resolver
 
 
 driver = get_driver()
@@ -97,6 +98,7 @@ async def initialize_xiuxian_runtime() -> None:
 
     await background_jobs.start()
     await critical_jobs.start()
+    await submit_background_job(media_resolver.cleanup)
 
 
 @driver.on_shutdown
