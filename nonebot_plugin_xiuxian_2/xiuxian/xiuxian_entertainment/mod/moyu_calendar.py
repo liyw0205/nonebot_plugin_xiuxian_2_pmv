@@ -69,7 +69,9 @@ async def _moyu_text_fallback() -> str:
 async def moyu_calendar_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     image_url = _moyu_image_url()
     try:
-        await bot.send(event=event, message=MessageSegment.image(bot, image_url))
+        await send_entertainment_media(
+            bot, event, MessageSegment.image(bot, image_url), media_type="图片"
+        )
     except Exception as e:
         logger.warning(f"摸鱼日报图片发送失败：{e}")
         try:

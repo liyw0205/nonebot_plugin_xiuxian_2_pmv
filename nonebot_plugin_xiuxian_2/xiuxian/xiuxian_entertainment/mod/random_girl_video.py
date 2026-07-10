@@ -88,7 +88,9 @@ async def _send_random_girl_video(bot: Bot, event, video_url: str):
                 ],
                 at_msg=False,
             )
-            await bot.send(event=event, message=MessageSegment.video(bot, video_url))
+            await send_entertainment_media(
+                bot, event, MessageSegment.video(bot, video_url), media_type="视频"
+            )
             return
         except Exception as e:
             logger.warning(f"随机小姐姐 Markdown发送失败：{e}")
@@ -105,7 +107,9 @@ async def _send_random_girl_video(bot: Bot, event, video_url: str):
         k3="娱乐帮助",
         v3="娱乐帮助",
     )
-    await bot.send(event=event, message=MessageSegment.video(bot, video_url))
+    await send_entertainment_media(
+        bot, event, MessageSegment.video(bot, video_url), media_type="视频"
+    )
 
 
 @random_girl_video_cmd.handle(parameterless=[Cooldown(cd_time=5)])

@@ -146,6 +146,58 @@ class SourceQualityTests(unittest.TestCase):
             source,
         )
 
+    def test_entertainment_network_calls_use_io_runtime(self) -> None:
+        entertainment = SOURCE_ROOT / "xiuxian" / "xiuxian_entertainment"
+        expected_calls = {
+            entertainment / "mod" / "alist_webdav.py": (
+                "await run_blocking_io(\n            _cached_propfind",
+                "await run_blocking_io(\n            _propfind",
+                "await run_blocking_io(\n            _format_link_message",
+            ),
+            entertainment / "mod" / "newapi_commands.py": (
+                "await run_blocking_io(\n                _run_checkin_for_account",
+                "await run_blocking_io(\n                fetch_user_self",
+            ),
+            entertainment / "media_parser" / "service.py": (
+                "await run_blocking_io(ensure_vendor_core",
+            ),
+            entertainment / "mod" / "anime_reaction.py": (
+                "await run_blocking_io(_fetch_nekos_sync",
+            ),
+            entertainment / "mod" / "music.py": (
+                "songs = await run_blocking_io(",
+            ),
+        }
+
+        missing = []
+        for path, calls in expected_calls.items():
+            source = path.read_text(encoding="utf-8")
+            missing.extend(
+                f"{path.relative_to(SOURCE_ROOT)}: {call}"
+                for call in calls
+                if call not in source
+            )
+
+        self.assertEqual(
+            missing,
+            [],
+            "Blocking entertainment I/O found: " + ", ".join(missing),
+        )
+
+        direct_to_thread = []
+        for path in entertainment.rglob("*.py"):
+            if path.name == "io_runtime.py" or "vendor" in path.parts:
+                continue
+            if "asyncio.to_thread" in path.read_text(encoding="utf-8"):
+                direct_to_thread.append(str(path.relative_to(SOURCE_ROOT)))
+
+        self.assertEqual(
+            direct_to_thread,
+            [],
+            "Entertainment code bypasses bounded I/O runtime: "
+            + ", ".join(direct_to_thread),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

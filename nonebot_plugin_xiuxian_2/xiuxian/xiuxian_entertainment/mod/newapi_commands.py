@@ -5,6 +5,7 @@ import re
 from typing import Any, Literal
 
 from ..command import *
+from ..io_runtime import run_blocking_io
 from .newapi_client import (
     account_base_url,
     detect_auth_mode,
@@ -191,7 +192,13 @@ async def run_scheduled_auto_checkins() -> int:
     n = 0
     for qq_key, _idx, acc in iter_all_auto_checkin_bindings():
         try:
-            _run_checkin_for_account(qq_key, acc, source="auto")
+            await run_blocking_io(
+                _run_checkin_for_account,
+                qq_key,
+                acc,
+                source="auto",
+                timeout=35,
+            )
             n += 1
         except Exception:
             continue
@@ -274,7 +281,13 @@ async def newapi_checkin_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
     blocks: list[str] = ["【NewAPI 签到】", ""]
     for acc in targets:
-        idx, data = _run_checkin_for_account(qq, acc, source="manual")
+        idx, data = await run_blocking_io(
+            _run_checkin_for_account,
+            qq,
+            acc,
+            source="manual",
+            timeout=35,
+        )
         blocks.append(format_checkin_block(idx, acc, data))
         blocks.append("")
 
@@ -299,11 +312,13 @@ async def newapi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         if not base:
             data = {"_error": "未配置接口地址"}
         else:
-            data = fetch_user_self(
+            data = await run_blocking_io(
+                fetch_user_self,
                 mode,
                 str(acc.get("api_user_id")),
                 acc.get("secret") or "",
                 base,
+                timeout=35,
             )
         blocks.append(format_user_info_block(idx, acc, data))
         blocks.append("")

@@ -79,7 +79,12 @@ async def click_music_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 
             if avatar_url:
                 try:
-                    await bot.send(event=event, message=MessageSegment.image(bot, avatar_url))
+                    await send_entertainment_media(
+                        bot,
+                        event,
+                        MessageSegment.image(bot, avatar_url),
+                        media_type="图片",
+                    )
                 except Exception as e:
                     logger.warning(f"随机点歌头像发送失败：{e}")
 

@@ -9,6 +9,7 @@ from nonebot.log import logger
 
 from .config import get_fun_media_parser_config
 from .install_core import ensure_vendor_core, vendor_core_ready
+from ..io_runtime import run_blocking_io
 
 _manager = None
 _init_lock = asyncio.Lock()
@@ -23,7 +24,7 @@ async def _get_manager():
         if _manager is not None:
             return _manager
         try:
-            ensure_vendor_core()
+            await run_blocking_io(ensure_vendor_core, timeout=180)
             from core.config_manager import ConfigManager
             from core.parser.manager import ParserManager
 

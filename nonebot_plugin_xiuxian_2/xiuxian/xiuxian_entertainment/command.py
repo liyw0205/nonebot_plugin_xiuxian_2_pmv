@@ -25,8 +25,8 @@ from ..adapter_compat import (
 from ..xiuxian_utils.utils import (
     handle_send,
     handle_send_md,
-    handle_pic_send,
-    handle_pic_msg_send,
+    handle_pic_send as _handle_pic_send,
+    handle_pic_msg_send as _handle_pic_msg_send,
     generate_command,
     send_help_message,
     escape_markdown_text,
@@ -37,6 +37,42 @@ from ..xiuxian_utils.lay_out import Cooldown
 
 from .media_parser.config import get_fun_media_parser_config
 from .media_parser.service import extract_links, run_parse_and_build_messages, dedupe_media_urls_preserve_order
+from .io_runtime import (
+    AUDIO_SEND_TIMEOUT,
+    IMAGE_SEND_TIMEOUT,
+    VIDEO_SEND_TIMEOUT,
+    run_blocking_io,
+    run_media_send,
+)
+
+
+async def send_entertainment_media(bot: Bot, event, segment, *, media_type: str):
+    timeouts = {
+        "图片": IMAGE_SEND_TIMEOUT,
+        "音频": AUDIO_SEND_TIMEOUT,
+        "视频": VIDEO_SEND_TIMEOUT,
+    }
+    await run_media_send(
+        lambda: bot.send(event=event, message=segment),
+        timeout=timeouts[media_type],
+        media_type=media_type,
+    )
+
+
+async def handle_pic_send(bot: Bot, event, imgpath=None):
+    await run_media_send(
+        lambda: _handle_pic_send(bot, event, imgpath),
+        timeout=IMAGE_SEND_TIMEOUT,
+        media_type="图片",
+    )
+
+
+async def handle_pic_msg_send(bot: Bot, event, imgpath=None, text: str | None = None):
+    await run_media_send(
+        lambda: _handle_pic_msg_send(bot, event, imgpath, text),
+        timeout=IMAGE_SEND_TIMEOUT,
+        media_type="图片",
+    )
 
 # ---------- 流媒体链接解析（娱乐）----------
 
@@ -205,12 +241,16 @@ async def fun_media_send_parse_result(
         )
     for img in images:
         try:
-            await bot.send(event=event, message=MessageSegment.image(bot, img))
+            await send_entertainment_media(
+                bot, event, MessageSegment.image(bot, img), media_type="图片"
+            )
         except Exception as e:
             logger.debug(f"发送解析图片失败 {img[:80]}: {e}")
     for vid in videos:
         try:
-            await bot.send(event=event, message=MessageSegment.video(bot, vid))
+            await send_entertainment_media(
+                bot, event, MessageSegment.video(bot, vid), media_type="视频"
+            )
         except Exception as e:
             logger.debug(f"发送解析视频失败 {vid[:80]}: {e}")
 
@@ -235,7 +275,9 @@ def _get_json_api_sync(api_url: str, params: dict | None = None, timeout: int = 
 
 
 async def get_json_api(api_url: str, params: dict | None = None, timeout: int = 15) -> dict:
-    return await asyncio.to_thread(_get_json_api_sync, api_url, params, timeout)
+    return await run_blocking_io(
+        _get_json_api_sync, api_url, params, timeout, timeout=timeout + 5
+    )
 
 
 def _get_text_api_sync(api_url: str, params: dict | None = None, timeout: int = 15) -> str:
@@ -248,7 +290,9 @@ def _get_text_api_sync(api_url: str, params: dict | None = None, timeout: int = 
 
 
 async def get_text_api(api_url: str, params: dict | None = None, timeout: int = 15) -> str:
-    return await asyncio.to_thread(_get_text_api_sync, api_url, params, timeout)
+    return await run_blocking_io(
+        _get_text_api_sync, api_url, params, timeout, timeout=timeout + 5
+    )
 
 
 _API_SUCCESS_CODES = {"0", "1", "200", "ok", "success", "true"}
@@ -377,7 +421,9 @@ def _get_media_url_api_sync(api_url: str, params: dict | None = None, timeout: i
 
 
 async def get_media_url_api(api_url: str, params: dict | None = None, timeout: int = 20) -> str:
-    return await asyncio.to_thread(_get_media_url_api_sync, api_url, params, timeout)
+    return await run_blocking_io(
+        _get_media_url_api_sync, api_url, params, timeout, timeout=timeout + 5
+    )
 
 
 async def handle_audio_send(bot: Bot, event, audio_url: str):
@@ -387,7 +433,7 @@ async def handle_audio_send(bot: Bot, event, audio_url: str):
     if not audio_url:
         return
     seg = MessageSegment.audio(bot, audio_url)
-    await bot.send(event=event, message=seg)
+    await send_entertainment_media(bot, event, seg, media_type="音频")
 
 
 async def send_entertainment_image_result(
@@ -424,7 +470,9 @@ async def send_entertainment_image_result(
             keyboard_rows=[buttons] if buttons else None,
             at_msg=False,
         )
-        await bot.send(event=event, message=MessageSegment.image(bot, image_url))
+        await send_entertainment_media(
+            bot, event, MessageSegment.image(bot, image_url), media_type="图片"
+        )
         return
 
     await handle_pic_msg_send(bot, event, image_url, body_text or title_text or None)

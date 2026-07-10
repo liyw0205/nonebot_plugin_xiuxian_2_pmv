@@ -11,6 +11,7 @@ import requests
 from nonebot.params import CommandArg
 
 from ..command import *
+from ..io_runtime import run_blocking_io
 from ...xiuxian_utils.utils import build_md_command_link
 
 
@@ -719,11 +720,13 @@ async def webdav_bind_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 
     label, dav_url, username, password = parsed
     try:
-        ok, msg = _append_binding(
+        ok, msg = await run_blocking_io(
+            _append_binding,
             label=label,
             dav_url=dav_url,
             username=username,
             password=password,
+            timeout=30,
         )
     except Exception as e:
         ok, msg = False, str(e)
@@ -744,7 +747,9 @@ async def webdav_ls_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await handle_send(bot, event, err or "无可用绑定", **_DAV_KW)
         await webdav_ls_cmd.finish()
     try:
-        entries = _cached_propfind(binding, dav_path, "1")
+        entries = await run_blocking_io(
+            _cached_propfind, binding, dav_path, "1", timeout=25
+        )
     except Exception as e:
         await handle_send(bot, event, f"读取 WebDAV 目录失败：{e}", **_DAV_KW)
         await webdav_ls_cmd.finish()
@@ -771,7 +776,9 @@ async def webdav_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, err or "无可用绑定", **_DAV_KW)
         await webdav_info_cmd.finish()
     try:
-        entries = _propfind(binding, dav_path, "0")
+        entries = await run_blocking_io(
+            _propfind, binding, dav_path, "0", timeout=25
+        )
         msg = _format_info(binding, idx, dav_path, entries)
     except Exception as e:
         msg = f"读取 WebDAV 信息失败：{e}"
@@ -785,7 +792,13 @@ async def webdav_link_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     if err or not binding:
         await handle_send(bot, event, err or "无可用绑定", **_DAV_KW)
         await webdav_link_cmd.finish()
-    await handle_send(bot, event, _format_link_message(binding, idx, dav_path), **_DAV_KW)
+    try:
+        msg = await run_blocking_io(
+            _format_link_message, binding, idx, dav_path, timeout=35
+        )
+    except Exception as e:
+        msg = f"获取 WebDAV 链接失败：{e}"
+    await handle_send(bot, event, msg, **_DAV_KW)
     await webdav_link_cmd.finish()
 
 
@@ -795,7 +808,13 @@ async def webdav_file_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     if err or not binding:
         await handle_send(bot, event, err or "无可用绑定", **_DAV_KW)
         await webdav_file_cmd.finish()
-    await handle_send(bot, event, _format_link_message(binding, idx, dav_path), **_DAV_KW)
+    try:
+        msg = await run_blocking_io(
+            _format_link_message, binding, idx, dav_path, timeout=35
+        )
+    except Exception as e:
+        msg = f"获取 WebDAV 文件失败：{e}"
+    await handle_send(bot, event, msg, **_DAV_KW)
     await webdav_file_cmd.finish()
 
 

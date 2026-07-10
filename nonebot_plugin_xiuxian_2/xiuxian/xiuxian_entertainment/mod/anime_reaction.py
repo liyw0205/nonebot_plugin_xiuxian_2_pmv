@@ -1,4 +1,3 @@
-import asyncio
 import random
 import requests
 from io import BytesIO
@@ -73,7 +72,7 @@ def _fetch_nekos_sync(category: str) -> tuple[BytesIO, str]:
 
 
 async def _fetch_nekos(category: str) -> tuple[BytesIO, str]:
-    return await asyncio.to_thread(_fetch_nekos_sync, category)
+    return await run_blocking_io(_fetch_nekos_sync, category, timeout=30)
 
 
 def _pick_image_category(raw: str) -> tuple[str, str]:
