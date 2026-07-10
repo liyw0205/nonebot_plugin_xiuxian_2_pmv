@@ -10,7 +10,40 @@ __all__ = [
     "get_weekly_key",
     "get_monthly_key",
     "get_season_key",
+    "format_duration_compact",
+    "format_duration_full",
+    "format_remaining_time",
 ]
+
+
+def _duration_parts(seconds: float | int) -> tuple[int, int, int, int]:
+    total = max(0, int(seconds))
+    days, remainder = divmod(total, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, secs = divmod(remainder, 60)
+    return days, hours, minutes, secs
+
+
+def format_duration_full(seconds: float | int, *, zero: str = "0秒") -> str:
+    if seconds <= 0:
+        return zero
+    days, hours, minutes, secs = _duration_parts(seconds)
+    return f"{days}天{hours}小时{minutes}分{secs}秒"
+
+
+def format_duration_compact(seconds: float | int, *, zero: str = "0秒") -> str:
+    if seconds <= 0:
+        return zero
+    parts = _duration_parts(seconds)
+    labels = ("天", "小时", "分", "秒")
+    first = next((index for index, value in enumerate(parts) if value), 3)
+    return "".join(
+        f"{value}{label}" for value, label in zip(parts[first:], labels[first:])
+    )
+
+
+def format_remaining_time(seconds: float | int) -> str:
+    return format_duration_compact(seconds, zero="已可用")
 
 
 def _to_date(now: PeriodNow = None) -> date:

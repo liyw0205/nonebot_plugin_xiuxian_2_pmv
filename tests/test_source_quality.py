@@ -73,6 +73,14 @@ class SourceQualityTests(unittest.TestCase):
             self.assertNotIn("requests.request(", source)
             self.assertIn("http_client", source)
 
+    def test_uptime_formatters_use_period_helpers(self) -> None:
+        for relative in (
+            Path("xiuxian/xiuxian_web/core.py"),
+            Path("xiuxian/xiuxian_status/__init__.py"),
+        ):
+            source = (SOURCE_ROOT / relative).read_text(encoding="utf-8")
+            self.assertIn("format_duration_full", source)
+
     def test_internal_imports_do_not_assume_top_level_package_name(self) -> None:
         violations: list[str] = []
         for path in SOURCE_ROOT.rglob("*.py"):

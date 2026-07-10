@@ -63,6 +63,7 @@ except ImportError:
 update_manager = UpdateManager()
 sql_message = XiuxianDateManage()
 trade_manager = TradeDataManager()
+from ..xiuxian_utils.periods import format_duration_full
 
 bot_info_cmd = on_command("bot信息", permission=SUPERUSER, priority=5, block=True)
 sys_info_cmd = on_command("系统信息", permission=SUPERUSER, priority=5, block=True)
@@ -74,12 +75,7 @@ check_update_cmd = on_command("检测更新", permission=SUPERUSER, priority=5, 
 
 def format_time(seconds: float) -> str:
     """将秒数格式化为 'X天X小时X分X秒'"""
-    if seconds <= 0:
-        return "未知"
-    days, remainder = divmod(seconds, 86400)
-    hours, remainder = divmod(remainder, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    return f"{int(days)}天{int(hours)}小时{int(minutes)}分{int(seconds)}秒"
+    return format_duration_full(seconds, zero="未知")
 
 def get_ping_emoji(delay: float) -> str:
     """根据延迟返回对应的表情"""

@@ -93,18 +93,9 @@ def limit_all_run(user_id: str):
 
 def format_time(seconds: int) -> str:
     """将秒数转换为更大的时间单位"""
-    minutes, seconds = divmod(seconds, 60)
-    hours, minutes = divmod(minutes, 60)
-    days, hours = divmod(hours, 24)
+    from .periods import format_duration_compact
 
-    if days > 0:
-        return f"{days}天{hours}小时{minutes}分钟{seconds}秒"
-    elif hours > 0:
-        return f"{hours}小时{minutes}分钟{seconds}秒"
-    elif minutes > 0:
-        return f"{minutes}分钟{seconds}秒"
-    else:
-        return f"{seconds}秒"
+    return format_duration_compact(seconds).replace("分", "分钟")
     
 
 def get_random_chat_notice():
