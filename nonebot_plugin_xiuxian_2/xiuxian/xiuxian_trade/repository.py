@@ -105,6 +105,25 @@ class ExpiredGuishiOrderClear:
         return self.status == "cleared"
 
 
+@dataclass(frozen=True)
+class GuishiMatch:
+    status: str
+    qiugou_order_id: str
+    baitan_order_id: str
+    buyer_id: str = ""
+    seller_id: str = ""
+    item_id: int = 0
+    item_name: str = ""
+    quantity: int = 0
+    amount: int = 0
+    qiugou_completed: bool = False
+    baitan_completed: bool = False
+
+    @property
+    def matched(self) -> bool:
+        return self.status == "matched"
+
+
 class TradeRepository:
     """Atomic marketplace operations stored with player economy data."""
 
@@ -381,6 +400,148 @@ class TradeRepository:
                 raise
             finally:
                 conn.execute("DETACH DATABASE guishi_trade")
+
+    @staticmethod
+    def _guishi_info(conn, user_id):
+        row = conn.execute(
+            "SELECT stored_stone, items FROM guishi_info WHERE user_id=%s",
+            (str(user_id),),
+        ).fetchone()
+        if row is None:
+            return 0, {}
+        try:
+            items = json.loads(row[1] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            items = {}
+        return int(row[0] or 0), items if isinstance(items, dict) else {}
+
+    @staticmethod
+    def _save_guishi_info(conn, user_id, stored_stone, items) -> None:
+        conn.execute(
+            """
+            INSERT INTO guishi_info (user_id, stored_stone, items)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (user_id) DO UPDATE
+            SET stored_stone=EXCLUDED.stored_stone, items=EXCLUDED.items
+            """,
+            (
+                str(user_id),
+                int(stored_stone),
+                json.dumps(items, ensure_ascii=False, sort_keys=True),
+            ),
+        )
+
+    def match_guishi_orders(
+        self,
+        trade_database: str | Path,
+        qiugou_order_id,
+        baitan_order_id,
+    ) -> GuishiMatch:
+        qiugou_order_id = str(qiugou_order_id)
+        baitan_order_id = str(baitan_order_id)
+        with self._lock, closing(db_backend.connect(trade_database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                qiugou = conn.execute(
+                    """
+                    SELECT user_id, item_id, item_name, item_type, price,
+                           quantity, COALESCE(filled_quantity, 0)
+                    FROM guishi_item WHERE id=%s
+                    """,
+                    (qiugou_order_id,),
+                ).fetchone()
+                baitan = conn.execute(
+                    """
+                    SELECT user_id, item_id, item_name, item_type, price,
+                           quantity, COALESCE(filled_quantity, 0)
+                    FROM guishi_item WHERE id=%s
+                    """,
+                    (baitan_order_id,),
+                ).fetchone()
+                if qiugou is None or baitan is None:
+                    conn.rollback()
+                    return GuishiMatch("order_missing", qiugou_order_id, baitan_order_id)
+                if str(qiugou[3]) not in {"qiugou", "求购"}:
+                    conn.rollback()
+                    return GuishiMatch("qiugou_invalid", qiugou_order_id, baitan_order_id)
+                if str(baitan[3]) not in {"baitan", "摆摊"}:
+                    conn.rollback()
+                    return GuishiMatch("baitan_invalid", qiugou_order_id, baitan_order_id)
+
+                buyer_id = str(qiugou[0])
+                seller_id = str(baitan[0])
+                item_id = int(baitan[1])
+                item_name = str(baitan[2])
+                qiugou_remaining = max(int(qiugou[5]) - int(qiugou[6]), 0)
+                baitan_remaining = max(int(baitan[5]) - int(baitan[6]), 0)
+                if qiugou_remaining <= 0:
+                    conn.execute("DELETE FROM guishi_item WHERE id=%s", (qiugou_order_id,))
+                    conn.commit()
+                    return GuishiMatch(
+                        "qiugou_completed", qiugou_order_id, baitan_order_id, buyer_id
+                    )
+                if baitan_remaining <= 0:
+                    conn.execute("DELETE FROM guishi_item WHERE id=%s", (baitan_order_id,))
+                    conn.commit()
+                    return GuishiMatch(
+                        "baitan_completed",
+                        qiugou_order_id,
+                        baitan_order_id,
+                        buyer_id,
+                        seller_id,
+                        item_id,
+                        item_name,
+                    )
+                if (
+                    buyer_id == seller_id
+                    or str(qiugou[2]) != item_name
+                    or int(baitan[4]) > int(qiugou[4])
+                ):
+                    conn.rollback()
+                    return GuishiMatch("not_matchable", qiugou_order_id, baitan_order_id)
+
+                quantity = min(qiugou_remaining, baitan_remaining)
+                amount = quantity * int(baitan[4])
+                buyer_stone, buyer_items = self._guishi_info(conn, buyer_id)
+                seller_stone, seller_items = self._guishi_info(conn, seller_id)
+                item_key = str(item_id)
+                buyer_items[item_key] = int(buyer_items.get(item_key, 0)) + quantity
+                self._save_guishi_info(conn, buyer_id, buyer_stone, buyer_items)
+                self._save_guishi_info(conn, seller_id, seller_stone + amount, seller_items)
+
+                qiugou_completed = quantity == qiugou_remaining
+                baitan_completed = quantity == baitan_remaining
+                if qiugou_completed:
+                    conn.execute("DELETE FROM guishi_item WHERE id=%s", (qiugou_order_id,))
+                else:
+                    conn.execute(
+                        "UPDATE guishi_item SET filled_quantity=filled_quantity+%s WHERE id=%s",
+                        (quantity, qiugou_order_id),
+                    )
+                if baitan_completed:
+                    conn.execute("DELETE FROM guishi_item WHERE id=%s", (baitan_order_id,))
+                else:
+                    conn.execute(
+                        "UPDATE guishi_item SET filled_quantity=filled_quantity+%s WHERE id=%s",
+                        (quantity, baitan_order_id),
+                    )
+                conn.commit()
+                return GuishiMatch(
+                    "matched",
+                    qiugou_order_id,
+                    baitan_order_id,
+                    buyer_id,
+                    seller_id,
+                    item_id,
+                    item_name,
+                    quantity,
+                    amount,
+                    qiugou_completed,
+                    baitan_completed,
+                )
+            except Exception:
+                conn.rollback()
+                raise
 
     @staticmethod
     def ensure_schema(conn) -> None:

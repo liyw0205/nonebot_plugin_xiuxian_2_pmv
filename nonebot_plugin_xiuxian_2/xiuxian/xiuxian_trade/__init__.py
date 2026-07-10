@@ -2178,75 +2178,48 @@ async def process_guishi_transactions(user_id: str = None) -> str:
             if user_id: transaction_log += f"【{qiugou_item_name}】没有符合价格或非自己的摆摊订单。\n"
             continue
         
-        current_qiugou_needed = unfilled_qiugou_quantity
-        
         for baitan_order in available_baitan_orders:
-            if current_qiugou_needed <= 0:
-                break # 求购已满足
-            
             baitan_order_id = baitan_order['id']
-            baitan_user_id = baitan_order['user_id']
-            baitan_item_name = baitan_order['item_name']
-            
-            unsold_baitan_quantity = baitan_order['quantity'] - baitan_order['filled_quantity']
-            
-            if unsold_baitan_quantity <= 0: # 摆摊已售罄
-                trade_manager.remove_guishi_order(baitan_order_id)
+            result = xianshi_repository.match_guishi_orders(
+                get_paths().trade_db,
+                qiugou_order_id,
+                baitan_order_id,
+            )
+            if result.status == "qiugou_completed":
+                if user_id:
+                    transaction_log += f"求购订单 {qiugou_order_id} 已完成，已移除。\n"
+                break
+            if not result.matched:
                 continue
-            
-            # 计算实际交易数量
-            trade_quantity = min(current_qiugou_needed, unsold_baitan_quantity)
-            
-            if trade_quantity > 0:
-                trade_amount = trade_quantity * baitan_order['price']
-                
-                # 1. 更新求购方的暂存物品
-                trade_manager.add_stored_item(qiugou_user_id, baitan_order['item_id'], trade_quantity)
-                
-                # 2. 更新摆摊方的暂存灵石
-                trade_manager.update_stored_stone(baitan_user_id, trade_amount, 'add')
-                
-                # 3. 更新求购订单的已购买数量 (在数据库中更新)
-                trade_manager.increase_filled_quantity(qiugou_order_id, trade_quantity)
-                
-                # 4. 更新摆摊订单的已售出数量 (在数据库中更新)
-                trade_manager.increase_filled_quantity(baitan_order_id, trade_quantity)
-                
-                # 记录交易日志
-                qiugou_user_name = sql_message.get_user_info_with_id(qiugou_user_id)['user_name'] if sql_message.get_user_info_with_id(qiugou_user_id) else str(qiugou_user_id)
-                baitan_user_name = sql_message.get_user_info_with_id(baitan_user_id)['user_name'] if sql_message.get_user_info_with_id(baitan_user_id) else str(baitan_user_id)
-                record_trade_event(
-                    qiugou_user_id,
-                    "鬼市成交",
-                    f"购得{baitan_item_name}x{trade_quantity}，花费{number_to(trade_amount)}灵石，卖家:{baitan_user_name}",
-                    {"鬼市购买次数": 1, "鬼市购买数量": trade_quantity, "鬼市消费灵石": trade_amount}
-                )
-                record_trade_event(
-                    baitan_user_id,
-                    "鬼市成交",
-                    f"售出{baitan_item_name}x{trade_quantity}，收入{number_to(trade_amount)}灵石，买家:{qiugou_user_name}",
-                    {"鬼市售出次数": 1, "鬼市售出数量": trade_quantity, "鬼市收入灵石": trade_amount}
-                )
-                
-                transaction_log += (f"{qiugou_user_name} 从 {baitan_user_name} 处\n"
-                                    f"购买了 {trade_quantity} 个 【{baitan_item_name}】，花费 {number_to(trade_amount)} 灵石。\n")
-                
-                current_qiugou_needed -= trade_quantity
-                
-                # 检查摆摊订单是否已完成，是则移除
-                if (baitan_order['filled_quantity'] + trade_quantity) >= baitan_order['quantity']:
-                    trade_manager.remove_guishi_order(baitan_order_id)
-                    if user_id: transaction_log += f"  摆摊订单 {baitan_order_id} 已完成，已移除。\n"
-        
-        # 检查求购订单是否已完成，是则移除
-        if current_qiugou_needed <= 0:
-            trade_manager.remove_guishi_order(qiugou_order_id)
-            if user_id: transaction_log += f"  求购订单 {qiugou_order_id} 已完成，已移除。\n"
-        else: # 如果未完全满足，更新qiugou_orders_dict中的filled_quantity
-            # 重新获取最新的订单数据，因为increase_filled_quantity已经更新了数据库
-            updated_qiugou_order = trade_manager.get_guishi_orders(id=qiugou_order_id, type="qiugou")
-            if updated_qiugou_order:
-                qiugou_orders_dict[qiugou_order_id] = updated_qiugou_order[0] # 更新字典中的订单状态
+
+            qiugou_user_info = sql_message.get_user_info_with_id(result.buyer_id)
+            baitan_user_info = sql_message.get_user_info_with_id(result.seller_id)
+            qiugou_user_name = (
+                qiugou_user_info['user_name'] if qiugou_user_info else result.buyer_id
+            )
+            baitan_user_name = (
+                baitan_user_info['user_name'] if baitan_user_info else result.seller_id
+            )
+            record_trade_event(
+                result.buyer_id,
+                "鬼市成交",
+                f"购得{result.item_name}x{result.quantity}，花费{number_to(result.amount)}灵石，卖家:{baitan_user_name}",
+                {"鬼市购买次数": 1, "鬼市购买数量": result.quantity, "鬼市消费灵石": result.amount}
+            )
+            record_trade_event(
+                result.seller_id,
+                "鬼市成交",
+                f"售出{result.item_name}x{result.quantity}，收入{number_to(result.amount)}灵石，买家:{qiugou_user_name}",
+                {"鬼市售出次数": 1, "鬼市售出数量": result.quantity, "鬼市收入灵石": result.amount}
+            )
+            transaction_log += (f"{qiugou_user_name} 从 {baitan_user_name} 处\n"
+                                f"购买了 {result.quantity} 个 【{result.item_name}】，花费 {number_to(result.amount)} 灵石。\n")
+            if result.baitan_completed and user_id:
+                transaction_log += f"  摆摊订单 {baitan_order_id} 已完成，已移除。\n"
+            if result.qiugou_completed:
+                if user_id:
+                    transaction_log += f"  求购订单 {qiugou_order_id} 已完成，已移除。\n"
+                break
     
     transaction_log += "鬼市交易处理完成。"
     logger.info(transaction_log)
