@@ -55,15 +55,28 @@ from .auction_service import (
     reconcile_auction_after_restart,
     place_auction_bid,
 )
+from .repository import TradeRepository
+from .service import XianshiPurchaseService
+from ...paths import get_paths
 from urllib.parse import quote
 
 # 初始化全局组件
 items = Items()
 sql_message = XiuxianDateManage()
 trade_manager = TradeDataManager()
+xianshi_repository = TradeRepository(
+    get_paths().game_db,
+    max_goods_num=XiuConfig().max_goods_num,
+)
+xianshi_purchase_service = XianshiPurchaseService(xianshi_repository)
 scheduler = require("nonebot_plugin_apscheduler").scheduler # 全局调度器，用于鬼市
 auction_scheduler = require("nonebot_plugin_apscheduler").scheduler # 独立的拍卖调度器，避免冲突
 bind_auction_service_dependencies(items=items, sql_message=sql_message, trade_manager=trade_manager)
+
+
+@DRIVER.on_startup
+async def initialize_xianshi_repository():
+    xianshi_repository.initialize(get_paths().trade_db)
 
 
 # === 全局常量配置 ===
@@ -132,7 +145,7 @@ AUCTION_ACTIVITY_BUTTONS = {
 # 获取仙肆物品的最低价格
 def get_xianshi_min_price(item_name: str) -> int | None:
     """获取仙肆中指定物品的最低价格"""
-    items_in_xianshi = trade_manager.get_xianshi_items(name=item_name)
+    items_in_xianshi = xianshi_repository.get_xianshi_items(name=item_name)
     if not items_in_xianshi:
         return None
     return min(item['price'] for item in items_in_xianshi)
@@ -147,7 +160,7 @@ def xianshi_remove_by_name_for_user(user_id: str, item_name: str, quantity: int)
     if quantity < 1:
         return 0, "下架数量须为正整数！"
 
-    rows = trade_manager.get_xianshi_items(user_id=str(user_id), name=item_name)
+    rows = xianshi_repository.get_xianshi_items(user_id=str(user_id), name=item_name)
     if not rows:
         return 0, f"您在仙肆未上架【{item_name}】！"
 
@@ -171,7 +184,7 @@ def xianshi_remove_by_name_for_user(user_id: str, item_name: str, quantity: int)
         take = min(left, stock)
         if take <= 0:
             continue
-        if not trade_manager.remove_xianshi_item(row["id"], take):
+        if not xianshi_repository.remove_xianshi_item(row["id"], take):
             return removed, "部分下架失败，请刷新我的仙肆后重试！" if removed else "下架失败，请刷新后重试！"
         sql_message.send_back(
             str(user_id),
@@ -203,122 +216,92 @@ def get_fee_price(total_price: int) -> int:
     return single_fee
 
 
-def buy_xianshi_item_safely(buyer_id, item_to_buy, quantity_to_buy):
-    """校验库存并完成仙肆购买，避免并发超买和扣款失败后发货。"""
-    buyer_id = str(buyer_id)
-    seller_id = str(item_to_buy["user_id"])
-    quantity_to_buy = max(1, int(quantity_to_buy))
-    stock_quantity = int(item_to_buy["quantity"])
-    total_cost = int(item_to_buy["price"]) * quantity_to_buy
+def _xianshi_operation_id(event, listing_id, suffix=""):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if not event_id:
+        return None
+    extra = f":{suffix}" if suffix else ""
+    return f"xianshi-buy:{event_id}:{listing_id}{extra}"
 
-    if seller_id == buyer_id:
-        return False, "不能购买自己上架的物品！", None
 
-    if stock_quantity > 0 and stock_quantity < quantity_to_buy:
-        msg = f"库存不足！仙肆中只有 {stock_quantity} 个 {item_to_buy['name']} 可用"
-        return False, msg, None
-
-    trace_id = f"trade:xianshi:{item_to_buy['id']}:{buyer_id}:{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
-    if not sql_message.try_update_ls(
+def buy_xianshi_item_safely(
+    buyer_id,
+    item_to_buy,
+    quantity_to_buy,
+    *,
+    operation_id=None,
+):
+    """通过同库事务完成扣款、减库存、发货、卖家入账和幂等记录。"""
+    result = xianshi_purchase_service.purchase(
         buyer_id,
-        total_cost,
-        2,
-        log_context=_trade_economy_context(
-            "xianshi_buy_cost",
-            trace_id,
-            xianshi_id=item_to_buy["id"],
-            goods_id=item_to_buy["goods_id"],
-            item_name=item_to_buy["name"],
-            seller_id=seller_id,
-            quantity=quantity_to_buy,
-            total_cost=total_cost,
-        ),
-    ):
-        msg = f"灵石不足！需要 {number_to(total_cost)} 灵石"
-        return False, msg, None
+        item_to_buy["id"],
+        quantity_to_buy,
+        operation_id=operation_id,
+    )
+    messages = {
+        "listing_missing": f"库存不足！{item_to_buy['name']} 已被其他道友购买。",
+        "self_purchase": "不能购买自己上架的物品！",
+        "stock_insufficient": f"库存不足！仙肆中没有足够的 {item_to_buy['name']}",
+        "buyer_missing": "未找到购买者修仙数据！",
+        "seller_missing": "卖家修仙数据不存在，购买已取消！",
+        "stone_insufficient": f"灵石不足！需要 {number_to(result.total_cost)} 灵石",
+        "inventory_full": f"背包中的 {item_to_buy['name']} 已达到数量上限！",
+    }
+    if not result.succeeded:
+        return False, messages[result.status], None
 
-    if not trade_manager.remove_xianshi_item(item_to_buy["id"], quantity_to_buy):
-        sql_message.update_ls(
-            buyer_id,
-            total_cost,
-            1,
-            log_context=_trade_economy_context(
-                "xianshi_buy_refund",
-                trace_id,
-                xianshi_id=item_to_buy["id"],
-                goods_id=item_to_buy["goods_id"],
-                item_name=item_to_buy["name"],
-                reason="stock_changed",
-            ),
+    if result.applied:
+        trace_id = operation_id or f"xianshi:{result.listing_id}:{buyer_id}"
+        common_detail = {
+            "xianshi_id": result.listing_id,
+            "goods_id": result.goods_id,
+            "item_name": result.name,
+            "seller_id": result.seller_id,
+            "quantity": result.quantity,
+            "total_cost": result.total_cost,
+        }
+        sql_message._safe_log_economy_context(
+            _trade_economy_context("xianshi_buy_cost", trace_id, **common_detail),
+            user_id=str(buyer_id),
+            stone_delta=-result.total_cost,
         )
-        return False, f"库存不足！{item_to_buy['name']} 已被其他道友购买或数量不足。", None
+        sql_message._safe_log_economy_context(
+            _trade_economy_context("xianshi_buy_item", trace_id, **common_detail),
+            user_id=str(buyer_id),
+            item_delta=[
+                {
+                    "id": result.goods_id,
+                    "name": result.name,
+                    "type": result.goods_type,
+                    "amount": result.quantity,
+                    "bind_flag": 1,
+                }
+            ],
+        )
+        if result.seller_id != "0":
+            sql_message._safe_log_economy_context(
+                _trade_economy_context(
+                    "xianshi_seller_income",
+                    trace_id,
+                    buyer_id=str(buyer_id),
+                    **common_detail,
+                ),
+                user_id=result.seller_id,
+                stone_delta=result.total_cost,
+            )
 
-    try:
-        sql_message.send_back(
-            buyer_id,
-            item_to_buy["goods_id"],
-            item_to_buy["name"],
-            item_to_buy["type"],
-            quantity_to_buy,
-            1,
-            log_context=_trade_economy_context(
-                "xianshi_buy_item",
-                trace_id,
-                xianshi_id=item_to_buy["id"],
-                goods_id=item_to_buy["goods_id"],
-                item_name=item_to_buy["name"],
-                seller_id=seller_id,
-                quantity=quantity_to_buy,
-                total_cost=total_cost,
-            ),
-        )
-    except Exception as e:
-        logger.error(f"仙肆发货失败，已尝试回滚库存和灵石: {e}")
-        trade_manager.restore_xianshi_item(
-            seller_id,
-            item_to_buy["goods_id"],
-            item_to_buy["name"],
-            item_to_buy["type"],
-            item_to_buy["price"],
-            quantity_to_buy,
-        )
-        sql_message.update_ls(
-            buyer_id,
-            total_cost,
-            1,
-            log_context=_trade_economy_context(
-                "xianshi_buy_refund",
-                trace_id,
-                xianshi_id=item_to_buy["id"],
-                goods_id=item_to_buy["goods_id"],
-                item_name=item_to_buy["name"],
-                reason="delivery_failed",
-            ),
-        )
-        return False, "购买过程中出现错误，请稍后再试！", None
-
-    if seller_id != "0":
-        sql_message.update_ls(
-            seller_id,
-            total_cost,
-            1,
-            log_context=_trade_economy_context(
-                "xianshi_seller_income",
-                trace_id,
-                xianshi_id=item_to_buy["id"],
-                goods_id=item_to_buy["goods_id"],
-                item_name=item_to_buy["name"],
-                buyer_id=buyer_id,
-                quantity=quantity_to_buy,
-                total_cost=total_cost,
-            ),
-        )
-
-    msg = f"成功购买 {item_to_buy['name']} x{quantity_to_buy}\n花费 {number_to(total_cost)} 灵石"
+    msg = (
+        f"成功购买 {result.name} x{result.quantity}\n花费 {number_to(result.total_cost)} 灵石"
+        if result.applied
+        else "该购买请求已经处理，无需重复提交。"
+    )
     trade_info = {
-        "seller_id": seller_id,
-        "quantity": quantity_to_buy,
-        "total_cost": total_cost,
+        "seller_id": result.seller_id,
+        "quantity": result.quantity,
+        "total_cost": result.total_cost,
+        "applied": result.applied,
     }
     return True, msg, trade_info
 
@@ -410,7 +393,7 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     for _ in range(quantity):
         try:
             # 添加到仙肆系统
-            trade_manager.add_xianshi_item(user_id, goods_id, item_name, goods_info['type'], price, 1)
+            xianshi_repository.add_xianshi_item(user_id, goods_id, item_name, goods_info['type'], price, 1)
             success_count += 1
         except Exception as e:
             logger.error(f"仙肆上架失败: {e}")
@@ -634,7 +617,7 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         added_for_item = 0
         for _ in range(item_summary['quantity']):            
             try:
-                trade_manager.add_xianshi_item(user_id, item_summary['id'], item_summary['name'], item_summary['type'], item_summary['price'], 1)
+                xianshi_repository.add_xianshi_item(user_id, item_summary['id'], item_summary['name'], item_summary['type'], item_summary['price'], 1)
                 added_for_item += 1
                 successful_items_count += 1
                 result_messages.append(f"{item_summary['name']} x1 - 单价:{number_to(item_summary['price'])}")
@@ -810,7 +793,7 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     success_count = 0
     for _ in range(quantity):
         try:
-            trade_manager.add_xianshi_item(user_id, goods_id, item_name, goods_info['type'], price, 1)
+            xianshi_repository.add_xianshi_item(user_id, goods_id, item_name, goods_info['type'], price, 1)
             success_count += 1
         except Exception as e:
             logger.error(f"快速上架失败: {e}")
@@ -909,7 +892,7 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await handle_send(bot, event, msg, md_type="交易", k1="技能", v1="仙肆查看 技能", k2="装备", v2="仙肆查看 装备", k3="药材", v3="仙肆查看 药材", k4="丹药", v4="仙肆查看 丹药")
         await xiuxian_shop_view.finish()
     
-    type_items = trade_manager.get_xianshi_items(type=item_type)
+    type_items = xianshi_repository.get_xianshi_items(type=item_type)
     
     if not type_items:
         msg = f"仙肆中暂无{item_type}类物品！"
@@ -1031,7 +1014,7 @@ async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     user_id = user_info['user_id']
     
-    user_items = trade_manager.get_xianshi_items(user_id=user_id)
+    user_items = xianshi_repository.get_xianshi_items(user_id=user_id)
 
     if not user_items:
         msg = "您在仙肆中没有上架任何物品！"
@@ -1133,7 +1116,7 @@ async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         quantity_to_buy = 1 # 购买数量至少为1
 
     # 从系统中查找物品
-    item_list = trade_manager.get_xianshi_items(id=xianshi_id)
+    item_list = xianshi_repository.get_xianshi_items(id=xianshi_id)
     
     if not item_list:
         msg = f"未找到仙肆ID为 {xianshi_id} 的物品！"
@@ -1143,24 +1126,30 @@ async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     item_to_buy = item_list[0] # get_xianshi_items返回列表，取第一个
     
     try:
-        success, msg, trade_info = buy_xianshi_item_safely(user_id, item_to_buy, quantity_to_buy)
+        success, msg, trade_info = buy_xianshi_item_safely(
+            user_id,
+            item_to_buy,
+            quantity_to_buy,
+            operation_id=_xianshi_operation_id(event, xianshi_id),
+        )
         if not success:
             await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
             await xian_buy.finish()
 
-        record_trade_event(
-            user_id,
-            "仙肆购买",
-            f"购买{item_to_buy['name']}x{trade_info['quantity']}，花费{number_to(trade_info['total_cost'])}灵石",
-            {"仙肆购买次数": 1, "仙肆购买数量": trade_info['quantity'], "仙肆消费灵石": trade_info['total_cost']}
-        )
-        if trade_info['seller_id'] != "0":
+        if trade_info["applied"]:
             record_trade_event(
-                trade_info['seller_id'],
-                "仙肆售出",
-                f"售出{item_to_buy['name']}x{trade_info['quantity']}，收入{number_to(trade_info['total_cost'])}灵石",
-                {"仙肆售出次数": 1, "仙肆售出数量": trade_info['quantity'], "仙肆收入灵石": trade_info['total_cost']}
+                user_id,
+                "仙肆购买",
+                f"购买{item_to_buy['name']}x{trade_info['quantity']}，花费{number_to(trade_info['total_cost'])}灵石",
+                {"仙肆购买次数": 1, "仙肆购买数量": trade_info['quantity'], "仙肆消费灵石": trade_info['total_cost']}
             )
+            if trade_info['seller_id'] != "0":
+                record_trade_event(
+                    trade_info['seller_id'],
+                    "仙肆售出",
+                    f"售出{item_to_buy['name']}x{trade_info['quantity']}，收入{number_to(trade_info['total_cost'])}灵石",
+                    {"仙肆售出次数": 1, "仙肆售出数量": trade_info['quantity'], "仙肆收入灵石": trade_info['total_cost']}
+                )
         await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
     except Exception as e:
         logger.error(f"仙肆购买出错: {e}")
@@ -1209,7 +1198,7 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         quantities = quantities[:len(goods_names)]
 
     # 获取所有仙肆中的物品
-    all_xianshi_items = trade_manager.get_xianshi_items()
+    all_xianshi_items = xianshi_repository.get_xianshi_items()
     if not all_xianshi_items:
         msg = "仙肆中没有物品可供购买！"
         sql_message.update_user_stamina(user_id, 10, 1)
@@ -1254,9 +1243,21 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 break # 灵石不足，停止购买该物品
             
             try:
-                success, result_msg, trade_info = buy_xianshi_item_safely(user_id, item_data, 1)
+                success, result_msg, trade_info = buy_xianshi_item_safely(
+                    user_id,
+                    item_data,
+                    1,
+                    operation_id=_xianshi_operation_id(
+                        event,
+                        item_data["id"],
+                        f"{i}:{purchased_count}",
+                    ),
+                )
                 if not success:
                     failed_items.append(f"{item_data['name']}×1 ({result_msg})")
+                    continue
+                if not trade_info["applied"]:
+                    failed_items.append(f"{item_data['name']}×1（请求已处理）")
                     continue
                 current_user_stone -= item_data["price"]
                 seller_id = trade_info['seller_id']
@@ -1335,7 +1336,7 @@ async def xian_shop_off_all_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     await handle_send(bot, event, msg)
     
     # 获取所有用户上架的物品
-    all_xianshi_items = trade_manager.get_xianshi_items()
+    all_xianshi_items = xianshi_repository.get_xianshi_items()
     
     if not all_xianshi_items:
         msg = "仙肆已经是空的，没有物品被下架！"
@@ -1344,7 +1345,7 @@ async def xian_shop_off_all_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     
     # 删除所有物品并退还给玩家
     for item in all_xianshi_items:
-        trade_manager.remove_xianshi_all_item(item['id']) # 删除该条仙肆记录
+        xianshi_repository.remove_xianshi_all_item(item['id']) # 删除该条仙肆记录
         if item["user_id"] != 0: # 如果不是系统上架的物品，则退还给玩家
             sql_message.send_back(
                 item["user_id"],
@@ -1407,7 +1408,7 @@ async def xian_shop_added_by_admin_(bot: Bot, event: GroupMessageEvent | Private
     
     # 上架物品
     try:
-        trade_manager.add_xianshi_item(0, goods_id, goods_name, goods_type, price, quantity) # user_id=0表示系统物品
+        xianshi_repository.add_xianshi_item(0, goods_id, goods_name, goods_type, price, quantity) # user_id=0表示系统物品
         if quantity == -1:
             quantity_msg = "无限"
         else:
@@ -1441,7 +1442,7 @@ async def xian_shop_remove_by_admin_(bot: Bot, event: GroupMessageEvent | Privat
     xianshi_id = args[0]
     
     # 查找物品
-    item_list = trade_manager.get_xianshi_items(id=xianshi_id)
+    item_list = xianshi_repository.get_xianshi_items(id=xianshi_id)
     
     if not item_list:
         msg = f"未找到仙肆ID为 {xianshi_id} 的物品！"
@@ -1451,7 +1452,7 @@ async def xian_shop_remove_by_admin_(bot: Bot, event: GroupMessageEvent | Privat
     item_to_remove = item_list[0]
     
     try:
-        trade_manager.remove_xianshi_all_item(xianshi_id) # 移除仙肆记录
+        xianshi_repository.remove_xianshi_all_item(xianshi_id) # 移除仙肆记录
         
         # 如果是用户上架的物品，退还给用户
         if item_to_remove['user_id'] != 0:

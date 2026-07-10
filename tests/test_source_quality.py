@@ -357,6 +357,15 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("json.dump(", source)
         self.assertIn("update_json_file(", source)
 
+    def test_xianshi_purchase_uses_transactional_service(self) -> None:
+        trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
+        command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")
+        repository_source = (trade_root / "repository.py").read_text(encoding="utf-8")
+        self.assertIn("xianshi_purchase_service.purchase(", command_source)
+        self.assertNotIn("xianshi_buy_refund", command_source)
+        self.assertIn("BEGIN IMMEDIATE", repository_source)
+        self.assertIn("xianshi_operations", repository_source)
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")
