@@ -211,6 +211,67 @@ class GuishiOrderMatchingTests(unittest.TestCase):
 
         self.assertEqual(self.info("buyer")[0], 99)
 
+    def test_create_baitan_consumes_tradeable_inventory_and_inserts_order(self) -> None:
+        with db_backend.transaction(self.game_database) as conn:
+            conn.execute(
+                """
+                CREATE TABLE back (
+                    user_id TEXT, goods_id INTEGER, goods_num INTEGER,
+                    bind_num INTEGER DEFAULT 0, state INTEGER DEFAULT 0,
+                    update_time TEXT, UNIQUE (user_id, goods_id)
+                )
+                """
+            )
+            conn.execute(
+                "INSERT INTO back VALUES (%s, %s, %s, %s, %s, NULL)",
+                ("seller", 1001, 8, 2, 1),
+            )
+
+        result = self.repository.create_guishi_baitan_order(
+            self.trade_database,
+            "seller",
+            1001,
+            "灵草",
+            20,
+            4,
+            max_orders=10,
+        )
+
+        self.assertTrue(result.created)
+        with db_backend.connection(self.game_database) as conn:
+            self.assertEqual(
+                tuple(conn.execute(
+                    "SELECT goods_num, bind_num FROM back WHERE user_id=%s AND goods_id=%s",
+                    ("seller", 1001),
+                ).fetchone()),
+                (4, 2),
+            )
+        with db_backend.connection(self.trade_database) as conn:
+            self.assertEqual(
+                tuple(conn.execute(
+                    "SELECT user_id, item_type, quantity FROM guishi_item WHERE id=%s",
+                    (result.order_id,),
+                ).fetchone()),
+                ("seller", "baitan", 4),
+            )
+
+    def test_create_baitan_insert_failure_rolls_back_inventory(self) -> None:
+        with db_backend.transaction(self.game_database) as conn:
+            conn.execute(
+                "CREATE TABLE back (user_id TEXT, goods_id INTEGER, goods_num INTEGER, bind_num INTEGER DEFAULT 0, state INTEGER DEFAULT 0, update_time TEXT, UNIQUE (user_id, goods_id))"
+            )
+            conn.execute("INSERT INTO back VALUES (%s, %s, %s, %s, %s, NULL)", ("seller", 1001, 8, 0, 0))
+        with db_backend.transaction(self.trade_database) as conn:
+            conn.execute("CREATE TRIGGER reject_baitan_insert BEFORE INSERT ON guishi_item WHEN NEW.item_type='baitan' BEGIN SELECT RAISE(ABORT, 'reject insert'); END")
+
+        with self.assertRaises(db_backend.IntegrityError):
+            self.repository.create_guishi_baitan_order(
+                self.trade_database, "seller", 1001, "灵草", 20, 4, max_orders=10
+            )
+
+        with db_backend.connection(self.game_database) as conn:
+            self.assertEqual(conn.execute("SELECT goods_num FROM back WHERE user_id=%s AND goods_id=%s", ("seller", 1001)).fetchone()[0], 8)
+
 
 if __name__ == "__main__":
     unittest.main()

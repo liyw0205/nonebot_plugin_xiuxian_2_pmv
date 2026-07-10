@@ -1855,14 +1855,26 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     if quantity > goods_num: # 实际可上架数量不能超过背包现有数量
         quantity = goods_num
         
-    # 从背包扣除物品
-    if not sql_message.consume_trade_item(user_id, goods_id, num=quantity):
+    result = xianshi_repository.create_guishi_baitan_order(
+        get_paths().trade_db,
+        user_id,
+        goods_id,
+        item_name,
+        price,
+        quantity,
+        max_orders=MAX_BAITAN_ORDERS,
+    )
+    if result.status == "limit_reached":
+        msg = f"您的摆摊订单已达上限({MAX_BAITAN_ORDERS})，请先收摊部分订单！"
+        await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
+        await guishi_baitan.finish()
+    if result.status == "stock_insufficient":
         msg = f"可交易的 {item_name} 数量不足，摆摊失败！"
         await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_baitan.finish()
-    
-    # 添加摆摊订单
-    order_id = trade_manager.add_guishi_order(user_id, item_id=goods_id, item_name=item_name, item_type="baitan", price=price, quantity=quantity)
+    if not result.created:
+        raise RuntimeError(f"unexpected guishi baitan status: {result.status}")
+    order_id = result.order_id
     
     msg = f"成功摆摊！\n"
     msg += f"物品：{item_name}\n"

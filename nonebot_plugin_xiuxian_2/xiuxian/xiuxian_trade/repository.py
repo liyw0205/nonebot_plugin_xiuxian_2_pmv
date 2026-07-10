@@ -136,6 +136,17 @@ class GuishiQiugouCreate:
         return self.status == "created"
 
 
+@dataclass(frozen=True)
+class GuishiBaitanCreate:
+    status: str
+    order_id: str = ""
+    quantity: int = 0
+
+    @property
+    def created(self) -> bool:
+        return self.status == "created"
+
+
 class TradeRepository:
     """Atomic marketplace operations stored with player economy data."""
 
@@ -557,6 +568,83 @@ class TradeRepository:
             except Exception:
                 conn.rollback()
                 raise
+
+    def create_guishi_baitan_order(
+        self,
+        trade_database: str | Path,
+        user_id,
+        item_id,
+        item_name,
+        price,
+        quantity,
+        *,
+        max_orders: int,
+    ) -> GuishiBaitanCreate:
+        import secrets
+
+        user_id = str(user_id)
+        item_id = int(item_id)
+        item_name = str(item_name)
+        price = max(int(price), 0)
+        quantity = max(int(quantity), 1)
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            conn.execute("ATTACH DATABASE %s AS guishi_trade", (str(trade_database),))
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                count = conn.execute(
+                    """
+                    SELECT COUNT(*) FROM guishi_trade.guishi_item
+                    WHERE user_id=%s AND (item_type=%s OR item_type=%s)
+                    """,
+                    (user_id, "baitan", "摆摊"),
+                ).fetchone()[0]
+                if int(count) >= max(int(max_orders), 1):
+                    conn.rollback()
+                    return GuishiBaitanCreate("limit_reached")
+                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+                updated = conn.execute(
+                    """
+                    UPDATE back
+                    SET goods_num=goods_num-%s,
+                        bind_num=LEAST(COALESCE(bind_num, 0), goods_num-%s),
+                        update_time=%s
+                    WHERE user_id=%s AND goods_id=%s
+                      AND COALESCE(goods_num, 0)-COALESCE(bind_num, 0)
+                          -COALESCE(state, 0) >= %s
+                    """,
+                    (quantity, quantity, now, user_id, item_id, quantity),
+                ).rowcount
+                if updated != 1:
+                    conn.rollback()
+                    return GuishiBaitanCreate("stock_insufficient")
+                for _ in range(20):
+                    order_id = str(secrets.randbelow(9_000_000_000_000) + 1_000_000_000_000)
+                    try:
+                        conn.execute(
+                            """
+                            INSERT INTO guishi_trade.guishi_item (
+                                id, user_id, item_id, item_name, item_type, price, quantity
+                            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            """,
+                            (order_id, user_id, item_id, item_name, "baitan", price, quantity),
+                        )
+                        break
+                    except db_backend.IntegrityError:
+                        if conn.execute(
+                            "SELECT 1 FROM guishi_trade.guishi_item WHERE id=%s", (order_id,)
+                        ).fetchone():
+                            continue
+                        raise
+                else:
+                    conn.rollback()
+                    raise RuntimeError("failed to allocate guishi order id")
+                conn.commit()
+                return GuishiBaitanCreate("created", order_id, quantity)
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.execute("DETACH DATABASE guishi_trade")
 
     @staticmethod
     def _guishi_info(conn, user_id):
