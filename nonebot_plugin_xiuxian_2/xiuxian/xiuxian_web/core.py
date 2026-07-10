@@ -57,6 +57,7 @@ from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.download_xiuxian_data import UpdateManager
 from ..xiuxian_utils.xiuxian2_handle import config_impart, trade_manager
 from ..xiuxian_utils.periods import format_duration_full
+from ..infrastructure import settings
 
 # --- 辅助函数 ---
 def format_time(seconds: float) -> str:
@@ -85,19 +86,7 @@ app = Flask(__name__)
 
 
 def _config_value(name: str, default=None):
-    try:
-        value = getattr(get_driver().config, name, None)
-        if value is not None:
-            return value
-    except Exception:
-        pass
-    try:
-        value = getattr(WEB_CONFIG, name, None)
-        if value is not None:
-            return value
-    except Exception:
-        pass
-    return default
+    return settings.get(name, default)
 
 
 def _config_bool(name: str, default: bool = False) -> bool:

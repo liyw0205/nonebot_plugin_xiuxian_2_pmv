@@ -81,6 +81,15 @@ class SourceQualityTests(unittest.TestCase):
             source = (SOURCE_ROOT / relative).read_text(encoding="utf-8")
             self.assertIn("format_duration_full", source)
 
+    def test_runtime_and_web_use_settings_provider(self) -> None:
+        for relative in (
+            Path("xiuxian/__init__.py"),
+            Path("xiuxian/runtime.py"),
+            Path("xiuxian/xiuxian_web/core.py"),
+        ):
+            source = (SOURCE_ROOT / relative).read_text(encoding="utf-8")
+            self.assertIn("settings", source)
+
     def test_internal_imports_do_not_assume_top_level_package_name(self) -> None:
         violations: list[str] = []
         for path in SOURCE_ROOT.rglob("*.py"):

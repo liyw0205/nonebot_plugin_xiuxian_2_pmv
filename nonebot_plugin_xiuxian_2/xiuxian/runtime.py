@@ -7,7 +7,7 @@ from typing import Any
 from nonebot import get_driver
 from nonebot.log import logger
 
-from .infrastructure import BackgroundJobQueue
+from .infrastructure import BackgroundJobQueue, settings
 from .messaging.media import media_resolver
 
 
@@ -39,10 +39,7 @@ async def submit_critical_job(operation, *, max_retries: int = 0) -> bool:
 
 
 def _config_bool(name: str, default: bool) -> bool:
-    value = getattr(driver.config, name, default)
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "on"}
-    return bool(value)
+    return settings.get_bool(name, default)
 
 
 async def _run_blocking(label: str, function: Callable[[], Any]) -> Any:

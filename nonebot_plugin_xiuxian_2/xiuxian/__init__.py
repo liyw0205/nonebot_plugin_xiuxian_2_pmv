@@ -28,7 +28,7 @@ from nonebot import require, load_all_plugins, get_plugin_by_module_name
 from .xiuxian_utils.config import config as _config
 from .broadcast_manager import auto_patch_broadcast_for_event
 from . import runtime as _runtime  # noqa: F401
-from .infrastructure import QQEventDeduplicator
+from .infrastructure import QQEventDeduplicator, settings
 from .qq_compat import (
     apply_lifecycle_event,
     arm_interaction_ack,
@@ -93,34 +93,20 @@ def _safe_str(value):
     return "" if value is None else str(value)
 
 
-_RATE_LIMIT_CONFIG = XiuConfig()
-_CONFIG_MISSING = object()
-
-
 def _get_config_raw(name: str, default):
-    try:
-        value = getattr(DRIVER.config, name, _CONFIG_MISSING)
-        if value is not _CONFIG_MISSING and value is not None:
-            return value
-    except Exception:
-        pass
-
-    try:
-        return getattr(_RATE_LIMIT_CONFIG, name, default)
-    except Exception:
-        return default
+    return settings.get(name, default)
 
 
 def _get_config_int(name: str, default: int) -> int:
     try:
-        return int(float(_get_config_raw(name, default)))
+        return settings.get_int(name, default)
     except Exception:
         return default
 
 
 def _get_config_str(name: str, default: str) -> str:
     try:
-        return str(_get_config_raw(name, default))
+        return settings.get_str(name, default)
     except Exception:
         return default
 

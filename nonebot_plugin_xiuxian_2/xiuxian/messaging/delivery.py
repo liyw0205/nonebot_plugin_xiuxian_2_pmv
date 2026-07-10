@@ -3,8 +3,6 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from nonebot import get_driver
-
 from ..adapter_compat import (
     get_chat_scene,
     get_group_id,
@@ -15,7 +13,7 @@ from ..adapter_message_actions import delete_message_compat
 from ..adapter_message_records import record_send_message
 from ..adapter_message_sender import is_qq_bot, send_group_message, send_private_message
 from ..qq_compat import QQCapabilityRegistry
-from ..infrastructure import RuntimeMetrics, runtime_metrics
+from ..infrastructure import RuntimeMetrics, runtime_metrics, settings
 from .models import SendRequest, SendResult
 from .media import MediaInput, MediaResolver, media_resolver
 from .reliability import (
@@ -349,7 +347,11 @@ class MessageDeliveryService:
 
 
 delivery_service = MessageDeliveryService(
-    capabilities=QQCapabilityRegistry.from_config(get_driver().config)
+    capabilities=QQCapabilityRegistry.from_config(
+        type("CapabilityConfig", (), {
+            "xiuxian_qq_capabilities": settings.get("xiuxian_qq_capabilities", None)
+        })()
+    )
 )
 
 
