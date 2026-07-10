@@ -6,6 +6,7 @@ httpx
 Markdown
 msgpack
 nonebot2[fastapi]
+nonebot-adapter-qq==1.7.1
 nonebot_plugin_apscheduler
 numpy
 Pillow

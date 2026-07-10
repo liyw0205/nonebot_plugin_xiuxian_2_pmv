@@ -1,0 +1,82 @@
+{
+  "group": {
+    "id": "group-message-1",
+    "content": " /status",
+    "timestamp": "2026-07-10T00:00:00+08:00",
+    "author": {
+      "id": "raw-group-user",
+      "bot": false,
+      "member_openid": "member-1",
+      "union_openid": "union-1",
+      "username": "group-user"
+    },
+    "group_id": "legacy-group-1",
+    "group_openid": "group-1",
+    "event_id": "group-event-1",
+    "message_scene": {
+      "source": "contract-test",
+      "ext": ["msg_idx=REFIDX%3Agroup-reference-1"]
+    },
+    "attachments": [
+      {
+        "content_type": "image/png",
+        "filename": "status.png",
+        "url": "https://example.invalid/status.png",
+        "size": 42
+      }
+    ]
+  },
+  "c2c": {
+    "id": "c2c-message-1",
+    "content": "help",
+    "timestamp": "2026-07-10T00:00:00+08:00",
+    "author": {
+      "id": "raw-c2c-user",
+      "user_openid": "user-1",
+      "union_openid": "union-2",
+      "username": "c2c-user"
+    },
+    "event_id": "c2c-event-1",
+    "message_scene": {
+      "source": "contract-test",
+      "ext": ["msg_idx=REFIDX%3Ac2c-reference-1"]
+    }
+  },
+  "channel": {
+    "id": "channel-message-1",
+    "channel_id": "channel-1",
+    "guild_id": "guild-1",
+    "content": "channel status",
+    "author": {
+      "id": "channel-user-1"
+    },
+    "event_id": "channel-event-1"
+  },
+  "interaction": {
+    "id": "interaction-1",
+    "type": 11,
+    "version": 1,
+    "timestamp": "2026-07-10T00:00:00+08:00",
+    "scene": "group",
+    "chat_type": 1,
+    "group_openid": "group-1",
+    "group_member_openid": "member-1",
+    "application_id": "application-1",
+    "event_id": "interaction-event-1",
+    "data": {
+      "resolved": {
+        "user_id": "legacy-user-1",
+        "message_id": "group-message-1",
+        "button_id": "button-1",
+        "button_data": "/checkin",
+        "feature_id": "feature-1"
+      }
+    }
+  },
+  "lifecycle": {
+    "timestamp": "2026-07-10T00:00:00+08:00",
+    "group_openid": "group-1",
+    "op_member_openid": "operator-1",
+    "event_id": "lifecycle-event-1"
+  }
+}
