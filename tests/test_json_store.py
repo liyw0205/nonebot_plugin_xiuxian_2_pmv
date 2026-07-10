@@ -10,6 +10,7 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.json_store import (
+    delete_json_file,
     load_json_file,
     save_json_file,
     update_json_file,
@@ -47,6 +48,13 @@ class JsonStoreTests(unittest.TestCase):
                 ["x"],
             )
             self.assertEqual(load_json_file(path, [], list), ["x"])
+
+    def test_delete_json_file_is_idempotent(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "state.json"
+            save_json_file(path, {"value": 1})
+            self.assertTrue(delete_json_file(path))
+            self.assertFalse(delete_json_file(path))
 
 
 if __name__ == "__main__":

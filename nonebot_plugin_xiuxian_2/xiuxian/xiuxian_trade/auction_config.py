@@ -1,8 +1,12 @@
 from copy import deepcopy
 from pathlib import Path
 from typing import Dict, Any, Optional
-import json
 from ...paths import get_paths
+from ..xiuxian_utils.json_store import (
+    delete_json_file,
+    load_json_file,
+    save_json_file,
+)
 
 XIUXIAN_DATABASE = get_paths().data
 
@@ -180,39 +184,29 @@ def load_persisted_auction_status() -> Optional[Dict[str, Any]]:
     """读取上次落盘的场次状态（与 trade.db 拍品配套）。"""
     if not AUCTION_SESSION_FILE.is_file():
         return None
-    try:
-        raw = json.loads(AUCTION_SESSION_FILE.read_text(encoding="utf-8"))
-        if not isinstance(raw, dict):
-            return None
-        merged = _deep_merge({"auction_status": raw}, DEFAULT_CONFIG)["auction_status"]
-        return _normalize_config({"auction_status": merged})["auction_status"]
-    except Exception:
+    raw = load_json_file(
+        AUCTION_SESSION_FILE,
+        deepcopy(DEFAULT_CONFIG["auction_status"]),
+        dict,
+    )
+    merged = _deep_merge({"auction_status": raw}, DEFAULT_CONFIG)["auction_status"]
+    normalized = _normalize_config({"auction_status": merged})["auction_status"]
+    if not normalized.get("active"):
         return None
+    return normalized
 
 
 def persist_auction_status(status: Dict[str, Any]) -> None:
     """把当前场次状态写到 data/xiuxian/auction_session.json。"""
-    try:
-        XIUXIAN_DATABASE.mkdir(parents=True, exist_ok=True)
-        normalized = _normalize_config({"auction_status": status})["auction_status"]
-        if not normalized.get("active"):
-            if AUCTION_SESSION_FILE.is_file():
-                AUCTION_SESSION_FILE.unlink(missing_ok=True)
-            return
-        AUCTION_SESSION_FILE.write_text(
-            json.dumps(normalized, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-    except Exception:
-        pass
+    normalized = _normalize_config({"auction_status": status})["auction_status"]
+    if not normalized.get("active"):
+        delete_json_file(AUCTION_SESSION_FILE)
+        return
+    save_json_file(AUCTION_SESSION_FILE, normalized, indent=2)
 
 
 def clear_persisted_auction_status() -> None:
-    try:
-        if AUCTION_SESSION_FILE.is_file():
-            AUCTION_SESSION_FILE.unlink()
-    except Exception:
-        pass
+    delete_json_file(AUCTION_SESSION_FILE)
 
 
 def set_auction_config_value(key: str, value: Any, sub_key: Optional[str] = None) -> None:

@@ -393,6 +393,17 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("sign_in_operations", service_source)
 
+    def test_auction_session_uses_central_json_store(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_trade" / "auction_config.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("json.loads(", source)
+        self.assertNotIn("json.dumps(", source)
+        self.assertNotIn("write_text(", source)
+        self.assertIn("load_json_file(", source)
+        self.assertIn("save_json_file(", source)
+        self.assertIn("delete_json_file(", source)
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")

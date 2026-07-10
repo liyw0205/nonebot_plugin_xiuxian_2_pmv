@@ -95,6 +95,17 @@ def update_json_file(
         return updated
 
 
+def delete_json_file(path: str | Path) -> bool:
+    """Delete a JSON state file while serializing against readers and writers."""
+    file_path = Path(path)
+    with _path_lock(file_path):
+        try:
+            file_path.unlink()
+            return True
+        except FileNotFoundError:
+            return False
+
+
 def safe_json_dumps(value: Any, default: Any = None) -> str:
     if value is None and default is not None:
         value = default
