@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import time
 from typing import Any
 
 from ..xiuxian_config import XiuConfig
@@ -148,3 +149,126 @@ def requests_post(
     }
     req_kwargs.update(kwargs)
     return _requests_call("POST", url, req_kwargs, proxies)
+
+
+class HttpClient:
+    def __init__(self, *, timeout: float = 30, retries: int = 2) -> None:
+        self.timeout = timeout
+        self.retries = max(0, int(retries))
+
+    def request(self, method: str, url: str, **kwargs: Any):
+        import requests
+
+        timeout = kwargs.pop("timeout", self.timeout)
+        check_status = bool(kwargs.pop("check_status", True))
+        use_config_proxy = kwargs.pop("use_config_proxy", True)
+        proxy_url = kwargs.pop("proxy_url", None)
+        proxies = build_requests_proxies(proxy_url) if use_config_proxy else None
+        last_error: BaseException | None = None
+        for attempt in range(self.retries + 1):
+            try:
+                response = _requests_call(
+                    method.upper(),
+                    url,
+                    {"timeout": timeout, **kwargs},
+                    proxies,
+                )
+                if check_status:
+                    response.raise_for_status()
+                return response
+            except (requests.Timeout, requests.ConnectionError) as exc:
+                last_error = exc
+                if attempt >= self.retries:
+                    raise
+                time.sleep(0.05 * (attempt + 1))
+        raise RuntimeError("HTTP 请求重试流程异常结束") from last_error
+
+    def get_json(
+        self,
+        url: str,
+        *,
+        expected_type: type | tuple[type, ...] = dict,
+        **kwargs: Any,
+    ) -> Any:
+        response = self.request("GET", url, **kwargs)
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise ValueError("HTTP 响应不是合法 JSON") from exc
+        if not isinstance(data, expected_type):
+            raise ValueError(f"HTTP JSON 根类型不是 {expected_type!r}")
+        return data
+
+    def post_json(
+        self,
+        url: str,
+        payload: Any = None,
+        *,
+        expected_type: type | tuple[type, ...] = dict,
+        **kwargs: Any,
+    ) -> Any:
+        response = self.request("POST", url, json=payload, **kwargs)
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise ValueError("HTTP 响应不是合法 JSON") from exc
+        if not isinstance(data, expected_type):
+            raise ValueError(f"HTTP JSON 根类型不是 {expected_type!r}")
+        return data
+
+    def download(self, url: str, *, max_bytes: int, **kwargs: Any) -> bytes:
+        response = self.request("GET", url, stream=True, **kwargs)
+        length = int(response.headers.get("content-length", 0) or 0)
+        if length > max_bytes:
+            raise ValueError(f"下载内容超过大小限制: {length} > {max_bytes}")
+        content = bytearray()
+        for chunk in response.iter_content(chunk_size=64 * 1024):
+            content.extend(chunk)
+            if len(content) > max_bytes:
+                raise ValueError("下载过程中超过大小限制")
+        return bytes(content)
+
+
+class AsyncHttpClient:
+    def __init__(self, *, timeout: float = 30, retries: int = 2) -> None:
+        self.timeout = timeout
+        self.retries = max(0, int(retries))
+
+    async def request(self, method: str, url: str, **kwargs: Any):
+        import asyncio
+        import httpx
+
+        timeout = kwargs.pop("timeout", self.timeout)
+        last_error: BaseException | None = None
+        for attempt in range(self.retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    response = await client.request(method.upper(), url, **kwargs)
+                response.raise_for_status()
+                return response
+            except (httpx.TimeoutException, httpx.TransportError) as exc:
+                last_error = exc
+                if attempt >= self.retries:
+                    raise
+                await asyncio.sleep(0.05 * (attempt + 1))
+        raise RuntimeError("异步 HTTP 请求重试流程异常结束") from last_error
+
+    async def get_json(
+        self,
+        url: str,
+        *,
+        expected_type: type | tuple[type, ...] = dict,
+        **kwargs: Any,
+    ) -> Any:
+        response = await self.request("GET", url, **kwargs)
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise ValueError("HTTP 响应不是合法 JSON") from exc
+        if not isinstance(data, expected_type):
+            raise ValueError(f"HTTP JSON 根类型不是 {expected_type!r}")
+        return data
+
+
+http_client = HttpClient()
+async_http_client = AsyncHttpClient()

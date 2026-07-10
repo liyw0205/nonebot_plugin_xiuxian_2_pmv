@@ -52,6 +52,27 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("json.dump(", source)
         self.assertIn("update_json_file(", source)
 
+    def test_entertainment_http_calls_use_central_client(self) -> None:
+        paths = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_entertainment" / "command.py",
+            SOURCE_ROOT
+            / "xiuxian"
+            / "xiuxian_entertainment"
+            / "mod"
+            / "newapi_client.py",
+            SOURCE_ROOT
+            / "xiuxian"
+            / "xiuxian_entertainment"
+            / "mod"
+            / "alist_webdav.py",
+        )
+        for path in paths:
+            source = path.read_text(encoding="utf-8")
+            self.assertNotIn("requests.get(", source)
+            self.assertNotIn("requests.post(", source)
+            self.assertNotIn("requests.request(", source)
+            self.assertIn("http_client", source)
+
     def test_internal_imports_do_not_assume_top_level_package_name(self) -> None:
         violations: list[str] = []
         for path in SOURCE_ROOT.rglob("*.py"):

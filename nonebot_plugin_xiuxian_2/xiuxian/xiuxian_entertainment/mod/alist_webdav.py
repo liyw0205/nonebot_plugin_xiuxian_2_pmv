@@ -7,12 +7,12 @@ from typing import Any
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 from xml.etree import ElementTree as ET
 
-import requests
 from nonebot.params import CommandArg
 
 from ..command import *
 from ..io_runtime import run_blocking_io
 from ...xiuxian_utils.utils import build_md_command_link
+from ...xiuxian_utils.http_proxy import http_client
 
 
 WEBDAV_DATA_DIR = Path(__file__).resolve().parent / "data" / "alist_webdav_bindings"
@@ -302,13 +302,14 @@ def _propfind(binding: dict[str, Any], dav_path: str, depth: str) -> list[dict[s
     <getcontenttype />
   </prop>
 </propfind>"""
-    resp = requests.request(
+    resp = http_client.request(
         "PROPFIND",
         url,
         data=body.encode("utf-8"),
         headers=headers,
         auth=(str(binding.get("username") or ""), str(binding.get("password") or "")),
         timeout=18,
+        check_status=False,
     )
     if resp.status_code in {401, 403}:
         raise ValueError("认证失败，请检查用户名和密码")
@@ -354,13 +355,15 @@ def _openlist_token(binding: dict[str, Any], *, refresh: bool = False) -> str:
     if not refresh and key in _TOKEN_CACHE:
         return _TOKEN_CACHE[key]
 
-    resp = requests.post(
+    resp = http_client.request(
+        "POST",
         _openlist_url(api_base, "/api/auth/login"),
         json={
             "username": username,
             "password": str(binding.get("password") or ""),
         },
         timeout=15,
+        check_status=False,
     )
     if resp.status_code != 200:
         raise ValueError(f"登录接口返回 {resp.status_code}")
@@ -398,21 +401,25 @@ def _openlist_post(
     if token:
         headers["Authorization"] = token
 
-    resp = requests.post(
+    resp = http_client.request(
+        "POST",
         _openlist_url(api_base, api_path),
         json=payload,
         headers=headers,
         timeout=18,
+        check_status=False,
     )
     if resp.status_code in {401, 403} and token and retry_auth:
         _TOKEN_CACHE.pop(_binding_api_prefix(binding), None)
         refreshed = _openlist_token(binding, refresh=True)
         headers["Authorization"] = refreshed
-        resp = requests.post(
+        resp = http_client.request(
+            "POST",
             _openlist_url(api_base, api_path),
             json=payload,
             headers=headers,
             timeout=18,
+            check_status=False,
         )
     if resp.status_code != 200:
         raise ValueError(f"接口返回 {resp.status_code}")

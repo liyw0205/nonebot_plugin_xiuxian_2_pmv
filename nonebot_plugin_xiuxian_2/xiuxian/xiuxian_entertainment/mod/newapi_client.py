@@ -5,7 +5,7 @@ import json
 import re
 from typing import Any
 
-import requests
+from ...xiuxian_utils.http_proxy import describe_proxy_request_error, http_client
 
 _UA = (
     "Mozilla/5.0 (Linux; Android; Pixel 7) AppleWebKit/537.36 "
@@ -100,17 +100,20 @@ def _request(
     url = f"{base_url.rstrip('/')}{path}"
     headers = _build_headers(mode, api_user_id, secret, base_url)
     try:
-        if method.upper() == "GET":
-            resp = requests.get(url, timeout=timeout, headers=headers)
-        else:
-            resp = requests.post(
-                url,
-                timeout=timeout,
-                headers={**headers, "Content-Type": "application/json"},
-                json=json_body or {},
-            )
+        resp = http_client.request(
+            method,
+            url,
+            timeout=timeout,
+            headers=(
+                headers
+                if method.upper() == "GET"
+                else {**headers, "Content-Type": "application/json"}
+            ),
+            json=None if method.upper() == "GET" else (json_body or {}),
+            check_status=False,
+        )
     except Exception as e:
-        return {"_error": str(e), "_raw": ""}
+        return {"_error": describe_proxy_request_error(e), "_raw": ""}
 
     text = (resp.text or "").strip()
     if not text:

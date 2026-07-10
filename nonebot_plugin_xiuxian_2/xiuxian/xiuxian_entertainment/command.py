@@ -2,7 +2,6 @@ import json
 import re
 import asyncio
 import time
-import requests
 import random
 from typing import Any, Tuple
 from urllib.parse import quote
@@ -34,6 +33,7 @@ from ..xiuxian_utils.utils import (
 
 from ..xiuxian_config import XiuConfig
 from ..messaging import MediaInput, delivery_service
+from ..xiuxian_utils.http_proxy import http_client
 from ..xiuxian_utils.lay_out import Cooldown
 
 from .media_parser.config import get_fun_media_parser_config
@@ -268,16 +268,7 @@ def _get_json_api_sync(api_url: str, params: dict | None = None, timeout: int = 
     - 失败时兼容 text -> json.loads
     - 失败抛异常给上层处理
     """
-    resp = requests.get(api_url, params=params, timeout=timeout)
-    resp.raise_for_status()
-    try:
-        result = resp.json()
-    except Exception:
-        result = json.loads(resp.text)
-
-    if not isinstance(result, dict):
-        raise ValueError("接口返回不是JSON对象")
-    return result
+    return http_client.get_json(api_url, params=params, timeout=timeout)
 
 
 async def get_json_api(api_url: str, params: dict | None = None, timeout: int = 15) -> dict:
@@ -290,8 +281,7 @@ def _get_text_api_sync(api_url: str, params: dict | None = None, timeout: int = 
     """
     通用文本接口请求
     """
-    resp = requests.get(api_url, params=params, timeout=timeout)
-    resp.raise_for_status()
+    resp = http_client.request("GET", api_url, params=params, timeout=timeout)
     return resp.text.strip()
 
 
@@ -401,8 +391,9 @@ def _get_media_url_api_sync(api_url: str, params: dict | None = None, timeout: i
     - 如果返回 JSON，则尝试从常见字段里找 URL
     - 如果不是 JSON，则使用 resp.url
     """
-    resp = requests.get(api_url, params=params, timeout=timeout, allow_redirects=True)
-    resp.raise_for_status()
+    resp = http_client.request(
+        "GET", api_url, params=params, timeout=timeout, allow_redirects=True
+    )
 
     content_type = resp.headers.get("Content-Type", "")
     if "application/json" in content_type:
