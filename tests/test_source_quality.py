@@ -469,6 +469,21 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("sect_fairyland_operations", service_source)
         self.assertIn("BEGIN IMMEDIATE", service_source)
 
+    def test_auction_runtime_tables_use_main_trade_repository(self) -> None:
+        trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
+        command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")
+        service_source = (trade_root / "auction_service.py").read_text(
+            encoding="utf-8"
+        )
+        repository_source = (trade_root / "repository.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("auction_current_from_trade_db_v1", repository_source)
+        self.assertIn("auction_history_from_trade_db_v1", repository_source)
+        self.assertIn("auction_repository.get_current_auction", service_source)
+        self.assertNotIn("trade_manager.get_current_auction", command_source)
+        self.assertNotIn("trade_manager.get_auction_history", command_source)
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")

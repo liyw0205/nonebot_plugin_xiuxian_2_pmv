@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import closing
 from dataclasses import dataclass, replace
+import json
 from pathlib import Path
 from threading import RLock
 from typing import Literal
@@ -68,37 +69,83 @@ class TradeRepository:
                 )
                 """
             )
+            conn.commit()
             if legacy_database is not None and Path(legacy_database) != self._database:
-                migration_id = "xianshi_item_from_trade_db_v1"
-                if conn.execute(
-                    "SELECT 1 FROM trade_migrations WHERE migration_id=%s",
-                    (migration_id,),
-                ).fetchone():
-                    conn.commit()
-                    return
                 conn.execute("ATTACH DATABASE %s AS legacy_trade", (str(legacy_database),))
                 try:
-                    if conn.execute(
-                        "SELECT 1 FROM legacy_trade.sqlite_master "
-                        "WHERE type='table' AND name='xianshi_item'"
-                    ).fetchone():
-                        conn.execute(
-                            """
-                            INSERT OR IGNORE INTO xianshi_item (
-                                id, user_id, goods_id, name, type, price, quantity
-                            )
-                            SELECT id, user_id, goods_id, name, type, price, quantity
-                            FROM legacy_trade.xianshi_item
-                            """
-                        )
-                    conn.execute(
-                        "INSERT INTO trade_migrations (migration_id) VALUES (%s)",
-                        (migration_id,),
-                    )
-                finally:
+                    conn.execute("BEGIN IMMEDIATE")
+                    self._migrate_legacy_trade_tables(conn)
                     conn.commit()
+                except Exception:
+                    conn.rollback()
+                    raise
+                finally:
                     conn.execute("DETACH DATABASE legacy_trade")
-            conn.commit()
+
+    @staticmethod
+    def _migration_pending(conn, migration_id: str) -> bool:
+        return not conn.execute(
+            "SELECT 1 FROM trade_migrations WHERE migration_id=%s",
+            (migration_id,),
+        ).fetchone()
+
+    @classmethod
+    def _migrate_legacy_trade_tables(cls, conn) -> None:
+        migrations = (
+            (
+                "xianshi_item_from_trade_db_v1",
+                "xianshi_item",
+                """
+                INSERT OR IGNORE INTO xianshi_item (
+                    id, user_id, goods_id, name, type, price, quantity
+                )
+                SELECT id, user_id, goods_id, name, type, price, quantity
+                FROM legacy_trade.xianshi_item
+                """,
+            ),
+            (
+                "auction_current_from_trade_db_v1",
+                "auction_current",
+                """
+                INSERT OR IGNORE INTO auction_current (
+                    id, item_id, name, start_price, current_price, seller_id,
+                    seller_name, bids, bid_times, is_system, last_bid_time
+                )
+                SELECT id, item_id, name, start_price, current_price, seller_id,
+                       seller_name, bids, bid_times, is_system, last_bid_time
+                FROM legacy_trade.auction_current
+                """,
+            ),
+            (
+                "auction_history_from_trade_db_v1",
+                "auction_history",
+                """
+                INSERT INTO auction_history (
+                    auction_id, item_id, item_name, start_price, final_price,
+                    seller_id, seller_name, winner_id, winner_name, status, fee,
+                    seller_earnings, start_time, end_time
+                )
+                SELECT auction_id, item_id, item_name, start_price, final_price,
+                       seller_id, seller_name, winner_id, winner_name, status, fee,
+                       seller_earnings, start_time, end_time
+                FROM legacy_trade.auction_history
+                """,
+            ),
+        )
+        for migration_id, table_name, statement in migrations:
+            if not cls._migration_pending(conn, migration_id):
+                continue
+            table_exists = conn.execute(
+                "SELECT 1 FROM legacy_trade.sqlite_master "
+                "WHERE type='table' AND name=%s",
+                (table_name,),
+            ).fetchone()
+            if table_exists:
+                conn.execute(statement)
+            conn.execute(
+                "INSERT INTO trade_migrations (migration_id) VALUES (%s)",
+                (migration_id,),
+            )
 
     def add_xianshi_item(self, user_id, goods_id, name, goods_type, price, quantity) -> str:
         import secrets
@@ -213,6 +260,190 @@ class TradeRepository:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS auction_current (
+                id TEXT PRIMARY KEY,
+                item_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                start_price INTEGER NOT NULL,
+                current_price INTEGER NOT NULL,
+                seller_id TEXT NOT NULL,
+                seller_name TEXT NOT NULL,
+                bids TEXT DEFAULT '{}',
+                bid_times TEXT DEFAULT '{}',
+                is_system INTEGER DEFAULT 0,
+                last_bid_time REAL DEFAULT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS auction_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                auction_id TEXT NOT NULL,
+                item_id INTEGER NOT NULL,
+                item_name TEXT NOT NULL,
+                start_price INTEGER NOT NULL,
+                final_price INTEGER,
+                seller_id TEXT NOT NULL,
+                seller_name TEXT NOT NULL,
+                winner_id TEXT,
+                winner_name TEXT,
+                status TEXT NOT NULL,
+                fee INTEGER,
+                seller_earnings INTEGER,
+                start_time REAL NOT NULL,
+                end_time REAL NOT NULL
+            )
+            """
+        )
+
+    @staticmethod
+    def _auction_row(row) -> dict:
+        result = dict(row)
+        for field in ("bids", "bid_times"):
+            try:
+                value = json.loads(result.get(field) or "{}")
+                result[field] = value if isinstance(value, dict) else {}
+            except (TypeError, ValueError, json.JSONDecodeError):
+                result[field] = {}
+        result["is_system"] = bool(result.get("is_system"))
+        return result
+
+    def set_current_auction(self, auction_items: list) -> None:
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            self.ensure_schema(conn)
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute("DELETE FROM auction_current")
+            for item in auction_items:
+                conn.execute(
+                    """
+                    INSERT INTO auction_current (
+                        id, item_id, name, start_price, current_price, seller_id,
+                        seller_name, bids, bid_times, is_system, last_bid_time
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        str(item["id"]),
+                        int(item["item_id"]),
+                        str(item["name"]),
+                        int(item["start_price"]),
+                        int(item["current_price"]),
+                        str(item["seller_id"]),
+                        str(item["seller_name"]),
+                        json.dumps(item.get("bids") or {}, ensure_ascii=False),
+                        json.dumps(item.get("bid_times") or {}, ensure_ascii=False),
+                        1 if item.get("is_system") else 0,
+                        float(item["last_bid_time"])
+                        if item.get("last_bid_time") is not None
+                        else None,
+                    ),
+                )
+            conn.commit()
+
+    def get_current_auction(self, auction_id=None):
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            self.ensure_schema(conn)
+            conn.row_factory = db_backend.Row
+            if auction_id is None:
+                rows = conn.execute("SELECT * FROM auction_current").fetchall()
+                return [self._auction_row(row) for row in rows]
+            row = conn.execute(
+                "SELECT * FROM auction_current WHERE id=%s", (str(auction_id),)
+            ).fetchone()
+            return self._auction_row(row) if row else None
+
+    def try_update_auction_bid(
+        self,
+        auction_id,
+        old_current_price,
+        new_current_price,
+        new_bids,
+        new_bid_times,
+        new_last_bid_time,
+    ) -> bool:
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            self.ensure_schema(conn)
+            cur = conn.execute(
+                """
+                UPDATE auction_current
+                SET current_price=%s, bids=%s, bid_times=%s, last_bid_time=%s
+                WHERE id=%s AND current_price=%s
+                """,
+                (
+                    int(new_current_price),
+                    json.dumps(new_bids or {}, ensure_ascii=False),
+                    json.dumps(new_bid_times or {}, ensure_ascii=False),
+                    float(new_last_bid_time)
+                    if new_last_bid_time is not None
+                    else None,
+                    str(auction_id),
+                    int(old_current_price),
+                ),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+    def clear_current_auction(self) -> None:
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            self.ensure_schema(conn)
+            conn.execute("DELETE FROM auction_current")
+            conn.commit()
+
+    def add_auction_history_record(self, record: dict) -> None:
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            self.ensure_schema(conn)
+            conn.execute(
+                """
+                INSERT INTO auction_history (
+                    auction_id, item_id, item_name, start_price, final_price,
+                    seller_id, seller_name, winner_id, winner_name, status, fee,
+                    seller_earnings, start_time, end_time
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    str(record["auction_id"]),
+                    int(record["item_id"]),
+                    str(record["item_name"]),
+                    int(record["start_price"]),
+                    int(record["final_price"])
+                    if record.get("final_price") is not None
+                    else None,
+                    str(record["seller_id"]),
+                    str(record["seller_name"]),
+                    str(record["winner_id"])
+                    if record.get("winner_id") is not None
+                    else None,
+                    str(record["winner_name"])
+                    if record.get("winner_name") is not None
+                    else None,
+                    str(record["status"]),
+                    int(record["fee"]) if record.get("fee") is not None else None,
+                    int(record["seller_earnings"])
+                    if record.get("seller_earnings") is not None
+                    else None,
+                    float(record["start_time"]),
+                    float(record["end_time"]),
+                ),
+            )
+            conn.commit()
+
+    def get_auction_history(self, auction_id=None):
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            self.ensure_schema(conn)
+            conn.row_factory = db_backend.Row
+            if auction_id is None:
+                rows = conn.execute(
+                    "SELECT * FROM auction_history ORDER BY end_time DESC"
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM auction_history WHERE auction_id=%s "
+                    "ORDER BY end_time DESC",
+                    (str(auction_id),),
+                ).fetchall()
+            return [dict(row) for row in rows]
 
     @staticmethod
     def _row_purchase(status: PurchaseStatus, row) -> XianshiPurchase:

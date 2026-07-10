@@ -5,11 +5,15 @@ from nonebot.log import logger
 
 from ..adapter_compat import GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.utils import check_user, number_to
-from ..xiuxian_utils.xiuxian2_handle import TradeDataManager
 from . import auction_config
 
 
-trade_manager = TradeDataManager()
+auction_repository: Any = None
+
+
+def bind_auction_repository(repository: Any) -> None:
+    global auction_repository
+    auction_repository = repository
 
 
 def get_auction_status() -> Dict[str, Any]:
@@ -160,7 +164,7 @@ def _format_hot_auction_items(current_auctions: List[Dict[str, Any]], limit: int
 
 def _format_recent_auction_deals(limit: int = 5) -> List[str]:
     try:
-        history_records = trade_manager.get_auction_history() or []
+        history_records = auction_repository.get_auction_history() or []
     except Exception as e:
         logger.warning(f"读取拍卖成交记录失败: {e}")
         return ["最近成交记录暂不可用。"]

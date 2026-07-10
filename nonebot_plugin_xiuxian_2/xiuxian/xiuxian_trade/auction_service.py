@@ -20,19 +20,28 @@ from .trade_utils import _trade_economy_context, record_trade_event
 _items: Any = None
 _sql_message: Any = None
 _trade_manager: Any = None
+_auction_repository: Any = None
 
 
-def bind_auction_service_dependencies(*, items: Any, sql_message: Any, trade_manager: Any) -> None:
-    global _items, _sql_message, _trade_manager
+def bind_auction_service_dependencies(
+    *, items: Any, sql_message: Any, trade_manager: Any, auction_repository: Any
+) -> None:
+    global _items, _sql_message, _trade_manager, _auction_repository
     _items = items
     _sql_message = sql_message
     _trade_manager = trade_manager
+    _auction_repository = auction_repository
 
 
-def _auction_dependencies() -> tuple[Any, Any, Any]:
-    if _items is None or _sql_message is None or _trade_manager is None:
+def _auction_dependencies() -> tuple[Any, Any, Any, Any]:
+    if (
+        _items is None
+        or _sql_message is None
+        or _trade_manager is None
+        or _auction_repository is None
+    ):
         raise RuntimeError("auction service dependencies are not bound")
-    return _items, _sql_message, _trade_manager
+    return _items, _sql_message, _trade_manager, _auction_repository
 
 
 def start_auction_process(bot: Optional[Bot]) -> bool: # bot参数可能为None
@@ -40,7 +49,7 @@ def start_auction_process(bot: Optional[Bot]) -> bool: # bot参数可能为None
     启动拍卖流程。
     从玩家上架区和系统配置中生成拍卖品，并存入当前拍卖表。
     """
-    _, _, trade_manager = _auction_dependencies()
+    _, _, trade_manager, auction_repository = _auction_dependencies()
     auction_current_status = get_auction_status()
     if auction_current_status["active"]:
         logger.warning("拍卖已在运行中，无法重复开启！")
@@ -93,7 +102,7 @@ def start_auction_process(bot: Optional[Bot]) -> bool: # bot参数可能为None
         return False
 
     # 将所有拍卖品存入数据库
-    trade_manager.set_current_auction(all_auction_items)
+    auction_repository.set_current_auction(all_auction_items)
 
     # 清空玩家上架等待区
     trade_manager.clear_player_auctions()
@@ -116,8 +125,8 @@ async def end_auction_process(bot: Optional[Bot]) -> List[Dict[str, Any]]: # bot
     结束拍卖流程。
     结算所有当前拍卖品，将物品发给买家，灵石发给卖家，并记录到拍卖历史。
     """
-    items, sql_message, trade_manager = _auction_dependencies()
-    current_auctions = trade_manager.get_current_auction() # 从数据库获取当前拍卖品
+    items, sql_message, _, auction_repository = _auction_dependencies()
+    current_auctions = auction_repository.get_current_auction() # 从数据库获取当前拍卖品
     if not current_auctions:
         return []
 
@@ -287,9 +296,9 @@ async def end_auction_process(bot: Optional[Bot]) -> List[Dict[str, Any]]: # bot
                     )
 
         auction_results.append(result_record)
-        trade_manager.add_auction_history_record(result_record) # 记录到拍卖历史
+        auction_repository.add_auction_history_record(result_record) # 记录到拍卖历史
 
-    trade_manager.clear_current_auction() # 清空当前拍卖表
+    auction_repository.clear_current_auction() # 清空当前拍卖表
     # 更新拍卖状态为不活跃，时间置空
     set_auction_status(active=False, start_time=None, end_time=None, last_display_refresh_time=None, items_count=0)
     auction_config.clear_persisted_auction_status()
@@ -302,8 +311,8 @@ async def reconcile_auction_after_restart() -> None:
     重启后对账：有落盘场次且未到结束时间 → 继续本场；否则库内遗留拍品 → 收尾结算。
     不向群里发公告。
     """
-    _, _, trade_manager = _auction_dependencies()
-    current_auctions = trade_manager.get_current_auction()
+    _, _, _, auction_repository = _auction_dependencies()
+    current_auctions = auction_repository.get_current_auction()
     if not current_auctions:
         return
 
@@ -348,12 +357,12 @@ async def place_auction_bid(bot: Bot, user_id: str, user_name: str, auction_id: 
     """
     用户参与拍卖竞拍。
     """
-    _, sql_message, trade_manager = _auction_dependencies()
+    _, sql_message, _, auction_repository = _auction_dependencies()
     auction_current_status = get_auction_status()
     if not auction_current_status["active"]:
         return False, "拍卖当前未开启！"
 
-    item = trade_manager.get_current_auction(auction_id) # 获取单个拍卖品详情
+    item = auction_repository.get_current_auction(auction_id) # 获取单个拍卖品详情
     if not item:
         return False, "无效的拍卖品ID！"
 
@@ -436,7 +445,7 @@ async def place_auction_bid(bot: Bot, user_id: str, user_name: str, auction_id: 
     item["last_bid_time"] = time.time() # 仍使用timestamp方便竞价逻辑
 
     # 保存更新
-    if not trade_manager.try_update_auction_bid(
+    if not auction_repository.try_update_auction_bid(
         item["id"],
         old_current_price,
         bid_price,
@@ -500,4 +509,3 @@ async def place_auction_bid(bot: Bot, user_id: str, user_name: str, auction_id: 
     msg_list.append(f"\n下次最低加价: {number_to(next_min_increment)}灵石")
 
     return True, "\n".join(msg_list)
-

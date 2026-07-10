@@ -224,6 +224,113 @@ class TradePurchaseTests(unittest.TestCase):
             self.scalar("SELECT quantity FROM xianshi_item WHERE id=%s", ("legacy-1",))
         )
 
+    def test_legacy_auction_state_and_history_are_imported_only_once(self) -> None:
+        legacy = Path(self.temp_dir.name) / "legacy-auction.sqlite3"
+        with db_backend.transaction(legacy) as conn:
+            TradeRepository.ensure_schema(conn)
+            conn.execute(
+                """
+                INSERT INTO auction_current VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                """,
+                (
+                    "auction-legacy",
+                    3001,
+                    "旧拍品",
+                    100,
+                    150,
+                    "seller",
+                    "卖家",
+                    '{"buyer": 150}',
+                    '{"buyer": 1.5}',
+                    0,
+                    1.5,
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO auction_history (
+                    auction_id, item_id, item_name, start_price, final_price,
+                    seller_id, seller_name, winner_id, winner_name, status,
+                    fee, seller_earnings, start_time, end_time
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    "history-legacy",
+                    3002,
+                    "旧成交",
+                    100,
+                    200,
+                    "seller",
+                    "卖家",
+                    "buyer",
+                    "买家",
+                    "成交",
+                    10,
+                    190,
+                    1.0,
+                    2.0,
+                ),
+            )
+
+        self.repository.initialize(legacy)
+        auction = self.repository.get_current_auction("auction-legacy")
+        self.assertEqual(auction["bids"], {"buyer": 150})
+        self.assertEqual(auction["bid_times"], {"buyer": 1.5})
+        self.assertFalse(auction["is_system"])
+        self.assertEqual(
+            self.repository.get_auction_history("history-legacy")[0]["final_price"],
+            200,
+        )
+
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "DELETE FROM auction_current WHERE id=%s", ("auction-legacy",)
+            )
+            conn.execute(
+                "DELETE FROM auction_history WHERE auction_id=%s",
+                ("history-legacy",),
+            )
+        self.repository.initialize(legacy)
+        self.assertIsNone(self.repository.get_current_auction("auction-legacy"))
+        self.assertEqual(
+            self.repository.get_auction_history("history-legacy"), []
+        )
+
+    def test_current_auction_repository_round_trip_and_compare_and_swap(self) -> None:
+        item = {
+            "id": "auction-1",
+            "item_id": 4001,
+            "name": "测试拍品",
+            "start_price": 100,
+            "current_price": 100,
+            "seller_id": "seller",
+            "seller_name": "卖家",
+            "bids": {},
+            "bid_times": {},
+            "is_system": False,
+            "last_bid_time": 1.0,
+        }
+        self.repository.set_current_auction([item])
+
+        self.assertTrue(
+            self.repository.try_update_auction_bid(
+                "auction-1", 100, 150, {"buyer": 150}, {"buyer": 2.0}, 2.0
+            )
+        )
+        self.assertFalse(
+            self.repository.try_update_auction_bid(
+                "auction-1", 100, 200, {"buyer": 200}, {"buyer": 3.0}, 3.0
+            )
+        )
+        stored = self.repository.get_current_auction("auction-1")
+        self.assertEqual(stored["current_price"], 150)
+        self.assertEqual(stored["bids"], {"buyer": 150})
+
+        self.repository.clear_current_auction()
+        self.assertEqual(self.repository.get_current_auction(), [])
+
 
 if __name__ == "__main__":
     unittest.main()

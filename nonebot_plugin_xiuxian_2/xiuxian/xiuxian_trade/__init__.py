@@ -47,6 +47,7 @@ from .auction_utils import (
     _format_hot_auction_items,
     _format_recent_auction_deals,
     _format_user_auction_quota,
+    bind_auction_repository,
 )
 from .auction_service import (
     bind_auction_service_dependencies,
@@ -72,7 +73,13 @@ xianshi_repository = TradeRepository(
 xianshi_purchase_service = XianshiPurchaseService(xianshi_repository)
 scheduler = require("nonebot_plugin_apscheduler").scheduler # 全局调度器，用于鬼市
 auction_scheduler = require("nonebot_plugin_apscheduler").scheduler # 独立的拍卖调度器，避免冲突
-bind_auction_service_dependencies(items=items, sql_message=sql_message, trade_manager=trade_manager)
+bind_auction_repository(xianshi_repository)
+bind_auction_service_dependencies(
+    items=items,
+    sql_message=sql_message,
+    trade_manager=trade_manager,
+    auction_repository=xianshi_repository,
+)
 
 
 @DRIVER.on_startup
@@ -2306,7 +2313,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     # 如果指定了ID，查看单个拍卖品详情
     if arg_str and arg_str.isdigit():
         auction_id = arg_str
-        item = trade_manager.get_current_auction(auction_id) # 从当前拍卖中查找
+        item = xianshi_repository.get_current_auction(auction_id) # 从当前拍卖中查找
         
         if item: # 如果在当前拍卖中找到
             # 构造详情消息
@@ -2339,7 +2346,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             await auction_view.finish()
         
         else: # 如果在当前拍卖中没找到，尝试从历史记录中查找
-            history_record_list = trade_manager.get_auction_history(auction_id)
+            history_record_list = xianshi_repository.get_auction_history(auction_id)
             if history_record_list:
                 record = history_record_list[0] # 取最新的一条
                 msg_list = [
@@ -2372,7 +2379,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await auction_view.finish()
     
     # 如果没有指定ID，查看当前活跃拍卖品列表
-    current_auctions_list = trade_manager.get_current_auction() # 从数据库获取所有当前拍卖品
+    current_auctions_list = xianshi_repository.get_current_auction() # 从数据库获取所有当前拍卖品
     auction_current_status = get_auction_status()
     
     if not current_auctions_list:
@@ -2660,7 +2667,7 @@ async def auction_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     total_player_items_in_queue = len(player_auctions_in_queue)
     
     # 获取拍卖历史记录数量
-    auction_history_count = len(trade_manager.get_auction_history())
+    auction_history_count = len(xianshi_repository.get_auction_history())
     
     msg_list = [
         "【拍卖信息】",
@@ -2698,7 +2705,7 @@ async def auction_activity_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     rules = auction_config.get_auction_rules()
     activity_config = auction_config.get_auction_activity_config()
     auction_current_status = get_auction_status()
-    current_auctions = trade_manager.get_current_auction() or []
+    current_auctions = xianshi_repository.get_current_auction() or []
     current_auctions_count = len(current_auctions)
     waiting_auctions_count = len(trade_manager.get_player_auction_items() or [])
     now = datetime.now()
@@ -2794,7 +2801,7 @@ async def auction_end_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await auction_end.finish()
     
     auction_current_status = get_auction_status()
-    pending_items = trade_manager.get_current_auction()
+    pending_items = xianshi_repository.get_current_auction()
     if not auction_current_status["active"] and not pending_items:
         await handle_send(bot, event, "拍卖当前未开启！", md_type="拍卖", k1="查看", v1="拍卖查看", k2="开启", v2="开启拍卖", k3="帮助", v3="拍卖帮助")
         await auction_end.finish()
@@ -2894,7 +2901,7 @@ async def check_auction_end_job():
 
 
 async def _check_auction_end_job_impl():
-    current_auctions = trade_manager.get_current_auction()
+    current_auctions = xianshi_repository.get_current_auction()
     if not current_auctions:
         return
 
