@@ -2,14 +2,19 @@
 
 Acceptance date: 2026-07-10
 
-This record closes the staged work described by the local architecture review.
+This record closes the QQ capability and shared-infrastructure baseline described
+by the earlier local architecture review. It is not a declaration that every
+legacy business call site has been migrated. Remaining mandatory work is tracked
+in `docs/development_roadmap.md`.
 It intentionally contains no Bot credentials, user IDs, group IDs, or local
 deployment values.
 
 ## Foundation
 
-- Runtime data paths are resolved through `XiuxianPaths`; source-quality tests
-  reject new business code that recreates `Path() / "data" / "xiuxian"`.
+- Runtime game-data paths are resolved through `XiuxianPaths`; source-quality
+  tests reject new business code that recreates `Path() / "data" / "xiuxian"`.
+  The legacy cwd-relative `message.db` is a documented exception that must be
+  migrated without data loss.
 - Dependency installation, resource download, database initialization, and
   maintenance run from explicit startup lifecycle hooks rather than ordinary
   module import. Shutdown drains the managed queues.

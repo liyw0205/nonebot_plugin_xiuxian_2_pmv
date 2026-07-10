@@ -1,0 +1,243 @@
+# 修仙插件后续开发路线
+
+审计日期：2026-07-10
+
+本文以当前 `main` 分支为准，替代早期以“计划实现”为主的架构审查。已经通过验收的
+能力不再重复列为待办；这里只记录仍需维持的边界、必须处理的问题和建议顺序。
+
+本文不得保存 Bot token、secret、用户 ID、群 ID或其他部署凭据。真实 Bot 参数只放在
+不受 Git 跟踪的本地文档或环境配置中。
+
+## 1. 当前基线
+
+当前非 vendor Python 代码约 116,900 行、261 个文件；测试 110 项。已完成并有测试保护：
+
+- `XiuxianPaths` 数据路径入口，以及业务源码相对 `data/xiuxian` 路径约束；
+- startup/shutdown 生命周期、依赖和资源初始化退出普通 import；
+- `UserRepository`、`EconomyRepository` 和旧数据管理器兼容外观；
+- Web 模块显式依赖、启动期创建服务、统一 Bot 选择和消息投递；
+- QQ group、C2C、channel、interaction、lifecycle 上下文；
+- REFIDX、消息 ID、发送结果、审核、撤回和消息记录归一化；
+- interaction ACK exactly-once、事件去重、有界任务队列和可靠性指标；
+- Markdown、keyboard、按 AppID capability、模板有限热加载和文本降级；
+- 媒体输入、缓存、SSRF/大小限制、重试和清理；
+- JSON Store、HTTP Client、时间格式、Settings、TTL Store 等共享基础设施；
+- vendored/installed/auto Adapter 选择、来源诊断和 QQ 双来源契约矩阵。
+
+Adapter 基线和完整 QQ 验收证据见 `docs/architecture_acceptance.md`。直接发送的迁移边界见
+`docs/message_delivery_migration.md`。
+
+## 2. 必须处理：P0
+
+以下问题具有明确的安全或数据正确性风险，应先于新的大型玩法和结构重构处理。
+
+### P0-1 Web 管理面板身份认证
+
+**现状**
+
+- 默认启用 Web 面板并监听 `0.0.0.0:5888`；
+- 登录只要求提交一个位于 `superusers` 的管理员 ID；
+- 登录后可使用数据库写入、消息发送、广播、撤回、备份恢复等高权限功能；
+- CSRF、持久会话密钥、Host 白名单和功能开关已经存在，但不能替代身份认证。
+
+**必须实现**
+
+1. 默认监听地址改为 `127.0.0.1`，外网监听必须显式配置；
+2. 登录增加独立凭据，优先支持密码哈希；也可接入可信反向代理身份，但不能只信任 ID；
+3. 首次启动不得生成公开可猜的默认密码，未配置认证时禁止高权限面板启动；
+4. 对登录失败增加限速和短期锁定，不在日志中记录密码、Cookie 或 CSRF token；
+5. 高危能力默认关闭，至少包括数据库写入、备份恢复和主动消息发送；
+6. Web 终端继续默认关闭，并增加二次确认或独立权限，不与普通面板登录等权；
+7. 增加 Flask test client 测试：未登录、错误密码、正确密码、CSRF、功能开关、会话过期。
+
+**验收条件**
+
+- 仅知道超级用户 ID 无法登录；
+- 默认配置不能从非本机网络访问管理面板；
+- 未认证请求不能触发任何写库、发送、恢复、更新或终端操作；
+- README 包含反向代理、HTTPS、Cookie Secure 和密码配置示例，但不包含真实凭据。
+
+### P0-2 `message.db` 路径与无损迁移
+
+**现状**
+
+`xiuxian_utils/message_db.py` 仍使用 `Path() / "message.db"`。其位置依赖进程 cwd；从仓库
+根目录运行真实发送测试会在根目录产生 `message.db`、`message.db-wal` 和
+`message.db-shm`，说明路径中心化尚未完全闭环。
+
+**必须实现**
+
+1. 在 `XiuxianPaths` 增加 `message_db`，默认位于配置的数据目录；
+2. 消息记录、Web 查询、备份选择、清理和容量统计只消费该路径；
+3. 启动时检测旧 cwd 数据库并执行一次无损迁移；新旧同时存在时不得静默覆盖；
+4. 迁移需要文件锁、SQLite WAL/SHM 处理、失败回滚和明确日志；
+5. 增加从不同 cwd 启动、旧库迁移、冲突、WAL、备份和恢复测试；
+6. 删除对仓库根目录 `message.db*` 的隐式依赖，并加入源码质量约束。
+
+**验收条件**
+
+- 任意 cwd 启动均使用同一个配置路径；
+- 旧消息记录可见且计数一致；
+- 迁移中断不会损坏或丢失旧库；
+- 测试和真实 Bot 发送不会在源码目录生成数据库文件。
+
+### P0-3 高权限 Web 操作的统一授权边界
+
+**现状**
+
+路由大量重复检查 `"admin_id" in session`，权限语义散落；现有全局 feature gate 能关闭
+部分能力，但登录、角色、功能开关和具体操作没有形成单一授权入口。
+
+**必须实现**
+
+1. 建立轻量装饰器或统一 helper，区分只读、写库、消息、备份、更新、终端权限；
+2. 路由不再自行拼写 session 判断和 feature flag；
+3. 对所有写请求建立自动路由审计测试，避免新增路由漏认证或漏 CSRF；
+4. 审计 `/upload_image` 本机豁免，可信代理场景下不得把代理地址误判为调用方本机；
+5. 对恢复、批量删除、广播、终端写入等操作记录管理员、目标和结果，但不记录秘密。
+
+**验收条件**
+
+- 新增高权限路由若未声明权限，测试直接失败；
+- 权限拒绝统一返回 401/403，不通过异常或页面重定向掩盖 API 错误；
+- 审计日志足以定位操作者和操作对象。
+
+## 3. 必须持续收敛：P1
+
+这些问题当前有兼容边界，不要求一次性重写，但必须建立可量化的递减目标。
+
+### P1-1 完成消息投递迁移
+
+当前仍有旧 `bot.send`、`call_api` 和平台专用发送，主要位于管理员、宠物、宗门、Boss、
+娱乐媒体、布局提示、广播和 Adapter 兼容层。
+
+要求：
+
+- 修正源码质量 allowlist，不能用宽泛的 `__init__.py` 前缀放行所有功能包；
+- 先迁移普通文本和 Markdown；合并转发、诊断和底层 endpoint 可保留专用门面；
+- 每迁移一个文件，同时缩小测试 allowlist 和 `message_delivery_migration.md`；
+- 所有新业务发送继续强制经过 `MessageDeliveryService`；
+- 最终只允许 delivery backend、Adapter compatibility 和明确的平台专用 facade 直接调用。
+
+### P1-2 统一运行时 HTTP 调用
+
+共享 `HttpClient` 已存在，但项目仍有直接 `requests`、`httpx.AsyncClient` 和
+`aiohttp.ClientSession`。资源安装器或协议专用流式客户端可以保留，但运行在事件处理路径
+中的同步网络调用必须迁移，避免阻塞事件循环。
+
+优先审计：
+
+- `xiuxian_admin/empty_fallback.py`；
+- `xiuxian_entertainment/mod/anime_reaction.py`；
+- `xiuxian_entertainment/mod/music_utils.py`；
+- `xiuxian_info/draw_changelog.py`；
+- `xiuxian_utils/external_api.py`；
+- `xiuxian_web/core.py`、`xiuxian_web/messages.py`。
+
+要求：记录允许保留的协议客户端及原因；对事件循环路径增加静态约束和 timeout/retry 测试。
+
+### P1-3 统一可变 JSON 状态
+
+除中央 Store 外仍约有 27 个文件直接 `json.load/json.dump`。并非所有 JSON 都需要迁移：
+只读配置和资源数据可保留直接解析；会被运行时修改的状态必须使用原子写、类型校验和锁。
+
+优先迁移补偿、邀请、互动、幻境、活动配置、相缘、小游戏存档、宗门配置、工作奖励等
+可变状态。迁移前为现有格式补 fixture，保证兼容旧文件和损坏恢复。
+
+### P1-4 关键经济流程行为测试
+
+当前 110 项测试主要保护基础设施和少量仓储，对 116,900 行玩法代码覆盖有限。继续拆分
+宗门、交易、背包、突破或宠物前，必须先覆盖关键事务：
+
+- 交易扣款、交付、取消、超时和重复提交；
+- 宗门职位、贡献、踢出和权限；
+- 背包增减、装备替换和失败回滚；
+- 突破、奖励、签到、补偿的幂等性；
+- Bot 重复事件和任务重试不得重复发放经济资产。
+
+测试应使用临时数据库和明确事务，不依赖生产数据目录或真实 Bot。
+
+## 4. 结构治理：P2
+
+P2 是维护性工作，不应压过 P0/P1，也不应一次性重写。
+
+### P2-1 拆分超大模块
+
+当前主要热点：
+
+- `xiuxian_utils/xiuxian2_handle.py`：约 4,381 行；
+- `xiuxian_sect/__init__.py`：约 3,004 行；
+- `xiuxian_trade/__init__.py`：约 2,924 行；
+- `xiuxian_web/messages.py`：约 2,286 行；
+- 多个玩法 `__init__.py` 仍超过 1,000 行。
+
+按“一条完整命令流”拆分 commands/service/repository/presenter，不按行数机械切文件。每次拆分
+必须先有行为测试，保留兼容导入，并验证插件加载顺序和 matcher 注册数量不变。
+
+### P2-2 扩展 Repository 边界
+
+目前仍有约 134 个模块级 `XiuxianDateManage`、`PlayerDataManager`、`Items` 实例。不要一次
+替换；沿已建立的 Repository 模式，从交易、宗门和背包中选择事务边界清晰的流程逐步迁移。
+
+### P2-3 Web application factory
+
+Web 已消除 `from .core import *`，但仍使用全局 Flask app 和导入注册路由。只有在开始拆分
+Web、需要多实例测试或出现循环依赖时再引入 application factory/Blueprint；当前不是 P0。
+
+### P2-4 异常处理和可观测性
+
+非 vendor 源码仍有大量宽泛 `except Exception`。优先处理经济事务、网络、备份恢复和
+消息投递边界；区分可重试、用户输入、配置、数据损坏和程序错误。不要以追求计数为目的
+机械替换。
+
+## 5. 明确非目标
+
+- 不引入第二套 Bot、Webhook、插件调度、Web 面板或通用 Hook 框架；
+- 不把 ElainaBot 或其他完整框架 vendor 进项目；
+- 不一次性删除 `XiuxianDateManage` 或重写全部玩法；
+- 不为只读 JSON 资源强制套状态 Store；
+- 不自行实现 QQ 分片上传，除非契约测试证明当前 Adapter 缺失必需能力；
+- 不在仓库、测试 fixture、日志或提交历史中保存真实 Bot 凭据和用户/群标识。
+
+## 6. 推荐执行顺序
+
+1. **Web 认证默认安全化**：本机监听、密码哈希、高危能力默认关闭、认证测试；
+2. **`message.db` 中心化与迁移**：路径、兼容迁移、跨 cwd 和 WAL 测试；
+3. **Web 授权边界**：统一权限 helper、自动路由审计、敏感操作日志；
+4. **发送迁移第一批**：管理员普通响应、宠物、宗门、Boss；
+5. **运行时 HTTP 收敛**：先消除事件循环中的同步请求；
+6. **可变 JSON 状态迁移**：按数据风险逐个迁移；
+7. **关键经济流程测试**：为交易、宗门、背包、突破建立行为基线；
+8. **按命令流拆分大模块**：有测试后再提取 service/repository/presenter。
+
+每项仍执行：定向测试 -> 全量测试 -> `compileall` -> `git diff --check` -> 独立提交推送。
+
+## 7. 每阶段验收
+
+```sh
+python -m unittest discover -s tests -v
+python -m compileall -q nonebot_plugin_xiuxian_2 tests
+git diff --check
+git status --short
+```
+
+涉及 QQ Adapter 时额外运行：
+
+```sh
+python -m unittest tests.test_qq_adapter_contracts -v
+```
+
+涉及真实 Bot 时只做最小冒烟测试：使用本地忽略文件读取凭据，通过
+`MessageDeliveryService` 向指定测试群发送带时间戳消息；不得打印凭据和标识，不得把生成的
+数据库、日志或临时配置提交到 Git。
+
+## 8. 完成定义
+
+本路线全部完成至少满足：
+
+- Web 默认仅本机可达，具备不可猜的独立认证和统一授权；
+- 所有运行时数据库均由 `XiuxianPaths` 决定，任意 cwd 不产生状态文件；
+- 直接发送、运行时 HTTP、可变 JSON 的迁移清单持续缩减并最终只剩明确例外；
+- 关键经济流程有事务、失败回滚、重试和幂等测试；
+- 超大模块按行为边界逐步缩小，不改变玩法数值和命令语义；
+- 全量测试、Adapter 契约、编译、凭据扫描和真实 Bot 最小冒烟测试通过。
