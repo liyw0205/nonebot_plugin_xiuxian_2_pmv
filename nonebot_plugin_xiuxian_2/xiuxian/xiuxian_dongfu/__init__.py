@@ -4,6 +4,7 @@ except ImportError:
     import json
 
 import random
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from ...paths import get_paths
@@ -16,10 +17,12 @@ from ..xiuxian_utils.game_events import safe_record_game_event
 from ..xiuxian_utils.utils import check_user, handle_send, number_to, send_help_message
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.item_json import Items
+from .expansion_service import DongfuExpansionService
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
 items = Items()
+dongfu_expansion_service = DongfuExpansionService(get_paths().game_db, get_paths().player_db)
 
 MAP_TABLE = "map_status"
 DONGFU_TABLE = "dongfu_status"
@@ -53,6 +56,15 @@ DONGFU_ACCELERATE_MINUTES = 60
 DONGFU_FERTILIZER_MAX = 3
 DONGFU_PATROL_STAMINA = 8
 DONGFU_PATROL_DAILY_LIMIT = 3
+
+
+def _dongfu_expansion_operation_id(event, user_id: str) -> str:
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"dongfu:{event_id}:expand:{user_id}"
+    return f"dongfu:expand:{user_id}:{time.time_ns()}"
 
 DONGFU_GEOMANCY = {
     "水域": {
@@ -1033,22 +1045,31 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, f"洞府灵田已扩建至上限：{DONGFU_PLOT_MAX}块。")
         return
 
-    next_count = plot_count + 1
-    deed_need = next_count - DONGFU_PLOT_COUNT
-    stone_cost = 20000000 * deed_need
-    if _to_int(sql_message.goods_num(uid, DONGFU_ITEM_DEED)) < deed_need:
-        await handle_send(bot, event, f"扩建至{next_count}块灵田需要【洞府地契】x{deed_need}。可通过地图探索获得。")
+    result = dongfu_expansion_service.expand(
+        _dongfu_expansion_operation_id(event, uid),
+        uid,
+        deed_id=DONGFU_ITEM_DEED,
+        base_plot_count=DONGFU_PLOT_COUNT,
+        max_plot_count=DONGFU_PLOT_MAX,
+        stone_cost_per_level=20000000,
+    )
+    if result.status == "deed_insufficient":
+        await handle_send(bot, event, f"扩建至{result.previous_count + 1}块灵田需要【洞府地契】x{result.deed_cost}。可通过地图探索获得。")
         return
-    if _to_int(user_info.get("stone")) < stone_cost:
-        await handle_send(bot, event, f"扩建至{next_count}块灵田需要{number_to(stone_cost)}灵石。")
+    if result.status == "stone_insufficient":
+        await handle_send(bot, event, f"扩建至{result.previous_count + 1}块灵田需要{number_to(result.stone_cost)}灵石。")
+        return
+    if result.status == "max_plots":
+        await handle_send(bot, event, f"洞府灵田已扩建至上限：{DONGFU_PLOT_MAX}块。")
+        return
+    if not result.succeeded:
+        await handle_send(bot, event, "洞府状态或资产已发生变化，请稍后重试。")
         return
 
-    sql_message.update_back_j(uid, DONGFU_ITEM_DEED, deed_need)
-    sql_message.update_ls(uid, stone_cost, 2)
-    d["plot_count"] = next_count
+    d = _get_dongfu(uid)
     _normalize_plant_slots(d)
     _save_dongfu(uid, d)
-    await handle_send(bot, event, f"洞府扩建成功，灵田数量提升至{next_count}块。\n{_format_plant_slots(d)}")
+    await handle_send(bot, event, f"洞府扩建成功，灵田数量提升至{result.current_count}块。\n{_format_plant_slots(d)}")
 
 
 @visit_friend.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=VISIT_STAMINA)])
