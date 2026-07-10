@@ -166,6 +166,16 @@ class SourceQualityTests(unittest.TestCase):
             f"Web server starts during import at lines: {module_level_starts}",
         )
 
+    def test_puppet_auto_harvest_scheduler_prevents_overlapping_runs(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_puppet" / "__init__.py"
+        ).read_text(encoding="utf-8")
+        start = source.index('id="auto_harvest"')
+        decorator = source[source.rfind("@scheduler.scheduled_job", 0, start):start + 120]
+        self.assertIn("coalesce=True", decorator)
+        self.assertIn("max_instances=1", decorator)
+        self.assertIn("misfire_grace_time=300", decorator)
+
     def test_web_defaults_are_local_and_high_risk_features_are_disabled(self) -> None:
         config_path = SOURCE_ROOT / "xiuxian" / "xiuxian_config.py"
         source = config_path.read_text(encoding="utf-8")

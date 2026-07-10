@@ -68,7 +68,14 @@ async def puppet_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 
 
 # 每小时整点执行（比如 15:00、16:00、17:00）
-@scheduler.scheduled_job("cron", minute=1, id="auto_harvest")
+@scheduler.scheduled_job(
+    "cron",
+    minute=1,
+    id="auto_harvest",
+    coalesce=True,
+    max_instances=1,
+    misfire_grace_time=300,
+)
 async def auto_harvest_scheduled():
     """每小时自动收取任务"""
     try:
