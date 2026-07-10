@@ -55,6 +55,7 @@ from .auction_service import (
     reconcile_auction_after_restart,
     place_auction_bid,
 )
+from .auction_jobs import run_auction_job
 from .repository import TradeRepository
 from .service import XianshiPurchaseService
 from ...paths import get_paths
@@ -2855,6 +2856,10 @@ async def auction_unlock_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
                         minute=auction_config.get_auction_schedule()["start_minute"])
 async def auto_start_auction_job():
     """根据配置时间自动开启拍卖"""
+    return await run_auction_job("auto_start", _auto_start_auction_job_impl)
+
+
+async def _auto_start_auction_job_impl():
     schedule_config = auction_config.get_auction_schedule()
     
     if not schedule_config["enabled"]:
@@ -2885,6 +2890,10 @@ async def auto_start_auction_job():
 @scheduler.scheduled_job("interval", minutes=5, id="check_auction_end")
 async def check_auction_end_job():
     """每 5 分钟看一场是否该收尾。"""
+    return await run_auction_job("end_check", _check_auction_end_job_impl)
+
+
+async def _check_auction_end_job_impl():
     current_auctions = trade_manager.get_current_auction()
     if not current_auctions:
         return
@@ -2919,7 +2928,8 @@ async def check_auction_end_job():
 
 @DRIVER.on_startup
 async def recover_orphan_auction_on_startup():
-    try:
-        await reconcile_auction_after_restart()
-    except Exception as e:
-        logger.opt(colors=True).error(f"<red>拍卖重启对账失败：{e}</red>")
+    await run_auction_job(
+        "startup_reconcile",
+        reconcile_auction_after_restart,
+        suppress=True,
+    )

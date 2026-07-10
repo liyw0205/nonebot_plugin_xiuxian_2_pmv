@@ -404,6 +404,17 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("save_json_file(", source)
         self.assertIn("delete_json_file(", source)
 
+    def test_auction_background_jobs_use_observable_boundary(self) -> None:
+        trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
+        command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")
+        jobs_source = (trade_root / "auction_jobs.py").read_text(encoding="utf-8")
+        self.assertIn('run_auction_job("auto_start"', command_source)
+        self.assertIn('run_auction_job("end_check"', command_source)
+        self.assertIn('"startup_reconcile"', command_source)
+        self.assertIn("failure_count", jobs_source)
+        self.assertIn('return "database"', jobs_source)
+        self.assertIn('return "filesystem"', jobs_source)
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")
