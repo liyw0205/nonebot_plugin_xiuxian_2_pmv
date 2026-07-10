@@ -168,6 +168,70 @@ class GuishiExpiredOrderCleanupTests(unittest.TestCase):
         self.assertIsNone(self.inventory())
         self.assertTrue(self.order_exists())
 
+    def test_qiugou_clear_refunds_stone_and_removes_order_atomically(self) -> None:
+        with db_backend.transaction(self.trade_database) as conn:
+            conn.execute(
+                "UPDATE guishi_item SET item_type=%s, price=%s, quantity=%s, filled_quantity=%s WHERE id=%s",
+                ("qiugou", 20, 10, 4, "order-1"),
+            )
+            conn.execute(
+                "CREATE TABLE guishi_info (user_id TEXT PRIMARY KEY, stored_stone INTEGER, items TEXT)"
+            )
+            conn.execute(
+                "INSERT INTO guishi_info VALUES (%s, %s, %s)",
+                ("seller", 30, '{}'),
+            )
+
+        result = self.repository.clear_guishi_qiugou_order(
+            self.trade_database, "order-1"
+        )
+
+        self.assertTrue(result.cleared)
+        self.assertEqual(result.refunded_stone, 120)
+        self.assertFalse(self.order_exists())
+        with db_backend.connection(self.trade_database) as conn:
+            self.assertEqual(
+                conn.execute(
+                    "SELECT stored_stone FROM guishi_info WHERE user_id=%s", ("seller",)
+                ).fetchone()[0],
+                150,
+            )
+
+    def test_qiugou_delete_failure_rolls_back_stone_refund(self) -> None:
+        with db_backend.transaction(self.trade_database) as conn:
+            conn.execute(
+                "UPDATE guishi_item SET item_type=%s, price=%s, quantity=%s, filled_quantity=%s WHERE id=%s",
+                ("qiugou", 20, 10, 4, "order-1"),
+            )
+            conn.execute(
+                "CREATE TABLE guishi_info (user_id TEXT PRIMARY KEY, stored_stone INTEGER, items TEXT)"
+            )
+            conn.execute(
+                "INSERT INTO guishi_info VALUES (%s, %s, %s)",
+                ("seller", 30, '{}'),
+            )
+            conn.execute(
+                """
+                CREATE TRIGGER reject_qiugou_delete
+                BEFORE DELETE ON guishi_item
+                BEGIN
+                    SELECT RAISE(ABORT, 'reject delete');
+                END
+                """
+            )
+
+        with self.assertRaises(db_backend.IntegrityError):
+            self.repository.clear_guishi_qiugou_order(self.trade_database, "order-1")
+
+        self.assertTrue(self.order_exists())
+        with db_backend.connection(self.trade_database) as conn:
+            self.assertEqual(
+                conn.execute(
+                    "SELECT stored_stone FROM guishi_info WHERE user_id=%s", ("seller",)
+                ).fetchone()[0],
+                30,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

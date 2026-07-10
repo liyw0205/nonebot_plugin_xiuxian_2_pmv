@@ -99,6 +99,7 @@ class ExpiredGuishiOrderClear:
     item_name: str = ""
     goods_type: str = ""
     refunded_quantity: int = 0
+    refunded_stone: int = 0
 
     @property
     def cleared(self) -> bool:
@@ -403,6 +404,54 @@ class TradeRepository:
                 raise
             finally:
                 conn.execute("DETACH DATABASE guishi_trade")
+
+    def clear_guishi_qiugou_order(
+        self,
+        trade_database: str | Path,
+        order_id,
+    ) -> ExpiredGuishiOrderClear:
+        order_id = str(order_id)
+        with self._lock, closing(db_backend.connect(trade_database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                order = conn.execute(
+                    """
+                    SELECT user_id, price, quantity, COALESCE(filled_quantity, 0), item_type
+                    FROM guishi_item WHERE id=%s
+                    """,
+                    (order_id,),
+                ).fetchone()
+                if order is None:
+                    conn.rollback()
+                    return ExpiredGuishiOrderClear("order_missing", order_id)
+                if str(order[4]) not in {"qiugou", "求购"}:
+                    conn.rollback()
+                    return ExpiredGuishiOrderClear("not_qiugou", order_id)
+
+                user_id = str(order[0])
+                refund_stone = max(int(order[2]) - int(order[3]), 0) * int(order[1])
+                if refund_stone:
+                    conn.execute(
+                        """
+                        INSERT INTO guishi_info (user_id, stored_stone, items)
+                        VALUES (%s, %s, '{}')
+                        ON CONFLICT (user_id) DO UPDATE
+                        SET stored_stone=COALESCE(guishi_info.stored_stone, 0)
+                                         + EXCLUDED.stored_stone
+                        """,
+                        (user_id, refund_stone),
+                    )
+                conn.execute("DELETE FROM guishi_item WHERE id=%s", (order_id,))
+                conn.commit()
+                return ExpiredGuishiOrderClear(
+                    "cleared",
+                    order_id,
+                    user_id,
+                    refunded_stone=refund_stone,
+                )
+            except Exception:
+                conn.rollback()
+                raise
 
     @staticmethod
     def _guishi_info(conn, user_id):
