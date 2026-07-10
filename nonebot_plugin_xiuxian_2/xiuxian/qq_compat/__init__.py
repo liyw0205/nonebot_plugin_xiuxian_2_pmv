@@ -10,7 +10,15 @@ from .interaction import (
     is_interaction_event,
     run_with_interaction_ack,
 )
-from .lifecycle import get_lifecycle_context, is_lifecycle_event
+from .lifecycle import (
+    LifecycleApplyResult,
+    LifecycleGroupState,
+    LifecycleStateRegistry,
+    apply_lifecycle_event,
+    get_lifecycle_context,
+    get_lifecycle_group_state,
+    is_lifecycle_event,
+)
 from .models import (
     QQAttachment,
     QQEventContext,
@@ -23,6 +31,9 @@ from .models import (
 __all__ = [
     "InteractionAcknowledger",
     "InteractionAckRuntime",
+    "LifecycleApplyResult",
+    "LifecycleGroupState",
+    "LifecycleStateRegistry",
     "QQCapabilities",
     "QQCapabilityRegistry",
     "QQAttachment",
@@ -33,10 +44,12 @@ __all__ = [
     "QQScene",
     "ack_interaction",
     "arm_interaction_ack",
+    "apply_lifecycle_event",
     "complete_interaction_ack",
     "from_nonebot_event",
     "get_interaction_context",
     "get_lifecycle_context",
+    "get_lifecycle_group_state",
     "get_qq_scene",
     "is_interaction_event",
     "is_lifecycle_event",

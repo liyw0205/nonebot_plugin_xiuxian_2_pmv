@@ -12,6 +12,7 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.qq_compat import (
     InteractionAckRuntime,
     InteractionAcknowledger,
+    LifecycleStateRegistry,
     from_nonebot_event,
     get_interaction_context,
     get_lifecycle_context,
@@ -133,6 +134,97 @@ class QQContextTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(await acknowledger.ack(bot, event, 0))
         self.assertFalse(await acknowledger.ack(bot, event, 1))
         self.assertEqual(bot.calls, [{"interaction_id": "interaction-1", "code": 0}])
+
+    def test_lifecycle_registry_tracks_group_capabilities(self) -> None:
+        registry = LifecycleStateRegistry()
+        bot = SimpleNamespace(self_id="bot-1")
+
+        for event_type in ("GROUP_ADD_ROBOT", "GROUP_MSG_RECEIVE"):
+            registry.apply(
+                bot,
+                FakeQQEvent(
+                    event_type=event_type,
+                    content="",
+                    group_openid="group-1",
+                ),
+            )
+
+        state = registry.get_group_state("bot-1", "group-1")
+        self.assertIsNotNone(state)
+        self.assertTrue(state.joined)
+        self.assertTrue(state.message_receive_enabled)
+        self.assertEqual(state.event_counts["bot_join_group"], 1)
+        self.assertEqual(state.event_counts["group_receive"], 1)
+
+        registry.apply(
+            bot,
+            FakeQQEvent(
+                event_type="GROUP_MSG_REJECT",
+                content="",
+                group_openid="group-1",
+            ),
+        )
+        state = registry.get_group_state("bot-1", "group-1")
+        self.assertFalse(state.message_receive_enabled)
+
+        registry.apply(
+            bot,
+            FakeQQEvent(
+                event_type="GROUP_DEL_ROBOT",
+                content="",
+                group_openid="group-1",
+            ),
+        )
+        state = registry.get_group_state("bot-1", "group-1")
+        self.assertFalse(state.joined)
+        self.assertFalse(state.message_receive_enabled)
+
+    def test_lifecycle_registry_isolated_and_reports_member_leave(self) -> None:
+        registry = LifecycleStateRegistry()
+        leave = FakeQQEvent(
+            event_type="GROUP_MEMBER_REMOVE",
+            content="",
+            group_openid="group-1",
+            member_openid="member-1",
+        )
+        result = registry.apply(SimpleNamespace(self_id="bot-1"), leave)
+        registry.apply(
+            SimpleNamespace(self_id="bot-2"),
+            FakeQQEvent(
+                event_type="GROUP_MEMBER_ADD",
+                content="",
+                group_openid="group-1",
+                member_openid="member-2",
+            ),
+        )
+
+        self.assertTrue(result.member_left)
+        self.assertEqual(result.context.user_id, "member-1")
+        self.assertEqual(result.action_count, 1)
+        self.assertEqual(
+            registry.get_group_state("bot-1", "group-1").event_counts,
+            {"member_leave_group": 1},
+        )
+        self.assertEqual(
+            registry.get_group_state("bot-2", "group-1").event_counts,
+            {"member_join_group": 1},
+        )
+        self.assertIsNone(registry.get_group_state("bot-1", "group-2"))
+
+    def test_lifecycle_registry_rejects_unsupported_or_incomplete_events(self) -> None:
+        registry = LifecycleStateRegistry()
+        bot = SimpleNamespace(self_id="bot-1")
+        with self.assertRaises(ValueError):
+            registry.apply(
+                bot,
+                FakeQQEvent(event_type="UNKNOWN_EVENT", content=""),
+            )
+        with self.assertRaises(ValueError):
+            registry.apply(
+                bot,
+                FakeQQEvent(event_type="GROUP_ADD_ROBOT", content=""),
+            )
+        self.assertIsNone(registry.get_group_state("bot-1", ""))
 
     async def test_failed_ack_can_be_retried(self) -> None:
         event = FakeQQEvent(

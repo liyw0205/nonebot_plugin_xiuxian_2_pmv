@@ -222,6 +222,17 @@ class SourceQualityTests(unittest.TestCase):
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")
         self.assertIn("@event_preprocessor\nasync def arm_qq_interaction_ack", source)
+
+    def test_qq_lifecycle_state_is_wired_into_event_preprocessing(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "__init__.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "@event_preprocessor\nasync def track_qq_lifecycle_event",
+            source,
+        )
+        self.assertIn("result = apply_lifecycle_event(bot, event)", source)
+        self.assertIn("if is_lifecycle_event(event):\n        return", source)
         self.assertIn("@run_postprocessor\nasync def ack_failed_qq_interaction", source)
         self.assertIn("@event_postprocessor\nasync def ack_completed_qq_interaction", source)
 

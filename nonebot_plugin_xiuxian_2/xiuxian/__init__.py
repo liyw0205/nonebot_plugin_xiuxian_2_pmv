@@ -30,9 +30,11 @@ from .broadcast_manager import auto_patch_broadcast_for_event
 from . import runtime as _runtime  # noqa: F401
 from .infrastructure import QQEventDeduplicator
 from .qq_compat import (
+    apply_lifecycle_event,
     arm_interaction_ack,
     complete_interaction_ack,
     is_interaction_event,
+    is_lifecycle_event,
     is_qq_event,
 )
 
@@ -575,6 +577,17 @@ async def deduplicate_qq_event(bot, event):
 
 
 @event_preprocessor
+async def track_qq_lifecycle_event(bot, event):
+    if is_lifecycle_event(event):
+        result = apply_lifecycle_event(bot, event)
+        try:
+            event.xiuxian_lifecycle_context = result.context
+            event.xiuxian_lifecycle_result = result
+        except (AttributeError, TypeError):
+            pass
+
+
+@event_preprocessor
 async def arm_qq_interaction_ack(bot, event):
     if is_interaction_event(event):
         await arm_interaction_ack(bot, event)
@@ -594,6 +607,9 @@ async def ack_completed_qq_interaction(bot, event):
 
 @event_preprocessor
 async def do_something(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    if is_lifecycle_event(event):
+        return
+
     if _is_other_bot_at_message(bot, event):
         raise IgnoredException("消息艾特了其他机器人,已忽略")
 
