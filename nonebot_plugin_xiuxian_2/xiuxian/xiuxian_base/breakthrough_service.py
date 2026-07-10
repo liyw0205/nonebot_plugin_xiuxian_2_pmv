@@ -135,6 +135,7 @@ class BreakthroughService:
         expected_rate,
         new_rate,
         item_id,
+        exp_gain=0,
         *,
         occurred_at: datetime | None = None,
     ) -> DirectBreakthroughResult:
@@ -150,6 +151,7 @@ class BreakthroughService:
             expected_rate,
             item_id,
             new_rate=new_rate,
+            exp_gain=exp_gain,
             occurred_at=occurred_at,
         )
 
@@ -166,6 +168,7 @@ class BreakthroughService:
         root_rate,
         level_spend,
         item_id,
+        exp_gain=0,
         *,
         occurred_at: datetime | None = None,
     ) -> DirectBreakthroughResult:
@@ -182,6 +185,7 @@ class BreakthroughService:
             item_id,
             root_rate=root_rate,
             level_spend=level_spend,
+            exp_gain=exp_gain,
             occurred_at=occurred_at,
         )
 
@@ -201,6 +205,7 @@ class BreakthroughService:
         new_rate=0,
         root_rate=0.0,
         level_spend=0.0,
+        exp_gain=0,
         occurred_at=None,
     ) -> DirectBreakthroughResult:
         operation_id = str(operation_id).strip()
@@ -214,6 +219,7 @@ class BreakthroughService:
         expected_mp = int(expected_mp)
         expected_rate = int(expected_rate)
         item_id = int(item_id)
+        exp_gain = max(int(exp_gain), 0)
         occurred_at = occurred_at or datetime.now()
 
         with self._lock, closing(db_backend.connect(self._database)) as conn:
@@ -267,20 +273,26 @@ class BreakthroughService:
 
                 if outcome == "failure":
                     conn.execute(
-                        "UPDATE user_xiuxian SET level_up_rate=%s, level_up_cd=%s "
+                        "UPDATE user_xiuxian SET exp=exp+%s, level_up_rate=%s, level_up_cd=%s "
                         "WHERE user_id=%s",
-                        (int(new_rate), occurred_at, user_id),
+                        (exp_gain, int(new_rate), occurred_at, user_id),
                     )
                 elif outcome == "success":
                     conn.execute(
-                        "UPDATE user_xiuxian SET level=%s, power=ROUND(exp*%s*%s, 0), "
-                        "level_up_cd=%s, level_up_rate=0, hp=exp/2, mp=exp, atk=exp/10 "
+                        "UPDATE user_xiuxian SET level=%s, exp=exp+%s, "
+                        "power=ROUND((exp+%s)*%s*%s, 0), level_up_cd=%s, "
+                        "level_up_rate=0, hp=(exp+%s)/2, mp=exp+%s, atk=(exp+%s)/10 "
                         "WHERE user_id=%s",
                         (
                             target_level,
+                            exp_gain,
+                            exp_gain,
                             float(root_rate),
                             float(level_spend),
                             occurred_at,
+                            exp_gain,
+                            exp_gain,
+                            exp_gain,
                             user_id,
                         ),
                     )

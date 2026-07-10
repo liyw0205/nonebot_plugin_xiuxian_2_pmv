@@ -147,6 +147,27 @@ class TribulationBreakthroughServiceTests(unittest.TestCase):
         self.assertEqual(user[-1], 5)
         self.assertEqual(item, (2, 0, 0, 1))
 
+    def test_gold_pill_failure_grants_exp_in_same_transaction(self) -> None:
+        result = self.service.apply_tribulation_failure(
+            "gold-failure", "user-1", "筑基境初期", 10000, 5000, 10000,
+            5, 7, 1999, exp_gain=1000,
+        )
+        self.assertEqual(result.status, "applied")
+        user, item = self.state()
+        self.assertEqual(user[1], 11000)
+        self.assertEqual(user[-1], 7)
+        self.assertEqual(item[0], 1)
+
+    def test_gold_pill_success_uses_post_reward_exp_for_attributes(self) -> None:
+        result = self.service.apply_tribulation_success(
+            "gold-success", "user-1", "筑基境初期", "筑基境中期",
+            10000, 5000, 10000, 5, 1.5, 2.0, 1999, exp_gain=1000,
+        )
+        self.assertEqual(result.status, "applied")
+        user, item = self.state()
+        self.assertEqual(user, ("筑基境中期", 11000, 5500, 11000, 1100, 33000, 0))
+        self.assertEqual(item[0], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1173,50 +1173,55 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
     if le == "失败":
         # 突破失败
-        sql_message.updata_level_cd(user_id)  # 更新突破CD
-        if pause_flag:
-            # 使用丹药减少的sql
-            sql_message.update_back_j(user_id, 1998, use_key=1)
-            now_exp = int(int(exp) * 0.1)
-            sql_message.update_exp(user_id, now_exp)  # 渡厄金丹增加用户修为
-            update_rate = 1 if int(level_rate * XiuConfig().level_up_probability) <= 1 else int(
-                level_rate * XiuConfig().level_up_probability)  # 失败增加突破几率
-            sql_message.update_levelrate(user_id, user_leveluprate + update_rate)
-            msg = f"道友突破失败，但是使用了丹药{elixir_name}，本次突破失败不扣除修为反而增加了一成，下次突破成功率增加{update_rate}%！！"
-            record_level_up_result(
-                user_id, "渡厄金丹突破", success=False, fail_count=1,
-                exp_gain=now_exp, item_name="渡厄金丹", item_count=1
-            )
-        else:
-            # 失败惩罚，随机扣减修为
-            percentage = random.randint(
-                XiuConfig().level_punishment_floor, XiuConfig().level_punishment_limit
-            )
-            main_exp_buff = UserBuffDate(user_id).get_user_main_buff_data()#功法突破扣修为减少
-            exp_buff = main_exp_buff['exp_buff'] if main_exp_buff is not None else 0
-            now_exp = int(int(exp) * ((percentage / 100) * exp_buff))
-            sql_message.update_j_exp(user_id, now_exp)  # 更新用户修为
-            nowhp = user_msg['hp'] - (now_exp / 2) if (user_msg['hp'] - (now_exp / 2)) > 0 else 1
-            nowmp = user_msg['mp'] - now_exp if (user_msg['mp'] - now_exp) > 0 else 1
-            sql_message.update_user_hp_mp(user_id, nowhp, nowmp)  # 修为掉了，血量、真元也要掉
-            update_rate = 1 if int(level_rate * XiuConfig().level_up_probability) <= 1 else int(
-                level_rate * XiuConfig().level_up_probability)  # 失败增加突破几率
-            sql_message.update_levelrate(user_id, user_leveluprate + update_rate)
-            msg = f"道友未备好{elixir_name}，突破失败，境界受损，修为减少{number_to(now_exp)}，下次突破成功率增加{update_rate}%，道友不要放弃！"
-            record_level_up_result(user_id, "渡厄金丹突破", success=False, fail_count=1, exp_loss=now_exp)
+        now_exp = int(int(exp) * 0.1)
+        update_rate = 1 if int(level_rate * XiuConfig().level_up_probability) <= 1 else int(
+            level_rate * XiuConfig().level_up_probability)  # 失败增加突破几率
+        result = breakthrough_service.apply_tribulation_failure(
+            _breakthrough_operation_id(event, "tribulation_gold", user_id),
+            user_id,
+            level_name,
+            exp,
+            user_msg["hp"],
+            user_msg["mp"],
+            user_leveluprate,
+            user_leveluprate + update_rate,
+            1998,
+            exp_gain=now_exp,
+        )
+        if not result.applied:
+            await handle_send(bot, event, "本次渡厄金丹突破已经处理或角色状态、丹药库存已经变化，请刷新后重试。")
+            await level_up_drjd.finish()
+        msg = f"道友突破失败，但是使用了丹药{elixir_name}，本次突破失败不扣除修为反而增加了一成，下次突破成功率增加{update_rate}%！！"
+        record_level_up_result(
+            user_id, "渡厄金丹突破", success=False, fail_count=1,
+            exp_gain=now_exp, item_name="渡厄金丹", item_count=1
+        )
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_drjd.finish()
 
     elif type(le) == list:
         # 突破成功
-        sql_message.updata_level(user_id, le[0])  # 更新境界
-        share_msg = trigger_breakthrough_relation_rewards(user_id, le[0])
-        sql_message.update_power2(user_id)  # 更新战力
-        sql_message.updata_level_cd(user_id)  # 更新CD
-        sql_message.update_levelrate(user_id, 0)
-        sql_message.update_user_hp(user_id)  # 重置用户HP，mp，atk状态
         now_exp = int(int(exp) * 0.1)
-        sql_message.update_exp(user_id, now_exp)  # 渡厄金丹增加用户修为
+        root_rate = sql_message.get_root_rate(user_msg["root_type"], user_id)
+        level_spend = jsondata.level_data()[le[0]]["spend"]
+        result = breakthrough_service.apply_tribulation_success(
+            _breakthrough_operation_id(event, "tribulation_gold", user_id),
+            user_id,
+            level_name,
+            le[0],
+            exp,
+            user_msg["hp"],
+            user_msg["mp"],
+            user_leveluprate,
+            root_rate,
+            level_spend,
+            1998,
+            exp_gain=now_exp,
+        )
+        if not result.applied:
+            await handle_send(bot, event, "本次渡厄金丹突破已经处理或角色状态、丹药库存已经变化，请刷新后重试。")
+            await level_up_drjd.finish()
+        share_msg = trigger_breakthrough_relation_rewards(user_id, le[0])
         msg = f"恭喜道友突破{le[0]}成功，因为使用了渡厄金丹，修为也增加了一成！！{share_msg}"
         record_level_up_result(
             user_id, "渡厄金丹突破", success=True, target_level=le[0],
