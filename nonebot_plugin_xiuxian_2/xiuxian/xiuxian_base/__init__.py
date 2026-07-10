@@ -48,12 +48,14 @@ from ..xiuxian_tasks.task_data import record_task_progress
 from .stone_limit import stone_limit
 from .lottery_pool import lottery_pool
 from .sign_service import SignInService
+from .registration_batch import RegistrationBatcher, RegistrationRequest
 from .breakthrough_tribulation import *  # noqa: F401,F403
 from .xiangyuan import clear_all_xiangyuan, reset_xiangyuan_daily  # noqa: F401
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
 sign_in_service = SignInService(get_paths().game_db)
+registration_batcher = RegistrationBatcher(sql_message)
 player_data_manager = PlayerDataManager()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 PLAYERSDATA = get_paths().players
@@ -567,20 +569,22 @@ async def run_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         # 防御式处理，避免导入异常影响注册
         pass
 
-    # 生成不重复道号
-    while True:
-        user_name = generate_daohao()
-        if not sql_message.get_user_info_with_name(user_name):
-            break
-
     root, root_type = XiuxianJsonDate().linggen_get()
     rate = sql_message.get_root_rate(root_type, user_id)
     power = 100 * float(rate)
     create_time = str(datetime.now())
 
-    is_new_user, create_msg = sql_message.create_user(
-        user_id, root, root_type, int(power), create_time, user_name
-    )
+    # 并发注册直接尝试插入；道号冲突时只重试当前用户，不先做全表查重。
+    for _ in range(20):
+        user_name = generate_daohao()
+        is_new_user, create_msg = await registration_batcher.submit(
+            RegistrationRequest(user_id, root, root_type, int(power), create_time, user_name)
+        )
+        if is_new_user is not None:
+            break
+    else:
+        await handle_send(bot, event, "当前注册人数较多，道号生成冲突，请稍后重试。")
+        await run_xiuxian.finish()
 
     if is_new_user:
         # 补全初始气血

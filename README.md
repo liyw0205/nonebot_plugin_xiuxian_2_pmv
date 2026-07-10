@@ -573,17 +573,7 @@ screen -S xiu2 -X quit
 
 首次启用面板前生成独立密码哈希：
 
-```bash
-python -c 'from getpass import getpass; from werkzeug.security import generate_password_hash; print(generate_password_hash(getpass("Web password: ")))'
-```
-
-将输出值配置到环境变量，值本身不要提交到仓库：
-
-```dotenv
-XIUXIAN_WEB_PASSWORD_HASH='scrypt:...'
-```
-
-未配置有效的 `XIUXIAN_WEB_PASSWORD_HASH` 或 `web_password_hash` 时，管理面板拒绝启动。登录失败默认在 5 次后锁定来源地址 15 分钟。
+Web 登录使用 NoneBot 的 `SUPERUSERS` 配置。配置了超级用户时，输入任一超级用户 ID 即可进入管理面板；`SUPERUSERS` 为空时，Web 面板不要求登录。
 
 ### 安全开关
 
@@ -592,7 +582,6 @@ Web 会话密钥会优先读取环境变量 `XIUXIAN_WEB_SECRET_KEY`，否则读
 | 配置项 | 默认值 | 说明 |
 |:------|:------:|:-----|
 | `web_host` | `127.0.0.1` | 默认仅本机监听；可显式配置为 `0.0.0.0` |
-| `web_password_hash` | `""` | 独立面板密码哈希；推荐使用环境变量 `XIUXIAN_WEB_PASSWORD_HASH` |
 | `web_require_csrf` | `True` | Web 写请求 CSRF 校验 |
 | `web_allowed_hosts` | `[]` | Host 白名单，留空不限制 |
 | `web_session_cookie_secure` | `False` | HTTPS 反代时建议开启 |

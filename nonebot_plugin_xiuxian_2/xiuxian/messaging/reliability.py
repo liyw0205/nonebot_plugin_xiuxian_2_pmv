@@ -53,11 +53,14 @@ def classify_delivery_error(exc: BaseException) -> tuple[DeliveryErrorKind, bool
     return "unknown", False
 
 
-@dataclass(frozen=True)
+@dataclass
 class DeliveryError(RuntimeError):
     kind: DeliveryErrorKind
     retryable: bool
     cause: BaseException
+
+    def __post_init__(self) -> None:
+        RuntimeError.__init__(self, str(self))
 
     def __str__(self) -> str:
         return f"消息投递失败[{self.kind}]: {self.cause}"

@@ -11,7 +11,6 @@ from .core import (
     XiuConfig,
     app,
     initialize_web_storage,
-    web_auth_is_configured,
 )
 from .config import (  # noqa: F401
     CONFIG_EDITABLE_FIELDS,
@@ -54,13 +53,6 @@ def start_web_server() -> None:
     global _server, _server_thread
     if _server is not None or not _web_enabled():
         return
-    if not web_auth_is_configured():
-        logger.error(
-            "修仙管理面板未启动：请配置 XIUXIAN_WEB_PASSWORD_HASH "
-            "或 web_password_hash，不能仅凭超级用户 ID 登录"
-        )
-        return
-
     initialize_web_storage()
     host = str(getattr(get_driver().config, "xiuxian_web_host", HOST))
     port = int(getattr(get_driver().config, "xiuxian_web_port", PORT))

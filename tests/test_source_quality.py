@@ -10,6 +10,16 @@ PROJECT_ROOT = SOURCE_ROOT.parent
 
 
 class SourceQualityTests(unittest.TestCase):
+    def test_registration_uses_concurrent_insert_path(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_base" / "__init__.py"
+        ).read_text(encoding="utf-8")
+        start = source.index("async def run_xiuxian_")
+        end = source.index("@sign_in.handle", start)
+        registration = source[start:end]
+        self.assertIn("registration_batcher.submit(", registration)
+        self.assertNotIn("sql_message.get_user_info_with_name(user_name)", registration)
+
     def test_runtime_sqlite_sidecars_are_ignored(self) -> None:
         source = (PROJECT_ROOT / ".gitignore").read_text(encoding="utf-8")
         self.assertIn("data/xiuxian/*.db-*", source)
@@ -267,8 +277,8 @@ class SourceQualityTests(unittest.TestCase):
 
         web_entrypoint = SOURCE_ROOT / "xiuxian" / "xiuxian_web" / "__init__.py"
         entrypoint_source = web_entrypoint.read_text(encoding="utf-8")
-        self.assertIn("if not web_auth_is_configured():", entrypoint_source)
-        self.assertIn("XIUXIAN_WEB_PASSWORD_HASH", entrypoint_source)
+        self.assertNotIn("web_auth_is_configured", entrypoint_source)
+        self.assertIn("initialize_web_storage()", entrypoint_source)
 
     def test_web_modules_do_not_use_core_star_imports(self) -> None:
         web_root = SOURCE_ROOT / "xiuxian" / "xiuxian_web"

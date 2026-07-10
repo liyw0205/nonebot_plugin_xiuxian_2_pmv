@@ -20,6 +20,7 @@ from .core import (
     nb_version,
     os,
     platform,
+    psutil,
     psutil_available,
     redirect,
     render_template,
@@ -33,8 +34,8 @@ from .core import (
     time,
     timedelta,
     url_for,
+    web_auth_is_enabled,
     web_feature_enabled,
-    verify_web_password,
 )
 
 
@@ -339,17 +340,12 @@ def get_terminal_session(admin_id):
 
 @app.route('/terminal/confirm', methods=['GET', 'POST'])
 def terminal_confirm():
+    if not web_auth_is_enabled():
+        return redirect(url_for('terminal'))
     if terminal_authorization_is_valid():
         return redirect(url_for('terminal'))
-    if request.method == 'POST':
-        password = str(request.form.get('password') or '')
-        if verify_web_password(password):
-            session['terminal_authorized_until'] = time.time() + 300
-            logger.info(f"Web 终端二次认证成功：admin={session.get('admin_id')}")
-            return redirect(url_for('terminal'))
-        logger.warning(f"Web 终端二次认证失败：admin={session.get('admin_id')}")
-        return render_template('terminal_confirm.html', error='面板密码错误'), 401
-    return render_template('terminal_confirm.html')
+    session['terminal_authorized_until'] = time.time() + 300
+    return redirect(url_for('terminal'))
 
 
 @app.route('/terminal')

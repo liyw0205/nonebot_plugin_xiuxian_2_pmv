@@ -37,6 +37,14 @@ from nonebot_plugin_xiuxian_2.xiuxian.qq_compat import (
 
 
 class MessageResultTests(unittest.TestCase):
+    def test_delivery_error_accepts_traceback_assignment(self) -> None:
+        error = DeliveryError("retryable", True, TimeoutError("send timeout"))
+        try:
+            raise error
+        except DeliveryError as raised:
+            self.assertIsNotNone(raised.__traceback__)
+            self.assertEqual(raised.kind, "retryable")
+
     def test_extractors_support_nested_and_list_results(self) -> None:
         result = [
             {"ignored": True},

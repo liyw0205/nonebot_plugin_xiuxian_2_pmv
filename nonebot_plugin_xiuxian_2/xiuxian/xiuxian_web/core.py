@@ -57,11 +57,6 @@ from ..xiuxian_utils.download_xiuxian_data import UpdateManager
 from ..xiuxian_utils.xiuxian2_handle import config_impart, trade_manager
 from ..xiuxian_utils.periods import format_duration_full
 from ..infrastructure import settings
-from .auth import (
-    LoginAttemptLimiter,
-    is_supported_password_hash,
-    verify_password_hash,
-)
 from .access import (
     WebPermission,
     resolve_endpoint_permission,
@@ -142,29 +137,6 @@ def _load_or_create_web_secret_key() -> str:
         return secrets.token_urlsafe(48)
 
 
-def get_web_password_hash() -> str:
-    return (
-        os.getenv("XIUXIAN_WEB_PASSWORD_HASH")
-        or str(_config_value("xiuxian_web_password_hash", "") or "")
-        or str(_config_value("web_password_hash", "") or "")
-    ).strip()
-
-
-def web_auth_is_configured() -> bool:
-    return is_supported_password_hash(get_web_password_hash())
-
-
-def verify_web_password(password: object) -> bool:
-    return verify_password_hash(get_web_password_hash(), password)
-
-
-web_login_limiter = LoginAttemptLimiter(
-    max_attempts=_config_int("web_login_max_attempts", 5, 1),
-    window_seconds=_config_int("web_login_window_seconds", 300, 1),
-    lock_seconds=_config_int("web_login_lock_seconds", 900, 1),
-)
-
-
 def initialize_web_storage() -> None:
     """Prepare persistent Web state during the NoneBot startup phase."""
     app.secret_key = _load_or_create_web_secret_key()
@@ -215,8 +187,14 @@ def web_error(message: str, status: int = 403):
 
 
 def is_admin_logged_in() -> bool:
+    if not ADMIN_IDS:
+        return True
     admin_id = session.get("admin_id")
     return bool(admin_id and admin_id in ADMIN_IDS)
+
+
+def web_auth_is_enabled() -> bool:
+    return bool(ADMIN_IDS)
 
 
 def _is_local_request() -> bool:
@@ -240,6 +218,8 @@ def undeclared_web_endpoints() -> set[str]:
 
 
 def terminal_authorization_is_valid() -> bool:
+    if not web_auth_is_enabled():
+        return True
     try:
         return float(session.get("terminal_authorized_until", 0)) > time.time()
     except (TypeError, ValueError):
@@ -364,6 +344,10 @@ def enforce_web_panel_security():
     host_error = _validate_host_header()
     if host_error:
         return host_error
+
+    if not web_auth_is_enabled():
+        session.setdefault("admin_id", "local")
+        session.setdefault("_csrf_token", secrets.token_urlsafe(32))
 
     authorization_error = _authorization_error()
     if authorization_error:

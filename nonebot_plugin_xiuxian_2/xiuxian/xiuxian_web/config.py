@@ -95,6 +95,12 @@ CONFIG_EDITABLE_FIELDS = {
         "type": "str",
         "category": "消息设置"
     },
+    "empty_fallback_image": {
+        "name": "空指令随机图片",
+        "description": "开启后默认回复会请求外部随机图片，高并发环境建议关闭",
+        "type": "bool",
+        "category": "消息设置"
+    },
     "xiuxian_user_command_rate_window": {
         "name": "单用户限流窗口",
         "description": "单用户命令限流统计窗口（秒）",

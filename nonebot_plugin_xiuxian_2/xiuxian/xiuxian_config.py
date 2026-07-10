@@ -49,6 +49,8 @@ class XiuConfig:
         # 是否开启默认回复
         self.empty_msg = "> 未识别到指令。可用功能：修仙帮助"
         # 默认回复内容
+        self.empty_fallback_image = False
+        # 默认回复是否请求外部随机图片；高并发环境建议关闭
 
         self.xiuxian_user_command_rate_window = 60
         # 单用户命令限流统计窗口（秒）
@@ -101,8 +103,6 @@ class XiuConfig:
         # 修仙管理面板IP
         self.web_secret_key = ""
         # Flask 会话密钥；留空时自动生成到 data/xiuxian/web_secret_key，也可用 XIUXIAN_WEB_SECRET_KEY 环境变量覆盖
-        self.web_password_hash = ""
-        # Web 独立登录密码哈希；建议通过 XIUXIAN_WEB_PASSWORD_HASH 环境变量配置
         self.web_require_csrf = True
         # 是否对 Web 面板写请求启用 CSRF 校验
         self.web_session_cookie_secure = False

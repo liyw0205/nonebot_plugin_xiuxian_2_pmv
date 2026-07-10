@@ -67,7 +67,9 @@ async def handle_empty_fallback(
 ):
     config = XiuConfig()
     text_msg = config.empty_msg
-    image_url = await get_random_acg_pic_url_async(timeout=3)
+    image_url = None
+    if config.empty_fallback_image:
+        image_url = await get_random_acg_pic_url_async(timeout=3)
 
     if image_url:
         try:

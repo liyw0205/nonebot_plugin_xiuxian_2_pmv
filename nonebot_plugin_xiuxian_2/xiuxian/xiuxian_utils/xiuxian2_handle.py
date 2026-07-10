@@ -980,6 +980,20 @@ class XiuxianDateManage:
             conn.commit()
             welcome_msg = f"欢迎进入修仙世界的，你的灵根为：{args[0]},类型是：{args[1]},你的战力为：{args[2]},当前境界：江湖好手"
             return True, welcome_msg
+        except db_backend.IntegrityError as exc:
+            if conn is not None:
+                try:
+                    conn.rollback()
+                except Exception:
+                    reusable = False
+            text = str(exc).lower()
+            if "user_name" in text:
+                return None, "道号已存在，请重试"
+            if "user_id" in text or "unique" in text:
+                return False, f"您已迈入修仙世界，输入【我的修仙信息】获取数据吧！"
+            reusable = False
+            logger.warning(f"注册快路径完整性错误，回退普通注册: {exc}")
+            return self.create_user(user_id, *args)
         except Exception as exc:
             reusable = False
             if conn is not None:
@@ -989,6 +1003,117 @@ class XiuxianDateManage:
                     pass
             logger.warning(f"注册快路径失败，回退普通注册: {exc}")
             return self.create_user(user_id, *args)
+        finally:
+            if conn is not None:
+                self._return_fast_conn(conn, reusable=reusable)
+
+    def create_users_batch_fast(self, rows):
+        """批量注册快路径：把并发“我要修仙”合并成一次短事务。"""
+        rows = list(rows or [])
+        if not rows:
+            return {}
+
+        conn = None
+        reusable = True
+        results = {}
+        try:
+            conn = self._borrow_fast_conn()
+            cur = conn.cursor()
+            unique_rows = []
+            seen_user_ids = set()
+            for row in rows:
+                user_id = str(row["user_id"])
+                if user_id in seen_user_ids:
+                    results[row["request_id"]] = (
+                        False,
+                        "您已迈入修仙世界，输入【我的修仙信息】获取数据吧！",
+                    )
+                    continue
+                seen_user_ids.add(user_id)
+                unique_rows.append(row)
+
+            existing_user_ids = set()
+            if unique_rows:
+                placeholders = ",".join(["%s"] * len(unique_rows))
+                cur.execute(
+                    f"SELECT user_id FROM user_xiuxian WHERE user_id IN ({placeholders})",
+                    tuple(str(row["user_id"]) for row in unique_rows),
+                )
+                existing_user_ids = {str(item[0]) for item in cur.fetchall()}
+
+            candidate_names = [str(row["user_name"]) for row in unique_rows]
+            existing_names = set()
+            if candidate_names:
+                placeholders = ",".join(["%s"] * len(candidate_names))
+                cur.execute(
+                    f"SELECT user_name FROM user_xiuxian WHERE user_name IN ({placeholders})",
+                    tuple(candidate_names),
+                )
+                existing_names = {str(item[0]) for item in cur.fetchall()}
+
+            batch_names = set()
+            insert_params = []
+            for row in unique_rows:
+                request_id = row["request_id"]
+                user_id = str(row["user_id"])
+                user_name = str(row["user_name"])
+                if user_id in existing_user_ids:
+                    results[request_id] = (
+                        False,
+                        "您已迈入修仙世界，输入【我的修仙信息】获取数据吧！",
+                    )
+                    continue
+                if user_name in existing_names or user_name in batch_names:
+                    results[request_id] = (None, "道号已存在，请重试")
+                    continue
+                batch_names.add(user_name)
+                insert_params.append(
+                    (
+                        user_id,
+                        row["root"],
+                        row["root_type"],
+                        row["power"],
+                        row["create_time"],
+                        user_name,
+                        XiuConfig().max_stamina,
+                        request_id,
+                    )
+                )
+
+            if insert_params:
+                sql = (
+                    "INSERT INTO user_xiuxian "
+                    "(user_id, stone, root, root_type, root_level, level, power, create_time, "
+                    "user_name, exp, hp, mp, atk, work_num, sect_id, sect_position, user_stamina, is_novice) "
+                    "VALUES (%s, 0, %s, %s, 0, '江湖好手', %s, %s, %s, 100, 50, 100, 10, 5, NULL, NULL, %s, 0)"
+                )
+                cur.executemany(sql, [params[:-1] for params in insert_params])
+                for params in insert_params:
+                    request_id = params[-1]
+                    results[request_id] = (
+                        True,
+                        f"欢迎进入修仙世界的，你的灵根为：{params[1]},类型是：{params[2]},你的战力为：{params[3]},当前境界：江湖好手",
+                    )
+            conn.commit()
+            return results
+        except Exception as exc:
+            reusable = False
+            if conn is not None:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            logger.warning(f"注册批量快路径失败，逐条回退普通注册: {exc}")
+            for row in rows:
+                results[row["request_id"]] = self.create_user_fast(
+                    row["user_id"],
+                    row["root"],
+                    row["root_type"],
+                    row["power"],
+                    row["create_time"],
+                    row["user_name"],
+                )
+            return results
         finally:
             if conn is not None:
                 self._return_fast_conn(conn, reusable=reusable)

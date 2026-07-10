@@ -7,47 +7,31 @@ from .core import (
     request,
     secrets,
     session,
-    verify_web_password,
-    web_auth_is_configured,
-    web_login_limiter,
+    web_auth_is_enabled,
     update_manager,
     url_for,
 )
 
 @app.route('/')
 def home():
-    if 'admin_id' not in session:
+    if web_auth_is_enabled() and 'admin_id' not in session:
         return redirect(url_for('login'))
     return render_template('home.html', admin_id=session['admin_id'])
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    if not web_auth_is_enabled():
+        return redirect(url_for('home'))
     if request.method == 'POST':
         admin_id = str(request.form.get('admin_id') or '').strip()
-        password = str(request.form.get('password') or '')
-        login_key = str(request.remote_addr or "unknown")
-        if web_login_limiter.is_blocked(login_key):
-            return render_template(
-                'login.html',
-                error="登录失败次数过多，请稍后重试",
-            ), 429
-        if not web_auth_is_configured():
-            return render_template(
-                'login.html',
-                error="管理面板尚未配置独立登录密码",
-            ), 503
-        if admin_id in ADMIN_IDS and verify_web_password(password):
-            web_login_limiter.record_success(login_key)
+        if admin_id in ADMIN_IDS:
             session.clear()
             session['admin_id'] = admin_id
             session['_csrf_token'] = secrets.token_urlsafe(32)
             session.permanent = True
             return redirect(url_for('home'))
         else:
-            blocked = web_login_limiter.record_failure(login_key)
-            status = 429 if blocked else 401
-            error = "登录失败次数过多，请稍后重试" if blocked else "管理员 ID 或密码错误"
-            return render_template('login.html', error=error), status
+            return render_template('login.html', error="无效的管理员 ID"), 401
     return render_template('login.html')
 
 @app.route('/logout')
