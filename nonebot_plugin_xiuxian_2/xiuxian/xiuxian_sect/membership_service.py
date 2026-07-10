@@ -54,6 +54,22 @@ class SectElixirRoomUpgrade:
 
 
 @dataclass(frozen=True)
+class SectBuffSearch:
+    status: str
+    actor_id: str
+    sect_id: int
+    buff_type: str
+    previous_value: str = ""
+    new_value: str = ""
+    stone_cost: int = 0
+    materials_cost: int = 0
+
+    @property
+    def applied(self) -> bool:
+        return self.status == "applied"
+
+
+@dataclass(frozen=True)
 class SectPracticeUpgrade:
     status: str
     user_id: str
@@ -118,6 +134,24 @@ class SectMembershipService:
                 to_level INTEGER NOT NULL,
                 stone_cost INTEGER NOT NULL,
                 scale_cost INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+    @staticmethod
+    def _ensure_buff_search_operations(conn) -> None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sect_buff_search_operations (
+                operation_id TEXT PRIMARY KEY,
+                actor_id TEXT NOT NULL,
+                sect_id INTEGER NOT NULL,
+                buff_type TEXT NOT NULL,
+                previous_value TEXT NOT NULL,
+                new_value TEXT NOT NULL,
+                stone_cost INTEGER NOT NULL,
+                materials_cost INTEGER NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """
@@ -554,6 +588,147 @@ class SectMembershipService:
                 conn.rollback()
                 raise
 
+    def apply_buff_search(
+        self,
+        operation_id,
+        actor_id,
+        sect_id,
+        buff_type,
+        expected_value,
+        new_value,
+        stone_cost,
+        materials_cost,
+        *,
+        owner_position: int = 0,
+    ) -> SectBuffSearch:
+        columns = {"main": "mainbuff", "secondary": "secbuff"}
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            raise ValueError("operation_id must not be empty")
+        actor_id = str(actor_id)
+        sect_id = int(sect_id)
+        buff_type = str(buff_type).strip().lower()
+        try:
+            column = columns[buff_type]
+        except KeyError as exc:
+            raise ValueError(f"unsupported buff type: {buff_type}") from exc
+        expected_value = str(expected_value or "")
+        new_value = str(new_value or "")
+        stone_cost = max(int(stone_cost), 0)
+        materials_cost = max(int(materials_cost), 0)
+
+        def result(status, previous=expected_value, current=new_value):
+            return SectBuffSearch(
+                status,
+                actor_id,
+                sect_id,
+                buff_type,
+                previous,
+                current,
+                stone_cost,
+                materials_cost,
+            )
+
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._ensure_buff_search_operations(conn)
+                previous = conn.execute(
+                    "SELECT buff_type, previous_value, new_value, stone_cost, "
+                    "materials_cost FROM sect_buff_search_operations "
+                    "WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if previous:
+                    conn.rollback()
+                    return SectBuffSearch(
+                        "duplicate",
+                        actor_id,
+                        sect_id,
+                        str(previous[0]),
+                        str(previous[1]),
+                        str(previous[2]),
+                        int(previous[3]),
+                        int(previous[4]),
+                    )
+
+                actor = conn.execute(
+                    "SELECT sect_id, sect_position FROM user_xiuxian WHERE user_id=%s",
+                    (actor_id,),
+                ).fetchone()
+                if actor is None:
+                    conn.rollback()
+                    return result("actor_missing")
+                sect = conn.execute(
+                    f"SELECT sect_owner, COALESCE(sect_used_stone, 0), "
+                    f"COALESCE(sect_materials, 0), COALESCE({column}, '') "
+                    "FROM sects WHERE sect_id=%s",
+                    (sect_id,),
+                ).fetchone()
+                if sect is None:
+                    conn.rollback()
+                    return result("sect_missing")
+                if (
+                    actor[0] is None
+                    or int(actor[0]) != sect_id
+                    or int(actor[1]) != int(owner_position)
+                    or str(sect[0]) != actor_id
+                ):
+                    conn.rollback()
+                    return result("not_owner")
+                current_value = str(sect[3] or "")
+                if current_value != expected_value:
+                    conn.rollback()
+                    return result("buff_changed", current_value, current_value)
+                if int(sect[1] or 0) < stone_cost:
+                    conn.rollback()
+                    return result("stone_insufficient")
+                if int(sect[2] or 0) < materials_cost:
+                    conn.rollback()
+                    return result("materials_insufficient")
+
+                updated = conn.execute(
+                    f"UPDATE sects SET sect_used_stone=sect_used_stone-%s, "
+                    f"sect_materials=sect_materials-%s, {column}=%s "
+                    "WHERE sect_id=%s AND sect_owner=%s "
+                    f"AND COALESCE({column}, '')=%s "
+                    "AND COALESCE(sect_used_stone, 0)>=%s "
+                    "AND COALESCE(sect_materials, 0)>=%s",
+                    (
+                        stone_cost,
+                        materials_cost,
+                        new_value,
+                        sect_id,
+                        actor_id,
+                        expected_value,
+                        stone_cost,
+                        materials_cost,
+                    ),
+                )
+                if updated.rowcount != 1:
+                    raise db_backend.IntegrityError("sect buff search changed concurrently")
+                conn.execute(
+                    "INSERT INTO sect_buff_search_operations "
+                    "(operation_id, actor_id, sect_id, buff_type, previous_value, "
+                    "new_value, stone_cost, materials_cost) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                    (
+                        operation_id,
+                        actor_id,
+                        sect_id,
+                        buff_type,
+                        expected_value,
+                        new_value,
+                        stone_cost,
+                        materials_cost,
+                    ),
+                )
+                conn.commit()
+                return result("applied")
+            except Exception:
+                conn.rollback()
+                raise
+
     def upgrade_practice(
         self,
         operation_id,
@@ -682,6 +857,7 @@ class SectMembershipService:
 
 
 __all__ = [
+    "SectBuffSearch",
     "SectElixirRoomUpgrade",
     "SectFairylandUpgrade",
     "SectMembershipService",
