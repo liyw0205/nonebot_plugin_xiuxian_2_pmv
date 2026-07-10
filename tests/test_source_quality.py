@@ -208,6 +208,18 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("max_instances=1", decorator)
         self.assertIn("misfire_grace_time=300", decorator)
 
+    def test_guishi_expiry_scheduler_prevents_overlapping_runs(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_trade" / "__init__.py"
+        ).read_text(encoding="utf-8")
+        start = source.index('id="clear_expired_baitan_orders"')
+        decorator = source[
+            source.rfind("@scheduler.scheduled_job", 0, start):start + 160
+        ]
+        self.assertIn("coalesce=True", decorator)
+        self.assertIn("max_instances=1", decorator)
+        self.assertIn("misfire_grace_time=300", decorator)
+
     def test_web_defaults_are_local_and_high_risk_features_are_disabled(self) -> None:
         config_path = SOURCE_ROOT / "xiuxian" / "xiuxian_config.py"
         source = config_path.read_text(encoding="utf-8")

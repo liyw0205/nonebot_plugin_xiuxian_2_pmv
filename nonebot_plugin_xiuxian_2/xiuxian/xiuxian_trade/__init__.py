@@ -2246,7 +2246,15 @@ async def auto_guishi_transactions_job():
     await process_guishi_transactions()
 
 
-@scheduler.scheduled_job("cron", hour=GUISHI_BAITAN_END_HOUR, minute=0, id="clear_expired_baitan_orders")
+@scheduler.scheduled_job(
+    "cron",
+    hour=GUISHI_BAITAN_END_HOUR,
+    minute=0,
+    id="clear_expired_baitan_orders",
+    coalesce=True,
+    max_instances=1,
+    misfire_grace_time=300,
+)
 async def clear_expired_baitan_orders_job():
     """每天摆摊时间结束后，自动清空所有未售罄的摆摊订单，并退还未售出的物品。"""
     logger.info("开始检查并清理超时鬼市摆摊订单...")
