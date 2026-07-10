@@ -6,11 +6,14 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Any, Union
 
 from nonebot.log import logger
+from ...paths import get_paths
 
 from ..adapter_compat import Bot, MessageEvent, GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.json_store import load_json_file, save_json_file
+from ..xiuxian_config import XiuConfig
+from .reward_service import RewardClaimService
 from ..xiuxian_utils.utils import (
     check_user,
     handle_send,
@@ -20,6 +23,10 @@ from ..xiuxian_utils.utils import (
 
 items = Items()
 sql_message = XiuxianDateManage()
+reward_claim_service = RewardClaimService(
+    get_paths().game_db,
+    max_goods_num=XiuConfig().max_goods_num,
+)
 
 DATA_PATH = Path(__file__).parent / "compensation_data"
 
@@ -325,6 +332,16 @@ def send_reward_to_user(user_id: str, reward_items: List[Dict[str, Any]]) -> Lis
     return msg_parts
 
 
+def format_reward_delivery(reward_items: List[Dict[str, Any]]) -> List[str]:
+    """Format the existing delivery messages without mutating player assets."""
+    return [
+        f"获得灵石 {number_to(item['quantity'])} 枚"
+        if item["type"] == "stone"
+        else f"获得 {item['name']} x{item['quantity']}"
+        for item in reward_items
+    ]
+
+
 async def create_reward_record(
     bot: Bot,
     event: MessageEvent,
@@ -454,12 +471,22 @@ async def claim_normal_reward(
         await handle_send(bot, event, f"{config['type_key']}尚未生效，生效时间：{record.get('start_time')}")
         return
 
-    if has_claimed(user_id, record_id, config):
+    if has_claimed(user_id, record_id, config) or reward_claim_service.has_claimed(
+        config["type_key"], record_id, user_id
+    ):
         await handle_send(bot, event, f"你已经领取过该{config['type_key']}了")
         return
 
-    reward_msg = send_reward_to_user(user_id, record["items"])
-    mark_claimed(user_id, record_id, config)
+    result = reward_claim_service.claim(
+        config["type_key"], record_id, user_id, record["items"]
+    )
+    if result.status == "duplicate":
+        await handle_send(bot, event, f"你已经领取过该{config['type_key']}了")
+        return
+    if result.status == "user_missing":
+        await handle_send(bot, event, "修仙界没有你的足迹，输入 我要修仙 加入修仙世界吧！")
+        return
+    reward_msg = format_reward_delivery(record["items"])
 
     await handle_send(
         bot,
@@ -487,11 +514,15 @@ def delete_record(record_id: str, config: Dict[str, Any]):
             del claimed_data[user_id]
 
     save_claimed_data(config, claimed_data)
+    if config["type_key"] != "兑换码":
+        reward_claim_service.delete_claims(config["type_key"], record_id)
 
 
 def clear_records(config: Dict[str, Any]):
     save_data(config, {})
     save_claimed_data(config, {})
+    if config["type_key"] != "兑换码":
+        reward_claim_service.delete_claims(config["type_key"])
     logger.info(f"已清空所有{config['type_key']}数据")
 
 

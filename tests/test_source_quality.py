@@ -415,6 +415,21 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn('return "database"', jobs_source)
         self.assertIn('return "filesystem"', jobs_source)
 
+    def test_normal_compensation_claim_uses_transactional_service(self) -> None:
+        compensation_root = SOURCE_ROOT / "xiuxian" / "xiuxian_compensation"
+        common_source = (compensation_root / "common.py").read_text(encoding="utf-8")
+        service_source = (compensation_root / "reward_service.py").read_text(
+            encoding="utf-8"
+        )
+        claim_body = common_source.split("async def claim_normal_reward", 1)[1].split(
+            "\ndef delete_record", 1
+        )[0]
+        self.assertIn("reward_claim_service.claim(", claim_body)
+        self.assertNotIn("send_reward_to_user(", claim_body)
+        self.assertNotIn("mark_claimed(", claim_body)
+        self.assertIn("BEGIN IMMEDIATE", service_source)
+        self.assertIn("reward_claims", service_source)
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")
