@@ -1,5 +1,6 @@
 import re
 import random
+import time
 from nonebot.typing import T_State
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, OtherSet, BuffJsonDate,
@@ -71,9 +72,12 @@ from .sect_fairyland import (
     _to_int,
 )
 from ..adapter_compat import is_channel_event
+from ...paths import get_paths
+from .membership_service import SectMembershipService
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
+sect_membership_service = SectMembershipService(get_paths().game_db)
 tianti_manager = TiantiDataManager()
 config = get_config()
 SECT_RENAME_CARD_ID = 20026
@@ -109,6 +113,15 @@ def _is_sect_owner(user_info: dict) -> bool:
     owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
     owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
     return int(user_info.get("sect_position", 99)) == owner_position
+
+
+def _sect_operation_id(event, action, target_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"sect:{event_id}:{action}:{target_id}"
+    return f"sect:{action}:{target_id}:{time.time_ns()}"
 
 
 materialsupdate = require("nonebot_plugin_apscheduler").scheduler
@@ -1829,17 +1842,26 @@ async def sect_owner_change_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             await handle_send(bot, event, msg)
             await sect_owner_change.finish()
         else:
-            give_user = sql_message.get_user_info_with_id(give_qq)
-            if give_user['sect_id'] == user_info['sect_id']:
-                sql_message.update_usr_sect(give_user['user_id'], give_user['sect_id'], owner_position)
-                sql_message.update_usr_sect(user_info['user_id'], user_info['sect_id'], owner_position + 1)
-                sect_info = sql_message.get_sect_info_by_id(give_user['sect_id'])
-                sql_message.update_sect_owner(give_user['user_id'], sect_info['sect_id'])
-                msg = f"传老宗主{user_info['user_name']}法旨，即日起由{give_user['user_name']}继任{sect_info['sect_name']}宗主"
+            result = sect_membership_service.transfer_owner(
+                _sect_operation_id(event, "transfer_owner", give_qq),
+                user_id,
+                give_qq,
+                owner_position=owner_position,
+            )
+            if result.succeeded:
+                msg = f"传老宗主{result.actor_name or user_info['user_name']}法旨，即日起由{result.target_name}继任{result.sect_name}宗主"
                 await handle_send(bot, event, msg, md_type="宗门", k1="宗门", v1="我的宗门", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
                 await sect_owner_change.finish()
+            elif result.status == "target_missing":
+                msg = "未找到目标道友，请检查后重试。"
+                await handle_send(bot, event, msg)
+                await sect_owner_change.finish()
+            elif result.status == "target_not_member":
+                msg = f"目标道友不在你管理的宗门内，请检查。"
+                await handle_send(bot, event, msg)
+                await sect_owner_change.finish()
             else:
-                msg = f"{give_user['user_name']}不在你管理的宗门内，请检查。"
+                msg = "宗门状态已经变化，当前无法完成传位，请刷新宗门信息后重试。"
                 await handle_send(bot, event, msg)
                 await sect_owner_change.finish()
     else:
