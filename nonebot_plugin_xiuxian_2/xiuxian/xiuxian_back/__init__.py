@@ -44,6 +44,7 @@ from ...paths import get_paths
 from ..xiuxian_utils.pet_system import PET_BAG_LIMIT, PET_EGG_IDS, PET_EGG_RARITY_KEY, can_add_pets, grant_pet_by_rarity
 from .back_util import *
 from .equipment_service import EquipmentService
+from .stone_reward_service import StoneItemRewardService
 from . import accessory as _accessory  # noqa: F401
 from .accessory_helpers import AFFIX_KEY_MAP, SET_BONUS, ACCESSORY_BAG_LIMIT, add_accessory_to_bag, can_add_accessories, quality_to_cn  # noqa: F401
 from .backpack_render import (
@@ -64,6 +65,7 @@ from .backpack_render import (
 items = Items()
 sql_message = XiuxianDateManage()
 equipment_service = EquipmentService(get_paths().game_db)
+stone_reward_service = StoneItemRewardService(get_paths().game_db)
 player_data_manager = PlayerDataManager()
 tianti_manager = TiantiDataManager()
 scheduler = require("nonebot_plugin_apscheduler").scheduler
@@ -79,6 +81,15 @@ def _equipment_operation_id(event, action, goods_id):
     if event_id:
         return f"equipment:{event_id}:{action}:{goods_id}"
     return f"equipment:{action}:{goods_id}:{time.time_ns()}"
+
+
+def _stone_reward_operation_id(event, reward_type, user_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"stone-reward:{event_id}:{reward_type}:{user_id}"
+    return f"stone-reward:{reward_type}:{user_id}:{time.time_ns()}"
 # 通用物品类型和炼金最低价格
 MIN_PRICE = 600000
 
@@ -1265,30 +1276,34 @@ async def use_spirit_stone_bag(bot: Bot, event: GroupMessageEvent | PrivateMessa
         (5,  64800000,  "极品！✨")
     ]
 
-    total_stone = 0
-    results = []
-
-    for _ in range(num):
-        # 根据权重随机选择灵石数量
-        roll_stone = random.choices(
+    rolled_rewards = [
+        random.choices(
             [t[1] for t in tiers],
             weights=[t[0] for t in tiers],
             k=1
         )[0]
+        for _ in range(num)
+    ]
+    reward = stone_reward_service.apply(
+        _stone_reward_operation_id(event, "spirit_stone_bag", user_id),
+        user_id,
+        reward_type="spirit_stone_bag",
+        item_id=item_id,
+        rewards=rolled_rewards,
+    )
+    if not reward.succeeded:
+        await handle_send(bot, event, "灵石福袋数量或角色状态已发生变化，请重新查看背包。")
+        return
 
-        # 获取对应的描述
-        desc = next(t[2] for t in tiers if t[1] == roll_stone)
-        total_stone += roll_stone
-        results.append(f"{desc}档：获得 {number_to(roll_stone)} 灵石")
-
-    # 增加用户灵石 & 扣除道具
-    sql_message.update_ls(user_id, total_stone, 1)
-    sql_message.update_back_j(user_id, item_id, num=num)
+    results = [
+        f"{next(t[2] for t in tiers if t[1] == value)}档：获得 {number_to(value)} 灵石"
+        for value in reward.rewards
+    ]
 
     # 构造消息
     lines = [
-        f"【灵石福袋 ×{num}】",
-        f"累计获得：{number_to(total_stone)} 灵石",
+        f"【灵石福袋 ×{reward.quantity}】",
+        f"累计获得：{number_to(reward.total_stone)} 灵石",
         *results,
         "祝道友财源滚滚～"
     ]
