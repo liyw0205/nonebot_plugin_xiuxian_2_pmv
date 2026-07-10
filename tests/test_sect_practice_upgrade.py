@@ -79,6 +79,20 @@ class SectPracticeUpgradeTests(unittest.TestCase):
             self.scalar_materials(), 4000
         )
 
+    def test_mana_upgrade_uses_the_same_atomic_boundary(self) -> None:
+        result = self.service.upgrade_practice(
+            "mana-1", "user", 1, "mana", 4, 5, 100, 1000
+        )
+
+        self.assertEqual(result.status, "upgraded")
+        with db_backend.connection(self.database) as conn:
+            row = conn.execute(
+                "SELECT stone, mppractice FROM user_xiuxian WHERE user_id=%s",
+                ("user",),
+            ).fetchone()
+        self.assertEqual((int(row[0]), int(row[1])), (900, 5))
+        self.assertEqual(self.scalar_materials(), 4000)
+
     def scalar_materials(self):
         with db_backend.connection(self.database) as conn:
             return int(
