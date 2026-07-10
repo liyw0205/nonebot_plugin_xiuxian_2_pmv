@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any, Mapping
 
@@ -53,6 +54,32 @@ class QQCapabilityRegistry:
     def get(self, bot_or_app_id: Any) -> QQCapabilities:
         app_id = str(getattr(bot_or_app_id, "self_id", bot_or_app_id) or "")
         return self._values.get(app_id, self._default)
+
+    @classmethod
+    def from_config(cls, config: Any) -> "QQCapabilityRegistry":
+        raw = getattr(config, "xiuxian_qq_capabilities", None)
+        if raw in (None, ""):
+            return cls()
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise ValueError("xiuxian_qq_capabilities 必须是合法 JSON") from exc
+        if not isinstance(raw, Mapping):
+            raise ValueError("xiuxian_qq_capabilities 必须是 AppID 到能力配置的映射")
+        default_values = raw.get("default")
+        bots = raw.get("bots", raw)
+        if not isinstance(bots, Mapping):
+            raise ValueError("xiuxian_qq_capabilities.bots 必须是映射")
+        values = {
+            str(app_id): capability
+            for app_id, capability in bots.items()
+            if app_id != "default" and isinstance(capability, Mapping)
+        }
+        default = QQCapabilities.from_mapping(
+            default_values if isinstance(default_values, Mapping) else None
+        )
+        return cls(values, default=default)
 
 
 __all__ = ["QQCapabilities", "QQCapabilityRegistry"]

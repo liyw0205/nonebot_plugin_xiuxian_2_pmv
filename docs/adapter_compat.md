@@ -224,6 +224,13 @@ QQ 好友、C2C 和群生命周期事件已接入 `LifecycleStateRegistry`。群
 去重命中，以及消息序号重试和审核 pending/timeout/rejected 均记录在
 `infrastructure.runtime_metrics` 中。
 
+QQ Markdown、keyboard、interaction 和全量消息能力可通过
+`xiuxian_qq_capabilities` 按 AppID 配置；支持直接映射或 JSON 字符串，结构为
+`{"default": {...}, "bots": {"AppID": {...}}}`。Web 和新增多 Bot 调用统一使用
+`qq_compat.BotSelector`，可按 AppID、Adapter 和显式优先级稳定选择在线 Bot。
+`MarkdownTemplateRegistry` 仅从指定 JSON 文件按 mtime 有限热加载，并限制模板数量、
+名称和长度；变量始终经过 Markdown 转义。
+
 ## 引用回复
 
 QQ 官方普通群与 C2C 的引用回复必须使用平台返回的 `REFIDX`，不是普通消息 ID。兼容层会在 `patch_event_inplace()` 时把它补到 `event.message_reference_id` / `event.reference_id`。通用业务发送可通过配置 `reference_reply=True` 走 `send_reference_reply(...)`；开启后 `send_msg_handler` 会避开合并转发 API，改走普通消息发送。底层仍支持显式传 `auto_reference=True` 或引用参数。

@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from nonebot import get_driver
+
 from ..adapter_compat import (
     get_chat_scene,
     get_group_id,
@@ -325,7 +327,9 @@ class MessageDeliveryService:
         )
 
 
-delivery_service = MessageDeliveryService()
+delivery_service = MessageDeliveryService(
+    capabilities=QQCapabilityRegistry.from_config(get_driver().config)
+)
 
 
 __all__ = ["MessageDeliveryService", "delivery_service"]

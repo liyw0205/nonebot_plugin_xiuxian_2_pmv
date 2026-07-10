@@ -2,7 +2,11 @@ from .delivery import MessageDeliveryService, delivery_service
 from .keyboard import ButtonSpec, KeyboardSpec, build_qq_keyboard, keyboard_plain_text
 from .models import DeliveryScene, DeliveryStatus, SendRequest, SendResult
 from .reliability import DeliveryError, DeliveryErrorKind
-from .templates import escape_qq_markdown, render_markdown_template
+from .templates import (
+    MarkdownTemplateRegistry,
+    escape_qq_markdown,
+    render_markdown_template,
+)
 
 __all__ = [
     "ButtonSpec",
@@ -11,6 +15,7 @@ __all__ = [
     "DeliveryErrorKind",
     "DeliveryStatus",
     "KeyboardSpec",
+    "MarkdownTemplateRegistry",
     "MessageDeliveryService",
     "SendRequest",
     "SendResult",

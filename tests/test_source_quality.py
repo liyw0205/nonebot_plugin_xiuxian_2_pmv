@@ -245,6 +245,13 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("@driver.on_shutdown", source)
         self.assertIn("await critical_jobs.stop(drain=True)", source)
 
+    def test_web_bot_lookup_uses_unified_selector(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_web" / "core.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("from ..qq_compat import bot_selector", source)
+        self.assertIn("return bot_selector.select(adapter=", source)
+
     def test_activity_rule_helpers_have_explicit_dependencies(self) -> None:
         activity_rules = SOURCE_ROOT / "xiuxian" / "xiuxian_activity" / "activity_rules.py"
         tree = ast.parse(

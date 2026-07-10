@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import unittest
+import json
+import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -18,6 +21,7 @@ from nonebot_plugin_xiuxian_2.xiuxian.messaging import (
     DeliveryError,
     KeyboardSpec,
     MessageDeliveryService,
+    MarkdownTemplateRegistry,
     SendRequest,
     SendResult,
     escape_qq_markdown,
@@ -26,6 +30,7 @@ from nonebot_plugin_xiuxian_2.xiuxian.messaging import (
 )
 from nonebot_plugin_xiuxian_2.xiuxian.infrastructure import RuntimeMetrics
 from nonebot_plugin_xiuxian_2.xiuxian.qq_compat import (
+    BotSelector,
     QQCapabilities,
     QQCapabilityRegistry,
 )
@@ -74,6 +79,55 @@ class MessageResultTests(unittest.TestCase):
         self.assertTrue(registry.get(SimpleNamespace(self_id="bot-2")).keyboard)
         self.assertFalse(QQCapabilities.from_mapping({"markdown": "false"}).markdown)
         self.assertEqual(QQCapabilities.from_mapping(None), QQCapabilities())
+
+        configured = QQCapabilityRegistry.from_config(
+            SimpleNamespace(
+                xiuxian_qq_capabilities=json.dumps(
+                    {
+                        "default": {"keyboard": False},
+                        "bots": {"app-1": {"markdown": False, "keyboard": True}},
+                    }
+                )
+            )
+        )
+        self.assertFalse(configured.get("app-1").markdown)
+        self.assertTrue(configured.get("app-1").keyboard)
+        self.assertFalse(configured.get("app-2").keyboard)
+
+    def test_bot_selector_is_stable_and_filters_adapter(self) -> None:
+        def bot(bot_id, adapter):
+            return SimpleNamespace(
+                self_id=bot_id,
+                adapter=SimpleNamespace(get_name=lambda: adapter),
+            )
+
+        bots = {
+            "qq-2": bot("qq-2", "QQ"),
+            "ob-1": bot("ob-1", "OneBot V11"),
+            "qq-1": bot("qq-1", "QQ"),
+        }
+        selector = BotSelector(lambda: bots, preferred_ids=("qq-2",))
+        self.assertEqual(selector.select(adapter="QQ").self_id, "qq-2")
+        self.assertEqual(selector.select(app_id="qq-1").self_id, "qq-1")
+        self.assertEqual(selector.select(adapter="ob11").self_id, "ob-1")
+        self.assertIsNone(selector.select(adapter="Unknown"))
+
+    def test_markdown_templates_reload_only_after_file_change(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "templates.json"
+            path.write_text(json.dumps({"welcome": "欢迎 {name}"}), encoding="utf-8")
+            registry = MarkdownTemplateRegistry(path)
+            self.assertEqual(registry.render("welcome", {"name": "[道友]"}), r"欢迎 \[道友\]")
+            self.assertFalse(registry.reload_if_changed())
+
+            path.write_text(
+                json.dumps({"welcome": "道友 {name} 已上线"}),
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                registry.render("welcome", {"name": "*甲*"}),
+                r"道友 \*甲\* 已上线",
+            )
 
 
 class DeliveryServiceTests(unittest.IsolatedAsyncioTestCase):

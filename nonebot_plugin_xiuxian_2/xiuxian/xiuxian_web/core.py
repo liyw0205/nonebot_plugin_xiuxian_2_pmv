@@ -40,6 +40,7 @@ from ...paths import get_paths
 from nonebot.message import event_preprocessor
 from nonebot.adapters import Bot as BaseBot, Event
 from ..adapter_compat import MessageSegment
+from ..qq_compat import bot_selector
 from ..adapter_message_actions import delete_message_compat
 from ..adapter_message_records import (
     extract_result_message_id,
@@ -872,31 +873,7 @@ def get_bot_by_adapter(adapter_name: str):
     - OneBot V11
     - OB11
     """
-    adapter_name = str(adapter_name or "").strip()
-    adapter_lower = adapter_name.lower()
-
-    bots = get_bots()
-
-    for bot in bots.values():
-        try:
-            name = bot.adapter.get_name()
-            name_lower = str(name).lower()
-
-            if adapter_name == name:
-                return bot
-
-            if adapter_lower in ("ob11", "onebot", "onebot v11") and (
-                "onebot" in name_lower or "v11" in name_lower
-            ):
-                return bot
-
-            if adapter_lower == "qq" and name == "QQ":
-                return bot
-
-        except Exception:
-            continue
-
-    return None
+    return bot_selector.select(adapter=str(adapter_name or "").strip())
 
 
 def is_ob11_adapter_name(adapter: str) -> bool:

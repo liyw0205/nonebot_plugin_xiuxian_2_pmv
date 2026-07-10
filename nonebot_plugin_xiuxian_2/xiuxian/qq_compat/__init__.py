@@ -1,4 +1,5 @@
 from .capabilities import QQCapabilities, QQCapabilityRegistry
+from .bot_selector import BotSelector, bot_selector
 from .context import from_nonebot_event, get_qq_scene, is_qq_event
 from .interaction import (
     InteractionAckRuntime,
@@ -31,6 +32,7 @@ from .models import (
 __all__ = [
     "InteractionAcknowledger",
     "InteractionAckRuntime",
+    "BotSelector",
     "LifecycleApplyResult",
     "LifecycleGroupState",
     "LifecycleStateRegistry",
@@ -45,6 +47,7 @@ __all__ = [
     "ack_interaction",
     "arm_interaction_ack",
     "apply_lifecycle_event",
+    "bot_selector",
     "complete_interaction_ack",
     "from_nonebot_event",
     "get_interaction_context",
