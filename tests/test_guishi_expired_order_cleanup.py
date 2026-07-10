@@ -232,6 +232,31 @@ class GuishiExpiredOrderCleanupTests(unittest.TestCase):
                 30,
             )
 
+    def test_expected_owner_is_checked_inside_the_transaction(self) -> None:
+        baitan = self.repository.clear_expired_guishi_order(
+            self.trade_database,
+            "order-1",
+            "药材",
+            expected_user_id="other",
+        )
+
+        self.assertEqual(baitan.status, "not_owner")
+        self.assertTrue(self.order_exists())
+        self.assertIsNone(self.inventory())
+
+        with db_backend.transaction(self.trade_database) as conn:
+            conn.execute(
+                "UPDATE guishi_item SET item_type=%s WHERE id=%s", ("qiugou", "order-1")
+            )
+        qiugou = self.repository.clear_guishi_qiugou_order(
+            self.trade_database,
+            "order-1",
+            expected_user_id="other",
+        )
+
+        self.assertEqual(qiugou.status, "not_owner")
+        self.assertTrue(self.order_exists())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -315,6 +315,8 @@ class TradeRepository:
         trade_database: str | Path,
         order_id,
         goods_type,
+        *,
+        expected_user_id=None,
     ) -> ExpiredGuishiOrderClear:
         order_id = str(order_id)
         goods_type = str(goods_type).strip()
@@ -341,6 +343,9 @@ class TradeRepository:
                     return ExpiredGuishiOrderClear("not_baitan", order_id)
 
                 user_id = str(order[0])
+                if expected_user_id is not None and user_id != str(expected_user_id):
+                    conn.rollback()
+                    return ExpiredGuishiOrderClear("not_owner", order_id)
                 goods_id = int(order[1])
                 item_name = str(order[2])
                 unfilled_quantity = max(int(order[4]) - int(order[5]), 0)
@@ -409,6 +414,8 @@ class TradeRepository:
         self,
         trade_database: str | Path,
         order_id,
+        *,
+        expected_user_id=None,
     ) -> ExpiredGuishiOrderClear:
         order_id = str(order_id)
         with self._lock, closing(db_backend.connect(trade_database)) as conn:
@@ -429,6 +436,9 @@ class TradeRepository:
                     return ExpiredGuishiOrderClear("not_qiugou", order_id)
 
                 user_id = str(order[0])
+                if expected_user_id is not None and user_id != str(expected_user_id):
+                    conn.rollback()
+                    return ExpiredGuishiOrderClear("not_owner", order_id)
                 refund_stone = max(int(order[2]) - int(order[3]), 0) * int(order[1])
                 if refund_stone:
                     conn.execute(

@@ -1751,29 +1751,23 @@ async def guishi_cancel_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMess
         await handle_send(bot, event, msg, md_type="交易", k1="取消求购", v1="鬼市取消求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_cancel_qiugou.finish()
     
-    # 获取订单信息
-    order = trade_manager.get_guishi_orders(id=order_id, type="qiugou")
-    if not order or order[0]['user_id'] != user_id:
+    result = xianshi_repository.clear_guishi_qiugou_order(
+        get_paths().trade_db,
+        order_id,
+        expected_user_id=user_id,
+    )
+    if not result.cleared:
         msg = f"未找到您的ID为 {order_id} 的求购订单！"
         await handle_send(bot, event, msg, md_type="交易", k1="取消求购", v1="鬼市取消求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_cancel_qiugou.finish()
-    
-    order = order[0]
-    
-    # 计算未成交的灵石并退还
-    unfilled_quantity = order['quantity'] - order['filled_quantity']
-    refund_amount = unfilled_quantity * order['price']
-    
-    trade_manager.remove_guishi_order(order_id) # 从数据库中移除订单
-    trade_manager.update_stored_stone(user_id, refund_amount, 'add') # 退还灵石
-    
-    msg = f"成功取消求购订单【{order['item_name']} (ID:{order_id})】！\n"
-    msg += f"已退还 {number_to(refund_amount)} 灵石到您的鬼市账户。"
+
+    msg = f"成功取消求购订单（ID:{order_id}）！\n"
+    msg += f"已退还 {number_to(result.refunded_stone)} 灵石到您的鬼市账户。"
     record_trade_event(
         user_id,
         "鬼市取消求购",
-        f"取消求购{order['item_name']}，订单ID:{order_id}，退还{number_to(refund_amount)}灵石",
-        {"鬼市取消求购次数": 1, "鬼市求购退还灵石": refund_amount}
+        f"取消求购订单ID:{order_id}，退还{number_to(result.refunded_stone)}灵石",
+        {"鬼市取消求购次数": 1, "鬼市求购退还灵石": result.refunded_stone}
     )
     await handle_send(bot, event, msg, md_type="交易", k1="取消求购", v1="鬼市取消求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     await guishi_cancel_qiugou.finish()
@@ -1920,22 +1914,24 @@ async def guishi_shoutan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     refunded_items_summary = {} # 统计退还的物品
     
     for order in baitan_orders:
-        trade_manager.remove_guishi_order(order['id']) # 从数据库移除订单
-        
-        # 如果物品未被全部购买，退回背包
-        unfilled_quantity = order['quantity'] - order['filled_quantity']
-        if unfilled_quantity > 0:
-            goods_id, item_info = items.get_data_by_item_name(order['item_name'])
-            if goods_id:
-                sql_message.send_back(
-                    user_id,
-                    goods_id,
-                    item_info['name'],
-                    item_info['type'],
-                    unfilled_quantity # 退还未售出的数量
-                )
-                refunded_items_summary[item_info['name']] = refunded_items_summary.get(item_info['name'], 0) + unfilled_quantity
-                total_refunded_items += unfilled_quantity
+        _, item_info = items.get_data_by_item_name(order['item_name'])
+        if not item_info:
+            logger.warning(f"鬼市摆摊订单 {order['id']} 的物品不存在，已保留订单")
+            continue
+        result = xianshi_repository.clear_expired_guishi_order(
+            get_paths().trade_db,
+            order['id'],
+            item_info['type'],
+            expected_user_id=user_id,
+        )
+        if not result.cleared:
+            continue
+        if result.refunded_quantity:
+            refunded_items_summary[result.item_name] = (
+                refunded_items_summary.get(result.item_name, 0)
+                + result.refunded_quantity
+            )
+            total_refunded_items += result.refunded_quantity
     
     if total_refunded_items > 0:
         refund_msg = "\n已退回物品：" + "\n".join([f"{name} x{count}" for name, count in refunded_items_summary.items()])
