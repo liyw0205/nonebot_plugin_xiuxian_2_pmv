@@ -142,15 +142,22 @@ class MessageDeliveryService:
         bot: Any,
         event: Any,
         message: Any,
+        *,
+        include_reference: bool = True,
         **kwargs: Any,
     ) -> SendResult:
         scene = get_chat_scene(event)
+        source_message_id = str(
+            getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+        )
+        reference_id = get_message_reference_id(event) if include_reference else None
         if scene in {"group", "channel_group"}:
             request = SendRequest(
                 scene,
                 str(get_group_id(event)),
                 message,
-                reference_id=get_message_reference_id(event),
+                reference_id=reference_id,
+                source_message_id=source_message_id,
             )
         elif scene in {"private", "channel_private"}:
             target_id = (
@@ -162,7 +169,8 @@ class MessageDeliveryService:
                 scene,
                 str(target_id),
                 message,
-                reference_id=get_message_reference_id(event),
+                reference_id=reference_id,
+                source_message_id=source_message_id,
             )
         else:
             raw = await bot.send(event=event, message=message, **kwargs)

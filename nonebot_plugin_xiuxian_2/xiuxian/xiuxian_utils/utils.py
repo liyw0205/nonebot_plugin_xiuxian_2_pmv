@@ -28,8 +28,8 @@ from ..adapter_compat import (
     is_group_event,
     get_chat_scene,
     MessageSegment,
-    send_reference_reply,
 )
+from ..messaging import delivery_service
 from nonebot.params import Depends
 from PIL import Image, ImageDraw, ImageFont
 from wcwidth import wcwidth
@@ -1015,11 +1015,23 @@ def _should_reference_reply(bot, event) -> bool:
 async def _send_event_message(bot, event, message, **kwargs):
     if _should_reference_reply(bot, event):
         try:
-            return await send_reference_reply(bot, event, message, **kwargs)
+            return await delivery_service.reply(
+                bot,
+                event,
+                message,
+                include_reference=True,
+                **kwargs,
+            )
         except Exception as e:
             logger.warning(f"引用回复发送失败，降级普通发送: {e}")
 
-    return await bot.send(event=event, message=message, **kwargs)
+    return await delivery_service.reply(
+        bot,
+        event,
+        message,
+        include_reference=False,
+        **kwargs,
+    )
 
 def _has_button_id(button_id) -> bool:
     return bool(str(button_id or "").strip())

@@ -189,7 +189,9 @@ result = await delivery_service.send(
 
 当前支持 `group`、`private`、`channel_group` 和 `channel_private`。返回值统一为
 `SendResult`，包含 `message_id`、`reference_id` 和原始 Adapter 响应。Web 消息发送
-与撤回已经接入该门面；OneBot 合并转发仍作为平台特有能力保留专用路径。
+与撤回，以及帮助、状态等 Presenter 的普通文本出口已经接入该门面；Markdown、
+keyboard 仍由能力适配层构建后交给该出口发送，OneBot 合并转发继续作为平台特有
+能力保留专用路径。
 
 `source_message_id` 用于 QQ 回复窗口和消息记录回复计数，`reference_id` 用于引用
 回复。两者语义不同，不应互相替代。

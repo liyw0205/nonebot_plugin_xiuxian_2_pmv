@@ -197,6 +197,70 @@ class DeliveryServiceTests(unittest.IsolatedAsyncioTestCase):
             raw_result={"message_id": "message-3"},
         )
 
+    async def test_reply_routes_event_context_through_delivery_request(self) -> None:
+        service = MessageDeliveryService()
+        event = SimpleNamespace(message_id="source-3")
+        with (
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery.get_chat_scene",
+                return_value="group",
+            ),
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery.get_group_id",
+                return_value="group-2",
+            ),
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery.get_message_reference_id",
+                return_value="ref-3",
+            ),
+            patch.object(
+                service,
+                "send",
+                new=AsyncMock(return_value=SendResult("message-4", None, {})),
+            ) as send,
+        ):
+            result = await service.reply(object(), event, "status")
+
+        self.assertEqual(result.message_id, "message-4")
+        request = send.await_args.args[1]
+        self.assertEqual(request.scene, "group")
+        self.assertEqual(request.target_id, "group-2")
+        self.assertEqual(request.reference_id, "ref-3")
+        self.assertEqual(request.source_message_id, "source-3")
+
+    async def test_reply_can_disable_reference_without_losing_source(self) -> None:
+        service = MessageDeliveryService()
+        event = SimpleNamespace(id="source-4")
+        with (
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery.get_chat_scene",
+                return_value="private",
+            ),
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery.get_user_id",
+                return_value="user-2",
+            ),
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery.get_message_reference_id"
+            ) as get_reference,
+            patch.object(
+                service,
+                "send",
+                new=AsyncMock(return_value=SendResult("message-5", None, {})),
+            ) as send,
+        ):
+            await service.reply(
+                object(),
+                event,
+                "help",
+                include_reference=False,
+            )
+
+        get_reference.assert_not_called()
+        request = send.await_args.args[1]
+        self.assertIsNone(request.reference_id)
+        self.assertEqual(request.source_message_id, "source-4")
+
 
 if __name__ == "__main__":
     unittest.main()

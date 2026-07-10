@@ -139,6 +139,22 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("bot.send_to_channel", send_source)
         self.assertNotIn("bot.send_to_dms", send_source)
 
+    def test_presenter_text_outlet_uses_delivery_service(self) -> None:
+        utils = SOURCE_ROOT / "xiuxian" / "xiuxian_utils" / "utils.py"
+        source = utils.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(utils))
+        send_outlet = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.AsyncFunctionDef)
+            and node.name == "_send_event_message"
+        )
+        outlet_source = ast.get_source_segment(source, send_outlet) or ""
+
+        self.assertIn("delivery_service.reply", outlet_source)
+        self.assertNotIn("bot.send(", outlet_source)
+        self.assertNotIn("send_reference_reply", outlet_source)
+
     def test_activity_rule_helpers_have_explicit_dependencies(self) -> None:
         activity_rules = SOURCE_ROOT / "xiuxian" / "xiuxian_activity" / "activity_rules.py"
         tree = ast.parse(
