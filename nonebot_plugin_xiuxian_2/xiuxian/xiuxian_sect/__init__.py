@@ -1125,15 +1125,24 @@ async def sect_secbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                     else:
                         fail_count += 1
 
-                # 更新数据库
-                sql_message.update_sect_materials(sect_id, total_materials_cost, 2)
-                sql_message.update_sect_scale_and_used_stone(
-                    sect_id, 
-                    sect_info['sect_used_stone'] - total_stone_cost, 
-                    sect_info['sect_scale']
-                )
                 sql = set_sect_list(secbuffidlist)
-                sql_message.update_sect_secbuff(sect_id, sql)
+                result = sect_membership_service.apply_buff_search(
+                    _sect_operation_id(event, "secbuff_search", sect_id),
+                    user_info["user_id"],
+                    sect_id,
+                    "secondary",
+                    sect_info["secbuff"],
+                    sql,
+                    total_stone_cost,
+                    total_materials_cost,
+                    owner_position=owner_position,
+                )
+                if not result.applied:
+                    if result.status == "duplicate":
+                        await handle_send(bot, event, "本次宗门神通搜寻已经完成，请刷新宗门信息。")
+                    else:
+                        await handle_send(bot, event, "宗门资产、权限或神通列表已经变化，请刷新后重试。")
+                    await sect_secbuff_get.finish()
 
                 # 构建结果消息
                 msg = f"共消耗{total_stone_cost}宗门灵石，{total_materials_cost}宗门资材。\n"

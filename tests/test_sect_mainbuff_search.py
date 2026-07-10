@@ -121,6 +121,16 @@ class SectMainbuffSearchTests(unittest.TestCase):
             self.apply("search-fail")
         self.assertEqual(self.row(), (1000, 2000, "[101]", "[201]"))
 
+    def test_secondary_search_updates_only_secondary_list(self) -> None:
+        result = self.apply(
+            "secondary-search",
+            buff_type="secondary",
+            expected_value="[201]",
+            new_value="[201,202]",
+        )
+        self.assertEqual(result.status, "applied")
+        self.assertEqual(self.row(), (900, 1800, "[101]", "[201,202]"))
+
 
 if __name__ == "__main__":
     unittest.main()
