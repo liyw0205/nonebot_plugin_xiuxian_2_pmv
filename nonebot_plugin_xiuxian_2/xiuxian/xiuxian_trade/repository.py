@@ -44,6 +44,51 @@ class XianshiPurchase:
         return self.status == "purchased"
 
 
+@dataclass(frozen=True)
+class AuctionSettlement:
+    status: str
+    auction_id: str
+    item_id: int = 0
+    item_name: str = ""
+    seller_id: str = ""
+    seller_name: str = ""
+    winner_id: str | None = None
+    winner_name: str | None = None
+    final_price: int | None = None
+    fee: int = 0
+    seller_earnings: int = 0
+    start_price: int = 0
+    start_time: float = 0.0
+    end_time: float = 0.0
+    is_system: bool = False
+
+    @property
+    def applied(self) -> bool:
+        return self.status in {"sold", "unsold"}
+
+    @property
+    def history_status(self) -> str:
+        return "成交" if self.final_price is not None else "流拍"
+
+    def as_history_record(self) -> dict:
+        return {
+            "auction_id": self.auction_id,
+            "item_id": self.item_id,
+            "item_name": self.item_name,
+            "start_price": self.start_price,
+            "final_price": self.final_price,
+            "seller_id": self.seller_id,
+            "seller_name": self.seller_name,
+            "winner_id": self.winner_id,
+            "winner_name": self.winner_name,
+            "status": self.history_status,
+            "fee": self.fee,
+            "seller_earnings": self.seller_earnings,
+            "start_time": self.start_time,
+            "end_time": self.end_time,
+        }
+
+
 class TradeRepository:
     """Atomic marketplace operations stored with player economy data."""
 
@@ -298,6 +343,27 @@ class TradeRepository:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS auction_settlement_operations (
+                auction_id TEXT PRIMARY KEY,
+                item_id INTEGER NOT NULL,
+                item_name TEXT NOT NULL,
+                seller_id TEXT NOT NULL,
+                seller_name TEXT NOT NULL,
+                winner_id TEXT,
+                winner_name TEXT,
+                final_price INTEGER,
+                fee INTEGER NOT NULL,
+                seller_earnings INTEGER NOT NULL,
+                start_price INTEGER NOT NULL,
+                start_time REAL NOT NULL,
+                end_time REAL NOT NULL,
+                is_system INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
 
     @staticmethod
     def _auction_row(row) -> dict:
@@ -444,6 +510,242 @@ class TradeRepository:
                     (str(auction_id),),
                 ).fetchall()
             return [dict(row) for row in rows]
+
+    @staticmethod
+    def _settlement_from_row(status: str, row) -> AuctionSettlement:
+        return AuctionSettlement(
+            status=status,
+            auction_id=str(row[0]),
+            item_id=int(row[1]),
+            item_name=str(row[2]),
+            seller_id=str(row[3]),
+            seller_name=str(row[4]),
+            winner_id=str(row[5]) if row[5] is not None else None,
+            winner_name=str(row[6]) if row[6] is not None else None,
+            final_price=int(row[7]) if row[7] is not None else None,
+            fee=int(row[8]),
+            seller_earnings=int(row[9]),
+            start_price=int(row[10]),
+            start_time=float(row[11]),
+            end_time=float(row[12]),
+            is_system=bool(row[13]),
+        )
+
+    def settle_auction_item(
+        self,
+        auction_id,
+        *,
+        item_type: str | None,
+        winner_name: str | None,
+        fee_rate: float,
+        end_time: float,
+    ) -> AuctionSettlement:
+        auction_id = str(auction_id)
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self.ensure_schema(conn)
+                operation = conn.execute(
+                    """
+                    SELECT auction_id, item_id, item_name, seller_id, seller_name,
+                           winner_id, winner_name, final_price, fee,
+                           seller_earnings, start_price, start_time, end_time,
+                           is_system
+                    FROM auction_settlement_operations WHERE auction_id=%s
+                    """,
+                    (auction_id,),
+                ).fetchone()
+                if operation is not None:
+                    conn.rollback()
+                    return self._settlement_from_row("duplicate", operation)
+
+                row = conn.execute(
+                    """
+                    SELECT id, item_id, name, start_price, current_price,
+                           seller_id, seller_name, bids, is_system, last_bid_time
+                    FROM auction_current WHERE id=%s
+                    """,
+                    (auction_id,),
+                ).fetchone()
+                if row is None:
+                    conn.rollback()
+                    return AuctionSettlement("missing", auction_id)
+
+                try:
+                    bids_value = json.loads(row[7] or "{}")
+                    bids = bids_value if isinstance(bids_value, dict) else {}
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    bids = {}
+                bids = {str(key): int(value) for key, value in bids.items()}
+                item_id = int(row[1])
+                item_name = str(row[2])
+                start_price = int(row[3])
+                seller_id = str(row[5])
+                seller_name = str(row[6])
+                is_system = bool(row[8])
+                start_time = float(row[9] or 0.0)
+                final_price = None
+                winner_id = None
+                fee = 0
+                seller_earnings = 0
+                status = "unsold"
+
+                if (bids or not is_system) and not item_type:
+                    conn.rollback()
+                    return AuctionSettlement("item_missing", auction_id)
+
+                if bids:
+                    winner_id, final_price = max(bids.items(), key=lambda entry: entry[1])
+                    final_price = int(final_price)
+                    fee = 0 if is_system else int(final_price * float(fee_rate))
+                    seller_earnings = 0 if is_system else final_price - fee
+                    status = "sold"
+                    if not conn.execute(
+                        "SELECT 1 FROM user_xiuxian WHERE user_id=%s", (winner_id,)
+                    ).fetchone():
+                        conn.rollback()
+                        return AuctionSettlement("participant_missing", auction_id)
+                    if not is_system and not conn.execute(
+                        "SELECT 1 FROM user_xiuxian WHERE user_id=%s", (seller_id,)
+                    ).fetchone():
+                        conn.rollback()
+                        return AuctionSettlement("participant_missing", auction_id)
+                    inventory = conn.execute(
+                        "SELECT goods_num FROM back WHERE user_id=%s AND goods_id=%s",
+                        (winner_id, item_id),
+                    ).fetchone()
+                    if inventory and int(inventory[0] or 0) >= self._max_goods_num:
+                        conn.rollback()
+                        return AuctionSettlement("inventory_full", auction_id)
+                    conn.execute(
+                        """
+                        INSERT INTO back (
+                            user_id, goods_id, goods_name, goods_type,
+                            goods_num, create_time, update_time, bind_num
+                        ) VALUES (%s, %s, %s, %s, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
+                        ON CONFLICT (user_id, goods_id) DO UPDATE SET
+                            goods_name=EXCLUDED.goods_name,
+                            goods_type=EXCLUDED.goods_type,
+                            goods_num=LEAST(COALESCE(back.goods_num, 0)+1, %s),
+                            bind_num=LEAST(COALESCE(back.bind_num, 0)+1, %s),
+                            update_time=CURRENT_TIMESTAMP
+                        """,
+                        (
+                            winner_id,
+                            item_id,
+                            item_name,
+                            str(item_type),
+                            self._max_goods_num,
+                            self._max_goods_num,
+                        ),
+                    )
+                    if not is_system:
+                        conn.execute(
+                            "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                            (seller_earnings, seller_id),
+                        )
+                    for bidder_id, locked_price in bids.items():
+                        if bidder_id != winner_id:
+                            refund = conn.execute(
+                                "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                                (int(locked_price), bidder_id),
+                            )
+                            if refund.rowcount == 0:
+                                conn.rollback()
+                                return AuctionSettlement("participant_missing", auction_id)
+                elif not is_system:
+                    if not conn.execute(
+                        "SELECT 1 FROM user_xiuxian WHERE user_id=%s", (seller_id,)
+                    ).fetchone():
+                        conn.rollback()
+                        return AuctionSettlement("participant_missing", auction_id)
+                    inventory = conn.execute(
+                        "SELECT goods_num FROM back WHERE user_id=%s AND goods_id=%s",
+                        (seller_id, item_id),
+                    ).fetchone()
+                    if inventory and int(inventory[0] or 0) >= self._max_goods_num:
+                        conn.rollback()
+                        return AuctionSettlement("inventory_full", auction_id)
+                    conn.execute(
+                        """
+                        INSERT INTO back (
+                            user_id, goods_id, goods_name, goods_type,
+                            goods_num, create_time, update_time, bind_num
+                        ) VALUES (%s, %s, %s, %s, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
+                        ON CONFLICT (user_id, goods_id) DO UPDATE SET
+                            goods_name=EXCLUDED.goods_name,
+                            goods_type=EXCLUDED.goods_type,
+                            goods_num=LEAST(COALESCE(back.goods_num, 0)+1, %s),
+                            bind_num=LEAST(COALESCE(back.bind_num, 0)+1, %s),
+                            update_time=CURRENT_TIMESTAMP
+                        """,
+                        (
+                            seller_id,
+                            item_id,
+                            item_name,
+                            str(item_type),
+                            self._max_goods_num,
+                            self._max_goods_num,
+                        ),
+                    )
+
+                result = AuctionSettlement(
+                    status=status,
+                    auction_id=auction_id,
+                    item_id=item_id,
+                    item_name=item_name,
+                    seller_id=seller_id,
+                    seller_name=seller_name,
+                    winner_id=winner_id,
+                    winner_name=winner_name if winner_id is not None else None,
+                    final_price=final_price,
+                    fee=fee,
+                    seller_earnings=seller_earnings,
+                    start_price=start_price,
+                    start_time=start_time,
+                    end_time=float(end_time),
+                    is_system=is_system,
+                )
+                history = result.as_history_record()
+                conn.execute(
+                    """
+                    INSERT INTO auction_history (
+                        auction_id, item_id, item_name, start_price, final_price,
+                        seller_id, seller_name, winner_id, winner_name, status,
+                        fee, seller_earnings, start_time, end_time
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    tuple(history[key] for key in (
+                        "auction_id", "item_id", "item_name", "start_price",
+                        "final_price", "seller_id", "seller_name", "winner_id",
+                        "winner_name", "status", "fee", "seller_earnings",
+                        "start_time", "end_time",
+                    )),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO auction_settlement_operations (
+                        auction_id, item_id, item_name, seller_id, seller_name,
+                        winner_id, winner_name, final_price, fee,
+                        seller_earnings, start_price, start_time, end_time,
+                        is_system
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        result.auction_id, result.item_id, result.item_name,
+                        result.seller_id, result.seller_name, result.winner_id,
+                        result.winner_name, result.final_price, result.fee,
+                        result.seller_earnings, result.start_price,
+                        result.start_time, result.end_time,
+                        1 if result.is_system else 0,
+                    ),
+                )
+                conn.execute("DELETE FROM auction_current WHERE id=%s", (auction_id,))
+                conn.commit()
+                return result
+            except Exception:
+                conn.rollback()
+                raise
 
     @staticmethod
     def _row_purchase(status: PurchaseStatus, row) -> XianshiPurchase:
@@ -614,4 +916,4 @@ class TradeRepository:
                 raise
 
 
-__all__ = ["TradeRepository", "XianshiPurchase"]
+__all__ = ["AuctionSettlement", "TradeRepository", "XianshiPurchase"]

@@ -481,6 +481,9 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("auction_current_from_trade_db_v1", repository_source)
         self.assertIn("auction_history_from_trade_db_v1", repository_source)
         self.assertIn("auction_repository.get_current_auction", service_source)
+        self.assertIn("auction_repository.settle_auction_item", service_source)
+        self.assertIn("auction_settlement_operations", repository_source)
+        self.assertIn('conn.execute("BEGIN IMMEDIATE")', repository_source)
         self.assertNotIn("trade_manager.get_current_auction", command_source)
         self.assertNotIn("trade_manager.get_auction_history", command_source)
 
