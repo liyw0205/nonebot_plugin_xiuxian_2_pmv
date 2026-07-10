@@ -255,13 +255,20 @@ __sect_manage_help__ = """
 # 定时任务每1小时按照宗门贡献度增加资材
 @materialsupdate.scheduled_job("cron", hour=config["发放宗门资材"]["时间"])
 async def materialsupdate_():
+    grant_key = f"sect-materials:{datetime.now().date().isoformat()}"
     all_sects = sql_message.get_all_sects_id_scale()
+    granted = 0
     for s in all_sects:
-        sql_message.update_sect_materials(sect_id=s[0], sect_materials=s[1] * config["发放宗门资材"]["倍率"], key=1)
-        # 更新宗门战力
-        sql_message.update_sect_combat_power(s[0])
+        result = sect_membership_service.grant_scheduled_materials(
+            grant_key,
+            s[0],
+            config["发放宗门资材"]["倍率"],
+        )
+        granted += int(result.applied)
 
-    logger.opt(colors=True).info(f"<green>已更新所有宗门的资材和战力</green>")
+    logger.opt(colors=True).info(
+        f"<green>已更新宗门资材和战力，本次发放 {granted} 个宗门</green>"
+    )
 
 # 重置用户宗门任务次数、宗门丹药领取次数
 async def resetusertask():

@@ -85,6 +85,19 @@ class SectPracticeUpgrade:
         return self.status == "upgraded"
 
 
+@dataclass(frozen=True)
+class SectScheduledMaterialGrant:
+    status: str
+    grant_key: str
+    sect_id: int
+    materials: int = 0
+    combat_power: int = 0
+
+    @property
+    def applied(self) -> bool:
+        return self.status == "granted"
+
+
 class SectMembershipService:
     def __init__(self, database: str | Path, lock: RLock | None = None) -> None:
         self._database = Path(database)
@@ -174,6 +187,98 @@ class SectMembershipService:
             )
             """
         )
+
+    @staticmethod
+    def _ensure_scheduled_material_grants(conn) -> None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sect_scheduled_material_grants (
+                grant_key TEXT NOT NULL,
+                sect_id INTEGER NOT NULL,
+                materials INTEGER NOT NULL,
+                combat_power INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (grant_key, sect_id)
+            )
+            """
+        )
+
+    def grant_scheduled_materials(
+        self,
+        grant_key,
+        sect_id,
+        multiplier,
+    ) -> SectScheduledMaterialGrant:
+        grant_key = str(grant_key).strip()
+        if not grant_key:
+            raise ValueError("grant_key must not be empty")
+        sect_id = int(sect_id)
+        multiplier = max(int(multiplier), 0)
+
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                self._ensure_scheduled_material_grants(conn)
+                conn.commit()
+                conn.execute("BEGIN IMMEDIATE")
+                previous = conn.execute(
+                    """
+                    SELECT materials, combat_power
+                    FROM sect_scheduled_material_grants
+                    WHERE grant_key=%s AND sect_id=%s
+                    """,
+                    (grant_key, sect_id),
+                ).fetchone()
+                if previous:
+                    conn.rollback()
+                    return SectScheduledMaterialGrant(
+                        "duplicate",
+                        grant_key,
+                        sect_id,
+                        int(previous[0]),
+                        int(previous[1]),
+                    )
+
+                sect = conn.execute(
+                    "SELECT sect_scale, sect_owner FROM sects WHERE sect_id=%s",
+                    (sect_id,),
+                ).fetchone()
+                if sect is None:
+                    conn.rollback()
+                    return SectScheduledMaterialGrant("sect_missing", grant_key, sect_id)
+                if sect[1] is None:
+                    conn.rollback()
+                    return SectScheduledMaterialGrant("sect_inactive", grant_key, sect_id)
+
+                materials = max(int(sect[0] or 0), 0) * multiplier
+                power_row = conn.execute(
+                    "SELECT COALESCE(SUM(power), 0) FROM user_xiuxian WHERE sect_id=%s",
+                    (sect_id,),
+                ).fetchone()
+                combat_power = int(power_row[0] or 0)
+                conn.execute(
+                    """
+                    UPDATE sects
+                    SET sect_materials=COALESCE(sect_materials, 0)+%s,
+                        combat_power=%s
+                    WHERE sect_id=%s
+                    """,
+                    (materials, combat_power, sect_id),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO sect_scheduled_material_grants (
+                        grant_key, sect_id, materials, combat_power
+                    ) VALUES (%s, %s, %s, %s)
+                    """,
+                    (grant_key, sect_id, materials, combat_power),
+                )
+                conn.commit()
+                return SectScheduledMaterialGrant(
+                    "granted", grant_key, sect_id, materials, combat_power
+                )
+            except Exception:
+                conn.rollback()
+                raise
 
     def transfer_owner(
         self,
@@ -863,4 +968,5 @@ __all__ = [
     "SectMembershipService",
     "SectOwnerTransfer",
     "SectPracticeUpgrade",
+    "SectScheduledMaterialGrant",
 ]
