@@ -39,6 +39,21 @@ class SectFairylandUpgrade:
 
 
 @dataclass(frozen=True)
+class SectElixirRoomUpgrade:
+    status: str
+    actor_id: str
+    sect_id: int
+    from_level: int = 0
+    to_level: int = 0
+    stone_cost: int = 0
+    scale_cost: int = 0
+
+    @property
+    def applied(self) -> bool:
+        return self.status == "upgraded"
+
+
+@dataclass(frozen=True)
 class SectPracticeUpgrade:
     status: str
     user_id: str
@@ -86,6 +101,23 @@ class SectMembershipService:
                 to_level INTEGER NOT NULL,
                 stone_cost INTEGER NOT NULL,
                 materials_cost INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+    @staticmethod
+    def _ensure_elixir_room_operations(conn) -> None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sect_elixir_room_operations (
+                operation_id TEXT PRIMARY KEY,
+                actor_id TEXT NOT NULL,
+                sect_id INTEGER NOT NULL,
+                from_level INTEGER NOT NULL,
+                to_level INTEGER NOT NULL,
+                stone_cost INTEGER NOT NULL,
+                scale_cost INTEGER NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """
@@ -378,6 +410,150 @@ class SectMembershipService:
                 conn.rollback()
                 raise
 
+    def upgrade_elixir_room(
+        self,
+        operation_id,
+        actor_id,
+        sect_id,
+        expected_level,
+        next_level,
+        stone_cost,
+        scale_cost,
+        *,
+        owner_position: int = 0,
+    ) -> SectElixirRoomUpgrade:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            raise ValueError("operation_id must not be empty")
+        actor_id = str(actor_id)
+        sect_id = int(sect_id)
+        expected_level = int(expected_level)
+        next_level = int(next_level)
+        stone_cost = max(int(stone_cost), 0)
+        scale_cost = max(int(scale_cost), 0)
+
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._ensure_elixir_room_operations(conn)
+                previous = conn.execute(
+                    "SELECT from_level, to_level, stone_cost, scale_cost "
+                    "FROM sect_elixir_room_operations WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if previous:
+                    conn.rollback()
+                    return SectElixirRoomUpgrade(
+                        "duplicate",
+                        actor_id,
+                        sect_id,
+                        int(previous[0]),
+                        int(previous[1]),
+                        int(previous[2]),
+                        int(previous[3]),
+                    )
+
+                actor = conn.execute(
+                    "SELECT sect_id, sect_position FROM user_xiuxian WHERE user_id=%s",
+                    (actor_id,),
+                ).fetchone()
+                if actor is None:
+                    conn.rollback()
+                    return SectElixirRoomUpgrade("actor_missing", actor_id, sect_id)
+                sect = conn.execute(
+                    "SELECT sect_owner, COALESCE(elixir_room_level, 0), "
+                    "COALESCE(sect_used_stone, 0), COALESCE(sect_scale, 0) "
+                    "FROM sects WHERE sect_id=%s",
+                    (sect_id,),
+                ).fetchone()
+                if sect is None:
+                    conn.rollback()
+                    return SectElixirRoomUpgrade("sect_missing", actor_id, sect_id)
+                if (
+                    actor[0] is None
+                    or int(actor[0]) != sect_id
+                    or int(actor[1]) != int(owner_position)
+                    or str(sect[0]) != actor_id
+                ):
+                    conn.rollback()
+                    return SectElixirRoomUpgrade("not_owner", actor_id, sect_id)
+                current_level = int(sect[1] or 0)
+                if current_level != expected_level or next_level != current_level + 1:
+                    conn.rollback()
+                    return SectElixirRoomUpgrade(
+                        "level_changed", actor_id, sect_id, current_level, next_level
+                    )
+                if int(sect[2] or 0) < stone_cost:
+                    conn.rollback()
+                    return SectElixirRoomUpgrade(
+                        "stone_insufficient",
+                        actor_id,
+                        sect_id,
+                        current_level,
+                        next_level,
+                        stone_cost,
+                        scale_cost,
+                    )
+                if int(sect[3] or 0) < scale_cost:
+                    conn.rollback()
+                    return SectElixirRoomUpgrade(
+                        "scale_insufficient",
+                        actor_id,
+                        sect_id,
+                        current_level,
+                        next_level,
+                        stone_cost,
+                        scale_cost,
+                    )
+
+                updated = conn.execute(
+                    "UPDATE sects SET sect_used_stone=sect_used_stone-%s, "
+                    "sect_scale=sect_scale-%s, elixir_room_level=%s "
+                    "WHERE sect_id=%s AND sect_owner=%s "
+                    "AND COALESCE(elixir_room_level, 0)=%s "
+                    "AND COALESCE(sect_used_stone, 0)>=%s "
+                    "AND COALESCE(sect_scale, 0)>=%s",
+                    (
+                        stone_cost,
+                        scale_cost,
+                        next_level,
+                        sect_id,
+                        actor_id,
+                        current_level,
+                        stone_cost,
+                        scale_cost,
+                    ),
+                )
+                if updated.rowcount != 1:
+                    raise db_backend.IntegrityError("sect elixir room changed concurrently")
+                conn.execute(
+                    "INSERT INTO sect_elixir_room_operations "
+                    "(operation_id, actor_id, sect_id, from_level, to_level, "
+                    "stone_cost, scale_cost) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    (
+                        operation_id,
+                        actor_id,
+                        sect_id,
+                        current_level,
+                        next_level,
+                        stone_cost,
+                        scale_cost,
+                    ),
+                )
+                conn.commit()
+                return SectElixirRoomUpgrade(
+                    "upgraded",
+                    actor_id,
+                    sect_id,
+                    current_level,
+                    next_level,
+                    stone_cost,
+                    scale_cost,
+                )
+            except Exception:
+                conn.rollback()
+                raise
+
     def upgrade_practice(
         self,
         operation_id,
@@ -506,6 +682,7 @@ class SectMembershipService:
 
 
 __all__ = [
+    "SectElixirRoomUpgrade",
     "SectFairylandUpgrade",
     "SectMembershipService",
     "SectOwnerTransfer",

@@ -469,6 +469,19 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("sect_fairyland_operations", service_source)
         self.assertIn("BEGIN IMMEDIATE", service_source)
 
+    def test_sect_elixir_room_upgrade_uses_transactional_service(self) -> None:
+        sect_root = SOURCE_ROOT / "xiuxian" / "xiuxian_sect"
+        command_source = (sect_root / "__init__.py").read_text(encoding="utf-8")
+        service_source = (sect_root / "membership_service.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "sect_membership_service.upgrade_elixir_room(", command_source
+        )
+        self.assertIn('"elixir_room_upgrade"', command_source)
+        self.assertIn("sect_elixir_room_operations", service_source)
+        self.assertIn("BEGIN IMMEDIATE", service_source)
+
     def test_auction_runtime_tables_use_main_trade_repository(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
         command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")

@@ -691,12 +691,22 @@ async def sect_elixir_room_make_(bot: Bot, event: GroupMessageEvent | PrivateMes
                 await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_elixir_room_make.finish()
             else:
-                msg = f"宗门消耗：{elixir_room_level_up_sect_scale_cost}建设度，{elixir_room_level_up_use_stone_cost}宗门灵石\n"
-                msg += f"成功升级宗门丹房，当前丹房为：{elixir_room_level_up_config[str(to_up_level)]['name']}!"
-                sql_message.update_sect_scale_and_used_stone(sect_id,
-                                                             sect_info['sect_used_stone'] - elixir_room_level_up_use_stone_cost,
-                                                             sect_info['sect_scale'] - elixir_room_level_up_sect_scale_cost)
-                sql_message.update_sect_elixir_room_level(sect_id, to_up_level)
+                result = sect_membership_service.upgrade_elixir_room(
+                    _sect_operation_id(event, "elixir_room_upgrade", sect_id),
+                    user_info["user_id"],
+                    sect_id,
+                    int(elixir_room_level),
+                    to_up_level,
+                    elixir_room_level_up_use_stone_cost,
+                    elixir_room_level_up_sect_scale_cost,
+                    owner_position=owner_position,
+                )
+                if not result.applied:
+                    if result.status == "duplicate":
+                        await handle_send(bot, event, "本次宗门丹房升级已经完成，请刷新宗门信息。")
+                    else:
+                        await handle_send(bot, event, "宗门资产或权限状态已经变化，请刷新后重试。")
+                    await sect_elixir_room_make.finish()
                 safe_log_economy_change(
                     user_id=user_info["user_id"],
                     sect_id=sect_id,
@@ -709,6 +719,8 @@ async def sect_elixir_room_make_(bot: Bot, event: GroupMessageEvent | PrivateMes
                         "to_level": to_up_level,
                     },
                 )
+                msg = f"宗门消耗：{elixir_room_level_up_sect_scale_cost}建设度，{elixir_room_level_up_use_stone_cost}宗门灵石\n"
+                msg += f"成功升级宗门丹房，当前丹房为：{elixir_room_level_up_config[str(to_up_level)]['name']}!"
                 await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
                 await sect_elixir_room_make.finish()
         else:
