@@ -157,6 +157,39 @@ class ContinuousTribulationServiceTests(unittest.TestCase):
         self.assertEqual(user[-1], 5)
         self.assertEqual(item, (5, 0, 0, 2))
 
+    def test_gold_pills_commit_cumulative_exp_gain_with_consumption(self) -> None:
+        result = self.apply(
+            "continuous-gold-failure",
+            final_exp=13310,
+            final_rate=11,
+            item_id=1999,
+            item_count=3,
+            exp_gain=3310,
+        )
+        self.assertEqual(result.status, "applied")
+        user, item = self.state()
+        self.assertEqual(user[1], 13310)
+        self.assertEqual(user[-1], 11)
+        self.assertEqual(item[0], 2)
+
+    def test_gold_success_uses_accumulated_exp_for_power_and_attributes(self) -> None:
+        result = self.apply(
+            "continuous-gold-success",
+            final_level="筑基境中期",
+            final_exp=13310,
+            final_rate=0,
+            attempts=3,
+            fail_count=2,
+            item_count=3,
+            exp_gain=3310,
+            root_rate=1.5,
+            level_spend=2.0,
+        )
+        self.assertEqual(result.status, "applied")
+        user, item = self.state()
+        self.assertEqual(user, ("筑基境中期", 13310, 6655, 13310, 1331, 39930, 0))
+        self.assertEqual(item[0], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

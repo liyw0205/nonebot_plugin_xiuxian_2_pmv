@@ -597,6 +597,7 @@ class SourceQualityTests(unittest.TestCase):
             "breakthrough_service.apply_continuous_tribulation(", command_source
         )
         self.assertIn('"continuous_tribulation"', command_source)
+        self.assertIn('"continuous_tribulation_gold"', command_source)
         self.assertIn("continuous_tribulation_operations", service_source)
 
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
