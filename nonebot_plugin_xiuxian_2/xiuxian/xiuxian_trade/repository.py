@@ -313,8 +313,12 @@ class TradeRepository:
         self,
         trade_database: str | Path,
         order_id,
+        goods_type,
     ) -> ExpiredGuishiOrderClear:
         order_id = str(order_id)
+        goods_type = str(goods_type).strip()
+        if not goods_type:
+            raise ValueError("goods_type must not be empty")
         trade_database = Path(trade_database)
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             conn.execute("ATTACH DATABASE %s AS guishi_trade", (str(trade_database),))
@@ -338,7 +342,6 @@ class TradeRepository:
                 user_id = str(order[0])
                 goods_id = int(order[1])
                 item_name = str(order[2])
-                goods_type = str(order[3])
                 unfilled_quantity = max(int(order[4]) - int(order[5]), 0)
                 if unfilled_quantity:
                     inventory = conn.execute(

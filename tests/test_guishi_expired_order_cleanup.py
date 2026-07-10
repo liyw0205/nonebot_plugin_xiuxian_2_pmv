@@ -76,13 +76,21 @@ class GuishiExpiredOrderCleanupTests(unittest.TestCase):
 
     def test_refund_and_order_removal_commit_together(self) -> None:
         result = self.repository.clear_expired_guishi_order(
-            self.trade_database, "order-1"
+            self.trade_database, "order-1", "药材"
         )
 
         self.assertEqual(result.status, "cleared")
         self.assertEqual(result.refunded_quantity, 6)
         self.assertEqual(self.inventory(), 6)
         self.assertFalse(self.order_exists())
+        with db_backend.connection(self.game_database) as conn:
+            self.assertEqual(
+                conn.execute(
+                    "SELECT goods_type FROM back WHERE user_id=%s AND goods_id=%s",
+                    ("seller", 1001),
+                ).fetchone()[0],
+                "药材",
+            )
 
     def test_existing_inventory_is_incremented(self) -> None:
         with db_backend.transaction(self.game_database) as conn:
@@ -92,7 +100,7 @@ class GuishiExpiredOrderCleanupTests(unittest.TestCase):
             )
 
         result = self.repository.clear_expired_guishi_order(
-            self.trade_database, "order-1"
+            self.trade_database, "order-1", "药材"
         )
 
         self.assertTrue(result.cleared)
@@ -107,7 +115,7 @@ class GuishiExpiredOrderCleanupTests(unittest.TestCase):
             )
 
         result = self.repository.clear_expired_guishi_order(
-            self.trade_database, "order-1"
+            self.trade_database, "order-1", "药材"
         )
 
         self.assertEqual(result.status, "inventory_full")
@@ -128,16 +136,18 @@ class GuishiExpiredOrderCleanupTests(unittest.TestCase):
 
         with self.assertRaises(db_backend.IntegrityError):
             self.repository.clear_expired_guishi_order(
-                self.trade_database, "order-1"
+                self.trade_database, "order-1", "药材"
             )
 
         self.assertIsNone(self.inventory())
         self.assertTrue(self.order_exists())
 
     def test_missing_order_is_idempotent(self) -> None:
-        self.repository.clear_expired_guishi_order(self.trade_database, "order-1")
+        self.repository.clear_expired_guishi_order(
+            self.trade_database, "order-1", "药材"
+        )
         result = self.repository.clear_expired_guishi_order(
-            self.trade_database, "order-1"
+            self.trade_database, "order-1", "药材"
         )
 
         self.assertEqual(result.status, "order_missing")
@@ -151,7 +161,7 @@ class GuishiExpiredOrderCleanupTests(unittest.TestCase):
             )
 
         result = self.repository.clear_expired_guishi_order(
-            self.trade_database, "order-1"
+            self.trade_database, "order-1", "药材"
         )
 
         self.assertEqual(result.status, "not_baitan")

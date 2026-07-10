@@ -2247,9 +2247,14 @@ async def clear_expired_baitan_orders_job():
     refund_item_summary = {}
     
     for order in all_baitan_orders:
+        _, item_info = items.get_data_by_item_name(order['item_name'])
+        if not item_info:
+            logger.warning(f"鬼市摆摊订单 {order['id']} 的物品不存在，已保留订单")
+            continue
         result = xianshi_repository.clear_expired_guishi_order(
             get_paths().trade_db,
             order['id'],
+            item_info['type'],
         )
         if result.status == "inventory_full":
             logger.warning(
