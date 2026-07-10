@@ -14,13 +14,12 @@ from .common import (
     delete_record,
     clear_records,
     load_data,
-    save_data,
     has_claimed,
-    mark_claimed,
     is_expired,
     is_not_started,
-    send_reward_to_user,
+    format_reward_delivery,
     create_item_message,
+    reward_claim_service,
 )
 
 config = DATA_CONFIG["兑换码"]
@@ -123,23 +122,36 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     usage_limit = redeem_info.get("usage_limit", 0)
-    used_count = redeem_info.get("used_count", 0)
+    legacy_used_count = redeem_info.get("used_count", 0)
+    used_count = reward_claim_service.get_used_count(
+        config["type_key"], code, legacy_used_count
+    )
 
     if usage_limit != 0 and used_count >= usage_limit:
         await handle_send(bot, event, "该兑换码已被使用完")
         return
 
-    if has_claimed(user_id, code, config):
+    if has_claimed(user_id, code, config) or reward_claim_service.has_claimed(
+        config["type_key"], code, user_id
+    ):
         await handle_send(bot, event, f"你已经使用过兑换码 {code}")
         return
 
-    reward_msg = send_reward_to_user(user_id, redeem_info["items"])
-
-    redeem_info["used_count"] = used_count + 1
-    data[code] = redeem_info
-    save_data(config, data)
-
-    mark_claimed(user_id, code, config)
+    result = reward_claim_service.claim(
+        config["type_key"],
+        code,
+        user_id,
+        redeem_info["items"],
+        usage_limit=usage_limit,
+        legacy_used_count=legacy_used_count,
+    )
+    if result.status == "duplicate":
+        await handle_send(bot, event, f"你已经使用过兑换码 {code}")
+        return
+    if result.status == "exhausted":
+        await handle_send(bot, event, "该兑换码已被使用完")
+        return
+    reward_msg = format_reward_delivery(redeem_info["items"])
 
     await handle_send(
         bot,
@@ -209,7 +221,9 @@ async def send_redeem_code_list(bot: Bot, event: MessageEvent):
         for code, info in codes:
             item_msg = create_item_message(info["items"])
             usage_limit = info.get("usage_limit", 0)
-            used_count = info.get("used_count", 0)
+            used_count = reward_claim_service.get_used_count(
+                config["type_key"], code, info.get("used_count", 0)
+            )
 
             usage_text = "无限次" if usage_limit == 0 else f"{usage_limit}次"
 

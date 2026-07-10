@@ -430,6 +430,14 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("reward_claims", service_source)
 
+    def test_redeem_code_uses_transactional_limited_claim(self) -> None:
+        compensation_root = SOURCE_ROOT / "xiuxian" / "xiuxian_compensation"
+        source = (compensation_root / "redeem_code.py").read_text(encoding="utf-8")
+        self.assertIn("reward_claim_service.claim(", source)
+        self.assertIn("usage_limit=usage_limit", source)
+        self.assertNotIn("send_reward_to_user(", source)
+        self.assertNotIn("mark_claimed(", source)
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")

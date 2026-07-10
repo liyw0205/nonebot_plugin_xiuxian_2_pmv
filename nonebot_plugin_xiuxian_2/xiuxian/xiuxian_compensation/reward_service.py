@@ -16,6 +16,7 @@ class RewardClaim:
     reward_type: str
     record_id: str
     user_id: str
+    used_count: int = 0
 
     @property
     def applied(self) -> bool:
@@ -47,6 +48,16 @@ class RewardClaimService:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS reward_claim_counters (
+                reward_type TEXT NOT NULL,
+                record_id TEXT NOT NULL,
+                baseline_count INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (reward_type, record_id)
+            )
+            """
+        )
 
     @staticmethod
     def _inventory_type(goods_type: str) -> str:
@@ -73,11 +84,16 @@ class RewardClaimService:
         record_id,
         user_id,
         reward_items: Iterable[dict[str, Any]],
+        *,
+        usage_limit: int = 0,
+        legacy_used_count: int = 0,
     ) -> RewardClaim:
         reward_type = str(reward_type)
         record_id = str(record_id)
         user_id = str(user_id)
         normalized_items = list(reward_items)
+        usage_limit = max(int(usage_limit or 0), 0)
+        legacy_used_count = max(int(legacy_used_count or 0), 0)
 
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             try:
@@ -95,8 +111,25 @@ class RewardClaimService:
                     (reward_type, record_id, user_id),
                 ).fetchone()
                 if previous:
+                    used_count = self._used_count(conn, reward_type, record_id)
                     conn.rollback()
-                    return RewardClaim("duplicate", reward_type, record_id, user_id)
+                    return RewardClaim(
+                        "duplicate", reward_type, record_id, user_id, used_count
+                    )
+
+                if usage_limit:
+                    conn.execute(
+                        "INSERT INTO reward_claim_counters "
+                        "(reward_type, record_id, baseline_count) VALUES (%s, %s, %s) "
+                        "ON CONFLICT (reward_type, record_id) DO NOTHING",
+                        (reward_type, record_id, legacy_used_count),
+                    )
+                    used_count = self._used_count(conn, reward_type, record_id)
+                    if used_count >= usage_limit:
+                        conn.rollback()
+                        return RewardClaim(
+                            "exhausted", reward_type, record_id, user_id, used_count
+                        )
 
                 now = datetime.now().isoformat(sep=" ", timespec="seconds")
                 for item in normalized_items:
@@ -153,7 +186,13 @@ class RewardClaimService:
                     (reward_type, record_id, user_id),
                 )
                 conn.commit()
-                return RewardClaim("claimed", reward_type, record_id, user_id)
+                return RewardClaim(
+                    "claimed",
+                    reward_type,
+                    record_id,
+                    user_id,
+                    self._used_count(conn, reward_type, record_id),
+                )
             except Exception:
                 conn.rollback()
                 raise
@@ -166,12 +205,56 @@ class RewardClaimService:
                     "DELETE FROM reward_claims WHERE reward_type=%s",
                     (str(reward_type),),
                 )
+                conn.execute(
+                    "DELETE FROM reward_claim_counters WHERE reward_type=%s",
+                    (str(reward_type),),
+                )
             else:
                 conn.execute(
                     "DELETE FROM reward_claims WHERE reward_type=%s AND record_id=%s",
                     (str(reward_type), str(record_id)),
                 )
+                conn.execute(
+                    "DELETE FROM reward_claim_counters "
+                    "WHERE reward_type=%s AND record_id=%s",
+                    (str(reward_type), str(record_id)),
+                )
             conn.commit()
+
+    @staticmethod
+    def _used_count(conn, reward_type: str, record_id: str) -> int:
+        row = conn.execute(
+            "SELECT COALESCE(c.baseline_count, 0) + COUNT(r.user_id) "
+            "FROM reward_claim_counters c "
+            "LEFT JOIN reward_claims r ON r.reward_type=c.reward_type "
+            "AND r.record_id=c.record_id "
+            "WHERE c.reward_type=%s AND c.record_id=%s "
+            "GROUP BY c.baseline_count",
+            (reward_type, record_id),
+        ).fetchone()
+        if row:
+            return int(row[0] or 0)
+        row = conn.execute(
+            "SELECT COUNT(*) FROM reward_claims "
+            "WHERE reward_type=%s AND record_id=%s",
+            (reward_type, record_id),
+        ).fetchone()
+        return int(row[0] or 0)
+
+    def get_used_count(self, reward_type, record_id, legacy_used_count: int = 0) -> int:
+        reward_type = str(reward_type)
+        record_id = str(record_id)
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            self._ensure_claims(conn)
+            conn.execute(
+                "INSERT INTO reward_claim_counters "
+                "(reward_type, record_id, baseline_count) VALUES (%s, %s, %s) "
+                "ON CONFLICT (reward_type, record_id) DO NOTHING",
+                (reward_type, record_id, max(int(legacy_used_count or 0), 0)),
+            )
+            used_count = self._used_count(conn, reward_type, record_id)
+            conn.commit()
+            return used_count
 
 
 __all__ = ["RewardClaim", "RewardClaimService"]

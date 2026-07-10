@@ -99,6 +99,21 @@ class RewardClaimServiceTests(unittest.TestCase):
         self.service.delete_claims("礼包")
         self.assertFalse(self.service.has_claimed("礼包", "G1", "u1"))
 
+    def test_limited_claim_honors_legacy_count_and_stops_at_limit(self) -> None:
+        first = self.service.claim(
+            "兑换码", "CODE", "u1", [], usage_limit=2, legacy_used_count=1
+        )
+        with db_backend.transaction(self.database) as conn:
+            conn.execute("INSERT INTO user_xiuxian VALUES (%s, %s)", ("u2", 100))
+        second = self.service.claim(
+            "兑换码", "CODE", "u2", [], usage_limit=2, legacy_used_count=1
+        )
+
+        self.assertEqual(first.status, "claimed")
+        self.assertEqual(first.used_count, 2)
+        self.assertEqual(second.status, "exhausted")
+        self.assertEqual(self.service.get_used_count("兑换码", "CODE", 1), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

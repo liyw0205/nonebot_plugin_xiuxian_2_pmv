@@ -514,15 +514,13 @@ def delete_record(record_id: str, config: Dict[str, Any]):
             del claimed_data[user_id]
 
     save_claimed_data(config, claimed_data)
-    if config["type_key"] != "兑换码":
-        reward_claim_service.delete_claims(config["type_key"], record_id)
+    reward_claim_service.delete_claims(config["type_key"], record_id)
 
 
 def clear_records(config: Dict[str, Any]):
     save_data(config, {})
     save_claimed_data(config, {})
-    if config["type_key"] != "兑换码":
-        reward_claim_service.delete_claims(config["type_key"])
+    reward_claim_service.delete_claims(config["type_key"])
     logger.info(f"已清空所有{config['type_key']}数据")
 
 
