@@ -5,7 +5,7 @@ flask
 httpx
 Markdown
 msgpack
-nonebot2
+nonebot2[fastapi]
 nonebot_plugin_apscheduler
 numpy
 Pillow
