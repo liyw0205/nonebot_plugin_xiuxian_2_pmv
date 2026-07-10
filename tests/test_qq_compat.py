@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import unittest
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -9,6 +10,7 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.qq_compat import (
+    InteractionAckRuntime,
     InteractionAcknowledger,
     from_nonebot_event,
     get_interaction_context,
@@ -155,6 +157,63 @@ class QQContextTests(unittest.IsolatedAsyncioTestCase):
             await acknowledger.ack(bot, event)
         self.assertTrue(await acknowledger.ack(bot, event))
         self.assertEqual(bot.calls, 2)
+
+    async def test_ack_runtime_completes_before_timeout_once(self) -> None:
+        event = FakeQQEvent(
+            event_type="INTERACTION_CREATE",
+            id="interaction-runtime-1",
+            content="",
+            data=SimpleNamespace(resolved=SimpleNamespace()),
+        )
+
+        class Bot:
+            def __init__(self):
+                self.calls = []
+
+            async def put_interaction(self, **kwargs):
+                self.calls.append(kwargs)
+
+        bot = Bot()
+        runtime = InteractionAckRuntime(InteractionAcknowledger())
+        self.assertTrue(await runtime.arm(bot, event, timeout=0.05))
+        self.assertTrue(await runtime.complete(bot, event, 0))
+        await asyncio.sleep(0.06)
+        self.assertEqual(
+            bot.calls,
+            [{"interaction_id": "interaction-runtime-1", "code": 0}],
+        )
+        self.assertEqual(await runtime.pending(), 0)
+
+    async def test_ack_runtime_timeout_fallback_is_exactly_once(self) -> None:
+        event = FakeQQEvent(
+            event_type="INTERACTION_CREATE",
+            id="interaction-runtime-2",
+            content="",
+            data=SimpleNamespace(resolved=SimpleNamespace()),
+        )
+
+        class Bot:
+            def __init__(self):
+                self.calls = []
+
+            async def put_interaction(self, **kwargs):
+                self.calls.append(kwargs)
+
+        bot = Bot()
+        runtime = InteractionAckRuntime(InteractionAcknowledger())
+        self.assertTrue(await runtime.arm(bot, event, timeout=0))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        self.assertFalse(await runtime.complete(bot, event, 1))
+        self.assertEqual(
+            bot.calls,
+            [{"interaction_id": "interaction-runtime-2", "code": 0}],
+        )
+
+    async def test_ack_runtime_ignores_unsupported_event(self) -> None:
+        runtime = InteractionAckRuntime(InteractionAcknowledger())
+        self.assertFalse(await runtime.arm(object(), object(), timeout=0))
+        self.assertFalse(await runtime.complete(object(), object(), 0))
 
 
 if __name__ == "__main__":

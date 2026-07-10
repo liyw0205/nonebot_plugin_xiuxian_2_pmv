@@ -218,6 +218,13 @@ class SourceQualityTests(unittest.TestCase):
         ]
         self.assertEqual(violations, [])
 
+    def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
+        entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
+        source = entrypoint.read_text(encoding="utf-8")
+        self.assertIn("@event_preprocessor\nasync def arm_qq_interaction_ack", source)
+        self.assertIn("@run_postprocessor\nasync def ack_failed_qq_interaction", source)
+        self.assertIn("@event_postprocessor\nasync def ack_completed_qq_interaction", source)
+
     def test_activity_rule_helpers_have_explicit_dependencies(self) -> None:
         activity_rules = SOURCE_ROOT / "xiuxian" / "xiuxian_activity" / "activity_rules.py"
         tree = ast.parse(

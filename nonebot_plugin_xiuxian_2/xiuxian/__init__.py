@@ -5,7 +5,12 @@ from collections import deque
 
 from nonebot.plugin import PluginMetadata
 from nonebot.log import logger
-from nonebot.message import event_preprocessor, IgnoredException
+from nonebot.message import (
+    IgnoredException,
+    event_postprocessor,
+    event_preprocessor,
+    run_postprocessor,
+)
 from .adapter_compat import (
     Bot,
     GroupMessageEvent,
@@ -24,7 +29,12 @@ from .xiuxian_utils.config import config as _config
 from .broadcast_manager import auto_patch_broadcast_for_event
 from . import runtime as _runtime  # noqa: F401
 from .infrastructure import QQEventDeduplicator
-from .qq_compat import is_qq_event
+from .qq_compat import (
+    arm_interaction_ack,
+    complete_interaction_ack,
+    is_interaction_event,
+    is_qq_event,
+)
 
 DRIVER = get_driver()
 _INTERNAL_PACKAGES = {"infrastructure", "messaging", "qq_compat"}
@@ -562,6 +572,24 @@ async def deduplicate_qq_event(bot, event):
                 f"event={getattr(event, 'event_id', None) or getattr(event, 'id', None)}"
             )
             raise IgnoredException("QQ 官方事件重复投递")
+
+
+@event_preprocessor
+async def arm_qq_interaction_ack(bot, event):
+    if is_interaction_event(event):
+        await arm_interaction_ack(bot, event)
+
+
+@run_postprocessor
+async def ack_failed_qq_interaction(bot, event, exception):
+    if is_interaction_event(event) and exception is not None:
+        await complete_interaction_ack(bot, event, 0)
+
+
+@event_postprocessor
+async def ack_completed_qq_interaction(bot, event):
+    if is_interaction_event(event):
+        await complete_interaction_ack(bot, event, 0)
 
 
 @event_preprocessor

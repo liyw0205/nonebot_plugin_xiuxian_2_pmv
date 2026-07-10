@@ -81,8 +81,76 @@ class InteractionAcknowledger:
 _ACKNOWLEDGER = InteractionAcknowledger()
 
 
+class InteractionAckRuntime:
+    """为事件处理生命周期提供超时兜底和完成确认。"""
+
+    def __init__(self, acknowledger: InteractionAcknowledger | None = None) -> None:
+        self._acknowledger = acknowledger or _ACKNOWLEDGER
+        self._timers: dict[str, asyncio.Task[None]] = {}
+
+    async def arm(
+        self,
+        bot: Any,
+        event: Any,
+        *,
+        timeout: float = 1.8,
+        fallback_code: int = 0,
+    ) -> bool:
+        if not is_interaction_event(event):
+            return False
+        context = get_interaction_context(event)
+        if not context.interaction_id or context.interaction_id in self._timers:
+            return False
+
+        async def _fallback() -> None:
+            try:
+                await asyncio.sleep(max(0.0, timeout))
+                await self._acknowledger.ack(bot, event, fallback_code)
+            finally:
+                current = self._timers.get(context.interaction_id)
+                if current is asyncio.current_task():
+                    self._timers.pop(context.interaction_id, None)
+
+        self._timers[context.interaction_id] = asyncio.create_task(_fallback())
+        return True
+
+    async def complete(self, bot: Any, event: Any, code: int = 0) -> bool:
+        if not is_interaction_event(event):
+            return False
+        context = get_interaction_context(event)
+        timer = self._timers.pop(context.interaction_id, None)
+        if timer is not None:
+            timer.cancel()
+        return await self._acknowledger.ack(bot, event, code)
+
+    async def pending(self) -> int:
+        return len(self._timers)
+
+
+_ACK_RUNTIME = InteractionAckRuntime()
+
+
 async def ack_interaction(bot: Any, event: Any, code: int = 0) -> bool:
     return await _ACKNOWLEDGER.ack(bot, event, code)
+
+
+async def arm_interaction_ack(
+    bot: Any,
+    event: Any,
+    *,
+    timeout: float = 1.8,
+    fallback_code: int = 0,
+) -> bool:
+    return await _ACK_RUNTIME.arm(
+        bot,
+        event,
+        timeout=timeout,
+        fallback_code=fallback_code,
+    )
+
+
+async def complete_interaction_ack(bot: Any, event: Any, code: int = 0) -> bool:
+    return await _ACK_RUNTIME.complete(bot, event, code)
 
 
 async def run_with_interaction_ack(
@@ -111,7 +179,10 @@ async def run_with_interaction_ack(
 
 __all__ = [
     "InteractionAcknowledger",
+    "InteractionAckRuntime",
     "ack_interaction",
+    "arm_interaction_ack",
+    "complete_interaction_ack",
     "get_interaction_context",
     "is_interaction_event",
     "run_with_interaction_ack",
