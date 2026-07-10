@@ -176,6 +176,18 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("max_instances=1", decorator)
         self.assertIn("misfire_grace_time=300", decorator)
 
+    def test_puppet_purchase_and_upgrade_use_transactional_service(self) -> None:
+        puppet_root = SOURCE_ROOT / "xiuxian" / "xiuxian_puppet"
+        command_source = (puppet_root / "__init__.py").read_text(encoding="utf-8")
+        service_source = (puppet_root / "operation_service.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("puppet_operation_service.purchase(", command_source)
+        self.assertIn("puppet_operation_service.upgrade(", command_source)
+        self.assertNotIn("sql_message.update_ls(user_id, cost, 2)", command_source)
+        self.assertIn("BEGIN IMMEDIATE", service_source)
+        self.assertIn("puppet_operations", service_source)
+
     def test_daily_dungeon_reset_scheduler_prevents_overlapping_runs(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_dungeon" / "__init__.py"

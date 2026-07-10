@@ -1,4 +1,5 @@
 import random
+import time
 from datetime import datetime
 from nonebot import require
 from nonebot.log import logger
@@ -12,12 +13,12 @@ from ..xiuxian_utils.lay_out import assign_bot
 from ..xiuxian_utils.utils import check_user, log_message, handle_send, send_help_message
 from ..xiuxian_utils.xiuxian2_handle import (
     get_player_info,
-    save_player_info,
     UserBuffDate,
     XiuxianDateManage,
     XIUXIAN_IMPART_BUFF,
 )
 from .harvest_service import PuppetHarvestReward, PuppetHarvestService
+from .operation_service import PuppetOperation, PuppetOperationService
 
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
@@ -26,6 +27,10 @@ puppet_harvest_service = PuppetHarvestService(
     get_paths().game_db,
     get_paths().player_db,
     max_goods_num=XiuConfig().max_goods_num,
+)
+puppet_operation_service = PuppetOperationService(
+    get_paths().game_db,
+    get_paths().player_db,
 )
 
 # 引入定时任务
@@ -68,6 +73,48 @@ PUPPET_CONFIG = {
         "next_level": None
     }
 }
+
+
+def _puppet_operation_id(event, action: str) -> str:
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"puppet:{event_id}:{action}"
+    return f"puppet:{action}:{time.time_ns()}"
+
+
+def _puppet_operation_message(result: PuppetOperation) -> str:
+    if result.status == "blessed_spot_missing":
+        return "道友还没有洞天福地呢，请发送洞天福地购买来购买吧~"
+    if result.status == "already_owned":
+        return "道友已经拥有灵田傀儡了！"
+    if result.status == "puppet_missing":
+        return "道友还没有灵田傀儡，请先购买！"
+    if result.status == "max_level":
+        return "道友的灵田傀儡已经达到最高等级！"
+    if result.status in {"stone_insufficient", "stone_changed"}:
+        if result.action == "purchase":
+            return f"购买灵田傀儡需要 {result.stone_cost} 灵石，道友的灵石不足！"
+        return (
+            f"升级到{result.current_level + 1}级需要 {result.stone_cost} 灵石，"
+            "道友的灵石不足！"
+        )
+    if result.status in {"player_info_missing", "puppet_level_changed"}:
+        return "灵田傀儡状态已变化，请稍后重试！"
+    if result.status == "user_missing":
+        return "未找到道友信息，请重新开始修仙后再试！"
+    if result.status == "invalid_puppet_level":
+        return "灵田傀儡等级异常，请联系管理员处理！"
+    if result.action == "purchase":
+        return (
+            "恭喜道友成功购买灵田傀儡！"
+            f"消耗灵石：{result.stone_cost}，当前傀儡等级：{result.current_level}级"
+        )
+    return (
+        f"恭喜道友成功将灵田傀儡升级到{result.current_level}级！"
+        f"消耗灵石：{result.stone_cost}"
+    )
 
 
 @puppet_help.handle()
@@ -173,32 +220,13 @@ async def buy_puppet_handler(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await handle_send(bot, event, msg)
         await buy_puppet.finish()
 
-    if int(user_info['blessed_spot_flag']) == 0:
-        msg = f"道友还没有洞天福地呢，请发送洞天福地购买来购买吧~"
-        await handle_send(bot, event, msg)
-        await buy_puppet.finish()
-
     user_id = user_info['user_id']
-    mix_elixir_info = get_player_info(user_id, "mix_elixir_info")
-    puppet_level = mix_elixir_info['灵田傀儡']
-
-    if puppet_level > 0:
-        msg = "道友已经拥有灵田傀儡了！"
-        await handle_send(bot, event, msg)
-        await buy_puppet.finish()
-
+    get_player_info(user_id, "mix_elixir_info")
     cost = 10000000
-    if user_info['stone'] < cost:
-        msg = f"购买灵田傀儡需要 {cost} 灵石，道友的灵石不足！"
-        await handle_send(bot, event, msg)
-        await buy_puppet.finish()
-
-    # 扣除灵石并更新傀儡
-    sql_message.update_ls(user_id, cost, 2)
-    mix_elixir_info['灵田傀儡'] = 1
-    save_player_info(user_id, mix_elixir_info, 'mix_elixir_info')
-
-    msg = f"恭喜道友成功购买灵田傀儡！消耗灵石：{cost}，当前傀儡等级：1级"
+    result = puppet_operation_service.purchase(
+        _puppet_operation_id(event, "purchase"), user_id, cost
+    )
+    msg = _puppet_operation_message(result)
     await handle_send(bot, event, msg)
     await buy_puppet.finish()
 
@@ -214,33 +242,14 @@ async def upgrade_puppet_handler(bot: Bot, event: GroupMessageEvent | PrivateMes
         await upgrade_puppet.finish()
 
     user_id = user_info['user_id']
-    mix_elixir_info = get_player_info(user_id, "mix_elixir_info")
-    puppet_level = mix_elixir_info['灵田傀儡']
-
-    if puppet_level == 0:
-        msg = "道友还没有灵田傀儡，请先购买！"
-        await handle_send(bot, event, msg)
-        await upgrade_puppet.finish()
-
-    if puppet_level >= 3:
-        msg = "道友的灵田傀儡已经达到最高等级！"
-        await handle_send(bot, event, msg)
-        await upgrade_puppet.finish()
-
-    next_puppet_level = puppet_level+ 1
-    cost = PUPPET_CONFIG[puppet_level]['upgrade_cost']
-
-    if user_info['stone'] < cost:
-        msg = f"升级到{next_puppet_level}级需要 {cost} 灵石，道友的灵石不足！"
-        await handle_send(bot, event, msg)
-        await upgrade_puppet.finish()
-
-    # 扣除灵石并升级
-    sql_message.update_ls(user_id, cost, 2)
-    mix_elixir_info['灵田傀儡'] = next_puppet_level
-    save_player_info(user_id, mix_elixir_info, 'mix_elixir_info')
-
-    msg = f"恭喜道友成功将灵田傀儡升级到{next_puppet_level}级！消耗灵石：{cost}"
+    get_player_info(user_id, "mix_elixir_info")
+    result = puppet_operation_service.upgrade(
+        _puppet_operation_id(event, "upgrade"),
+        user_id,
+        {level: config["upgrade_cost"] for level, config in PUPPET_CONFIG.items()},
+        max_level=max(PUPPET_CONFIG),
+    )
+    msg = _puppet_operation_message(result)
     await handle_send(bot, event, msg)
     await upgrade_puppet.finish()
 
