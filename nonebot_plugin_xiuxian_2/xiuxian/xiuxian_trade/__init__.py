@@ -2856,8 +2856,15 @@ async def auction_unlock_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     await handle_send(bot, event, msg, md_type="拍卖", k1="封闭", v1="封闭拍卖", k2="信息", v2="拍卖信息", k3="帮助", v3="拍卖帮助")
     await auction_unlock.finish()
 
-@scheduler.scheduled_job("cron", hour=auction_config.get_auction_schedule()["start_hour"], 
-                        minute=auction_config.get_auction_schedule()["start_minute"])
+@scheduler.scheduled_job(
+    "cron",
+    hour=auction_config.get_auction_schedule()["start_hour"],
+    minute=auction_config.get_auction_schedule()["start_minute"],
+    id="auto_start_auction",
+    coalesce=True,
+    max_instances=1,
+    misfire_grace_time=300,
+)
 async def auto_start_auction_job():
     """根据配置时间自动开启拍卖"""
     return await run_auction_job("auto_start", _auto_start_auction_job_impl)
@@ -2891,7 +2898,14 @@ async def _auto_start_auction_job_impl():
     else:
         logger.warning("自动开启拍卖失败，可能因为没有物品可供拍卖。")
 
-@scheduler.scheduled_job("interval", minutes=5, id="check_auction_end")
+@scheduler.scheduled_job(
+    "interval",
+    minutes=5,
+    id="check_auction_end",
+    coalesce=True,
+    max_instances=1,
+    misfire_grace_time=300,
+)
 async def check_auction_end_job():
     """每 5 分钟看一场是否该收尾。"""
     return await run_auction_job("end_check", _check_auction_end_job_impl)
