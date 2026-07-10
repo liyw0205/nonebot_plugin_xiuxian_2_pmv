@@ -1,8 +1,12 @@
 import random
-import json
-import os
 from pathlib import Path
 from datetime import datetime
+
+from ..xiuxian_utils.json_store import (
+    load_json_file,
+    save_json_file,
+    update_json_file,
+)
 
 # 幻境问题
 DEFAULT_QUESTIONS = [
@@ -402,107 +406,113 @@ class IllusionData:
     DATA_PATH = Path(__file__).parent / "illusion"
     STATS_FILE = DATA_PATH / "illusion_stats.json"  # 改名为stats文件
     DAILY_RESET_HOUR = 8  # 每天8点重置
+
+    @classmethod
+    def _default_user_data(cls):
+        question_count = len(DEFAULT_QUESTIONS)
+        return {
+            "last_participate": None,
+            "today_choice": None,
+            "question_index": random.randint(0, question_count - 1)
+            if question_count > 0
+            else None,
+        }
+
+    @classmethod
+    def _default_stats(cls):
+        return {
+            "question_stats": [
+                [0] * len(question["options"]) for question in DEFAULT_QUESTIONS
+            ]
+        }
+
+    @classmethod
+    def _normalize_stats(cls, data):
+        default = cls._default_stats()
+        rows = data.get("question_stats") if isinstance(data, dict) else None
+        if not isinstance(rows, list) or len(rows) != len(DEFAULT_QUESTIONS):
+            return default
+
+        normalized = []
+        for index, question in enumerate(DEFAULT_QUESTIONS):
+            row = rows[index]
+            expected_length = len(question["options"])
+            if (
+                not isinstance(row, list)
+                or len(row) != expected_length
+                or any(not isinstance(value, int) or value < 0 for value in row)
+            ):
+                normalized.append([0] * expected_length)
+            else:
+                normalized.append(list(row))
+        return {"question_stats": normalized}
     
     @classmethod
     def get_or_create_user_illusion_info(cls, user_id):
         """获取或创建用户幻境信息"""
         user_id = str(user_id)
         file_path = cls.DATA_PATH / f"{user_id}.json"
-        
-        question_count = len(DEFAULT_QUESTIONS)  # 从硬编码的问题列表中获取数量
-        
-        default_data = {
-            "last_participate": None,  # 上次参与时间
-            "today_choice": None,      # 今日选择
-            "question_index": random.randint(0, question_count - 1) if question_count > 0 else None  # 随机分配问题索引
-        }
-        
-        if not file_path.exists():
-            os.makedirs(cls.DATA_PATH, exist_ok=True)
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(default_data, f, ensure_ascii=False, indent=4)
-            return default_data
-        
-        with open(file_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        
-        # 检查是否需要重置(每天8点)
-        if cls._check_reset(data.get("last_participate")):
-            data["today_choice"] = None
-            data["question_index"] = random.randint(0, question_count - 1) if question_count > 0 else None  # 重置时重新分配问题
-            data["last_participate"] = None
-            cls.save_user_illusion_info(user_id, data)
-        
-        # 确保所有字段都存在
-        for key in default_data:
-            if key not in data:
-                data[key] = default_data[key]
-        
-        # 如果问题索引不存在或无效，分配一个
-        if data["question_index"] is None or data["question_index"] >= question_count:
-            data["question_index"] = random.randint(0, question_count - 1) if question_count > 0 else None
-            cls.save_user_illusion_info(user_id, data)
-        
-        return data
+        default_data = cls._default_user_data()
+        question_count = len(DEFAULT_QUESTIONS)
+
+        def normalize(data):
+            if cls._check_reset(data.get("last_participate")):
+                data = dict(default_data)
+            else:
+                for key, value in default_data.items():
+                    data.setdefault(key, value)
+
+            question_index = data.get("question_index")
+            if (
+                not isinstance(question_index, int)
+                or question_index < 0
+                or question_index >= question_count
+            ):
+                data["question_index"] = default_data["question_index"]
+            return data
+
+        return update_json_file(
+            file_path,
+            default_data,
+            normalize,
+            expected_type=dict,
+        )
     
     @classmethod
     def save_user_illusion_info(cls, user_id, data):
         """保存用户幻境信息"""
         user_id = str(user_id)
         file_path = cls.DATA_PATH / f"{user_id}.json"
-        
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
+        save_json_file(file_path, data)
     
     @classmethod
     def get_stats(cls):
         """获取统计数据"""
-        if not cls.STATS_FILE.exists():
-            # 如果文件不存在，创建默认的统计数据
-            default_stats = {"question_stats": [[0] * len(question["options"]) for question in DEFAULT_QUESTIONS]}
-            os.makedirs(cls.STATS_FILE.parent, exist_ok=True)
-            with open(cls.STATS_FILE, "w", encoding="utf-8") as f:
-                json.dump(default_stats, f, ensure_ascii=False, indent=4)
-            return default_stats
-        
-        with open(cls.STATS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            
-            # 确保数据结构正确
-            if "question_stats" not in data or not isinstance(data["question_stats"], list):
-                data = {"question_stats": [[0] * len(question["options"]) for question in DEFAULT_QUESTIONS]}
-                with open(cls.STATS_FILE, "w", encoding="utf-8") as f:
-                    json.dump(data, f, ensure_ascii=False, indent=4)
-                return data
-            
-            # 检查统计数据长度是否与问题数量匹配
-            if len(data["question_stats"]) != len(DEFAULT_QUESTIONS):
-                # 如果不匹配，重新初始化
-                data = {"question_stats": [[0] * len(question["options"]) for question in DEFAULT_QUESTIONS]}
-                with open(cls.STATS_FILE, "w", encoding="utf-8") as f:
-                    json.dump(data, f, ensure_ascii=False, indent=4)
-                return data
-            
-            # 检查每个问题的选项数量是否匹配
-            for i, question in enumerate(DEFAULT_QUESTIONS):
-                if len(data["question_stats"][i]) != len(question["options"]):
-                    data["question_stats"][i] = [0] * len(question["options"])
-                    with open(cls.STATS_FILE, "w", encoding="utf-8") as f:
-                        json.dump(data, f, ensure_ascii=False, indent=4)
-                    return data
-            
-            return data
+        default_stats = cls._default_stats()
+        return update_json_file(
+            cls.STATS_FILE,
+            default_stats,
+            cls._normalize_stats,
+            expected_type=dict,
+        )
     
     @classmethod
     def update_question_stats(cls, question_index, choice_index):
         """更新问题统计数据"""
-        stats = cls.get_stats()
-        if 0 <= question_index < len(stats["question_stats"]):
-            question_stats = stats["question_stats"][question_index]
-            if 0 <= choice_index < len(question_stats):
-                question_stats[choice_index] += 1
-                with open(cls.STATS_FILE, "w", encoding="utf-8") as f:
-                    json.dump(stats, f, ensure_ascii=False, indent=4)
+        def increment(data):
+            stats = cls._normalize_stats(data)
+            if 0 <= question_index < len(stats["question_stats"]):
+                question_stats = stats["question_stats"][question_index]
+                if 0 <= choice_index < len(question_stats):
+                    question_stats[choice_index] += 1
+            return stats
+
+        update_json_file(
+            cls.STATS_FILE,
+            cls._default_stats(),
+            increment,
+            expected_type=dict,
+        )
     
     @classmethod
     def _check_reset(cls, last_participate_str):
@@ -524,6 +534,8 @@ class IllusionData:
     def reset_player_data_only(cls):
         """仅重置玩家数据（每日定时任务调用）"""
         for file in cls.DATA_PATH.glob("*.json"):
+            if file == cls.STATS_FILE:
+                continue
             try:
                 # 直接删除玩家数据文件，下次访问时会自动创建
                 file.unlink()
@@ -539,5 +551,4 @@ class IllusionData:
         # 重置问题统计数据
         stats = cls.get_stats()
         stats["question_stats"] = [[0] * len(question["options"]) for question in DEFAULT_QUESTIONS]
-        with open(cls.STATS_FILE, "w", encoding="utf-8") as f:
-            json.dump(stats, f, ensure_ascii=False, indent=4)
+        save_json_file(cls.STATS_FILE, stats)

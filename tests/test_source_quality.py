@@ -346,6 +346,17 @@ class SourceQualityTests(unittest.TestCase):
                 violations.append(f"{relative}:{direct_calls}")
         self.assertEqual(violations, [])
 
+    def test_illusion_state_uses_central_json_store(self) -> None:
+        source = (
+            SOURCE_ROOT
+            / "xiuxian"
+            / "xiuxian_Illusion"
+            / "IllusionData.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("json.load(", source)
+        self.assertNotIn("json.dump(", source)
+        self.assertIn("update_json_file(", source)
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")
