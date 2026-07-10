@@ -4,10 +4,10 @@ import time
 from io import BytesIO
 from pathlib import Path
 
-import requests
 from nonebot.log import logger
 
 from ..xiuxian_config import XiuConfig
+from .http_proxy import http_client
 
 _REAL_ID_CACHE_TTL = 600
 _REAL_ID_NEGATIVE_CACHE_TTL = 30
@@ -36,9 +36,11 @@ def get_real_id(id_str, timeout: float = 1.5):
 
     url = f"{base_url}/getid"
     try:
-        response = requests.get(url, params={"type": 2, "id": id_str}, timeout=timeout)
-        response.raise_for_status()
-        data = response.json()
+        data = http_client.get_json(
+            url,
+            params={"type": 2, "id": id_str},
+            timeout=timeout,
+        )
         real_id = data.get("id")
         real_id = str(real_id) if real_id else None
         ttl = _REAL_ID_CACHE_TTL if real_id else _REAL_ID_NEGATIVE_CACHE_TTL
@@ -77,7 +79,14 @@ def call_upload_api(image_data):
             return False
 
         data = {"channel_id": XiuConfig().channel_id}
-        response = requests.post(url, files=files, data=data, timeout=10)
+        response = http_client.request(
+            "POST",
+            url,
+            files=files,
+            data=data,
+            timeout=10,
+            check_status=False,
+        )
 
         if response.status_code == 200:
             res_json = response.json()

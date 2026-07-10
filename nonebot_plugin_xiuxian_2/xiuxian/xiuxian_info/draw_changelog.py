@@ -1,10 +1,10 @@
 import re
-import requests
 from io import BytesIO
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from nonebot.log import logger
 from ...paths import get_paths
+from ..xiuxian_utils.http_proxy import http_client
 from datetime import datetime, timedelta
 
 API_URL = "https://api.github.com/repos/liyw0205/nonebot_plugin_xiuxian_2_pmv/commits"
@@ -24,10 +24,14 @@ def get_commits(page: int, per_page: int = ITEMS_PER_PAGE):
     }
 
     try:
-        response = requests.get(API_URL, params=params, headers=headers, timeout=15)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
+        return http_client.get_json(
+            API_URL,
+            params=params,
+            headers=headers,
+            timeout=15,
+            expected_type=list,
+        )
+    except Exception as e:
         logger.error(f"从 GitHub 获取 Commits 失败: {e}")
         return None
 

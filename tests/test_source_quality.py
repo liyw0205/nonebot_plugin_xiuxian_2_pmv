@@ -278,6 +278,24 @@ class SourceQualityTests(unittest.TestCase):
         ]
         self.assertEqual(violations, [])
 
+    def test_runtime_http_calls_use_central_client_or_documented_protocols(self) -> None:
+        checked = (
+            "xiuxian_admin/empty_fallback.py",
+            "xiuxian_entertainment/mod/anime_reaction.py",
+            "xiuxian_entertainment/mod/music_utils.py",
+            "xiuxian_info/draw_changelog.py",
+            "xiuxian_utils/external_api.py",
+            "xiuxian_web/core.py",
+            "xiuxian_web/messages.py",
+        )
+        forbidden = ("requests.get(", "requests.post(", "httpx.AsyncClient(", "aiohttp.ClientSession(")
+        violations = []
+        for relative in checked:
+            source = (SOURCE_ROOT / "xiuxian" / relative).read_text(encoding="utf-8")
+            if any(token in source for token in forbidden):
+                violations.append(relative)
+        self.assertEqual(violations, [])
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")

@@ -1,6 +1,5 @@
 import asyncio
 
-import requests
 from nonebot.adapters import Event as BaseEvent
 from nonebot.log import logger
 from nonebot.matcher import Matcher
@@ -11,6 +10,7 @@ from ..adapter_compat import Bot, GroupMessageEvent, PrivateMessageEvent
 from ..on_compat import on_message
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.lay_out import Cooldown
+from ..xiuxian_utils.http_proxy import http_client
 from ..xiuxian_utils.utils import handle_pic_msg_send, handle_send
 
 
@@ -23,13 +23,7 @@ def get_random_acg_pic_url(timeout: int = 5) -> str | None:
     }
 
     try:
-        resp = requests.get(api_url, params=params, timeout=timeout)
-        resp.raise_for_status()
-
-        data = resp.json()
-        if not isinstance(data, dict):
-            logger.warning("默认回复图片接口返回格式异常：不是 JSON 对象")
-            return None
+        data = http_client.get_json(api_url, params=params, timeout=timeout)
 
         if str(data.get("code")) != "200":
             logger.warning(

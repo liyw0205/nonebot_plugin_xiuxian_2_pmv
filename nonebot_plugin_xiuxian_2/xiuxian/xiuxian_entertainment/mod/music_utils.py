@@ -2,11 +2,11 @@ import json
 import time
 from typing import Any, Optional
 
-import requests
 from nonebot.log import logger
 
 from ...adapter_compat import Bot
 from ...messaging.delivery import delivery_service
+from ...xiuxian_utils.http_proxy import http_client
 from ...xiuxian_config import XiuConfig
 from ...xiuxian_utils.utils import build_md_command_link, escape_markdown_text
 
@@ -149,7 +149,8 @@ def search_music(keyword: str, platform: Optional[str] = None, limit: Optional[i
         "Referer": "https://music.txqq.pro",
     }
 
-    resp = requests.post(
+    resp = http_client.request(
+        "POST",
         api_base,
         data={
             "input": keyword,
@@ -160,8 +161,6 @@ def search_music(keyword: str, platform: Optional[str] = None, limit: Optional[i
         headers=headers,
         timeout=15
     )
-    resp.raise_for_status()
-
     text = (resp.text or "").strip()
     if not text:
         raise ValueError("接口返回为空")

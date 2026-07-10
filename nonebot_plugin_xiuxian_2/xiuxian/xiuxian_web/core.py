@@ -17,7 +17,6 @@ from enum import Enum
 from werkzeug.utils import secure_filename
 from io import BytesIO
 from PIL import Image
-import requests
 
 IS_WINDOWS = platform.system() == "Windows"
 
@@ -532,27 +531,6 @@ WEB_UPLOAD_CACHE = get_paths().cache / "web_uploads"
 
 ALLOWED_MEDIA_TYPES = {"image", "video", "audio", "file"}
 
-
-def get_image_size_from_input(media_input):
-    try:
-        if isinstance(media_input, (str,)):
-            if media_input.startswith("http://") or media_input.startswith("https://"):
-                resp = requests.get(media_input, timeout=10)
-                resp.raise_for_status()
-                img = Image.open(BytesIO(resp.content))
-                return img.size
-            else:
-                img = Image.open(media_input)
-                return img.size
-
-        elif isinstance(media_input, Path):
-            img = Image.open(media_input)
-            return img.size
-
-    except Exception:
-        pass
-
-    return (1280, 720)
 
 def build_web_message_segment(bot, *, content: str, send_mode: str = "plain",
                               media_type: str = "", media_input=None,

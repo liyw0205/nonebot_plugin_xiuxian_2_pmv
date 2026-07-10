@@ -31,7 +31,6 @@ from .core import (
     redirect,
     render_template,
     request,
-    requests,
     run_async,
     save_uploaded_media,
     session,
@@ -40,6 +39,7 @@ from .core import (
 from ..broadcast_manager import format_broadcast_status, start_broadcast
 from ..messaging import SendRequest, delivery_service
 from ..xiuxian_utils import message_db as message_db_config
+from ..xiuxian_utils.http_proxy import http_client
 
 
 def _parse_message_config_int(data, key: str, minimum: int, maximum: int) -> int:
@@ -1449,7 +1449,8 @@ def api_messages_media_proxy():
         abort(400)
 
     try:
-        resp = requests.get(
+        resp = http_client.request(
+            "GET",
             url,
             headers={
                 "User-Agent": (
