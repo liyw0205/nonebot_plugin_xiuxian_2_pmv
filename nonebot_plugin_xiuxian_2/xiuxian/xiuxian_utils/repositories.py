@@ -150,6 +150,57 @@ class EconomyRepository:
             )
         return success
 
+    def transfer_stones(
+        self,
+        operation_id: str,
+        sender_id: str,
+        recipient_id: str,
+        amount: int,
+    ) -> bool:
+        """Atomically transfer stones; repeated operation IDs are no-ops."""
+        amount = abs(int(amount))
+        if amount <= 0 or str(sender_id) == str(recipient_id):
+            return False
+
+        with self._connection() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS economy_operations (
+                    operation_id TEXT PRIMARY KEY,
+                    operation_type TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            cur.execute(
+                "SELECT operation_id FROM economy_operations WHERE operation_id=%s",
+                (operation_id,),
+            )
+            if cur.fetchone() is not None:
+                return False
+            cur.execute(
+                """
+                UPDATE user_xiuxian SET stone=stone-%s
+                WHERE user_id=%s AND COALESCE(stone, 0) >= %s
+                """,
+                (amount, sender_id, amount),
+            )
+            if cur.rowcount != 1:
+                return False
+            cur.execute(
+                "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                (amount, recipient_id),
+            )
+            if cur.rowcount != 1:
+                raise ValueError("recipient does not exist")
+            cur.execute(
+                "INSERT INTO economy_operations (operation_id, operation_type) VALUES (%s, %s)",
+                (operation_id, "stone_transfer"),
+            )
+            conn.commit()
+        return True
+
     def add_experience(self, user_id, amount) -> None:
         self._update_experience(user_id, amount, subtract=False)
 

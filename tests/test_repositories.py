@@ -42,6 +42,10 @@ class RepositoryTests(unittest.TestCase):
                 "INSERT INTO user_xiuxian VALUES (%s, %s, %s, %s)",
                 ("1001", "测试道友", 100, 50),
             )
+            conn.execute(
+                "INSERT INTO user_xiuxian VALUES (%s, %s, %s, %s)",
+                ("1002", "另一位道友", 20, 10),
+            )
         self.logs: list[dict] = []
 
     def tearDown(self) -> None:
@@ -105,6 +109,39 @@ class RepositoryTests(unittest.TestCase):
         )
         self.assertEqual(tuple(row), (80, 0))
         self.assertEqual(self.logs[0]["stone_delta"], 30)
+
+    def test_stone_transfer_is_atomic_and_idempotent(self) -> None:
+        repository = repositories.EconomyRepository(
+            self.connection,
+            int,
+            self.log_change,
+        )
+
+        self.assertTrue(repository.transfer_stones("trade-1", "1001", "1002", 40))
+        self.assertFalse(repository.transfer_stones("trade-1", "1001", "1002", 40))
+        self.assertFalse(repository.transfer_stones("trade-2", "1001", "1002", 1000))
+
+        sender = self.read_query(
+            "SELECT stone FROM user_xiuxian WHERE user_id=%s", ("1001",), one=True
+        )
+        recipient = self.read_query(
+            "SELECT stone FROM user_xiuxian WHERE user_id=%s", ("1002",), one=True
+        )
+        self.assertEqual(sender[0], 60)
+        self.assertEqual(recipient[0], 60)
+
+    def test_stone_transfer_rolls_back_when_recipient_is_missing(self) -> None:
+        repository = repositories.EconomyRepository(
+            self.connection,
+            int,
+            self.log_change,
+        )
+        with self.assertRaises(ValueError):
+            repository.transfer_stones("trade-missing", "1001", "missing", 40)
+        sender = self.read_query(
+            "SELECT stone FROM user_xiuxian WHERE user_id=%s", ("1001",), one=True
+        )
+        self.assertEqual(sender[0], 100)
 
 
 if __name__ == "__main__":

@@ -1210,6 +1210,15 @@ class XiuxianDateManage:
         """更新灵石并返回是否成功；扣减时要求余额足够。"""
         return self.economy.try_update_stones(user_id, price, key, log_context)
 
+    def transfer_ls(self, operation_id, sender_id, recipient_id, amount):
+        """原子转移灵石；重复操作 ID 不会重复扣款或入账。"""
+        return self.economy.transfer_stones(
+            operation_id,
+            sender_id,
+            recipient_id,
+            amount,
+        )
+
     def update_exp(self, user_id, exp):
         """增加修为"""
         self.economy.add_experience(user_id, exp)
