@@ -136,7 +136,9 @@ async def set_boss_generation():
                 trigger='interval',
                 minutes=total_minutes,
                 id="generate_all_bosses",
-                misfire_grace_time=60
+                coalesce=True,
+                max_instances=1,
+                misfire_grace_time=60,
             )
             logger.opt(colors=True).success(f"<green>已开启自动生成全部世界BOSS定时任务，每{hours}小时{minutes}分钟执行一次！</green>")
         else:
