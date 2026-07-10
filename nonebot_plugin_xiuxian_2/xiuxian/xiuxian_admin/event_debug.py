@@ -10,6 +10,7 @@ from nonebot.log import logger
 from nonebot.permission import SUPERUSER
 
 from ..adapter_compat import Bot, GroupMessageEvent, MessageSegment, PrivateMessageEvent
+from ..messaging.delivery import delivery_service
 from ..on_compat import on_command
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.lay_out import Cooldown, assign_bot
@@ -409,13 +410,13 @@ async def _send_event_info_by_config(
                 f"{safe_raw}\r"
                 f"```"
             )
-            await bot.send(event=event, message=MessageSegment.markdown(bot, plain))
+            await delivery_service.reply(bot, event, MessageSegment.markdown(bot, plain))
             return
         except Exception as e:
             logger.warning(f"消息信息原生Markdown发送失败，降级纯文本: {e}")
 
     plain = f"{basic_text}\n\n【原始信息】\n{raw_json}"
     try:
-        await bot.send(event=event, message=plain)
+        await delivery_service.reply(bot, event, plain)
     except Exception:
         await handle_send(bot, event, plain)

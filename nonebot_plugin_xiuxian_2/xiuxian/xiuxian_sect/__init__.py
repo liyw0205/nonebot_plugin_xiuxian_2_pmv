@@ -7,6 +7,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
 )
 from nonebot import require
 from ..on_compat import on_command
+from ..messaging.delivery import delivery_service
 from nonebot.log import logger
 from ..adapter_compat import (
     Bot,
@@ -1580,7 +1581,7 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                     md_lines.append("\n已是最后一页")
 
                 md_msg = MessageSegment.markdown(bot, "\n".join(md_lines), button_id="")
-                await bot.send(event=event, message=md_msg)
+                await delivery_service.reply(bot, event, md_msg)
                 await sect_users.finish()
 
             # ===== 文本模式（回退）=====

@@ -1,4 +1,5 @@
 from ..command import *
+from ...messaging.delivery import delivery_service
 
 steam_plus_one_cmd = on_command("Steam喜加一", aliases={"喜加一"}, priority=5, block=True)
 
@@ -152,7 +153,7 @@ async def steam_plus_one_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 config.markdown_id,
                 param
             )
-            await bot.send(event=event, message=md_msg)
+            await delivery_service.reply(bot, event, md_msg)
         except Exception as e:
             logger.warning(f"Steam喜加一 模板MD发送失败：{e}")
         await steam_plus_one_cmd.finish()

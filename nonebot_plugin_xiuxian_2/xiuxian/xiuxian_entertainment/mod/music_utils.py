@@ -6,6 +6,7 @@ import requests
 from nonebot.log import logger
 
 from ...adapter_compat import Bot
+from ...messaging.delivery import delivery_service
 from ...xiuxian_config import XiuConfig
 from ...xiuxian_utils.utils import build_md_command_link, escape_markdown_text
 
@@ -329,7 +330,7 @@ async def send_song_rich(bot: Bot, event, song: dict) -> tuple[bool, str]:
 
     # ===== 3) 普通文本 =====
     try:
-        await bot.send(event=event, message=text_msg)
+        await delivery_service.reply(bot, event, text_msg)
 
         if audio_url:
             await handle_audio_send(bot, event, audio_url)

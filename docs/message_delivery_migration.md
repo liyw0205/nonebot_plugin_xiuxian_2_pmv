@@ -10,14 +10,9 @@
 | `messaging/delivery.py` | 唯一投递门面实现 | 保留 |
 | `xiuxian_utils/utils.py` | OneBot 合并转发专用 API | 建立 forward 专用门面后 |
 | `broadcast_manager.py` | OneBot 合并转发和普通广播专用 API | 建立 forward 专用门面后 |
-| `xiuxian_admin/` | 管理员 Adapter/Markdown 诊断命令 | 诊断 Presenter 迁移后 |
-| `xiuxian_back/accessory.py` | 旧 Markdown 响应 | Presenter 迁移后 |
-| `xiuxian_boss/__init__.py` | 旧图片与管理响应 | Presenter 迁移后 |
-| `xiuxian_entertainment/` | 有界媒体发送运行时 | Q6 媒体门面接入后 |
-| `xiuxian_pet/__init__.py` | 旧 Markdown 响应 | Presenter 迁移后 |
-| `xiuxian_sect/__init__.py` | 旧 Markdown 响应 | Presenter 迁移后 |
-| `xiuxian_utils/lay_out.py` | Matcher 前置提示 | 入口提示迁移后 |
-| `xiuxian/__init__.py` | 全局过载提示 | 入口提示迁移后 |
+| `adapter_message_actions.py` | 撤回专用 endpoint | Adapter 提供统一撤回接口后 |
+| `qq_compat/interaction.py` | QQ interaction ACK 专用 endpoint | QQ Adapter 契约统一后 |
 
-源码质量测试会阻止新的直接发送文件进入该清单之外。每迁移一个路径，应同时缩小
-测试允许集合和本表。
+普通回复、主动群发、主动私聊和媒体响应已统一进入 `MessageDeliveryService`。源码质量测试
+只允许投递后端和 Adapter compatibility 实现直接调用发送方法；合并转发、广播、撤回和
+interaction ACK 保持明确的平台专用门面。

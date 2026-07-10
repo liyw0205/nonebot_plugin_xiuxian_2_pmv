@@ -9,6 +9,7 @@ import os
 from nonebot.rule import Rule
 from nonebot import get_bots, get_bot, require
 from ..on_compat import on_command
+from ..messaging.delivery import delivery_service
 from nonebot.params import CommandArg
 from ..adapter_compat import (
     Bot,
@@ -18,7 +19,6 @@ from ..adapter_compat import (
     PrivateMessageEvent,
     MessageSegment
 )
-from ..adapter_message_sender import send_group_message
 from ..xiuxian_utils.lay_out import assign_bot, put_bot, layout_bot_dict, Cooldown
 from ..xiuxian_utils.data_source import jsondata
 from nonebot.permission import SUPERUSER
@@ -158,7 +158,7 @@ async def generate_all_bosses_task():
     # 只向已开启通知的群发送消息
     for notify_group_id in groups:
         bot = get_bot()
-        await send_group_message(bot, group_id=notify_group_id, message=msg)
+        await delivery_service.send_to_group(bot, notify_group_id, msg)
 
 @DRIVER.on_shutdown
 async def save_boss_():
@@ -910,7 +910,7 @@ async def boss_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         else:
             boss_name = boss["name"]
         pic = await get_msg_pic(f"@{event.sender.nickname}\n" + msg, boss_name=boss_name)
-        await bot.send(event=event, message=MessageSegment.image(bot, pic))
+        await delivery_service.reply(bot, event, MessageSegment.image(bot, pic))
         await boss_info.finish()
     else:
         i = 1
@@ -973,7 +973,7 @@ async def generate_all_bosses(bot: Bot, event: GroupMessageEvent | PrivateMessag
     bosses = create_all_bosses()  # 自动计算最高境界
     group_boss[GLOBAL_BOSS_KEY] = bosses  # 替换当前 BOSS 列表
     old_boss_info.save_boss(group_boss)
-    await bot.send(event, f"已生成全部 {len(bosses)} 个境界的 BOSS！")
+    await delivery_service.reply(bot, event, f"已生成全部 {len(bosses)} 个境界的 BOSS！")
 
 
 @create.handle(parameterless=[Cooldown(cd_time=0)])

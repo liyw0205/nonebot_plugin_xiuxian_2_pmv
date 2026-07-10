@@ -11,6 +11,7 @@ from nonebot.permission import SUPERUSER
 
 from ..adapter_compat import Bot, GroupMessageEvent, Message, MessageSegment, PrivateMessageEvent
 from ..command_disable import apply_disable_targets, format_command_list_page
+from ..messaging.delivery import delivery_service
 from ..on_compat import on_command, rebuild_on_compat_index
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.lay_out import Cooldown, assign_bot
@@ -155,12 +156,12 @@ async def all_apply_cmd_(
             permission_type=3,
             specify_role_ids=["4"],
         )
-        await bot.send(event=event, message=msg)
+        await delivery_service.reply(bot, event, msg)
     except Exception as e:
         logger.warning(f"全量申请：自定义键盘发送失败，尝试降级原生 MD: {e}")
         try:
             msg = MessageSegment.markdown(bot, md_text)
-            await bot.send(event=event, message=msg)
+            await delivery_service.reply(bot, event, msg)
         except Exception as e2:
             logger.error(f"全量申请：Markdown 发送失败，降级纯文本: {e2}")
             fallback_msg = (

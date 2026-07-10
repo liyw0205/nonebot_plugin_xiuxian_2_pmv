@@ -27,7 +27,7 @@ from ..adapter_compat import (
     get_at_user_ids,
     has_at_user,
 )
-from ..adapter_message_sender import send_group_message
+from ..messaging.delivery import delivery_service
 
 from ..broadcast_manager import (
     start_broadcast,
@@ -159,7 +159,7 @@ async def at_test_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 
     msg = "\n".join(lines)
     try:
-        await bot.send(event=event, message=MessageSegment.markdown_keyboard(bot, msg, rows))
+        await delivery_service.reply(bot, event, MessageSegment.markdown_keyboard(bot, msg, rows))
     except Exception as e:
         logger.error(f"艾特测试按钮发送失败: {e}")
         await handle_send(bot, event, msg)
@@ -281,9 +281,9 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             try:
                 if XiuConfig().img:
                     pic = await get_msg_pic(msg)
-                    await send_group_message(bot, group_id=gid, message=MessageSegment.image(pic))
+                    await delivery_service.send_to_group(bot, gid, MessageSegment.image(pic))
                 else:
-                    await send_group_message(bot, group_id=gid, message=msg)
+                    await delivery_service.send_to_group(bot, gid, msg)
             except Exception as e:
                 logger.debug(f"全服灵石广播到群 {gid} 失败：{e}")
     else:  # 单人
@@ -1493,7 +1493,7 @@ async def mb_template_test_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     args_str = re.sub(r'mqqapi:/aio', 'mqqapi://aio', args.extract_plain_text())
     args_str = args_str.replace("\\r", "\r").replace('\\"', '"').replace(':/', '://').replace(':///', '://')
     if not args_str:
-        await bot.send(event, "请提供模板参数，格式如下：mid=模板ID bid=按钮ID k=a,v=\"xx\" k=b k=c,v=x k=d,v=[\"xx\",\"xx\"] button_id=按钮ID")
+        await delivery_service.reply(bot, event, "请提供模板参数，格式如下：mid=模板ID bid=按钮ID k=a,v=\"xx\" k=b k=c,v=x k=d,v=[\"xx\",\"xx\"] button_id=按钮ID")
         return
 
     config = XiuConfig()
@@ -1528,7 +1528,7 @@ async def mb_template_test_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         args_str = args_str.replace(button_id_match.group(0), '').strip()
 
     if not template_id:
-        await bot.send(event, "请提供模板ID (mid=模板ID)")
+        await delivery_service.reply(bot, event, "请提供模板ID (mid=模板ID)")
         return
 
     arg_parts = re.split(r'\s+(?=\w+=)', args_str.strip())  # 仅在键前分割
@@ -1575,7 +1575,7 @@ async def mb_template_test_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     logger.debug(f"dm markdown模板参数：传入={args_str!r}，解析={params!r}")
     try:
         msg = MessageSegment.markdown_template(bot, template_id, params, button_id)
-        await bot.send(event, msg)
+        await delivery_service.reply(bot, event, msg)
     except Exception as e:
         err = str(e)
         logger.error(f"dm发送markdown模板失败: {err}")
@@ -1604,7 +1604,7 @@ async def keyboard_test_cmd_(
 
     try:
         msg = MessageSegment.markdown_keyboard(bot, " ", rows)
-        await bot.send(event=event, message=msg)
+        await delivery_service.reply(bot, event, msg)
     except Exception as e:
         err = str(e)
         logger.error(f"按钮测试发送失败: {err}")
@@ -1639,7 +1639,7 @@ async def dm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     try:
         msg = MessageSegment.markdown(bot, text)
         logger.info(f"转换 {msg}")
-        await bot.send(event, msg)
+        await delivery_service.reply(bot, event, msg)
 
     except Exception as e:
         err = str(e)

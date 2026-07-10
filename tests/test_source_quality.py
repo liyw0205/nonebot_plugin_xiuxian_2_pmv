@@ -230,16 +230,6 @@ class SourceQualityTests(unittest.TestCase):
             "adapter_compat.py",
             "adapter_message_sender.py",
             "messaging/delivery.py",
-            "xiuxian_utils/utils.py",
-            "broadcast_manager.py",
-            "xiuxian_admin",
-            "xiuxian_back/accessory.py",
-            "xiuxian_boss/__init__.py",
-            "xiuxian_entertainment",
-            "xiuxian_pet/__init__.py",
-            "xiuxian_sect/__init__.py",
-            "xiuxian_utils/lay_out.py",
-            "__init__.py",
         }
         direct_methods = {
             "send",

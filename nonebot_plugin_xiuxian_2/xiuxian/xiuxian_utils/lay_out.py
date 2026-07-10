@@ -20,6 +20,7 @@ from ..adapter_compat import (
     MessageSegment,
     patch_context
 )
+from ..messaging.delivery import delivery_service
 from ..xiuxian_config import XiuConfig, JsonConfig
 from .xiuxian2_handle import XiuxianDateManage
 from .utils import get_msg_pic, check_user, handle_send
@@ -171,7 +172,7 @@ def Cooldown(
         limit_type = limit_all_run(str(event.get_user_id()))
         if limit_type is True:
             bot = await assign_bot_group(group_id=group_id)
-            await bot.send(event=event, message=bu_ji_notice)
+            await delivery_service.reply(bot, event, bu_ji_notice)
             await matcher.finish()
         elif limit_type is False:
             await matcher.finish()
@@ -204,9 +205,9 @@ def Cooldown(
             ):
                 bot = await assign_bot_group(group_id=group_id)
                 if XiuConfig().at_sender:
-                    await bot.send(event=event, message=MessageSegment.at(event.get_user_id()) + "本群已关闭修仙模组,请联系管理员开启,开启命令为【启用修仙功能】!")
+                    await delivery_service.reply(bot, event, MessageSegment.at(event.get_user_id()) + "本群已关闭修仙模组,请联系管理员开启,开启命令为【启用修仙功能】!")
                 else:
-                    await bot.send(event=event, message="本群已关闭修仙模组,请联系管理员开启,开启命令为【启用修仙功能】!")
+                    await delivery_service.reply(bot, event, "本群已关闭修仙模组,请联系管理员开启,开启命令为【启用修仙功能】!")
                 await matcher.finish()
             else:
                 await matcher.finish()
@@ -215,7 +216,7 @@ def Cooldown(
         
         if is_private:        
             if is_private and not conf_data.get("private", True):
-                await bot.send(event=event, message="私聊修仙功能未启用，请联系管理员在群聊中发送「启用私聊功能」！")
+                await delivery_service.reply(bot, event, "私聊修仙功能未启用，请联系管理员在群聊中发送「启用私聊功能」！")
                 await matcher.finish()
         
         if XiuConfig().admin_debug:

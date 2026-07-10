@@ -29,6 +29,7 @@ from .xiuxian_utils.config import config as _config
 from .broadcast_manager import auto_patch_broadcast_for_event
 from . import runtime as _runtime  # noqa: F401
 from .infrastructure import QQEventDeduplicator, settings
+from .messaging.delivery import delivery_service
 from .qq_compat import (
     apply_lifecycle_event,
     arm_interaction_ack,
@@ -318,7 +319,7 @@ async def _send_global_overload_notice(bot: Bot, event, user_id: str, now: float
 
     try:
         bot = patch_bot_inplace(bot)
-        await bot.send(event=event, message=GLOBAL_COMMAND_OVERLOAD_NOTICE)
+        await delivery_service.reply(bot, event, GLOBAL_COMMAND_OVERLOAD_NOTICE)
     except Exception as e:
         logger.debug(f"[全局命令入口限流] 繁忙提示发送失败: {e}")
 

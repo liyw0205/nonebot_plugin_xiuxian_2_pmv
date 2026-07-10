@@ -6,6 +6,7 @@ from nonebot.params import CommandArg
 
 from ..adapter_compat import Bot, GroupMessageEvent, Message, MessageSegment, PrivateMessageEvent
 from ..on_compat import on_command
+from ..messaging.delivery import delivery_service
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.game_events import safe_record_game_event
 from ..xiuxian_utils.item_json import Items
@@ -888,7 +889,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             current_page=current_page,
         )
         try:
-            await bot.send(event=event, message=MessageSegment.markdown(bot, md_text))
+            await delivery_service.reply(bot, event, MessageSegment.markdown(bot, md_text))
         except Exception:
             await handle_send(bot, event, fallback_text)
         return

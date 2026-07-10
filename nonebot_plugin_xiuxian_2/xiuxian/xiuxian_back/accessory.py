@@ -8,6 +8,7 @@ from ..adapter_compat import (
     PrivateMessageEvent,
     MessageSegment,
 )
+from ..messaging.delivery import delivery_service
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, send_help_message
@@ -358,7 +359,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         )
 
         try:
-            await bot.send(event=event, message=MessageSegment.markdown(bot, md_text))
+            await delivery_service.reply(bot, event, MessageSegment.markdown(bot, md_text))
         except Exception:
             await handle_send(bot, event, fallback_text)
         return
