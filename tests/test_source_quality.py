@@ -438,6 +438,17 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("send_reward_to_user(", source)
         self.assertNotIn("mark_claimed(", source)
 
+    def test_dungeon_team_json_fields_use_typed_normalization(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_dungeon" / "team_manager.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("def _normalize_team_record", source)
+        self.assertIn("except (json.JSONDecodeError, TypeError, ValueError)", source)
+        self.assertNotIn(
+            'teams[team_id]["members"] = json.loads',
+            source,
+        )
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")

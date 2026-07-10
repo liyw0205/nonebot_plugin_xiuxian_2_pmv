@@ -22,6 +22,35 @@ TEAM_TABLE = "teams" # 队伍信息表
 team_invite_cache: Dict[str, Dict] = {}
 
 
+def _normalize_team_record(record: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize legacy database fields without trusting arbitrary JSON shapes."""
+    team = dict(record)
+    members = team.get("members", [])
+    if not isinstance(members, list):
+        try:
+            members = json.loads(members or "[]")
+        except (json.JSONDecodeError, TypeError, ValueError):
+            members = []
+    if not isinstance(members, list):
+        members = []
+    team["members"] = [
+        str(member)
+        for member in members
+        if isinstance(member, (str, int)) and str(member).strip()
+    ]
+
+    leader = team.get("leader")
+    if leader is None or isinstance(leader, (dict, list)):
+        leader = team["members"][0] if team["members"] else ""
+    team["leader"] = str(leader)
+
+    try:
+        team["max_members"] = max(int(team.get("max_members", 4)), 1)
+    except (TypeError, ValueError):
+        team["max_members"] = 4
+    return team
+
+
 def load_teams() -> Dict[str, Dict]:
     """
     从数据库加载所有队伍数据。
@@ -33,12 +62,7 @@ def load_teams() -> Dict[str, Dict]:
         team_id = record.get("user_id") # 'user_id'字段在这里存储'team_id'
         if team_id:
             # PlayerDataManager.get_fields 已经处理了JSON反序列化
-            teams[team_id] = record
-            # 确保成员列表等字段是list，leader是str
-            if not isinstance(teams[team_id].get("members"), list):
-                teams[team_id]["members"] = json.loads(teams[team_id].get("members", "[]")) # 再次确保是列表
-            if not isinstance(teams[team_id].get("leader"), str):
-                teams[team_id]["leader"] = str(teams[team_id].get("leader"))
+            teams[str(team_id)] = _normalize_team_record(record)
     return teams
 
 
@@ -76,14 +100,7 @@ def get_team_info(team_id: str) -> Optional[Dict]:
     # PlayerDataManager.get_fields 已经处理了JSON反序列化
     team_info = player_data.get_fields(team_id, TEAM_TABLE)
     if team_info:
-        # 再次确保成员列表是list，leader是str，以防get_fields未完全处理或存储格式不一致
-        if not isinstance(team_info.get("members"), list):
-            try:
-                team_info["members"] = json.loads(team_info.get("members", "[]"))
-            except (json.JSONDecodeError, TypeError):
-                team_info["members"] = [] # 如果解析失败，则设为空列表
-        if not isinstance(team_info.get("leader"), str):
-            team_info["leader"] = str(team_info.get("leader"))
+        team_info = _normalize_team_record(team_info)
     return team_info
 
 
