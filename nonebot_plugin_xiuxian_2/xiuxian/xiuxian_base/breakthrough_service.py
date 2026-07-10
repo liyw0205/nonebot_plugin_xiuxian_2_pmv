@@ -23,6 +23,21 @@ class DirectBreakthroughResult:
         return self.status == "applied"
 
 
+@dataclass(frozen=True)
+class ContinuousBreakthroughResult:
+    status: str
+    user_id: str
+    from_level: str
+    to_level: str
+    attempts: int
+    fail_count: int
+    exp_loss: int
+
+    @property
+    def applied(self) -> bool:
+        return self.status == "applied"
+
+
 class BreakthroughService:
     def __init__(self, database: str | Path, lock: RLock | None = None) -> None:
         self._database = Path(database)
@@ -60,6 +75,164 @@ class BreakthroughService:
             )
             """
         )
+
+    @staticmethod
+    def _ensure_continuous_operations(conn) -> None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS continuous_breakthrough_operations (
+                operation_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                from_level TEXT NOT NULL,
+                to_level TEXT NOT NULL,
+                attempts INTEGER NOT NULL,
+                fail_count INTEGER NOT NULL,
+                exp_loss INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+    def apply_continuous(
+        self,
+        operation_id,
+        user_id,
+        expected_level,
+        expected_exp,
+        expected_hp,
+        expected_mp,
+        expected_rate,
+        final_level,
+        final_exp,
+        final_hp,
+        final_mp,
+        final_rate,
+        attempts,
+        fail_count,
+        exp_loss,
+        *,
+        root_rate=0.0,
+        level_spend=0.0,
+        occurred_at: datetime | None = None,
+    ) -> ContinuousBreakthroughResult:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            raise ValueError("operation_id must not be empty")
+        user_id = str(user_id)
+        expected_level = str(expected_level)
+        final_level = str(final_level)
+        expected_exp = int(expected_exp)
+        expected_hp = int(expected_hp)
+        expected_mp = int(expected_mp)
+        expected_rate = int(expected_rate)
+        final_exp = max(int(final_exp), 0)
+        final_hp = max(int(final_hp), 1)
+        final_mp = max(int(final_mp), 1)
+        final_rate = max(int(final_rate), 0)
+        attempts = max(int(attempts), 0)
+        fail_count = max(int(fail_count), 0)
+        exp_loss = max(int(exp_loss), 0)
+        occurred_at = occurred_at or datetime.now()
+
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._ensure_continuous_operations(conn)
+                previous = conn.execute(
+                    "SELECT from_level, to_level, attempts, fail_count, exp_loss "
+                    "FROM continuous_breakthrough_operations WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if previous:
+                    conn.rollback()
+                    return ContinuousBreakthroughResult(
+                        "duplicate",
+                        user_id,
+                        str(previous[0]),
+                        str(previous[1]),
+                        int(previous[2]),
+                        int(previous[3]),
+                        int(previous[4]),
+                    )
+
+                user = conn.execute(
+                    "SELECT level, exp, hp, mp, level_up_rate "
+                    "FROM user_xiuxian WHERE user_id=%s",
+                    (user_id,),
+                ).fetchone()
+                if user is None:
+                    conn.rollback()
+                    return ContinuousBreakthroughResult(
+                        "user_missing", user_id, expected_level, final_level,
+                        attempts, fail_count, exp_loss,
+                    )
+                if (
+                    str(user[0]) != expected_level
+                    or int(user[1] or 0) != expected_exp
+                    or int(user[2] or 0) != expected_hp
+                    or int(user[3] or 0) != expected_mp
+                    or int(user[4] or 0) != expected_rate
+                ):
+                    conn.rollback()
+                    return ContinuousBreakthroughResult(
+                        "state_changed", user_id, str(user[0]), str(user[0]),
+                        attempts, fail_count, exp_loss,
+                    )
+
+                if final_level != expected_level:
+                    conn.execute(
+                        "UPDATE user_xiuxian SET level=%s, exp=%s, "
+                        "power=ROUND(%s*%s*%s, 0), level_up_cd=%s, "
+                        "level_up_rate=0, hp=%s/2, mp=%s, atk=%s/10 "
+                        "WHERE user_id=%s",
+                        (
+                            final_level,
+                            final_exp,
+                            final_exp,
+                            float(root_rate),
+                            float(level_spend),
+                            occurred_at,
+                            final_exp,
+                            final_exp,
+                            final_exp,
+                            user_id,
+                        ),
+                    )
+                else:
+                    conn.execute(
+                        "UPDATE user_xiuxian SET exp=%s, hp=%s, mp=%s, "
+                        "level_up_rate=%s, level_up_cd=%s WHERE user_id=%s",
+                        (
+                            final_exp,
+                            final_hp,
+                            final_mp,
+                            final_rate,
+                            occurred_at,
+                            user_id,
+                        ),
+                    )
+                conn.execute(
+                    "INSERT INTO continuous_breakthrough_operations "
+                    "(operation_id, user_id, from_level, to_level, attempts, "
+                    "fail_count, exp_loss) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    (
+                        operation_id,
+                        user_id,
+                        expected_level,
+                        final_level,
+                        attempts,
+                        fail_count,
+                        exp_loss,
+                    ),
+                )
+                conn.commit()
+                return ContinuousBreakthroughResult(
+                    "applied", user_id, expected_level, final_level,
+                    attempts, fail_count, exp_loss,
+                )
+            except Exception:
+                conn.rollback()
+                raise
 
     def apply_failure(
         self,
@@ -460,4 +633,8 @@ class BreakthroughService:
                 raise
 
 
-__all__ = ["BreakthroughService", "DirectBreakthroughResult"]
+__all__ = [
+    "BreakthroughService",
+    "ContinuousBreakthroughResult",
+    "DirectBreakthroughResult",
+]

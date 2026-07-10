@@ -1071,19 +1071,13 @@ async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMes
                     XiuConfig().level_punishment_floor, XiuConfig().level_punishment_limit
                 )
                 now_exp = int(int(exp) * ((percentage / 100) * (1 - exp_buff)))
-                sql_message.update_j_exp(user_id, now_exp)
                 exp -= now_exp
-                
-                nowhp = user_msg['hp'] - (now_exp / 2) if (user_msg['hp'] - (now_exp / 2)) > 0 else 1
-                nowmp = user_msg['mp'] - now_exp if (user_msg['mp'] - now_exp) > 0 else 1
-                sql_message.update_user_hp_mp(user_id, nowhp, nowmp)
                 fail_count += 1
                 total_exp_loss += now_exp
                 
                 update_rate = 1 if int(level_rate * XiuConfig().level_up_probability) <= 1 else int(
                     level_rate * XiuConfig().level_up_probability)
                 leveluprate += update_rate
-                sql_message.update_levelrate(user_id, leveluprate)
                 
                 result_msg += f"第{attempts}次突破失败，修为减少{number_to(now_exp)}，下次突破成功率增加{update_rate}%\n"
             else:
@@ -1092,12 +1086,6 @@ async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMes
                 break
         elif isinstance(le, list):
             # 突破成功
-            sql_message.updata_level(user_id, le[0])
-            share_msg = trigger_breakthrough_relation_rewards(user_id, le[0])
-            sql_message.update_power2(user_id)
-            sql_message.update_levelrate(user_id, 0)
-            sql_message.update_user_hp(user_id)
-            result_msg += f"第{attempts}次突破成功，达到{le[0]}境界！{share_msg}"
             success = True
             target_level = le[0]
             break
@@ -1105,7 +1093,39 @@ async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMes
     if not success and attempts == 5 and "修为不足以突破" not in result_msg:
         result_msg += "连续5次突破尝试结束，未能突破成功。"
     
-    sql_message.updata_level_cd(user_id)  # 更新突破CD
+    final_level = target_level or level_name
+    final_hp = max(int(user_msg["hp"] - total_exp_loss / 2), 1)
+    final_mp = max(int(user_msg["mp"] - total_exp_loss), 1)
+    root_rate = 0.0
+    level_spend = 0.0
+    if success:
+        root_rate = sql_message.get_root_rate(user_msg["root_type"], user_id)
+        level_spend = jsondata.level_data()[final_level]["spend"]
+    result = breakthrough_service.apply_continuous(
+        _breakthrough_operation_id(event, "continuous", user_id),
+        user_id,
+        level_name,
+        user_msg["exp"],
+        user_msg["hp"],
+        user_msg["mp"],
+        int(user_msg["level_up_rate"]),
+        final_level,
+        exp,
+        final_hp,
+        final_mp,
+        0 if success else leveluprate,
+        attempts,
+        fail_count,
+        total_exp_loss,
+        root_rate=root_rate,
+        level_spend=level_spend,
+    )
+    if not result.applied:
+        await handle_send(bot, event, "本次连续突破已经处理或角色状态已经变化，请刷新后重试。")
+        await level_up_lx.finish()
+    if success:
+        share_msg = trigger_breakthrough_relation_rewards(user_id, final_level)
+        result_msg += f"第{attempts}次突破成功，达到{final_level}境界！{share_msg}"
     record_level_up_result(
         user_id, "连续突破", attempts=attempts, success=success,
         target_level=target_level, fail_count=fail_count, exp_loss=total_exp_loss
