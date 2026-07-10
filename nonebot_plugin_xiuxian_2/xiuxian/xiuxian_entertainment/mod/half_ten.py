@@ -1,9 +1,9 @@
 import random
-import json
 import asyncio
 from pathlib import Path
 
 from ...on_compat import on_command
+from ...xiuxian_utils.json_store import load_json_file, save_json_file
 from nonebot.params import CommandArg
 
 from ..command import *
@@ -178,8 +178,7 @@ class HalfTenRoomManager:
     def load_rooms(self):
         for f in HALF_TEN_ROOMS_PATH.glob("*.json"):
             try:
-                with open(f, "r", encoding="utf-8") as fp:
-                    data = json.load(fp)
+                data = load_json_file(f, {}, dict)
                 g = HalfTenGame.from_dict(data)
                 self.rooms[g.room_id] = g
 
@@ -194,8 +193,7 @@ class HalfTenRoomManager:
         g = self.rooms.get(room_id)
         if not g:
             return
-        with open(self._file(room_id), "w", encoding="utf-8") as fp:
-            json.dump(g.to_dict(), fp, ensure_ascii=False, indent=2)
+        save_json_file(self._file(room_id), g.to_dict(), indent=2)
 
     def create_room(self, room_id: str, creator_id: str, creator_name: str):
         if room_id in self.rooms:

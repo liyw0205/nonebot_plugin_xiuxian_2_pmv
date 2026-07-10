@@ -1,11 +1,11 @@
 import random
-import json
 import asyncio
 from pathlib import Path
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 
 from ...on_compat import on_command
+from ...xiuxian_utils.json_store import load_json_file, save_json_file
 from nonebot.params import CommandArg
 from ..command import *
 from .game_utils import event_display_name, format_board_coord, now_text, parse_board_coord
@@ -255,8 +255,7 @@ class MinesweeperManager:
     def _load(self):
         for f in MINESWEEPER_DATA_PATH.glob("*.json"):
             try:
-                with open(f, "r", encoding="utf-8") as fp:
-                    data = json.load(fp)
+                data = load_json_file(f, {}, dict)
                 game = MinesweeperGame.from_dict(data)
                 self.games[game.game_id] = game
                 if game.status == "playing":
@@ -268,8 +267,7 @@ class MinesweeperManager:
         game = self.games.get(game_id)
         if not game:
             return
-        with open(self._file(game_id), "w", encoding="utf-8") as fp:
-            json.dump(game.to_dict(), fp, ensure_ascii=False, indent=2)
+        save_json_file(self._file(game_id), game.to_dict(), indent=2)
 
     def delete(self, game_id: str):
         g = self.games.get(game_id)

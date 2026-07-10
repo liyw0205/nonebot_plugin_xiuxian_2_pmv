@@ -1,5 +1,4 @@
 import random
-import json
 import asyncio
 from pathlib import Path
 from io import BytesIO
@@ -7,6 +6,7 @@ from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
 
 from ...on_compat import on_command
+from ...xiuxian_utils.json_store import load_json_file, save_json_file
 from nonebot.params import CommandArg
 
 from ..command import *
@@ -104,8 +104,7 @@ class GomokuRoomManager:
     def load_rooms(self):
         for f in GOMOKU_ROOMS_PATH.glob("*.json"):
             try:
-                with open(f, "r", encoding="utf-8") as fp:
-                    data = json.load(fp)
+                data = load_json_file(f, {}, dict)
                 room_id = f.stem
                 game = GomokuGame.from_dict(data)
                 self.rooms[room_id] = game
@@ -122,8 +121,7 @@ class GomokuRoomManager:
         if not game:
             return
         fp = GOMOKU_ROOMS_PATH / f"{room_id}.json"
-        with open(fp, "w", encoding="utf-8") as f:
-            json.dump(game.to_dict(), f, ensure_ascii=False, indent=2)
+        save_json_file(fp, game.to_dict(), indent=2)
 
     def create_room(self, room_id: str, creator_id: str, creator_name: str):
         if room_id in self.rooms:

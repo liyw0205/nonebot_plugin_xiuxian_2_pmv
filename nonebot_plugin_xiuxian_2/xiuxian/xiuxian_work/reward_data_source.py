@@ -5,6 +5,7 @@ from datetime import datetime
 from ...paths import get_paths
 
 from ..xiuxian_utils.data_source import JsonDate
+from ..xiuxian_utils.json_store import load_json_file, save_json_file
 
 WORKDATA = get_paths().work
 PLAYERSDATA = get_paths().players
@@ -58,8 +59,7 @@ def savef(user_id, data):
         "refresh_time": data.get("refresh_time", datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')),
         "user_level": data.get("user_level")
     }
-    with open(FILEPATH, "w", encoding="UTF-8") as f:
-        json.dump(save_data, f, ensure_ascii=False, indent=4)
+    save_json_file(FILEPATH, save_data)
 
 def readf(user_id):
     """从JSON加载悬赏令信息"""
@@ -68,9 +68,7 @@ def readf(user_id):
     if not os.path.exists(FILEPATH):
         return None
     
-    with open(FILEPATH, "r", encoding="UTF-8") as f:
-        data = json.load(f)
-    return data
+    return load_json_file(FILEPATH, {}, dict)
 
 def delete_work_file(user_id):
     """删除悬赏令信息文件"""

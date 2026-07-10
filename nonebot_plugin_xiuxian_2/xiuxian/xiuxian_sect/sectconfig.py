@@ -1,10 +1,7 @@
-try:
-    import ujson as json
-except ImportError:
-    import json
 from datetime import datetime
 
 from ...paths import get_paths
+from ..xiuxian_utils.json_store import load_json_file, save_json_file, update_json_file
 
 PLAYERSDATA = get_paths().players
 
@@ -356,31 +353,26 @@ def get_sect_weekly_purchases(user_id, item_id):
         init_sect_purchase_file(user_id)
         return 0
 
-    with open(file_path, "r", encoding="utf-8") as f:
-        try:
-            data = json.load(f)
-            # 检查是否需要按周重置
-            if "_last_reset" in data:
-                last_reset = datetime.strptime(data["_last_reset"], "%Y-%m-%d")
-                current_week = datetime.now().isocalendar()[1]
-                last_week = last_reset.isocalendar()[1]
-                current_year = datetime.now().year
-                last_year = last_reset.year
+    data = load_json_file(file_path, {}, dict)
+    try:
+        if "_last_reset" in data:
+            last_reset = datetime.strptime(data["_last_reset"], "%Y-%m-%d")
+            current_week = datetime.now().isocalendar()[1]
+            last_week = last_reset.isocalendar()[1]
+            current_year = datetime.now().year
+            last_year = last_reset.year
 
-                if current_week != last_week or current_year != last_year:
-                    # 跨周或跨年时重置购买记录
-                    init_sect_purchase_file(user_id)
-                    return 0
-            else:
-                # 没有重置日期，直接初始化
+            if current_week != last_week or current_year != last_year:
                 init_sect_purchase_file(user_id)
                 return 0
-
-            return data.get(str(item_id), 0)
-        except Exception:
-            # 文件损坏则重新初始化
+        else:
             init_sect_purchase_file(user_id)
             return 0
+
+        return data.get(str(item_id), 0)
+    except (TypeError, ValueError):
+        init_sect_purchase_file(user_id)
+        return 0
 
 
 def init_sect_purchase_file(user_id):
@@ -395,8 +387,7 @@ def init_sect_purchase_file(user_id):
         "_last_reset": datetime.now().strftime("%Y-%m-%d")
     }
 
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    save_json_file(file_path, data)
 
 
 def update_sect_weekly_purchase(user_id, item_id, quantity):
@@ -407,20 +398,10 @@ def update_sect_weekly_purchase(user_id, item_id, quantity):
     # 确保用户目录存在
     file_path.parent.mkdir(parents=True, exist_ok=True)
 
-    data = {}
-    if file_path.exists():
-        with open(file_path, "r", encoding="utf-8") as f:
-            try:
-                data = json.load(f)
-            except Exception:
-                pass
+    def apply_purchase(data):
+        data.setdefault("_last_reset", datetime.now().strftime("%Y-%m-%d"))
+        current = data.get(str(item_id), 0)
+        data[str(item_id)] = current + quantity
+        return data
 
-    # 确保有重置日期
-    if "_last_reset" not in data:
-        data["_last_reset"] = datetime.now().strftime("%Y-%m-%d")
-
-    current = data.get(str(item_id), 0)
-    data[str(item_id)] = current + quantity
-
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    update_json_file(file_path, {}, apply_purchase, expected_type=dict)

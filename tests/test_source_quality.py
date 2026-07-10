@@ -303,6 +303,11 @@ class SourceQualityTests(unittest.TestCase):
             "xiuxian_Interactive/__init__.py",
             "xiuxian_activity/activity_config.py",
             "xiuxian_base/xiangyuan.py",
+            "xiuxian_entertainment/mod/gomoku.py",
+            "xiuxian_entertainment/mod/half_ten.py",
+            "xiuxian_entertainment/mod/minesweeper.py",
+            "xiuxian_sect/sectconfig.py",
+            "xiuxian_work/reward_data_source.py",
         )
         violations = []
         for relative in checked:
