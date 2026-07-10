@@ -882,7 +882,15 @@ def _refresh_defeated_demon_bosses() -> tuple[dict, list[str]]:
     return state, refreshed_realms
 
 
-@scheduler.scheduled_job("cron", hour=f"{EVENT_START_HOUR},{EVENT_END_HOUR}", minute=0, id="demon_invasion_schedule")
+@scheduler.scheduled_job(
+    "cron",
+    hour=f"{EVENT_START_HOUR},{EVENT_END_HOUR}",
+    minute=0,
+    id="demon_invasion_schedule",
+    coalesce=True,
+    max_instances=1,
+    misfire_grace_time=300,
+)
 async def demon_invasion_schedule_job():
     now = _now()
     with _state_lock:
