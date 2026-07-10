@@ -556,6 +556,22 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("direct_breakthrough_operations", service_source)
         self.assertIn("BEGIN IMMEDIATE", service_source)
 
+    def test_tribulation_breakthrough_uses_transactional_service(self) -> None:
+        base_root = SOURCE_ROOT / "xiuxian" / "xiuxian_base"
+        command_source = (base_root / "breakthrough_tribulation.py").read_text(
+            encoding="utf-8"
+        )
+        service_source = (base_root / "breakthrough_service.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "breakthrough_service.apply_tribulation_failure(", command_source
+        )
+        self.assertIn(
+            "breakthrough_service.apply_tribulation_success(", command_source
+        )
+        self.assertIn("tribulation_breakthrough_operations", service_source)
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")
