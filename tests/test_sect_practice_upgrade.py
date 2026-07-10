@@ -63,6 +63,30 @@ class SectPracticeUpgradeTests(unittest.TestCase):
         self.assertEqual(result.status, "upgraded")
         self.assertEqual(self.state(), (900, 3, 4000))
 
+    def test_health_upgrade_uses_the_same_atomic_boundary(self) -> None:
+        result = self.service.upgrade_practice(
+            "health-1", "user", 1, "health", 3, 4, 100, 1000
+        )
+
+        self.assertEqual(result.status, "upgraded")
+        with db_backend.connection(self.database) as conn:
+            row = conn.execute(
+                "SELECT stone, hppractice FROM user_xiuxian WHERE user_id=%s",
+                ("user",),
+            ).fetchone()
+        self.assertEqual((int(row[0]), int(row[1])), (900, 4))
+        self.assertEqual(
+            self.scalar_materials(), 4000
+        )
+
+    def scalar_materials(self):
+        with db_backend.connection(self.database) as conn:
+            return int(
+                conn.execute(
+                    "SELECT sect_materials FROM sects WHERE sect_id=%s", (1,)
+                ).fetchone()[0]
+            )
+
     def test_duplicate_operation_does_not_charge_twice(self) -> None:
         self.service.upgrade_practice(
             "practice-repeat", "user", 1, "attack", 2, 3, 100, 1000

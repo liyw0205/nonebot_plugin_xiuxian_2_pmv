@@ -502,6 +502,7 @@ class SourceQualityTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("sect_membership_service.upgrade_practice(", command_source)
+        self.assertIn('"health_practice_upgrade"', command_source)
         self.assertIn("sect_practice_operations", service_source)
         self.assertIn("BEGIN IMMEDIATE", service_source)
 

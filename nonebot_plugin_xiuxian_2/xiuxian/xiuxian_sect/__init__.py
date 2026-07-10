@@ -1351,9 +1351,22 @@ async def uphppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级元血修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await uphppractice.finish()
 
-        sql_message.update_ls(user_id, total_stone_cost, 2)
-        sql_message.update_sect_materials(sect_id, total_materials_cost, 2)
-        sql_message.update_user_hppractice(user_id, userhppractice + level_up_count)
+        result = sect_membership_service.upgrade_practice(
+            _sect_operation_id(event, "health_practice_upgrade", sect_id),
+            user_id,
+            sect_id,
+            "health",
+            userhppractice,
+            userhppractice + level_up_count,
+            total_stone_cost,
+            total_materials_cost,
+        )
+        if not result.applied:
+            if result.status == "duplicate":
+                await handle_send(bot, event, "本次元血修炼升级已经完成，请刷新状态。")
+            else:
+                await handle_send(bot, event, "个人或宗门资产状态已经变化，请刷新后重试。")
+            await uphppractice.finish()
         msg = f"升级成功！\n道友当前元血修炼等级：{userhppractice + level_up_count}\n消耗灵石：{number_to(total_stone_cost)}枚\n消耗宗门资材{number_to(total_materials_cost)}"
         await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级元血修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
         await uphppractice.finish()
