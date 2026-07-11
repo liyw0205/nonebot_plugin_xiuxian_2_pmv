@@ -3,6 +3,7 @@ try:
 except ImportError:
     import json
 
+import asyncio
 import time
 from functools import lru_cache
 from io import BytesIO
@@ -14,7 +15,6 @@ from ...paths import get_paths
 from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
 
 from .download import get_avatar_by_user_id_and_save
-from .send_image_tool import convert_img
 
 TEXT_PATH = get_paths().data / "info_img"
 CACHE_PATH = get_paths().cache
@@ -74,12 +74,12 @@ async def draw_user_info_img(user_id, DETAIL_MAP):
 
 
 async def draw_user_info_img_with_default_bg(user_id, DETAIL_MAP):
-    img = _load_default_background()
+    img = await asyncio.to_thread(_load_default_background)
     return await _draw_user_info_common(img, user_id, DETAIL_MAP)
 
 
 async def _load_random_background() -> Image.Image:
-    cached = _load_cached_background(allow_stale=False)
+    cached = await asyncio.to_thread(_load_cached_background, False)
     if cached is not None:
         return cached
 
@@ -89,20 +89,24 @@ async def _load_random_background() -> Image.Image:
             raise ValueError("随机背景API未返回图片地址")
 
         raw = await async_request(bg_url, timeout=BACKGROUND_TIMEOUT)
-        bg = Image.open(BytesIO(raw)).convert("RGBA")
-        bg = _prepare_background(bg)
-        CACHE_PATH.mkdir(parents=True, exist_ok=True)
-        bg.save(RANDOM_BG_CACHE, format="PNG", optimize=True)
-        return bg
+        return await asyncio.to_thread(_prepare_and_cache_background, raw)
     except (ClientError, TimeoutError, UnidentifiedImageError, OSError, ValueError, KeyError) as e:
         logger.opt(colors=True).info(f"<red>下载随机背景图失败，使用缓存或默认背景图: {e}</red>")
     except Exception as e:
         logger.opt(colors=True).warning(f"<red>随机背景处理异常，使用缓存或默认背景图: {e}</red>")
 
-    cached = _load_cached_background(allow_stale=True)
+    cached = await asyncio.to_thread(_load_cached_background, True)
     if cached is not None:
         return cached
-    return _load_default_background()
+    return await asyncio.to_thread(_load_default_background)
+
+
+def _prepare_and_cache_background(raw: bytes) -> Image.Image:
+    bg = Image.open(BytesIO(raw)).convert("RGBA")
+    bg = _prepare_background(bg)
+    CACHE_PATH.mkdir(parents=True, exist_ok=True)
+    bg.save(RANDOM_BG_CACHE, format="PNG", optimize=True)
+    return bg
 
 
 def _load_cached_background(allow_stale: bool) -> Image.Image | None:
@@ -144,9 +148,13 @@ def _cover_resize(img: Image.Image, size: tuple[int, int]) -> Image.Image:
 
 
 async def _draw_user_info_common(img: Image.Image, user_id, DETAIL_MAP):
+    avatar = await get_avatar_by_user_id_and_save(user_id)
+    return await asyncio.to_thread(_render_user_info, img, avatar, user_id, DETAIL_MAP)
+
+
+def _render_user_info(img: Image.Image, avatar: Image.Image, user_id, DETAIL_MAP):
     user_status = _copy_template("user_state.png", (450, 450))
-    temp = await get_avatar_by_user_id_and_save(user_id)
-    user_avatar = img_author(temp, user_status)
+    user_avatar = img_author(avatar, user_status)
     img.paste(user_avatar, (100, 100), mask=user_status.split()[-1])
 
     _draw_center_line(
@@ -259,12 +267,10 @@ async def _draw_user_info_common(img: Image.Image, user_id, DETAIL_MAP):
             min_size=23,
         )
 
-    output_dir = CACHE_PATH
-    output_dir.mkdir(parents=True, exist_ok=True)
-    image_path = output_dir / f"user_xiuxian_info_{user_id}.png"
     final_img = img.convert("RGB")
-    final_img.save(image_path, format="PNG", optimize=True)
-    return await convert_img(final_img)
+    result_buffer = BytesIO()
+    final_img.save(result_buffer, format="PNG", optimize=True)
+    return result_buffer.getvalue()
 
 
 def _draw_section_title(img: Image.Image, title: str, xy: tuple[int, int]):

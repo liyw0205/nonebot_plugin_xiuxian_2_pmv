@@ -768,6 +768,14 @@ class SourceQualityTests(unittest.TestCase):
             source,
         )
 
+    def test_user_info_image_rendering_does_not_block_event_loop(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_info" / "draw_user_info.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("await asyncio.to_thread(_render_user_info", source)
+        self.assertIn("await asyncio.to_thread(_prepare_and_cache_background", source)
+        self.assertNotIn("return await convert_img(final_img)", source)
+
     def test_entertainment_network_calls_use_io_runtime(self) -> None:
         entertainment = SOURCE_ROOT / "xiuxian" / "xiuxian_entertainment"
         expected_calls = {
