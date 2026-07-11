@@ -46,6 +46,7 @@ from .back_util import *
 from .cultivation_item_service import CultivationItemService
 from .equipment_service import EquipmentService
 from .stone_reward_service import StoneItemRewardService
+from .three_cultivation_pill_service import ThreeCultivationPillService
 from . import accessory as _accessory  # noqa: F401
 from .accessory_helpers import AFFIX_KEY_MAP, SET_BONUS, ACCESSORY_BAG_LIMIT, add_accessory_to_bag, can_add_accessories, quality_to_cn  # noqa: F401
 from .backpack_render import (
@@ -68,6 +69,7 @@ sql_message = XiuxianDateManage()
 equipment_service = EquipmentService(get_paths().game_db)
 cultivation_item_service = CultivationItemService(get_paths().game_db)
 stone_reward_service = StoneItemRewardService(get_paths().game_db)
+three_cultivation_pill_service = ThreeCultivationPillService(get_paths().game_db)
 player_data_manager = PlayerDataManager()
 tianti_manager = TiantiDataManager()
 scheduler = require("nonebot_plugin_apscheduler").scheduler
@@ -1426,40 +1428,33 @@ async def use_three_cultivation_pill(bot: Bot, event: GroupMessageEvent | Privat
     # OtherSet().set_closing_type(level) 返回的是当前境界突破到下一境界所需的修为，作为计算上限的基数
     max_exp_for_level_up = OtherSet().set_closing_type(level) 
     max_exp = max_exp_for_level_up * XiuConfig().closing_exp_upper_limit # 境界上限
-    can_gain = max(0, max_exp - current_exp) # 距离上限还能获得的修为
 
-    # 实际增加的修为（不超过上限）
-    real_gain = min(total_exp_gain, can_gain)
-
-    # 更新修为
-    sql_message.update_exp(user_id, real_gain)
-    sql_message.update_power2(user_id)
-
-    # 更新气血真元
-    # 这里的参数似乎是hp_change和mp_change，但原代码是传入current_exp / 10等
-    # 假设这里传入的是恢复量，而不是新的值
-    result_msg, result_hp_mp = OtherSet().send_hp_mp(
-        user_id, 
-        int(current_exp / 10), # 这里的参数含义需要根据send_hp_mp的实际逻辑确认
-        int(current_exp / 20)  # 这里的参数含义需要根据send_hp_mp的实际逻辑确认
+    result = three_cultivation_pill_service.apply(
+        _cultivation_item_operation_id(event, user_id, item_id),
+        user_id,
+        item_id,
+        num,
+        total_exp_gain,
+        max_exp=max_exp,
+        power_multiplier=float(level_rate) * float(realm_rate),
     )
-    sql_message.update_user_attribute(
-        user_id, 
-        result_hp_mp[0], # 新的HP
-        result_hp_mp[1], # 新的MP
-        int(user_mes['atk']) # 攻击力保持不变
-    )
+    if not result.succeeded:
+        await handle_send(bot, event, "三转玄丹数量或角色状态已经变化，请刷新背包后重试！")
+        return
 
-    # 扣除道具
-    sql_message.update_back_j(user_id, item_id, num=num, use_key=1)
+    recovery_msg = ""
+    if result.hp_after > result.hp_before:
+        recovery_msg += f",回复气血：{number_to(result.hp_after - result.hp_before)}"
+    if result.mp_after > result.mp_before:
+        recovery_msg += f",回复真元：{number_to(result.mp_after - result.mp_before)}"
 
     # 提示语
     msg_lines = [
-        f"【使用 三转玄丹 ×{num}】",
-        f"获得：{number_to(real_gain)}修为{result_msg[0]}{result_msg[1]}"
+        f"【使用 三转玄丹 ×{result.quantity}】",
+        f"获得：{number_to(result.exp_gain)}修为{recovery_msg}"
     ]
 
-    if real_gain < total_exp_gain:
+    if result.exp_gain < result.requested_exp:
         msg_lines.append("（已达当前境界上限，剩余修为溢出）")
 
     msg_lines.extend([

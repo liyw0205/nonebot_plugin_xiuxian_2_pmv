@@ -501,6 +501,23 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("cultivation_item_operations", service_source)
 
+    def test_three_cultivation_pill_use_is_atomic_and_idempotent(self) -> None:
+        back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
+        command_source = (back_root / "__init__.py").read_text(encoding="utf-8")
+        service_source = (back_root / "three_cultivation_pill_service.py").read_text(
+            encoding="utf-8"
+        )
+        start = command_source.index("async def use_three_cultivation_pill(")
+        end = command_source.index("\n\n@chakan_wupin.handle", start)
+        command = command_source[start:end]
+
+        self.assertIn("three_cultivation_pill_service.apply(", command)
+        self.assertNotIn("sql_message.update_exp(", command)
+        self.assertNotIn("sql_message.update_user_attribute(", command)
+        self.assertNotIn("sql_message.update_back_j(", command)
+        self.assertIn("BEGIN IMMEDIATE", service_source)
+        self.assertIn("three_cultivation_pill_operations", service_source)
+
     def test_sect_owner_transfer_uses_transactional_service(self) -> None:
         sect_root = SOURCE_ROOT / "xiuxian" / "xiuxian_sect"
         command_source = (sect_root / "__init__.py").read_text(encoding="utf-8")
