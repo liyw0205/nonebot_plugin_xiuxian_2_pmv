@@ -113,6 +113,19 @@ class SectElixirRoomMaintenance:
         return self.status == "charged" and not self.duplicate
 
 
+@dataclass(frozen=True)
+class SectDonation:
+    status: str
+    user_id: str
+    sect_id: int
+    stone: int = 0
+    materials: int = 0
+
+    @property
+    def applied(self) -> bool:
+        return self.status in {"donated", "duplicate"}
+
+
 class SectMembershipService:
     def __init__(self, database: str | Path, lock: RLock | None = None) -> None:
         self._database = Path(database)
@@ -234,6 +247,108 @@ class SectMembershipService:
             )
             """
         )
+
+    @staticmethod
+    def _ensure_donation_operations(conn) -> None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sect_donation_operations (
+                operation_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                sect_id INTEGER NOT NULL,
+                stone INTEGER NOT NULL,
+                materials INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+    def donate(self, operation_id, user_id, sect_id, stone, materials) -> SectDonation:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            raise ValueError("operation_id must not be empty")
+        user_id = str(user_id)
+        sect_id = int(sect_id)
+        stone = int(stone)
+        materials = int(materials)
+        if stone <= 0:
+            return SectDonation("invalid_amount", user_id, sect_id, stone, materials)
+        if materials < 0:
+            return SectDonation("invalid_materials", user_id, sect_id, stone, materials)
+
+        def result(status, result_stone=stone, result_materials=materials):
+            return SectDonation(status, user_id, sect_id, int(result_stone), int(result_materials))
+
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._ensure_donation_operations(conn)
+                previous = conn.execute(
+                    "SELECT stone, materials FROM sect_donation_operations WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if previous is not None:
+                    conn.rollback()
+                    return result("duplicate", previous[0], previous[1])
+
+                user = conn.execute(
+                    "SELECT sect_id, stone FROM user_xiuxian WHERE user_id=%s",
+                    (user_id,),
+                ).fetchone()
+                if user is None:
+                    conn.rollback()
+                    return result("user_missing")
+                if user[0] is None or int(user[0]) != sect_id:
+                    conn.rollback()
+                    return result("sect_changed")
+                if int(user[1] or 0) < stone:
+                    conn.rollback()
+                    return result("stone_insufficient")
+                if conn.execute(
+                    "SELECT 1 FROM sects WHERE sect_id=%s", (sect_id,)
+                ).fetchone() is None:
+                    conn.rollback()
+                    return result("sect_missing")
+
+                user_update = conn.execute(
+                    """
+                    UPDATE user_xiuxian
+                    SET stone=stone-%s,
+                        sect_contribution=COALESCE(sect_contribution, 0)+%s
+                    WHERE user_id=%s AND sect_id=%s AND stone >= %s
+                    """,
+                    (stone, stone, user_id, sect_id, stone),
+                )
+                sect_update = conn.execute(
+                    """
+                    UPDATE sects
+                    SET sect_used_stone=COALESCE(sect_used_stone, 0)+%s,
+                        sect_scale=COALESCE(sect_scale, 0)+%s,
+                        sect_materials=COALESCE(sect_materials, 0)+%s
+                    WHERE sect_id=%s
+                    """,
+                    (stone, stone, materials, sect_id),
+                )
+                if user_update.rowcount != 1:
+                    conn.rollback()
+                    return result("user_changed")
+                if sect_update.rowcount != 1:
+                    conn.rollback()
+                    return result("sect_changed")
+
+                conn.execute(
+                    """
+                    INSERT INTO sect_donation_operations (
+                        operation_id, user_id, sect_id, stone, materials
+                    ) VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (operation_id, user_id, sect_id, stone, materials),
+                )
+                conn.commit()
+                return result("donated")
+            except Exception:
+                conn.rollback()
+                raise
 
     def charge_elixir_room_maintenance(
         self,
@@ -1102,6 +1217,7 @@ class SectMembershipService:
 
 __all__ = [
     "SectBuffSearch",
+    "SectDonation",
     "SectElixirRoomMaintenance",
     "SectElixirRoomUpgrade",
     "SectFairylandUpgrade",

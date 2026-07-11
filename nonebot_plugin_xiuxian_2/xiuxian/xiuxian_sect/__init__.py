@@ -2315,37 +2315,49 @@ async def sect_donate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         materials_rate = config.get("宗门捐献资材倍率", 1)
         add_materials = int(donate_stone * materials_rate)
 
-        # 扣用户灵石
-        sql_message.update_ls(user_id, donate_stone, 2)
-        # 加宗门建设度
-        sql_message.donate_update(user_info['sect_id'], donate_stone)
-        # 加个人宗门贡献
-        sql_message.update_user_sect_contribution(user_id, user_info['sect_contribution'] + donate_stone)
-        # 加宗门资材
-        sql_message.update_sect_materials(user_info['sect_id'], add_materials, 1)
-        safe_log_economy_change(
-            user_id=user_id,
-            sect_id=user_info["sect_id"],
-            source="sect",
-            action="donate",
-            stone_delta=-donate_stone,
-            sect_contribution_delta=donate_stone,
-            sect_scale_delta=donate_stone,
-            sect_materials_delta=add_materials,
-            detail={"donate_stone": donate_stone, "materials_rate": materials_rate},
-        )
-        safe_record_game_event(
+        donation = sect_membership_service.donate(
+            _sect_operation_id(event, "donate", user_id),
             user_id,
-            "sect_donate",
+            user_info["sect_id"],
             donate_stone,
-            {
-                "source": "sect",
-                "action": "donate",
-                "skip_statistics": True,
-                "sect_id": user_info["sect_id"],
-                "detail": {"donate_stone": donate_stone, "materials_rate": materials_rate},
-            },
+            add_materials,
         )
+        if donation.status == "stone_insufficient":
+            msg = f"道友的灵石数量小于欲捐献数量{donate_stone}，请检查"
+            await handle_send(bot, event, msg, md_type="宗门", k1="捐献", v1="宗门捐献", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
+            await sect_donate.finish()
+        if donation.status in {"sect_changed", "sect_missing", "user_changed"}:
+            msg = "道友的宗门状态已发生变化，请重新确认后再捐献。"
+            await handle_send(bot, event, msg, md_type="宗门", k1="捐献", v1="宗门捐献", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
+            await sect_donate.finish()
+        if not donation.applied:
+            msg = "宗门捐献失败，请检查输入后重试。"
+            await handle_send(bot, event, msg, md_type="宗门", k1="捐献", v1="宗门捐献", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
+            await sect_donate.finish()
+        if donation.status == "donated":
+            safe_log_economy_change(
+                user_id=user_id,
+                sect_id=user_info["sect_id"],
+                source="sect",
+                action="donate",
+                stone_delta=-donate_stone,
+                sect_contribution_delta=donate_stone,
+                sect_scale_delta=donate_stone,
+                sect_materials_delta=add_materials,
+                detail={"donate_stone": donate_stone, "materials_rate": materials_rate},
+            )
+            safe_record_game_event(
+                user_id,
+                "sect_donate",
+                donate_stone,
+                {
+                    "source": "sect",
+                    "action": "donate",
+                    "skip_statistics": True,
+                    "sect_id": user_info["sect_id"],
+                    "detail": {"donate_stone": donate_stone, "materials_rate": materials_rate},
+                },
+            )
 
         msg = (
             f"道友捐献灵石{donate_stone}枚，"
