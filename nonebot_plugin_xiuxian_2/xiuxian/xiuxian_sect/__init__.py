@@ -1791,6 +1791,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 await sect_task_complete.finish()
 
             get_exp = int(user_info['exp'] * userstask[user_id]['任务内容']['give'])
+            msg = ""
 
             if user_info['sect_position'] is None:
                 max_exp_limit = 4

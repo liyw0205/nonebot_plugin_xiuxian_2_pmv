@@ -42,10 +42,7 @@ def create_user_sect_task(user_id, sect_id=None):
     else:
         key = random.choices(list(tasklist))[0]
         task = {"任务名称": key, "任务内容": tasklist[key]}
-    userstask[user_id] = {
-        "任务名称": task["任务名称"],
-        "任务内容": task["任务内容"],
-    }
+    userstask[user_id] = dict(task)
     return userstask[user_id]
 
 
@@ -53,10 +50,7 @@ def isUserTask(user_id):
     """判断用户是否已有任务 True:有任务"""
     task = sect_task_state_manager.get_active_task(user_id)
     if task:
-        userstask[user_id] = {
-            "任务名称": task["任务名称"],
-            "任务内容": task["任务内容"],
-        }
+        userstask[user_id] = dict(task)
         return True
 
     if user_id not in userstask:
