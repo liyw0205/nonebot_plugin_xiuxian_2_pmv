@@ -45,6 +45,7 @@ from ..xiuxian_utils.pet_system import PET_BAG_LIMIT, PET_EGG_IDS, PET_EGG_RARIT
 from .back_util import *
 from .cultivation_item_service import CultivationItemService
 from .equipment_service import EquipmentService
+from .lottery_talisman_service import LotteryReward, LotteryTalismanService
 from .stone_reward_service import StoneItemRewardService
 from .three_cultivation_pill_service import ThreeCultivationPillService
 from .unbind_item_service import UnbindItemService
@@ -72,6 +73,7 @@ cultivation_item_service = CultivationItemService(get_paths().game_db)
 stone_reward_service = StoneItemRewardService(get_paths().game_db)
 three_cultivation_pill_service = ThreeCultivationPillService(get_paths().game_db)
 unbind_item_service = UnbindItemService(get_paths().game_db)
+lottery_talisman_service = LotteryTalismanService(get_paths().game_db)
 player_data_manager = PlayerDataManager()
 tianti_manager = TiantiDataManager()
 scheduler = require("nonebot_plugin_apscheduler").scheduler
@@ -105,6 +107,17 @@ def _cultivation_item_operation_id(event, user_id, goods_id):
     if event_id:
         return f"cultivation-item:{event_id}:{user_id}:{goods_id}"
     return f"cultivation-item:{user_id}:{goods_id}:{time.time_ns()}"
+
+
+def _lottery_talisman_operation_id(event, user_id, goods_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"lottery-talisman:{event_id}:{user_id}:{goods_id}"
+    return f"lottery-talisman:{user_id}:{goods_id}:{time.time_ns()}"
+
+
 # 通用物品类型和炼金最低价格
 MIN_PRICE = 600000
 
@@ -1155,60 +1168,49 @@ async def use_lottery_talisman(bot: Bot, event: GroupMessageEvent | PrivateMessa
     """使用灵签宝箓"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
-    user_id = user_info["user_id"]
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
-        
-    # 批量处理使用灵签宝箓
-    success_count = 0
-    obtained_items_dict = {} # 使用字典汇总获得的物品及数量
-    
+    user_id = user_info["user_id"]
+    rewards = []
     for _ in range(num):
-        # 50%概率判断成功
         roll = random.randint(1, 100)
         if roll <= 50:
-            success_count += 1
-            
-            # 随机选择防具或法器类型
             item_type = random.choice(["防具", "法器"])
-            # 随机生成品阶，min(随机数, 54) 确保不超过最大品阶
-            zx_rank = random.randint(5, 10) # 基础品阶范围
+            zx_rank = random.randint(5, 10)
             item_rank = min(random.randint(zx_rank, zx_rank + 50), 54)
-            # 提高低品阶物品的概率（如果roll到5且不是100，则强制变为16，即下品符器）
             if item_rank == 5 and random.randint(1, 100) != 100:
                 item_rank = 16
-            
-            # 获取随机物品
+
             item_id_list = items.get_random_id_list_by_rank_and_item_type(item_rank, item_type)
             if item_id_list:
                 rank_id = random.choice(item_id_list)
                 item_info = items.get_data_by_item_id(rank_id)
-                
-                # 给予物品
-                sql_message.send_back(
-                    user_id, 
-                    rank_id, 
-                    item_info["name"], 
-                    item_info["type"], 
-                    1,
-                    1
+                rewards.append(
+                    LotteryReward(rank_id, item_info["name"], item_info["type"], 1)
                 )
-                
-                # 汇总获得的物品
-                obtained_items_dict[item_info["name"]] = obtained_items_dict.get(item_info["name"], 0) + 1
-    
-    # 批量消耗灵签宝箓
-    sql_message.update_back_j(user_id, item_id, num=num)
-    
-    # 构建结果消息
-    items_msg_list = [f"{name} x{count}" for name, count in obtained_items_dict.items()]
-    
-    if success_count > 0:
-        result_msg = f"道友使用灵签宝箓 {num} 个，成功获得以下物品：\n" + "\n".join(items_msg_list)
+
+    result = lottery_talisman_service.apply(
+        _lottery_talisman_operation_id(event, user_id, item_id),
+        user_id,
+        item_id,
+        num,
+        rewards,
+        max_goods_num=XiuConfig().max_goods_num,
+    )
+    if not result.succeeded:
+        await handle_send(bot, event, "灵签宝箓数量已经变化，请刷新背包后重试！")
+        return
+
+    obtained_items = {}
+    for reward in result.rewards:
+        obtained_items[reward.name] = obtained_items.get(reward.name, 0) + reward.quantity
+    if obtained_items:
+        items_msg = "\n".join(f"{name} x{count}" for name, count in obtained_items.items())
+        result_msg = f"道友使用灵签宝箓 {result.quantity} 个，成功获得以下物品：\n{items_msg}"
     else:
-        result_msg = f"道友使用灵签宝箓 {num} 个，未能获得任何物品，运气不佳啊！"
-    
+        result_msg = f"道友使用灵签宝箓 {result.quantity} 个，未能获得任何物品，运气不佳啊！"
+
     await handle_send(bot, event, result_msg)
     return
 
