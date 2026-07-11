@@ -183,6 +183,39 @@ class SectRename:
         return self.status in {"renamed", "duplicate"}
 
 
+@dataclass(frozen=True)
+class SectMemberRemoval:
+    status: str
+    actor_id: str
+    target_id: str
+    sect_id: int | None = None
+    sect_name: str = ""
+    actor_name: str = ""
+    target_name: str = ""
+    actor_position: int | None = None
+    target_position: int | None = None
+
+    @property
+    def applied(self) -> bool:
+        return self.status in {"left", "kicked", "duplicate"}
+
+
+@dataclass(frozen=True)
+class SectPositionChange:
+    status: str
+    actor_id: str
+    target_id: str
+    sect_id: int | None = None
+    actor_name: str = ""
+    target_name: str = ""
+    old_position: int | None = None
+    new_position: int | None = None
+
+    @property
+    def applied(self) -> bool:
+        return self.status in {"changed", "duplicate", "unchanged"}
+
+
 class SectMembershipService:
     def __init__(self, database: str | Path, lock: RLock | None = None) -> None:
         self._database = Path(database)
@@ -381,6 +414,44 @@ class SectMembershipService:
             """
         )
 
+    @staticmethod
+    def _ensure_member_removal_operations(conn) -> None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sect_member_removal_operations (
+                operation_id TEXT PRIMARY KEY,
+                operation_type TEXT NOT NULL,
+                actor_id TEXT NOT NULL,
+                target_id TEXT NOT NULL,
+                sect_id INTEGER NOT NULL,
+                sect_name TEXT NOT NULL,
+                actor_name TEXT NOT NULL,
+                target_name TEXT NOT NULL,
+                actor_position INTEGER,
+                target_position INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+    @staticmethod
+    def _ensure_position_change_operations(conn) -> None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sect_position_change_operations (
+                operation_id TEXT PRIMARY KEY,
+                actor_id TEXT NOT NULL,
+                target_id TEXT NOT NULL,
+                sect_id INTEGER NOT NULL,
+                actor_name TEXT NOT NULL,
+                target_name TEXT NOT NULL,
+                old_position INTEGER NOT NULL,
+                new_position INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
     def rename_sect(
         self,
         operation_id,
@@ -518,6 +589,442 @@ class SectMembershipService:
                 )
                 conn.commit()
                 return result("renamed", current_name)
+            except Exception:
+                conn.rollback()
+                raise
+
+    def leave_sect(self, operation_id, user_id, *, owner_position: int = 0) -> SectMemberRemoval:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            raise ValueError("operation_id must not be empty")
+        user_id = str(user_id)
+
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._ensure_member_removal_operations(conn)
+                previous = conn.execute(
+                    "SELECT sect_id, sect_name, actor_name, target_name, actor_position, target_position "
+                    "FROM sect_member_removal_operations WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if previous is not None:
+                    conn.rollback()
+                    return SectMemberRemoval(
+                        "duplicate",
+                        user_id,
+                        user_id,
+                        int(previous[0]),
+                        str(previous[1]),
+                        str(previous[2]),
+                        str(previous[3]),
+                        None if previous[4] is None else int(previous[4]),
+                        None if previous[5] is None else int(previous[5]),
+                    )
+
+                actor = conn.execute(
+                    "SELECT sect_id, sect_position, user_name FROM user_xiuxian WHERE user_id=%s",
+                    (user_id,),
+                ).fetchone()
+                if actor is None:
+                    conn.rollback()
+                    return SectMemberRemoval("user_not_found", user_id, user_id)
+                if actor[0] is None:
+                    conn.rollback()
+                    return SectMemberRemoval("not_in_sect", user_id, user_id)
+                if int(actor[1]) == int(owner_position):
+                    conn.rollback()
+                    return SectMemberRemoval(
+                        "owner_cannot_leave",
+                        user_id,
+                        user_id,
+                        int(actor[0]),
+                        actor_name=str(actor[2] or ""),
+                        target_name=str(actor[2] or ""),
+                        actor_position=int(actor[1]),
+                        target_position=int(actor[1]),
+                    )
+
+                sect = conn.execute(
+                    "SELECT sect_name FROM sects WHERE sect_id=%s",
+                    (actor[0],),
+                ).fetchone()
+                if sect is None:
+                    conn.rollback()
+                    return SectMemberRemoval("sect_not_found", user_id, user_id, int(actor[0]))
+
+                updated = conn.execute(
+                    "UPDATE user_xiuxian SET sect_id=NULL, sect_position=NULL, sect_contribution=0 "
+                    "WHERE user_id=%s AND sect_id=%s AND sect_position=%s",
+                    (user_id, actor[0], actor[1]),
+                )
+                if updated.rowcount != 1:
+                    raise db_backend.IntegrityError("sect leave state changed concurrently")
+                conn.execute(
+                    "INSERT INTO sect_member_removal_operations "
+                    "(operation_id, operation_type, actor_id, target_id, sect_id, sect_name, actor_name, target_name, actor_position, target_position) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    (
+                        operation_id,
+                        "leave",
+                        user_id,
+                        user_id,
+                        actor[0],
+                        str(sect[0] or ""),
+                        str(actor[2] or ""),
+                        str(actor[2] or ""),
+                        actor[1],
+                        actor[1],
+                    ),
+                )
+                conn.commit()
+                return SectMemberRemoval(
+                    "left",
+                    user_id,
+                    user_id,
+                    int(actor[0]),
+                    str(sect[0] or ""),
+                    str(actor[2] or ""),
+                    str(actor[2] or ""),
+                    int(actor[1]),
+                    int(actor[1]),
+                )
+            except Exception:
+                conn.rollback()
+                raise
+
+    def kick_member(
+        self,
+        operation_id,
+        actor_id,
+        target_id,
+        *,
+        manager_max_position: int,
+    ) -> SectMemberRemoval:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            raise ValueError("operation_id must not be empty")
+        actor_id = str(actor_id)
+        target_id = str(target_id)
+        manager_max_position = int(manager_max_position)
+
+        if actor_id == target_id:
+            return SectMemberRemoval("self_target", actor_id, target_id)
+
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._ensure_member_removal_operations(conn)
+                previous = conn.execute(
+                    "SELECT sect_id, sect_name, actor_name, target_name, actor_position, target_position "
+                    "FROM sect_member_removal_operations WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if previous is not None:
+                    conn.rollback()
+                    return SectMemberRemoval(
+                        "duplicate",
+                        actor_id,
+                        target_id,
+                        int(previous[0]),
+                        str(previous[1]),
+                        str(previous[2]),
+                        str(previous[3]),
+                        None if previous[4] is None else int(previous[4]),
+                        None if previous[5] is None else int(previous[5]),
+                    )
+
+                actor = conn.execute(
+                    "SELECT sect_id, sect_position, user_name FROM user_xiuxian WHERE user_id=%s",
+                    (actor_id,),
+                ).fetchone()
+                if actor is None:
+                    conn.rollback()
+                    return SectMemberRemoval("actor_not_found", actor_id, target_id)
+                if actor[0] is None:
+                    conn.rollback()
+                    return SectMemberRemoval("actor_not_in_sect", actor_id, target_id)
+                target = conn.execute(
+                    "SELECT sect_id, sect_position, user_name FROM user_xiuxian WHERE user_id=%s",
+                    (target_id,),
+                ).fetchone()
+                if target is None:
+                    conn.rollback()
+                    return SectMemberRemoval(
+                        "target_not_found",
+                        actor_id,
+                        target_id,
+                        int(actor[0]),
+                        actor_name=str(actor[2] or ""),
+                        actor_position=int(actor[1]),
+                    )
+                if int(actor[1]) > manager_max_position:
+                    conn.rollback()
+                    return SectMemberRemoval(
+                        "insufficient_rank",
+                        actor_id,
+                        target_id,
+                        int(actor[0]),
+                        actor_name=str(actor[2] or ""),
+                        target_name=str(target[2] or ""),
+                        actor_position=int(actor[1]),
+                        target_position=int(target[1]) if target[1] is not None else None,
+                    )
+                if target[0] != actor[0]:
+                    conn.rollback()
+                    return SectMemberRemoval(
+                        "different_sect",
+                        actor_id,
+                        target_id,
+                        int(actor[0]),
+                        actor_name=str(actor[2] or ""),
+                        target_name=str(target[2] or ""),
+                        actor_position=int(actor[1]),
+                        target_position=int(target[1]) if target[1] is not None else None,
+                    )
+                if int(target[1]) <= int(actor[1]):
+                    conn.rollback()
+                    return SectMemberRemoval(
+                        "target_not_lower",
+                        actor_id,
+                        target_id,
+                        int(actor[0]),
+                        actor_name=str(actor[2] or ""),
+                        target_name=str(target[2] or ""),
+                        actor_position=int(actor[1]),
+                        target_position=int(target[1]),
+                    )
+                sect = conn.execute(
+                    "SELECT sect_name FROM sects WHERE sect_id=%s",
+                    (actor[0],),
+                ).fetchone()
+                if sect is None:
+                    conn.rollback()
+                    return SectMemberRemoval("sect_not_found", actor_id, target_id, int(actor[0]))
+
+                updated = conn.execute(
+                    "UPDATE user_xiuxian SET sect_id=NULL, sect_position=NULL, sect_contribution=0 "
+                    "WHERE user_id=%s AND sect_id=%s AND sect_position=%s",
+                    (target_id, target[0], target[1]),
+                )
+                if updated.rowcount != 1:
+                    raise db_backend.IntegrityError("sect kick state changed concurrently")
+                conn.execute(
+                    "INSERT INTO sect_member_removal_operations "
+                    "(operation_id, operation_type, actor_id, target_id, sect_id, sect_name, actor_name, target_name, actor_position, target_position) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    (
+                        operation_id,
+                        "kick",
+                        actor_id,
+                        target_id,
+                        actor[0],
+                        str(sect[0] or ""),
+                        str(actor[2] or ""),
+                        str(target[2] or ""),
+                        actor[1],
+                        target[1],
+                    ),
+                )
+                conn.commit()
+                return SectMemberRemoval(
+                    "kicked",
+                    actor_id,
+                    target_id,
+                    int(actor[0]),
+                    str(sect[0] or ""),
+                    str(actor[2] or ""),
+                    str(target[2] or ""),
+                    int(actor[1]),
+                    int(target[1]),
+                )
+            except Exception:
+                conn.rollback()
+                raise
+
+    def change_position(
+        self,
+        operation_id,
+        actor_id,
+        target_id,
+        requested_position,
+        position_limits,
+        *,
+        manager_max_position: int,
+    ) -> SectPositionChange:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            raise ValueError("operation_id must not be empty")
+        actor_id = str(actor_id)
+        target_id = str(target_id)
+        requested_position = int(requested_position)
+        manager_max_position = int(manager_max_position)
+        normalized_limits = {
+            int(position): max(0, int(limit))
+            for position, limit in position_limits.items()
+        }
+        if requested_position not in normalized_limits:
+            return SectPositionChange("invalid_position", actor_id, target_id)
+        if actor_id == target_id:
+            return SectPositionChange("self_target", actor_id, target_id)
+
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._ensure_position_change_operations(conn)
+                previous = conn.execute(
+                    "SELECT sect_id, actor_name, target_name, old_position, new_position "
+                    "FROM sect_position_change_operations WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if previous is not None:
+                    conn.rollback()
+                    return SectPositionChange(
+                        "duplicate",
+                        actor_id,
+                        target_id,
+                        int(previous[0]),
+                        str(previous[1]),
+                        str(previous[2]),
+                        int(previous[3]),
+                        int(previous[4]),
+                    )
+
+                actor = conn.execute(
+                    "SELECT sect_id, sect_position, user_name FROM user_xiuxian WHERE user_id=%s",
+                    (actor_id,),
+                ).fetchone()
+                if actor is None:
+                    conn.rollback()
+                    return SectPositionChange("actor_missing", actor_id, target_id)
+                if actor[0] is None:
+                    conn.rollback()
+                    return SectPositionChange("actor_without_sect", actor_id, target_id)
+                target = conn.execute(
+                    "SELECT sect_id, sect_position, user_name FROM user_xiuxian WHERE user_id=%s",
+                    (target_id,),
+                ).fetchone()
+                if target is None:
+                    conn.rollback()
+                    return SectPositionChange(
+                        "target_missing",
+                        actor_id,
+                        target_id,
+                        int(actor[0]),
+                        actor_name=str(actor[2] or ""),
+                    )
+                if int(actor[1]) > manager_max_position:
+                    conn.rollback()
+                    return SectPositionChange(
+                        "actor_not_manager",
+                        actor_id,
+                        target_id,
+                        int(actor[0]),
+                        str(actor[2] or ""),
+                        str(target[2] or ""),
+                        int(target[1]) if target[1] is not None else None,
+                        requested_position,
+                    )
+                if target[0] != actor[0]:
+                    conn.rollback()
+                    return SectPositionChange(
+                        "target_not_member",
+                        actor_id,
+                        target_id,
+                        int(actor[0]),
+                        str(actor[2] or ""),
+                        str(target[2] or ""),
+                        int(target[1]) if target[1] is not None else None,
+                        requested_position,
+                    )
+                if int(target[1]) <= int(actor[1]):
+                    conn.rollback()
+                    return SectPositionChange(
+                        "target_not_below_actor",
+                        actor_id,
+                        target_id,
+                        int(actor[0]),
+                        str(actor[2] or ""),
+                        str(target[2] or ""),
+                        int(target[1]),
+                        requested_position,
+                    )
+                if requested_position <= int(actor[1]):
+                    conn.rollback()
+                    return SectPositionChange(
+                        "position_not_below_actor",
+                        actor_id,
+                        target_id,
+                        int(actor[0]),
+                        str(actor[2] or ""),
+                        str(target[2] or ""),
+                        int(target[1]),
+                        requested_position,
+                    )
+                current_position = int(target[1])
+                if current_position == requested_position:
+                    conn.rollback()
+                    return SectPositionChange(
+                        "unchanged",
+                        actor_id,
+                        target_id,
+                        int(actor[0]),
+                        str(actor[2] or ""),
+                        str(target[2] or ""),
+                        current_position,
+                        requested_position,
+                    )
+                limit = normalized_limits[requested_position]
+                if limit > 0:
+                    count = conn.execute(
+                        "SELECT COUNT(*) FROM user_xiuxian WHERE sect_id=%s AND sect_position=%s AND user_id<>%s",
+                        (actor[0], requested_position, target_id),
+                    ).fetchone()
+                    if int(count[0] or 0) >= limit:
+                        conn.rollback()
+                        return SectPositionChange(
+                            "position_full",
+                            actor_id,
+                            target_id,
+                            int(actor[0]),
+                            str(actor[2] or ""),
+                            str(target[2] or ""),
+                            current_position,
+                            requested_position,
+                        )
+
+                updated = conn.execute(
+                    "UPDATE user_xiuxian SET sect_position=%s WHERE user_id=%s AND sect_id=%s AND sect_position=%s",
+                    (requested_position, target_id, actor[0], current_position),
+                )
+                if updated.rowcount != 1:
+                    raise db_backend.IntegrityError("sect position changed concurrently")
+                conn.execute(
+                    "INSERT INTO sect_position_change_operations "
+                    "(operation_id, actor_id, target_id, sect_id, actor_name, target_name, old_position, new_position) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                    (
+                        operation_id,
+                        actor_id,
+                        target_id,
+                        actor[0],
+                        str(actor[2] or ""),
+                        str(target[2] or ""),
+                        current_position,
+                        requested_position,
+                    ),
+                )
+                conn.commit()
+                return SectPositionChange(
+                    "changed",
+                    actor_id,
+                    target_id,
+                    int(actor[0]),
+                    str(actor[2] or ""),
+                    str(target[2] or ""),
+                    current_position,
+                    requested_position,
+                )
             except Exception:
                 conn.rollback()
                 raise
@@ -1748,8 +2255,10 @@ __all__ = [
     "SectElixirRoomMaintenance",
     "SectElixirRoomUpgrade",
     "SectFairylandUpgrade",
+    "SectMemberRemoval",
     "SectMembershipService",
     "SectNameRefresh",
+    "SectPositionChange",
     "SectRename",
     "SectOwnerTransfer",
     "SectPracticeUpgrade",

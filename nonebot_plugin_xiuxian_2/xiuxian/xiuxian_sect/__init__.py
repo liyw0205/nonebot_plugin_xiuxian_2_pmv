@@ -2248,40 +2248,45 @@ async def sect_kick_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="宗门", k1="踢出", v1="宗门踢出", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
         await sect_kick_out.finish()
     
-    # 检查不能踢自己
-    if give_user['user_id'] == user_info['user_id']:
-        msg = f"无法对自己进行操作，试试退出宗门？"
-        await handle_send(bot, event, msg, md_type="宗门", k1="踢出", v1="宗门踢出", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
-        await sect_kick_out.finish()
-    
-    # 检查目标是否在同一宗门
-    if give_user['sect_id'] != user_info['sect_id']:
-        msg = f"{give_user['user_name']}不在你管理的宗门内，请检查。"
-        await handle_send(bot, event, msg, md_type="宗门", k1="踢出", v1="宗门踢出", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
-        await sect_kick_out.finish()
-    
     # 获取长老职位配置
     position_zhanglao = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "长老"]
     idx_position = int(position_zhanglao[0]) if len(position_zhanglao) == 1 else 2
-    
-    # 检查操作者权限
-    if user_info['sect_position'] <= idx_position:  # 长老及以上职位
-        if give_user['sect_position'] <= user_info['sect_position']:
-            msg = f"""{give_user['user_name']}的宗门职务为{jsondata.sect_config_data()[f"{give_user['sect_position']}"]['title']}，不在你之下，无权操作。"""
-            await handle_send(bot, event, msg, md_type="宗门", k1="踢出", v1="宗门踢出", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
-            await sect_kick_out.finish()
-        else:
-            # 执行踢出操作
-            sect_info = sql_message.get_sect_info_by_id(give_user['sect_id'])
-            sql_message.update_usr_sect(give_user['user_id'], None, None)
-            sql_message.update_user_sect_contribution(give_user['user_id'], 0)
-            msg = f"""传{jsondata.sect_config_data()[f"{user_info['sect_position']}"]['title']}{user_info['user_name']}法旨，即日起{give_user['user_name']}被{sect_info['sect_name']}除名"""
-            await handle_send(bot, event, msg, md_type="宗门", k1="踢出", v1="宗门踢出", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
-            await sect_kick_out.finish()
-    else:
+
+    if user_info['sect_position'] > idx_position:
         msg = f"""你的宗门职务为{jsondata.sect_config_data()[f"{user_info['sect_position']}"]['title']}，只有长老及以上可执行踢出操作。"""
         await handle_send(bot, event, msg, md_type="宗门", k1="踢出", v1="宗门踢出", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
         await sect_kick_out.finish()
+
+    result = sect_membership_service.kick_member(
+        _sect_operation_id(event, "kick", give_user['user_id']),
+        user_info['user_id'],
+        give_user['user_id'],
+        manager_max_position=idx_position,
+    )
+    if result.status == "self_target":
+        msg = f"无法对自己进行操作，试试退出宗门？"
+    elif result.status == "different_sect":
+        msg = f"{give_user['user_name']}不在你管理的宗门内，请检查。"
+    elif result.status == "target_not_lower":
+        target_position = result.target_position
+        target_title = (
+            jsondata.sect_config_data()[f"{target_position}"]['title']
+            if target_position is not None and f"{target_position}" in jsondata.sect_config_data()
+            else "未知职位"
+        )
+        msg = f"""{give_user['user_name']}的宗门职务为{target_title}，不在你之下，无权操作。"""
+    elif result.status in {"kicked", "duplicate"}:
+        actor_position = result.actor_position if result.actor_position is not None else user_info['sect_position']
+        actor_title = jsondata.sect_config_data()[f"{actor_position}"]['title']
+        sect_name = result.sect_name or (sql_message.get_sect_info_by_id(user_info['sect_id']) or {}).get('sect_name', '')
+        msg = f"""传{actor_title}{result.actor_name or user_info['user_name']}法旨，即日起{result.target_name or give_user['user_name']}被{sect_name}除名"""
+    elif result.status == "target_not_found":
+        msg = f"修仙界没有名为【{nick_name}】的道友，请检查道号是否正确！"
+    else:
+        msg = f"{give_user['user_name']}不在你管理的宗门内，请检查。"
+
+    await handle_send(bot, event, msg, md_type="宗门", k1="踢出", v1="宗门踢出", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
+    await sect_kick_out.finish()
 
 @sect_out.handle(parameterless=[Cooldown(cd_time=0)])
 async def sect_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -2298,18 +2303,19 @@ async def sect_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         await sect_out.finish()
     position_this = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
     owner_position = int(position_this[0]) if len(position_this) == 1 else 0
-    sect_out_id = user_info['sect_id']
-    if user_info['sect_position'] != owner_position:
-        sql_message.update_usr_sect(user_id, None, None)
-        sect_info = sql_message.get_sect_info_by_id(int(sect_out_id))
-        sql_message.update_user_sect_contribution(user_id, 0)
-        msg = f"道友已退出{sect_info['sect_name']}，今后就是自由散修，是福是祸，犹未可知。"
-        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
-        await sect_out.finish()
-    else:
+    result = sect_membership_service.leave_sect(
+        _sect_operation_id(event, "leave", user_id),
+        user_id,
+        owner_position=owner_position,
+    )
+    if result.status == "owner_cannot_leave":
         msg = f"宗主无法直接退出宗门，如确有需要，请完成宗主传位后另行尝试。"
-        await handle_send(bot, event, msg, md_type="宗门", k1="捐献", v1="宗主传位", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
+        await handle_send(bot, event, msg, md_type="宗门", k1="传位", v1="宗主传位", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_out.finish()
+    sect_name = result.sect_name or (sql_message.get_sect_info_by_id(int(user_info['sect_id'])) or {}).get('sect_name', '')
+    msg = f"道友已退出{sect_name}，今后就是自由散修，是福是祸，犹未可知。"
+    await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
+    await sect_out.finish()
 
 
 @sect_donate.handle(parameterless=[Cooldown(cd_time=0)])
@@ -2479,59 +2485,48 @@ async def sect_position_update_(bot: Bot, event: GroupMessageEvent | PrivateMess
         await handle_send(bot, event, msg, md_type="宗门", k1="变更", v1="宗门职位变更", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_position_update.finish()
     
-    # 检查目标是否在同一宗门
-    if give_user['sect_id'] != user_info['sect_id']:
+    position_limits = {
+        int(pos_id): int(pos_data.get("max_count", 0) or 0)
+        for pos_id, pos_data in jsondata.sect_config_data().items()
+    }
+    result = sect_membership_service.change_position(
+        _sect_operation_id(event, "position_change", give_user['user_id']),
+        user_id,
+        give_user['user_id'],
+        int(position_num),
+        position_limits,
+        manager_max_position=idx_position,
+    )
+    if result.status == "target_not_member":
         msg = f"请确保变更目标道友与你在同一宗门。"
-        await handle_send(bot, event, msg, md_type="宗门", k1="变更", v1="宗门职位变更", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
-        await sect_position_update.finish()
-    
-    # 检查目标职位是否低于自己
-    if give_user['sect_position'] <= user_info['sect_position']:
-        msg = f"""{give_user['user_name']}的宗门职务为{jsondata.sect_config_data()[f"{give_user['sect_position']}"]['title']}，不在你之下，无权操作。"""
-        await handle_send(bot, event, msg, md_type="宗门", k1="变更", v1="宗门职位变更", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
-        await sect_position_update.finish()
-    
-    # 检查要变更的职位是否低于自己
-    if int(position_num) <= user_info['sect_position']:
+    elif result.status == "target_not_below_actor":
+        target_position = result.old_position
+        target_title = (
+            jsondata.sect_config_data()[f"{target_position}"]['title']
+            if target_position is not None and f"{target_position}" in jsondata.sect_config_data()
+            else "未知职位"
+        )
+        msg = f"""{give_user['user_name']}的宗门职务为{target_title}，不在你之下，无权操作。"""
+    elif result.status == "position_not_below_actor":
         msg = f"道友试图变更的职位品阶必须在你品阶之下"
-        await handle_send(bot, event, msg, md_type="宗门", k1="变更", v1="宗门职位变更", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
-        await sect_position_update.finish()
-    
-    # 检查职位人数限制
-    position_data = jsondata.sect_config_data().get(position_num, {})
-    max_count = position_data.get("max_count", 0)
-    
-    if max_count > 0:
-        # 获取当前该职位人数
-        sect_members = sql_message.get_all_users_by_sect_id(user_info['sect_id'])
-        current_count = sum(1 for m in sect_members if m['sect_position'] == int(position_num))
-        
-        if current_count >= max_count:
-            msg = f"{position_data['title']}职位已有{current_count}人，已达到上限{max_count}人，无法再任命！"
-            await handle_send(bot, event, msg, md_type="宗门", k1="变更", v1=f"宗门职位变更 {give_user['user_name']}", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
-            await sect_position_update.finish()
-    
-    # 检查特殊职位限制（如大师兄、大师姐等）
-    special_positions = ["6", "7", "8", "9", "10"]  # 大师兄、大师姐、二师兄、小师弟、小师妹
-    if position_num in special_positions:
-        # 检查是否已经有人担任该职位
-        sect_members = sql_message.get_all_users_by_sect_id(user_info['sect_id'])
-        for member in sect_members:
-            if member['sect_position'] == int(position_num) and member['user_id'] != give_user['user_id']:
-                current_title = jsondata.sect_config_data()[position_num]['title']
-                msg = f"{current_title}职位已由{member['user_name']}担任，无法重复任命！"
-                await handle_send(bot, event, msg, md_type="宗门", k1="变更", v1=f"宗门职位变更 {give_user['user_name']}", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
-                await sect_position_update.finish()
-    
-    # 执行职位变更
-    sql_message.update_usr_sect(give_user['user_id'], give_user['sect_id'], int(position_num))
-    
-    old_title = jsondata.sect_config_data()[f"{give_user['sect_position']}"]['title']
-    new_title = jsondata.sect_config_data()[position_num]['title']
-    
-    msg = f"""传{jsondata.sect_config_data()[f"{user_info['sect_position']}"]['title']}{user_info['user_name']}法旨：
-即日起{give_user['user_name']}由{old_title}晋升为本宗{new_title}"""
-    
+    elif result.status == "position_full":
+        position_data = jsondata.sect_config_data()[position_num]
+        max_count = position_data.get("max_count", 0)
+        current_count = max_count
+        msg = f"{position_data['title']}职位已有{current_count}人，已达到上限{max_count}人，无法再任命！"
+    elif result.status == "unchanged":
+        title = jsondata.sect_config_data()[position_num]['title']
+        msg = f"{give_user['user_name']}当前已担任本宗{title}，无需重复变更。"
+    elif result.status in {"changed", "duplicate"}:
+        actor_title = jsondata.sect_config_data()[f"{user_info['sect_position']}"]['title']
+        old_title = jsondata.sect_config_data()[f"{result.old_position}"]['title']
+        new_title = jsondata.sect_config_data()[f"{result.new_position}"]['title']
+        action_text = "晋升为" if result.new_position < result.old_position else "调整为"
+        msg = f"""传{actor_title}{result.actor_name or user_info['user_name']}法旨：
+即日起{result.target_name or give_user['user_name']}由{old_title}{action_text}本宗{new_title}"""
+    else:
+        msg = f"请确保变更目标道友与你在同一宗门。"
+
     await handle_send(bot, event, msg, md_type="宗门", k1="宗门", v1="我的宗门", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
     await sect_position_update.finish()
 

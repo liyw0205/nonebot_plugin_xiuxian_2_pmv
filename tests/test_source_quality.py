@@ -788,6 +788,36 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("sql_message.update_back_j(", command)
         self.assertNotIn("sql_message.update_sect_used_stone(", command)
 
+    def test_sect_member_removal_commands_use_transactional_service(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_sect" / "__init__.py"
+        ).read_text(encoding="utf-8")
+
+        kick_start = source.index("async def sect_kick_out_")
+        out_start = source.index("async def sect_out_", kick_start)
+        donate_start = source.index("async def sect_donate_", out_start)
+        kick_command = source[kick_start:out_start]
+        out_command = source[out_start:donate_start]
+
+        self.assertIn("sect_membership_service.kick_member(", kick_command)
+        self.assertNotIn("sql_message.update_usr_sect(", kick_command)
+        self.assertNotIn("sql_message.update_user_sect_contribution(", kick_command)
+
+        self.assertIn("sect_membership_service.leave_sect(", out_command)
+        self.assertNotIn("sql_message.update_usr_sect(", out_command)
+        self.assertNotIn("sql_message.update_user_sect_contribution(", out_command)
+
+    def test_sect_position_update_uses_transactional_service(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_sect" / "__init__.py"
+        ).read_text(encoding="utf-8")
+        start = source.index("async def sect_position_update_")
+        end = source.index("@join_sect.handle", start)
+        command = source[start:end]
+
+        self.assertIn("sect_membership_service.change_position(", command)
+        self.assertNotIn("sql_message.update_usr_sect(", command)
+
     def test_entertainment_network_calls_use_io_runtime(self) -> None:
         entertainment = SOURCE_ROOT / "xiuxian" / "xiuxian_entertainment"
         expected_calls = {
