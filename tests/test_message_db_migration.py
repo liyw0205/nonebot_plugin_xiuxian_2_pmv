@@ -76,6 +76,22 @@ class MessageDatabaseMigrationTests(unittest.TestCase):
                 connection.close()
             self.assertEqual(row, ("target",))
 
+    def test_interrupted_migration_file_is_removed_before_retry(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            legacy = root / "old" / "message.db"
+            target = root / "data" / "xiuxian" / "message.db"
+            legacy.parent.mkdir(parents=True)
+            target.parent.mkdir(parents=True)
+            _create_legacy_database(legacy)
+            stale = target.parent / ".message.db.deadbeef.migrating"
+            stale.write_bytes(b"interrupted")
+
+            message_db.migrate_legacy_message_db(legacy, target)
+
+            self.assertFalse(stale.exists())
+            self.assertTrue(target.exists())
+
     def test_missing_legacy_database_is_a_noop(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

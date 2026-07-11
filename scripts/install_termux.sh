@@ -510,7 +510,8 @@ backup_before_update() {
                 "data/xiuxian" \
                 "src/plugins/nonebot_plugin_xiuxian_2" \
                 -x "data/xiuxian/backups/*" "*/__pycache__/*" "*.pyc" "logs/*" \
-                   "data/xiuxian/message.db*" "data/xiuxian/activity/activity.db*"
+                   "data/xiuxian/message.db*" "data/xiuxian/.message.db.*.migrating" \
+                   "data/xiuxian/activity/activity.db*"
         ) || ui_print yellow "警告: 更新前备份可能不完整。"
         ui_print green "备份位置: $backup_file"
     fi

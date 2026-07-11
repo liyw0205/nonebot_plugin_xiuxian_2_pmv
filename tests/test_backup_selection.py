@@ -41,6 +41,12 @@ class BackupSelectionTests(unittest.TestCase):
         self.assertTrue(
             backup_module._is_transient_backup_file(data_dir / "message.db-shm", data_dir)
         )
+        self.assertTrue(
+            backup_module._is_transient_backup_file(
+                data_dir / ".message.db.d13db9f1ee124b2ebc206303aa09bd8e.migrating",
+                data_dir,
+            )
+        )
         self.assertFalse(
             backup_module._is_transient_backup_file(data_dir / "player.db", data_dir)
         )

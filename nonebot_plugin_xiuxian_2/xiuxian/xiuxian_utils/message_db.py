@@ -96,6 +96,12 @@ def migrate_legacy_message_db(
         return None
 
     with _migration_file_lock(target):
+        for stale in target.parent.glob(f".{target.name}.*.migrating"):
+            try:
+                stale.unlink()
+                logger.warning(f"[message.db] 已清理上次中断遗留的迁移临时文件: {stale}")
+            except OSError as exc:
+                logger.warning(f"[message.db] 无法清理迁移临时文件 {stale}: {exc}")
         if not legacy.exists():
             return None
         if target.exists():

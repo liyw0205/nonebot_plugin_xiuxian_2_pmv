@@ -32,6 +32,7 @@ class InstallerScriptTests(unittest.TestCase):
         for name in ("install.sh", "install_termux.sh"):
             source = (SCRIPTS / name).read_text(encoding="utf-8")
             self.assertIn("data/xiuxian/message.db*", source)
+            self.assertIn("data/xiuxian/.message.db.*.migrating", source)
             self.assertIn("data/xiuxian/activity/activity.db*", source)
 
     def test_managed_start_commands_disable_development_reloader(self) -> None:

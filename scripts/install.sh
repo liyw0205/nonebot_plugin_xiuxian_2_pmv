@@ -620,6 +620,7 @@ backup_before_update() {
         "data/xiuxian/font/*"
         "data/xiuxian/卡图/*"
         "data/xiuxian/message.db*"
+        "data/xiuxian/.message.db.*.migrating"
         "data/xiuxian/activity/activity.db*"
     )
 

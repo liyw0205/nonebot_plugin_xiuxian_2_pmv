@@ -43,6 +43,12 @@ def _is_transient_backup_file(file_path: Path, data_dir: Path) -> bool:
     if relative_path is None:
         return file_path.name in {"message.db", "message.db-wal", "message.db-shm"}
     relative_text = relative_path.as_posix()
+    if (
+        relative_path.parent == PurePosixPath(".")
+        and relative_path.name.startswith(".message.db.")
+        and relative_path.name.endswith(".migrating")
+    ):
+        return True
     for suffix in ("-wal", "-shm"):
         if relative_text.endswith(suffix):
             relative_path = PurePosixPath(relative_text[: -len(suffix)])
