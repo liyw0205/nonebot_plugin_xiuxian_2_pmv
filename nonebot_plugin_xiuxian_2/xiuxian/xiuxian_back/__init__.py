@@ -43,6 +43,7 @@ from ..xiuxian_config import XiuConfig, convert_rank, added_ranks
 from ...paths import get_paths
 from ..xiuxian_utils.pet_system import PET_BAG_LIMIT, PET_EGG_IDS, PET_EGG_RARITY_KEY, can_add_pets, grant_pet_by_rarity
 from .back_util import *
+from .cultivation_item_service import CultivationItemService
 from .equipment_service import EquipmentService
 from .stone_reward_service import StoneItemRewardService
 from . import accessory as _accessory  # noqa: F401
@@ -65,6 +66,7 @@ from .backpack_render import (
 items = Items()
 sql_message = XiuxianDateManage()
 equipment_service = EquipmentService(get_paths().game_db)
+cultivation_item_service = CultivationItemService(get_paths().game_db)
 stone_reward_service = StoneItemRewardService(get_paths().game_db)
 player_data_manager = PlayerDataManager()
 tianti_manager = TiantiDataManager()
@@ -90,6 +92,15 @@ def _stone_reward_operation_id(event, reward_type, user_id):
     if event_id:
         return f"stone-reward:{event_id}:{reward_type}:{user_id}"
     return f"stone-reward:{reward_type}:{user_id}:{time.time_ns()}"
+
+
+def _cultivation_item_operation_id(event, user_id, goods_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"cultivation-item:{event_id}:{user_id}:{goods_id}"
+    return f"cultivation-item:{user_id}:{goods_id}:{time.time_ns()}"
 # 通用物品类型和炼金最低价格
 MIN_PRICE = 600000
 
@@ -902,16 +913,24 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 )
             else:
                 exp = goods_info['buff'] * num
-                sql_message.update_exp(user_id, exp)
-                sql_message.update_power2(user_id)
-                sql_message.update_user_attribute(
+                root_rate = sql_message.get_root_rate(user_info_full['root_type'], user_id)
+                level_spend = jsondata.level_data()[user_info_full['level']]["spend"]
+                result = cultivation_item_service.apply(
+                    _cultivation_item_operation_id(event, user_id, goods_id),
                     user_id,
-                    int(user_info_full['hp'] + (exp / 2)),
-                    int(user_info_full['mp'] + exp),
-                    int(user_info_full['atk'] + (exp / 10))
+                    goods_id,
+                    num,
+                    exp,
+                    hp_gain=int(exp / 2),
+                    mp_gain=exp,
+                    atk_gain=int(exp / 10),
+                    power_multiplier=float(root_rate) * float(level_spend),
                 )
-                sql_message.update_back_j(user_id, goods_id, num=num, use_key=1)
-                msg = f"道友成功使用神物：{goods_info['name']} {num} 个，修为增加 {number_to(exp)}！"
+                msg = (
+                    f"道友成功使用神物：{goods_info['name']} {num} 个，修为增加 {number_to(exp)}！"
+                    if result.succeeded
+                    else "神物数量或角色状态已经变化，请刷新背包后重试！"
+                )
 
     elif goods_type == "聚灵旗":
         msg = get_use_jlq_msg(user_id, goods_id)

@@ -475,6 +475,24 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("equipment_operations", service_source)
 
+    def test_cultivation_item_use_is_atomic_and_idempotent(self) -> None:
+        back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
+        command_source = (back_root / "__init__.py").read_text(encoding="utf-8")
+        service_source = (back_root / "cultivation_item_service.py").read_text(
+            encoding="utf-8"
+        )
+        start = command_source.index('elif goods_type == "神物"')
+        end = command_source.index('elif goods_type == "聚灵旗"', start)
+        command = command_source[start:end]
+        growth_branch = command[command.index("                exp = goods_info['buff'] * num"):]
+
+        self.assertIn("cultivation_item_service.apply(", growth_branch)
+        self.assertNotIn("sql_message.update_exp(", growth_branch)
+        self.assertNotIn("sql_message.update_user_attribute(", growth_branch)
+        self.assertNotIn("sql_message.update_back_j(", growth_branch)
+        self.assertIn("BEGIN IMMEDIATE", service_source)
+        self.assertIn("cultivation_item_operations", service_source)
+
     def test_sect_owner_transfer_uses_transactional_service(self) -> None:
         sect_root = SOURCE_ROOT / "xiuxian" / "xiuxian_sect"
         command_source = (sect_root / "__init__.py").read_text(encoding="utf-8")
