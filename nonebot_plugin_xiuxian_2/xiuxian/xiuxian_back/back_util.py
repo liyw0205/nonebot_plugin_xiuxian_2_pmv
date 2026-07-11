@@ -17,10 +17,12 @@ from pathlib import Path
 from ..xiuxian_config import XiuConfig, convert_rank, added_ranks as get_added_ranks
 from ...paths import get_paths
 from .cultivation_item_service import CultivationItemService
+from .breakthrough_rate_item_service import BreakthroughRateItemService
 from nonebot.log import logger
 items = Items()
 sql_message = XiuxianDateManage()
 cultivation_item_service = CultivationItemService(get_paths().game_db)
+breakthrough_rate_item_service = BreakthroughRateItemService(get_paths().game_db)
 ADDED_RANKS = get_added_ranks()
 
 sign = lambda x: (x > 0) - (x < 0)
@@ -850,9 +852,19 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
         else:  # 检查完毕
             level_up_rate = True
         if level_up_rate:
-            sql_message.update_back_j(user_id, goods_id, num, 1)
-            sql_message.update_levelrate(user_id, user_info['level_up_rate'] + goods_info['buff'] * num)
-            msg = f"道友成功使用丹药：{goods_name}{num}颗，下一次突破的成功概率提高{goods_info['buff'] * num}%!"
+            result = breakthrough_rate_item_service.apply(
+                operation_id or f"elixir-rate:{user_id}:{goods_id}:{datetime.now().timestamp()}",
+                user_id,
+                goods_id,
+                num,
+                goods_info['buff'] * num,
+            )
+            msg = (
+                f"道友成功使用丹药：{goods_name}{result.quantity}颗，"
+                f"下一次突破的成功概率提高{result.rate_gain}%!"
+                if result.succeeded
+                else "丹药数量或角色状态已经变化，请刷新背包后重试！"
+            )
 
     elif goods_info['buff_type'] == "level_up_big":  # 增加大境界突破概率的丹药
         if goods_rank != user_rank:  # 使用限制
@@ -867,8 +879,15 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
                 else:
                     msg = f"道友成功使用丹药：{goods_name}{num}颗, 下一次突破的成功概率提高{goods_info['buff'] * num}%!"
 
-                sql_message.update_back_j(user_id, goods_id, num, 1)
-                sql_message.update_levelrate(user_id, user_info['level_up_rate'] + goods_info['buff'] * num)
+                result = breakthrough_rate_item_service.apply(
+                    operation_id or f"elixir-rate:{user_id}:{goods_id}:{datetime.now().timestamp()}",
+                    user_id,
+                    goods_id,
+                    num,
+                    goods_info['buff'] * num,
+                )
+                if not result.succeeded:
+                    msg = "丹药数量或角色状态已经变化，请刷新背包后重试！"
 
     elif goods_info['buff_type'] == "hp":  # 回复状态的丹药
         if user_info['root'] == "凡人":
