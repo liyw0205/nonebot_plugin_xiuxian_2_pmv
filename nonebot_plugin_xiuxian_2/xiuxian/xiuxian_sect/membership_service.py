@@ -144,6 +144,30 @@ class SectTaskSettlement:
         return self.status in {"settled", "duplicate"}
 
 
+@dataclass(frozen=True)
+class SectCreation:
+    status: str
+    user_id: str
+    sect_name: str
+    stone_cost: int
+    sect_id: int | None = None
+
+    @property
+    def applied(self) -> bool:
+        return self.status in {"created", "duplicate"}
+
+
+@dataclass(frozen=True)
+class SectNameRefresh:
+    status: str
+    user_id: str
+    stone_cost: int
+
+    @property
+    def applied(self) -> bool:
+        return self.status in {"charged", "duplicate"}
+
+
 class SectMembershipService:
     def __init__(self, database: str | Path, lock: RLock | None = None) -> None:
         self._database = Path(database)
@@ -299,6 +323,160 @@ class SectMembershipService:
             )
             """
         )
+
+    @staticmethod
+    def _ensure_creation_operations(conn) -> None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sect_creation_operations (
+                operation_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                sect_id INTEGER NOT NULL,
+                sect_name TEXT NOT NULL,
+                stone_cost INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sect_name_refresh_operations (
+                operation_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                stone_cost INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+    def charge_name_refresh(self, operation_id, user_id, stone_cost) -> SectNameRefresh:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            raise ValueError("operation_id must not be empty")
+        user_id = str(user_id)
+        stone_cost = int(stone_cost)
+        if stone_cost < 0:
+            return SectNameRefresh("invalid_cost", user_id, stone_cost)
+
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._ensure_creation_operations(conn)
+                previous = conn.execute(
+                    "SELECT stone_cost FROM sect_name_refresh_operations WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if previous is not None:
+                    conn.rollback()
+                    return SectNameRefresh("duplicate", user_id, int(previous[0]))
+                user = conn.execute(
+                    "SELECT sect_id, stone FROM user_xiuxian WHERE user_id=%s", (user_id,)
+                ).fetchone()
+                if user is None:
+                    conn.rollback()
+                    return SectNameRefresh("user_missing", user_id, stone_cost)
+                if user[0] is not None:
+                    conn.rollback()
+                    return SectNameRefresh("already_member", user_id, stone_cost)
+                charged = conn.execute(
+                    "UPDATE user_xiuxian SET stone=stone-%s WHERE user_id=%s AND sect_id IS NULL AND stone >= %s",
+                    (stone_cost, user_id, stone_cost),
+                )
+                if charged.rowcount != 1:
+                    conn.rollback()
+                    return SectNameRefresh("stone_insufficient", user_id, stone_cost)
+                conn.execute(
+                    "INSERT INTO sect_name_refresh_operations (operation_id, user_id, stone_cost) VALUES (%s, %s, %s)",
+                    (operation_id, user_id, stone_cost),
+                )
+                conn.commit()
+                return SectNameRefresh("charged", user_id, stone_cost)
+            except Exception:
+                conn.rollback()
+                raise
+
+    def create_sect(
+        self, operation_id, user_id, sect_name, stone_cost, owner_position
+    ) -> SectCreation:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            raise ValueError("operation_id must not be empty")
+        user_id = str(user_id)
+        sect_name = str(sect_name).strip()
+        stone_cost = int(stone_cost)
+        owner_position = int(owner_position)
+        if not sect_name:
+            return SectCreation("invalid_name", user_id, sect_name, stone_cost)
+        if stone_cost < 0:
+            return SectCreation("invalid_cost", user_id, sect_name, stone_cost)
+
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._ensure_creation_operations(conn)
+                previous = conn.execute(
+                    "SELECT sect_id, sect_name, stone_cost FROM sect_creation_operations WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if previous is not None:
+                    conn.rollback()
+                    return SectCreation("duplicate", user_id, str(previous[1]), int(previous[2]), int(previous[0]))
+                user = conn.execute(
+                    "SELECT sect_id, stone FROM user_xiuxian WHERE user_id=%s", (user_id,)
+                ).fetchone()
+                if user is None:
+                    conn.rollback()
+                    return SectCreation("user_missing", user_id, sect_name, stone_cost)
+                if user[0] is not None:
+                    conn.rollback()
+                    return SectCreation("already_member", user_id, sect_name, stone_cost)
+                if int(user[1] or 0) < stone_cost:
+                    conn.rollback()
+                    return SectCreation("stone_insufficient", user_id, sect_name, stone_cost)
+                if conn.execute("SELECT 1 FROM sects WHERE sect_name=%s", (sect_name,)).fetchone():
+                    conn.rollback()
+                    return SectCreation("name_exists", user_id, sect_name, stone_cost)
+
+                conn.execute(
+                    """
+                    INSERT INTO sects (
+                        sect_name, sect_owner, sect_scale, sect_used_stone,
+                        join_open, closed, combat_power
+                    ) VALUES (%s, %s, 0, 0, 1, 0, 0)
+                    """,
+                    (sect_name, user_id),
+                )
+                created = conn.execute(
+                    "SELECT sect_id FROM sects WHERE sect_owner=%s AND sect_name=%s",
+                    (user_id, sect_name),
+                ).fetchone()
+                if created is None:
+                    raise RuntimeError("created sect could not be read back")
+                sect_id = int(created[0])
+                user_update = conn.execute(
+                    """
+                    UPDATE user_xiuxian
+                    SET sect_id=%s, sect_position=%s, stone=stone-%s
+                    WHERE user_id=%s AND sect_id IS NULL AND stone >= %s
+                    """,
+                    (sect_id, owner_position, stone_cost, user_id, stone_cost),
+                )
+                if user_update.rowcount != 1:
+                    conn.rollback()
+                    return SectCreation("user_changed", user_id, sect_name, stone_cost)
+                conn.execute(
+                    """
+                    INSERT INTO sect_creation_operations (
+                        operation_id, user_id, sect_id, sect_name, stone_cost
+                    ) VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (operation_id, user_id, sect_id, sect_name, stone_cost),
+                )
+                conn.commit()
+                return SectCreation("created", user_id, sect_name, stone_cost, sect_id)
+            except Exception:
+                conn.rollback()
+                raise
 
     def settle_task(
         self,
@@ -1392,11 +1570,13 @@ class SectMembershipService:
 
 __all__ = [
     "SectBuffSearch",
+    "SectCreation",
     "SectDonation",
     "SectElixirRoomMaintenance",
     "SectElixirRoomUpgrade",
     "SectFairylandUpgrade",
     "SectMembershipService",
+    "SectNameRefresh",
     "SectOwnerTransfer",
     "SectPracticeUpgrade",
     "SectScheduledMaterialGrant",
