@@ -85,6 +85,57 @@ class MessageDatabaseMigrationTests(unittest.TestCase):
             )
             self.assertIsNone(result)
 
+    def test_size_cleanup_removes_oldest_messages_and_shrinks_database(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            data_dir = Path(directory) / "runtime-data"
+            configure_paths(data_dir)
+            database = message_db.get_message_db_path()
+            conn = message_db.db_backend.connect(database)
+            try:
+                message_db._ensure_message_db_schema(conn)
+                payload = "x" * 32_000
+                conn.executemany(
+                    """
+                    INSERT INTO messages (
+                        direction, scene, message_id, content, created_at
+                    ) VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    [
+                        (
+                            "recv",
+                            "group",
+                            f"message-{index}",
+                            payload,
+                            f"2026-01-01 00:{index // 60:02d}:{index % 60:02d}",
+                        )
+                        for index in range(100)
+                    ],
+                )
+                conn.commit()
+                conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                self.assertGreater(message_db._message_db_size_mb(), 1.0)
+
+                deleted = message_db._cleanup_message_db_by_size(conn, 1)
+
+                self.assertGreater(deleted, 0)
+                self.assertLess(message_db._message_db_size_mb(), 1.0)
+                remaining = conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
+                self.assertLess(int(remaining), 100)
+            finally:
+                conn.close()
+
+    def test_size_measurement_includes_wal_sidecar(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            data_dir = Path(directory) / "runtime-data"
+            configure_paths(data_dir)
+            database = message_db.get_message_db_path()
+            database.parent.mkdir(parents=True, exist_ok=True)
+            database.write_bytes(b"a" * 1024)
+            Path(f"{database}-wal").write_bytes(b"b" * 2048)
+            Path(f"{database}-shm").write_bytes(b"c" * 1024)
+
+            self.assertAlmostEqual(message_db._message_db_size_mb(), 4 / 1024, places=6)
+
 
 if __name__ == "__main__":
     unittest.main()

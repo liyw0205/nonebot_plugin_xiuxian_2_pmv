@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from contextlib import contextmanager
+import math
 import json
 import os
 from pathlib import Path
@@ -424,22 +425,86 @@ def _get_message_cleanup_config() -> tuple[int, int, int]:
 def _message_db_size_mb() -> float:
     try:
         message_db = _message_db_path()
-        if not message_db.exists():
-            return 0.0
-        return message_db.stat().st_size / 1024 / 1024
+        paths = (message_db, Path(f"{message_db}-wal"), Path(f"{message_db}-shm"))
+        return sum(path.stat().st_size for path in paths if path.exists()) / 1024 / 1024
     except Exception:
         return 0.0
 
 
 def _vacuum_message_db(conn):
     try:
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         conn.execute("VACUUM")
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     except Exception as e:
         logger.debug(f"[message.db] VACUUM失败: {e}")
 
 
 def _cleanup_message_db_by_size(conn, max_size_mb: int) -> int:
-    return 0
+    if max_size_mb <= 0:
+        return 0
+
+    current_size_mb = _message_db_size_mb()
+    if current_size_mb < max_size_mb:
+        return 0
+
+    row = conn.execute("SELECT COUNT(*) FROM messages").fetchone()
+    total_rows = int(row[0] or 0) if row else 0
+    if total_rows <= 0:
+        _vacuum_message_db(conn)
+        return 0
+
+    # 留出 10% 空间，避免数据库在阈值附近每十分钟反复清理。
+    target_size_mb = max(1.0, max_size_mb * 0.9)
+    delete_ratio = min(1.0, max(0.01, 1.0 - target_size_mb / current_size_mb))
+    delete_count = min(total_rows, max(1, math.ceil(total_rows * delete_ratio)))
+    deleted_total = 0
+
+    cur = conn.cursor()
+    cur.execute(
+        """
+        DELETE FROM messages
+        WHERE id IN (
+            SELECT id FROM messages ORDER BY id ASC LIMIT %s
+        )
+        """,
+        (delete_count,),
+    )
+    deleted_total += int(cur.rowcount or 0)
+    conn.commit()
+    _vacuum_message_db(conn)
+
+    # 消息大小差异可能很大；估算不足时继续按固定批次删除，最多执行 20 轮。
+    rounds = 0
+    while _message_db_size_mb() >= max_size_mb and rounds < 20:
+        remaining = conn.execute("SELECT COUNT(*) FROM messages").fetchone()
+        remaining_rows = int(remaining[0] or 0) if remaining else 0
+        if remaining_rows <= 0:
+            break
+        batch_size = min(remaining_rows, max(1000, math.ceil(remaining_rows * 0.1)))
+        cur.execute(
+            """
+            DELETE FROM messages
+            WHERE id IN (
+                SELECT id FROM messages ORDER BY id ASC LIMIT %s
+            )
+            """,
+            (batch_size,),
+        )
+        deleted = int(cur.rowcount or 0)
+        if deleted <= 0:
+            break
+        deleted_total += deleted
+        conn.commit()
+        _vacuum_message_db(conn)
+        rounds += 1
+
+    if deleted_total > 0:
+        logger.info(
+            f"[message.db] 容量 {current_size_mb:.1f}MB 超过上限 {max_size_mb}MB，"
+            f"已清理最早消息 {deleted_total} 条，当前 {_message_db_size_mb():.1f}MB"
+        )
+    return deleted_total
 
 
 def _cleanup_message_db_by_keep_days(conn, group_keep_days: int, private_keep_days: int) -> int:
