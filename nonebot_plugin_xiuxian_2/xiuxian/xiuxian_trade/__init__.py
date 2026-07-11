@@ -59,6 +59,7 @@ from .auction_service import (
 from .auction_jobs import run_auction_job
 from .repository import TradeRepository
 from .service import XianshiPurchaseService
+from .guishi_stone_service import GuishiStoneService
 from ...paths import get_paths
 from urllib.parse import quote
 
@@ -71,6 +72,7 @@ xianshi_repository = TradeRepository(
     max_goods_num=XiuConfig().max_goods_num,
 )
 xianshi_purchase_service = XianshiPurchaseService(xianshi_repository)
+guishi_stone_service = GuishiStoneService(get_paths().game_db, get_paths().trade_db)
 scheduler = require("nonebot_plugin_apscheduler").scheduler # 全局调度器，用于鬼市
 auction_scheduler = require("nonebot_plugin_apscheduler").scheduler # 独立的拍卖调度器，避免冲突
 bind_auction_repository(xianshi_repository)
@@ -232,6 +234,16 @@ def _xianshi_operation_id(event, listing_id, suffix=""):
         return None
     extra = f":{suffix}" if suffix else ""
     return f"xianshi-buy:{event_id}:{listing_id}{extra}"
+
+
+def _guishi_stone_operation_id(event, operation_type, user_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"guishi-stone:{operation_type}:{event_id}:{user_id}"
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
+    return f"guishi-stone:{operation_type}:{user_id}:{timestamp}"
 
 
 def buy_xianshi_item_safely(
@@ -1505,50 +1517,28 @@ async def guishi_deposit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_deposit.finish()
     
-    if user_info['stone'] < amount:
-        msg = f"灵石不足！当前拥有 {number_to(user_info['stone'])} 灵石"
-        await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
-        await guishi_deposit.finish()
-
-    trace_id = f"trade:guishi_deposit:{user_id}:{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
-    if not sql_message.try_update_ls(
+    result = guishi_stone_service.deposit(
+        _guishi_stone_operation_id(event, "deposit", user_id),
         user_id,
         amount,
-        2,
-        log_context=_trade_economy_context(
-            "guishi_deposit_cost",
-            trace_id,
-            amount=amount,
-        ),
-    ):
+    )
+    if result.status == "stone_insufficient":
         msg = "灵石不足，存入失败！"
         await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_deposit.finish()
-    
-    # 存入鬼市账户
-    if not trade_manager.try_update_stored_stone(user_id, amount, 'add'):
-        sql_message.update_ls(
-            user_id,
-            amount,
-            1,
-            log_context=_trade_economy_context(
-                "guishi_deposit_refund",
-                trace_id,
-                amount=amount,
-                reason="account_update_failed",
-            ),
-        )
-        msg = "鬼市账户更新失败，已退回灵石！"
+    if not result.succeeded:
+        msg = "鬼市账户状态已经变化，请稍后重试！"
         await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_deposit.finish()
     
-    msg = f"成功存入 {number_to(amount)} 灵石到鬼市账户！"
-    record_trade_event(
-        user_id,
-        "鬼市存灵石",
-        f"存入{number_to(amount)}灵石到鬼市账户",
-        {"鬼市存入灵石": amount}
-    )
+    msg = f"成功存入 {number_to(result.amount)} 灵石到鬼市账户！"
+    if result.applied:
+        record_trade_event(
+            user_id,
+            "鬼市存灵石",
+            f"存入{number_to(result.amount)}灵石到鬼市账户",
+            {"鬼市存入灵石": result.amount}
+        )
     await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     await guishi_deposit.finish()
 
@@ -1582,54 +1572,29 @@ async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_withdraw.finish()
     
-    user_stored_stone = trade_manager.get_stored_stone(user_id)
-    if user_stored_stone < amount:
-        msg = f"鬼市账户余额不足！当前余额 {number_to(user_stored_stone)} 灵石"
+    result = guishi_stone_service.withdraw(
+        _guishi_stone_operation_id(event, "withdraw", user_id),
+        user_id,
+        amount,
+    )
+    if result.status == "stored_insufficient":
+        msg = f"鬼市账户余额不足！当前余额 {number_to(result.stored_balance)} 灵石"
         await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_withdraw.finish()
-    
-    # 计算手续费：基础20%，每100亿额外加5%，最高80%
-    base_fee_rate = 0.2
-    additional_fee_per_10b = 0.05
-    max_fee_rate = 0.8
-    
-    fee_rate = base_fee_rate
-    if user_stored_stone > 10_000_000_000: # 超过100亿开始计算额外手续费
-        excess_amount = user_stored_stone - 10_000_000_000
-        additional_fee = (excess_amount // 10_000_000_000) * additional_fee_per_10b
-        fee_rate = base_fee_rate + additional_fee
-        fee_rate = min(fee_rate, max_fee_rate) # 限制最高手续费
-    
-    fee = int(amount * fee_rate)
-    actual_amount = amount - fee
-    
-    # 更新鬼市账户
-    if not trade_manager.try_update_stored_stone(user_id, amount, 'subtract'):
-        msg = "鬼市账户余额不足，取出失败！"
+    if not result.succeeded:
+        msg = "鬼市账户状态已经变化，请稍后重试！"
         await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_withdraw.finish()
-    
-    # 给用户灵石
-    sql_message.update_ls(
-        user_id,
-        actual_amount,
-        1,
-        log_context=_trade_economy_context(
-            "guishi_withdraw_income",
-            f"trade:guishi_withdraw:{user_id}:{datetime.now().strftime('%Y%m%d%H%M%S%f')}",
-            amount=amount,
-            fee=fee,
-            actual_amount=actual_amount,
-        ),
-    )
-    
-    msg = f"成功取出 {number_to(amount)} 灵石（手续费：{fee_rate*100:.0f}%，扣除{number_to(fee)}灵石，实际到账 {number_to(actual_amount)} 灵石）"
-    record_trade_event(
-        user_id,
-        "鬼市取灵石",
-        f"取出{number_to(amount)}灵石，手续费{number_to(fee)}灵石，到账{number_to(actual_amount)}灵石",
-        {"鬼市取出灵石": actual_amount, "鬼市取灵石手续费": fee}
-    )
+
+    fee_rate = result.fee / result.amount if result.amount else 0
+    msg = f"成功取出 {number_to(result.amount)} 灵石（手续费：{fee_rate*100:.0f}%，扣除{number_to(result.fee)}灵石，实际到账 {number_to(result.actual_amount)} 灵石）"
+    if result.applied:
+        record_trade_event(
+            user_id,
+            "鬼市取灵石",
+            f"取出{number_to(result.amount)}灵石，手续费{number_to(result.fee)}灵石，到账{number_to(result.actual_amount)}灵石",
+            {"鬼市取出灵石": result.actual_amount, "鬼市取灵石手续费": result.fee}
+        )
     await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     await guishi_withdraw.finish()
 
