@@ -826,6 +826,25 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn('"continuous_tribulation_gold"', command_source)
         self.assertIn("continuous_tribulation_operations", service_source)
 
+    def test_destiny_pill_fusion_uses_transactional_service(self) -> None:
+        base_root = SOURCE_ROOT / "xiuxian" / "xiuxian_base"
+        command_source = (base_root / "breakthrough_tribulation.py").read_text(
+            encoding="utf-8"
+        )
+        service_source = (base_root / "pill_fusion_service.py").read_text(
+            encoding="utf-8"
+        )
+        start = command_source.index("@fusion_destiny_pill.handle")
+        end = command_source.index("@start_tribulation.handle", start)
+        command = command_source[start:end]
+
+        self.assertEqual(command.count("pill_fusion_service.apply("), 2)
+        self.assertNotIn("sql_message.get_back_msg(", command)
+        self.assertNotIn("sql_message.update_back_j(", command)
+        self.assertNotIn("sql_message.send_back(", command)
+        self.assertIn("BEGIN IMMEDIATE", service_source)
+        self.assertIn("pill_fusion_operations", service_source)
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")

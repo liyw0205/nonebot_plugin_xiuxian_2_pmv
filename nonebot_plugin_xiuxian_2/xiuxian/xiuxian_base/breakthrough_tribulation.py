@@ -23,9 +23,11 @@ from ..xiuxian_utils.utils import (
 from ..xiuxian_utils.xiuxian2_handle import OtherSet, UserBuffDate, XiuxianDateManage
 from ..xiuxian_title.title_data import check_and_unlock_titles
 from .breakthrough_service import BreakthroughService
+from .pill_fusion_service import PillFusionService
 
 sql_message = XiuxianDateManage()
 breakthrough_service = BreakthroughService(get_paths().game_db)
+pill_fusion_service = PillFusionService(get_paths().game_db)
 PLAYERSDATA = get_paths().players
 tribulation_cd2 = int(XiuConfig().tribulation_cd * 60)
 
@@ -52,6 +54,15 @@ def _breakthrough_operation_id(event, action, user_id):
     if event_id:
         return f"breakthrough:{event_id}:{action}:{user_id}"
     return f"breakthrough:{action}:{user_id}:{time.time_ns()}"
+
+
+def _pill_fusion_operation_id(event, action, user_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"pill-fusion:{event_id}:{action}:{user_id}"
+    return f"pill-fusion:{action}:{user_id}:{time.time_ns()}"
 
 
 def get_user_tribulation_info(user_id):
@@ -262,51 +273,45 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg)
         await fusion_destiny_pill.finish()
     
-    # 检查渡厄丹数量
-    back_msg = sql_message.get_back_msg(user_id) or []
-    elixir_count = 0
-    for item in back_msg:
-        if item['goods_id'] == 1999:  # 渡厄丹ID
-            elixir_count = item['goods_num']
-            break
-    
-    if elixir_count < num:
-        msg = f"融合需要{num}个渡厄丹，你只有{elixir_count}个！"
-        await handle_send(bot, event, msg)
-        await fusion_destiny_pill.finish()
-    
     # 计算成功率（每个渡厄丹10%）
     success_rate = min(100, num * 10)  # 上限100%
     roll = random.randint(1, 100)
     
-    if roll <= success_rate:  # 成功
-        # 扣除渡厄丹
-        sql_message.update_back_j(user_id, 1999, num)
-        
-        # 获得天命丹
-        destiny_count = 1  # 成功固定获得1个
-        sql_message.send_back(user_id, 1996, "天命丹", "丹药", destiny_count, 1)
-        
+    result = pill_fusion_service.apply(
+        _pill_fusion_operation_id(event, "destiny", user_id),
+        user_id,
+        1999,
+        num,
+        1996,
+        "天命丹",
+        "丹药",
+        successful=roll <= success_rate,
+        max_goods_num=XiuConfig().max_goods_num,
+    )
+    if not result.succeeded:
+        await handle_send(bot, event, "渡厄丹数量已经变化，请刷新背包后重试！")
+        await fusion_destiny_pill.finish()
+
+    if result.successful:
         msg = (
             f"✨融合成功！消耗{num}个渡厄丹获得1个天命丹✨"
         )
-        log_message(user_id, f"[融合天命丹] 成功，消耗渡厄丹{num}个，获得天命丹1个")
-        update_statistics_value(user_id, "天命丹融合次数")
-        update_statistics_value(user_id, "天命丹融合成功")
-        update_statistics_value(user_id, "渡厄丹消耗", increment=num)
-    else:  # 失败
-        # 扣除渡厄丹
-        sql_message.update_back_j(user_id, 1999, num)
-        
+        if result.status == "applied":
+            log_message(user_id, f"[融合天命丹] 成功，消耗渡厄丹{num}个，获得天命丹1个")
+            update_statistics_value(user_id, "天命丹融合次数")
+            update_statistics_value(user_id, "天命丹融合成功")
+            update_statistics_value(user_id, "渡厄丹消耗", increment=num)
+    else:
         msg = (
             f"融合失败！消耗了{num}个渡厄丹\n"
             f"当前成功率：{success_rate}%\n"
             f"（每颗渡厄丹提供10%成功率，10颗必成功）"
         )
-        log_message(user_id, f"[融合天命丹] 失败，消耗渡厄丹{num}个，成功率{success_rate}%")
-        update_statistics_value(user_id, "天命丹融合次数")
-        update_statistics_value(user_id, "天命丹融合失败")
-        update_statistics_value(user_id, "渡厄丹消耗", increment=num)
+        if result.status == "applied":
+            log_message(user_id, f"[融合天命丹] 失败，消耗渡厄丹{num}个，成功率{success_rate}%")
+            update_statistics_value(user_id, "天命丹融合次数")
+            update_statistics_value(user_id, "天命丹融合失败")
+            update_statistics_value(user_id, "渡厄丹消耗", increment=num)
     
     await handle_send(bot, event, msg)
     await fusion_destiny_pill.finish()
@@ -332,51 +337,45 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg)
         await fusion_destiny_tribulation_pill.finish()
     
-    # 检查天命丹数量
-    back_msg = sql_message.get_back_msg(user_id) or []
-    elixir_count = 0
-    for item in back_msg:
-        if item['goods_id'] == 1996:  # 天命丹ID
-            elixir_count = item['goods_num']
-            break
-    
-    if elixir_count < num:
-        msg = f"融合需要{num}个天命丹，你只有{elixir_count}个！\n请发送【融合天命丹】获得"
-        await handle_send(bot, event, msg)
-        await fusion_destiny_tribulation_pill.finish()
-    
     # 计算成功率（每个天命丹10%）
     success_rate = min(100, num * 10)  # 上限100%
     roll = random.randint(1, 100)
     
-    if roll <= success_rate:  # 成功
-        # 扣除天命丹
-        sql_message.update_back_j(user_id, 1996, num)
-        
-        # 获得天命渡劫丹
-        destiny_count = 1  # 成功固定获得1个
-        sql_message.send_back(user_id, 1997, "天命渡劫丹", "丹药", destiny_count, 1)
-        
+    result = pill_fusion_service.apply(
+        _pill_fusion_operation_id(event, "destiny-tribulation", user_id),
+        user_id,
+        1996,
+        num,
+        1997,
+        "天命渡劫丹",
+        "丹药",
+        successful=roll <= success_rate,
+        max_goods_num=XiuConfig().max_goods_num,
+    )
+    if not result.succeeded:
+        await handle_send(bot, event, "天命丹数量已经变化，请刷新背包后重试！")
+        await fusion_destiny_tribulation_pill.finish()
+
+    if result.successful:
         msg = (
             f"✨融合成功！消耗{num}个天命丹获得1个天命渡劫丹✨"
         )
-        log_message(user_id, f"[融合天命渡劫丹] 成功，消耗天命丹{num}个，获得天命渡劫丹1个")
-        update_statistics_value(user_id, "天命渡劫丹融合次数")
-        update_statistics_value(user_id, "天命渡劫丹融合成功")
-        update_statistics_value(user_id, "天命丹消耗", increment=num)
-    else:  # 失败
-        # 扣除天命丹
-        sql_message.update_back_j(user_id, 1996, num)
-        
+        if result.status == "applied":
+            log_message(user_id, f"[融合天命渡劫丹] 成功，消耗天命丹{num}个，获得天命渡劫丹1个")
+            update_statistics_value(user_id, "天命渡劫丹融合次数")
+            update_statistics_value(user_id, "天命渡劫丹融合成功")
+            update_statistics_value(user_id, "天命丹消耗", increment=num)
+    else:
         msg = (
             f"融合失败！消耗了{num}个天命丹\n"
             f"当前成功率：{success_rate}%\n"
             f"（每颗天命丹提供10%成功率，10颗必成功）"
         )
-        log_message(user_id, f"[融合天命渡劫丹] 失败，消耗天命丹{num}个，成功率{success_rate}%")
-        update_statistics_value(user_id, "天命渡劫丹融合次数")
-        update_statistics_value(user_id, "天命渡劫丹融合失败")
-        update_statistics_value(user_id, "天命丹消耗", increment=num)
+        if result.status == "applied":
+            log_message(user_id, f"[融合天命渡劫丹] 失败，消耗天命丹{num}个，成功率{success_rate}%")
+            update_statistics_value(user_id, "天命渡劫丹融合次数")
+            update_statistics_value(user_id, "天命渡劫丹融合失败")
+            update_statistics_value(user_id, "天命丹消耗", increment=num)
     
     await handle_send(bot, event, msg)
 
