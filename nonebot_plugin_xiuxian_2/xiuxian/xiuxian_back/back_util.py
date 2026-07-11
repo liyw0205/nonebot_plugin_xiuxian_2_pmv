@@ -3,6 +3,7 @@ try:
 except ImportError:
     import json
 from ..xiuxian_utils.item_json import Items
+from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.utils import number_to
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, UserBuffDate, 
@@ -14,9 +15,12 @@ from datetime import datetime
 import os
 from pathlib import Path
 from ..xiuxian_config import XiuConfig, convert_rank, added_ranks as get_added_ranks
+from ...paths import get_paths
+from .cultivation_item_service import CultivationItemService
 from nonebot.log import logger
 items = Items()
 sql_message = XiuxianDateManage()
+cultivation_item_service = CultivationItemService(get_paths().game_db)
 ADDED_RANKS = get_added_ranks()
 
 sign = lambda x: (x > 0) - (x < 0)
@@ -820,7 +824,7 @@ def get_yaocai_info_msg(goods_id, item_info):
     return msg
 
 
-def check_use_elixir(user_id, goods_id, num):
+def check_use_elixir(user_id, goods_id, num, operation_id=None):
     user_info = sql_message.get_user_info_with_id(user_id)
     user_rank = convert_rank(user_info['level'])[0]
     goods_info = items.get_data_by_item_id(goods_id)
@@ -975,14 +979,25 @@ def check_use_elixir(user_id, goods_id, num):
             msg = f"丹药：{goods_name}的使用境界为{goods_info['境界']}以上，道友不满足使用条件！"
         else:
             exp = goods_info['buff'] * num
-            user_hp = int(user_info['hp'] + (exp / 2))
-            user_mp = int(user_info['mp'] + exp)
-            user_atk = int(user_info['atk'] + (exp / 10))
-            sql_message.update_exp(user_id, exp)
-            sql_message.update_power2(user_id)  # 更新战力
-            sql_message.update_user_attribute(user_id, user_hp, user_mp, user_atk)  # 这种事情要放在update_exp方法里
-            sql_message.update_back_j(user_id, goods_id, num=num, use_key=1)
-            msg = f"道友成功使用丹药：{goods_name}{num}颗,修为增加{exp}点！"
+            root_rate = sql_message.get_root_rate(user_info['root_type'], user_id)
+            level_spend = jsondata.level_data()[user_info['level']]["spend"]
+            result = cultivation_item_service.apply(
+                operation_id or f"elixir-exp:{user_id}:{goods_id}:{datetime.now().timestamp()}",
+                user_id,
+                goods_id,
+                num,
+                exp,
+                hp_gain=int(exp / 2),
+                mp_gain=exp,
+                atk_gain=int(exp / 10),
+                power_multiplier=float(root_rate) * float(level_spend),
+                track_usage=True,
+            )
+            msg = (
+                f"道友成功使用丹药：{goods_name}{result.quantity}颗,修为增加{result.exp_gain}点！"
+                if result.succeeded
+                else "丹药数量或角色状态已经变化，请刷新背包后重试！"
+            )
     else:
         msg = f"该类型的丹药目前暂时不支持使用！"
     return msg

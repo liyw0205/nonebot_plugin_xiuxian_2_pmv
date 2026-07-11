@@ -27,6 +27,7 @@ class CultivationItemServiceTests(unittest.TestCase):
             conn.execute(
                 "CREATE TABLE back "
                 "(user_id TEXT, goods_id INTEGER, goods_num INTEGER, bind_num INTEGER, "
+                "day_num INTEGER DEFAULT 0, all_num INTEGER DEFAULT 0, "
                 "UNIQUE(user_id, goods_id))"
             )
             conn.execute(
@@ -34,7 +35,8 @@ class CultivationItemServiceTests(unittest.TestCase):
                 ("user", 1000, 500, 700, 100, 1500),
             )
             conn.execute(
-                "INSERT INTO back VALUES (%s, %s, %s, %s)",
+                "INSERT INTO back (user_id, goods_id, goods_num, bind_num) "
+                "VALUES (%s, %s, %s, %s)",
                 ("user", 9001, 3, 2),
             )
         self.service = CultivationItemService(self.database)
@@ -49,7 +51,8 @@ class CultivationItemServiceTests(unittest.TestCase):
                 ("user",),
             ).fetchone()
             item = conn.execute(
-                "SELECT goods_num, bind_num FROM back WHERE user_id=%s AND goods_id=%s",
+                "SELECT goods_num, bind_num, day_num, all_num FROM back "
+                "WHERE user_id=%s AND goods_id=%s",
                 ("user", 9001),
             ).fetchone()
             operation_count = (
@@ -76,7 +79,24 @@ class CultivationItemServiceTests(unittest.TestCase):
         )
 
         self.assertEqual(result.status, "applied")
-        self.assertEqual(self.state(), ((1200, 600, 900, 120, 1800), (1, 0), 1))
+        self.assertEqual(self.state(), ((1200, 600, 900, 120, 1800), (1, 0, 0, 0), 1))
+
+    def test_elixir_usage_updates_tolerance_counters_in_same_transaction(self) -> None:
+        result = self.service.apply(
+            "use-elixir",
+            "user",
+            9001,
+            2,
+            200,
+            hp_gain=100,
+            mp_gain=200,
+            atk_gain=20,
+            power_multiplier=1.5,
+            track_usage=True,
+        )
+
+        self.assertEqual(result.status, "applied")
+        self.assertEqual(self.state(), ((1200, 600, 900, 120, 1800), (1, 0, 2, 2), 1))
 
     def test_duplicate_event_does_not_consume_or_reward_twice(self) -> None:
         first = self.service.apply(
@@ -90,7 +110,7 @@ class CultivationItemServiceTests(unittest.TestCase):
 
         self.assertEqual((first.status, second.status), ("applied", "duplicate"))
         self.assertEqual((second.quantity, second.exp_gain), (1, 100))
-        self.assertEqual(self.state(), ((1100, 550, 800, 110, 1650), (2, 1), 1))
+        self.assertEqual(self.state(), ((1100, 550, 800, 110, 1650), (2, 1, 0, 0), 1))
 
     def test_insufficient_item_leaves_character_unchanged(self) -> None:
         result = self.service.apply(
@@ -99,7 +119,7 @@ class CultivationItemServiceTests(unittest.TestCase):
         )
 
         self.assertEqual(result.status, "item_insufficient")
-        self.assertEqual(self.state(), ((1000, 500, 700, 100, 1500), (3, 2), 0))
+        self.assertEqual(self.state(), ((1000, 500, 700, 100, 1500), (3, 2, 0, 0), 0))
 
     def test_database_failure_rolls_back_item_and_character(self) -> None:
         with db_backend.transaction(self.database) as conn:
@@ -116,7 +136,7 @@ class CultivationItemServiceTests(unittest.TestCase):
                 hp_gain=50, mp_gain=100, atk_gain=10, power_multiplier=1.5,
             )
 
-        self.assertEqual(self.state(), ((1000, 500, 700, 100, 1500), (3, 2), 0))
+        self.assertEqual(self.state(), ((1000, 500, 700, 100, 1500), (3, 2, 0, 0), 0))
 
 
 if __name__ == "__main__":

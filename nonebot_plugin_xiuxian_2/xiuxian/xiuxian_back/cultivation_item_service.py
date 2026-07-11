@@ -59,6 +59,7 @@ class CultivationItemService:
         mp_gain,
         atk_gain,
         power_multiplier,
+        track_usage=False,
     ) -> CultivationItemUse:
         operation_id = str(operation_id).strip()
         if not operation_id:
@@ -71,6 +72,7 @@ class CultivationItemService:
         mp_gain = int(mp_gain)
         atk_gain = int(atk_gain)
         power_multiplier = float(power_multiplier)
+        track_usage = bool(track_usage)
         if quantity <= 0 or min(exp_gain, hp_gain, mp_gain, atk_gain) < 0:
             raise ValueError("quantity and gains must be non-negative")
         if power_multiplier < 0:
@@ -110,6 +112,12 @@ class CultivationItemService:
                 back_columns = set(conn.column_names("back"))
                 updates = ["goods_num=goods_num-%s"]
                 params: list[object] = [quantity]
+                if track_usage and "day_num" in back_columns:
+                    updates.append("day_num=COALESCE(day_num, 0)+%s")
+                    params.append(quantity)
+                if track_usage and "all_num" in back_columns:
+                    updates.append("all_num=COALESCE(all_num, 0)+%s")
+                    params.append(quantity)
                 if "bind_num" in back_columns:
                     updates.append(
                         "bind_num=CASE WHEN goods_num-%s=0 THEN 0 "

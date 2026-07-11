@@ -871,7 +871,12 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 return
 
     elif goods_type == "丹药":
-        msg = check_use_elixir(user_id, goods_id, num)
+        msg = check_use_elixir(
+            user_id,
+            goods_id,
+            num,
+            _cultivation_item_operation_id(event, user_id, goods_id),
+        )
 
     elif goods_type == "特殊道具":
         msg = f"请使用【道具使用 {goods_info['name']}】命令来使用此道具。"
