@@ -19,12 +19,14 @@ from ...paths import get_paths
 from .cultivation_item_service import CultivationItemService
 from .breakthrough_rate_item_service import BreakthroughRateItemService
 from .recovery_item_service import RecoveryItemService
+from .permanent_atk_item_service import PermanentAtkItemService
 from nonebot.log import logger
 items = Items()
 sql_message = XiuxianDateManage()
 cultivation_item_service = CultivationItemService(get_paths().game_db)
 breakthrough_rate_item_service = BreakthroughRateItemService(get_paths().game_db)
 recovery_item_service = RecoveryItemService(get_paths().game_db)
+permanent_atk_item_service = PermanentAtkItemService(get_paths().game_db)
 ADDED_RANKS = get_added_ranks()
 
 sign = lambda x: (x > 0) - (x < 0)
@@ -1032,17 +1034,29 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
     elif goods_info['buff_type'] == "atk_buff":  # 永久加攻击buff的丹药
         if user_info['root'] == "凡人":
             buff = goods_info['buff'] * num
-            sql_message.updata_user_atk_buff(user_id, buff)
-            sql_message.update_back_j(user_id, goods_id,num=num, use_key=1)
-            msg = f"道友成功使用丹药：{goods_name}{num}颗，攻击力永久增加{buff}点！"
+            result = permanent_atk_item_service.apply(
+                operation_id or f"elixir-atk:{user_id}:{goods_id}:{datetime.now().timestamp()}",
+                user_id, goods_id, num, buff,
+            )
+            msg = (
+                f"道友成功使用丹药：{goods_name}{result.quantity}颗，攻击力永久增加{result.atk_gain}点！"
+                if result.succeeded
+                else "丹药数量或角色状态已经变化，请刷新背包后重试！"
+            )
         else:
             if goods_rank < user_rank:  # 使用限制
                 msg = f"丹药：{goods_name}的使用境界为{goods_info['境界']}以上，道友不满足使用条件！"
             else:
                 buff = goods_info['buff'] * num
-                sql_message.updata_user_atk_buff(user_id, buff)
-                sql_message.update_back_j(user_id, goods_id,num=num, use_key=1)
-                msg = f"道友成功使用丹药：{goods_name}{num}颗，攻击力永久增加{buff}点！"
+                result = permanent_atk_item_service.apply(
+                    operation_id or f"elixir-atk:{user_id}:{goods_id}:{datetime.now().timestamp()}",
+                    user_id, goods_id, num, buff,
+                )
+                msg = (
+                    f"道友成功使用丹药：{goods_name}{result.quantity}颗，攻击力永久增加{result.atk_gain}点！"
+                    if result.succeeded
+                    else "丹药数量或角色状态已经变化，请刷新背包后重试！"
+                )
 
     elif goods_info['buff_type'] == "exp_up":  # 加固定经验值的丹药
         if goods_rank < user_rank:  # 使用限制
