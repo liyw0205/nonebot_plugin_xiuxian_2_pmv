@@ -47,6 +47,7 @@ from .cultivation_item_service import CultivationItemService
 from .equipment_service import EquipmentService
 from .stone_reward_service import StoneItemRewardService
 from .three_cultivation_pill_service import ThreeCultivationPillService
+from .unbind_item_service import UnbindItemService
 from . import accessory as _accessory  # noqa: F401
 from .accessory_helpers import AFFIX_KEY_MAP, SET_BONUS, ACCESSORY_BAG_LIMIT, add_accessory_to_bag, can_add_accessories, quality_to_cn  # noqa: F401
 from .backpack_render import (
@@ -70,6 +71,7 @@ equipment_service = EquipmentService(get_paths().game_db)
 cultivation_item_service = CultivationItemService(get_paths().game_db)
 stone_reward_service = StoneItemRewardService(get_paths().game_db)
 three_cultivation_pill_service = ThreeCultivationPillService(get_paths().game_db)
+unbind_item_service = UnbindItemService(get_paths().game_db)
 player_data_manager = PlayerDataManager()
 tianti_manager = TiantiDataManager()
 scheduler = require("nonebot_plugin_apscheduler").scheduler
@@ -1247,40 +1249,21 @@ async def use_unbind_charm(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, msg)
         return
 
-    # 检查背包中是否有要解绑的物品
-    # 注意：这里调用的是 goods_num(..., num_type=None)，获取的是总数量，不是绑定数量
-    # 应该先检查是否有绑定数量，才能解绑
-    target_goods_total_num = sql_message.goods_num(user_id, target_goods_id)
-    if target_goods_total_num <= 0:
+    result = unbind_item_service.apply(
+        _cultivation_item_operation_id(event, user_id, item_id),
+        user_id,
+        item_id,
+        target_goods_id,
+        num,
+    )
+    if result.succeeded:
+        msg = f"成功使用解绑符，解除了 {target_item_name} 的 {result.quantity} 个绑定状态！"
+    elif result.status == "target_missing":
         msg = f"背包中没有 {target_item_name} ！"
-        await handle_send(bot, event, msg)
-        return
-    
-    # 获取物品的绑定数量
-    bind_num_in_db = sql_message.goods_num(user_id, target_goods_id, num_type='bind')
-    if bind_num_in_db <= 0:
+    elif result.status == "not_bound":
         msg = f"{target_item_name} 没有绑定数量，无需解绑！"
-        await handle_send(bot, event, msg)
-        return
-    
-    # 计算实际可解绑的数量，不能超过解绑符数量，也不能超过物品的绑定数量
-    actual_unbind_quantity = min(num, bind_num_in_db)
-    
-    if actual_unbind_quantity <= 0:
-        msg = f"没有足够的可解绑数量或解绑符数量不足！"
-        await handle_send(bot, event, msg)
-        return
-    
-    # 使用解绑符解绑物品
-    success = sql_message.unbind_item(user_id, target_goods_id, actual_unbind_quantity)
-    
-    if success:
-        # 消耗解绑符
-        sql_message.update_back_j(user_id, item_id, num=actual_unbind_quantity) # 消耗用户输入的解绑符数量
-        
-        msg = f"成功使用解绑符，解除了 {target_item_name} 的 {actual_unbind_quantity} 个绑定状态！"
     else:
-        msg = "解绑失败，请稍后重试！"
+        msg = "解绑符数量或物品绑定状态已经变化，请刷新背包后重试！"
     
     await handle_send(bot, event, msg)
 
