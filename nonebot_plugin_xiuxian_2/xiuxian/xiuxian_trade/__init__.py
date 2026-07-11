@@ -60,6 +60,7 @@ from .auction_jobs import run_auction_job
 from .repository import TradeRepository
 from .service import XianshiPurchaseService
 from .guishi_stone_service import GuishiStoneService
+from .auction_queue_service import AuctionQueueService
 from ...paths import get_paths
 from urllib.parse import quote
 
@@ -73,6 +74,11 @@ xianshi_repository = TradeRepository(
 )
 xianshi_purchase_service = XianshiPurchaseService(xianshi_repository)
 guishi_stone_service = GuishiStoneService(get_paths().game_db, get_paths().trade_db)
+auction_queue_service = AuctionQueueService(
+    get_paths().game_db,
+    get_paths().trade_db,
+    XiuConfig().max_goods_num,
+)
 scheduler = require("nonebot_plugin_apscheduler").scheduler # 全局调度器，用于鬼市
 auction_scheduler = require("nonebot_plugin_apscheduler").scheduler # 独立的拍卖调度器，避免冲突
 bind_auction_repository(xianshi_repository)
@@ -244,6 +250,16 @@ def _guishi_stone_operation_id(event, operation_type, user_id):
         return f"guishi-stone:{operation_type}:{event_id}:{user_id}"
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
     return f"guishi-stone:{operation_type}:{user_id}:{timestamp}"
+
+
+def _auction_queue_operation_id(event, action, user_id, item_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"auction-queue:{action}:{event_id}:{user_id}:{item_id}"
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
+    return f"auction-queue:{action}:{user_id}:{item_id}:{timestamp}"
 
 
 def buy_xianshi_item_safely(
@@ -2463,21 +2479,6 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_add.finish()
     
-    # 获取用户背包中可交易的物品数量 (非绑定且未装备)
-    # 辅助函数，检查装备是否被使用
-    def get_equipment_is_used(user_id, goods_id):
-        back = sql_message.get_item_by_good_id_and_user_id(user_id, goods_id)
-        return back and back.get('state', 0) == 1
-    
-    trade_num = sql_message.goods_num(str(user_info['user_id']), goods_id, num_type='trade')
-    if get_equipment_is_used(user_id, goods_id): # 如果是已装备物品
-        trade_num = max(0, trade_num - 1) # 已装备的物品不能上架，所以减1
-    
-    if trade_num <= 0:
-        msg = f"背包中没有 {item_name} 可用于拍卖！"
-        await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
-        await auction_add.finish()
-    
     # 检查物品类型是否允许拍卖 (这里与仙肆交易类型一致)
     if goods_info['type'] not in ITEM_TYPES:
         msg = f"该物品类型不允许拍卖！允许类型：{', '.join(ITEM_TYPES)}"
@@ -2490,37 +2491,41 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_add.finish()
 
-    # 检查上架数量限制
-    player_auction_items = trade_manager.get_player_auction_items(user_id)
     auction_rules = auction_config.get_auction_rules()
-    if len(player_auction_items) >= auction_rules["max_user_items"]:
+    result = auction_queue_service.enqueue(
+        _auction_queue_operation_id(event, "enqueue", user_id, goods_id),
+        user_id,
+        goods_id,
+        item_name,
+        base_price,
+        user_info['user_name'],
+        max_user_items=auction_rules["max_user_items"],
+    )
+    if result.status == "limit_reached":
         msg = f"每人最多上架{auction_rules['max_user_items']}件物品到拍卖等待区！"
         await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_add.finish()
-    
-    # 从背包扣除物品
-    if not sql_message.consume_trade_item(user_id, goods_id, num=1):
+    if result.status == "stock_insufficient":
         msg = f"可交易的 {item_name} 数量不足，上架失败！"
         await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_add.finish()
-    
-    # 添加到拍卖等待区
-    try:
-        trade_manager.add_player_auction_item(user_id, goods_id, item_name, base_price, user_info['user_name'])
-    except Exception as e:
-        logger.error(f"拍卖上架失败，已退回物品: {e}")
-        sql_message.send_back(user_id, goods_id, item_name, goods_info['type'], 1)
-        msg = "拍卖上架失败，物品已退回背包！"
+    if result.status == "already_queued":
+        msg = f"{item_name} 已在拍卖等待区，请勿重复上架！"
+        await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
+        await auction_add.finish()
+    if not result.succeeded:
+        msg = "拍卖等待区状态已经变化，请稍后重试！"
         await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_add.finish()
     
     msg = f"成功上架 {item_name} 到拍卖等待区！底价：{number_to(base_price)}灵石"
-    record_trade_event(
-        user_id,
-        "拍卖上架",
-        f"上架{item_name}到底价{number_to(base_price)}灵石的拍卖等待区",
-        {"拍卖上架次数": 1}
-    )
+    if result.applied:
+        record_trade_event(
+            user_id,
+            "拍卖上架",
+            f"上架{item_name}到底价{number_to(base_price)}灵石的拍卖等待区",
+            {"拍卖上架次数": 1}
+        )
     await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
     await auction_add.finish()
 
@@ -2545,6 +2550,19 @@ async def auction_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         msg = "请输入要下架的物品名！"
         await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_remove.finish()
+
+    goods_id, item_info = items.get_data_by_item_name(item_name)
+    if goods_id:
+        operation_id = _auction_queue_operation_id(
+            event, "dequeue", user_id, goods_id
+        )
+        previous = auction_queue_service.get_operation(
+            operation_id, "dequeue", user_id, goods_id
+        )
+        if previous is not None and previous.succeeded:
+            msg = f"成功从拍卖等待区下架 {item_name}！物品已退回背包。"
+            await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
+            await auction_remove.finish()
     
     # 查找用户上架的该物品
     player_items_in_queue = trade_manager.get_player_auction_items(user_id)
@@ -2559,32 +2577,41 @@ async def auction_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_remove.finish()
     
-    # 移除物品
-    item_to_remove = trade_manager.claim_player_auction_item(user_id, item_to_remove["item_id"]) # item_id是物品的goods_id
-    if not item_to_remove:
+    item_info = items.get_data_by_item_id(item_to_remove["item_id"])
+    if not item_info:
+        msg = "无法读取该物品信息，请稍后重试！"
+        await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
+        await auction_remove.finish()
+    operation_id = _auction_queue_operation_id(
+        event, "dequeue", user_id, item_to_remove["item_id"]
+    )
+    result = auction_queue_service.dequeue(
+        operation_id,
+        user_id,
+        item_to_remove["item_id"],
+        item_info["type"],
+    )
+    if result.status == "queue_missing":
         msg = "该物品已不在拍卖等待区，请刷新后重试！"
         await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_remove.finish()
-    
-    # 退还物品到背包
-    item_info = items.get_data_by_item_id(item_to_remove["item_id"])
-    if item_info:
-        sql_message.send_back(
-            user_id,
-            item_to_remove["item_id"],
-            item_to_remove["item_name"],
-            item_info["type"],
-            1,
-            1 # 下架退回的物品默认绑定
-        )
+    if result.status == "inventory_full":
+        msg = "背包中该物品数量已达上限，无法下架！"
+        await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
+        await auction_remove.finish()
+    if not result.succeeded:
+        msg = "拍卖等待区状态已经变化，请稍后重试！"
+        await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
+        await auction_remove.finish()
     
     msg = f"成功从拍卖等待区下架 {item_name}！物品已退回背包。"
-    record_trade_event(
-        user_id,
-        "拍卖下架",
-        f"从拍卖等待区下架{item_name}，已退回背包",
-        {"拍卖下架次数": 1}
-    )
+    if result.applied:
+        record_trade_event(
+            user_id,
+            "拍卖下架",
+            f"从拍卖等待区下架{item_name}，已退回背包",
+            {"拍卖下架次数": 1}
+        )
     await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
     await auction_remove.finish()
 
