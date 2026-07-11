@@ -11,6 +11,18 @@ from typing import Literal
 from ..xiuxian_utils import db_backend
 
 
+def get_fee_price(total_price: int) -> int:
+    if total_price <= 5000000:
+        fee_rate = 0.1
+    elif total_price <= 10000000:
+        fee_rate = 0.15
+    elif total_price <= 20000000:
+        fee_rate = 0.2
+    else:
+        fee_rate = 0.3
+    return int(total_price * fee_rate)
+
+
 PurchaseStatus = Literal[
     "purchased",
     "duplicate",
@@ -147,6 +159,28 @@ class GuishiBaitanCreate:
         return self.status == "created"
 
 
+@dataclass(frozen=True)
+class XianshiListingBatch:
+    status: str
+    seller_id: str
+    goods_id: int
+    name: str
+    goods_type: str
+    price: int
+    requested_quantity: int
+    listed_quantity: int = 0
+    fee_charged: int = 0
+    fee_refund: int = 0
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"listed", "duplicate"}
+
+    @property
+    def applied(self) -> bool:
+        return self.status == "listed"
+
+
 class TradeRepository:
     """Atomic marketplace operations stored with player economy data."""
 
@@ -279,6 +313,156 @@ class TradeRepository:
                 except db_backend.IntegrityError:
                     conn.rollback()
             raise RuntimeError("failed to allocate xianshi listing id")
+
+    def add_xianshi_items(
+        self,
+        operation_id,
+        seller_id,
+        goods_id,
+        name,
+        goods_type,
+        price,
+        quantity,
+        *,
+        fee_charged: int,
+    ) -> XianshiListingBatch:
+        import secrets
+
+        operation_id = str(operation_id).strip()
+        seller_id = str(seller_id)
+        goods_id = int(goods_id)
+        name = str(name)
+        goods_type = str(goods_type)
+        price = int(price)
+        quantity = int(quantity)
+        fee_charged = int(fee_charged)
+        if not operation_id:
+            raise ValueError("operation_id must not be empty")
+        if quantity <= 0:
+            raise ValueError("quantity must be positive")
+
+        def result(status, listed_quantity=0, actual_fee=0, original_fee=None):
+            charged_fee = int(actual_fee if original_fee is None else original_fee)
+            fee_refund = max(charged_fee - int(actual_fee), 0)
+            return XianshiListingBatch(
+                status,
+                seller_id,
+                goods_id,
+                name,
+                goods_type,
+                price,
+                quantity,
+                int(listed_quantity),
+                int(actual_fee),
+                int(fee_refund),
+            )
+
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                self.ensure_schema(conn)
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS xianshi_listing_operations (
+                        operation_id TEXT PRIMARY KEY,
+                        seller_id TEXT NOT NULL,
+                        goods_id INTEGER NOT NULL,
+                        name TEXT NOT NULL,
+                        goods_type TEXT NOT NULL,
+                        price INTEGER NOT NULL,
+                        requested_quantity INTEGER NOT NULL,
+                        listed_quantity INTEGER NOT NULL,
+                        fee_charged INTEGER NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+                conn.execute("BEGIN IMMEDIATE")
+                previous = conn.execute(
+                    "SELECT seller_id, goods_id, name, goods_type, price, requested_quantity, "
+                    "listed_quantity, fee_charged FROM xianshi_listing_operations "
+                    "WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if previous is not None:
+                    conn.rollback()
+                    (
+                        prev_seller,
+                        prev_goods,
+                        prev_name,
+                        prev_type,
+                        prev_price,
+                        prev_requested,
+                        prev_listed,
+                        prev_fee,
+                    ) = previous
+                    if (
+                        str(prev_seller) != seller_id
+                        or int(prev_goods) != goods_id
+                        or str(prev_name) != name
+                        or str(prev_type) != goods_type
+                        or int(prev_price) != price
+                        or int(prev_requested) != quantity
+                    ):
+                        return result("state_changed")
+                    return result("duplicate", prev_listed, prev_fee, prev_fee)
+
+                listed_quantity = 0
+                for _ in range(quantity):
+                    for _ in range(20):
+                        listing_id = str(
+                            secrets.randbelow(9_000_000_000_000) + 1_000_000_000_000
+                        )
+                        try:
+                            conn.execute(
+                                """
+                                INSERT INTO xianshi_item (
+                                    id, user_id, goods_id, name, type, price, quantity
+                                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                """,
+                                (
+                                    listing_id,
+                                    seller_id,
+                                    goods_id,
+                                    name,
+                                    goods_type,
+                                    price,
+                                    1,
+                                ),
+                            )
+                            listed_quantity += 1
+                            break
+                        except db_backend.IntegrityError:
+                            if conn.execute(
+                                "SELECT 1 FROM xianshi_item WHERE id=%s", (listing_id,)
+                            ).fetchone():
+                                continue
+                            raise
+                    else:
+                        raise RuntimeError("failed to allocate xianshi listing id")
+
+                actual_fee = get_fee_price(price * listed_quantity)
+                conn.execute(
+                    "INSERT INTO xianshi_listing_operations "
+                    "(operation_id, seller_id, goods_id, name, goods_type, price, "
+                    "requested_quantity, listed_quantity, fee_charged) VALUES "
+                    "(%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    (
+                        operation_id,
+                        seller_id,
+                        goods_id,
+                        name,
+                        goods_type,
+                        price,
+                        quantity,
+                        listed_quantity,
+                        actual_fee,
+                    ),
+                )
+                conn.commit()
+                return result("listed", listed_quantity, actual_fee)
+            except Exception:
+                conn.rollback()
+                raise
 
     def get_xianshi_items(self, *, user_id=None, type=None, id=None, name=None):
         conditions = []
