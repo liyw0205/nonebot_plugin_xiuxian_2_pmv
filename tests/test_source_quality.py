@@ -776,6 +776,18 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("await asyncio.to_thread(_prepare_and_cache_background", source)
         self.assertNotIn("return await convert_img(final_img)", source)
 
+    def test_sect_rename_uses_transactional_service(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_sect" / "__init__.py"
+        ).read_text(encoding="utf-8")
+        start = source.index("async def sect_rename_")
+        end = source.index("@create_sect.handle", start)
+        command = source[start:end]
+        self.assertIn("sect_membership_service.rename_sect(", command)
+        self.assertNotIn("sql_message.update_sect_name(", command)
+        self.assertNotIn("sql_message.update_back_j(", command)
+        self.assertNotIn("sql_message.update_sect_used_stone(", command)
+
     def test_entertainment_network_calls_use_io_runtime(self) -> None:
         entertainment = SOURCE_ROOT / "xiuxian" / "xiuxian_entertainment"
         expected_calls = {

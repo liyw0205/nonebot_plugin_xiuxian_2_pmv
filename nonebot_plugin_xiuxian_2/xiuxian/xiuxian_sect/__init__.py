@@ -1985,8 +1985,6 @@ async def sect_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     else:
         update_sect_name = args.extract_plain_text().strip()
         sect_id = user_info['sect_id']
-        sect_info = sql_message.get_sect_info(sect_id)
-        enabled_groups = JsonConfig().get_enabled_groups()
         len_sect_name = len(update_sect_name.encode('gbk'))
 
         if len_sect_name > 20:
@@ -1994,41 +1992,49 @@ async def sect_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             await handle_send(bot, event, msg, md_type="宗门", k1="改名", v1="宗门改名", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await sect_rename.finish()
 
-        elif update_sect_name is None:
+        elif not update_sect_name:
             msg = f"道友确定要改名无名之宗门？还请三思。"
             await handle_send(bot, event, msg, md_type="宗门", k1="改名", v1="宗门改名", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await sect_rename.finish()
 
-        elif sect_info['sect_used_stone'] < XiuConfig().sect_rename_cost:
-            msg = f"道友宗门灵石储备不足，还需{number_to(XiuConfig().sect_rename_cost - sect_info['sect_used_stone'])}灵石!"
-            await handle_send(bot, event, msg, md_type="宗门", k1="改名", v1="宗门改名", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
-            await sect_rename.finish()
-
-        elif (
-            not (rename_card := sql_message.get_item_by_good_id_and_user_id(user_info['user_id'], SECT_RENAME_CARD_ID))
-            or int(rename_card.get('goods_num', 0)) < 1
-        ):
-            msg = f"宗门改名需要消耗1个{SECT_RENAME_CARD_NAME}！"
-            await handle_send(bot, event, msg, md_type="宗门", k1="改名", v1="宗门改名", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
-            await sect_rename.finish()
-
-        elif sql_message.update_sect_name(sect_id, update_sect_name) is False:
+        result = sect_membership_service.rename_sect(
+            _sect_operation_id(event, "rename", sect_id),
+            user_info['user_id'],
+            sect_id,
+            update_sect_name,
+            XiuConfig().sect_rename_cost,
+            SECT_RENAME_CARD_ID,
+            owner_position=owner_position,
+        )
+        if result.status == "name_exists":
             msg = f"已存在同名宗门(自己宗门名字一样的就不要改了),请重新输入！"
             await handle_send(bot, event, msg, md_type="宗门", k1="改名", v1="宗门改名", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await sect_rename.finish()
-        else:
-            sql_message.update_back_j(user_info['user_id'], SECT_RENAME_CARD_ID, use_key=1)
-            sql_message.update_sect_used_stone(sect_id, XiuConfig().sect_rename_cost, 2)
+        if result.status == "stone_insufficient":
+            msg = f"道友宗门灵石储备不足，还需补足改名所需的{number_to(XiuConfig().sect_rename_cost)}灵石!"
+            await handle_send(bot, event, msg, md_type="宗门", k1="改名", v1="宗门改名", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
+            await sect_rename.finish()
+        if result.status == "card_insufficient":
+            msg = f"宗门改名需要消耗1个{SECT_RENAME_CARD_NAME}！"
+            await handle_send(bot, event, msg, md_type="宗门", k1="改名", v1="宗门改名", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
+            await sect_rename.finish()
+        if not result.applied:
+            await handle_send(bot, event, "宗门状态已经变化，当前无法改名，请刷新宗门信息后重试。")
+            await sect_rename.finish()
+
+        if result.status == "renamed":
             msg = f"""
-传宗门——{sect_info['sect_name']}
+传宗门——{result.previous_name}
 宗主{user_info['user_name']}法旨:
-宗门改名为{update_sect_name}！
+宗门改名为{result.new_name}！
 星斗更迭，法器灵通，神光熠熠。
 愿同门共沐神光，共护宗门千世荣光！
 青天无云，道韵长存，灵气飘然。
 愿同门同心同德，共铸宗门万世辉煌！"""
             await handle_send(bot, event, msg, md_type="宗门", k1="宗门", v1="我的宗门", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
-            await sect_rename.finish()
+        else:
+            await handle_send(bot, event, f"宗门已改名为{result.new_name}，本次操作未重复扣除资源。")
+        await sect_rename.finish()
 
 @create_sect.handle(parameterless=[Cooldown(cd_time=0)])
 async def create_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_State):
