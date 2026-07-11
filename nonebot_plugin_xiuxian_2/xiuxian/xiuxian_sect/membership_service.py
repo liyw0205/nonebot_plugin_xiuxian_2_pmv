@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import closing
 from dataclasses import dataclass, replace
+from datetime import datetime
 from pathlib import Path
 from threading import RLock
 
@@ -124,6 +125,23 @@ class SectDonation:
     @property
     def applied(self) -> bool:
         return self.status in {"donated", "duplicate"}
+
+
+@dataclass(frozen=True)
+class SectTaskSettlement:
+    status: str
+    user_id: str
+    sect_id: int
+    period: str
+    cost_type: str
+    cost: int = 0
+    exp_reward: int = 0
+    sect_reward: int = 0
+    materials_reward: int = 0
+
+    @property
+    def applied(self) -> bool:
+        return self.status in {"settled", "duplicate"}
 
 
 class SectMembershipService:
@@ -262,6 +280,163 @@ class SectMembershipService:
             )
             """
         )
+
+    @staticmethod
+    def _ensure_task_settlement_operations(conn) -> None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sect_task_settlement_operations (
+                operation_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                sect_id INTEGER NOT NULL,
+                period TEXT NOT NULL,
+                cost_type TEXT NOT NULL,
+                cost INTEGER NOT NULL,
+                exp_reward INTEGER NOT NULL,
+                sect_reward INTEGER NOT NULL,
+                materials_reward INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+    def settle_task(
+        self,
+        operation_id,
+        user_id,
+        sect_id,
+        period,
+        cost_type,
+        cost,
+        exp_reward,
+        sect_reward,
+    ) -> SectTaskSettlement:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            raise ValueError("operation_id must not be empty")
+        user_id = str(user_id)
+        sect_id = int(sect_id)
+        period = str(period).strip()
+        cost_type = str(cost_type).strip().lower()
+        cost = int(cost)
+        exp_reward = int(exp_reward)
+        sect_reward = int(sect_reward)
+        materials_reward = sect_reward * 10
+        if not period:
+            raise ValueError("period must not be empty")
+        if cost_type not in {"hp", "stone"}:
+            raise ValueError("cost_type must be hp or stone")
+        if min(cost, exp_reward, sect_reward) < 0:
+            return SectTaskSettlement(
+                "invalid_amount", user_id, sect_id, period, cost_type,
+                cost, exp_reward, sect_reward, materials_reward,
+            )
+
+        def result(status, values=None):
+            values = values or (cost_type, cost, exp_reward, sect_reward, materials_reward)
+            return SectTaskSettlement(
+                status, user_id, sect_id, period, str(values[0]),
+                int(values[1]), int(values[2]), int(values[3]), int(values[4]),
+            )
+
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._ensure_task_settlement_operations(conn)
+                previous = conn.execute(
+                    """
+                    SELECT cost_type, cost, exp_reward, sect_reward, materials_reward
+                    FROM sect_task_settlement_operations WHERE operation_id=%s
+                    """,
+                    (operation_id,),
+                ).fetchone()
+                if previous is not None:
+                    conn.rollback()
+                    return result("duplicate", previous)
+
+                task = conn.execute(
+                    """
+                    SELECT sect_id, status FROM sect_task_state
+                    WHERE user_id=%s AND period=%s
+                    """,
+                    (user_id, period),
+                ).fetchone()
+                if task is None or str(task[1]) != "accepted":
+                    conn.rollback()
+                    return result("task_missing")
+                if int(task[0]) != sect_id:
+                    conn.rollback()
+                    return result("task_sect_changed")
+
+                user = conn.execute(
+                    "SELECT sect_id, stone, hp FROM user_xiuxian WHERE user_id=%s",
+                    (user_id,),
+                ).fetchone()
+                if user is None:
+                    conn.rollback()
+                    return result("user_missing")
+                if user[0] is None or int(user[0]) != sect_id:
+                    conn.rollback()
+                    return result("sect_changed")
+                balance = int((user[2] if cost_type == "hp" else user[1]) or 0)
+                if balance < cost:
+                    conn.rollback()
+                    return result(f"{cost_type}_insufficient")
+                if conn.execute("SELECT 1 FROM sects WHERE sect_id=%s", (sect_id,)).fetchone() is None:
+                    conn.rollback()
+                    return result("sect_missing")
+
+                cost_column = "hp" if cost_type == "hp" else "stone"
+                user_update = conn.execute(
+                    f"""
+                    UPDATE user_xiuxian
+                    SET {cost_column}={cost_column}-%s,
+                        exp=COALESCE(exp, 0)+%s,
+                        sect_task=COALESCE(sect_task, 0)+1,
+                        sect_contribution=COALESCE(sect_contribution, 0)+%s
+                    WHERE user_id=%s AND sect_id=%s AND {cost_column} >= %s
+                    """,
+                    (cost, exp_reward, sect_reward, user_id, sect_id, cost),
+                )
+                sect_update = conn.execute(
+                    """
+                    UPDATE sects
+                    SET sect_used_stone=COALESCE(sect_used_stone, 0)+%s,
+                        sect_scale=COALESCE(sect_scale, 0)+%s,
+                        sect_materials=COALESCE(sect_materials, 0)+%s
+                    WHERE sect_id=%s
+                    """,
+                    (sect_reward, sect_reward, materials_reward, sect_id),
+                )
+                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                task_update = conn.execute(
+                    """
+                    UPDATE sect_task_state
+                    SET status='completed', progress=target,
+                        updated_at=%s, completed_at=%s
+                    WHERE user_id=%s AND period=%s AND sect_id=%s AND status='accepted'
+                    """,
+                    (now, now, user_id, period, sect_id),
+                )
+                if user_update.rowcount != 1 or sect_update.rowcount != 1 or task_update.rowcount != 1:
+                    conn.rollback()
+                    return result("state_changed")
+
+                conn.execute(
+                    """
+                    INSERT INTO sect_task_settlement_operations (
+                        operation_id, user_id, sect_id, period, cost_type, cost,
+                        exp_reward, sect_reward, materials_reward
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (operation_id, user_id, sect_id, period, cost_type, cost,
+                     exp_reward, sect_reward, materials_reward),
+                )
+                conn.commit()
+                return result("settled")
+            except Exception:
+                conn.rollback()
+                raise
 
     def donate(self, operation_id, user_id, sect_id, stone, materials) -> SectDonation:
         operation_id = str(operation_id).strip()
@@ -1225,4 +1400,5 @@ __all__ = [
     "SectOwnerTransfer",
     "SectPracticeUpgrade",
     "SectScheduledMaterialGrant",
+    "SectTaskSettlement",
 ]

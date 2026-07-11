@@ -1808,36 +1808,37 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 get_exp = 1
                 msg = "修为已近当前境界上限，本次所得修为收束为1点！\n"
             sect_stone = int(userstask[user_id]['任务内容']['sect'])
-            sql_message.update_user_hp_mp(user_id, user_info['hp'] - costhp, user_info['mp'])
-            sql_message.update_exp(user_id, get_exp)
-            sql_message.donate_update(user_info['sect_id'], sect_stone)
-            sql_message.update_sect_materials(sect_id, sect_stone * 10, 1)
-            sql_message.update_user_sect_task(user_id, 1)
-            sql_message.update_user_sect_contribution(user_id, user_info['sect_contribution'] + int(sect_stone))
+            settlement = sect_membership_service.settle_task(
+                _sect_operation_id(event, "task_complete", user_id),
+                user_id,
+                sect_id,
+                userstask[user_id]["period"],
+                "hp",
+                costhp,
+                get_exp,
+                sect_stone,
+            )
+            if not settlement.applied:
+                msg = "宗门任务状态或角色资产已发生变化，请重新确认后再完成任务。"
+                await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
+                await sect_task_complete.finish()
             task_type_value = userstask[user_id]['任务内容']['type']
             msg += f"道友大战一番，气血减少：{number_to(costhp)}，获得修为：{number_to(get_exp)}，所在宗门建设度增加：{number_to(sect_stone)}，资材增加：{number_to(sect_stone * 10)}, 宗门贡献度增加：{int(sect_stone)}"
-            sect_task_state_manager.complete_task(user_id)
             userstask[user_id] = {}
-            update_statistics_value(user_id, "宗门任务")
-            safe_record_game_event(
-                user_id,
-                "sect_task_complete",
-                1,
-                {
-                    "source": "sect",
-                    "action": "task_complete",
-                    "skip_statistics": True,
-                    "sect_id": sect_id,
-                    "exp_delta": get_exp,
-                    "sect_contribution_delta": int(sect_stone),
-                    "sect_scale_delta": sect_stone,
-                    "sect_materials_delta": sect_stone * 10,
-                    "detail": {
-                        "task_type": task_type_value,
-                        "hp_cost": costhp,
+            if settlement.status == "settled":
+                update_statistics_value(user_id, "宗门任务")
+                safe_record_game_event(
+                    user_id,
+                    "sect_task_complete",
+                    1,
+                    {
+                        "source": "sect", "action": "task_complete", "skip_statistics": True,
+                        "sect_id": sect_id, "exp_delta": get_exp,
+                        "sect_contribution_delta": int(sect_stone), "sect_scale_delta": sect_stone,
+                        "sect_materials_delta": sect_stone * 10,
+                        "detail": {"task_type": task_type_value, "hp_cost": costhp},
                     },
-                },
-            )
+                )
             await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
             await sect_task_complete.finish()
 
@@ -1869,37 +1870,37 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 get_exp = 1
                 msg = "修为已近当前境界上限，本次所得修为收束为1点！\n"
             sect_stone = int(userstask[user_id]['任务内容']['sect'])
-            sql_message.update_ls(user_id, costls, 2)
-            sql_message.update_exp(user_id, get_exp)
-            sql_message.donate_update(user_info['sect_id'], sect_stone)
-            sql_message.update_sect_materials(sect_id, sect_stone * 10, 1)
-            sql_message.update_user_sect_task(user_id, 1)
-            sql_message.update_user_sect_contribution(user_id, user_info['sect_contribution'] + int(sect_stone))
+            settlement = sect_membership_service.settle_task(
+                _sect_operation_id(event, "task_complete", user_id),
+                user_id,
+                sect_id,
+                userstask[user_id]["period"],
+                "stone",
+                costls,
+                get_exp,
+                sect_stone,
+            )
+            if not settlement.applied:
+                msg = "宗门任务状态或角色资产已发生变化，请重新确认后再完成任务。"
+                await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
+                await sect_task_complete.finish()
             task_type_value = userstask[user_id]['任务内容']['type']
             msg = f"道友为了完成任务购买宝物消耗灵石：{number_to(costls)}枚，获得修为：{number_to(get_exp)}，所在宗门建设度增加：{number_to(sect_stone)}，资材增加：{number_to(sect_stone * 10)}, 宗门贡献度增加：{int(sect_stone)}"
-            sect_task_state_manager.complete_task(user_id)
             userstask[user_id] = {}
-            update_statistics_value(user_id, "宗门任务")
-            safe_record_game_event(
-                user_id,
-                "sect_task_complete",
-                1,
-                {
-                    "source": "sect",
-                    "action": "task_complete",
-                    "skip_statistics": True,
-                    "sect_id": sect_id,
-                    "stone_delta": -int(costls),
-                    "exp_delta": get_exp,
-                    "sect_contribution_delta": int(sect_stone),
-                    "sect_scale_delta": sect_stone,
-                    "sect_materials_delta": sect_stone * 10,
-                    "detail": {
-                        "task_type": task_type_value,
-                        "stone_cost": int(costls),
+            if settlement.status == "settled":
+                update_statistics_value(user_id, "宗门任务")
+                safe_record_game_event(
+                    user_id,
+                    "sect_task_complete",
+                    1,
+                    {
+                        "source": "sect", "action": "task_complete", "skip_statistics": True,
+                        "sect_id": sect_id, "stone_delta": -int(costls), "exp_delta": get_exp,
+                        "sect_contribution_delta": int(sect_stone), "sect_scale_delta": sect_stone,
+                        "sect_materials_delta": sect_stone * 10,
+                        "detail": {"task_type": task_type_value, "stone_cost": int(costls)},
                     },
-                },
-            )
+                )
             await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
             await sect_task_complete.finish()
     else:
