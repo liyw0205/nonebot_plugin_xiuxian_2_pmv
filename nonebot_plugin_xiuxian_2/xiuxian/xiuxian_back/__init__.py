@@ -46,6 +46,7 @@ from .back_util import *
 from .cultivation_item_service import CultivationItemService
 from .equipment_service import EquipmentService
 from .lottery_talisman_service import LotteryReward, LotteryTalismanService
+from .skill_learning_service import SkillLearningService
 from .stone_reward_service import StoneItemRewardService
 from .three_cultivation_pill_service import ThreeCultivationPillService
 from .unbind_item_service import UnbindItemService
@@ -74,6 +75,7 @@ stone_reward_service = StoneItemRewardService(get_paths().game_db)
 three_cultivation_pill_service = ThreeCultivationPillService(get_paths().game_db)
 unbind_item_service = UnbindItemService(get_paths().game_db)
 lottery_talisman_service = LotteryTalismanService(get_paths().game_db)
+skill_learning_service = SkillLearningService(get_paths().game_db)
 player_data_manager = PlayerDataManager()
 tianti_manager = TiantiDataManager()
 scheduler = require("nonebot_plugin_apscheduler").scheduler
@@ -116,6 +118,15 @@ def _lottery_talisman_operation_id(event, user_id, goods_id):
     if event_id:
         return f"lottery-talisman:{event_id}:{user_id}:{goods_id}"
     return f"lottery-talisman:{user_id}:{goods_id}:{time.time_ns()}"
+
+
+def _skill_learning_operation_id(event, invite_id, user_id, goods_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"skill-learning:{event_id}:{user_id}:{goods_id}"
+    return f"skill-learning:{invite_id}:{user_id}:{goods_id}"
 
 
 # 通用物品类型和炼金最低价格
@@ -997,13 +1008,20 @@ async def confirm_use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await confirm_use.finish()
     data = confirm_use_cache[str(user_id)]
     gid, name, s_type = data['goods_id'], data['item_name'], data['skill_type']
-    if sql_message.goods_num(user_id, gid) <= 0:
+    result = skill_learning_service.learn(
+        _skill_learning_operation_id(event, data['invite_id'], user_id, gid),
+        user_id,
+        gid,
+        s_type,
+    )
+    if result.status == "item_missing":
         msg = f"背包中已无 {name}！"
-    else:
-        update_map = {"神通": sql_message.updata_user_sec_buff, "身法": sql_message.updata_user_effect1_buff, "瞳术": sql_message.updata_user_effect2_buff, "功法": sql_message.updata_user_main_buff, "辅修功法": sql_message.updata_user_sub_buff}
-        sql_message.update_back_j(user_id, gid)
-        update_map[s_type](user_id, gid)
+    elif result.status == "already_learned":
+        msg = f"道友已学会该{s_type}：{name}，请勿重复学习！"
+    elif result.succeeded:
         msg = f"恭喜道友成功学会{s_type}：{name}！"
+    else:
+        msg = "技能书数量或角色技能状态已经变化，请刷新背包后重试！"
     await handle_send(bot, event, msg, md_type="背包", k1="背包", v1="我的背包")
     del confirm_use_cache[str(user_id)]
     await confirm_use.finish()
