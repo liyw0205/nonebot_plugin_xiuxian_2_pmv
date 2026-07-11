@@ -6,6 +6,8 @@ from collections.abc import Awaitable, Callable
 from functools import partial
 from typing import Any, TypeVar
 
+from nonebot.log import logger
+
 
 T = TypeVar("T")
 
@@ -25,8 +27,10 @@ class EntertainmentIOTimeout(TimeoutError):
 def _consume_task_result(task: asyncio.Task[Any]) -> None:
     try:
         task.result()
-    except (Exception, asyncio.CancelledError):
-        pass
+    except asyncio.CancelledError:
+        logger.debug("娱乐模块超时后台任务已取消")
+    except Exception as exc:
+        logger.warning(f"娱乐模块超时后台任务最终失败: {exc}")
 
 
 async def run_blocking_io(

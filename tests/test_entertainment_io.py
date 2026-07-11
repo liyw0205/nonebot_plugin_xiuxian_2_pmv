@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 import unittest
+from unittest.mock import patch
 
 import nonebot
 
@@ -10,6 +11,7 @@ nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_entertainment.io_runtime import (
     EntertainmentIOTimeout,
+    _consume_task_result,
     run_blocking_io,
     run_media_send,
 )
@@ -59,6 +61,21 @@ class EntertainmentIOTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertLessEqual(peak, 3)
+
+    async def test_background_task_failure_is_logged(self) -> None:
+        async def fail() -> None:
+            raise RuntimeError("background failed")
+
+        task = asyncio.create_task(fail())
+        await asyncio.wait({task})
+
+        with patch(
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_entertainment.io_runtime.logger.warning"
+        ) as warning:
+            _consume_task_result(task)
+
+        warning.assert_called_once()
+        self.assertIn("background failed", warning.call_args.args[0])
 
 
 if __name__ == "__main__":

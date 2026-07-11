@@ -18,6 +18,7 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, number_to, log_message, send_help_message
 from ..xiuxian_config import XiuConfig
 from nonebot.permission import SUPERUSER
+from nonebot.log import logger
 from ...paths import get_paths
 
 sql_message = XiuxianDateManage()
@@ -759,7 +760,8 @@ async def unseal_migrate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
                     users = json.loads(content).get("users", [])
                     if isinstance(users, list):
                         save_sharing_users(users)
-    except Exception:
-        pass
+    except Exception as exc:
+        fail += 1
+        logger.warning(f"鉴石旧共享名单同步失败: {exc}")
 
     await handle_send(bot, event, f"鉴石同步完成！扫描:{total}，成功:{ok}，失败:{fail}")

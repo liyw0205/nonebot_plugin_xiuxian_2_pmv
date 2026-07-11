@@ -1,5 +1,7 @@
 import time
 
+from nonebot.log import logger
+
 from ...paths import get_paths
 
 from . import db_backend
@@ -161,6 +163,7 @@ def migrate_user_id_to_openid():
 
         players_dir = DATABASE / "players"
         rename_count = 0
+        rename_failures = []
         if players_dir.exists():
             for old_id, new_id in id_map.items():
                 old_p = players_dir / str(old_id)
@@ -169,8 +172,9 @@ def migrate_user_id_to_openid():
                     try:
                         old_p.rename(new_p)
                         rename_count += 1
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        rename_failures.append(f"{old_id}->{new_id}: {exc}")
+                        logger.warning(f"玩家目录 ID 迁移失败 {old_p} -> {new_p}: {exc}")
 
         msg = (
             f"QQID转换完成！\n"
@@ -179,6 +183,7 @@ def migrate_user_id_to_openid():
             f"转换失败：{len(fail_ids)}\n"
             f"更新总单元格：{total_updated}\n"
             f"players目录改名：{rename_count}\n"
+            f"players目录改名失败：{len(rename_failures)}\n"
             f"\n[字段类型阶段]\n" + "\n".join(type_logs) +
             f"\n\n[数据替换阶段]\n" + "\n".join(data_logs)
         )

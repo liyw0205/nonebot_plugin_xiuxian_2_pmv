@@ -366,7 +366,22 @@ class XiuxianDateManage:
 
     def _normalize_legacy_buffinfo_table(self, cur):
         """兼容历史大小写不一致的 BuffInfo 表名。"""
-        return
+        table_names = self.conn.list_tables()
+        if "buffinfo" in table_names or "BuffInfo" not in table_names:
+            return
+
+        temporary_name = "__xiuxian_buffinfo_case_migration"
+        if temporary_name in table_names:
+            raise RuntimeError(f"检测到未完成的 BuffInfo 表迁移: {temporary_name}")
+
+        # SQLite 标识符不区分大小写，大小写改名需要经过一个临时表名。
+        cur.execute(
+            f"ALTER TABLE {_quote_ident('BuffInfo')} RENAME TO {_quote_ident(temporary_name)}"
+        )
+        cur.execute(
+            f"ALTER TABLE {_quote_ident(temporary_name)} RENAME TO {_quote_ident('buffinfo')}"
+        )
+        logger.info("已将历史 BuffInfo 表名规范为 buffinfo")
 
     @classmethod
     def close_dbs(cls):

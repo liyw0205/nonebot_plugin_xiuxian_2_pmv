@@ -25,8 +25,9 @@ try:
     )
 
     HAS_MESSAGE_RECORDS = True
-except Exception:
+except Exception as exc:
     HAS_MESSAGE_RECORDS = False
+    logger.warning(f"消息记录模块加载失败，已禁用消息记录兼容钩子: {exc}")
 
     def _extract_text_from_message_obj(message: Any) -> str:
         try:
