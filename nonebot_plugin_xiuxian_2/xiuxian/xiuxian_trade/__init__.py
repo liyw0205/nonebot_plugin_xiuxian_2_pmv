@@ -651,7 +651,20 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await xianshi_auto_add.finish()
 
     consume_items = [(item_summary['id'], item_summary['quantity']) for item_summary in processed_items_summary]
-    trace_id = f"trade:xianshi_auto_add:{user_id}:{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+    listing_plan = [
+        {
+            "goods_id": item_summary["id"],
+            "name": item_summary["name"],
+            "goods_type": item_summary["type"],
+            "price": item_summary["price"],
+            "quantity": item_summary["quantity"],
+        }
+        for item_summary in processed_items_summary
+    ]
+    operation_id = _xianshi_listing_operation_id(
+        event, user_id, 0, total_fees_to_deduct, len(listing_plan), "auto"
+    )
+    trace_id = f"trade:xianshi_auto_add:{operation_id}"
     if not sql_message.spend_stone_and_consume_trade_items(
         user_id,
         total_fees_to_deduct,
@@ -670,48 +683,34 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆自动上架 {item_type} {rank_name}", k2="查看", v2=f"仙肆查看 {item_type}", k3="购买", v3="仙肆购买")
         await xianshi_auto_add.finish()
     
-    successful_items_count = 0
-    result_messages = []
-    failed_items_summary = {}
-    actual_fees_to_charge = 0
-    for item_summary in processed_items_summary:
-        added_for_item = 0
-        for _ in range(item_summary['quantity']):            
-            try:
-                xianshi_repository.add_xianshi_item(user_id, item_summary['id'], item_summary['name'], item_summary['type'], item_summary['price'], 1)
-                added_for_item += 1
-                successful_items_count += 1
-                result_messages.append(f"{item_summary['name']} x1 - 单价:{number_to(item_summary['price'])}")
-            except Exception as e:
-                logger.error(f"批量上架失败: {e}")
-                failed_count = item_summary['quantity'] - added_for_item
-                if failed_count > 0:
-                    failed_items_summary[item_summary['id']] = (
-                        item_summary['name'],
-                        item_summary['type'],
-                        failed_items_summary.get(item_summary['id'], ("", "", 0))[2] + failed_count,
-                    )
-                break # 如果某个物品上架失败，停止该物品的后续上架
-        if added_for_item > 0:
-            actual_fees_to_charge += get_fee_price(item_summary['price'] * added_for_item)
-
-    for item_id, (item_name, item_type, failed_count) in failed_items_summary.items():
-        sql_message.send_back(
+    try:
+        result = xianshi_repository.add_xianshi_plan_items(
+            operation_id,
             user_id,
-            item_id,
-            item_name,
-            item_type,
-            failed_count,
-            log_context=_trade_economy_context(
-                "xianshi_auto_add_item_rollback",
-                trace_id,
-                item_id=item_id,
-                item_name=item_name,
-                failed_count=failed_count,
-            ),
+            listing_plan,
+            fee_charged=total_fees_to_deduct,
         )
-
-    fee_refund = max(total_fees_to_deduct - actual_fees_to_charge, 0)
+    except Exception as e:
+        logger.error(f"批量上架失败: {e}")
+        for item_summary in processed_items_summary:
+            sql_message.send_back(
+                user_id,
+                item_summary['id'],
+                item_summary['name'],
+                item_summary['type'],
+                item_summary['quantity'],
+                log_context=_trade_economy_context(
+                    "xianshi_auto_add_item_rollback",
+                    trace_id,
+                    item_id=item_summary['id'],
+                    item_name=item_summary['name'],
+                    failed_count=item_summary['quantity'],
+                ),
+            )
+        fee_refund = total_fees_to_deduct
+        result = None
+    else:
+        fee_refund = result.fee_refund
     if fee_refund:
         sql_message.update_ls(
             user_id,
@@ -721,23 +720,35 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 "xianshi_auto_add_fee_refund",
                 trace_id,
                 total_fees=total_fees_to_deduct,
-                actual_fees=actual_fees_to_charge,
+                actual_fees=0 if result is None else result.fee_charged,
             ),
         )
+    if result is None:
+        msg = "自动上架过程中出现错误，请稍后再试！"
+        sql_message.update_user_stamina(user_id, 30, 1)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆自动上架 {item_type} {rank_name}", k2="查看", v2=f"仙肆查看 {item_type}", k3="购买", v3="仙肆购买")
+        await xianshi_auto_add.finish()
     
     # 限制显示数量，防止消息过长
+    result_messages = []
+    for item_summary in processed_items_summary:
+        for _ in range(item_summary['quantity']):
+            result_messages.append(
+                f"{item_summary['name']} x1 - 单价:{number_to(item_summary['price'])}"
+            )
     display_msg_lines = result_messages[:20]
     if len(result_messages) > 20:
         display_msg_lines.append(f"...等共{len(result_messages)}件物品")
     
-    msg = f"\n✨ 成功上架 {successful_items_count} 件物品\n"
-    msg += f"💎 总手续费: {number_to(actual_fees_to_charge)}灵石"
-    record_trade_event(
-        user_id,
-        "仙肆自动上架",
-        f"按{item_type}/{rank_name}上架{successful_items_count}件物品，手续费{number_to(actual_fees_to_charge)}灵石",
-        {"仙肆上架次数": 1, "仙肆上架数量": successful_items_count, "仙肆手续费消耗": actual_fees_to_charge}
-    )
+    msg = f"\n✨ 成功上架 {result.listed_quantity} 件物品\n"
+    msg += f"💎 总手续费: {number_to(result.fee_charged)}灵石"
+    if result.applied:
+        record_trade_event(
+            user_id,
+            "仙肆自动上架",
+            f"按{item_type}/{rank_name}上架{result.listed_quantity}件物品，手续费{number_to(result.fee_charged)}灵石",
+            {"仙肆上架次数": 1, "仙肆上架数量": result.listed_quantity, "仙肆手续费消耗": result.fee_charged}
+        )
     
     await send_msg_handler(bot, event, '仙肆上架', bot.self_id, display_msg_lines, title=f"【仙肆自动上架 {item_type} {rank_name}】", page_param=msg)
     await xianshi_auto_add.finish()

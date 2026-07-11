@@ -181,6 +181,24 @@ class XianshiListingBatch:
         return self.status == "listed"
 
 
+@dataclass(frozen=True)
+class XianshiListingPlanBatch:
+    status: str
+    seller_id: str
+    item_count: int
+    listed_quantity: int = 0
+    fee_charged: int = 0
+    fee_refund: int = 0
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"listed", "duplicate"}
+
+    @property
+    def applied(self) -> bool:
+        return self.status == "listed"
+
+
 class TradeRepository:
     """Atomic marketplace operations stored with player economy data."""
 
@@ -454,6 +472,129 @@ class TradeRepository:
                         goods_type,
                         price,
                         quantity,
+                        listed_quantity,
+                        actual_fee,
+                    ),
+                )
+                conn.commit()
+                return result("listed", listed_quantity, actual_fee)
+            except Exception:
+                conn.rollback()
+                raise
+
+    def add_xianshi_plan_items(self, operation_id, seller_id, listing_plan, *, fee_charged):
+        import secrets
+
+        operation_id = str(operation_id).strip()
+        seller_id = str(seller_id)
+        fee_charged = int(fee_charged)
+        plan = []
+        for entry in listing_plan:
+            quantity = int(entry["quantity"])
+            if quantity <= 0:
+                continue
+            plan.append(
+                {
+                    "goods_id": int(entry["goods_id"]),
+                    "name": str(entry["name"]),
+                    "goods_type": str(entry["goods_type"]),
+                    "price": int(entry["price"]),
+                    "quantity": quantity,
+                }
+            )
+        if not operation_id:
+            raise ValueError("operation_id must not be empty")
+        if not plan:
+            raise ValueError("listing_plan must not be empty")
+
+        def normalized_text():
+            return json.dumps(plan, ensure_ascii=False, sort_keys=True)
+
+        def result(status, listed_quantity=0, actual_fee=0, original_fee=None):
+            charged_fee = int(actual_fee if original_fee is None else original_fee)
+            return XianshiListingPlanBatch(
+                status,
+                seller_id,
+                len(plan),
+                int(listed_quantity),
+                int(actual_fee),
+                max(charged_fee - int(actual_fee), 0),
+            )
+
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                self.ensure_schema(conn)
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS xianshi_plan_listing_operations (
+                        operation_id TEXT PRIMARY KEY,
+                        seller_id TEXT NOT NULL,
+                        listing_plan TEXT NOT NULL,
+                        listed_quantity INTEGER NOT NULL,
+                        fee_charged INTEGER NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+                conn.execute("BEGIN IMMEDIATE")
+                previous = conn.execute(
+                    "SELECT seller_id, listing_plan, listed_quantity, fee_charged "
+                    "FROM xianshi_plan_listing_operations WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if previous is not None:
+                    prev_seller, prev_plan, prev_listed, prev_fee = previous
+                    conn.rollback()
+                    if str(prev_seller) != seller_id or str(prev_plan) != normalized_text():
+                        return result("state_changed")
+                    return result("duplicate", prev_listed, prev_fee, prev_fee)
+
+                listed_quantity = 0
+                for entry in plan:
+                    for _ in range(entry["quantity"]):
+                        for _ in range(20):
+                            listing_id = str(
+                                secrets.randbelow(9_000_000_000_000) + 1_000_000_000_000
+                            )
+                            try:
+                                conn.execute(
+                                    """
+                                    INSERT INTO xianshi_item (
+                                        id, user_id, goods_id, name, type, price, quantity
+                                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                    """,
+                                    (
+                                        listing_id,
+                                        seller_id,
+                                        entry["goods_id"],
+                                        entry["name"],
+                                        entry["goods_type"],
+                                        entry["price"],
+                                        1,
+                                    ),
+                                )
+                                listed_quantity += 1
+                                break
+                            except db_backend.IntegrityError:
+                                if conn.execute(
+                                    "SELECT 1 FROM xianshi_item WHERE id=%s", (listing_id,)
+                                ).fetchone():
+                                    continue
+                                raise
+                        else:
+                            raise RuntimeError("failed to allocate xianshi listing id")
+
+                actual_fee = 0
+                for entry in plan:
+                    actual_fee += get_fee_price(entry["price"] * entry["quantity"])
+                conn.execute(
+                    "INSERT INTO xianshi_plan_listing_operations "
+                    "(operation_id, seller_id, listing_plan, listed_quantity, fee_charged) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (
+                        operation_id,
+                        seller_id,
+                        normalized_text(),
                         listed_quantity,
                         actual_fee,
                     ),

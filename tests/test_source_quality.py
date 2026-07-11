@@ -518,6 +518,19 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", repository_source)
         self.assertIn("xianshi_listing_operations", repository_source)
 
+    def test_xianshi_auto_listing_uses_plan_transaction_service(self) -> None:
+        trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
+        command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")
+        repository_source = (trade_root / "repository.py").read_text(encoding="utf-8")
+        start = command_source.index("async def xianshi_auto_add_(")
+        end = command_source.index("@xianshi_fast_add.handle", start)
+        command = command_source[start:end]
+
+        self.assertIn("xianshi_repository.add_xianshi_plan_items(", command)
+        self.assertNotIn("xianshi_repository.add_xianshi_item(", command)
+        self.assertIn("BEGIN IMMEDIATE", repository_source)
+        self.assertIn("xianshi_plan_listing_operations", repository_source)
+
     def test_equipment_change_uses_transactional_service(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         command_source = (back_root / "__init__.py").read_text(encoding="utf-8")
