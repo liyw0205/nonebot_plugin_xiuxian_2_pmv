@@ -48,6 +48,7 @@ from ..xiuxian_tasks.task_data import record_task_progress
 from .stone_limit import stone_limit
 from .lottery_pool import lottery_pool
 from .sign_service import SignInService
+from .player_rename_service import PlayerRenameService
 from .registration_batch import RegistrationBatcher, RegistrationRequest
 from .breakthrough_tribulation import *  # noqa: F401,F403
 from .xiangyuan import clear_all_xiangyuan, reset_xiangyuan_daily  # noqa: F401
@@ -55,6 +56,7 @@ from .xiangyuan import clear_all_xiangyuan, reset_xiangyuan_daily  # noqa: F401
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
 sign_in_service = SignInService(get_paths().game_db)
+player_rename_service = PlayerRenameService(get_paths().game_db)
 registration_batcher = RegistrationBatcher(sql_message)
 player_data_manager = PlayerDataManager()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
@@ -92,6 +94,17 @@ def _sign_operation_id(event, user_id):
     if event_id:
         return f"sign:{event_id}:{user_id}"
     return f"sign:{user_id}:{time.time_ns()}"
+
+
+def _player_rename_operation_id(event, rename_type, user_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"player-rename:{event_id}:{rename_type}:{user_id}"
+    return f"player-rename:{rename_type}:{user_id}:{time.time_ns()}"
+
+
 xiuxian_world_info = on_command("修仙界信息", priority=5, block=True)
 
 __level_help__ = """
@@ -446,50 +459,47 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     
     # 如果没有提供新道号，则生成随机道号
     user_name = args.extract_plain_text().strip()
-    if not user_name:
-        if user_info['stone'] < XiuConfig().remaname:
-            msg = f"修改道号需要消耗{XiuConfig().remaname}灵石，你的灵石不足！"
-            await handle_send(bot, event, msg, md_type="修仙", k1="改名", v1="修仙改名", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
-            await remaname.finish()
-
+    random_name = not user_name
+    if random_name:
         # 生成不重复的道号
         while True:
             user_name = generate_daohao()
             if not sql_message.get_user_info_with_name(user_name):
                 break
-        msg = f"你获得了随机道号：{user_name}\n"
-        # 扣除灵石
-        sql_message.update_ls(user_id, XiuConfig().remaname, 2)
-    else:            
-        # 检查易名符
-        has_item = False
-        back_msg = sql_message.get_back_msg(user_id) or []
-        for item in back_msg:
-            if item['goods_id'] == 20011 and item['goods_name'] == "易名符":
-                has_item = True
-                break
-                
-        if not has_item:
-            msg = "修改道号需要消耗1个易名符！"
-            await handle_send(bot, event, msg, md_type="修仙", k1="改名", v1="修仙改名", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
-            await remaname.finish()
-            
+        result = player_rename_service.rename_user(
+            _player_rename_operation_id(event, "user-name", user_id),
+            user_id,
+            user_name,
+            stone_cost=XiuConfig().remaname,
+        )
+    else:
         # 检查名字长度（7个中文字符）
         if len(user_name) > 7:
             msg = "道号长度不能超过7个字符！"
             await handle_send(bot, event, msg, md_type="修仙", k1="改名", v1="修仙改名", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
             await remaname.finish()
             
-        # 检查道号是否已存在
-        if sql_message.get_user_info_with_name(user_name):
-            msg = "该道号已被使用，请选择其他道号！"
-            await handle_send(bot, event, msg, md_type="修仙", k1="改名", v1="修仙改名", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
-            await remaname.finish()
-        
-        # 扣除易名符
-        sql_message.update_back_j(user_id, 20011, use_key=1)
-    result = sql_message.update_user_name(user_id, user_name)
-    msg += result
+        msg = ""
+        result = player_rename_service.rename_user(
+            _player_rename_operation_id(event, "user-name", user_id),
+            user_id,
+            user_name,
+            item_id=20011,
+        )
+    if result.status == "stone_insufficient":
+        msg = f"修改道号需要消耗{XiuConfig().remaname}灵石，你的灵石不足！"
+    elif result.status == "item_missing":
+        msg = "修改道号需要消耗1个易名符！"
+    elif result.status == "name_conflict":
+        msg = "该道号已被使用，请选择其他道号！"
+    elif result.status == "unchanged":
+        msg = "新道号不能与当前道号相同！"
+    elif result.succeeded:
+        if random_name:
+            msg = f"你获得了随机道号：{result.new_name}\n"
+        msg += "道友的道号更新成啦~"
+    else:
+        msg = "道号或资产状态已经变化，请稍后重试！"
     await handle_send(bot, event, msg, md_type="修仙", k1="改名", v1="修仙改名", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
     await remaname.finish()
 
@@ -515,14 +525,20 @@ async def root_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, msg, md_type="修仙", k1="改名", v1="灵根改名", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
         await root_rename.finish()
 
-    card = sql_message.get_item_by_good_id_and_user_id(user_id, 20025)
-    if not card or int(card.get('goods_num', 0)) < 1:
+    result = player_rename_service.rename_root(
+        _player_rename_operation_id(event, "root", user_id),
+        user_id,
+        root_name,
+        item_id=20025,
+    )
+    if result.status == "item_missing":
         msg = "修改灵根名需要消耗1个灵根改名卡！"
-        await handle_send(bot, event, msg, md_type="修仙", k1="改名", v1="灵根改名", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
-        await root_rename.finish()
-
-    sql_message.update_back_j(user_id, 20025, use_key=1)
-    msg = sql_message.update_root_name(user_id, root_name)
+    elif result.status == "unchanged":
+        msg = "新灵根名不能与当前灵根名相同！"
+    elif result.succeeded:
+        msg = f"灵根已改名为：{result.new_name}"
+    else:
+        msg = "灵根名或改名卡状态已经变化，请稍后重试！"
     await handle_send(bot, event, msg, md_type="修仙", k1="改名", v1="灵根改名", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
     await root_rename.finish()
 

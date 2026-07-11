@@ -845,6 +845,25 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("pill_fusion_operations", service_source)
 
+    def test_player_rename_uses_transactional_service(self) -> None:
+        base_root = SOURCE_ROOT / "xiuxian" / "xiuxian_base"
+        command_source = (base_root / "__init__.py").read_text(encoding="utf-8")
+        service_source = (base_root / "player_rename_service.py").read_text(
+            encoding="utf-8"
+        )
+        start = command_source.index("async def remaname_(")
+        end = command_source.index("@run_xiuxian.handle", start)
+        command = command_source[start:end]
+
+        self.assertIn("player_rename_service.rename_user(", command)
+        self.assertIn("player_rename_service.rename_root(", command)
+        self.assertNotIn("sql_message.update_ls(", command)
+        self.assertNotIn("sql_message.update_back_j(", command)
+        self.assertNotIn("sql_message.update_user_name(", command)
+        self.assertNotIn("sql_message.update_root_name(", command)
+        self.assertIn("BEGIN IMMEDIATE", service_source)
+        self.assertIn("player_rename_operations", service_source)
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")
