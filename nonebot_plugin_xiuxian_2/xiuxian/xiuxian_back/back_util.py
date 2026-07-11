@@ -18,11 +18,13 @@ from ..xiuxian_config import XiuConfig, convert_rank, added_ranks as get_added_r
 from ...paths import get_paths
 from .cultivation_item_service import CultivationItemService
 from .breakthrough_rate_item_service import BreakthroughRateItemService
+from .recovery_item_service import RecoveryItemService
 from nonebot.log import logger
 items = Items()
 sql_message = XiuxianDateManage()
 cultivation_item_service = CultivationItemService(get_paths().game_db)
 breakthrough_rate_item_service = BreakthroughRateItemService(get_paths().game_db)
+recovery_item_service = RecoveryItemService(get_paths().game_db)
 ADDED_RANKS = get_added_ranks()
 
 sign = lambda x: (x > 0) - (x < 0)
@@ -908,9 +910,20 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
                     new_mp = user_max_mp
                 else:
                     new_mp = user_info['mp'] + recover_mp
-                msg = f"道友成功使用丹药：{goods_name}{num}颗，经过境界转化状态恢复了{int(buff * 100 * num)}%!"
-                sql_message.update_back_j(user_id, goods_id, num=num ,use_key=1)
-                sql_message.update_user_hp_mp(user_id, new_hp, new_mp)
+                result = recovery_item_service.apply(
+                    operation_id or f"elixir-recovery:{user_id}:{goods_id}:{datetime.now().timestamp()}",
+                    user_id,
+                    goods_id,
+                    num,
+                    mode="hp_mp",
+                    hp_gain=recover_hp,
+                    mp_gain=recover_mp,
+                )
+                msg = (
+                    f"道友成功使用丹药：{goods_name}{result.quantity}颗，经过境界转化状态恢复了{int(buff * 100 * result.quantity)}%!"
+                    if result.succeeded
+                    else "丹药数量或角色状态已经变化，请刷新背包后重试！"
+                )
         else:
             if goods_rank < user_rank:  # 使用限制
                 msg = f"丹药：{goods_name}的使用境界为{goods_info['境界']}以上，道友不满足使用条件！"
@@ -932,9 +945,20 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
                         new_mp = user_max_mp
                     else:
                         new_mp = user_info['mp'] + recover_mp
-                    msg = f"道友成功使用丹药：{goods_name}{num}颗，经过境界转化状态恢复了{int(buff * 100 * num)}%!"
-                    sql_message.update_back_j(user_id, goods_id, num=num ,use_key=1)
-                    sql_message.update_user_hp_mp(user_id, new_hp, new_mp)
+                    result = recovery_item_service.apply(
+                        operation_id or f"elixir-recovery:{user_id}:{goods_id}:{datetime.now().timestamp()}",
+                        user_id,
+                        goods_id,
+                        num,
+                        mode="hp_mp",
+                        hp_gain=recover_hp,
+                        mp_gain=recover_mp,
+                    )
+                    msg = (
+                        f"道友成功使用丹药：{goods_name}{result.quantity}颗，经过境界转化状态恢复了{int(buff * 100 * result.quantity)}%!"
+                        if result.succeeded
+                        else "丹药数量或角色状态已经变化，请刷新背包后重试！"
+                    )
 
     elif goods_info['buff_type'] == "stamina":  # 回复体力的丹药
         user_info = sql_message.get_user_info_with_id(user_id) or user_info
@@ -948,11 +972,20 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
         else:
             recover_stamina = max(1, int(max_stamina * goods_info['buff'] * num))
             real_recover = min(recover_stamina, max_stamina - current_stamina)
-            sql_message.update_back_j(user_id, goods_id, num=num, use_key=1)
-            sql_message.update_user_stamina(user_id, real_recover, 1)
+            result = recovery_item_service.apply(
+                operation_id or f"elixir-recovery:{user_id}:{goods_id}:{datetime.now().timestamp()}",
+                user_id,
+                goods_id,
+                num,
+                mode="stamina",
+                stamina_gain=recover_stamina,
+                max_stamina=max_stamina,
+            )
             msg = (
-                f"道友成功使用丹药：{goods_name}{num}颗，"
-                f"体力恢复{real_recover}点，当前体力{current_stamina + real_recover}/{max_stamina}！"
+                f"道友成功使用丹药：{goods_name}{result.quantity}颗，"
+                f"体力恢复{result.stamina_after - result.stamina_before}点，当前体力{result.stamina_after}/{max_stamina}！"
+                if result.succeeded
+                else "丹药数量或角色状态已经变化，请刷新背包后重试！"
             )
 
     elif goods_info['buff_type'] == "all":  # 回满状态的丹药
@@ -962,9 +995,18 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
             if user_info['hp'] == user_max_hp and user_info['mp'] == user_max_mp:
                 msg = f"道友的状态是满的，用不了哦！"
             else:
-                sql_message.update_back_j(user_id, goods_id, use_key=1)
-                sql_message.update_user_hp(user_id)
-                msg = f"道友成功使用丹药：{goods_name}1颗,状态已全部恢复!"
+                result = recovery_item_service.apply(
+                    operation_id or f"elixir-recovery:{user_id}:{goods_id}:{datetime.now().timestamp()}",
+                    user_id,
+                    goods_id,
+                    1,
+                    mode="full",
+                )
+                msg = (
+                    f"道友成功使用丹药：{goods_name}{result.quantity}颗,状态已全部恢复!"
+                    if result.succeeded
+                    else "丹药数量或角色状态已经变化，请刷新背包后重试！"
+                )
         else:
             if goods_rank < user_rank:  # 使用限制
                 msg = f"丹药：{goods_name}的使用境界为{goods_info['境界']}以上，道友不满足使用条件！"
@@ -974,9 +1016,18 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
                 if user_info['hp'] == user_max_hp and user_info['mp'] == user_max_mp:
                     msg = f"道友的状态是满的，用不了哦！"
                 else:
-                    sql_message.update_back_j(user_id, goods_id, use_key=1)
-                    sql_message.update_user_hp(user_id)
-                    msg = f"道友成功使用丹药：{goods_name}1颗,状态已全部恢复!"
+                    result = recovery_item_service.apply(
+                        operation_id or f"elixir-recovery:{user_id}:{goods_id}:{datetime.now().timestamp()}",
+                        user_id,
+                        goods_id,
+                        1,
+                        mode="full",
+                    )
+                    msg = (
+                        f"道友成功使用丹药：{goods_name}{result.quantity}颗,状态已全部恢复!"
+                        if result.succeeded
+                        else "丹药数量或角色状态已经变化，请刷新背包后重试！"
+                    )
 
     elif goods_info['buff_type'] == "atk_buff":  # 永久加攻击buff的丹药
         if user_info['root'] == "凡人":

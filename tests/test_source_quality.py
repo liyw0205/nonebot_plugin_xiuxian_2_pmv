@@ -534,6 +534,24 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("breakthrough_rate_item_operations", service_source)
 
+    def test_recovery_elixir_use_is_atomic_and_idempotent(self) -> None:
+        back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
+        utility_source = (back_root / "back_util.py").read_text(encoding="utf-8")
+        service_source = (back_root / "recovery_item_service.py").read_text(
+            encoding="utf-8"
+        )
+        start = utility_source.index('elif goods_info[\'buff_type\'] == "hp"')
+        end = utility_source.index('elif goods_info[\'buff_type\'] == "atk_buff"', start)
+        command = utility_source[start:end]
+
+        self.assertGreaterEqual(command.count("recovery_item_service.apply("), 4)
+        self.assertNotIn("sql_message.update_user_hp_mp(", command)
+        self.assertNotIn("sql_message.update_user_hp(", command)
+        self.assertNotIn("sql_message.update_user_stamina(", command)
+        self.assertNotIn("sql_message.update_back_j(", command)
+        self.assertIn("BEGIN IMMEDIATE", service_source)
+        self.assertIn("recovery_item_operations", service_source)
+
     def test_sect_owner_transfer_uses_transactional_service(self) -> None:
         sect_root = SOURCE_ROOT / "xiuxian" / "xiuxian_sect"
         command_source = (sect_root / "__init__.py").read_text(encoding="utf-8")
