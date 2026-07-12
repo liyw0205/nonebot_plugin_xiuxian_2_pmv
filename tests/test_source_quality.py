@@ -1505,6 +1505,21 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("bank_upgrade_operations", service)
 
+    def test_bank_interest_uses_cross_database_transaction(self) -> None:
+        bank_root = SOURCE_ROOT / "xiuxian" / "xiuxian_bank"
+        source = (bank_root / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("elif mode == '结算'")
+        handler = source[start:source.index("def get_give_stone", start)]
+        self.assertIn("bank_interest_service.settle(", handler)
+        self.assertNotIn("sql_message.update_ls(", handler)
+        self.assertNotIn("savef(user_id, bankinfo)", handler)
+        for status in ("state_changed", "user_missing"):
+            self.assertIn(f'"{status}"', handler)
+        service = (bank_root / "interest_service.py").read_text(encoding="utf-8")
+        self.assertIn("ATTACH DATABASE", service)
+        self.assertIn("BEGIN IMMEDIATE", service)
+        self.assertIn("bank_interest_operations", service)
+
     def test_sect_rename_uses_transactional_service(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_sect" / "__init__.py"

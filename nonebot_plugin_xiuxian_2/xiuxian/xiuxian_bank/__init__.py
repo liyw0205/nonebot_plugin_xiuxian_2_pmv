@@ -26,6 +26,7 @@ from ..xiuxian_config import XiuConfig
 from .deposit_service import BankDepositService
 from .withdrawal_service import BankWithdrawalService
 from .upgrade_service import BankUpgradeService
+from .interest_service import BankInterestService
 
 config = get_config()
 BANKLEVEL = config["BANKLEVEL"]
@@ -34,6 +35,7 @@ player_data_manager = PlayerDataManager()
 bank_deposit_service = BankDepositService(get_paths().game_db, get_paths().player_db)
 bank_withdrawal_service = BankWithdrawalService(get_paths().game_db, get_paths().player_db)
 bank_upgrade_service = BankUpgradeService(get_paths().game_db, get_paths().player_db)
+bank_interest_service = BankInterestService(get_paths().game_db, get_paths().player_db)
 PLAYERSDATA = get_paths().players
 
 bank = on_regex(
@@ -210,11 +212,28 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         await bank.finish()
 
     elif mode == '结算':
-
+        expected_saved_stone = bankinfo['savestone']
+        expected_saved_at = bankinfo['savetime']
         bankinfo, give_stone, timedeff = get_give_stone(bankinfo)
-        sql_message.update_ls(user_id, give_stone, 1)
-        savef(user_id, bankinfo)
-        msg = f"道友本次结息时间为：{timedeff}小时，获得灵石：{give_stone}枚！"
+        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        operation_id = f"bank-interest:{event_id}:{user_id}" if event_id else f"bank-interest:{user_id}:{time.time_ns()}"
+        settlement = bank_interest_service.settle(
+            operation_id,
+            user_id,
+            expected_saved_stone,
+            expected_saved_at,
+            bankinfo['banklevel'],
+            give_stone,
+            bankinfo['savetime'],
+        )
+        if settlement.status == "state_changed":
+            msg = "灵庄账户状态已变化，本次结息未处理，请重新查看后再试。"
+            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
+            await bank.finish()
+        if settlement.status == "user_missing":
+            await handle_send(bot, event, "未找到修仙数据，本次结息未处理。", md_type="我要修仙")
+            await bank.finish()
+        msg = f"道友本次结息时间为：{timedeff}小时，获得灵石：{settlement.interest}枚！"
         await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
         await bank.finish()
 
