@@ -1232,6 +1232,21 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("mixelixir_settlement_operations", service)
 
+    def test_mixelixir_harvest_uses_cross_database_transaction(self) -> None:
+        mixelixir_root = SOURCE_ROOT / "xiuxian" / "xiuxian_mixelixir"
+        source = (mixelixir_root / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("@yaocai_get.handle")
+        handler = source[start:source.index("@my_mix_elixir_info.handle", start)]
+        self.assertIn("mixelixir_harvest_service.harvest(", handler)
+        self.assertNotIn("sql_message.send_back(", handler)
+        self.assertNotIn('save_player_info(user_id, mix_elixir_info, "mix_elixir_info")', handler)
+        for status in ("state_changed", "user_missing"):
+            self.assertIn(f'"{status}"', handler)
+        service = (mixelixir_root / "harvest_service.py").read_text(encoding="utf-8")
+        self.assertIn("ATTACH DATABASE", service)
+        self.assertIn("BEGIN IMMEDIATE", service)
+        self.assertIn("mixelixir_harvest_operations", service)
+
     def test_natal_treasure_training_uses_transactional_service(self) -> None:
         natal_root = SOURCE_ROOT / "xiuxian" / "xiuxian_natal_treasure"
         source = (natal_root / "__init__.py").read_text(encoding="utf-8")

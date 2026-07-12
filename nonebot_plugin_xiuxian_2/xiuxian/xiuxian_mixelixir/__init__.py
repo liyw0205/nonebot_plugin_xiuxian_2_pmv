@@ -30,9 +30,11 @@ from datetime import datetime
 from .mix_elixir_config import MIXELIXIRCONFIG
 from ...paths import get_paths
 from .settlement_service import MixelixirSettlementService
+from .harvest_service import MixelixirHarvestService
 
 sql_message = XiuxianDateManage()  # sql类
 mixelixir_settlement_service = MixelixirSettlementService(get_paths().game_db)
+mixelixir_harvest_service = MixelixirHarvestService(get_paths().game_db, get_paths().player_db)
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 items = Items()
 added_rank = added_ranks()
@@ -168,11 +170,9 @@ async def yaocai_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             else:
                 reap_buff = 0
             num = mix_elixir_info['灵田数量'] + mix_elixir_info['收取等级'] + impart_reap_per + reap_buff
-            msg = ""
-            l_msg = []
+            rewards = []
             if not yaocai_id_list:
-                sql_message.send_back(user_info['user_id'], 3001, '恒心草', '药材', num)  # 没有合适的，保底
-                msg += f"道友成功收获药材：恒心草 {num} 个！\n"
+                rewards.append((3001, "恒心草", num))
             else:
                 i = 1
                 give_dict = {}
@@ -186,11 +186,26 @@ async def yaocai_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                         i += 1
                 for k, v in give_dict.items():
                     goods_info = items.get_data_by_item_id(k)
-                    msg += f"道友成功收获药材：{goods_info['name']} {v} 个！\n"
-                    sql_message.send_back(user_info['user_id'], k, goods_info['name'], '药材', v)
-            l_msg.append(msg)
-            mix_elixir_info['收取时间'] = nowtime
-            save_player_info(user_id, mix_elixir_info, "mix_elixir_info")
+                    rewards.append((k, goods_info['name'], v))
+            event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+            operation_id = f"mixelixir-harvest:{event_id}:{user_id}" if event_id else f"mixelixir-harvest:{user_id}:{time.time_ns()}"
+            harvest = mixelixir_harvest_service.harvest(
+                operation_id,
+                user_id,
+                last_time,
+                nowtime,
+                rewards,
+                max_goods_num=XiuConfig().max_goods_num,
+            )
+            if harvest.status in {"state_changed", "user_missing"}:
+                msg = "灵田状态已变化，本次未发放药材，请重新查看后再试。"
+                await handle_send(bot, event, msg, md_type="炼丹", k1="收取", v1="灵田收取", k2="查看", v2="洞天福地查看", k3="帮助", v3="洞天福地帮助")
+                await yaocai_get.finish()
+            msg = "".join(
+                f"道友成功收获药材：{reward.name} {reward.quantity} 个！\n"
+                for reward in harvest.rewards
+            )
+            l_msg = [msg]
             await send_msg_handler(bot, event, '灵田收取', bot.self_id, l_msg)
             await yaocai_get.finish()
         else:
