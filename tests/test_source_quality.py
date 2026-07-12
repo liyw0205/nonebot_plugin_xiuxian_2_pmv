@@ -1311,6 +1311,19 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("natal_awaken_operations", service)
 
+    def test_natal_data_has_no_non_transactional_write_shortcuts(self) -> None:
+        natal_data = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_natal_treasure" / "natal_data.py"
+        ).read_text(encoding="utf-8")
+        for method in (
+            "awaken",
+            "engrave_effect",
+            "forget_effect",
+            "add_exp",
+            "upgrade_single_effect_level",
+        ):
+            self.assertNotIn(f"    def {method}(", natal_data)
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")
