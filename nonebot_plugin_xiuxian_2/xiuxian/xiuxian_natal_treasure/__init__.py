@@ -40,12 +40,14 @@ from .natal_config import (
 from .training_service import NatalTrainingService
 from .effect_upgrade_service import EffectUpgradeService
 from .engraving_service import EngravingService
+from .forget_service import ForgetEffectService
 
 items = Items()
 sql_message = XiuxianDateManage()
 natal_training_service = NatalTrainingService(get_paths().game_db, get_paths().player_db)
 natal_effect_upgrade_service = EffectUpgradeService(get_paths().game_db, get_paths().player_db)
 natal_engraving_service = EngravingService(get_paths().game_db, get_paths().player_db)
+natal_forget_service = ForgetEffectService(get_paths().game_db, get_paths().player_db)
 
 # 定义觉醒本命法宝命令
 natal_awaken = on_command(
@@ -454,66 +456,40 @@ async def natal_forget_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
                           md_type="法宝", k1="遗忘", v1="遗忘道纹", k2="帮助", v2="本命法宝帮助", k3="法宝", v3="我的本命法宝")
         await natal_forget.finish()
 
-    nt_data = nt.get_data()
-    current_effect_count = sum(1 for i in range(1, MAX_EFFECT_SLOTS + 1) if nt_data.get(f"effect{i}_type", 0) > 0)
-
-    if current_effect_count <= 1:
-        await handle_send(bot, event, "你的本命法宝至少需要保留一个道纹，无法遗忘！",
-                          md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="帮助", v3="本命法宝帮助")
-        await natal_forget.finish()
-
-    forget_effect_level = 0
-    for i in range(1, MAX_EFFECT_SLOTS + 1):
-        if nt_data.get(f"effect{i}_type", 0) == effect_type_to_forget.value:
-            forget_effect_level = nt_data.get(f"effect{i}_level", 1)
-            break
-
-    if forget_effect_level <= 0:
-        effect_name_cn = EFFECT_NAME_MAP.get(effect_type_to_forget, "未知效果")
-        await handle_send(bot, event, f"你的本命法宝上没有【{effect_name_cn}】这个道纹，无法遗忘。",
-                          md_type="法宝", k1="法宝", v1="我的本命法宝", k2="遗忘", v2="遗忘道纹", k3="帮助", v3="本命法宝帮助")
-        await natal_forget.finish()
-
     scripture_cost = MYSTERIOUS_SCRIPTURE_COST_FORGET
-    refund_scripture = max(0, forget_effect_level - 1)
-    net_scripture_change = refund_scripture - scripture_cost
-
-    scripture_num = sql_message.goods_num(user_id, MYSTERIOUS_SCRIPTURE_ID)
     mysterious_scripture_info = items.get_data_by_item_id(MYSTERIOUS_SCRIPTURE_ID)
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"natal-forget:{event_id}:{user_id}" if event_id else f"natal-forget:{user_id}:{datetime.now().timestamp()}"
+    forgotten = natal_forget_service.forget(
+        operation_id, user_id, effect_type_to_forget.value,
+        MYSTERIOUS_SCRIPTURE_ID, mysterious_scripture_info["name"],
+        mysterious_scripture_info["type"], scripture_cost,
+        MAX_EFFECT_SLOTS, XiuConfig().max_goods_num,
+    )
 
-    if net_scripture_change < 0:
-        need = abs(net_scripture_change)
-        if scripture_num < need:
-            await handle_send(bot, event, f"遗忘该道纹需净消耗{need}个【{mysterious_scripture_info['name']}】（遗忘消耗{scripture_cost}，返还{refund_scripture}），你目前只有{scripture_num}个！",
-                              md_type="法宝", k1="遗忘", v1="遗忘道纹", k2="法宝", v2="我的本命法宝", k3="铭刻", v3="铭刻道纹")
-            await natal_forget.finish()
-
-    success, result_msg = nt.forget_effect(effect_type_to_forget)
-
-    if success:
-        if net_scripture_change < 0:
-            sql_message.update_back_j(user_id, MYSTERIOUS_SCRIPTURE_ID, num=abs(net_scripture_change))
-        elif net_scripture_change > 0:
-            sql_message.send_back(
-                user_id,
-                MYSTERIOUS_SCRIPTURE_ID,
-                mysterious_scripture_info["name"],
-                mysterious_scripture_info["type"],
-                net_scripture_change,
-                0
-            )
-
-        if net_scripture_change < 0:
-            extra = f"净消耗{abs(net_scripture_change)}个【神秘经书】（遗忘消耗{scripture_cost}，返还{refund_scripture}）。"
-        elif net_scripture_change > 0:
-            extra = f"净返还{net_scripture_change}个【神秘经书】（遗忘消耗{scripture_cost}，返还{refund_scripture}）。"
+    if forgotten.succeeded:
+        nt._natal_data_cache = None
+        refund_scripture = max(0, forgotten.effect_level - 1)
+        if forgotten.scripture_change < 0:
+            extra = f"净消耗{abs(forgotten.scripture_change)}个【神秘经书】（遗忘消耗{scripture_cost}，返还{refund_scripture}）。"
+        elif forgotten.scripture_change > 0:
+            extra = f"净返还{forgotten.scripture_change}个【神秘经书】（遗忘消耗{scripture_cost}，返还{refund_scripture}）。"
         else:
             extra = f"本次刚好抵消（遗忘消耗{scripture_cost}，返还{refund_scripture}）。"
-
-        await handle_send(bot, event, f"遗忘道纹成功！\n{result_msg}\n{extra}",
+        effect_name_cn = EFFECT_NAME_MAP.get(effect_type_to_forget, "未知效果")
+        await handle_send(bot, event, f"遗忘道纹成功！\n成功遗忘道纹：【{effect_name_cn}】。\n{extra}",
                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="遗忘", v3="遗忘道纹")
     else:
-        await handle_send(bot, event, f"遗忘道纹失败：{result_msg}",
+        failure_reasons = {
+            "treasure_missing": "尚未觉醒本命法宝或法宝数据不完整",
+            "effect_missing": "法宝上没有该道纹",
+            "last_effect": "本命法宝至少需要保留一个道纹",
+            "item_insufficient": "神秘经书数量不足",
+            "inventory_full": "神秘经书已达到背包上限",
+            "state_changed": "法宝或神秘经书状态已经变化",
+        }
+        reason = failure_reasons.get(forgotten.status, "遗忘事务未能完成")
+        await handle_send(bot, event, f"遗忘道纹失败：{reason}。",
                           md_type="法宝", k1="遗忘", v1="遗忘道纹", k2="法宝", v2="我的本命法宝", k3="帮助", v3="本命法宝帮助")
     await natal_forget.finish()
 
