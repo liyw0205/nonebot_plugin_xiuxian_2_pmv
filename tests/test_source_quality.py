@@ -1280,6 +1280,24 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("ATTACH DATABASE", service)
         self.assertIn("natal_forget_operations", service)
 
+    def test_natal_reawaken_uses_transactional_service(self) -> None:
+        natal_root = SOURCE_ROOT / "xiuxian" / "xiuxian_natal_treasure"
+        source = (natal_root / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("@natal_reawaken.handle")
+        handler = source[start:source.index("# 定义查看本命法宝信息命令", start)]
+        self.assertIn("natal_reawaken_service.reawaken(", handler)
+        self.assertNotIn("nt.awaken(force_new=True)", handler)
+        self.assertNotIn("sql_message.update_back_j(", handler)
+        self.assertNotIn("sql_message.send_back(", handler)
+        for status in (
+            "treasure_missing", "item_insufficient", "inventory_full", "state_changed",
+        ):
+            self.assertIn(f'"{status}"', handler)
+        service = (natal_root / "reawaken_service.py").read_text(encoding="utf-8")
+        self.assertIn("BEGIN IMMEDIATE", service)
+        self.assertIn("ATTACH DATABASE", service)
+        self.assertIn("natal_reawaken_operations", service)
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")

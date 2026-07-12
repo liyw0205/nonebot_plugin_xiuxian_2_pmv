@@ -41,6 +41,7 @@ from .training_service import NatalTrainingService
 from .effect_upgrade_service import EffectUpgradeService
 from .engraving_service import EngravingService
 from .forget_service import ForgetEffectService
+from .reawaken_service import ReawakenService
 
 items = Items()
 sql_message = XiuxianDateManage()
@@ -48,6 +49,7 @@ natal_training_service = NatalTrainingService(get_paths().game_db, get_paths().p
 natal_effect_upgrade_service = EffectUpgradeService(get_paths().game_db, get_paths().player_db)
 natal_engraving_service = EngravingService(get_paths().game_db, get_paths().player_db)
 natal_forget_service = ForgetEffectService(get_paths().game_db, get_paths().player_db)
+natal_reawaken_service = ReawakenService(get_paths().game_db, get_paths().player_db)
 
 # 定义觉醒本命法宝命令
 natal_awaken = on_command(
@@ -126,45 +128,53 @@ async def natal_reawaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMes
     scripture_cost_for_reawaken = 1
     mysterious_scripture_info = items.get_data_by_item_id(MYSTERIOUS_SCRIPTURE_ID)
 
-    old_nt_data = nt.get_data()
-    refund_from_effect_upgrades = 0
-    for i in range(1, MAX_EFFECT_SLOTS + 1):
-        if old_nt_data.get(f"effect{i}_level", 0) > 1:
-            refund_from_effect_upgrades += (old_nt_data[f"effect{i}_level"] - 1)
-
-    total_scripture_change = refund_from_effect_upgrades - scripture_cost_for_reawaken  # <0消耗, >0返还
-
-    if total_scripture_change < 0:
-        scripture_num = sql_message.goods_num(user_id, MYSTERIOUS_SCRIPTURE_ID)
-        need = abs(total_scripture_change)
-        if scripture_num < need:
-            await handle_send(
-                bot, event,
-                f"重塑失败：需要{need}个【{mysterious_scripture_info['name']}】，你目前只有{scripture_num}个。",
-                md_type="法宝", k1="法宝", v1="我的本命法宝", k2="升阶", v2="本命法宝升阶", k3="铭刻", v3="铭刻道纹"
-            )
-            return
-
-    if total_scripture_change < 0:
-        sql_message.update_back_j(user_id, MYSTERIOUS_SCRIPTURE_ID, num=abs(total_scripture_change))
-    elif total_scripture_change > 0:
-        sql_message.send_back(
-            user_id,
-            MYSTERIOUS_SCRIPTURE_ID,
-            mysterious_scripture_info["name"],
-            mysterious_scripture_info["type"],
-            total_scripture_change,
-            0
+    fixed_base_effects = {
+        NatalEffectType.INVINCIBLE, NatalEffectType.TWIN_STRIKE,
+        NatalEffectType.SLEEP, NatalEffectType.PETRIFY, NatalEffectType.STUN,
+        NatalEffectType.FATIGUE, NatalEffectType.SILENCE,
+        NatalEffectType.NIRVANA, NatalEffectType.SOUL_RETURN,
+        NatalEffectType.SOUL_SUMMON, NatalEffectType.ENLIGHTENMENT,
+        NatalEffectType.SPEED,
+    }
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"natal-reawaken:{event_id}:{user_id}" if event_id else f"natal-reawaken:{user_id}:{datetime.now().timestamp()}"
+    reawakened = natal_reawaken_service.reawaken(
+        operation_id, user_id, MYSTERIOUS_SCRIPTURE_ID,
+        mysterious_scripture_info["name"], mysterious_scripture_info["type"],
+        scripture_cost_for_reawaken, MAX_EFFECT_SLOTS, XiuConfig().max_goods_num,
+        {
+            effect_type.value: (config["min_value"], config["max_value"])
+            for effect_type, config in EFFECT_BASE_AND_GROWTH.items()
+        },
+        {
+            effect_type.value: names
+            for effect_type, names in NATAL_TREASURE_NAMES.items()
+        },
+        {effect_type.value for effect_type in fixed_base_effects},
+        random.getrandbits(63),
+    )
+    if not reawakened.succeeded:
+        failure_reasons = {
+            "treasure_missing": "尚未觉醒本命法宝或法宝数据不完整",
+            "item_insufficient": "神秘经书数量不足",
+            "inventory_full": "神秘经书已达到背包上限",
+            "state_changed": "法宝或神秘经书状态已经变化",
+        }
+        reason = failure_reasons.get(reawakened.status, "重塑事务未能完成")
+        await handle_send(
+            bot, event, f"重塑失败：{reason}。",
+            md_type="法宝", k1="法宝", v1="我的本命法宝", k2="升阶", v2="本命法宝升阶", k3="铭刻", v3="铭刻道纹"
         )
+        return
 
-    nt.awaken(force_new=True)
+    nt._natal_data_cache = None
     desc = nt.get_effect_desc()
 
     result_msg = f"本命法宝已重塑！\n{desc}\n"
-    if total_scripture_change > 0:
-        result_msg += f"返还了{total_scripture_change}个【{mysterious_scripture_info['name']}】。"
-    elif total_scripture_change < 0:
-        result_msg += f"消耗了{abs(total_scripture_change)}个【{mysterious_scripture_info['name']}】。"
+    if reawakened.scripture_change > 0:
+        result_msg += f"返还了{reawakened.scripture_change}个【{mysterious_scripture_info['name']}】。"
+    elif reawakened.scripture_change < 0:
+        result_msg += f"消耗了{abs(reawakened.scripture_change)}个【{mysterious_scripture_info['name']}】。"
     else:
         result_msg += f"本次重塑无需额外消耗【{mysterious_scripture_info['name']}】。"
 
