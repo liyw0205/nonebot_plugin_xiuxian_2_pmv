@@ -1,4 +1,5 @@
 import random
+import time
 import json
 import re
 from pathlib import Path
@@ -14,13 +15,16 @@ from ..xiuxian_utils.item_json import Items
 from .training_data import training_data
 from .training_limit import training_limit
 from .training_events import training_events
-from ..xiuxian_config import convert_rank
+from .completion_service import TrainingCompletionService
+from ...paths import get_paths
+from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import number_to
 
 player_data_manager = PlayerDataManager()
 sql_message = XiuxianDateManage()
 items = Items()
+training_completion_service = TrainingCompletionService(get_paths().game_db, get_paths().player_db)
 # 定义命令
 training_start = on_command("开始历练", aliases={"历练开始"}, priority=5, block=True)
 training_status = on_command("历练状态", priority=5, block=True)
@@ -91,7 +95,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await training_start.finish()
     
     # 开始历练 - 随机选择事件类型
-    result = make_choice(user_id)
+    event_id = getattr(event, "message_id", None)
+    operation_id = f"training-completion:{event_id}:{user_id}" if event_id else f"training-completion:{time.time_ns()}:{user_id}"
+    result = make_choice(user_id, operation_id)
     
     msg = f"{result}"
     await handle_send(bot, event, msg, md_type="历练", k1="开始历练", v1="开始历练", k2="历练状态", v2="历练状态", k3="商店", v3="历练商店")
@@ -319,9 +325,13 @@ async def training_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMe
     await handle_send(bot, event, rank_msg)
     await training_integral_rank.finish()
 
-def make_choice(user_id):
+def make_choice(user_id, operation_id):
     """进行历练选择"""
     training_info = training_limit.get_user_training_info(user_id)
+    expected_training_info = training_info.copy()
+    expected_training_info["weekly_purchases"] = dict(training_info["weekly_purchases"])
+    if isinstance(expected_training_info["last_time"], datetime):
+        expected_training_info["last_time"] = expected_training_info["last_time"].strftime("%Y-%m-%d %H:%M:%S")
     user_info = sql_message.get_user_info_with_id(user_id)
     now = datetime.now()
     
@@ -387,8 +397,6 @@ def make_choice(user_id):
         stone_reward = random.randint(5000000, 10000000)  # 500万-1000万灵石
         points_reward = 1000  # 1000成就点
         exp_reward = int(exp_reward * min(0.1 * max(user_rank // 3, 1), 1))
-        sql_message.update_exp(user_id, exp_reward)
-        sql_message.update_ls(user_id, stone_reward, 1)
         training_info["points"] += points_reward
         
         # 添加随机物品奖励
@@ -401,9 +409,10 @@ def make_choice(user_id):
         if item_id_list:
             item_id = random.choice(item_id_list)
             item_info = items.get_data_by_item_id(item_id)
-            sql_message.send_back(user_id, item_id, item_info["name"], item_info["type"], 1)
+            reward_items = [{"id": item_id, "name": item_info["name"], "type": item_info["type"], "amount": 1}]
             item_reward_msg = f"\n随机物品：{item_info['level']}:{item_info['name']}"
         else:
+            reward_items = []
             item_reward_msg = ""
             
         training_info["last_event"] += (
@@ -416,7 +425,19 @@ def make_choice(user_id):
     # 更新最高进度
     training_info["max_progress"] = max(training_info["max_progress"], training_info["progress"])
     
-    training_limit.save_user_training_info(user_id, training_info)
+    if training_info["completed"] > expected_training_info["completed"]:
+        saved_training_info = training_info.copy()
+        saved_training_info["weekly_purchases"] = dict(training_info["weekly_purchases"])
+        if isinstance(saved_training_info["last_time"], datetime):
+            saved_training_info["last_time"] = saved_training_info["last_time"].strftime("%Y-%m-%d %H:%M:%S")
+        settlement = training_completion_service.complete(
+            operation_id, user_id, expected_training_info, saved_training_info, stone_reward,
+            exp_reward, reward_items, XiuConfig().max_goods_num,
+        )
+        if not settlement.succeeded:
+            return "历练完成奖励结算失败，请稍后重试。"
+    else:
+        training_limit.save_user_training_info(user_id, training_info)
     
     return training_info["last_event"]
 

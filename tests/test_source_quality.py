@@ -1657,6 +1657,21 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("dungeon_reward_operations", service)
 
+    def test_training_completion_uses_cross_database_transaction(self) -> None:
+        root = SOURCE_ROOT / "xiuxian" / "xiuxian_training"
+        source = (root / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("def make_choice")
+        handler = source[start:source.index("def training_reset_limits", start)]
+        self.assertIn("training_completion_service.complete(", handler)
+        completion = handler[handler.index("if training_info[\"progress\"] >= 12:"):]
+        self.assertNotIn("sql_message.update_exp(", completion)
+        self.assertNotIn("sql_message.update_ls(", completion)
+        self.assertNotIn("sql_message.send_back(", completion)
+        service = (root / "completion_service.py").read_text(encoding="utf-8")
+        self.assertIn("ATTACH DATABASE", service)
+        self.assertIn("BEGIN IMMEDIATE", service)
+        self.assertIn("training_completion_operations", service)
+
     def test_sect_rename_uses_transactional_service(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_sect" / "__init__.py"
