@@ -519,6 +519,36 @@ class DeliveryServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(request.reference_id)
         self.assertEqual(request.source_message_id, "source-4")
 
+    async def test_send_to_group_uses_group_scene_request(self) -> None:
+        service = MessageDeliveryService()
+        with patch.object(
+            service,
+            "send",
+            new=AsyncMock(return_value=SendResult("message-group", None, {})),
+        ) as send:
+            result = await service.send_to_group(object(), "group-9", "boss notice")
+
+        self.assertEqual(result.message_id, "message-group")
+        request = send.await_args.args[1]
+        self.assertEqual(request.scene, "group")
+        self.assertEqual(request.target_id, "group-9")
+        self.assertEqual(request.message, "boss notice")
+
+    async def test_send_to_user_uses_private_scene_request(self) -> None:
+        service = MessageDeliveryService()
+        with patch.object(
+            service,
+            "send",
+            new=AsyncMock(return_value=SendResult("message-user", None, {})),
+        ) as send:
+            result = await service.send_to_user(object(), "user-9", "invite")
+
+        self.assertEqual(result.message_id, "message-user")
+        request = send.await_args.args[1]
+        self.assertEqual(request.scene, "private")
+        self.assertEqual(request.target_id, "user-9")
+        self.assertEqual(request.message, "invite")
+
 
 if __name__ == "__main__":
     unittest.main()
