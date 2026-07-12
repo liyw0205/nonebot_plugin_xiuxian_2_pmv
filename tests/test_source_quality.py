@@ -1619,6 +1619,21 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("tower_purchase_operations", service)
 
+    def test_tower_single_challenge_uses_atomic_settlement(self) -> None:
+        tower_root = SOURCE_ROOT / "xiuxian" / "xiuxian_tower"
+        source = (tower_root / "tower_battle.py").read_text(encoding="utf-8")
+        start = source.index("async def _single_challenge")
+        handler = source[start:source.index("async def _continuous_challenge", start)]
+        self.assertIn("tower_settlement_service.settle(", handler)
+        self.assertNotIn("tower_limit.save_user_tower_info(", handler)
+        self.assertNotIn("sql_message.update_ls(", handler)
+        self.assertNotIn("sql_message.update_exp(", handler)
+        self.assertNotIn("sql_message.send_back(", handler)
+        service = (tower_root / "settlement_service.py").read_text(encoding="utf-8")
+        self.assertIn("ATTACH DATABASE", service)
+        self.assertIn("BEGIN IMMEDIATE", service)
+        self.assertIn("tower_settlement_operations", service)
+
     def test_sect_rename_uses_transactional_service(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_sect" / "__init__.py"

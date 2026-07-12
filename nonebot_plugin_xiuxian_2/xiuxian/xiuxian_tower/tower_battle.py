@@ -1,5 +1,6 @@
 import random
 import asyncio
+import time
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, UserBuffDate, leave_harm_time
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.player_fight import Boss_fight
@@ -11,9 +12,13 @@ from ..xiuxian_config import convert_rank, base_rank
 from ..xiuxian_utils.item_json import Items
 from .tower_data import tower_data
 from .tower_limit import tower_limit
+from .settlement_service import TowerSettlementService
+from ...paths import get_paths
+from ..xiuxian_config import XiuConfig
 
 sql_message = XiuxianDateManage()
 items = Items()
+tower_settlement_service = TowerSettlementService(get_paths().game_db, get_paths().player_db)
 
 # BOSS配置数据
 TOWER_BOSS_CONFIG = {
@@ -113,9 +118,14 @@ class TowerBattle:
         result, victor, bossinfo_new = await Boss_fight(user_id, boss_info, bot_id=bot.self_id)        
         await send_msg_handler(bot, event, result)
         if victor == "群友赢了":
+            event_id = getattr(event, "message_id", None)
+            operation_id = f"tower-settlement:{event_id}:{user_id}:{boss_info['floor']}" if event_id else f"tower-settlement:{time.time_ns()}:{user_id}:{boss_info['floor']}"
+            reward_rng = random.Random(operation_id)
             # 挑战成功
             total_score = 0
             total_stone = 0
+            total_exp = 0
+            reward_items = []
             reward_msg = ""
             
             # 基础奖励
@@ -134,10 +144,12 @@ class TowerBattle:
                 total_score += extra_score
                 total_stone += extra_stone
                 
-                item_msg = self._give_random_item(user_id, user_info["level"])
+                item, item_msg = self._select_random_item(user_info["level"], reward_rng)
                 user_rank = max(convert_rank(user_info['level'])[0] // 3, 1)
                 exp_reward = int(user_info["exp"] * self.config["修为奖励"]["每10层"] * min(0.1 * user_rank, 1))
-                sql_message.update_exp(user_id, exp_reward)
+                total_exp += exp_reward
+                if item:
+                    reward_items.append(item)
                 
                 reward_msg = f"\n通关第{boss_info['floor']}层特别奖励：{item_msg}，修为：{number_to(exp_reward)}点"
 
@@ -148,26 +160,26 @@ class TowerBattle:
                 total_score += extra_score
                 total_stone += extra_stone
                 
-                item_msg = self._give_random_item(user_id, user_info["level"])
+                item, item_msg = self._select_random_item(user_info["level"], reward_rng)
                 user_rank = max(convert_rank(user_info['level'])[0] // 3, 1)
                 exp_reward = int(user_info["exp"] * self.config["修为奖励"]["每10层"] * 2 * min(0.1 * user_rank, 1))
-                sql_message.update_exp(user_id, exp_reward)
+                total_exp += exp_reward
+                if item:
+                    reward_items.append(item)
                 
                 reward_msg += f"\n百层奖励：{item_msg}，修为：{number_to(exp_reward)}点"
 
             # 更新积分
             total_score = int(total_score * (1 + sub_buff_integral_buff))
             total_stone = int(total_stone * (1 + sub_buff_stone_buff))
-            tower_info = tower_limit.get_user_tower_info(user_id)
-            tower_info["score"] += total_score
-            tower_info["current_floor"] = boss_info["floor"]
-            tower_info["max_floor"] = max(tower_info["max_floor"], boss_info["floor"])
-            tower_limit.save_user_tower_info(user_id, tower_info)
+            settlement = tower_settlement_service.settle(
+                operation_id, user_id, tower_info, boss_info["floor"], total_score, total_stone,
+                total_exp, reward_items, XiuConfig().max_goods_num,
+            )
+            if not settlement.succeeded:
+                return False, "通天塔奖励结算失败，请稍后重试。"
             update_statistics_value(user_id, "通天塔通关层数")
-            update_statistics_value(user_id, "通天塔最高层", value=tower_info["max_floor"])
-            
-            # 给予灵石
-            sql_message.update_ls(user_id, total_stone, 1)
+            update_statistics_value(user_id, "通天塔最高层", value=max(tower_info["max_floor"], boss_info["floor"]))
             
             msg = (
                 f"恭喜道友击败{boss_info['name']}，成功通关通天塔第{boss_info['floor']}层！\n"
@@ -272,11 +284,11 @@ class TowerBattle:
             msg = f"连续挑战完成，成功通关第{max_floor}层！共获得积分：{total_score}点，灵石：{number_to(total_stone)}枚{reward_msg}"
             return True, msg
 
-    def _give_random_item(self, user_id, user_level):
-        """给予随机物品奖励"""
+    def _select_random_item(self, user_level, rng):
+        """生成本次通天塔奖励物品，不在此处写入背包。"""
         # 随机选择物品类型
         item_types = ["功法", "神通", "药材", "法器", "防具", "身法", "瞳术"]
-        item_type = random.choice(item_types)
+        item_type = rng.choice(item_types)
 
         if item_type in ["法器", "防具", "辅修功法", "身法", "瞳术"]:
             zx_rank = base_rank(user_level, 16)
@@ -285,20 +297,11 @@ class TowerBattle:
         # 获取随机物品
         item_id_list = items.get_random_id_list_by_rank_and_item_type(zx_rank, item_type)
         if not item_id_list:
-            return "无"
+            return None, "无"
         
-        item_id = random.choice(item_id_list)
+        item_id = rng.choice(item_id_list)
         item_info = items.get_data_by_item_id(item_id)
         
-        # 给予物品
-        sql_message.send_back(
-            user_id, 
-            item_id, 
-            item_info["name"], 
-            item_info["type"], 
-            1
-        )
-        
-        return f"{item_info['level']}:{item_info['name']}"
+        return {"id": item_id, "name": item_info["name"], "type": item_info["type"], "amount": 1}, f"{item_info['level']}:{item_info['name']}"
 
 tower_battle = TowerBattle()
