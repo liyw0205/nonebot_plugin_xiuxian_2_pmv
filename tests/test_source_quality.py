@@ -1557,7 +1557,7 @@ class SourceQualityTests(unittest.TestCase):
         pet_root = SOURCE_ROOT / "xiuxian" / "xiuxian_pet"
         source = (pet_root / "__init__.py").read_text(encoding="utf-8")
         start = source.index("@pet_travel_claim.handle")
-        handler = source[start:source.index("@", start + 1)]
+        handler = source[start:source.index("@pet_bag.handle", start)]
         self.assertIn("prepare_pet_travel_completion(", handler)
         self.assertIn("pet_travel_claim_service.claim(", handler)
         self.assertNotIn("complete_pet_travel(", handler)
@@ -1587,6 +1587,20 @@ class SourceQualityTests(unittest.TestCase):
         service = (illusion_root / "choice_service.py").read_text(encoding="utf-8")
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("illusion_choice_operations", service)
+
+    def test_demon_claim_uses_cross_database_transaction(self) -> None:
+        root = SOURCE_ROOT / "xiuxian" / "xiuxian_world_events"
+        source = (root / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("@claim_demon_reward.handle")
+        handler = source[start:]
+        self.assertIn("demon_claim_service.claim(", handler)
+        self.assertNotIn("claimed[claim_key] = True", handler)
+        self.assertNotIn("sql_message.update_ls(", handler)
+        self.assertNotIn("sql_message.update_exp(", handler)
+        self.assertNotIn("sql_message.send_back(", handler)
+        service = (root / "demon_claim_service.py").read_text(encoding="utf-8")
+        self.assertIn("ATTACH DATABASE", service)
+        self.assertIn("BEGIN IMMEDIATE", service)
 
     def test_tower_purchase_uses_cross_database_transaction(self) -> None:
         tower_root = SOURCE_ROOT / "xiuxian" / "xiuxian_tower"

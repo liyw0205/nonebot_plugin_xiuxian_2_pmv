@@ -1,6 +1,7 @@
 import random
 from datetime import datetime, timedelta
 from threading import RLock
+import time
 
 from nonebot import require
 from nonebot.log import logger
@@ -27,12 +28,16 @@ from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage,
     leave_harm_time,
 )
+from ...paths import get_paths
+from ..xiuxian_config import XiuConfig
+from .demon_claim_service import DemonClaimService
 
 
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
 items = Items()
+demon_claim_service = DemonClaimService(get_paths().game_db, get_paths().player_db)
 
 EVENT_TABLE = "world_event_state"
 EVENT_KEY = "global"
@@ -1301,8 +1306,8 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 if reward_pool:
                     random_reward = random.choice(reward_pool)
 
-            claimed[claim_key] = True
-            _save_state(state)
+            expected_claimed = dict(claimed)
+            claim_event_id = str(state.get("event_id", ""))
 
     if reward_pending:
         msg = f"你参与的{realm}魔修尚未被击退，暂不能领取奖励。"
@@ -1321,36 +1326,32 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, msg, md_type="世界事件", k1="状态", v1="魔修入侵状态")
         await claim_demon_reward.finish()
 
-    sql_message.update_ls(user_id, stone_reward, 1)
-    if exp_reward > 0:
-        sql_message.update_exp(user_id, exp_reward)
-
+    reward_items = []
     if talisman_reward > 0:
         talisman_info = items.get_data_by_item_id(DEMON_TALISMAN_ITEM_ID)
         if talisman_info:
-            sql_message.send_back(
-                user_id,
-                DEMON_TALISMAN_ITEM_ID,
-                talisman_info["name"],
-                talisman_info["type"],
-                talisman_reward,
-                1,
-            )
+            reward_items.append({"id": DEMON_TALISMAN_ITEM_ID, "name": talisman_info["name"], "type": talisman_info["type"], "amount": talisman_reward})
 
     random_reward_text = "未获得"
     if random_reward:
         random_item_id, random_item_info = random_reward
-        sql_message.send_back(
-            user_id,
-            random_item_id,
-            random_item_info["name"],
-            random_item_info["type"],
-            1,
-            1,
-        )
+        reward_items.append({"id": random_item_id, "name": random_item_info["name"], "type": random_item_info["type"], "amount": 1})
         random_reward_level = random_item_info.get("level")
         random_reward_name = random_item_info.get("name", f"未知物品{random_item_id}")
         random_reward_text = f"{random_reward_level}:{random_reward_name}" if random_reward_level else random_reward_name
+
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"demon-claim:{claim_event_id}:{user_id}:{event_message_id or time.time_ns()}"
+    claim_result = demon_claim_service.claim(operation_id, EVENT_KEY, claim_event_id, user_id, expected_claimed, stone_reward, exp_reward, reward_items, XiuConfig().max_goods_num)
+    if claim_result.status == "already_claimed":
+        await handle_send(bot, event, "你已经领取过本期魔修入侵奖励了。")
+        await claim_demon_reward.finish()
+    if claim_result.status == "inventory_full":
+        await handle_send(bot, event, "背包物品已达上限，本期奖励尚未领取。")
+        await claim_demon_reward.finish()
+    if claim_result.status in {"state_changed", "user_missing"}:
+        await handle_send(bot, event, "魔修入侵领奖状态已变化，请重新尝试。")
+        await claim_demon_reward.finish()
 
     update_statistics_value(user_id, "魔修入侵领奖")
 
