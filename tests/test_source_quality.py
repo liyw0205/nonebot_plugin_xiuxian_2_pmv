@@ -762,9 +762,15 @@ class SourceQualityTests(unittest.TestCase):
             SOURCE_ROOT / "xiuxian" / "xiuxian_dungeon" / "team_command_service.py"
         ).read_text(encoding="utf-8")
         self.assertIn("build_team_view_message(", source)
+        self.assertIn("build_team_view(", source)
+        self.assertIn("resolve_transfer_target(", source)
         self.assertIn("build_transfer_team_success_message(", source)
         self.assertIn("build_transfer_team_self_message(", source)
         self.assertIn("build_transfer_team_not_member_message(", source)
+        self.assertIn("class TeamViewResult", presenter_source)
+        self.assertIn("class TeamTransferResult", presenter_source)
+        self.assertIn("def build_team_view", presenter_source)
+        self.assertIn("def resolve_transfer_target", presenter_source)
         self.assertIn("def build_transfer_team_self_message", presenter_source)
         self.assertIn("def build_transfer_team_not_member_message", presenter_source)
 

@@ -35,10 +35,12 @@ from .team_manager import (
     load_teams, save_team
 )
 from .team_command_service import (
+    build_team_view,
     build_team_view_message,
     build_transfer_team_not_member_message,
     build_transfer_team_self_message,
     build_transfer_team_success_message,
+    resolve_transfer_target,
 )
 
 sql_message = XiuxianDateManage()
@@ -600,14 +602,13 @@ async def view_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
         await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
         await view_team_cmd.finish()
 
-    member_names = []
-    for member_id in team_info['members']:
-        member_db_info = sql_message.get_user_info_with_id(member_id)
-        member_names.append(
-            member_db_info['user_name'] if member_db_info else f"未知用户({member_id})"
-        )
-
-    msg = build_team_view_message(team_info, member_names)
+    view_result = build_team_view(
+        team_info,
+        lambda member_id: (
+            sql_message.get_user_info_with_id(member_id) or {}
+        ).get("user_name", f"未知用户({member_id})"),
+    )
+    msg = build_team_view_message(view_result)
 
     await handle_send(bot, event, msg, md_type="team", k1="探索副本", v1="探索副本", k2="离开队伍", v2="离开队伍", k3="队伍帮助", v3="队伍帮助")
     await view_team_cmd.finish()
@@ -650,31 +651,38 @@ async def transfer_team_handler(bot: Bot, event: Union[GroupMessageEvent, Privat
         if target_db_info:
             target_user_id = str(target_db_info['user_id'])
 
-    if not target_user_id:
+    transfer_result = resolve_transfer_target(
+        actor_user_id=user_id,
+        team_info=team_info,
+        at_target_user_id=target_user_id,
+        arg_target_user_id=None,
+        lookup_user_name=lambda candidate_user_id: (
+            (sql_message.get_user_info_with_id(candidate_user_id) or {}).get("user_name")
+        ),
+    )
+
+    if transfer_result.status == "target_not_found":
         msg = "未找到指定成员，请检查道号或艾特是否正确！"
         await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
         await transfer_team_cmd.finish()
-
-    if target_user_id == user_id:
+    if transfer_result.status == "self_target":
         msg = build_transfer_team_self_message()
         await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
         await transfer_team_cmd.finish()
-
-    if target_user_id not in team_info.get("members", []):
+    if transfer_result.status == "target_not_member":
         msg = build_transfer_team_not_member_message()
         await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="邀请组队", v2="邀请组队", k3="队伍帮助", v3="队伍帮助")
         await transfer_team_cmd.finish()
-
-    target_info = sql_message.get_user_info_with_id(target_user_id)
-    if not target_info:
+    if transfer_result.status == "target_info_missing":
         msg = "目标成员信息异常，无法转移。"
         await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
         await transfer_team_cmd.finish()
 
+    target_user_id = transfer_result.target_user_id
     team_info["leader"] = target_user_id
     save_team(team_info)
 
-    msg = build_transfer_team_success_message(target_info['user_name'])
+    msg = build_transfer_team_success_message(transfer_result.target_user_name)
     await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="探索副本", v2="探索副本", k3="队伍帮助", v3="队伍帮助")
     await transfer_team_cmd.finish()
 
