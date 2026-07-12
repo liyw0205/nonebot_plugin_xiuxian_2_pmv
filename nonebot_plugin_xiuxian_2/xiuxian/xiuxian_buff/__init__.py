@@ -2,6 +2,7 @@ import random
 import asyncio
 import re
 import json
+import sqlite3
 from nonebot.log import logger
 from ...paths import get_paths
 from datetime import datetime, timedelta
@@ -1303,19 +1304,66 @@ async def migrate_data3_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await handle_send(bot, event, f"同步完成，共：{user_num}")
 
 migrate_data4 = on_command("player数据同步4", permission=SUPERUSER, priority=25, block=True)
+
+
+def _migrate_statistics_data_sync(players_dir):
+    user_num = 0
+    sync_num = 0
+    fail_num = 0
+
+    if not players_dir.exists():
+        return user_num, sync_num, fail_num
+
+    for user_dir in players_dir.iterdir():
+        if not user_dir.is_dir():
+            continue
+        user_id = user_dir.name
+        user_num += 1
+        statistics_file = user_dir / "statistics.json"
+        if not statistics_file.exists():
+            continue
+
+        try:
+            content = statistics_file.read_text(encoding="utf-8").strip()
+            if not content:
+                continue
+            stats_data = json.loads(content)
+            if not isinstance(stats_data, dict):
+                raise TypeError("统计数据根节点必须是对象")
+            for key in sorted(stats_data):
+                player_data_manager.update_or_write_data(
+                    user_id, "statistics", key, stats_data[key]
+                )
+            sync_num += 1
+            logger.info(f"更新统计数据: {user_id}")
+        except (
+            OSError,
+            UnicodeError,
+            json.JSONDecodeError,
+            TypeError,
+            sqlite3.DatabaseError,
+        ) as exc:
+            fail_num += 1
+            logger.warning(f"统计数据同步失败 {user_id}: {exc}")
+
+    return user_num, sync_num, fail_num
+
+
 @migrate_data4.handle(parameterless=[Cooldown(cd_time=0)])
 async def migrate_data4_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    user_ids = get_all_user_ids()
-    user_num = 0
-    for user_id in user_ids:
-        user_num += 1
-        stats_data = load_player_user3(user_id, "statistics")
-        sorted_keys = sorted(stats_data.keys())
-        for key in sorted_keys:
-            value = stats_data[key]
-            player_data_manager.update_or_write_data(user_id, "statistics", key, value)
-        logger.info(f"更新统计数据: {user_id}")
-    await handle_send(bot, event, f"同步完成，共：{user_num}")
+    players_dir = get_paths().players
+    if not players_dir.exists():
+        await handle_send(bot, event, "未找到 players 数据目录，无需同步。")
+        return
+
+    user_num, sync_num, fail_num = await asyncio.to_thread(
+        _migrate_statistics_data_sync, players_dir
+    )
+    await handle_send(
+        bot,
+        event,
+        f"统计数据同步完成！扫描用户:{user_num}，成功:{sync_num}，失败:{fail_num}",
+    )
 
 migrate_bank_data = on_command("同步灵庄", permission=SUPERUSER, priority=25, block=True)
 

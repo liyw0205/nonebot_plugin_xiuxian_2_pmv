@@ -1246,6 +1246,21 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn(".iterdir()", handler)
         self.assertNotIn(".read_text(", handler)
 
+    def test_statistics_data_migration_does_not_block_event_loop(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_buff" / "__init__.py"
+        ).read_text(encoding="utf-8")
+        handler_start = source.index("async def migrate_data4_")
+        handler_end = source.index("migrate_bank_data =", handler_start)
+        handler = source[handler_start:handler_end]
+
+        self.assertIn(
+            "await asyncio.to_thread(\n        _migrate_statistics_data_sync",
+            handler,
+        )
+        self.assertNotIn(".iterdir()", handler)
+        self.assertNotIn(".read_text(", handler)
+
 
 if __name__ == "__main__":
     unittest.main()
