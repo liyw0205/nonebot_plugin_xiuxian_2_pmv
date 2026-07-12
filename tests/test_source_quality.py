@@ -1187,6 +1187,16 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("stone_gift_operations", service_source)
 
+    def test_stone_theft_uses_transactional_transfer_service(self) -> None:
+        base_root = SOURCE_ROOT / "xiuxian" / "xiuxian_base"
+        source = (base_root / "__init__.py").read_text(encoding="utf-8")
+        handler = source[source.index("@steal_stone.handle"):source.index("@rob_stone.handle")]
+        self.assertIn("stone_contest_service.transfer(", handler)
+        self.assertNotIn("sql_message.update_ls(", handler)
+        service_source = (base_root / "stone_contest_service.py").read_text(encoding="utf-8")
+        self.assertIn("BEGIN IMMEDIATE", service_source)
+        self.assertIn("stone_contest_operations", service_source)
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")

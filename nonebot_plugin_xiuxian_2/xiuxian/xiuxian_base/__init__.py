@@ -50,6 +50,7 @@ from .lottery_pool import lottery_pool
 from .sign_service import SignInService
 from .player_rename_service import PlayerRenameService
 from .stone_gift_service import StoneGiftService
+from .stone_contest_service import StoneContestService
 from .registration_batch import RegistrationBatcher, RegistrationRequest
 from .breakthrough_tribulation import *  # noqa: F401,F403
 from .xiangyuan import clear_all_xiangyuan, reset_xiangyuan_daily  # noqa: F401
@@ -59,6 +60,7 @@ sql_message = XiuxianDateManage()  # sql类
 sign_in_service = SignInService(get_paths().game_db)
 player_rename_service = PlayerRenameService(get_paths().game_db)
 stone_gift_service = StoneGiftService(get_paths().game_db)
+stone_contest_service = StoneContestService(get_paths().game_db)
 registration_batcher = RegistrationBatcher(sql_message)
 player_data_manager = PlayerDataManager()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
@@ -1197,8 +1199,12 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
         
         if isinstance(result, int):
             if int(steal_success) > result:
-                sql_message.update_ls(user_id, coststone_num, 2)  # 减少手续费
-                sql_message.update_ls(steal_qq, coststone_num, 1)  # 增加被偷的人的灵石
+                event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+                operation_id = f"steal-fail:{event_id}:{user_id}" if event_id else f"steal-fail:{user_id}:{time.time_ns()}"
+                transfer = stone_contest_service.transfer(operation_id, user_id, steal_qq, coststone_num)
+                if not transfer.succeeded:
+                    await handle_send(bot, event, "双方灵石状态已经变化，本次偷窃未结算。")
+                    await steal_stone.finish()
                 msg = f"道友偷窃失手了，被对方发现并被派去华哥厕所义务劳工！赔款{number_to(coststone_num)}灵石"
                 await handle_send(bot, event, msg)
                 await steal_stone.finish()
@@ -1211,20 +1217,22 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
             # 确保偷取数量不超过1000000
             get_stone = min(get_stone, 1000000)
             
-            if int(get_stone) > int(steal_user_stone):
-                sql_message.update_ls(user_id, steal_user_stone, 1)  # 增加偷到的灵石
-                sql_message.update_ls(steal_qq, steal_user_stone, 2)  # 减少被偷的人的灵石
+            event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+            operation_id = f"steal-win:{event_id}:{user_id}" if event_id else f"steal-win:{user_id}:{time.time_ns()}"
+            transfer = stone_contest_service.transfer(operation_id, steal_qq, user_id, get_stone)
+            if not transfer.succeeded:
+                await handle_send(bot, event, "双方灵石状态已经变化，本次偷窃未结算。")
+                await steal_stone.finish()
+            if transfer.payer_balance == 0:
                 msg = f"{steal_user['user_name']}道友已经被榨干了~"
-                msg2 = f"灵石被{user_id['user_name']}道友榨干了~"
+                msg2 = f"灵石被{user_info['user_name']}道友榨干了~"
                 await handle_send(bot, event, msg)
                 log_message(user_id, msg)
                 log_message(steal_qq, msg2)
                 await steal_stone.finish()
             else:
-                sql_message.update_ls(user_id, get_stone, 1)  # 增加偷到的灵石
-                sql_message.update_ls(steal_qq, get_stone, 2)  # 减少被偷的人的灵石
-                msg = f"共偷取{steal_user['user_name']}道友{number_to(get_stone)}枚灵石！"
-                msg2 = f"被{user_id['user_name']}道友偷取{number_to(get_stone)}枚灵石！"
+                msg = f"共偷取{steal_user['user_name']}道友{number_to(transfer.transferred_amount)}枚灵石！"
+                msg2 = f"被{user_info['user_name']}道友偷取{number_to(transfer.transferred_amount)}枚灵石！"
                 await handle_send(bot, event, msg)
                 log_message(user_id, msg)
                 log_message(steal_qq, msg2)
