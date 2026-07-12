@@ -1537,6 +1537,22 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("boss_reward_operations", service)
 
+    def test_world_boss_purchase_uses_cross_database_transaction(self) -> None:
+        boss_root = SOURCE_ROOT / "xiuxian" / "xiuxian_boss"
+        source = (boss_root / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("boss_data =", source.index("async def boss_integral_use_"))
+        handler = source[start:source.index('msg = f"道友成功兑换', start)]
+        self.assertIn("boss_purchase_service.purchase(", handler)
+        self.assertNotIn("save_user_boss_fight_info(", handler)
+        self.assertNotIn("boss_limit.update_weekly_purchase(", handler)
+        self.assertNotIn("sql_message.send_back(", handler)
+        for status in ("integral_insufficient", "limit_reached", "inventory_full", "state_changed", "user_missing"):
+            self.assertIn(f'"{status}"', handler)
+        service = (boss_root / "purchase_service.py").read_text(encoding="utf-8")
+        self.assertIn("ATTACH DATABASE", service)
+        self.assertIn("BEGIN IMMEDIATE", service)
+        self.assertIn("boss_purchase_operations", service)
+
     def test_tower_purchase_uses_cross_database_transaction(self) -> None:
         tower_root = SOURCE_ROOT / "xiuxian" / "xiuxian_tower"
         source = (tower_root / "__init__.py").read_text(encoding="utf-8")

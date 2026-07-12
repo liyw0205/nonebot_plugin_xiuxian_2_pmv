@@ -45,6 +45,7 @@ from ..xiuxian_tasks.task_data import record_task_progress
 from ..xiuxian_title.title_data import check_and_unlock_titles
 from .boss_limit import boss_limit, player_data_manager
 from .reward_service import BossRewardService
+from .purchase_service import BossPurchaseService
 from .. import DRIVER
 # boss定时任务
 scheduler = require("nonebot_plugin_apscheduler").scheduler
@@ -56,6 +57,7 @@ groups = config['open']
 battle_flag = {}
 sql_message = XiuxianDateManage()  # sql类
 boss_reward_service = BossRewardService(get_paths().game_db, get_paths().player_db)
+boss_purchase_service = BossPurchaseService(get_paths().game_db, get_paths().player_db)
 BOSSDROPSPATH = get_paths().data / "boss掉落物"
 
 create = on_command("世界BOSS生成", aliases={"世界boss生成", "世界Boss生成", "生成世界BOSS", "生成世界boss", "生成世界Boss"}, permission=SUPERUSER, priority=5, block=True)
@@ -1207,13 +1209,33 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             await handle_send(bot, event, msg, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")
             await boss_integral_use.finish()
         else:
-            user_boss_fight_info['boss_integral'] -= total_cost
-            save_user_boss_fight_info(user_id, user_boss_fight_info)
-            
-            # 更新每周购买记录
-            boss_limit.update_weekly_purchase(user_id, shop_id, quantity)
-           
-            sql_message.send_back(user_id, item_id, item_info['name'], item_info['type'], quantity, 1)
+            boss_data = boss_limit._load_data(user_id)
+            event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+            operation_id = (
+                f"boss-purchase:{event_id}:{user_id}"
+                if event_id
+                else f"boss-purchase:{time_module.time_ns()}:{user_id}"
+            )
+            purchase_result = boss_purchase_service.purchase(
+                operation_id, user_id, item_id, item_info['name'], item_info['type'], quantity,
+                cost, weekly_limit, user_boss_fight_info['boss_integral'],
+                boss_data.get('weekly_purchases', {}), XiuConfig().max_goods_num,
+            )
+            if purchase_result.status == "integral_insufficient":
+                await handle_send(bot, event, "世界积分状态已变化，当前积分不足！")
+                await boss_integral_use.finish()
+            if purchase_result.status == "limit_reached":
+                await handle_send(bot, event, f"{item_info['name']}已到限购无法再购买！")
+                await boss_integral_use.finish()
+            if purchase_result.status == "inventory_full":
+                await handle_send(bot, event, f"{item_info['name']}持有数量已达上限！")
+                await boss_integral_use.finish()
+            if purchase_result.status == "state_changed":
+                await handle_send(bot, event, "世界BOSS兑换状态已变化，请重新兑换！")
+                await boss_integral_use.finish()
+            if purchase_result.status == "user_missing":
+                await handle_send(bot, event, "未找到道友数据，世界BOSS兑换失败！")
+                await boss_integral_use.finish()
             msg = f"道友成功兑换获得：{item_info['name']}{quantity}个"
             await handle_send(bot, event, msg, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")
             await boss_integral_use.finish()
