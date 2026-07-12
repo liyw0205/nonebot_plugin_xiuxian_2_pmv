@@ -1,5 +1,6 @@
 import random
 import re
+import time
 from datetime import datetime, timedelta
 from ..on_compat import on_command
 from nonebot.params import CommandArg
@@ -26,9 +27,12 @@ from .tianti_service import (
     get_tianti_cap,
     settle_tianti_gain,
 )
+from .stone_training_service import StoneTrainingService
+from ...paths import get_paths
 
 sql_message = XiuxianDateManage()
 tianti_manager = TiantiDataManager()
+stone_training_service = StoneTrainingService(get_paths().game_db, get_paths().player_db)
 items = Items()
 
 tianti_help = on_command("炼体帮助", priority=10, block=True)
@@ -252,30 +256,24 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if stone_cost <= 9:
         await handle_send(bot, event, "请输入大于10的灵石数量。")
         return
-    if stone_cost > int(user_info["stone"]):
-        await handle_send(bot, event, "你的灵石不足。")
-        return
-
-    data = tianti_manager.get_user_tianti_info(user_id)
-    cap = _get_tianti_cap(data)
-
-    old_hp = int(data["tianti_hp"])
-    gain = stone_cost // 10
-    new_hp = min(cap, old_hp + gain)
-    real_gain = max(0, new_hp - old_hp)
-    real_stone_cost = real_gain * 10
-
-    if real_stone_cost <= 0:
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = (
+        f"tianti-stone:{event_id}:{user_id}" if event_id
+        else f"tianti-stone:{user_id}:{time.time_ns()}"
+    )
+    result = stone_training_service.train(operation_id, user_id, stone_cost)
+    if result.status == "at_cap":
         await handle_send(bot, event, "已达当前炼体境界上限，无法继续灵石炼体。")
         return
-
-    sql_message.update_ls(user_id, real_stone_cost, 2)
-    data["tianti_hp"] = new_hp
-    tianti_manager.save_user_tianti_info(user_id, data)
+    if result.status in {"stone_insufficient", "stone_changed"}:
+        await handle_send(bot, event, "你的灵石不足或余额已经变化。")
+        return
+    if not result.succeeded:
+        raise RuntimeError(f"unexpected tianti stone training status: {result.status}")
 
     await handle_send(
         bot, event,
-        f"灵石炼体完成：消耗灵石{number_to(real_stone_cost)}，获得炼体气血{number_to(real_gain)}。"
+        f"灵石炼体完成：消耗灵石{number_to(result.stone_cost)}，获得炼体气血{number_to(result.hp_gain)}。"
     )
 
 
