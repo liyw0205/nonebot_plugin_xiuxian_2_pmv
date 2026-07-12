@@ -589,7 +589,7 @@ async def get_msg_pic(msg, boss_name="", scale=True):
     if XiuConfig().img_send_type == "io":
         pic = await img.io_draw_to(msg, boss_name, scale)
     elif XiuConfig().img_send_type == "base64":
-        pic = img.sync_draw_to(msg, boss_name, scale)
+        pic = await asyncio.to_thread(img.sync_draw_to, msg, boss_name, scale)
     return pic
 
 def format_number(num):
@@ -959,7 +959,7 @@ async def send_msg_handler(bot, event, *args, title=None, page=None, page_param=
         if XiuConfig().img_send_type == "io":
             img_data = await img.io_draw_to(merged)
         else:
-            img_data = img.sync_draw_to(merged)
+            img_data = await asyncio.to_thread(img.sync_draw_to, merged)
 
         await _send_event_message(event=event, bot=bot, message=MessageSegment.image(bot, img_data))
         return

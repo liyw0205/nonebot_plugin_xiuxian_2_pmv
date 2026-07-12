@@ -1090,6 +1090,19 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("await asyncio.to_thread(_prepare_and_cache_background", source)
         self.assertNotIn("return await convert_img(final_img)", source)
 
+    def test_shared_base64_image_rendering_does_not_block_event_loop(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_utils" / "utils.py"
+        ).read_text(encoding="utf-8")
+        get_pic_body = source.split("async def get_msg_pic", 1)[1].split(
+            "\ndef format_number", 1
+        )[0]
+        send_body = source.split("async def send_msg_handler", 1)[1].split(
+            "\ndef append_draw_card_node", 1
+        )[0]
+        self.assertIn("await asyncio.to_thread(img.sync_draw_to", get_pic_body)
+        self.assertIn("await asyncio.to_thread(img.sync_draw_to", send_body)
+
     def test_sect_rename_uses_transactional_service(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_sect" / "__init__.py"
