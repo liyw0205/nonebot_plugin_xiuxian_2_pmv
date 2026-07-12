@@ -76,11 +76,11 @@ class TiantiBreakthroughServiceTests(unittest.TestCase):
         self.assertEqual((first.status, second.status), ("completed", "duplicate"))
         self.assertEqual(self.state(), ("初境", 190))
 
-    def test_changed_duplicate_roll_is_rejected(self) -> None:
+    def test_duplicate_reuses_first_result_even_if_retry_rerolls(self) -> None:
         self.attempt("break-conflict", success=False)
         result = self.attempt("break-conflict", success=True)
 
-        self.assertEqual(result.status, "state_changed")
+        self.assertEqual((result.status, result.success), ("duplicate", False))
         self.assertEqual(self.state(), ("初境", 190))
 
     def test_ineligible_attempt_does_not_charge(self) -> None:

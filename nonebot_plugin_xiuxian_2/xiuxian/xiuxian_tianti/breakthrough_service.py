@@ -89,7 +89,6 @@ class TiantiBreakthroughService:
                     if (
                         str(previous[0]) != user_id
                         or int(previous[1]) != cultivation_rank
-                        or bool(previous[2]) != roll_success
                     ):
                         return self._result("state_changed", user_id)
                     return self._result("duplicate", user_id, previous[3:])

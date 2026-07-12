@@ -30,6 +30,7 @@ from .tianti_service import (
 from .stone_training_service import StoneTrainingService
 from .medicine_bath_service import MedicineBathService
 from .breakthrough_service import TiantiBreakthroughService
+from .qiaoxue_service import QiaoxueService
 from ...paths import get_paths
 
 sql_message = XiuxianDateManage()
@@ -37,6 +38,7 @@ tianti_manager = TiantiDataManager()
 stone_training_service = StoneTrainingService(get_paths().game_db, get_paths().player_db)
 medicine_bath_service = MedicineBathService(get_paths().game_db, get_paths().player_db)
 tianti_breakthrough_service = TiantiBreakthroughService(get_paths().player_db)
+qiaoxue_service = QiaoxueService(get_paths().player_db)
 items = Items()
 
 tianti_help = on_command("炼体帮助", priority=10, block=True)
@@ -559,64 +561,37 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     user_id = str(user_info["user_id"])
-    data = tianti_manager.get_user_tianti_info(user_id)
-
-    opened = data.get("opened_qiaoxue", [])
-    opened_count = len(opened)
-    unlock_limit = _get_qiaoxue_unlock_limit(data)
     pool = get_qiaoxue_pool()
-
-    # 按当前炼体境界 rank 判断累计可冲窍数量
-    if opened_count >= unlock_limit:
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = (
+        f"tianti-qiaoxue:{event_id}:{user_id}" if event_id
+        else f"tianti-qiaoxue:{user_id}:{time.time_ns()}"
+    )
+    result = qiaoxue_service.open(operation_id, user_id, random.randrange(max(1, len(pool))))
+    if result.status == "limit_reached":
         await handle_send(
             bot,
             event,
-            f"你当前境界【{data['tianti_level']}】累计最多可开 {unlock_limit} 个窍穴，"
-            f"你已开启 {opened_count} 个。请继续突破炼体境界后再来冲窍。"
+            f"当前炼体境界累计最多可开 {result.unlock_limit} 个窍穴，"
+            f"你已开启 {result.opened_count} 个。请继续突破炼体境界后再来冲窍。"
         )
         return
-
-    unopen = [q for q in pool if q["name"] not in set(opened)]
-    if not unopen:
-        await handle_send(bot, event, "你已开满所有窍穴，无可再冲。")
-        return
-
-    cur_hp = int(data["tianti_hp"])
-    cost = max(1, int(cur_hp * 0.1))
-    if cur_hp < cost:
+    if result.status == "hp_insufficient":
         await handle_send(bot, event, "炼体气血不足，无法冲窍。")
         return
-
-    chosen = random.choice(unopen)
-    real_val = float(chosen["effect_value"])
-
-    detail_list = data.get("opened_qiaoxue_detail", [])
-    detail_list.append({
-        "name": chosen["name"],
-        "group": chosen["group"],
-        "effect_type": chosen["effect_type"],
-        "effect_value": real_val
-    })
-
-    data["tianti_hp"] = max(0, cur_hp - cost)
-    data["opened_qiaoxue"] = opened + [chosen["name"]]
-    data["opened_qiaoxue_detail"] = detail_list
-
-    # 兼容保留旧字段，但不再作为限制依据
-    if "qiaoxue_stage_opened" not in data or not isinstance(data["qiaoxue_stage_opened"], dict):
-        data["qiaoxue_stage_opened"] = {}
-
-    tianti_manager.save_user_tianti_info(user_id, data)
-    effect_cn = _effect_type_cn(chosen["effect_type"])
+    if not result.succeeded:
+        raise RuntimeError(f"unexpected qiaoxue status: {result.status}")
+    real_val = float(result.qiaoxue["effect_value"])
+    effect_cn = _effect_type_cn(result.qiaoxue["effect_type"])
 
     await handle_send(
         bot, event,
         f"冲窍成功！\n"
-        f"消耗炼体气血：{number_to(cost)}\n"
-        f"新开窍穴：{chosen['name']}\n"
+        f"消耗炼体气血：{number_to(result.hp_cost)}\n"
+        f"新开窍穴：{result.qiaoxue['name']}\n"
         f"效果：{effect_cn} +{real_val * 100:.2f}%\n"
-        f"已开窍数：{opened_count + 1}/108\n"
-        f"当前境界可开上限：{unlock_limit}/108"
+        f"已开窍数：{result.opened_count}/108\n"
+        f"当前境界可开上限：{result.unlock_limit}/108"
     )
 
 
