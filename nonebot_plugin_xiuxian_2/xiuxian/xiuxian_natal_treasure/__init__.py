@@ -25,6 +25,7 @@ from ..xiuxian_utils.utils import (
 from ..xiuxian_utils.lay_out import Cooldown
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items
+from ...paths import get_paths
 
 from .natal_data import *
 from .natal_config import (
@@ -36,9 +37,11 @@ from .natal_config import (
     EFFECT_NAME_TO_TYPE,
     EFFECT_NAME_MAP
 )
+from .training_service import NatalTrainingService
 
 items = Items()
 sql_message = XiuxianDateManage()
+natal_training_service = NatalTrainingService(get_paths().game_db, get_paths().player_db)
 
 # 定义觉醒本命法宝命令
 natal_awaken = on_command(
@@ -249,21 +252,29 @@ async def natal_upgrade_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
         await handle_send(bot, event, f"你本次最多只能再增加{remaining_exp_needed}点经验达到当前等级上限，已为你调整为{exp_to_add}点。",
                           md_type="法宝", k1="养成", v1="养成本命法宝", k2="升阶", v2="本命法宝升阶", k3="法宝", v3="我的本命法宝")
 
-    base_cost_per_exp = 1_000_000
-    cost_per_level_increase_rate = 0.5
-    stone_cost_per_exp_unit = int(base_cost_per_exp * (1 + current_level * cost_per_level_increase_rate))
-    total_stone_cost = stone_cost_per_exp_unit * exp_to_add
-
-    if user_info['stone'] < total_stone_cost:
-        msg = f"本次养成{exp_to_add}点经验需要{number_to(total_stone_cost)}灵石，你灵石不足！"
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"natal-train:{event_id}:{user_id}" if event_id else f"natal-train:{user_id}:{datetime.now().timestamp()}"
+    training = natal_training_service.train(
+        operation_id, user_id, exp_to_add,
+        base_cost=1_000_000, growth_rate=0.5,
+        max_level=nt.max_treasure_level,
+        max_exp_base=MAX_EXP_BASE,
+        max_exp_growth=MAX_EXP_GROWTH_PER_LEVEL,
+    )
+    if training.status == "stone_insufficient":
+        msg = f"本次养成{training.exp_added}点经验需要{number_to(training.stone_cost)}灵石，你灵石不足！"
         await handle_send(bot, event, msg,
                           md_type="法宝", k1="养成", v1="养成本命法宝", k2="法宝", v2="我的本命法宝", k3="灵石", v3="灵石")
         return
-
-    sql_message.update_ls(user_id, total_stone_cost, 2)
-    is_level_up, upgrade_msg = nt.add_exp(exp_to_add)
-
-    final_msg = f"成功养成法宝，消耗灵石：{number_to(total_stone_cost)}\n{upgrade_msg}"
+    if not training.succeeded:
+        await handle_send(bot, event, "本命法宝或灵石状态已经变化，本次养成未结算。")
+        return
+    nt._natal_data_cache = None
+    if training.level > current_level:
+        upgrade_msg = f"本命法宝等级提升至 {training.level}！"
+    else:
+        upgrade_msg = f"法宝经验 +{training.exp_added}，当前经验 {training.exp}/{training.max_exp}。"
+    final_msg = f"成功养成法宝，消耗灵石：{number_to(training.stone_cost)}\n{upgrade_msg}"
     await handle_send(bot, event, final_msg,
                       md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="升阶", v3="本命法宝升阶")
 
