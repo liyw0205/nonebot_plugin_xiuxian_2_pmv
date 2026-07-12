@@ -108,6 +108,46 @@ class PillFusionServiceTests(unittest.TestCase):
         self.assertIsNone(self.inventory(1996))
         self.assertEqual(self.operation_count(), 0)
 
+    def test_success_merges_into_existing_target_inventory(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "INSERT INTO back VALUES (%s, %s, %s, %s, %s, %s)",
+                ("user", 1996, "天命丹", "丹药", 2, 1),
+            )
+
+        result = self.fuse("fusion-merge", 2, True)
+
+        self.assertEqual((result.status, result.successful), ("applied", True))
+        self.assertEqual(self.inventory(1999), (6, 3))
+        self.assertEqual(self.inventory(1996), (3, 2))
+        self.assertEqual(self.operation_count(), 1)
+
+    def test_success_target_quantity_is_capped_by_inventory_limit(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "INSERT INTO back VALUES (%s, %s, %s, %s, %s, %s)",
+                ("user", 1996, "天命丹", "丹药", 4, 4),
+            )
+
+        result = self.service.apply(
+            "fusion-cap",
+            "user",
+            1999,
+            2,
+            1996,
+            "天命丹",
+            "丹药",
+            successful=True,
+            target_quantity=3,
+            max_goods_num=5,
+        )
+
+        self.assertEqual((result.status, result.successful), ("applied", True))
+        self.assertEqual(result.target_quantity, 3)
+        self.assertEqual(self.inventory(1999), (6, 3))
+        self.assertEqual(self.inventory(1996), (5, 5))
+        self.assertEqual(self.operation_count(), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
