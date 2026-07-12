@@ -77,6 +77,21 @@ class XianshiRemoval:
 
 
 @dataclass(frozen=True)
+class XianshiClearAll:
+    status: str
+    listing_count: int = 0
+    refunded_quantity: int = 0
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"cleared", "duplicate", "empty"}
+
+    @property
+    def applied(self) -> bool:
+        return self.status == "cleared"
+
+
+@dataclass(frozen=True)
 class AuctionSettlement:
     status: str
     auction_id: str
@@ -785,6 +800,91 @@ class TradeRepository:
                     "removed", listing_id, seller_id, int(goods_id), str(name),
                     str(goods_type), refunded_quantity,
                 )
+            except Exception:
+                conn.rollback()
+                raise
+
+    def clear_all_xianshi_listings(self, operation_id) -> XianshiClearAll:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            raise ValueError("operation_id must not be empty")
+
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                self.ensure_schema(conn)
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS xianshi_clear_operations (
+                        operation_id TEXT PRIMARY KEY,
+                        listing_count INTEGER NOT NULL,
+                        refunded_quantity INTEGER NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+                conn.execute("BEGIN IMMEDIATE")
+                previous = conn.execute(
+                    "SELECT listing_count, refunded_quantity "
+                    "FROM xianshi_clear_operations WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if previous is not None:
+                    conn.rollback()
+                    return XianshiClearAll("duplicate", int(previous[0]), int(previous[1]))
+
+                listings = conn.execute(
+                    "SELECT id, user_id, goods_id, name, type, quantity FROM xianshi_item"
+                ).fetchall()
+                if not listings:
+                    conn.rollback()
+                    return XianshiClearAll("empty")
+
+                refunds = {}
+                for _, seller_id, goods_id, name, goods_type, quantity in listings:
+                    seller_id = str(seller_id)
+                    quantity = int(quantity)
+                    if seller_id == "0" or quantity <= 0:
+                        continue
+                    key = (seller_id, int(goods_id), str(name), str(goods_type))
+                    refunds[key] = refunds.get(key, 0) + quantity
+
+                for (seller_id, goods_id, _, _), quantity in refunds.items():
+                    current = conn.execute(
+                        "SELECT goods_num FROM back WHERE user_id=%s AND goods_id=%s",
+                        (seller_id, goods_id),
+                    ).fetchone()
+                    current_num = int(current[0] or 0) if current else 0
+                    if current_num + quantity > self._max_goods_num:
+                        conn.rollback()
+                        return XianshiClearAll("inventory_full", len(listings), sum(refunds.values()))
+
+                now = datetime.now()
+                for (seller_id, goods_id, name, goods_type), quantity in refunds.items():
+                    conn.execute(
+                        """
+                        INSERT INTO back (
+                            user_id, goods_id, goods_name, goods_type, goods_num,
+                            create_time, update_time, bind_num
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, 0)
+                        ON CONFLICT (user_id, goods_id) DO UPDATE SET
+                            goods_name=EXCLUDED.goods_name,
+                            goods_type=EXCLUDED.goods_type,
+                            goods_num=COALESCE(back.goods_num, 0)+EXCLUDED.goods_num,
+                            update_time=EXCLUDED.update_time
+                        """,
+                        (seller_id, goods_id, name, goods_type, quantity, now, now),
+                    )
+
+                listing_count = len(listings)
+                refunded_quantity = sum(refunds.values())
+                conn.execute("DELETE FROM xianshi_item")
+                conn.execute(
+                    "INSERT INTO xianshi_clear_operations "
+                    "(operation_id, listing_count, refunded_quantity) VALUES (%s, %s, %s)",
+                    (operation_id, listing_count, refunded_quantity),
+                )
+                conn.commit()
+                return XianshiClearAll("cleared", listing_count, refunded_quantity)
             except Exception:
                 conn.rollback()
                 raise

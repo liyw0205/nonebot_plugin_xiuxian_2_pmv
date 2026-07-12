@@ -112,6 +112,46 @@ class XianshiRemovalTests(unittest.TestCase):
         self.assertEqual(result.refunded_quantity, 0)
         self.assertEqual(self.scalar("SELECT COUNT(*) FROM back"), 0)
 
+    def test_clear_all_refunds_all_remaining_quantities_in_one_transaction(self) -> None:
+        self.repository.add_xianshi_item("seller", 1001, "测试法器", "装备", 600000, 2)
+        self.repository.add_xianshi_item("seller", 1001, "测试法器", "装备", 700000, 3)
+        self.repository.add_xianshi_item("0", 1002, "系统丹药", "丹药", 600000, -1)
+
+        result = self.repository.clear_all_xianshi_listings("clear-1")
+
+        self.assertTrue(result.applied)
+        self.assertEqual((result.listing_count, result.refunded_quantity), (3, 5))
+        self.assertEqual(self.scalar("SELECT COUNT(*) FROM xianshi_item"), 0)
+        self.assertEqual(
+            self.scalar("SELECT goods_num FROM back WHERE user_id=%s AND goods_id=%s", ("seller", 1001)), 5
+        )
+
+    def test_clear_all_inventory_failure_keeps_every_listing(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "INSERT INTO back (user_id, goods_id, goods_name, goods_type, goods_num) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                ("seller", 1001, "测试法器", "装备", 9),
+            )
+        self.repository.add_xianshi_item("seller", 1001, "测试法器", "装备", 600000, 2)
+        self.repository.add_xianshi_item("other", 1002, "测试丹药", "丹药", 600000, 1)
+
+        result = self.repository.clear_all_xianshi_listings("clear-full")
+
+        self.assertEqual(result.status, "inventory_full")
+        self.assertEqual(self.scalar("SELECT COUNT(*) FROM xianshi_item"), 2)
+        self.assertEqual(self.scalar("SELECT COUNT(*) FROM xianshi_clear_operations"), 0)
+
+    def test_clear_all_duplicate_does_not_refund_twice(self) -> None:
+        self.repository.add_xianshi_item("seller", 1001, "测试法器", "装备", 600000, 2)
+        first = self.repository.clear_all_xianshi_listings("clear-repeat")
+        second = self.repository.clear_all_xianshi_listings("clear-repeat")
+
+        self.assertEqual((first.status, second.status), ("cleared", "duplicate"))
+        self.assertEqual(
+            self.scalar("SELECT goods_num FROM back WHERE user_id=%s AND goods_id=%s", ("seller", 1001)), 2
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

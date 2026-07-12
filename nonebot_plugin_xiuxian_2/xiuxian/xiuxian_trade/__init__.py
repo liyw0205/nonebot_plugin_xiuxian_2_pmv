@@ -119,6 +119,15 @@ def _xianshi_removal_operation_id(event, listing_id):
     return f"xianshi-remove:{listing_id}:{time.time_ns()}"
 
 
+def _xianshi_clear_operation_id(event):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"xianshi-clear:{event_id}"
+    return f"xianshi-clear:{time.time_ns()}"
+
+
 # === 仙肆命令 ===
 xian_shop_add = on_command("仙肆上架", priority=5, block=True)
 xianshi_auto_add = on_command("仙肆自动上架", priority=5, block=True)
@@ -1442,27 +1451,24 @@ async def xian_shop_off_all_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     msg = "正在清空全服仙肆，请稍候..."
     await handle_send(bot, event, msg)
     
-    # 获取所有用户上架的物品
-    all_xianshi_items = xianshi_repository.get_xianshi_items()
-    
-    if not all_xianshi_items:
+    result = xianshi_repository.clear_all_xianshi_listings(
+        _xianshi_clear_operation_id(event)
+    )
+    if result.status == "empty":
         msg = "仙肆已经是空的，没有物品被下架！"
         await handle_send(bot, event, msg)
         await xian_shop_off_all.finish()
-    
-    # 删除所有物品并退还给玩家
-    for item in all_xianshi_items:
-        xianshi_repository.remove_xianshi_all_item(item['id']) # 删除该条仙肆记录
-        if item["user_id"] != 0: # 如果不是系统上架的物品，则退还给玩家
-            sql_message.send_back(
-                item["user_id"],
-                item["goods_id"],
-                item["name"],
-                item["type"],
-                1 # 每次退还1个，因为上架时也视为1个
-            )
-    
-    msg = f"成功清空全服仙肆！共下架 {len(all_xianshi_items)} 件物品，用户上架物品已退回背包。"
+    if result.status == "inventory_full":
+        msg = "存在用户背包空间不足，仙肆未清空，请先处理背包容量！"
+        await handle_send(bot, event, msg)
+        await xian_shop_off_all.finish()
+    if not result.succeeded:
+        raise RuntimeError(f"unexpected xianshi clear status: {result.status}")
+
+    msg = (
+        f"成功清空全服仙肆！共下架 {result.listing_count} 条记录，"
+        f"退回用户物品 {result.refunded_quantity} 件。"
+    )
     await handle_send(bot, event, msg)
     await xian_shop_off_all.finish()
 
