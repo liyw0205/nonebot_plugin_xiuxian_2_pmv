@@ -37,8 +37,7 @@ from ..xiuxian_impart import use_wishing_stone, use_love_sand
 from ..xiuxian_work import use_work_order, use_work_capture_order
 from ..xiuxian_buff import use_two_exp_token
 from ..xiuxian_arena import use_arena_challenge_ticket
-from ..xiuxian_tianti.tianti_data import TiantiDataManager
-from ..xiuxian_tianti.tianti_service import grant_tianti_settle_minutes
+from ..xiuxian_tianti.item_reward_service import TiantiItemRewardService
 from ..xiuxian_config import XiuConfig, convert_rank, added_ranks
 from ...paths import get_paths
 from ..xiuxian_utils.pet_system import PET_BAG_LIMIT, PET_EGG_IDS, PET_EGG_RARITY_KEY, can_add_pets, grant_pet_by_rarity
@@ -83,7 +82,9 @@ accessory_package_service = AccessoryPackageService(
 )
 skill_learning_service = SkillLearningService(get_paths().game_db)
 player_data_manager = PlayerDataManager()
-tianti_manager = TiantiDataManager()
+tianti_item_reward_service = TiantiItemRewardService(
+    get_paths().game_db, get_paths().player_db
+)
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 added_ranks = added_ranks()
 # 技能学习确认缓存
@@ -142,6 +143,15 @@ def _package_reward_operation_id(event, user_id, goods_id):
     if event_id:
         return f"package-reward:{event_id}:{user_id}:{goods_id}"
     return f"package-reward:{user_id}:{goods_id}:{time.time_ns()}"
+
+
+def _tianti_item_reward_operation_id(event, user_id, goods_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"tianti-item-reward:{event_id}:{user_id}:{goods_id}"
+    return f"tianti-item-reward:{user_id}:{goods_id}:{time.time_ns()}"
 
 
 # 通用物品类型和炼金最低价格
@@ -1010,15 +1020,21 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         else:
             tianti_minutes = int(goods_info.get("tianti_settle_minutes", 0) or 0)
             if goods_info.get("buff_type") == "tianti_hp_time" and tianti_minutes > 0:
-                total_minutes = tianti_minutes * num
-                data = tianti_manager.get_user_tianti_info(str(user_id))
-                result = grant_tianti_settle_minutes(
-                    data,
-                    total_minutes,
+                reward = tianti_item_reward_service.apply(
+                    _tianti_item_reward_operation_id(event, user_id, goods_id),
+                    user_id,
+                    goods_id,
+                    num,
+                    tianti_minutes,
                     sect_fairyland_level=_get_user_sect_fairyland_level(user_info_full),
                 )
-                tianti_manager.save_user_tianti_info(str(user_id), data)
-                sql_message.update_back_j(user_id, goods_id, num=num, use_key=1)
+                if not reward.succeeded:
+                    msg = "神物数量或炼体状态已经变化，请刷新背包后重试！"
+                    await handle_send(bot, event, msg, md_type="背包", k1="背包", v1="我的背包")
+                    await use.finish()
+                    return
+                result = reward.detail
+                total_minutes = reward.minutes
 
                 bath_msg = ""
                 if result.get("bath"):

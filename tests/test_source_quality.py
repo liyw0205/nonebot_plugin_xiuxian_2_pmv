@@ -584,6 +584,24 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("accessory_package_operations", service_source)
 
+    def test_tianti_time_item_uses_attached_database_transaction(self) -> None:
+        back_source = (SOURCE_ROOT / "xiuxian" / "xiuxian_back" / "__init__.py").read_text(
+            encoding="utf-8"
+        )
+        service_source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_tianti" / "item_reward_service.py"
+        ).read_text(encoding="utf-8")
+        start = back_source.index('if goods_info.get("buff_type") == "tianti_hp_time"')
+        end = back_source.index("else:", start)
+        command = back_source[start:end]
+
+        self.assertIn("tianti_item_reward_service.apply(", command)
+        self.assertNotIn("tianti_manager.save_user_tianti_info(", command)
+        self.assertNotIn("sql_message.update_back_j(", command)
+        self.assertIn("ATTACH DATABASE", service_source)
+        self.assertIn("BEGIN IMMEDIATE", service_source)
+        self.assertIn("tianti_item_reward_operations", service_source)
+
     def test_admin_xianshi_removal_uses_atomic_repository_flow(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
         command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")
