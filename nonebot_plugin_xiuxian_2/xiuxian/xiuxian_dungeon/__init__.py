@@ -34,6 +34,10 @@ from .team_manager import (
     get_team_info, team_invite_cache, expire_team_invite,
     load_teams, save_team
 )
+from .team_command_service import (
+    build_team_view_message,
+    build_transfer_team_success_message,
+)
 
 sql_message = XiuxianDateManage()
 player_data = PlayerDataManager()
@@ -594,26 +598,14 @@ async def view_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
         await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
         await view_team_cmd.finish()
 
-    members_info_str = []
+    member_names = []
     for member_id in team_info['members']:
         member_db_info = sql_message.get_user_info_with_id(member_id)
-        member_name = member_db_info['user_name'] if member_db_info else f"未知用户({member_id})"
-        if member_id == team_info['leader']:
-            members_info_str.append(f"👑 {member_name}")
-        else:
-            members_info_str.append(f"👤 {member_name}")
+        member_names.append(
+            member_db_info['user_name'] if member_db_info else f"未知用户({member_id})"
+        )
 
-    members_str_formatted = "\n".join(members_info_str)
-
-    msg = (
-        f"【队伍信息】\n"
-        f"队伍名：{team_info['team_name']}\n"
-        f"队伍ID：{team_info['team_id']}\n"
-        f"创建时间：{team_info['create_time']}\n"
-        f"成员：{len(team_info['members'])}/{team_info['max_members']}\n"
-        f"{members_str_formatted}\n"
-        f"操作：探索副本 / 离开队伍"
-    )
+    msg = build_team_view_message(team_info, member_names)
 
     await handle_send(bot, event, msg, md_type="team", k1="探索副本", v1="探索副本", k2="离开队伍", v2="离开队伍", k3="队伍帮助", v3="队伍帮助")
     await view_team_cmd.finish()
@@ -680,7 +672,7 @@ async def transfer_team_handler(bot: Bot, event: Union[GroupMessageEvent, Privat
     team_info["leader"] = target_user_id
     save_team(team_info)
 
-    msg = f"👑 队长已成功转移给 {target_info['user_name']}！"
+    msg = build_transfer_team_success_message(target_info['user_name'])
     await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="探索副本", v2="探索副本", k3="队伍帮助", v3="队伍帮助")
     await transfer_team_cmd.finish()
 
