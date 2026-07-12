@@ -1,6 +1,7 @@
 import re
 import asyncio
 import json
+import time
 from datetime import datetime
 from ..on_compat import on_command, on_regex
 from nonebot.params import CommandArg, RegexGroup
@@ -23,10 +24,14 @@ from ..xiuxian_utils.item_json import Items
 from .tower_data import tower_data
 from .tower_battle import tower_battle
 from .tower_limit import tower_limit
+from .purchase_service import TowerPurchaseService
+from ...paths import get_paths
+from ..xiuxian_config import XiuConfig
 from ..xiuxian_title.title_data import check_and_unlock_titles
 player_data_manager = PlayerDataManager()
 sql_message = XiuxianDateManage()
 items = Items()
+tower_purchase_service = TowerPurchaseService(get_paths().game_db, get_paths().player_db)
 
 # 定义命令
 tower_challenge = on_command("爬塔", aliases={"挑战通天塔", "通天塔挑战"}, priority=5, block=True)
@@ -321,20 +326,41 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg, md_type="通天塔", k1="兑换", v1="通天塔兑换", k2="商店", v2="通天塔帮助", k3="信息", v3="通天塔信息")
         await tower_buy.finish()
     
-    # 兑换商品
-    tower_info["score"] -= total_cost
-    tower_limit.save_user_tower_info(user_id, tower_info)
-    tower_limit.update_weekly_purchase(user_id, item_id, quantity)
-    
-    # 给予物品
-    sql_message.send_back(
-        user_id, 
-        item_id,
-        item_info["name"], 
-        item_info["type"], 
-        quantity,
-        1
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = (
+        f"tower-purchase:{event_id}:{user_id}"
+        if event_id
+        else f"tower-purchase:{time.time_ns()}:{user_id}"
     )
+    purchase_result = tower_purchase_service.purchase(
+        operation_id,
+        user_id,
+        item_id,
+        item_info["name"],
+        item_info["type"],
+        quantity,
+        item_data["cost"],
+        item_data["weekly_limit"],
+        tower_info["score"],
+        tower_info["weekly_purchases"],
+        XiuConfig().max_goods_num,
+        1,
+    )
+    if purchase_result.status == "score_insufficient":
+        await handle_send(bot, event, "积分状态已变化，当前积分不足！")
+        await tower_buy.finish()
+    if purchase_result.status == "limit_reached":
+        await handle_send(bot, event, f"{item_info['name']}已到限购无法再购买！")
+        await tower_buy.finish()
+    if purchase_result.status == "inventory_full":
+        await handle_send(bot, event, f"{item_info['name']}持有数量已达上限！")
+        await tower_buy.finish()
+    if purchase_result.status == "state_changed":
+        await handle_send(bot, event, "通天塔兑换状态已变化，请重新兑换！")
+        await tower_buy.finish()
+    if purchase_result.status == "user_missing":
+        await handle_send(bot, event, "未找到道友数据，通天塔兑换失败！")
+        await tower_buy.finish()
     
     msg = f"成功兑换{item_info['name']}×{quantity}，消耗{total_cost}积分！"
     await handle_send(bot, event, msg, md_type="通天塔", k1="兑换", v1="通天塔兑换", k2="商店", v2="通天塔帮助", k3="信息", v3="通天塔信息")

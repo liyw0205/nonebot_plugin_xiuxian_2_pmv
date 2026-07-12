@@ -1537,6 +1537,23 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("boss_reward_operations", service)
 
+    def test_tower_purchase_uses_cross_database_transaction(self) -> None:
+        tower_root = SOURCE_ROOT / "xiuxian" / "xiuxian_tower"
+        source = (tower_root / "__init__.py").read_text(encoding="utf-8")
+        command_start = source.index("@tower_buy.handle")
+        start = source.index("event_id =", command_start)
+        handler = source[start:source.index('msg = f"成功兑换', start)]
+        self.assertIn("tower_purchase_service.purchase(", handler)
+        self.assertNotIn("tower_limit.save_user_tower_info(", handler)
+        self.assertNotIn("tower_limit.update_weekly_purchase(", handler)
+        self.assertNotIn("sql_message.send_back(", handler)
+        for status in ("score_insufficient", "limit_reached", "inventory_full", "state_changed", "user_missing"):
+            self.assertIn(f'"{status}"', handler)
+        service = (tower_root / "purchase_service.py").read_text(encoding="utf-8")
+        self.assertIn("ATTACH DATABASE", service)
+        self.assertIn("BEGIN IMMEDIATE", service)
+        self.assertIn("tower_purchase_operations", service)
+
     def test_sect_rename_uses_transactional_service(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_sect" / "__init__.py"
