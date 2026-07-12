@@ -1520,6 +1520,23 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("bank_interest_operations", service)
 
+    def test_world_boss_rewards_use_cross_database_transaction(self) -> None:
+        boss_root = SOURCE_ROOT / "xiuxian" / "xiuxian_boss"
+        source = (boss_root / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("# 发放奖励")
+        handler = source[start:source.index("# 判断BOSS是否真正死亡", start)]
+        self.assertIn("boss_reward_service.grant(", handler)
+        self.assertNotIn("sql_message.update_ls(", handler)
+        self.assertNotIn("boss_limit.update_stone(", handler)
+        self.assertNotIn("boss_limit.update_integral(", handler)
+        self.assertNotIn("save_user_boss_fight_info(", handler)
+        for status in ("state_changed", "user_missing"):
+            self.assertIn(f'"{status}"', handler)
+        service = (boss_root / "reward_service.py").read_text(encoding="utf-8")
+        self.assertIn("ATTACH DATABASE", service)
+        self.assertIn("BEGIN IMMEDIATE", service)
+        self.assertIn("boss_reward_operations", service)
+
     def test_sect_rename_uses_transactional_service(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_sect" / "__init__.py"

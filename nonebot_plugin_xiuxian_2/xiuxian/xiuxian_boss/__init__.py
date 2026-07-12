@@ -6,6 +6,7 @@ import re
 from datetime import datetime
 import random
 import os
+import time as time_module
 from nonebot.rule import Rule
 from nonebot import get_bots, get_bot, require
 from ..on_compat import on_command
@@ -43,6 +44,7 @@ from ..xiuxian_utils.utils import (
 from ..xiuxian_tasks.task_data import record_task_progress
 from ..xiuxian_title.title_data import check_and_unlock_titles
 from .boss_limit import boss_limit, player_data_manager
+from .reward_service import BossRewardService
 from .. import DRIVER
 # boss定时任务
 scheduler = require("nonebot_plugin_apscheduler").scheduler
@@ -53,6 +55,7 @@ group_boss = {}
 groups = config['open']
 battle_flag = {}
 sql_message = XiuxianDateManage()  # sql类
+boss_reward_service = BossRewardService(get_paths().game_db, get_paths().player_db)
 BOSSDROPSPATH = get_paths().data / "boss掉落物"
 
 create = on_command("世界BOSS生成", aliases={"世界boss生成", "世界Boss生成", "生成世界BOSS", "生成世界boss", "生成世界Boss"}, permission=SUPERUSER, priority=5, block=True)
@@ -465,6 +468,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
 
     today_integral = int(boss_limit.get_integral(user_id))
     today_stone = int(boss_limit.get_stone(user_id))
+    total_integral = int(get_user_boss_fight_info(user_id)['boss_integral'])
 
     integral_limit = 12000
     stone_limit = 300000000
@@ -560,15 +564,29 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     # =========================
     # 发放奖励
     # =========================
-    if get_stone > 0:
-        sql_message.update_ls(user_id, get_stone, 1)
-        boss_limit.update_stone(user_id, get_stone)
-
-    if boss_integral > 0:
-        user_boss_fight_info = get_user_boss_fight_info(user_id)
-        user_boss_fight_info['boss_integral'] += boss_integral
-        boss_limit.update_integral(user_id, boss_integral)
-        save_user_boss_fight_info(user_id, user_boss_fight_info)
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = (
+        f"boss-reward:{event_id}:{user_id}"
+        if event_id
+        else f"boss-reward:{time_module.time_ns()}:{user_id}"
+    )
+    reward_result = boss_reward_service.grant(
+        operation_id,
+        user_id,
+        today_stone,
+        today_integral,
+        total_integral,
+        get_stone,
+        boss_integral,
+    )
+    if reward_result.status == "state_changed":
+        battle_flag[GLOBAL_BOSS_KEY] = False
+        await handle_send(bot, event, "世界BOSS奖励状态已变化，请重新讨伐！")
+        await battle.finish()
+    if reward_result.status == "user_missing":
+        battle_flag[GLOBAL_BOSS_KEY] = False
+        await handle_send(bot, event, "未找到道友数据，世界BOSS奖励结算失败！")
+        await battle.finish()
 
     # =========================
     # 判断BOSS是否真正死亡
