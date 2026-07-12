@@ -25,6 +25,22 @@ class TeamTransferResult:
     target_user_name: str = ""
 
 
+@dataclass(frozen=True)
+class TeamLeaveResult:
+    status: str
+    team_name: str = ""
+    new_leader_name: str = ""
+    cooldown_hours: int = 0
+
+
+@dataclass(frozen=True)
+class TeamKickResult:
+    status: str
+    target_user_id: str = ""
+    target_user_name: str = ""
+    cooldown_hours: int = 0
+
+
 def build_team_view(team_info: dict[str, Any], lookup_user_name: Callable[[str], str]) -> TeamViewResult:
     members = []
     leader_id = str(team_info.get("leader", ""))
@@ -100,13 +116,125 @@ def build_transfer_team_not_member_message() -> str:
     return "只能将队长转移给当前队伍内的成员！"
 
 
+def build_leave_team_result(
+    *,
+    team_info: dict[str, Any],
+    leaver_user_id: str,
+    success: bool,
+    cooldown_hours: int,
+    new_leader_name: str | None,
+) -> TeamLeaveResult:
+    if not success:
+        return TeamLeaveResult("leave_failed")
+
+    if leaver_user_id != str(team_info.get("leader", "")):
+        return TeamLeaveResult(
+            "member_left",
+            team_name=str(team_info.get("team_name", "")),
+            cooldown_hours=cooldown_hours,
+        )
+
+    if new_leader_name:
+        return TeamLeaveResult(
+            "leader_left_transferred",
+            team_name=str(team_info.get("team_name", "")),
+            new_leader_name=new_leader_name,
+            cooldown_hours=cooldown_hours,
+        )
+
+    return TeamLeaveResult(
+        "leader_left_disbanded",
+        team_name=str(team_info.get("team_name", "")),
+        cooldown_hours=cooldown_hours,
+    )
+
+
+def build_leave_team_message(result: TeamLeaveResult) -> str:
+    if result.status == "leader_left_transferred":
+        return (
+            f"你已离开队伍【{result.team_name}】，队长已转让给{result.new_leader_name}。\n"
+            f"你进入了{result.cooldown_hours}小时组队冷却。"
+        )
+    if result.status == "leader_left_disbanded":
+        return (
+            f"你已离开队伍【{result.team_name}】，队伍已解散。\n"
+            f"你进入了{result.cooldown_hours}小时组队冷却。"
+        )
+    if result.status == "member_left":
+        return (
+            f"你已离开队伍【{result.team_name}】。\n"
+            f"你进入了{result.cooldown_hours}小时组队冷却。"
+        )
+    return "离开队伍失败！"
+
+
+def resolve_kick_target(
+    *,
+    actor_user_id: str,
+    team_info: dict[str, Any],
+    at_target_user_id: str | None,
+    arg_target_user_id: str | None,
+    lookup_user_name: Callable[[str], str | None],
+) -> TeamKickResult:
+    target_user_id = at_target_user_id or arg_target_user_id or ""
+    if not target_user_id:
+        return TeamKickResult("target_not_found")
+    if target_user_id == actor_user_id:
+        return TeamKickResult("self_target", target_user_id=target_user_id)
+    if target_user_id not in team_info.get("members", []):
+        return TeamKickResult("target_not_member", target_user_id=target_user_id)
+
+    target_user_name = lookup_user_name(target_user_id)
+    if not target_user_name:
+        return TeamKickResult("target_info_missing", target_user_id=target_user_id)
+
+    return TeamKickResult(
+        "ok",
+        target_user_id=target_user_id,
+        target_user_name=target_user_name,
+    )
+
+
+def build_kick_team_result(
+    *,
+    target_user_id: str,
+    target_user_name: str,
+    success: bool,
+    cooldown_hours: int,
+) -> TeamKickResult:
+    if not success:
+        return TeamKickResult("kick_failed", target_user_id=target_user_id)
+    return TeamKickResult(
+        "kicked",
+        target_user_id=target_user_id,
+        target_user_name=target_user_name,
+        cooldown_hours=cooldown_hours,
+    )
+
+
+def build_kick_team_message(result: TeamKickResult) -> str:
+    if result.status == "kicked":
+        return (
+            f"已将成员{result.target_user_name}踢出队伍。\n"
+            f"对方进入{result.cooldown_hours}小时组队冷却。"
+        )
+    return "踢出成员失败！"
+
+
 __all__ = [
     "TeamMemberView",
     "TeamTransferResult",
     "TeamViewResult",
+    "TeamLeaveResult",
+    "TeamKickResult",
     "build_team_view",
     "build_team_view_message",
+    "build_leave_team_message",
+    "build_leave_team_result",
+    "build_kick_team_message",
+    "build_kick_team_result",
     "resolve_transfer_target",
+    "resolve_kick_target",
     "build_transfer_team_success_message",
     "build_transfer_team_self_message",
     "build_transfer_team_not_member_message",

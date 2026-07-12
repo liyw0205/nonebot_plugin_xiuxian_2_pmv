@@ -36,10 +36,15 @@ from .team_manager import (
 )
 from .team_command_service import (
     build_team_view,
+    build_kick_team_message,
+    build_kick_team_result,
+    build_leave_team_message,
+    build_leave_team_result,
     build_team_view_message,
     build_transfer_team_not_member_message,
     build_transfer_team_self_message,
     build_transfer_team_success_message,
+    resolve_kick_target,
     resolve_transfer_target,
 )
 
@@ -462,17 +467,27 @@ async def leave_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
         if int(cd_info.get("had_first_join", 0)) == 1:
             set_team_cd(user_id, TEAM_JOIN_CD_HOURS)
 
+        new_leader_name = None
         if user_id == team_info['leader']:
             new_team_info = get_team_info(team_id)
             if new_team_info:
                 new_leader_name = sql_message.get_user_info_with_id(new_team_info['leader'])['user_name']
-                msg = f"你已离开队伍【{team_info['team_name']}】，队长已转让给{new_leader_name}。\n你进入了{TEAM_JOIN_CD_HOURS}小时组队冷却。"
-            else:
-                msg = f"你已离开队伍【{team_info['team_name']}】，队伍已解散。\n你进入了{TEAM_JOIN_CD_HOURS}小时组队冷却。"
-        else:
-            msg = f"你已离开队伍【{team_info['team_name']}】。\n你进入了{TEAM_JOIN_CD_HOURS}小时组队冷却。"
+        leave_result = build_leave_team_result(
+            team_info=team_info,
+            leaver_user_id=user_id,
+            success=True,
+            cooldown_hours=TEAM_JOIN_CD_HOURS,
+            new_leader_name=new_leader_name,
+        )
     else:
-        msg = "离开队伍失败！"
+        leave_result = build_leave_team_result(
+            team_info=team_info,
+            leaver_user_id=user_id,
+            success=False,
+            cooldown_hours=TEAM_JOIN_CD_HOURS,
+            new_leader_name=None,
+        )
+    msg = build_leave_team_message(leave_result)
 
     await handle_send(bot, event, msg, md_type="team", k1="创建队伍", v1="创建队伍", k2="队伍帮助", v3="队伍帮助")
     await leave_team_cmd.finish()
@@ -510,32 +525,47 @@ async def kick_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
         if target_db_info:
             target_user_id = str(target_db_info['user_id'])
 
-    if not target_user_id:
+    kick_result = resolve_kick_target(
+        actor_user_id=user_id,
+        team_info=team_info,
+        at_target_user_id=target_user_id,
+        arg_target_user_id=None,
+        lookup_user_name=lambda candidate_user_id: (
+            (sql_message.get_user_info_with_id(candidate_user_id) or {}).get("user_name")
+        ),
+    )
+
+    if kick_result.status == "target_not_found":
         msg = "未找到指定的成员！"
         await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
         await kick_team_cmd.finish()
-
-    if target_user_id == user_id:
+    if kick_result.status == "self_target":
         msg = "不能踢出自己！"
         await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
         await kick_team_cmd.finish()
-
-    if target_user_id not in team_info['members']:
+    if kick_result.status == "target_not_member":
         msg = "该成员不在你的队伍中！"
         await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
         await kick_team_cmd.finish()
+    if kick_result.status == "target_info_missing":
+        msg = "目标成员信息异常，无法踢出。"
+        await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
+        await kick_team_cmd.finish()
 
+    target_user_id = kick_result.target_user_id
     success = remove_member_from_team(team_id, target_user_id)
 
     if success:
         cd_info = get_team_cd_info(target_user_id)
         if int(cd_info.get("had_first_join", 0)) == 1:
             set_team_cd(target_user_id, TEAM_JOIN_CD_HOURS)
-
-        target_info = sql_message.get_user_info_with_id(target_user_id)
-        msg = f"已将成员{target_info['user_name']}踢出队伍。\n对方进入{TEAM_JOIN_CD_HOURS}小时组队冷却。"
-    else:
-        msg = "踢出成员失败！"
+    kick_result = build_kick_team_result(
+        target_user_id=target_user_id,
+        target_user_name=kick_result.target_user_name,
+        success=success,
+        cooldown_hours=TEAM_JOIN_CD_HOURS,
+    )
+    msg = build_kick_team_message(kick_result)
 
     await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
     await kick_team_cmd.finish()

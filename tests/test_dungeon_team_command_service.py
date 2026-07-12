@@ -7,11 +7,16 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.team_command_service import (
+    build_kick_team_message,
+    build_kick_team_result,
+    build_leave_team_message,
+    build_leave_team_result,
     build_team_view,
     build_team_view_message,
     build_transfer_team_not_member_message,
     build_transfer_team_self_message,
     build_transfer_team_success_message,
+    resolve_kick_target,
     resolve_transfer_target,
 )
 
@@ -112,6 +117,123 @@ class DungeonTeamCommandServiceTests(unittest.TestCase):
         self.assertEqual(success.status, "ok")
         self.assertEqual(success.target_user_id, "1002")
         self.assertEqual(success.target_user_name, "乙")
+
+    def test_build_leave_team_result_covers_member_transfer_and_disband(self) -> None:
+        team_info = {"team_name": "试炼小队", "leader": "1001"}
+
+        member_left = build_leave_team_result(
+            team_info=team_info,
+            leaver_user_id="1002",
+            success=True,
+            cooldown_hours=3,
+            new_leader_name=None,
+        )
+        self.assertEqual(member_left.status, "member_left")
+        self.assertIn("你已离开队伍【试炼小队}】".replace("}", ""), build_leave_team_message(member_left))
+
+        leader_transferred = build_leave_team_result(
+            team_info=team_info,
+            leaver_user_id="1001",
+            success=True,
+            cooldown_hours=3,
+            new_leader_name="韩立",
+        )
+        self.assertEqual(leader_transferred.status, "leader_left_transferred")
+        self.assertIn("队长已转让给韩立", build_leave_team_message(leader_transferred))
+
+        leader_disbanded = build_leave_team_result(
+            team_info=team_info,
+            leaver_user_id="1001",
+            success=True,
+            cooldown_hours=3,
+            new_leader_name=None,
+        )
+        self.assertEqual(leader_disbanded.status, "leader_left_disbanded")
+        self.assertIn("队伍已解散", build_leave_team_message(leader_disbanded))
+
+        failed = build_leave_team_result(
+            team_info=team_info,
+            leaver_user_id="1002",
+            success=False,
+            cooldown_hours=3,
+            new_leader_name=None,
+        )
+        self.assertEqual(build_leave_team_message(failed), "离开队伍失败！")
+
+    def test_resolve_kick_target_and_message_cover_validation_and_success(self) -> None:
+        team_info = {"members": ["1001", "1002"]}
+
+        self.assertEqual(
+            resolve_kick_target(
+                actor_user_id="1001",
+                team_info=team_info,
+                at_target_user_id=None,
+                arg_target_user_id=None,
+                lookup_user_name=lambda user_id: None,
+            ).status,
+            "target_not_found",
+        )
+        self.assertEqual(
+            resolve_kick_target(
+                actor_user_id="1001",
+                team_info=team_info,
+                at_target_user_id="1001",
+                arg_target_user_id=None,
+                lookup_user_name=lambda user_id: "甲",
+            ).status,
+            "self_target",
+        )
+        self.assertEqual(
+            resolve_kick_target(
+                actor_user_id="1001",
+                team_info=team_info,
+                at_target_user_id=None,
+                arg_target_user_id="1003",
+                lookup_user_name=lambda user_id: "丙",
+            ).status,
+            "target_not_member",
+        )
+        self.assertEqual(
+            resolve_kick_target(
+                actor_user_id="1001",
+                team_info=team_info,
+                at_target_user_id=None,
+                arg_target_user_id="1002",
+                lookup_user_name=lambda user_id: None,
+            ).status,
+            "target_info_missing",
+        )
+
+        success = resolve_kick_target(
+            actor_user_id="1001",
+            team_info=team_info,
+            at_target_user_id=None,
+            arg_target_user_id="1002",
+            lookup_user_name=lambda user_id: "乙",
+        )
+        self.assertEqual(success.status, "ok")
+
+        kick_message = build_kick_team_message(
+            build_kick_team_result(
+                target_user_id="1002",
+                target_user_name="乙",
+                success=True,
+                cooldown_hours=3,
+            )
+        )
+        self.assertIn("已将成员乙踢出队伍", kick_message)
+        self.assertIn("3小时组队冷却", kick_message)
+        self.assertEqual(
+            build_kick_team_message(
+                build_kick_team_result(
+                    target_user_id="1002",
+                    target_user_name="乙",
+                    success=False,
+                    cooldown_hours=3,
+                )
+            ),
+            "踢出成员失败！",
+        )
 
     def test_transfer_team_messages_are_centralized(self) -> None:
         self.assertEqual(build_transfer_team_success_message("韩立"), "👑 队长已成功转移给 韩立！")
