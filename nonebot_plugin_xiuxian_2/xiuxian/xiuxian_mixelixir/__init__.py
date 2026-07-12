@@ -2,6 +2,7 @@ import random
 import asyncio
 import re
 import json
+import time
 from ..on_compat import on_command
 from nonebot.params import EventPlainText, CommandArg
 from ..adapter_compat import (
@@ -27,8 +28,11 @@ from .mixelixirutil import get_mix_elixir_msg, tiaohe, check_mix, make_dict, get
 from ..xiuxian_config import convert_rank, XiuConfig, added_ranks
 from datetime import datetime
 from .mix_elixir_config import MIXELIXIRCONFIG
+from ...paths import get_paths
+from .settlement_service import MixelixirSettlementService
 
 sql_message = XiuxianDateManage()  # sql类
+mixelixir_settlement_service = MixelixirSettlementService(get_paths().game_db)
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 items = Items()
 added_rank = added_ranks()
@@ -453,13 +457,37 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
 
                 num = 1 + ldl_info['buff'] + mix_elixir_info['丹药控火'] + impart_mix_per + main_dan  # 炼丹数量提升
                 msg = f"恭喜道友成功炼成丹药：{goods_info['name']}{num}枚"
-                # 背包sql
-                sql_message.send_back(user_id, id, goods_info['name'], "丹药", num)  # 将炼制的丹药加入背包
-                sql_message.update_back_j(user_id, zhuyao_goods_id, zhuyao_num)  # 将消耗的药材从背包中减去
-                sql_message.update_back_j(user_id, fuyao_goods_id, fuyao_num)
-                sql_message.update_back_j(user_id, yaoyin_goods_id, yaoyin_num)
+                event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+                operation_id = f"mixelixir:{event_id}:{user_id}" if event_id else f"mixelixir:{user_id}:{time.time_ns()}"
+                recipe_materials = {}
+                for material_id, quantity in (
+                    (zhuyao_goods_id, zhuyao_num),
+                    (fuyao_goods_id, fuyao_num),
+                    (yaoyin_goods_id, yaoyin_num),
+                ):
+                    recipe_materials[material_id] = recipe_materials.get(material_id, 0) + quantity
+                settlement = mixelixir_settlement_service.settle(
+                    operation_id,
+                    user_id,
+                    recipe_materials,
+                    id,
+                    goods_info['name'],
+                    num,
+                    max_goods_num=XiuConfig().max_goods_num,
+                )
+                if settlement.status in {"item_insufficient", "state_changed"}:
+                    msg = "药材状态已变化，本次炼丹未结算，请重新提交配方。"
+                    await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
+                    await mix_make.finish()
+                if settlement.status == "user_missing":
+                    msg = "未找到修仙数据，本次炼丹未结算。"
+                    await handle_send(bot, event, msg, md_type="我要修仙")
+                    await mix_make.finish()
+                if settlement.status == "duplicate":
+                    msg = f"该配方已结算，丹药：{goods_info['name']}{settlement.reward_quantity}枚"
+                    await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
+                    await mix_make.finish()
                 update_statistics_value(user_id, "炼丹次数")
-                sql_message.update_mixelixir_num(user_id)
                 try:
                     var = mix_elixir_info['炼丹记录'][id]
                     now_num = mix_elixir_info['炼丹记录'][id]['num']  # now_num 已经炼制的丹药数量

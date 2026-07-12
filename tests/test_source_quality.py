@@ -1217,6 +1217,21 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("fusion_operations", service)
 
+    def test_mixelixir_recipe_uses_transactional_settlement(self) -> None:
+        mixelixir_root = SOURCE_ROOT / "xiuxian" / "xiuxian_mixelixir"
+        source = (mixelixir_root / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("@mix_make.handle")
+        handler = source[start:source.index("async def check_yaocai_name_in_back", start)]
+        self.assertIn("mixelixir_settlement_service.settle(", handler)
+        self.assertNotIn("sql_message.send_back(", handler)
+        self.assertNotIn("sql_message.update_back_j(", handler)
+        self.assertNotIn("sql_message.update_mixelixir_num(", handler)
+        for status in ("item_insufficient", "state_changed", "user_missing", "duplicate"):
+            self.assertIn(f'"{status}"', handler)
+        service = (mixelixir_root / "settlement_service.py").read_text(encoding="utf-8")
+        self.assertIn("BEGIN IMMEDIATE", service)
+        self.assertIn("mixelixir_settlement_operations", service)
+
     def test_natal_treasure_training_uses_transactional_service(self) -> None:
         natal_root = SOURCE_ROOT / "xiuxian" / "xiuxian_natal_treasure"
         source = (natal_root / "__init__.py").read_text(encoding="utf-8")
