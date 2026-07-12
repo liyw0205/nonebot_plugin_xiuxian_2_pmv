@@ -16,6 +16,7 @@ from .training_data import training_data
 from .training_limit import training_limit
 from .training_events import training_events
 from .completion_service import TrainingCompletionService
+from .purchase_service import TrainingPurchaseService
 from ...paths import get_paths
 from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.item_json import Items
@@ -25,6 +26,7 @@ player_data_manager = PlayerDataManager()
 sql_message = XiuxianDateManage()
 items = Items()
 training_completion_service = TrainingCompletionService(get_paths().game_db, get_paths().player_db)
+training_purchase_service = TrainingPurchaseService(get_paths().game_db, get_paths().player_db)
 # 定义命令
 training_start = on_command("开始历练", aliases={"历练开始"}, priority=5, block=True)
 training_status = on_command("历练状态", priority=5, block=True)
@@ -258,20 +260,25 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg, md_type="历练", k1="兑换", v1="历练兑换", k2="商店", v2="历练商店", k3="历练状态", v3="历练状态")
         await training_buy.finish()
     
-    # 兑换商品
-    training_info["points"] -= total_cost
-    training_limit.save_user_training_info(user_id, training_info)
-    training_limit.update_weekly_purchase(user_id, shop_id, quantity)
-    
-    # 给予物品
-    sql_message.send_back(
-        user_id, 
-        shop_id, 
-        item_info["name"], 
-        item_info["type"], 
-        quantity,
-        1
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"training-purchase:{event_id}:{user_id}" if event_id else f"training-purchase:{time.time_ns()}:{user_id}"
+    purchase_result = training_purchase_service.purchase(
+        operation_id, user_id, shop_id, item_info["name"], item_info["type"], quantity,
+        item_data["cost"], item_data["weekly_limit"], training_info["points"],
+        training_info["weekly_purchases"], XiuConfig().max_goods_num, 1,
     )
+    if purchase_result.status == "points_insufficient":
+        await handle_send(bot, event, "成就点状态已变化，当前成就点不足！", md_type="历练")
+        await training_buy.finish()
+    if purchase_result.status == "limit_reached":
+        await handle_send(bot, event, f"{item_info['name']}已到限购无法再购买！", md_type="历练")
+        await training_buy.finish()
+    if purchase_result.status == "inventory_full":
+        await handle_send(bot, event, f"{item_info['name']}持有数量已达上限！", md_type="历练")
+        await training_buy.finish()
+    if purchase_result.status in {"state_changed", "user_missing"}:
+        await handle_send(bot, event, "历练兑换状态已变化，请重新兑换！", md_type="历练")
+        await training_buy.finish()
     
     msg = f"成功兑换{item_info['name']}×{quantity}，消耗{total_cost}成就点！"
     await handle_send(bot, event, msg, md_type="历练", k1="兑换", v1="历练兑换", k2="商店", v2="历练商店", k3="历练状态", v3="历练状态")
