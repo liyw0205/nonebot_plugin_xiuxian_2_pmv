@@ -602,6 +602,22 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("tianti_item_reward_operations", service_source)
 
+    def test_sect_fairyland_claim_uses_transactional_service(self) -> None:
+        sect_root = SOURCE_ROOT / "xiuxian" / "xiuxian_sect"
+        command_source = (sect_root / "__init__.py").read_text(encoding="utf-8")
+        service_source = (sect_root / "fairyland_claim_service.py").read_text(
+            encoding="utf-8"
+        )
+        start = command_source.index("async def sect_fairyland_claim_(")
+        end = command_source.index("@sect_elixir_room_make.handle", start)
+        command = command_source[start:end]
+
+        self.assertIn("fairyland_claim_service.claim(", command)
+        self.assertNotIn("tianti_manager.save_user_tianti_info(", command)
+        self.assertNotIn("_set_fairyland_last_claim(", command)
+        self.assertIn("BEGIN IMMEDIATE", service_source)
+        self.assertIn("sect_fairyland_claim_operations", service_source)
+
     def test_admin_xianshi_removal_uses_atomic_repository_flow(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
         command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")

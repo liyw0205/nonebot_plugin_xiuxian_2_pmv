@@ -55,10 +55,8 @@ from ..xiuxian_utils.utils import (
     parse_page_arg, paginate_text_blocks, build_pagination_buttons
 )
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_tianti.tianti_data import TiantiDataManager
 from ..xiuxian_tianti.tianti_service import (
     get_sect_fairyland_bonus,
-    grant_tianti_settle_minutes,
 )
 from .sect_fairyland import (
     SECT_FAIRYLAND_CLAIM_TABLE,
@@ -68,17 +66,17 @@ from .sect_fairyland import (
     _get_fairyland_last_claim,
     _get_sect_fairyland_config,
     _get_sect_fairyland_level,
-    _set_fairyland_last_claim,
     _to_int,
 )
 from ..adapter_compat import is_channel_event
 from ...paths import get_paths
 from .membership_service import SectMembershipService
+from .fairyland_claim_service import FairylandClaimService
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
 sect_membership_service = SectMembershipService(get_paths().game_db)
-tianti_manager = TiantiDataManager()
+fairyland_claim_service = FairylandClaimService(get_paths().player_db)
 config = get_config()
 SECT_RENAME_CARD_ID = 20026
 SECT_RENAME_CARD_NAME = "宗门易名符"
@@ -651,10 +649,20 @@ async def sect_fairyland_claim_(bot: Bot, event: GroupMessageEvent | PrivateMess
         await handle_send(bot, event, "今日已经完成过宗门淬体修行。", md_type="宗门", k1="炼体堂", v1="宗门炼体堂", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_fairyland_claim.finish()
 
-    data = tianti_manager.get_user_tianti_info(str(user_info["user_id"]))
-    result = grant_tianti_settle_minutes(data, conf["minutes"], sect_fairyland_level=level)
-    tianti_manager.save_user_tianti_info(str(user_info["user_id"]), data)
-    _set_fairyland_last_claim(user_info["user_id"], sect_id, today)
+    claim = fairyland_claim_service.claim(
+        f"sect-fairyland:{user_info['user_id']}:{sect_id}:{today}",
+        user_info["user_id"],
+        sect_id,
+        today,
+        level,
+        conf["minutes"],
+    )
+    if claim.status == "already_claimed":
+        await handle_send(bot, event, "今日已经完成过宗门淬体修行。", md_type="宗门", k1="炼体堂", v1="宗门炼体堂", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
+        await sect_fairyland_claim.finish()
+    if not claim.succeeded:
+        raise RuntimeError(f"unexpected fairyland claim status: {claim.status}")
+    result = claim.detail
 
     msg = (
         f"宗门淬体修行完成！\n"
