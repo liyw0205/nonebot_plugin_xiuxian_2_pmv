@@ -567,6 +567,23 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("package_reward_operations", service_source)
 
+    def test_accessory_package_rewards_use_attached_database_transaction(self) -> None:
+        back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
+        command_source = (back_root / "__init__.py").read_text(encoding="utf-8")
+        service_source = (back_root / "accessory_package_service.py").read_text(
+            encoding="utf-8"
+        )
+        start = command_source.index("if goods_type == \"礼包\":")
+        end = command_source.index("elif goods_type == \"装备\":", start)
+        command = command_source[start:end]
+
+        self.assertIn("accessory_package_service.apply(", command)
+        self.assertNotIn("sql_message.update_back_j(", command)
+        self.assertNotIn("sql_message.send_back(", command)
+        self.assertIn("ATTACH DATABASE", service_source)
+        self.assertIn("BEGIN IMMEDIATE", service_source)
+        self.assertIn("accessory_package_operations", service_source)
+
     def test_admin_xianshi_removal_uses_atomic_repository_flow(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
         command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")

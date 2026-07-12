@@ -47,12 +47,13 @@ from .cultivation_item_service import CultivationItemService
 from .equipment_service import EquipmentService
 from .lottery_talisman_service import LotteryReward, LotteryTalismanService
 from .package_reward_service import PackageReward, PackageRewardService
+from .accessory_package_service import AccessoryPackageService
 from .skill_learning_service import SkillLearningService
 from .stone_reward_service import StoneItemRewardService
 from .three_cultivation_pill_service import ThreeCultivationPillService
 from .unbind_item_service import UnbindItemService
 from . import accessory as _accessory  # noqa: F401
-from .accessory_helpers import AFFIX_KEY_MAP, SET_BONUS, ACCESSORY_BAG_LIMIT, add_accessory_to_bag, can_add_accessories, quality_to_cn  # noqa: F401
+from .accessory_helpers import AFFIX_KEY_MAP, SET_BONUS, ACCESSORY_BAG_LIMIT, add_accessory_to_bag, can_add_accessories, create_accessory_instance, quality_to_cn  # noqa: F401
 from .backpack_render import (
     _build_backpack_md_with_sections,
     _build_backpack_fallback_with_sections,
@@ -77,6 +78,9 @@ three_cultivation_pill_service = ThreeCultivationPillService(get_paths().game_db
 unbind_item_service = UnbindItemService(get_paths().game_db)
 lottery_talisman_service = LotteryTalismanService(get_paths().game_db)
 package_reward_service = PackageRewardService(get_paths().game_db)
+accessory_package_service = AccessoryPackageService(
+    get_paths().game_db, get_paths().player_db
+)
 skill_learning_service = SkillLearningService(get_paths().game_db)
 player_data_manager = PlayerDataManager()
 tianti_manager = TiantiDataManager()
@@ -781,48 +785,6 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
 
             return rewards, errors
 
-        def _grant_one_reward(rwd: dict):
-            """
-            rwd字段建议：
-            {
-              "buff": 17001,
-              "type": "饰品/丹药/法器...",
-              "name": "xxx",
-              "amount": 1,
-              "quality": 1
-            }
-            """
-            r_type = rwd.get("type")
-            r_name = rwd.get("name", "未知物品")
-            r_amount = int(rwd.get("amount", 1) or 1)
-            r_buff = rwd.get("buff", None)
-
-            # 灵石特殊处理
-            if r_name == "灵石":
-                if r_amount > 0:
-                    sql_message.update_ls(user_id, abs(r_amount), 1)
-                    return f"获得灵石 {number_to(r_amount)} 枚"
-                else:
-                    sql_message.update_ls(user_id, abs(r_amount), 2)
-                    return f"扣除灵石 {number_to(abs(r_amount))} 枚"
-
-            # 饰品处理（走实例）
-            if r_type == "饰品":
-                if r_buff is None:
-                    return f"【失败】{r_name}：缺少buff(item_id)"
-                q = int(rwd.get("quality", 1) or 1)
-                q = max(1, min(5, q))
-                for _ in range(r_amount):
-                    add_accessory_to_bag(str(user_id), int(r_buff), q)
-                return f"获得饰品 {r_name} x{r_amount}（{quality_to_cn(q)}）"
-
-            # 普通物品
-            if r_buff is None:
-                return f"【失败】{r_name}：缺少buff(item_id)"
-            g_type = "技能" if r_type in ["辅修功法", "神通", "功法", "身法", "瞳术"] else ("装备" if r_type in ["法器", "防具"] else r_type)
-            sql_message.send_back(user_id, int(r_buff), r_name, g_type, r_amount, 1)
-            return f"获得 {r_name} x{r_amount}"
-
         package_rewards = []
         accessory_need = 0
         for _ in range(num):
@@ -849,6 +811,83 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 await handle_send(bot, event, msg, md_type="背包", k1="饰品", v1="饰品背包", k2="分解", v2="快速分解饰品")
                 await use.finish()
                 return
+
+            fixed_rewards = []
+            accessory_instances = []
+            validation_errors = list(all_msgs)
+            for rewards in package_rewards:
+                for rwd in rewards:
+                    r_name = str(rwd.get("name", "未知物品"))
+                    try:
+                        r_amount = int(rwd.get("amount", 1) or 1)
+                    except (TypeError, ValueError):
+                        validation_errors.append(f"【失败】{r_name}：奖励数量配置错误")
+                        continue
+                    r_buff = rwd.get("buff")
+                    r_type = rwd.get("type")
+                    if r_name == "灵石":
+                        fixed_rewards.append(PackageReward(None, r_name, None, r_amount))
+                        continue
+                    if r_buff is None:
+                        validation_errors.append(f"【失败】{r_name}：缺少buff(item_id)")
+                        continue
+                    if r_type == "饰品":
+                        quality = max(1, min(5, int(rwd.get("quality", 1) or 1)))
+                        for _ in range(r_amount):
+                            accessory_instances.append(
+                                create_accessory_instance(int(r_buff), quality)
+                            )
+                        continue
+                    goods_reward_type = (
+                        "技能" if r_type in ["辅修功法", "神通", "功法", "身法", "瞳术"]
+                        else "装备" if r_type in ["法器", "防具"]
+                        else r_type
+                    )
+                    fixed_rewards.append(
+                        PackageReward(int(r_buff), r_name, goods_reward_type, r_amount)
+                    )
+
+            if validation_errors or len(accessory_instances) != accessory_need:
+                msg = f"{package_name}奖励配置错误，未消耗礼包：\n" + "\n".join(validation_errors)
+                await handle_send(bot, event, msg, md_type="背包", k1="背包", v1="我的背包")
+                await use.finish()
+                return
+
+            result = accessory_package_service.apply(
+                _package_reward_operation_id(event, user_id, goods_id),
+                user_id,
+                goods_id,
+                num,
+                fixed_rewards,
+                accessory_instances,
+                max_goods_num=XiuConfig().max_goods_num,
+                accessory_limit=ACCESSORY_BAG_LIMIT,
+            )
+            if not result.succeeded:
+                msg = "礼包数量、奖励容量、灵石余额或角色状态已经变化，请刷新背包后重试！"
+                await handle_send(bot, event, msg, md_type="背包", k1="背包", v1="我的背包")
+                await use.finish()
+                return
+
+            reward_msgs = []
+            for reward in result.rewards:
+                if reward.name == "灵石":
+                    action = "获得" if reward.quantity > 0 else "扣除"
+                    reward_msgs.append(f"{action}灵石 {number_to(abs(reward.quantity))} 枚")
+                else:
+                    reward_msgs.append(f"获得 {reward.name} x{reward.quantity}")
+            accessory_summary = {}
+            for accessory in result.accessories:
+                key = (accessory["name"], int(accessory["quality"]))
+                accessory_summary[key] = accessory_summary.get(key, 0) + 1
+            for (name, quality), amount in accessory_summary.items():
+                reward_msgs.append(f"获得饰品 {name} x{amount}（{quality_to_cn(quality)}）")
+            msg = f"道友打开了 {result.quantity} 个 {package_name}：\n" + "\n".join(reward_msgs[:80])
+            if len(reward_msgs) > 80:
+                msg += f"\n...其余{len(reward_msgs)-80}条已省略"
+            await handle_send(bot, event, msg, md_type="背包", k1="背包", v1="我的背包", k2="道具", v2="道具使用", k3="饰品", v3="饰品背包")
+            await use.finish()
+            return
 
         if accessory_need == 0:
             fixed_rewards = []
@@ -913,26 +952,6 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
             await handle_send(bot, event, msg, md_type="背包", k1="背包", v1="我的背包", k2="道具", v2="道具使用", k3="饰品", v3="饰品背包")
             await use.finish()
             return
-
-        # 使用num个礼包
-        for rewards in package_rewards:
-            for rwd in rewards:
-                try:
-                    all_msgs.append(_grant_one_reward(rwd))
-                except Exception as e:
-                    all_msgs.append(f"【失败】{rwd.get('name', '未知物品')}：{e}")
-
-            # 每开1个礼包，扣1个礼包道具
-            sql_message.update_back_j(user_id, goods_id, num=1, use_key=1)
-
-        # 汇总消息
-        msg = f"道友打开了 {num} 个 {package_name}：\n" + "\n".join(all_msgs[:80])
-        if len(all_msgs) > 80:
-            msg += f"\n...其余{len(all_msgs)-80}条已省略"
-
-        await handle_send(bot, event, msg, md_type="背包", k1="背包", v1="我的背包", k2="道具", v2="道具使用", k3="饰品", v3="饰品背包")
-        await use.finish()
-        return
 
     elif goods_type == "装备":
         if goods_rank_calculated <= user_rank:
