@@ -15,6 +15,27 @@ from .draw_changelog import create_changelog_image, get_commits
 changelog = on_command("更新日志", priority=5, aliases={"更新记录"}, block=True)
 
 
+def _read_generated_image(img_obj):
+    if isinstance(img_obj, BytesIO):
+        img_obj.seek(0)
+        return img_obj, None
+    if isinstance(img_obj, bytes):
+        img_buf = BytesIO(img_obj)
+        img_buf.seek(0)
+        return img_buf, None
+    if isinstance(img_obj, (Path, str)):
+        img_path = Path(img_obj)
+        img_buf = BytesIO(img_path.read_bytes())
+        img_buf.seek(0)
+        return img_buf, img_path
+    raise TypeError(f"不支持的图片类型 {type(img_obj)}")
+
+
+def _delete_generated_image(path: Path) -> None:
+    if path.exists():
+        path.unlink()
+
+
 @changelog.handle(parameterless=[Cooldown(cd_time=30)])
 async def changelog_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """处理更新日志命令"""
@@ -48,31 +69,11 @@ async def changelog_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
 
         img_obj = await asyncio.to_thread(create_changelog_image, commits, page)
 
-        img_buf = None
-        need_delete_path = None
-
-        if isinstance(img_obj, BytesIO):
-            img_obj.seek(0)
-            img_buf = img_obj
-
-        elif isinstance(img_obj, bytes):
-            img_buf = BytesIO(img_obj)
-            img_buf.seek(0)
-
-        elif isinstance(img_obj, Path):
-            need_delete_path = img_obj
-            with open(img_obj, "rb") as f:
-                img_buf = BytesIO(f.read())
-            img_buf.seek(0)
-
-        elif isinstance(img_obj, str):
-            img_path = Path(img_obj)
-            need_delete_path = img_path
-            with open(img_path, "rb") as f:
-                img_buf = BytesIO(f.read())
-            img_buf.seek(0)
-
-        else:
+        try:
+            img_buf, need_delete_path = await asyncio.to_thread(
+                _read_generated_image, img_obj
+            )
+        except TypeError:
             await handle_send(
                 bot,
                 event,
@@ -84,8 +85,7 @@ async def changelog_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
 
         if need_delete_path:
             try:
-                if need_delete_path.exists():
-                    need_delete_path.unlink()
+                await asyncio.to_thread(_delete_generated_image, need_delete_path)
             except Exception as e:
                 logger.warning(f"删除更新日志缓存图片失败: {e}")
 

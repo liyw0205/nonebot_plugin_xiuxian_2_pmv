@@ -1103,6 +1103,15 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("await asyncio.to_thread(img.sync_draw_to", get_pic_body)
         self.assertIn("await asyncio.to_thread(img.sync_draw_to", send_body)
 
+    def test_changelog_file_io_does_not_block_event_loop(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_info" / "changelog_command.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("await asyncio.to_thread(\n                _read_generated_image", source)
+        self.assertIn("await asyncio.to_thread(_delete_generated_image", source)
+        handler = source.split("async def changelog_", 1)[1]
+        self.assertNotIn("with open(", handler)
+
     def test_sect_rename_uses_transactional_service(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_sect" / "__init__.py"
