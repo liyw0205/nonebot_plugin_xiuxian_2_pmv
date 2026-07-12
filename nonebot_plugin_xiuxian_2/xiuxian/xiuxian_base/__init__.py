@@ -1380,15 +1380,18 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
                     # 限制抢劫上限为1000000灵石
                     foe_stone = min(user_2['stone'], 1000000)
                     
-                    if foe_stone > 0:
+                    robbed_amount = min(int(foe_stone * 0.1), 1000000)
+                    if robbed_amount > 0:
                         # 限制抢劫金额为1000000
-                        robbed_amount = min(int(foe_stone * 0.1), 1000000)
-                        
-                        sql_message.update_ls(user_id, robbed_amount, 1)
-                        sql_message.update_ls(give_qq, robbed_amount, 2)
-                        
-                        msg = f"大战一番，战胜对手，获取灵石{number_to(robbed_amount)}枚！"
-                        msg2 = f"被{user_info['user_name']}道友抢走{number_to(robbed_amount)}枚灵石！"
+                        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+                        operation_id = f"rob-win:{event_id}:{user_id}" if event_id else f"rob-win:{user_id}:{time.time_ns()}"
+                        transfer = stone_contest_service.transfer(operation_id, give_qq, user_id, robbed_amount)
+                        if not transfer.succeeded:
+                            await handle_send(bot, event, "双方灵石状态已经变化，本次抢劫未结算。")
+                            await rob_stone.finish()
+
+                        msg = f"大战一番，战胜对手，获取灵石{number_to(transfer.transferred_amount)}枚！"
+                        msg2 = f"被{user_info['user_name']}道友抢走{number_to(transfer.transferred_amount)}枚灵石！"
                         update_statistics_value(user_id, "抢灵石成功")
                         update_statistics_value(give_qq, "抢灵石失败")
                         await handle_send(bot, event, msg)
@@ -1408,15 +1411,18 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
                     # 限制被抢上限为1000000灵石
                     mind_stone = min(user_info['stone'], 1000000)
                     
-                    if mind_stone > 0:
+                    lost_amount = min(int(mind_stone * 0.1), 1000000)
+                    if lost_amount > 0:
                         # 限制被抢金额为1000000
-                        lost_amount = min(int(mind_stone * 0.1), 1000000)
-                        
-                        sql_message.update_ls(user_id, lost_amount, 2)
-                        sql_message.update_ls(give_qq, lost_amount, 1)
-                        
-                        msg = f"大战一番，被对手反杀，损失灵石{number_to(lost_amount)}枚！"
-                        msg2 = f"成功反杀{user_info['user_name']}道友，获得{number_to(lost_amount)}枚灵石战利品！"
+                        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+                        operation_id = f"rob-lose:{event_id}:{user_id}" if event_id else f"rob-lose:{user_id}:{time.time_ns()}"
+                        transfer = stone_contest_service.transfer(operation_id, user_id, give_qq, lost_amount)
+                        if not transfer.succeeded:
+                            await handle_send(bot, event, "双方灵石状态已经变化，本次抢劫未结算。")
+                            await rob_stone.finish()
+
+                        msg = f"大战一番，被对手反杀，损失灵石{number_to(transfer.transferred_amount)}枚！"
+                        msg2 = f"成功反杀{user_info['user_name']}道友，获得{number_to(transfer.transferred_amount)}枚灵石战利品！"
                         update_statistics_value(user_id, "抢灵石失败")
                         update_statistics_value(give_qq, "抢灵石成功")
                         
