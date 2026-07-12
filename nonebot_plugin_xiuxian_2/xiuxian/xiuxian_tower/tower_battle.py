@@ -202,6 +202,9 @@ class TowerBattle:
         sub_buff_stone_buff = sub_buff_data.get('stone', 0) if sub_buff_data is not None else 0
         tower_info = tower_limit.get_user_tower_info(user_id)
         initial_max_floor = tower_info["max_floor"]  # 保存初始的最大层数
+        event_id = getattr(event, "message_id", None)
+        operation_id = f"tower-continuous:{event_id}:{user_id}:{start_floor}:{target_floors}" if event_id else f"tower-continuous:{time.time_ns()}:{user_id}:{start_floor}:{target_floors}"
+        reward_rng = random.Random(operation_id)
         
         # 计算最大挑战层数，限制为100层
         max_floor = min(start_floor + target_floors - 1, start_floor + 100)
@@ -211,6 +214,8 @@ class TowerBattle:
         reward_msg = ""
         total_score = 0
         total_stone = 0
+        total_exp = 0
+        reward_items = []
         last_result = None  # 存储最后一次战斗结果
 
         for floor in range(start_floor, max_floor + 1):
@@ -236,9 +241,11 @@ class TowerBattle:
                     total_score += extra_score
                     total_stone += extra_stone
                     
-                    item_msg = self._give_random_item(user_id, user_info["level"])
+                    item, item_msg = self._select_random_item(user_info["level"], reward_rng)
                     exp_reward = int(user_info["exp"] * self.config["修为奖励"]["每10层"])
-                    sql_message.update_exp(user_id, exp_reward)
+                    total_exp += exp_reward
+                    if item:
+                        reward_items.append(item)
                     reward_msg += f"\n通关第{floor}层特别奖励：{item_msg}，修为：{number_to(exp_reward)}点"
 
                 # 每100层可重复奖励(双倍十层奖励)
@@ -248,9 +255,11 @@ class TowerBattle:
                     total_score += extra_score
                     total_stone += extra_stone
                     
-                    item_msg = self._give_random_item(user_id, user_info["level"])
+                    item, item_msg = self._select_random_item(user_info["level"], reward_rng)
                     exp_reward = int(user_info["exp"] * self.config["修为奖励"]["每10层"] * 2)
-                    sql_message.update_exp(user_id, exp_reward)
+                    total_exp += exp_reward
+                    if item:
+                        reward_items.append(item)
                     reward_msg += f"\n百层特别奖励：{item_msg}，修为：{number_to(exp_reward)}点"
             else:
                 failed_floor = floor
@@ -266,16 +275,14 @@ class TowerBattle:
             # 一次性更新所有数据
             total_score = int(total_score * (1 + sub_buff_integral_buff))
             total_stone = int(total_stone * (1 + sub_buff_stone_buff))
-            tower_info["current_floor"] = max_success
-            tower_info["max_floor"] = max(tower_info["max_floor"], max_success)
-            tower_info["score"] += total_score
-            tower_limit.save_user_tower_info(user_id, tower_info)
+            settlement = tower_settlement_service.settle(
+                operation_id, user_id, tower_info, max_success, total_score, total_stone,
+                total_exp, reward_items, XiuConfig().max_goods_num,
+            )
+            if not settlement.succeeded:
+                return False, "通天塔奖励结算失败，请稍后重试。"
             update_statistics_value(user_id, "通天塔通关层数", increment=len(success_floors))
-            update_statistics_value(user_id, "通天塔最高层", value=tower_info["max_floor"])
-            
-            # 给予总灵石奖励
-            if total_stone > 0:
-                sql_message.update_ls(user_id, total_stone, 1)
+            update_statistics_value(user_id, "通天塔最高层", value=max(tower_info["max_floor"], max_success))
         
         if failed_floor:
             msg = f"连续挑战失败，止步第{failed_floor - 1}层！共获得积分：{total_score}点，灵石：{number_to(total_stone)}枚{reward_msg}"
