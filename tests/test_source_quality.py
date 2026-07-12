@@ -573,6 +573,19 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("sql_message.send_back(", command)
         self.assertIn("xianshi_clear_operations", repository_source)
 
+    def test_user_xianshi_removal_uses_atomic_repository_flow(self) -> None:
+        trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
+        command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")
+        repository_source = (trade_root / "repository.py").read_text(encoding="utf-8")
+        start = command_source.index("async def xian_shop_remove_")
+        end = command_source.index("@xian_buy.handle", start)
+        command = command_source[start:end]
+
+        self.assertIn("xianshi_repository.remove_xianshi_by_name(", command)
+        self.assertNotIn("remove_xianshi_item(", command)
+        self.assertNotIn("sql_message.send_back(", command)
+        self.assertIn("xianshi_name_removal_operations", repository_source)
+
     def test_equipment_change_uses_transactional_service(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         command_source = (back_root / "__init__.py").read_text(encoding="utf-8")

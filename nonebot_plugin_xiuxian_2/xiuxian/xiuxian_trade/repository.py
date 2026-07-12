@@ -92,6 +92,23 @@ class XianshiClearAll:
 
 
 @dataclass(frozen=True)
+class XianshiNameRemoval:
+    status: str
+    seller_id: str
+    item_name: str
+    requested_quantity: int
+    removed_quantity: int = 0
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"removed", "duplicate"}
+
+    @property
+    def applied(self) -> bool:
+        return self.status == "removed"
+
+
+@dataclass(frozen=True)
 class AuctionSettlement:
     status: str
     auction_id: str
@@ -885,6 +902,124 @@ class TradeRepository:
                 )
                 conn.commit()
                 return XianshiClearAll("cleared", listing_count, refunded_quantity)
+            except Exception:
+                conn.rollback()
+                raise
+
+    def remove_xianshi_by_name(
+        self, operation_id, seller_id, item_name, quantity
+    ) -> XianshiNameRemoval:
+        operation_id = str(operation_id).strip()
+        seller_id = str(seller_id)
+        item_name = str(item_name).strip()
+        quantity = int(quantity)
+        if not operation_id:
+            raise ValueError("operation_id must not be empty")
+        if not item_name:
+            raise ValueError("item_name must not be empty")
+        if quantity <= 0:
+            raise ValueError("quantity must be positive")
+
+        def result(status, removed_quantity=0, requested_quantity=quantity):
+            return XianshiNameRemoval(
+                status, seller_id, item_name, int(requested_quantity), int(removed_quantity)
+            )
+
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                self.ensure_schema(conn)
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS xianshi_name_removal_operations (
+                        operation_id TEXT PRIMARY KEY,
+                        seller_id TEXT NOT NULL,
+                        item_name TEXT NOT NULL,
+                        requested_quantity INTEGER NOT NULL,
+                        removed_quantity INTEGER NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+                conn.execute("BEGIN IMMEDIATE")
+                previous = conn.execute(
+                    "SELECT seller_id, item_name, requested_quantity, removed_quantity "
+                    "FROM xianshi_name_removal_operations WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if previous is not None:
+                    conn.rollback()
+                    return XianshiNameRemoval("duplicate", *previous)
+
+                listings = conn.execute(
+                    "SELECT id, goods_id, name, type, price, quantity "
+                    "FROM xianshi_item WHERE user_id=%s AND name=%s "
+                    "AND quantity<>-1 ORDER BY price ASC, id ASC",
+                    (seller_id, item_name),
+                ).fetchall()
+                if not listings:
+                    conn.rollback()
+                    return result("listing_missing")
+
+                total_available = sum(max(int(row[5]), 0) for row in listings)
+                if total_available <= 0:
+                    conn.rollback()
+                    return result("listing_missing")
+                remove_quantity = min(quantity, total_available)
+                goods_ids = {int(row[1]) for row in listings}
+                goods_types = {str(row[3]) for row in listings}
+                if len(goods_ids) != 1 or len(goods_types) != 1:
+                    conn.rollback()
+                    return result("listing_conflict")
+                goods_id = goods_ids.pop()
+                goods_type = goods_types.pop()
+
+                current = conn.execute(
+                    "SELECT goods_num FROM back WHERE user_id=%s AND goods_id=%s",
+                    (seller_id, goods_id),
+                ).fetchone()
+                current_num = int(current[0] or 0) if current else 0
+                if current_num + remove_quantity > self._max_goods_num:
+                    conn.rollback()
+                    return result("inventory_full", remove_quantity)
+
+                left = remove_quantity
+                for listing_id, _, _, _, _, stock_value in listings:
+                    if left <= 0:
+                        break
+                    stock = int(stock_value)
+                    take = min(left, stock)
+                    if take == stock:
+                        conn.execute("DELETE FROM xianshi_item WHERE id=%s", (str(listing_id),))
+                    else:
+                        conn.execute(
+                            "UPDATE xianshi_item SET quantity=quantity-%s WHERE id=%s",
+                            (take, str(listing_id)),
+                        )
+                    left -= take
+
+                now = datetime.now()
+                conn.execute(
+                    """
+                    INSERT INTO back (
+                        user_id, goods_id, goods_name, goods_type, goods_num,
+                        create_time, update_time, bind_num
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, 0)
+                    ON CONFLICT (user_id, goods_id) DO UPDATE SET
+                        goods_name=EXCLUDED.goods_name,
+                        goods_type=EXCLUDED.goods_type,
+                        goods_num=COALESCE(back.goods_num, 0)+EXCLUDED.goods_num,
+                        update_time=EXCLUDED.update_time
+                    """,
+                    (seller_id, goods_id, item_name, goods_type, remove_quantity, now, now),
+                )
+                conn.execute(
+                    "INSERT INTO xianshi_name_removal_operations "
+                    "(operation_id, seller_id, item_name, requested_quantity, removed_quantity) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (operation_id, seller_id, item_name, quantity, remove_quantity),
+                )
+                conn.commit()
+                return result("removed", remove_quantity)
             except Exception:
                 conn.rollback()
                 raise

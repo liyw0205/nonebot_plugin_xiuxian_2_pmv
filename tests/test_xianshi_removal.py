@@ -152,6 +152,84 @@ class XianshiRemovalTests(unittest.TestCase):
             self.scalar("SELECT goods_num FROM back WHERE user_id=%s AND goods_id=%s", ("seller", 1001)), 2
         )
 
+    def test_name_removal_consumes_lowest_price_rows_and_refunds_once(self) -> None:
+        high = self.repository.add_xianshi_item(
+            "seller", 1001, "测试法器", "装备", 800000, 3
+        )
+        low = self.repository.add_xianshi_item(
+            "seller", 1001, "测试法器", "装备", 600000, 2
+        )
+
+        result = self.repository.remove_xianshi_by_name(
+            "remove-name-1", "seller", "测试法器", 4
+        )
+
+        self.assertTrue(result.applied)
+        self.assertEqual(result.removed_quantity, 4)
+        self.assertIsNone(self.scalar("SELECT id FROM xianshi_item WHERE id=%s", (low,)))
+        self.assertEqual(self.scalar("SELECT quantity FROM xianshi_item WHERE id=%s", (high,)), 1)
+        self.assertEqual(
+            self.scalar("SELECT goods_num FROM back WHERE user_id=%s AND goods_id=%s", ("seller", 1001)), 4
+        )
+
+    def test_name_removal_duplicate_does_not_refund_twice(self) -> None:
+        self.repository.add_xianshi_item("seller", 1001, "测试法器", "装备", 600000, 2)
+        first = self.repository.remove_xianshi_by_name(
+            "remove-name-repeat", "seller", "测试法器", 2
+        )
+        second = self.repository.remove_xianshi_by_name(
+            "remove-name-repeat", "seller", "测试法器", 2
+        )
+
+        self.assertEqual((first.status, second.status), ("removed", "duplicate"))
+        self.assertEqual(
+            self.scalar("SELECT goods_num FROM back WHERE user_id=%s AND goods_id=%s", ("seller", 1001)), 2
+        )
+
+    def test_name_removal_inventory_failure_keeps_all_rows(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "INSERT INTO back (user_id, goods_id, goods_name, goods_type, goods_num) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                ("seller", 1001, "测试法器", "装备", 9),
+            )
+        first = self.repository.add_xianshi_item(
+            "seller", 1001, "测试法器", "装备", 600000, 1
+        )
+        second = self.repository.add_xianshi_item(
+            "seller", 1001, "测试法器", "装备", 700000, 1
+        )
+
+        result = self.repository.remove_xianshi_by_name(
+            "remove-name-full", "seller", "测试法器", 2
+        )
+
+        self.assertEqual(result.status, "inventory_full")
+        self.assertEqual(self.scalar("SELECT quantity FROM xianshi_item WHERE id=%s", (first,)), 1)
+        self.assertEqual(self.scalar("SELECT quantity FROM xianshi_item WHERE id=%s", (second,)), 1)
+
+    def test_name_removal_refund_failure_rolls_back_all_listing_changes(self) -> None:
+        first = self.repository.add_xianshi_item(
+            "seller", 1001, "测试法器", "装备", 600000, 1
+        )
+        second = self.repository.add_xianshi_item(
+            "seller", 1001, "测试法器", "装备", 700000, 2
+        )
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "CREATE TRIGGER fail_name_refund BEFORE INSERT ON back "
+                "BEGIN SELECT RAISE(ABORT, 'refund failed'); END"
+            )
+
+        with self.assertRaises(db_backend.IntegrityError):
+            self.repository.remove_xianshi_by_name(
+                "remove-name-fail", "seller", "测试法器", 2
+            )
+
+        self.assertEqual(self.scalar("SELECT quantity FROM xianshi_item WHERE id=%s", (first,)), 1)
+        self.assertEqual(self.scalar("SELECT quantity FROM xianshi_item WHERE id=%s", (second,)), 2)
+        self.assertEqual(self.scalar("SELECT COUNT(*) FROM xianshi_name_removal_operations"), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

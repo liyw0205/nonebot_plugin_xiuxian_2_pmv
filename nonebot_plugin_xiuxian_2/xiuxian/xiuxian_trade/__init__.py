@@ -128,6 +128,15 @@ def _xianshi_clear_operation_id(event):
     return f"xianshi-clear:{time.time_ns()}"
 
 
+def _xianshi_name_removal_operation_id(event, user_id, item_name, quantity):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"xianshi-remove-name:{event_id}:{user_id}:{item_name}:{quantity}"
+    return f"xianshi-remove-name:{user_id}:{item_name}:{quantity}:{time.time_ns()}"
+
+
 # === 仙肆命令 ===
 xian_shop_add = on_command("仙肆上架", priority=5, block=True)
 xianshi_auto_add = on_command("仙肆自动上架", priority=5, block=True)
@@ -184,56 +193,6 @@ def get_xianshi_min_price(item_name: str) -> int | None:
     if not items_in_xianshi:
         return None
     return min(item['price'] for item in items_in_xianshi)
-
-
-def xianshi_remove_by_name_for_user(user_id: str, item_name: str, quantity: int) -> tuple[int, str | None]:
-    """按物品名下架指定用户仙肆上架；同名多档按单价从低到高扣减。"""
-    try:
-        quantity = int(quantity)
-    except (TypeError, ValueError):
-        return 0, "下架数量须为正整数！"
-    if quantity < 1:
-        return 0, "下架数量须为正整数！"
-
-    rows = xianshi_repository.get_xianshi_items(user_id=str(user_id), name=item_name)
-    if not rows:
-        return 0, f"您在仙肆未上架【{item_name}】！"
-
-    rows = sorted(rows, key=lambda x: int(x["price"]))
-    total_available = sum(
-        int(r["quantity"]) for r in rows if int(r["quantity"]) != -1
-    )
-    if total_available <= 0:
-        return 0, f"您在仙肆未上架可下架的【{item_name}】！"
-
-    to_remove = min(quantity, total_available)
-    removed = 0
-    left = to_remove
-
-    for row in rows:
-        if left <= 0:
-            break
-        stock = int(row["quantity"])
-        if stock == -1:
-            continue
-        take = min(left, stock)
-        if take <= 0:
-            continue
-        if not xianshi_repository.remove_xianshi_item(row["id"], take):
-            return removed, "部分下架失败，请刷新我的仙肆后重试！" if removed else "下架失败，请刷新后重试！"
-        sql_message.send_back(
-            str(user_id),
-            row["goods_id"],
-            row["name"],
-            row["type"],
-            take,
-        )
-        removed += take
-        left -= take
-
-    if removed <= 0:
-        return 0, "下架失败，请刷新后重试！"
-    return removed, None
 
 
 # 计算仙肆手续费
@@ -1192,21 +1151,36 @@ async def xian_shop_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="交易", k1="下架", v1="仙肆下架", k2="上架", v2="仙肆上架", k3="我的", v3="我的仙肆")
         await xian_shop_remove.finish()
 
-    removed, err = xianshi_remove_by_name_for_user(user_id, item_name.strip(), quantity)
-    if err:
-        await handle_send(bot, event, err, md_type="交易", k1="下架", v1=f"仙肆下架 {item_name.strip()}", k2="上架", v2="仙肆上架", k3="我的", v3="我的仙肆")
+    item_name = item_name.strip()
+    result = xianshi_repository.remove_xianshi_by_name(
+        _xianshi_name_removal_operation_id(event, user_id, item_name, quantity),
+        user_id,
+        item_name,
+        quantity,
+    )
+    if result.status == "listing_missing":
+        await handle_send(bot, event, f"您在仙肆未上架可下架的【{item_name}】！", md_type="交易", k1="下架", v1=f"仙肆下架 {item_name}", k2="上架", v2="仙肆上架", k3="我的", v3="我的仙肆")
         await xian_shop_remove.finish()
+    if result.status == "inventory_full":
+        await handle_send(bot, event, "背包空间不足，无法下架并退还物品！", md_type="交易", k1="下架", v1=f"仙肆下架 {item_name}", k2="上架", v2="仙肆上架", k3="我的", v3="我的仙肆")
+        await xian_shop_remove.finish()
+    if result.status == "listing_conflict":
+        await handle_send(bot, event, "同名仙肆记录数据不一致，请联系管理员处理！")
+        await xian_shop_remove.finish()
+    if not result.succeeded:
+        raise RuntimeError(f"unexpected xianshi name removal status: {result.status}")
 
+    removed = result.removed_quantity
     qty_msg = f"x{removed}" if removed > 1 else ""
-    msg = f"成功下架【{item_name.strip()}】{qty_msg}，已退回背包！"
+    msg = f"成功下架【{item_name}】{qty_msg}，已退回背包！"
     record_trade_event(
         user_id,
         "仙肆下架",
-        f"下架{item_name.strip()}{qty_msg}",
+        f"下架{item_name}{qty_msg}",
         {"仙肆下架次数": 1, "仙肆下架数量": removed}
     )
 
-    await handle_send(bot, event, msg, md_type="交易", k1="下架", v1=f"仙肆下架 {item_name.strip()}", k2="上架", v2="仙肆上架", k3="我的", v3="我的仙肆")
+    await handle_send(bot, event, msg, md_type="交易", k1="下架", v1=f"仙肆下架 {item_name}", k2="上架", v2="仙肆上架", k3="我的", v3="我的仙肆")
     await xian_shop_remove.finish()
 
 @xian_buy.handle(parameterless=[Cooldown(cd_time=0)])
