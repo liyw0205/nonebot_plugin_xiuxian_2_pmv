@@ -1,5 +1,6 @@
 import asyncio
 import re
+import time
 from datetime import datetime, timedelta
 from nonebot import require
 from .. import DRIVER
@@ -107,6 +108,15 @@ GUISHI_AUTO_HOUR = 2           # 鬼市自动交易频率（每2小时）
 GUISHI_MAX_QUANTITY = 10       # 鬼市单次最大交易数量（求购/摆摊）
 MAX_QIUGOU_ORDERS = 10         # 每个用户最大求购订单数
 MAX_BAITAN_ORDERS = 10         # 每个用户最大摆摊订单数
+
+
+def _xianshi_removal_operation_id(event, listing_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"xianshi-remove:{event_id}:{listing_id}"
+    return f"xianshi-remove:{listing_id}:{time.time_ns()}"
 
 
 # === 仙肆命令 ===
@@ -1548,24 +1558,21 @@ async def xian_shop_remove_by_admin_(bot: Bot, event: GroupMessageEvent | Privat
     
     item_to_remove = item_list[0]
     
-    try:
-        xianshi_repository.remove_xianshi_all_item(xianshi_id) # 移除仙肆记录
-        
-        # 如果是用户上架的物品，退还给用户
-        if item_to_remove['user_id'] != 0:
-            sql_message.send_back(
-                item_to_remove["user_id"],
-                item_to_remove["goods_id"],
-                item_to_remove["name"],
-                item_to_remove["type"],
-                1
-            )
-        msg = f"成功下架仙肆ID为 {xianshi_id} 的 {item_to_remove['name']}！"
-        await handle_send(bot, event, msg)
-    except Exception as e:
-        logger.error(f"系统仙肆下架失败: {e}")
-        msg = "下架过程中出现错误，请稍后再试！"
-        await handle_send(bot, event, msg)
+    result = xianshi_repository.remove_xianshi_listing(
+        _xianshi_removal_operation_id(event, xianshi_id), xianshi_id
+    )
+    if result.status == "inventory_full":
+        await handle_send(bot, event, "用户背包空间不足，无法下架并退还物品！")
+        await xian_shop_remove_by_admin.finish()
+    if result.status == "listing_missing":
+        await handle_send(bot, event, f"仙肆ID为 {xianshi_id} 的物品状态已变化！")
+        await xian_shop_remove_by_admin.finish()
+    if not result.succeeded:
+        raise RuntimeError(f"unexpected xianshi removal status: {result.status}")
+    msg = f"成功下架仙肆ID为 {xianshi_id} 的 {result.name}！"
+    if result.refunded_quantity:
+        msg += f"\n已退还给用户 x{result.refunded_quantity}。"
+    await handle_send(bot, event, msg)
     
     await xian_shop_remove_by_admin.finish()
 
