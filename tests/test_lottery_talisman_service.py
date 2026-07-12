@@ -109,6 +109,48 @@ class LotteryTalismanServiceTests(unittest.TestCase):
         self.assertIsNone(self.inventory(9001))
         self.assertEqual(self.operation_count(), 0)
 
+    def test_existing_inventory_reward_is_merged_and_bound_count_capped(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "INSERT INTO back VALUES (%s, %s, %s, %s, %s, %s)",
+                ("user", 9001, "青锋剑", "法器", 2, 1),
+            )
+
+        result = self.service.apply(
+            "lottery-merge",
+            "user",
+            20010,
+            1,
+            (LotteryReward(9001, "青锋剑", "法器", 2),),
+            max_goods_num=1000,
+        )
+
+        self.assertEqual(result.status, "applied")
+        self.assertEqual(self.inventory(20010), (2, 2))
+        self.assertEqual(self.inventory(9001), (4, 3))
+        self.assertEqual(self.operation_count(), 1)
+
+    def test_reward_quantity_is_capped_by_max_goods_num(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "INSERT INTO back VALUES (%s, %s, %s, %s, %s, %s)",
+                ("user", 9001, "青锋剑", "法器", 4, 4),
+            )
+
+        result = self.service.apply(
+            "lottery-cap",
+            "user",
+            20010,
+            1,
+            (LotteryReward(9001, "青锋剑", "法器", 3),),
+            max_goods_num=5,
+        )
+
+        self.assertEqual(result.status, "applied")
+        self.assertEqual(self.inventory(20010), (2, 2))
+        self.assertEqual(self.inventory(9001), (5, 5))
+        self.assertEqual(self.operation_count(), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
