@@ -24,12 +24,14 @@ from .bankconfig import get_config
 from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, send_help_message
 from ..xiuxian_config import XiuConfig
 from .deposit_service import BankDepositService
+from .withdrawal_service import BankWithdrawalService
 
 config = get_config()
 BANKLEVEL = config["BANKLEVEL"]
 sql_message = XiuxianDateManage()  # sql类
 player_data_manager = PlayerDataManager()
 bank_deposit_service = BankDepositService(get_paths().game_db, get_paths().player_db)
+bank_withdrawal_service = BankWithdrawalService(get_paths().game_db, get_paths().player_db)
 PLAYERSDATA = get_paths().players
 
 bank = on_regex(
@@ -139,14 +141,29 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
 
-        # 先结算利息
+        expected_saved_stone = bankinfo['savestone']
+        expected_saved_at = bankinfo['savetime']
         bankinfo, give_stone, timedeff = get_give_stone(bankinfo)
-
-        userinfonowstone = int(user_info['stone']) + num + give_stone
-        bankinfo['savestone'] -= num
-        sql_message.update_ls(user_id, num + give_stone, 1)
-        savef(user_id, bankinfo)
-        msg = f"道友本次结息时间为：{timedeff}小时，获得灵石：{give_stone}枚!\n取出灵石{num}枚，当前所拥有灵石{userinfonowstone}枚，灵庄存有灵石{bankinfo['savestone']}枚!"
+        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        operation_id = f"bank-withdrawal:{event_id}:{user_id}" if event_id else f"bank-withdrawal:{user_id}:{time.time_ns()}"
+        withdrawal = bank_withdrawal_service.withdraw(
+            operation_id,
+            user_id,
+            num,
+            expected_saved_stone,
+            expected_saved_at,
+            bankinfo['banklevel'],
+            give_stone,
+            bankinfo['savetime'],
+        )
+        if withdrawal.status in {"saved_stone_insufficient", "state_changed"}:
+            msg = "灵庄账户状态已变化，本次取款未结算，请重新查看后再试。"
+            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
+            await bank.finish()
+        if withdrawal.status == "user_missing":
+            await handle_send(bot, event, "未找到修仙数据，本次取款未结算。", md_type="我要修仙")
+            await bank.finish()
+        msg = f"道友本次结息时间为：{timedeff}小时，获得灵石：{withdrawal.interest}枚!\n取出灵石{withdrawal.withdrawn}枚，当前所拥有灵石{withdrawal.wallet_stone}枚，灵庄存有灵石{withdrawal.saved_stone}枚!"
         await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
         await bank.finish()
 
