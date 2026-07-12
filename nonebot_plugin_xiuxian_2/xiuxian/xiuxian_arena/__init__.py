@@ -22,8 +22,10 @@ sql_message = XiuxianDateManage()
 from .arena_limit import arena_limit
 from .arena_shop import arena_shop_data
 from .purchase_service import ArenaPurchaseService
+from .challenge_purchase_service import ArenaChallengePurchaseService
 
 arena_purchase_service = ArenaPurchaseService(get_paths().game_db, get_paths().player_db)
+arena_challenge_purchase_service = ArenaChallengePurchaseService(get_paths().game_db, get_paths().player_db)
 
 arena_challenge = on_command("竞技场挑战", priority=10, block=True)
 arena_view = on_command("竞技场查看", priority=10, block=True)
@@ -569,8 +571,16 @@ async def arena_buy_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         )
         await arena_buy_challenge.finish()
 
-    sql_message.update_ls(user_id, total_cost, 2)
-    real_amount, new_bought, total_cap = arena_limit.buy_challenge_count(user_id, buy_amount)
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    result = arena_challenge_purchase_service.purchase(
+        f"arena-challenge-purchase:{event_id}:{user_id}" if event_id else f"arena-challenge-purchase:{time.time_ns()}:{user_id}",
+        user_id, buy_amount, ARENA_CHALLENGE_BUY_COST, arena_limit.daily_buy_limit,
+        int(user_info["stone"]), bought, int(arena_info.get("daily_extra_challenges", 0)),
+    )
+    if not result.succeeded:
+        await handle_send(bot, event, "竞技场购买状态已变化，请重新操作。")
+        await arena_buy_challenge.finish()
+    real_amount, new_bought, total_cap = result.amount, result.bought, arena_limit.daily_challenges + result.extra
     arena_info = arena_limit.get_user_arena_info(user_id)
     remaining = max(0, int(total_cap) - int(arena_info.get("daily_challenges_used", 0)))
 
