@@ -1842,7 +1842,7 @@ def _roll_travel_item_reward(scene_key: str, multiplier: float, duration_hours: 
     ]
 
 
-def complete_pet_travel(user_id: str | int):
+def prepare_pet_travel_completion(user_id: str | int):
     data = get_pet_doc(user_id)
     travel = data.get("travel")
     if not travel:
@@ -1854,8 +1854,6 @@ def complete_pet_travel(user_id: str | int):
 
     _, _, pet = find_pet_anywhere(data, travel["pet_uid"])
     if not pet:
-        data["travel"] = None
-        save_pet_doc(user_id, data)
         return False, "游历宠物已不存在，本次游历状态已清理。", None
 
     multiplier = _travel_pet_power(pet)
@@ -1881,9 +1879,17 @@ def complete_pet_travel(user_id: str | int):
         "reward_rate": reward_rate,
     }
 
+    return True, "游历完成。", result
+
+
+def complete_pet_travel(user_id: str | int):
+    ok, message, result = prepare_pet_travel_completion(user_id)
+    if not ok:
+        return ok, message, result
+    data = get_pet_doc(user_id)
     data["travel"] = None
     save_pet_doc(user_id, data)
-    return True, "游历完成。", result
+    return ok, message, result
 
 
 def find_pet_anywhere(data: dict, token: str):

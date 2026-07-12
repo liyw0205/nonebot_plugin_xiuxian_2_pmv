@@ -1553,6 +1553,24 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("boss_purchase_operations", service)
 
+    def test_pet_travel_claim_uses_cross_database_transaction(self) -> None:
+        pet_root = SOURCE_ROOT / "xiuxian" / "xiuxian_pet"
+        source = (pet_root / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("@pet_travel_claim.handle")
+        handler = source[start:source.index("@", start + 1)]
+        self.assertIn("prepare_pet_travel_completion(", handler)
+        self.assertIn("pet_travel_claim_service.claim(", handler)
+        self.assertNotIn("complete_pet_travel(", handler)
+        self.assertNotIn("sql_message.update_ls(", handler)
+        self.assertNotIn("sql_message.update_exp(", handler)
+        self.assertNotIn("sql_message.send_back(", handler)
+        for status in ("inventory_full", "state_changed", "user_missing"):
+            self.assertIn(f'"{status}"', handler)
+        service = (pet_root / "travel_claim_service.py").read_text(encoding="utf-8")
+        self.assertIn("ATTACH DATABASE", service)
+        self.assertIn("BEGIN IMMEDIATE", service)
+        self.assertIn("pet_travel_claim_operations", service)
+
     def test_tower_purchase_uses_cross_database_transaction(self) -> None:
         tower_root = SOURCE_ROOT / "xiuxian" / "xiuxian_tower"
         source = (tower_root / "__init__.py").read_text(encoding="utf-8")

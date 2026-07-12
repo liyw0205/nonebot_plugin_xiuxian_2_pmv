@@ -24,7 +24,7 @@ from ..xiuxian_utils.pet_system import (
     calc_feed_exp,
     calc_pet_release_refund,
     can_add_pets,
-    complete_pet_travel,
+    prepare_pet_travel_completion,
     exp_to_next_star,
     feed_active_pet,
     format_pet_travel_time,
@@ -55,9 +55,12 @@ from ..xiuxian_utils.utils import (
     update_statistics_value,
 )
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
+from ...paths import get_paths
+from .travel_claim_service import PetTravelClaimService
 
 items = Items()
 sql_message = XiuxianDateManage()
+pet_travel_claim_service = PetTravelClaimService(get_paths().game_db, get_paths().player_db)
 
 pet_help = on_command("宠物帮助", aliases={"宠物系统帮助"}, priority=10, block=True)
 pet_intro_help = on_command("宠物入门帮助", aliases={"宠物获取帮助", "宠物查看帮助"}, priority=10, block=True)
@@ -818,7 +821,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     user_id = str(user_info["user_id"])
-    ok, result_msg, result = complete_pet_travel(user_id)
+    ok, result_msg, result = prepare_pet_travel_completion(user_id)
     if not ok:
         await handle_send(
             bot,
@@ -832,7 +835,48 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         )
         return
 
-    reward_lines = _grant_pet_travel_rewards(user_id, result)
+    reward_items = []
+    for reward in result.get("items", []) or []:
+        item_info = items.get_data_by_item_id(int(reward.get("id", 0) or 0))
+        if item_info and int(reward.get("amount", 0) or 0) > 0:
+            reward_items.append({
+                "id": int(reward["id"]),
+                "name": item_info.get("name", f"未知物品{reward['id']}"),
+                "type": item_info.get("type", "道具"),
+                "amount": int(reward["amount"]),
+            })
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    travel = result.get("travel", {}) or {}
+    travel_id = f"{travel.get('pet_uid', '')}:{travel.get('start_at', '')}:{travel.get('end_at', '')}"
+    operation_id = f"pet-travel-claim:{event_id or travel_id}:{user_id}"
+    claim_result = pet_travel_claim_service.claim(
+        operation_id,
+        user_id,
+        travel,
+        int(result.get("stone", 0) or 0),
+        int(result.get("exp", 0) or 0),
+        reward_items,
+        XiuConfig().max_goods_num,
+    )
+    if claim_result.status == "inventory_full":
+        await handle_send(bot, event, "背包物品已达上限，宠物游历奖励尚未领取。")
+        return
+    if claim_result.status == "state_changed":
+        await handle_send(bot, event, "宠物游历状态已变化，请重新查询游历状态。")
+        return
+    if claim_result.status == "user_missing":
+        await handle_send(bot, event, "未找到道友数据，宠物游历奖励领取失败。")
+        return
+    reward_result = dict(result)
+    reward_result["items"] = reward_items
+    reward_lines = []
+    if claim_result.stone > 0:
+        reward_lines.append(f"灵石：{number_to(claim_result.stone)}")
+    if claim_result.exp > 0:
+        reward_lines.append(f"修为：{number_to(claim_result.exp)}")
+    reward_lines.extend(f"{reward['name']} x{reward['amount']}" for reward in reward_items)
+    update_statistics_value(user_id, "宠物游历次数")
+    update_statistics_value(user_id, "宠物游历时长", increment=int(travel.get("duration_hours", 0) or 0))
     pet = result.get("pet", {}) or {}
     travel = result.get("travel", {}) or {}
     lines = [
