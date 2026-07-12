@@ -768,6 +768,19 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("def build_transfer_team_self_message", presenter_source)
         self.assertIn("def build_transfer_team_not_member_message", presenter_source)
 
+    def test_adapter_compat_uses_explicit_message_record_hooks(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "adapter_compat.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("class MessageRecordHooks", source)
+        self.assertIn("MESSAGE_RECORD_HOOKS = _load_message_record_hooks()", source)
+        self.assertIn("record_send_message=None", source)
+        self.assertIn("record_recv_message=None", source)
+        self.assertIn("_record_send_if_enabled(", source)
+        self.assertIn("_record_recv_if_enabled(", source)
+        self.assertNotIn("def _record_recv_message(bot: Any, event: BaseEvent):", source)
+        self.assertNotIn("def _record_send_message(bot: Any, **kwargs):", source)
+
     def test_command_disable_uses_central_json_store(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "command_disable.py").read_text(
             encoding="utf-8"

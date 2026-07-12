@@ -16,62 +16,86 @@ from nonebot.adapters import Event as BaseEvent
 from nonebot.log import logger
 from nonebot.permission import Permission
 
-try:
-    from .adapter_message_records import (
-        extract_result_message_id as _extract_result_message_id,
-        extract_text_from_message_obj as _extract_text_from_message_obj,
-        record_recv_message as _record_recv_message,
-        record_send_message as _record_send_message,
-    )
 
-    HAS_MESSAGE_RECORDS = True
-except Exception as exc:
-    HAS_MESSAGE_RECORDS = False
-    logger.warning(f"消息记录模块加载失败，已禁用消息记录兼容钩子: {exc}")
+@dataclass(frozen=True)
+class MessageRecordHooks:
+    extract_result_message_id: Any
+    extract_text_from_message_obj: Any
+    record_recv_message: Any | None
+    record_send_message: Any | None
+    enabled: bool
 
-    def _extract_text_from_message_obj(message: Any) -> str:
-        try:
-            if message is None:
-                return ""
-            if isinstance(message, str):
-                return message
-            if hasattr(message, "extract_plain_text"):
-                text = message.extract_plain_text()
-                if text:
-                    return str(text)
-            if hasattr(message, "extract_content"):
-                text = message.extract_content()
-                if text:
-                    return str(text)
-            return str(message)
-        except Exception:
+
+def _fallback_extract_text_from_message_obj(message: Any) -> str:
+    try:
+        if message is None:
             return ""
+        if isinstance(message, str):
+            return message
+        if hasattr(message, "extract_plain_text"):
+            text = message.extract_plain_text()
+            if text:
+                return str(text)
+        if hasattr(message, "extract_content"):
+            text = message.extract_content()
+            if text:
+                return str(text)
+        return str(message)
+    except Exception:
+        return ""
 
-    def _extract_result_message_id(result: Any) -> str:
-        try:
-            if result is None:
-                return ""
-            if isinstance(result, dict):
-                return str(
-                    result.get("message_id")
-                    or result.get("msg_id")
-                    or result.get("id")
-                    or ""
-                )
+
+def _fallback_extract_result_message_id(result: Any) -> str:
+    try:
+        if result is None:
+            return ""
+        if isinstance(result, dict):
             return str(
-                getattr(result, "message_id", "")
-                or getattr(result, "msg_id", "")
-                or getattr(result, "id", "")
+                result.get("message_id")
+                or result.get("msg_id")
+                or result.get("id")
                 or ""
             )
-        except Exception:
-            return ""
+        return str(
+            getattr(result, "message_id", "")
+            or getattr(result, "msg_id", "")
+            or getattr(result, "id", "")
+            or ""
+        )
+    except Exception:
+        return ""
 
-    def _record_recv_message(bot: Any, event: BaseEvent):
-        return None
 
-    def _record_send_message(bot: Any, **kwargs):
-        return None
+def _load_message_record_hooks() -> MessageRecordHooks:
+    try:
+        from .adapter_message_records import (
+            extract_result_message_id,
+            extract_text_from_message_obj,
+            record_recv_message,
+            record_send_message,
+        )
+
+        return MessageRecordHooks(
+            extract_result_message_id=extract_result_message_id,
+            extract_text_from_message_obj=extract_text_from_message_obj,
+            record_recv_message=record_recv_message,
+            record_send_message=record_send_message,
+            enabled=True,
+        )
+    except Exception as exc:
+        logger.warning(f"消息记录模块加载失败，已禁用消息记录兼容钩子: {exc}")
+        return MessageRecordHooks(
+            extract_result_message_id=_fallback_extract_result_message_id,
+            extract_text_from_message_obj=_fallback_extract_text_from_message_obj,
+            record_recv_message=None,
+            record_send_message=None,
+            enabled=False,
+        )
+
+MESSAGE_RECORD_HOOKS = _load_message_record_hooks()
+HAS_MESSAGE_RECORDS = MESSAGE_RECORD_HOOKS.enabled
+_extract_result_message_id = MESSAGE_RECORD_HOOKS.extract_result_message_id
+_extract_text_from_message_obj = MESSAGE_RECORD_HOOKS.extract_text_from_message_obj
 
 try:
     from .adapter_message_actions import (
@@ -2010,7 +2034,7 @@ def _patch_ob11_send_record(bot: BaseBot):
                 message = kwargs.get("message", "")
                 message_id = _extract_result_message_id(result)
 
-                _record_send_message(
+                _record_send_if_enabled(
                     bot,
                     scene="group",
                     message=message,
@@ -2048,7 +2072,7 @@ def _patch_ob11_send_record(bot: BaseBot):
                 message = kwargs.get("message", "")
                 message_id = _extract_result_message_id(result)
 
-                _record_send_message(
+                _record_send_if_enabled(
                     bot,
                     scene="private",
                     message=message,
@@ -2093,7 +2117,7 @@ def _patch_ob11_send_record(bot: BaseBot):
                         getattr(patched_event, "message_id", "") or ""
                     )
 
-                    _record_send_message(
+                    _record_send_if_enabled(
                         bot,
                         scene=scene,
                         message=message,
@@ -2140,7 +2164,7 @@ def _patch_ob11_send_record(bot: BaseBot):
                         message = data.get("message", "")
                         message_id = _extract_result_message_id(result)
 
-                        _record_send_message(
+                        _record_send_if_enabled(
                             bot,
                             scene="group",
                             message=message,
@@ -2162,7 +2186,7 @@ def _patch_ob11_send_record(bot: BaseBot):
                         message = data.get("message", "")
                         message_id = _extract_result_message_id(result)
 
-                        _record_send_message(
+                        _record_send_if_enabled(
                             bot,
                             scene="private",
                             message=message,
@@ -2249,7 +2273,7 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
 
                 message_id = _extract_result_message_id(result)
 
-                _record_send_message(
+                _record_send_if_enabled(
                     bot,
                     scene="group",
                     message=message,
@@ -2322,7 +2346,7 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
 
                 message_id = _extract_result_message_id(result)
 
-                _record_send_message(
+                _record_send_if_enabled(
                     bot,
                     scene="private",
                     message=message,
@@ -2383,7 +2407,7 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
 
                 message_id = _extract_result_message_id(result)
 
-                _record_send_message(
+                _record_send_if_enabled(
                     bot,
                     scene="channel_group",
                     message=message,
@@ -2446,7 +2470,7 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
 
                 message_id = _extract_result_message_id(result)
 
-                _record_send_message(
+                _record_send_if_enabled(
                     bot,
                     scene="channel_private",
                     message=message,
@@ -2479,7 +2503,7 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
                 getattr(event, "id", "") or getattr(event, "message_id", "") or ""
             )
 
-            _record_send_message(
+            _record_send_if_enabled(
                 bot,
                 scene=scene,
                 message=message,
@@ -2507,12 +2531,24 @@ def patch_bot_inplace(bot: BaseBot) -> BaseBot:
     return bot
 
 
+def _record_send_if_enabled(bot: Any, **kwargs) -> None:
+    hook = MESSAGE_RECORD_HOOKS.record_send_message
+    if hook is not None:
+        hook(bot, **kwargs)
+
+
+def _record_recv_if_enabled(bot: Any, event: BaseEvent) -> None:
+    hook = MESSAGE_RECORD_HOOKS.record_recv_message
+    if hook is not None:
+        hook(bot, event)
+
+
 def patch_context(bot: BaseBot, event: BaseEvent) -> tuple[BaseBot, BaseEvent]:
     bot = patch_bot_inplace(bot)
     event = patch_event_inplace(event, bot)
 
     # 收消息入库
-    _record_recv_message(bot, event)
+    _record_recv_if_enabled(bot, event)
 
     return bot, event
 
