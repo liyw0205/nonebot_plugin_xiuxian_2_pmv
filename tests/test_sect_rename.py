@@ -53,12 +53,25 @@ class SectRenameTests(unittest.TestCase):
             ).fetchone()
         return str(sect[0]), int(sect[1]), int(card[0]), int(card[1])
 
+    def operation_count(self) -> int:
+        with db_backend.connection(self.database) as conn:
+            exists = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=%s",
+                ("sect_rename_operations",),
+            ).fetchone()
+            if exists is None:
+                return 0
+            return int(
+                conn.execute("SELECT COUNT(*) FROM sect_rename_operations").fetchone()[0]
+            )
+
     def test_rename_updates_name_and_consumes_assets_atomically(self) -> None:
         result = self.service.rename_sect("rename-1", "owner", 1, "凌霄宗", 300, 1999)
 
         self.assertEqual(result.status, "renamed")
         self.assertEqual((result.previous_name, result.new_name), ("青云宗", "凌霄宗"))
         self.assertEqual(self.state(), ("凌霄宗", 700, 1, 0))
+        self.assertEqual(self.operation_count(), 1)
 
     def test_duplicate_operation_does_not_consume_assets_twice(self) -> None:
         first = self.service.rename_sect("rename-repeat", "owner", 1, "凌霄宗", 300, 1999)
@@ -67,6 +80,7 @@ class SectRenameTests(unittest.TestCase):
         self.assertEqual((first.status, second.status), ("renamed", "duplicate"))
         self.assertEqual((second.previous_name, second.new_name), ("青云宗", "凌霄宗"))
         self.assertEqual(self.state(), ("凌霄宗", 700, 1, 0))
+        self.assertEqual(self.operation_count(), 1)
 
     def test_existing_name_leaves_every_asset_unchanged(self) -> None:
         result = self.service.rename_sect("rename-conflict", "owner", 1, "天音寺", 300, 1999)
@@ -101,6 +115,7 @@ class SectRenameTests(unittest.TestCase):
             self.service.rename_sect("rename-fail", "owner", 1, "凌霄宗", 300, 1999)
 
         self.assertEqual(self.state(), ("青云宗", 1000, 2, 1))
+        self.assertEqual(self.operation_count(), 0)
 
     def test_current_owner_and_membership_are_rechecked(self) -> None:
         with db_backend.transaction(self.database) as conn:
@@ -110,6 +125,22 @@ class SectRenameTests(unittest.TestCase):
 
         self.assertEqual(result.status, "not_owner")
         self.assertEqual(self.state(), ("青云宗", 1000, 2, 1))
+
+    def test_missing_sect_or_actor_state_changes_are_rejected(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute("DELETE FROM sects WHERE sect_id=%s", (1,))
+
+        result = self.service.rename_sect("rename-no-sect", "owner", 1, "凌霄宗", 300, 1999)
+
+        self.assertEqual(result.status, "sect_missing")
+        self.assertEqual(self.operation_count(), 0)
+
+    def test_name_equal_current_name_is_treated_as_conflict_without_cost(self) -> None:
+        result = self.service.rename_sect("rename-same", "owner", 1, "青云宗", 300, 1999)
+
+        self.assertEqual(result.status, "name_exists")
+        self.assertEqual(self.state(), ("青云宗", 1000, 2, 1))
+        self.assertEqual(self.operation_count(), 0)
 
 
 if __name__ == "__main__":

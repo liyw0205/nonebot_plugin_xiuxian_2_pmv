@@ -1038,6 +1038,9 @@ class SourceQualityTests(unittest.TestCase):
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_sect" / "__init__.py"
         ).read_text(encoding="utf-8")
+        service_source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_sect" / "membership_service.py"
+        ).read_text(encoding="utf-8")
         start = source.index("async def sect_rename_")
         end = source.index("@create_sect.handle", start)
         command = source[start:end]
@@ -1045,6 +1048,8 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("sql_message.update_sect_name(", command)
         self.assertNotIn("sql_message.update_back_j(", command)
         self.assertNotIn("sql_message.update_sect_used_stone(", command)
+        self.assertIn("BEGIN IMMEDIATE", service_source)
+        self.assertIn("sect_rename_operations", service_source)
 
     def test_sect_member_removal_commands_use_transactional_service(self) -> None:
         source = (
