@@ -1644,6 +1644,19 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("sql_message.update_exp(", handler)
         self.assertNotIn("sql_message.send_back(", handler)
 
+    def test_dungeon_team_rewards_use_batch_transaction(self) -> None:
+        root = SOURCE_ROOT / "xiuxian" / "xiuxian_dungeon"
+        source = (root / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("def battle_settlement")
+        handler = source[start:source.index("def check_user_state", start)]
+        self.assertIn("dungeon_reward_service.award(", handler)
+        self.assertNotIn("sql_message.update_ls(", handler)
+        self.assertNotIn("sql_message.update_exp(", handler)
+        self.assertNotIn("sql_message.send_back(", handler)
+        service = (root / "reward_service.py").read_text(encoding="utf-8")
+        self.assertIn("BEGIN IMMEDIATE", service)
+        self.assertIn("dungeon_reward_operations", service)
+
     def test_sect_rename_uses_transactional_service(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_sect" / "__init__.py"
