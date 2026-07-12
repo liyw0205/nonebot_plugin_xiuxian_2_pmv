@@ -1232,6 +1232,20 @@ class SourceQualityTests(unittest.TestCase):
             + ", ".join(direct_to_thread),
         )
 
+    def test_unseal_migration_runs_file_io_off_event_loop(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_dufang" / "__init__.py"
+        ).read_text(encoding="utf-8")
+        handler_start = source.index("async def unseal_migrate_")
+        handler = source[handler_start:]
+
+        self.assertIn(
+            "await asyncio.to_thread(\n        _migrate_unseal_data_sync",
+            handler,
+        )
+        self.assertNotIn(".iterdir()", handler)
+        self.assertNotIn(".read_text(", handler)
+
 
 if __name__ == "__main__":
     unittest.main()

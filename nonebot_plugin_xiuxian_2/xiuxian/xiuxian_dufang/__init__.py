@@ -1,6 +1,6 @@
 import random
+import asyncio
 import json
-import os
 from pathlib import Path
 from datetime import datetime
 from ..on_compat import on_command
@@ -699,6 +699,75 @@ SHARING_EVENTS = [
 
 unseal_migrate = on_command("同步鉴石", permission=SUPERUSER, priority=25, block=True)
 
+
+def _migrate_unseal_data_sync(players_dir: Path, sharing_data_path: Path) -> tuple[int, int, int]:
+    total = 0
+    ok = 0
+    fail = 0
+
+    if not players_dir.exists():
+        return total, ok, fail
+
+    for user_dir in players_dir.iterdir():
+        if not user_dir.is_dir():
+            continue
+        total += 1
+        user_id = user_dir.name
+        file_path = user_dir / "unseal_data.json"
+        if not file_path.exists():
+            continue
+
+        try:
+            content = file_path.read_text(encoding="utf-8").strip()
+            if not content:
+                continue
+            raw = json.loads(content)
+            if not isinstance(raw, dict):
+                raise TypeError("鉴石数据根节点必须是对象")
+            unseal_info = raw.get("unseal_info", {})
+            sharing_info = raw.get("sharing_info", {})
+            if not isinstance(unseal_info, dict) or not isinstance(sharing_info, dict):
+                raise TypeError("鉴石统计节点必须是对象")
+            data = {
+                "unseal_info": {
+                    "count": int(unseal_info.get("count", 0)),
+                    "total_cost": int(unseal_info.get("total_cost", 0)),
+                    "profit": int(unseal_info.get("profit", 0)),
+                    "loss": int(unseal_info.get("loss", 0)),
+                },
+                "sharing_info": {
+                    "shared_profit": int(sharing_info.get("shared_profit", 0)),
+                    "shared_loss": int(sharing_info.get("shared_loss", 0)),
+                    "received_profit": int(sharing_info.get("received_profit", 0)),
+                    "received_loss": int(sharing_info.get("received_loss", 0)),
+                },
+                "last_update": raw.get("last_update", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+            }
+            save_unseal_data(user_id, data)
+            ok += 1
+        except (OSError, json.JSONDecodeError, TypeError, ValueError, AttributeError) as exc:
+            fail += 1
+            logger.warning(f"鉴石数据同步失败 {user_id}: {exc}")
+
+    try:
+        if sharing_data_path.exists():
+            content = sharing_data_path.read_text(encoding="utf-8").strip()
+            if content:
+                sharing_data = json.loads(content)
+                if not isinstance(sharing_data, dict):
+                    raise TypeError("旧共享名单根节点必须是对象")
+                users = sharing_data.get("users", [])
+                if isinstance(users, list):
+                    save_sharing_users(users)
+                else:
+                    raise TypeError("旧共享名单 users 必须是列表")
+    except (OSError, json.JSONDecodeError, TypeError, AttributeError) as exc:
+        fail += 1
+        logger.warning(f"鉴石旧共享名单同步失败: {exc}")
+
+    return total, ok, fail
+
+
 @unseal_migrate.handle(parameterless=[Cooldown(cd_time=0)])
 async def unseal_migrate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -708,60 +777,8 @@ async def unseal_migrate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, "未找到players目录，无需同步。")
         return
 
-    total = 0
-    ok = 0
-    fail = 0
-
-    for user_dir in players_dir.iterdir():
-        if not user_dir.is_dir():
-            continue
-        total += 1
-        user_id = user_dir.name
-
-        file_path = user_dir / "unseal_data.json"
-        if not file_path.exists():
-            continue
-
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read().strip()
-                if not content:
-                    continue
-                raw = json.loads(content)
-
-            # 兜底
-            data = {
-                "unseal_info": {
-                    "count": int(raw.get("unseal_info", {}).get("count", 0)),
-                    "total_cost": int(raw.get("unseal_info", {}).get("total_cost", 0)),
-                    "profit": int(raw.get("unseal_info", {}).get("profit", 0)),
-                    "loss": int(raw.get("unseal_info", {}).get("loss", 0)),
-                },
-                "sharing_info": {
-                    "shared_profit": int(raw.get("sharing_info", {}).get("shared_profit", 0)),
-                    "shared_loss": int(raw.get("sharing_info", {}).get("shared_loss", 0)),
-                    "received_profit": int(raw.get("sharing_info", {}).get("received_profit", 0)),
-                    "received_loss": int(raw.get("sharing_info", {}).get("received_loss", 0)),
-                },
-                "last_update": raw.get("last_update", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-            }
-
-            save_unseal_data(user_id, data)
-            ok += 1
-        except Exception:
-            fail += 1
-
-    # 同步旧共享名单文件（可选）
-    try:
-        if SHARING_DATA_PATH.exists():
-            with open(SHARING_DATA_PATH, "r", encoding="utf-8") as f:
-                content = f.read().strip()
-                if content:
-                    users = json.loads(content).get("users", [])
-                    if isinstance(users, list):
-                        save_sharing_users(users)
-    except Exception as exc:
-        fail += 1
-        logger.warning(f"鉴石旧共享名单同步失败: {exc}")
+    total, ok, fail = await asyncio.to_thread(
+        _migrate_unseal_data_sync, players_dir, SHARING_DATA_PATH
+    )
 
     await handle_send(bot, event, f"鉴石同步完成！扫描:{total}，成功:{ok}，失败:{fail}")
