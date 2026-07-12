@@ -42,6 +42,7 @@ from .effect_upgrade_service import EffectUpgradeService
 from .engraving_service import EngravingService
 from .forget_service import ForgetEffectService
 from .reawaken_service import ReawakenService
+from .awaken_service import AwakenService
 
 items = Items()
 sql_message = XiuxianDateManage()
@@ -50,6 +51,7 @@ natal_effect_upgrade_service = EffectUpgradeService(get_paths().game_db, get_pat
 natal_engraving_service = EngravingService(get_paths().game_db, get_paths().player_db)
 natal_forget_service = ForgetEffectService(get_paths().game_db, get_paths().player_db)
 natal_reawaken_service = ReawakenService(get_paths().game_db, get_paths().player_db)
+natal_awaken_service = AwakenService(get_paths().player_db)
 
 # 定义觉醒本命法宝命令
 natal_awaken = on_command(
@@ -75,7 +77,42 @@ async def natal_awaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
     nt = NatalTreasure(user_id)
 
     if not nt.exists():
-        nt.awaken()
+        fixed_base_effects = {
+            NatalEffectType.INVINCIBLE, NatalEffectType.TWIN_STRIKE,
+            NatalEffectType.SLEEP, NatalEffectType.PETRIFY, NatalEffectType.STUN,
+            NatalEffectType.FATIGUE, NatalEffectType.SILENCE,
+            NatalEffectType.NIRVANA, NatalEffectType.SOUL_RETURN,
+            NatalEffectType.SOUL_SUMMON, NatalEffectType.ENLIGHTENMENT,
+            NatalEffectType.SPEED,
+        }
+        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        operation_id = f"natal-awaken:{event_id}:{user_id}" if event_id else f"natal-awaken:{user_id}:{datetime.now().timestamp()}"
+        awakened = natal_awaken_service.awaken(
+            operation_id, user_id, MAX_EFFECT_SLOTS,
+            {
+                effect_type.value: (config["min_value"], config["max_value"])
+                for effect_type, config in EFFECT_BASE_AND_GROWTH.items()
+            },
+            {
+                effect_type.value: names
+                for effect_type, names in NATAL_TREASURE_NAMES.items()
+            },
+            {effect_type.value for effect_type in fixed_base_effects},
+            random.getrandbits(63),
+        )
+        if not awakened.succeeded:
+            failure_reasons = {
+                "treasure_missing": "法宝数据结构尚未准备完成",
+                "already_awakened": "本命法宝已经觉醒",
+                "state_changed": "本命法宝状态已经变化",
+            }
+            reason = failure_reasons.get(awakened.status, "觉醒事务未能完成")
+            await handle_send(
+                bot, event, f"本命法宝觉醒失败：{reason}。",
+                md_type="法宝", k1="法宝", v1="我的本命法宝", k2="帮助", v2="本命法宝帮助", k3="觉醒", v3="觉醒本命法宝"
+            )
+            await natal_awaken.finish()
+        nt._natal_data_cache = None
         desc = nt.get_effect_desc()
         await handle_send(
             bot, event,
