@@ -263,6 +263,16 @@ def _guishi_stone_operation_id(event, operation_type, user_id):
     return f"guishi-stone:{operation_type}:{user_id}:{timestamp}"
 
 
+def _guishi_take_item_operation_id(event, user_id, goods_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"guishi-item-take:{event_id}:{user_id}:{goods_id}"
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
+    return f"guishi-item-take:{user_id}:{goods_id}:{timestamp}"
+
+
 def _auction_queue_operation_id(event, action, user_id, item_id):
     event_id = str(
         getattr(event, "message_id", "") or getattr(event, "id", "") or ""
@@ -2013,39 +2023,35 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_take_item.finish()
     
-    stored_items = trade_manager.get_stored_items(user_id)
-    if not stored_items:
-        msg = "您没有暂存的物品！"
-        await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
-        await guishi_take_item.finish()
-    
-    # 判断物品是否存在和数量
-    stored_quantity = stored_items.get(str(goods_id)) # 字典的key是字符串
-    if not stored_quantity or stored_quantity <= 0:
-        msg = f"您没有暂存物品 {goods_name}！"
-        await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
-        await guishi_take_item.finish()
-
-    # 从暂存物品中删除物品 (实际是更新stored_items字典并保存)
-    trade_manager.remove_stored_item(user_id, goods_id) # 这里的remove_stored_item方法会更新stored_items
-
-    # 给玩家物品 (设定为绑定物品)
-    sql_message.send_back(
+    result = xianshi_repository.take_guishi_stored_item(
+        _guishi_take_item_operation_id(event, user_id, goods_id),
+        get_paths().trade_db,
         user_id,
         goods_id,
         item_info['name'],
         item_info['type'],
-        stored_quantity,
-        1 # 绑定物品
     )
-    
-    msg = f"成功取出 {item_info['name']} x{stored_quantity}！"
-    record_trade_event(
-        user_id,
-        "鬼市取物品",
-        f"取出暂存物品{item_info['name']}x{stored_quantity}",
-        {"鬼市取物品次数": 1, "鬼市取物品数量": stored_quantity}
-    )
+    if result.status == "item_missing":
+        msg = f"您没有暂存物品 {goods_name}！"
+        await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
+        await guishi_take_item.finish()
+    if result.status == "inventory_full":
+        msg = f"背包空间不足，无法取出 {item_info['name']} x{result.quantity}！"
+        await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
+        await guishi_take_item.finish()
+    if not result.succeeded:
+        msg = "鬼市暂存区状态已经变化，请稍后重试！"
+        await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
+        await guishi_take_item.finish()
+
+    msg = f"成功取出 {item_info['name']} x{result.quantity}！"
+    if result.applied:
+        record_trade_event(
+            user_id,
+            "鬼市取物品",
+            f"取出暂存物品{item_info['name']}x{result.quantity}",
+            {"鬼市取物品次数": 1, "鬼市取物品数量": result.quantity}
+        )
     await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     await guishi_take_item.finish()
 

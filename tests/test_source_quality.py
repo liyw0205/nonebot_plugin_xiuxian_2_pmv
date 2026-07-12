@@ -505,6 +505,21 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("auction_queue_operations", service_source)
 
+    def test_guishi_take_item_uses_atomic_repository_flow(self) -> None:
+        trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
+        command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")
+        repository_source = (trade_root / "repository.py").read_text(encoding="utf-8")
+        start = command_source.index("async def guishi_take_item_(")
+        end = command_source.index("@guishi_info.handle", start)
+        command = command_source[start:end]
+
+        self.assertIn("xianshi_repository.take_guishi_stored_item(", command)
+        self.assertNotIn("trade_manager.remove_stored_item(", command)
+        self.assertNotIn("sql_message.send_back(", command)
+        self.assertIn("ATTACH DATABASE", repository_source)
+        self.assertIn("BEGIN IMMEDIATE", repository_source)
+        self.assertIn("guishi_take_item_operations", repository_source)
+
     def test_xianshi_listing_uses_batch_transaction_service(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
         command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")
