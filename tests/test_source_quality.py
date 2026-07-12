@@ -530,6 +530,9 @@ class SourceQualityTests(unittest.TestCase):
             command = command_source[start:end]
             self.assertIn("xianshi_repository.add_xianshi_items(", command)
             self.assertNotIn("xianshi_repository.add_xianshi_item(", command)
+            self.assertIn("consume_assets=True", command)
+            self.assertNotIn("spend_stone_and_consume_trade_items(", command)
+            self.assertNotIn("sql_message.send_back(", command)
         self.assertIn("BEGIN IMMEDIATE", repository_source)
         self.assertIn("xianshi_listing_operations", repository_source)
 
@@ -543,6 +546,9 @@ class SourceQualityTests(unittest.TestCase):
 
         self.assertIn("xianshi_repository.add_xianshi_plan_items(", command)
         self.assertNotIn("xianshi_repository.add_xianshi_item(", command)
+        self.assertIn("consume_assets=True", command)
+        self.assertNotIn("spend_stone_and_consume_trade_items(", command)
+        self.assertNotIn("sql_message.send_back(", command)
         self.assertIn("BEGIN IMMEDIATE", repository_source)
         self.assertIn("xianshi_plan_listing_operations", repository_source)
 

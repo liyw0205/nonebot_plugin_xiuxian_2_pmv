@@ -408,81 +408,17 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     operation_id = _xianshi_listing_operation_id(
         event, user_id, goods_id, price, quantity
     )
-    trace_id = f"trade:xianshi_add:{operation_id}"
-    if not sql_message.spend_stone_and_consume_trade_items(
-        user_id,
-        total_fee,
-        [(goods_id, quantity)],
-        log_context=_trade_economy_context(
-            "xianshi_add_consume",
-            trace_id,
-            goods_id=goods_id,
-            item_name=item_name,
-            price=price,
-            quantity=quantity,
-            total_fee=total_fee,
-        ),
-    ):
+    result = xianshi_repository.add_xianshi_items(
+        operation_id, user_id, goods_id, item_name, goods_info['type'], price,
+        quantity, fee_charged=total_fee, consume_assets=True,
+    )
+    if result.status in {"stone_insufficient", "stock_insufficient"}:
         msg = f"灵石或可交易的 {item_name} 数量不足，上架失败！"
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆上架 {item_name} {price}", k2="查看", v2=f"仙肆查看 {goods_info['type']}", k3="购买", v3="仙肆购买")
         await xian_shop_add.finish()
-    
-    try:
-        result = xianshi_repository.add_xianshi_items(
-            operation_id,
-            user_id,
-            goods_id,
-            item_name,
-            goods_info['type'],
-            price,
-            quantity,
-            fee_charged=total_fee,
-        )
-    except Exception as e:
-        logger.error(f"仙肆上架失败: {e}")
-        sql_message.send_back(
-            user_id,
-            goods_id,
-            item_name,
-            goods_info['type'],
-            quantity,
-            log_context=_trade_economy_context(
-                "xianshi_add_item_rollback",
-                trace_id,
-                goods_id=goods_id,
-                item_name=item_name,
-                price=price,
-                requested_quantity=quantity,
-            ),
-        )
-        fee_refund = total_fee
-        result = None
-        msg = "上架过程中出现错误，请稍后再试！"
-    else:
-        success_count = result.listed_quantity
-        actual_fee = result.fee_charged
-        fee_refund = result.fee_refund
-        msg = None
-
-    if fee_refund:
-        sql_message.update_ls(
-            user_id,
-            fee_refund,
-            1,
-            log_context=_trade_economy_context(
-                "xianshi_add_fee_refund",
-                trace_id,
-                goods_id=goods_id,
-                item_name=item_name,
-                requested_quantity=quantity,
-                success_count=0 if result is None else result.listed_quantity,
-                total_fee=total_fee,
-                actual_fee=0 if result is None else result.fee_charged,
-            ),
-        )
-    if result is None:
-        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆上架 {item_name} {price}", k2="查看", v2=f"仙肆查看 {goods_info['type']}", k3="购买", v3="仙肆购买")
-        await xian_shop_add.finish()
+    if not result.succeeded:
+        raise RuntimeError(f"unexpected xianshi listing status: {result.status}")
+    success_count = result.listed_quantity
     msg = f"\n成功上架 {item_name} x{success_count} 到仙肆！\n"
     msg += f"单价: {number_to(price)} 灵石\n"
     msg += f"总手续费: {number_to(result.fee_charged)} 灵石"
@@ -638,7 +574,6 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆自动上架 {item_type} {rank_name}", k2="查看", v2=f"仙肆查看 {item_type}", k3="购买", v3="仙肆购买")
         await xianshi_auto_add.finish()
 
-    consume_items = [(item_summary['id'], item_summary['quantity']) for item_summary in processed_items_summary]
     listing_plan = [
         {
             "goods_id": item_summary["id"],
@@ -652,70 +587,17 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     operation_id = _xianshi_listing_operation_id(
         event, user_id, 0, total_fees_to_deduct, len(listing_plan), "auto"
     )
-    trace_id = f"trade:xianshi_auto_add:{operation_id}"
-    if not sql_message.spend_stone_and_consume_trade_items(
-        user_id,
-        total_fees_to_deduct,
-        consume_items,
-        log_context=_trade_economy_context(
-            "xianshi_auto_add_consume",
-            trace_id,
-            item_type=item_type,
-            rank_name=rank_name,
-            item_count=len(processed_items_summary),
-            total_fees=total_fees_to_deduct,
-        ),
-    ):
+    result = xianshi_repository.add_xianshi_plan_items(
+        operation_id, user_id, listing_plan,
+        fee_charged=total_fees_to_deduct, consume_assets=True,
+    )
+    if result.status in {"stone_insufficient", "stock_insufficient"}:
         msg = "灵石或可交易物品数量不足，自动上架失败！"
         sql_message.update_user_stamina(user_id, 30, 1)
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆自动上架 {item_type} {rank_name}", k2="查看", v2=f"仙肆查看 {item_type}", k3="购买", v3="仙肆购买")
         await xianshi_auto_add.finish()
-    
-    try:
-        result = xianshi_repository.add_xianshi_plan_items(
-            operation_id,
-            user_id,
-            listing_plan,
-            fee_charged=total_fees_to_deduct,
-        )
-    except Exception as e:
-        logger.error(f"批量上架失败: {e}")
-        for item_summary in processed_items_summary:
-            sql_message.send_back(
-                user_id,
-                item_summary['id'],
-                item_summary['name'],
-                item_summary['type'],
-                item_summary['quantity'],
-                log_context=_trade_economy_context(
-                    "xianshi_auto_add_item_rollback",
-                    trace_id,
-                    item_id=item_summary['id'],
-                    item_name=item_summary['name'],
-                    failed_count=item_summary['quantity'],
-                ),
-            )
-        fee_refund = total_fees_to_deduct
-        result = None
-    else:
-        fee_refund = result.fee_refund
-    if fee_refund:
-        sql_message.update_ls(
-            user_id,
-            fee_refund,
-            1,
-            log_context=_trade_economy_context(
-                "xianshi_auto_add_fee_refund",
-                trace_id,
-                total_fees=total_fees_to_deduct,
-                actual_fees=0 if result is None else result.fee_charged,
-            ),
-        )
-    if result is None:
-        msg = "自动上架过程中出现错误，请稍后再试！"
-        sql_message.update_user_stamina(user_id, 30, 1)
-        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆自动上架 {item_type} {rank_name}", k2="查看", v2=f"仙肆查看 {item_type}", k3="购买", v3="仙肆购买")
-        await xianshi_auto_add.finish()
+    if not result.succeeded:
+        raise RuntimeError(f"unexpected xianshi plan listing status: {result.status}")
     
     # 限制显示数量，防止消息过长
     result_messages = []
@@ -833,79 +715,18 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     operation_id = _xianshi_listing_operation_id(
         event, user_id, goods_id, price, quantity, "fast"
     )
-    trace_id = f"trade:xianshi_fast_add:{operation_id}"
-    if not sql_message.spend_stone_and_consume_trade_items(
-        user_id,
-        single_fee,
-        [(goods_id, quantity)],
-        log_context=_trade_economy_context(
-            "xianshi_fast_add_consume",
-            trace_id,
-            goods_id=goods_id,
-            item_name=item_name,
-            price=price,
-            quantity=quantity,
-            fee=single_fee,
-        ),
-    ):
+    result = xianshi_repository.add_xianshi_items(
+        operation_id, user_id, goods_id, item_name, goods_info['type'], price,
+        quantity, fee_charged=single_fee, consume_assets=True,
+    )
+    if result.status in {"stone_insufficient", "stock_insufficient"}:
         msg = f"灵石或可交易的 {item_name} 数量不足，上架失败！"
         sql_message.update_user_stamina(user_id, 10, 1)
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆快速上架 {item_name} {price}", k2="查看", v2=f"仙肆查看 {goods_info['type']}", k3="购买", v3="仙肆购买")
         await xianshi_fast_add.finish()
-    
-    try:
-        result = xianshi_repository.add_xianshi_items(
-            operation_id,
-            user_id,
-            goods_id,
-            item_name,
-            goods_info['type'],
-            price,
-            quantity,
-            fee_charged=single_fee,
-        )
-    except Exception as e:
-        logger.error(f"快速上架失败: {e}")
-        sql_message.send_back(
-            user_id,
-            goods_id,
-            item_name,
-            goods_info['type'],
-            quantity,
-            log_context=_trade_economy_context(
-                "xianshi_fast_add_item_rollback",
-                trace_id,
-                goods_id=goods_id,
-                item_name=item_name,
-                requested_quantity=quantity,
-            ),
-        )
-        fee_refund = single_fee
-        result = None
-    else:
-        success_count = result.listed_quantity
-        fee_refund = result.fee_refund
-    if fee_refund:
-        sql_message.update_ls(
-            user_id,
-            fee_refund,
-            1,
-            log_context=_trade_economy_context(
-                "xianshi_fast_add_fee_refund",
-                trace_id,
-                goods_id=goods_id,
-                item_name=item_name,
-                requested_quantity=quantity,
-                success_count=0 if result is None else result.listed_quantity,
-                fee=single_fee,
-                actual_fee=0 if result is None else result.fee_charged,
-            ),
-        )
-    if result is None:
-        msg = "上架过程中出现错误，请稍后再试！"
-        sql_message.update_user_stamina(user_id, 10, 1)
-        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆快速上架 {item_name} {price}", k2="查看", v2=f"仙肆查看 {goods_info['type']}", k3="购买", v3="仙肆购买")
-        await xianshi_fast_add.finish()
+    if not result.succeeded:
+        raise RuntimeError(f"unexpected xianshi fast listing status: {result.status}")
+    success_count = result.listed_quantity
     
     msg = f"\n成功上架 {item_name} x{success_count} 到仙肆！\n"
     msg += f"单价: {number_to(price)} 灵石\n"

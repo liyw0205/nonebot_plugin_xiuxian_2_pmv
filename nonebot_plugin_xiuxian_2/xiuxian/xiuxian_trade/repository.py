@@ -412,6 +412,7 @@ class TradeRepository:
         quantity,
         *,
         fee_charged: int,
+        consume_assets: bool = False,
     ) -> XianshiListingBatch:
         import secrets
 
@@ -493,6 +494,31 @@ class TradeRepository:
                         return result("state_changed")
                     return result("duplicate", prev_listed, prev_fee, prev_fee)
 
+                if consume_assets:
+                    stone_update = conn.execute(
+                        "UPDATE user_xiuxian SET stone=stone-%s "
+                        "WHERE user_id=%s AND COALESCE(stone, 0)>=%s",
+                        (fee_charged, seller_id, fee_charged),
+                    )
+                    if stone_update.rowcount <= 0:
+                        conn.rollback()
+                        return result("stone_insufficient")
+                    now = datetime.now()
+                    stock_update = conn.execute(
+                        """
+                        UPDATE back SET
+                            goods_num=COALESCE(goods_num, 0)-%s,
+                            update_time=%s,
+                            action_time=%s
+                        WHERE user_id=%s AND goods_id=%s
+                          AND COALESCE(goods_num, 0)-COALESCE(bind_num, 0)-COALESCE(state, 0)>=%s
+                        """,
+                        (quantity, now, now, seller_id, goods_id, quantity),
+                    )
+                    if stock_update.rowcount <= 0:
+                        conn.rollback()
+                        return result("stock_insufficient")
+
                 listed_quantity = 0
                 for _ in range(quantity):
                     for _ in range(20):
@@ -551,7 +577,9 @@ class TradeRepository:
                 conn.rollback()
                 raise
 
-    def add_xianshi_plan_items(self, operation_id, seller_id, listing_plan, *, fee_charged):
+    def add_xianshi_plan_items(
+        self, operation_id, seller_id, listing_plan, *, fee_charged, consume_assets=False
+    ):
         import secrets
 
         operation_id = str(operation_id).strip()
@@ -617,6 +645,35 @@ class TradeRepository:
                     if str(prev_seller) != seller_id or str(prev_plan) != normalized_text():
                         return result("state_changed")
                     return result("duplicate", prev_listed, prev_fee, prev_fee)
+
+                if consume_assets:
+                    stone_update = conn.execute(
+                        "UPDATE user_xiuxian SET stone=stone-%s "
+                        "WHERE user_id=%s AND COALESCE(stone, 0)>=%s",
+                        (fee_charged, seller_id, fee_charged),
+                    )
+                    if stone_update.rowcount <= 0:
+                        conn.rollback()
+                        return result("stone_insufficient")
+                    now = datetime.now()
+                    for entry in plan:
+                        stock_update = conn.execute(
+                            """
+                            UPDATE back SET
+                                goods_num=COALESCE(goods_num, 0)-%s,
+                                update_time=%s,
+                                action_time=%s
+                            WHERE user_id=%s AND goods_id=%s
+                              AND COALESCE(goods_num, 0)-COALESCE(bind_num, 0)-COALESCE(state, 0)>=%s
+                            """,
+                            (
+                                entry["quantity"], now, now, seller_id,
+                                entry["goods_id"], entry["quantity"],
+                            ),
+                        )
+                        if stock_update.rowcount <= 0:
+                            conn.rollback()
+                            return result("stock_insufficient")
 
                 listed_quantity = 0
                 for entry in plan:

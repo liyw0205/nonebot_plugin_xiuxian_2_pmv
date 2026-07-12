@@ -18,6 +18,20 @@ class XianshiPlanListingBatchTests(unittest.TestCase):
         self.database = Path(self.temp_dir.name) / "xianshi-plan.sqlite3"
         with db_backend.transaction(self.database) as conn:
             TradeRepository.ensure_schema(conn)
+            conn.execute(
+                "CREATE TABLE user_xiuxian (user_id TEXT PRIMARY KEY, stone INTEGER NOT NULL)"
+            )
+            conn.execute(
+                """
+                CREATE TABLE back (
+                    user_id TEXT NOT NULL, goods_id INTEGER NOT NULL,
+                    goods_name TEXT, goods_type TEXT, goods_num INTEGER DEFAULT 0,
+                    bind_num INTEGER DEFAULT 0, state INTEGER DEFAULT 0,
+                    update_time TEXT, action_time TEXT,
+                    UNIQUE (user_id, goods_id)
+                )
+                """
+            )
         self.repository = TradeRepository(self.database, max_goods_num=99)
         self.repository.initialize()
         self.plan = [
@@ -69,6 +83,69 @@ class XianshiPlanListingBatchTests(unittest.TestCase):
 
         self.assertEqual(self.scalar("SELECT COUNT(*) FROM xianshi_item"), 0)
         self.assertEqual(self.scalar("SELECT COUNT(*) FROM xianshi_plan_listing_operations"), 0)
+
+    def seed_assets(self, *, stone=500000, first=3, second=2) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute("INSERT INTO user_xiuxian VALUES (%s, %s)", ("seller", stone))
+            conn.execute(
+                "INSERT INTO back (user_id, goods_id, goods_name, goods_type, goods_num) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                ("seller", 1001, "测试法器", "装备", first),
+            )
+            conn.execute(
+                "INSERT INTO back (user_id, goods_id, goods_name, goods_type, goods_num) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                ("seller", 1002, "灵草", "药材", second),
+            )
+
+    def test_atomic_plan_consumes_all_assets_and_creates_all_rows(self) -> None:
+        self.seed_assets()
+        result = self.repository.add_xianshi_plan_items(
+            "plan-assets", "seller", self.plan,
+            fee_charged=200000, consume_assets=True,
+        )
+
+        self.assertTrue(result.applied)
+        self.assertEqual(self.scalar("SELECT stone FROM user_xiuxian WHERE user_id=%s", ("seller",)), 300000)
+        self.assertEqual(self.scalar("SELECT goods_num FROM back WHERE goods_id=%s", (1001,)), 1)
+        self.assertEqual(self.scalar("SELECT goods_num FROM back WHERE goods_id=%s", (1002,)), 1)
+        self.assertEqual(self.scalar("SELECT COUNT(*) FROM xianshi_item"), 3)
+
+    def test_atomic_plan_duplicate_and_conflict_do_not_consume_assets_again(self) -> None:
+        self.seed_assets()
+        first = self.repository.add_xianshi_plan_items(
+            "plan-idempotent", "seller", self.plan,
+            fee_charged=200000, consume_assets=True,
+        )
+        duplicate = self.repository.add_xianshi_plan_items(
+            "plan-idempotent", "seller", self.plan,
+            fee_charged=499999, consume_assets=True,
+        )
+        changed_plan = [dict(entry) for entry in self.plan]
+        changed_plan[0]["price"] += 1
+        conflict = self.repository.add_xianshi_plan_items(
+            "plan-idempotent", "seller", changed_plan,
+            fee_charged=200000, consume_assets=True,
+        )
+
+        self.assertEqual((first.status, duplicate.status, conflict.status),
+                         ("listed", "duplicate", "state_changed"))
+        self.assertEqual(self.scalar("SELECT stone FROM user_xiuxian WHERE user_id=%s", ("seller",)), 300000)
+        self.assertEqual(self.scalar("SELECT goods_num FROM back WHERE goods_id=%s", (1001,)), 1)
+        self.assertEqual(self.scalar("SELECT goods_num FROM back WHERE goods_id=%s", (1002,)), 1)
+        self.assertEqual(self.scalar("SELECT COUNT(*) FROM xianshi_item"), 3)
+
+    def test_atomic_plan_stock_failure_rolls_back_fee_and_prior_item(self) -> None:
+        self.seed_assets(second=0)
+        result = self.repository.add_xianshi_plan_items(
+            "plan-assets-fail", "seller", self.plan,
+            fee_charged=200000, consume_assets=True,
+        )
+
+        self.assertEqual(result.status, "stock_insufficient")
+        self.assertEqual(self.scalar("SELECT stone FROM user_xiuxian WHERE user_id=%s", ("seller",)), 500000)
+        self.assertEqual(self.scalar("SELECT goods_num FROM back WHERE goods_id=%s", (1001,)), 3)
+        self.assertEqual(self.scalar("SELECT COUNT(*) FROM xianshi_item"), 0)
 
 
 if __name__ == "__main__":
