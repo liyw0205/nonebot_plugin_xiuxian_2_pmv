@@ -1571,6 +1571,23 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("pet_travel_claim_operations", service)
 
+    def test_illusion_choice_uses_transactional_service(self) -> None:
+        illusion_root = SOURCE_ROOT / "xiuxian" / "xiuxian_Illusion"
+        source = (illusion_root / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("@illusion_choice.handle")
+        handler = source[start:source.index("@illusion_reset.handle", start)]
+        self.assertIn("illusion_choice_service.choose(", handler)
+        self.assertNotIn("IllusionData.save_user_illusion_info(", handler)
+        self.assertNotIn("IllusionData.update_question_stats(", handler)
+        self.assertNotIn("sql_message.update_ls(", handler)
+        self.assertNotIn("sql_message.update_exp(", handler)
+        self.assertNotIn("sql_message.send_back(", handler)
+        for status in ("already_chosen", "inventory_full", "state_changed", "user_missing"):
+            self.assertIn(f'"{status}"', handler)
+        service = (illusion_root / "choice_service.py").read_text(encoding="utf-8")
+        self.assertIn("BEGIN IMMEDIATE", service)
+        self.assertIn("illusion_choice_operations", service)
+
     def test_tower_purchase_uses_cross_database_transaction(self) -> None:
         tower_root = SOURCE_ROOT / "xiuxian" / "xiuxian_tower"
         source = (tower_root / "__init__.py").read_text(encoding="utf-8")

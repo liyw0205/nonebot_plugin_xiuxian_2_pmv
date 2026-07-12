@@ -1,6 +1,7 @@
 import random
 import json
 import os
+import time
 from pathlib import Path
 from datetime import datetime
 from ..on_compat import on_command
@@ -21,10 +22,13 @@ from ..xiuxian_utils.utils import (
 )
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_config import convert_rank, base_rank
+from ..xiuxian_config import convert_rank, base_rank, XiuConfig
+from ...paths import get_paths
+from .choice_service import IllusionChoiceService
 from .IllusionData import *
 sql_message = XiuxianDateManage()
 items = Items()
+illusion_choice_service = IllusionChoiceService(get_paths().game_db)
 
 # 定义命令
 illusion_start = on_command("幻境寻心", priority=5, block=True)
@@ -47,6 +51,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     user_id = user_info["user_id"]
     illusion_info = IllusionData.get_or_create_user_illusion_info(user_id)
+    stored_choice = illusion_choice_service.get_choice(user_id, illusion_choice_service.period_key())
+    if stored_choice is not None:
+        illusion_info["question_index"] = stored_choice["question_index"]
+        illusion_info["today_choice"] = stored_choice["selected_option"]
     
     # 检查问题索引是否有效
     if illusion_info["question_index"] is None or illusion_info["question_index"] >= len(DEFAULT_QUESTIONS):
@@ -128,17 +136,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg)
         await illusion_choice.finish()
     
-    # 记录用户选择
     selected_option = options[choice_num - 1]  # 获取不带数字的选项文本
     selected_explanation = explanations[choice_num - 1] if choice_num - 1 < len(explanations) else "暂无详细解释"
-    illusion_info["today_choice"] = selected_option
-    illusion_info["last_participate"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    IllusionData.save_user_illusion_info(user_id, illusion_info)
-    
-    # 更新问题统计数据
-    IllusionData.update_question_stats(illusion_info["question_index"], choice_num - 1)
-    
-    # 获取当前问题的统计数据
+
     stats = IllusionData.get_stats()
     question_stats = stats["question_stats"][illusion_info["question_index"]]
     counts = question_stats
@@ -148,7 +148,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     sorted_counts = sorted([(i+1, count) for i, count in enumerate(counts)], key=lambda x: -x[1])
     rank_dict = {x[0]: i+1 for i, x in enumerate(sorted_counts)}
     user_rank = rank_dict[choice_num]
-    choice_count = counts[choice_num - 1]
+    choice_count = counts[choice_num - 1] + 1
     
     # 计算当前选择的占比
     percentage = choice_count / total_choices * 100 if total_choices > 0 else 100
@@ -176,20 +176,43 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     # 根据权重随机选择奖励类型
     selected_reward_type = random.choices(reward_types, weights=weights, k=1)[0]
 
-    # 根据选择的奖励类型给予相应奖励
-    reward_msg = ""
+    stone_reward = 0
+    exp_reward = 0
+    item_reward = None
     if selected_reward_type == 'exp':  # 修为奖励
         user_rank = max(convert_rank(user_info['level'])[0] // 3, 1)
         exp_reward = int(user_info["exp"] * 0.01 * min(0.1 * user_rank, 1))
-        sql_message.update_exp(user_id, exp_reward)
-        reward_msg = f"你的选择是少数派的选择(第{choice_count}位道友)，获得修为：{number_to(exp_reward)}点"
     elif selected_reward_type == 'stone':  # 灵石奖励
         stone_reward = int(random.randint(1000000, 10000000) * (1 + min(choice_count * 0.1, 2.0)))
-        sql_message.update_ls(user_id, stone_reward, 1)
-        reward_msg = f"你的选择是多数派的选择(第{choice_count}位道友)，获得灵石：{number_to(stone_reward)}枚"
     elif selected_reward_type == 'item':  # 物品奖励
-        item_msg = _give_random_item(user_id, user_info["level"])
-        reward_msg = f"你的选择是平均派的选择(第{choice_count}位道友)，获得：{item_msg}"
+        item_reward = _select_random_item(user_info["level"])
+
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    period_key = illusion_choice_service.period_key()
+    operation_id = f"illusion-choice:{event_id}:{user_id}" if event_id else f"illusion-choice:{period_key}:{user_id}:{time.time_ns()}"
+    choice_result = illusion_choice_service.choose(
+        operation_id, user_id, period_key, illusion_info["question_index"], choice_num - 1,
+        selected_option, stone_reward, exp_reward, item_reward, XiuConfig().max_goods_num,
+    )
+    if choice_result.status == "already_chosen":
+        await handle_send(bot, event, "今日已经参与过幻境寻心，请明日再来！")
+        await illusion_choice.finish()
+    if choice_result.status == "inventory_full":
+        await handle_send(bot, event, "背包物品已达上限，本次选择尚未提交。")
+        await illusion_choice.finish()
+    if choice_result.status in {"state_changed", "user_missing"}:
+        await handle_send(bot, event, "幻境寻心结算状态异常，请重新尝试。")
+        await illusion_choice.finish()
+
+    choice_count = choice_result.choice_count
+    if choice_result.exp > 0:
+        reward_msg = f"你的选择是少数派的选择(第{choice_count}位道友)，获得修为：{number_to(choice_result.exp)}点"
+    elif choice_result.stone > 0:
+        reward_msg = f"你的选择是多数派的选择(第{choice_count}位道友)，获得灵石：{number_to(choice_result.stone)}枚"
+    elif item_reward:
+        reward_msg = f"你的选择是平均派的选择(第{choice_count}位道友)，获得：{item_reward['level']}:{item_reward['name']}"
+    else:
+        reward_msg = f"你的选择是平均派的选择(第{choice_count}位道友)，本次未获得物品"
 
     msg = (
         f"【幻境寻心】\n"
@@ -225,8 +248,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
     await illusion_clear.finish()
 
-def _give_random_item(user_id, user_level):
-    """给予随机物品奖励"""    
+def _select_random_item(user_level):
+    """Select a random item without mutating inventory."""
     # 随机选择物品类型
     item_types = ["功法", "神通", "药材", "法器", "防具", "身法", "瞳术"]
     item_type = random.choice(item_types)
@@ -257,13 +280,10 @@ def _give_random_item(user_id, user_level):
     if item_info is None:
         return "无"
 
-    # 给予物品
-    sql_message.send_back(
-        user_id, 
-        item_id, 
-        item_info["name"], 
-        item_info["type"], 
-        1
-    )
-
-    return f"{item_info.get('level', '特殊道具')}:{item_info['name']}"
+    return {
+        "id": int(item_id),
+        "name": item_info["name"],
+        "type": item_info["type"],
+        "amount": 1,
+        "level": item_info.get("level", "特殊道具"),
+    }
