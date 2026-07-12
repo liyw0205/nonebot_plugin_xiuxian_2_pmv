@@ -1,5 +1,6 @@
 import random
 import re
+import time
 from datetime import datetime
 from nonebot.log import logger
 from nonebot.params import CommandArg
@@ -11,6 +12,8 @@ from ..xiuxian_utils.utils import check_user, log_message, handle_send, send_msg
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.player_fight import Player_fight
 from ..xiuxian_utils.item_json import Items
+from ..xiuxian_config import XiuConfig
+from ...paths import get_paths
 
 items = Items()
 player_data_manager = PlayerDataManager()
@@ -18,6 +21,9 @@ sql_message = XiuxianDateManage()
 
 from .arena_limit import arena_limit
 from .arena_shop import arena_shop_data
+from .purchase_service import ArenaPurchaseService
+
+arena_purchase_service = ArenaPurchaseService(get_paths().game_db, get_paths().player_db)
 
 arena_challenge = on_command("竞技场挑战", priority=10, block=True)
 arena_view = on_command("竞技场查看", priority=10, block=True)
@@ -469,20 +475,25 @@ async def arena_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await handle_send(bot, event, msg)
         await arena_buy.finish()
     
-    # 兑换商品
-    new_honor = arena_info["honor_points"] - total_cost
-    arena_limit.update_arena_data(user_id, {"honor_points": new_honor})
-    arena_limit.update_weekly_purchase(user_id, shop_id, quantity)
-    
-    # 给予物品
-    sql_message.send_back(
-        user_id, 
-        shop_id, 
-        item_info["name"], 
-        item_info["type"], 
-        quantity,
-        1
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"arena-purchase:{event_id}:{user_id}" if event_id else f"arena-purchase:{time.time_ns()}:{user_id}"
+    purchase_result = arena_purchase_service.purchase(
+        operation_id, user_id, shop_id, item_info["name"], item_info["type"], quantity,
+        item_data["cost"], item_data["weekly_limit"], arena_info["honor_points"],
+        arena_info["weekly_purchases"], XiuConfig().max_goods_num, 1,
     )
+    if purchase_result.status == "honor_insufficient":
+        await handle_send(bot, event, "荣誉值状态已变化，当前荣誉值不足！")
+        await arena_buy.finish()
+    if purchase_result.status == "limit_reached":
+        await handle_send(bot, event, f"{item_info['name']}已到限购无法再购买！")
+        await arena_buy.finish()
+    if purchase_result.status == "inventory_full":
+        await handle_send(bot, event, f"{item_info['name']}持有数量已达上限！")
+        await arena_buy.finish()
+    if purchase_result.status in {"state_changed", "user_missing"}:
+        await handle_send(bot, event, "竞技场兑换状态已变化，请重新兑换！")
+        await arena_buy.finish()
     
     msg = f"成功兑换{item_info['name']}×{quantity}，消耗{total_cost}荣誉值！"
     await handle_send(bot, event, msg)
