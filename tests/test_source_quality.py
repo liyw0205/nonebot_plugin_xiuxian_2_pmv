@@ -1243,6 +1243,24 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("ATTACH DATABASE", service)
         self.assertIn("natal_effect_upgrade_operations", service)
 
+    def test_natal_engraving_uses_transactional_service(self) -> None:
+        natal_root = SOURCE_ROOT / "xiuxian" / "xiuxian_natal_treasure"
+        source = (natal_root / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("@natal_engrave.handle")
+        handler = source[start:source.index("# 定义遗忘道纹命令", start)]
+        self.assertIn("natal_engraving_service.engrave(", handler)
+        self.assertNotIn("nt.engrave_effect(", handler)
+        self.assertNotIn("sql_message.update_back_j(", handler)
+        for status in (
+            "treasure_missing", "slots_full", "effect_exhausted",
+            "item_insufficient", "state_changed",
+        ):
+            self.assertIn(f'"{status}"', handler)
+        service = (natal_root / "engraving_service.py").read_text(encoding="utf-8")
+        self.assertIn("BEGIN IMMEDIATE", service)
+        self.assertIn("ATTACH DATABASE", service)
+        self.assertIn("natal_engraving_operations", service)
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")

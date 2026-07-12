@@ -39,11 +39,13 @@ from .natal_config import (
 )
 from .training_service import NatalTrainingService
 from .effect_upgrade_service import EffectUpgradeService
+from .engraving_service import EngravingService
 
 items = Items()
 sql_message = XiuxianDateManage()
 natal_training_service = NatalTrainingService(get_paths().game_db, get_paths().player_db)
 natal_effect_upgrade_service = EffectUpgradeService(get_paths().game_db, get_paths().player_db)
+natal_engraving_service = EngravingService(get_paths().game_db, get_paths().player_db)
 
 # 定义觉醒本命法宝命令
 natal_awaken = on_command(
@@ -375,14 +377,42 @@ async def natal_engrave_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
                           md_type="法宝", k1="铭刻", v1="铭刻道纹", k2="法宝", v2="我的本命法宝", k3="觉醒", v3="觉醒本命法宝")
         await natal_engrave.finish()
 
-    success, result_msg = nt.engrave_effect()
-
-    if success:
-        sql_message.update_back_j(user_id, MYSTERIOUS_SCRIPTURE_ID, num=scripture_cost)
+    fixed_base_effects = {
+        NatalEffectType.INVINCIBLE, NatalEffectType.TWIN_STRIKE,
+        NatalEffectType.SLEEP, NatalEffectType.PETRIFY, NatalEffectType.STUN,
+        NatalEffectType.FATIGUE, NatalEffectType.SILENCE,
+        NatalEffectType.NIRVANA, NatalEffectType.SOUL_RETURN,
+        NatalEffectType.SOUL_SUMMON, NatalEffectType.ENLIGHTENMENT,
+        NatalEffectType.SPEED,
+    }
+    effect_configs = {
+        effect_type.value: (config["min_value"], config["max_value"])
+        for effect_type, config in EFFECT_BASE_AND_GROWTH.items()
+    }
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"natal-engrave:{event_id}:{user_id}" if event_id else f"natal-engrave:{user_id}:{datetime.now().timestamp()}"
+    engraving = natal_engraving_service.engrave(
+        operation_id, user_id, MYSTERIOUS_SCRIPTURE_ID, scripture_cost,
+        MAX_EFFECT_SLOTS, effect_configs,
+        {effect_type.value for effect_type in fixed_base_effects},
+        random.getrandbits(63),
+    )
+    if engraving.succeeded:
+        nt._natal_data_cache = None
+        effect_name = EFFECT_NAME_MAP.get(NatalEffectType(engraving.effect_type), "未知效果")
+        result_msg = f"成功铭刻道纹：【{effect_name}】，等级1。"
         await handle_send(bot, event, f"铭刻道纹成功！消耗{scripture_cost}个【神秘经书】。\n{result_msg}",
                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="养成", v2="养成本命法宝", k3="升阶", v3="本命法宝升阶")
     else:
-        await handle_send(bot, event, f"铭刻道纹失败：{result_msg}",
+        failure_reasons = {
+            "treasure_missing": "尚未觉醒本命法宝或法宝数据不完整",
+            "slots_full": "效果槽位已满",
+            "effect_exhausted": "没有可供铭刻的新道纹",
+            "item_insufficient": "神秘经书数量不足",
+            "state_changed": "法宝或神秘经书状态已经变化",
+        }
+        reason = failure_reasons.get(engraving.status, "铭刻事务未能完成")
+        await handle_send(bot, event, f"铭刻道纹失败：{reason}。",
                           md_type="法宝", k1="铭刻", v1="铭刻道纹", k2="法宝", v2="我的本命法宝", k3="帮助", v3="本命法宝帮助")
     await natal_engrave.finish()
 
