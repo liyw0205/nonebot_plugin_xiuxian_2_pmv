@@ -25,6 +25,7 @@ from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, send_hel
 from ..xiuxian_config import XiuConfig
 from .deposit_service import BankDepositService
 from .withdrawal_service import BankWithdrawalService
+from .upgrade_service import BankUpgradeService
 
 config = get_config()
 BANKLEVEL = config["BANKLEVEL"]
@@ -32,6 +33,7 @@ sql_message = XiuxianDateManage()  # sql类
 player_data_manager = PlayerDataManager()
 bank_deposit_service = BankDepositService(get_paths().game_db, get_paths().player_db)
 bank_withdrawal_service = BankWithdrawalService(get_paths().game_db, get_paths().player_db)
+bank_upgrade_service = BankUpgradeService(get_paths().game_db, get_paths().player_db)
 PLAYERSDATA = get_paths().players
 
 bank = on_regex(
@@ -180,10 +182,18 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await handle_send(bot, event, msg, md_type="灵庄", k1="升级", v1="灵庄升级会员", k2="信息", v2="灵庄信息", k3="帮助", v3="灵庄帮助")
             await bank.finish()
 
-        sql_message.update_ls(user_id, stonecost, 2)
-        bankinfo['banklevel'] = f"{int(userlevel) + 1}"
-        savef(user_id, bankinfo)
-        msg = f"道友成功升级灵庄会员等级，消耗灵石{stonecost}枚，当前为：{BANKLEVEL[str(int(userlevel) + 1)]['level']}，灵庄可存有灵石上限{BANKLEVEL[str(int(userlevel) + 1)]['savemax']}枚"
+        next_level = f"{int(userlevel) + 1}"
+        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        operation_id = f"bank-upgrade:{event_id}:{user_id}" if event_id else f"bank-upgrade:{user_id}:{time.time_ns()}"
+        upgrade = bank_upgrade_service.upgrade(operation_id, user_id, userlevel, next_level, stonecost)
+        if upgrade.status in {"stone_insufficient", "state_changed"}:
+            msg = "灵庄账户状态已变化，本次会员升级未结算，请重新查看后再试。"
+            await handle_send(bot, event, msg, md_type="灵庄", k1="升级", v1="灵庄升级会员", k2="信息", v2="灵庄信息", k3="帮助", v3="灵庄帮助")
+            await bank.finish()
+        if upgrade.status == "user_missing":
+            await handle_send(bot, event, "未找到修仙数据，本次会员升级未结算。", md_type="我要修仙")
+            await bank.finish()
+        msg = f"道友成功升级灵庄会员等级，消耗灵石{upgrade.cost}枚，当前为：{BANKLEVEL[upgrade.bank_level]['level']}，灵庄可存有灵石上限{BANKLEVEL[upgrade.bank_level]['savemax']}枚"
 
         await handle_send(bot, event, msg, md_type="灵庄", k1="升级", v1="灵庄升级会员", k2="信息", v2="灵庄信息", k3="帮助", v3="灵庄帮助")
         await bank.finish()
