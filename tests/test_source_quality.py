@@ -1460,6 +1460,21 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("for user_dir in players_dir.iterdir()", handler)
         self.assertIn("def _migrate_bank_data_sync", source)
 
+    def test_bank_deposit_uses_cross_database_transaction(self) -> None:
+        bank_root = SOURCE_ROOT / "xiuxian" / "xiuxian_bank"
+        source = (bank_root / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("if mode == '存灵石'")
+        handler = source[start:source.index("elif mode == '取灵石'", start)]
+        self.assertIn("bank_deposit_service.deposit(", handler)
+        self.assertNotIn("sql_message.update_ls(", handler)
+        self.assertNotIn("savef(user_id, bankinfo)", handler)
+        for status in ("stone_insufficient", "limit_exceeded", "state_changed", "user_missing"):
+            self.assertIn(f'"{status}"', handler)
+        service = (bank_root / "deposit_service.py").read_text(encoding="utf-8")
+        self.assertIn("ATTACH DATABASE", service)
+        self.assertIn("BEGIN IMMEDIATE", service)
+        self.assertIn("bank_deposit_operations", service)
+
     def test_sect_rename_uses_transactional_service(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_sect" / "__init__.py"
