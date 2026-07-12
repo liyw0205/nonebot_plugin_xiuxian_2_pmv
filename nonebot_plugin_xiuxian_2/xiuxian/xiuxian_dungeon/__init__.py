@@ -35,6 +35,8 @@ from .team_manager import (
     load_teams, save_team
 )
 from .team_command_service import (
+    TeamInviteResponseResult,
+    build_invite_response_message,
     build_team_view,
     build_kick_team_message,
     build_kick_team_result,
@@ -44,7 +46,11 @@ from .team_command_service import (
     build_transfer_team_not_member_message,
     build_transfer_team_self_message,
     build_transfer_team_success_message,
+    build_team_invite_message,
+    build_team_invite_private_message,
+    resolve_invite_response,
     resolve_kick_target,
+    resolve_team_invite,
     resolve_transfer_target,
 )
 
@@ -279,35 +285,35 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
         if target_db_info:
             target_user_id = str(target_db_info['user_id'])
 
-    if not target_user_id:
-        msg = "未找到指定的用户，请检查道号或艾特是否正确！"
-        await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
-        await invite_team_cmd.finish()
+    target_user_info = None
+    if target_user_id:
+        is_target_user, target_user_info, target_msg = check_user(target_user_id)
+        if not is_target_user:
+            await handle_send(bot, event, target_msg)
+            await invite_team_cmd.finish()
 
-    is_target_user, target_user_info, target_msg = check_user(target_user_id)
-    if not is_target_user:
-        await handle_send(bot, event, target_msg)
-        await invite_team_cmd.finish()
-
-    in_cd, remain = is_in_team_cd(target_user_id)
-    if in_cd:
-        target_name = target_user_info['user_name']
-        msg = f"{target_name}当前处于组队冷却中（剩余{format_seconds(remain)}），不可被邀请。"
-        await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
-        await invite_team_cmd.finish()
-
-    target_team = get_user_team(target_user_id)
-    if target_team:
-        target_name = target_user_info['user_name']
-        msg = f"{target_name}已有队伍！"
-        await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
-        await invite_team_cmd.finish()
-
-    if target_user_id in team_invite_cache:
+    in_cd, remain = is_in_team_cd(target_user_id) if target_user_id else (False, 0)
+    target_team = get_user_team(target_user_id) if target_user_id else None
+    pending_inviter_name = None
+    pending_remaining_time = 0
+    if target_user_id and target_user_id in team_invite_cache:
         inviter_id = team_invite_cache[target_user_id]['inviter']
         inviter_info = sql_message.get_user_info_with_id(inviter_id)
-        remaining_time = 60 - (datetime.now().timestamp() - team_invite_cache[target_user_id]['timestamp'])
-        msg = f"对方已有来自{inviter_info['user_name']}的组队邀请（剩余{int(remaining_time)}秒），请稍后再试！"
+        pending_inviter_name = inviter_info['user_name'] if inviter_info else "未知用户"
+        pending_remaining_time = int(
+            60 - (datetime.now().timestamp() - team_invite_cache[target_user_id]['timestamp'])
+        )
+
+    invite_result = resolve_team_invite(
+        target_user_id=target_user_id,
+        target_user_name=(target_user_info or {}).get("user_name"),
+        cooldown_seconds=remain if in_cd else 0,
+        target_team_id=target_team,
+        pending_inviter_name=pending_inviter_name,
+        pending_remaining_seconds=pending_remaining_time,
+    )
+    if invite_result.status != "ready":
+        msg = build_team_invite_message(invite_result, format_seconds)
         await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
         await invite_team_cmd.finish()
 
@@ -322,8 +328,8 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
     asyncio.create_task(expire_team_invite(target_user_id, invite_id, bot, event))
 
-    target_name = target_user_info['user_name']
-    msg = f"📨 已向{target_name}发送组队邀请，等待对方回应..."
+    target_name = invite_result.target_user_name
+    msg = build_team_invite_message(invite_result, format_seconds)
     await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
 
     try:
@@ -331,7 +337,10 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
             await delivery_service.send_to_user(
                 bot,
                 str(target_user_id),
-                f"你在群{event.group_id}收到了来自{user_info['user_name']}的组队邀请，请在1分钟内回复【同意组队】或【拒绝组队】。",
+                build_team_invite_private_message(
+                    group_id=str(event.group_id),
+                    inviter_name=user_info['user_name'],
+                ),
             )
     except Exception as e:
         logger.warning(f"私聊通知被邀请者失败: {e}")
@@ -349,38 +358,45 @@ async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
 
     user_id = str(user_info['user_id'])
 
-    if user_id not in team_invite_cache:
-        msg = "没有待处理的组队邀请！"
+    invite_data = team_invite_cache.get(user_id)
+    if invite_data is None:
+        msg = build_invite_response_message(
+            resolve_invite_response(
+                has_invite=False,
+                invite_group_id=None,
+                current_group_id=None,
+                team_exists=False,
+                user_has_team=False,
+                member_count=0,
+                max_members=0,
+            )
+        )
         await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
         await agree_team_cmd.finish()
 
-    invite_data = team_invite_cache[user_id]
     team_id = invite_data['team_id']
     inviter_id = invite_data['inviter']
     invite_group_id = invite_data['group_id']
 
-    if isinstance(event, GroupMessageEvent) and event.group_id != invite_group_id:
-        msg = f"此邀请是在群{invite_group_id}发出的，请在该群或私聊中进行操作。"
-        await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
-        await agree_team_cmd.finish()
-
     team_info = get_team_info(team_id)
-    if not team_info:
-        msg = "该队伍已解散！"
-        del team_invite_cache[user_id]
+    response_result = resolve_invite_response(
+        has_invite=True,
+        invite_group_id=str(invite_group_id),
+        current_group_id=(str(event.group_id) if isinstance(event, GroupMessageEvent) else None),
+        team_exists=bool(team_info),
+        user_has_team=bool(get_user_team(user_id)),
+        member_count=len(team_info['members']) if team_info else 0,
+        max_members=int(team_info['max_members']) if team_info else 0,
+    )
+    if response_result.status != "ready":
+        msg = build_invite_response_message(response_result)
+        if response_result.status in {"team_disbanded", "user_has_team", "team_full"}:
+            del team_invite_cache[user_id]
         await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
         await agree_team_cmd.finish()
 
-    if get_user_team(user_id):
-        msg = "你已经在一个队伍中了，无法接受邀请！"
+    if not team_info:
         del team_invite_cache[user_id]
-        await handle_send(bot, event, msg, md_type="team", k1="离开队伍", v1="离开队伍", k2="查看队伍", v2="查看队伍", k3="队伍帮助", v3="队伍帮助")
-        await agree_team_cmd.finish()
-
-    if len(team_info['members']) >= team_info['max_members']:
-        msg = "该队伍已满员！"
-        del team_invite_cache[user_id]
-        await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
         await agree_team_cmd.finish()
 
     success = add_member_to_team(team_id, user_id)
@@ -394,7 +410,15 @@ async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
 
         inviter_info = sql_message.get_user_info_with_id(inviter_id)
 
-        msg = f"✅ 你已成功加入队伍【{team_info['team_name']}】！\n👑 队长：{inviter_info['user_name']}\n👥 当前成员：{len(team_info['members'])}/{team_info['max_members']}"
+        msg = build_invite_response_message(
+            TeamInviteResponseResult(
+                "joined",
+                team_name=team_info['team_name'],
+                leader_name=inviter_info['user_name'],
+                member_count=len(team_info['members']),
+                max_members=team_info['max_members'],
+            )
+        )
         await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="副本信息", v2="副本信息", k3="队伍帮助", v3="队伍帮助")
 
         try:
@@ -407,7 +431,7 @@ async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
         except Exception as e:
             logger.warning(f"通知队长失败: {e}")
     else:
-        msg = "加入队伍失败！"
+        msg = build_invite_response_message(TeamInviteResponseResult("join_failed"))
         await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
 
     await agree_team_cmd.finish()
@@ -423,22 +447,24 @@ async def reject_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
     user_id = str(user_info['user_id'])
 
-    if user_id not in team_invite_cache:
-        msg = "没有待处理的组队邀请！"
+    invite_data = team_invite_cache.get(user_id)
+    if invite_data is None:
+        msg = build_invite_response_message(TeamInviteResponseResult("no_invite"))
         await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
         await reject_team_cmd.finish()
 
-    invite_data = team_invite_cache[user_id]
     invite_group_id = invite_data['group_id']
 
     if isinstance(event, GroupMessageEvent) and event.group_id != invite_group_id:
-        msg = f"此邀请是在群{invite_group_id}发出的，请在该群或私聊中进行操作。"
+        msg = build_invite_response_message(
+            TeamInviteResponseResult("wrong_group", invite_group_id=str(invite_group_id))
+        )
         await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
         await reject_team_cmd.finish()
 
     del team_invite_cache[user_id]
 
-    msg = "已拒绝组队邀请。"
+    msg = build_invite_response_message(TeamInviteResponseResult("rejected"))
     await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
     await reject_team_cmd.finish()
 
