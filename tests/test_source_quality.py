@@ -630,6 +630,17 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("tianti_medicine_bath_operations", service_source)
 
+    def test_tianti_breakthrough_uses_idempotent_transaction_service(self) -> None:
+        tianti_root = SOURCE_ROOT / "xiuxian" / "xiuxian_tianti"
+        source = (tianti_root / "__init__.py").read_text(encoding="utf-8")
+        handler = source[source.index("@tianti_break.handle"):source.index("@tianti_info.handle")]
+        self.assertIn("tianti_breakthrough_service.attempt(", handler)
+        self.assertNotIn("tianti_manager.save_user_tianti_info(", handler)
+
+        service_source = (tianti_root / "breakthrough_service.py").read_text(encoding="utf-8")
+        self.assertIn("BEGIN IMMEDIATE", service_source)
+        self.assertIn("tianti_breakthrough_operations", service_source)
+
     def test_sect_fairyland_claim_uses_transactional_service(self) -> None:
         sect_root = SOURCE_ROOT / "xiuxian" / "xiuxian_sect"
         command_source = (sect_root / "__init__.py").read_text(encoding="utf-8")

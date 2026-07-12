@@ -29,12 +29,14 @@ from .tianti_service import (
 )
 from .stone_training_service import StoneTrainingService
 from .medicine_bath_service import MedicineBathService
+from .breakthrough_service import TiantiBreakthroughService
 from ...paths import get_paths
 
 sql_message = XiuxianDateManage()
 tianti_manager = TiantiDataManager()
 stone_training_service = StoneTrainingService(get_paths().game_db, get_paths().player_db)
 medicine_bath_service = MedicineBathService(get_paths().game_db, get_paths().player_db)
+tianti_breakthrough_service = TiantiBreakthroughService(get_paths().player_db)
 items = Items()
 
 tianti_help = on_command("炼体帮助", priority=10, block=True)
@@ -440,49 +442,44 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     user_id = str(user_info["user_id"])
     data = tianti_manager.get_user_tianti_info(user_id)
-    cur_name = data["tianti_level"]
-    next_name = get_next_tianti_level_name(cur_name)
-
+    next_name = get_next_tianti_level_name(data["tianti_level"])
     if not next_name:
         await handle_send(bot, event, "你的炼体已达最高境界。")
         return
-
     next_cfg = get_tianti_level_data(next_name)
-    need_hp = int(next_cfg["need_hp"])
     min_xx = next_cfg["min_xx_level"]
-
-    # 修仙境界校验
     user_xx_rank = get_tianti_level_index(user_info["level"], is_xiuxian=True)
-    need_xx_rank = get_tianti_level_index(min_xx, is_xiuxian=True)
-    if user_xx_rank > need_xx_rank:
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = (
+        f"tianti-break:{event_id}:{user_id}" if event_id
+        else f"tianti-break:{user_id}:{time.time_ns()}"
+    )
+    result = tianti_breakthrough_service.attempt(
+        operation_id, user_id, cultivation_rank=user_xx_rank,
+        roll_success=random.random() < 0.5,
+    )
+    if result.status == "max_level":
+        await handle_send(bot, event, "你的炼体已达最高境界。")
+        return
+    if result.status == "cultivation_insufficient":
         await handle_send(bot, event, f"突破失败：修仙境界不足，需达到【{min_xx}】。")
         return
-
-    cur_hp = int(data["tianti_hp"])
-    if cur_hp < need_hp:
-        await handle_send(bot, event, f"突破失败：炼体气血不足，需{number_to(need_hp)}。")
+    if result.status == "hp_insufficient":
+        await handle_send(bot, event, f"突破失败：炼体气血不足，需{number_to(int(next_cfg['need_hp']))}。")
         return
-
-    # 无论成败先扣 5% 当前气血
-    cost_hp = max(1, int(cur_hp * 0.05))
-    data["tianti_hp"] = max(0, cur_hp - cost_hp)
-
-    # 固定 50% 成功率
-    success = random.random() < 0.5
-    if success:
-        data["tianti_level"] = next_name
-        tianti_manager.save_user_tianti_info(user_id, data)
+    if not result.succeeded:
+        raise RuntimeError(f"unexpected tianti breakthrough status: {result.status}")
+    if result.success:
         await handle_send(
             bot, event,
-            f"炼体突破成功！当前境界：{next_name}\n"
-            f"本次消耗炼体气血：{number_to(cost_hp)}"
+            f"炼体突破成功！当前境界：{result.new_level}\n"
+            f"本次消耗炼体气血：{number_to(result.hp_cost)}"
         )
     else:
-        tianti_manager.save_user_tianti_info(user_id, data)
         await handle_send(
             bot, event,
             f"炼体突破失败！\n"
-            f"本次消耗炼体气血：{number_to(cost_hp)}"
+            f"本次消耗炼体气血：{number_to(result.hp_cost)}"
         )
 
 
