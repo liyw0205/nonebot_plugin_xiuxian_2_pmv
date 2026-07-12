@@ -1205,6 +1205,18 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("stone_contest_service.transfer(", handler)
         self.assertNotIn("sql_message.update_ls(", handler)
 
+    def test_general_fusion_uses_transactional_service(self) -> None:
+        fusion_root = SOURCE_ROOT / "xiuxian" / "xiuxian_fusion"
+        source = (fusion_root / "__init__.py").read_text(encoding="utf-8")
+        handler = source[source.index("async def general_fusion("):source.index("@available_fusion.handle")]
+        self.assertIn("fusion_service.apply(", handler)
+        self.assertNotIn("sql_message.update_ls(", handler)
+        self.assertNotIn("sql_message.update_back_j(", handler)
+        self.assertNotIn("sql_message.send_back(", handler)
+        service = (fusion_root / "fusion_service.py").read_text(encoding="utf-8")
+        self.assertIn("BEGIN IMMEDIATE", service)
+        self.assertIn("fusion_operations", service)
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")

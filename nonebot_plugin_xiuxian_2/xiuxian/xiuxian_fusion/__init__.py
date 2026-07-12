@@ -18,10 +18,14 @@ from ..xiuxian_utils.utils import (
     check_user, get_msg_pic, number_to, handle_send, send_help_message
 )
 from ..xiuxian_back.back_util import check_equipment_use_msg
+from ...paths import get_paths
+from .fusion_service import FusionService
 import random
+import time
 
 items = Items()
 sql_message = XiuxianDateManage()
+fusion_service = FusionService(get_paths().game_db)
 
 # 合成必定成功ID列表
 FIXED_SUCCESS_IDS = [7084]
@@ -83,7 +87,9 @@ async def fusion_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             await handle_send(bot, event, msg, md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
             await fusion_item.finish()
     
-    success, msg = await general_fusion(user_id, equipment_id, equipment)
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"fusion:{event_id}:{user_id}" if event_id else f"fusion:{user_id}:{time.time_ns()}"
+    success, msg = await general_fusion(user_id, equipment_id, equipment, operation_id)
     await handle_send(bot, event, msg, md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
     await fusion_item.finish()
 
@@ -104,11 +110,13 @@ async def force_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, msg, md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
         await force_fusion.finish()
     
-    success, msg = await general_fusion(user_id, equipment_id, equipment)
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"force-fusion:{event_id}:{user_id}" if event_id else f"force-fusion:{user_id}:{time.time_ns()}"
+    success, msg = await general_fusion(user_id, equipment_id, equipment, operation_id)
     await handle_send(bot, event, msg, md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
     await force_fusion.finish()
 
-async def general_fusion(user_id, equipment_id, equipment):
+async def general_fusion(user_id, equipment_id, equipment, operation_id):
     """
     合成函数
     :param user_id: 用户ID
@@ -203,50 +211,34 @@ async def general_fusion(user_id, equipment_id, equipment):
         if missing_names:
             return False, "道友还缺少：\n" + "\n".join(missing_names)
     
-    # 检查是否必定成功
-    if int(equipment_id) in FIXED_SUCCESS_IDS or str(equipment['type']) == "特殊道具":
-        # 必定成功，直接扣除材料并添加物品
-        sql_message.update_ls(user_id, int(fusion_info.get('need_stone', 0)), 2)  # 扣灵石
-        for item_id, amount_needed in needed_items.items():
-            sql_message.update_back_j(user_id, int(item_id), amount_needed)  # 扣道具
-        
-        sql_message.send_back(user_id, int(equipment_id), equipment['name'], equipment['type'], 1, 1)
-        
+    guaranteed = int(equipment_id) in FIXED_SUCCESS_IDS or str(equipment['type']) == "特殊道具"
+    successful = guaranteed or random.randint(1, 100) <= 30
+    reserved_items = {}
+    for item_id in needed_items:
+        item_info = next((back for back in back_msg if back['goods_id'] == int(item_id)), None)
+        if item_info and item_info['goods_type'] == "装备" and check_equipment_use_msg(user_id, int(item_id)):
+            reserved_items[int(item_id)] = 1
+    result = fusion_service.apply(
+        operation_id,
+        user_id,
+        int(fusion_info.get('need_stone', 0)),
+        needed_items,
+        equipment_id,
+        equipment['name'],
+        equipment['type'],
+        successful=successful,
+        protection_item_id=None if guaranteed else 20006,
+        reserved_items=reserved_items,
+        max_goods_num=XiuConfig().max_goods_num,
+    )
+    if not result.succeeded:
+        return False, "合成所需的灵石或材料状态已经变化，本次合成未结算。"
+    if result.successful:
         item_type = equipment.get('type', '物品')
         return True, f"道友成功合成了{item_type}: {equipment['name']}！！"
-    
-    # 概率合成（30%成功率）
-    roll = random.randint(1, 100)
-    
-    if roll <= 30:
-        # 成功，扣除材料并添加物品
-        sql_message.update_ls(user_id, int(fusion_info.get('need_stone', 0)), 2)  # 扣灵石
-        for item_id, amount_needed in needed_items.items():
-            sql_message.update_back_j(user_id, int(item_id), amount_needed)  # 扣道具
-        
-        sql_message.send_back(user_id, int(equipment_id), equipment['name'], equipment['type'], 1, 1)
-        
-        item_type = equipment.get('type', '物品')
-        return True, f"道友成功合成了{item_type}: {equipment['name']}！！"
-    else:
-        # 失败，检查是否有福缘石
-        has_protection = False
-        for back in back_msg:
-            if back['goods_id'] == 20006 and back['goods_num'] > 0:
-                has_protection = True
-                # 使用一个福缘石
-                sql_message.update_back_j(user_id, 20006, 1)
-                break
-        
-        if has_protection:
-            return False, f"合成失败！幸好使用了福缘石，材料没有损失。"
-        else:
-            # 没有福缘石，扣除材料
-            sql_message.update_ls(user_id, int(fusion_info.get('need_stone', 0)), 2)  # 扣灵石
-            for item_id, amount_needed in needed_items.items():
-                sql_message.update_back_j(user_id, int(item_id), amount_needed)  # 扣道具
-            
-            return False, f"合成失败！材料已消耗。"
+    if result.protected:
+        return False, "合成失败！幸好使用了福缘石，材料没有损失。"
+    return False, "合成失败！材料已消耗。"
 
 @available_fusion.handle(parameterless=[Cooldown(cd_time=0)])
 async def available_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
