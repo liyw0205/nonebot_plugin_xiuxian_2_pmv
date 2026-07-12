@@ -754,6 +754,20 @@ class SourceQualityTests(unittest.TestCase):
             source,
         )
 
+    def test_dungeon_team_command_presenter_extracts_view_and_transfer_copy(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_dungeon" / "__init__.py"
+        ).read_text(encoding="utf-8")
+        presenter_source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_dungeon" / "team_command_service.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("build_team_view_message(", source)
+        self.assertIn("build_transfer_team_success_message(", source)
+        self.assertIn("build_transfer_team_self_message(", source)
+        self.assertIn("build_transfer_team_not_member_message(", source)
+        self.assertIn("def build_transfer_team_self_message", presenter_source)
+        self.assertIn("def build_transfer_team_not_member_message", presenter_source)
+
     def test_command_disable_uses_central_json_store(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "command_disable.py").read_text(
             encoding="utf-8"

@@ -30,7 +30,17 @@ def build_transfer_team_success_message(target_user_name: str) -> str:
     return f"👑 队长已成功转移给 {target_user_name}！"
 
 
+def build_transfer_team_self_message() -> str:
+    return "你已经是队长了，无需转移给自己。"
+
+
+def build_transfer_team_not_member_message() -> str:
+    return "只能将队长转移给当前队伍内的成员！"
+
+
 __all__ = [
     "build_team_view_message",
     "build_transfer_team_success_message",
+    "build_transfer_team_self_message",
+    "build_transfer_team_not_member_message",
 ]

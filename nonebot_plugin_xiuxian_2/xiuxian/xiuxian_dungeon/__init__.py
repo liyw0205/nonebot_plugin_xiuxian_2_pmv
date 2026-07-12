@@ -36,6 +36,8 @@ from .team_manager import (
 )
 from .team_command_service import (
     build_team_view_message,
+    build_transfer_team_not_member_message,
+    build_transfer_team_self_message,
     build_transfer_team_success_message,
 )
 
@@ -654,12 +656,12 @@ async def transfer_team_handler(bot: Bot, event: Union[GroupMessageEvent, Privat
         await transfer_team_cmd.finish()
 
     if target_user_id == user_id:
-        msg = "你已经是队长了，无需转移给自己。"
+        msg = build_transfer_team_self_message()
         await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
         await transfer_team_cmd.finish()
 
     if target_user_id not in team_info.get("members", []):
-        msg = "只能将队长转移给当前队伍内的成员！"
+        msg = build_transfer_team_not_member_message()
         await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="邀请组队", v2="邀请组队", k3="队伍帮助", v3="队伍帮助")
         await transfer_team_cmd.finish()
 
