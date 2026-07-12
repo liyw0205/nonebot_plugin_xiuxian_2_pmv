@@ -28,11 +28,13 @@ from .tianti_service import (
     settle_tianti_gain,
 )
 from .stone_training_service import StoneTrainingService
+from .medicine_bath_service import MedicineBathService
 from ...paths import get_paths
 
 sql_message = XiuxianDateManage()
 tianti_manager = TiantiDataManager()
 stone_training_service = StoneTrainingService(get_paths().game_db, get_paths().player_db)
+medicine_bath_service = MedicineBathService(get_paths().game_db, get_paths().player_db)
 items = Items()
 
 tianti_help = on_command("炼体帮助", priority=10, block=True)
@@ -350,18 +352,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg)
         return
 
-    data = tianti_manager.get_user_tianti_info(user_id)
-    active_bath = _get_active_medicine_bath(data, now_t)
-    if active_bath:
-        remain = int((active_bath["end_time"] - now_t).total_seconds() // 60)
-        await handle_send(
-            bot,
-            event,
-            f"当前药浴仍在生效：{active_bath['name']}，剩余约{remain}分钟。\n"
-            f"药浴结束后再使用新的药材。"
-        )
-        return
-
     consume_plan = []
     plan_by_id = {}
     remaining_units = MEDICINE_BATH_MAX_UNITS
@@ -387,31 +377,31 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "有效药材数量不足，无法开启药浴。")
         return
 
-    not_enough = []
-    for item in consume_plan:
-        have = sql_message.goods_num(user_id, item["item_id"])
-        if have < item["amount"]:
-            not_enough.append(f"{item['name']}需要{item['amount']}份，现有{have}份")
-    if not_enough:
-        await handle_send(bot, event, "药材不足：\n" + "\n".join(not_enough))
-        return
-
     sect_fairyland_level = _get_user_sect_fairyland_level(user_info)
-    pre_result = _settle_tianti_gain(data, now_t, sect_fairyland_level)
-    if pre_result["status"] == "empty":
-        data["last_settle_time"] = now_t.strftime("%Y-%m-%d %H:%M:%S")
-
     effect = _medicine_bath_effect(consume_units)
-    end_t = now_t + timedelta(minutes=MEDICINE_BATH_DURATION_MINUTES)
-    bath_name = f"{slot['name']}药浴（{_format_medicine_bath_plan(consume_plan)}）"
-    data["medicine_last_time"] = now_t.strftime("%Y-%m-%d %H:%M:%S")
-    data["medicine_end_time"] = end_t.strftime("%Y-%m-%d %H:%M:%S")
-    data["medicine_effect"] = effect
-    data["medicine_name"] = bath_name
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = (
+        f"tianti-bath:{event_id}:{user_id}" if event_id
+        else f"tianti-bath:{user_id}:{time.time_ns()}"
+    )
+    result = medicine_bath_service.apply(
+        operation_id, user_id, consume_plan, effect, slot["name"], now_t,
+        MEDICINE_BATH_DURATION_MINUTES, sect_fairyland_level=sect_fairyland_level,
+    )
+    if result.status == "bath_active":
+        await handle_send(bot, event, "当前药浴仍在生效，药浴结束后再使用新的药材。")
+        return
+    if result.status in {"item_insufficient", "item_changed"}:
+        detail = "\n".join(
+            f"{item['name']}需要{item['amount']}份，现有{item['have']}份"
+            for item in result.insufficient
+        )
+        await handle_send(bot, event, "药材不足或库存已经变化。" + (f"\n{detail}" if detail else ""))
+        return
+    if not result.succeeded:
+        raise RuntimeError(f"unexpected medicine bath status: {result.status}")
 
-    for item in consume_plan:
-        sql_message.update_back_j(user_id, item["item_id"], item["amount"])
-    tianti_manager.save_user_tianti_info(user_id, data)
+    pre_result = result.settlement
 
     pre_msg = ""
     if pre_result["status"] == "ok" and pre_result.get("real_gain", 0) > 0:
@@ -434,7 +424,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         f"消耗有效药材：{_format_medicine_bath_plan(consume_plan)}，共{consume_units}份\n"
         f"炼体结算效果：{_format_medicine_bath_percent(effect)}%\n"
         f"持续时间：{MEDICINE_BATH_DURATION_MINUTES}分钟\n"
-        f"有效至：{end_t.strftime('%Y-%m-%d %H:%M:%S')}"
+        f"有效至：{result.end_time}"
         f"{ignored_msg}"
         f"{pre_msg}"
     )

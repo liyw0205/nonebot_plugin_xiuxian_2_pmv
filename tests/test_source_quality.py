@@ -615,6 +615,21 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("tianti_stone_training_operations", service_source)
 
+    def test_tianti_medicine_bath_uses_attached_database_transaction(self) -> None:
+        tianti_root = SOURCE_ROOT / "xiuxian" / "xiuxian_tianti"
+        source = (tianti_root / "__init__.py").read_text(encoding="utf-8")
+        handler = source[
+            source.index("@tianti_medicine_bath.handle"):source.index("@tianti_break.handle")
+        ]
+        self.assertIn("medicine_bath_service.apply(", handler)
+        self.assertNotIn("sql_message.update_back_j(", handler)
+        self.assertNotIn("tianti_manager.save_user_tianti_info(", handler)
+
+        service_source = (tianti_root / "medicine_bath_service.py").read_text(encoding="utf-8")
+        self.assertIn("ATTACH DATABASE", service_source)
+        self.assertIn("BEGIN IMMEDIATE", service_source)
+        self.assertIn("tianti_medicine_bath_operations", service_source)
+
     def test_sect_fairyland_claim_uses_transactional_service(self) -> None:
         sect_root = SOURCE_ROOT / "xiuxian" / "xiuxian_sect"
         command_source = (sect_root / "__init__.py").read_text(encoding="utf-8")
