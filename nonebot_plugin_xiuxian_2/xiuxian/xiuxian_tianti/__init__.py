@@ -31,6 +31,7 @@ from .stone_training_service import StoneTrainingService
 from .medicine_bath_service import MedicineBathService
 from .breakthrough_service import TiantiBreakthroughService
 from .qiaoxue_service import QiaoxueService
+from .settlement_service import TiantiSettlementService
 from ...paths import get_paths
 
 sql_message = XiuxianDateManage()
@@ -39,6 +40,7 @@ stone_training_service = StoneTrainingService(get_paths().game_db, get_paths().p
 medicine_bath_service = MedicineBathService(get_paths().game_db, get_paths().player_db)
 tianti_breakthrough_service = TiantiBreakthroughService(get_paths().player_db)
 qiaoxue_service = QiaoxueService(get_paths().player_db)
+tianti_settlement_service = TiantiSettlementService(get_paths().player_db)
 items = Items()
 
 tianti_help = on_command("炼体帮助", priority=10, block=True)
@@ -210,12 +212,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     user_id = str(user_info["user_id"])
-    data = tianti_manager.get_user_tianti_info(user_id)
     now_t = datetime.now()
-
     sect_fairyland_level = _get_user_sect_fairyland_level(user_info)
-    result = _settle_tianti_gain(data, now_t, sect_fairyland_level)
-    tianti_manager.save_user_tianti_info(user_id, data)
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = (
+        f"tianti-settle:{event_id}:{user_id}" if event_id
+        else f"tianti-settle:{user_id}:{time.time_ns()}"
+    )
+    settlement = tianti_settlement_service.settle(
+        operation_id, user_id, now_t, sect_fairyland_level=sect_fairyland_level
+    )
+    if not settlement.succeeded:
+        raise RuntimeError(f"unexpected tianti settlement status: {settlement.status}")
+    result = settlement.detail
     if result["status"] == "init":
         await handle_send(bot, event, "已初始化炼体计时，请稍后再来结算。")
         return
