@@ -38,10 +38,12 @@ from .natal_config import (
     EFFECT_NAME_MAP
 )
 from .training_service import NatalTrainingService
+from .effect_upgrade_service import EffectUpgradeService
 
 items = Items()
 sql_message = XiuxianDateManage()
 natal_training_service = NatalTrainingService(get_paths().game_db, get_paths().player_db)
+natal_effect_upgrade_service = EffectUpgradeService(get_paths().game_db, get_paths().player_db)
 
 # 定义觉醒本命法宝命令
 natal_awaken = on_command(
@@ -312,14 +314,22 @@ async def natal_effect_upgrade_handler(bot: Bot, event: GroupMessageEvent | Priv
                           md_type="法宝", k1="升阶", v1="本命法宝升阶", k2="法宝", v2="我的本命法宝", k3="觉醒", v3="觉醒本命法宝")
         return
 
-    success, upgrade_result_msg = nt.upgrade_single_effect_level()
-
-    if success:
-        sql_message.update_back_j(user_id, MYSTERIOUS_SCRIPTURE_ID, num=scripture_cost)
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"natal-effect-upgrade:{event_id}:{user_id}" if event_id else f"natal-effect-upgrade:{user_id}:{datetime.now().timestamp()}"
+    upgrade = natal_effect_upgrade_service.upgrade(
+        operation_id, user_id, MYSTERIOUS_SCRIPTURE_ID, scripture_cost,
+        MAX_EFFECT_SLOTS, nt.max_effect_level_all_effects,
+        random.getrandbits(63),
+    )
+    if upgrade.succeeded:
+        nt._natal_data_cache = None
+        effect_name = EFFECT_NAME_MAP.get(NatalEffectType(upgrade.effect_type), "未知效果")
+        upgrade_result_msg = f"效果【{effect_name}】等级提升至 {upgrade.level}。"
         await handle_send(bot, event, f"效果升阶成功！消耗{scripture_cost}个【神秘经书】。\n{upgrade_result_msg}",
                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="升阶", v3="本命法宝升阶")
     else:
-        await handle_send(bot, event, f"效果升阶失败：{upgrade_result_msg}",
+        reason = "所有效果已达最高等级" if upgrade.status == "all_maxed" else "法宝或神秘经书状态已经变化"
+        await handle_send(bot, event, f"效果升阶失败：{reason}。",
                           md_type="法宝", k1="升阶", v1="本命法宝升阶", k2="法宝", v2="我的本命法宝", k3="帮助", v3="本命法宝帮助")
 
 

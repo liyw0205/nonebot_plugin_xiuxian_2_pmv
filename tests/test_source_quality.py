@@ -1230,6 +1230,19 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("ATTACH DATABASE", service)
         self.assertIn("natal_training_operations", service)
 
+    def test_natal_effect_upgrade_uses_transactional_service(self) -> None:
+        natal_root = SOURCE_ROOT / "xiuxian" / "xiuxian_natal_treasure"
+        source = (natal_root / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("@natal_effect_upgrade.handle")
+        handler = source[start:source.index("# 定义铭刻道纹命令", start)]
+        self.assertIn("natal_effect_upgrade_service.upgrade(", handler)
+        self.assertNotIn("nt.upgrade_single_effect_level(", handler)
+        self.assertNotIn("sql_message.update_back_j(", handler)
+        service = (natal_root / "effect_upgrade_service.py").read_text(encoding="utf-8")
+        self.assertIn("BEGIN IMMEDIATE", service)
+        self.assertIn("ATTACH DATABASE", service)
+        self.assertIn("natal_effect_upgrade_operations", service)
+
     def test_interaction_ack_is_wired_into_event_lifecycle(self) -> None:
         entrypoint = SOURCE_ROOT / "xiuxian" / "__init__.py"
         source = entrypoint.read_text(encoding="utf-8")
