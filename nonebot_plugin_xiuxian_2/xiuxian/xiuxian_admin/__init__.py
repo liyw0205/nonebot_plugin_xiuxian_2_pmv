@@ -62,6 +62,7 @@ from .admin_helpers import (
     parse_clear_broadcast_kind,
 )
 from .level_change_service import AdminLevelChangeService
+from .root_change_service import AdminRootChangeService
 from . import command_controls as _command_controls  # noqa: F401
 from . import empty_fallback as _empty_fallback  # noqa: F401
 from . import event_debug as _event_debug  # noqa: F401
@@ -70,6 +71,7 @@ items = Items()
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 admin_level_change_service = AdminLevelChangeService(get_paths().game_db)
+admin_root_change_service = AdminRootChangeService(get_paths().game_db)
 
 
 def _admin_operation_id(event, action: str, user_id: str) -> str:
@@ -561,11 +563,43 @@ async def gmm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, "未找到目标用户（或对方未踏入修仙界）")
         return
 
-    # 执行修改
-    new_root = sql_message.update_root(target_qq, str(root_id))
-    sql_message.update_power2(target_qq)
-
-    msg = f"已将 {target_user['user_name']} 的灵根变更为 【{new_root}】！"
+    _, new_root_type = admin_root_change_service.root_values(root_id, target_user["user_name"])
+    root_config = jsondata.root_data()
+    if new_root_type == "命运道果":
+        new_root_rate = float(root_config["永恒道果"]["type_speeds"])
+        step_rate = float(root_config[new_root_type]["type_speeds"])
+        remaining = int(target_user["root_level"] or 0)
+        while remaining > 0:
+            levels = min(remaining, 5)
+            new_root_rate += levels * step_rate
+            remaining -= levels
+            step_rate = round(max(0.5, step_rate - 0.3), 2)
+            if step_rate <= 0.5:
+                new_root_rate += remaining * 0.5
+                break
+    else:
+        new_root_rate = float(root_config[new_root_type]["type_speeds"])
+    result = admin_root_change_service.change(
+        _admin_operation_id(event, "root-change", str(target_qq)),
+        str(get_user_id(event) or "unknown"),
+        target_qq,
+        (
+            target_user["root"], target_user["root_type"], target_user["root_level"],
+            target_user["level"], target_user["exp"], target_user["power"],
+            target_user["user_name"],
+        ),
+        root_id,
+        float(jsondata.level_data()[target_user["level"]]["spend"]),
+        new_root_rate,
+    )
+    if result.status == "state_changed":
+        msg = "玩家综合状态已变化，请重新执行指令"
+    elif result.status == "operation_conflict":
+        msg = "本次管理员灵根操作与已记录事件冲突"
+    elif result.status == "user_missing":
+        msg = "目标玩家已不存在"
+    else:
+        msg = f"已将 {target_user['user_name']} 的灵根变更为 【{result.root_type}】！"
     await handle_send(bot, event, msg)
 
 @cz.handle(parameterless=[Cooldown(cd_time=0)])
