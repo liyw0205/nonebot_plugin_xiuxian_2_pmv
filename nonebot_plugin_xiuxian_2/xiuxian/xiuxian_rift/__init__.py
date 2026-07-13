@@ -30,6 +30,7 @@ from .entry_service import RiftEntryService
 from .termination_service import RiftTerminationService
 from .key_event_settlement_service import RiftKeyEventSettlementService
 from .demon_token_battle_settlement_service import RiftDemonTokenBattleSettlementService
+from .speedup_service import RiftSpeedupService
 from .settlement_service import RiftSettlementService
 from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_map import (
@@ -49,6 +50,7 @@ rift_key_event_settlement_service = RiftKeyEventSettlementService(get_paths().ga
 rift_demon_token_battle_settlement_service = RiftDemonTokenBattleSettlementService(
     get_paths().game_db, get_paths().player_db
 )
+rift_speedup_service = RiftSpeedupService(get_paths().game_db)
 rift_settlement_service = RiftSettlementService(get_paths().game_db)
 cache_help = {}
 group_rift = {}  # dict
@@ -719,8 +721,13 @@ async def use_rift_boss(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await handle_send(bot, event, settlement.message)
     return
 
-async def use_rift_speedup(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
-    """使用秘境加速券"""
+async def _use_rift_speedup(
+    bot: Bot,
+    event: GroupMessageEvent | PrivateMessageEvent,
+    item_id,
+    remaining_ratio: int,
+    reduction_text: str,
+):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -729,110 +736,48 @@ async def use_rift_speedup(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     
     user_id = user_info['user_id']
     
-    # 检查是否在秘境中
-    is_type, msg = check_user_type(user_id, 3)  # 需要正在秘境的用户
-    if not is_type:
-        await handle_send(bot, event, msg, md_type="3", k2="修仙帮助", v2="修仙帮助", k3="秘境帮助", v3="秘境帮助")
-        return
-    
-    # 读取秘境信息
-    rift_info = None
-    try:
-        rift_info = read_rift_data(user_id)
-    except Exception as e:
-        logger.error(f"读取用户 {user_id} 秘境数据失败: {e}")
-        msg = "秘境数据读取失败，请稍后再试！"
-        await handle_send(bot, event, msg)
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"rift-speedup:{event_id or time.time_ns()}:{user_id}"
+    result = rift_speedup_service.apply(
+        operation_id,
+        user_id,
+        item_id,
+        remaining_ratio=remaining_ratio,
+    )
+    if not result.succeeded:
+        messages = {
+            "not_needed": "秘境探索时间已经小于等于10分钟，无需使用加速券！",
+            "item_missing": "加速券数量不足，请重新查看背包。",
+            "not_active": "当前没有可加速的秘境探索。",
+        }
+        await handle_send(bot, event, messages.get(result.status, "秘境或加速券状态已变化，请稍后重试。"))
         return
 
-    original_time = rift_info["time"]
-    
-    # 如果时间已经是10分钟，则不需要使用
-    if original_time <= 10:
-        msg = "秘境探索时间已经小于等于10分钟，无需使用加速券！"
-        await handle_send(bot, event, msg, md_type="秘境", k1="结算", v1="秘境结算", k2="加速", v2="道具使用 秘境加速券", k3="大加速", v3="道具使用 秘境大加速券", k4="钥匙", v4="道具使用 秘境钥匙")
-        return
-    
-    # 计算加速后的时间（最少保留1分钟）
-    new_time = max(1, int(original_time * 0.5))
-    rift_info["time"] = new_time
-    save_rift_data(user_id, rift_info)
-    
-    # 检查是否可以结算
-    user_cd_message = sql_message.get_user_cd(user_id)
-    work_time = datetime.strptime(
-        user_cd_message['create_time'], "%Y-%m-%d %H:%M:%S.%f"
-    )
+    # The database is authoritative; keep the legacy file as a post-commit projection.
+    try:
+        save_rift_data(user_id, result.rift_data)
+    except Exception as exc:
+        logger.error(f"同步用户 {user_id} 秘境加速缓存失败: {exc}")
+
+    work_time = datetime.strptime(result.create_time, "%Y-%m-%d %H:%M:%S.%f")
     exp_time = (datetime.now() - work_time).seconds // 60
-    time2 = rift_info["time"]
+    time2 = result.new_time
     
     if exp_time >= time2:
         rift_status = "可结算"
     else:
-        rift_status = f"探索{rift_info['name']} {time2 - exp_time}分后"
-    
-    # 消耗道具
-    sql_message.update_back_j(user_id, item_id)
-    
-    msg = f"秘境探索时间减少50%了！\n当前状态：{rift_status}"
+        rift_status = f"探索{result.rift_data['name']} {time2 - exp_time}分后"
+
+    msg = f"秘境探索时间减少{reduction_text}了！\n当前状态：{rift_status}"
     await handle_send(bot, event, msg, md_type="秘境", k1="结算", v1="秘境结算", k2="加速", v2="道具使用 秘境加速券", k3="大加速", v3="道具使用 秘境大加速券", k4="钥匙", v4="道具使用 秘境钥匙")
     return
+
+
+async def use_rift_speedup(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
+    """使用秘境加速券"""
+    return await _use_rift_speedup(bot, event, item_id, 50, "50%")
+
 
 async def use_rift_big_speedup(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
     """使用秘境大加速券"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙")
-        return
-    
-    user_id = user_info['user_id']
-    
-    # 检查是否在秘境中
-    is_type, msg = check_user_type(user_id, 3)  # 需要正在秘境的用户
-    if not is_type:
-        await handle_send(bot, event, msg, md_type="3", k2="修仙帮助", v2="修仙帮助", k3="秘境帮助", v3="秘境帮助")
-        return
-    
-    # 读取秘境信息
-    rift_info = None
-    try:
-        rift_info = read_rift_data(user_id)
-    except Exception as e:
-        logger.error(f"读取用户 {user_id} 秘境数据失败: {e}")
-        msg = "秘境数据读取失败，请稍后再试！"
-        await handle_send(bot, event, msg)
-        return
-
-    original_time = rift_info["time"]
-    
-    # 如果时间已经小于等于10分钟，则不需要使用
-    if original_time <= 10:
-        msg = "秘境探索时间已经小于等于10分钟，无需使用大加速券！"
-        await handle_send(bot, event, msg, md_type="秘境", k1="结算", v1="秘境结算", k2="加速", v2="道具使用 秘境加速券", k3="大加速", v3="道具使用 秘境大加速券", k4="钥匙", v4="道具使用 秘境钥匙")
-        return
-    
-    # 计算大加速后的时间（最少保留1分钟）
-    new_time = max(1, int(original_time * 0.1))
-    rift_info["time"] = new_time
-    save_rift_data(user_id, rift_info)
-    
-    # 检查是否可以结算
-    user_cd_message = sql_message.get_user_cd(user_id)
-    work_time = datetime.strptime(
-        user_cd_message['create_time'], "%Y-%m-%d %H:%M:%S.%f"
-    )
-    exp_time = (datetime.now() - work_time).seconds // 60
-    time2 = rift_info["time"]
-    
-    if exp_time >= time2:
-        rift_status = "可结算"
-    else:
-        rift_status = f"探索{rift_info['name']} {time2 - exp_time}分后"
-    
-    # 消耗道具
-    sql_message.update_back_j(user_id, item_id)
-    
-    msg = f"秘境探索时间减少90%了！\n当前状态：{rift_status}"
-    await handle_send(bot, event, msg, md_type="秘境", k1="结算", v1="秘境结算", k2="加速", v2="道具使用 秘境加速券", k3="大加速", v3="道具使用 秘境大加速券", k4="钥匙", v4="道具使用 秘境钥匙")
-    return
+    return await _use_rift_speedup(bot, event, item_id, 10, "90%")
