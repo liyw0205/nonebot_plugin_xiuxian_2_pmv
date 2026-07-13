@@ -1,11 +1,14 @@
 import json
 import os
 from datetime import datetime
+from contextlib import closing
+from nonebot.log import logger
 
 from ...paths import get_paths
 
 from ..xiuxian_utils.data_source import JsonDate
 from ..xiuxian_utils.json_store import load_json_file, save_json_file
+from ..xiuxian_utils import db_backend
 
 WORKDATA = get_paths().work
 PLAYERSDATA = get_paths().players
@@ -46,8 +49,8 @@ class reward(JsonDate):
             data = json.loads(file_data)
             return data
 
-def savef(user_id, data):
-    """保存悬赏令信息到JSON"""
+def savef(user_id, data, sync_snapshot=True):
+    """保存兼容 JSON 投影，并同步数据库悬赏快照。"""
     user_id = str(user_id)
     if not os.path.exists(PLAYERSDATA / user_id):
         os.makedirs(PLAYERSDATA / user_id)
@@ -60,20 +63,58 @@ def savef(user_id, data):
         "user_level": data.get("user_level")
     }
     save_json_file(FILEPATH, save_data)
+    if not sync_snapshot:
+        return
+    with closing(db_backend.connect(get_paths().game_db)) as conn:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS work_offer_snapshots("
+            "user_id TEXT PRIMARY KEY,snapshot TEXT NOT NULL,updated_at TEXT NOT NULL)"
+        )
+        conn.execute(
+            "INSERT INTO work_offer_snapshots(user_id,snapshot,updated_at) VALUES(%s,%s,%s) "
+            "ON CONFLICT(user_id) DO UPDATE SET snapshot=EXCLUDED.snapshot,updated_at=EXCLUDED.updated_at",
+            (user_id, json.dumps(save_data, ensure_ascii=True, sort_keys=True), save_data["refresh_time"]),
+        )
+        conn.commit()
 
 def readf(user_id):
-    """从JSON加载悬赏令信息"""
+    """优先读取数据库权威快照，并兼容迁移旧 JSON。"""
     user_id = str(user_id)
     FILEPATH = PLAYERSDATA / user_id / "workinfo.json"
-    if not os.path.exists(FILEPATH):
-        return None
-    
-    return load_json_file(FILEPATH, {}, dict)
+    with closing(db_backend.connect(get_paths().game_db)) as conn:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS work_offer_snapshots("
+            "user_id TEXT PRIMARY KEY,snapshot TEXT NOT NULL,updated_at TEXT NOT NULL)"
+        )
+        row = conn.execute(
+            "SELECT snapshot FROM work_offer_snapshots WHERE user_id=%s", (user_id,)
+        ).fetchone()
+        if row is not None:
+            return json.loads(str(row[0]))
+        if not os.path.exists(FILEPATH):
+            return None
+        data = load_json_file(FILEPATH, {}, dict)
+        if not data:
+            return None
+        conn.execute(
+            "INSERT INTO work_offer_snapshots(user_id,snapshot,updated_at) VALUES(%s,%s,%s)",
+            (user_id, json.dumps(data, ensure_ascii=True, sort_keys=True), str(data.get("refresh_time", ""))),
+        )
+        conn.commit()
+        return data
 
-def delete_work_file(user_id):
-    """删除悬赏令信息文件"""
+def delete_work_file(user_id, delete_snapshot=True):
+    """删除数据库悬赏快照及兼容 JSON。"""
     user_id = str(user_id)
     FILEPATH = PLAYERSDATA / user_id / "workinfo.json"
+    if delete_snapshot:
+        with closing(db_backend.connect(get_paths().game_db)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS work_offer_snapshots("
+                "user_id TEXT PRIMARY KEY,snapshot TEXT NOT NULL,updated_at TEXT NOT NULL)"
+            )
+            conn.execute("DELETE FROM work_offer_snapshots WHERE user_id=%s", (user_id,))
+            conn.commit()
     if os.path.exists(FILEPATH):
         try:
             os.remove(FILEPATH)

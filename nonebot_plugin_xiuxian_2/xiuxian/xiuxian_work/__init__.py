@@ -32,12 +32,14 @@ from ...paths import get_paths
 from .settlement_service import WorkSettlementService
 from .claim_service import WorkClaimService
 from .item_use_service import WorkItemUseService
-from .abort_service import WorkAbortService
+from .refresh_settlement_service import WorkRefreshSettlementService
+from .abort_cleanup_service import WorkAbortCleanupService
 
 work_settlement_service = WorkSettlementService(get_paths().game_db)
 work_claim_service = WorkClaimService(get_paths().game_db)
 work_item_use_service = WorkItemUseService(get_paths().game_db)
-work_abort_service = WorkAbortService(get_paths().game_db)
+work_refresh_service = WorkRefreshSettlementService(get_paths().game_db)
+work_abort_cleanup_service = WorkAbortCleanupService(get_paths().game_db)
 sql_message = XiuxianDateManage()  # sql类
 items = Items()
 count = 5  # 每日刷新次数
@@ -299,6 +301,32 @@ def generate_work_message(work_list: list, freenum: int) -> str:
     )
     return work_msg_f
 
+
+def _work_operation_id(event, action: str, user_id: str) -> str:
+    message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    return f"work-{action}:{user_id}:{message_id or time.time_ns()}"
+
+
+def _work_cd_snapshot(user_id: str) -> dict:
+    cd = sql_message.get_user_cd(user_id) or {}
+    return {
+        "type": int(cd.get("type", 0)),
+        "create_time": cd.get("create_time"),
+        "scheduled_time": cd.get("scheduled_time"),
+    }
+
+
+def _prepare_work_offer(operation_id: str, user_id: str, user_level: str, exp: int):
+    """Generate a stable offer for an operation without leaking RNG state."""
+    random_state = random.getstate()
+    try:
+        random.seed(operation_id)
+        return workhandle().do_work(
+            0, level=user_level, exp=exp, user_id=user_id, persist=False
+        )
+    finally:
+        random.setstate(random_state)
+
 def get_work_msg(work_):
     item_msg = format_reward_item(work_[4])
     return (
@@ -435,10 +463,26 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await handle_send(bot, event, msg, md_type="悬赏令", k1="接取", v1="悬赏令接取", k2="刷新", v2="悬赏令确认刷新", k3="查看", v3="悬赏令查看")
             await do_work.finish()
         elif status == 4 or status == 0:  # 已过期的悬赏令/无悬赏令
-            # 生成新悬赏令
-            work_msg = workhandle().do_work(0, level=user_level, exp=user_info['exp'], user_id=user_id)
-            msg = generate_work_message(work_msg, usernums - 1)
-            sql_message.update_work_num(user_id, usernums - 1)
+            operation_id = _work_operation_id(event, "refresh", user_id)
+            work_msg, new_offer = _prepare_work_offer(
+                operation_id, user_id, user_level, user_info['exp']
+            )
+            result = work_refresh_service.refresh(
+                operation_id,
+                user_id,
+                usernums,
+                _work_cd_snapshot(user_id),
+                work_data,
+                new_offer,
+            )
+            if result.status in {"state_changed", "user_missing", "offer_exists"}:
+                await handle_send(bot, event, "悬赏状态或刷新次数已变化，请重新查看后再试。")
+                await do_work.finish()
+            if result.status == "operation_conflict":
+                await handle_send(bot, event, "该次刷新请求参数与首次处理不一致，请重新发起。")
+                await do_work.finish()
+            savef(user_id, result.offer, sync_snapshot=False)
+            msg = generate_work_message(work_msg, result.remaining_count)
             
             # 取消任何现有的延迟提醒任务
             if user_id in user_reminder_tasks:
