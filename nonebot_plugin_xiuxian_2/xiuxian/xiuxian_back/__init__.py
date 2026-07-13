@@ -4,6 +4,7 @@ import time
 import re
 import os
 import json
+import copy
 from pathlib import Path
 from datetime import datetime, timedelta
 from nonebot import require
@@ -40,7 +41,16 @@ from ..xiuxian_arena import use_arena_challenge_ticket
 from ..xiuxian_tianti.item_reward_service import TiantiItemRewardService
 from ..xiuxian_config import XiuConfig, convert_rank, added_ranks
 from ...paths import get_paths
-from ..xiuxian_utils.pet_system import PET_BAG_LIMIT, PET_EGG_IDS, PET_EGG_RARITY_KEY, can_add_pets, grant_pet_by_rarity
+from ..xiuxian_utils.pet_system import (
+    PET_BAG_LIMIT,
+    PET_EGG_IDS,
+    PET_EGG_RARITY_KEY,
+    can_add_pets,
+    create_pet_instance,
+    get_pet_doc,
+    roll_pet_template_by_rarity,
+    _put_pet_into_doc,
+)
 from .back_util import *
 from .cultivation_item_service import CultivationItemService
 from .equipment_service import EquipmentService
@@ -52,6 +62,7 @@ from .skill_learning_service import SkillLearningService
 from .stone_reward_service import StoneItemRewardService
 from .three_cultivation_pill_service import ThreeCultivationPillService
 from .unbind_item_service import UnbindItemService
+from .batch_item_use_service import BatchItemUseService
 from . import accessory as _accessory  # noqa: F401
 from .accessory_helpers import AFFIX_KEY_MAP, SET_BONUS, ACCESSORY_BAG_LIMIT, add_accessory_to_bag, can_add_accessories, create_accessory_instance, quality_to_cn  # noqa: F401
 from .backpack_render import (
@@ -83,6 +94,9 @@ accessory_package_service = AccessoryPackageService(
 )
 alchemy_service = AlchemyService(get_paths().game_db)
 skill_learning_service = SkillLearningService(get_paths().game_db)
+batch_item_use_service = BatchItemUseService(
+    get_paths().game_db, get_paths().player_db
+)
 player_data_manager = PlayerDataManager()
 tianti_item_reward_service = TiantiItemRewardService(
     get_paths().game_db, get_paths().player_db
@@ -163,6 +177,15 @@ def _tianti_item_reward_operation_id(event, user_id, goods_id):
     if event_id:
         return f"tianti-item-reward:{event_id}:{user_id}:{goods_id}"
     return f"tianti-item-reward:{user_id}:{goods_id}:{time.time_ns()}"
+
+
+def _batch_item_use_operation_id(event, user_id, goods_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"batch-item-use:{event_id}:{user_id}:{goods_id}"
+    return f"batch-item-use:{user_id}:{goods_id}:{time.time_ns()}"
 
 
 # 通用物品类型和炼金最低价格
@@ -1295,26 +1318,50 @@ async def use_pet_egg_item(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         )
         return
 
-    lines = []
-    success_count = 0
-    for _ in range(use_num):
-        try:
-            pet, location = grant_pet_by_rarity(user_id, rarity)
-        except Exception as e:
-            lines.append(f"孵化失败：{e}")
-            break
+    current_doc = get_pet_doc(user_id)
+    working_doc = copy.deepcopy(current_doc)
+    rolled_pets = []
+    try:
+        for _ in range(use_num):
+            template = roll_pet_template_by_rarity(rarity)
+            pet, location = _put_pet_into_doc(
+                working_doc, create_pet_instance(template)
+            )
+            rolled_pets.append((pet, location))
+    except Exception as exc:
+        await handle_send(bot, event, f"宠物蛋批量孵化失败，未消耗道具：{exc}")
+        return
 
-        success_count += 1
+    active = current_doc.get("active") or {}
+    expected_active_uid = str(active.get("uid", ""))
+    expected_pet_uids = [
+        str(pet.get("uid", ""))
+        for pet in ([current_doc.get("active")] + current_doc.get("bag", []))
+        if pet
+    ]
+    result = batch_item_use_service.use_pet_eggs(
+        _batch_item_use_operation_id(event, user_id, item_id),
+        user_id,
+        item_id,
+        use_num,
+        expected_active_uid,
+        expected_pet_uids,
+        rolled_pets,
+        bag_limit=PET_BAG_LIMIT,
+    )
+    if not result.succeeded:
+        await handle_send(bot, event, "宠物蛋数量或宠物背包状态已变化，请刷新后重试。")
+        return
+
+    lines = []
+    for pet, location in result.pets:
         loc_msg = "已自动出战" if location == "active" else "已放入宠物背包"
         lines.append(
             f"{pet.get('form_name', pet.get('name', '未知宠物'))}"
             f"（{pet.get('rarity', rarity)}·{pet.get('race', '凡兽')}·{pet.get('type', '攻击')}，UID:{pet.get('uid')}，{loc_msg}）"
         )
 
-    if success_count > 0:
-        sql_message.update_back_j(user_id, item_id, num=success_count)
-
-    msg = f"道友使用{item_info.get('name', '宠物蛋')} x{success_count}，孵化结果：\n" + "\n".join(lines[:30])
+    msg = f"道友使用{item_info.get('name', '宠物蛋')} x{result.quantity}，孵化结果：\n" + "\n".join(lines[:30])
     if len(lines) > 30:
         msg += f"\n...其余{len(lines) - 30}条已省略"
 
