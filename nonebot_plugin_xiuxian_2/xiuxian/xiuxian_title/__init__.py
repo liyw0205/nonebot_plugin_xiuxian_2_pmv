@@ -26,7 +26,7 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from .title_data import (
     get_all_titles, get_title_by_id,
     check_and_unlock_titles, get_user_unlocked_titles,
-    get_user_equipped_title, unequip_title,
+    get_user_equipped_title,
     refresh_title_cache, find_title_id_by_name_or_id, grant_title_to_user,
     get_title_achievement_records
 )
@@ -220,7 +220,19 @@ async def title_unequip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await title_unequip_cmd.finish()
 
     user_id = user_info['user_id']
-    success, result_msg = unequip_title(user_id)
+    equipped = get_user_equipped_title(user_id) or ""
+    result = title_transaction_service.unequip(
+        _title_operation_id(event, "unequip", str(user_id)), user_id, equipped
+    )
+    title_data = get_title_by_id(equipped) or {}
+    messages = {
+        "applied": f"成功卸下称号【{title_data.get('name', equipped)}】！",
+        "duplicate": f"成功卸下称号【{title_data.get('name', result.title_id)}】！",
+        "not_equipped": "你当前没有装备任何称号！",
+        "state_changed": "称号状态已变化，请重新查看后再试。",
+        "operation_conflict": "本次称号请求与已处理记录冲突，请重新操作。",
+    }
+    result_msg = messages.get(result.status, "卸下称号失败，请重试。")
     await handle_send(bot, event, result_msg, md_type="修仙", k1="称号", v1="我的称号", k2="装备", v2="装备称号", k3="存档", v3="我的修仙信息")
     await title_unequip_cmd.finish()
 

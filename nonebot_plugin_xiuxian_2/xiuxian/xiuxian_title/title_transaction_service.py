@@ -103,5 +103,52 @@ class TitleTransactionService:
                 conn.rollback()
                 raise
 
+    def unequip(self, operation_id, user_id, expected_equipped):
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        expected_equipped = str(expected_equipped or "")
+        if not operation_id or not user_id:
+            raise ValueError("operation and user are required")
+        payload = json.dumps(
+            ["unequip", user_id, expected_equipped], ensure_ascii=True, separators=(",", ":")
+        )
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._ensure_schema(conn)
+                previous = conn.execute(
+                    "SELECT payload,title_id FROM title_transaction_operations WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if previous is not None:
+                    conn.rollback()
+                    if str(previous[0]) != payload:
+                        return TitleTransactionResult("operation_conflict")
+                    return TitleTransactionResult("duplicate", str(previous[1]))
+                row = conn.execute("SELECT equipped FROM title WHERE user_id=%s", (user_id,)).fetchone()
+                actual = str(row[0] or "") if row else ""
+                if actual != expected_equipped:
+                    conn.rollback()
+                    return TitleTransactionResult("state_changed")
+                if not actual:
+                    conn.rollback()
+                    return TitleTransactionResult("not_equipped")
+                changed = conn.execute(
+                    "UPDATE title SET equipped='' WHERE user_id=%s AND COALESCE(equipped,'')=%s",
+                    (user_id, expected_equipped),
+                )
+                if changed.rowcount != 1:
+                    conn.rollback()
+                    return TitleTransactionResult("state_changed")
+                conn.execute(
+                    "INSERT INTO title_transaction_operations(operation_id,payload,result_status,title_id) "
+                    "VALUES(%s,%s,%s,%s)",
+                    (operation_id, payload, "applied", expected_equipped),
+                )
+                conn.commit()
+                return TitleTransactionResult("applied", expected_equipped)
+            except Exception:
+                conn.rollback()
+                raise
+
 
 __all__ = ["TitleTransactionResult", "TitleTransactionService"]
