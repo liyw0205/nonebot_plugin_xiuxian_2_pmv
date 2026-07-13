@@ -1,6 +1,7 @@
 import random
 import asyncio
 import json
+import time
 from pathlib import Path
 from datetime import datetime
 from ..on_compat import on_command
@@ -20,9 +21,11 @@ from ..xiuxian_config import XiuConfig
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
 from ...paths import get_paths
+from .bet_service import DufangBetService
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
+dufang_bet_service = DufangBetService(get_paths().game_db, get_paths().player_db)
 PLAYERSDATA = get_paths().players
 SHARING_DATA_PATH = Path(__file__).parent / "unseal_sharing.json"
 BANNED_UNSEAL_IDS = XiuConfig().banned_unseal_ids  # 禁止鉴石的群
@@ -365,14 +368,26 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await handle_send(bot, event, msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
         return
     
-    # 扣除消耗
-    sql_message.update_ls(user_id, cost, 2)
-    current_stone = (current_stone - cost)
-    
-    # 获取/初始化鉴石数据
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"dufang-bet:{event_id}:{user_id}" if event_id else f"dufang-bet:{user_id}:{time.time_ns()}"
+    placed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    bet = dufang_bet_service.place(operation_id, user_id, cost, placed_at)
+    if bet.status == "stone_insufficient":
+        await handle_send(bot, event, "灵石余额已变化，本次鉴石未下注。", md_type="鉴石")
+        return
+    if bet.status == "user_missing":
+        await handle_send(bot, event, "未找到修仙数据，本次鉴石未下注。", md_type="我要修仙")
+        return
+    if bet.status == "duplicate":
+        await handle_send(bot, event, "本次鉴石请求已受理，请勿重复提交。", md_type="鉴石")
+        return
+    if not bet.succeeded:
+        await handle_send(bot, event, "鉴石状态已变化，请稍后重试。", md_type="鉴石")
+        return
+    current_stone = bet.wallet_stone
+
+    # 获取事务内已更新的鉴石统计
     unseal_data = get_unseal_data(user_id)
-    unseal_data["unseal_info"]["count"] += 1
-    unseal_data["unseal_info"]["total_cost"] = unseal_data["unseal_info"].get("total_cost", 0) + cost
     
     # 随机选择封印物
     entity = random.choice(SEALED_ENTITIES)
