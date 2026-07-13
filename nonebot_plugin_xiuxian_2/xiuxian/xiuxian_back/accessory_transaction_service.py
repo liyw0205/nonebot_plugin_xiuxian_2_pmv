@@ -273,6 +273,54 @@ class AccessoryTransactionService:
 
         return self._run(operation_id, "wash", payload, apply)
 
+    def set_affix_locks(
+        self,
+        operation_id,
+        action,
+        user_id,
+        uid,
+        expected_accessory,
+        locked_indexes,
+    ) -> AccessoryTransactionResult:
+        action = str(action)
+        if action not in {"lock", "unlock"}:
+            raise ValueError("action must be lock or unlock")
+        user_id = str(user_id)
+        uid = str(uid)
+        locked_indexes = sorted({int(index) for index in locked_indexes})
+        payload = {
+            "user_id": user_id,
+            "uid": uid,
+            "expected_accessory": expected_accessory,
+            "locked_indexes": locked_indexes,
+        }
+
+        def apply(conn):
+            equipped, bag = self._load_accessories(conn, user_id)
+            where, key, current = self._find(equipped, bag, uid)
+            if current is None:
+                return AccessoryTransactionResult(
+                    "accessory_missing", action, user_id
+                )
+            if self._json(current) != self._json(expected_accessory):
+                return AccessoryTransactionResult("state_changed", action, user_id)
+
+            updated = json.loads(json.dumps(current, ensure_ascii=False))
+            if locked_indexes:
+                updated["locked_affixes"] = locked_indexes
+            else:
+                updated.pop("locked_affixes", None)
+            if where == "bag":
+                bag[key] = updated
+            else:
+                equipped[key] = updated
+            self._save_accessories(conn, user_id, equipped, bag)
+            return AccessoryTransactionResult(
+                "applied", action, user_id, 1, 0, updated
+            )
+
+        return self._run(operation_id, action, payload, apply)
+
     def decompose(
         self,
         operation_id,
