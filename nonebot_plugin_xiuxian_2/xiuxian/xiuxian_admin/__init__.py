@@ -67,6 +67,7 @@ from .exp_adjustment_service import AdminExpAdjustmentService
 from .stone_adjustment_service import AdminStoneAdjustmentService
 from .item_grant_service import AdminItemGrantService
 from .item_destroy_service import AdminItemDestroyService
+from .admin_item_batch_grant_service import AdminItemBatchGrantService
 from . import command_controls as _command_controls  # noqa: F401
 from . import empty_fallback as _empty_fallback  # noqa: F401
 from . import event_debug as _event_debug  # noqa: F401
@@ -80,6 +81,7 @@ admin_exp_adjustment_service = AdminExpAdjustmentService(get_paths().game_db)
 admin_stone_adjustment_service = AdminStoneAdjustmentService(get_paths().game_db)
 admin_item_grant_service = AdminItemGrantService(get_paths().game_db)
 admin_item_destroy_service = AdminItemDestroyService(get_paths().game_db)
+admin_item_batch_grant_service = AdminItemBatchGrantService(get_paths().game_db)
 
 
 def _admin_operation_id(event, action: str, user_id: str) -> str:
@@ -694,40 +696,41 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
             await handle_send(bot, event, "当前没有可发放的用户。")
             await cz.finish()
 
-        success_count = 0
-        log_context = _admin_economy_context(
-            event,
-            "admin_item_add_all",
-            item_id=goods_id,
-            item_name=item_info["name"],
-            target="all",
-        )
-
-        for uid in all_users:
-            try:
-                uid_str = str(uid)
-
-                if is_accessory:
+        if is_accessory:
+            success_count = 0
+            for uid in all_users:
+                try:
+                    uid_str = str(uid)
                     for _ in range(quantity):
                         add_accessory_to_bag(uid_str, goods_id, quality)
-                else:
-                    sql_message.send_back(
-                        uid_str,
-                        goods_id,
-                        item_info["name"],
-                        goods_type,
-                        quantity,
-                        log_context=log_context,
-                    )
-
-                success_count += 1
-            except Exception as e:
-                logger.error(f"创造力量全服发放失败 user_id={uid}: {e}")
-
-        if is_accessory:
+                    success_count += 1
+                except Exception as e:
+                    logger.error(f"创造力量全服发放饰品失败 user_id={uid}: {e}")
             msg = f"全服发放成功！共向 {success_count} 名玩家发放【{item_info['name']}】饰品 x{quantity}（{quality}阶）"
         else:
-            msg = f"全服发放成功！共向 {success_count} 名玩家发放 {item_info['name']} x{quantity}"
+            operation_id = _admin_operation_id(event, "item-add-all", str(goods_id))
+            operator_id = str(get_user_id(event) or "unknown")
+            while True:
+                result = admin_item_batch_grant_service.grant(
+                    operation_id,
+                    operator_id,
+                    all_users,
+                    goods_id,
+                    item_info["name"],
+                    goods_type,
+                    quantity,
+                    int(XiuConfig().max_goods_num),
+                )
+                if result.status != "applied" or result.completed >= result.total:
+                    break
+            if result.status == "operation_conflict":
+                msg = "本次全服物品发放与已记录事件冲突"
+            else:
+                msg = (
+                    f"全服发放完成！已处理 {result.completed}/{result.total} 名玩家，"
+                    f"实际向 {result.granted_users} 名玩家发放 {item_info['name']} x{quantity}，"
+                    f"累计入包 {result.added} 件"
+                )
 
         await handle_send(bot, event, msg)
         await cz.finish()
