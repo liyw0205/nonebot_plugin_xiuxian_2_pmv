@@ -156,52 +156,6 @@ class IMPART_DATA(object):
             logger.error(f"添加卡片失败: {e}")
             return False, 0
 
-    def data_person_add_batch(self, user_id: str, card_names: List[str]) -> Tuple[List[str], Dict[str, int]]:
-        """
-        批量添加卡片
-        :param user_id: 用户ID
-        :param card_names: 卡片名称列表
-        :return: (新卡列表, 各卡片的当前数量字典)
-        """
-        user_id = str(user_id)
-        new_cards = []
-        card_counts = {}
-        
-        try:
-            # 获取当前卡片数量
-            self.cursor.execute(
-                "SELECT card_name, quantity FROM impart_cards WHERE user_id = %s",
-                (user_id,)
-            )
-            existing_cards = {row[0]: row[1] for row in self.cursor.fetchall()}
-            
-            # 处理每张卡片
-            for card_name in card_names:
-                if card_name in existing_cards:
-                    # 已有卡片，增加数量
-                    new_count = existing_cards[card_name] + 1
-                    self.cursor.execute(
-                        "UPDATE impart_cards SET quantity = %s WHERE user_id = %s AND card_name = %s",
-                        (new_count, user_id, card_name)
-                    )
-                    card_counts[card_name] = new_count
-                else:
-                    # 新卡片
-                    self.cursor.execute(
-                        "INSERT INTO impart_cards (user_id, card_name, quantity) VALUES (%s, %s, 1)",
-                        (user_id, card_name)
-                    )
-                    new_cards.append(card_name)
-                    card_counts[card_name] = 1
-                    existing_cards[card_name] = 1
-            
-            self.conn.commit()
-            return new_cards, card_counts
-            
-        except db_backend.Error as e:
-            logger.error(f"批量添加卡片失败: {e}")
-            return [], {}
-
     def data_person_list(self, user_id: str) -> Optional[Dict[str, int]]:
         """
         获取用户所有卡片

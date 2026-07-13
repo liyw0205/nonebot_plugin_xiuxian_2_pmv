@@ -1,6 +1,7 @@
 import os
 import random
 import time
+from collections import Counter
 from ..on_compat import on_command
 from ..adapter_compat import (
     GROUP,
@@ -45,12 +46,14 @@ from .draw_service import ImpartDrawService
 from .card_compose_service import CardComposeService
 from .card_disassemble_service import CardDisassembleService
 from .love_sand_service import LoveSandUseService
+from .prayer_settlement_service import ImpartPrayerSettlementService
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 impart_draw_service = ImpartDrawService(get_paths().game_db, get_paths().impart_db)
 card_compose_service = CardComposeService(get_paths().impart_db)
 card_disassemble_service = CardDisassembleService(get_paths().impart_db)
 love_sand_service = LoveSandUseService(get_paths().game_db, get_paths().impart_db, get_paths().player_db)
+impart_prayer_service = ImpartPrayerSettlementService(get_paths().game_db, get_paths().impart_db)
 
 
 cache_help = {}
@@ -395,11 +398,11 @@ async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     """使用祈愿石"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
-    user_id = user_info["user_id"]
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
-        
+    user_id = user_info["user_id"]
+
     impart_data_draw = await impart_check(user_id)
     if impart_data_draw is None:
         await handle_send(bot, event, "发生未知错误！")
@@ -409,40 +412,52 @@ async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, "请检查卡图数据完整！")
         return
 
-    # 必中奖抽卡 - 直接随机选择卡片
-    drawn_cards = [random.choice(img_list) for _ in range(quantity)]
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns())
+    operation_id = f"impart-prayer:{event_id}:{user_id}:{item_id}"
+    result = impart_prayer_service.replay(operation_id, user_id, item_id, quantity)
+    if result is None:
+        drawn_cards = [random.choice(img_list) for _ in range(quantity)]
+        result = impart_prayer_service.settle(
+            operation_id,
+            user_id,
+            item_id,
+            quantity,
+            drawn_cards,
+            impart_data_json.data_all_(),
+        )
+    if result.status == "item_missing":
+        await handle_send(bot, event, "祈愿石数量不足，未进行祈愿。")
+        return
+    if not result.succeeded:
+        await handle_send(bot, event, "祈愿状态已变化，请重新查看背包后再试。")
+        return
 
-    # 批量添加卡片
-    new_cards, card_counts = impart_data_json.data_person_add_batch(user_id, drawn_cards)
+    drawn_cards = list(result.cards)
+    new_cards = list(result.new_cards)
     total_new_cards = len(new_cards)
     total_duplicates = len(drawn_cards) - total_new_cards
 
     # 计算重复卡片信息（只显示前10个，避免消息过长）
     duplicate_cards_info = []
     duplicate_display_limit = 10
-    for card, count in card_counts.items():
-        if card in new_cards:
-            continue
-        if len(duplicate_cards_info) < duplicate_display_limit:
-            duplicate_cards_info.append(f"{card}x{drawn_cards.count(card)}")
+    for card, count in Counter(drawn_cards).items():
+        duplicate_count = count - int(card in new_cards)
+        if duplicate_count > 0 and len(duplicate_cards_info) < duplicate_display_limit:
+            duplicate_cards_info.append(f"{card}x{duplicate_count}")
     
     # 如果有更多重复卡未显示
     more_duplicates_msg = ""
     if total_duplicates > duplicate_display_limit:
         more_duplicates_msg = f"\n(还有{total_duplicates - duplicate_display_limit}张重复卡未显示)"
 
-    # 批量消耗祈愿石
-    sql_message.update_back_j(user_id, item_id, quantity)
-
-    # 更新用户的抽卡数据（不更新概率计数）
-    await re_impart_data(user_id)
-    update_statistics_value(user_id, "祈愿石使用", increment=quantity)
-    update_statistics_value(user_id, "传承新卡", increment=total_new_cards)
-    update_statistics_value(user_id, "传承重复卡", increment=total_duplicates)
-    log_message(
-        user_id,
-        f"[祈愿石] 使用{quantity}颗，获得新卡{total_new_cards}张，重复{total_duplicates}张"
-    )
+    if result.status == "applied":
+        update_statistics_value(user_id, "祈愿石使用", increment=quantity)
+        update_statistics_value(user_id, "传承新卡", increment=total_new_cards)
+        update_statistics_value(user_id, "传承重复卡", increment=total_duplicates)
+        log_message(
+            user_id,
+            f"[祈愿石] 使用{quantity}颗，获得新卡{total_new_cards}张，重复{total_duplicates}张"
+        )
     
     # 构建结果消息
     new_cards_msg = f"新卡片({total_new_cards}张)：{', '.join(new_cards) if new_cards else '无'}"
