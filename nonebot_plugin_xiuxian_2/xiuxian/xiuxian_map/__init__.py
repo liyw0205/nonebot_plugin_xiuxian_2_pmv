@@ -34,6 +34,8 @@ from .mission_claim_service import MapMissionClaimService
 from .combat_settlement_service import MapCombatSettlementService
 from .dongfu_build_service import MapDongfuBuildService
 from .explore_start_service import MapExploreStartService
+from .movement_settlement_service import MapMovementSettlementService
+from .dao_battle_settlement_service import MapDaoBattleSettlementService
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
@@ -43,6 +45,8 @@ map_resource_reward_service = MapResourceRewardService(get_paths().game_db, get_
 map_combat_settlement_service = MapCombatSettlementService(get_paths().game_db, get_paths().player_db)
 map_dongfu_build_service = MapDongfuBuildService(get_paths().game_db, get_paths().player_db)
 map_explore_start_service = MapExploreStartService(get_paths().game_db, get_paths().player_db)
+map_movement_service = MapMovementSettlementService(get_paths().game_db, get_paths().player_db)
+map_dao_battle_service = MapDaoBattleSettlementService(get_paths().player_db, get_paths().game_db)
 seed_purchase_service = SeedPurchaseService(get_paths().game_db)
 items = Items()
 
@@ -68,6 +72,12 @@ EXPLORE_START_COOLDOWN_SEC = 30
 # =========================================
 TRAVEL_NODE_TYPES = {"交通", "渡口", "驿站"}
 SEED_SHOP_TYPES = {"坊市", "城池", "驿站"}
+
+
+def _map_operation_id(event, action: str, *identifiers) -> str:
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    suffix = ":".join(str(value) for value in identifiers)
+    return f"map-{action}:{event_id or time.time_ns()}:{suffix}"
 
 # =========================================
 # 每日限制配置
@@ -1209,8 +1219,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             await handle_send(bot, event, f"跨界体力不足！需{cost}，当前{stamina}。")
             return
 
-        _save_map_status(uid, tar_realm, first_heaven, tar_node["id"])
-        sql_message.update_user_stamina(uid, cost, 2)
+        result = map_movement_service.move(
+            _map_operation_id(event, "move", uid), uid, st,
+            {"realm": tar_realm, "heaven": first_heaven, "node_id": tar_node["id"]}, stamina, cost,
+        )
+        if not result.succeeded:
+            message = "体力状态已变化，请重试。" if result.status in {"state_changed", "stamina_insufficient"} else "角色状态异常，无法移动。"
+            await handle_send(bot, event, message)
+            return
         await handle_send(bot, event, f"🚀 跨界成功！\n已抵达 {tar_realm}·{first_heaven}·{tar_node['name']}\n消耗体力：{cost}")
         return
 
@@ -1234,8 +1250,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             await handle_send(bot, event, f"跨天体力不足！需{cost}，当前{stamina}。")
             return
 
-        _save_map_status(uid, tar_realm, tar_heaven, tar_node["id"])
-        sql_message.update_user_stamina(uid, cost, 2)
+        result = map_movement_service.move(
+            _map_operation_id(event, "move", uid), uid, st,
+            {"realm": tar_realm, "heaven": tar_heaven, "node_id": tar_node["id"]}, stamina, cost,
+        )
+        if not result.succeeded:
+            message = "体力状态已变化，请重试。" if result.status in {"state_changed", "stamina_insufficient"} else "角色状态异常，无法移动。"
+            await handle_send(bot, event, message)
+            return
         await handle_send(bot, event, f"☁️ 跨天成功！\n已抵达 {tar_realm}·{tar_heaven}·{tar_node['name']}\n消耗体力：{cost}")
         return
 
@@ -1263,8 +1285,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             await handle_send(bot, event, f"移动体力不足！需{cost}，当前{stamina}。")
             return
 
-        _save_map_status(uid, tar_realm, tar_heaven, tar_node["id"])
-        sql_message.update_user_stamina(uid, cost, 2)
+        result = map_movement_service.move(
+            _map_operation_id(event, "move", uid), uid, st,
+            {"realm": tar_realm, "heaven": tar_heaven, "node_id": tar_node["id"]}, stamina, cost,
+        )
+        if not result.succeeded:
+            message = "体力状态已变化，请重试。" if result.status in {"state_changed", "stamina_insufficient"} else "角色状态异常，无法移动。"
+            await handle_send(bot, event, message)
+            return
         await handle_send(bot, event, f"👣 移动成功！\n已前往【{tar_node['name']}】\n跨越 {steps} 个节点，消耗体力：{cost}")
         return
 
@@ -1306,20 +1334,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, "\n".join(lines))
 
 
-def _add_dao_record(user_id, win: bool):
-    total = player_data_manager.get_field_data(str(user_id), "dao_record", "total") or 0
-    win_n = player_data_manager.get_field_data(str(user_id), "dao_record", "win") or 0
-    lose_n = player_data_manager.get_field_data(str(user_id), "dao_record", "lose") or 0
-    total += 1
-    if win:
-        win_n += 1
-    else:
-        lose_n += 1
-    player_data_manager.update_or_write_data(str(user_id), "dao_record", "total", total)
-    player_data_manager.update_or_write_data(str(user_id), "dao_record", "win", win_n)
-    player_data_manager.update_or_write_data(str(user_id), "dao_record", "lose", lose_n)
-
-
 @dao_qc.handle(parameterless=[Cooldown(cd_time=20, stamina_cost=1)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
@@ -1348,8 +1362,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     my_win_rate = 0.5 if (my_power + ta_power) == 0 else my_power / (my_power + ta_power)
     my_win = random.random() < my_win_rate
 
-    _add_dao_record(uid, my_win)
-    _add_dao_record(target["user_id"], not my_win)
+    result = map_dao_battle_service.settle(
+        _map_operation_id(event, "dao", uid, target["user_id"]),
+        uid, target["user_id"], st, my_win,
+    )
+    if not result.succeeded:
+        message = "对方位置已变化，本次论道未结算。" if result.status == "position_changed" else "双方状态已变化，请重新发起论道。"
+        await handle_send(bot, event, message)
+        return
 
     winner = user_info["user_name"] if my_win else target["user_name"]
     await handle_send(bot, event, f"你与【{target['user_name']}】论道切磋一番，胜者：{winner}")
