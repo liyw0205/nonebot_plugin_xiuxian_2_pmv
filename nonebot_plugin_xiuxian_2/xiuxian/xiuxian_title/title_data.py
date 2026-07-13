@@ -399,13 +399,11 @@ def format_new_title_message(newly_unlocked: List[dict]) -> str:
     return "\n".join(lines)
 
 
-def check_and_unlock_titles(user_id: str) -> List[dict]:
+def find_unlockable_titles(user_id: str) -> List[dict]:
     """
     检查用户是否有新的可解锁称号
     返回: 新解锁的称号列表
     """
-    from ..xiuxian_utils.xiuxian2_handle import player_data_manager
-
     newly_unlocked = []
 
     # 获取已解锁称号
@@ -432,14 +430,23 @@ def check_and_unlock_titles(user_id: str) -> List[dict]:
             newly_unlocked.append(title_data)
             unlocked_ids.add(str(title_id))
 
-    # 保存更新后的已解锁列表
-    if newly_unlocked:
-        player_data_manager.update_or_write_data(
-            str(user_id), "title", "unlocked",
-            json.dumps(list(unlocked_ids), ensure_ascii=False)
-        )
-
     return newly_unlocked
+
+
+def check_and_unlock_titles(user_id: str) -> List[dict]:
+    """Compatibility wrapper for non-command callers."""
+    from .title_transaction_service import TitleTransactionService
+
+    expected = get_user_unlocked_titles(user_id)
+    unlockable = find_unlockable_titles(user_id)
+    if not unlockable:
+        return []
+    title_ids = [str(title["id"]) for title in unlockable]
+    operation_id = "title-auto-unlock:" + str(user_id) + ":" + ",".join(sorted(title_ids))
+    result = TitleTransactionService(get_paths().player_db).unlock_batch(
+        operation_id, user_id, expected, title_ids
+    )
+    return unlockable if result.succeeded else []
 
 
 def get_user_unlocked_titles(user_id: str) -> List[str]:

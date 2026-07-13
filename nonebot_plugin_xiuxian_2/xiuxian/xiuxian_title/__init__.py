@@ -28,7 +28,7 @@ from .title_data import (
     check_and_unlock_titles, get_user_unlocked_titles,
     get_user_equipped_title,
     refresh_title_cache, find_title_id_by_name_or_id,
-    get_title_achievement_records
+    get_title_achievement_records, find_unlockable_titles
 )
 from ...paths import get_paths
 from .title_transaction_service import TitleTransactionService
@@ -41,6 +41,18 @@ title_transaction_service = TitleTransactionService(get_paths().player_db)
 def _title_operation_id(event, action: str, user_id: str) -> str:
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     return f"title-{action}:{event_id or __import__('time').time_ns()}:{user_id}"
+
+
+def _unlock_titles_from_event(event, user_id: str):
+    expected = get_user_unlocked_titles(user_id)
+    unlockable = find_unlockable_titles(user_id)
+    if not unlockable:
+        return []
+    title_ids = [str(title["id"]) for title in unlockable]
+    result = title_transaction_service.unlock_batch(
+        _title_operation_id(event, "unlock", str(user_id)), user_id, expected, title_ids
+    )
+    return unlockable if result.succeeded else []
 
 # ===== 注册命令 =====
 title_list_cmd = on_command("我的称号", aliases={"称号列表", "查看称号"}, priority=5, block=True)
@@ -111,7 +123,7 @@ async def title_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         page = max(1, int(arg_text))
 
     # 自动检查新称号
-    newly_unlocked = check_and_unlock_titles(user_id)
+    newly_unlocked = _unlock_titles_from_event(event, user_id)
 
     # 获取已解锁称号
     unlocked_ids = get_user_unlocked_titles(user_id)
@@ -247,7 +259,7 @@ async def title_check_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await title_check_cmd.finish()
 
     user_id = user_info['user_id']
-    newly_unlocked = check_and_unlock_titles(user_id)
+    newly_unlocked = _unlock_titles_from_event(event, user_id)
 
     if newly_unlocked:
         msg_text = "🎉 检查完成，恭喜解锁新称号：\n"
@@ -272,7 +284,7 @@ async def achievement_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await achievement_list_cmd.finish()
 
     user_id = user_info["user_id"]
-    newly_unlocked = check_and_unlock_titles(user_id)
+    newly_unlocked = _unlock_titles_from_event(event, user_id)
     records = get_title_achievement_records(user_id)
     total_count = len(records)
     unlocked_count = len([record for record in records if record["unlocked"]])
@@ -321,7 +333,7 @@ async def achievement_check_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await achievement_check_cmd.finish()
 
     user_id = user_info["user_id"]
-    newly_unlocked = check_and_unlock_titles(user_id)
+    newly_unlocked = _unlock_titles_from_event(event, user_id)
     records = get_title_achievement_records(user_id)
     unlocked_count = len([record for record in records if record["unlocked"]])
 
