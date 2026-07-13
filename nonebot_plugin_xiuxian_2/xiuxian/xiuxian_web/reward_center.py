@@ -114,6 +114,7 @@ def _serialize_record(kind: str, record_id: str, record: dict, config: dict) -> 
         "usage_limit": usage_limit,
         "used_count": used_count,
         "claimed_count": claimed_count,
+        "version": int(record.get("_definition_version") or 0),
     }
 
 
@@ -178,6 +179,10 @@ def _normalize_payload(payload: dict) -> tuple[str, str, dict]:
         record["used_count"] = int(old_record.get("used_count") or 0)
     else:
         record["reason"] = _clean_text(payload.get("reason"), meta["title"])
+        if kind == "compensation" and record_id in data:
+            record["_definition_version"] = data[record_id].get(
+                "_definition_version"
+            )
 
     return kind, record_id, record
 
@@ -221,10 +226,11 @@ def api_save_reward_record():
         data = load_data(config)
         data[record_id] = record
         save_data(config, data)
+        saved_record = load_data(config)[record_id]
         return api_success(
             message=f"{meta['title']}已保存",
             kind=kind,
-            record=_serialize_record(kind, record_id, record, config),
+            record=_serialize_record(kind, record_id, saved_record, config),
             records=_serialize_records(kind),
         )
     except Exception as e:
@@ -238,7 +244,9 @@ def api_delete_reward_record(kind, record_id):
 
     try:
         meta = _reward_config(kind)
-        delete_record(record_id, meta["data_config"])
+        result = delete_record(record_id, meta["data_config"])
+        if kind == "compensation" and not result.succeeded:
+            return api_error("补偿定义已变化，请刷新后重试")
         return api_success(message=f"{meta['title']}已删除", records=_serialize_records(kind))
     except Exception as e:
         return api_error(str(e))
@@ -251,7 +259,9 @@ def api_clear_reward_records(kind):
 
     try:
         meta = _reward_config(kind)
-        clear_records(meta["data_config"])
+        result = clear_records(meta["data_config"])
+        if kind == "compensation" and not result.succeeded:
+            return api_error("补偿列表已变化，请刷新后重试")
         return api_success(message=f"{meta['title']}已清空", records=[])
     except Exception as e:
         return api_error(str(e))

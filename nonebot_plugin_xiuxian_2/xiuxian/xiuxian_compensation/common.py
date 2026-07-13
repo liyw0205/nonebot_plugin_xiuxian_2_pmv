@@ -14,6 +14,7 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.json_store import load_json_file, save_json_file
 from ..xiuxian_config import XiuConfig
 from .reward_service import RewardClaimService
+from .definition_service import CompensationDefinitionService
 from ..xiuxian_utils.utils import (
     check_user,
     handle_send,
@@ -52,6 +53,12 @@ DATA_CONFIG = {
     },
 }
 
+compensation_definition_service = CompensationDefinitionService(
+    get_paths().game_db,
+    DATA_CONFIG["补偿"]["data_path"],
+    DATA_CONFIG["补偿"]["claimed_path"],
+)
+
 
 def init_data_files():
     """初始化数据目录和文件"""
@@ -71,18 +78,27 @@ init_data_files()
 
 
 def load_data(config: Dict[str, Any]) -> Dict[str, dict]:
+    if config["type_key"] == "补偿":
+        return compensation_definition_service.list()
     return load_json_file(config["data_path"], {}, dict)
 
 
 def save_data(config: Dict[str, Any], data: Dict[str, dict]):
+    if config["type_key"] == "补偿":
+        compensation_definition_service.sync(data)
+        return
     save_json_file(config["data_path"], data)
 
 
 def load_claimed_data(config: Dict[str, Any]) -> Dict[str, List[str]]:
+    if config["type_key"] == "补偿":
+        return compensation_definition_service.claimed_data()
     return load_json_file(config["claimed_path"], {}, dict)
 
 
 def save_claimed_data(config: Dict[str, Any], data: Dict[str, List[str]]):
+    if config["type_key"] == "补偿":
+        raise RuntimeError("compensation claims must be changed through RewardClaimService")
     save_json_file(config["claimed_path"], data)
 
 
@@ -416,6 +432,11 @@ async def create_reward_record(
     else:
         record["reason"] = third_arg
 
+    if config["type_key"] == "补偿" and record_id in data:
+        record["_definition_version"] = data[record_id].get(
+            "_definition_version"
+        )
+
     data[record_id] = record
     save_data(config, data)
 
@@ -478,13 +499,24 @@ async def claim_normal_reward(
         return
 
     result = reward_claim_service.claim(
-        config["type_key"], record_id, user_id, record["items"]
+        config["type_key"],
+        record_id,
+        user_id,
+        record["items"],
+        expected_definition_version=(
+            record.get("_definition_version")
+            if config["type_key"] == "补偿"
+            else None
+        ),
     )
     if result.status == "duplicate":
         await handle_send(bot, event, f"你已经领取过该{config['type_key']}了")
         return
     if result.status == "user_missing":
         await handle_send(bot, event, "修仙界没有你的足迹，输入 我要修仙 加入修仙世界吧！")
+        return
+    if result.status in {"record_missing", "definition_changed"}:
+        await handle_send(bot, event, "补偿定义已变更，请重新查询后领取")
         return
     reward_msg = format_reward_delivery(record["items"])
 
@@ -498,6 +530,14 @@ async def claim_normal_reward(
 
 
 def delete_record(record_id: str, config: Dict[str, Any]):
+    if config["type_key"] == "补偿":
+        definition = compensation_definition_service.get(record_id)
+        version = None if definition is None else definition.version
+        operation_id = f"compensation-delete:{record_id}:v{version or 'missing'}"
+        return compensation_definition_service.delete(
+            operation_id, record_id, version
+        )
+
     data = load_data(config)
 
     if record_id in data:
@@ -518,6 +558,17 @@ def delete_record(record_id: str, config: Dict[str, Any]):
 
 
 def clear_records(config: Dict[str, Any]):
+    if config["type_key"] == "补偿":
+        catalog_version = compensation_definition_service.catalog_version()
+        result = compensation_definition_service.clear(
+            f"compensation-clear:{catalog_version}", catalog_version
+        )
+        logger.info(
+            f"已清空所有补偿数据：定义{result.removed_definitions}条，"
+            f"领取记录{result.removed_claims}条"
+        )
+        return result
+
     save_data(config, {})
     save_claimed_data(config, {})
     reward_claim_service.delete_claims(config["type_key"])
@@ -593,6 +644,24 @@ async def list_normal_rewards(
 
 def clean_expired_by_config(config: Dict[str, Any]):
     data = load_data(config)
+
+    if config["type_key"] == "补偿":
+        deleted = []
+        for record_id, info in data.items():
+            if not is_expired(info):
+                continue
+            version = int(info["_definition_version"])
+            result = compensation_definition_service.delete(
+                f"compensation-expire:{record_id}:v{version}",
+                record_id,
+                version,
+            )
+            if result.succeeded:
+                deleted.append(record_id)
+        if deleted:
+            logger.info(f"已自动清理过期补偿：{deleted}")
+        return
+
     claimed_data = load_claimed_data(config)
 
     to_delete = []

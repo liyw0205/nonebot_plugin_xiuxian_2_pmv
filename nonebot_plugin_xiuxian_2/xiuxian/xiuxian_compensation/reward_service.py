@@ -87,6 +87,7 @@ class RewardClaimService:
         *,
         usage_limit: int = 0,
         legacy_used_count: int = 0,
+        expected_definition_version: int | None = None,
     ) -> RewardClaim:
         reward_type = str(reward_type)
         record_id = str(record_id)
@@ -94,11 +95,36 @@ class RewardClaimService:
         normalized_items = list(reward_items)
         usage_limit = max(int(usage_limit or 0), 0)
         legacy_used_count = max(int(legacy_used_count or 0), 0)
+        expected_definition_version = (
+            None
+            if expected_definition_version in (None, "")
+            else int(expected_definition_version)
+        )
 
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 self._ensure_claims(conn)
+                if expected_definition_version is not None:
+                    if not conn.table_exists("compensation_definitions"):
+                        conn.rollback()
+                        return RewardClaim(
+                            "record_missing", reward_type, record_id, user_id
+                        )
+                    definition = conn.execute(
+                        "SELECT version FROM compensation_definitions WHERE record_id=%s",
+                        (record_id,),
+                    ).fetchone()
+                    if definition is None:
+                        conn.rollback()
+                        return RewardClaim(
+                            "record_missing", reward_type, record_id, user_id
+                        )
+                    if int(definition[0]) != expected_definition_version:
+                        conn.rollback()
+                        return RewardClaim(
+                            "definition_changed", reward_type, record_id, user_id
+                        )
                 user = conn.execute(
                     "SELECT 1 FROM user_xiuxian WHERE user_id=%s", (user_id,)
                 ).fetchone()

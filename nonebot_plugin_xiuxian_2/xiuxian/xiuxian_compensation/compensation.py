@@ -54,7 +54,10 @@ async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
         await handle_send(bot, event, "请指定要删除的补偿ID")
         return
 
-    delete_record(comp_id, config)
+    result = delete_record(comp_id, config)
+    if not result.succeeded:
+        await handle_send(bot, event, "补偿定义已变化，请重新执行删除")
+        return
     await handle_send(bot, event, f"已删除补偿 {comp_id} 及其领取记录")
 
 
@@ -62,7 +65,10 @@ async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
 async def _(bot: Bot, event: MessageEvent):
     await assign_bot(bot=bot, event=event)
 
-    clear_records(config)
+    result = clear_records(config)
+    if not result.succeeded:
+        await handle_send(bot, event, "补偿列表已变化，请重新执行清空")
+        return
     await handle_send(bot, event, "已清空所有补偿及领取记录")
 
 
