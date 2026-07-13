@@ -28,6 +28,8 @@ class PetTravelClaimServiceTests(unittest.TestCase):
                 "goods_num INTEGER, create_time TEXT, update_time TEXT, bind_num INTEGER, UNIQUE(user_id, goods_id))"
             )
         with db_backend.transaction(self.player_database) as conn:
+            conn.execute("CREATE TABLE player_pet_item (user_id TEXT, uid TEXT, total_exp INTEGER)")
+            conn.execute("INSERT INTO player_pet_item VALUES (%s,%s,%s)", ("user", "pet-1", 0))
             conn.execute("CREATE TABLE player_pet (user_id TEXT PRIMARY KEY, travel TEXT)")
             conn.execute("INSERT INTO player_pet VALUES (%s, %s)", ("user", json.dumps(self.travel, ensure_ascii=False)))
         self.service = PetTravelClaimService(self.game_database, self.player_database)
@@ -59,6 +61,12 @@ class PetTravelClaimServiceTests(unittest.TestCase):
             conn.execute("INSERT INTO back VALUES (%s,%s,%s,%s,%s,%s,%s,%s)", ("user", 1, "item", "type", 99, "", "", 99))
         self.assertEqual(self.claim("full").status, "inventory_full")
         self.assertEqual(self.state(), ((100, 200), (99, 99), json.dumps(self.travel, ensure_ascii=False)))
+
+    def test_missing_travel_pet_preserves_state(self) -> None:
+        with db_backend.transaction(self.player_database) as conn:
+            conn.execute("DELETE FROM player_pet_item WHERE user_id=%s", ("user",))
+        self.assertEqual(self.claim("missing-pet").status, "pet_missing")
+        self.assertEqual(self.state(), ((100, 200), None, json.dumps(self.travel, ensure_ascii=False)))
 
     def test_stale_travel_changes_nothing(self) -> None:
         self.assertEqual(self.claim(travel={**self.travel, "end_at": 3}).status, "state_changed")

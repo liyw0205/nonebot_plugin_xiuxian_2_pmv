@@ -81,6 +81,15 @@ class PetTravelClaimService:
                 except (TypeError, ValueError):
                     conn.rollback()
                     return result("state_changed")
+                pet_uid = str(expected_travel.get("pet_uid", ""))
+                pet_table = conn.execute(
+                    "SELECT 1 FROM player_data.sqlite_master WHERE type='table' AND name=%s", ("player_pet_item",)
+                ).fetchone()
+                if pet_table is not None and (not pet_uid or conn.execute(
+                    "SELECT 1 FROM player_data.player_pet_item WHERE user_id=%s AND uid=%s", (user_id, pet_uid)
+                ).fetchone() is None):
+                    conn.rollback()
+                    return result("pet_missing")
                 current_json = json.dumps(current_travel, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
                 if current_json != travel_json:
                     conn.rollback()
