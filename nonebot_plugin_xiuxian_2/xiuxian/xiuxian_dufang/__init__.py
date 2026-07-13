@@ -22,10 +22,12 @@ from nonebot.permission import SUPERUSER
 from nonebot.log import logger
 from ...paths import get_paths
 from .bet_service import DufangBetService
+from .payout_service import DufangPayoutService
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
 dufang_bet_service = DufangBetService(get_paths().game_db, get_paths().player_db)
+dufang_payout_service = DufangPayoutService(get_paths().game_db, get_paths().player_db)
 PLAYERSDATA = get_paths().players
 SHARING_DATA_PATH = Path(__file__).parent / "unseal_sharing.json"
 BANNED_UNSEAL_IDS = XiuConfig().banned_unseal_ids  # 禁止鉴石的群
@@ -415,22 +417,29 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     events = random.choice(eligible_events) if eligible_events else random.choice(UNSEAL_EVENTS[result])
     
     base_ratio = events["effect"]()
-    if result in ["great_success", "success"]:  # 成功情况
+    if result in ["great_success", "success"]:
         gain = int(cost * base_ratio)
-        sql_message.update_ls(user_id, gain, 1)
-        effect_text = f"获得 {number_to(gain)} 灵石"
-        unseal_data["unseal_info"]["profit"] += gain
-        log_message(user_id, f"进行鉴石，消耗灵石：{number_to(cost)}枚\n鉴石成功！获得灵石：{number_to(gain)}枚")
-    else:  # 失败情况
-        loss = int(cost * base_ratio)
-        actual_loss = min(loss, current_stone)
-        sql_message.update_ls(user_id, actual_loss, 2)
-        effect_text = f"损失 {number_to(actual_loss)} 灵石"
-        unseal_data["unseal_info"]["loss"] += actual_loss
-        log_message(user_id, f"进行鉴石，消耗灵石：{number_to(cost)}枚\n鉴石失败！损失灵石：{number_to(actual_loss)}枚")
-    
-    user_info = sql_message.get_user_info_with_id(user_id)
-    current_stone = int(user_info['stone'])
+        requested_loss = 0
+        outcome = "win"
+    else:
+        gain = 0
+        requested_loss = int(cost * base_ratio)
+        outcome = "loss"
+    payout = dufang_payout_service.settle(
+        f"dufang-payout:{operation_id}", operation_id, user_id, outcome, gain, requested_loss,
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    )
+    if not payout.succeeded:
+        await handle_send(bot, event, "鉴石结算状态已变化，请稍后查看灵石余额。", md_type="鉴石")
+        return
+    current_stone = payout.wallet_stone
+    unseal_data = get_unseal_data(user_id)
+    if outcome == "win":
+        effect_text = f"获得 {number_to(payout.gain)} 灵石"
+        log_message(user_id, f"进行鉴石，消耗灵石：{number_to(cost)}枚\n鉴石成功！获得灵石：{number_to(payout.gain)}枚")
+    else:
+        effect_text = f"损失 {number_to(payout.loss)} 灵石"
+        log_message(user_id, f"进行鉴石，消耗灵石：{number_to(cost)}枚\n鉴石失败！损失灵石：{number_to(payout.loss)}枚")
     
     # 构建完整消息
     full_msg = [
