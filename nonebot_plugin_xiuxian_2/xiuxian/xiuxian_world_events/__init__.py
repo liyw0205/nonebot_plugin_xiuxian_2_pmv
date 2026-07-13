@@ -34,6 +34,7 @@ from .demon_attack_settlement_service import DemonAttackSettlementService
 from .demon_claim_service import DemonClaimService
 from .demon_event_lifecycle_service import DemonEventLifecycleService
 from .demon_wave_refresh_service import DemonWaveRefreshService
+from .spirit_vein_lifecycle_service import SpiritVeinLifecycleService
 
 
 scheduler = require("nonebot_plugin_apscheduler").scheduler
@@ -44,6 +45,7 @@ demon_claim_service = DemonClaimService(get_paths().game_db, get_paths().player_
 demon_attack_settlement_service = DemonAttackSettlementService(get_paths().player_db)
 demon_event_lifecycle_service = DemonEventLifecycleService(get_paths().player_db)
 demon_wave_refresh_service = DemonWaveRefreshService(get_paths().player_db)
+spirit_vein_lifecycle_service = SpiritVeinLifecycleService(get_paths().player_db)
 
 EVENT_TABLE = "world_event_state"
 EVENT_KEY = "global"
@@ -390,15 +392,20 @@ def _build_active_state(period: str | None = None, manual: bool = False) -> dict
     }
 
 
-def _build_spirit_vein_state(duration_minutes: int | None = None, manual: bool = False) -> dict:
-    now = _now()
+def _build_spirit_vein_state(
+    duration_minutes: int | None = None,
+    manual: bool = False,
+    now: datetime | None = None,
+    event_id: str | None = None,
+) -> dict:
+    now = now or _now()
     duration_minutes = duration_minutes or random.randint(SPIRIT_VEIN_MIN_DURATION, SPIRIT_VEIN_MAX_DURATION)
     duration_minutes = max(SPIRIT_VEIN_MIN_DURATION, min(int(duration_minutes), SPIRIT_VEIN_MAX_DURATION))
     ends_at = now + timedelta(minutes=duration_minutes)
     return {
         "active": 1,
         "status": "active",
-        "event_id": _spirit_vein_event_id(now),
+        "event_id": event_id or _spirit_vein_event_id(now),
         "event_type": "spirit_vein",
         "name": "天降灵脉",
         "period": now.strftime("%Y-%m-%d"),
@@ -426,10 +433,25 @@ def _ensure_spirit_vein_state(now: datetime | None = None) -> dict:
 
     ends_at = _parse_time(state.get("ends_at"))
     if state.get("status") == "active" and ends_at and now >= ends_at:
-        state["active"] = 0
-        state["status"] = "finished"
-        state["last_result"] = f"天降灵脉已于{ends_at.strftime('%H:%M')}消散。"
-        _save_state(state, SPIRIT_VEIN_EVENT_KEY)
+        operation_id = (
+            f"spirit-vein:expire:{state.get('event_id')}:"
+            f"{ends_at.strftime('%Y%m%d%H%M%S')}"
+        )
+        replay = spirit_vein_lifecycle_service.replay(operation_id)
+        if replay is not None:
+            return replay.state or state
+        target = dict(state)
+        target["active"] = 0
+        target["status"] = "finished"
+        target["last_result"] = f"天降灵脉已于{ends_at.strftime('%H:%M')}消散。"
+        result = spirit_vein_lifecycle_service.transition(
+            operation_id,
+            SPIRIT_VEIN_EVENT_KEY,
+            "expire",
+            state,
+            target,
+        )
+        state = result.state or state
     return state
 
 
@@ -462,7 +484,6 @@ def get_spirit_vein_tianti_bonus_msg() -> str:
 
 
 def _build_spirit_vein_message(state: dict) -> str:
-    state = _ensure_spirit_vein_state()
     if state.get("status") == "active":
         ends_at = _parse_time(state.get("ends_at"))
         now = _now()
@@ -487,32 +508,97 @@ def _build_spirit_vein_message(state: dict) -> str:
 def _try_start_auto_spirit_vein() -> tuple[dict, str]:
     now = _now()
     state = _ensure_spirit_vein_state(now)
-    if state.get("status") == "active":
-        return state, "天降灵脉仍在持续，本次触发检查自动跳过。"
-    if random.random() >= SPIRIT_VEIN_TRIGGER_CHANCE:
-        return state, "天降灵脉触发检查完成，本次未开启。"
+    slot = now.strftime("%Y%m%d%H30")
+    operation_id = f"spirit-vein:auto-trigger:{slot}"
+    replay = spirit_vein_lifecycle_service.replay(operation_id)
+    if replay is not None:
+        state = replay.state or state
+        if replay.action == "auto_skip":
+            return state, "天降灵脉仍在持续，本次触发检查自动跳过。"
+        if replay.action == "auto_miss":
+            return state, "天降灵脉触发检查完成，本次未开启。"
+        return state, f"天降灵脉已自动开启，持续至{state.get('ends_at')}。"
 
-    state = _build_spirit_vein_state()
-    _save_state(state, SPIRIT_VEIN_EVENT_KEY)
+    if state.get("status") == "active":
+        action = "auto_skip"
+        target = state
+    elif random.random() >= SPIRIT_VEIN_TRIGGER_CHANCE:
+        action = "auto_miss"
+        target = state
+    else:
+        action = "auto_start"
+        target = _build_spirit_vein_state(
+            now=now,
+            event_id=f"spirit_vein:{operation_id}",
+        )
+    result = spirit_vein_lifecycle_service.transition(
+        operation_id,
+        SPIRIT_VEIN_EVENT_KEY,
+        action,
+        state,
+        target,
+    )
+    state = result.state or state
+    if result.action == "auto_skip":
+        return state, "天降灵脉仍在持续，本次触发检查自动跳过。"
+    if result.action == "auto_miss":
+        return state, "天降灵脉触发检查完成，本次未开启。"
+    if result.status != "applied":
+        return state, "天降灵脉状态已变化，本次自动触发未执行。"
     return state, f"天降灵脉已自动开启，持续至{state.get('ends_at')}。"
 
 
-def _start_spirit_vein_manual(duration_minutes: int | None = None) -> dict:
-    state = _build_spirit_vein_state(duration_minutes=duration_minutes, manual=True)
-    _save_state(state, SPIRIT_VEIN_EVENT_KEY)
-    return state
+def _start_spirit_vein_manual(
+    operation_id: str,
+    duration_minutes: int | None = None,
+):
+    now = _now()
+    state = _ensure_spirit_vein_state(now)
+    replay = spirit_vein_lifecycle_service.replay(operation_id)
+    if replay is not None:
+        return replay
+    if state.get("status") == "active":
+        action = "manual_start_skip"
+        target = state
+    else:
+        action = "manual_start"
+        target = _build_spirit_vein_state(
+            duration_minutes=duration_minutes,
+            manual=True,
+            now=now,
+            event_id=f"spirit_vein:{operation_id}",
+        )
+    return spirit_vein_lifecycle_service.transition(
+        operation_id,
+        SPIRIT_VEIN_EVENT_KEY,
+        action,
+        state,
+        target,
+    )
 
 
-def _close_spirit_vein_manual() -> dict:
-    state = _load_state(SPIRIT_VEIN_EVENT_KEY)
-    state["active"] = 0
-    state["status"] = "finished"
-    state["event_type"] = "spirit_vein"
-    state["name"] = "天降灵脉"
-    state["manual"] = 1
-    state["last_result"] = "天降灵脉已手动关闭。"
-    _save_state(state, SPIRIT_VEIN_EVENT_KEY)
-    return state
+def _close_spirit_vein_manual(operation_id: str):
+    state = _ensure_spirit_vein_state()
+    replay = spirit_vein_lifecycle_service.replay(operation_id)
+    if replay is not None:
+        return replay
+    if state.get("status") == "active":
+        action = "manual_finish"
+        target = dict(state)
+        target["active"] = 0
+        target["status"] = "finished"
+        target["manual"] = 1
+        target["last_result"] = "天降灵脉已手动关闭。"
+    else:
+        action = "manual_finish_skip"
+        target = state
+    return spirit_vein_lifecycle_service.transition(
+        operation_id,
+        SPIRIT_VEIN_EVENT_KEY,
+        action,
+        state,
+        target,
+    )
 
 
 def _ensure_daily_state() -> dict:
@@ -1064,13 +1150,21 @@ async def start_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMess
 async def start_spirit_vein_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     with _state_lock:
-        state = _start_spirit_vein_manual()
-    msg = (
-        "天降灵脉已手动开启。\n"
-        f"持续至：{state.get('ends_at')}\n"
-        f"修为加成：+{int(SPIRIT_VEIN_EXP_BONUS_RATE * 100)}%\n"
-        f"炼体加成：+{int(SPIRIT_VEIN_TIANTI_BONUS_RATE * 100)}%"
-    )
+        message_id = getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns()
+        operation_id = f"spirit-vein:manual-start:{message_id}"
+        result = _start_spirit_vein_manual(operation_id)
+        state = result.state or {}
+    if result.action == "manual_start" and result.status == "applied":
+        msg = (
+            "天降灵脉已手动开启。\n"
+            f"持续至：{state.get('ends_at')}\n"
+            f"修为加成：+{int(SPIRIT_VEIN_EXP_BONUS_RATE * 100)}%\n"
+            f"炼体加成：+{int(SPIRIT_VEIN_TIANTI_BONUS_RATE * 100)}%"
+        )
+    elif result.status == "already_active":
+        msg = f"天降灵脉仍在持续，结束时间保持为：{state.get('ends_at')}"
+    else:
+        msg = "天降灵脉状态已变化，本次未能开启。"
     await handle_send(bot, event, msg, md_type="世界事件", k1="状态", v1="天降灵脉状态")
     await start_spirit_vein.finish()
 
@@ -1101,8 +1195,15 @@ async def close_world_event_(bot: Bot, event: GroupMessageEvent | PrivateMessage
 async def close_spirit_vein_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     with _state_lock:
-        _close_spirit_vein_manual()
-    await handle_send(bot, event, "天降灵脉已手动关闭。", md_type="世界事件", k1="状态", v1="天降灵脉状态")
+        message_id = getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns()
+        operation_id = f"spirit-vein:manual-finish:{message_id}"
+        result = _close_spirit_vein_manual(operation_id)
+    msg = (
+        "天降灵脉已手动关闭。"
+        if result.action == "manual_finish" and result.status == "applied"
+        else "当前没有开启中的天降灵脉。"
+    )
+    await handle_send(bot, event, msg, md_type="世界事件", k1="状态", v1="天降灵脉状态")
     await close_spirit_vein.finish()
 
 
