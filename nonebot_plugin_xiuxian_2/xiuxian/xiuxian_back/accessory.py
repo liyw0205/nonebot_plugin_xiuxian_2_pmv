@@ -3,8 +3,8 @@ import time
 
 from ..on_compat import on_command
 from nonebot.params import CommandArg
-from ...paths import get_paths
 
+from ...paths import get_paths
 from ..adapter_compat import (
     Bot,
     Message,
@@ -733,59 +733,55 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     uid = parts[0].strip()
     index_tokens = parts[1:]
     user_id = str(user_info["user_id"])
-    result = {"ok": False, "msg": "锁定失败：未找到饰品"}
-
-    def _mut(doc):
-        nonlocal result
-        doc = _normalize_accessory_doc(doc)
-        w, k, target = _find_accessory_anywhere(doc, uid)
-        if not target:
-            return False
-
-        affixes = target.get("affixes", [])
-        affix_count = len(affixes) if isinstance(affixes, list) else 0
-        if affix_count <= 0:
-            result["msg"] = "锁定失败：该饰品没有可锁定词条"
-            return False
-
-        indexes, err = _parse_affix_indexes(index_tokens, affix_count)
-        if err:
-            result["msg"] = f"锁定失败：{err}"
-            return False
-
+    operation_id = _accessory_operation_id(event, "lock", user_id, uid)
+    replay = accessory_transaction_service.replay(operation_id, "lock")
+    if replay is not None and replay.accessory is not None:
+        target = replay.accessory
         q = max(1, min(5, int(target.get("quality", 1))))
-        target_count = _target_affix_count_for_quality(q)
-        current_locked = _normalize_locked_affixes(target, affix_count)
-        new_locked = sorted(set(current_locked + indexes))
-        if len(new_locked) >= target_count:
-            result["msg"] = f"锁定失败：{quality_to_cn(q)}最多锁定{target_count - 1}条，至少保留1条参与洗练"
-            return False
-
-        _set_locked_affixes(target, new_locked)
-        if w == "bag":
-            doc["bag"][k] = target
-        else:
-            doc["equipped"][k] = target
-
-        need = _wash_stone_need(q, len(new_locked))
-        result["ok"] = True
-        result["msg"] = (
+        locked = _normalize_locked_affixes(target)
+        result_msg = (
             f"已锁定：{target.get('name', '未知饰品')}\n"
-            f"锁定词条：{_format_locked_positions(new_locked)}\n"
-            f"下次洗练消耗：{WASH_STONE_NAME}x{need}"
+            f"锁定词条：{_format_locked_positions(locked)}\n"
+            f"下次洗练消耗：{WASH_STONE_NAME}x{_wash_stone_need(q, len(locked))}"
         )
-        return True
-
-    player_data_manager.patch_doc(
-        user_id=user_id,
-        table_name=TABLE,
-        fields=["equipped", "bag"],
-        mutator=_mut,
-        default_factory=_default_accessory_doc
-    )
+    else:
+        data = _get_data(user_id)
+        _, _, target = _find_accessory_anywhere(data, uid)
+        if not target:
+            result_msg = "锁定失败：未找到饰品"
+        else:
+            affixes = target.get("affixes", [])
+            affix_count = len(affixes) if isinstance(affixes, list) else 0
+            if affix_count <= 0:
+                result_msg = "锁定失败：该饰品没有可锁定词条"
+            else:
+                indexes, err = _parse_affix_indexes(index_tokens, affix_count)
+                if err:
+                    result_msg = f"锁定失败：{err}"
+                else:
+                    q = max(1, min(5, int(target.get("quality", 1))))
+                    target_count = _target_affix_count_for_quality(q)
+                    current_locked = _normalize_locked_affixes(target, affix_count)
+                    new_locked = sorted(set(current_locked + indexes))
+                    if len(new_locked) >= target_count:
+                        result_msg = f"锁定失败：{quality_to_cn(q)}最多锁定{target_count - 1}条，至少保留1条参与洗练"
+                    else:
+                        result = accessory_transaction_service.set_affix_locks(
+                            operation_id, "lock", user_id, uid,
+                            deepcopy(target), new_locked,
+                        )
+                        if not result.succeeded or result.accessory is None:
+                            result_msg = "锁定失败：饰品状态已变化，请重新查看后再试"
+                        else:
+                            updated = result.accessory
+                            result_msg = (
+                                f"已锁定：{updated.get('name', '未知饰品')}\n"
+                                f"锁定词条：{_format_locked_positions(new_locked)}\n"
+                                f"下次洗练消耗：{WASH_STONE_NAME}x{_wash_stone_need(q, len(new_locked))}"
+                            )
 
     await handle_send(
-        bot, event, result["msg"],
+        bot, event, result_msg,
         md_type="背包", k1="查看", v1=f"查看饰品 {uid}", k2="洗练", v2=f"饰品洗练 {uid}"
     )
 
@@ -805,62 +801,59 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     index_tokens = parts[1:]
     unlock_all = any(str(token).strip() in {"全部", "全解", "all", "ALL"} for token in index_tokens)
     user_id = str(user_info["user_id"])
-    result = {"ok": False, "msg": "解锁失败：未找到饰品"}
-
-    def _mut(doc):
-        nonlocal result
-        doc = _normalize_accessory_doc(doc)
-        w, k, target = _find_accessory_anywhere(doc, uid)
-        if not target:
-            return False
-
-        affixes = target.get("affixes", [])
-        affix_count = len(affixes) if isinstance(affixes, list) else 0
-        current_locked = _normalize_locked_affixes(target, affix_count)
-        if not current_locked:
-            result["msg"] = "该饰品当前没有锁定词条"
-            return False
-
-        if unlock_all:
-            new_locked = []
-        else:
-            indexes, err = _parse_affix_indexes(index_tokens, affix_count)
-            if err:
-                result["msg"] = f"解锁失败：{err}"
-                return False
-            remove_set = set(indexes)
-            new_locked = [idx for idx in current_locked if idx not in remove_set]
-
-        _set_locked_affixes(target, new_locked)
-        if w == "bag":
-            doc["bag"][k] = target
-        else:
-            doc["equipped"][k] = target
-
+    operation_id = _accessory_operation_id(event, "unlock", user_id, uid)
+    replay = accessory_transaction_service.replay(operation_id, "unlock")
+    if replay is not None and replay.accessory is not None:
+        target = replay.accessory
         q = max(1, min(5, int(target.get("quality", 1))))
-        need = _wash_stone_need(q, len(new_locked))
-        result["ok"] = True
-        result["msg"] = (
+        locked = _normalize_locked_affixes(target)
+        result_msg = (
             f"已解锁：{target.get('name', '未知饰品')}\n"
-            f"锁定词条：{_format_locked_positions(new_locked)}\n"
-            f"下次洗练消耗：{WASH_STONE_NAME}x{need}"
+            f"锁定词条：{_format_locked_positions(locked)}\n"
+            f"下次洗练消耗：{WASH_STONE_NAME}x{_wash_stone_need(q, len(locked))}"
         )
-        return True
-
-    player_data_manager.patch_doc(
-        user_id=user_id,
-        table_name=TABLE,
-        fields=["equipped", "bag"],
-        mutator=_mut,
-        default_factory=_default_accessory_doc
-    )
+    else:
+        data = _get_data(user_id)
+        _, _, target = _find_accessory_anywhere(data, uid)
+        if not target:
+            result_msg = "解锁失败：未找到饰品"
+        else:
+            affixes = target.get("affixes", [])
+            affix_count = len(affixes) if isinstance(affixes, list) else 0
+            current_locked = _normalize_locked_affixes(target, affix_count)
+            if not current_locked:
+                result_msg = "该饰品当前没有锁定词条"
+            else:
+                if unlock_all:
+                    new_locked = []
+                    err = ""
+                else:
+                    indexes, err = _parse_affix_indexes(index_tokens, affix_count)
+                    remove_set = set(indexes or [])
+                    new_locked = [idx for idx in current_locked if idx not in remove_set]
+                if err:
+                    result_msg = f"解锁失败：{err}"
+                else:
+                    result = accessory_transaction_service.set_affix_locks(
+                        operation_id, "unlock", user_id, uid,
+                        deepcopy(target), new_locked,
+                    )
+                    if not result.succeeded or result.accessory is None:
+                        result_msg = "解锁失败：饰品状态已变化，请重新查看后再试"
+                    else:
+                        updated = result.accessory
+                        q = max(1, min(5, int(updated.get("quality", 1))))
+                        result_msg = (
+                            f"已解锁：{updated.get('name', '未知饰品')}\n"
+                            f"锁定词条：{_format_locked_positions(new_locked)}\n"
+                            f"下次洗练消耗：{WASH_STONE_NAME}x{_wash_stone_need(q, len(new_locked))}"
+                        )
 
     await handle_send(
-        bot, event, result["msg"],
+        bot, event, result_msg,
         md_type="背包", k1="查看", v1=f"查看饰品 {uid}", k2="洗练", v2=f"饰品洗练 {uid}"
     )
 
-@quick_decompose_accessory.handle(parameterless=[Cooldown(cd_time=2)])
 @wash_accessory.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     isUser, user_info, msg = check_user(event)
@@ -1036,6 +1029,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         md_type="背包", k1="饰品", v1="饰品背包", k2="背包", v2="我的背包"
     )
 
+@quick_decompose_accessory.handle(parameterless=[Cooldown(cd_time=2)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -1099,14 +1093,28 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "未找到符合条件的饰品")
         return
 
-    data["bag"] = keep
-    _save_data(user_id, data)
-
-    sql_message.send_back(user_id, WASH_STONE_ID, WASH_STONE_NAME, "特殊道具", total_gain, 1)
+    selected_uids = [str(acc.get("uid", "")) for acc in hit]
+    target_key = f"{t}:{q_text}:{','.join(selected_uids)}"
+    result = accessory_transaction_service.batch_decompose(
+        _accessory_operation_id(event, "batch-decompose", user_id, target_key),
+        user_id,
+        deepcopy(bag),
+        selected_uids,
+        WASH_STONE_ID,
+        WASH_STONE_NAME,
+        total_gain,
+        int(XiuConfig().max_goods_num),
+    )
+    if result.status == "inventory_full":
+        await handle_send(bot, event, f"快速分解失败：{WASH_STONE_NAME}已达背包上限")
+        return
+    if not result.succeeded:
+        await handle_send(bot, event, "快速分解失败：饰品状态已变化，请重新查看后再试")
+        return
 
     await handle_send(
         bot, event,
-        f"快速分解完成：{len(hit)}件\n筛选：{t} / {q_text}\n获得{WASH_STONE_NAME}：{total_gain}个",
+        f"快速分解完成：{result.affected}件\n筛选：{t} / {q_text}\n获得{WASH_STONE_NAME}：{result.stone_delta}个",
         md_type="背包", k1="饰品", v1="饰品背包", k2="背包", v2="我的背包"
     )
 
