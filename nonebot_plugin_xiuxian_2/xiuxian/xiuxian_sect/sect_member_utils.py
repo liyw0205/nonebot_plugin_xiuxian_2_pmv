@@ -58,6 +58,26 @@ def create_user_sect_task(user_id, sect_id=None, operation_id=None, replace_exis
     return userstask[user_id]
 
 
+
+def refresh_user_sect_task(user_id, sect_id, operation_id, membership_service):
+    current = sect_task_state_manager.get_active_task(user_id)
+    if not current:
+        return None
+    tasklist = config["宗门任务"]
+    key = random.choice(list(tasklist))
+    refreshed = membership_service.refresh_task(
+        operation_id, user_id, sect_id, sect_task_state_manager._period(),
+        current["任务名称"], current["任务内容"], key, tasklist[key],
+        config["每日宗门任务次上限"],
+    )
+    if not refreshed.applied:
+        return None
+    task = {"任务名称": refreshed.task_key, "任务内容": dict(refreshed.task_data or {}),
+            "sect_id": refreshed.sect_id, "period": refreshed.period, "status": "accepted",
+            "progress": 0, "target": 1}
+    userstask[user_id] = task
+    return task
+
 def isUserTask(user_id):
     """判断用户是否已有任务 True:有任务"""
     task = sect_task_state_manager.get_active_task(user_id)

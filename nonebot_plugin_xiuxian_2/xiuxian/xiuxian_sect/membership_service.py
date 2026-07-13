@@ -1186,6 +1186,42 @@ class SectMembershipService:
                 conn.rollback()
                 raise
 
+    def refresh_task(self, operation_id, user_id, sect_id, period, expected_task_key,
+                     expected_task_data, task_key, task_data, daily_limit) -> SectTaskClaim:
+        operation_id = str(operation_id).strip()
+        user_id, sect_id, period = str(user_id), int(sect_id), str(period).strip()
+        expected_json = safe_json_dumps(dict(expected_task_data))
+        task_key, task_data = str(task_key).strip(), dict(task_data)
+        task_json = safe_json_dumps(task_data)
+        if not operation_id or not period or not task_key:
+            raise ValueError("operation, period and task are required")
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._ensure_task_claim_operations(conn)
+                previous = conn.execute("SELECT task_key,task_data FROM sect_task_claim_operations WHERE operation_id=%s", (operation_id,)).fetchone()
+                if previous is not None:
+                    conn.rollback()
+                    return SectTaskClaim("duplicate", user_id, sect_id, period, str(previous[0]), safe_json_loads(previous[1], {}, dict))
+                user = conn.execute("SELECT sect_id,sect_task FROM user_xiuxian WHERE user_id=%s", (user_id,)).fetchone()
+                if user is None or user[0] is None or int(user[0]) != sect_id:
+                    conn.rollback(); return SectTaskClaim("sect_changed", user_id, sect_id, period)
+                if int(user[1] or 0) >= int(daily_limit):
+                    conn.rollback(); return SectTaskClaim("daily_limit", user_id, sect_id, period)
+                current = conn.execute("SELECT task_key,task_data,status FROM sect_task_state WHERE user_id=%s AND period=%s", (user_id, period)).fetchone()
+                if current is None or str(current[2]) != "accepted":
+                    conn.rollback(); return SectTaskClaim("task_missing", user_id, sect_id, period)
+                if str(current[0]) != str(expected_task_key) or safe_json_dumps(safe_json_loads(current[1], {}, dict)) != expected_json:
+                    conn.rollback(); return SectTaskClaim("state_changed", user_id, sect_id, period)
+                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                conn.execute("UPDATE sect_task_state SET task_key=%s,task_data=%s,progress=0,target=1,accepted_at=%s,updated_at=%s,completed_at=NULL WHERE user_id=%s AND period=%s", (task_key,task_json,now,now,user_id,period))
+                conn.execute("INSERT INTO sect_task_claim_operations (operation_id,user_id,sect_id,period,task_key,task_data) VALUES (%s,%s,%s,%s,%s,%s)", (operation_id,user_id,sect_id,period,task_key,task_json))
+                conn.commit()
+                return SectTaskClaim("claimed", user_id, sect_id, period, task_key, task_data)
+            except Exception:
+                conn.rollback()
+                raise
+
     def claim_task(self, operation_id, user_id, sect_id, period, task_key,
                    task_data, daily_limit, replace_existing=False) -> SectTaskClaim:
         operation_id = str(operation_id).strip()

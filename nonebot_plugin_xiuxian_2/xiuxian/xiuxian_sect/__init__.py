@@ -34,6 +34,7 @@ from .sect_member_utils import (
     bind_sect_member_dependencies as _bind_sect_member_dependencies,
     can_join_sect,
     create_user_sect_task,
+    refresh_user_sect_task,
     generate_random_sect_name,
     get_mainname_list,
     get_mainnameid,
@@ -1525,7 +1526,10 @@ async def sect_task_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     sect_id = user_info['sect_id']
     if sect_id:
         if isUserTask(user_id):
-            create_user_sect_task(user_id, sect_id, _sect_operation_id(event, "task_refresh", user_id), True, sect_membership_service)
+            refreshed_task = refresh_user_sect_task(user_id, sect_id, _sect_operation_id(event, "task_refresh", user_id), sect_membership_service)
+            if refreshed_task is None:
+                await handle_send(bot, event, "宗门任务状态已变化，请重新查看后再刷新。")
+                await sect_task_refresh.finish()
             if userstask[user_id]['任务内容']['type'] == 1:
                 task_type = "⚔️"
             else:
