@@ -47,6 +47,7 @@ from .equipment_service import EquipmentService
 from .lottery_talisman_service import LotteryReward, LotteryTalismanService
 from .package_reward_service import PackageReward, PackageRewardService
 from .accessory_package_service import AccessoryPackageService
+from .alchemy_service import AlchemyService
 from .skill_learning_service import SkillLearningService
 from .stone_reward_service import StoneItemRewardService
 from .three_cultivation_pill_service import ThreeCultivationPillService
@@ -80,6 +81,7 @@ package_reward_service = PackageRewardService(get_paths().game_db)
 accessory_package_service = AccessoryPackageService(
     get_paths().game_db, get_paths().player_db
 )
+alchemy_service = AlchemyService(get_paths().game_db)
 skill_learning_service = SkillLearningService(get_paths().game_db)
 player_data_manager = PlayerDataManager()
 tianti_item_reward_service = TiantiItemRewardService(
@@ -116,6 +118,15 @@ def _cultivation_item_operation_id(event, user_id, goods_id):
     if event_id:
         return f"cultivation-item:{event_id}:{user_id}:{goods_id}"
     return f"cultivation-item:{user_id}:{goods_id}:{time.time_ns()}"
+
+
+def _alchemy_operation_id(event, user_id, mode):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"alchemy:{event_id}:{user_id}:{mode}"
+    return f"alchemy:{user_id}:{mode}:{time.time_ns()}"
 
 
 def _lottery_talisman_operation_id(event, user_id, goods_id):
@@ -458,7 +469,13 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
         await goods_re_root.finish()
 
-    if not sql_message.alchemy_items(user_id, price, [(goods_id, num)]):
+    alchemy_result = alchemy_service.apply(
+        _alchemy_operation_id(event, user_id, "single"),
+        user_id,
+        price,
+        [(goods_id, num)],
+    )
+    if not alchemy_result.succeeded:
         msg = "炼金失败，背包数量发生变化，请重试！"
         await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
         await goods_re_root.finish()
@@ -520,7 +537,13 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             consume_items.append((elixir['id'], elixir['num']))
             results.append(f"{elixir['name']} x{elixir['num']} → {number_to(total_price)}灵石")
 
-        if not sql_message.alchemy_items(user_id, total_stone, consume_items):
+        alchemy_result = alchemy_service.apply(
+            _alchemy_operation_id(event, user_id, "fast-hp"),
+            user_id,
+            total_stone,
+            consume_items,
+        )
+        if not alchemy_result.succeeded:
             msg = "快速炼金失败，背包数量发生变化，请重试！"
             await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="快速炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
             await fast_alchemy.finish()
@@ -627,7 +650,13 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         
         result_msg.append(f"{item['name']} x{item['available_num']}{status_info} → {number_to(total_price)}灵石")
 
-    if not sql_message.alchemy_items(user_id, total_stone, consume_items):
+    alchemy_result = alchemy_service.apply(
+        _alchemy_operation_id(event, user_id, f"fast-{item_type}-{rank_name}"),
+        user_id,
+        total_stone,
+        consume_items,
+    )
+    if not alchemy_result.succeeded:
         msg = "快速炼金失败，背包数量发生变化，请重试！"
         await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="快速炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
         await fast_alchemy.finish()
