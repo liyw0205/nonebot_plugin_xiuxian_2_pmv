@@ -1,5 +1,6 @@
 import os
 import random
+import time
 from ..on_compat import on_command
 from ..adapter_compat import (
     GROUP,
@@ -43,11 +44,13 @@ from ...paths import get_paths
 from .draw_service import ImpartDrawService
 from .card_compose_service import CardComposeService
 from .card_disassemble_service import CardDisassembleService
+from .love_sand_service import LoveSandUseService
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 impart_draw_service = ImpartDrawService(get_paths().game_db, get_paths().impart_db)
 card_compose_service = CardComposeService(get_paths().impart_db)
 card_disassemble_service = CardDisassembleService(get_paths().impart_db)
+love_sand_service = LoveSandUseService(get_paths().game_db, get_paths().impart_db, get_paths().player_db)
 
 
 cache_help = {}
@@ -472,17 +475,17 @@ async def use_love_sand(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     # 使用思恋流沙，随机获得思恋结晶
     total_gained = sum(random.choice([10, 20, 30]) for _ in range(quantity))
     
-    # 更新思恋结晶数量
-    xiuxian_impart.update_stone_num(total_gained, user_id, 1)
-    
-    # 批量消耗思恋流沙
-    sql_message.update_back_j(user_id, item_id, quantity)
-    update_statistics_value(user_id, "思恋流沙使用", increment=quantity)
-    update_statistics_value(user_id, "思恋结晶获取", increment=total_gained)
+    item_count = sql_message.goods_num(user_id, item_id)
+    event_id = getattr(event, "message_id", None)
+    operation_id = f"love-sand:{event_id}:{user_id}:{item_id}" if event_id else f"love-sand:{time.time_ns()}:{user_id}:{item_id}"
+    result = love_sand_service.apply(operation_id, user_id, item_id, quantity, total_gained, item_count, current_stones)
+    if not result.succeeded:
+        await handle_send(bot, event, "道具或传承状态已变化，请刷新后重试。")
+        return
     log_message(user_id, f"[思恋流沙] 使用{quantity}个，获得思恋结晶{total_gained}颗")
     
     # 构建结果消息
-    final_msg = f"获得思恋结晶 {total_gained} 颗\n当前思恋结晶：{current_stones + total_gained}颗"
+    final_msg = f"获得思恋结晶 {result.gained} 颗\n当前思恋结晶：{result.stone_num}颗"
     
     await handle_send(bot, event, final_msg)
     return
