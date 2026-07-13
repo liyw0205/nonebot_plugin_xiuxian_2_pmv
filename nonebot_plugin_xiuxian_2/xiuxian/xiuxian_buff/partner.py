@@ -30,6 +30,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
 )
 from .mentor_exp_cd import mentor_exp_cd
 from .partner_cultivation_service import PartnerCultivationService
+from .partner_breakthrough_service import PartnerBreakthroughService
 from .partner_storage import (
     PLAYERSDATA,
     bind_partner_storage,
@@ -61,6 +62,7 @@ sql_message = XiuxianDateManage()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
 partner_cultivation_service = PartnerCultivationService(get_paths().game_db, get_paths().player_db)
+partner_breakthrough_service = PartnerBreakthroughService(get_paths().game_db, get_paths().player_db)
 two_exp_limit = 3
 mentor_config = XiuConfig()
 mentor_transmission_limit = getattr(mentor_config, "mentor_transmission_limit", two_exp_limit)
@@ -2270,13 +2272,17 @@ async def partner_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
 def trigger_partner_exp_share(user_id, new_level):
     partner_data = load_partner(user_id)
+def trigger_partner_exp_share(user_id, new_level):
+    user_id = str(user_id)
+    partner_data = load_partner(user_id)
     if partner_data and partner_data.get('partner_id'):
-        partner_id = partner_data['partner_id']
-    
-        # 获取双方当前修为
-        self_exp = sql_message.get_user_info_with_id(user_id)['exp']
+        partner_id = str(partner_data['partner_id'])
+        user_info = sql_message.get_user_info_with_id(user_id)
         partner_info = sql_message.get_user_info_with_id(partner_id)
-        partner_exp = partner_info['exp']
+        if not user_info or not partner_info or not awaitable_check_partner_pair(user_id, partner_id):
+            return ""
+        self_exp = int(user_info['exp'])
+        partner_exp = int(partner_info['exp'])
         partner_name = partner_info['user_name']
     
         # 计算可赠送的修为量：突破者当前修为的1%
@@ -2292,9 +2298,14 @@ def trigger_partner_exp_share(user_id, new_level):
             trigger_rate = min(40 + (affection // 1000), 50)
         
             if random.randint(1, 100) <= trigger_rate:
-                # 给道侣加修为
-                sql_message.update_exp(partner_id, give_exp)
-                sql_message.update_power2(partner_id)  # 更新战力
+                result = partner_breakthrough_service.apply(
+                    f"partner-breakthrough:{user_id}:{new_level}", user_id, partner_id, new_level,
+                    expected_user_exp=self_exp, expected_partner_exp=partner_exp,
+                    expected_affection=affection, reward_exp=give_exp,
+                    partner_power=_relation_power(partner_info, partner_exp + give_exp),
+                )
+                if not result.succeeded:
+                    return ""
             
                 # 记录日志
                 log_message(user_id, f"突破{new_level}，道侣共享修为：{number_to(give_exp)}")
@@ -2303,8 +2314,11 @@ def trigger_partner_exp_share(user_id, new_level):
     return ""
 
 
-def _mentor_breakthrough_reward_rate(apprentice_level):
-    """
+def awaitable_check_partner_pair(user_id, partner_id):
+    reciprocal = load_partner(partner_id)
+    return str(reciprocal.get("partner_id")) == str(user_id)
+
+
     参考双修按境界段缩放：低境界拿更低比例，高境界最多到配置上限。
     """
     base_rate = _config_rate(MENTOR_BREAKTHROUGH_REWARD_BASE_RATE, 0.005)
