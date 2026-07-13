@@ -7,6 +7,7 @@ from pathlib import Path
 from threading import RLock
 
 from ..xiuxian_utils import db_backend
+from .card_bonus import refresh_card_bonuses
 
 
 @dataclass(frozen=True)
@@ -29,7 +30,7 @@ class CardDisassembleService:
 
     def disassemble(
         self, operation_id, user_id, card_name, quantity,
-        expected_card_quantity, expected_stone_quantity, reward_per_card=2,
+        expected_card_quantity, expected_stone_quantity, reward_per_card=2, card_definitions=None,
     ) -> CardDisassembleResult:
         operation_id = str(operation_id).strip()
         user_id, card_name = str(user_id), str(card_name)
@@ -94,6 +95,8 @@ class CardDisassembleService:
                     return CardDisassembleResult("state_changed")
                 new_card = card_quantity - quantity
                 new_stone = stone_quantity + quantity * reward_per_card
+                if card_definitions is not None:
+                    refresh_card_bonuses(conn, user_id, card_definitions)
                 conn.execute(
                     "INSERT INTO impart_card_disassemble_operations VALUES (%s,%s,%s,%s)",
                     (operation_id, payload, new_card, new_stone),

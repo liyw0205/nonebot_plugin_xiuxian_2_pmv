@@ -659,7 +659,7 @@ async def impart_compose_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     user_id = str(user_info["user_id"])
     cards = impart_data_json.data_person_list(user_id) or {}
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or random.getrandbits(64))
-    result = card_compose_service.compose(f"impart-compose:{event_id}:{user_id}", user_id, source_card, target_card, cards.get(source_card, 0), cards.get(target_card, 0), 5)
+    result = card_compose_service.compose(f"impart-compose:{event_id}:{user_id}", user_id, source_card, target_card, cards.get(source_card, 0), cards.get(target_card, 0), 5, impart_data_json.data_all_())
     messages = {"same_card": "合成材料卡与目标卡不能相同！", "card_missing": "重复卡不足5张，无法合成！", "state_changed": "传承卡牌状态已变化，请重新操作！"}
     if not result.succeeded:
         await handle_send(bot, event, messages.get(result.status, "传承合成失败！"))
@@ -690,7 +690,7 @@ async def impart_disassemble_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, "未找到传承数据！")
         return
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or random.getrandbits(64))
-    result = card_disassemble_service.disassemble(f"impart-disassemble:{event_id}:{user_id}", user_id, card_name, quantity, cards.get(card_name, 0), impart_state["stone_num"], 2)
+    result = card_disassemble_service.disassemble(f"impart-disassemble:{event_id}:{user_id}", user_id, card_name, quantity, cards.get(card_name, 0), impart_state["stone_num"], 2, impart_data_json.data_all_())
     messages = {"card_missing": "卡牌不足；分解后必须至少保留1张！", "state_changed": "传承卡牌状态已变化，请重新操作！", "user_missing": "未找到传承数据！"}
     if not result.succeeded:
         await handle_send(bot, event, messages.get(result.status, "传承分解失败！"))

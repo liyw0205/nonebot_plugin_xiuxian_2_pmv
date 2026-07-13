@@ -7,6 +7,7 @@ from pathlib import Path
 from threading import RLock
 
 from ..xiuxian_utils import db_backend
+from .card_bonus import refresh_card_bonuses
 
 
 @dataclass(frozen=True)
@@ -29,7 +30,7 @@ class CardComposeService:
 
     def compose(
         self, operation_id, user_id, source_card, target_card,
-        expected_source_quantity, expected_target_quantity, cost=5,
+        expected_source_quantity, expected_target_quantity, cost=5, card_definitions=None,
     ) -> CardComposeResult:
         operation_id = str(operation_id).strip()
         user_id, source_card, target_card = map(str, (user_id, source_card, target_card))
@@ -96,6 +97,8 @@ class CardComposeService:
                     (user_id, target_card),
                 )
                 new_source, new_target = source_quantity - cost, target_quantity + 1
+                if card_definitions is not None:
+                    refresh_card_bonuses(conn, user_id, card_definitions)
                 conn.execute(
                     "INSERT INTO impart_card_compose_operations VALUES (%s,%s,%s,%s)",
                     (operation_id, payload, new_source, new_target),
