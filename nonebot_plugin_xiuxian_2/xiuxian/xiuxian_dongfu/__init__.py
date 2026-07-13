@@ -23,6 +23,7 @@ from .harvest_settlement_service import DongfuHarvestSettlementService
 from .plant_service import DongfuPlantService
 from .accelerate_service import DongfuAccelerateService
 from .patrol_service import DongfuPatrolService
+from .array_upgrade_service import DongfuArrayUpgradeService
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
@@ -31,6 +32,7 @@ dongfu_expansion_service = DongfuExpansionService(get_paths().game_db, get_paths
 dongfu_plant_service = DongfuPlantService(get_paths().game_db, get_paths().player_db)
 dongfu_accelerate_service = DongfuAccelerateService(get_paths().game_db, get_paths().player_db)
 dongfu_patrol_service = DongfuPatrolService(get_paths().game_db, get_paths().player_db)
+dongfu_array_upgrade_service = DongfuArrayUpgradeService(get_paths().game_db, get_paths().player_db)
 dongfu_harvest_settlement_service = DongfuHarvestSettlementService(get_paths().game_db, get_paths().player_db)
 
 MAP_TABLE = "map_status"
@@ -542,6 +544,7 @@ def _get_infiltrate_left(d: dict, is_random: bool):
 def _can_infiltrate(uid: str, is_random: bool):
     d = _get_dongfu(uid)
     d = _reset_infiltrate_count_if_needed(d)
+    _save_dongfu(uid, d)
     return _get_infiltrate_left(d, is_random) > 0, d
 
 
@@ -550,6 +553,7 @@ def _consume_infiltrate_count(uid: str, is_random: bool):
     d = _reset_infiltrate_count_if_needed(d)
     field = _get_infiltrate_count_field(is_random)
     d[field] = _to_int(d.get(field)) + 1
+    _save_dongfu(uid, d)
     return d[field], _get_infiltrate_left(d, is_random)
 
 
@@ -639,6 +643,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     d = _reset_intrude_count_if_needed(d)
     d = _reset_infiltrate_count_if_needed(d)
     d = _reset_patrol_count_if_needed(d)
+    _save_dongfu(uid, d)
     intrude_left = INFILTRATE_DAILY_LIMIT - _to_int(d.get("intrude_count"))
     active_left = _get_infiltrate_left(d, is_random=False)
     random_left = _get_infiltrate_left(d, is_random=True)
@@ -1001,6 +1006,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     slots = _normalize_plant_slots(d)
     slots[slot_no - 1]["fertilizer"] = fertilizer + 1
     d["plant_slots"] = slots
+    _save_dongfu(uid, d)
     await handle_send(bot, event, f"已对{slot_no}号灵田施肥，当前肥力+{fertilizer + 1}。\n{_format_plant_slots(d)}")
 
 
@@ -1100,9 +1106,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if not result.succeeded:
         await handle_send(bot, event, "洞府状态或资产已发生变化，请稍后重试。")
         return
-
     d = _get_dongfu(uid)
     _normalize_plant_slots(d)
+    _save_dongfu(uid, d)
     await handle_send(bot, event, f"洞府扩建成功，灵田数量提升至{result.current_count}块。\n{_format_plant_slots(d)}")
 
 
@@ -1163,17 +1169,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     geomancy = _get_geomancy(d)
     cost = int(3000000 * (lv + 1) * (1 - float(geomancy.get("array_discount", 0))))
     array_stone_need = max(0, next_lv - 3 - _to_int(geomancy.get("array_stone_reduce")))
-    if _to_int(user_info.get("stone")) < cost:
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    result = dongfu_array_upgrade_service.upgrade(
+        f"dongfu-array:{uid}:{event_message_id or time.time_ns()}", uid, lv, next_lv, cost, DONGFU_ITEM_ARRAY_STONE, array_stone_need,
+    )
+    if result.status == "stone_insufficient":
         await handle_send(bot, event, f"升级阵法需要{number_to(cost)}灵石。")
         return
-    if array_stone_need > 0 and _to_int(sql_message.goods_num(uid, DONGFU_ITEM_ARRAY_STONE)) < array_stone_need:
+    if result.status == "item_insufficient":
         await handle_send(bot, event, f"升级至{next_lv}级阵法需要【玄铁阵石】x{array_stone_need}。可通过地图挖矿/战斗获得。")
         return
-
-    if array_stone_need > 0:
-        sql_message.update_back_j(uid, DONGFU_ITEM_ARRAY_STONE, array_stone_need)
-    sql_message.update_ls(uid, cost, 2)
-    d["array_level"] = next_lv
+    if not result.succeeded:
+        await handle_send(bot, event, "洞府状态或资产已发生变化，请稍后重试。")
+        return
     item_msg = f"，玄铁阵石x{array_stone_need}" if array_stone_need > 0 else ""
     await handle_send(bot, event, f"消耗{number_to(cost)}灵石{item_msg}，洞府布阵成功，当前阵法等级：{next_lv}")
 
