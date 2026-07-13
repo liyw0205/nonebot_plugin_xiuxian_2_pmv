@@ -6,7 +6,7 @@ import random
 
 from nonebot.log import logger
 
-from ..xiuxian_compensation.common import send_reward_to_user
+from ...paths import get_paths
 from ..xiuxian_utils import db_backend
 from ..xiuxian_utils.utils import number_to
 from .service import (
@@ -22,10 +22,10 @@ from .service import (
     get_gameplay_activities,
     load_config,
     now_str,
-    parse_reward,
     resolve_daohao,
     today_str,
 )
+from .boss_reward_claim_service import BossRewardClaimService
 
 BOSS_MODES = {"item_raid", "cooperative", "both"}
 
@@ -598,15 +598,8 @@ def build_boss_rank_text(query: str = "", limit: int = 10) -> str:
         conn.close()
 
 
-def _send_parsed_reward(user_id: str, reward_text: str) -> tuple[bool, str]:
-    if not _clean_text(reward_text):
-        return True, ""
-    try:
-        items = parse_reward(reward_text)
-        send_reward_to_user(user_id, items)
-        return True, reward_text
-    except Exception as e:
-        return False, str(e)
+def _boss_reward_claim_service() -> BossRewardClaimService:
+    return BossRewardClaimService(DB_PATH, get_paths().game_db)
 
 
 def claim_boss_milestone_reward(user_id: str, query: str = "") -> tuple[bool, str]:
@@ -617,49 +610,15 @@ def claim_boss_milestone_reward(user_id: str, query: str = "") -> tuple[bool, st
     if not activity:
         return False, "未找到活动首领"
     ensure_activity_files()
-    conn = db_backend.connect(DB_PATH)
-    conn.row_factory = db_backend.Row
-    try:
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT milestone_key FROM activity_boss_milestone WHERE activity_key=%s",
-            (activity["key"],),
-        )
-        unlocked = {str(r["milestone_key"]) for r in cur.fetchall()}
-        if not unlocked:
-            return False, "全服进度奖励尚未解锁"
-        claimed_any = []
-        for ms in activity.get("server_milestones") or []:
-            mkey = ms.get("key") or f"p{ms.get('hp_percent')}"
-            if mkey not in unlocked:
-                continue
-            cur.execute(
-                """
-                SELECT 1 FROM activity_boss_milestone_claim
-                WHERE activity_key=%s AND user_id=%s AND milestone_key=%s
-                """,
-                (activity["key"], str(user_id), mkey),
-            )
-            if cur.fetchone():
-                continue
-            ok, msg = _send_parsed_reward(user_id, ms.get("reward", ""))
-            if not ok:
-                return False, f"发放失败：{msg}"
-            cur.execute(
-                """
-                INSERT INTO activity_boss_milestone_claim (
-                    activity_key, user_id, milestone_key, create_time
-                ) VALUES (%s, %s, %s, %s)
-                """,
-                (activity["key"], str(user_id), mkey, now_str()),
-            )
-            claimed_any.append(ms.get("name") or mkey)
-        conn.commit()
-        if not claimed_any:
-            return False, "没有可领取的全服进度奖励（可能已领过）"
-        return True, "已领取：" + "、".join(claimed_any)
-    finally:
-        conn.close()
+    milestones = [
+        {"key": ms.get("key") or f"p{ms.get('hp_percent')}", "name": ms.get("name"), "reward": ms.get("reward", "")}
+        for ms in activity.get("server_milestones") or []
+    ]
+    result = _boss_reward_claim_service().claim_milestones(user_id, activity["key"], milestones)
+    if result.succeeded:
+        return True, "已领取：" + "、".join(result.names)
+    messages = {"not_unlocked": "全服进度奖励尚未解锁", "already_claimed": "没有可领取的全服进度奖励（可能已领过）", "inventory_full": "背包空间不足，奖励未领取", "user_missing": "角色不存在"}
+    return False, messages.get(result.status, "领取失败，请稍后重试")
 
 
 def claim_boss_rank_reward(user_id: str, query: str = "") -> tuple[bool, str]:
@@ -670,53 +629,15 @@ def claim_boss_rank_reward(user_id: str, query: str = "") -> tuple[bool, str]:
     if not activity:
         return False, "未找到活动首领"
     ensure_activity_files()
-    conn = db_backend.connect(DB_PATH)
-    conn.row_factory = db_backend.Row
-    try:
-        cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT user_id, total_damage FROM activity_boss_damage
-            WHERE activity_key=%s ORDER BY total_damage DESC
-            """,
-            (activity["key"],),
-        )
-        ordered = [str(r["user_id"]) for r in cur.fetchall()]
-        if str(user_id) not in ordered:
-            return False, "你尚未参与该首领讨伐，无法领取排行奖励"
-        rank = ordered.index(str(user_id)) + 1
-        tier = None
-        for row in activity.get("rank_rewards") or []:
-            if row["rank_min"] <= rank <= row["rank_max"]:
-                tier = row
-                break
-        if not tier:
-            return False, f"你的排名为第{rank}名，不在奖励档位内"
-        tier_key = f"{tier['rank_min']}-{tier['rank_max']}"
-        cur.execute(
-            """
-            SELECT 1 FROM activity_boss_rank_claim
-            WHERE activity_key=%s AND user_id=%s AND tier_key=%s
-            """,
-            (activity["key"], str(user_id), tier_key),
-        )
-        if cur.fetchone():
-            return False, "该档排行奖励已领取"
-        ok, msg = _send_parsed_reward(user_id, tier.get("reward", ""))
-        if not ok:
-            return False, f"发放失败：{msg}"
-        cur.execute(
-            """
-            INSERT INTO activity_boss_rank_claim (activity_key, user_id, tier_key, create_time)
-            VALUES (%s, %s, %s, %s)
-            """,
-            (activity["key"], str(user_id), tier_key, now_str()),
-        )
-        conn.commit()
-        name = resolve_daohao(user_id)
-        return True, f"{name} 第{rank}名，已领取【{tier.get('name', '排行奖励')}】"
-    finally:
-        conn.close()
+    result = _boss_reward_claim_service().claim_rank(user_id, activity["key"], activity.get("rank_rewards") or [])
+    if result.succeeded:
+        return True, f"{resolve_daohao(user_id)} 第{result.rank}名，已领取【{result.names[0]}】"
+    if result.status == "not_participant":
+        return False, "你尚未参与该首领讨伐，无法领取排行奖励"
+    if result.status == "not_eligible":
+        return False, f"你的排名为第{result.rank}名，不在奖励档位内"
+    messages = {"already_claimed": "该档排行奖励已领取", "inventory_full": "背包空间不足，奖励未领取", "user_missing": "角色不存在"}
+    return False, messages.get(result.status, "领取失败，请稍后重试")
 
 
 def claim_boss_rewards(user_id: str, query: str = "") -> tuple[bool, str]:
