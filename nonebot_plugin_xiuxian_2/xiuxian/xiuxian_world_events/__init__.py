@@ -32,6 +32,7 @@ from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
 from .demon_attack_settlement_service import DemonAttackSettlementService
 from .demon_claim_service import DemonClaimService
+from .demon_wave_refresh_service import DemonWaveRefreshService
 
 
 scheduler = require("nonebot_plugin_apscheduler").scheduler
@@ -40,6 +41,7 @@ player_data_manager = PlayerDataManager()
 items = Items()
 demon_claim_service = DemonClaimService(get_paths().game_db, get_paths().player_db)
 demon_attack_settlement_service = DemonAttackSettlementService(get_paths().player_db)
+demon_wave_refresh_service = DemonWaveRefreshService(get_paths().player_db)
 
 EVENT_TABLE = "world_event_state"
 EVENT_KEY = "global"
@@ -873,20 +875,19 @@ def _refresh_defeated_demon_bosses() -> tuple[dict, list[str]]:
     if state.get("status") != "active":
         return state, []
 
-    refreshed_realms: list[str] = []
-    bosses = state.setdefault("bosses", {})
-    for realm, boss_info in list(bosses.items()):
-        if _to_int(boss_info.get("boss_hp"), 0) > 0:
-            continue
-        wave = max(_to_int(boss_info.get("wave"), 1), 1)
-        _mark_wave_reward_ready(state, realm, wave)
-        bosses[realm] = _create_demon_boss(realm, wave=wave + 1)
-        refreshed_realms.append(realm)
-
-    if refreshed_realms:
-        state["last_result"] = f"每小时30分刷新检查：{', '.join(refreshed_realms)}魔修已重新入侵。"
-        _save_state(state)
-    return state, refreshed_realms
+    slot = _now().strftime("%Y%m%d%H30")
+    operation_id = f"demon-wave-refresh:{state.get('event_id')}:{slot}"
+    replay = demon_wave_refresh_service.replay(operation_id)
+    if replay is not None:
+        return replay.state or state, list(replay.refreshed_realms)
+    next_bosses = {}
+    for realm, boss_info in state.get("bosses", {}).items():
+        if _to_int(boss_info.get("boss_hp"), 0) <= 0:
+            next_bosses[realm] = _create_demon_boss(realm, wave=max(_to_int(boss_info.get("wave"), 1), 1) + 1)
+    realms = list(next_bosses)
+    last_result = f"每小时30分刷新检查：{', '.join(realms)}魔修已重新入侵。"
+    result = demon_wave_refresh_service.refresh(operation_id, EVENT_KEY, state, next_bosses, last_result)
+    return result.state or state, list(result.refreshed_realms)
 
 
 @scheduler.scheduled_job(
@@ -1049,7 +1050,8 @@ async def close_world_event_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         state["manual"] = 1
         state["last_result"] = "魔修入侵已手动结束。"
         _save_state(state)
-    await handle_send(bot, event, "魔修入侵已手动结束。", md_type="世界事件", k1="状态", v1="魔修入侵状态")
+    msg = "魔修入侵已手动结束。"
+    await handle_send(bot, event, msg, md_type="世界事件", k1="状态", v1="魔修入侵状态")
     await close_world_event.finish()
 
 
