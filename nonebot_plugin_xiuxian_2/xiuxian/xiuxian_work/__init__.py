@@ -566,10 +566,14 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await do_work.finish()
         elif status == 1:  # 进行中的悬赏，终止并惩罚
             stone = 4000000
-            event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-            result = work_abort_service.abort(
-                f"work-abort:{user_id}:{event_message_id or time.time_ns()}",
-                user_id, work_data, int(user_info["stone"]), stone,
+            result = work_abort_cleanup_service.cleanup(
+                _work_operation_id(event, "abort", user_id),
+                user_id,
+                "active_abort",
+                _work_cd_snapshot(user_id),
+                readf(user_id),
+                int(user_info["stone"]),
+                stone,
             )
             if not result.succeeded:
                 await handle_send(bot, event, "悬赏状态或灵石余额已变化，请刷新后重试。")
@@ -580,10 +584,23 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 f"悬赏已终止！"
             )
         elif status == 3 or status == 4:  # 有未接取的悬赏
+            reason = "offer_abort" if status == 3 else "expired"
+            result = work_abort_cleanup_service.cleanup(
+                _work_operation_id(event, reason, user_id),
+                user_id,
+                reason,
+                _work_cd_snapshot(user_id),
+                work_data,
+            )
+            if not result.succeeded:
+                await handle_send(bot, event, "悬赏状态已变化，请重新查看后再试。")
+                await do_work.finish()
             msg = "未接取的悬赏令已终止！"
         else:
             msg = "没有查到您的悬赏令信息！"
-        delete_work_file(user_id)
+            await handle_send(bot, event, msg)
+            await do_work.finish()
+        delete_work_file(user_id, delete_snapshot=False)
         await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="刷新", v2="悬赏令确认刷新", k3="帮助", v3="悬赏令帮助")
         await do_work.finish()
 
@@ -651,10 +668,17 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         await do_work.finish()
 
     elif mode == "重置":
-        delete_work_file(user_id)
-        user_cd_message = sql_message.get_user_cd(user_id)
-        if user_cd_message['type'] == 2:
-            sql_message.do_work(user_id, 0)
+        result = work_abort_cleanup_service.cleanup(
+            _work_operation_id(event, "reset", user_id),
+            user_id,
+            "reset",
+            _work_cd_snapshot(user_id),
+            readf(user_id),
+        )
+        if not result.succeeded:
+            await handle_send(bot, event, "悬赏状态已变化，请重新查看后再试。")
+            await do_work.finish()
+        delete_work_file(user_id, delete_snapshot=False)
         msg = "已重置悬赏令"
         await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="刷新", v2="悬赏令确认刷新", k3="帮助", v3="悬赏令帮助")
 
