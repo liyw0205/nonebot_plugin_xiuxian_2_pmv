@@ -1525,7 +1525,7 @@ async def sect_task_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     sect_id = user_info['sect_id']
     if sect_id:
         if isUserTask(user_id):
-            create_user_sect_task(user_id, sect_id)
+            create_user_sect_task(user_id, sect_id, _sect_operation_id(event, "task_refresh", user_id), True, sect_membership_service)
             if userstask[user_id]['任务内容']['type'] == 1:
                 task_type = "⚔️"
             else:
@@ -1757,7 +1757,13 @@ async def sect_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
             await sect_task.finish()
 
-        create_user_sect_task(user_id, sect_id)
+        claimed_task = create_user_sect_task(
+            user_id, sect_id, _sect_operation_id(event, "task_claim", user_id),
+            False, sect_membership_service,
+        )
+        if claimed_task is None:
+            await handle_send(bot, event, "宗门任务状态或角色信息已发生变化，请刷新后重试。")
+            await sect_task.finish()
         if userstask[user_id]['任务内容']['type'] == 1:
             task_type = "⚔️"
         else:
@@ -1826,6 +1832,8 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 costhp,
                 get_exp,
                 sect_stone,
+                userstask[user_id]["任务名称"],
+                userstask[user_id]["任务内容"],
             )
             if not settlement.applied:
                 msg = "宗门任务状态或角色资产已发生变化，请重新确认后再完成任务。"
@@ -1888,6 +1896,8 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 costls,
                 get_exp,
                 sect_stone,
+                userstask[user_id]["任务名称"],
+                userstask[user_id]["任务内容"],
             )
             if not settlement.applied:
                 msg = "宗门任务状态或角色资产已发生变化，请重新确认后再完成任务。"
