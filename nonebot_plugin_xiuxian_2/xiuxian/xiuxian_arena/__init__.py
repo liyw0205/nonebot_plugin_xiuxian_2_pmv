@@ -24,12 +24,14 @@ from .arena_shop import arena_shop_data
 from .purchase_service import ArenaPurchaseService
 from .challenge_purchase_service import ArenaChallengePurchaseService
 from .challenge_cost_service import ArenaChallengeCostService
+from .challenge_ticket_service import ArenaChallengeTicketService
 from .battle_settlement_service import ArenaBattleSettlementService
 from .season_reward_service import ArenaSeasonRewardService
 
 arena_purchase_service = ArenaPurchaseService(get_paths().game_db, get_paths().player_db)
 arena_challenge_purchase_service = ArenaChallengePurchaseService(get_paths().game_db, get_paths().player_db)
 arena_challenge_cost_service = ArenaChallengeCostService(get_paths().game_db, get_paths().player_db)
+arena_challenge_ticket_service = ArenaChallengeTicketService(get_paths().game_db, get_paths().player_db)
 arena_battle_settlement_service = ArenaBattleSettlementService(get_paths().game_db, get_paths().player_db)
 arena_season_reward_service = ArenaSeasonRewardService(get_paths().game_db, get_paths().player_db)
 
@@ -754,8 +756,7 @@ async def use_arena_challenge_ticket(bot: Bot, event: GroupMessageEvent | Privat
     user_id = user_info["user_id"]
     arena_info = arena_limit.get_user_arena_info(user_id)
     used_count = int(arena_info.get("daily_challenges_used", 0))
-    use_count = min(int(quantity), used_count)
-    if use_count <= 0:
+    if used_count <= 0:
         await handle_send(
             bot, event,
             "今日竞技场挑战次数未消耗，无需使用挑战券。",
@@ -766,11 +767,35 @@ async def use_arena_challenge_ticket(bot: Bot, event: GroupMessageEvent | Privat
         )
         return
 
-    remaining = arena_limit.add_challenge_count(user_id, use_count)
-    sql_message.update_back_j(user_id, item_id, use_count)
+    item_count = int(sql_message.goods_num(user_id, item_id))
+    extra_challenges = int(arena_info.get("daily_extra_challenges", 0))
+    challenge_cap = arena_limit.daily_challenges + extra_challenges
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    result = arena_challenge_ticket_service.use(
+        f"arena-challenge-ticket:{event_id}:{user_id}" if event_id
+        else f"arena-challenge-ticket:{time.time_ns()}:{user_id}",
+        user_id,
+        item_id,
+        int(quantity),
+        item_count,
+        used_count,
+        extra_challenges,
+        challenge_cap,
+    )
+    if not result.succeeded:
+        if result.status == "no_challenges_used":
+            message = "今日竞技场挑战次数未消耗，无需使用挑战券。"
+        elif result.status == "item_missing":
+            message = "背包中没有可用的竞技场挑战券。"
+        else:
+            message = "竞技场挑战券使用状态已变化，请重新操作。"
+        await handle_send(bot, event, message, md_type="竞技场")
+        return
+
     await handle_send(
         bot, event,
-        f"使用竞技场挑战券 {use_count} 张，今日剩余竞技场挑战次数：{remaining}/{arena_limit.get_daily_challenge_cap(user_id)}",
+        f"使用竞技场挑战券 {result.used_tickets} 张，今日剩余竞技场挑战次数："
+        f"{result.challenges_remaining}/{result.challenge_cap}",
         md_type="竞技场",
         k1="挑战", v1="竞技场挑战",
         k2="查看", v2="竞技场查看",
