@@ -11,6 +11,10 @@ class XU_WORLD(object):
         self.dir_path = Path(__file__).parent
         self.data_path = os.path.join(self.dir_path, "x_world.json")
         self.data = load_json_file(self.data_path, {})
+        self.service = None
+
+    def bind_service(self, service):
+        self.service = service
 
     def __save(self):
         """
@@ -22,7 +26,7 @@ class XU_WORLD(object):
         """
         查看人数
         """
-        num = len(self.data.keys())
+        num = len(self.all_xu_world_user())
         return num < XU_WORLD_MAX_USERS
 
     def check_xu_world_user_id(self, user_id):
@@ -30,6 +34,8 @@ class XU_WORLD(object):
         检查是否加入
         """
         user_id = str(user_id)
+        if self.service is not None:
+            return self.service.contains(user_id, self.data.keys())
         return bool(self.data.get(user_id))
 
     def add_xu_world(self, user_id):
@@ -52,6 +58,8 @@ class XU_WORLD(object):
         加入虚神界
         """
         user_id = str(user_id)
+        if self.service is not None:
+            return self.service.remove(user_id)
         del self.data[user_id]
         self.__save()
 
@@ -59,6 +67,8 @@ class XU_WORLD(object):
         """
         全部虚神界用户
         """
+        if self.service is not None:
+            return self.service.members(self.data.keys())
         all_user = self.data.keys()
         if all_user is None:
             return None
@@ -69,6 +79,9 @@ class XU_WORLD(object):
         """
         重置数据
         """
+        if self.service is not None:
+            self.service.reset_daily(self.data.keys())
+            return
         self.data = {}
         self.__save()
 

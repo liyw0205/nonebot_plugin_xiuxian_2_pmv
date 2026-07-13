@@ -30,6 +30,7 @@ from .training_settlement_service import ImpartTrainingSettlementService
 from .explore_settlement_service import ImpartExploreSettlementService
 from .battle_batch_service import ImpartBattleBatchService
 from .closing_settlement_service import ImpartClosingSettlementService
+from .project_join_service import ImpartProjectJoinService
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_tasks.task_data import record_task_progress
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate, XIUXIAN_IMPART_BUFF
@@ -44,6 +45,8 @@ impart_closing_settlement_service = ImpartClosingSettlementService(
 impart_battle_batch_service = ImpartBattleBatchService(
     get_paths().impart_db, get_paths().player_db
 )
+impart_project_join_service = ImpartProjectJoinService(get_paths().player_db)
+xu_world.bind_service(impart_project_join_service)
 
 impart_pk_project = on_command("投影虚神界", priority=6, block=True)
 impart_pk_go = on_command("探索虚神界", aliases={"虚神界探索"}, priority=6, block=True)
@@ -106,6 +109,7 @@ def _daily_impart_state(user_id):
 async def impart_pk_project_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """投影虚神界"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
+    user_type = 4  # 状态0为无事件
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
@@ -117,14 +121,25 @@ async def impart_pk_project_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await handle_send(bot, event, msg, md_type="虚神界", k1="投影", v1="投影虚神界", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_project.finish()
     # 加入虚神界
-    if impart_pk.find_user_data(user_id)["pk_num"] <= 0:
-        msg = f"道友今日次数已用尽，无法在加入虚神界！"
-        await handle_send(bot, event, msg, md_type="虚神界", k1="投影", v1="投影虚神界", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
-        await impart_pk_project.finish()
-    msg = xu_world.add_xu_world(user_id)
-    if "成功" in msg:
-        log_message(user_id, f"[虚神界] 投影虚神界成功")
-        update_statistics_value(user_id, "虚神界投影次数")
+    legacy_state = impart_pk.find_user_data(user_id)
+    result = impart_project_join_service.join(
+        _impart_operation_id(event, "project", user_id),
+        user_id,
+        legacy_pk_num=legacy_state["pk_num"],
+        legacy_members=xu_world.data.keys(),
+    )
+    if result.status in {"applied", "duplicate"}:
+        msg = "加入虚神界成功！"
+        if result.status == "applied":
+            log_message(user_id, f"[虚神界] 投影虚神界成功")
+    elif result.status == "already_joined":
+        msg = "你已经在虚神界中了！"
+    elif result.status == "pk_exhausted":
+        msg = "道友今日次数已用尽，无法再加入虚神界！"
+    elif result.status == "capacity_full":
+        msg = "虚神界人数已满，道友现在无法加入！"
+    else:
+        msg = "投影状态已变化，请稍后重试！"
     await handle_send(bot, event, msg, md_type="虚神界", k1="投影", v1="投影虚神界", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
     await impart_pk_project.finish()
 
@@ -782,7 +797,6 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 async def impart_pk_in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """虚神界闭关"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    user_type = 4  # 状态0为无事件
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
