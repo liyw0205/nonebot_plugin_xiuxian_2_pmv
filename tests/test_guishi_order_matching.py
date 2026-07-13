@@ -91,6 +91,20 @@ class GuishiOrderMatchingTests(unittest.TestCase):
         self.assertEqual(self.info("buyer"), (99, {"1001": 6, "1002": 1}))
         self.assertEqual(self.info("seller"), (137, {}))
 
+    def test_match_operation_is_idempotent(self) -> None:
+        first = self.repository.match_guishi_orders(
+            self.trade_database, "want", "sell", operation_id="match-1"
+        )
+        second = self.repository.match_guishi_orders(
+            self.trade_database, "want", "sell", operation_id="match-1"
+        )
+
+        self.assertTrue(first.matched)
+        self.assertEqual(second.status, "duplicate")
+        self.assertEqual(second.quantity, first.quantity)
+        self.assertEqual(self.info("buyer"), (99, {"1001": 4, "1002": 1}))
+        self.assertEqual(self.info("seller"), (97, {}))
+
     def test_partial_match_increments_filled_quantities(self) -> None:
         with db_backend.transaction(self.trade_database) as conn:
             conn.execute("UPDATE guishi_item SET quantity=%s WHERE id=%s", (12, "want"))
@@ -167,6 +181,20 @@ class GuishiOrderMatchingTests(unittest.TestCase):
                 (result.order_id,),
             ).fetchone()
         self.assertEqual(tuple(order), ("buyer", 1003, 20, 3))
+
+    def test_create_qiugou_operation_is_idempotent(self) -> None:
+        first = self.repository.create_guishi_qiugou_order(
+            self.trade_database, "buyer", 1003, "灵石草", 20, 3,
+            max_orders=10, operation_id="create-want-1",
+        )
+        second = self.repository.create_guishi_qiugou_order(
+            self.trade_database, "buyer", 1003, "灵石草", 20, 3,
+            max_orders=10, operation_id="create-want-1",
+        )
+
+        self.assertEqual(second.status, "duplicate")
+        self.assertEqual(second.order_id, first.order_id)
+        self.assertEqual(self.info("buyer")[0], 39)
 
     def test_create_qiugou_rejects_insufficient_stone_without_order(self) -> None:
         result = self.repository.create_guishi_qiugou_order(
@@ -254,6 +282,27 @@ class GuishiOrderMatchingTests(unittest.TestCase):
                 ).fetchone()),
                 ("seller", "baitan", 4),
             )
+
+    def test_create_baitan_operation_is_idempotent(self) -> None:
+        with db_backend.transaction(self.game_database) as conn:
+            conn.execute(
+                "CREATE TABLE back (user_id TEXT, goods_id INTEGER, goods_num INTEGER, bind_num INTEGER DEFAULT 0, state INTEGER DEFAULT 0, update_time TEXT, UNIQUE (user_id, goods_id))"
+            )
+            conn.execute("INSERT INTO back VALUES (%s, %s, %s, %s, %s, NULL)", ("seller", 1001, 8, 0, 0))
+
+        first = self.repository.create_guishi_baitan_order(
+            self.trade_database, "seller", 1001, "灵草", 20, 4,
+            max_orders=10, operation_id="create-sell-1",
+        )
+        second = self.repository.create_guishi_baitan_order(
+            self.trade_database, "seller", 1001, "灵草", 20, 4,
+            max_orders=10, operation_id="create-sell-1",
+        )
+
+        self.assertEqual(second.status, "duplicate")
+        self.assertEqual(second.order_id, first.order_id)
+        with db_backend.connection(self.game_database) as conn:
+            self.assertEqual(conn.execute("SELECT goods_num FROM back WHERE user_id=%s AND goods_id=%s", ("seller", 1001)).fetchone()[0], 4)
 
     def test_create_baitan_insert_failure_rolls_back_inventory(self) -> None:
         with db_backend.transaction(self.game_database) as conn:
