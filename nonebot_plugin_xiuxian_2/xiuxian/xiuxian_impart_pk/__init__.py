@@ -9,6 +9,11 @@ from ..adapter_compat import (
     MessageSegment
 )
 import random
+import time
+from typing import Dict, List
+from ...paths import get_paths
+import time
+from ...paths import get_paths
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.data_source import jsondata
 from nonebot.log import logger
@@ -21,12 +26,24 @@ from ..xiuxian_utils.spirit_vein import apply_spirit_vein_exp_bonus as _apply_sp
 from .impart_pk_uitls import impart_pk_check
 from .xu_world import xu_world
 from .impart_pk import impart_pk
+from .training_settlement_service import ImpartTrainingSettlementService
+from .explore_settlement_service import ImpartExploreSettlementService
+from .battle_batch_service import ImpartBattleBatchService
+from .closing_settlement_service import ImpartClosingSettlementService
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_tasks.task_data import record_task_progress
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate, XIUXIAN_IMPART_BUFF
 from .. import NICKNAME
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 sql_message = XiuxianDateManage()  # sql类
+impart_training_settlement_service = ImpartTrainingSettlementService(get_paths().game_db, get_paths().impart_db, get_paths().player_db)
+impart_explore_settlement_service = ImpartExploreSettlementService(get_paths().game_db, get_paths().impart_db, get_paths().player_db)
+impart_closing_settlement_service = ImpartClosingSettlementService(
+    get_paths().game_db, get_paths().impart_db, get_paths().player_db
+)
+impart_battle_batch_service = ImpartBattleBatchService(
+    get_paths().impart_db, get_paths().player_db
+)
 
 impart_pk_project = on_command("投影虚神界", priority=6, block=True)
 impart_pk_go = on_command("探索虚神界", aliases={"虚神界探索"}, priority=6, block=True)
@@ -47,6 +64,7 @@ XU_SOUL_LOAD_CAP_EXP = 1
 
 async def impart_re():
     impart_pk.re_data()
+    impart_training_settlement_service.reset_daily()
     xu_world.re_data()
     logger.opt(colors=True).info(f"<green>已重置虚神界次数</green>")
 
@@ -76,6 +94,13 @@ def calc_xu_soul_load_gain(request_time, used_time=0):
     if time_load > 0:
         details.append(f"累计时长{time_steps}段+{time_load}%")
     return total_load, details
+
+def _impart_operation_id(event, action, user_id):
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    return f"impart-{action}:{event_id}:{user_id}" if event_id else f"impart-{action}:{user_id}:{time.time_ns()}"
+
+def _daily_impart_state(user_id):
+    return impart_training_settlement_service.get_daily_state(user_id, impart_pk.find_user_data(user_id))
 
 @impart_pk_project.handle(parameterless=[Cooldown(stamina_cost = 1)])
 async def impart_pk_project_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -191,7 +216,12 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await impart_pk_now.finish()
 
     args_text = args.extract_plain_text().strip()
-    user_data = impart_pk.find_user_data(user_info['user_id'])
+    user_data = _daily_impart_state(user_info['user_id'])
+    user_data = dict(user_data)
+    user_data["pk_num"] = impart_battle_batch_service.get_pk_num(
+        user_id, user_data["pk_num"]
+    )
+    expected_player_1_pk_num = user_data["pk_num"]
 
     if user_data["pk_num"] <= 0:
         msg = f"道友今日次数耗尽，明天再来吧！"
@@ -242,20 +272,14 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             
             if win == 1:  # 玩家胜利
                 battle_msg += f"战报：道友{user_info['user_name']}获胜，获得思恋结晶20颗\n"
-                impart_pk.update_user_data(user_info['user_id'], True)  # 胜利不消耗次数
-                xiuxian_impart.update_stone_num(20, user_id, 1)
                 player_1_stones += 20
                 total_wins += 1
             elif win == 2:  # 玩家失败
                 battle_msg += f"战报：道友{user_info['user_name']}败了，消耗1次次数，获得思恋结晶10颗\n"
-                impart_pk.update_user_data(user_info['user_id'], False)  # 失败消耗次数
-                xiuxian_impart.update_stone_num(10, user_id, 1)
                 player_1_stones += 10
                 current_loss_count += 1
                 total_losses += 1
-                
-                # 更新用户数据
-                user_data = impart_pk.find_user_data(user_info['user_id'])
+                user_data["pk_num"] -= 1
             else:
                 battle_msg += f"对决异常，不计结果\n"
 
@@ -268,6 +292,20 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                     combined_msg += "已帮助道友退出虚神界！\n"
                     xu_world.del_xu_world(user_id)
                 break
+
+        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        operation_id = f"impart-battle:{event_id}:{user_id}" if event_id else f"impart-battle:{user_id}:{time.time_ns()}"
+        settlement = impart_battle_batch_service.settle(
+            operation_id,
+            user_id,
+            expected_player_1_pk_num,
+            total_wins,
+            total_losses,
+            player_1_stones,
+        )
+        if not settlement.succeeded:
+            await handle_send(bot, event, "对决状态已变化，请重新发起虚神界对决！")
+            await impart_pk_now.finish()
 
         msg = f"【对决结束】\n"
         msg += f"共进行{total_battles}场对决，获胜{total_wins}场，失败{total_losses}场\n"
@@ -286,10 +324,6 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             user_id,
             f"[虚神界对决] 挑战{NICKNAME}，共{total_battles}场，胜{total_wins}场，败{total_losses}场，获得思恋结晶{player_1_stones}颗"
         )
-        update_statistics_value(user_id, "虚神界对决次数", increment=total_battles)
-        update_statistics_value(user_id, "虚神界对决胜利", increment=total_wins)
-        update_statistics_value(user_id, "虚神界对决失败", increment=total_losses)
-        update_statistics_value(user_id, "思恋结晶获取", increment=player_1_stones)
         await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="祈愿", v3="传承祈愿")
         await impart_pk_now.finish()
 
@@ -318,6 +352,11 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
     player_1_name = user_info['user_name']
     player_2_name = sql_message.get_user_info_with_id(player_2)['user_name']
+    player_2_legacy = impart_pk.find_user_data(player_2)
+    expected_player_2_pk_num = impart_battle_batch_service.get_pk_num(
+        player_2, player_2_legacy["pk_num"]
+    )
+    player_2_pk_num = expected_player_2_pk_num
 
     # 检查对方是否还在虚神界
     if not xu_world.check_xu_world_user_id(player_2):
@@ -340,44 +379,34 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             continue
 
         if win == 1:  # 1号玩家胜利
-            impart_pk.update_user_data(player_1, True)  # 胜利不消耗次数
-            impart_pk.update_user_data(player_2, False)  # 失败消耗次数
-            xiuxian_impart.update_stone_num(20, player_1, 1)
-            xiuxian_impart.update_stone_num(10, player_2, 1)
             player_1_stones += 20
             player_2_stones += 10
             player_1_wins += 1
             total_wins += 1
+            player_2_pk_num -= 1
             
             battle_combined_msg += "\n".join([node['data']['content'] for node in msg_list]) + "\n"
             battle_combined_msg += f"道友{player_1_name}获得了胜利，获得思恋结晶20颗！\n"
             battle_combined_msg += f"道友{player_2_name}败了，获得思恋结晶10颗！\n"
             
             # 检查对方次数是否用尽
-            player_2_data = impart_pk.find_user_data(player_2)
-            if player_2_data["pk_num"] <= 0:
+            if player_2_pk_num <= 0:
                 battle_combined_msg += f"道友{player_2_name}次数耗尽，离开了虚神界！\n"
                 xu_world.del_xu_world(player_2)
                 combined_msg += battle_combined_msg
                 break
                 
         elif win == 2:  # 2号玩家胜利
-            impart_pk.update_user_data(player_2, True)  # 胜利不消耗次数
-            impart_pk.update_user_data(player_1, False)  # 失败消耗次数
-            xiuxian_impart.update_stone_num(20, player_2, 1)
-            xiuxian_impart.update_stone_num(10, player_1, 1)
             player_2_stones += 20
             player_1_stones += 10
             player_2_wins += 1
             current_loss_count += 1
             total_losses += 1
+            user_data["pk_num"] -= 1
             
             battle_combined_msg += "\n".join([node['data']['content'] for node in msg_list]) + "\n"
             battle_combined_msg += f"道友{player_2_name}获得了胜利，获得思恋结晶20颗！\n"
             battle_combined_msg += f"道友{player_1_name}败了，获得思恋结晶10颗！\n"
-            
-            # 更新用户数据
-            user_data = impart_pk.find_user_data(player_1)
             
             # 检查自己次数是否用尽
             if user_data["pk_num"] <= 0:
@@ -389,6 +418,25 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                 break
         
         combined_msg += battle_combined_msg + "\n"
+
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"impart-battle:{event_id}:{player_1}:{player_2}" if event_id else f"impart-battle:{player_1}:{player_2}:{time.time_ns()}"
+    settlement = impart_battle_batch_service.settle(
+        operation_id,
+        player_1,
+        expected_player_1_pk_num,
+        player_1_wins,
+        player_2_wins,
+        player_1_stones,
+        player_2,
+        expected_player_2_pk_num,
+        player_2_wins,
+        player_1_wins,
+        player_2_stones,
+    )
+    if not settlement.succeeded:
+        await handle_send(bot, event, "对决双方状态已变化，请重新发起虚神界对决！")
+        await impart_pk_now.finish()
 
     msg = f"【对决结束】\n"
     msg += f"共进行{total_battles}场对决\n"
@@ -414,14 +462,6 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         player_2,
         f"[虚神界对决] 被{player_1_name}挑战，共{total_battles}场，胜{player_2_wins}场，败{player_1_wins}场，获得思恋结晶{player_2_stones}颗"
     )
-    update_statistics_value(player_1, "虚神界对决次数", increment=total_battles)
-    update_statistics_value(player_1, "虚神界对决胜利", increment=player_1_wins)
-    update_statistics_value(player_1, "虚神界对决失败", increment=player_2_wins)
-    update_statistics_value(player_1, "思恋结晶获取", increment=player_1_stones)
-    update_statistics_value(player_2, "虚神界对决次数", increment=total_battles)
-    update_statistics_value(player_2, "虚神界对决胜利", increment=player_2_wins)
-    update_statistics_value(player_2, "虚神界对决失败", increment=player_1_wins)
-    update_statistics_value(player_2, "思恋结晶获取", increment=player_2_stones)
     await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="祈愿", v3="传承祈愿")
     await impart_pk_now.finish()
 
@@ -486,7 +526,7 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="虚神界", k1="修炼", v1="虚神界修炼", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_exp.finish()
 
-    user_data = impart_pk.find_user_data(user_id)
+    user_data = _daily_impart_state(user_id)
     used_load = clamp_xu_soul_load(user_data.get("exp_load", 0) if user_data else 0)
     used_exp_time = int(user_data.get("exp_used", 0) or 0) if user_data else 0
     exp_cost_time = impaer_exp_time
@@ -503,16 +543,21 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="虚神界", k1="修炼", v1="虚神界修炼", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_exp.finish()
 
-    # 更新经验并返回成功
-    xiuxian_impart.use_impart_exp_day(exp_cost_time, user_id)
-    sql_message.update_exp(user_id, exp)
-    impart_pk.add_exp_cultivation(user_id, exp_cost_time, actual_exp_load, exp)
-    sql_message.update_power2(user_id)  # 更新战力
+    result = impart_training_settlement_service.settle(
+        _impart_operation_id(event, "training", user_id), user_id,
+        expected_exp=current_exp, expected_exp_day=int(impart_data_draw['exp_day']),
+        expected_daily={key: user_data[key] for key in ("exp_used", "exp_count", "exp_load", "exp_gain")},
+        exp_cost=exp_cost_time, exp_gain=exp, exp_load_gain=actual_exp_load,
+        power=round((current_exp + exp) * level_rate * realm_rate), legacy_state=user_data,
+    )
+    if not result.succeeded:
+        msg = "累计时间不足，修炼失败!" if result.status == "time_insufficient" else "虚神界状态已变化，请重新尝试。"
+        await handle_send(bot, event, msg, md_type="虚神界", k1="修炼", v1="虚神界修炼", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
+        await impart_pk_exp.finish()
     
     # 计算修炼效率百分比
     efficiency_percent = int((level_rate + mainbuffratebuff + mainbuffcloexp + impart_exp_up + impart_exp_up2) * 100)
-    new_user_data = impart_pk.find_user_data(user_id)
-    current_load = clamp_xu_soul_load(new_user_data.get("exp_load", 0))
+    current_load = result.exp_load
     load_detail_msg = "、".join(load_details)
     cap_msg = ""
     if load_is_capped:
@@ -521,14 +566,10 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         f"虚神界修炼结束，共修炼{round(exp_cost_time)}分钟，本次增加修为：{number_to(exp)}"
         f"（修炼效率：{efficiency_percent}%）"
         f"\n神魂承载：{used_load}% -> {current_load}%（{load_detail_msg}，实际+{actual_exp_load}%）"
-        f"\n今日虚神界修炼收益：{number_to(new_user_data.get('exp_gain', 0))}"
-        f"\n今日修炼次数：{new_user_data.get('exp_count', 0)}次"
+        f"\n今日虚神界修炼收益：{number_to(result.exp_gain)}"
+        f"\n今日修炼次数：{result.exp_count}次"
         f"{cap_msg}"
     )
-    update_statistics_value(user_id, "虚神界修炼", increment=exp_cost_time)
-    update_statistics_value(user_id, "虚神界修炼次数")
-    update_statistics_value(user_id, "虚神界修炼修为", increment=exp)
-    update_statistics_value(user_id, "虚神界修炼承载", increment=actual_exp_load)
     log_message(
         user_id,
         f"[虚神界修炼] 修炼{exp_cost_time}分钟，获得修为{number_to(exp)}，承载{used_load}%->{current_load}%(+{actual_exp_load}%)"
@@ -545,7 +586,7 @@ async def impart_pk_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg, md_type="我要修仙")
         await impart_pk_info.finish()
     user_id = user_info['user_id']
-    user_data = impart_pk.find_user_data(user_info['user_id'])
+    user_data = _daily_impart_state(user_info['user_id'])
     pk_num = user_data["pk_num"]
     impart_num = user_data["impart_num"]
     impart_data_draw = await impart_pk_check(user_id)
@@ -611,7 +652,7 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, msg, md_type="我要修仙")
         await impart_pk_go.finish()
     user_id = user_info['user_id']
-    user_data = impart_pk.find_user_data(user_info['user_id'])
+    user_data = _daily_impart_state(user_info['user_id'])
     if user_data["impart_num"] <= 0:
         msg = f"\n道友今日探索次数耗尽，需打坐调息，明日方可再探虚神界！"
         await handle_send(bot, event, msg, md_type="虚神界", k1="探索", v1="虚神界探索", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
@@ -701,21 +742,9 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     msg = random.choice(all_msgs[msg_type])
     match msg_type:
         case "stay":
-            impart_pk.update_user_impart_lv(user_info['user_id'])  # 扣除探索次数
-            log_message(user_id, f"[虚神界探索] 停留于{impart_name}，未消耗虚神界时间")
-            update_statistics_value(user_id, "虚神界探索次数")
-            await handle_send(bot, event, msg, md_type="虚神界", k1="探索", v1="虚神界探索", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
-            await impart_pk_go.finish()
+            impart_time = 0
         case "fail":
-            msg += f"\n消耗虚神界时间：{impart_time} 分钟"
-            xiuxian_impart.use_impart_exp_day(impart_time, user_id)  # 消耗时间
-            
-            impart_pk.update_user_impart_lv(user_info['user_id'])
-            log_message(user_id, f"[虚神界探索] 探索{impart_name}失败，消耗虚神界时间{impart_time}分钟")
-            update_statistics_value(user_id, "虚神界探索次数")
-            update_statistics_value(user_id, "虚神界探索消耗时间", increment=impart_time)
-            await handle_send(bot, event, msg, md_type="虚神界", k1="探索", v1="虚神界探索", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
-            await impart_pk_go.finish()
+            pass
         case "down":
             impart_lv = max(impart_lv - 1, 0)
         case "up":
@@ -725,9 +754,17 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         case "up_rate":
             impart_lv = min(impart_lv + impart_rate, 30)
 
-    xiuxian_impart.use_impart_exp_day(impart_time, user_id)
-    xiuxian_impart.update_impart_lv(user_id, impart_lv)
-    impart_pk.update_user_impart_lv(user_info['user_id'])
+    result = impart_explore_settlement_service.settle(
+        _impart_operation_id(event, "explore", user_id), user_id,
+        event_type=msg_type, expected_exp_day=int(impart_data_draw['exp_day']),
+        expected_impart_lv=int(impart_data_draw['impart_lv']),
+        expected_impart_num=int(user_data['impart_num']), time_cost=impart_time,
+        new_impart_lv=impart_lv, legacy_state=user_data,
+    )
+    if not result.succeeded:
+        msg = "虚神界时间不足，探索失败。" if result.status == "time_insufficient" else "虚神界状态已变化，请重新探索。"
+        await handle_send(bot, event, msg, md_type="虚神界", k1="探索", v1="虚神界探索", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
+        await impart_pk_go.finish()
     
     impart_exp_up = impart_lv * 0.1
     impart_name_new = impart_level.get(impart_lv, "未知秘境")
@@ -738,12 +775,6 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         user_id,
         f"[虚神界探索] 从{impart_name}探索至{impart_name_new}，消耗虚神界时间{impart_time}分钟，结果：{msg_type}"
     )
-    update_statistics_value(user_id, "虚神界探索次数")
-    update_statistics_value(user_id, "虚神界探索消耗时间", increment=impart_time)
-    if msg_type in {"up", "up_rate"}:
-        update_statistics_value(user_id, "虚神界探索上升")
-    elif msg_type in {"down", "down_rate"}:
-        update_statistics_value(user_id, "虚神界探索下降")
     await handle_send(bot, event, msg, md_type="虚神界", k1="探索", v1="虚神界探索", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
     await impart_pk_go.finish()
 
@@ -872,25 +903,21 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
 
     total_exp, spirit_vein_msg = _apply_spirit_vein_exp_bonus(total_exp, user_get_exp_max)
 
-    # 更新可用修炼时间
-    if exp_day_cost > 0:
-        xiuxian_impart.use_impart_exp_day(exp_day_cost, user_id)
-
-    # 更新用户数据
-    sql_message.in_closing(user_id, user_type)
-    sql_message.update_exp(user_id, total_exp)
-    sql_message.update_power2(user_id)
-
     # 更新HP和MP
     result_msg, result_hp_mp = OtherSet().send_hp_mp(
         user_id, int(use_exp / 10 * exp_time), int(use_exp / 5 * exp_time)
     )
-    sql_message.update_user_attribute(
-        user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10)
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"impart-closing:{event_id}:{user_id}" if event_id else f"impart-closing:{user_id}:{time.time_ns()}"
+    settlement = impart_closing_settlement_service.settle(
+        operation_id, user_id, user_cd_message["create_time"], use_exp,
+        available_exp_day, total_exp, int(exp_day_cost), exp_time,
+        result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10),
+        int(round((use_exp + total_exp) * level_rate * realm_rate)),
     )
-    update_statistics_value(user_id, "虚神界闭关时长", increment=exp_time)
-    update_statistics_value(user_id, "虚神界闭关修为", increment=total_exp)
-    update_statistics_value(user_id, "虚神界闭关祝福时长", increment=int(exp_day_cost))
+    if not settlement.succeeded:
+        await handle_send(bot, event, "闭关状态已变化，请重新尝试出关！")
+        await impart_pk_out_closing.finish()
 
     # 构造返回消息
     if total_exp >= user_get_exp_max:
