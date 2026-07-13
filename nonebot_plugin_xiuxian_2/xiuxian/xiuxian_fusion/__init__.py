@@ -38,7 +38,7 @@ available_fusion = on_command('查看可合成物品', aliases={"查看合成"},
 fusion_help_text = f"""
 **合成帮助**
 ---
-- 合成 物品名：合成指定物品。
+- 合成 物品名 [数量]：合成一个或批量合成指定物品。
 - 查看可合成物品 [物品名可选]：查看当前可合成物品及相关信息。
 """.strip()
 
@@ -65,10 +65,14 @@ async def fusion_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 
     user_id = user_info['user_id']
     args_str = args.extract_plain_text().strip()
+    item_name, quantity = parse_fusion_args(args_str)
+    if quantity is None:
+        await handle_send(bot, event, "合成数量必须是正整数！", md_type="合成")
+        await fusion_item.finish()
     
-    equipment_id, equipment = items.get_data_by_item_name(args_str)
+    equipment_id, equipment = items.get_data_by_item_name(item_name)
     if equipment is None:
-        msg = f"未找到可合成的物品：{args_str}"
+        msg = f"未找到可合成的物品：{item_name}"
         await handle_send(bot, event, msg, md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
         await fusion_item.finish()
     
@@ -89,7 +93,7 @@ async def fusion_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"fusion:{event_id}:{user_id}" if event_id else f"fusion:{user_id}:{time.time_ns()}"
-    success, msg = await general_fusion(user_id, equipment_id, equipment, operation_id)
+    success, msg = await general_fusion(user_id, equipment_id, equipment, operation_id, quantity)
     await handle_send(bot, event, msg, md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
     await fusion_item.finish()
 
@@ -103,20 +107,35 @@ async def force_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
     user_id = user_info['user_id']
     args_str = args.extract_plain_text().strip()
+    item_name, quantity = parse_fusion_args(args_str)
+    if quantity is None:
+        await handle_send(bot, event, "合成数量必须是正整数！", md_type="合成")
+        await force_fusion.finish()
     
-    equipment_id, equipment = items.get_data_by_item_name(args_str)
+    equipment_id, equipment = items.get_data_by_item_name(item_name)
     if equipment is None:
-        msg = f"未找到可合成的物品：{args_str}"
+        msg = f"未找到可合成的物品：{item_name}"
         await handle_send(bot, event, msg, md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
         await force_fusion.finish()
     
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"force-fusion:{event_id}:{user_id}" if event_id else f"force-fusion:{user_id}:{time.time_ns()}"
-    success, msg = await general_fusion(user_id, equipment_id, equipment, operation_id)
+    success, msg = await general_fusion(user_id, equipment_id, equipment, operation_id, quantity)
     await handle_send(bot, event, msg, md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
     await force_fusion.finish()
 
-async def general_fusion(user_id, equipment_id, equipment, operation_id):
+def parse_fusion_args(args_str):
+    parts = str(args_str).rsplit(maxsplit=1)
+    if len(parts) == 2:
+        try:
+            quantity = int(parts[1])
+        except ValueError:
+            return str(args_str).strip(), 1
+        return parts[0].strip(), quantity if quantity > 0 else None
+    return str(args_str).strip(), 1
+
+
+async def general_fusion(user_id, equipment_id, equipment, operation_id, quantity=1):
     """
     合成函数
     :param user_id: 用户ID
@@ -124,6 +143,9 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id):
     :param equipment: 装备信息
     :return: (成功与否, 消息)
     """
+    quantity = int(quantity)
+    if quantity <= 0:
+        return False, "合成数量必须是正整数！"
     user_info = sql_message.get_user_info_with_id(user_id)
     back_msg = sql_message.get_back_msg(user_id) or []
     
@@ -139,7 +161,7 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id):
             if back['goods_id'] == int(equipment_id):
                 current_amount = back['goods_num']
                 break
-        if current_amount >= limit:
+        if current_amount >= limit or current_amount + quantity > limit:
             return False, f"道友的背包中已有足够数量的 {equipment['name']}，无法再次合成！"
     
     # 检查境界
@@ -152,13 +174,15 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id):
         return False, f"道友的修为不足，合成 {equipment['name']} 需要修为 {int(fusion_info.get('need_exp', 0))}！"
     
     # 检查灵石
-    if user_info['stone'] < int(fusion_info.get('need_stone', 0)):
-        return False, f"道友的灵石不足，合成 {equipment['name']} 需要 {number_to(int(fusion_info.get('need_stone', 0)))} 枚灵石呢！"
+    total_stone = int(fusion_info.get('need_stone', 0)) * quantity
+    if quantity == 1 and user_info['stone'] < total_stone:
+        return False, f"道友的灵石不足，合成 {quantity} 个 {equipment['name']} 最多需要 {number_to(total_stone)} 枚灵石呢！"
     
     # 检查材料
     needed_items = fusion_info.get('need_item', {})
     missing_items = []
-    for item_id, amount_needed in needed_items.items():
+    for item_id, amount_per_attempt in needed_items.items():
+        amount_needed = int(amount_per_attempt) * quantity
         total_amount = 0
         for back in back_msg:
             if back['goods_id'] == int(item_id):
@@ -180,7 +204,7 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id):
         if total_amount < amount_needed:
             missing_items.append((item_id, amount_needed - total_amount))
     
-    if missing_items:
+    if missing_items and quantity == 1:
         missing_names = []
         for item_id, amount_needed in missing_items:
             material_info = items.get_data_by_item_id(int(item_id))
@@ -212,13 +236,36 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id):
             return False, "道友还缺少：\n" + "\n".join(missing_names)
     
     guaranteed = int(equipment_id) in FIXED_SUCCESS_IDS or str(equipment['type']) == "特殊道具"
-    successful = guaranteed or random.randint(1, 100) <= 30
+    outcomes = tuple(guaranteed or random.randint(1, 100) <= 30 for _ in range(quantity))
     reserved_items = {}
     for item_id in needed_items:
         item_info = next((back for back in back_msg if back['goods_id'] == int(item_id)), None)
         if item_info and item_info['goods_type'] == "装备" and check_equipment_use_msg(user_id, int(item_id)):
             reserved_items[int(item_id)] = 1
-    result = fusion_service.apply(
+    if quantity == 1:
+        result = fusion_service.apply(
+            operation_id,
+            user_id,
+            int(fusion_info.get('need_stone', 0)),
+            needed_items,
+            equipment_id,
+            equipment['name'],
+            equipment['type'],
+            successful=outcomes[0],
+            protection_item_id=None if guaranteed else 20006,
+            reserved_items=reserved_items,
+            max_goods_num=XiuConfig().max_goods_num,
+        )
+        if not result.succeeded:
+            return False, "合成所需的灵石或材料状态已经变化，本次合成未结算。"
+        if result.successful:
+            item_type = equipment.get('type', '物品')
+            return True, f"道友成功合成了{item_type}: {equipment['name']}！！"
+        if result.protected:
+            return False, "合成失败！幸好使用了福缘石，材料没有损失。"
+        return False, "合成失败！材料已消耗。"
+
+    result = fusion_service.apply_batch(
         operation_id,
         user_id,
         int(fusion_info.get('need_stone', 0)),
@@ -226,19 +273,26 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id):
         equipment_id,
         equipment['name'],
         equipment['type'],
-        successful=successful,
+        outcomes,
         protection_item_id=None if guaranteed else 20006,
         reserved_items=reserved_items,
         max_goods_num=XiuConfig().max_goods_num,
+        target_limit=limit,
     )
     if not result.succeeded:
-        return False, "合成所需的灵石或材料状态已经变化，本次合成未结算。"
-    if result.successful:
-        item_type = equipment.get('type', '物品')
-        return True, f"道友成功合成了{item_type}: {equipment['name']}！！"
-    if result.protected:
-        return False, "合成失败！幸好使用了福缘石，材料没有损失。"
-    return False, "合成失败！材料已消耗。"
+        status_messages = {
+            "stone_insufficient": "灵石不足，批量合成未结算。",
+            "item_insufficient": "材料不足，批量合成未结算。",
+            "inventory_full": "成品数量将超过背包上限，批量合成未结算。",
+            "user_missing": "未找到修仙数据，批量合成未结算。",
+        }
+        return False, status_messages.get(result.status, "合成状态已经变化，批量合成未结算。")
+    consumed_failures = result.failed_count - result.protected_count
+    return result.successful_count > 0, (
+        f"批量合成完成：共 {quantity} 次，成功 {result.successful_count} 次，"
+        f"失败 {result.failed_count} 次；福缘石保护 {result.protected_count} 次，"
+        f"损失材料 {consumed_failures} 次。"
+    )
 
 @available_fusion.handle(parameterless=[Cooldown(cd_time=0)])
 async def available_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):

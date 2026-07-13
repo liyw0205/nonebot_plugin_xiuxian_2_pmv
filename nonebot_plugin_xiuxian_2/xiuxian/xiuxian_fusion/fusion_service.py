@@ -20,6 +20,18 @@ class FusionResult:
         return self.status in {"applied", "duplicate"}
 
 
+@dataclass(frozen=True)
+class FusionBatchResult:
+    status: str
+    successful_count: int
+    failed_count: int
+    protected_count: int
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"applied", "duplicate"}
+
+
 class FusionService:
     """Apply fusion costs, material consumption and reward in one transaction."""
 
@@ -160,5 +172,170 @@ class FusionService:
                 conn.rollback()
                 raise
 
+    def apply_batch(
+        self,
+        operation_id,
+        user_id,
+        stone_cost,
+        materials,
+        target_id,
+        target_name,
+        target_type,
+        outcomes,
+        *,
+        protection_item_id=None,
+        reserved_items=None,
+        max_goods_num,
+        target_limit=None,
+    ) -> FusionBatchResult:
+        """Settle pre-rolled fusion attempts with one database commit."""
+        operation_id = str(operation_id).strip()
+        user_id = str(user_id)
+        stone_cost = int(stone_cost)
+        target_id = int(target_id)
+        target_name = str(target_name)
+        target_type = str(target_type)
+        outcomes = tuple(bool(value) for value in outcomes)
+        max_goods_num = int(max_goods_num)
+        materials = {int(key): int(value) for key, value in materials.items() if int(value) > 0}
+        reserved = {int(key): max(0, int(value)) for key, value in (reserved_items or {}).items()}
+        protection_item_id = int(protection_item_id) if protection_item_id is not None else None
+        target_limit = int(target_limit) if target_limit is not None else None
+        if not operation_id or not outcomes or stone_cost < 0 or max_goods_num <= 0:
+            raise ValueError("valid operation, outcomes, non-negative cost and positive capacity are required")
+        if target_limit is not None and target_limit <= 0:
+            raise ValueError("target_limit must be positive")
 
-__all__ = ["FusionResult", "FusionService"]
+        payload = json.dumps(
+            [user_id, stone_cost, sorted(materials.items()), target_id, target_name,
+             target_type, len(outcomes), protection_item_id, sorted(reserved.items()),
+             max_goods_num, target_limit],
+            ensure_ascii=True,
+        )
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS fusion_batch_operations ("
+                    "operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, outcomes TEXT NOT NULL, "
+                    "successful_count INTEGER NOT NULL, failed_count INTEGER NOT NULL, "
+                    "protected_count INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+                )
+                previous = conn.execute(
+                    "SELECT payload, successful_count, failed_count, protected_count "
+                    "FROM fusion_batch_operations WHERE operation_id=%s", (operation_id,),
+                ).fetchone()
+                if previous is not None:
+                    conn.rollback()
+                    if str(previous[0]) != payload:
+                        return FusionBatchResult("state_changed", 0, 0, 0)
+                    return FusionBatchResult(
+                        "duplicate", int(previous[1]), int(previous[2]), int(previous[3])
+                    )
+
+                user = conn.execute(
+                    "SELECT COALESCE(stone, 0) FROM user_xiuxian WHERE user_id=%s", (user_id,)
+                ).fetchone()
+                if user is None:
+                    conn.rollback()
+                    return FusionBatchResult("user_missing", 0, 0, 0)
+
+                successful_count = sum(outcomes)
+                failed_count = len(outcomes) - successful_count
+                protection_available = 0
+                if protection_item_id is not None and failed_count:
+                    protection = conn.execute(
+                        "SELECT COALESCE(goods_num, 0) FROM back WHERE user_id=%s AND goods_id=%s",
+                        (user_id, protection_item_id),
+                    ).fetchone()
+                    protection_available = 0 if protection is None else max(0, int(protection[0]))
+                protected_count = min(failed_count, protection_available)
+                charged_attempts = len(outcomes) - protected_count
+                total_stone = stone_cost * charged_attempts
+                total_materials = {
+                    item_id: quantity * charged_attempts for item_id, quantity in materials.items()
+                }
+
+                if int(user[0]) < total_stone:
+                    conn.rollback()
+                    return FusionBatchResult("stone_insufficient", 0, 0, 0)
+                columns = set(conn.column_names("back"))
+                for item_id, quantity in total_materials.items():
+                    row = conn.execute(
+                        "SELECT COALESCE(goods_num, 0)" +
+                        (", COALESCE(bind_num, 0)" if "bind_num" in columns else "") +
+                        " FROM back WHERE user_id=%s AND goods_id=%s", (user_id, item_id),
+                    ).fetchone()
+                    available = 0 if row is None else int(row[0]) - (int(row[1]) if len(row) > 1 else 0)
+                    if available - reserved.get(item_id, 0) < quantity:
+                        conn.rollback()
+                        return FusionBatchResult("item_insufficient", 0, 0, 0)
+
+                target = conn.execute(
+                    "SELECT COALESCE(goods_num, 0) FROM back WHERE user_id=%s AND goods_id=%s",
+                    (user_id, target_id),
+                ).fetchone()
+                current_target = 0 if target is None else int(target[0])
+                capacity = min(max_goods_num, target_limit or max_goods_num)
+                if current_target + successful_count > capacity:
+                    conn.rollback()
+                    return FusionBatchResult("inventory_full", 0, 0, 0)
+
+                if total_stone:
+                    charged = conn.execute(
+                        "UPDATE user_xiuxian SET stone=stone-%s WHERE user_id=%s AND stone>=%s",
+                        (total_stone, user_id, total_stone),
+                    )
+                    if charged.rowcount != 1:
+                        conn.rollback()
+                        return FusionBatchResult("state_changed", 0, 0, 0)
+                for item_id, quantity in total_materials.items():
+                    consumed = conn.execute(
+                        "UPDATE back SET goods_num=goods_num-%s WHERE user_id=%s AND goods_id=%s",
+                        (quantity, user_id, item_id),
+                    )
+                    if consumed.rowcount != 1:
+                        conn.rollback()
+                        return FusionBatchResult("state_changed", 0, 0, 0)
+                if protected_count:
+                    consumed = conn.execute(
+                        "UPDATE back SET goods_num=goods_num-%s WHERE user_id=%s AND goods_id=%s "
+                        "AND goods_num>=%s",
+                        (protected_count, user_id, protection_item_id, protected_count),
+                    )
+                    if consumed.rowcount != 1:
+                        conn.rollback()
+                        return FusionBatchResult("state_changed", 0, 0, 0)
+
+                if successful_count:
+                    if "bind_num" in columns:
+                        conn.execute(
+                            "INSERT INTO back (user_id, goods_id, goods_name, goods_type, goods_num, bind_num) "
+                            "VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (user_id, goods_id) DO UPDATE SET "
+                            "goods_name=EXCLUDED.goods_name, goods_type=EXCLUDED.goods_type, "
+                            "goods_num=COALESCE(back.goods_num, 0)+EXCLUDED.goods_num, "
+                            "bind_num=COALESCE(back.bind_num, 0)+EXCLUDED.bind_num",
+                            (user_id, target_id, target_name, target_type, successful_count, successful_count),
+                        )
+                    else:
+                        conn.execute(
+                            "INSERT INTO back (user_id, goods_id, goods_name, goods_type, goods_num) "
+                            "VALUES (%s, %s, %s, %s, %s) ON CONFLICT (user_id, goods_id) DO UPDATE SET "
+                            "goods_name=EXCLUDED.goods_name, goods_type=EXCLUDED.goods_type, "
+                            "goods_num=COALESCE(back.goods_num, 0)+EXCLUDED.goods_num",
+                            (user_id, target_id, target_name, target_type, successful_count),
+                        )
+                conn.execute(
+                    "INSERT INTO fusion_batch_operations "
+                    "(operation_id, payload, outcomes, successful_count, failed_count, protected_count) "
+                    "VALUES (%s, %s, %s, %s, %s, %s)",
+                    (operation_id, payload, json.dumps(outcomes), successful_count, failed_count, protected_count),
+                )
+                conn.commit()
+                return FusionBatchResult("applied", successful_count, failed_count, protected_count)
+            except Exception:
+                conn.rollback()
+                raise
+
+
+__all__ = ["FusionBatchResult", "FusionResult", "FusionService"]
