@@ -39,8 +39,11 @@ from .impart_uitls import (
     update_user_impart_data,
 )
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
+from ...paths import get_paths
+from .draw_service import ImpartDrawService
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
+impart_draw_service = ImpartDrawService(get_paths().game_db, get_paths().impart_db)
 
 
 cache_help = {}
@@ -197,8 +200,9 @@ async def impart_draw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                 # 未中奖情况
                 total_seclusion_time += 660
 
-    # 批量添加卡片
-    new_cards, card_counts = impart_data_json.data_person_add_batch(user_id, drawn_cards)
+    old_card_counts = impart_data_json.data_person_list(user_id) or {}
+    new_cards = list(dict.fromkeys(card for card in drawn_cards if card not in old_card_counts))
+    card_counts = {card: old_card_counts.get(card, 0) + drawn_cards.count(card) for card in set(drawn_cards)}
     total_new_cards = len(new_cards)
     total_duplicates = len(drawn_cards) - total_new_cards
 
@@ -310,20 +314,19 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             drawn_cards.append(reap_img)
             guaranteed_pulls += 1
             current_wish = 0  # 重置概率计数
-            xiuxian_impart.update_impart_wish(current_wish, user_id)
         else:
             if get_rank(user_id):
                 # 中奖情况
                 reap_img = random.choice(img_list)
                 drawn_cards.append(reap_img)
                 current_wish = 0  # 重置概率计数
-                xiuxian_impart.update_impart_wish(current_wish, user_id)
 
     # 批量添加卡片
-    new_cards, card_counts = impart_data_json.data_person_add_batch(user_id, drawn_cards)
+    old_card_counts = impart_data_json.data_person_list(user_id) or {}
+    new_cards = list(dict.fromkeys(card for card in drawn_cards if card not in old_card_counts))
+    card_counts = {card: old_card_counts.get(card, 0) + drawn_cards.count(card) for card in set(drawn_cards)}
     total_new_cards = len(new_cards)
     total_duplicates = len(drawn_cards) - total_new_cards
-
     # 计算重复卡片信息（只显示前10个，避免消息过长）
     duplicate_cards_info = []
     duplicate_display_limit = 10
@@ -339,9 +342,15 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         more_duplicates_msg = f"\n(还有{total_duplicates - duplicate_display_limit}张重复卡未显示)"
 
     # 更新用户数据
-    sql_message.update_ls(user_id, required_crystals, 2)
-    xiuxian_impart.update_impart_wish(current_wish, user_id)
-    xiuxian_impart.update_impart_num(times, user_id)
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or random.getrandbits(64))
+    result = impart_draw_service.draw(
+        f"impart-draw:{event_id}:{user_id}", user_id, user_stone_num,
+        impart_data_draw["wish"], impart_data_draw["impart_num"], required_crystals,
+        current_wish, times, drawn_cards,
+    )
+    if not result.succeeded:
+        await handle_send(bot, event, "抽卡状态已变化，请重试。")
+        return
     await re_impart_data(user_id)
     impart_data_draw = await impart_check(user_id)
     update_statistics_value(user_id, "传承抽卡", increment=times * 10)
