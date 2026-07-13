@@ -19,8 +19,9 @@ class BossRewardServiceTests(unittest.TestCase):
         self.game_database = root / "game.sqlite3"
         self.player_database = root / "player.sqlite3"
         with db_backend.transaction(self.game_database) as conn:
-            conn.execute("CREATE TABLE user_xiuxian (user_id TEXT PRIMARY KEY, stone INTEGER NOT NULL)")
-            conn.execute("INSERT INTO user_xiuxian VALUES (%s, %s)", ("user", 1000))
+            conn.execute("CREATE TABLE user_xiuxian (user_id TEXT PRIMARY KEY, stone INTEGER NOT NULL, exp INTEGER NOT NULL)")
+            conn.execute("INSERT INTO user_xiuxian VALUES (%s, %s, %s)", ("user", 1000, 500))
+            conn.execute("CREATE TABLE back (user_id TEXT, goods_id INTEGER, goods_name TEXT, goods_type TEXT, goods_num INTEGER, create_time TEXT, update_time TEXT, bind_num INTEGER, UNIQUE(user_id, goods_id))")
         with db_backend.transaction(self.player_database) as conn:
             conn.execute(
                 "CREATE TABLE boss (user_id TEXT PRIMARY KEY, boss_stone INTEGER, boss_integral INTEGER)"
@@ -35,17 +36,19 @@ class BossRewardServiceTests(unittest.TestCase):
 
     def state(self):
         with db_backend.connection(self.game_database) as conn:
-            wallet = int(conn.execute("SELECT stone FROM user_xiuxian WHERE user_id=%s", ("user",)).fetchone()[0])
+            wallet = tuple(map(int, conn.execute("SELECT stone, exp FROM user_xiuxian WHERE user_id=%s", ("user",)).fetchone()))
+            item = conn.execute("SELECT goods_num FROM back WHERE user_id=%s AND goods_id=7", ("user",)).fetchone()
         with db_backend.connection(self.player_database) as conn:
             daily = conn.execute(
                 "SELECT boss_stone, boss_integral FROM boss WHERE user_id=%s", ("user",)
             ).fetchone()
             total = conn.execute("SELECT integral FROM boss_limit WHERE user_id=%s", ("user",)).fetchone()[0]
-        return wallet, (int(daily[0]), int(daily[1])), int(total)
+        return wallet, (int(daily[0]), int(daily[1])), int(total), int(item[0]) if item else 0
 
     def grant(self, operation_id="reward", daily_stone=100, daily_integral=20, total_integral=200):
         return self.service.grant(
-            operation_id, "user", daily_stone, daily_integral, total_integral, 30, 5
+            operation_id, "user", daily_stone, daily_integral, total_integral, 500, 30, 5,
+            10, 7, "drop", "type", 1, 1, 99,
         )
 
     def test_success_updates_wallet_daily_limits_and_total_integral(self) -> None:
@@ -54,31 +57,31 @@ class BossRewardServiceTests(unittest.TestCase):
             (result.status, result.stone, result.integral, result.wallet_stone),
             ("applied", 30, 5, 1030),
         )
-        self.assertEqual(self.state(), (1030, (130, 25), 205))
+        self.assertEqual(self.state(), ((1030, 510), (130, 25), 205, 1))
 
     def test_zero_reward_is_recorded_without_changing_balances(self) -> None:
-        result = self.service.grant("zero", "user", 100, 20, 200, 0, 0)
+        result = self.service.grant("zero", "user", 100, 20, 200, 500, 0, 0)
         self.assertEqual((result.status, result.wallet_stone), ("applied", 1000))
-        self.assertEqual(self.state(), (1000, (100, 20), 200))
+        self.assertEqual(self.state(), ((1000, 500), (100, 20), 200, 0))
 
     def test_stale_counters_change_nothing(self) -> None:
         result = self.grant(daily_stone=99)
         self.assertEqual(result.status, "state_changed")
-        self.assertEqual(self.state(), (1000, (100, 20), 200))
+        self.assertEqual(self.state(), ((1000, 500), (100, 20), 200, 0))
 
     def test_duplicate_reuses_result_and_conflict_is_rejected(self) -> None:
         first = self.grant("repeat")
         duplicate = self.grant("repeat")
-        conflict = self.service.grant("repeat", "user", 100, 20, 200, 31, 5)
+        conflict = self.service.grant("repeat", "user", 100, 20, 200, 500, 31, 5)
         self.assertEqual((first.status, duplicate.status, conflict.status), ("applied", "duplicate", "state_changed"))
         self.assertEqual((duplicate.wallet_stone, duplicate.daily_stone, duplicate.total_integral), (1030, 130, 205))
-        self.assertEqual(self.state(), (1030, (130, 25), 205))
+        self.assertEqual(self.state(), ((1030, 510), (130, 25), 205, 1))
 
     def test_operation_failure_rolls_back_all_reward_state(self) -> None:
         with db_backend.transaction(self.game_database) as conn:
             conn.execute(
                 "CREATE TABLE boss_reward_operations (operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, "
-                "stone INTEGER NOT NULL, integral INTEGER NOT NULL, wallet_stone INTEGER NOT NULL, "
+                "exp INTEGER NOT NULL, stone INTEGER NOT NULL, integral INTEGER NOT NULL, item_quantity INTEGER NOT NULL, total_exp INTEGER NOT NULL, wallet_stone INTEGER NOT NULL, "
                 "daily_stone INTEGER NOT NULL, daily_integral INTEGER NOT NULL, total_integral INTEGER NOT NULL, "
                 "created_at TIMESTAMP)"
             )
@@ -88,7 +91,7 @@ class BossRewardServiceTests(unittest.TestCase):
             )
         with self.assertRaises(db_backend.IntegrityError):
             self.grant("rollback")
-        self.assertEqual(self.state(), (1000, (100, 20), 200))
+        self.assertEqual(self.state(), ((1000, 500), (100, 20), 200, 0))
 
 
 if __name__ == "__main__":
