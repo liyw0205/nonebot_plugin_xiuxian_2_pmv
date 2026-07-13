@@ -7,6 +7,7 @@ from pathlib import Path
 from threading import RLock
 
 from ..xiuxian_utils import db_backend
+from .partner_invite_service import PartnerInviteService
 from .relation_transaction_utils import increment_stat, set_field
 
 
@@ -34,7 +35,8 @@ class PartnerCultivationService:
         self, operation_id, user_id_1, user_id_2, *, expected_exp_1, expected_exp_2,
         exp_1, exp_2, used_count, power_1, power_2, hp_1, mp_1, atk_1, hp_2, mp_2, atk_2,
         level_rate_1=0, level_rate_2=0, expected_affection_1=None, expected_affection_2=None,
-        affection_1=0, affection_2=0,
+        affection_1=0, affection_2=0, invite_id=None,
+        expected_used_count_1=None, expected_used_count_2=None,
     ) -> PartnerCultivationResult:
         operation_id = str(operation_id).strip()
         user_id_1, user_id_2 = str(user_id_1), str(user_id_2)
@@ -47,8 +49,14 @@ class PartnerCultivationService:
             raise ValueError("invalid partner cultivation operation")
         expected_affection_1 = None if expected_affection_1 is None else int(expected_affection_1)
         expected_affection_2 = None if expected_affection_2 is None else int(expected_affection_2)
+        invite_id = None if invite_id is None else str(invite_id)
+        expected_used_count_1 = None if expected_used_count_1 is None else int(expected_used_count_1)
+        expected_used_count_2 = None if expected_used_count_2 is None else int(expected_used_count_2)
+        if invite_id and (expected_used_count_1 is None or expected_used_count_2 is None):
+            raise ValueError("invite settlement requires usage snapshots")
         payload = json.dumps(
-            [user_id_1, user_id_2, *values, expected_affection_1, expected_affection_2],
+            [user_id_1, user_id_2, *values, expected_affection_1, expected_affection_2,
+             invite_id, expected_used_count_1, expected_used_count_2],
             separators=(",", ":"), ensure_ascii=True,
         )
 
@@ -76,6 +84,37 @@ class PartnerCultivationService:
                     if str(previous[0]) != payload:
                         return result("operation_conflict")
                     return PartnerCultivationResult("duplicate", *(int(value) for value in previous[1:]))
+
+                if invite_id:
+                    PartnerInviteService.ensure_schema(conn, "player_data")
+                    invite = conn.execute(
+                        "SELECT inviter_id,target_id,count,status,expires_at FROM "
+                        "player_data.partner_cultivation_invites WHERE invite_id=%s", (invite_id,),
+                    ).fetchone()
+                    if invite is None or str(invite[0]) != user_id_1 or str(invite[1]) != user_id_2:
+                        conn.rollback()
+                        return result("invitation_changed")
+                    if str(invite[3]) != "pending" or float(invite[4]) <= __import__("time").time():
+                        conn.rollback()
+                        return result("invitation_changed")
+                    if int(invite[2]) < values[4]:
+                        conn.rollback()
+                        return result("invitation_changed")
+                    conn.execute(
+                        "CREATE TABLE IF NOT EXISTS player_data.partner_two_exp_usage ("
+                        "user_id TEXT PRIMARY KEY,used_count INTEGER NOT NULL DEFAULT 0,"
+                        "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+                    )
+                    for user_id, expected in (
+                        (user_id_1, expected_used_count_1), (user_id_2, expected_used_count_2),
+                    ):
+                        row = conn.execute(
+                            "SELECT used_count FROM player_data.partner_two_exp_usage WHERE user_id=%s", (user_id,),
+                        ).fetchone()
+                        current_used = int(row[0]) if row is not None else 0
+                        if current_used != expected:
+                            conn.rollback()
+                            return result("state_changed")
 
                 rows = conn.execute(
                     "SELECT user_id,exp FROM user_xiuxian WHERE user_id IN (%s,%s)",
@@ -115,6 +154,32 @@ class PartnerCultivationService:
                 if expected_affection_1 is not None:
                     set_field(conn, "partner", user_id_1, "affection", expected_affection_1 + values[15], "INTEGER")
                     set_field(conn, "partner", user_id_2, "affection", expected_affection_2 + values[16], "INTEGER")
+
+                if invite_id:
+                    for user_id, expected in (
+                        (user_id_1, expected_used_count_1), (user_id_2, expected_used_count_2),
+                    ):
+                        changed = conn.execute(
+                            "UPDATE player_data.partner_two_exp_usage SET used_count=used_count+%s "
+                            "WHERE user_id=%s AND used_count=%s",
+                            (values[4], user_id, expected),
+                        )
+                        if changed.rowcount == 0:
+                            if expected != 0:
+                                conn.rollback()
+                                return result("state_changed")
+                            conn.execute(
+                                "INSERT INTO player_data.partner_two_exp_usage(user_id,used_count) VALUES(%s,%s)",
+                                (user_id, values[4]),
+                            )
+                    changed = conn.execute(
+                        "UPDATE player_data.partner_cultivation_invites SET status='accepted',"
+                        "resolved_at=strftime('%s','now') WHERE invite_id=%s AND status='pending'",
+                        (invite_id,),
+                    )
+                    if changed.rowcount != 1:
+                        conn.rollback()
+                        return result("invitation_changed")
 
                 conn.execute(
                     "INSERT INTO partner_cultivation_operations "
