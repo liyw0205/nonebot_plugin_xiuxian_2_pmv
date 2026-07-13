@@ -29,6 +29,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
     save_player_info,
 )
 from .mentor_exp_cd import mentor_exp_cd
+from .mentor_bind_service import MentorBindService
 from .mentor_graduation_service import MentorGraduationService
 from .mentor_transmission_service import MentorTransmissionService
 from .partner_breakthrough_service import PartnerBreakthroughService
@@ -71,6 +72,7 @@ partner_token_service = PartnerTokenUseService(get_paths().game_db, get_paths().
 partner_bind_service = PartnerBindService(get_paths().game_db, get_paths().player_db)
 partner_unbind_service = PartnerUnbindService(get_paths().game_db, get_paths().player_db)
 partner_breakthrough_service = PartnerBreakthroughService(get_paths().game_db, get_paths().player_db)
+mentor_bind_service = MentorBindService(get_paths().game_db, get_paths().player_db)
 mentor_graduation_service = MentorGraduationService(get_paths().game_db, get_paths().player_db)
 mentor_transmission_service = MentorTransmissionService(get_paths().game_db, get_paths().player_db)
 two_exp_limit = 3
@@ -1783,15 +1785,35 @@ async def agree_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, f"拜师失败：{reason}", **buttons)
         await agree_mentor.finish()
 
-    bind_time, title_lines = _bind_mentor_relation(mentor_id, apprentice_id)
-    _remove_pending_mentor_invite(mentor_id, apprentice_id)
-
+    invite_data = pending_invites[apprentice_id]
     apprentice_info = sql_message.get_user_real_info(apprentice_id)
+    bind_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    result = mentor_bind_service.apply(
+        f"mentor-bind:{mentor_id}:{invite_data['invite_id']}", mentor_id, apprentice_id,
+        invite_data["invite_id"], bind_time=bind_time,
+        expected_mentor_level=user_info["level"], expected_apprentice_level=apprentice_info["level"],
+        max_apprentices=MENTOR_MAX_APPRENTICES, history_limit=MENTOR_HISTORY_LIMIT,
+        mentor_desc=f"收{apprentice_info['user_name']}为徒",
+        apprentice_desc=f"拜{user_info['user_name']}为师",
+        invitation_validator=lambda m, a, i: bool(
+            _get_pending_mentor_invites(m).get(a)
+            and _get_pending_mentor_invites(m)[a].get("invite_id") == i
+        ),
+    )
+    if not result.succeeded:
+        await handle_send(bot, event, "拜师邀请或双方状态已变化，请重新申请。", **buttons)
+        await agree_mentor.finish()
+    if result.status == "applied":
+        _remove_pending_mentor_invite(mentor_id, apprentice_id)
+        log_message(mentor_id, f"[师徒] 收{apprentice_info['user_name']}为徒")
+        log_message(apprentice_id, f"[师徒] 拜{user_info['user_name']}为师")
+    title_lines = _grant_mentor_titles_by_stats(mentor_id) + _grant_mentor_titles_by_stats(apprentice_id)
     title_msg = "\n" + "\n".join(title_lines) if title_lines else ""
     msg = (
-        f"你已收{apprentice_info['user_name']}为徒，拜师时间为{bind_time}。\n"
+        f"你已收{apprentice_info['user_name']}为徒，拜师时间为{result.bind_time}。\n"
         f"新拜师后{MENTOR_NEW_BIND_TRANSMISSION_WAIT_HOURS}小时内不能传功。"
         f"{title_msg}"
+    )
     )
     await handle_send(bot, event, msg, md_type="buff", k1="传功", v1=f"师徒传功 {apprentice_info['user_name']}", k2="师徒", v2="我的师徒", k3="关系", v3="关系帮助")
     await agree_mentor.finish()
