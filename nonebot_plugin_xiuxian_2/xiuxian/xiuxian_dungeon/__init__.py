@@ -54,17 +54,19 @@ from .team_command_service import (
     resolve_team_invite,
     resolve_transfer_target,
 )
-from .reward_service import DungeonRewardService
 from .session_service import DungeonSessionService
 from .purchase_service import DungeonPurchaseService
+from .explore_event_service import DungeonExploreEventService
+from .battle_progress_service import DungeonBattleProgressService
 from ...paths import get_paths
 
 sql_message = XiuxianDateManage()
 player_data = PlayerDataManager()
 items = Items()
-dungeon_reward_service = DungeonRewardService(get_paths().game_db)
 dungeon_session_service = DungeonSessionService(get_paths().player_db)
 dungeon_purchase_service = DungeonPurchaseService(get_paths().game_db)
+dungeon_explore_event_service = DungeonExploreEventService(get_paths().game_db, get_paths().player_db)
+dungeon_battle_progress_service = DungeonBattleProgressService(get_paths().game_db, get_paths().player_db)
 DUNGEON_SHOP = {
     1999: {"name": "渡厄丹", "cost": 100000},
     20012: {"name": "秘境加速券", "cost": 500000},
@@ -831,7 +833,7 @@ def _get_reward_caps(user_level: str, is_boss: bool):
     return stone_cap, exp_cap
 
 
-def battle_settlement(user_info, members_info, monsters_list, status_list, operation_id):
+def battle_settlement(user_info, members_info, monsters_list, status_list, operation_id, player_status, complete=False):
     is_boss = any(m.get("monster_type") == "boss" for m in monsters_list)
 
     total_stone_pool = sum(int(monster.get("stone", 0)) for monster in monsters_list)
@@ -893,7 +895,16 @@ def battle_settlement(user_info, members_info, monsters_list, status_list, opera
             reward_items.append({"id": item_id, "name": item_info['name'], "type": item_info['type'], "amount": 1})
             rewards_msg.append(f"{item_info['name']}")
 
-        rewards.append({"user_id": uid, "stone": stone_final, "exp": exp_final, "items": reward_items})
+        for item in reward_items:
+            item["expected_num"] = int(sql_message.goods_num(uid, item["id"]))
+        rewards.append({
+            "user_id": uid,
+            "expected_stone": int(m_info["stone"]),
+            "expected_exp": int(m_info["exp"]),
+            "stone": stone_final,
+            "exp": exp_final,
+            "items": reward_items,
+        })
 
         total_dmg = sum(dmg_map.values()) if sum(dmg_map.values()) > 0 else 1
         contrib_percent = dmg_map.get(uid, 0) / total_dmg * 100
@@ -902,12 +913,11 @@ def battle_settlement(user_info, members_info, monsters_list, status_list, opera
         rewards_msg_str = "无" if not rewards_msg else "、".join(rewards_msg)
         msg += f"\n{m_info['user_name']}（贡献{contrib_percent:.2f}% / 分配{alloc_percent:.2f}%）获得：{rewards_msg_str}"
 
-    settlement = dungeon_reward_service.award(operation_id, rewards, XiuConfig().max_goods_num)
+    settlement = dungeon_battle_progress_service.settle(
+        operation_id, user_info["user_id"], player_status, rewards, complete, XiuConfig().max_goods_num
+    )
     if not settlement.succeeded:
         return "\n副本奖励结算失败，请稍后重试。"
-    for reward in rewards:
-        if reward["exp"] > 0:
-            sql_message.update_power2(reward["user_id"])
     return msg
 
 
@@ -1161,8 +1171,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         if winner == 0:
             msg = f"恭喜道友击败【{boss_info[0]['name']}】！"
             msg += mentor_buff_msg
-            msg += battle_settlement(user_info, members_info, boss_info, status, f"{operation_base}:boss:{current_layer}")
-            dungeon_manager.update_player_progress(user_id, status="completed")
+            msg += battle_settlement(user_info, members_info, boss_info, status, f"{operation_base}:boss:{current_layer}", player_status, complete=True)
         else:
             msg = f"道友不敌【{boss_info[0]['name']}】，重伤逃遁。"
 
@@ -1176,12 +1185,15 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
 
     event_result = dungeon_manager.trigger_event(user_info['level'], user_exp)
 
+    non_combat_event = None
+    non_combat_members = []
     if event_result["type"] == "trap":
         msg_parts = [f"{event_result.get('description', '')}"]
         for user in members_info:
             costhp = int((user['exp'] / 2) * event_result.get('damage', 0.1))
-            sql_message.update_user_hp_mp(user['user_id'], user['hp'] - costhp, user['mp'])
+            non_combat_members.append({"user_id": user["user_id"], "expected_hp": user["hp"], "expected_mp": user["mp"], "hp_delta": -costhp})
             msg_parts.append(f"{user['user_name']}气血减少：{number_to(costhp)}")
+        non_combat_event = {"type": "trap"}
         msg = "，".join(msg_parts)
 
     elif event_result["type"] == "monster":
@@ -1200,9 +1212,16 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         if winner == 0:
             msg += f"\n恭喜道友击败敌人。"
             msg += mentor_buff_msg
-            msg += battle_settlement(user_info, members_info, event_result["monster_data"], status, f"{operation_base}:monster:{current_layer}")
+            msg += battle_settlement(user_info, members_info, event_result["monster_data"], status, f"{operation_base}:monster:{current_layer}", player_status)
         else:
             msg += f"\n道友不敌，重伤逃遁。"
+            settlement = dungeon_battle_progress_service.settle(
+                f"{operation_base}:monster:{current_layer}:loss", user_id, player_status,
+                [{"user_id": user_id, "expected_stone": int(user_info["stone"]), "expected_exp": int(user_info["exp"]), "stone": 0, "exp": 0, "items": []}],
+                False, XiuConfig().max_goods_num,
+            )
+            if not settlement.succeeded:
+                msg += "\n副本进度结算失败，请稍后重试。"
 
         try:
             await send_msg_handler(bot, event, result)
@@ -1212,19 +1231,27 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
     elif event_result["type"] == "treasure":
         item_id = event_result.get('drop_items', 9001)
         item_info = items.get_data_by_item_id(item_id)
-        sql_message.send_back(user_id, item_id, item_info['name'], item_info['type'], 1)
+        non_combat_event = {"type": "treasure", "item": {"id": item_id, "name": item_info["name"], "type": item_info["type"], "amount": 1, "expected_num": int(sql_message.goods_num(user_id, item_id))}}
+        non_combat_members = [{"user_id": user_id, "expected_hp": user_info["hp"], "expected_mp": user_info["mp"]}]
         msg = f"{event_result.get('description', '')}，凑近一看居然是{item_info['name']}"
 
     elif event_result["type"] == "spirit_stone":
         stones = int(event_result.get('stones', 0))
         msg = f"{event_result.get('description', '')}，获得{number_to(stones)}灵石"
-        sql_message.update_ls(user_id, stones, 1)
+        non_combat_event = {"type": "spirit_stone", "stone": stones, "expected_stone": int(user_info["stone"])}
+        non_combat_members = [{"user_id": user_id, "expected_hp": user_info["hp"], "expected_mp": user_info["mp"]}]
 
     else:
         msg = f"{event_result.get('description', '')}"
+        non_combat_event = {"type": "nothing"}
+        non_combat_members = [{"user_id": user_id, "expected_hp": user_info["hp"], "expected_mp": user_info["mp"]}]
 
     msg += "！\n"
-    dungeon_manager.update_player_progress(user_id)
+    if non_combat_event is not None:
+        settlement = dungeon_explore_event_service.settle(f"{operation_base}:event:{current_layer}", user_id, player_status, non_combat_event, non_combat_members, XiuConfig().max_goods_num)
+        if not settlement.succeeded:
+            await handle_send(bot, event, "副本事件结算状态已变化，请稍后重试。")
+            await explore_dungeon.finish()
 
     updated_player_status = dungeon_manager.get_player_status(user_id)
     current_layer_after_update = updated_player_status["current_layer"]
