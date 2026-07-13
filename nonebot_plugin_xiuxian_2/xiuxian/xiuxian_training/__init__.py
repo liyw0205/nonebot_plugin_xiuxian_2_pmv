@@ -16,6 +16,7 @@ from .training_data import training_data
 from .training_limit import training_limit
 from .training_events import training_events
 from .completion_service import TrainingCompletionService
+from .event_service import TrainingEventService
 from .purchase_service import TrainingPurchaseService
 from ...paths import get_paths
 from ..xiuxian_config import XiuConfig, convert_rank
@@ -26,6 +27,7 @@ player_data_manager = PlayerDataManager()
 sql_message = XiuxianDateManage()
 items = Items()
 training_completion_service = TrainingCompletionService(get_paths().game_db, get_paths().player_db)
+training_event_service = TrainingEventService(get_paths().game_db, get_paths().player_db)
 training_purchase_service = TrainingPurchaseService(get_paths().game_db, get_paths().player_db)
 # 定义命令
 training_start = on_command("开始历练", aliases={"历练开始"}, priority=5, block=True)
@@ -104,7 +106,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = f"{result}"
     await handle_send(bot, event, msg, md_type="历练", k1="开始历练", v1="开始历练", k2="历练状态", v2="历练状态", k3="商店", v3="历练商店")
     log_message(user_id, result)
-    update_statistics_value(user_id, "历练次数")
     await training_start.finish()
 
 @training_status.handle(parameterless=[Cooldown(cd_time=0)])
@@ -364,6 +365,13 @@ def make_choice(user_id, operation_id):
     
     # 调用事件处理器，传入用户信息
     event_result = training_events.handle_event(user_id, user_info, event_type)
+    stone_delta = int(event_result.get("amount", 0)) if isinstance(event_result, dict) and event_result.get("type") == "stone" else 0
+    exp_delta = int(event_result.get("amount", 0)) if isinstance(event_result, dict) and event_result.get("type") == "exp" else 0
+    hp_delta = int(event_result.get("amount", 0)) if isinstance(event_result, dict) and event_result.get("type") == "hp" else 0
+    event_items = []
+    if isinstance(event_result, dict) and event_result.get("type") == "item":
+        item_info = items.get_data_by_item_id(event_result["item_id"])
+        event_items.append({"id": event_result["item_id"], "name": event_result["item_name"], "type": item_info["type"], "amount": -1 if event_result.get("lost") else 1})
     
     # 更新进度 - 默认+1
     base_progress = 1
@@ -437,14 +445,21 @@ def make_choice(user_id, operation_id):
         saved_training_info["weekly_purchases"] = dict(training_info["weekly_purchases"])
         if isinstance(saved_training_info["last_time"], datetime):
             saved_training_info["last_time"] = saved_training_info["last_time"].strftime("%Y-%m-%d %H:%M:%S")
-        settlement = training_completion_service.complete(
-            operation_id, user_id, expected_training_info, saved_training_info, stone_reward,
-            exp_reward, reward_items, XiuConfig().max_goods_num,
-        )
-        if not settlement.succeeded:
-            return "历练完成奖励结算失败，请稍后重试。"
-    else:
-        training_limit.save_user_training_info(user_id, training_info)
+        stone_delta += stone_reward
+        exp_delta += exp_reward
+        event_items.extend(reward_items)
+
+    saved_training_info = training_info.copy()
+    saved_training_info["weekly_purchases"] = dict(training_info["weekly_purchases"])
+    if isinstance(saved_training_info["last_time"], datetime):
+        saved_training_info["last_time"] = saved_training_info["last_time"].strftime("%Y-%m-%d %H:%M:%S")
+    settlement = training_event_service.apply(
+        operation_id, user_id, expected_training_info, saved_training_info,
+        {key: user_info[key] for key in ("stone", "exp", "hp", "mp")},
+        stone_delta, exp_delta, hp_delta, event_items, XiuConfig().max_goods_num,
+    )
+    if not settlement.succeeded:
+        return "历练事件结算失败，请稍后重试。"
     
     return training_info["last_event"]
 

@@ -416,7 +416,6 @@ class TrainingEvents:
             locals_dict = {"base_amount": reward_data["base_amount"], "random": random}
             amount = eval(calc_rule, {}, locals_dict)
             amount = int(amount * (1 + sub_buff_stone_buff))
-            sql_message.update_ls(user_id, amount, 1)
             return {
                 "message": desc_template.format(number_to(amount)),
                 "type": "stone",
@@ -428,7 +427,6 @@ class TrainingEvents:
             percent = eval(calc_rule, {}, locals_dict)
             user_rank = max(convert_rank(user_info['level'])[0] // 3, 1)
             exp = int(user_info["exp"] * percent * min(0.1 * user_rank, 1))
-            sql_message.update_exp(user_id, exp)
             return {
                 "message": desc_template.format(number_to(exp)),
                 "type": "exp",
@@ -447,7 +445,6 @@ class TrainingEvents:
             if item_id_list:
                 item_id = random.choice(item_id_list)
                 item_info = items.get_data_by_item_id(item_id)
-                sql_message.send_back(user_id, item_id, item_info["name"], item_info["type"], 1)
                 return {
                     "message": desc_template.format(f"{item_info['name']}"),
                     "type": "item",
@@ -456,7 +453,6 @@ class TrainingEvents:
                 }
             else:
                 amount = 100_0000
-                sql_message.update_ls(user_id, amount, 1)
                 return {
                     "message": f"探索有所收获，但没找到合适物品，获得{number_to(amount)}灵石",
                     "type": "stone",
@@ -499,7 +495,6 @@ class TrainingEvents:
             
             if not back_msg:
                 amount = 500_0000
-                sql_message.update_ls(user_id, amount, 2)
                 return {
                     "message": f"探索遭遇意外，损失{number_to(amount)}灵石",
                     "type": "stone",
@@ -541,7 +536,6 @@ class TrainingEvents:
                 
                 if valid_items:
                     item = random.choice(valid_items)
-                    sql_message.update_back_j(user_id, item["goods_id"], 1)
                     return {
                         "message": desc_template.format(item["goods_name"]),
                         "type": "item",
@@ -552,7 +546,6 @@ class TrainingEvents:
                         
             # 没有则扣灵石
             amount = 500_0000
-            sql_message.update_ls(user_id, amount, 2)
             return {
                 "message": f"遭遇意外，损失{number_to(amount)}灵石",
                 "type": "stone",
@@ -565,7 +558,6 @@ class TrainingEvents:
             if punish_type == "stone":
                 locals_dict = {"base_amount": punish_data["base_amount"], "random": random}
                 amount = eval(calc_rule, {}, locals_dict)
-                sql_message.update_ls(user_id, amount, 2)
                 return {
                     "message": desc_template.format(number_to(amount)),
                     "type": "stone",
@@ -580,7 +572,6 @@ class TrainingEvents:
                 level = user_info['level'][:3] + '初期'
                 max_exp = int(jsondata.level_data()[level]["power"] * XiuConfig().closing_exp_upper_limit)
                 exp = min(exp, max_exp)
-                sql_message.update_j_exp(user_id, exp)
                 return {
                     "message": desc_template.format(number_to(exp)),
                     "type": "exp",
@@ -591,7 +582,6 @@ class TrainingEvents:
                 locals_dict = {"base_percent": punish_data["base_percent"], "random": random}
                 percent = eval(calc_rule, {}, locals_dict)
                 hp_loss = int(user_info["hp"] * percent)
-                sql_message.update_user_hp_mp(user_id, user_info["hp"] - hp_loss, user_info["mp"])
                 return {
                     "message": desc_template.format(number_to(hp_loss)),
                     "type": "hp",
