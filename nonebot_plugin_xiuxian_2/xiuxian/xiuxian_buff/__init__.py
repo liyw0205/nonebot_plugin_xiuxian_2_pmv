@@ -51,6 +51,7 @@ from .two_exp_cd import two_exp_cd
 from .blessed_spot_service import BlessedSpotService
 from .closing_settlement_service import ClosingSettlementService
 from .normal_training_lifecycle_service import NormalTrainingLifecycleService
+from .stone_training_settlement_service import StoneTrainingSettlementService
 from nonebot.permission import SUPERUSER
 from .partner import (  # noqa: F401
     get_mentor_team_attack_buffs,
@@ -71,6 +72,7 @@ player_data_manager = PlayerDataManager()
 blessed_spot_service = BlessedSpotService(get_paths().game_db, get_paths().player_db)
 closing_settlement_service = ClosingSettlementService(get_paths().game_db)
 normal_training_lifecycle_service = NormalTrainingLifecycleService(get_paths().game_db, get_paths().player_db)
+stone_training_settlement_service = StoneTrainingSettlementService(get_paths().game_db, get_paths().player_db)
 
 def _blessed_spot_operation_id(event, action, user_id):
     event_id = str(
@@ -86,6 +88,13 @@ def _normal_training_operation_id(event, user_id):
     if event_id:
         return f"training:{event_id}:normal:{user_id}"
     return f"training:normal:{user_id}:{datetime.now().timestamp()}"
+
+
+def _stone_training_operation_id(event, user_id):
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    if event_id:
+        return f"training:{event_id}:stone:{user_id}"
+    return f"training:stone:{user_id}:{datetime.now().timestamp()}"
 BLESSEDSPOTCOST = 3500000 # 洞天福地购买消耗
 PLAYERSDATA = get_paths().players
 
@@ -513,33 +522,31 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await handle_send(bot, event, msg, md_type="buff", k1="灵石修炼", v1="灵石修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await stone_exp.finish()
     stone_num = int(stone_num[0])
-    if use_stone <= stone_num:
+    if use_stone < stone_num:
         msg = "你的灵石还不够呢，快去赚点灵石吧！"
         await handle_send(bot, event, msg, md_type="buff", k1="灵石修炼", v1="灵石修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await stone_exp.finish()
 
-    exp = int(stone_num / 10)
-    if exp >= user_get_exp_max:
-        # 用户获取的修为到达上限
-        sql_message.update_exp(user_id, user_get_exp_max)
-        sql_message.update_power2(user_id)  # 更新战力
-        msg = f"修炼结束，本次修炼到达上限，共增加修为：{user_get_exp_max},消耗灵石：{user_get_exp_max * 10}"
-        sql_message.update_ls(user_id, int(user_get_exp_max * 10), 2)
-        update_statistics_value(user_id, "灵石修炼", increment=user_get_exp_max * 10)
-        update_statistics_value(user_id, "灵石修炼修为", increment=user_get_exp_max)
-        log_message(user_id, f"[灵石修炼] 到达上限，消耗灵石{number_to(user_get_exp_max * 10)}，获得修为{number_to(user_get_exp_max)}")
-        await handle_send(bot, event, msg, md_type="buff", k1="灵石修炼", v1="灵石修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
-        await stone_exp.finish()
+    level_rate = sql_message.get_root_rate(user_mes['root_type'], user_id)
+    realm_rate = jsondata.level_data()[level]["spend"]
+    result = stone_training_settlement_service.settle(
+        _stone_training_operation_id(event, user_id), user_id,
+        requested_stone=stone_num, expected_exp=use_exp, expected_stone=use_stone,
+        exp_cap=max_exp, power_multiplier=level_rate * realm_rate,
+    )
+    if result.status == "stone_insufficient":
+        msg = "你的灵石还不够呢，快去赚点灵石吧！"
+    elif result.status == "exp_capped":
+        msg = "当前修为已到达上限，无法继续灵石修炼！"
+    elif not result.succeeded:
+        msg = "修为或灵石状态已变化，请重新尝试。"
     else:
-        sql_message.update_exp(user_id, exp)
-        sql_message.update_power2(user_id)  # 更新战力
-        msg = f"修炼结束，本次修炼共增加修为：{exp},消耗灵石：{stone_num}"
-        sql_message.update_ls(user_id, int(stone_num), 2)
-        update_statistics_value(user_id, "灵石修炼", increment=stone_num)
-        update_statistics_value(user_id, "灵石修炼修为", increment=exp)
-        log_message(user_id, f"[灵石修炼] 消耗灵石{number_to(stone_num)}，获得修为{number_to(exp)}")
-        await handle_send(bot, event, msg, md_type="buff", k1="灵石修炼", v1="灵石修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
-        await stone_exp.finish()
+        capped = result.exp_gain >= user_get_exp_max
+        prefix = "修炼结束，本次修炼到达上限" if capped else "修炼结束"
+        msg = f"{prefix}，共增加修为：{result.exp_gain},消耗灵石：{result.stone_cost}"
+        log_message(user_id, f"[灵石修炼] 消耗灵石{number_to(result.stone_cost)}，获得修为{number_to(result.exp_gain)}")
+    await handle_send(bot, event, msg, md_type="buff", k1="灵石修炼", v1="灵石修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
+    await stone_exp.finish()
 
 
 @in_closing.handle(parameterless=[Cooldown(cd_time=0)])
