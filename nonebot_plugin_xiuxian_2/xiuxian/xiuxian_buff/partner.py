@@ -30,6 +30,8 @@ from ..xiuxian_utils.xiuxian2_handle import (
 )
 from .mentor_exp_cd import mentor_exp_cd
 from .mentor_bind_service import MentorBindService
+from .mentor_expel_service import MentorExpelService
+from .apprentice_leave_service import ApprenticeLeaveService
 from .mentor_graduation_service import MentorGraduationService
 from .mentor_transmission_service import MentorTransmissionService
 from .partner_breakthrough_service import PartnerBreakthroughService
@@ -73,6 +75,8 @@ partner_bind_service = PartnerBindService(get_paths().game_db, get_paths().playe
 partner_unbind_service = PartnerUnbindService(get_paths().game_db, get_paths().player_db)
 partner_breakthrough_service = PartnerBreakthroughService(get_paths().game_db, get_paths().player_db)
 mentor_bind_service = MentorBindService(get_paths().game_db, get_paths().player_db)
+mentor_expel_service = MentorExpelService(get_paths().game_db, get_paths().player_db)
+apprentice_leave_service = ApprenticeLeaveService(get_paths().game_db, get_paths().player_db)
 mentor_graduation_service = MentorGraduationService(get_paths().game_db, get_paths().player_db)
 mentor_transmission_service = MentorTransmissionService(get_paths().game_db, get_paths().player_db)
 two_exp_limit = 3
@@ -2049,27 +2053,29 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         target_info = sql_message.get_user_real_info(target_id)
         mentor_name = user_info["user_name"]
         target_name = target_info["user_name"] if target_info else str(target_id)
-        _remove_mentor_relation(user_id, target_id)
-        _set_mentor_cooldown(user_id, "mentor_cd_until", MENTOR_COOLDOWN_DAYS)
-        _set_mentor_cooldown(target_id, "apprentice_cd_until", APPRENTICE_COOLDOWN_DAYS)
-        _set_pair_rebind_cooldown(target_id, user_id, MENTOR_SAME_PAIR_REBIND_COOLDOWN_DAYS)
-        _record_mentor_event(
-            user_id,
-            target_id,
-            "expel",
-            f"将{target_name}逐出师门",
-            f"被师父{mentor_name}逐出师门",
+        now = datetime.now()
+        occurred_at = now.strftime("%Y-%m-%d %H:%M:%S")
+        mentor_cd_until = (now + timedelta(days=MENTOR_COOLDOWN_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
+        apprentice_cd_until = (now + timedelta(days=APPRENTICE_COOLDOWN_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
+        pair_rebind_until = (now + timedelta(days=MENTOR_SAME_PAIR_REBIND_COOLDOWN_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
+        settlement = mentor_expel_service.apply(
+            _relation_operation_id(event, "expel", user_id, target_id), user_id, target_id,
+            occurred_at=occurred_at, mentor_cd_until=mentor_cd_until,
+            apprentice_cd_until=apprentice_cd_until, pair_rebind_until=pair_rebind_until,
+            history_limit=MENTOR_HISTORY_LIMIT, mentor_desc=f"将{target_name}逐出师门",
+            apprentice_desc=f"被师父{mentor_name}逐出师门",
         )
-        update_statistics_value(user_id, "逐出徒弟次数", increment=1)
-        update_statistics_value(target_id, "被逐出师门次数", increment=1)
-        log_message(user_id, f"[师徒] 将{target_name}逐出师门")
-        log_message(target_id, f"[师徒] 被师父{mentor_name}逐出师门")
+        if not settlement.succeeded:
+            await handle_send(bot, event, "师徒关系状态已变化，本次逐出未执行。", **buttons)
+            await unbind_mentor.finish()
+        if settlement.status == "applied":
+            log_message(user_id, f"[师徒] 将{target_name}逐出师门")
+            log_message(target_id, f"[师徒] 被师父{mentor_name}逐出师门")
         msg = (
             f"你已将{target_name}逐出师门。\n"
             f"你进入{MENTOR_COOLDOWN_DAYS}天收徒冷却，对方进入{APPRENTICE_COOLDOWN_DAYS}天拜师冷却。\n"
             f"对方{MENTOR_SAME_PAIR_REBIND_COOLDOWN_DAYS}天内不能再次拜入你门下。"
         )
-        await handle_send(bot, event, msg, **buttons)
         await unbind_mentor.finish()
 
     mentor_data = load_mentor(user_id)
