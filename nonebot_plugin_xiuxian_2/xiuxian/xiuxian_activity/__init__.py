@@ -191,7 +191,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
 
-    ok, text = claim_activity_pass_rewards(str(user_info["user_id"]), args.extract_plain_text())
+    user_id = str(user_info["user_id"])
+    ok, text = claim_activity_pass_rewards(
+        user_id,
+        args.extract_plain_text(),
+        _activity_operation_id(event, "pass-claim", user_id),
+    )
     await handle_send(bot, event, text if ok else f"活动战令领取失败：{text}")
 
 
@@ -216,7 +221,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
 
-    ok, text = claim_sign(str(user_info["user_id"]))
+    user_id = str(user_info["user_id"])
+    ok, text = claim_sign(user_id, _activity_operation_id(event, "sign", user_id))
     await handle_send(bot, event, text if ok else f"活动签到失败：{text}")
 
 
@@ -246,7 +252,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
 
-    ok, text = claim_collect_phrase(str(user_info["user_id"]), args.extract_plain_text())
+    user_id = str(user_info["user_id"])
+    ok, text = claim_collect_phrase(
+        user_id,
+        args.extract_plain_text(),
+        _activity_operation_id(event, "collect-exchange", user_id),
+    )
     await handle_send(bot, event, text if ok else f"活动兑换失败：{text}")
 
 
