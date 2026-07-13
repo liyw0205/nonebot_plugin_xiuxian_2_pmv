@@ -557,18 +557,24 @@ async def leave_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
         await leave_team_cmd.finish()
 
     team_info = get_team_info(team_id)
-    success = remove_member_from_team(team_id, user_id)
+    team_snapshot = dungeon_team_exit_service.snapshot(team_id)
+    exit_result = None
+    if team_snapshot is not None:
+        exit_result = dungeon_team_exit_service.leave(
+            _team_operation_id(event, "leave", user_id),
+            user_id,
+            team_snapshot,
+            _team_cooldown_until(),
+        )
+    success = exit_result is not None and exit_result.status in {"applied", "duplicate"}
 
     if success:
-        cd_info = get_team_cd_info(user_id)
-        if int(cd_info.get("had_first_join", 0)) == 1:
-            set_team_cd(user_id, TEAM_JOIN_CD_HOURS)
+        _clear_team_invite_cache(team_id, [user_id])
 
         new_leader_name = None
-        if user_id == team_info['leader']:
-            new_team_info = get_team_info(team_id)
-            if new_team_info:
-                new_leader_name = sql_message.get_user_info_with_id(new_team_info['leader'])['user_name']
+        if exit_result.new_leader_id:
+            new_leader_info = sql_message.get_user_info_with_id(exit_result.new_leader_id) or {}
+            new_leader_name = new_leader_info.get("user_name", exit_result.new_leader_id)
         leave_result = build_leave_team_result(
             team_info=team_info,
             leaver_user_id=user_id,
@@ -650,12 +656,19 @@ async def kick_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
         await kick_team_cmd.finish()
 
     target_user_id = kick_result.target_user_id
-    success = remove_member_from_team(team_id, target_user_id)
-
+    team_snapshot = dungeon_team_exit_service.snapshot(team_id)
+    exit_result = None
+    if team_snapshot is not None:
+        exit_result = dungeon_team_exit_service.kick(
+            _team_operation_id(event, "kick", user_id),
+            user_id,
+            target_user_id,
+            team_snapshot,
+            _team_cooldown_until(),
+        )
+    success = exit_result is not None and exit_result.status in {"applied", "duplicate"}
     if success:
-        cd_info = get_team_cd_info(target_user_id)
-        if int(cd_info.get("had_first_join", 0)) == 1:
-            set_team_cd(target_user_id, TEAM_JOIN_CD_HOURS)
+        _clear_team_invite_cache(team_id, [target_user_id])
     kick_result = build_kick_team_result(
         target_user_id=target_user_id,
         target_user_name=kick_result.target_user_name,
@@ -690,15 +703,20 @@ async def disband_team_handler(bot: Bot, event: Union[GroupMessageEvent, Private
         await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
         await disband_team_cmd.finish()
 
-    members = team_info.get("members", [])[:]
-    for mid in members:
-        cd_info = get_team_cd_info(mid)
-        if int(cd_info.get("had_first_join", 0)) == 1:
-            set_team_cd(mid, TEAM_JOIN_CD_HOURS)
-
-    success = disband_team(team_id)
+    members = [str(member) for member in team_info.get("members", [])]
+    team_snapshot = dungeon_team_exit_service.snapshot(team_id)
+    exit_result = None
+    if team_snapshot is not None:
+        exit_result = dungeon_team_exit_service.disband(
+            _team_operation_id(event, "disband", user_id),
+            user_id,
+            team_snapshot,
+            _team_cooldown_until(),
+        )
+    success = exit_result is not None and exit_result.status in {"applied", "duplicate"}
 
     if success:
+        _clear_team_invite_cache(team_id, members)
         msg = f"队伍【{team_info['team_name']}】已解散。\n全体成员进入{TEAM_JOIN_CD_HOURS}小时组队冷却。"
     else:
         msg = "解散队伍失败！"
