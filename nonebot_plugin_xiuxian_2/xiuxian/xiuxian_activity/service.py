@@ -61,12 +61,14 @@ from .point_shop_service import ActivityPointShopPurchaseService
 from .task_claim_service import ActivityTaskClaimService
 from .sign_settlement_service import ActivitySignSettlementService
 from .pass_claim_service import ActivityPassClaimService
+from .collect_exchange_service import ActivityCollectExchangeService
 
 
 point_shop_purchase_service = ActivityPointShopPurchaseService(DB_PATH, get_paths().game_db)
 activity_task_claim_service = ActivityTaskClaimService(DB_PATH, get_paths().game_db)
 activity_sign_settlement_service = ActivitySignSettlementService(DB_PATH, get_paths().game_db)
 activity_pass_claim_service = ActivityPassClaimService(DB_PATH, get_paths().game_db)
+activity_collect_exchange_service = ActivityCollectExchangeService(DB_PATH, get_paths().game_db)
 
 
 def _reward_by_day(config: dict, day_index: int) -> dict:
@@ -468,7 +470,7 @@ def _find_collect_phrase(config: dict, query: str) -> tuple[dict, dict] | None:
     return None
 
 
-def claim_collect_phrase(user_id: str, query: str) -> tuple[bool, str]:
+def claim_collect_phrase(user_id: str, query: str, operation_id: str | None = None) -> tuple[bool, str]:
     uid = str(user_id)
     target = _clean_text(query)
     if not target:
@@ -494,61 +496,16 @@ def claim_collect_phrase(user_id: str, query: str) -> tuple[bool, str]:
         return False, f"兑换奖励配置错误：{e}"
 
     ensure_activity_files()
-    conn = db_backend.connect(DB_PATH)
-    conn.row_factory = db_backend.Row
-    try:
-        cur = conn.cursor()
-        inventory = _get_collect_inventory_map(cur, activity["key"], uid)
-        claims = _get_collect_claim_map(cur, activity["key"], uid)
-        missing = [
-            f"{word_char}x{count - inventory.get(word_char, 0)}"
-            for word_char, count in need.items()
-            if inventory.get(word_char, 0) < count
-        ]
-        if missing:
-            return False, "字牌不足，还缺：" + "、".join(missing)
-
-        claimed = claims.get(phrase["phrase"], 0)
-        limit = _as_int(phrase.get("limit"), 1)
-        if limit > 0 and claimed >= limit:
-            return False, "该词组已达到兑换次数上限"
-
-        ts = now_str()
-        for word_char, count in need.items():
-            cur.execute(
-                """
-                UPDATE activity_collect_inventory
-                SET count=count-%s, update_time=%s
-                WHERE activity_key=%s AND user_id=%s AND word_char=%s
-                """,
-                (count, ts, activity["key"], uid, word_char),
-            )
-        cur.execute(
-            """
-            INSERT INTO activity_collect_claim (
-                activity_key, user_id, phrase, count, update_time
-            )
-            VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT(activity_key, user_id, phrase) DO UPDATE SET
-                count = activity_collect_claim.count + 1,
-                update_time = excluded.update_time
-            """,
-            (activity["key"], uid, phrase["phrase"], 1, ts),
-        )
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
-
-    try:
-        reward_msg = send_reward_items(uid, reward_items)
-    except Exception as e:
-        logger.warning(f"活动集字兑换发奖失败 user_id={uid}, activity={activity['key']}, phrase={phrase['phrase']}: {e}")
-        return False, f"兑换已记录，奖励发放失败：{e}"
-
-    reward_text = "，".join(reward_msg) if reward_msg else ""
+    result = activity_collect_exchange_service.exchange(
+        operation_id or f"activity-exchange:{uid}:{time.time_ns()}", uid, activity["key"],
+        phrase["phrase"], need, _as_int(phrase.get("limit"), 1), reward_items,
+        XiuConfig().max_goods_num,
+    )
+    if not result.succeeded:
+        if result.status == "tokens_insufficient":
+            return False, "字牌不足，还缺：" + "、".join(f"{char}x{count}" for char, count in result.missing)
+        return False, {"limit_reached":"该词组已达到兑换次数上限","inventory_full":"背包空间不足，奖励未领取","user_missing":"角色不存在","operation_conflict":"兑换请求冲突，请重新发送"}.get(result.status,"兑换状态已变化，请重试")
+    reward_text = "，".join(result.rewards)
     if reward_text:
         return True, f"{activity['name']}兑换成功：{phrase['name']}\n{reward_text}"
     return True, f"{activity['name']}兑换成功：{phrase['name']}"
