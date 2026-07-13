@@ -2124,19 +2124,24 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, **buttons)
         await unbind_mentor.finish()
 
-    _remove_mentor_relation(mentor_id, user_id)
-    _set_mentor_cooldown(user_id, "apprentice_cd_until", APPRENTICE_COOLDOWN_DAYS)
-    _set_pair_rebind_cooldown(user_id, mentor_id, MENTOR_SAME_PAIR_REBIND_COOLDOWN_DAYS)
-    _record_mentor_event(
-        mentor_id,
-        user_id,
-        "leave",
-        f"徒弟{user_info['user_name']}离开师门",
-        f"离开师父{mentor_name}门下",
+    now = datetime.now()
+    occurred_at = now.strftime("%Y-%m-%d %H:%M:%S")
+    apprentice_cd_until = (now + timedelta(days=APPRENTICE_COOLDOWN_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
+    pair_rebind_until = (now + timedelta(days=MENTOR_SAME_PAIR_REBIND_COOLDOWN_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
+    settlement = apprentice_leave_service.apply(
+        _relation_operation_id(event, "leave", mentor_id, user_id), mentor_id, user_id,
+        occurred_at=occurred_at, expected_apprentice_level=user_info["level"],
+        graduation_eligible=False, apprentice_cd_until=apprentice_cd_until,
+        pair_rebind_until=pair_rebind_until, history_limit=MENTOR_HISTORY_LIMIT,
+        mentor_desc=f"徒弟{user_info['user_name']}离开师门",
+        apprentice_desc=f"离开师父{mentor_name}门下",
     )
-    update_statistics_value(user_id, "离开师门次数", increment=1)
-    log_message(user_id, f"[师徒] 离开师父{mentor_name}门下")
-    log_message(mentor_id, f"[师徒] 徒弟{user_info['user_name']}离开师门")
+    if not settlement.succeeded:
+        await handle_send(bot, event, "师徒关系状态已变化，本次离师未执行。", **buttons)
+        await unbind_mentor.finish()
+    if settlement.status == "applied":
+        log_message(user_id, f"[师徒] 离开师父{mentor_name}门下")
+        log_message(mentor_id, f"[师徒] 徒弟{user_info['user_name']}离开师门")
     msg = (
         f"你已离开{mentor_name}门下，进入{APPRENTICE_COOLDOWN_DAYS}天拜师冷却。\n"
         f"{MENTOR_SAME_PAIR_REBIND_COOLDOWN_DAYS}天内不能再次拜入同一位师父门下。"
