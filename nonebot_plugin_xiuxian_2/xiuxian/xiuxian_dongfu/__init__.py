@@ -21,12 +21,14 @@ from ..xiuxian_config import XiuConfig
 from .expansion_service import DongfuExpansionService
 from .harvest_settlement_service import DongfuHarvestSettlementService
 from .plant_service import DongfuPlantService
+from .accelerate_service import DongfuAccelerateService
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
 items = Items()
 dongfu_expansion_service = DongfuExpansionService(get_paths().game_db, get_paths().player_db)
 dongfu_plant_service = DongfuPlantService(get_paths().game_db, get_paths().player_db)
+dongfu_accelerate_service = DongfuAccelerateService(get_paths().game_db, get_paths().player_db)
 dongfu_harvest_settlement_service = DongfuHarvestSettlementService(get_paths().game_db, get_paths().player_db)
 
 MAP_TABLE = "map_status"
@@ -1040,17 +1042,22 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, f"{slot_no}号灵田已成熟，请使用洞府收获。")
         return
 
-    if not _consume_item(uid, DONGFU_ITEM_ACCELERATE, "灵息露"):
-        await handle_send(bot, event, "你没有【灵息露】。可通过地图钓鱼/探索获得。")
-        return
-
     geomancy = _get_geomancy(d)
     accelerate_minutes = DONGFU_ACCELERATE_MINUTES + _to_int(geomancy.get("accelerate_bonus"))
     new_finish = max(now, finish - timedelta(minutes=accelerate_minutes))
-    slots = _normalize_plant_slots(d)
-    slots[slot_no - 1]["plant_finish"] = _fmt_dt(new_finish)
-    d["plant_slots"] = slots
-    _save_dongfu(uid, d)
+    expected_slots = json.dumps(_normalize_plant_slots(d), ensure_ascii=False)
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"dongfu-accelerate:{uid}:{event_message_id or time.time_ns()}"
+    result = dongfu_accelerate_service.accelerate(
+        operation_id, uid, expected_slots, slot_no, DONGFU_ITEM_ACCELERATE, _fmt_dt(now), _fmt_dt(new_finish),
+    )
+    if result.status == "item_insufficient":
+        await handle_send(bot, event, "你没有【灵息露】。可通过地图钓鱼/探索获得。")
+        return
+    if result.status in {"plot_empty", "already_mature", "state_changed", "dongfu_missing"}:
+        await handle_send(bot, event, "洞府灵田状态已变化，请重新尝试。")
+        return
+    d = _get_dongfu(uid)
     await handle_send(bot, event, f"已使用【灵息露】催熟{slot_no}号灵田，成熟时间缩短{accelerate_minutes}分钟。\n{_format_plant_slots(d)}")
 
 
