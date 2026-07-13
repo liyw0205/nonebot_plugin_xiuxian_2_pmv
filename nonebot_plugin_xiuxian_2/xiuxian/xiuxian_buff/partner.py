@@ -29,9 +29,10 @@ from ..xiuxian_utils.xiuxian2_handle import (
     save_player_info,
 )
 from .mentor_exp_cd import mentor_exp_cd
-from .partner_cultivation_service import PartnerCultivationService
 from .mentor_graduation_service import MentorGraduationService
+from .mentor_transmission_service import MentorTransmissionService
 from .partner_breakthrough_service import PartnerBreakthroughService
+from .partner_cultivation_service import PartnerCultivationService
 from .partner_storage import (
     PLAYERSDATA,
     bind_partner_storage,
@@ -63,8 +64,9 @@ sql_message = XiuxianDateManage()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
 partner_cultivation_service = PartnerCultivationService(get_paths().game_db, get_paths().player_db)
-mentor_graduation_service = MentorGraduationService(get_paths().game_db, get_paths().player_db)
 partner_breakthrough_service = PartnerBreakthroughService(get_paths().game_db, get_paths().player_db)
+mentor_graduation_service = MentorGraduationService(get_paths().game_db, get_paths().player_db)
+mentor_transmission_service = MentorTransmissionService(get_paths().game_db, get_paths().player_db)
 two_exp_limit = 3
 mentor_config = XiuConfig()
 mentor_transmission_limit = getattr(mentor_config, "mentor_transmission_limit", two_exp_limit)
@@ -106,6 +108,7 @@ bind_partner_storage(
     mentor_breakthrough_reward_limit=MENTOR_BREAKTHROUGH_REWARD_LIMIT,
 )
 
+
 def _relation_operation_id(event, action, *user_ids):
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     suffix = ":".join(str(user_id) for user_id in user_ids)
@@ -124,6 +127,7 @@ def _recovered_attributes(user_info, new_exp):
         min(int(user_info["mp"]) + int(new_exp / 20), max_mp),
         int(new_exp / 10),
     )
+
 two_exp_invite = on_command("双修", priority=6, block=True)
 two_exp_accept = on_command("同意双修", priority=5, block=True)
 two_exp_reject = on_command("拒绝双修", priority=5, block=True)
@@ -2020,6 +2024,7 @@ async def mentor_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     await mentor_rank.finish()
 
 
+@unbind_mentor.handle(parameterless=[Cooldown(cd_time=0)])
 async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """解除师徒关系 / 逐出师门 / 出师"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -2130,6 +2135,19 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await unbind_mentor.finish()
 
 
+@mentor_transmission.handle(parameterless=[Cooldown(cd_time=0)])
+async def mentor_transmission_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """师徒传功"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, mentor_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await mentor_transmission.finish()
+
+    mentor_id = str(mentor_info["user_id"])
+    apprentices = get_valid_apprentices(mentor_id)
+    target_id = _resolve_user_id_from_args(args)
+    buttons = _build_mentor_help_buttons()
 
     if not target_id:
         if len(apprentices) == 1:
@@ -2192,35 +2210,24 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, "本次传功未能获得修为。", **buttons)
         await mentor_transmission.finish()
 
-    sql_message.update_exp(target_id, give_exp)
-    sql_message.update_power2(target_id)
-
-    apprentice_after = sql_message.get_user_real_info(target_id)
-    result_msg, result_hp_mp = OtherSet().send_hp_mp(
-        target_id,
-        int(apprentice_after["exp"] / 10),
-        int(apprentice_after["exp"] / 20),
+    new_exp = apprentice_exp + give_exp
+    hp, mp, atk = _recovered_attributes(apprentice_info, new_exp)
+    settlement = mentor_transmission_service.apply(
+        _relation_operation_id(event, "transmission", mentor_id, target_id), mentor_id, target_id,
+        expected_apprentice_exp=apprentice_exp, reward_exp=give_exp,
+        power=_relation_power(apprentice_info, new_exp), hp=hp, mp=mp, atk=atk,
+        mentor_used=mentor_transmission_limit - mentor_remain,
+        apprentice_used=mentor_transmission_limit - apprentice_remain,
+        daily_limit=mentor_transmission_limit, history_limit=MENTOR_HISTORY_LIMIT,
+        mentor_desc=f"向徒弟{apprentice_info['user_name']}传功，授予修为{number_to(give_exp)}",
+        apprentice_desc=f"师父{mentor_info['user_name']}传功，获得修为{number_to(give_exp)}",
     )
-    sql_message.update_user_attribute(
-        target_id,
-        result_hp_mp[0],
-        result_hp_mp[1],
-        int(result_hp_mp[2] / 10),
-    )
-
-    mentor_exp_cd.add_user(mentor_id)
-    mentor_exp_cd.add_user(target_id)
-
-    update_statistics_value(mentor_id, "师徒传功次数", increment=1)
-    update_statistics_value(target_id, "接受传功次数", increment=1)
-    update_statistics_value(target_id, "传功获得修为", increment=give_exp)
-    _record_mentor_event(
-        mentor_id,
-        target_id,
-        "transmission",
-        f"向徒弟{apprentice_info['user_name']}传功，授予修为{number_to(give_exp)}",
-        f"师父{mentor_info['user_name']}传功，获得修为{number_to(give_exp)}",
-    )
+    if not settlement.succeeded:
+        await handle_send(bot, event, "师徒状态发生变化，本次传功未结算，请重试。", **buttons)
+        await mentor_transmission.finish()
+    if settlement.status == "applied":
+        mentor_exp_cd.add_user(mentor_id)
+        mentor_exp_cd.add_user(target_id)
     title_lines = _grant_mentor_titles_by_stats(mentor_id) + _grant_mentor_titles_by_stats(target_id)
     log_message(mentor_id, f"向徒弟{apprentice_info['user_name']}传功，授予修为{number_to(give_exp)}")
     log_message(target_id, f"师父{mentor_info['user_name']}传功，获得修为{number_to(give_exp)}")
@@ -2272,8 +2279,6 @@ async def partner_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await partner_rank.finish()
 
 def trigger_partner_exp_share(user_id, new_level):
-    partner_data = load_partner(user_id)
-def trigger_partner_exp_share(user_id, new_level):
     user_id = str(user_id)
     partner_data = load_partner(user_id)
     if partner_data and partner_data.get('partner_id'):
@@ -2320,6 +2325,8 @@ def awaitable_check_partner_pair(user_id, partner_id):
     return str(reciprocal.get("partner_id")) == str(user_id)
 
 
+def _mentor_breakthrough_reward_rate(apprentice_level):
+    """
     参考双修按境界段缩放：低境界拿更低比例，高境界最多到配置上限。
     """
     base_rate = _config_rate(MENTOR_BREAKTHROUGH_REWARD_BASE_RATE, 0.005)
