@@ -2,6 +2,8 @@
 前尘往事 - 故事引擎
 """
 import copy
+import hashlib
+import json
 import random
 from .past_life_data import (
     STAGES, ENDINGS, POSITIVE_TALENTS, MIXED_TALENTS, NEGATIVE_TALENTS,
@@ -11,11 +13,17 @@ from .past_life_limit import past_life_limit
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, UserBuffDate
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import number_to
-from ..xiuxian_config import convert_rank
+from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.data_source import jsondata
+from ...paths import get_paths
+from .final_settlement_service import PastLifeFinalSettlementService
 
 sql_message = XiuxianDateManage()
 items = Items()
+_paths = get_paths()
+final_settlement_service = PastLifeFinalSettlementService(
+    _paths.game_db, _paths.player_db, max_goods_num=XiuConfig().max_goods_num
+)
 
 ATTR_NAMES = ["悟性", "机缘", "根骨", "气运", "心性"]
 SCORE_CHOICE_MAX = 50
@@ -244,13 +252,14 @@ class PastLifeEngine:
         return {"message": msg, "choices_count": len(event["choices"])}
 
     # ── 处理选择 ────────────────────────────────────
-    def process_choice(self, user_id, choice_idx: int):
+    def process_choice(self, user_id, choice_idx: int, operation_id=None):
         """
         处理玩家的选择 (choice_idx 从1开始)
         """
         state = past_life_limit.get_user_state(user_id)
         if state["state"] != 2:
             return {"message": "你当前没有进行中的前尘往事。", "is_end": False, "ending": None}
+        expected_state = copy.deepcopy(state)
 
         current_stage = state["stage"]
         event = self._get_stage_event(state, current_stage)
@@ -307,21 +316,19 @@ class PastLifeEngine:
         if early_death:
             state["stage"] = current_stage + 1
             score_breakdown = self._finalize_total_score(state)
-            past_life_limit.save_user_state(user_id, state)
             ending = early_death["ending"]
             if ending.get("partial_reward"):
                 reward_rate = self._calculate_partial_reward_rate(state)
-                rewards = self._calculate_rewards(
-                    user_id,
-                    ending,
-                    state,
-                    reward_rate=reward_rate,
-                    include_item=False,
-                )
-                reward_msg = rewards["msg"]
+                reward_plan = self._prepare_rewards(user_id, ending, reward_rate, include_item=False)
             else:
-                rewards = {"msg": "无"}
-                reward_msg = "本世过早夭折，未能留下可继承的前世馈赠。"
+                reward_plan = self._empty_rewards(ending)
+            settlement = self._settle_final(
+                operation_id, user_id, choice_idx, expected_state, state, ending, reward_plan
+            )
+            if not settlement.succeeded:
+                return {"message": "前尘状态已变化，请重新查看当前进度。", "is_end": False, "ending": None}
+            rewards = self._format_rewards(reward_plan, settlement.rewards)
+            reward_msg = rewards["msg"] if ending.get("partial_reward") else "本世过早夭折，未能留下可继承的前世馈赠。"
 
             ending_msg = (
                 f"{result_msg}\n"
@@ -334,7 +341,6 @@ class PastLifeEngine:
                 f"【前世奖励】\n"
                 f"{reward_msg}"
             )
-            past_life_limit.save_run_result(user_id, ending["name"], state["total_score"])
             return {"message": ending_msg, "is_end": True, "ending": ending, "rewards": rewards}
 
         # 推进到下一幕
@@ -344,9 +350,14 @@ class PastLifeEngine:
             # 所有幕数完成 → 计算结局
             state["stage"] = next_stage
             score_breakdown = self._finalize_total_score(state)
-            past_life_limit.save_user_state(user_id, state)
             ending = self._calculate_ending(state)
-            rewards = self._calculate_rewards(user_id, ending, state)
+            reward_plan = self._prepare_rewards(user_id, ending)
+            settlement = self._settle_final(
+                operation_id, user_id, choice_idx, expected_state, state, ending, reward_plan
+            )
+            if not settlement.succeeded:
+                return {"message": "前尘状态已变化，请重新查看当前进度。", "is_end": False, "ending": None}
+            rewards = self._format_rewards(reward_plan, settlement.rewards)
 
             ending_msg = (
                 f"{result_msg}\n"
@@ -358,8 +369,6 @@ class PastLifeEngine:
                 f"【前世奖励】\n"
                 f"{rewards['msg']}"
             )
-
-            past_life_limit.save_run_result(user_id, ending["name"], state["total_score"])
 
             return {"message": ending_msg, "is_end": True, "ending": ending, "rewards": rewards}
         else:
@@ -405,14 +414,20 @@ class PastLifeEngine:
         rate = completed_stages / len(STAGES)
         return max(0.1, min(rate, 0.9))
 
-    def _calculate_rewards(self, user_id, ending, state, reward_rate=1.0, include_item=True):
+    def _empty_rewards(self, ending):
+        return {
+            "exp": 0, "stone": 0, "points": 0, "tier": ending["tier"],
+            "reward_rate": 0.0, "item": None,
+        }
+
+    def _prepare_rewards(self, user_id, ending, reward_rate=1.0, include_item=True):
         reward_rate = max(0.0, min(float(reward_rate), 1.0))
         tier = ending["tier"]
         reward = REWARD_TABLE.get(tier, REWARD_TABLE[5])
 
         user_info = sql_message.get_user_info_with_id(user_id)
         if not user_info:
-            return {"msg": "无法获取用户信息", "details": {}}
+            raise ValueError("past life user missing")
 
         # 修为奖励
         user_rank = max(convert_rank(user_info["level"])[0] // 3, 1)
@@ -422,14 +437,9 @@ class PastLifeEngine:
             exp_amount = max(exp_amount, 10000)
         elif reward_rate > 0:
             exp_amount = max(exp_amount, max(1000, int(10000 * reward_rate)))
-        sql_message.update_exp(user_id, exp_amount)
-
-        # 灵石奖励
         stone_amount = int(reward["stone"] * reward_rate)
-        sql_message.update_ls(user_id, stone_amount, 1)
 
-        # 物品奖励
-        item_msg = ""
+        item_reward = None
         if include_item:
             user_rank_val = convert_rank(user_info["level"])[0]
             min_rank = max(user_rank_val - 16 - reward["item_rank_offset"], 5)
@@ -441,36 +451,59 @@ class PastLifeEngine:
             if item_id_list:
                 item_id = random.choice(item_id_list)
                 item_info = items.get_data_by_item_id(item_id)
-                sql_message.send_back(user_id, item_id, item_info["name"], item_info["type"], 1)
-                item_msg = f"\n物品：{item_info['level']}·{item_info['name']}"
+                item_reward = {
+                    "id": item_id, "name": item_info["name"], "type": item_info["type"],
+                    "level": item_info["level"], "num": 1,
+                }
 
         # 成就点
         points = int(reward["points"] * reward_rate)
         if reward_rate > 0:
             points = max(points, 1)
 
+        return {
+            "exp": exp_amount, "stone": stone_amount, "points": points, "tier": tier,
+            "reward_rate": reward_rate, "item": item_reward,
+        }
+
+    def _format_rewards(self, plan, applied):
+        item = applied.get("item") or plan.get("item")
+        item_msg = f"\n物品：{plan['item']['level']}·{item['name']}" if item and plan.get("item") else ""
+        reward_rate = float(plan.get("reward_rate", 0))
         partial_msg = ""
         if reward_rate < 1:
             partial_msg = f"提前终局，仅结算{int(reward_rate * 100)}%前世奖励\n"
 
         msg = (
             f"{partial_msg}"
-            f"修为 +{number_to(exp_amount)}\n"
-            f"灵石 +{number_to(stone_amount)}\n"
-            f"前世成就点 +{points}"
+            f"修为 +{number_to(applied.get('exp', 0))}\n"
+            f"灵石 +{number_to(applied.get('stone', 0))}\n"
+            f"前世成就点 +{applied.get('points', 0)}"
             f"{item_msg}"
         )
 
         return {
             "msg": msg,
             "details": {
-                "exp": exp_amount,
-                "stone": stone_amount,
-                "points": points,
-                "tier": tier,
+                "exp": applied.get("exp", 0),
+                "stone": applied.get("stone", 0),
+                "points": applied.get("points", 0),
+                "tier": plan["tier"],
                 "reward_rate": reward_rate,
             }
         }
+
+    def _settle_final(self, operation_id, user_id, choice_idx, expected_state, state, ending, plan):
+        if not operation_id:
+            fingerprint = hashlib.sha256(json.dumps(
+                [str(user_id), expected_state, int(choice_idx)], ensure_ascii=False,
+                sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")).hexdigest()[:24]
+            operation_id = f"past-life-final:{user_id}:{fingerprint}"
+        return final_settlement_service.settle(
+            operation_id, user_id, expected_state, state, ending["name"], state["total_score"],
+            plan["exp"], plan["stone"], plan["points"], plan.get("item"),
+        )
 
     # ── 获取当前状态描述 ────────────────────────────
     def get_current_display(self, user_id):

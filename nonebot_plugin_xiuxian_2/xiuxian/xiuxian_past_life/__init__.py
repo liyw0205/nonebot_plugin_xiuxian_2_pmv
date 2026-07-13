@@ -3,6 +3,7 @@
 修仙版人生重开 · 剧本杀
 """
 import random
+import time
 from ..on_compat import on_command
 from nonebot.permission import SUPERUSER
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent, get_at_user_id
@@ -157,7 +158,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await past_choice_cmd.finish()
 
     # 处理选择
-    result = past_life_engine.process_choice(user_id, choice_idx)
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns())
+    result = past_life_engine.process_choice(
+        user_id, choice_idx, f"past-life-final:{user_id}:{event_id}"
+    )
 
     if result["is_end"]:
         log_message(user_id, f"[前尘往事] 结局：{result['ending']['name']}")

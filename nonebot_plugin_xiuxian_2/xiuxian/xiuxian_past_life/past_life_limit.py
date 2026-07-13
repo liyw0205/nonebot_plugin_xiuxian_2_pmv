@@ -24,6 +24,7 @@ FIELDS = [
     "best_ending",      # 最佳结局名
     "best_score",       # 最高分
     "endings_log",      # 结局记录
+    "achievement_points",  # 前尘成就点
 ]
 
 REFRESH_INTERVAL_HOURS = 12
@@ -52,6 +53,7 @@ class PastLifeLimit:
             "best_ending": "",
             "best_score": 0,
             "endings_log": [],
+            "achievement_points": 0,
         }
 
     def get_user_state(self, user_id):
@@ -229,6 +231,7 @@ class PastLifeLimit:
             state["best_ending"] = ""
             state["best_score"] = 0
             state["endings_log"] = []
+            state["achievement_points"] = 0
 
         self.save_user_state(user_id, state)
 
