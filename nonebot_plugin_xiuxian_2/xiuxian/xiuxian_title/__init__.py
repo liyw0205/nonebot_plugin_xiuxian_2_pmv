@@ -27,7 +27,7 @@ from .title_data import (
     get_all_titles, get_title_by_id,
     check_and_unlock_titles, get_user_unlocked_titles,
     get_user_equipped_title,
-    refresh_title_cache, find_title_id_by_name_or_id, grant_title_to_user,
+    refresh_title_cache, find_title_id_by_name_or_id,
     get_title_achievement_records
 )
 from ...paths import get_paths
@@ -405,8 +405,11 @@ async def title_grant_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         repeat_or_fail = 0
         for uid in all_users:
             try:
-                ok, _ = grant_title_to_user(str(uid), title_id)
-                if ok:
+                unlocked = get_user_unlocked_titles(str(uid))
+                result = title_transaction_service.grant(
+                    _title_operation_id(event, f"grant-{title_id}", str(uid)), uid, unlocked, title_id
+                )
+                if result.status in {"applied", "duplicate"}:
                     success_count += 1
                 else:
                     repeat_or_fail += 1
@@ -431,11 +434,22 @@ async def title_grant_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, "未找到目标用户（或对方未踏入修仙界）")
         return
 
-    ok, msg = grant_title_to_user(str(target_user["user_id"]), title_id)
-    if ok:
+    target_id = str(target_user["user_id"])
+    result = title_transaction_service.grant(
+        _title_operation_id(event, f"grant-{title_id}", target_id),
+        target_id,
+        get_user_unlocked_titles(target_id),
+        title_id,
+    )
+    if result.status in {"applied", "duplicate"}:
         await handle_send(bot, event, f"成功给 {target_user['user_name']} 赠送称号【{title_name}】")
     else:
-        await handle_send(bot, event, f"赠送失败：{msg}")
+        messages = {
+            "already_unlocked": f"用户已拥有称号【{title_name}】",
+            "state_changed": "用户称号状态已变化，请重试",
+            "operation_conflict": "本次赠送请求与已处理记录冲突",
+        }
+        await handle_send(bot, event, f"赠送失败：{messages.get(result.status, '请重试')}")
 
 
 @title_refresh_cmd.handle(parameterless=[Cooldown(cd_time=30)])

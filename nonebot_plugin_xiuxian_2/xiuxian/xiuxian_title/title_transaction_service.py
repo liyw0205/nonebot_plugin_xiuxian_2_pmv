@@ -150,5 +150,55 @@ class TitleTransactionService:
                 conn.rollback()
                 raise
 
+    def grant(self, operation_id, user_id, expected_unlocked, title_id):
+        operation_id, user_id, title_id = str(operation_id).strip(), str(user_id), str(title_id).strip()
+        unlocked = tuple(sorted({str(item) for item in expected_unlocked}))
+        if not operation_id or not user_id or not title_id:
+            raise ValueError("operation, user and title are required")
+        payload = json.dumps(["grant", user_id, unlocked, title_id], ensure_ascii=True, separators=(",", ":"))
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._ensure_schema(conn)
+                previous = conn.execute(
+                    "SELECT payload,title_id FROM title_transaction_operations WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if previous is not None:
+                    conn.rollback()
+                    if str(previous[0]) != payload:
+                        return TitleTransactionResult("operation_conflict")
+                    return TitleTransactionResult("duplicate", str(previous[1]))
+                row = conn.execute("SELECT unlocked FROM title WHERE user_id=%s", (user_id,)).fetchone()
+                actual = _decode_titles(row[0]) if row else ()
+                if actual != unlocked:
+                    conn.rollback()
+                    return TitleTransactionResult("state_changed")
+                if title_id in actual:
+                    conn.rollback()
+                    return TitleTransactionResult("already_unlocked", title_id)
+                updated = tuple(sorted((*actual, title_id)))
+                value = json.dumps(updated, ensure_ascii=False)
+                if row is None:
+                    conn.execute("INSERT INTO title(user_id,unlocked,equipped) VALUES(%s,%s,'')", (user_id, value))
+                else:
+                    changed = conn.execute(
+                        "UPDATE title SET unlocked=%s WHERE user_id=%s AND COALESCE(unlocked,'')=%s",
+                        (value, user_id, str(row[0] or "")),
+                    )
+                    if changed.rowcount != 1:
+                        conn.rollback()
+                        return TitleTransactionResult("state_changed")
+                conn.execute(
+                    "INSERT INTO title_transaction_operations(operation_id,payload,result_status,title_id) "
+                    "VALUES(%s,%s,'applied',%s)",
+                    (operation_id, payload, title_id),
+                )
+                conn.commit()
+                return TitleTransactionResult("applied", title_id)
+            except Exception:
+                conn.rollback()
+                raise
+
 
 __all__ = ["TitleTransactionResult", "TitleTransactionService"]
