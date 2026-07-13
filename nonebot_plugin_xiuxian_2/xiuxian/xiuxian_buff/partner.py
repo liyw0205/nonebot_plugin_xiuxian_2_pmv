@@ -30,6 +30,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
 )
 from .mentor_exp_cd import mentor_exp_cd
 from .mentor_bind_service import MentorBindService
+from .mentor_application_service import MentorApplicationService
 from .mentor_expel_service import MentorExpelService
 from .mentor_breakthrough_reward_service import MentorBreakthroughRewardService
 from .apprentice_leave_service import ApprenticeLeaveService
@@ -37,6 +38,7 @@ from .mentor_graduation_service import MentorGraduationService
 from .mentor_transmission_service import MentorTransmissionService
 from .partner_breakthrough_service import PartnerBreakthroughService
 from .partner_cultivation_service import PartnerCultivationService
+from .partner_invite_service import PartnerInviteService
 from .partner_token_service import PartnerTokenUseService
 from .partner_bind_service import PartnerBindService
 from .partner_unbind_service import PartnerUnbindService
@@ -64,9 +66,7 @@ from .relation_utils import (
 )
 from .two_exp_cd import two_exp_cd
 
-invite_cache = {}
 partner_invite_cache = {}
-mentor_invite_cache = {}
 sql_message = XiuxianDateManage()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
@@ -76,6 +76,8 @@ partner_bind_service = PartnerBindService(get_paths().game_db, get_paths().playe
 partner_unbind_service = PartnerUnbindService(get_paths().game_db, get_paths().player_db)
 partner_breakthrough_service = PartnerBreakthroughService(get_paths().game_db, get_paths().player_db)
 mentor_bind_service = MentorBindService(get_paths().game_db, get_paths().player_db)
+mentor_application_service = MentorApplicationService(get_paths().player_db)
+partner_invite_service = PartnerInviteService(get_paths().player_db)
 mentor_expel_service = MentorExpelService(get_paths().game_db, get_paths().player_db)
 mentor_breakthrough_reward_service = MentorBreakthroughRewardService(get_paths().game_db, get_paths().player_db)
 apprentice_leave_service = ApprenticeLeaveService(get_paths().game_db, get_paths().player_db)
@@ -241,28 +243,12 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
     user_id = user_1['user_id']
 
-    # 检查是否已经发出过邀请（作为邀请者）
-    existing_invite = None
-    for target_id, invite_data in invite_cache.items():
-        if invite_data['inviter'] == user_id:
-            existing_invite = target_id
-            break
-
+    existing_invite = partner_invite_service.pending_for_user(user_id)
     if existing_invite is not None:
-        # 已经发出过邀请，提示用户等待
-        target_info = sql_message.get_user_real_info(existing_invite)
-        remaining_time = 60 - (datetime.now().timestamp() - invite_cache[existing_invite]['timestamp'])
+        other_id = existing_invite.target_id if existing_invite.inviter_id == str(user_id) else existing_invite.inviter_id
+        target_info = sql_message.get_user_real_info(other_id)
+        remaining_time = existing_invite.expires_at - datetime.now().timestamp()
         msg = f"你已经向{target_info['user_name']}发送了双修邀请，请等待{int(remaining_time)}秒后邀请过期或对方回应后再发送新邀请！"
-        await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意双修", k2="拒绝", v2="拒绝双修", k3="双修", v3="双修")
-        await two_exp_invite.finish()
-
-    # 检查是否有未处理的邀请（作为被邀请者）
-    if str(user_id) in invite_cache:
-        # 有未处理的邀请，提示用户
-        inviter_id = invite_cache[str(user_id)]['inviter']
-        inviter_info = sql_message.get_user_real_info(inviter_id)
-        remaining_time = 60 - (datetime.now().timestamp() - invite_cache[str(user_id)]['timestamp'])
-        msg = f"道友已有来自{inviter_info['user_name']}的双修邀请（剩余{int(remaining_time)}秒），请先处理！\n发送【同意双修】或【拒绝双修】"
         await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意双修", k2="拒绝", v2="拒绝双修", k3="双修", v3="双修")
         await two_exp_invite.finish()
 
@@ -298,28 +284,8 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
         await two_exp_invite.finish()
 
-    # 检查对方是否已经作为邀请者发出过邀请
-    target_existing_invite = None
-    for target_id, invite_data in invite_cache.items():
-        if invite_data['inviter'] == two_qq:
-            target_existing_invite = target_id
-            break
-
-    if target_existing_invite is not None:
-        # 对方已经发出过邀请，提示用户
-        target_info = sql_message.get_user_real_info(target_existing_invite)
-        remaining_time = 60 - (datetime.now().timestamp() - invite_cache[target_existing_invite]['timestamp'])
-        msg = f"对方已经向{target_info['user_name']}发送了双修邀请，请等待{int(remaining_time)}秒后再试！"
-        await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意双修", k2="拒绝", v2="拒绝双修", k3="双修", v3="双修")
-        await two_exp_invite.finish()
-
-    # 检查对方是否有未处理的邀请（作为被邀请者）
-    if str(two_qq) in invite_cache:
-        # 对方有未处理的邀请，提示用户
-        inviter_id = invite_cache[str(two_qq)]['inviter']
-        inviter_info = sql_message.get_user_real_info(inviter_id)
-        remaining_time = 60 - (datetime.now().timestamp() - invite_cache[str(two_qq)]['timestamp'])
-        msg = f"对方已有来自{inviter_info['user_name']}的双修邀请（剩余{int(remaining_time)}秒），请稍后再试！"
+    if partner_invite_service.pending_for_user(two_qq) is not None:
+        msg = "对方已有未处理的双修邀请，请稍后再试！"
         await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意双修", k2="拒绝", v2="拒绝双修", k3="双修", v3="双修")
         await two_exp_invite.finish()
 
@@ -356,13 +322,7 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
         await two_exp_invite.finish()
     elif protection_status == "on":
-        # 对方开启保护，需要发送邀请
-        # 检查邀请是否已存在（再次确认，防止并发）
-        if str(two_qq) in invite_cache:
-            msg = "对方已有未处理的双修邀请，请稍后再试！"
-            await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
-            await two_exp_invite.finish()
-        
+        # 对方开启保护，需要发送持久邀请。
         # 检查对方双修次数是否足够
         limt_2 = two_exp_cd.find_user(two_qq)
         impart_data_2 = xiuxian_impart.get_user_impart_info_with_id(two_qq)
@@ -379,12 +339,10 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         exp_count = max(exp_count, 1)
         # 创建邀请
         invite_id = f"{user_id}_{two_qq}_{datetime.now().timestamp()}"
-        invite_cache[str(two_qq)] = {
-            'inviter': user_id,
-            'count': min(exp_count, max_count_2),  # 取最小值
-            'timestamp': datetime.now().timestamp(),
-            'invite_id': invite_id
-        }
+        created = partner_invite_service.create(invite_id, user_id, two_qq, min(exp_count, max_count_2))
+        if not created.succeeded:
+            await handle_send(bot, event, "双方已有待处理的双修邀请，请稍后再试！", md_type="buff")
+            await two_exp_invite.finish()
 
         # 设置60秒过期
         asyncio.create_task(expire_invite(two_qq, invite_id, bot, event))
@@ -412,7 +370,7 @@ async def check_is_partner(user_id_1, user_id_2):
         and str(partner_data_2.get("partner_id")) == user_id_1
     )
 
-async def direct_two_exp(bot, event, user_id_1, user_id_2, exp_count=1, is_partner=False):
+async def direct_two_exp(bot, event, user_id_1, user_id_2, exp_count=1, is_partner=False, invite_id=None):
     """
     直接进行双修。
 
@@ -570,11 +528,14 @@ async def direct_two_exp(bot, event, user_id_1, user_id_2, exp_count=1, is_partn
         expected_affection_1=safe_int(partner_data_1.get("affection"), 0) if valid_partner else None,
         expected_affection_2=safe_int(partner_data_2.get("affection"), 0) if valid_partner else None,
         affection_1=add_affection_1, affection_2=add_affection_2,
+        invite_id=invite_id,
+        expected_used_count_1=limt_1 if invite_id else None,
+        expected_used_count_2=limt_2 if invite_id else None,
     )
     if not settlement.succeeded:
         await handle_send(bot, event, "双修状态发生变化，本次未结算，请重新发起。", md_type="buff")
         return
-    if settlement.status == "applied":
+    if settlement.status == "applied" and not invite_id:
         for _ in range(actual_used_count):
             two_exp_cd.add_user(user_id_1)
             two_exp_cd.add_user(user_id_2)
@@ -797,32 +758,23 @@ async def two_exp_accept_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         
     user_id = user_info['user_id']
     
-    # 检查是否有邀请
-    if str(user_id) not in invite_cache:
+    invite = partner_invite_service.pending_for_target(user_id)
+    if invite is None:
         msg = "没有待处理的双修邀请！"
         await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
         await two_exp_accept.finish()
         
-    invite_data = invite_cache[str(user_id)]
-    inviter_id = invite_data['inviter']
-    exp_count = invite_data['count']
-    
-    # 删除邀请
-    del invite_cache[str(user_id)]
-    
-    await direct_two_exp(bot, event, inviter_id, user_id, exp_count)
+    await direct_two_exp(bot, event, invite.inviter_id, user_id, invite.count, invite_id=invite.invite_id)
     await two_exp_accept.finish()
 
 async def expire_invite(user_id, invite_id, bot, event):
     """邀请过期处理"""
     await asyncio.sleep(60)
-    if str(user_id) in invite_cache and invite_cache[str(user_id)]['invite_id'] == invite_id:
-        inviter_id = invite_cache[str(user_id)]['inviter']
+    result = partner_invite_service.resolve(invite_id, user_id, "expired")
+    if result.status == "applied":
         # 发送过期提示
         msg = f"双修邀请已过期！"
         await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
-        # 删除过期的邀请
-        del invite_cache[str(user_id)]
 
 @two_exp_reject.handle(parameterless=[Cooldown(cd_time=0)])
 async def two_exp_reject_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -835,19 +787,18 @@ async def two_exp_reject_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         
     user_id = user_info['user_id']
     
-    if str(user_id) not in invite_cache:
+    invite = partner_invite_service.pending_for_target(user_id)
+    if invite is None:
         msg = "没有待处理的双修邀请！"
         await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
         await two_exp_reject.finish()
         
-    invite_data = invite_cache[str(user_id)]
-    inviter_id = invite_data['inviter']
+    inviter_id = invite.inviter_id
     
     inviter_info = sql_message.get_user_real_info(inviter_id)
     msg = f"你拒绝了{inviter_info['user_name']}的双修邀请！"
     
-    # 删除邀请
-    del invite_cache[str(user_id)]
+    partner_invite_service.resolve(invite.invite_id, user_id, "rejected")
     
     await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
     await two_exp_reject.finish()
@@ -926,7 +877,8 @@ async def mentor_protect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         if pending_invites:
             pending_count = len(pending_invites)
             pending_names = _format_pending_mentor_applicants(user_id, limit=10)
-            mentor_invite_cache.pop(user_id, None)
+            for apprentice_id, invite in list(pending_invites.items()):
+                mentor_application_service.resolve(invite["invite_id"], user_id, apprentice_id, "rejected")
             msg += f"\n已自动拒绝当前{pending_count}条待处理拜师申请：{pending_names}。"
     elif arg in ["关闭", "off"]:
         mentor_data["mentor_protect"] = "off"
@@ -1253,25 +1205,29 @@ def _record_mentor_apply(apprentice_id, mentor_id):
 
 
 def _get_pending_mentor_invites(mentor_id):
-    return mentor_invite_cache.get(str(mentor_id), {})
+    return {
+        app.apprentice_id: {
+            "timestamp": app.created_at,
+            "expires_at": app.expires_at,
+            "invite_id": app.invite_id,
+        }
+        for app in mentor_application_service.list_pending(mentor_id)
+    }
 
 
 def _remove_pending_mentor_invite(mentor_id, apprentice_id):
     mentor_id = str(mentor_id)
     apprentice_id = str(apprentice_id)
-    invites = _get_pending_mentor_invites(mentor_id)
-    if apprentice_id not in invites:
-        return
-    del invites[apprentice_id]
-    if not invites:
-        mentor_invite_cache.pop(mentor_id, None)
+    invite = _get_pending_mentor_invites(mentor_id).get(apprentice_id)
+    if invite:
+        mentor_application_service.resolve(invite["invite_id"], mentor_id, apprentice_id, "cancelled")
 
 
 def _find_pending_mentor_invite_by_apprentice(apprentice_id):
     apprentice_id = str(apprentice_id)
-    for mentor_id, invites in mentor_invite_cache.items():
-        if apprentice_id in invites:
-            return str(mentor_id), invites[apprentice_id]
+    app = mentor_application_service.find_pending_by_apprentice(apprentice_id)
+    if app:
+        return app.mentor_id, {"timestamp": app.created_at, "expires_at": app.expires_at, "invite_id": app.invite_id}
     return None, None
 
 
@@ -1712,12 +1668,10 @@ async def apply_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
     mentor_info = sql_message.get_user_real_info(mentor_id)
     invite_id = f"{user_id}_{mentor_id}_{datetime.now().timestamp()}"
-    pending_invites = mentor_invite_cache.setdefault(str(mentor_id), {})
-    pending_invites[user_id] = {
-        "timestamp": datetime.now().timestamp(),
-        "invite_id": invite_id,
-    }
-    _record_mentor_apply(user_id, mentor_id)
+    created = mentor_application_service.create(invite_id, mentor_id, user_id)
+    if not created.succeeded:
+        await handle_send(bot, event, "拜师申请状态已变化，请稍后重试。", **buttons)
+        await apply_mentor.finish()
     asyncio.create_task(expire_mentor_invite(mentor_id, user_id, invite_id, bot, event))
 
     msg = f"已向{mentor_info['user_name']}发送拜师申请，等待对方回应。"
@@ -1740,7 +1694,7 @@ async def expire_mentor_invite(mentor_id, apprentice_id, invite_id, bot, event):
     apprentice_id = str(apprentice_id)
     invite_data = _get_pending_mentor_invites(mentor_id).get(apprentice_id)
     if invite_data and invite_data["invite_id"] == invite_id:
-        _remove_pending_mentor_invite(mentor_id, apprentice_id)
+        mentor_application_service.resolve(invite_id, mentor_id, apprentice_id, "expired")
         await handle_send(
             bot,
             event,
@@ -1801,16 +1755,11 @@ async def agree_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         max_apprentices=MENTOR_MAX_APPRENTICES, history_limit=MENTOR_HISTORY_LIMIT,
         mentor_desc=f"收{apprentice_info['user_name']}为徒",
         apprentice_desc=f"拜{user_info['user_name']}为师",
-        invitation_validator=lambda m, a, i: bool(
-            _get_pending_mentor_invites(m).get(a)
-            and _get_pending_mentor_invites(m)[a].get("invite_id") == i
-        ),
     )
     if not result.succeeded:
         await handle_send(bot, event, "拜师邀请或双方状态已变化，请重新申请。", **buttons)
         await agree_mentor.finish()
     if result.status == "applied":
-        _remove_pending_mentor_invite(mentor_id, apprentice_id)
         log_message(mentor_id, f"[师徒] 收{apprentice_info['user_name']}为徒")
         log_message(apprentice_id, f"[师徒] 拜{user_info['user_name']}为师")
     title_lines = _grant_mentor_titles_by_stats(mentor_id) + _grant_mentor_titles_by_stats(apprentice_id)
@@ -1859,7 +1808,7 @@ async def reject_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
     apprentice_info = sql_message.get_user_real_info(apprentice_id)
     apprentice_name = apprentice_info["user_name"] if apprentice_info else apprentice_id
-    _remove_pending_mentor_invite(mentor_id, apprentice_id)
+    mentor_application_service.resolve(pending_invites[apprentice_id]["invite_id"], mentor_id, apprentice_id, "rejected")
 
     await handle_send(bot, event, f"你拒绝了{apprentice_name}的拜师申请。", **buttons)
     await reject_mentor.finish()

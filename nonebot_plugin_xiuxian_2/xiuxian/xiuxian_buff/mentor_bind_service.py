@@ -42,7 +42,7 @@ class MentorBindService:
         history_limit,
         mentor_desc,
         apprentice_desc,
-        invitation_validator: Callable[[str, str, str], bool],
+        invitation_validator: Callable[[str, str, str], bool] | None = None,
         now: datetime | None = None,
     ) -> MentorBindResult:
         operation_id = str(operation_id).strip()
@@ -74,7 +74,22 @@ class MentorBindService:
                     conn.rollback()
                     status = "duplicate" if str(previous[0]) == payload else "operation_conflict"
                     return MentorBindResult(status, str(previous[1]))
-                if not invitation_validator(mentor_id, apprentice_id, invite_id):
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS player_data.mentor_applications ("
+                    "invite_id TEXT PRIMARY KEY,mentor_id TEXT NOT NULL,apprentice_id TEXT NOT NULL,"
+                    "status TEXT NOT NULL,created_at REAL NOT NULL,expires_at REAL NOT NULL,resolved_at REAL)"
+                )
+                application = conn.execute(
+                    "SELECT status,expires_at FROM player_data.mentor_applications "
+                    "WHERE invite_id=%s AND mentor_id=%s AND apprentice_id=%s",
+                    (invite_id, mentor_id, apprentice_id),
+                ).fetchone()
+                if application is None:
+                    valid_legacy = invitation_validator and invitation_validator(mentor_id, apprentice_id, invite_id)
+                    if not valid_legacy:
+                        conn.rollback()
+                        return MentorBindResult("invitation_changed", bind_time)
+                elif str(application[0]) != "pending" or float(application[1]) <= check_time.timestamp():
                     conn.rollback()
                     return MentorBindResult("invitation_changed", bind_time)
                 users = conn.execute(
@@ -127,6 +142,15 @@ class MentorBindService:
                 increment_stat(conn, apprentice_id, "拜师次数", 1)
                 append_mentor_history(conn, mentor_id, "bind", apprentice_id, mentor_desc, history_limit)
                 append_mentor_history(conn, apprentice_id, "bind", mentor_id, apprentice_desc, history_limit)
+                if application is not None:
+                    consumed = conn.execute(
+                        "UPDATE player_data.mentor_applications SET status='accepted',resolved_at=%s "
+                        "WHERE invite_id=%s AND status='pending'",
+                        (check_time.timestamp(), invite_id),
+                    )
+                    if consumed.rowcount != 1:
+                        conn.rollback()
+                        return MentorBindResult("invitation_changed", bind_time)
                 conn.execute(
                     "INSERT INTO mentor_bind_operations (operation_id,payload,bind_time) VALUES (%s,%s,%s)",
                     (operation_id, payload, bind_time),
