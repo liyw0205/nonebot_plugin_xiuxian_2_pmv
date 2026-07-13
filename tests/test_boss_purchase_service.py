@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
 import nonebot
@@ -69,6 +70,14 @@ class BossPurchaseServiceTests(unittest.TestCase):
     def test_stale_state_changes_nothing(self) -> None:
         self.assertEqual(self.purchase(integral=99).status, "state_changed")
         self.assertEqual(self.state(), (100, self.weekly, None))
+
+    def test_cross_week_snapshot_resets_inside_transaction(self) -> None:
+        stale = {"_last_reset": "2026-07-05", "1": 5}
+        with db_backend.transaction(self.player_database) as conn:
+            conn.execute("UPDATE boss SET weekly_purchases=%s WHERE user_id=%s", (json.dumps(stale), "user"))
+        result = self.purchase("new-week", weekly=stale, quantity=2, today=date(2026, 7, 13))
+        self.assertEqual((result.status, result.purchased), ("applied", 2))
+        self.assertEqual(self.state(), (80, {"_last_reset": "2026-07-13", "1": 2}, (2, 2)))
 
     def test_duplicate_reuses_result_and_conflict_is_rejected(self) -> None:
         first = self.purchase("repeat")

@@ -3,11 +3,23 @@ from __future__ import annotations
 import json
 from contextlib import closing
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from threading import RLock
 
 from ..xiuxian_utils import db_backend
+
+
+def normalize_weekly_purchases(value, today=None):
+    today = today or date.today()
+    weekly = {str(key): item for key, item in dict(value or {}).items()}
+    try:
+        reset = date.fromisoformat(str(weekly.get("_last_reset", "")))
+    except ValueError:
+        reset = None
+    if reset is None or reset.isocalendar()[:2] != today.isocalendar()[:2]:
+        return {"_last_reset": today.isoformat()}
+    return weekly
 
 
 @dataclass(frozen=True)
@@ -41,6 +53,7 @@ class BossPurchaseService:
         expected_integral,
         expected_weekly_purchases,
         max_goods_num,
+        today=None,
     ) -> BossPurchaseResult:
         operation_id = str(operation_id).strip()
         user_id = str(user_id)
@@ -52,7 +65,8 @@ class BossPurchaseService:
         weekly_limit = int(weekly_limit)
         expected_integral = int(expected_integral)
         max_goods_num = int(max_goods_num)
-        weekly = {str(key): value for key, value in dict(expected_weekly_purchases).items()}
+        today = today or date.today()
+        weekly = normalize_weekly_purchases(expected_weekly_purchases, today)
         if not operation_id or quantity <= 0 or min(item_id, unit_cost, weekly_limit, expected_integral, max_goods_num) < 0:
             raise ValueError("valid operation, item, quantity and purchase limits are required")
         payload = json.dumps(
@@ -115,6 +129,7 @@ class BossPurchaseService:
                 except (TypeError, ValueError):
                     conn.rollback()
                     return rejected("state_changed")
+                current_weekly = normalize_weekly_purchases(current_weekly, today)
                 if int(integral_row[0]) != expected_integral or current_weekly != weekly:
                     conn.rollback()
                     return rejected("state_changed")
@@ -171,4 +186,4 @@ class BossPurchaseService:
                     conn.execute("DETACH DATABASE player_data")
 
 
-__all__ = ["BossPurchaseResult", "BossPurchaseService"]
+__all__ = ["BossPurchaseResult", "BossPurchaseService", "normalize_weekly_purchases"]
