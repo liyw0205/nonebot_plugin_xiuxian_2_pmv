@@ -25,6 +25,7 @@ from .accelerate_service import DongfuAccelerateService
 from .patrol_service import DongfuPatrolService
 from .array_upgrade_service import DongfuArrayUpgradeService
 from .visit_reward_service import DongfuVisitRewardService
+from .fertilize_service import DongfuFertilizeService
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
@@ -35,6 +36,7 @@ dongfu_accelerate_service = DongfuAccelerateService(get_paths().game_db, get_pat
 dongfu_patrol_service = DongfuPatrolService(get_paths().game_db, get_paths().player_db)
 dongfu_array_upgrade_service = DongfuArrayUpgradeService(get_paths().game_db, get_paths().player_db)
 dongfu_visit_reward_service = DongfuVisitRewardService(get_paths().game_db, get_paths().player_db)
+dongfu_fertilize_service = DongfuFertilizeService(get_paths().game_db, get_paths().player_db)
 dongfu_harvest_settlement_service = DongfuHarvestSettlementService(get_paths().game_db, get_paths().player_db)
 
 MAP_TABLE = "map_status"
@@ -1000,15 +1002,18 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if fertilizer >= DONGFU_FERTILIZER_MAX:
         await handle_send(bot, event, f"{slot_no}号灵田肥力已满。")
         return
-
-    if not _consume_item(uid, DONGFU_ITEM_FERTILIZER, "五色灵壤"):
+    expected_slots = json.dumps(_normalize_plant_slots(d), ensure_ascii=False)
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    result = dongfu_fertilize_service.fertilize(
+        f"dongfu-fertilize:{uid}:{event_message_id or time.time_ns()}", uid, expected_slots, slot_no, DONGFU_ITEM_FERTILIZER, DONGFU_FERTILIZER_MAX,
+    )
+    if result.status == "item_insufficient":
         await handle_send(bot, event, "你没有【五色灵壤】。可通过地图采集/探索获得。")
         return
-
-    slots = _normalize_plant_slots(d)
-    slots[slot_no - 1]["fertilizer"] = fertilizer + 1
-    d["plant_slots"] = slots
-    _save_dongfu(uid, d)
+    if result.status in {"fertilizer_full", "plot_empty", "state_changed", "dongfu_missing"}:
+        await handle_send(bot, event, "洞府灵田状态已变化，请重新尝试。")
+        return
+    d = _get_dongfu(uid)
     await handle_send(bot, event, f"已对{slot_no}号灵田施肥，当前肥力+{fertilizer + 1}。\n{_format_plant_slots(d)}")
 
 
