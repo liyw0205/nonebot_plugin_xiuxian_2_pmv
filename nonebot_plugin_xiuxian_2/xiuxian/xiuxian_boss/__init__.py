@@ -4,6 +4,7 @@ except ImportError:
     import json
 import re
 from datetime import datetime
+from copy import deepcopy
 import random
 import os
 import time as time_module
@@ -38,15 +39,13 @@ items = Items()
 from ..xiuxian_utils.utils import (
     number_to, check_user, check_user_type,
     get_msg_pic,
-    send_msg_handler, log_message, handle_send, update_statistics_value,
+    send_msg_handler, log_message, handle_send,
     send_help_message
 )
-from ..xiuxian_tasks.task_data import record_task_progress
 from ..xiuxian_title.title_data import check_and_unlock_titles
 from .boss_limit import boss_limit, player_data_manager
-from .reward_service import BossRewardService
 from .purchase_service import BossPurchaseService
-from .battle_cost_service import BossBattleCostService
+from .battle_settlement_service import WorldBossBattleSettlementService
 from .. import DRIVER
 # boss定时任务
 scheduler = require("nonebot_plugin_apscheduler").scheduler
@@ -57,9 +56,12 @@ group_boss = {}
 groups = config['open']
 battle_flag = {}
 sql_message = XiuxianDateManage()  # sql类
-boss_reward_service = BossRewardService(get_paths().game_db, get_paths().player_db)
 boss_purchase_service = BossPurchaseService(get_paths().game_db, get_paths().player_db)
-boss_battle_cost_service = BossBattleCostService(get_paths().game_db, get_paths().player_db)
+world_boss_battle_settlement_service = WorldBossBattleSettlementService(
+    get_paths().game_db,
+    get_paths().player_db,
+    get_paths().data / "activity" / "activity.db",
+)
 BOSSDROPSPATH = get_paths().data / "boss掉落物"
 
 create = on_command("世界BOSS生成", aliases={"世界boss生成", "世界Boss生成", "生成世界BOSS", "生成世界boss", "生成世界Boss"}, permission=SUPERUSER, priority=5, block=True)
@@ -424,29 +426,21 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         )
         await battle.finish()
 
+    stamina_cost = int(config['讨伐世界Boss体力消耗'])
+    if int(user_info['user_stamina']) < stamina_cost:
+        await handle_send(bot, event, "你没有足够的体力，请等待体力恢复后再试！")
+        await battle.finish()
+
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_key = event_id or str(time_module.time_ns())
     checked_at = sql_message.get_last_check_info_time(user_id)
-    cost_result = boss_battle_cost_service.consume(
-        f"boss-cost:{operation_key}:{user_id}", user_id, config['讨伐世界Boss体力消耗'], battle_count,
-        user_info['user_stamina'], user_info['hp'], user_info['exp'], today_battle_count,
-        "" if checked_at is None else str(checked_at),
-    )
-    if cost_result.status == "stamina_insufficient":
-        await handle_send(bot, event, "你没有足够的体力，请等待体力恢复后再试！")
-        await battle.finish()
-    if cost_result.status in {"state_changed", "duplicate", "hp_insufficient"}:
-        await handle_send(bot, event, "世界BOSS挑战状态已变化，请重新讨伐！")
-        await battle.finish()
-    if cost_result.status == "limit_reached":
-        await handle_send(bot, event, f"今日讨伐次数已达上限（{battle_count}次），请明日再来！")
-        await battle.finish()
 
     battle_flag[GLOBAL_BOSS_KEY] = True
 
     boss_all_hp = int(bossinfo['总血量'])
     boss_old_hp = int(bossinfo['气血'])
     boss_max_stone = int(bossinfo.get('max_stone', bossinfo.get('stone', 0)))
+    expected_bosses = deepcopy(group_boss[GLOBAL_BOSS_KEY])
 
     # =========================
     # 执行战斗
@@ -454,6 +448,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     result, victor, bossinfo_new, status_list = await Boss_fight(
         user_id,
         bossinfo,
+        type_in=1,
         bot_id=bot.self_id,
         return_status=True
     )
@@ -576,39 +571,95 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     reward_drop = bool(drops_id and drops_info and boss_rank < convert_rank('遁一境中期')[0]
                        and (boss_now_hp <= 0 or random.randint(1, 100) > 50))
 
-    # =========================
-    # 发放奖励
-    # =========================
-    operation_id = f"boss-reward:{operation_key}:{user_id}"
-    reward_result = boss_reward_service.grant(
-        operation_id,
-        user_id,
-        today_stone,
-        today_integral,
-        total_integral,
-        user_info['exp'],
-        get_stone,
-        boss_integral,
-        now_exp,
-        drops_info['id'] if reward_drop else 0,
-        drops_info['name'] if reward_drop else "",
-        drops_info['type'] if reward_drop else "",
-        1 if reward_drop else 0,
-        1 if reward_drop and drops_info['type'] in ["特殊道具", "神物"] else 0,
-        XiuConfig().max_goods_num,
+    settled_bosses = deepcopy(expected_bosses)
+    if boss_now_hp <= 0:
+        new_boss = createboss_jj(bossinfo['jj'])
+        if new_boss:
+            settled_bosses[boss_num - 1] = new_boss
+        else:
+            settled_bosses.pop(boss_num - 1)
+    else:
+        settled_bosses[boss_num - 1] = deepcopy(bossinfo_new)
+
+    final_hp = int(user_info.get("hp", 1) or 1)
+    final_mp = int(user_info.get("mp", 1) or 1)
+    for status in status_list:
+        for stats in status.values():
+            if stats.get("team_id") != 0 or str(stats.get("user_id")) != str(user_id):
+                continue
+            hp_multiplier = float(stats.get("hp_multiplier", 1) or 1)
+            mp_multiplier = float(stats.get("mp_multiplier", 1) or 1)
+            final_hp = max(1, int(float(stats.get("hp", final_hp)) / hp_multiplier))
+            final_mp = max(1, int(float(stats.get("mp", final_mp)) / mp_multiplier))
+
+    activity_bosses = []
+    try:
+        from ..xiuxian_activity.activity_boss import _active_boss_activities, _runtime_gate
+
+        allowed, _, multiplier = _runtime_gate("boss")
+        if allowed:
+            for activity in _active_boss_activities():
+                if activity.get("mode", "cooperative") not in {"cooperative", "both"}:
+                    continue
+                activity = deepcopy(activity)
+                activity["multiplier"] = multiplier
+                activity_bosses.append(activity)
+    except Exception as e:
+        log_message(user_id, f"[活动首领] 读取世界BOSS联动配置失败：{e}")
+
+    now = datetime.now()
+    settlement = world_boss_battle_settlement_service.settle(
+        operation_id=f"world-boss-battle:{operation_key}:{user_id}",
+        user_id=user_id,
+        expected_bosses=expected_bosses,
+        settled_bosses=settled_bosses,
+        boss_index=boss_num - 1,
+        expected_stamina=user_info['user_stamina'],
+        stamina_cost=stamina_cost,
+        expected_hp=user_info['hp'],
+        expected_mp=user_info['mp'],
+        final_hp=final_hp,
+        final_mp=final_mp,
+        expected_exp=user_info['exp'],
+        exp_reward=now_exp,
+        expected_stone=user_info['stone'],
+        stone_reward=get_stone,
+        expected_daily_stone=today_stone,
+        expected_daily_integral=today_integral,
+        expected_total_integral=total_integral,
+        integral_reward=boss_integral,
+        expected_battle_count=today_battle_count,
+        battle_limit=battle_count,
+        expected_checked_at="" if checked_at is None else str(checked_at),
+        checked_at=str(now),
+        item={
+            "id": drops_info['id'], "name": drops_info['name'], "type": drops_info['type'],
+            "quantity": 1, "bind": drops_info['type'] in ["特殊道具", "神物"],
+        } if reward_drop else None,
+        max_goods_num=XiuConfig().max_goods_num,
+        actual_damage=actual_damage,
+        killed=boss_now_hp <= 0,
+        daily_period=now.strftime("%Y-%m-%d"),
+        weekly_period=f"{now.isocalendar().year}-W{now.isocalendar().week:02d}",
+        activity_bosses=activity_bosses,
     )
-    if reward_result.status == "state_changed":
+    if settlement.status == "stamina_insufficient":
         battle_flag[GLOBAL_BOSS_KEY] = False
-        await handle_send(bot, event, "世界BOSS奖励状态已变化，请重新讨伐！")
+        await handle_send(bot, event, "你没有足够的体力，请等待体力恢复后再试！")
         await battle.finish()
-    if reward_result.status == "user_missing":
+    if settlement.status == "limit_reached":
         battle_flag[GLOBAL_BOSS_KEY] = False
-        await handle_send(bot, event, "未找到道友数据，世界BOSS奖励结算失败！")
+        await handle_send(bot, event, f"今日讨伐次数已达上限（{battle_count}次），请明日再来！")
         await battle.finish()
-    if reward_result.status == "inventory_full":
+    if settlement.status == "inventory_full":
         battle_flag[GLOBAL_BOSS_KEY] = False
         await handle_send(bot, event, "世界BOSS掉落物背包已满，请整理后重新讨伐！")
         await battle.finish()
+    if not settlement.succeeded:
+        battle_flag[GLOBAL_BOSS_KEY] = False
+        await handle_send(bot, event, "世界BOSS状态已变化，本次未扣除体力，请重新讨伐！")
+        await battle.finish()
+    group_boss[GLOBAL_BOSS_KEY] = settled_bosses
 
     # =========================
     # 判断BOSS是否真正死亡
@@ -621,16 +672,6 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             f"实际削减世界BOSS血量：{number_to(actual_damage)}\n"
             f"{stone_msg}，{more_msg}{integral_msg}{exp_msg}"
         )
-
-        # 移除旧BOSS并生成同境界新BOSS
-        try:
-            group_boss[GLOBAL_BOSS_KEY].remove(group_boss[GLOBAL_BOSS_KEY][boss_num - 1])
-        except Exception:
-            pass
-
-        new_boss = createboss_jj(bossinfo['jj'])
-        if new_boss:
-            group_boss[GLOBAL_BOSS_KEY].insert(boss_num - 1, new_boss)
 
         if reward_drop:
             drops_msg = f"boss的尸体上好像有什么东西，凑近一看居然是{drops_info['name']}！"
@@ -655,9 +696,6 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
                 f"临逃前{stone_msg}，{more_msg}{integral_msg}"
             )
 
-        # 未击杀，保存扣血后的BOSS状态
-        group_boss[GLOBAL_BOSS_KEY][boss_num - 1] = bossinfo_new
-
         if reward_drop:
             drops_msg = f"路上好像有什么东西，凑近一看居然是{drops_info['name']}！"
             msg += f"\n{drops_msg}"
@@ -666,21 +704,9 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     if user_info['root'] == "凡人" and boss_integral < 0:
         msg += "\n如果出现负积分，说明你境界太高了，玩凡人就不要那么高境界了！！！"
 
-    old_boss_info.save_boss(group_boss)
     battle_flag[GLOBAL_BOSS_KEY] = False
-
-    update_statistics_value(user_id, "讨伐世界BOSS")
-    if boss_now_hp <= 0:
-        update_statistics_value(user_id, "击败世界BOSS")
-    record_task_progress(user_id, "boss")
-    try:
-        from ..xiuxian_activity.activity_boss import record_cooperative_boss_hit
-
-        act_lines = record_cooperative_boss_hit(user_id, actual_damage)
-        if act_lines:
-            msg += "\n" + "\n".join(act_lines)
-    except Exception as e:
-        log_message(user_id, f"[活动首领] 世界BOSS伤害计入失败：{e}")
+    if settlement.activity_lines:
+        msg += "\n" + "\n".join(settlement.activity_lines)
     try:
         check_and_unlock_titles(user_id)
     except Exception as e:
