@@ -30,6 +30,7 @@ from .entry_service import RiftEntryService
 from .termination_service import RiftTerminationService
 from .key_settlement_service import RiftKeySettlementService
 from .boss_token_service import RiftBossTokenService
+from .settlement_service import RiftSettlementService
 from ..xiuxian_config import convert_rank
 from ..xiuxian_map import (
     get_player_current_position,
@@ -46,6 +47,7 @@ rift_entry_service = RiftEntryService(get_paths().game_db)
 rift_termination_service = RiftTerminationService(get_paths().game_db)
 rift_key_settlement_service = RiftKeySettlementService(get_paths().game_db)
 rift_boss_token_service = RiftBossTokenService(get_paths().game_db)
+rift_settlement_service = RiftSettlementService(get_paths().game_db)
 cache_help = {}
 group_rift = {}  # dict
 config = get_rift_config() # 获取秘境配置
@@ -561,9 +563,19 @@ async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             msg = f"进行中的：{rift_info['name']}探索，预计{time2 - exp_time}分钟后可结束"
             await handle_send(bot, event, msg, md_type="秘境", k1="结算", v1="秘境结算", k2="加速", v2="道具使用 秘境加速券", k3="大加速", v3="道具使用 秘境大加速券", k4="钥匙", v4="道具使用 秘境钥匙")
             await complete_rift.finish()
-        else:  # 秘境结算逻辑
-            sql_message.do_work(user_id, 0) # 清除秘境状态
-            await _perform_rift_settlement(user_id, user_info, rift_info, bot, event)
+        else:
+            event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+            result = rift_settlement_service.settle(
+                f"rift-settlement:{event_id or time.time_ns()}:{user_id}", user_id, rift_info,
+                {key: int(user_info.get(key, 0)) for key in ("stone", "exp", "hp", "mp")},
+                {"stone": 0, "exp": 0, "hp": 0, "mp": 0},
+            )
+            if not result.succeeded:
+                await handle_send(bot, event, "秘境结算状态已变化，请重新查询后再试。")
+                await complete_rift.finish()
+            final_msg = f"{random.choice(NONEMSG)}\n当前秘境完成次数：{result.explore_count}"
+            await handle_send(bot, event, final_msg)
+            log_message(user_id, final_msg)
             await complete_rift.finish()
 
 
