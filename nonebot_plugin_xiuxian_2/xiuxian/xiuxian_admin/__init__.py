@@ -64,6 +64,7 @@ from .admin_helpers import (
 from .level_change_service import AdminLevelChangeService
 from .root_change_service import AdminRootChangeService
 from .exp_adjustment_service import AdminExpAdjustmentService
+from .stone_adjustment_service import AdminStoneAdjustmentService
 from . import command_controls as _command_controls  # noqa: F401
 from . import empty_fallback as _empty_fallback  # noqa: F401
 from . import event_debug as _event_debug  # noqa: F401
@@ -74,6 +75,7 @@ xiuxian_impart = XIUXIAN_IMPART_BUFF()
 admin_level_change_service = AdminLevelChangeService(get_paths().game_db)
 admin_root_change_service = AdminRootChangeService(get_paths().game_db)
 admin_exp_adjustment_service = AdminExpAdjustmentService(get_paths().game_db)
+admin_stone_adjustment_service = AdminStoneAdjustmentService(get_paths().game_db)
 
 
 def _admin_operation_id(event, action: str, user_id: str) -> str:
@@ -299,19 +301,26 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             except Exception as e:
                 logger.debug(f"全服灵石广播到群 {gid} 失败：{e}")
     else:  # 单人
-        key = 1 if amount > 0 else 2
-        sql_message.update_ls(
+        if amount == 0:
+            await handle_send(bot, event, "单人灵石调整数量不能为 0")
+            return
+        result = admin_stone_adjustment_service.adjust(
+            _admin_operation_id(event, "stone-adjust", str(user_id)),
+            str(get_user_id(event) or "unknown"),
             user_id,
-            abs(amount),
-            key,
-            log_context=_admin_economy_context(
-                event,
-                "admin_stone_add" if amount > 0 else "admin_stone_cost",
-                target_name=target_name,
-            ),
+            int(user["stone"] or 0),
+            amount,
+            target_name=target_name,
         )
-        action = "赠送" if amount > 0 else "扣除"
-        msg = f"成功{action}{number_to(abs(amount))}枚灵石给 {target_name} 道友！"
+        if result.status == "state_changed":
+            msg = "玩家灵石状态已变化，请重新执行指令"
+        elif result.status == "operation_conflict":
+            msg = "本次管理员操作与已记录事件冲突"
+        elif result.status == "user_missing":
+            msg = "该玩家已不存在"
+        else:
+            action = "赠送" if result.applied_delta > 0 else "扣除"
+            msg = f"成功{action}{number_to(abs(result.applied_delta))}枚灵石给 {target_name} 道友！"
         await handle_send(bot, event, msg)
 
 # GM加思恋结晶
