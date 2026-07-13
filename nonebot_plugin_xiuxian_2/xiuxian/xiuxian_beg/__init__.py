@@ -18,6 +18,7 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.data_source import jsondata
+from .daily_reward_service import BegDailyRewardService
 from .novice_gift_service import NoviceGiftClaimService
 from ..xiuxian_utils.utils import (
     check_user,Txt2Img,
@@ -31,6 +32,7 @@ cache_level_help = {}
 cache_beg_help = {}
 sql_message = XiuxianDateManage()  # sql类
 novice_gift_claim_service = NoviceGiftClaimService(get_paths().game_db)
+beg_daily_reward_service = BegDailyRewardService(get_paths().game_db)
 
 __beg_help__ = f"""
 **仙途奇缘系统帮助**
@@ -80,7 +82,11 @@ async def beg_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 @beg_stone.handle(parameterless=[Cooldown(cd_time=0)])
 async def beg_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, _ = check_user(event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        await beg_stone.finish()
+
     user_id = str(user_info['user_id'])
     user_msg = sql_message.get_user_info_with_id(user_id)
     user_root = user_msg['root_type']
@@ -92,10 +98,6 @@ async def beg_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     now_time = datetime.now()
     diff_time = now_time - create_time
     diff_days = diff_time.days # 距离创建账号时间的天数
-    
-    if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙")
-        await beg_stone.finish()
     
     sql_message.update_last_check_info_time(user_id) # 更新查看修仙信息时间
     if sect != None and user_root == "伪灵根":
@@ -115,10 +117,30 @@ async def beg_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
 
     else:
-        stone = sql_message.get_beg(user_id)
-        if stone is None:
+        stone_reward = random.randint(
+            XiuConfig().beg_lingshi_lower_limit,
+            XiuConfig().beg_lingshi_upper_limit,
+        )
+        max_level_index = list_level_all.index(XiuConfig().beg_max_level)
+        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        operation_id = f"beg-daily:{event_id}:{user_id}" if event_id else f"beg-daily:{time.time_ns()}:{user_id}"
+        result = beg_daily_reward_service.settle(
+            operation_id=operation_id,
+            user_id=user_id,
+            expected_create_time=user_info["create_time"],
+            expected_stone=user_info["stone"],
+            expected_sect_id=sect,
+            expected_root_type=user_root,
+            expected_level=level,
+            settled_at=now_time,
+            max_age_days=XiuConfig().beg_max_days,
+            eligible_levels=list_level_all[:max_level_index],
+            stone_reward=stone_reward,
+        )
+        if result.status == "already_claimed":
             msg = '贪心的人是不会有好运的！'
-        else:
+        elif result.succeeded:
+            stone = result.stone_reward
             msg = random.choice(
     [
         f"在一次深入古老森林的修炼旅程中，你意外地遇到了一位神秘的前辈高人。这位前辈不仅给予了你宝贵的修炼指导，还在临别时赠予了你 {stone} 枚灵石，以表达对你的认可和鼓励。",
@@ -139,6 +161,18 @@ async def beg_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         f"你在一次随机的交易中获得了一个外表不起眼的神秘盒子。当你好奇心驱使下打开它时，发现里面竟是一枚装满灵石的纳戒，收获了 {stone} 枚灵石！",
     ]
 )
+        elif result.status == "ineligible_sect":
+            msg = "道友已有宗门庇佑，又何必来此寻求机缘呢？"
+        elif result.status == "ineligible_root":
+            msg = "道友已是轮回大能，又何必来此寻求机缘呢？"
+        elif result.status == "ineligible_level":
+            msg = f"道友已跻身于{level}层次的修行之人，可徜徉于四海八荒，自寻机缘与造化矣。"
+        elif result.status == "expired":
+            msg = "道友已经过了新手期,不能再来此寻求机缘了。"
+        elif result.status in {"state_changed", "operation_conflict"}:
+            msg = "角色状态已变化，请重新尝试领取！"
+        else:
+            msg = "未找到角色信息，无法领取仙途奇缘！"
         await handle_send(bot, event, msg)
         await beg_help.finish()
 
