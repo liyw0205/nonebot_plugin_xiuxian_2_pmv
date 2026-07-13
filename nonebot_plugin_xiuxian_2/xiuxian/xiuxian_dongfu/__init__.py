@@ -26,6 +26,7 @@ from .patrol_service import DongfuPatrolService
 from .array_upgrade_service import DongfuArrayUpgradeService
 from .visit_reward_service import DongfuVisitRewardService
 from .fertilize_service import DongfuFertilizeService
+from .infiltrate_failure_service import InfiltrateFailureService
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
@@ -37,6 +38,7 @@ dongfu_patrol_service = DongfuPatrolService(get_paths().game_db, get_paths().pla
 dongfu_array_upgrade_service = DongfuArrayUpgradeService(get_paths().game_db, get_paths().player_db)
 dongfu_visit_reward_service = DongfuVisitRewardService(get_paths().game_db, get_paths().player_db)
 dongfu_fertilize_service = DongfuFertilizeService(get_paths().game_db, get_paths().player_db)
+dongfu_infiltrate_failure_service = InfiltrateFailureService(get_paths().game_db, get_paths().player_db)
 dongfu_harvest_settlement_service = DongfuHarvestSettlementService(get_paths().game_db, get_paths().player_db)
 
 MAP_TABLE = "map_status"
@@ -1261,16 +1263,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "目标洞府种植数据异常。")
         return
 
-    # 占用目标当日被潜入次数
-    _, infiltrate_left = _consume_infiltrate_count(my_uid, is_random_mode)
-    current_intrude = _consume_intrude_count(target_uid)
 
     now = _now()
     array_lv = _to_int(td.get("array_level"))
     geomancy = _get_geomancy(td)
-    guarded = _consume_patrol_guard(td)
-    if guarded:
-        _save_dongfu(target_uid, td)
+    guarded = _to_int(td.get("patrol_guard")) > 0
 
     detect_rate = min(0.80, 0.20 + array_lv * 0.06)
     matured = now >= finish
@@ -1283,23 +1280,25 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     detected = random.random() < detect_rate
     success = random.random() < success_rate
-
     if detected and not success:
         loss_stone = random.randint(50000, 200000) * max(1, array_lv)
-        sql_message.update_ls(my_uid, loss_stone, 2)
-        left = max(0, INFILTRATE_DAILY_LIMIT - current_intrude)
-        guard_msg = "\n目标洞府巡山护府尚有余威。" if guarded else ""
-        await handle_send(
-            bot,
-            event,
-            f"❌ 你潜入【{tname}】洞府时触发阵法警示，被当场逼退！\n"
-            f"对方阵法等级：{array_lv}\n"
-            f"损失灵石：{number_to(loss_stone)}\n"
-            f"今日剩余{mode_name}次数：{infiltrate_left}\n"
-            f"该洞府今日剩余可被潜入次数：{left}"
-            f"{guard_msg}"
+        event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        result = dongfu_infiltrate_failure_service.settle(
+            f"dongfu-infiltrate-failure:{my_uid}:{event_message_id or time.time_ns()}", my_uid, target_uid, _today_str(),
+            _get_infiltrate_count_field(is_random_mode), _get_infiltrate_limit(is_random_mode), INFILTRATE_DAILY_LIMIT, loss_stone, guarded,
         )
+        if not result.succeeded:
+            await handle_send(bot, event, "潜入状态已变化，请稍后重试。")
+            return
+        guard_msg = "\n目标洞府巡山护府尚有余威。" if guarded else ""
+        await handle_send(bot, event, f"❌ 你潜入【{tname}】洞府时触发阵法警示，被当场逼退！\n对方阵法等级：{array_lv}\n损失灵石：{number_to(loss_stone)}\n今日剩余{mode_name}次数：{result.infiltrate_left}\n该洞府今日剩余可被潜入次数：{result.intrude_left}{guard_msg}")
         return
+
+    _, infiltrate_left = _consume_infiltrate_count(my_uid, is_random_mode)
+    current_intrude = _consume_intrude_count(target_uid)
+    if guarded:
+        _consume_patrol_guard(td)
+        _save_dongfu(target_uid, td)
 
     stealth_penalty = 0.6 if (detected and success) else 1.0
     rewards = []
