@@ -20,7 +20,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
 )
 from ..xiuxian_utils.utils import (
     check_user, send_msg_handler,
-    get_msg_pic, handle_send, log_message, update_statistics_value,
+    get_msg_pic, handle_send, log_message,
     send_help_message
 )
 from ..xiuxian_utils.item_json import Items
@@ -29,16 +29,16 @@ from ..xiuxian_config import convert_rank, XiuConfig, added_ranks
 from datetime import datetime
 from .mix_elixir_config import MIXELIXIRCONFIG
 from ...paths import get_paths
-from .settlement_service import MixelixirSettlementService
 from .harvest_service import MixelixirHarvestService
 from .recipe_service import MixelixirRecipeService
 from .refine_cost_service import MixelixirRefineCostService
+from .refine_reward_service import MixelixirRefineRewardService
 
 sql_message = XiuxianDateManage()  # sql类
-mixelixir_settlement_service = MixelixirSettlementService(get_paths().game_db)
 mixelixir_harvest_service = MixelixirHarvestService(get_paths().game_db, get_paths().player_db)
 mixelixir_recipe_service = MixelixirRecipeService(get_paths().game_db)
 mixelixir_refine_cost_service = MixelixirRefineCostService(get_paths().game_db)
+mixelixir_refine_reward_service = MixelixirRefineRewardService(get_paths().game_db, get_paths().player_db)
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 items = Items()
 added_rank = added_ranks()
@@ -544,6 +544,7 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                 exp_gain = (int(goods_info["mix_exp"]) + int(main_exp)) * exp_count
                 records[record_key] = {"name": goods_info["name"], "num": now_num + num}
                 updated_mix_state["炼丹经验"] = int(updated_mix_state["炼丹经验"]) + exp_gain
+
                 event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
                 operation_id = f"mixelixir-cost:{event_id}:{user_id}" if event_id else f"mixelixir-cost:{user_id}:{time.time_ns()}"
                 started = mixelixir_refine_cost_service.start(
@@ -557,30 +558,21 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                     updated_mix_state,
                 )
                 if not started.succeeded:
-                    msg = "药材状态已变化，本次炼丹未结算，请重新提交配方。"
+                    msg = "药材、丹炉或炼丹状态已变化，本次未消耗药材，请重新生成丹方。"
+                    await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="炼丹", k2="信息", v2="我的炼丹信息", k3="药材", v3="药材背包")
+                    await mix_make.finish()
+
+                claim_operation = f"mixelixir-reward:{event_id}:{user_id}" if event_id else f"mixelixir-reward:{user_id}:{time.time_ns()}"
+                claimed = mixelixir_refine_reward_service.claim(
+                    claim_operation, user_id, started.task_id, XiuConfig().max_goods_num
+                )
+                if not claimed.succeeded:
+                    msg = "丹药领取状态已变化，材料消耗记录已保留，请重新提交同一配方领取。"
                     await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
                     await mix_make.finish()
-                update_statistics_value(user_id, "炼丹次数")
-                try:
-                    var = mix_elixir_info['炼丹记录'][id]
-                    now_num = mix_elixir_info['炼丹记录'][id]['num']  # now_num 已经炼制的丹药数量
-                    if now_num >= goods_info['mix_all']:
-                        msg += f"该丹药道友已炼制{now_num}次，无法获得炼丹经验了~"
-                    elif now_num + num >= goods_info['mix_all']:
-                        exp_num = goods_info['mix_all'] - now_num
-                        mix_elixir_info['炼丹经验'] += (goods_info['mix_exp'] + main_exp) * exp_num
-                        msg += f"获得炼丹经验{goods_info['mix_exp'] * exp_num}点"
-                    else:
-                        mix_elixir_info['炼丹经验'] += (goods_info['mix_exp'] + main_exp) * num
-                        msg += f"获得炼丹经验{(goods_info['mix_exp'] + main_exp) * num}点"
-                    mix_elixir_info['炼丹记录'][id]['num'] += num
-                except Exception:
-                    mix_elixir_info['炼丹记录'][id] = {}
-                    mix_elixir_info['炼丹记录'][id]['name'] = goods_info['name']
-                    mix_elixir_info['炼丹记录'][id]['num'] = num
-                    mix_elixir_info['炼丹经验'] += (goods_info['mix_exp'] + main_exp) * num
-                    msg += f"获得炼丹经验{(goods_info['mix_exp'] + main_exp) * num}点"
-                save_player_info(user_id, mix_elixir_info, 'mix_elixir_info')
+                msg = f"恭喜道友成功炼成丹药：{claimed.reward_name}{claimed.reward_quantity}枚"
+                if exp_gain:
+                    msg += f"\n获得炼丹经验{exp_gain}点"
                 await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
                 await mix_make.finish()
             else:
