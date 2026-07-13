@@ -145,7 +145,6 @@ class BlessedSpotService:
                 conn.execute("DETACH DATABASE player_data")
 
 
-__all__ = ["BlessedSpotResult", "BlessedSpotService"]
     def upgrade_field(self, operation_id, user_id, expected_level, stone_cost, max_level=10) -> BlessedSpotResult:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         expected_level, stone_cost, max_level = int(expected_level), int(stone_cost), int(max_level)
@@ -197,3 +196,39 @@ __all__ = ["BlessedSpotResult", "BlessedSpotService"]
                 raise
             finally:
                 conn.execute("DETACH DATABASE player_data")
+
+    def rename(self, operation_id, user_id, expected_name, new_name) -> BlessedSpotResult:
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        expected_name, new_name = str(expected_name), str(new_name).strip()
+        if not operation_id or not new_name or len(new_name) > 9:
+            raise ValueError("valid operation and name up to 9 characters are required")
+        payload = self._payload([user_id, expected_name, new_name])
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._ensure_operation_table(conn)
+                previous = conn.execute("SELECT payload,result_json FROM blessed_spot_operations WHERE operation_id=%s AND action=%s", (operation_id, "rename")).fetchone()
+                if previous is not None:
+                    conn.rollback()
+                    if str(previous[0]) != payload:
+                        return BlessedSpotResult("state_changed", user_id)
+                    return BlessedSpotResult("duplicate", user_id, name=json.loads(str(previous[1]))["name"])
+                row = conn.execute("SELECT COALESCE(blessed_spot_flag,0),COALESCE(blessed_spot_name,'') FROM user_xiuxian WHERE user_id=%s", (user_id,)).fetchone()
+                if row is None or int(row[0]) == 0:
+                    conn.rollback()
+                    return BlessedSpotResult("blessed_spot_missing", user_id)
+                if str(row[1]) != expected_name:
+                    conn.rollback()
+                    return BlessedSpotResult("state_changed", user_id)
+                changed = conn.execute("UPDATE user_xiuxian SET blessed_spot_name=%s WHERE user_id=%s AND COALESCE(blessed_spot_name,'')=%s AND COALESCE(blessed_spot_flag,0)<>0", (new_name, user_id, expected_name))
+                if changed.rowcount != 1:
+                    conn.rollback()
+                    return BlessedSpotResult("state_changed", user_id)
+                conn.execute("INSERT INTO blessed_spot_operations (operation_id,action,payload,result_json) VALUES (%s,%s,%s,%s)", (operation_id, "rename", payload, json.dumps({"name": new_name}, ensure_ascii=False)))
+                conn.commit()
+                return BlessedSpotResult("applied", user_id, name=new_name)
+            except Exception:
+                conn.rollback()
+                raise
+
+__all__ = ["BlessedSpotResult", "BlessedSpotService"]
