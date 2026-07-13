@@ -32,10 +32,12 @@ from ...paths import get_paths
 from .settlement_service import WorkSettlementService
 from .claim_service import WorkClaimService
 from .item_use_service import WorkItemUseService
+from .abort_service import WorkAbortService
 
 work_settlement_service = WorkSettlementService(get_paths().game_db)
 work_claim_service = WorkClaimService(get_paths().game_db)
 work_item_use_service = WorkItemUseService(get_paths().game_db)
+work_abort_service = WorkAbortService(get_paths().game_db)
 sql_message = XiuxianDateManage()  # sql类
 items = Items()
 count = 5  # 每日刷新次数
@@ -520,11 +522,17 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await do_work.finish()
         elif status == 1:  # 进行中的悬赏，终止并惩罚
             stone = 4000000
-            sql_message.update_ls(user_id, stone, 2)
-            sql_message.do_work(user_id, 0)
+            event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+            result = work_abort_service.abort(
+                f"work-abort:{user_id}:{event_message_id or time.time_ns()}",
+                user_id, work_data, int(user_info["stone"]), stone,
+            )
+            if not result.succeeded:
+                await handle_send(bot, event, "悬赏状态或灵石余额已变化，请刷新后重试。")
+                await do_work.finish()
             msg = (
                 f"道友终止了悬赏令【{work_data['scheduled_time']}】\n"
-                f"灵石减少：{number_to(stone)}\n"
+                f"灵石减少：{number_to(result.penalty)}\n"
                 f"悬赏已终止！"
             )
         elif status == 3 or status == 4:  # 有未接取的悬赏
