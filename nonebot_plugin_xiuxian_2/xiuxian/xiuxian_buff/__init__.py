@@ -26,7 +26,6 @@ from ..xiuxian_utils.xiuxian2_handle import (
 from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 from nonebot.params import CommandArg
-from ..xiuxian_utils.player_fight import Player_fight
 from ..xiuxian_utils.utils import (
     number_to, check_user, send_msg_handler,
     check_user_type, get_msg_pic, handle_send, log_message, update_statistics_value,
@@ -51,6 +50,7 @@ from .two_exp_cd import two_exp_cd
 from .blessed_spot_service import BlessedSpotService
 from .closing_settlement_service import ClosingSettlementService
 from .normal_training_lifecycle_service import NormalTrainingLifecycleService
+from .normal_pvp_settlement_service import NormalPvpSettlementService
 from .stone_training_settlement_service import StoneTrainingSettlementService
 from nonebot.permission import SUPERUSER
 from .partner import (  # noqa: F401
@@ -72,6 +72,7 @@ player_data_manager = PlayerDataManager()
 blessed_spot_service = BlessedSpotService(get_paths().game_db, get_paths().player_db)
 closing_settlement_service = ClosingSettlementService(get_paths().game_db)
 normal_training_lifecycle_service = NormalTrainingLifecycleService(get_paths().game_db, get_paths().player_db)
+normal_pvp_settlement_service = NormalPvpSettlementService(get_paths().game_db, get_paths().player_db)
 stone_training_settlement_service = StoneTrainingSettlementService(get_paths().game_db, get_paths().player_db)
 
 def _blessed_spot_operation_id(event, action, user_id):
@@ -95,6 +96,13 @@ def _stone_training_operation_id(event, user_id):
     if event_id:
         return f"training:{event_id}:stone:{user_id}"
     return f"training:stone:{user_id}:{datetime.now().timestamp()}"
+
+
+def _normal_pvp_operation_id(event, user_id, opponent_id):
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    if event_id:
+        return f"normal-pvp:{event_id}:{user_id}:{opponent_id}"
+    return f"normal-pvp:{user_id}:{opponent_id}:{datetime.now().timestamp()}"
 BLESSEDSPOTCOST = 3500000 # 洞天福地购买消耗
 PLAYERSDATA = get_paths().players
 
@@ -311,9 +319,9 @@ async def blessed_spot_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     await blessed_spot_rename.finish()
 
 
-@qc.handle(parameterless=[Cooldown(cd_time=60, stamina_cost=1)])
+@qc.handle(parameterless=[Cooldown(cd_time=60)])
 async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """切磋，不会掉血"""
+    """切磋"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -334,38 +342,66 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
         give_qq = give_info['user_id'] if give_info else None
     
     user2 = sql_message.get_user_real_info(give_qq)
-    
+
     if user_info['hp'] is None or user_info['hp'] == 0:
-    # 判断用户气血是否为空
         sql_message.update_user_hp(user_id)
-    
-    if user_info['hp'] <= user_info['exp'] / 10:
-        time = leave_harm_time(user_id)
-        msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！"
-        msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
-        sql_message.update_user_stamina(user_id, 20, 1)
-        await handle_send(bot, event, msg, md_type="buff", k1="切磋", v1="切磋", k2="状态", v2="我的状态", k3="修为", v3="我的修为")
-        await qc.finish()
-        
-    if user1 and user2:
-        result, victor = Player_fight(user1['user_id'], user2['user_id'], 1, bot.self_id)
-        await send_msg_handler(bot, event, result)
-        msg = f"获胜的是{victor}"
-        if victor == "没有人":
-            msg = f"{victor}获胜"
-        else:
-            if victor == user1['user_name']:
-                update_statistics_value(user1['user_id'], "切磋胜利")
-                update_statistics_value(user2['user_id'], "切磋失败")
-            else:
-                update_statistics_value(user2['user_id'], "切磋胜利")
-                update_statistics_value(user1['user_id'], "切磋失败")
-        await handle_send(bot, event, msg, md_type="buff", k1="切磋", v1="切磋", k2="状态", v2="我的状态", k3="修为", v3="我的修为")
-        await qc.finish()
-    else:
+        user1 = sql_message.get_user_real_info(user_id)
+
+    if not user1 or not user2:
         msg = "修仙界没有对方的信息，快邀请对方加入修仙界吧！"
         await handle_send(bot, event, msg, md_type="buff", k1="切磋", v1="切磋", k2="状态", v2="我的状态", k3="修为", v3="我的修为")
         await qc.finish()
+
+    operation_id = _normal_pvp_operation_id(event, user1['user_id'], user2['user_id'])
+    replay = normal_pvp_settlement_service.replay(operation_id, user1['user_id'], user2['user_id'])
+    if replay is not None:
+        if replay.succeeded:
+            await send_msg_handler(bot, event, replay.battle_messages)
+            msg = f"获胜的是{replay.winner_name}" if replay.winner_id else "没有人获胜"
+        else:
+            msg = "本次切磋请求与已结算记录不一致，请重新发起。"
+        await handle_send(bot, event, msg, md_type="buff", k1="切磋", v1="切磋", k2="状态", v2="我的状态", k3="修为", v3="我的修为")
+        await qc.finish()
+
+    if int(user1['hp']) <= int(user1['exp']) / 10:
+        time = leave_harm_time(user_id)
+        msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！"
+        msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
+        await handle_send(bot, event, msg, md_type="buff", k1="切磋", v1="切磋", k2="状态", v2="我的状态", k3="修为", v3="我的修为")
+        await qc.finish()
+
+    result, winner_id, winner_name, final = normal_pvp_settlement_service.calculate_battle(
+        user1['user_id'], user2['user_id'], bot.self_id
+    )
+    settlement = normal_pvp_settlement_service.settle(
+        operation_id,
+        user1['user_id'],
+        user2['user_id'],
+        expected_challenger_hp=user1['hp'],
+        expected_challenger_mp=user1['mp'],
+        expected_challenger_stamina=user1['user_stamina'],
+        expected_challenger_exp=user1['exp'],
+        expected_opponent_hp=user2['hp'],
+        expected_opponent_mp=user2['mp'],
+        expected_opponent_stamina=user2['user_stamina'],
+        expected_opponent_exp=user2['exp'],
+        challenger_final_hp=final[str(user1['user_id'])][0],
+        challenger_final_mp=final[str(user1['user_id'])][1],
+        opponent_final_hp=final[str(user2['user_id'])][0],
+        opponent_final_mp=final[str(user2['user_id'])][1],
+        winner_id=winner_id,
+        winner_name=winner_name,
+        battle_messages=result,
+    )
+    if settlement.succeeded:
+        await send_msg_handler(bot, event, settlement.battle_messages)
+        msg = f"获胜的是{settlement.winner_name}" if settlement.winner_id else "没有人获胜"
+    elif settlement.status == "stamina_insufficient":
+        msg = "你没有足够的体力，请等待体力恢复后再试！"
+    else:
+        msg = "双方状态已经变化，本次切磋未结算，请重新发起。"
+    await handle_send(bot, event, msg, md_type="buff", k1="切磋", v1="切磋", k2="状态", v2="我的状态", k3="修为", v3="我的修为")
+    await qc.finish()
 
 
 @reset_exp.handle(parameterless=[Cooldown(cd_time=60)])
