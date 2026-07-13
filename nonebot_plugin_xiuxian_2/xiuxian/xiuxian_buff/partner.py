@@ -33,6 +33,7 @@ from .mentor_graduation_service import MentorGraduationService
 from .mentor_transmission_service import MentorTransmissionService
 from .partner_breakthrough_service import PartnerBreakthroughService
 from .partner_cultivation_service import PartnerCultivationService
+from .partner_token_service import PartnerTokenUseService
 from .partner_storage import (
     PLAYERSDATA,
     bind_partner_storage,
@@ -64,6 +65,7 @@ sql_message = XiuxianDateManage()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
 partner_cultivation_service = PartnerCultivationService(get_paths().game_db, get_paths().player_db)
+partner_token_service = PartnerTokenUseService(get_paths().game_db, get_paths().player_db)
 partner_breakthrough_service = PartnerBreakthroughService(get_paths().game_db, get_paths().player_db)
 mentor_graduation_service = MentorGraduationService(get_paths().game_db, get_paths().player_db)
 mentor_transmission_service = MentorTransmissionService(get_paths().game_db, get_paths().player_db)
@@ -962,24 +964,26 @@ async def use_two_exp_token(bot, event, item_id, num):
         
     user_id = user_info['user_id']
     
-    current_count = two_exp_cd.find_user(user_id)    
-    tokens_used = min(num, current_count)
-    if tokens_used > 0:
-        two_exp_cd.remove_user(user_id, tokens_used)
-        
-        sql_message.update_back_j(user_id, item_id, tokens_used)
-        
-        # 计算剩余双修次数
+    current_count = two_exp_cd.find_user(user_id)
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    result = partner_token_service.apply(
+        f"partner-token:{user_id}:{event_id or time.time_ns()}", user_id, item_id,
+        requested_count=num, expected_item_count=sql_message.goods_num(user_id, item_id),
+        expected_used_count=current_count,
+    )
+    tokens_used = result.used_tokens
+    if result.succeeded and tokens_used > 0:
         impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
         impart_two_exp = impart_data['impart_two_exp'] if impart_data is not None else 0
         main_two_data = UserBuffDate(user_id).get_user_main_buff_data()
         main_two = main_two_data['two_buff'] if main_two_data is not None else 0
-        remaining_count = (two_exp_limit + impart_two_exp + main_two) - two_exp_cd.find_user(user_id)
-        
+        remaining_count = (two_exp_limit + impart_two_exp + main_two) - result.used_count
         msg = f"增加{tokens_used}次双修！\n"
         msg += f"当前剩余双修次数：{remaining_count}次"
-    else:
+    elif result.status == "limit_full":
         msg = "当前剩余双修次数已满！"
+    else:
+        msg = "双修令牌或次数状态已变化，请刷新背包后重试！"
     
     await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="我的修为", v2="我的修为", k3="次数", v3="我的双修次数")
 
