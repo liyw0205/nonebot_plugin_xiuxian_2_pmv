@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import time
 
 from nonebot.log import logger
@@ -27,10 +28,18 @@ from .service import (
 )
 from .boss_reward_claim_service import BossRewardClaimService
 from .boss_coop_settlement_service import ActivityBossCoopSettlementService
+from .boss_item_raid_settlement_service import ActivityBossItemRaidSettlementService
 
 BOSS_MODES = {"item_raid", "cooperative", "both"}
 
 activity_boss_coop_settlement_service = ActivityBossCoopSettlementService(DB_PATH)
+activity_boss_item_raid_settlement_service = ActivityBossItemRaidSettlementService(DB_PATH)
+
+
+def _fixed_item_damage(operation_id: str, damage_min: int, damage_max: int) -> int:
+    span = damage_max - damage_min + 1
+    value = int.from_bytes(hashlib.sha256(operation_id.encode()).digest()[:8], "big")
+    return damage_min + value % span
 
 
 def _runtime_gate(feature: str) -> tuple[bool, str, float]:
@@ -285,7 +294,7 @@ def _today_fight_count(cur, activity_key: str, user_id: str) -> int:
     cur.execute(
         """
         SELECT COUNT(*) AS c FROM activity_boss_fight_log
-        WHERE activity_key=%s AND user_id=%s AND fight_date=%s AND source IN ('coop', 'world_boss')
+        WHERE activity_key=%s AND user_id=%s AND fight_date=%s AND source IN ('coop', 'world_boss', 'item')
         """,
         (activity_key, user_id, today_str()),
     )
@@ -447,7 +456,7 @@ def fight_cooperative_boss(user_id: str, query: str = "", operation_id: str | No
     return True, "\n".join(lines)
 
 
-def use_item_on_boss(user_id: str, query: str) -> tuple[bool, str]:
+def use_item_on_boss(user_id: str, query: str, operation_id: str | None = None) -> tuple[bool, str]:
     allowed, reason, multiplier = _runtime_gate("boss")
     if not allowed:
         return False, reason
@@ -474,6 +483,8 @@ def use_item_on_boss(user_id: str, query: str) -> tuple[bool, str]:
     if not item_def:
         return False, f"未找到道具【{item_query}】，请查看活动玩法说明"
 
+    operation_id = operation_id or f"activity-boss-item:{user_id}:{time.time_ns()}"
+
     ensure_activity_files()
     conn = db_backend.connect(DB_PATH)
     conn.row_factory = db_backend.Row
@@ -489,32 +500,41 @@ def use_item_on_boss(user_id: str, query: str) -> tuple[bool, str]:
         row = cur.fetchone()
         have = _as_int(row["count"] if row else 0)
         need = item_def["cost"]
-        if have < need:
-            return False, f"【{item_def['name']}】不足（需要{need}，持有{have}）"
-
-        import random
-        dmg = max(1, int(random.randint(item_def["damage_min"], item_def["damage_max"]) * multiplier))
-        cur.execute(
-            """
-            UPDATE activity_item_inventory
-            SET count=count-%s, update_time=%s
-            WHERE activity_key=%s AND user_id=%s AND item_id=%s AND count>=%s
-            """,
-            (need, now_str(), activity["key"], str(user_id), item_def["id"], need),
+        base_damage = _fixed_item_damage(
+            operation_id, item_def["damage_min"], item_def["damage_max"]
         )
-        actual, hp_left, max_hp = _apply_damage(cur, activity, str(user_id), dmg, "item")
-        conn.commit()
-        name = resolve_daohao(user_id)
-        lines = [
-            f"【{activity['boss_name']}】",
-            f"{name} 使用【{item_def['name']}】造成 {number_to(actual)} 点伤害",
-            f"首领剩余 {number_to(hp_left)} / {number_to(max_hp)}",
-        ]
-        if hp_left <= 0:
-            lines.append("首领已被击退！全服可领取进度奖励。")
-        return True, "\n".join(lines)
+        damage = max(1, int(base_damage * multiplier))
+        hp_left, max_hp = _ensure_boss_hp(cur, activity)
+        used = _today_fight_count(cur, activity["key"], str(user_id))
+        limit = activity["daily_fight_limit"]
     finally:
         conn.close()
+
+    result = activity_boss_item_raid_settlement_service.settle(
+        operation_id, str(user_id), activity["key"], item_def["id"], have, need,
+        hp_left, max_hp, used, limit, damage, today_str(), now_str(),
+        activity.get("server_milestones") or (),
+    )
+    if result.status == "item_insufficient":
+        return False, f"【{item_def['name']}】不足（需要{need}，持有{result.inventory or 0}）"
+    if result.status == "limit_reached":
+        return False, f"今日挑战次数已用完（{limit}次）"
+    if result.status == "boss_defeated":
+        return False, "首领已被击退"
+    if result.status in {"state_changed", "operation_conflict"}:
+        return False, "首领或库存状态已变化，请重试"
+    if not result.succeeded:
+        return False, "活动首领讨伐失败，请重试"
+
+    name = resolve_daohao(user_id)
+    lines = [
+        f"【{activity['boss_name']}】",
+        f"{name} 使用【{item_def['name']}】造成 {number_to(result.damage)} 点伤害",
+        f"首领剩余 {number_to(result.hp_left)} / {number_to(result.max_hp)}",
+    ]
+    if result.hp_left <= 0:
+        lines.append("首领已被击退！全服可领取进度奖励。")
+    return True, "\n".join(lines)
 
 
 def build_boss_status_text(user_id: str, query: str = "") -> str:
