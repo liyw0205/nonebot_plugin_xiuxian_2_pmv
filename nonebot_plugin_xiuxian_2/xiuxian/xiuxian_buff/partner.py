@@ -2,6 +2,7 @@ import random
 import asyncio
 import re
 import json
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from ...paths import get_paths
@@ -28,6 +29,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
     save_player_info,
 )
 from .mentor_exp_cd import mentor_exp_cd
+from .partner_cultivation_service import PartnerCultivationService
 from .partner_storage import (
     PLAYERSDATA,
     bind_partner_storage,
@@ -58,6 +60,7 @@ mentor_invite_cache = {}
 sql_message = XiuxianDateManage()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
+partner_cultivation_service = PartnerCultivationService(get_paths().game_db, get_paths().player_db)
 two_exp_limit = 3
 mentor_config = XiuConfig()
 mentor_transmission_limit = getattr(mentor_config, "mentor_transmission_limit", two_exp_limit)
@@ -99,6 +102,24 @@ bind_partner_storage(
     mentor_breakthrough_reward_limit=MENTOR_BREAKTHROUGH_REWARD_LIMIT,
 )
 
+def _relation_operation_id(event, action, *user_ids):
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    suffix = ":".join(str(user_id) for user_id in user_ids)
+    return f"relation:{action}:{event_id or time.time_ns()}:{suffix}"
+
+
+def _relation_power(user_info, new_exp):
+    root_rate = sql_message.get_root_rate(user_info["root_type"], user_info["user_id"])
+    return round(int(new_exp) * root_rate * jsondata.level_data()[user_info["level"]]["spend"], 0)
+
+
+def _recovered_attributes(user_info, new_exp):
+    max_hp, max_mp = int(new_exp / 2), int(new_exp)
+    return (
+        min(int(user_info["hp"]) + int(new_exp / 10), max_hp),
+        min(int(user_info["mp"]) + int(new_exp / 20), max_mp),
+        int(new_exp / 10),
+    )
 two_exp_invite = on_command("双修", priority=6, block=True)
 two_exp_accept = on_command("同意双修", priority=5, block=True)
 two_exp_reject = on_command("拒绝双修", priority=5, block=True)
@@ -492,10 +513,6 @@ async def direct_two_exp(bot, event, user_id_1, user_id_2, exp_count=1, is_partn
 
         actual_used_count += 1
 
-        # 只有实际进行了双修才消耗次数
-        two_exp_cd.add_user(user_id_1)
-        two_exp_cd.add_user(user_id_2)
-
     if actual_used_count == 0:
         msg = "双修过程中修为已达上限，无法进行双修！"
         await handle_send(
@@ -507,44 +524,41 @@ async def direct_two_exp(bot, event, user_id_1, user_id_2, exp_count=1, is_partn
         )
         return
 
-    # 统一写入最终获得修为
-    sql_message.update_exp(user_id_1, total_exp_1)
-    sql_message.update_power2(user_id_1)
-
-    user_1_info_before_recover = sql_message.get_user_real_info(user_id_1)
-    result_msg_1, result_hp_mp_1 = OtherSet().send_hp_mp(
-        user_id_1,
-        int(user_1_info_before_recover["exp"] / 10),
-        int(user_1_info_before_recover["exp"] / 20)
+    partner_data_1 = load_partner(user_id_1) if is_partner else None
+    partner_data_2 = load_partner(user_id_2) if is_partner else None
+    valid_partner = bool(
+        partner_data_1 and partner_data_2
+        and str(partner_data_1.get("partner_id")) == user_id_2
+        and str(partner_data_2.get("partner_id")) == user_id_1
     )
-    sql_message.update_user_attribute(
-        user_id_1,
-        result_hp_mp_1[0],
-        result_hp_mp_1[1],
-        int(result_hp_mp_1[2] / 10)
+    add_affection_1 = 20 * actual_used_count if valid_partner else 0
+    add_affection_2 = 10 * actual_used_count if valid_partner else 0
+    new_exp_1, new_exp_2 = temp_exp_1, temp_exp_2
+    hp_1, mp_1, atk_1 = _recovered_attributes(user_1, new_exp_1)
+    hp_2, mp_2, atk_2 = _recovered_attributes(user_2, new_exp_2)
+    special_count = sum("天降异象" in desc for desc in event_descriptions)
+    settlement = partner_cultivation_service.apply(
+        _relation_operation_id(event, "cultivation", user_id_1, user_id_2),
+        user_id_1, user_id_2,
+        expected_exp_1=user_1["exp"], expected_exp_2=user_2["exp"],
+        exp_1=total_exp_1, exp_2=total_exp_2, used_count=actual_used_count,
+        power_1=_relation_power(user_1, new_exp_1), power_2=_relation_power(user_2, new_exp_2),
+        hp_1=hp_1, mp_1=mp_1, atk_1=atk_1, hp_2=hp_2, mp_2=mp_2, atk_2=atk_2,
+        level_rate_1=special_count * 2, level_rate_2=special_count * 2,
+        expected_affection_1=safe_int(partner_data_1.get("affection"), 0) if valid_partner else None,
+        expected_affection_2=safe_int(partner_data_2.get("affection"), 0) if valid_partner else None,
+        affection_1=add_affection_1, affection_2=add_affection_2,
     )
-
-    sql_message.update_exp(user_id_2, total_exp_2)
-    sql_message.update_power2(user_id_2)
-
-    user_2_info_before_recover = sql_message.get_user_real_info(user_id_2)
-    result_msg_2, result_hp_mp_2 = OtherSet().send_hp_mp(
-        user_id_2,
-        int(user_2_info_before_recover["exp"] / 10),
-        int(user_2_info_before_recover["exp"] / 20)
-    )
-    sql_message.update_user_attribute(
-        user_id_2,
-        result_hp_mp_2[0],
-        result_hp_mp_2[1],
-        int(result_hp_mp_2[2] / 10)
-    )
+    if not settlement.succeeded:
+        await handle_send(bot, event, "双修状态发生变化，本次未结算，请重新发起。", md_type="buff")
+        return
+    if settlement.status == "applied":
+        for _ in range(actual_used_count):
+            two_exp_cd.add_user(user_id_1)
+            two_exp_cd.add_user(user_id_2)
 
     user_1_info = sql_message.get_user_real_info(user_id_1)
     user_2_info = sql_message.get_user_real_info(user_id_2)
-
-    update_statistics_value(user_id_1, "双修次数", increment=actual_used_count)
-    update_statistics_value(user_id_2, "双修次数", increment=actual_used_count)
 
     log_message(
         user_id_1,
@@ -559,27 +573,7 @@ async def direct_two_exp(bot, event, user_id_1, user_id_2, exp_count=1, is_partn
 
     affection_msg = ""
     if is_partner:
-        partner_data_1 = load_partner(user_id_1)
-        partner_data_2 = load_partner(user_id_2)
-
-        if (
-            partner_data_1
-            and partner_data_2
-            and str(partner_data_1.get("partner_id")) == str(user_id_2)
-            and str(partner_data_2.get("partner_id")) == str(user_id_1)
-        ):
-            current_affection_1 = safe_int(partner_data_1.get("affection"), 0)
-            current_affection_2 = safe_int(partner_data_2.get("affection"), 0)
-
-            add_affection_1 = 20 * actual_used_count
-            add_affection_2 = 10 * actual_used_count
-
-            partner_data_1["affection"] = current_affection_1 + add_affection_1
-            partner_data_2["affection"] = current_affection_2 + add_affection_2
-
-            save_partner(user_id_1, partner_data_1)
-            save_partner(user_id_2, partner_data_2)
-
+        if valid_partner:
             affection_msg = (
                 f"\n\n道侣双修亲密度增加："
                 f"\n{user_1_info['user_name']} +{add_affection_1}"
@@ -734,9 +728,6 @@ async def process_two_exp(
 
         exp_limit_1 = int(exp_limit_1 * 1.5)
         exp_limit_2 = int(exp_limit_2 * 1.5)
-
-        sql_message.update_levelrate(user_id_1, user_mes_1["level_up_rate"] + 2)
-        sql_message.update_levelrate(user_id_2, user_mes_2["level_up_rate"] + 2)
 
         event_desc += "\n💫道友同心，天降异象！"
         event_desc += "\n💝离开时双方互相赠送信物，双方各增加突破概率2%。"
