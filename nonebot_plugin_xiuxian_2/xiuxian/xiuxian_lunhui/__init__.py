@@ -30,12 +30,14 @@ from ..xiuxian_impart.impart_uitls import (
     update_user_impart_data
 )
 from ...paths import get_paths
+from .cultivation_reset_service import CultivationResetService
 from .recall_service import LunhuiRecallService
 
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
 items = Items()
 lunhui_recall_service = LunhuiRecallService(get_paths().game_db, get_paths().player_db)
+cultivation_reset_service = CultivationResetService(get_paths().game_db)
 added_ranks = added_ranks()
 confirm_lunhui_cache = {}
 ROOT_RENAME_CARD_ID = 20025
@@ -112,14 +114,16 @@ async def resetting_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                     
     if user_msg['level'] in ['感气境初期', '感气境中期', '感气境圆满']:
         exp = user_msg['exp']
-        sql_message.updata_level(user_id, '江湖好手') #重置用户境界
-        sql_message.update_levelrate(user_id, 0) #重置突破成功率
-        sql_message.update_j_exp(user_id, exp) #重置用户修为
-        sql_message.update_exp(user_id, 100)
-        sql_message.update_user_hp(user_id)  # 重置用户HP，mp，atk状态
+        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        operation_id = f"cultivation-reset:{user_id}:{event_id or datetime.now().timestamp()}"
+        result = cultivation_reset_service.reset(operation_id, user_id, user_msg['level'], exp)
+        if not result.succeeded:
+            await handle_send(bot, event, "角色状态已变化，本次自废修为未执行，请重新查看后再试。")
+            await resetting.finish()
         msg = f"{user_name}现在是一介凡人了！！"
-        log_message(user_id, f"[自废修为] 从{user_msg['level']}自废至江湖好手，重置修为{number_to(exp)}")
-        update_statistics_value(user_id, "自废修为次数")
+        if result.status == "applied":
+            log_message(user_id, f"[自废修为] 从{user_msg['level']}自废至江湖好手，重置修为{number_to(exp)}")
+            update_statistics_value(user_id, "自废修为次数")
         await handle_send(bot, event, msg)
         await resetting.finish()
     else:
