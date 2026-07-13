@@ -1,13 +1,9 @@
-try:
-    import ujson as json
-except ImportError:
-    import json
 import re
-import os
 import random
 import asyncio
 import time
 from datetime import datetime
+from pathlib import Path
 from nonebot.typing import T_State
 from ...paths import get_paths
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
@@ -46,7 +42,7 @@ from ..xiuxian_utils.season_rank_service import (
 )
 from ..xiuxian_tasks.task_data import record_task_progress
 from .stone_limit import stone_limit
-from .lottery_pool import lottery_pool
+from .lottery_settlement_service import LotterySettlementService
 from .sign_service import SignInService
 from .player_rename_service import PlayerRenameService
 from .stone_gift_service import StoneGiftService
@@ -58,6 +54,10 @@ from .xiangyuan import clear_all_xiangyuan, reset_xiangyuan_daily  # noqa: F401
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
 sign_in_service = SignInService(get_paths().game_db)
+lottery_settlement_service = LotterySettlementService(
+    get_paths().game_db,
+    Path(__file__).with_name("lottery_pool.json"),
+)
 player_rename_service = PlayerRenameService(get_paths().game_db)
 stone_gift_service = StoneGiftService(get_paths().game_db)
 stone_contest_service = StoneContestService(get_paths().game_db)
@@ -98,6 +98,10 @@ def _sign_operation_id(event, user_id):
     if event_id:
         return f"sign:{event_id}:{user_id}"
     return f"sign:{user_id}:{time.time_ns()}"
+
+
+def _lottery_operation_id(sign_operation_id):
+    return f"lottery:{sign_operation_id}"
 
 
 def _player_rename_operation_id(event, rename_type, user_id):
@@ -651,31 +655,29 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await sign_in.finish()
     user_id = user_info['user_id']
     
+    sign_operation_id = _sign_operation_id(event, user_id)
     sign_result = sign_in_service.sign(
-        _sign_operation_id(event, user_id),
+        sign_operation_id,
         user_id,
         XiuConfig().sign_in_lingshi_lower_limit,
         XiuConfig().sign_in_lingshi_upper_limit,
     )
-    if not sign_result.applied:
-        result = (
-            f"签到成功，获取{sign_result.stone}块灵石!"
-            if sign_result.status == "duplicate"
-            else "贪心的人是不会有好运的！"
-        )
-        await handle_send(bot, event, result)
+    if not sign_result.succeeded:
+        await handle_send(bot, event, "贪心的人是不会有好运的！")
         await sign_in.finish()
     result = f"签到成功，获取{sign_result.stone}块灵石!"
 
-    # 仅首次成功签到参与鸿运，重复事件不会重复写奖池或派奖。
-    lottery_result = await handle_lottery(user_info)
+    lottery_result = await handle_lottery(
+        user_info, _lottery_operation_id(sign_operation_id)
+    )
     
     # 3. 组合签到结果和抽奖结果
     msg = f"{result}\n\n{lottery_result}"
     
-    log_message(user_id, msg)
-    update_statistics_value(user_id, "修仙签到")
-    record_task_progress(user_id, "sign_in")
+    if sign_result.applied:
+        log_message(user_id, msg)
+        update_statistics_value(user_id, "修仙签到")
+        record_task_progress(user_id, "sign_in")
     await handle_send(bot, event, msg, md_type="修仙", k1="修仙签到", v1="修仙签到", k2="鸿运", v2="鸿运", k3="帮助", v3="修仙帮助")
     await sign_in.finish()
 
@@ -683,17 +685,18 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 async def hongyun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看中奖记录和当前奖池"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    # 构建消息
+    business_date = datetime.now().date().isoformat()
+    snapshot = lottery_settlement_service.get_snapshot(business_date)
     msg = "【鸿运当头】\n"
-    msg += f"当前奖池累计：{number_to(lottery_pool.get_pool())}灵石\n"
-    msg += f"本期参与人数：{lottery_pool.get_participants()}位道友\n\n"
+    msg += f"当前奖池累计：{number_to(snapshot.pool)}灵石\n"
+    msg += f"本期参与人数：{snapshot.participants}位道友\n\n"
     
-    last_winner = lottery_pool.get_last_winner()
+    last_winner = snapshot.last_winner
     if last_winner:
         msg += "上期中奖记录\n"
-        msg += f"中奖道友：{last_winner['name']}\n"
-        msg += f"中奖时间：{last_winner['time']}\n"
-        msg += f"中奖金额：{number_to(last_winner['amount'])}灵石\n"
+        msg += f"中奖道友：{last_winner.user_name}\n"
+        msg += f"中奖时间：{last_winner.won_at}\n"
+        msg += f"中奖金额：{number_to(last_winner.amount)}灵石\n"
     else:
         msg += "暂无历史中奖记录，道友快来签到吧！\n"
     
@@ -702,66 +705,34 @@ async def hongyun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg, md_type="修仙", k1="修仙签到", v1="修仙签到", k2="鸿运", v2="鸿运", k3="帮助", v3="修仙帮助")
     await hongyun.finish()
 
-async def handle_lottery(user_info: dict):
+async def handle_lottery(user_info: dict, operation_id: str):
     """处理鸿运抽奖逻辑"""
     user_id = user_info['user_id']
     user_name = user_info['user_name']
-    
-    # 1. 每人每次签到存入100万灵石到奖池
-    deposit_amount = 1000000
-    lottery_pool.deposit_to_pool(deposit_amount)
-    lottery_pool.add_participant(user_id)
-    
-    # 2. 生成1-100000的随机数，中奖号码为66666,6666,666,66,6
-    lottery_number = random.randint(1, 100000)
-    
-    # 3. 检查用户ID是否包含特等奖的数字序列
-    special_numbers = [6, 66, 666, 6666, 66666]
-    if lottery_number in special_numbers:
-        # 特等奖
-        prize = int(lottery_pool.get_pool())
-        lottery_pool.set_winner(user_id, user_name, prize, lottery_number)
-        return f"✨鸿运当头！恭喜道友获得特等奖！\n中奖号码：{lottery_number}\n获得奖池中{number_to(prize)}灵石！🎉🎉🎉"
-    
-    # 4. 检查随机数中6的数量
-    count_6 = str(lottery_number).count('6')
-    
-    if count_6 == 3:
-        # 一等奖
-        prize = int(lottery_pool.get_pool() * 0.1)
-        lottery_pool.set_winner(user_id, user_name, prize, lottery_number)
-        return f"🎉恭喜道友获得一等奖！\n中奖号码：{lottery_number}\n获得奖池的{number_to(prize)}灵石！🎉"
-    elif count_6 == 2:
-        # 二等奖
-        prize = int(lottery_pool.get_pool() * 0.01)
-        lottery_pool.set_winner(user_id, user_name, prize, lottery_number)
-        return f"🎉恭喜道友获得二等奖！\n中奖号码：{lottery_number}\n获得奖池的{number_to(prize)}灵石！🎉"
-    elif count_6 == 1:
-        # 三等奖
-        prize = int(lottery_pool.get_pool() * 0.001)
-        lottery_pool.set_winner(user_id, user_name, prize, lottery_number)
-        return f"🎉恭喜道友获得三等奖！\n中奖号码：{lottery_number}\n获得奖池的{number_to(prize)}灵石！🎉"
-    else:
-        # 未中奖
-        return f"本次签到未中奖，奖池继续累积~"
-
-def read_lottery_data():
-    """读取奖池数据"""
-    try:
-        with open('xiuxian_lottery.json', 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        # 初始化数据
-        return {
-            'pool': 0,
-            'participants': [],
-            'last_winner': None
-        }
-
-def save_lottery_data(data):
-    """保存奖池数据"""
-    with open('xiuxian_lottery.json', 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    occurred_at = datetime.now()
+    settled = lottery_settlement_service.settle(
+        operation_id,
+        user_id,
+        user_name,
+        occurred_at.date().isoformat(),
+        occurred_at=occurred_at,
+    )
+    if settled.status == "operation_conflict":
+        return "鸿运结算记录冲突，请联系管理员处理。"
+    if settled.status == "user_missing":
+        return "未找到修仙存档，本次鸿运未结算。"
+    if settled.status == "already_participated" and not settled.lottery_number:
+        return "本期鸿运已经参与，奖池继续累积~"
+    if settled.prize_tier == "grand":
+        return f"✨鸿运当头！恭喜道友获得特等奖！\n中奖号码：{settled.lottery_number}\n获得奖池中{number_to(settled.prize)}灵石！🎉🎉🎉"
+    prize_names = {
+        "first": "一等奖",
+        "second": "二等奖",
+        "third": "三等奖",
+    }
+    if settled.prize_tier in prize_names:
+        return f"🎉恭喜道友获得{prize_names[settled.prize_tier]}！\n中奖号码：{settled.lottery_number}\n获得奖池的{number_to(settled.prize)}灵石！🎉"
+    return "本次签到未中奖，奖池继续累积~"
 
 @help_in.handle(parameterless=[Cooldown(cd_time=0)])
 async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -1708,8 +1679,11 @@ def generate_daohao():
     return daohao
 
 async def reset_lottery_participants():
-    lottery_pool.reset_daily()
-    logger.opt(colors=True).info(f"<green>每日鸿运参与者已重置！</green>")
+    business_date = datetime.now().date().isoformat()
+    lottery_settlement_service.get_snapshot(business_date)
+    logger.opt(colors=True).info(
+        f"<green>鸿运业务日已切换：{business_date}</green>"
+    )
     
 async def reset_stone_limits():
     stone_limit.reset_limits()
