@@ -1,5 +1,6 @@
 from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER
+import time
 
 from ..adapter_compat import Bot, GroupMessageEvent, Message, MessageEvent, PrivateMessageEvent
 from ..on_compat import on_command
@@ -56,6 +57,11 @@ activity_close_cmd = on_command("关闭活动", permission=SUPERUSER, priority=5
 async def _ensure_user(event) -> tuple[bool, dict | None, str]:
     is_user, user_info, msg = check_user(event)
     return is_user, user_info, msg
+
+
+def _activity_operation_id(event, action: str, user_id: str) -> str:
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    return f"activity:{action}:{user_id}:{event_id or time.time_ns()}"
 
 
 @activity_help_cmd.handle(parameterless=[Cooldown(cd_time=0)])
@@ -271,7 +277,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
 
-    ok, text = claim_point_shop_item(str(user_info["user_id"]), args.extract_plain_text())
+    user_id = str(user_info["user_id"])
+    ok, text = claim_point_shop_item(
+        user_id, args.extract_plain_text(),
+        _activity_operation_id(event, "point-shop", user_id),
+    )
     await handle_send(bot, event, text if ok else f"活动购买失败：{text}")
 
 

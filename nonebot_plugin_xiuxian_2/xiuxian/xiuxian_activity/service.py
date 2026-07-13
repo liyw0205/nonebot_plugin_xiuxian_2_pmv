@@ -3,7 +3,9 @@ from copy import deepcopy
 
 from nonebot.log import logger
 
+from ...paths import get_paths
 from ..xiuxian_compensation.common import get_item_list, send_reward_to_user
+from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils import db_backend
 from ..xiuxian_utils.activity_helpers import as_bool as _as_bool
 from .activity_config import (
@@ -54,6 +56,10 @@ from .activity_storage import *
 from .activity_rules import *
 from .activity_pass import *
 from .activity_progress import *
+from .point_shop_service import ActivityPointShopPurchaseService
+
+
+point_shop_purchase_service = ActivityPointShopPurchaseService(DB_PATH, get_paths().game_db)
 
 
 def _reward_by_day(config: dict, day_index: int) -> dict:
@@ -1059,7 +1065,7 @@ def _multiply_reward_items(reward_items: list[dict], quantity: int) -> list[dict
     return items
 
 
-def claim_point_shop_item(user_id: str, query: str) -> tuple[bool, str]:
+def claim_point_shop_item(user_id: str, query: str, operation_id: str | None = None) -> tuple[bool, str]:
     uid = str(user_id)
     target, quantity = _parse_shop_query(query)
     if not target:
@@ -1089,60 +1095,28 @@ def claim_point_shop_item(user_id: str, query: str) -> tuple[bool, str]:
     point_name = activity.get("point_name") or "活动积分"
     total_cost = cost * quantity
     ensure_activity_files()
-    conn = db_backend.connect(DB_PATH)
-    conn.row_factory = db_backend.Row
-    try:
-        cur = conn.cursor()
-        balance = _get_point_balance(cur, activity["key"], uid)
-        if balance["points"] < total_cost:
-            return False, f"{point_name}不足，还缺 {total_cost - balance['points']}"
-        purchases = _get_point_purchase_map(cur, activity["key"], uid)
-        bought = purchases.get(item_key, 0)
-        limit = _as_int(item.get("limit"), 1)
-        if limit > 0 and bought + quantity > limit:
-            return False, f"该商品兑换次数不足，当前已兑换 {bought}/{limit}"
-        stock_limit = _as_int(item.get("stock_limit"), 0)
-        if stock_limit > 0:
-            sold = _get_point_shop_total_purchase(cur, activity["key"], item_key)
-            if sold + quantity > stock_limit:
-                return False, f"该商品全服库存不足，当前已兑换 {sold}/{stock_limit}"
+    operation_id = str(operation_id or f"activity-shop:{uid}:{activity['key']}:{item_key}:{now_str()}")
+    result = point_shop_purchase_service.purchase(
+        operation_id, uid, activity["key"], item_key, quantity, cost,
+        _as_int(item.get("limit"), 1), _as_int(item.get("stock_limit"), 0),
+        reward_items, XiuConfig().max_goods_num,
+    )
+    if result.status == "points_insufficient":
+        return False, f"{point_name}不足，还缺 {max(total_cost - result.points, 0)}"
+    if result.status == "personal_limit":
+        return False, f"该商品兑换次数不足，当前已兑换 {result.personal_count}/{_as_int(item.get('limit'), 1)}"
+    if result.status == "stock_insufficient":
+        return False, f"该商品全服库存不足，当前已兑换 {result.total_count}/{_as_int(item.get('stock_limit'), 0)}"
+    if result.status == "inventory_full":
+        return False, "背包中该奖励物品已达持有上限"
+    if result.status in {"operation_conflict", "state_changed", "user_missing"}:
+        return False, "兑换状态已变化，请重新尝试"
 
-        ts = now_str()
-        cur.execute(
-            """
-            UPDATE activity_point_balance
-            SET points=points-%s, update_time=%s
-            WHERE activity_key=%s AND user_id=%s AND points >= %s
-            """,
-            (total_cost, ts, activity["key"], uid, total_cost),
-        )
-        if cur.rowcount <= 0:
-            conn.rollback()
-            return False, f"{point_name}不足"
-        cur.execute(
-            """
-            INSERT INTO activity_point_purchase (
-                activity_key, user_id, item_key, count, update_time
-            )
-            VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT(activity_key, user_id, item_key) DO UPDATE SET
-                count = activity_point_purchase.count + excluded.count,
-                update_time = excluded.update_time
-            """,
-            (activity["key"], uid, item_key, quantity, ts),
-        )
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
-
-    try:
-        reward_msg = send_reward_items(uid, reward_items)
-    except Exception as e:
-        logger.warning(f"活动积分兑换发奖失败 user_id={uid}, activity={activity['key']}, item={item_key}: {e}")
-        return False, f"兑换已记录，奖励发放失败：{e}"
+    reward_msg = [
+        f"获得灵石 {number_to(reward['quantity'])} 枚"
+        if reward["type"] == "stone" else f"获得 {reward['name']} x{reward['quantity']}"
+        for reward in reward_items
+    ]
 
     reward_result = "，".join(reward_msg) if reward_msg else reward_text
     item_name = item.get("name") or item_key
