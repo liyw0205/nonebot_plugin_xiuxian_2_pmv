@@ -30,8 +30,7 @@ from ..xiuxian_utils.data_source import jsondata
 
 from .dungeon_manager import DungeonManager
 from .team_manager import (
-    remove_member_from_team, disband_team, get_user_team,
-    get_team_info, team_invite_cache, expire_team_invite,
+    get_user_team, get_team_info, team_invite_cache, expire_team_invite,
     load_teams, save_team
 )
 from .team_command_service import (
@@ -58,6 +57,7 @@ from .purchase_service import DungeonPurchaseService
 from .explore_event_service import DungeonExploreEventService
 from .battle_progress_service import DungeonBattleProgressService
 from .team_transaction_service import DungeonTeamTransactionService
+from .team_exit_service import DungeonTeamExitService
 from ...paths import get_paths
 
 sql_message = XiuxianDateManage()
@@ -68,6 +68,7 @@ dungeon_purchase_service = DungeonPurchaseService(get_paths().game_db)
 dungeon_explore_event_service = DungeonExploreEventService(get_paths().game_db, get_paths().player_db)
 dungeon_battle_progress_service = DungeonBattleProgressService(get_paths().game_db, get_paths().player_db)
 dungeon_team_transaction_service = DungeonTeamTransactionService(get_paths().player_db)
+dungeon_team_exit_service = DungeonTeamExitService(get_paths().player_db)
 DUNGEON_SHOP = {
     1999: {"name": "渡厄丹", "cost": 100000},
     20012: {"name": "秘境加速券", "cost": 500000},
@@ -116,6 +117,24 @@ def set_team_cd(user_id: str, hours: int = TEAM_JOIN_CD_HOURS):
     until = (_now_dt() + timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
     player_data.update_or_write_data(uid, TEAM_CD_TABLE, "join_cd_until", until)
     return until
+
+
+def _team_cooldown_until(hours: int = TEAM_JOIN_CD_HOURS) -> str:
+    return (_now_dt() + timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _team_operation_id(event, action: str, user_id: str) -> str:
+    event_id = getattr(event, "message_id", None)
+    if event_id:
+        return f"dungeon-team-{action}:{event_id}:{user_id}"
+    return f"dungeon-team-{action}:{time.time_ns()}:{user_id}"
+
+
+def _clear_team_invite_cache(team_id: str, affected_members: list[str] | tuple[str, ...]) -> None:
+    affected = {str(member) for member in affected_members}
+    for invitee_id, invite in list(team_invite_cache.items()):
+        if str(invitee_id) in affected or str(invite.get("team_id", "")) == str(team_id):
+            team_invite_cache.pop(invitee_id, None)
 
 
 def set_first_join_flag(user_id: str):

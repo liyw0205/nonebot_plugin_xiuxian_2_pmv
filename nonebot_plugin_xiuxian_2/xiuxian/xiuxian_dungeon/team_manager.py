@@ -103,50 +103,6 @@ def get_team_info(team_id: str) -> Optional[Dict]:
     return team_info
 
 
-def remove_member_from_team(team_id: str, user_id: str) -> bool:
-    """
-    从队伍移除成员。
-    :param team_id: 队伍ID。
-    :param user_id: 要移除的成员QQ号（字符串）。
-    :return: True如果成功，False否则。
-    """
-    team = get_team_info(team_id)
-    if not team:
-        return False
-
-    if user_id not in team['members']:
-        return False
-
-    if user_id == team['leader']:
-        if len(team['members']) > 1:
-            team['members'].remove(user_id)
-            team['leader'] = team['members'][0] # 转移队长给第一个成员
-            save_team(team) # 更新到数据库
-        else:
-            disband_team(team_id) # 最后一个成员离开，解散队伍
-    else:
-        team['members'].remove(user_id)
-        save_team(team) # 更新到数据库
-
-    return True
-
-
-def disband_team(team_id: str) -> bool:
-    """
-    解散队伍。
-    :param team_id: 队伍ID。
-    :return: True如果成功，False否则。
-    """
-    team = get_team_info(team_id)
-    if not team:
-        return False
-
-    # 从数据库中删除队伍记录
-    player_data.delete_record(team_id, TEAM_TABLE)
-
-    return True
-
-
 async def expire_team_invite(user_id: str, invite_id: str, bot: Bot, event):
     """
     组队邀请过期处理。
