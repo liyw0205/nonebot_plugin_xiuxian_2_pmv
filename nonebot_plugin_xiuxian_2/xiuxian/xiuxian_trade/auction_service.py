@@ -354,68 +354,17 @@ async def place_auction_bid(bot: Bot, user_id: str, user_name: str, auction_id: 
         return False, f"灵石不足！当前拥有 {number_to(user_info['stone'])} 灵石，需要补足 {number_to(debit_amount)} 灵石"
 
     trace_id = f"trade:auction:{auction_id}"
-    if not sql_message.try_update_ls(
-        user_id,
-        debit_amount,
-        2,
-        log_context=_trade_economy_context(
-            "auction_bid_lock",
-            trace_id,
-            auction_id=auction_id,
-            item_id=item["item_id"],
-            item_name=item["name"],
-            bid_price=bid_price,
-            previous_locked=old_bids.get(user_id, 0),
-        ),
-    ):
+    operation_id = f"auction-bid:{auction_id}:{user_id}:{bid_price}:{old_current_price}"
+    bid_result = auction_repository.place_auction_bid(
+        operation_id, auction_id, user_id, bid_price,
+        old_current_price, old_bids, time.time(),
+    )
+    if bid_result.status == "stone_insufficient":
         return False, "灵石不足，竞拍失败！"
-
-    # 更新出价记录和时间戳
-    item["bids"] = {user_id: bid_price}
-    item["bid_times"] = {user_id: time.time()} # 仍使用timestamp方便竞价逻辑
-    item["current_price"] = bid_price
-    item["last_bid_time"] = time.time() # 仍使用timestamp方便竞价逻辑
-
-    # 保存更新
-    if not auction_repository.try_update_auction_bid(
-        item["id"],
-        old_current_price,
-        bid_price,
-        item["bids"],
-        item["bid_times"],
-        item["last_bid_time"],
-    ):
-        sql_message.update_ls(
-            user_id,
-            debit_amount,
-            1,
-            log_context=_trade_economy_context(
-                "auction_bid_rollback",
-                trace_id,
-                auction_id=auction_id,
-                item_id=item["item_id"],
-                item_name=item["name"],
-                bid_price=bid_price,
-            ),
-        )
+    if bid_result.status in {"state_changed", "bid_too_low"}:
         return False, "当前拍卖价格已变化，请重新出价！"
-
-    for bidder_id_str, locked_price in old_bids.items():
-        if bidder_id_str != user_id:
-            sql_message.update_ls(
-                bidder_id_str,
-                locked_price,
-                1,
-                log_context=_trade_economy_context(
-                    "auction_previous_bid_refund",
-                    trace_id,
-                    auction_id=auction_id,
-                    item_id=item["item_id"],
-                    item_name=item["name"],
-                    new_bidder_id=user_id,
-                    new_bid_price=bid_price,
-                ),
-            )
+    if not bid_result.succeeded:
+        return False, "竞拍状态发生变化，请重新查看拍卖！"
     record_trade_event(
         user_id,
         "拍卖竞拍",

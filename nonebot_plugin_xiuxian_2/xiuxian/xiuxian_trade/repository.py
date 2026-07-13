@@ -108,6 +108,21 @@ class XianshiNameRemoval:
         return self.status == "removed"
 
 
+
+@dataclass(frozen=True)
+class AuctionBid:
+    status: str
+    auction_id: str
+    bidder_id: str
+    bid_price: int = 0
+    debit: int = 0
+    refunded_bidder: str = ""
+    refunded_amount: int = 0
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"bid", "duplicate"}
+
 @dataclass(frozen=True)
 class AuctionSettlement:
     status: str
@@ -1801,6 +1816,53 @@ class TradeRepository:
                 "SELECT * FROM auction_current WHERE id=%s", (str(auction_id),)
             ).fetchone()
             return self._auction_row(row) if row else None
+
+    def place_auction_bid(self, operation_id, auction_id, bidder_id, bid_price,
+                          expected_price, expected_bids, bid_time) -> AuctionBid:
+        operation_id, auction_id, bidder_id = map(str, (operation_id, auction_id, bidder_id))
+        bid_price, expected_price = int(bid_price), int(expected_price)
+        expected_bids = {str(k): int(v) for k, v in dict(expected_bids).items()}
+        payload = json.dumps([auction_id,bidder_id,bid_price,expected_price,expected_bids], sort_keys=True)
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self.ensure_schema(conn)
+                conn.execute("CREATE TABLE IF NOT EXISTS auction_bid_operations (operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,auction_id TEXT,bidder_id TEXT,bid_price INTEGER,debit INTEGER,refunded_bidder TEXT,refunded_amount INTEGER)")
+                old = conn.execute("SELECT payload,bid_price,debit,refunded_bidder,refunded_amount FROM auction_bid_operations WHERE operation_id=%s", (operation_id,)).fetchone()
+                if old:
+                    conn.rollback()
+                    return AuctionBid("duplicate" if str(old[0]) == payload else "state_changed",auction_id,bidder_id,int(old[1]),int(old[2]),str(old[3] or ""),int(old[4]))
+                row = conn.execute("SELECT current_price,bids,seller_id FROM auction_current WHERE id=%s", (auction_id,)).fetchone()
+                if not row:
+                    conn.rollback(); return AuctionBid("auction_missing",auction_id,bidder_id)
+                current_bids = json.loads(str(row[1]) or "{}")
+                current_bids = {str(k):int(v) for k,v in current_bids.items()}
+                if int(row[0]) != expected_price or current_bids != expected_bids:
+                    conn.rollback(); return AuctionBid("state_changed",auction_id,bidder_id)
+                if str(row[2]) == bidder_id:
+                    conn.rollback(); return AuctionBid("self_bid",auction_id,bidder_id)
+                previous_bidder, previous_amount = ("",0)
+                if current_bids:
+                    previous_bidder, previous_amount = max(current_bids.items(), key=lambda item:item[1])
+                debit = bid_price - current_bids.get(bidder_id,0)
+                if debit <= 0:
+                    conn.rollback(); return AuctionBid("bid_too_low",auction_id,bidder_id)
+                changed = conn.execute("UPDATE user_xiuxian SET stone=stone-%s WHERE user_id=%s AND stone>=%s", (debit,bidder_id,debit))
+                if changed.rowcount != 1:
+                    conn.rollback(); return AuctionBid("stone_insufficient",auction_id,bidder_id)
+                refunded_bidder, refunded_amount = "",0
+                if previous_bidder and previous_bidder != bidder_id:
+                    if conn.execute("UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s", (previous_amount,previous_bidder)).rowcount != 1:
+                        conn.rollback(); return AuctionBid("participant_missing",auction_id,bidder_id)
+                    refunded_bidder, refunded_amount = previous_bidder, previous_amount
+                new_bids = {bidder_id:bid_price}
+                conn.execute("UPDATE auction_current SET current_price=%s,bids=%s,bid_times=%s,last_bid_time=%s WHERE id=%s", (bid_price,json.dumps(new_bids),json.dumps({bidder_id:bid_time}),float(bid_time),auction_id))
+                conn.execute("INSERT INTO auction_bid_operations VALUES (%s,%s,%s,%s,%s,%s,%s,%s)", (operation_id,payload,auction_id,bidder_id,bid_price,debit,refunded_bidder,refunded_amount))
+                conn.commit()
+                return AuctionBid("bid",auction_id,bidder_id,bid_price,debit,refunded_bidder,refunded_amount)
+            except Exception:
+                conn.rollback()
+                raise
 
     def try_update_auction_bid(
         self,
