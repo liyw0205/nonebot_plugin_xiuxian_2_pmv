@@ -26,13 +26,21 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from .title_data import (
     get_all_titles, get_title_by_id,
     check_and_unlock_titles, get_user_unlocked_titles,
-    get_user_equipped_title, equip_title, unequip_title,
+    get_user_equipped_title, unequip_title,
     refresh_title_cache, find_title_id_by_name_or_id, grant_title_to_user,
     get_title_achievement_records
 )
+from ...paths import get_paths
+from .title_transaction_service import TitleTransactionService
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
+title_transaction_service = TitleTransactionService(get_paths().player_db)
+
+
+def _title_operation_id(event, action: str, user_id: str) -> str:
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    return f"title-{action}:{event_id or __import__('time').time_ns()}:{user_id}"
 
 # ===== 注册命令 =====
 title_list_cmd = on_command("我的称号", aliases={"称号列表", "查看称号"}, priority=5, block=True)
@@ -179,7 +187,25 @@ async def title_equip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, msg_text, md_type="修仙", k1="称号", v1="我的称号", k2="帮助", v2="称号帮助", k3="存档", v3="我的修仙信息")
         await title_equip_cmd.finish()
 
-    success, result_msg = equip_title(user_id, title_name_or_id)
+    title_id = find_title_id_by_name_or_id(title_name_or_id)
+    if not title_id:
+        await handle_send(bot, event, "称号不存在！")
+        await title_equip_cmd.finish()
+    unlocked = get_user_unlocked_titles(user_id)
+    equipped = get_user_equipped_title(user_id) or ""
+    result = title_transaction_service.equip(
+        _title_operation_id(event, "equip", str(user_id)), user_id, unlocked, equipped, title_id
+    )
+    title_data = get_title_by_id(title_id) or {}
+    messages = {
+        "applied": f"成功装备称号【{title_data.get('name', title_id)}】！",
+        "duplicate": f"成功装备称号【{title_data.get('name', title_id)}】！",
+        "already_equipped": f"称号【{title_data.get('name', title_id)}】已在装备中。",
+        "title_locked": "你还未解锁该称号！",
+        "state_changed": "称号状态已变化，请重新查看后再试。",
+        "operation_conflict": "本次称号请求与已处理记录冲突，请重新操作。",
+    }
+    result_msg = messages.get(result.status, "装备称号失败，请重试。")
     await handle_send(bot, event, result_msg, md_type="修仙", k1="称号", v1="我的称号", k2="卸下", v2="卸下称号", k3="存档", v3="我的修仙信息")
     await title_equip_cmd.finish()
 
