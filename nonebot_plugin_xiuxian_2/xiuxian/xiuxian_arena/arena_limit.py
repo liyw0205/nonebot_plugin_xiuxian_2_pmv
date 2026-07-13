@@ -48,6 +48,7 @@ class ArenaLimit:
             "daily_challenge_buys": 0,             # 今日购买次数
             "last_reset_date": datetime.now().strftime("%Y-%m-%d"),  # 最后重置日期
             "last_buy_date": datetime.now().strftime("%Y-%m-%d"),
+            "last_challenge_time": "",
             "win_streak": 0,                       # 连胜次数
             "max_win_streak": 0,                   # 最大连胜
             "rank": "青铜",                        # 当前段位
@@ -122,18 +123,6 @@ class ArenaLimit:
                 return i
         return 0  # 未找到用户
 
-    def add_honor_points(self, user_id, amount):
-        """添加荣誉值"""
-        arena_info = self.get_user_arena_info(user_id)
-        new_honor = arena_info["honor_points"] + amount
-        new_total = arena_info["total_honor_earned"] + amount
-        
-        self.update_arena_data(user_id, {
-            "honor_points": new_honor,
-            "total_honor_earned": new_total
-        })
-        return new_honor
-
     def get_weekly_purchases(self, user_id, item_id):
         """获取用户本周已购买竞技场商店某商品的数量。"""
         arena_info = self.get_user_arena_info(user_id)
@@ -176,12 +165,6 @@ class ArenaLimit:
         arena_info = self.get_user_arena_info(user_id)
         return int(arena_info["daily_challenges_used"]) < self.get_daily_challenge_cap(user_id)
 
-    def use_challenge(self, user_id):
-        """使用一次挑战次数"""
-        arena_info = self.get_user_arena_info(user_id)
-        arena_info["daily_challenges_used"] += 1
-        self.update_arena_data(user_id, {"daily_challenges_used": arena_info["daily_challenges_used"]})
-
     def add_challenge_count(self, user_id, amount=1):
         """增加今日剩余挑战次数，实际表现为扣减已用次数"""
         arena_info = self.get_user_arena_info(user_id)
@@ -207,53 +190,6 @@ class ArenaLimit:
             "last_buy_date": datetime.now().strftime("%Y-%m-%d")
         })
         return real_amount, bought, self.daily_challenges + extra
-
-    def update_after_battle(self, user_id, is_win, is_opponent=False, opponent_id=None):
-        """更新战斗结果
-        Args:
-            user_id: 用户ID
-            is_win: 是否胜利
-            is_opponent: 是否为对手（用于区分扣分逻辑）
-            opponent_id: 对手ID（用于无匹配情况）
-        """
-        arena_info = self.get_user_arena_info(user_id)
-    
-        if is_win:
-            # 胜利处理
-            new_score = arena_info["score"] + self.win_points
-            arena_info["total_wins"] += 1
-            arena_info["win_streak"] += 1
-            arena_info["max_win_streak"] = max(arena_info["max_win_streak"], arena_info["win_streak"])
-        else:
-            # 失败处理
-            if is_opponent:
-                # 对手失败时扣分
-                new_score = max(0, arena_info["score"] - self.lose_points)  # 防止负分
-            else:
-                # 挑战者失败时积分不变
-                new_score = arena_info["score"]
-            
-            arena_info["total_losses"] += 1
-            arena_info["win_streak"] = 0
-            
-            # 无匹配情况（只有挑战者会触发）
-            if opponent_id is None and not is_opponent:
-                new_score += self.no_match_points
-        
-        # 更新段位
-        new_rank = self.calculate_rank(new_score)
-    
-        update_data = {
-            "score": new_score,
-            "total_wins": arena_info["total_wins"],
-            "total_losses": arena_info["total_losses"],
-            "win_streak": arena_info["win_streak"],
-            "max_win_streak": arena_info["max_win_streak"],
-            "rank": new_rank
-        }
-    
-        self.update_arena_data(user_id, update_data)
-        return new_score, new_rank
 
     def calculate_rank(self, score):
         """根据积分计算段位"""

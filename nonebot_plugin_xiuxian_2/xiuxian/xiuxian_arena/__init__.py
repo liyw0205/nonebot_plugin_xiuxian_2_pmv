@@ -10,7 +10,7 @@ from nonebot.permission import SUPERUSER
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import check_user, log_message, handle_send, send_msg_handler, update_statistics_value, number_to, send_help_message
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
-from ..xiuxian_utils.player_fight import Player_fight
+from ..xiuxian_utils.player_fight import BattleSystem, Entity, apply_player_buffs, get_players_attributes
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig
 from ...paths import get_paths
@@ -23,9 +23,15 @@ from .arena_limit import arena_limit
 from .arena_shop import arena_shop_data
 from .purchase_service import ArenaPurchaseService
 from .challenge_purchase_service import ArenaChallengePurchaseService
+from .challenge_cost_service import ArenaChallengeCostService
+from .battle_settlement_service import ArenaBattleSettlementService
+from .season_reward_service import ArenaSeasonRewardService
 
 arena_purchase_service = ArenaPurchaseService(get_paths().game_db, get_paths().player_db)
 arena_challenge_purchase_service = ArenaChallengePurchaseService(get_paths().game_db, get_paths().player_db)
+arena_challenge_cost_service = ArenaChallengeCostService(get_paths().game_db, get_paths().player_db)
+arena_battle_settlement_service = ArenaBattleSettlementService(get_paths().game_db, get_paths().player_db)
+arena_season_reward_service = ArenaSeasonRewardService(get_paths().game_db, get_paths().player_db)
 
 arena_challenge = on_command("竞技场挑战", priority=10, block=True)
 arena_view = on_command("竞技场查看", priority=10, block=True)
@@ -38,6 +44,29 @@ arena_honor = on_command("我的荣誉", priority=10, block=True)
 arena_buy_challenge = on_command("竞技场购买次数", aliases={"购买竞技场次数", "竞技场买次数"}, priority=10, block=True)
 
 ARENA_CHALLENGE_BUY_COST = 2000000
+ARENA_CHALLENGE_STAMINA_COST = 0
+
+
+def _arena_fight(user_id, opponent_id, bot_id):
+    players = []
+    for team_id, current_id in enumerate((user_id, opponent_id)):
+        data = get_players_attributes(current_id)
+        attributes = data["属性"]
+        attributes["natal_data"] = data.get("本命法宝")
+        player = Entity(attributes, team_id=team_id)
+        apply_player_buffs(player, data)
+        players.append(player)
+    return BattleSystem(players, bot_id=bot_id).run_battle()
+
+
+def _arena_final_vitals(status_list, user_id, fallback):
+    for item in status_list:
+        for attributes in item.values():
+            if str(attributes.get("user_id")) == str(user_id):
+                hp_multiplier = attributes.get("hp_multiplier", 1) or 1
+                mp_multiplier = attributes.get("mp_multiplier", 1) or 1
+                return max(1, int(attributes.get("hp", 1) / hp_multiplier)), max(1, int(attributes.get("mp", 1) / mp_multiplier))
+    return int(fallback["hp"]), int(fallback["mp"])
 
 __arena_help__ = """
 竞技场玩法
@@ -110,12 +139,6 @@ async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     user_id = str(user_info['user_id'])
     arg_text = args.extract_plain_text().strip()
 
-    # 检查挑战次数
-    if not arena_limit.can_challenge_today(user_id):
-        msg = "今日挑战次数已用完，请明日再来！"
-        await handle_send(bot, event, msg)
-        await arena_challenge.finish()
-
     opponent_id = None
     use_cached_target = False
 
@@ -137,53 +160,61 @@ async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         # 无参数则随机匹配
         opponent_id = await find_arena_opponent(user_id)
 
-    # 使用一次挑战次数
-    arena_limit.use_challenge(user_id)
+    arena_info = arena_limit.get_user_arena_info(user_id)
+    challenger_player = sql_message.get_user_info_with_id(user_id)
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns())
+    challenged_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+    cost = arena_challenge_cost_service.consume(
+        f"arena-challenge-cost:{event_id}:{user_id}", user_id, opponent_id,
+        arena_limit.daily_challenges + int(arena_info.get("daily_extra_challenges", 0)),
+        ARENA_CHALLENGE_STAMINA_COST, int(arena_info.get("daily_challenges_used", 0)),
+        int(arena_info.get("daily_extra_challenges", 0)), int(challenger_player["hp"]),
+        int(challenger_player["mp"]), int(challenger_player.get("user_stamina", 0)),
+        arena_info.get("last_challenge_time", ""), challenged_at,
+    )
+    if not cost.succeeded:
+        message = "今日挑战次数已用完，请明日再来！" if cost.status == "limit_reached" else "竞技场挑战状态已变化，请重新操作。"
+        await handle_send(bot, event, message)
+        await arena_challenge.finish()
+
+    challenger_arena = dict(arena_info)
+    challenger_player = dict(challenger_player)
+    challenger_player["user_stamina"] = cost.stamina
+    opponent_arena = opponent_player = None
+    outcome, final_challenger = "no_match", (int(challenger_player["hp"]), int(challenger_player["mp"]))
+    final_opponent = (None, None)
 
     if opponent_id:
-        # 重新获取对手当前信息，避免缓存期间积分变化/用户失效
-        opponent_user_info = sql_message.get_user_info_with_id(opponent_id)
-        if not opponent_user_info:
+        opponent_arena = arena_limit.get_user_arena_info(opponent_id)
+        opponent_player = sql_message.get_user_info_with_id(opponent_id)
+        if opponent_player:
             if use_cached_target:
                 clear_arena_opponent_cache(user_id)
-            new_score, new_rank = arena_limit.update_after_battle(user_id, False, opponent_id=None)
-            msg = f"目标对手信息已失效，获得安慰积分{arena_limit.no_match_points}点！\n当前积分：{new_score} ({new_rank})"
-            await handle_send(bot, event, msg)
-            await arena_challenge.finish()
-
-        # 清理缓存：被挑战后清除
-        if use_cached_target:
-            clear_arena_opponent_cache(user_id)
-
-        # 进行战斗
-        user1_info = sql_message.get_user_real_info(user_id)
-        user2_info = sql_message.get_user_real_info(opponent_id)
-
-        if not user1_info or not user2_info:
-            new_score, new_rank = arena_limit.update_after_battle(user_id, False, opponent_id=None)
-            msg = f"战斗数据异常，获得安慰积分{arena_limit.no_match_points}点！\n当前积分：{new_score} ({new_rank})"
-            await handle_send(bot, event, msg)
-            await arena_challenge.finish()
-
-        result, victor = Player_fight(user_id, opponent_id, 1, bot.self_id)
-
-        # 发送战斗过程
-        await send_msg_handler(bot, event, result)
-
-        # 处理战斗结果
-        if victor == user1_info['user_name']:
-            # 挑战者胜利
-            new_score, new_rank = arena_limit.update_after_battle(user_id, True)
-            arena_limit.update_after_battle(opponent_id, False, is_opponent=True)
-            msg = f"🎉 挑战胜利！获得{arena_limit.win_points}积分！\n当前积分：{new_score} ({new_rank})"
+            battle_messages, winner, status_list = _arena_fight(user_id, opponent_id, bot.self_id)
+            await send_msg_handler(bot, event, battle_messages)
+            final_challenger = _arena_final_vitals(status_list, user_id, challenger_player)
+            final_opponent = _arena_final_vitals(status_list, opponent_id, opponent_player)
+            outcome = "win" if winner == 0 else "loss" if winner == 1 else "draw"
         else:
-            # 挑战者失败
-            new_score, new_rank = arena_limit.update_after_battle(user_id, False, opponent_id=opponent_id)
-            msg = f"💔 挑战失败，积分不变。\n当前积分：{new_score} ({new_rank})"
+            opponent_id = None
+            opponent_arena = None
+
+    settlement = arena_battle_settlement_service.settle(
+        f"arena-battle-settlement:{event_id}:{user_id}", user_id, opponent_id, outcome,
+        challenger_arena, opponent_arena, challenger_player, opponent_player,
+        final_challenger[0], final_challenger[1], final_opponent[0], final_opponent[1],
+        arena_limit.win_points, arena_limit.lose_points, arena_limit.no_match_points,
+    )
+    if not settlement.succeeded:
+        await handle_send(bot, event, "竞技场战斗结算状态已变化，请重新查看竞技场信息。")
+        await arena_challenge.finish()
+    new_score, new_rank = settlement.challenger_score, settlement.challenger_rank
+    if outcome == "win":
+        msg = f"挑战胜利！获得{arena_limit.win_points}积分！\n当前积分：{new_score} ({new_rank})"
+    elif outcome in {"loss", "draw"}:
+        msg = f"挑战失败，积分不变。\n当前积分：{new_score} ({new_rank})"
     else:
-        # 无匹配对手
-        new_score, new_rank = arena_limit.update_after_battle(user_id, False, opponent_id=None)
-        msg = f"⚪ 未找到合适对手，获得安慰积分{arena_limit.no_match_points}点！\n当前积分：{new_score} ({new_rank})"
+        msg = f"未找到有效对手，获得安慰积分{arena_limit.no_match_points}点！\n当前积分：{new_score} ({new_rank})"
     
     await handle_send(bot, event, msg)
     await arena_challenge.finish()
@@ -680,28 +711,23 @@ def clear_arena_opponent_cache(user_id: str):
 
 async def reset_arena_daily_challenges():
     """每日重置竞技场挑战次数并发放荣誉值奖励"""
-    # 获取所有有竞技场数据的用户
     all_users = player_data_manager.get_all_field_data("arena", "score")
-    
     honor_distribution = {}
-    
+    season_key = datetime.now().strftime("%Y-%m-%d")
+
     for user_id, _ in all_users:
         user_id = str(user_id)
-        
-        # 重置挑战次数
-        player_data_manager.update_or_write_data(user_id, "arena", "daily_challenges_used", 0)
-        player_data_manager.update_or_write_data(user_id, "arena", "daily_extra_challenges", 0)
-        player_data_manager.update_or_write_data(user_id, "arena", "daily_challenge_buys", 0)
-        player_data_manager.update_or_write_data(user_id, "arena", "last_reset_date", datetime.now().strftime("%Y-%m-%d"))
-        player_data_manager.update_or_write_data(user_id, "arena", "last_buy_date", datetime.now().strftime("%Y-%m-%d"))
-        
-        # 计算并发放荣誉值
+        arena_info = arena_limit.get_user_arena_info(user_id)
         total_honor, base_honor, ranking_bonus = arena_limit.calculate_daily_honor(user_id)
-        if total_honor > 0:
-            arena_limit.add_honor_points(user_id, total_honor)
-            
+        claimed = arena_season_reward_service.claim(
+            f"arena-season-reward:{season_key}:{user_id}", user_id, season_key,
+            int(arena_info["score"]), arena_info["rank"], arena_limit.get_user_ranking(user_id),
+            int(arena_info["honor_points"]), int(arena_info["total_honor_earned"]),
+            base_honor, ranking_bonus, expected_reset=arena_info,
+        )
+        if claimed.succeeded and total_honor > 0:
             user_info = sql_message.get_user_info_with_id(user_id)
-            honor_distribution[user_info['user_name']] = {
+            honor_distribution[user_info['user_name'] if user_info else user_id] = {
                 'total': total_honor,
                 'base': base_honor,
                 'bonus': ranking_bonus
