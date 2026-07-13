@@ -93,8 +93,4 @@ class TrainingLimit:
             data["weekly_purchases"] = user_data
         self.save_user_training_info(user_id, data)
 
-    def reset_limits(self):
-        """重置所有历练状态"""
-        player_data_manager.update_all_records("training", "last_time", None)
-
 training_limit = TrainingLimit()

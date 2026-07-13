@@ -1300,8 +1300,21 @@ async def do_work_cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 async def training_reset_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """重置所有用户的历练"""
     from ..xiuxian_training import training_reset_limits
-    training_reset_limits()
-    msg = "用户历练状态重置成功"
+
+    operation_id = _admin_operation_id(event, "training-reset", "all")
+    operator_id = str(get_user_id(event) or "unknown")
+    while True:
+        result = training_reset_limits(operation_id, operator_id)
+        if result.status != "applied" or result.completed >= result.total:
+            break
+        await asyncio.sleep(0)
+    if result.status == "operation_conflict":
+        msg = "本次历练重置与已记录事件冲突"
+    else:
+        msg = (
+            f"用户历练状态重置完成：已处理 {result.completed}/{result.total} 名玩家，"
+            f"重置 {result.changed} 名，跳过 {result.skipped} 名"
+        )
     await handle_send(bot, event, msg)
     await training_reset.finish()
 

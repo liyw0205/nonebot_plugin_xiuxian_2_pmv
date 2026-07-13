@@ -18,6 +18,7 @@ from .training_events import training_events
 from .completion_service import TrainingCompletionService
 from .event_service import TrainingEventService
 from .purchase_service import TrainingPurchaseService
+from .reset_service import TrainingResetService
 from ...paths import get_paths
 from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.item_json import Items
@@ -29,6 +30,7 @@ items = Items()
 training_completion_service = TrainingCompletionService(get_paths().game_db, get_paths().player_db)
 training_event_service = TrainingEventService(get_paths().game_db, get_paths().player_db)
 training_purchase_service = TrainingPurchaseService(get_paths().game_db, get_paths().player_db)
+training_reset_service = TrainingResetService(get_paths().game_db, get_paths().player_db)
 # 定义命令
 training_start = on_command("开始历练", aliases={"历练开始"}, priority=5, block=True)
 training_status = on_command("历练状态", priority=5, block=True)
@@ -463,6 +465,10 @@ def make_choice(user_id, operation_id):
     
     return training_info["last_event"]
 
-def training_reset_limits():
-    training_limit.reset_limits()
+def training_reset_limits(operation_id, operator_id, *, chunk_size=500):
+    return training_reset_service.reset(
+        operation_id,
+        operator_id,
+        chunk_size=chunk_size,
+    )
     
