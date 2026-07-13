@@ -34,6 +34,7 @@ from .mentor_transmission_service import MentorTransmissionService
 from .partner_breakthrough_service import PartnerBreakthroughService
 from .partner_cultivation_service import PartnerCultivationService
 from .partner_token_service import PartnerTokenUseService
+from .partner_bind_service import PartnerBindService
 from .partner_storage import (
     PLAYERSDATA,
     bind_partner_storage,
@@ -66,6 +67,7 @@ xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
 partner_cultivation_service = PartnerCultivationService(get_paths().game_db, get_paths().player_db)
 partner_token_service = PartnerTokenUseService(get_paths().game_db, get_paths().player_db)
+partner_bind_service = PartnerBindService(get_paths().game_db, get_paths().player_db)
 partner_breakthrough_service = PartnerBreakthroughService(get_paths().game_db, get_paths().player_db)
 mentor_graduation_service = MentorGraduationService(get_paths().game_db, get_paths().player_db)
 mentor_transmission_service = MentorTransmissionService(get_paths().game_db, get_paths().player_db)
@@ -1094,33 +1096,24 @@ async def agree_bind_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意道侣", k2="绑定", v2="绑定道侣", k3="道侣", v3="我的道侣")
         await agree_bind.finish()
         
-    invite_data = partner_invite_cache[str(user_id)]
-    inviter_id = invite_data['inviter']
-    
-    # 获取双方信息
-    inviter_info = sql_message.get_user_real_info(inviter_id)
-    user_info = sql_message.get_user_real_info(user_id)
-    
-    # 创建道侣数据
-    partner_data = {
-        'partner_id': inviter_id,
-        'bind_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'affection': 0  # 初始化亲密度
-    }
-    
-    # 保存用户道侣数据
-    save_partner(user_id, partner_data)
-    
-    # 创建对方道侣数据
-    partner_data_inviter = {
-        'partner_id': user_id,
-        'bind_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'affection': 0  # 初始化亲密度
-    }
-    
-    # 保存邀请者道侣数据
-    save_partner(inviter_id, partner_data_inviter)
-    
+    bind_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    invitee_partner = load_partner(user_id).get("partner_id")
+    inviter_partner = load_partner(inviter_id).get("partner_id")
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    result = partner_bind_service.apply(
+        f"partner-bind:{user_id}:{invite_data.get('invite_id', event_id or time.time_ns())}",
+        user_id, inviter_id, bind_time=bind_time,
+        expected_invitee_partner=invitee_partner, expected_inviter_partner=inviter_partner,
+    )
+    if not result.succeeded:
+        await handle_send(bot, event, "道侣邀请或双方关系状态已变化，请重新发起邀请。", md_type="buff")
+        await agree_bind.finish()
+    if result.status == "applied" and str(user_id) in partner_invite_cache:
+        del partner_invite_cache[str(user_id)]
+
+    msg = f"你已与{inviter_info['user_name']}结为道侣，绑定时间为{result.bind_time}。"
+    await handle_send(bot, event, msg)
+    await agree_bind.finish()
     # 删除邀请
     del partner_invite_cache[str(user_id)]
     
