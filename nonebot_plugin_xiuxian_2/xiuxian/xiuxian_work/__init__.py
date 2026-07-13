@@ -1,5 +1,6 @@
 import os
 import random
+import time
 import asyncio
 import json
 from typing import Tuple, Any, Dict
@@ -27,7 +28,10 @@ from .reward_data_source import PLAYERSDATA, readf, savef, delete_work_file, has
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import convert_rank, XiuConfig
 from pathlib import Path
+from ...paths import get_paths
+from .settlement_service import WorkSettlementService
 
+work_settlement_service = WorkSettlementService(get_paths().game_db)
 sql_message = XiuxianDateManage()  # sql类
 items = Items()
 count = 5  # 每日刷新次数
@@ -209,74 +213,65 @@ async def get_work_status_message(user_id: str, work_data: dict) -> str:
         return work_msg_f
     elif status == 4:  # 已过期的悬赏令
         return "悬赏令已过期，请重新刷新获取新悬赏！"
-    else:  # 无悬赏
-        return "没有查到您的悬赏令信息，请输入【悬赏令刷新】获取新悬赏！"
-
-async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, user_id: str, work_data: dict):
-    """结算悬赏令"""    
-    user_info = sql_message.get_user_info_with_id(user_id)    
-    msg, give_exp, s_o_f, item_id, big_suc = workhandle().do_work(
-        2,
-        work_list=work_data['scheduled_time'],
-        level=user_info['level'],
-        exp=user_info['exp'],
-        user_id=user_id
-    )
-    
-    # 结算后删除JSON文件
-    delete_work_file(user_id)
-    
-    item_flag = False
-    item_info = None
-    item_msg = None
-    if item_id != 0:
-        item_flag = True
-        item_info = items.get_data_by_item_id(item_id)
-        item_msg = f"{item_info['level']}:{item_info['name']}"
-    
-    current_exp = user_info['exp']
-    max_exp = int(OtherSet().set_closing_type(user_info['level'])) * XiuConfig().closing_exp_upper_limit
-    
-    if big_suc:  # 大成功
-        exp_rate = random.uniform(1.5, 2.5)
-        gain_exp = int(give_exp * exp_rate)
-        success_msg = "悬赏大成功！"
     else:
+        return "没有查到您的悬赏令信息，请输入【悬赏令刷新】获取新悬赏！"
+async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, user_id: str, work_data: dict):
+    """结算悬赏令。随机结果先固定，再由事务服务一次提交。"""
+    user_info = sql_message.get_user_info_with_id(user_id)
+    _, give_exp, s_o_f, item_id, big_suc = workhandle().do_work(
+        2,
+        work_list=work_data["scheduled_time"],
+        level=user_info["level"],
+        exp=user_info["exp"],
+        user_id=user_id,
+    )
+    max_exp = int(OtherSet().set_closing_type(user_info["level"])) * XiuConfig().closing_exp_upper_limit
+    item_info = items.get_data_by_item_id(item_id) if item_id else None
+    item_flag = bool(item_info) and (big_suc or s_o_f)
+    item_msg = f"{item_info['level']}:{item_info['name']}" if item_flag else None
+
+    if big_suc:
+        gain_exp = int(give_exp * random.uniform(1.5, 2.5))
+        success_msg = "悬赏大成功！"
+    elif s_o_f:
         gain_exp = give_exp
         success_msg = "悬赏完成！"
-    
-    if current_exp + gain_exp >= max_exp:
-        remaining_exp = max_exp - current_exp
-        gain_exp = remaining_exp
-    gain_exp = max(gain_exp, 0)
-    
-    if big_suc or s_o_f:  # 大成功 or 普通成功
-        sql_message.update_exp(user_id, gain_exp)
-        sql_message.do_work(user_id, 0)
-        msg = (
-            f"{success_msg}\n"
-            f"悬赏名称：{work_data['scheduled_time']}\n"
-            f"获得修为：{number_to(gain_exp)}"
-        )
-        if item_flag:
-            sql_message.send_back(user_id, item_id, item_info['name'], item_info['type'], 1)
-            msg += f"\n额外奖励：{item_msg}！"
-    else:  # 失败
+    else:
         gain_exp = give_exp // 2
-        if current_exp + gain_exp >= max_exp:
-            remaining_exp = max_exp - current_exp
-            gain_exp = remaining_exp
-        gain_exp = max(gain_exp, 0)
-        sql_message.update_exp(user_id, gain_exp)
-        sql_message.do_work(user_id, 0)
-        msg = (
-            f"悬赏勉强完成\n"
-            f"悬赏名称：{work_data['scheduled_time']}\n"
-            f"获得修为：{number_to(gain_exp)}"
-        )
-    log_message(user_id, msg)
-    update_statistics_value(user_id, "悬赏令结算次数")
-    record_task_progress(user_id, "work")
+        success_msg = "悬赏勉强完成"
+
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"work-settlement:{user_id}:{event_message_id or time.time_ns()}"
+    result = work_settlement_service.settle(
+        operation_id,
+        user_id,
+        {"create_time": work_data["create_time"], "scheduled_time": work_data["scheduled_time"]},
+        gain_exp,
+        {"id": item_id, "name": item_info["name"], "type": item_info["type"]} if item_flag else None,
+        max_exp,
+        XiuConfig().max_goods_num,
+    )
+    if result.status == "inventory_full":
+        msg = "背包物品已达上限，悬赏奖励尚未结算。"
+        await handle_send(bot, event, msg)
+        return msg
+    if result.status in {"state_changed", "user_missing"}:
+        msg = "悬赏令状态已变化，请重新查看后再试。"
+        await handle_send(bot, event, msg)
+        return msg
+
+    delete_work_file(user_id)
+    msg = (
+        f"{success_msg}\n"
+        f"悬赏名称：{work_data['scheduled_time']}\n"
+        f"获得修为：{number_to(result.exp)}"
+    )
+    if result.item_awarded:
+        msg += f"\n额外奖励：{item_msg}！"
+    if result.status == "applied":
+        log_message(user_id, msg)
+        update_statistics_value(user_id, "悬赏令结算次数")
+        record_task_progress(user_id, "work")
     await handle_send(bot, event, msg, md_type="悬赏令", k1="刷新", v1="悬赏令刷新", k2="数据", v2="统计数据", k3="帮助", v3="悬赏令帮助")
     return msg
 
