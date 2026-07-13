@@ -860,7 +860,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         md_type="背包", k1="查看", v1=f"查看饰品 {uid}", k2="洗练", v2=f"饰品洗练 {uid}"
     )
 
-@decompose_accessory.handle(parameterless=[Cooldown(cd_time=1.2)])
+@quick_decompose_accessory.handle(parameterless=[Cooldown(cd_time=2)])
 @wash_accessory.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     isUser, user_info, msg = check_user(event)
@@ -980,6 +980,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         md_type="背包", k1="饰品", v1="饰品背包", k2="查看", v2="我的饰品"
     )
 
+@decompose_accessory.handle(parameterless=[Cooldown(cd_time=1.2)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -992,47 +993,49 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     user_id = str(user_info["user_id"])
-    result = {"ok": False, "gain": 0, "name": "未知饰品", "q": 1, "msg": ""}
-
-    def _mut(doc):
-        nonlocal result
-        doc = _normalize_accessory_doc(doc)
-        idx, target = _find_accessory_in_bag(doc, uid)
-        if idx < 0 or not target:
-            result["msg"] = "分解失败：未在饰品背包中找到该UID（已装备饰品请先卸下）"
-            return False
-
-        q = max(1, min(5, int(target.get("quality", 1))))
-        gain = ACCESSORY_DECOMPOSE_GAIN.get(q, 1)
-
-        result["ok"] = True
-        result["gain"] = gain
-        result["name"] = target.get("name", "未知饰品")
-        result["q"] = q
-
-        del doc["bag"][idx]
-        return True
-
-    player_data_manager.patch_doc(
-        user_id=user_id,
-        table_name=TABLE,
-        fields=["equipped", "bag"],
-        mutator=_mut,
-        default_factory=_default_accessory_doc
+    operation_id = _accessory_operation_id(event, "decompose", user_id, uid)
+    replay = accessory_transaction_service.replay(operation_id, "decompose")
+    if replay is not None and replay.accessory is not None:
+        decomposed = replay.accessory
+        q = max(1, min(5, int(decomposed.get("quality", 1))))
+        await handle_send(
+            bot, event,
+            f"已分解：{decomposed.get('name', '未知饰品')}（{quality_to_cn(q)}）\n获得{WASH_STONE_NAME}：{replay.stone_delta}个",
+            md_type="背包", k1="饰品", v1="饰品背包", k2="背包", v2="我的背包"
+        )
+        return
+    data = _get_data(user_id)
+    _, target = _find_accessory_in_bag(data, uid)
+    if not target:
+        await handle_send(bot, event, "分解失败：未在饰品背包中找到该UID（已装备饰品请先卸下）")
+        return
+    q = max(1, min(5, int(target.get("quality", 1))))
+    gain = ACCESSORY_DECOMPOSE_GAIN.get(q, 1)
+    result = accessory_transaction_service.decompose(
+        operation_id,
+        user_id,
+        uid,
+        deepcopy(target),
+        WASH_STONE_ID,
+        WASH_STONE_NAME,
+        gain,
+        int(XiuConfig().max_goods_num),
     )
 
-    if not result["ok"]:
-        await handle_send(bot, event, result["msg"] or "分解失败")
+    if result.status == "inventory_full":
+        await handle_send(bot, event, f"分解失败：{WASH_STONE_NAME}已达背包上限")
+        return
+    if not result.succeeded or result.accessory is None:
+        await handle_send(bot, event, "分解失败：饰品状态已变化，请重新查看后再试")
         return
 
-    sql_message.send_back(user_id, WASH_STONE_ID, WASH_STONE_NAME, "特殊道具", result["gain"], 1)
+    decomposed = result.accessory
     await handle_send(
         bot, event,
-        f"已分解：{result['name']}（{quality_to_cn(result['q'])}）\n获得{WASH_STONE_NAME}：{result['gain']}个",
+        f"已分解：{decomposed.get('name', '未知饰品')}（{quality_to_cn(q)}）\n获得{WASH_STONE_NAME}：{gain}个",
         md_type="背包", k1="饰品", v1="饰品背包", k2="背包", v2="我的背包"
     )
 
-@quick_decompose_accessory.handle(parameterless=[Cooldown(cd_time=2)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     isUser, user_info, msg = check_user(event)
     if not isUser:
