@@ -29,9 +29,11 @@ from ..xiuxian_utils.player_fight import Boss_fight
 from ..xiuxian_config import XiuConfig, base_rank
 from .seed_purchase_service import SeedPurchaseService
 from .resource_reward_service import MapResourceRewardService
+from .explore_settlement_service import MapExploreSettlementService
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
+map_explore_settlement_service = MapExploreSettlementService(get_paths().game_db, get_paths().player_db)
 map_resource_reward_service = MapResourceRewardService(get_paths().game_db, get_paths().player_db)
 seed_purchase_service = SeedPurchaseService(get_paths().game_db)
 items = Items()
@@ -1789,6 +1791,7 @@ def _get_explore_status(uid: str):
             "node_name": "",
             "start_time": "",
             "duration_min": 0,
+            "settlement": "",
             "max_duration_min": 0,
             "interval_min": 0,
         }
@@ -1807,83 +1810,50 @@ def _save_explore_status(uid: str, d: dict):
 # =========================================
 def _pick_explore_event(ntype: str):
     conf = EXPLORE_CONFIG[ntype]
-    ew = conf["event_weights"]
-    keys = list(ew.keys())
-    vals = list(ew.values())
-    return random.choices(keys, weights=vals, k=1)[0]
+    event_weights = conf["event_weights"]
+    return random.choices(list(event_weights), weights=list(event_weights.values()), k=1)[0]
 
 
-def _resolve_explore_event(uid: str, user_info: dict, node_type: str, node_name: str):
+def _roll_explore_event(user_info: dict, node_type: str, node_name: str, decay: float):
     event_type = _pick_explore_event(node_type)
-
     if event_type == "empty":
         text_pool = [
             f"你在【{node_name}】搜索许久，却只看到风过残痕。",
             f"你循迹探查【{node_name}】，最终一无所获。",
-            f"这一次在【{node_name}】的探索，未能找到有价值的线索。"
+            f"这一次在【{node_name}】的探索，未能找到有价值的线索。",
         ]
-        return random.choice(text_pool), []
+        return random.choice(text_pool), [], 0, []
 
-    if event_type == "normal":
-        rewards = _grant_rewards(uid, [
-            ("stone_low", 1, 2, 1.0),
-            ("herb_low", 1, 1, 0.55),
-            ("wash_stone_low", 1, 1, 0.12),
-        ], decay_ratio=_get_reward_decay(uid))
-        extra = _grant_skill_equip_drop(user_info, MAP_EXTRA_DROP_RATE["explore_normal"])
-        if extra:
-            rewards.append(extra)
-        dongfu_material = _grant_map_dongfu_material(uid, node_type, 1.2)
-        if dongfu_material:
-            rewards.append(dongfu_material)
-        return f"你在【{node_name}】有所收获。", rewards
-
-    if event_type == "good":
-        rewards = _grant_rewards(uid, [
-            ("stone_mid", 1, 2, 1.0),
-            ("herb_mid", 1, 2, 0.65),
-            ("token_common", 1, 1, 0.10),
-            ("wash_stone_low", 1, 1, 0.25),
-            ("tianti_god", 1, 1, 0.02),
-        ], decay_ratio=_get_reward_decay(uid))
-        extra = _grant_skill_equip_drop(user_info, MAP_EXTRA_DROP_RATE["explore_normal"])
-        if extra:
-            rewards.append(extra)
-        dongfu_material = _grant_map_dongfu_material(uid, node_type, 1.5)
-        if dongfu_material:
-            rewards.append(dongfu_material)
-        return f"你在【{node_name}】发现了一处隐秘资源点。", rewards
-
-    if event_type == "rare":
-        rewards = _grant_rewards(uid, [
-            ("stone_high", 1, 1, 1.0),
-            ("token_rare", 1, 1, 0.15),
-            ("acc_pack_low", 1, 1, 0.05),
-            ("god_frag", 1, 1, 0.02),
-            ("tianti_god", 1, 1, 0.05),
-        ], decay_ratio=_get_reward_decay(uid))
-        extra = _grant_skill_equip_drop(user_info, MAP_EXTRA_DROP_RATE["explore_rare"])
-        if extra:
-            rewards.append(extra)
-        dongfu_material = _grant_map_dongfu_material(uid, node_type, 2.5)
-        if dongfu_material:
-            rewards.append(dongfu_material)
-        if random.random() < 0.12:
-            rewards.extend(_grant_rewards(uid, [("dongfu_deed", 1, 1, 1.0)]))
-        return f"你在【{node_name}】触发了一场罕见机缘！", rewards
-
-    rewards = _grant_rewards(uid, [
-        ("stone_mid", 1, 2, 1.0),
-        ("wash_stone_low", 1, 2, 0.30),
-        ("token_common", 1, 1, 0.15),
-    ], decay_ratio=_get_reward_decay(uid))
-    extra = _grant_skill_equip_drop(user_info, MAP_EXTRA_DROP_RATE["explore_normal"])
-    if extra:
-        rewards.append(extra)
-    dongfu_material = _grant_map_dongfu_material(uid, node_type, 1.3)
-    if dongfu_material:
-        rewards.append(dongfu_material)
-    return f"你在【{node_name}】遭遇阻击，鏖战后夺得战利品。", rewards
+    plans = {
+        "normal": [("stone_low", 1, 2, 1.0), ("herb_low", 1, 1, 0.55), ("wash_stone_low", 1, 1, 0.12)],
+        "good": [("stone_mid", 1, 2, 1.0), ("herb_mid", 1, 2, 0.65), ("token_common", 1, 1, 0.10), ("wash_stone_low", 1, 1, 0.25), ("tianti_god", 1, 1, 0.02)],
+        "rare": [("stone_high", 1, 1, 1.0), ("token_rare", 1, 1, 0.15), ("acc_pack_low", 1, 1, 0.05), ("god_frag", 1, 1, 0.02), ("tianti_god", 1, 1, 0.05)],
+        "battle": [("stone_mid", 1, 2, 1.0), ("wash_stone_low", 1, 2, 0.30), ("token_common", 1, 1, 0.15)],
+    }
+    event_type = event_type if event_type in plans else "battle"
+    rewards, stone, reward_items = _roll_rewards(plans[event_type], decay)
+    drop_rate = MAP_EXTRA_DROP_RATE["explore_rare"] if event_type == "rare" else MAP_EXTRA_DROP_RATE["explore_normal"]
+    extra_text, extra_item = _roll_skill_equip_drop(user_info, drop_rate)
+    if extra_item:
+        rewards.append(extra_text)
+        reward_items.append(extra_item)
+    multiplier = {"normal": 1.2, "good": 1.5, "rare": 2.5, "battle": 1.3}[event_type]
+    material_rewards, material_stone, material_items = _roll_map_dongfu_material(node_type, multiplier)
+    rewards.extend(material_rewards)
+    stone += material_stone
+    reward_items.extend(material_items)
+    if event_type == "rare" and random.random() < 0.12:
+        deed_rewards, deed_stone, deed_items = _roll_rewards([("dongfu_deed", 1, 1, 1.0)], decay)
+        rewards.extend(deed_rewards)
+        stone += deed_stone
+        reward_items.extend(deed_items)
+    text = {
+        "normal": f"你在【{node_name}】有所收获。",
+        "good": f"你在【{node_name}】发现了一处隐秘资源点。",
+        "rare": f"你在【{node_name}】触发了一场罕见机缘！",
+        "battle": f"你在【{node_name}】遭遇阻击，鏖战后夺得战利品。",
+    }[event_type]
+    return text, rewards, stone, reward_items
 
 
 async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, duration_arg: int | None):
@@ -1927,15 +1897,12 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     if stamina < need_stamina:
         await handle_send(bot, event, f"体力不足！发起探索需 {need_stamina}，当前 {stamina}")
         return
-
     if duration_arg is None:
         duration_min = conf["duration_min"]
     else:
         duration_min = max(5, duration_arg)
 
     sql_message.update_user_stamina(uid, need_stamina, 2)
-    _inc_daily_count(uid, "explore_count", 1)
-    _set_cd(uid, "explore_start_cd_until", 60)
 
     new_st = {
         "running": 1,
@@ -1943,6 +1910,7 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         "node_name": node["name"],
         "start_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "duration_min": duration_min,
+        "settlement": "",
         "max_duration_min": conf["max_duration_min"],
         "interval_min": conf["base_interval_min"],
     }
@@ -1967,65 +1935,93 @@ async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     if int(st.get("running", 0)) != 1:
         await handle_send(bot, event, "当前没有进行中的探索。")
         return
-
-    start_time = st.get("start_time", "")
     try:
-        dt = datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S")
+        start_time = str(st["start_time"])
+        start_at = datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S")
     except Exception:
-        st["running"] = 0
+        await handle_send(bot, event, "探索状态异常，请联系管理员处理。")
+        return
+
+    snapshot = None
+    raw_snapshot = st.get("settlement", "")
+    if raw_snapshot:
+        try:
+            snapshot = json.loads(raw_snapshot)
+        except (TypeError, ValueError):
+            await handle_send(bot, event, "探索结算数据异常，请联系管理员处理。")
+            return
+    if snapshot is None:
+        elapsed_min = max(0, int((datetime.now() - start_at).total_seconds() // 60))
+        duration_min = int(st.get("duration_min", 0))
+        max_duration = int(st.get("max_duration_min", 0))
+        interval = max(1, int(st.get("interval_min", 20)))
+        settle_min = min(elapsed_min, duration_min or elapsed_min, max_duration or elapsed_min)
+        if settle_min <= 0:
+            await handle_send(bot, event, "探索时间太短，暂时无可结算收益。")
+            return
+        rounds = max(1, settle_min // interval)
+        node_type = str(st.get("node_type", ""))
+        node_name = str(st.get("node_name", "未知地点"))
+        daily = _get_daily_limit(uid)
+        decay = _get_reward_decay(uid)
+        event_lines, rewards, reward_items, stone = [], [], [], 0
+        for index in range(rounds):
+            line, event_rewards, event_stone, event_items = _roll_explore_event(user_info, node_type, node_name, decay)
+            event_lines.append(f"{index + 1}. {line}")
+            rewards.extend(event_rewards)
+            reward_items.extend(event_items)
+            stone += event_stone
+        snapshot = {
+            "daily": daily,
+            "decay": decay,
+            "event_lines": event_lines,
+            "items": reward_items,
+            "node_name": node_name,
+            "rewards": rewards,
+            "rounds": rounds,
+            "settle_min": settle_min,
+            "stone": stone,
+        }
+        st["settlement"] = json.dumps(snapshot, ensure_ascii=False, sort_keys=True)
         _save_explore_status(uid, st)
-        await handle_send(bot, event, "探索状态异常，已重置。")
-        return
 
-    now = datetime.now()
-    elapsed_min = max(0, int((now - dt).total_seconds() // 60))
-    duration_min = int(st.get("duration_min", 0))
-    max_duration = int(st.get("max_duration_min", 0))
-    interval = max(1, int(st.get("interval_min", 20)))
-
-    settle_min = min(elapsed_min, duration_min if duration_min > 0 else elapsed_min, max_duration if max_duration > 0 else elapsed_min)
-    if settle_min <= 0:
-        await handle_send(bot, event, "探索时间太短，暂时无可结算收益。")
-        return
-
-    rounds = max(1, settle_min // interval)
-    node_type = st.get("node_type", "")
-    node_name = st.get("node_name", "未知地点")
-
-    event_lines = []
-    all_rewards = []
-
-    for i in range(rounds):
-        line, rewards = _resolve_explore_event(uid, user_info, node_type, node_name)
-        event_lines.append(f"{i + 1}. {line}")
-        all_rewards.extend(rewards)
-
-    clear_st = {
-        "running": 0,
-        "node_type": "",
-        "node_name": "",
-        "start_time": "",
-        "duration_min": 0,
-        "max_duration_min": 0,
-        "interval_min": 0,
+    expected_state = {
+        "running": 1,
+        "node_type": st.get("node_type", ""),
+        "node_name": st.get("node_name", ""),
+        "start_time": st.get("start_time", ""),
+        "duration_min": st.get("duration_min", 0),
+        "max_duration_min": st.get("max_duration_min", 0),
+        "interval_min": st.get("interval_min", 0),
+        "settlement": st.get("settlement", ""),
     }
-    _save_explore_status(uid, clear_st)
+    operation_id = f"map-explore:{uid}:{start_time}"
+    result = map_explore_settlement_service.settle(
+        operation_id,
+        uid,
+        expected_state,
+        snapshot["daily"],
+        DAILY_LIMIT_CONFIG["explore"],
+        snapshot["stone"],
+        snapshot["items"],
+        XiuConfig().max_goods_num,
+    )
+    if result.status == "inventory_full":
+        await handle_send(bot, event, "背包物品已达上限，探索奖励尚未领取。")
+        return
+    if result.status in {"limit_reached", "state_changed", "user_missing"}:
+        await handle_send(bot, event, "探索状态已变化，请重新尝试。")
+        return
 
-    decay = _get_reward_decay(uid)
-    decay_tip = f"\n当前收益系数：{int(decay * 100)}%" if decay < 1 else ""
-
+    decay_tip = f"\n当前收益系数：{int(snapshot['decay'] * 100)}%" if snapshot["decay"] < 1 else ""
     msg = (
         f"🧭 探索结算完成\n"
-        f"地点：{node_name}\n"
-        f"有效探索：{settle_min}分钟（共{rounds}轮）\n"
-        f"—— 事件记录 ——\n" + "\n".join(event_lines[:20]) +
-        f"\n—— 总收益 ——\n{_merge_reward_text(all_rewards)}{decay_tip}"
+        f"地点：{snapshot['node_name']}\n"
+        f"有效探索：{snapshot['settle_min']}分钟（共{snapshot['rounds']}轮）\n"
+        f"—— 事件记录 ——\n" + "\n".join(snapshot["event_lines"][:20]) +
+        f"\n—— 总收益 ——\n{_merge_reward_text(snapshot['rewards'])}{decay_tip}"
     )
     await handle_send(bot, event, msg)
-
-
-# =========================================
-# 命令入口
 # =========================================
 @fishing_cmd.handle(parameterless=[Cooldown(cd_time=2.0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
