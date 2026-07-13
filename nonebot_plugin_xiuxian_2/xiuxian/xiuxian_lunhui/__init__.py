@@ -32,11 +32,13 @@ from ..xiuxian_impart.impart_uitls import (
 from ...paths import get_paths
 from .cultivation_reset_service import CultivationResetService
 from .recall_service import LunhuiRecallService
+from .settlement_service import LunhuiSettlementService
 
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
 items = Items()
 lunhui_recall_service = LunhuiRecallService(get_paths().game_db, get_paths().player_db)
+lunhui_settlement_service = LunhuiSettlementService(get_paths().game_db, get_paths().player_db, get_paths().impart_db)
 cultivation_reset_service = CultivationResetService(get_paths().game_db)
 added_ranks = added_ranks()
 confirm_lunhui_cache = {}
@@ -303,69 +305,41 @@ async def confirm_lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     confirm_data = confirm_lunhui_cache[str(user_id)]
     root_level = confirm_data['root_level']
     original_msg = confirm_data['msg']
-    impart_data_draw = await impart_check(user_id) 
-    impaer_exp_time = impart_data_draw["exp_day"] if impart_data_draw is not None else 0 
-
-    # 执行轮回操作
+    impart_data_draw = await impart_check(user_id)
     user_msg = sql_message.get_user_info_with_id(user_id)
-    user_name = user_msg['user_name']
-    old_level = user_msg['level']
-    old_root = user_msg['root_type']
-    exp = user_msg['exp']
-    stone = user_info['stone']
-    now_stone = int(stone - 1_0000_0000)
-    if now_stone >= 0:
-        sql_message.update_ls(user_id, now_stone, 2)
-        # 重置用户灵石（保留1亿）
-    save_reincarnation_memory(user_id)
-    # 记录轮回印记
-    sql_message.updata_level(user_id, '江湖好手')  
-    # 重置用户境界
-    sql_message.update_levelrate(user_id, 0)  
-    # 重置突破成功率
-    sql_message.update_j_exp(user_id, exp)
-    sql_message.update_exp(user_id, 100)
-    # 重置用户修为
-    sql_message.update_user_hp(user_id)  
-    # 重置用户HP，mp，atk状态
-    sql_message.updata_user_main_buff(user_id, 0)  
-    # 重置用户主功法
-    sql_message.updata_user_sub_buff(user_id, 0)  
-    # 重置用户辅修功法
-    sql_message.updata_user_sec_buff(user_id, 0)  
-    # 重置用户神通
-    sql_message.updata_user_effect1_buff(user_id, 0)  
-    # 重置用户身法
-    sql_message.updata_user_effect2_buff(user_id, 0)  
-    # 重置用户瞳术
-    sql_message.reset_user_drug_resistance(user_id)  
-    # 重置用户耐药性
-    xiuxian_impart.use_impart_exp_day(impaer_exp_time, user_id)
-    # 重置用户虚神界修炼时间
-    xiuxian_impart.convert_stone_to_wishing_stone(user_id)
-    # 转换思恋结晶
-    if root_level != 0:
-        sql_message.update_user_atkpractice(user_id, 0) #重置用户攻修等级
-        sql_message.update_user_hppractice(user_id, 0) #重置用户元血等级
-        sql_message.update_user_mppractice(user_id, 0) #重置用户灵海等级
-        sql_message.update_root(user_id, root_level)  # 更换灵根
-    if root_level == 0 or root_level == 9:
-        sql_message.updata_root_level(user_id, 1)  # 更新轮回等级
-    sql_message.send_back(user_id, ROOT_RENAME_CARD_ID, ROOT_RENAME_CARD_NAME, "特殊道具", 1, 1)
-    msg = f"{original_msg}！\n轮回馈赠：{ROOT_RENAME_CARD_NAME} x1"
-    log_message(
-        user_id,
-        f"[轮回] {old_root}于{old_level}确认轮回，重置修为{number_to(exp)}，保留灵石至{number_to(min(stone, 1_0000_0000))}"
+    buff_info = UserBuffDate(user_id).BuffInfo or {}
+    expected_buffs = {
+        key: int(buff_info.get(key, 0) or 0)
+        for key in ("main_buff", "sub_buff", "sec_buff", "effect1_buff", "effect2_buff")
+    }
+    impart_exp_day = int(impart_data_draw.get("exp_day", 0) or 0) if impart_data_draw else 0
+    impart_stone = int(impart_data_draw.get("stone_num", 0) or 0) if impart_data_draw else 0
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"lunhui-settlement:{user_id}:{confirm_data['invite_id']}:{event_id or 'confirm'}"
+    result = lunhui_settlement_service.settle(
+        operation_id, user_id, user_msg["level"], root_level, user_msg["root_type"],
+        ROOT_RENAME_CARD_ID, ROOT_RENAME_CARD_NAME,
+        expected_exp=user_msg["exp"], expected_stone=user_msg["stone"],
+        expected_root_level=user_msg["root_level"], expected_buffs=expected_buffs,
+        expected_impart_exp_day=impart_exp_day, expected_impart_stone=impart_stone,
+        user_name=user_msg["user_name"],
     )
-    update_statistics_value(user_id, "轮回次数")
-    if root_level == 0 or root_level == 9:
-        update_statistics_value(user_id, "无限轮回次数")
-    else:
-        update_statistics_value(user_id, "普通轮回次数")
+    if not result.succeeded:
+        await handle_send(bot, event, "轮回确认状态已变化，本次未执行，请重新发起轮回。", md_type="轮回")
+        await confirm_lunhui.finish()
+
+    msg = f"{original_msg}！\n轮回馈赠：{ROOT_RENAME_CARD_NAME} x1"
+    if result.wishing_stones:
+        msg += f"\n思恋结晶转化：祈愿石 x{result.wishing_stones}"
+    if result.status == "applied":
+        log_message(
+            user_id,
+            f"[轮回] {user_msg['root_type']}于{user_msg['level']}确认轮回，重置修为{number_to(user_msg['exp'])}，保留灵石至{number_to(result.stone)}"
+        )
     await handle_send(bot, event, msg, md_type="轮回", k1="修为", v1="我的修为", k2="存档", v2="我的修仙信息", k3="印记", v3="轮回印记")
 
-    # 删除确认缓存
-    del confirm_lunhui_cache[str(user_id)]
+    if str(user_id) in confirm_lunhui_cache and confirm_lunhui_cache[str(user_id)].get("invite_id") == confirm_data["invite_id"]:
+        del confirm_lunhui_cache[str(user_id)]
     await confirm_lunhui.finish()
 
 async def confirm_lunhui_invite(bot, event, user_id, root_level, lunhui_level2, msg):
