@@ -32,11 +32,13 @@ from ...paths import get_paths
 from .settlement_service import MixelixirSettlementService
 from .harvest_service import MixelixirHarvestService
 from .recipe_service import MixelixirRecipeService
+from .refine_cost_service import MixelixirRefineCostService
 
 sql_message = XiuxianDateManage()  # sql类
 mixelixir_settlement_service = MixelixirSettlementService(get_paths().game_db)
 mixelixir_harvest_service = MixelixirHarvestService(get_paths().game_db, get_paths().player_db)
 mixelixir_recipe_service = MixelixirRecipeService(get_paths().game_db)
+mixelixir_refine_cost_service = MixelixirRefineCostService(get_paths().game_db)
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 items = Items()
 added_rank = added_ranks()
@@ -495,6 +497,11 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
             await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
             await mix_make.finish()
         else:
+            saved_recipe = mixelixir_recipe_service.find(user_id, mode)
+            if saved_recipe is None:
+                await handle_send(bot, event, "该丹方未保存或已经使用，请先重新执行炼丹生成丹方。")
+                await mix_make.finish()
+            recipe_set_id, recipe_snapshot = saved_recipe
             elixir_config = {
                 str(zhuyao_info['主药']['type']): zhuyao_info['主药']['power'] * zhuyao_num
             }
@@ -523,35 +530,34 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                     main_exp = 0
 
                 num = 1 + ldl_info['buff'] + mix_elixir_info['丹药控火'] + impart_mix_per + main_dan  # 炼丹数量提升
-                msg = f"恭喜道友成功炼成丹药：{goods_info['name']}{num}枚"
+                expected_mix_state = {
+                    "丹药控火": mix_elixir_info["丹药控火"],
+                    "炼丹记录": mix_elixir_info["炼丹记录"],
+                    "炼丹经验": mix_elixir_info["炼丹经验"],
+                }
+                updated_mix_state = json.loads(json.dumps(expected_mix_state, ensure_ascii=False))
+                records = updated_mix_state["炼丹记录"]
+                record_key = str(id)
+                current = records.get(record_key, {"name": goods_info["name"], "num": 0})
+                now_num = int(current.get("num", 0) or 0)
+                exp_count = max(0, min(num, int(goods_info["mix_all"]) - now_num))
+                exp_gain = (int(goods_info["mix_exp"]) + int(main_exp)) * exp_count
+                records[record_key] = {"name": goods_info["name"], "num": now_num + num}
+                updated_mix_state["炼丹经验"] = int(updated_mix_state["炼丹经验"]) + exp_gain
                 event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-                operation_id = f"mixelixir:{event_id}:{user_id}" if event_id else f"mixelixir:{user_id}:{time.time_ns()}"
-                recipe_materials = {}
-                for material_id, quantity in (
-                    (zhuyao_goods_id, zhuyao_num),
-                    (fuyao_goods_id, fuyao_num),
-                    (yaoyin_goods_id, yaoyin_num),
-                ):
-                    recipe_materials[material_id] = recipe_materials.get(material_id, 0) + quantity
-                settlement = mixelixir_settlement_service.settle(
+                operation_id = f"mixelixir-cost:{event_id}:{user_id}" if event_id else f"mixelixir-cost:{user_id}:{time.time_ns()}"
+                started = mixelixir_refine_cost_service.start(
                     operation_id,
                     user_id,
-                    recipe_materials,
-                    id,
-                    goods_info['name'],
+                    recipe_set_id,
+                    recipe_snapshot["recipe_key"],
+                    int(user_info.get("mixelixir_num", 0) or 0),
                     num,
-                    max_goods_num=XiuConfig().max_goods_num,
+                    expected_mix_state,
+                    updated_mix_state,
                 )
-                if settlement.status in {"item_insufficient", "state_changed"}:
+                if not started.succeeded:
                     msg = "药材状态已变化，本次炼丹未结算，请重新提交配方。"
-                    await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
-                    await mix_make.finish()
-                if settlement.status == "user_missing":
-                    msg = "未找到修仙数据，本次炼丹未结算。"
-                    await handle_send(bot, event, msg, md_type="我要修仙")
-                    await mix_make.finish()
-                if settlement.status == "duplicate":
-                    msg = f"该配方已结算，丹药：{goods_info['name']}{settlement.reward_quantity}枚"
                     await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
                     await mix_make.finish()
                 update_statistics_value(user_id, "炼丹次数")
