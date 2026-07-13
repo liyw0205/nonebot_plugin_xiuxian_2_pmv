@@ -22,6 +22,7 @@ from .expansion_service import DongfuExpansionService
 from .harvest_settlement_service import DongfuHarvestSettlementService
 from .plant_service import DongfuPlantService
 from .accelerate_service import DongfuAccelerateService
+from .patrol_service import DongfuPatrolService
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
@@ -29,6 +30,7 @@ items = Items()
 dongfu_expansion_service = DongfuExpansionService(get_paths().game_db, get_paths().player_db)
 dongfu_plant_service = DongfuPlantService(get_paths().game_db, get_paths().player_db)
 dongfu_accelerate_service = DongfuAccelerateService(get_paths().game_db, get_paths().player_db)
+dongfu_patrol_service = DongfuPatrolService(get_paths().game_db, get_paths().player_db)
 dongfu_harvest_settlement_service = DongfuHarvestSettlementService(get_paths().game_db, get_paths().player_db)
 
 MAP_TABLE = "map_status"
@@ -540,7 +542,6 @@ def _get_infiltrate_left(d: dict, is_random: bool):
 def _can_infiltrate(uid: str, is_random: bool):
     d = _get_dongfu(uid)
     d = _reset_infiltrate_count_if_needed(d)
-    _save_dongfu(uid, d)
     return _get_infiltrate_left(d, is_random) > 0, d
 
 
@@ -549,7 +550,6 @@ def _consume_infiltrate_count(uid: str, is_random: bool):
     d = _reset_infiltrate_count_if_needed(d)
     field = _get_infiltrate_count_field(is_random)
     d[field] = _to_int(d.get(field)) + 1
-    _save_dongfu(uid, d)
     return d[field], _get_infiltrate_left(d, is_random)
 
 
@@ -642,7 +642,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     intrude_left = INFILTRATE_DAILY_LIMIT - _to_int(d.get("intrude_count"))
     active_left = _get_infiltrate_left(d, is_random=False)
     random_left = _get_infiltrate_left(d, is_random=True)
-    _save_dongfu(uid, d)
     active_count = len(_active_plant_slots(d))
     ready_count = 0
     now = _now()
@@ -911,23 +910,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, "你尚未建设洞府。")
         return
 
-    d = _reset_patrol_count_if_needed(d)
-    if _to_int(d.get("patrol_count")) >= DONGFU_PATROL_DAILY_LIMIT:
-        await handle_send(bot, event, f"今日洞府巡山次数已达上限（{DONGFU_PATROL_DAILY_LIMIT}次）。")
-        return
-
-    stamina = _to_int(user_info.get("user_stamina"))
-    if stamina < DONGFU_PATROL_STAMINA:
-        await handle_send(bot, event, f"体力不足，洞府巡山需要{DONGFU_PATROL_STAMINA}点体力。")
-        return
-
-    sql_message.update_user_stamina(uid, DONGFU_PATROL_STAMINA, 2)
-    d["patrol_count"] = _to_int(d.get("patrol_count")) + 1
-    d["patrol_guard"] = min(3, _to_int(d.get("patrol_guard")) + 1)
-
     geomancy = _get_geomancy(d)
     node_type = _get_dongfu_node_type(d)
-    rewards = []
     material_plan = {
         "水域": (DONGFU_ITEM_ACCELERATE, "灵息露", 0.35),
         "灵林": (DONGFU_ITEM_FERTILIZER, "五色灵壤", 0.35),
@@ -935,19 +919,36 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "矿脉": (DONGFU_ITEM_ARRAY_STONE, "玄铁阵石", 0.35),
         "险地": (DONGFU_ITEM_DEED, "洞府地契", 0.10),
     }
+    reward = None
     if node_type in material_plan:
         item_id, item_name, chance = material_plan[node_type]
         if random.random() < chance:
-            sql_message.send_back(uid, item_id, item_name, "特殊物品", 1, 1)
-            rewards.append(f"{item_name}x1")
-
+            reward = (item_id, item_name, 1)
     stone_gain = random.randint(50000, 150000)
     if geomancy.get("name"):
         stone_gain = int(stone_gain * 1.2)
-    sql_message.update_ls(uid, stone_gain, 1)
-    rewards.append(f"灵石x{number_to(stone_gain)}")
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    result = dongfu_patrol_service.patrol(
+        f"dongfu-patrol:{uid}:{event_message_id or time.time_ns()}", uid, _today_str(), DONGFU_PATROL_STAMINA,
+        DONGFU_PATROL_DAILY_LIMIT, stone_gain, reward, XiuConfig().max_backpack,
+    )
+    if result.status == "stamina_insufficient":
+        await handle_send(bot, event, f"体力不足，洞府巡山需要{DONGFU_PATROL_STAMINA}点体力。")
+        return
+    if result.status == "daily_limit":
+        await handle_send(bot, event, f"今日洞府巡山次数已达上限（{DONGFU_PATROL_DAILY_LIMIT}次）。")
+        return
+    if result.status == "inventory_full":
+        await handle_send(bot, event, "背包空间不足，无法领取巡山奖励。")
+        return
+    if not result.succeeded:
+        await handle_send(bot, event, "洞府状态或资产已发生变化，请稍后重试。")
+        return
+    d = _get_dongfu(uid)
+    rewards = [f"灵石x{number_to(stone_gain)}"]
+    if reward:
+        rewards.insert(0, f"{reward[1]}x{reward[2]}")
 
-    _save_dongfu(uid, d)
     await handle_send(
         bot,
         event,
@@ -1000,7 +1001,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     slots = _normalize_plant_slots(d)
     slots[slot_no - 1]["fertilizer"] = fertilizer + 1
     d["plant_slots"] = slots
-    _save_dongfu(uid, d)
     await handle_send(bot, event, f"已对{slot_no}号灵田施肥，当前肥力+{fertilizer + 1}。\n{_format_plant_slots(d)}")
 
 
@@ -1103,7 +1103,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     d = _get_dongfu(uid)
     _normalize_plant_slots(d)
-    _save_dongfu(uid, d)
     await handle_send(bot, event, f"洞府扩建成功，灵田数量提升至{result.current_count}块。\n{_format_plant_slots(d)}")
 
 
@@ -1175,7 +1174,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         sql_message.update_back_j(uid, DONGFU_ITEM_ARRAY_STONE, array_stone_need)
     sql_message.update_ls(uid, cost, 2)
     d["array_level"] = next_lv
-    _save_dongfu(uid, d)
     item_msg = f"，玄铁阵石x{array_stone_need}" if array_stone_need > 0 else ""
     await handle_send(bot, event, f"消耗{number_to(cost)}灵石{item_msg}，洞府布阵成功，当前阵法等级：{next_lv}")
 
