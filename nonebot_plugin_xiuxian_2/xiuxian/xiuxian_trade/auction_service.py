@@ -97,120 +97,75 @@ def start_auction_process(bot: Optional[Bot], operation_id: str | None = None) -
     return True
 
 
-async def end_auction_process(bot: Optional[Bot]) -> List[Dict[str, Any]]: # bot参数可能为None
-    """
-    结束拍卖流程。
-    结算所有当前拍卖品，将物品发给买家，灵石发给卖家，并记录到拍卖历史。
-    """
-    items, sql_message, _, auction_repository, _ = _auction_dependencies()
-    current_auctions = auction_repository.get_current_auction() # 从数据库获取当前拍卖品
+async def end_auction_process(
+    bot: Optional[Bot], operation_id: str | None = None
+) -> List[Dict[str, Any]]: # bot参数可能为None
+    """Atomically settle every item in the active database auction session."""
+    items, _, _, auction_repository, session_service = _auction_dependencies()
+    current_auctions = auction_repository.get_current_auction()
     if not current_auctions:
         return []
-
-    auction_results: List[Dict[str, Any]] = []
-    auction_rules = auction_config.get_auction_rules()
-
+    session = session_service.get_active_session()
+    if session is None:
+        raise RuntimeError("auction items exist without an active database session")
+    item_types = {}
     for item in current_auctions:
-        winner_id = None
-        winner_name = None
-        if item["bids"]:
-            winner_id, _ = max(item["bids"].items(), key=lambda entry: entry[1])
-            winner_info = sql_message.get_user_info_with_id(winner_id)
-            winner_name = winner_info["user_name"] if winner_info else str(winner_id)
-        item_info = items.get_data_by_item_id(item["item_id"])
-        settlement = auction_repository.settle_auction_item(
-            item["id"],
-            item_type=item_info["type"] if item_info else None,
-            winner_name=winner_name,
-            fee_rate=auction_rules["fee_rate"],
-            end_time=time.time(),
-        )
-        if not settlement.applied:
-            raise ValueError(
-                f"auction settlement blocked: auction_id={item['id']} "
-                f"status={settlement.status}"
-            )
-        result_record = settlement.as_history_record()
-        trace_id = f"trade:auction:{settlement.auction_id}"
-
-        if settlement.final_price is not None:
+        info = items.get_data_by_item_id(item["item_id"])
+        if info:
+            item_types[int(item["item_id"])] = str(info["type"])
+    result = session_service.finish(
+        operation_id or f"auction-finish:{session['session_id']}",
+        session["session_id"], end_time=time.time(),
+        fee_rate=auction_config.get_auction_rules()["fee_rate"],
+        item_types=item_types,
+    )
+    if not result.succeeded:
+        raise ValueError(f"auction session settlement blocked: status={result.status}")
+    auction_results = [dict(record) for record in result.results]
+    for settlement in auction_results:
+        trace_id = f"trade:auction:{settlement['auction_id']}"
+        if settlement["final_price"] is not None:
             record_trade_event(
-                settlement.winner_id,
-                "拍卖成交",
-                f"拍得{settlement.item_name}，成交价{number_to(settlement.final_price)}灵石，拍卖ID:{settlement.auction_id}",
-                {"拍卖成交次数": 1, "拍卖消费灵石": settlement.final_price}
+                settlement["winner_id"], "拍卖成交",
+                f"拍得{settlement['item_name']}，成交价{number_to(settlement['final_price'])}灵石，拍卖ID:{settlement['auction_id']}",
+                {"拍卖成交次数": 1, "拍卖消费灵石": settlement["final_price"]},
             )
             safe_record_game_event(
-                settlement.winner_id,
-                "trade_buy",
-                1,
+                settlement["winner_id"], "trade_buy", 1,
                 {
-                    "source": "auction",
-                    "action": "auction_buy",
-                    "stone_delta": -int(settlement.final_price),
-                    "item_delta": [
-                        {
-                            "id": settlement.item_id,
-                            "name": settlement.item_name,
-                            "amount": 1,
-                        }
-                    ],
-                    "detail": {
-                        "auction_id": settlement.auction_id,
-                        "seller_id": settlement.seller_id,
-                        "final_price": settlement.final_price,
-                    },
+                    "source": "auction", "action": "auction_buy",
+                    "stone_delta": -int(settlement["final_price"]),
+                    "item_delta": [{"id": settlement["item_id"], "name": settlement["item_name"], "amount": 1}],
+                    "detail": {"auction_id": settlement["auction_id"], "seller_id": settlement["seller_id"], "final_price": settlement["final_price"]},
                     "trace_id": trace_id,
                 },
             )
-            if not settlement.is_system:
+            if settlement["seller_id"] != "0":
                 record_trade_event(
-                    settlement.seller_id,
-                    "拍卖成交",
-                    f"售出{settlement.item_name}，成交价{number_to(settlement.final_price)}灵石，手续费{number_to(settlement.fee)}灵石，收入{number_to(settlement.seller_earnings)}灵石",
-                    {"拍卖售出次数": 1, "拍卖收入灵石": settlement.seller_earnings, "拍卖手续费消耗": settlement.fee}
+                    settlement["seller_id"], "拍卖成交",
+                    f"售出{settlement['item_name']}，成交价{number_to(settlement['final_price'])}灵石，手续费{number_to(settlement['fee'])}灵石，收入{number_to(settlement['seller_earnings'])}灵石",
+                    {"拍卖售出次数": 1, "拍卖收入灵石": settlement["seller_earnings"], "拍卖手续费消耗": settlement["fee"]},
                 )
                 safe_record_game_event(
-                    settlement.seller_id,
-                    "trade_sell",
-                    1,
+                    settlement["seller_id"], "trade_sell", 1,
                     {
-                        "source": "auction",
-                        "action": "auction_sell",
-                        "stone_delta": int(settlement.seller_earnings),
-                        "item_delta": [
-                            {
-                                "id": settlement.item_id,
-                                "name": settlement.item_name,
-                                "amount": -1,
-                            }
-                        ],
-                        "detail": {
-                            "auction_id": settlement.auction_id,
-                            "winner_id": settlement.winner_id,
-                            "final_price": settlement.final_price,
-                            "fee": settlement.fee,
-                        },
+                        "source": "auction", "action": "auction_sell",
+                        "stone_delta": int(settlement["seller_earnings"]),
+                        "item_delta": [{"id": settlement["item_id"], "name": settlement["item_name"], "amount": -1}],
+                        "detail": {"auction_id": settlement["auction_id"], "winner_id": settlement["winner_id"], "final_price": settlement["final_price"], "fee": settlement["fee"]},
                         "trace_id": trace_id,
                     },
                 )
-        elif not settlement.is_system and item_info:
+        elif settlement["seller_id"] != "0":
             record_trade_event(
-                settlement.seller_id,
-                "拍卖流拍",
-                f"{settlement.item_name}流拍，已退回背包，拍卖ID:{settlement.auction_id}",
+                settlement["seller_id"], "拍卖流拍",
+                f"{settlement['item_name']}流拍，已退回背包，拍卖ID:{settlement['auction_id']}",
                 {"拍卖流拍次数": 1},
             )
-
-        auction_results.append(result_record)
-
-    remaining = auction_repository.get_current_auction()
-    if remaining:
-        raise RuntimeError(f"auction settlement incomplete: remaining={len(remaining)}")
-    _auction_session_service.close_active_session()
-
-    # 更新拍卖状态为不活跃，时间置空
-    set_auction_status(active=False, start_time=None, end_time=None, last_display_refresh_time=None, items_count=0)
+    set_auction_status(
+        active=False, start_time=None, end_time=None,
+        last_display_refresh_time=None, items_count=0,
+    )
     auction_config.clear_persisted_auction_status()
     logger.info("拍卖已结束，结算完成！")
     return auction_results

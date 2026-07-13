@@ -2688,7 +2688,9 @@ async def auction_end_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await handle_send(bot, event, "拍卖当前未开启！", md_type="拍卖", k1="查看", v1="拍卖查看", k2="开启", v2="开启拍卖", k3="帮助", v3="拍卖帮助")
         await auction_end.finish()
     
-    results = await end_auction_process(bot)
+    results = await end_auction_process(
+        bot, _auction_session_operation_id(event, "finish")
+    )
     if not results:
         await handle_send(bot, event, "结束拍卖失败或没有拍卖品需要结算！", md_type="拍卖", k1="查看", v1="拍卖查看", k2="开启", v2="开启拍卖", k3="帮助", v3="拍卖帮助")
         await auction_end.finish()
@@ -2812,7 +2814,9 @@ async def _check_auction_end_job_impl():
 
     if now_dt >= end_dt:
         logger.info(f"拍卖到点收尾，拍品 {n} 件，开始结算。")
-        await end_auction_process(None)
+        await end_auction_process(
+            None, f"auction-session:auto-finish:{session['session_id']}"
+        )
         return
 
     remaining_seconds = int((end_dt - now_dt).total_seconds())

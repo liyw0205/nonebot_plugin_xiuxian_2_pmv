@@ -25,6 +25,18 @@ class AuctionSessionStartResult:
         return self.status in {"started", "duplicate"}
 
 
+@dataclass(frozen=True)
+class AuctionSessionFinishResult:
+    status: str
+    operation_id: str
+    session_id: str = ""
+    results: tuple[dict[str, Any], ...] = ()
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"settled", "duplicate"}
+
+
 class AuctionSessionService:
     """Use the game database as the durable truth for an auction session."""
 
@@ -37,6 +49,7 @@ class AuctionSessionService:
     ) -> None:
         self._game_database = Path(game_database)
         self._trade_database = Path(trade_database)
+        self._max_goods_num = max(int(max_goods_num or 1), 1)
         self._lock = lock or RLock()
 
     def _connect(self):
@@ -76,6 +89,13 @@ class AuctionSessionService:
             )
             """
         )
+        columns = {
+            str(row[1]) for row in conn.execute("PRAGMA table_info(auction_sessions)").fetchall()
+        }
+        if "finish_operation_id" not in columns:
+            conn.execute("ALTER TABLE auction_sessions ADD COLUMN finish_operation_id TEXT")
+        if "settled_at" not in columns:
+            conn.execute("ALTER TABLE auction_sessions ADD COLUMN settled_at REAL")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS auction_current (
@@ -84,6 +104,19 @@ class AuctionSessionService:
                 seller_id TEXT NOT NULL, seller_name TEXT NOT NULL,
                 bids TEXT DEFAULT '{}', bid_times TEXT DEFAULT '{}',
                 is_system INTEGER DEFAULT 0, last_bid_time REAL DEFAULT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS auction_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, auction_id TEXT NOT NULL,
+                item_id INTEGER NOT NULL, item_name TEXT NOT NULL,
+                start_price INTEGER NOT NULL, final_price INTEGER,
+                seller_id TEXT NOT NULL, seller_name TEXT NOT NULL,
+                winner_id TEXT, winner_name TEXT, status TEXT NOT NULL,
+                fee INTEGER, seller_earnings INTEGER,
+                start_time REAL NOT NULL, end_time REAL NOT NULL
             )
             """
         )
@@ -150,15 +183,6 @@ class AuctionSessionService:
                 float(value["start_time"]), float(value["end_time"]),
                 int(value["items_count"]),
             )
-
-    def close_active_session(self) -> None:
-        """Keep start-session state compatible with the legacy item closer."""
-        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
-            self._ensure_schema(conn)
-            conn.execute(
-                "UPDATE auction_sessions SET status='closed' WHERE status='active'"
-            )
-            conn.commit()
 
     def start(
         self,
@@ -246,7 +270,8 @@ class AuctionSessionService:
                 conn.execute("DELETE FROM auction_trade.auction_player_upload")
                 count = len(all_items)
                 conn.execute(
-                    "INSERT INTO auction_sessions VALUES (%s,'active',%s,%s,%s,%s,CURRENT_TIMESTAMP)",
+                    "INSERT INTO auction_sessions (session_id,status,start_time,end_time,items_count,"
+                    "start_operation_id,created_at) VALUES (%s,'active',%s,%s,%s,%s,CURRENT_TIMESTAMP)",
                     (session_id, float(start_time), float(end_time), count, operation_id),
                 )
                 result = {
@@ -264,3 +289,165 @@ class AuctionSessionService:
             except Exception:
                 conn.rollback()
                 raise
+
+    def finish(
+        self,
+        operation_id: str,
+        session_id: str,
+        *,
+        end_time: float,
+        fee_rate: float,
+        item_types: dict[int, str],
+    ) -> AuctionSessionFinishResult:
+        operation_id = str(operation_id).strip()
+        session_id = str(session_id).strip()
+        normalized_types = {str(int(key)): str(value) for key, value in item_types.items()}
+        payload = self._payload(
+            {"session_id": session_id, "fee_rate": float(fee_rate),
+             "item_types": normalized_types}
+        )
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._ensure_schema(conn)
+                previous = self._read_operation(conn, operation_id, "finish", payload)
+                if previous is not None:
+                    conn.rollback()
+                    if previous[0] == "state_changed":
+                        return AuctionSessionFinishResult("state_changed", operation_id, session_id)
+                    return AuctionSessionFinishResult(
+                        "duplicate", operation_id, session_id, tuple(previous[1]["results"])
+                    )
+                session = conn.execute(
+                    "SELECT start_time FROM auction_sessions WHERE session_id=%s AND status='active'",
+                    (session_id,),
+                ).fetchone()
+                if session is None:
+                    conn.rollback()
+                    return AuctionSessionFinishResult("not_active", operation_id, session_id)
+                rows = conn.execute(
+                    "SELECT id,item_id,name,start_price,seller_id,seller_name,bids,is_system,last_bid_time "
+                    "FROM auction_current ORDER BY id"
+                ).fetchall()
+                results: list[dict[str, Any]] = []
+                for row in rows:
+                    auction_id, item_id, name = str(row[0]), int(row[1]), str(row[2])
+                    seller_id, seller_name = str(row[4]), str(row[5])
+                    is_system = bool(row[7])
+                    bids_value = json.loads(row[6] or "{}")
+                    bids = {str(key): int(value) for key, value in bids_value.items()}
+                    winner_id = final_price = winner_name = None
+                    fee = earnings = 0
+                    status = "流拍"
+                    item_type = normalized_types.get(str(item_id))
+                    if (bids or not is_system) and not item_type:
+                        conn.rollback()
+                        return AuctionSessionFinishResult("item_missing", operation_id, session_id)
+                    if bids:
+                        winner_id, final_price = max(bids.items(), key=lambda entry: entry[1])
+                        winner = conn.execute(
+                            "SELECT user_name FROM user_xiuxian WHERE user_id=%s", (winner_id,)
+                        ).fetchone()
+                        seller = True if is_system else conn.execute(
+                            "SELECT 1 FROM user_xiuxian WHERE user_id=%s", (seller_id,)
+                        ).fetchone()
+                        if winner is None or not seller:
+                            conn.rollback()
+                            return AuctionSessionFinishResult("participant_missing", operation_id, session_id)
+                        winner_name = str(winner[0] or winner_id)
+                        if self._inventory_full(conn, winner_id, item_id):
+                            conn.rollback()
+                            return AuctionSessionFinishResult("inventory_full", operation_id, session_id)
+                        self._grant_item(conn, winner_id, item_id, name, item_type)
+                        fee = 0 if is_system else int(final_price * float(fee_rate))
+                        earnings = 0 if is_system else final_price - fee
+                        if not is_system:
+                            conn.execute(
+                                "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                                (earnings, seller_id),
+                            )
+                        for bidder_id, locked in bids.items():
+                            if bidder_id != winner_id and conn.execute(
+                                "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                                (locked, bidder_id),
+                            ).rowcount != 1:
+                                conn.rollback()
+                                return AuctionSessionFinishResult("participant_missing", operation_id, session_id)
+                        status = "成交"
+                    elif not is_system:
+                        if not conn.execute(
+                            "SELECT 1 FROM user_xiuxian WHERE user_id=%s", (seller_id,)
+                        ).fetchone():
+                            conn.rollback()
+                            return AuctionSessionFinishResult("participant_missing", operation_id, session_id)
+                        if self._inventory_full(conn, seller_id, item_id):
+                            conn.rollback()
+                            return AuctionSessionFinishResult("inventory_full", operation_id, session_id)
+                        self._grant_item(conn, seller_id, item_id, name, item_type)
+
+                    record = {
+                        "auction_id": auction_id, "item_id": item_id, "item_name": name,
+                        "start_price": int(row[3]), "final_price": final_price,
+                        "seller_id": seller_id, "seller_name": seller_name,
+                        "winner_id": winner_id, "winner_name": winner_name,
+                        "status": status, "fee": fee, "seller_earnings": earnings,
+                        "start_time": float(row[8] or session[0]), "end_time": float(end_time),
+                    }
+                    conn.execute(
+                        """
+                        INSERT INTO auction_history (
+                            auction_id,item_id,item_name,start_price,final_price,
+                            seller_id,seller_name,winner_id,winner_name,status,fee,
+                            seller_earnings,start_time,end_time
+                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        """,
+                        tuple(record[key] for key in (
+                            "auction_id", "item_id", "item_name", "start_price", "final_price",
+                            "seller_id", "seller_name", "winner_id", "winner_name", "status", "fee",
+                            "seller_earnings", "start_time", "end_time",
+                        )),
+                    )
+                    results.append(record)
+                conn.execute("DELETE FROM auction_current")
+                conn.execute(
+                    "UPDATE auction_sessions SET status='settled',finish_operation_id=%s,settled_at=%s "
+                    "WHERE session_id=%s AND status='active'",
+                    (operation_id, float(end_time), session_id),
+                )
+                result_value = {"session_id": session_id, "results": results}
+                conn.execute(
+                    "INSERT INTO auction_session_operations (operation_id,action,payload,result) "
+                    "VALUES (%s,'finish',%s,%s)",
+                    (operation_id, payload, self._payload(result_value)),
+                )
+                conn.commit()
+                return AuctionSessionFinishResult(
+                    "settled", operation_id, session_id, tuple(results)
+                )
+            except Exception:
+                conn.rollback()
+                raise
+
+    def _inventory_full(self, conn, user_id: str, item_id: int) -> bool:
+        row = conn.execute(
+            "SELECT goods_num FROM back WHERE user_id=%s AND goods_id=%s",
+            (user_id, item_id),
+        ).fetchone()
+        return bool(row and int(row[0] or 0) >= self._max_goods_num)
+
+    @staticmethod
+    def _grant_item(conn, user_id: str, item_id: int, name: str, item_type: str) -> None:
+        conn.execute(
+            """
+            INSERT INTO back (
+                user_id,goods_id,goods_name,goods_type,goods_num,
+                create_time,update_time,bind_num
+            ) VALUES (%s,%s,%s,%s,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,1)
+            ON CONFLICT (user_id,goods_id) DO UPDATE SET
+                goods_name=EXCLUDED.goods_name,goods_type=EXCLUDED.goods_type,
+                goods_num=COALESCE(back.goods_num,0)+1,
+                bind_num=COALESCE(back.bind_num,0)+1,
+                update_time=CURRENT_TIMESTAMP
+            """,
+            (user_id, item_id, name, item_type),
+        )
