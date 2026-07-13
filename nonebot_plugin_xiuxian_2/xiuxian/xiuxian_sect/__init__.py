@@ -320,6 +320,11 @@ async def resetusertask():
 # 定时任务自动检测并处理宗门状态
 async def auto_handle_inactive_sect_owners():
     logger.info("⏳ 开始检测并处理宗门状态")
+    maintenance_checked_at = datetime.now()
+    maintenance_slot = 0 if maintenance_checked_at.hour < 12 else 12
+    maintenance_key = (
+        f"{maintenance_checked_at.date().isoformat()}:T{maintenance_slot:02d}"
+    )
     
     try:
         # 使用新的方法获取宗门列表（包含成员数量）
@@ -355,8 +360,21 @@ async def auto_handle_inactive_sect_owners():
                     
                     if not members:
                         logger.info("宗门没有成员，执行解散操作")
-                        sql_message.delete_sect(sect_id)
-                        logger.info(f"宗门 {sect_name}(ID:{sect_id}) 已解散")
+                        disbanded = sect_disband_service.disband_inactive(
+                            f"sect:auto-disband:{maintenance_key}:{sect_id}:empty",
+                            sect_id,
+                            "empty",
+                            expected_sect_name=sect_name,
+                            expected_owner_id=sect_info['sect_owner'],
+                            expected_closed=True,
+                            expected_member_ids=(),
+                            expected_active_candidate_ids=(),
+                            checked_at=maintenance_checked_at,
+                            inactivity_days=auto_change_sect_owner_cd,
+                        )
+                        logger.info(
+                            f"宗门 {sect_name}(ID:{sect_id}) 自动解散结果：{disbanded.status}"
+                        )
                         continue
                         
                     # 按职位优先级和贡献度排序
@@ -373,15 +391,30 @@ async def auto_handle_inactive_sect_owners():
                     active_candidates = []
                     for candidate in candidates:
                         last_active = sql_message.get_last_check_info_time(candidate['user_id'])
-                        if last_active and (datetime.now() - last_active).days <= auto_change_sect_owner_cd:
+                        if last_active and (maintenance_checked_at - last_active).days <= auto_change_sect_owner_cd:
                             active_candidates.append(candidate)
                     
                     logger.info(f"活跃候选人数量：{len(active_candidates)}")
                     
                     if not active_candidates:
                         logger.info("没有活跃的继承人，执行解散操作")
-                        sql_message.delete_sect(sect_id)
-                        logger.info(f"宗门 {sect_name}(ID:{sect_id}) 已解散")
+                        disbanded = sect_disband_service.disband_inactive(
+                            f"sect:auto-disband:{maintenance_key}:{sect_id}:no-successor",
+                            sect_id,
+                            "no_active_successor",
+                            expected_sect_name=sect_name,
+                            expected_owner_id=sect_info['sect_owner'],
+                            expected_closed=True,
+                            expected_member_ids=tuple(
+                                str(member['user_id']) for member in members
+                            ),
+                            expected_active_candidate_ids=(),
+                            checked_at=maintenance_checked_at,
+                            inactivity_days=auto_change_sect_owner_cd,
+                        )
+                        logger.info(
+                            f"宗门 {sect_name}(ID:{sect_id}) 自动解散结果：{disbanded.status}"
+                        )
                         continue
                         
                     # 选择贡献最高的活跃候选人
@@ -389,7 +422,7 @@ async def auto_handle_inactive_sect_owners():
                     logger.info(f"选定继承人：{new_owner['user_name']}")
                     
                     result = sect_owner_inherit_service.inherit(
-                        f"sect:auto-inherit:{sect_id}:{new_owner['user_id']}:{time.time_ns()}",
+                        f"sect:auto-inherit:{maintenance_key}:{sect_id}:{new_owner['user_id']}",
                         new_owner['user_id'],
                         expected_sect_id=sect_id,
                         eligible_positions=tuple(
@@ -427,7 +460,7 @@ async def auto_handle_inactive_sect_owners():
                     continue
                     
                 # 计算离线天数
-                offline_days = (datetime.now() - last_check_time).days
+                offline_days = (maintenance_checked_at - last_check_time).days
                 logger.info(f"宗主 {owner_id} 最后活跃：{last_check_time} | 已离线：{offline_days}天")
                 
                 if offline_days < auto_change_sect_owner_cd:
@@ -441,8 +474,21 @@ async def auto_handle_inactive_sect_owners():
                 # 检查宗门成员数量
                 if len(members) == 1:
                     logger.info("宗门只有宗主一人，执行解散操作")
-                    sql_message.delete_sect(sect_id)
-                    logger.info(f"宗门 {sect_name}(ID:{sect_id}) 已解散")
+                    disbanded = sect_disband_service.disband_inactive(
+                        f"sect:auto-disband:{maintenance_key}:{sect_id}:sole-owner",
+                        sect_id,
+                        "inactive_sole_owner",
+                        expected_sect_name=sect_name,
+                        expected_owner_id=owner_id,
+                        expected_closed=False,
+                        expected_member_ids=(str(members[0]['user_id']),),
+                        expected_active_candidate_ids=(),
+                        checked_at=maintenance_checked_at,
+                        inactivity_days=auto_change_sect_owner_cd,
+                    )
+                    logger.info(
+                        f"宗门 {sect_name}(ID:{sect_id}) 自动解散结果：{disbanded.status}"
+                    )
                     continue
                     
                 # 获取宗主信息
@@ -454,7 +500,7 @@ async def auto_handle_inactive_sect_owners():
                 logger.info(f"检测到不活跃宗主：{user_info['user_name']} 已离线 {offline_days} 天")
                 
                 result = sect_close_mountain_service.close(
-                    f"sect:auto-close:{sect_id}:{owner_id}:{time.time_ns()}",
+                    f"sect:auto-close:{maintenance_key}:{sect_id}:{owner_id}",
                     owner_id,
                     expected_sect_id=sect_id,
                 )
