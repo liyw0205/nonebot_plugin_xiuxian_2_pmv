@@ -30,6 +30,7 @@ from .training_settlement_service import ImpartTrainingSettlementService
 from .explore_settlement_service import ImpartExploreSettlementService
 from .battle_batch_service import ImpartBattleBatchService
 from .closing_settlement_service import ImpartClosingSettlementService
+from .closing_enter_service import ImpartClosingEnterService
 from .project_join_service import ImpartProjectJoinService
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_tasks.task_data import record_task_progress
@@ -44,6 +45,9 @@ impart_closing_settlement_service = ImpartClosingSettlementService(
 )
 impart_battle_batch_service = ImpartBattleBatchService(
     get_paths().impart_db, get_paths().player_db
+)
+impart_closing_enter_service = ImpartClosingEnterService(
+    get_paths().game_db, get_paths().player_db
 )
 impart_project_join_service = ImpartProjectJoinService(get_paths().player_db)
 xu_world.bind_service(impart_project_join_service)
@@ -802,21 +806,22 @@ async def impart_pk_in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMess
         await handle_send(bot, event, msg, md_type="我要修仙")
         await impart_pk_in_closing.finish()
     user_id = user_info['user_id']
-    is_type, msg = check_user_type(user_id, 0)
-    if user_info['root_type'] == '伪灵根':
+    started_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+    result = impart_closing_enter_service.enter(
+        _impart_operation_id(event, "closing-enter", user_id), user_id, started_at
+    )
+    if result.status == "ineligible":
         msg = "凡人无法虚神界闭关！"
         await handle_send(bot, event, msg)
         await impart_pk_in_closing.finish()
-    if is_type:  # 符合
-        sql_message.in_closing(user_id, user_type)
+    if result.succeeded:
         msg = f"进入虚神界闭关状态，如需出关，发送【虚神界出关】！"
         log_message(user_id, "[虚神界闭关] 进入虚神界闭关状态")
-        update_statistics_value(user_id, "虚神界闭关次数")
         await handle_send(bot, event, msg, md_type="虚神界", k1="出关", v1="虚神界出关", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_in_closing.finish()
-    else:
-        await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="虚神界帮助", v3="虚神界帮助")
-        await impart_pk_in_closing.finish()
+    msg = "当前状态无法进入虚神界闭关，请稍后重试！"
+    await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="虚神界帮助", v3="虚神界帮助")
+    await impart_pk_in_closing.finish()
         
 @impart_pk_out_closing.handle(parameterless=[Cooldown(cd_time=0)])
 async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
