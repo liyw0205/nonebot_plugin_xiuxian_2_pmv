@@ -1814,7 +1814,6 @@ async def agree_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         f"新拜师后{MENTOR_NEW_BIND_TRANSMISSION_WAIT_HOURS}小时内不能传功。"
         f"{title_msg}"
     )
-    )
     await handle_send(bot, event, msg, md_type="buff", k1="传功", v1=f"师徒传功 {apprentice_info['user_name']}", k2="师徒", v2="我的师徒", k3="关系", v3="关系帮助")
     await agree_mentor.finish()
 
