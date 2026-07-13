@@ -20,6 +20,7 @@ from .cultivation_item_service import CultivationItemService
 from .breakthrough_rate_item_service import BreakthroughRateItemService
 from .recovery_item_service import RecoveryItemService
 from .permanent_atk_item_service import PermanentAtkItemService
+from .blessed_flag_replace_service import BlessedFlagReplaceService
 from nonebot.log import logger
 items = Items()
 sql_message = XiuxianDateManage()
@@ -27,6 +28,7 @@ cultivation_item_service = CultivationItemService(get_paths().game_db)
 breakthrough_rate_item_service = BreakthroughRateItemService(get_paths().game_db)
 recovery_item_service = RecoveryItemService(get_paths().game_db)
 permanent_atk_item_service = PermanentAtkItemService(get_paths().game_db)
+blessed_flag_replace_service = BlessedFlagReplaceService(get_paths().game_db, get_paths().player_db)
 ADDED_RANKS = get_added_ranks()
 
 sign = lambda x: (x > 0) - (x < 0)
@@ -1087,25 +1089,28 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
     return msg
 
 
-def get_use_jlq_msg(user_id, goods_id):
     user_info = sql_message.get_user_info_with_id(user_id)
     if user_info['blessed_spot_flag'] == 0:
-        msg = f"道友还未拥有洞天福地，无法使用该物品"
-    else:
-        item_info = items.get_data_by_item_id(goods_id)
-        user_buff_data = UserBuffDate(user_id).BuffInfo
-        if int(user_buff_data['blessed_spot']) > item_info['level']:
-            msg = f"当前福地聚灵旗等级较高，无需降级"
-        elif int(user_buff_data['blessed_spot']) == item_info['level']:
-            msg = f"聚灵旗和福地聚灵旗等级相同，无需使用"
-        else:
-            mix_elixir_info = get_player_info(user_id, "mix_elixir_info")
-            mix_elixir_info['药材速度'] = item_info['药材速度']
-            save_player_info(user_id, mix_elixir_info, 'mix_elixir_info')
-            sql_message.update_back_j(user_id, goods_id)
-            sql_message.updata_user_blessed_spot(user_id, item_info['level'])
-            msg = f"道友洞天福地的聚灵旗已经替换为：{item_info['name']}"
-    return msg
+        return "道友还未拥有洞天福地，无法使用该物品"
+    item_info = items.get_data_by_item_id(goods_id)
+    user_buff_data = UserBuffDate(user_id).BuffInfo
+    mix_elixir_info = get_player_info(user_id, "mix_elixir_info") or {}
+    result = blessed_flag_replace_service.replace(
+        f"blessed-flag:{user_id}:{goods_id}:{datetime.now().timestamp()}",
+        user_id, goods_id, item_info['level'], item_info['药材速度'],
+        expected_level=int(user_buff_data['blessed_spot']),
+        expected_herb_speed=int(mix_elixir_info.get('药材速度', 0) or 0),
+        expected_quantity=sql_message.goods_num(user_id, goods_id),
+    )
+    if result.succeeded:
+        return f"道友洞天福地的聚灵旗已经替换为：{item_info['name']}"
+    if result.status == "downgrade":
+        return "当前福地聚灵旗等级较高，无需降级"
+    if result.status == "same_level":
+        return "聚灵旗和福地聚灵旗等级相同，无需使用"
+    if result.status == "blessed_spot_missing":
+        return "道友还未拥有洞天福地，无法使用该物品"
+    return "聚灵旗或洞天状态已变化，请刷新背包后重试"
 
 PATH = Path(__file__).parent
 FILEPATH = PATH / 'shop.json'
