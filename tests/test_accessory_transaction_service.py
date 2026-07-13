@@ -125,6 +125,50 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
         self.assertEqual(self.state()[0], 20)
         self.assertEqual(self.state()[1][0], self.accessory)
 
+    def test_lock_and_unlock_are_idempotent_with_expected_snapshot(self) -> None:
+        unlocked = dict(self.accessory)
+        unlocked.pop("locked_affixes")
+        self.write_bag([unlocked, self.second])
+
+        locked = self.service.set_affix_locks(
+            "lock-1", "lock", "user", "acc-1", unlocked, [0, 1]
+        )
+        duplicate = self.service.set_affix_locks(
+            "lock-1", "lock", "user", "acc-1", unlocked, [0, 1]
+        )
+        self.assertEqual((locked.status, duplicate.status), ("applied", "duplicate"))
+        self.assertEqual(duplicate.accessory["locked_affixes"], [0, 1])
+
+        unlocked_result = self.service.set_affix_locks(
+            "unlock-1", "unlock", "user", "acc-1", locked.accessory, [1]
+        )
+        unlock_duplicate = self.service.set_affix_locks(
+            "unlock-1", "unlock", "user", "acc-1", locked.accessory, [1]
+        )
+        self.assertEqual(
+            (unlocked_result.status, unlock_duplicate.status),
+            ("applied", "duplicate"),
+        )
+        self.assertEqual(self.state()[1][0]["locked_affixes"], [1])
+
+    def test_lock_snapshot_and_operation_payload_conflicts_change_nothing(self) -> None:
+        stale = dict(self.accessory, wash_count=2)
+        before = self.state()
+        stale_result = self.service.set_affix_locks(
+            "lock-stale", "lock", "user", "acc-1", stale, [0, 1]
+        )
+        self.assertEqual(stale_result.status, "state_changed")
+        self.assertEqual(self.state(), before)
+
+        applied = self.service.set_affix_locks(
+            "lock-conflict", "lock", "user", "acc-1", self.accessory, [0, 1]
+        )
+        conflict = self.service.set_affix_locks(
+            "lock-conflict", "lock", "user", "acc-1", self.accessory, [0]
+        )
+        self.assertEqual((applied.status, conflict.status), ("applied", "state_changed"))
+        self.assertEqual(self.state()[1][0]["locked_affixes"], [0, 1])
+
     def test_single_decompose_returns_stones_once(self) -> None:
         first = self.service.decompose(
             "decompose-1", "user", "acc-2", self.second,
@@ -187,6 +231,32 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
             self.service.decompose(
                 "decompose-fail", "user", "acc-2", self.second,
                 20023, "洗练石", 3, 1000,
+            )
+        self.assertEqual(self.state(), before)
+
+    def test_operation_write_failure_rolls_back_lock_and_unlock(self) -> None:
+        with db_backend.connection(self.game_database) as conn:
+            conn.execute("ATTACH DATABASE %s AS player_data", (str(self.player_database),))
+            self.service._ensure_schema(conn)
+            conn.commit()
+            conn.execute("DETACH DATABASE player_data")
+        with db_backend.transaction(self.game_database) as conn:
+            conn.execute(
+                "CREATE TRIGGER fail_accessory_lock_operation "
+                "BEFORE INSERT ON accessory_transaction_operations "
+                "WHEN NEW.action IN ('lock', 'unlock') "
+                "BEGIN SELECT RAISE(ABORT, 'operation failed'); END"
+            )
+
+        before = self.state()
+        with self.assertRaises(db_backend.IntegrityError):
+            self.service.set_affix_locks(
+                "lock-fail", "lock", "user", "acc-1", self.accessory, [0, 1]
+            )
+        self.assertEqual(self.state(), before)
+        with self.assertRaises(db_backend.IntegrityError):
+            self.service.set_affix_locks(
+                "unlock-fail", "unlock", "user", "acc-1", self.accessory, []
             )
         self.assertEqual(self.state(), before)
 
