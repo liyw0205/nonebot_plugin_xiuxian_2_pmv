@@ -32,6 +32,8 @@ from .resource_reward_service import MapResourceRewardService
 from .explore_settlement_service import MapExploreSettlementService
 from .mission_claim_service import MapMissionClaimService
 from .combat_settlement_service import MapCombatSettlementService
+from .dongfu_build_service import MapDongfuBuildService
+from .explore_start_service import MapExploreStartService
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
@@ -39,6 +41,8 @@ map_explore_settlement_service = MapExploreSettlementService(get_paths().game_db
 map_mission_claim_service = MapMissionClaimService(get_paths().game_db, get_paths().player_db)
 map_resource_reward_service = MapResourceRewardService(get_paths().game_db, get_paths().player_db)
 map_combat_settlement_service = MapCombatSettlementService(get_paths().game_db, get_paths().player_db)
+map_dongfu_build_service = MapDongfuBuildService(get_paths().game_db, get_paths().player_db)
+map_explore_start_service = MapExploreStartService(get_paths().game_db, get_paths().player_db)
 seed_purchase_service = SeedPurchaseService(get_paths().game_db)
 items = Items()
 
@@ -57,6 +61,7 @@ MAP_CD_TABLE = "map_cooldown"
 # =========================================
 DONGFU_COST = 100000000
 FORBIDDEN_DONGFU_TYPES = {"坊市", "渡口", "驿站", "交通", "关隘", "情报", "宫殿", "试炼"}
+EXPLORE_START_COOLDOWN_SEC = 30
 
 # =========================================
 # 地图移动
@@ -970,7 +975,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, f"建设洞府需要{number_to(DONGFU_COST)}灵石，你当前灵石不足。")
         return
 
-    sql_message.update_ls(user_id, DONGFU_COST, 2)
     save_data = {
         "built": 1,
         "realm": realm,
@@ -979,8 +983,24 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "node_name": node["name"],
         "node_type": node.get("type", ""),
     }
-    for k, v in save_data.items():
-        player_data_manager.update_or_write_data(user_id, DONGFU_TABLE, k, v)
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    result = map_dongfu_build_service.build(
+        f"map-dongfu-build:{user_id}:{event_message_id or time.time_ns()}",
+        user_id,
+        int(user_info.get("stone", 0)),
+        DONGFU_COST,
+        {"realm": realm, "heaven": heaven, "node_id": node_id},
+        save_data,
+    )
+    if result.status == "already_built":
+        await handle_send(bot, event, "你已建立洞府，无需重复建设。")
+        return
+    if result.status == "stone_insufficient":
+        await handle_send(bot, event, f"建设洞府需要{number_to(DONGFU_COST)}灵石，你当前灵石不足。")
+        return
+    if not result.succeeded:
+        await handle_send(bot, event, "地图位置或资产状态已变化，请重新尝试建设洞府。")
+        return
 
     await handle_send(bot, event, f"洞府建设成功！\n位置：{realm}·{heaven}·{node['name']}\n消耗灵石：{number_to(DONGFU_COST)}")
 
@@ -1925,19 +1945,63 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     else:
         duration_min = max(5, duration_arg)
 
-    sql_message.update_user_stamina(uid, need_stamina, 2)
-
+    start_at = datetime.now()
     new_st = {
         "running": 1,
         "node_type": ntype,
         "node_name": node["name"],
-        "start_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "start_time": start_at.strftime("%Y-%m-%d %H:%M:%S"),
         "duration_min": duration_min,
         "settlement": "",
         "max_duration_min": conf["max_duration_min"],
         "interval_min": conf["base_interval_min"],
     }
-    _save_explore_status(uid, new_st)
+    position = get_player_current_position(uid)
+    if not position:
+        await handle_send(bot, event, "当前位置异常，请先前往有效节点。")
+        return
+    expected_status = {
+        key: st.get(key, default)
+        for key, default in {
+            "running": 0,
+            "node_type": "",
+            "node_name": "",
+            "start_time": "",
+            "duration_min": 0,
+            "settlement": "",
+            "max_duration_min": 0,
+            "interval_min": 0,
+        }.items()
+    }
+    expected_daily = _get_daily_limit(uid)
+    expected_cooldown = player_data_manager.get_field_data(uid, MAP_CD_TABLE, "explore_start_cd_until")
+    cooldown_until = (start_at + timedelta(seconds=EXPLORE_START_COOLDOWN_SEC)).strftime("%Y-%m-%d %H:%M:%S")
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    result = map_explore_start_service.start(
+        f"map-explore-start:{uid}:{event_message_id or time.time_ns()}",
+        uid,
+        stamina,
+        need_stamina,
+        {key: position[key] for key in ("realm", "heaven", "node_id")},
+        expected_status,
+        expected_daily,
+        DAILY_LIMIT_CONFIG["explore"],
+        expected_cooldown,
+        cooldown_until,
+        new_st,
+    )
+    if result.status == "already_running":
+        await handle_send(bot, event, "你已有进行中的探索，请先【探索结算】。")
+        return
+    if result.status == "stamina_insufficient":
+        await handle_send(bot, event, f"体力不足！发起探索需 {need_stamina}，当前 {result.stamina}")
+        return
+    if result.status == "limit_reached":
+        await handle_send(bot, event, f"今日探索发起次数已达上限（{DAILY_LIMIT_CONFIG['explore']}次），请明日再来。")
+        return
+    if not result.succeeded:
+        await handle_send(bot, event, "探索状态已变化，请重新尝试。")
+        return
 
     await handle_send(
         bot, event,
