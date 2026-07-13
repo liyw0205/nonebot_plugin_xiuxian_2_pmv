@@ -30,8 +30,10 @@ from ..xiuxian_config import convert_rank, XiuConfig
 from pathlib import Path
 from ...paths import get_paths
 from .settlement_service import WorkSettlementService
+from .claim_service import WorkClaimService
 
 work_settlement_service = WorkSettlementService(get_paths().game_db)
+work_claim_service = WorkClaimService(get_paths().game_db)
 sql_message = XiuxianDateManage()  # sql类
 items = Items()
 count = 5  # 每日刷新次数
@@ -564,9 +566,25 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await do_work.finish()
             
         task_name, task_data = tasks[work_num - 1]
-        sql_message.do_work(user_id, 2, task_name)
-        
-        # 更新悬赏状态为已接取
+        event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        operation_id = f"work-claim:{user_id}:{event_message_id or time.time_ns()}"
+        started_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        result = work_claim_service.claim(
+            operation_id,
+            user_id,
+            sql_message.get_work_num(user_id),
+            work_data,
+            work_num,
+            started_at,
+        )
+        if result.status in {"state_changed", "user_missing"}:
+            await handle_send(bot, event, "悬赏状态或可用次数已变化，请重新查看后再试。")
+            await do_work.finish()
+        if result.status == "operation_conflict":
+            await handle_send(bot, event, "该次接取请求参数与首次处理不一致，请重新发起。")
+            await do_work.finish()
+
+        # JSON 文件仅保留为旧读取路径的投影，权威状态已由事务服务落库。
         work_data["status"] = 2
         savef(user_id, work_data)
                 
