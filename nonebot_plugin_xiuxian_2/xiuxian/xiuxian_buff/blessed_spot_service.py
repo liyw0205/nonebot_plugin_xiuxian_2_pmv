@@ -146,3 +146,54 @@ class BlessedSpotService:
 
 
 __all__ = ["BlessedSpotResult", "BlessedSpotService"]
+    def upgrade_field(self, operation_id, user_id, expected_level, stone_cost, max_level=10) -> BlessedSpotResult:
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        expected_level, stone_cost, max_level = int(expected_level), int(stone_cost), int(max_level)
+        if not operation_id or expected_level <= 0 or stone_cost <= 0 or max_level <= 1:
+            raise ValueError("valid operation, level and cost are required")
+        payload = self._payload([user_id, expected_level, stone_cost, max_level])
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute("ATTACH DATABASE %s AS player_data", (str(self._player_database),))
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._ensure_operation_table(conn)
+                self._ensure_mix_table(conn)
+                previous = conn.execute(
+                    "SELECT payload,result_json FROM blessed_spot_operations WHERE operation_id=%s AND action=%s",
+                    (operation_id, "upgrade"),
+                ).fetchone()
+                if previous is not None:
+                    conn.rollback()
+                    if str(previous[0]) != payload:
+                        return BlessedSpotResult("state_changed", user_id)
+                    saved = json.loads(str(previous[1]))
+                    return BlessedSpotResult("duplicate", user_id, saved["stone_cost"], previous_level=saved["previous_level"], current_level=saved["current_level"])
+                user = conn.execute("SELECT COALESCE(stone,0),COALESCE(blessed_spot_flag,0) FROM user_xiuxian WHERE user_id=%s", (user_id,)).fetchone()
+                level = conn.execute(f"SELECT {db_backend.quote_ident('灵田数量')} FROM player_data.mix_elixir_info WHERE user_id=%s", (user_id,)).fetchone()
+                if user is None or level is None or int(user[1]) == 0:
+                    conn.rollback()
+                    return BlessedSpotResult("blessed_spot_missing", user_id)
+                current = int(level[0] or 0)
+                if current != expected_level:
+                    conn.rollback()
+                    return BlessedSpotResult("state_changed", user_id, previous_level=current, current_level=current)
+                if current >= max_level:
+                    conn.rollback()
+                    return BlessedSpotResult("max_level", user_id, previous_level=current, current_level=current)
+                if int(user[0]) < stone_cost:
+                    conn.rollback()
+                    return BlessedSpotResult("stone_insufficient", user_id, stone_cost, previous_level=current, current_level=current)
+                conn.execute("UPDATE user_xiuxian SET stone=stone-%s WHERE user_id=%s AND stone>=%s", (stone_cost, user_id, stone_cost))
+                changed = conn.execute(f"UPDATE player_data.mix_elixir_info SET {db_backend.quote_ident('灵田数量')}=%s WHERE user_id=%s AND CAST({db_backend.quote_ident('灵田数量')} AS INTEGER)=%s", (str(current + 1), user_id, current))
+                if changed.rowcount != 1:
+                    conn.rollback()
+                    return BlessedSpotResult("state_changed", user_id)
+                saved = {"stone_cost": stone_cost, "previous_level": current, "current_level": current + 1}
+                conn.execute("INSERT INTO blessed_spot_operations (operation_id,action,payload,result_json) VALUES (%s,%s,%s,%s)", (operation_id, "upgrade", payload, json.dumps(saved)))
+                conn.commit()
+                return BlessedSpotResult("applied", user_id, stone_cost, previous_level=current, current_level=current + 1)
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.execute("DETACH DATABASE player_data")

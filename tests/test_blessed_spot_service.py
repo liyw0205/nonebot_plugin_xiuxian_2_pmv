@@ -66,5 +66,24 @@ class BlessedSpotServiceTests(unittest.TestCase):
         self.assertEqual(before, self.state())
 
 
+    def test_field_upgrade_is_atomic_and_idempotent(self):
+        self.service.open("open", "u", 300, "洞府", "now")
+        with db_backend.transaction(self.game) as conn:
+            conn.execute("UPDATE user_xiuxian SET stone=%s WHERE user_id=%s", (500, "u"))
+        first = self.service.upgrade_field("upgrade", "u", 1, 200)
+        second = self.service.upgrade_field("upgrade", "u", 1, 200)
+        self.assertEqual(("applied", 1, 2), (first.status, first.previous_level, first.current_level))
+        self.assertEqual("duplicate", second.status)
+        self.assertEqual(((300, 1, "洞府"), ("now", "2", "{}")), self.state())
+
+    def test_rename_checks_snapshot_and_replays_result(self):
+        self.service.open("open", "u", 300, "旧名", "now")
+        first = self.service.rename("rename", "u", "旧名", "新名")
+        second = self.service.rename("rename", "u", "旧名", "新名")
+        self.assertEqual("applied", first.status)
+        self.assertEqual(("duplicate", "新名"), (second.status, second.name))
+        self.assertEqual("state_changed", self.service.rename("other", "u", "旧名", "另名").status)
+        self.assertEqual("新名", self.state()[0][2])
+
 if __name__ == "__main__":
     unittest.main()

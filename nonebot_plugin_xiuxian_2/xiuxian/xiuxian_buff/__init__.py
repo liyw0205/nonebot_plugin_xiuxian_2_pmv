@@ -243,10 +243,17 @@ async def ling_tian_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         if int(user_info['stone']) < cost:
             msg = f"本次开垦需要灵石：{cost}，道友的灵石不足！"
         else:
-            msg = f"道友成功消耗灵石：{cost}，灵田数量+1,目前数量:{now_num + 1}"
-            mix_elixir_info['灵田数量'] = now_num + 1
-            save_player_info(user_id, mix_elixir_info, 'mix_elixir_info')
-            sql_message.update_ls(user_id, cost, 2)
+            result = blessed_spot_service.upgrade_field(
+                _blessed_spot_operation_id(event, "upgrade", user_id),
+                user_id,
+                now_num,
+                cost,
+                len(LINGTIANCONFIG) + 1,
+            )
+            if result.succeeded:
+                msg = f"道友成功消耗灵石：{result.stone_cost}，灵田数量+1,目前数量:{result.current_level}"
+            else:
+                msg = "灵石或灵田状态已变化，请重新查看后再试。"
     await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
     await ling_tian_up.finish()
 
@@ -273,8 +280,13 @@ async def blessed_spot_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     if len(arg) > 9:
         msg = f"洞天福地的名字不可大于9位,请重新命名"
     else:
-        msg = f"道友的洞天福地成功改名为：{arg}"
-        sql_message.update_user_blessed_spot_name(user_id, arg)
+        result = blessed_spot_service.rename(
+            _blessed_spot_operation_id(event, "rename", user_id),
+            user_id,
+            str(user_info.get("blessed_spot_name", "") or ""),
+            arg,
+        )
+        msg = f"道友的洞天福地成功改名为：{result.name}" if result.succeeded else "洞天福地状态已变化，请重新查看后再试。"
     await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
     await blessed_spot_rename.finish()
 
