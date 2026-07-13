@@ -21,7 +21,7 @@ from nonebot.log import logger
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.utils import (
     check_user, check_user_type,
-    send_msg_handler, get_msg_pic, log_message, handle_send, update_statistics_value,
+    send_msg_handler, get_msg_pic, log_message, handle_send,
     build_md_command_link
 )
 from .riftconfig import get_rift_config
@@ -29,7 +29,7 @@ from .jsondata import save_rift_data, read_rift_data
 from .entry_service import RiftEntryService
 from .termination_service import RiftTerminationService
 from .key_event_settlement_service import RiftKeyEventSettlementService
-from .boss_token_service import RiftBossTokenService
+from .demon_token_battle_settlement_service import RiftDemonTokenBattleSettlementService
 from .settlement_service import RiftSettlementService
 from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_map import (
@@ -46,7 +46,9 @@ sql_message = XiuxianDateManage()  # sql类
 rift_entry_service = RiftEntryService(get_paths().game_db)
 rift_termination_service = RiftTerminationService(get_paths().game_db)
 rift_key_event_settlement_service = RiftKeyEventSettlementService(get_paths().game_db, get_paths().player_db)
-rift_boss_token_service = RiftBossTokenService(get_paths().game_db)
+rift_demon_token_battle_settlement_service = RiftDemonTokenBattleSettlementService(
+    get_paths().game_db, get_paths().player_db
+)
 rift_settlement_service = RiftSettlementService(get_paths().game_db)
 cache_help = {}
 group_rift = {}  # dict
@@ -691,25 +693,30 @@ async def use_rift_boss(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, msg)
         return
 
-    rift_rank = rift_info["rank"]
-
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    settlement = rift_boss_token_service.settle(
-        f"rift-boss-token:{event_id or time.time_ns()}:{user_id}", user_id, item_id, rift_info
+    operation_id = f"rift-demon-token-battle:{event_id or time.time_ns()}:{user_id}"
+    replay = rift_demon_token_battle_settlement_service.replay(operation_id)
+    if replay is not None:
+        await handle_send(bot, event, replay.message)
+        return
+    battle_result, result_msg, outcome = await get_boss_battle_info(
+        user_info, rift_info["rank"], bot.self_id, persist=False
+    )
+    explore_count = _rift_progress_snapshot(user_id)
+    progress_reward, progress_msg = _roll_rift_progress(explore_count)
+    outcome["progress_reward"] = progress_reward
+    outcome["message"] = f"秘境 {rift_info['name']} 已使用斩妖令结算！\n战斗结果：{result_msg}{progress_msg}"
+    settlement = rift_demon_token_battle_settlement_service.settle(
+        operation_id, user_id, item_id, rift_info,
+        {key: int(user_info.get(key, 0)) for key in ("stone", "exp", "hp", "mp")},
+        explore_count, outcome, XiuConfig().max_goods_num,
     )
     if not settlement.succeeded:
         await handle_send(bot, event, "斩妖令或秘境状态已变化，请稍后重试。")
         return
-
-    result, result_msg = await get_boss_battle_info(user_info, rift_rank, bot.self_id)
-    update_statistics_value(user_id, "秘境打怪")
-    await send_msg_handler(bot, event, result, title=result_msg)
-
-    count_msg = update_rift_explore_count(user_id, do_give=True)
-
-    final_msg = f"秘境 {rift_info['name']} 已使用斩妖令结算！\n战斗结果：{result_msg}{count_msg}"
-    log_message(user_id, final_msg)
-    await handle_send(bot, event, final_msg)
+    await send_msg_handler(bot, event, battle_result, title=result_msg)
+    log_message(user_id, settlement.message)
+    await handle_send(bot, event, settlement.message)
     return
 
 async def use_rift_speedup(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
