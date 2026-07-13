@@ -65,6 +65,7 @@ from .level_change_service import AdminLevelChangeService
 from .root_change_service import AdminRootChangeService
 from .exp_adjustment_service import AdminExpAdjustmentService
 from .stone_adjustment_service import AdminStoneAdjustmentService
+from .item_grant_service import AdminItemGrantService
 from . import command_controls as _command_controls  # noqa: F401
 from . import empty_fallback as _empty_fallback  # noqa: F401
 from . import event_debug as _event_debug  # noqa: F401
@@ -76,6 +77,7 @@ admin_level_change_service = AdminLevelChangeService(get_paths().game_db)
 admin_root_change_service = AdminRootChangeService(get_paths().game_db)
 admin_exp_adjustment_service = AdminExpAdjustmentService(get_paths().game_db)
 admin_stone_adjustment_service = AdminStoneAdjustmentService(get_paths().game_db)
+admin_item_grant_service = AdminItemGrantService(get_paths().game_db)
 
 
 def _admin_operation_id(event, action: str, user_id: str) -> str:
@@ -742,21 +744,29 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
                 add_accessory_to_bag(user_id, goods_id, quality)
             msg = f"成功向 {target} 发放【{item_info['name']}】饰品 x{quantity}（{quality}阶）"
         else:
-            sql_message.send_back(
+            expected_quantity = int(sql_message.goods_num(user_id, goods_id) or 0)
+            result = admin_item_grant_service.grant(
+                _admin_operation_id(event, "item-grant", user_id),
+                str(get_user_id(event) or "unknown"),
                 user_id,
                 goods_id,
                 item_info["name"],
                 goods_type,
                 quantity,
-                log_context=_admin_economy_context(
-                    event,
-                    "admin_item_add",
-                    item_id=goods_id,
-                    item_name=item_info["name"],
-                    target_name=target,
-                ),
+                expected_quantity,
+                int(XiuConfig().max_goods_num),
+                target_name=target,
             )
-            msg = f"成功向 {target} 发放 {item_info['name']} x{quantity}"
+            if result.status == "inventory_full":
+                msg = f"{target} 的 {item_info['name']} 已达到背包容量上限！"
+            elif result.status == "state_changed":
+                msg = "玩家背包状态已变化，请重新执行指令"
+            elif result.status == "operation_conflict":
+                msg = "本次管理员操作与已记录事件冲突"
+            elif result.status == "user_missing":
+                msg = f"玩家 {target} 已不存在！"
+            else:
+                msg = f"成功向 {target} 发放 {item_info['name']} x{result.granted_quantity}"
 
         await handle_send(bot, event, msg)
         await cz.finish()
@@ -774,21 +784,29 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
             add_accessory_to_bag(self_user_id, goods_id, quality)
         msg = f"成功向您发放【{item_info['name']}】饰品 x{quantity}（{quality}阶）"
     else:
-        sql_message.send_back(
+        expected_quantity = int(sql_message.goods_num(self_user_id, goods_id) or 0)
+        result = admin_item_grant_service.grant(
+            _admin_operation_id(event, "item-grant", self_user_id),
+            str(get_user_id(event) or "unknown"),
             self_user_id,
             goods_id,
             item_info["name"],
             goods_type,
             quantity,
-            log_context=_admin_economy_context(
-                event,
-                "admin_item_add",
-                item_id=goods_id,
-                item_name=item_info["name"],
-                target="self",
-            ),
+            expected_quantity,
+            int(XiuConfig().max_goods_num),
+            target_name="self",
         )
-        msg = f"成功向您发放 {item_info['name']} x{quantity}"
+        if result.status == "inventory_full":
+            msg = f"您的 {item_info['name']} 已达到背包容量上限！"
+        elif result.status == "state_changed":
+            msg = "您的背包状态已变化，请重新执行指令"
+        elif result.status == "operation_conflict":
+            msg = "本次管理员操作与已记录事件冲突"
+        elif result.status == "user_missing":
+            msg = "您的修仙数据已不存在！"
+        else:
+            msg = f"成功向您发放 {item_info['name']} x{result.granted_quantity}"
 
     await handle_send(bot, event, msg)
     await cz.finish()
