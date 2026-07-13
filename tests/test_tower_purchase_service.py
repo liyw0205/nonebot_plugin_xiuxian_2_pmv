@@ -9,7 +9,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tower.purchase_service import TowerPurchaseService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tower.purchase_service import TowerPurchaseService, normalize_weekly_purchases
 from tests.test_db_backend import db_backend
 
 
@@ -73,6 +73,19 @@ class TowerPurchaseServiceTests(unittest.TestCase):
         self.assertEqual((first.status, duplicate.status, conflict.status), ("applied", "duplicate", "state_changed"))
         self.assertEqual((duplicate.score, duplicate.inventory), (80, 2))
         self.assertEqual(self.state(), (80, {"_last_reset": "2026-07-13", "1": 3}, (2, 2)))
+
+    def test_stale_week_snapshot_is_reset_inside_purchase(self) -> None:
+        stale = {"_last_reset": "2020-01-01", "1": 5}
+        with db_backend.transaction(self.player_database) as conn:
+            conn.execute("UPDATE tower SET weekly_purchases=%s WHERE user_id=%s", (json.dumps(stale), "user"))
+        result = self.purchase("new-week", weekly=stale)
+        self.assertEqual((result.status, result.purchased), ("applied", 2))
+        score, weekly, inventory = self.state()
+        self.assertEqual((score, weekly["1"], inventory), (80, 2, (2, 2)))
+        self.assertNotEqual(weekly["_last_reset"], "2020-01-01")
+
+    def test_week_normalization_is_stable_within_current_week(self) -> None:
+        self.assertEqual(normalize_weekly_purchases(self.weekly), self.weekly)
 
     def test_operation_failure_rolls_back_score_limit_and_inventory(self) -> None:
         with db_backend.transaction(self.game_database) as conn:

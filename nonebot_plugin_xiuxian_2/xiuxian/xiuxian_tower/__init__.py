@@ -24,7 +24,7 @@ from ..xiuxian_utils.item_json import Items
 from .tower_data import tower_data
 from .tower_battle import tower_battle
 from .tower_limit import tower_limit
-from .purchase_service import TowerPurchaseService
+from .purchase_service import TowerPurchaseService, normalize_weekly_purchases
 from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_title.title_data import check_and_unlock_titles
@@ -309,14 +309,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg, md_type="通天塔", k1="兑换", v1="通天塔兑换", k2="商店", v2="通天塔帮助", k3="信息", v3="通天塔信息")
         await tower_buy.finish()
 
-    # 检查限购
-    already_purchased = tower_limit.get_weekly_purchases(user_id, item_id)
+    # 周快照只在兑换事务内持久化，预检查不再提前写库。
+    tower_info["weekly_purchases"] = normalize_weekly_purchases(tower_info.get("weekly_purchases", {}))
+    already_purchased = int(tower_info["weekly_purchases"].get(str(item_id), 0))
     max_quantity = item_data['weekly_limit'] - already_purchased
-    if quantity > max_quantity:
-        quantity = max_quantity
+    quantity = min(quantity, max_quantity)
     if quantity <= 0:
-        msg = f"{item_info['name']}已到限购无法再购买！"
-        await handle_send(bot, event, msg, md_type="通天塔", k1="兑换", v1="通天塔兑换", k2="商店", v2="通天塔帮助", k3="信息", v3="通天塔信息")
+        await handle_send(bot, event, f"{item_info['name']}已到限购无法再购买！")
         await tower_buy.finish()
 
     # 检查积分是否足够

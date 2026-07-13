@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from contextlib import closing
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from threading import RLock
 
@@ -23,6 +23,18 @@ class TowerPurchaseResult:
     def succeeded(self) -> bool:
         return self.status in {"applied", "duplicate"}
 
+
+
+def normalize_weekly_purchases(value, today=None):
+    today = today or date.today()
+    weekly = {str(key): item for key, item in dict(value or {}).items()}
+    try:
+        reset = date.fromisoformat(str(weekly.get("_last_reset", "")))
+    except ValueError:
+        reset = None
+    if reset is None or reset.isocalendar()[:2] != today.isocalendar()[:2]:
+        return {"_last_reset": today.isoformat()}
+    return weekly
 
 class TowerPurchaseService:
     """Exchange tower score for inventory items in one transaction."""
@@ -58,7 +70,7 @@ class TowerPurchaseService:
         expected_score = int(expected_score)
         max_goods_num = int(max_goods_num)
         bind_flag = 1 if int(bind_flag) == 1 else 0
-        weekly = {str(key): value for key, value in dict(expected_weekly_purchases).items()}
+        weekly = normalize_weekly_purchases(expected_weekly_purchases)
         if not operation_id or quantity <= 0 or min(item_id, unit_cost, weekly_limit, expected_score, max_goods_num) < 0:
             raise ValueError("valid operation, item, quantity and purchase limits are required")
         payload = json.dumps(
@@ -118,6 +130,7 @@ class TowerPurchaseService:
                 except (TypeError, ValueError):
                     conn.rollback()
                     return result("state_changed")
+                current_weekly = normalize_weekly_purchases(current_weekly)
                 if int(tower[0]) != expected_score or current_weekly != weekly:
                     conn.rollback()
                     return result("state_changed")
@@ -171,4 +184,4 @@ class TowerPurchaseService:
                     conn.execute("DETACH DATABASE player_data")
 
 
-__all__ = ["TowerPurchaseResult", "TowerPurchaseService"]
+__all__ = ["TowerPurchaseResult", "TowerPurchaseService", "normalize_weekly_purchases"]
