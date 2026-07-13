@@ -24,6 +24,7 @@ from .plant_service import DongfuPlantService
 from .accelerate_service import DongfuAccelerateService
 from .patrol_service import DongfuPatrolService
 from .array_upgrade_service import DongfuArrayUpgradeService
+from .visit_reward_service import DongfuVisitRewardService
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
@@ -33,6 +34,7 @@ dongfu_plant_service = DongfuPlantService(get_paths().game_db, get_paths().playe
 dongfu_accelerate_service = DongfuAccelerateService(get_paths().game_db, get_paths().player_db)
 dongfu_patrol_service = DongfuPatrolService(get_paths().game_db, get_paths().player_db)
 dongfu_array_upgrade_service = DongfuArrayUpgradeService(get_paths().game_db, get_paths().player_db)
+dongfu_visit_reward_service = DongfuVisitRewardService(get_paths().game_db, get_paths().player_db)
 dongfu_harvest_settlement_service = DongfuHarvestSettlementService(get_paths().game_db, get_paths().player_db)
 
 MAP_TABLE = "map_status"
@@ -1140,9 +1142,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if _to_int(td.get("built")) != 1:
         await handle_send(bot, event, f"{tname}尚未建设洞府。")
         return
-
     gain = random.randint(10000, 50000)
-    sql_message.update_ls(uid, gain, 1)
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    result = dongfu_visit_reward_service.reward(f"dongfu-visit:{uid}:{event_message_id or time.time_ns()}", uid, tid, gain)
+    if not result.succeeded:
+        await handle_send(bot, event, "洞府状态已变化，请稍后重试。")
+        return
     await handle_send(bot, event, f"你拜访了【{tname}】的洞府（{td.get('node_name')}），获得灵石{number_to(gain)}。")
 
 
