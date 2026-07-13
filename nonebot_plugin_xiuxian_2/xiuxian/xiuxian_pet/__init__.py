@@ -57,10 +57,14 @@ from ..xiuxian_utils.utils import (
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ...paths import get_paths
 from .travel_claim_service import PetTravelClaimService
+from .feed_service import PetFeedService
+from .skill_replace_service import PetSkillReplaceService
 
 items = Items()
 sql_message = XiuxianDateManage()
 pet_travel_claim_service = PetTravelClaimService(get_paths().game_db, get_paths().player_db)
+pet_feed_service = PetFeedService(get_paths().game_db, get_paths().player_db)
+pet_skill_replace_service = PetSkillReplaceService(get_paths().player_db)
 
 pet_help = on_command("宠物帮助", aliases={"宠物系统帮助"}, priority=10, block=True)
 pet_intro_help = on_command("宠物入门帮助", aliases={"宠物获取帮助", "宠物查看帮助"}, priority=10, block=True)
@@ -1272,16 +1276,31 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "该材料无法提供宠物经验。")
         return
 
-    pet, upgraded, form_changes, skill_offers = feed_active_pet(user_id, feed_exp)
-    if not pet:
-        await handle_send(bot, event, "喂食失败：未找到出战宠物。")
+    old_stars = int(active_pet.get("stars", 1))
+    old_exp = int(active_pet.get("exp", 0))
+    old_total_exp = int(active_pet.get("total_exp", old_exp))
+    new_stars, new_exp = old_stars, old_exp + feed_exp
+    while new_stars < active_max_stars:
+        need = exp_to_next_star(new_stars)
+        if new_exp < need:
+            break
+        if requires_fusion_for_next_star(new_stars):
+            new_exp = need
+            break
+        new_exp -= need
+        new_stars += 1
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns())
+    result = pet_feed_service.feed(
+        f"pet-feed:{event_id}:{user_id}", user_id, active_pet.get("uid"), item_id, count,
+        (old_stars, old_exp, old_total_exp), (new_stars, new_exp, old_total_exp + feed_exp),
+    )
+    if not result.succeeded:
+        messages = {"item_missing": "材料不足，请重新检查背包。", "state_changed": "宠物或背包状态已变化，请重试。"}
+        await handle_send(bot, event, messages.get(result.status, "喂食结算失败，请重试。"))
         return
-
-    if upgraded <= 0 and pet.get("stars", 1) >= pet.get("max_stars", 5):
-        await handle_send(bot, event, f"{pet.get('form_name')}已达到当前稀有度上限，无法继续喂食。")
-        return
-
-    sql_message.update_back_j(user_id, item_id, num=count)
+    pet = get_pet_doc(user_id).get("active")
+    upgraded = new_stars - old_stars
+    form_changes, skill_offers = [], []
 
     lines = [
         f"喂食成功：消耗{item_info.get('name', item_name)} x{count}",
@@ -1430,11 +1449,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, "当前没有待替换的宠物技能。")
         return
 
-    pet = replace_pet_skill(user_id, pending["uid"], pending["skill"])
+    data = get_pet_doc(user_id)
+    _, _, current_pet = next(((where, key, pet) for where, key, pet in [("active", None, data.get("active"))] + [("bag", i, pet) for i, pet in enumerate(data.get("bag", []))] if pet and str(pet.get("uid")) == str(pending["uid"])), (None, None, None))
+    new_skill_id = str(pending["skill"].get("skill_id", ""))
+    old_skill_id = str((current_pet or {}).get("skill", {}).get("skill_id", ""))
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns())
+    result = pet_skill_replace_service.replace(f"pet-skill-replace:{event_id}:{user_id}", user_id, pending["uid"], old_skill_id, new_skill_id)
     PET_SKILL_REPLACE_CACHE.pop(user_id, None)
-    if not pet:
+    if not result.succeeded:
         await handle_send(bot, event, "替换失败：未找到对应宠物，或技能类型不匹配。")
         return
+    pet = replace_pet_skill(user_id, pending["uid"], pending["skill"])
 
     await handle_send(
         bot,
