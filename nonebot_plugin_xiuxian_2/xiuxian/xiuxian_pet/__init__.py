@@ -37,6 +37,7 @@ from ..xiuxian_utils.pet_system import (
     get_pet_doc,
     get_pet_bag_rows,
     get_pet_total_count,
+    get_releasable_pets_by_keyword,
     get_pet_travel_scene_key,
     grant_pet,
     grant_pet_egg_pity_rewards,
@@ -67,6 +68,7 @@ from .feed_service import PetFeedService
 from .skill_replace_service import PetSkillReplaceService
 from .travel_start_service import PetTravelStartService
 from .hatch_service import PetHatchService
+from .release_service import PetReleaseService
 
 items = Items()
 sql_message = XiuxianDateManage()
@@ -75,6 +77,7 @@ pet_feed_service = PetFeedService(get_paths().game_db, get_paths().player_db)
 pet_skill_replace_service = PetSkillReplaceService(get_paths().player_db)
 pet_travel_start_service = PetTravelStartService(get_paths().player_db)
 pet_hatch_service = PetHatchService(get_paths().game_db, get_paths().player_db)
+pet_release_service = PetReleaseService(get_paths().game_db, get_paths().player_db)
 
 pet_help = on_command("宠物帮助", aliases={"宠物系统帮助"}, priority=10, block=True)
 pet_intro_help = on_command("宠物入门帮助", aliases={"宠物获取帮助", "宠物查看帮助"}, priority=10, block=True)
@@ -328,6 +331,27 @@ def _grant_pet_release_refund(user_id: str, pets: list[dict]):
 
     if len(pets) == 1:
         return f"\n返还：无（累计经验{total_exp}，按80%计{total_refund_base_exp}经验，不足{refund_exp}）"
+    return (
+        f"\n返还：无（合计累计经验{total_exp}，逐只按80%折算，"
+        f"合计折算经验{total_refund_base_exp}，均不足{refund_exp}）"
+    )
+
+
+def _format_pet_release_refund(pets: list[dict], refund_item: dict, total_refund_count: int):
+    refund_name = refund_item.get("name", "一阶天地灵髓")
+    total_exp = 0
+    total_refund_base_exp = 0
+    refund_exp = 800
+    for pet in pets:
+        _, pet_total_exp, pet_refund_base_exp, refund_exp = calc_pet_release_refund(pet, refund_item)
+        total_exp += pet_total_exp
+        total_refund_base_exp += pet_refund_base_exp
+    if total_refund_count > 0:
+        return (
+            f"\n返还：{refund_name} x{total_refund_count}"
+            f"（合计累计经验{total_exp}，逐只按80%折算，合计折算经验{total_refund_base_exp}，"
+            f"{refund_exp}经验/个，余数不返）"
+        )
     return (
         f"\n返还：无（合计累计经验{total_exp}，逐只按80%折算，"
         f"合计折算经验{total_refund_base_exp}，均不足{refund_exp}）"
@@ -902,6 +926,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if claim_result.status == "state_changed":
         await handle_send(bot, event, "宠物游历状态已变化，请重新查询游历状态。")
         return
+    if claim_result.status == "pet_missing":
+        await handle_send(bot, event, "游历宠物状态已变化，奖励尚未领取。")
+        return
     if claim_result.status == "user_missing":
         await handle_send(bot, event, "未找到道友数据，宠物游历奖励领取失败。")
         return
@@ -1217,7 +1244,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     user_id = str(user_info["user_id"])
-    pets, skipped_active = remove_pets_by_keyword(user_id, keyword)
+    pets, skipped_active = get_releasable_pets_by_keyword(user_id, keyword)
     if not pets:
         msg = f"未找到可一键放生的宠物：{keyword}。"
         if skipped_active:
@@ -1225,7 +1252,27 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg)
         return
 
-    refund_msg = _grant_pet_release_refund(user_id, pets)
+    refund_item = items.get_data_by_item_id(PET_RELEASE_REFUND_ITEM_ID) or {}
+    refund_count = sum(calc_pet_release_refund(pet, refund_item)[0] for pet in pets)
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    snapshot_id = ":".join(sorted(str(pet.get("uid", "")) for pet in pets))
+    release_result = pet_release_service.release_batch(
+        f"pet-release-batch:{event_id or snapshot_id}:{user_id}",
+        user_id,
+        [{"uid": pet.get("uid"), "total_exp": pet.get("total_exp", 0), "is_active": 0} for pet in pets],
+        PET_RELEASE_REFUND_ITEM_ID,
+        refund_item.get("name", "一阶天地灵髓"),
+        refund_item.get("type", "特殊道具"),
+        refund_count,
+        XiuConfig().max_goods_num,
+    )
+    if release_result.status == "inventory_full":
+        await handle_send(bot, event, "背包物品已达上限，宠物未放生。")
+        return
+    if not release_result.succeeded:
+        await handle_send(bot, event, "宠物状态已变化，请重新查看宠物背包后再试。")
+        return
+    refund_msg = _format_pet_release_refund(pets, refund_item, release_result.refund)
     lines = [
         f"已一键放生：{keyword}，共{len(pets)}只。",
         f"稀有度统计：{_summarize_pet_rarities(pets)}",

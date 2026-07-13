@@ -1992,6 +1992,15 @@ def remove_pets_by_keyword(user_id: str | int, keyword: str, include_active: boo
     return removed, skipped_active
 
 
+def get_releasable_pets_by_keyword(user_id: str | int, keyword: str):
+    data = get_pet_doc(user_id)
+    keyword = str(keyword).strip()
+    active = data.get("active")
+    skipped_active = bool(active and _pet_matches_release_keyword(active, keyword))
+    pets = [pet for pet in data.get("bag", []) if _pet_matches_release_keyword(pet, keyword)]
+    return pets, skipped_active
+
+
 def get_rarity_max_stars(rarity: str) -> int:
     return RARITY_MAX_STARS.get(str(rarity), 5)
 
