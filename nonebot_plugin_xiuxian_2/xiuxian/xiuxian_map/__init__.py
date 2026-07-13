@@ -31,12 +31,14 @@ from .seed_purchase_service import SeedPurchaseService
 from .resource_reward_service import MapResourceRewardService
 from .explore_settlement_service import MapExploreSettlementService
 from .mission_claim_service import MapMissionClaimService
+from .combat_settlement_service import MapCombatSettlementService
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
 map_explore_settlement_service = MapExploreSettlementService(get_paths().game_db, get_paths().player_db)
 map_mission_claim_service = MapMissionClaimService(get_paths().game_db, get_paths().player_db)
 map_resource_reward_service = MapResourceRewardService(get_paths().game_db, get_paths().player_db)
+map_combat_settlement_service = MapCombatSettlementService(get_paths().game_db, get_paths().player_db)
 seed_purchase_service = SeedPurchaseService(get_paths().game_db)
 items = Items()
 
@@ -1696,78 +1698,108 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
         return
 
     uid = str(user_info["user_id"])
-
-    can_use, cur_cnt, cap = _check_daily_cap(uid, "combat_count", DAILY_LIMIT_CONFIG["combat"])
-    if not can_use:
-        await handle_send(bot, event, f"今日节点战斗次数已达上限（{cap}次），请明日再来。")
-        return
-
-    node = get_player_current_node(uid)
-    if not node:
-        await handle_send(bot, event, "当前位置异常，请先前往有效节点。")
-        return
-
-    ntype = node["type"]
-    if ntype not in COMBAT_NODE_TYPES:
-        await handle_send(bot, event, f"当前节点【{node['name']}】不是对战节点。")
-        return
-
-    now = datetime.now()
-    cd = _get_cd(uid, "combat_cd_until")
-    if cd and now < cd:
-        sec = int((cd - now).total_seconds())
-        await handle_send(bot, event, f"你刚经历一战，尚需冷却 {sec}s")
-        return
-
-    conf = COMBAT_CONFIG[ntype]
-    stamina = int(user_info.get("user_stamina", 0))
-    if stamina < conf["stamina_cost"]:
-        await handle_send(bot, event, f"体力不足！需要 {conf['stamina_cost']}，当前 {stamina}")
-        return
-
-    sql_message.update_user_stamina(uid, conf["stamina_cost"], 2)
-    _set_cd(uid, "combat_cd_until", conf["cooldown_sec"])
-
-    enemy = _build_map_enemy(user_info, ntype, node["name"])
-    result, victor, bossinfo_new = await Boss_fight(uid, enemy, bot_id=bot.self_id)
-    await send_msg_handler(bot, event, result)
-
-    _inc_daily_count(uid, "combat_count", 1)
-
-    if victor != "群友赢了":
-        await handle_send(bot, event, f"⚔️ {conf['fail_msg']}\n地点：{node['name']}")
-        return
-
-    big_win = False
-    remain_hp = None
-    try:
-        remain_hp = bossinfo_new.get("群友", {}).get("剩余气血")
-    except Exception:
-        remain_hp = None
-
-    if remain_hp is not None:
+    pending = player_data_manager.get_fields(uid, "map_combat_settlement") or {}
+    raw_snapshot = pending.get("snapshot", "")
+    snapshot = None
+    if raw_snapshot:
         try:
-            big_win = int(remain_hp) > int(user_info.get("hp", 1)) * 0.5
-        except Exception:
-            big_win = False
+            snapshot = json.loads(raw_snapshot)
+        except (TypeError, ValueError):
+            await handle_send(bot, event, "节点战斗结算数据异常，请联系管理员处理。")
+            return
+
+    if snapshot is None:
+        can_use, cur_cnt, cap = _check_daily_cap(uid, "combat_count", DAILY_LIMIT_CONFIG["combat"])
+        if not can_use:
+            await handle_send(bot, event, f"今日节点战斗次数已达上限（{cap}次），请明日再来。")
+            return
+        node = get_player_current_node(uid)
+        if not node:
+            await handle_send(bot, event, "当前位置异常，请先前往有效节点。")
+            return
+        ntype = node["type"]
+        if ntype not in COMBAT_NODE_TYPES:
+            await handle_send(bot, event, f"当前节点【{node['name']}】不是对战节点。")
+            return
+        now = datetime.now()
+        cd = _get_cd(uid, "combat_cd_until")
+        if cd and now < cd:
+            sec = int((cd - now).total_seconds())
+            await handle_send(bot, event, f"你刚经历一战，尚需冷却 {sec}s")
+            return
+        conf = COMBAT_CONFIG[ntype]
+        stamina = int(user_info.get("user_stamina", 0))
+        if stamina < conf["stamina_cost"]:
+            await handle_send(bot, event, f"体力不足！需要 {conf['stamina_cost']}，当前 {stamina}")
+            return
+
+        sql_message.update_user_stamina(uid, conf["stamina_cost"], 2)
+        _set_cd(uid, "combat_cd_until", conf["cooldown_sec"])
+        enemy = _build_map_enemy(user_info, ntype, node["name"])
+        battle_result, victor, bossinfo_new = await Boss_fight(uid, enemy, bot_id=bot.self_id)
+        await send_msg_handler(bot, event, battle_result)
+        daily = _get_daily_limit(uid)
+        rewards, reward_items, stone, decay = [], [], 0, _get_reward_decay(uid)
+        title = conf["fail_msg"]
+        won = victor == "群友赢了"
+        if won:
+            remain_hp = None
+            try:
+                remain_hp = bossinfo_new.get("群友", {}).get("剩余气血")
+            except Exception:
+                pass
+            try:
+                big_win = int(remain_hp) > int(user_info.get("hp", 1)) * 0.5 if remain_hp is not None else random.random() < 0.25
+            except Exception:
+                big_win = False
+            plan = conf["reward_plan_big_win"] if big_win else conf["reward_plan_win"]
+            rewards, stone, reward_items = _roll_rewards(plan, decay)
+            drop_rate = MAP_EXTRA_DROP_RATE["combat_trial"] if ntype == "试炼" else MAP_EXTRA_DROP_RATE["combat_risk"]
+            extra_text, extra_item = _roll_skill_equip_drop(user_info, drop_rate)
+            if extra_item:
+                rewards.append(extra_text)
+                reward_items.append(extra_item)
+            material_rewards, material_stone, material_items = _roll_map_dongfu_material(ntype, 1.35 if big_win else 1.0)
+            rewards.extend(material_rewards)
+            stone += material_stone
+            reward_items.extend(material_items)
+            title = "大胜而归" if big_win else "战而胜之"
+        snapshot = {
+            "daily": daily,
+            "decay": decay,
+            "items": reward_items,
+            "node_name": node["name"],
+            "operation_id": f"map-combat:{uid}:{time.time_ns()}",
+            "rewards": rewards,
+            "stone": stone,
+            "title": title,
+            "won": won,
+        }
+        raw_snapshot = json.dumps(snapshot, ensure_ascii=False, sort_keys=True)
+        player_data_manager.update_or_write_data(uid, "map_combat_settlement", "snapshot", raw_snapshot)
+
+    result = map_combat_settlement_service.settle(
+        snapshot["operation_id"],
+        uid,
+        snapshot["daily"],
+        raw_snapshot,
+        DAILY_LIMIT_CONFIG["combat"],
+        snapshot["stone"],
+        snapshot["items"],
+        XiuConfig().max_goods_num,
+    )
+    if result.status == "inventory_full":
+        await handle_send(bot, event, "背包物品已达上限，节点战斗结算尚未领取。")
+        return
+    if result.status in {"limit_reached", "state_changed", "user_missing"}:
+        await handle_send(bot, event, "节点战斗状态已变化，请重新尝试。")
+        return
+
+    decay_tip = f"\n当前收益系数：{int(snapshot['decay'] * 100)}%" if snapshot["decay"] < 1 else ""
+    if snapshot["won"]:
+        await handle_send(bot, event, f"⚔️ 你在【{snapshot['node_name']}】{snapshot['title']}！\n战利品：{_merge_reward_text(snapshot['rewards'])}{decay_tip}")
     else:
-        big_win = random.random() < 0.25
-
-    decay = _get_reward_decay(uid)
-    plan = conf["reward_plan_big_win"] if big_win else conf["reward_plan_win"]
-    rewards = _grant_rewards(uid, plan, decay_ratio=decay)
-
-    drop_rate = MAP_EXTRA_DROP_RATE["combat_trial"] if ntype == "试炼" else MAP_EXTRA_DROP_RATE["combat_risk"]
-    extra = _grant_skill_equip_drop(user_info, drop_rate)
-    if extra:
-        rewards.append(extra)
-    dongfu_material = _grant_map_dongfu_material(uid, ntype, 1.35 if big_win else 1.0)
-    if dongfu_material:
-        rewards.append(dongfu_material)
-
-    title = "大胜而归" if big_win else "战而胜之"
-    decay_tip = f"\n当前收益系数：{int(decay * 100)}%" if decay < 1 else ""
-    await handle_send(bot, event, f"⚔️ 你在【{node['name']}】{title}！\n战利品：{_merge_reward_text(rewards)}{decay_tip}")
+        await handle_send(bot, event, f"⚔️ {snapshot['title']}\n地点：{snapshot['node_name']}")
 
 
 # =========================================
