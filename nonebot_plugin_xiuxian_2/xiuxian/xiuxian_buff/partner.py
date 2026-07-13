@@ -35,6 +35,7 @@ from .partner_breakthrough_service import PartnerBreakthroughService
 from .partner_cultivation_service import PartnerCultivationService
 from .partner_token_service import PartnerTokenUseService
 from .partner_bind_service import PartnerBindService
+from .partner_unbind_service import PartnerUnbindService
 from .partner_storage import (
     PLAYERSDATA,
     bind_partner_storage,
@@ -68,6 +69,7 @@ player_data_manager = PlayerDataManager()
 partner_cultivation_service = PartnerCultivationService(get_paths().game_db, get_paths().player_db)
 partner_token_service = PartnerTokenUseService(get_paths().game_db, get_paths().player_db)
 partner_bind_service = PartnerBindService(get_paths().game_db, get_paths().player_db)
+partner_unbind_service = PartnerUnbindService(get_paths().game_db, get_paths().player_db)
 partner_breakthrough_service = PartnerBreakthroughService(get_paths().game_db, get_paths().player_db)
 mentor_graduation_service = MentorGraduationService(get_paths().game_db, get_paths().player_db)
 mentor_transmission_service = MentorTransmissionService(get_paths().game_db, get_paths().player_db)
@@ -1140,42 +1142,26 @@ async def unbind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg, md_type="buff", k1="解除", v1="断绝关系", k2="绑定", v2="绑定道侣", k3="道侣", v3="我的道侣")
         await unbind_partner.finish()
     
-    partner_user_id = partner_data["partner_id"]
-    bind_time_str = partner_data.get("bind_time")
-    
-    if not bind_time_str:
-        # 如果没有绑定时间，视为异常情况，允许解绑
-        msg = "道侣结契时间记录缺失，本次可直接解除关系。"
-        await handle_send(bot, event, msg)
-        # 继续执行解绑逻辑
-    else:
-        try:
-            bind_time = datetime.strptime(bind_time_str, '%Y-%m-%d %H:%M:%S')
-            current_time = datetime.now()
-            time_difference = current_time - bind_time
-            days_difference = time_difference.days
-            
-            if days_difference < 7:
-                remaining_days = 7 - days_difference
-                msg = f"你与道侣的绑定时间不足7天，还需等待{remaining_days}天才能解绑道侣。"
-                await handle_send(bot, event, msg, md_type="buff", k1="解除", v1="断绝关系", k2="绑定", v2="绑定道侣", k3="道侣", v3="我的道侣")
-                await unbind_partner.finish()
-        except ValueError:
-            # 如果 bind_time 格式不正确，视为异常，允许解绑
-            msg = "道侣结契时间记录异常，本次可直接解除关系。"
-            await handle_send(bot, event, msg)
-            # 继续执行解绑逻辑
-    
-    # 继续执行解绑逻辑
-    partner_user_id = partner_data["partner_id"]
-    
-    # 解除双方道侣关系
-    save_partner(user_id, {'partner_id': None, 'bind_time': None, 'affection': None})
-    save_partner(partner_user_id, {'partner_id': None, 'bind_time': None, 'affection': None})
-    
-    msg = f"你已与道侣断绝关系。"
+    partner_user_id = str(partner_data["partner_id"])
+    partner_side = load_partner(partner_user_id)
+    checked_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    result = partner_unbind_service.apply(
+        f"partner-unbind:{user_id}:{event_id or time.time_ns()}", user_id, partner_user_id,
+        expected_user_bind_time=partner_data.get("bind_time"),
+        expected_partner_bind_time=partner_side.get("bind_time"),
+        expected_user_affection=partner_data.get("affection", 0),
+        expected_partner_affection=partner_side.get("affection", 0),
+        checked_at=checked_at, minimum_days=7,
+    )
+    if result.status == "too_early":
+        await handle_send(bot, event, "你与道侣的绑定时间不足7天，暂时不能解除关系。", md_type="buff")
+        await unbind_partner.finish()
+    if not result.succeeded:
+        await handle_send(bot, event, "道侣关系状态已变化，请重新查看后再试。", md_type="buff")
+        await unbind_partner.finish()
+    msg = "你已与道侣断绝关系。"
     await handle_send(bot, event, msg, md_type="buff", k1="绑定", v1="绑定道侣", k2="解除", v2="断绝关系", k3="道侣", v3="我的道侣")
-    
     await unbind_partner.finish()
 
 def get_affection_level(affection):
