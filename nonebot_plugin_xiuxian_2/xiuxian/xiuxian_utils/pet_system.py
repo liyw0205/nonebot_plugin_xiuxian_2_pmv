@@ -2418,7 +2418,7 @@ def replace_pet_skill(user_id: str | int, uid: str, skill: dict):
     return pet
 
 
-def reroll_pet_skill(user_id: str | int, uid: str | None = None):
+def prepare_pet_skill_reroll(user_id: str | int, uid: str | None = None, random_seed: str | None = None):
     data = get_pet_doc(user_id)
     if uid:
         where, key, pet = find_pet_anywhere(data, uid)
@@ -2428,18 +2428,12 @@ def reroll_pet_skill(user_id: str | int, uid: str | None = None):
     if not pet:
         return None, None
 
-    new_skill = roll_replacement_pet_skill(pet)
-    pet["skills"] = [new_skill]
-    pet["skill"] = new_skill
-    pet = _normalize_pet(pet)
-
-    if where == "active":
-        data["active"] = pet
-    else:
-        data["bag"][key] = pet
-
-    save_pet_doc(user_id, data)
-    return pet, new_skill
+    new_skill = roll_replacement_pet_skill(
+        pet,
+        rng=random.Random(str(random_seed)) if random_seed is not None else None,
+    )
+    updated_pet = _normalize_pet({**pet, "skills": [new_skill], "skill": new_skill})
+    return pet, updated_pet, new_skill
 
 
 def build_pet_detail(pet: dict):

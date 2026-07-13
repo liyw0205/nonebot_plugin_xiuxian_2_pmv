@@ -49,7 +49,7 @@ from ..xiuxian_utils.pet_system import (
     replace_pet_skill,
     requires_fusion_for_next_star,
     prepare_pet_fusion,
-    reroll_pet_skill,
+    prepare_pet_skill_reroll,
     set_active_pet,
     validate_pet_feed_item,
 )
@@ -70,6 +70,7 @@ from .travel_start_service import PetTravelStartService
 from .hatch_service import PetHatchService
 from .release_service import PetReleaseService
 from .fusion_breakthrough_service import PetFusionBreakthroughService
+from .skill_reroll_service import PetSkillRerollService
 
 items = Items()
 sql_message = XiuxianDateManage()
@@ -80,6 +81,7 @@ pet_travel_start_service = PetTravelStartService(get_paths().player_db)
 pet_hatch_service = PetHatchService(get_paths().game_db, get_paths().player_db)
 pet_release_service = PetReleaseService(get_paths().game_db, get_paths().player_db)
 pet_fusion_breakthrough_service = PetFusionBreakthroughService(get_paths().player_db)
+pet_skill_reroll_service = PetSkillRerollService(get_paths().game_db, get_paths().player_db)
 
 pet_help = on_command("宠物帮助", aliases={"宠物系统帮助"}, priority=10, block=True)
 pet_intro_help = on_command("宠物入门帮助", aliases={"宠物获取帮助", "宠物查看帮助"}, priority=10, block=True)
@@ -1517,17 +1519,29 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     user_id = str(user_info["user_id"])
     token = args.extract_plain_text().strip()
-    have = sql_message.goods_num(user_id, QIMING_STONE_ID)
-    if have <= 0:
-        await handle_send(bot, event, "背包中没有启明石，无法重置宠物技能。")
-        return
-
-    pet, new_skill = reroll_pet_skill(user_id, token or None)
-    if not pet:
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns())
+    operation_id = f"pet-skill-reroll:{event_id}:{user_id}"
+    current_pet, pet, new_skill = prepare_pet_skill_reroll(user_id, token or None, operation_id)
+    if not current_pet:
         await handle_send(bot, event, "未找到可启明的宠物，请检查宠物UID。")
         return
-
-    sql_message.update_back_j(user_id, QIMING_STONE_ID, num=1)
+    result = pet_skill_reroll_service.reroll(
+        operation_id,
+        user_id,
+        _pet_transaction_snapshot(
+            current_pet,
+            get_pet_doc(user_id).get("active", {}).get("uid") == current_pet.get("uid"),
+        ),
+        str(new_skill.get("skill_id", "")),
+        QIMING_STONE_ID,
+    )
+    if not result.succeeded:
+        messages = {
+            "item_missing": "背包中没有启明石，无法重置宠物技能。",
+            "state_changed": "启明失败：宠物或背包状态已变化，请重试。",
+        }
+        await handle_send(bot, event, messages.get(result.status, "启明结算失败，请重试。"))
+        return
     PET_SKILL_REPLACE_CACHE.pop(user_id, None)
     await handle_send(
         bot,
