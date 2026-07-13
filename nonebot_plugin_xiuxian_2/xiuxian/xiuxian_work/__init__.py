@@ -34,12 +34,14 @@ from .claim_service import WorkClaimService
 from .item_use_service import WorkItemUseService
 from .refresh_settlement_service import WorkRefreshSettlementService
 from .abort_cleanup_service import WorkAbortCleanupService
+from .daily_refresh_reset_service import WorkDailyRefreshResetService
 
 work_settlement_service = WorkSettlementService(get_paths().game_db)
 work_claim_service = WorkClaimService(get_paths().game_db)
 work_item_use_service = WorkItemUseService(get_paths().game_db)
 work_refresh_service = WorkRefreshSettlementService(get_paths().game_db)
 work_abort_cleanup_service = WorkAbortCleanupService(get_paths().game_db)
+work_daily_refresh_reset_service = WorkDailyRefreshResetService(get_paths().game_db)
 sql_message = XiuxianDateManage()  # sql类
 items = Items()
 count = 5  # 每日刷新次数
@@ -339,8 +341,19 @@ def get_work_msg(work_):
 
 # 重置悬赏令刷新次数
 async def resetrefreshnum():
-    sql_message.reset_work_num(count)
-    logger.opt(colors=True).info(f"用户悬赏令刷新次数重置成功")
+    business_date = datetime.now().date().isoformat()
+    while True:
+        result = work_daily_refresh_reset_service.reset(business_date, count)
+        if result.status == "operation_conflict":
+            logger.error(f"悬赏令刷新次数重置配置冲突：{business_date}")
+            return
+        if result.task_status != "running":
+            logger.opt(colors=True).info(
+                f"用户悬赏令刷新次数重置完成：{result.completed}/{result.total}，"
+                f"实际变更{result.changed}人"
+            )
+            return
+        await asyncio.sleep(0)
 
 async def delayed_reminder(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, user_id: str):
     try:
