@@ -30,7 +30,10 @@ class PetActiveSwitchServiceTest(unittest.TestCase):
         self.assertEqual(self.service.switch("op", "u", "old", "new").status, "duplicate")
         with db_backend.connection(self.database) as conn:
             self.assertEqual(tuple(conn.execute("SELECT active_uid,active FROM player_pet").fetchone()), ("new", "new"))
-            self.assertEqual(conn.execute("SELECT uid,is_active FROM player_pet_item ORDER BY uid").fetchall(), [("new", 1), ("old", 0)])
+            self.assertEqual(
+                [tuple(row) for row in conn.execute("SELECT uid,is_active FROM player_pet_item ORDER BY uid").fetchall()],
+                [("new", 1), ("old", 0)],
+            )
 
     def test_already_active(self):
         self.assertEqual(self.service.switch("op", "u", "old", "old").status, "already_active")
@@ -57,4 +60,7 @@ class PetActiveSwitchServiceTest(unittest.TestCase):
             self.service.switch("op", "u", "old", "new")
         with db_backend.connection(self.database) as conn:
             self.assertEqual(tuple(conn.execute("SELECT active_uid,active FROM player_pet").fetchone()), ("old", "old"))
-            self.assertEqual(conn.execute("SELECT uid,is_active FROM player_pet_item ORDER BY uid").fetchall(), [("new", 0), ("old", 1)])
+            self.assertEqual(
+                [tuple(row) for row in conn.execute("SELECT uid,is_active FROM player_pet_item ORDER BY uid").fetchall()],
+                [("new", 0), ("old", 1)],
+            )
