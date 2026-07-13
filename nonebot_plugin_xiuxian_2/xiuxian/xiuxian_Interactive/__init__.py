@@ -1,5 +1,6 @@
 from ..on_compat import on_command
 from .. import NICKNAME
+from ...paths import get_paths
 from ..adapter_compat import (
     Bot,
     GROUP,
@@ -17,7 +18,11 @@ import os
 from pathlib import Path
 from ..xiuxian_config import convert_rank
 from ..xiuxian_utils.json_store import load_json_file, save_json_file
+from .exp_daily_reward_service import InteractiveExpDailyRewardService
+from .stone_daily_reward_service import InteractiveStoneDailyRewardService
 sql_message = XiuxianDateManage()
+interactive_exp_daily_reward_service = InteractiveExpDailyRewardService(get_paths().game_db)
+interactive_stone_daily_reward_service = InteractiveStoneDailyRewardService(get_paths().game_db)
 
 # 创建数据存储目录
 DATA_PATH = Path(__file__).parent / "morning_night_data"
@@ -248,58 +253,6 @@ what_to_eat = on_command("今天吃什么", aliases={"吃什么", "吃啥", "推
 give_exp_command = on_command("给点修为", aliases={"赏点修为", "施舍点修为", "求点修为"}, priority=30, block=True)
 give_stone_command = on_command("给点灵石", aliases={"赏点灵石", "施舍点灵石", "求点灵石"}, priority=30, block=True)
 interaction_command = on_command("互动", priority=30, block=True)
-
-GIVE_DATA_PATH = DATA_PATH / "give_data.json"
-def load_give_data():
-    return load_json_file(GIVE_DATA_PATH, {
-        "last_reset_date": datetime.now().strftime("%Y-%m-%d"),
-        "stone_users": {},
-        "exp_users": {},
-    }, dict)
-def save_give_data(data):
-    save_json_file(GIVE_DATA_PATH, data)
-
-def has_user_received_today(user_id, reward_type):
-    """检查用户今天是否已经获得过指定的给予
-    reward_type: 'stone' 灵石, 'exp' 修为
-    """
-    data = load_give_data()
-    current_date = datetime.now().strftime("%Y-%m-%d")
-    
-    # 检查是否需要重置日期
-    if data["last_reset_date"] != current_date:
-        data["last_reset_date"] = current_date
-        data["stone_users"] = {}
-        data["exp_users"] = {}
-        save_give_data(data)
-        return False
-    
-    if reward_type == 'stone':
-        user_data = data["stone_users"].get(str(user_id))
-    else:  # exp
-        user_data = data["exp_users"].get(str(user_id))
-        
-    return user_data == current_date
-
-def mark_user_received_today(user_id, reward_type):
-    """标记用户今天已经获得过指定的给予
-    reward_type: 'stone' 灵石, 'exp' 修为
-    """
-    data = load_give_data()
-    current_date = datetime.now().strftime("%Y-%m-%d")
-    
-    # 确保日期是最新的
-    if data["last_reset_date"] != current_date:
-        data["last_reset_date"] = current_date
-        data["stone_users"] = {}
-        data["exp_users"] = {}
-    
-    if reward_type == 'stone':
-        data["stone_users"][str(user_id)] = current_date
-    else:  # exp
-        data["exp_users"][str(user_id)] = current_date
-        
-    save_give_data(data)
 
 # 根据时间获取不同的问候语
 def get_morning_message_by_time(count):
@@ -1086,29 +1039,25 @@ async def handle_give_exp(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg)
         return
 
-    user_id = user_info["user_id"]
-    
-    # 检查用户今天是否已经获得过修为
-    if has_user_received_today(user_id, 'exp'):
+    user_id = str(user_info["user_id"])
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"interactive-exp:{user_id}:{event_id or time.time_ns()}"
+    result = interactive_exp_daily_reward_service.settle(
+        operation_id=operation_id,
+        user_id=user_id,
+        expected_exp=user_info["exp"],
+        expected_level=user_info["level"],
+        rank_value=convert_rank(user_info["level"])[0],
+        business_date=datetime.now(),
+    )
+    if result.succeeded and result.granted:
+        message = f"{random.choice(AGREE_EXP_MESSAGES)}\n获得修为：{number_to(result.exp_reward)}点！"
+    elif result.status in {"applied", "duplicate", "already_claimed"}:
         message = random.choice(REFUSE_EXP_MESSAGES)
-        await handle_send(bot, event, message)
-        return
-    
-    # 50%概率同意或拒绝
-    if random.random() < 0.5:  # 同意
-        # 计算奖励：玩家当前修为的0.1%-0.9%
-        current_exp = user_info["exp"]
-        user_rank = max(convert_rank(user_info['level'])[0] // 3, 1)
-        exp_reward = int(current_exp * random.uniform(0.001, 0.009) * min(0.1 * user_rank, 1))
-        
-        # 更新用户修为
-        sql_message.update_exp(user_id, exp_reward)
-        
-        message = f"{random.choice(AGREE_EXP_MESSAGES)}\n获得修为：{number_to(exp_reward)}点！"
-        mark_user_received_today(user_id, 'exp')
-    else:  # 拒绝
-        message = random.choice(REFUSE_EXP_MESSAGES)
-    
+    elif result.status in {"state_changed", "operation_conflict"}:
+        message = "角色状态已变化，请重新尝试。"
+    else:
+        message = "未找到角色信息，无法发放修为。"
     await handle_send(bot, event, message)
 
 @give_stone_command.handle(parameterless=[Cooldown(cd_time=30)])
@@ -1119,27 +1068,23 @@ async def handle_give_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg)
         return
 
-    user_id = user_info["user_id"]
-    
-    # 检查用户今天是否已经获得过灵石
-    if has_user_received_today(user_id, 'stone'):
+    user_id = str(user_info["user_id"])
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"interactive-stone:{user_id}:{event_id or time.time_ns()}"
+    result = interactive_stone_daily_reward_service.settle(
+        operation_id=operation_id,
+        user_id=user_id,
+        expected_stone=user_info["stone"],
+        business_date=datetime.now(),
+    )
+    if result.succeeded and result.granted:
+        message = f"{random.choice(AGREE_STONE_MESSAGES)}\n获得灵石：{number_to(result.stone_reward)}枚！"
+    elif result.status in {"applied", "duplicate", "already_claimed"}:
         message = random.choice(REFUSE_STONE_MESSAGES)
-        await handle_send(bot, event, message)
-        return
-    
-    # 50%概率同意或拒绝
-    if random.random() < 0.5:  # 同意
-        # 计算奖励：1000000-5000000灵石
-        stone_reward = random.randint(1000000, 5000000)
-        
-        # 更新用户灵石
-        sql_message.update_ls(user_id, stone_reward, 1)
-        
-        message = f"{random.choice(AGREE_STONE_MESSAGES)}\n获得灵石：{number_to(stone_reward)}枚！"
-        mark_user_received_today(user_id, 'stone')
-    else:  # 拒绝
-        message = random.choice(REFUSE_STONE_MESSAGES)
-    
+    elif result.status in {"state_changed", "operation_conflict"}:
+        message = "角色状态已变化，请重新尝试。"
+    else:
+        message = "未找到角色信息，无法发放灵石。"
     await handle_send(bot, event, message)
 
 
