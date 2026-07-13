@@ -27,6 +27,9 @@ from ..xiuxian_utils.utils import (
 from .riftconfig import get_rift_config
 from .jsondata import save_rift_data, read_rift_data
 from .entry_service import RiftEntryService
+from .termination_service import RiftTerminationService
+from .key_settlement_service import RiftKeySettlementService
+from .boss_token_service import RiftBossTokenService
 from ..xiuxian_config import convert_rank
 from ..xiuxian_map import (
     get_player_current_position,
@@ -40,6 +43,9 @@ from .riftmake import (
 
 sql_message = XiuxianDateManage()  # sql类
 rift_entry_service = RiftEntryService(get_paths().game_db)
+rift_termination_service = RiftTerminationService(get_paths().game_db)
+rift_key_settlement_service = RiftKeySettlementService(get_paths().game_db)
+rift_boss_token_service = RiftBossTokenService(get_paths().game_db)
 cache_help = {}
 group_rift = {}  # dict
 config = get_rift_config() # 获取秘境配置
@@ -586,7 +592,13 @@ async def break_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await handle_send(bot, event, msg)
             await break_rift.finish()
 
-        sql_message.do_work(user_id, 0)
+        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        result = rift_termination_service.terminate(
+            f"rift-termination:{event_id or time.time_ns()}:{user_id}", user_id, rift_info
+        )
+        if not result.succeeded:
+            await handle_send(bot, event, "秘境状态已变化，请稍后重试。")
+            await break_rift.finish()
         msg = f"已终止{rift_info['name']}秘境的探索！"
         await handle_send(bot, event, msg)
         await break_rift.finish()
@@ -617,10 +629,13 @@ async def use_rift_key(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, msg)
         return
 
-    sql_message.do_work(user_id, 0)  # 清除秘境状态
-
-    # 消耗秘境钥匙
-    sql_message.update_back_j(user_id, item_id)
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    result = rift_key_settlement_service.settle(
+        f"rift-key:{event_id or time.time_ns()}:{user_id}", user_id, item_id, rift_info
+    )
+    if not result.succeeded:
+        await handle_send(bot, event, "秘境钥匙或秘境状态已变化，请稍后重试。")
+        return
     
     await _perform_rift_settlement(user_id, user_info, rift_info, bot, event)
     return
@@ -650,17 +665,21 @@ async def use_rift_boss(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, msg)
         return
 
-    sql_message.do_work(user_id, 0)  # 清除秘境状态
     rift_rank = rift_info["rank"]
+
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    settlement = rift_boss_token_service.settle(
+        f"rift-boss-token:{event_id or time.time_ns()}:{user_id}", user_id, item_id, rift_info
+    )
+    if not settlement.succeeded:
+        await handle_send(bot, event, "斩妖令或秘境状态已变化，请稍后重试。")
+        return
     
     # 直接触发Boss战斗结算，并消耗道具
     result, result_msg = await get_boss_battle_info(user_info, rift_rank, bot.self_id)
     update_statistics_value(user_id, "秘境打怪")
     await send_msg_handler(bot, event, result, title=result_msg)
 
-    # 消耗斩妖令
-    sql_message.update_back_j(user_id, item_id)
-    
     # 更新秘境探索次数
     count_msg = update_rift_explore_count(user_id, do_give=True)
     
