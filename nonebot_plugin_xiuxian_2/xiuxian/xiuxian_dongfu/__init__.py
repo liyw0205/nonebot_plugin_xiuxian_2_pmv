@@ -27,6 +27,7 @@ from .array_upgrade_service import DongfuArrayUpgradeService
 from .visit_reward_service import DongfuVisitRewardService
 from .fertilize_service import DongfuFertilizeService
 from .infiltrate_failure_service import InfiltrateFailureService
+from .infiltrate_success_service import InfiltrateSuccessService
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
@@ -39,6 +40,7 @@ dongfu_array_upgrade_service = DongfuArrayUpgradeService(get_paths().game_db, ge
 dongfu_visit_reward_service = DongfuVisitRewardService(get_paths().game_db, get_paths().player_db)
 dongfu_fertilize_service = DongfuFertilizeService(get_paths().game_db, get_paths().player_db)
 dongfu_infiltrate_failure_service = InfiltrateFailureService(get_paths().game_db, get_paths().player_db)
+dongfu_infiltrate_success_service = InfiltrateSuccessService(get_paths().game_db, get_paths().player_db)
 dongfu_harvest_settlement_service = DongfuHarvestSettlementService(get_paths().game_db, get_paths().player_db)
 
 MAP_TABLE = "map_status"
@@ -1293,16 +1295,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         guard_msg = "\n目标洞府巡山护府尚有余威。" if guarded else ""
         await handle_send(bot, event, f"❌ 你潜入【{tname}】洞府时触发阵法警示，被当场逼退！\n对方阵法等级：{array_lv}\n损失灵石：{number_to(loss_stone)}\n今日剩余{mode_name}次数：{result.infiltrate_left}\n该洞府今日剩余可被潜入次数：{result.intrude_left}{guard_msg}")
         return
-
-    _, infiltrate_left = _consume_infiltrate_count(my_uid, is_random_mode)
-    current_intrude = _consume_intrude_count(target_uid)
-    if guarded:
-        _consume_patrol_guard(td)
-        _save_dongfu(target_uid, td)
-
-    stealth_penalty = 0.6 if (detected and success) else 1.0
-    rewards = []
-
+    stealth_penalty = 0.6 if detected else 1.0
+    reward_rows = []
+    reward_messages = []
+    stone_gain = 0
     if matured:
         all_drops = _roll_harvest(seed_id, array_lv)
         if all_drops:
@@ -1311,61 +1307,44 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             steal_drops = all_drops[:take_n]
             if stealth_penalty < 1.0 and len(steal_drops) > 1:
                 steal_drops = steal_drops[:max(1, len(steal_drops) // 2)]
-
-            for gid, name, tp, num in steal_drops:
-                sql_message.send_back(my_uid, gid, name, tp, num, 1)
-                rewards.append(f"{name} x{num}")
+            for gid, name, item_type, amount in steal_drops:
+                reward_rows.append((gid, name, item_type, amount))
+                reward_messages.append(f"{name} x{amount}")
     else:
-        conf = SEED_CONFIG.get(seed_id, {})
-        pool_name = conf.get("pool", "herb_low")
-
-        if pool_name == "herb_low":
-            pool = HERB_LOW[:8]
-        elif pool_name == "herb_mid":
-            pool = HERB_MID[:8]
-        elif pool_name == "god_low":
-            pool = HERB_MID[:8]
-        else:
-            pool = HERB_LOW[:8]
-
-        steal_count = 1 if random.random() < 0.75 else 2
-        if stealth_penalty < 1.0:
-            steal_count = 1
-
+        pool_name = SEED_CONFIG.get(seed_id, {}).get("pool", "herb_low")
+        pool = HERB_MID[:8] if pool_name in {"herb_mid", "god_low"} else HERB_LOW[:8]
+        steal_count = 1 if detected or random.random() < 0.75 else 2
         for _ in range(steal_count):
             gid = random.choice(pool)
             item = items.get_data_by_item_id(gid)
             if item:
-                sql_message.send_back(my_uid, gid, item["name"], item.get("type", "药材"), 1, 1)
-                rewards.append(f"{item['name']} x1")
+                reward_rows.append((gid, item["name"], item.get("type", "药材"), 1))
+                reward_messages.append(f"{item['name']} x1")
+        stone_gain = int(random.randint(30000, 80000) * stealth_penalty)
+        if stone_gain:
+            reward_messages.append(f"灵石 x{number_to(stone_gain)}")
 
-        ls_gain = int(random.randint(30000, 80000) * stealth_penalty)
-        if ls_gain > 0:
-            sql_message.update_ls(my_uid, ls_gain, 1)
-            rewards.append(f"灵石 x{number_to(ls_gain)}")
-
-    # ===== 新增：偷取成功时，目标增加种植时间 =====
     added_minutes = 0
-    if success and rewards:
-        # 成熟被偷影响更大，未成熟影响较小；阵法高会造成更强“反制扰动”
-        if matured:
-            base_delay = random.randint(20, 45)
-        else:
-            base_delay = random.randint(8, 20)
-
-        added_minutes = base_delay + int(array_lv * 2)
-
-        # 上限保护：单次最多+180分钟
-        added_minutes = min(180, added_minutes)
-
-        old_finish = finish
-        new_finish = old_finish + timedelta(minutes=added_minutes)
-        slots = _normalize_plant_slots(td)
-        slots[_to_int(target_slot.get("slot")) - 1]["plant_finish"] = _fmt_dt(new_finish)
-        td["plant_slots"] = slots
-        _save_dongfu(target_uid, td)
-
-    left = max(0, INFILTRATE_DAILY_LIMIT - current_intrude)
+    new_finish = ""
+    if reward_rows or stone_gain:
+        base_delay = random.randint(20, 45) if matured else random.randint(8, 20)
+        added_minutes = min(180, base_delay + array_lv * 2)
+        new_finish = _fmt_dt(finish + timedelta(minutes=added_minutes))
+    expected_slots = json.dumps(_normalize_plant_slots(td), ensure_ascii=False)
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    result = dongfu_infiltrate_success_service.settle(
+        f"dongfu-infiltrate-success:{my_uid}:{event_message_id or time.time_ns()}", my_uid, target_uid, _today_str(),
+        _get_infiltrate_count_field(is_random_mode), _get_infiltrate_limit(is_random_mode), INFILTRATE_DAILY_LIMIT,
+        expected_slots, _to_int(target_slot.get("slot")), new_finish, reward_rows, stone_gain, guarded, XiuConfig().max_backpack,
+    )
+    if result.status == "inventory_full":
+        await handle_send(bot, event, "背包空间不足，潜入所得无法结算。")
+        return
+    if not result.succeeded:
+        await handle_send(bot, event, "潜入状态已变化，请稍后重试。")
+        return
+    rewards = reward_messages
+    infiltrate_left, left = result.infiltrate_left, result.intrude_left
 
     if not rewards:
         if detected:
