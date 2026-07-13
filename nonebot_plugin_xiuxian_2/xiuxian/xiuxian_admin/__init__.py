@@ -8,6 +8,7 @@ import random
 import asyncio
 from pathlib import Path
 from typing import Any, Dict, List
+from ...paths import get_paths
 from nonebot.typing import T_State
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
@@ -60,6 +61,7 @@ from .admin_helpers import (
     parse_broadcast_duration_and_content,
     parse_clear_broadcast_kind,
 )
+from .level_change_service import AdminLevelChangeService
 from . import command_controls as _command_controls  # noqa: F401
 from . import empty_fallback as _empty_fallback  # noqa: F401
 from . import event_debug as _event_debug  # noqa: F401
@@ -67,6 +69,12 @@ from . import event_debug as _event_debug  # noqa: F401
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
+admin_level_change_service = AdminLevelChangeService(get_paths().game_db)
+
+
+def _admin_operation_id(event, action: str, user_id: str) -> str:
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    return f"admin-{action}:{event_id or __import__('time').time_ns()}:{user_id}"
 
 
 gm_command = on_command("神秘力量", permission=SUPERUSER, priority=10, block=True)
@@ -475,15 +483,29 @@ async def zaohua_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, f"境界「{level_name}」不存在或格式错误")
         return
 
-    max_exp = int(jsondata.level_data()[level]["power"])
-    # 重置修为到该境界满经验
-    sql_message.update_j_exp(target_qq, target_user['exp'] - 100)   # 清掉多余修为
-    sql_message.update_exp(target_qq, max_exp)
-    sql_message.updata_level(target_qq, level)
-    sql_message.update_user_hp(target_qq)
-    sql_message.update_power2(target_qq)
-
-    msg = f"已将 {target_user['user_name']} 的境界变更为 【{level}】！"
+    level_config = jsondata.level_data()[level]
+    result = admin_level_change_service.change(
+        _admin_operation_id(event, "level-change", str(target_qq)),
+        str(get_user_id(event) or "unknown"),
+        target_qq,
+        (
+            target_user["level"], target_user["exp"], target_user["hp"],
+            target_user["mp"], target_user["atk"], target_user["power"],
+            target_user["root_type"], target_user["root_level"],
+        ),
+        level,
+        int(level_config["power"]),
+        float(level_config["spend"]),
+        float(sql_message.get_root_rate(target_user["root_type"], target_qq)),
+    )
+    if result.status == "state_changed":
+        msg = "玩家综合状态已变化，请重新执行指令"
+    elif result.status == "operation_conflict":
+        msg = "本次管理员境界操作与已记录事件冲突"
+    elif result.status == "user_missing":
+        msg = "目标玩家已不存在"
+    else:
+        msg = f"已将 {target_user['user_name']} 的境界变更为 【{result.level}】！"
     await handle_send(bot, event, msg)
 
 @gmm_command.handle(parameterless=[Cooldown(cd_time=0)])
