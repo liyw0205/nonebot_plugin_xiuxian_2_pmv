@@ -50,6 +50,7 @@ from ..xiuxian_dungeon import dungeon_manager
 from .two_exp_cd import two_exp_cd
 from .blessed_spot_service import BlessedSpotService
 from .closing_settlement_service import ClosingSettlementService
+from .normal_training_lifecycle_service import NormalTrainingLifecycleService
 from nonebot.permission import SUPERUSER
 from .partner import (  # noqa: F401
     get_mentor_team_attack_buffs,
@@ -69,6 +70,7 @@ xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
 blessed_spot_service = BlessedSpotService(get_paths().game_db, get_paths().player_db)
 closing_settlement_service = ClosingSettlementService(get_paths().game_db)
+normal_training_lifecycle_service = NormalTrainingLifecycleService(get_paths().game_db, get_paths().player_db)
 
 def _blessed_spot_operation_id(event, action, user_id):
     event_id = str(
@@ -77,6 +79,13 @@ def _blessed_spot_operation_id(event, action, user_id):
     if event_id:
         return f"blessed-spot:{event_id}:{action}:{user_id}"
     return f"blessed-spot:{action}:{user_id}:{datetime.now().timestamp()}"
+
+
+def _normal_training_operation_id(event, user_id):
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    if event_id:
+        return f"training:{event_id}:normal:{user_id}"
+    return f"training:normal:{user_id}:{datetime.now().timestamp()}"
 BLESSEDSPOTCOST = 3500000 # 洞天福地购买消耗
 PLAYERSDATA = get_paths().players
 
@@ -382,7 +391,6 @@ async def reset_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """修炼"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    user_type = 5  # 状态5为修炼
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
@@ -401,8 +409,6 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         # 校验当当前修为超出上限的问题，不可为负数
         user_get_exp_max = 0
 
-    now_time = datetime.now()
-    user_cd_message = sql_message.get_user_cd(user_id)
     is_type, msg = check_user_type(user_id, 0)
     if not is_type:
         await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="重置修炼", v3="重置修炼状态")
@@ -423,57 +429,56 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         )  # 本次闭关获取的修为
         exp_rate = random.uniform(0.9, 1.3)
         exp = int(exp * exp_rate)
-        sql_message.in_closing(user_id, user_type)
-        user_cd_message = sql_message.get_user_cd(user_id) or {}
-        closing_create_time = user_cd_message.get("create_time")
+        operation_id = _normal_training_operation_id(event, user_id)
         if user_info['root_type'] == '伪灵根':
+            give_stone_num = int(random.randint(10000, 300000) * exp_rate)
+            start_result = normal_training_lifecycle_service.start(
+                operation_id, user_id, kind="mining", expected_exp=use_exp,
+                expected_stone=int(user_mes['stone']), reward=give_stone_num,
+                exp_cap=max_exp, power_multiplier=level_rate * realm_rate,
+            )
+            if start_result.status not in {"started", "duplicate"}:
+                await handle_send(bot, event, "修炼状态已变化，请重新尝试。")
+                await up_exp.finish()
             msg = f"开始挖矿⛏️！【{user_info['user_name']}开始挖矿】\n挥起玄铁镐砸向发光岩壁\n碎石里蹦出带灵气的矿石\n预计时间：60秒"
             await handle_send(bot, event, msg)
             await asyncio.sleep(60)
-            if not sql_message.clear_user_type_if_match(user_id, 5, closing_create_time):
+            iso = datetime.now().isocalendar()
+            result = normal_training_lifecycle_service.complete(operation_id, task_period=f"{iso.year}-W{iso.week:02d}")
+            if not result.succeeded:
                 await up_exp.finish()
-            give_stone = random.randint(10000, 300000)
-            give_stone_num = int(give_stone * exp_rate)
-            sql_message.update_ls(user_info['user_id'], give_stone_num, 1)  # 增加用户灵石
-            msg = f"挖矿结束，增加灵石：{give_stone_num}"
-            log_message(user_id, f"[凡人挖矿] 获得灵石{number_to(give_stone_num)}")
-            update_statistics_value(user_id, "凡人挖矿次数")
-            update_statistics_value(user_id, "灵石获取", increment=give_stone_num)
+            msg = f"挖矿结束，增加灵石：{result.stone_gain}"
+            log_message(user_id, f"[凡人挖矿] 获得灵石{number_to(result.stone_gain)}")
             await handle_send(bot, event, msg, button_id=XiuConfig().button_id, md_type="buff", k1="修炼", v1="修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
             await up_exp.finish()
         else:
+            exp, spirit_vein_msg = _apply_spirit_vein_exp_bonus(exp, user_get_exp_max)
+            start_result = normal_training_lifecycle_service.start(
+                operation_id, user_id, kind="cultivation", expected_exp=use_exp,
+                expected_stone=int(user_mes['stone']), reward=exp,
+                exp_cap=max_exp, power_multiplier=level_rate * realm_rate,
+            )
+            if start_result.status not in {"started", "duplicate"}:
+                await handle_send(bot, event, "修炼状态已变化，请重新尝试。")
+                await up_exp.finish()
             msg = f"【{user_info['user_name']}开始修炼】\n盘膝而坐，五心朝天，闭目凝神，渐入空明之境...\n周身灵气如涓涓细流汇聚，在经脉中缓缓流转\n丹田内真元涌动，与天地灵气相互呼应\n渐入佳境，物我两忘，进入深度修炼状态\n预计修炼时间：60秒"
         await handle_send(bot, event, msg)
         await asyncio.sleep(60)
-        if not sql_message.clear_user_type_if_match(user_id, 5, closing_create_time):
+        iso = datetime.now().isocalendar()
+        result = normal_training_lifecycle_service.complete(operation_id, task_period=f"{iso.year}-W{iso.week:02d}")
+        if not result.succeeded:
             await up_exp.finish()
-        exp, spirit_vein_msg = _apply_spirit_vein_exp_bonus(exp, user_get_exp_max)
-        update_statistics_value(user_id, "修炼次数")
-        if exp >= user_get_exp_max:
-            # 用户获取的修为到达上限
-            sql_message.update_exp(user_id, user_get_exp_max)
-            sql_message.update_power2(user_id)  # 更新战力
-
-            result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(use_exp / 10), int(use_exp / 20))
-            sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
-            msg = f"修炼结束，本次修炼到达上限，共增加修为：{number_to(user_get_exp_max)}{result_msg[0]}{result_msg[1]}{spirit_vein_msg}"
-            log_message(user_id, f"[修炼] 修炼60秒，到达上限，获得修为{number_to(user_get_exp_max)}")
-            update_statistics_value(user_id, "修炼修为", increment=user_get_exp_max)
-            record_task_progress(user_id, "cultivation_time", 1)
-            await handle_send(bot, event, msg, button_id=XiuConfig().button_id, md_type="buff", k1="修炼", v1="修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
-            await up_exp.finish()
-        else:
-            # 用户获取的修为没有到达上限
-            sql_message.update_exp(user_id, exp)
-            sql_message.update_power2(user_id)  # 更新战力
-            result_msg, result_hp_mp = OtherSet().send_hp_mp(user_id, int(use_exp / 10), int(use_exp / 20))
-            sql_message.update_user_attribute(user_id, result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10))
-            msg = f"修炼结束，增加修为：{number_to(exp)}{result_msg[0]}{result_msg[1]}{spirit_vein_msg}"
-            log_message(user_id, f"[修炼] 修炼60秒，获得修为{number_to(exp)}")
-            update_statistics_value(user_id, "修炼修为", increment=exp)
-            record_task_progress(user_id, "cultivation_time", 1)
-            await handle_send(bot, event, msg, button_id=XiuConfig().button_id, md_type="buff", k1="修炼", v1="修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
-            await up_exp.finish()
+        recovery_msg = ""
+        if result.hp_gain:
+            recovery_msg += f",回复气血：{number_to(result.hp_gain)}"
+        if result.mp_gain:
+            recovery_msg += f",回复真元：{number_to(result.mp_gain)}"
+        capped = result.exp_gain >= user_get_exp_max
+        prefix = "修炼结束，本次修炼到达上限，共增加修为：" if capped else "修炼结束，增加修为："
+        msg = f"{prefix}{number_to(result.exp_gain)}{recovery_msg}{spirit_vein_msg}"
+        log_message(user_id, f"[修炼] 修炼60秒，获得修为{number_to(result.exp_gain)}")
+        await handle_send(bot, event, msg, button_id=XiuConfig().button_id, md_type="buff", k1="修炼", v1="修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
+        await up_exp.finish()
 
  
 @stone_exp.handle(parameterless=[Cooldown(cd_time=0)])
