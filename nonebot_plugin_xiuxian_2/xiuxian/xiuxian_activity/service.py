@@ -60,11 +60,13 @@ from .activity_progress import *
 from .point_shop_service import ActivityPointShopPurchaseService
 from .task_claim_service import ActivityTaskClaimService
 from .sign_settlement_service import ActivitySignSettlementService
+from .pass_claim_service import ActivityPassClaimService
 
 
 point_shop_purchase_service = ActivityPointShopPurchaseService(DB_PATH, get_paths().game_db)
 activity_task_claim_service = ActivityTaskClaimService(DB_PATH, get_paths().game_db)
 activity_sign_settlement_service = ActivitySignSettlementService(DB_PATH, get_paths().game_db)
+activity_pass_claim_service = ActivityPassClaimService(DB_PATH, get_paths().game_db)
 
 
 def _reward_by_day(config: dict, day_index: int) -> dict:
@@ -877,7 +879,7 @@ def build_activity_pass_text(user_id: str) -> str:
         conn.close()
 
 
-def claim_activity_pass_rewards(user_id: str, query: str = "") -> tuple[bool, str]:
+def claim_activity_pass_rewards(user_id: str, query: str = "", operation_id: str | None = None) -> tuple[bool, str]:
     cfg = load_config()
     runtime = activity_runtime_state(cfg)
     if not runtime.get("ok"):
@@ -925,37 +927,21 @@ def claim_activity_pass_rewards(user_id: str, query: str = "") -> tuple[bool, st
             except Exception as e:
                 conn.rollback()
                 return False, f"战令Lv.{level}奖励配置错误：{e}"
-            ts = now_str()
-            cur.execute(
-                """
-                INSERT INTO activity_pass_reward_claim (activity_key, user_id, level, create_time)
-                VALUES (%s, %s, %s, %s)
-                """,
-                (activity_key, uid, level, ts),
-            )
-            reward_jobs.append((reward, reward_items))
+            reward_jobs.append({"level": level, "name": reward.get("name"), "reward": reward_text, "reward_items": reward_items})
         if not reward_jobs:
             return False, "当前没有可领取的活动战令奖励"
-        conn.commit()
-    except db_backend.IntegrityError:
-        conn.rollback()
-        return False, "活动战令奖励已领取"
-    except Exception:
-        conn.rollback()
-        raise
     finally:
         conn.close()
 
+    result = activity_pass_claim_service.claim(
+        operation_id or f"activity-pass:{uid}:{time.time_ns()}", uid, activity_key,
+        balance["level"], reward_jobs, XiuConfig().max_goods_num,
+    )
+    if not result.succeeded:
+        return False, {"inventory_full":"背包空间不足，奖励未领取","user_missing":"角色不存在","state_changed":"战令状态已变化，请重新查询","operation_conflict":"领取请求冲突，请重新发送"}.get(result.status,"活动战令奖励已领取")
     lines = ["活动战令奖励领取成功："]
-    for reward, reward_items in reward_jobs:
-        level = _as_int(reward.get("level"), 0)
-        try:
-            reward_msg = send_reward_items(uid, reward_items)
-            reward_text = "，".join(reward_msg) if reward_msg else _clean_text(reward.get("reward"), "暂无奖励")
-        except Exception as e:
-            logger.warning(f"活动战令发奖失败 user_id={uid}, level={level}: {e}")
-            reward_text = f"奖励发放失败：{e}"
-        lines.append(f"- Lv.{level} {reward.get('name') or '等级奖励'}：{reward_text}")
+    for level, name, reward_text in result.rewards:
+        lines.append(f"- Lv.{level} {name}：{reward_text or '暂无奖励'}")
     return True, "\n".join(lines)
 
 
