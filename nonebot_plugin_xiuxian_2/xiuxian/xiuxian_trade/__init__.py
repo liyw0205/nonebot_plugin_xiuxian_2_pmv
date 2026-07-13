@@ -62,6 +62,7 @@ from .repository import TradeRepository
 from .service import XianshiPurchaseService
 from .guishi_stone_service import GuishiStoneService
 from .auction_queue_service import AuctionQueueService
+from .auction_session_service import AuctionSessionService
 from ...paths import get_paths
 from urllib.parse import quote
 
@@ -80,6 +81,9 @@ auction_queue_service = AuctionQueueService(
     get_paths().trade_db,
     XiuConfig().max_goods_num,
 )
+auction_session_service = AuctionSessionService(
+    get_paths().game_db, get_paths().trade_db
+)
 scheduler = require("nonebot_plugin_apscheduler").scheduler # 全局调度器，用于鬼市
 auction_scheduler = require("nonebot_plugin_apscheduler").scheduler # 独立的拍卖调度器，避免冲突
 bind_auction_repository(xianshi_repository)
@@ -88,6 +92,7 @@ bind_auction_service_dependencies(
     sql_message=sql_message,
     trade_manager=trade_manager,
     auction_repository=xianshi_repository,
+    auction_session_service=auction_session_service,
 )
 
 
@@ -268,6 +273,15 @@ def _auction_queue_operation_id(event, action, user_id, item_id):
         return f"auction-queue:{action}:{event_id}:{user_id}:{item_id}"
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
     return f"auction-queue:{action}:{user_id}:{item_id}:{timestamp}"
+
+
+def _auction_session_operation_id(event, action):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"auction-session:{action}:{event_id}"
+    return f"auction-session:{action}:{time.time_ns()}"
 
 
 def buy_xianshi_item_safely(
@@ -2638,8 +2652,7 @@ async def auction_start_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, "此功能仅限管理员使用！")
         await auction_start.finish()
     
-    auction_current_status = get_auction_status()
-    if auction_current_status["active"]:
+    if auction_session_service.get_active_session() is not None:
         await handle_send(bot, event, "拍卖已经在运行中！", md_type="拍卖", k1="查看", v1="拍卖查看", k2="结束", v2="结束拍卖", k3="帮助", v3="拍卖帮助")
         await auction_start.finish()
     
@@ -2647,7 +2660,7 @@ async def auction_start_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     auction_config.update_schedule({"enabled": True})
     
     # 开启拍卖
-    success = start_auction_process(bot)
+    success = start_auction_process(bot, _auction_session_operation_id(event, "start"))
     if not success:
         await handle_send(bot, event, "开启拍卖失败或没有物品可供拍卖！", md_type="拍卖", k1="查看", v1="拍卖查看", k2="结束", v2="结束拍卖", k3="帮助", v3="拍卖帮助")
         await auction_start.finish()
@@ -2669,9 +2682,9 @@ async def auction_end_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await handle_send(bot, event, "此功能仅限管理员使用！")
         await auction_end.finish()
     
-    auction_current_status = get_auction_status()
+    active_session = auction_session_service.get_active_session()
     pending_items = xianshi_repository.get_current_auction()
-    if not auction_current_status["active"] and not pending_items:
+    if active_session is None and not pending_items:
         await handle_send(bot, event, "拍卖当前未开启！", md_type="拍卖", k1="查看", v1="拍卖查看", k2="开启", v2="开启拍卖", k3="帮助", v3="拍卖帮助")
         await auction_end.finish()
     
@@ -2754,14 +2767,15 @@ async def _auto_start_auction_job_impl():
         logger.info("今日自动拍卖已开启，跳过本次调度。")
         return  # 今日已开启过，防止重复
     
-    auction_current_status = get_auction_status()
-    if auction_current_status["active"]:
+    if auction_session_service.get_active_session() is not None:
         logger.warning("拍卖已在运行中，自动开启任务跳过。")
         return
 
     logger.info("开始执行自动拍卖开启任务...")
     
-    success = start_auction_process(None)  # 传入None表示不需要Bot实例发送消息
+    success = start_auction_process(
+        None, f"auction-session:auto-start:{current_date}"
+    )  # 传入None表示不需要Bot实例发送消息
     if success:
         # 获取最新的拍卖状态以得到准确的结束时间
         current_auction_status = get_auction_status()
@@ -2788,32 +2802,23 @@ async def _check_auction_end_job_impl():
     if not current_auctions:
         return
 
-    status = get_auction_status()
+    session = auction_session_service.get_active_session()
+    if session is None:
+        logger.error("拍卖库内存在拍品，但数据库场次不存在，停止自动收尾。")
+        return
     now_dt = datetime.now()
-    end_dt = status["end_time"]
-    active = status["active"]
+    end_dt = datetime.fromtimestamp(session["end_time"])
     n = len(current_auctions)
 
-    if active and end_dt is not None and now_dt >= end_dt:
+    if now_dt >= end_dt:
         logger.info(f"拍卖到点收尾，拍品 {n} 件，开始结算。")
         await end_auction_process(None)
         return
 
-    if not active:
-        logger.warning(f"拍卖定时检查：库内还有 {n} 件拍品，场次未开启，按遗留数据结算。")
-        await end_auction_process(None)
-        return
-
-    if active and end_dt is None:
-        logger.warning(f"拍卖定时检查：场次开着但没有结束时间，拍品 {n} 件，收尾结算。")
-        await end_auction_process(None)
-        return
-
-    if end_dt is not None:
-        remaining_seconds = int((end_dt - now_dt).total_seconds())
-        remaining_minutes = remaining_seconds // 60
-        if remaining_minutes > 0 and remaining_minutes % 30 == 0:
-            logger.info(f"拍卖进行中，距结束约 {remaining_minutes} 分钟。")
+    remaining_seconds = int((end_dt - now_dt).total_seconds())
+    remaining_minutes = remaining_seconds // 60
+    if remaining_minutes > 0 and remaining_minutes % 30 == 0:
+        logger.info(f"拍卖进行中，距结束约 {remaining_minutes} 分钟。")
 
 
 @DRIVER.on_startup

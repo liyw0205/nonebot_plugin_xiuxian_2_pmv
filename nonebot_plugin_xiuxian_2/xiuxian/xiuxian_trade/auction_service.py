@@ -10,7 +10,6 @@ from ..xiuxian_utils.game_events import safe_record_game_event
 from ..xiuxian_utils.utils import number_to
 from . import auction_config
 from .auction_utils import (
-    _restore_auction_status_from_disk,
     get_auction_status,
     set_auction_status,
 )
@@ -21,41 +20,49 @@ _items: Any = None
 _sql_message: Any = None
 _trade_manager: Any = None
 _auction_repository: Any = None
+_auction_session_service: Any = None
 
 
 def bind_auction_service_dependencies(
-    *, items: Any, sql_message: Any, trade_manager: Any, auction_repository: Any
+    *, items: Any, sql_message: Any, trade_manager: Any, auction_repository: Any,
+    auction_session_service: Any
 ) -> None:
-    global _items, _sql_message, _trade_manager, _auction_repository
+    global _items, _sql_message, _trade_manager, _auction_repository, _auction_session_service
     _items = items
     _sql_message = sql_message
     _trade_manager = trade_manager
     _auction_repository = auction_repository
+    _auction_session_service = auction_session_service
 
 
-def _auction_dependencies() -> tuple[Any, Any, Any, Any]:
+def _auction_dependencies() -> tuple[Any, Any, Any, Any, Any]:
     if (
         _items is None
         or _sql_message is None
         or _trade_manager is None
         or _auction_repository is None
+        or _auction_session_service is None
     ):
         raise RuntimeError("auction service dependencies are not bound")
-    return _items, _sql_message, _trade_manager, _auction_repository
+    return _items, _sql_message, _trade_manager, _auction_repository, _auction_session_service
 
 
-def start_auction_process(bot: Optional[Bot]) -> bool: # bot参数可能为None
+def start_auction_process(bot: Optional[Bot], operation_id: str | None = None) -> bool: # bot参数可能为None
     """
     启动拍卖流程。
     从玩家上架区和系统配置中生成拍卖品，并存入当前拍卖表。
     """
-    _, _, trade_manager, auction_repository = _auction_dependencies()
-    auction_current_status = get_auction_status()
-    if auction_current_status["active"]:
-        logger.warning("拍卖已在运行中，无法重复开启！")
-        return False
-
-    player_auctions = trade_manager.get_player_auction_items() # 从数据库获取玩家上架物品
+    _, _, _, _, session_service = _auction_dependencies()
+    operation_id = operation_id or f"auction-start:{time.time_ns()}"
+    previous = session_service.get_start_operation(operation_id)
+    if previous is not None:
+        start_dt = datetime.fromtimestamp(previous.start_time)
+        end_dt = datetime.fromtimestamp(previous.end_time)
+        set_auction_status(
+            active=True, start_time=start_dt, end_time=end_dt,
+            last_display_refresh_time=start_dt, items_count=previous.items_count,
+        )
+        return True
     system_items_config = auction_config.get_system_items() # 从内置配置获取系统物品
 
     schedule_config = auction_config.get_auction_schedule()
@@ -63,60 +70,30 @@ def start_auction_process(bot: Optional[Bot]) -> bool: # bot参数可能为None
     # 随机选择5个系统拍卖品
     selected_system_items_names = random.sample(list(system_items_config.keys()), min(5, len(system_items_config)))
     selected_system_items = [
-        {"id": trade_manager.generate_unique_id("auction_current"), # 生成唯一的拍卖ID
-         "item_id": system_items_config[name]["id"],
+        {"item_id": system_items_config[name]["id"],
          "name": name,
-         "start_price": system_items_config[name]["start_price"],
-         "current_price": system_items_config[name]["start_price"],
-         "seller_id": 0,  # 系统卖方ID
-         "seller_name": "系统",
-         "bids": {},
-         "bid_times": {},
-         "is_system": True,
-         "last_bid_time": datetime.now().timestamp() # 记录拍卖开始时间，作为拍卖品的基准时间 (仍使用timestamp方便竞价逻辑)
+         "start_price": system_items_config[name]["start_price"]
         } for name in selected_system_items_names
     ]
-
-    # 添加玩家拍卖品
-    player_auction_items: List[Dict[str, Any]] = []
-    for player_item in player_auctions:
-        player_auction_items.append({
-            "id": trade_manager.generate_unique_id("auction_current"), # 生成唯一的拍卖ID
-            "item_id": player_item["item_id"],
-            "name": player_item["item_name"], # 玩家上架的是 item_name
-            "start_price": player_item["start_price"],
-            "current_price": player_item["start_price"],
-            "seller_id": player_item["user_id"],
-            "seller_name": player_item["user_name"],
-            "bids": {},
-            "bid_times": {},
-            "is_system": False,
-            "last_bid_time": datetime.now().timestamp() # 记录拍卖开始时间，作为拍卖品的基准时间
-        })
-
-    # 合并所有拍卖品
-    all_auction_items = selected_system_items + player_auction_items
-
-    if not all_auction_items:
-        logger.warning("没有可供拍卖的物品！")
-        return False
-
-    # 将所有拍卖品存入数据库
-    auction_repository.set_current_auction(all_auction_items)
-
-    # 清空玩家上架等待区
-    trade_manager.clear_player_auctions()
-
-    # 更新拍卖状态
     now_dt = datetime.now()
     end_time_dt = now_dt + timedelta(hours=schedule_config["duration_hours"])
-    set_auction_status(active=True, start_time=now_dt, end_time=end_time_dt, last_display_refresh_time=now_dt, items_count=len(all_auction_items))
-
-    # 更新调度器的last_auto_start_date，防止当日重复自动开启
+    session_id = f"auction:{now_dt.strftime('%Y%m%d%H%M%S')}:{operation_id[-12:]}"
+    result = session_service.start(
+        operation_id, session_id, start_time=now_dt.timestamp(),
+        end_time=end_time_dt.timestamp(), system_items=selected_system_items,
+    )
+    if not result.succeeded:
+        logger.warning(f"拍卖开启失败：{result.status}")
+        return False
+    start_dt = datetime.fromtimestamp(result.start_time)
+    end_dt = datetime.fromtimestamp(result.end_time)
+    set_auction_status(
+        active=True, start_time=start_dt, end_time=end_dt,
+        last_display_refresh_time=start_dt, items_count=result.items_count,
+    )
     current_date = datetime.now().strftime('%Y-%m-%d')
     auction_config.set_auction_config_value("schedule", current_date, "last_auto_start_date")
-
-    logger.info(f"拍卖已开启，共 {len(all_auction_items)} 件物品参与拍卖！")
+    logger.info(f"拍卖已开启，共 {result.items_count} 件物品参与拍卖！")
     return True
 
 
@@ -125,7 +102,7 @@ async def end_auction_process(bot: Optional[Bot]) -> List[Dict[str, Any]]: # bot
     结束拍卖流程。
     结算所有当前拍卖品，将物品发给买家，灵石发给卖家，并记录到拍卖历史。
     """
-    items, sql_message, _, auction_repository = _auction_dependencies()
+    items, sql_message, _, auction_repository, _ = _auction_dependencies()
     current_auctions = auction_repository.get_current_auction() # 从数据库获取当前拍卖品
     if not current_auctions:
         return []
@@ -230,6 +207,7 @@ async def end_auction_process(bot: Optional[Bot]) -> List[Dict[str, Any]]: # bot
     remaining = auction_repository.get_current_auction()
     if remaining:
         raise RuntimeError(f"auction settlement incomplete: remaining={len(remaining)}")
+    _auction_session_service.close_active_session()
 
     # 更新拍卖状态为不活跃，时间置空
     set_auction_status(active=False, start_time=None, end_time=None, last_display_refresh_time=None, items_count=0)
@@ -243,53 +221,40 @@ async def reconcile_auction_after_restart() -> None:
     重启后对账：有落盘场次且未到结束时间 → 继续本场；否则库内遗留拍品 → 收尾结算。
     不向群里发公告。
     """
-    _, _, _, auction_repository = _auction_dependencies()
+    _, _, _, auction_repository, session_service = _auction_dependencies()
     current_auctions = auction_repository.get_current_auction()
     if not current_auctions:
         return
-
-    _restore_auction_status_from_disk()
-    status = get_auction_status()
+    session = session_service.get_active_session()
+    if session is None:
+        raise RuntimeError("auction items exist without an active database session")
     now_dt = datetime.now()
     item_count = len(current_auctions)
-    end_dt = status["end_time"]
-    start_dt = status["start_time"]
-    active = status["active"]
-
-    if active and end_dt is not None:
-        if now_dt >= end_dt:
-            logger.info(
-                f"拍卖重启后对账：已过结束时间（{end_dt.strftime('%m-%d %H:%M')}），"
-                f"开始收尾，拍品 {item_count} 件。"
-            )
-            await end_auction_process(None)
-            return
-        refresh = status.get("last_display_refresh_time") or start_dt
-        set_auction_status(
-            active=True,
-            start_time=start_dt,
-            end_time=end_dt,
-            last_display_refresh_time=refresh,
-            items_count=item_count,
-        )
-        left_min = max(int((end_dt - now_dt).total_seconds()) // 60, 0)
+    start_dt = datetime.fromtimestamp(session["start_time"])
+    end_dt = datetime.fromtimestamp(session["end_time"])
+    if now_dt >= end_dt:
         logger.info(
-            f"拍卖重启后继续本场，预计 {end_dt.strftime('%H:%M')} 结束，"
-            f"剩余约 {left_min} 分钟，拍品 {item_count} 件。"
+            f"拍卖重启后对账：已过结束时间（{end_dt.strftime('%m-%d %H:%M')}），"
+            f"开始收尾，拍品 {item_count} 件。"
         )
+        await end_auction_process(None)
         return
-
-    logger.warning(
-        f"拍卖库里有 {item_count} 件未收尾拍品，场次记录对不上，按遗留数据结算。"
+    set_auction_status(
+        active=True, start_time=start_dt, end_time=end_dt,
+        last_display_refresh_time=start_dt, items_count=item_count,
     )
-    await end_auction_process(None)
+    left_min = max(int((end_dt - now_dt).total_seconds()) // 60, 0)
+    logger.info(
+        f"拍卖重启后继续本场，预计 {end_dt.strftime('%H:%M')} 结束，"
+        f"剩余约 {left_min} 分钟，拍品 {item_count} 件。"
+    )
 
 
 async def place_auction_bid(bot: Bot, user_id: str, user_name: str, auction_id: str, bid_price: int):
     """
     用户参与拍卖竞拍。
     """
-    _, sql_message, _, auction_repository = _auction_dependencies()
+    _, sql_message, _, auction_repository, _ = _auction_dependencies()
     auction_current_status = get_auction_status()
     if not auction_current_status["active"]:
         return False, "拍卖当前未开启！"
