@@ -26,7 +26,7 @@ from datetime import datetime, timedelta
 from ..xiuxian_config import XiuConfig, convert_rank, JsonConfig, added_ranks
 from ..xiuxian_utils.economy_log import safe_log_economy_change
 from ..xiuxian_utils.game_events import safe_record_game_event
-from .sectconfig import get_config, get_sect_weekly_purchases, update_sect_weekly_purchase
+from .sectconfig import get_config, get_sect_weekly_purchases
 from .sect_tasks import sect_task_state_manager
 from .sect_weekly_commands import sect_weekly, sect_weekly_claim, sect_weekly_rank
 from .sect_member_utils import (
@@ -73,11 +73,19 @@ from ..adapter_compat import is_channel_event
 from ...paths import get_paths
 from .membership_service import SectMembershipService
 from .fairyland_claim_service import FairylandClaimService
+from .close_mountain_service import SectCloseMountainService
+from .owner_inherit_service import SectOwnerInheritService
+from .shop_purchase_service import SectShopPurchaseService
+from .elixir_claim_service import SectElixirClaimService
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
 sect_membership_service = SectMembershipService(get_paths().game_db)
 fairyland_claim_service = FairylandClaimService(get_paths().player_db)
+sect_close_mountain_service = SectCloseMountainService(get_paths().game_db)
+sect_owner_inherit_service = SectOwnerInheritService(get_paths().game_db)
+sect_shop_purchase_service = SectShopPurchaseService(get_paths().game_db)
+sect_elixir_claim_service = SectElixirClaimService(get_paths().game_db)
 config = get_config()
 SECT_RENAME_CARD_ID = 20026
 SECT_RENAME_CARD_NAME = "宗门易名符"
@@ -362,13 +370,28 @@ async def auto_handle_inactive_sect_owners():
                     new_owner = active_candidates[0]
                     logger.info(f"选定继承人：{new_owner['user_name']}")
                     
-                    # 执行继承
-                    sql_message.update_usr_sect(new_owner['user_id'], sect_id, 0)  # 设为宗主
-                    sql_message.update_sect_owner(new_owner['user_id'], sect_id)
-                    sql_message.update_sect_closed_status(sect_id, 0)  # 解除封闭
-                    sql_message.update_sect_join_status(sect_id, 1)  # 开放加入
-                    
-                    logger.info(f"宗门【{sect_name}】继承完成：新宗主：{new_owner['user_name']}")
+                    result = sect_owner_inherit_service.inherit(
+                        f"sect:auto-inherit:{sect_id}:{new_owner['user_id']}:{time.time_ns()}",
+                        new_owner['user_id'],
+                        expected_sect_id=sect_id,
+                        eligible_positions=tuple(
+                            sorted(
+                                {
+                                    int(candidate['sect_position'])
+                                    for candidate in active_candidates
+                                }
+                            )
+                        ),
+                        eligible_user_ids=tuple(
+                            str(candidate['user_id']) for candidate in active_candidates
+                        ),
+                    )
+                    if result.applied:
+                        logger.info(f"宗门【{sect_name}】继承完成：新宗主：{new_owner['user_name']}")
+                    else:
+                        logger.info(
+                            f"宗门【{sect_name}】继承状态已变化，跳过：{result.status}"
+                        )
                     continue
                     
                 # ===== 第二阶段：处理未封闭的宗门（检测不活跃宗主） =====
@@ -412,13 +435,17 @@ async def auto_handle_inactive_sect_owners():
                     
                 logger.info(f"检测到不活跃宗主：{user_info['user_name']} 已离线 {offline_days} 天")
                 
-                # 执行降位处理（有多名成员时）
-                sql_message.update_sect_join_status(sect_id, 0)  # 关闭宗门加入
-                sql_message.update_sect_closed_status(sect_id, 1)  # 设置封闭状态
-                sql_message.update_usr_sect(owner_id, sect_id, 2)  # 降为长老
-                sql_message.update_sect_owner(None, sect_id)  # 清空宗主
-                
-                logger.info(f"宗门【{sect_name}】处理完成：原宗主 {user_info['user_name']} 已降为长老")
+                result = sect_close_mountain_service.close(
+                    f"sect:auto-close:{sect_id}:{owner_id}:{time.time_ns()}",
+                    owner_id,
+                    expected_sect_id=sect_id,
+                )
+                if result.applied:
+                    logger.info(f"宗门【{sect_name}】处理完成：原宗主 {user_info['user_name']} 已降为长老")
+                else:
+                    logger.info(
+                        f"宗门【{sect_name}】状态已变化，跳过封闭：{result.status}"
+                    )
                 
             except Exception as e:
                 logger.error(f"处理宗门 {sect_id} 时发生错误：{str(e)}")
@@ -793,12 +820,10 @@ async def sect_elixir_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
                 msg = f"道友已经领取过了，不要贪心哦~"
                 await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_elixir_get.finish()
+            rewards = []
             if int(sect_info['elixir_room_level']) == 1:
                 msg = f"道友成功领取到丹药:渡厄丹！"
-                sql_message.send_back(user_info['user_id'], 1999, "渡厄丹", "丹药", 1, 1)  # 1级丹房送1个渡厄丹
-                sql_message.update_user_sect_elixir_get_num(user_info['user_id'])
-                await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
-                await sect_elixir_get.finish()
+                rewards = [(1999, "渡厄丹", "丹药", 1)]
             else:
                 sect_now_room_config = elixir_room_level_up_config[str(sect_info['elixir_room_level'])]
                 give_num = sect_now_room_config['give_level']['give_num'] - 1
@@ -806,33 +831,41 @@ async def sect_elixir_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
                 give_dict = {}
                 give_elixir_id_list = items.get_random_id_list_by_rank_and_item_type(
                     fanil_rank=max(convert_rank(user_info['level'])[0] - rank_up - added_rank, 16), item_type=['丹药'])
+                give_elixir_id_list = [item_id for item_id in give_elixir_id_list if int(item_id) != 1999]
                 if not give_elixir_id_list:  # 没有合适的ID，全部给渡厄丹
                     msg = f"道友成功领取到丹药：渡厄丹 2 枚！"
-                    sql_message.send_back(user_info['user_id'], 1999, "渡厄丹", "丹药", 2, 1)  # 送1个渡厄丹
-                    sql_message.update_user_sect_elixir_get_num(user_info['user_id'])
-                    await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
-                    await sect_elixir_get.finish()
-                i = 1
-                while i <= give_num:
-                    id = random.choice(give_elixir_id_list)
-                    if int(id) == 1999:  # 不给渡厄丹了
-                        continue
-                    else:
-                        try:
-                            give_dict[id] += 1
-                            i += 1
-                        except Exception:
-                            give_dict[id] = 1
-                            i += 1
-                msg = f"道友成功领取到丹药:渡厄丹 1 枚!\n"
-                sql_message.send_back(user_info['user_id'], 1999, "渡厄丹", "丹药", 1, 1)  # 送1个渡厄丹
-                for k, v in give_dict.items():
-                    goods_info = items.get_data_by_item_id(k)
-                    msg += f"道友成功领取到丹药：{goods_info['name']} {v} 枚!\n"
-                    sql_message.send_back(user_info['user_id'], k, goods_info['name'], '丹药', v, bind_flag=1)
-                sql_message.update_user_sect_elixir_get_num(user_info['user_id'])
-                await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
+                    rewards = [(1999, "渡厄丹", "丹药", 2)]
+                else:
+                    for _ in range(give_num):
+                        item_id = random.choice(give_elixir_id_list)
+                        give_dict[item_id] = give_dict.get(item_id, 0) + 1
+                    msg = f"道友成功领取到丹药:渡厄丹 1 枚!\n"
+                    rewards = [(1999, "渡厄丹", "丹药", 1)]
+                    for item_id, amount in give_dict.items():
+                        goods_info = items.get_data_by_item_id(item_id)
+                        msg += f"道友成功领取到丹药：{goods_info['name']} {amount} 枚!\n"
+                        rewards.append((item_id, goods_info['name'], '丹药', amount))
+
+            result = sect_elixir_claim_service.claim(
+                _sect_operation_id(event, "elixir_claim", user_id), user_id, sect_id,
+                elixir_room_config['领取贡献度要求'], elixir_room_cost, rewards,
+                XiuConfig().max_goods_num,
+            )
+            if not result.succeeded:
+                failure_messages = {
+                    "already_claimed": "道友已经领取过了，不要贪心哦~",
+                    "membership_changed": "宗门成员状态已变化，请重新查看宗门信息。",
+                    "position_ineligible": "当前宗门职位不满足领取要求。",
+                    "room_missing": "道友的宗门目前还未建设丹房！",
+                    "contribution_insufficient": "当前宗门贡献度不满足领取条件。",
+                    "materials_insufficient": "当前宗门资材无法维护丹房。",
+                    "inventory_full": "背包已满，无法领取丹药。",
+                    "state_changed": "领取状态已变化，请重试。",
+                }
+                await handle_send(bot, event, failure_messages.get(result.status, "领取失败，请稍后重试。"))
                 await sect_elixir_get.finish()
+            await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
+            await sect_elixir_get.finish()
     else:
         msg = f"道友尚未加入宗门！"
         await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
@@ -2866,16 +2899,18 @@ async def sect_close_mountain2_confirm(bot: Bot, event: GroupMessageEvent | Priv
     owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
     
     if sect_position == owner_position:
-        # 1. 关闭宗门加入
-        sql_message.update_sect_join_status(sect_id, 0)
-        # 2. 设置封闭状态
-        sql_message.update_sect_closed_status(sect_id, 1)
-        # 3. 宗主退位为长老
-        sql_message.update_usr_sect(user_info['user_id'], sect_id, 2)  # 2是长老职位
-        # 4. 清空宗主
-        sql_message.update_sect_owner(None, sect_id)
-        
-        msg = "已封闭山门！你已退位为长老，宗门现在处于无主状态。长老们可以使用【继承宗主】来继承宗主之位。"
+        result = sect_close_mountain_service.close(
+            _sect_operation_id(event, "close_mountain", sect_id),
+            user_info['user_id'],
+            owner_position=owner_position,
+            expected_sect_id=sect_id,
+        )
+        if result.applied:
+            msg = "已封闭山门！你已退位为长老，宗门现在处于无主状态。长老们可以使用【继承宗主】来继承宗主之位。"
+        elif result.status == "already_closed":
+            msg = "宗门已经处于封闭状态。"
+        else:
+            msg = "宗门状态已发生变化，只有当前宗主可以封闭山门！"
     else:
         msg = "只有宗主可以封闭山门！"
     
@@ -2922,16 +2957,19 @@ async def sect_inherit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, msg, md_type="宗门", k1="继承", v1="继承宗主", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_inherit.finish()
     
-    # 执行继承
-    # 1. 继承宗主
-    sql_message.update_usr_sect(user_info['user_id'], sect_id, 0)  # 0是宗主
-    sql_message.update_sect_owner(user_info['user_id'], sect_id)
-    # 2. 解除封闭
-    sql_message.update_sect_closed_status(sect_id, 0)
-    # 3. 开放加入
-    sql_message.update_sect_join_status(sect_id, 1)
-    
-    msg = f"恭喜{user_info['user_name']}继承宗主之位！宗门已解除封闭状态并开放加入。"
+    result = sect_owner_inherit_service.inherit(
+        _sect_operation_id(event, "inherit_owner", sect_id),
+        user_info['user_id'],
+        expected_sect_id=sect_id,
+    )
+    if result.applied:
+        msg = f"恭喜{result.actor_name or user_info['user_name']}继承宗主之位！宗门已解除封闭状态并开放加入。"
+    elif result.status == "higher_priority":
+        msg = "存在更高优先级的继承人，请等待他们继承！"
+    elif result.status == "ineligible":
+        msg = "只有副宗主、长老、大师兄、大师姐可以继承宗主之位！"
+    else:
+        msg = "宗门状态已发生变化，当前无法继承宗主之位。"
     await handle_send(bot, event, msg)
     await sect_inherit.finish()
 
@@ -3135,21 +3173,25 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg, md_type="宗门", k1="兑换", v1="宗门兑换", k2="宗门", v2="我的宗门", k3="商店", v3="宗门商店")
         await sect_buy.finish()
 
-    # 兑换商品
-    sect_contribution -= total_cost
-    sql_message.update_sect_materials(user_info['sect_id'], total_cost, 2)
-    sql_message.deduct_sect_contribution(user_id, total_cost)
-
-    # 给予物品
     item_info = items.get_data_by_item_id(shop_id)
-    sql_message.send_back(
-        user_id, 
-        shop_id, 
-        item_info["name"], 
-        item_info["type"], 
-        quantity,
-        1
+    result = sect_shop_purchase_service.purchase(
+        _sect_operation_id(event, "shop_purchase", f"{user_id}:{shop_id}"),
+        user_id, user_info['sect_id'], shop_id, item_info["name"], item_info["type"],
+        quantity, item_data["cost"], item_data["weekly_limit"], already_purchased,
+        XiuConfig().max_goods_num,
     )
+    if not result.succeeded:
+        failure_messages = {
+            "membership_changed": "宗门成员状态已变化，请重新查看宗门信息。",
+            "sect_closed": "宗门已封闭，无法进行兑换。",
+            "limit_reached": "该商品已达到本周限购数量。",
+            "contribution_insufficient": "宗门贡献度不足，无法兑换。",
+            "materials_insufficient": "宗门资材不足，无法兑换。",
+            "inventory_full": "背包已满，无法兑换。",
+            "state_changed": "兑换状态已变化，请重试。",
+        }
+        await handle_send(bot, event, failure_messages.get(result.status, "兑换失败，请稍后重试。"))
+        await sect_buy.finish()
     safe_log_economy_change(
         user_id=user_id,
         sect_id=user_info["sect_id"],
@@ -3170,8 +3212,5 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     msg = f"成功兑换{item_info['name']}×{quantity}，消耗{number_to(total_cost)}宗门贡献度！"
     await handle_send(bot, event, msg, md_type="宗门", k1="兑换", v1="宗门兑换", k2="宗门", v2="我的宗门", k3="商店", v3="宗门商店")
-
-    # 更新限购记录
-    update_sect_weekly_purchase(user_id, shop_id, quantity)
 
     await sect_buy.finish()
