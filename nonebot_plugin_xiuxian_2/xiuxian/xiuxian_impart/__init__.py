@@ -42,10 +42,12 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ...paths import get_paths
 from .draw_service import ImpartDrawService
 from .card_compose_service import CardComposeService
+from .card_disassemble_service import CardDisassembleService
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 impart_draw_service = ImpartDrawService(get_paths().game_db, get_paths().impart_db)
 card_compose_service = CardComposeService(get_paths().impart_db)
+card_disassemble_service = CardDisassembleService(get_paths().impart_db)
 
 
 cache_help = {}
@@ -76,6 +78,7 @@ impart_info = on_command(
 impart_help = on_command("传承帮助", priority=8, block=True)
 impart_pk_help = on_command("虚神界帮助", priority=8, block=True)
 impart_compose = on_command("传承合成", priority=15, block=True)
+impart_disassemble = on_command("传承分解", priority=15, block=True)
 re_impart_load = on_command("加载传承数据", priority=45, block=True)
 impart_img = on_command(
     "传承卡图", aliases={"传承卡片"}, priority=50, block=True
@@ -94,6 +97,7 @@ __impart_help__ = f"""
 - 加载传承数据：重新加载传承属性（修复显示异常）
 - 传承卡图+名字：查看传承卡牌原画
 - 传承合成 [重复卡] [目标卡]：消耗5张重复卡合成目标卡
+- 传承分解 [卡名] [数量]：保留1张，其余分解为思恋结晶
 """.strip()
 
 __impart_pk_help__ = f"""
@@ -545,6 +549,96 @@ async def impart_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     msg += f"\n\n第{page}/{total_pages}页"
     msg += f"\n输入【传承背包+页码】查看其他页"
     l_msg.append(msg)
+    page = ["翻页", f"传承背包 {page + 1}", "信息", "传承信息", "卡图", "传承卡图", f"{page}/{total_pages}"]    
+    await send_msg_handler(bot, event, '传承背包', bot.self_id, l_msg, title=title, page=page)
+
+@re_impart_load.handle(parameterless=[Cooldown(cd_time=0)])
+async def re_impart_load_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """加载传承数据"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+
+    user_id = user_info["user_id"]
+    impart_data_draw = await impart_check(user_id)
+    if impart_data_draw is None:
+        await handle_send(
+            bot, event, send_group_id, "发生未知错误！"
+        )
+        return
+    # 更新传承数据
+    info = await re_impart_data(user_id)
+    if info:
+        msg = "传承数据加载完成！"
+    else:
+        msg = "传承数据加载失败！"
+    await handle_send(bot, event, msg)
+
+
+@impart_info.handle(parameterless=[Cooldown(cd_time=0)])
+async def impart_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """传承信息"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    isUser, user_info, msg = check_user(event)
+    if not isUser:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+    user_id = user_info["user_id"]
+    impart_data_draw = await impart_check(user_id)
+    if impart_data_draw is None:
+        await handle_send(
+            bot, event, send_group_id, "发生未知错误！"
+        )
+        return
+
+    msg = f"""
+道友的传承总属性
+攻击提升:{int(impart_data_draw["impart_atk_per"] * 100)}%
+气血提升:{int(impart_data_draw["impart_hp_per"] * 100)}%
+真元提升:{int(impart_data_draw["impart_mp_per"] * 100)}%
+会心提升：{int(impart_data_draw["impart_know_per"] * 100)}%
+会心伤害提升：{int(impart_data_draw["impart_burst_per"] * 100)}%
+闭关经验提升：{int(impart_data_draw["impart_exp_up"] * 100)}%
+炼丹收获数量提升：{impart_data_draw["impart_mix_per"]}颗
+灵田收取数量提升：{impart_data_draw["impart_reap_per"]}颗
+每日双修次数提升：{impart_data_draw["impart_two_exp"]}次
+boss战攻击提升:{int(impart_data_draw["boss_atk"] * 100)}%
+
+思恋结晶：{impart_data_draw["stone_num"]}颗"""
+    await handle_send(bot, event, msg, md_type="传承", k1="祈愿", v1="传承祈愿", k2="背包", v2="传承背包", k3="帮助", v3="传承帮助")
+
+@impart_img.handle(parameterless=[Cooldown(cd_time=0)])
+async def impart_img_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """传承卡图"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    img_list = impart_data_json.data_all_keys()
+    img_name = str(args.extract_plain_text().strip())
+    if not img_name:
+        msg = "请输入正确格式：传承卡图 卡图名"
+        await handle_send(bot, event, msg, md_type="传承", k1="卡图", v1="传承卡图", k2="背包", v2="传承背包", k3="帮助", v3="传承帮助")
+        await impart_img.finish()
+
+    if img_name not in img_list:
+        msg = "没有找到此卡图！"
+        await handle_send(bot, event, msg, md_type="传承", k1="卡图", v1="传承卡图", k2="背包", v2="传承背包", k3="帮助", v3="传承帮助")
+        await impart_img.finish()
+
+    # 判断是否允许发送图片
+    if getattr(XiuConfig(), 'impart_image', True):  # 默认True防止未定义时报错
+        img = get_image_representation(img_name)
+        try:
+            await handle_pic_send(bot, event, img)
+        except Exception as e:
+            # 如果发送图片失败，降级为发送文本属性
+            logger.opt(colors=True).warning(f"发送传承卡图失败，降级发送文本。错误：{e}")
+            description = get_impart_card_description(img_name)
+            await handle_send(bot, event, f"传承卡图：{img_name}\n{description}")
+    else:
+        # 不发送图片，只发送属性文本
+        description = get_impart_card_description(img_name)
+        await handle_send(bot, event, f"传承卡图：{img_name}\n{description}")
 
 
 @impart_compose.handle(parameterless=[Cooldown(cd_time=0)])
@@ -565,10 +659,7 @@ async def impart_compose_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     user_id = str(user_info["user_id"])
     cards = impart_data_json.data_person_list(user_id) or {}
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or random.getrandbits(64))
-    result = card_compose_service.compose(
-        f"impart-compose:{event_id}:{user_id}", user_id, source_card, target_card,
-        cards.get(source_card, 0), cards.get(target_card, 0), 5,
-    )
+    result = card_compose_service.compose(f"impart-compose:{event_id}:{user_id}", user_id, source_card, target_card, cards.get(source_card, 0), cards.get(target_card, 0), 5)
     messages = {"same_card": "合成材料卡与目标卡不能相同！", "card_missing": "重复卡不足5张，无法合成！", "state_changed": "传承卡牌状态已变化，请重新操作！"}
     if not result.succeeded:
         await handle_send(bot, event, messages.get(result.status, "传承合成失败！"))
@@ -576,3 +667,32 @@ async def impart_compose_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     await handle_send(bot, event, f"合成成功：{source_card}剩余{result.source_quantity}张，{target_card}现有{result.target_quantity}张")
 
 
+@impart_disassemble.handle(parameterless=[Cooldown(cd_time=0)])
+async def impart_disassemble_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    bot, _ = await assign_bot(bot=bot, event=event)
+    is_user, user_info, msg = check_user(event)
+    if not is_user:
+        await handle_send(bot, event, msg, md_type="我要修仙")
+        return
+    parts = args.extract_plain_text().strip().split()
+    if not parts or len(parts) > 2 or (len(parts) == 2 and not parts[1].isdigit()):
+        await handle_send(bot, event, "格式：传承分解 卡名 [数量]")
+        return
+    card_name = parts[0]
+    quantity = int(parts[1]) if len(parts) == 2 else 1
+    if card_name not in impart_data_json.data_all_keys() or quantity <= 0:
+        await handle_send(bot, event, "传承卡名或数量无效！")
+        return
+    user_id = str(user_info["user_id"])
+    cards = impart_data_json.data_person_list(user_id) or {}
+    impart_state = await impart_check(user_id)
+    if impart_state is None:
+        await handle_send(bot, event, "未找到传承数据！")
+        return
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or random.getrandbits(64))
+    result = card_disassemble_service.disassemble(f"impart-disassemble:{event_id}:{user_id}", user_id, card_name, quantity, cards.get(card_name, 0), impart_state["stone_num"], 2)
+    messages = {"card_missing": "卡牌不足；分解后必须至少保留1张！", "state_changed": "传承卡牌状态已变化，请重新操作！", "user_missing": "未找到传承数据！"}
+    if not result.succeeded:
+        await handle_send(bot, event, messages.get(result.status, "传承分解失败！"))
+        return
+    await handle_send(bot, event, f"分解成功：{card_name}剩余{result.card_quantity}张，思恋结晶现有{result.stone_quantity}颗")
