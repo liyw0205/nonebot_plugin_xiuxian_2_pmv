@@ -29,10 +29,13 @@ from ..xiuxian_impart.impart_uitls import (
     impart_check,
     update_user_impart_data
 )
+from ...paths import get_paths
+from .recall_service import LunhuiRecallService
 
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
 items = Items()
+lunhui_recall_service = LunhuiRecallService(get_paths().game_db, get_paths().player_db)
 added_ranks = added_ranks()
 confirm_lunhui_cache = {}
 ROOT_RENAME_CARD_ID = 20025
@@ -232,7 +235,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
     
     skill_type = type_map[arg]
-    success, reason = retrieve_reincarnation_skill(user_id, skill_type)
+    success, reason = retrieve_reincarnation_skill(user_id, skill_type, operation_id=f"lunhui-recall:{getattr(event, 'message_id', '') or getattr(event, 'id', '') or datetime.now().timestamp()}:{user_id}")
     if success:
         log_message(user_id, f"[回忆前世] 取回{arg}：{reason}")
         update_statistics_value(user_id, "回忆前世次数")
@@ -517,7 +520,7 @@ def arg_to_name(skill_type):
     return names.get(skill_type, skill_type)
 
 
-def retrieve_reincarnation_skill(user_id, skill_type):
+def retrieve_reincarnation_skill(user_id, skill_type, operation_id=None):
     """
     执行取回某类轮回技能
     返回 (success: bool, msg: str)
@@ -531,37 +534,9 @@ def retrieve_reincarnation_skill(user_id, skill_type):
     if skill_id == 0:
         return False, "记忆中没有该技能"
     
-    # 标记已取回
-    retrieved_field_map = {
-        "main_buff": "retrieved_main",
-        "sub_buff": "retrieved_sub",
-        "sec_buff": "retrieved_sec",
-        "effect1_buff": "retrieved_effect1",
-        "effect2_buff": "retrieved_effect2"
-    }
-    
-    retrieved_field = retrieved_field_map.get(skill_type)
-    if retrieved_field:
-        player_data_manager.update_or_write_data(
-            str(user_id),
-            "reincarnation_memory",
-            retrieved_field,
-            1,
-            data_type="INTEGER"
-        )
-    
-    # 写入当前 Buff
-    update_func_map = {
-        "main_buff": sql_message.updata_user_main_buff,
-        "sub_buff": sql_message.updata_user_sub_buff,
-        "sec_buff": sql_message.updata_user_sec_buff,
-        "effect1_buff": sql_message.updata_user_effect1_buff,
-        "effect2_buff": sql_message.updata_user_effect2_buff
-    }
-    
-    update_func = update_func_map.get(skill_type)
-    if update_func:
-        update_func(user_id, skill_id)
+    result = lunhui_recall_service.recall(operation_id or f"lunhui-recall:{user_id}:{skill_type}", user_id, skill_type, skill_id)
+    if not result.succeeded:
+        return False, "轮回印记状态已变化，请重试"
     
     skill_name = items.get_data_by_item_id(skill_id).get('name', '未知技能')
     return True, f"成功回忆前世中的技能：{skill_name}"
