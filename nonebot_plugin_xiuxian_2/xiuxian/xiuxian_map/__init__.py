@@ -28,9 +28,11 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.player_fight import Boss_fight
 from ..xiuxian_config import XiuConfig, base_rank
 from .seed_purchase_service import SeedPurchaseService
+from .resource_reward_service import MapResourceRewardService
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
+map_resource_reward_service = MapResourceRewardService(get_paths().game_db, get_paths().player_db)
 seed_purchase_service = SeedPurchaseService(get_paths().game_db)
 items = Items()
 
@@ -777,6 +779,48 @@ def _expand_reward_plan(reward_plan):
     return expanded
 
 
+def _roll_rewards(reward_plan, decay_ratio: float = 1.0):
+    """Resolve map reward randomness before entering a transaction."""
+    rewards = []
+    stone = 0
+    items_to_add = []
+    for pool_key, cmin, cmax, chance in _expand_reward_plan(reward_plan):
+        if random.random() > chance:
+            continue
+        pool_ids = ACTION_ITEM_POOLS.get(pool_key, [])
+        if not pool_ids:
+            continue
+        count = max(1, int(round(random.randint(cmin, cmax) * decay_ratio)))
+        for _ in range(count):
+            reward_id = random.choice(pool_ids)
+            if isinstance(reward_id, str) and reward_id.startswith("LS_"):
+                amount = max(1, int(round(int(reward_id.split("_")[1]) * decay_ratio)))
+                stone += amount
+                rewards.append(f"灵石x{number_to(amount)}")
+                continue
+            info = items.get_data_by_item_id(str(reward_id))
+            if not info:
+                continue
+            items_to_add.append({
+                "id": int(reward_id), "name": info["name"],
+                "type": info.get("type", "材料"), "amount": 1,
+            })
+            rewards.append(f"{info['name']}x1")
+    return rewards, stone, items_to_add
+
+
+def _roll_map_dongfu_material(node_type: str, chance_multiplier: float = 1.0):
+    plan = {
+        "水域": ("dongfu_water", 0.16), "灵林": ("dongfu_soil", 0.16),
+        "仙山": ("dongfu_soil", 0.22), "矿脉": ("dongfu_array", 0.16),
+    }
+    if node_type not in plan:
+        return [], 0, []
+    pool_key, chance = plan[node_type]
+    if random.random() > min(0.80, chance * chance_multiplier):
+        return [], 0, []
+    return _roll_rewards([(pool_key, 1, 1, 1.0)])
+
 def _grant_map_dongfu_material(uid: str, node_type: str, chance_multiplier: float = 1.0):
     plan = {
         "水域": ("dongfu_water", 0.16),
@@ -863,6 +907,23 @@ def _grant_skill_equip_drop(user_info: dict, drop_rate: float = 0.1):
 
     return f"{item_info.get('level', '未知品级')}:{item_info['name']}x1"
 
+
+def _roll_skill_equip_drop(user_info: dict, drop_rate: float = 0.1):
+    if random.random() > drop_rate:
+        return None, None
+    item_type = random.choice(SKILL_EQUIP_TYPES)
+    user_level = user_info.get("level", "江湖好手")
+    rank = base_rank(user_level, 16 if item_type in ["法器", "防具", "辅修功法", "身法", "瞳术"] else 5)
+    item_ids = items.get_random_id_list_by_rank_and_item_type(rank, item_type)
+    if not item_ids:
+        return None, None
+    item_id = random.choice(item_ids)
+    info = items.get_data_by_item_id(item_id)
+    if not info:
+        return None, None
+    return f"{info.get('level', '未知品级')}:{info['name']}x1", {
+        "id": int(item_id), "name": info["name"], "type": info.get("type", item_type), "amount": 1,
+    }
 
 def _merge_reward_text(rewards: list[str]) -> str:
     if not rewards:
@@ -1513,69 +1574,88 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
         INTERACTIVE_ACTION_STATE.pop(uid, None)
         await handle_send(bot, event, "状态异常，已重置。")
         return
-
     if ia["resolve_cmd"] != resolve_cmd:
         await handle_send(bot, event, f"当前应使用【{ia['resolve_cmd']}】而不是【{resolve_cmd}】")
         return
-
     if not st.get("ready"):
         sec = max(1, int((st["ready_ts"] - now).total_seconds()))
         await handle_send(bot, event, f"还没到时机，再等等（约 {sec}s）")
         return
-
     if st.get("expire_ts") and now > st["expire_ts"]:
         INTERACTIVE_ACTION_STATE.pop(uid, None)
         _set_cd(uid, "gather_cd_until", ia["cooldown_sec"])
         await handle_send(bot, event, f"❌ 时机已过，{action}失败。")
         return
 
-    if random.random() > ia["success_rate"]:
+    if "success" not in st:
+        st["success"] = random.random() <= ia["success_rate"]
+        INTERACTIVE_ACTION_STATE[uid] = st
+    if not st["success"]:
         INTERACTIVE_ACTION_STATE.pop(uid, None)
         _set_cd(uid, "gather_cd_until", ia["cooldown_sec"])
         await handle_send(bot, event, f"💨 你动作慢了半拍，{action}失败（目标跑了）")
         return
 
-    _inc_daily_count(uid, "gather_count", 1)
+    settlement = st.get("settlement")
+    if settlement is None:
+        daily = _get_daily_limit(uid)
+        decay = _get_reward_decay(uid)
+        roll = random.random()
+        extra_msg = ""
+        if roll < 0.10:
+            rewards, stone, reward_items = _roll_rewards([("stone_low", 1, 1, 1.0)], decay)
+            extra_msg = "你惊动了附近的异兽，只来得及捡走些散落资源。"
+        elif roll < 0.30:
+            rewards, stone, reward_items = _roll_rewards([
+                (st["pool_key"], 1, 2, 1.0), ("stone_low", 1, 2, 1.0), ("wash_stone_low", 1, 1, 0.15),
+            ], decay)
+            extra_msg = "运气极佳，收获颇丰！"
+        else:
+            rewards, stone, reward_items = _roll_rewards([
+                (st["pool_key"], 1, 2, 1.0), ("stone_low", 1, 1, 0.55),
+            ], decay)
+        material_rewards, material_stone, material_items = _roll_map_dongfu_material(st.get("node_type", ""))
+        settlement = {
+            "daily": daily,
+            "decay": decay,
+            "rewards": rewards + material_rewards,
+            "stone": stone + material_stone,
+            "items": reward_items + material_items,
+            "extra_msg": extra_msg,
+        }
+        extra_text, extra_item = _roll_skill_equip_drop(user_info, MAP_EXTRA_DROP_RATE["gather"])
+        if extra_item:
+            settlement["rewards"].append(extra_text)
+            settlement["items"].append(extra_item)
+        st["settlement"] = settlement
+        INTERACTIVE_ACTION_STATE[uid] = st
 
-    decay = _get_reward_decay(uid)
-
-    roll = random.random()
-    rewards = []
-    extra_msg = ""
-
-    if roll < 0.10:
-        rewards = _grant_rewards(uid, [("stone_low", 1, 1, 1.0)], decay_ratio=decay)
-        extra_msg = "你惊动了附近的异兽，只来得及捡走些散落资源。"
-    elif roll < 0.30:
-        rewards = _grant_rewards(uid, [
-            (st["pool_key"], 1, 2, 1.0),
-            ("stone_low", 1, 2, 1.0),
-            ("wash_stone_low", 1, 1, 0.15),
-        ], decay_ratio=decay)
-        extra_msg = "运气极佳，收获颇丰！"
-    else:
-        rewards = _grant_rewards(uid, [
-            (st["pool_key"], 1, 2, 1.0),
-            ("stone_low", 1, 1, 0.55),
-        ], decay_ratio=decay)
-
-    extra = _grant_skill_equip_drop(user_info, MAP_EXTRA_DROP_RATE["gather"])
-    if extra:
-        rewards.append(extra)
-    dongfu_material = _grant_map_dongfu_material(uid, st.get("node_type", ""))
-    if dongfu_material:
-        rewards.append(dongfu_material)
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"map-resource:{uid}:{event_message_id or int(st['start_ts'].timestamp())}"
+    result = map_resource_reward_service.settle(
+        operation_id,
+        uid,
+        settlement["daily"],
+        DAILY_LIMIT_CONFIG["gather"],
+        settlement["stone"],
+        settlement["items"],
+        XiuConfig().max_goods_num,
+    )
+    if result.status == "inventory_full":
+        await handle_send(bot, event, "背包物品已达上限，资源奖励尚未领取。")
+        return
+    if result.status in {"limit_reached", "state_changed", "user_missing"}:
+        await handle_send(bot, event, "资源行动状态已变化，请重新尝试。")
+        return
 
     INTERACTIVE_ACTION_STATE.pop(uid, None)
     _set_cd(uid, "gather_cd_until", ia["cooldown_sec"])
-
-    decay_tip = f"\n当前收益系数：{int(decay * 100)}%" if decay < 1 else ""
-    if rewards:
-        tip = f"\n{extra_msg}" if extra_msg else ""
-        await handle_send(bot, event, f"✅ {action}成功！\n地点：{st['node_name']}\n获得：{_merge_reward_text(rewards)}{tip}{decay_tip}")
+    decay_tip = f"\n当前收益系数：{int(settlement['decay'] * 100)}%" if settlement["decay"] < 1 else ""
+    if settlement["rewards"]:
+        tip = f"\n{settlement['extra_msg']}" if settlement["extra_msg"] else ""
+        await handle_send(bot, event, f"✅ {action}成功！\n地点：{st['node_name']}\n获得：{_merge_reward_text(settlement['rewards'])}{tip}{decay_tip}")
     else:
         await handle_send(bot, event, f"✅ {action}完成，但这次没有收获。{decay_tip}")
-
 
 # =========================================
 # 战斗节点：真实战斗（已加每日次数+持久化CD）
