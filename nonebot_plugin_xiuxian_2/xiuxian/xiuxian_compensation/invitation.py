@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 from ..on_compat import on_command
@@ -8,19 +9,22 @@ from ..adapter_compat import Bot, Message, MessageEvent, GroupMessageEvent, Priv
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.json_store import load_json_file, save_json_file
 from ..xiuxian_utils.utils import check_user, send_msg_handler, handle_send, number_to, send_help_message
+from ..xiuxian_config import XiuConfig
+from ...paths import get_paths
 
 from .common import (
     DATA_PATH,
     sql_message,
     get_item_list,
     create_item_message,
-    send_reward_to_user,
 )
+from .invitation_reward_service import InvitationRewardClaimService
 
 INVITATION_DATA_PATH = DATA_PATH / "invitation_data"
 INVITATION_REWARDS_FILE = INVITATION_DATA_PATH / "invitation_rewards.json"
 INVITATION_RECORDS_FILE = INVITATION_DATA_PATH / "invitation_records.json"
 INVITATION_CLAIMED_FILE = INVITATION_DATA_PATH / "invitation_claimed.json"
+invitation_reward_service = InvitationRewardClaimService(get_paths().game_db)
 
 INVITATION_DATA_PATH.mkdir(parents=True, exist_ok=True)
 
@@ -61,10 +65,6 @@ def save_invitation_records(data):
 
 def load_claimed_records():
     return load_json(INVITATION_CLAIMED_FILE)
-
-
-def save_claimed_records(data):
-    save_json(INVITATION_CLAIMED_FILE, data)
 
 
 def get_user_invitation_count(inviter_id):
@@ -110,26 +110,6 @@ def get_inviter_id(user_id):
     return None
 
 
-def has_claimed_reward(user_id, threshold):
-    claimed = load_claimed_records()
-    return str(threshold) in claimed.get(str(user_id), [])
-
-
-def mark_reward_claimed(user_id, threshold):
-    claimed = load_claimed_records()
-
-    user_id = str(user_id)
-    threshold = str(threshold)
-
-    if user_id not in claimed:
-        claimed[user_id] = []
-
-    if threshold not in claimed[user_id]:
-        claimed[user_id].append(threshold)
-
-    save_claimed_records(claimed)
-
-
 invitation_use_cmd = on_command("邀请码", priority=5, block=True)
 invitation_check_cmd = on_command("邀请人", priority=5, block=True)
 invitation_info_cmd = on_command("我的邀请", priority=5, block=True)
@@ -139,6 +119,13 @@ invitation_help_cmd = on_command("邀请帮助", priority=7, block=True)
 
 invitation_set_reward_cmd = on_command("邀请奖励设置", permission=SUPERUSER, priority=5, block=True)
 invitation_admin_help_cmd = on_command("邀请管理", permission=SUPERUSER, priority=5, block=True)
+
+
+def _invitation_operation_id(event, user_id: str) -> str:
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    return f"invitation:claim:{user_id}:{event_id or time.time_ns()}"
 
 
 @invitation_use_cmd.handle(parameterless=[Cooldown(cd_time=0)])
@@ -227,7 +214,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_id = str(user_info["user_id"])
     count = get_user_invitation_count(user_id)
     rewards = load_invitation_rewards()
-    claimed = load_claimed_records().get(user_id, [])
+    claimed = {
+        str(value) for value in load_claimed_records().get(user_id, [])
+    } | {
+        str(value) for value in invitation_reward_service.claimed_thresholds(user_id)
+    }
 
     available = []
 
@@ -257,7 +248,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     user_id = str(user_info["user_id"])
     arg = args.extract_plain_text().strip()
 
-    count = get_user_invitation_count(user_id)
+    invitation_records = load_invitation_records()
+    invited_user_ids = invitation_records.get(user_id, [])
     rewards = load_invitation_rewards()
 
     if not rewards:
@@ -277,31 +269,24 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     else:
         thresholds = sorted([int(x) for x in rewards.keys()])
 
-    claimed_msgs = []
-
-    for threshold in thresholds:
-        threshold_str = str(threshold)
-
-        if threshold_str not in rewards:
-            continue
-
-        if count < threshold:
-            continue
-
-        if has_claimed_reward(user_id, threshold):
-            continue
-
-        reward_items = rewards[threshold_str]
-        send_reward_to_user(user_id, reward_items)
-        mark_reward_claimed(user_id, threshold)
-
-        claimed_msgs.append(
-            f"邀请{threshold}人奖励：{', '.join(create_item_message(reward_items))}"
-        )
-
-    if not claimed_msgs:
+    result = invitation_reward_service.claim(
+        operation_id=_invitation_operation_id(event, user_id),
+        user_id=user_id,
+        invited_user_ids=invited_user_ids,
+        rewards_by_threshold=rewards,
+        requested_thresholds=thresholds,
+        legacy_claimed_thresholds=load_claimed_records().get(user_id, []),
+        max_goods_num=XiuConfig().max_goods_num,
+    )
+    if not result.succeeded:
         await handle_send(bot, event, "没有可领取的邀请奖励")
         return
+
+    claimed_msgs = [
+        f"邀请{threshold}人奖励："
+        f"{', '.join(create_item_message(rewards[str(threshold)]))}"
+        for threshold in result.thresholds
+    ]
 
     await handle_send(
         bot,
