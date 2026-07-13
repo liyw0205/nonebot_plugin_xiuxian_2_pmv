@@ -77,6 +77,11 @@ from .close_mountain_service import SectCloseMountainService
 from .owner_inherit_service import SectOwnerInheritService
 from .shop_purchase_service import SectShopPurchaseService
 from .elixir_claim_service import SectElixirClaimService
+from .open_join_service import SectOpenJoinService
+from .close_join_service import SectCloseJoinService
+from .member_join_service import SectMemberJoinService
+from .mainbuff_learn_service import SectMainBuffLearnService
+from .secbuff_learn_service import SectSecBuffLearnService
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
@@ -86,6 +91,11 @@ sect_close_mountain_service = SectCloseMountainService(get_paths().game_db)
 sect_owner_inherit_service = SectOwnerInheritService(get_paths().game_db)
 sect_shop_purchase_service = SectShopPurchaseService(get_paths().game_db)
 sect_elixir_claim_service = SectElixirClaimService(get_paths().game_db)
+sect_open_join_service = SectOpenJoinService(get_paths().game_db)
+sect_close_join_service = SectCloseJoinService(get_paths().game_db)
+sect_member_join_service = SectMemberJoinService(get_paths().game_db)
+sect_mainbuff_learn_service = SectMainBuffLearnService(get_paths().game_db)
+sect_secbuff_learn_service = SectSecBuffLearnService(get_paths().game_db)
 config = get_config()
 SECT_RENAME_CARD_ID = 20026
 SECT_RENAME_CARD_NAME = "宗门易名符"
@@ -1012,8 +1022,25 @@ async def sect_mainbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessa
             # 获取逻辑
             materialscost = mainbuffgear * mainbuffconfig['学习资材消耗']
             if sect_info['sect_materials'] >= materialscost:
-                sql_message.update_sect_materials(sect_id, materialscost, 2)
-                sql_message.updata_user_main_buff(user_info['user_id'], mainbuffid)
+                result = sect_mainbuff_learn_service.learn(
+                    _sect_operation_id(event, "mainbuff_learn", mainbuffid),
+                    user_id,
+                    sect_id,
+                    mainbuffid,
+                    materialscost,
+                    expected_catalog=sect_info['mainbuff'],
+                )
+                if not result.applied:
+                    if result.status == "duplicate":
+                        msg = "本次宗门功法学习已经完成，请刷新功法信息。"
+                    elif result.status == "already_learned":
+                        msg = "道友请勿重复学习！"
+                    elif result.status == "materials_insufficient":
+                        msg = f"本次学习需要消耗{number_to(materialscost)}宗门资材，不满足条件！"
+                    else:
+                        msg = "宗门归属、职位、功法目录或资材已经变化，请刷新后重试。"
+                    await handle_send(bot, event, msg, md_type="宗门", k1="学习", v1="宗门功法学习", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
+                    await sect_mainbuff_learn.finish()
                 mainbuff, mainbuffmsg = get_main_info_msg(str(mainbuffid))
                 msg = f"本次学习消耗{number_to(materialscost)}宗门资材，成功学习到本宗{mainbufftype}功法：{mainbuff['name']}\n{mainbuffmsg}"
                 await handle_send(bot, event, msg, md_type="宗门", k1="学习", v1="宗门功法学习", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
@@ -1269,8 +1296,25 @@ async def sect_secbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             # 获取逻辑
             materialscost = secbuffgear * secbuffconfig['学习资材消耗']
             if sect_info['sect_materials'] >= materialscost:
-                sql_message.update_sect_materials(sect_id, materialscost, 2)
-                sql_message.updata_user_sec_buff(user_info['user_id'], secbuffid)
+                result = sect_secbuff_learn_service.learn(
+                    _sect_operation_id(event, "secbuff_learn", secbuffid),
+                    user_id,
+                    sect_id,
+                    secbuffid,
+                    materialscost,
+                    expected_catalog=sect_info['secbuff'],
+                )
+                if not result.applied:
+                    if result.status == "duplicate":
+                        msg = "本次宗门神通学习已经完成，请刷新神通信息。"
+                    elif result.status == "already_learned":
+                        msg = "道友请勿重复学习！"
+                    elif result.status == "materials_insufficient":
+                        msg = f"本次学习需要消耗{number_to(materialscost)}宗门资材，不满足条件！"
+                    else:
+                        msg = "宗门归属、职位、神通目录或资材已经变化，请刷新后重试。"
+                    await handle_send(bot, event, msg, md_type="宗门", k1="学习", v1="宗门神通学习", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
+                    await sect_secbuff_learn.finish()
                 secmsg = get_sec_msg(secbuff)
                 msg = f"本次学习消耗{number_to(materialscost)}宗门资材，成功学习到本宗{secbufftype}神通：{secbuff['name']}\n{secbuff['name']}：{secmsg}"
                 await handle_send(bot, event, msg, md_type="宗门", k1="学习", v1="宗门神通学习", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
@@ -2631,28 +2675,29 @@ async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await join_sect.finish()
     
-    # 检查宗门是否可以加入
-    can_join, reason = can_join_sect(target_sect_id)
-    if not can_join:
-        msg = f"宗门【{target_sect_name}】{reason}，无法加入！"
-        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
-        await join_sect.finish()
-    
-    # 检查人数上限
-    max_members = get_sect_member_limit(sql_message.get_sect_info(target_sect_id)['sect_scale'])
-    current_members = len(sql_message.get_all_users_by_sect_id(target_sect_id))
-    
-    if current_members >= max_members:
-        msg = f"该宗门人数已满（{current_members}/{max_members}），无法加入！"
-        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
-        await join_sect.finish()
-    
-    # 执行加入宗门
     owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "外门弟子"]
     owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 12
-    sql_message.update_usr_sect(user_info['user_id'], target_sect_id, owner_position)
-    
-    msg = f"欢迎{user_info['user_name']}道友加入【{target_sect_name}】！当前宗门人数：{current_members + 1}/{max_members}"
+    result = sect_member_join_service.join(
+        _sect_operation_id(event, "member_join", target_sect_id),
+        user_info['user_id'],
+        target_sect_id,
+        member_position=owner_position,
+    )
+    if result.applied:
+        msg = (
+            f"欢迎{user_info['user_name']}道友加入【{result.sect_name or target_sect_name}】！"
+            f"当前宗门人数：{result.member_count}/{result.member_limit}"
+        )
+    elif result.status == "already_in_sect":
+        msg = "道友已经加入其他宗门，无法重复加入！"
+    elif result.status == "sect_closed":
+        msg = f"宗门【{target_sect_name}】已封闭，无法加入！"
+    elif result.status == "join_closed":
+        msg = f"宗门【{target_sect_name}】已关闭加入，无法加入！"
+    elif result.status == "sect_full":
+        msg = f"该宗门人数已满（{result.member_count}/{result.member_limit}），无法加入！"
+    else:
+        msg = "加入宗门失败，宗门或修士状态已经变化，请稍后重试。"
     await handle_send(bot, event, msg, md_type="宗门", k1="宗门", v1="我的宗门", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
     await join_sect.finish()
 
@@ -2809,15 +2854,25 @@ async def sect_close_join_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_close_join.finish()
     
-    sect_position = user_info['sect_position']
     owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
     owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
-    
-    if sect_position == owner_position:
-        sql_message.update_sect_join_status(sect_id, 0)
+
+    result = sect_close_join_service.close(
+        _sect_operation_id(event, "close_join", sect_id),
+        user_info['user_id'],
+        owner_position=owner_position,
+        expected_sect_id=sect_id,
+    )
+    if result.applied:
         msg = "已关闭宗门加入，其他修士将无法申请加入本宗！"
-    else:
+    elif result.status == "already_closed":
+        msg = "宗门当前已经关闭加入。"
+    elif result.status == "sect_closed":
+        msg = "宗门已封闭，无需单独关闭加入。"
+    elif result.status == "not_owner":
         msg = "只有宗主可以关闭宗门加入！"
+    else:
+        msg = "关闭宗门加入失败，宗门或宗主状态已经变化。"
     
     await handle_send(bot, event, msg)
     await sect_close_join.finish()
@@ -2837,15 +2892,25 @@ async def sect_open_join_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_open_join.finish()
     
-    sect_position = user_info['sect_position']
     owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
     owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
-    
-    if sect_position == owner_position:
-        sql_message.update_sect_join_status(sect_id, 1)
+
+    result = sect_open_join_service.open(
+        _sect_operation_id(event, "open_join", sect_id),
+        user_info['user_id'],
+        owner_position=owner_position,
+        expected_sect_id=sect_id,
+    )
+    if result.applied:
         msg = "已开放宗门加入，其他修士可以申请加入本宗了！"
-    else:
+    elif result.status == "already_open":
+        msg = "宗门当前已经开放加入。"
+    elif result.status == "sect_closed":
+        msg = "宗门处于封闭状态，无法开放加入。"
+    elif result.status == "not_owner":
         msg = "只有宗主可以开放宗门加入！"
+    else:
+        msg = "开放宗门加入失败，宗门或宗主状态已经变化。"
     
     await handle_send(bot, event, msg)
     await sect_open_join.finish()
