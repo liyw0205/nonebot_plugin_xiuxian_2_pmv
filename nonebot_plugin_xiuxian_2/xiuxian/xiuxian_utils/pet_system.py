@@ -1409,7 +1409,8 @@ def _fallback_basic_skill(pet: dict):
     }
 
 
-def roll_basic_pet_skill(pet: dict, exclude_skill_ids: set[str] | None = None):
+def roll_basic_pet_skill(pet: dict, exclude_skill_ids: set[str] | None = None, rng=None):
+    rng = rng or random
     candidates = get_available_basic_skills(pet)
     if exclude_skill_ids:
         filtered = [
@@ -1437,7 +1438,7 @@ def roll_basic_pet_skill(pet: dict, exclude_skill_ids: set[str] | None = None):
         weight += max(0, stars - int(skill.get("min_stars", 1)))
         weights.append(max(1, weight))
 
-    return dict(random.choices(candidates, weights=weights, k=1)[0])
+    return dict(rng.choices(candidates, weights=weights, k=1)[0])
 
 
 def _exclusive_skill_roll_chance(pet: dict, override_chance: float | None = None):
@@ -1472,7 +1473,9 @@ def roll_pet_skill(
     include_exclusive: bool = False,
     exclude_skill_ids: set[str] | None = None,
     exclusive_chance: float | None = None,
+    rng=None,
 ):
+    rng = rng or random
     if include_exclusive:
         exclusive_candidates = get_available_exclusive_skills(pet)
         if exclude_skill_ids:
@@ -1483,14 +1486,14 @@ def roll_pet_skill(
             ]
 
         chance = _exclusive_skill_roll_chance(pet, override_chance=exclusive_chance)
-        if exclusive_candidates and random.random() < chance:
+        if exclusive_candidates and rng.random() < chance:
             weights = [max(1, int(skill.get("weight", 1))) for skill in exclusive_candidates]
-            return dict(random.choices(exclusive_candidates, weights=weights, k=1)[0])
+            return dict(rng.choices(exclusive_candidates, weights=weights, k=1)[0])
 
-    return roll_basic_pet_skill(pet, exclude_skill_ids=exclude_skill_ids)
+    return roll_basic_pet_skill(pet, exclude_skill_ids=exclude_skill_ids, rng=rng)
 
 
-def roll_replacement_pet_skill(pet: dict, exclusive_chance: float | None = None):
+def roll_replacement_pet_skill(pet: dict, exclusive_chance: float | None = None, rng=None):
     current_skill = pet.get("skill") or (pet.get("skills") or [{}])[0]
     exclude = set()
     if isinstance(current_skill, dict) and current_skill.get("skill_id"):
@@ -1500,6 +1503,7 @@ def roll_replacement_pet_skill(pet: dict, exclusive_chance: float | None = None)
         include_exclusive=True,
         exclude_skill_ids=exclude,
         exclusive_chance=exclusive_chance,
+        rng=rng,
     )
 
 
@@ -2279,16 +2283,16 @@ def _is_valid_breakthrough_material(pet: dict, requirement: dict | None):
     )
 
 
-def fuse_pet(user_id: str | int, material_tokens: list[str]):
+def prepare_pet_fusion(user_id: str | int, material_tokens: list[str], random_seed: str | None = None):
     data = get_pet_doc(user_id)
     main_pet = data.get("active")
     if not main_pet:
-        return False, "融合失败：当前没有出战宠物，请先使用【出战宠物 UID】设置主宠。", None, None
+        return False, "融合失败：当前没有出战宠物，请先使用【出战宠物 UID】设置主宠。", None, None, []
 
     max_stars = get_rarity_max_stars(main_pet.get("rarity", "常见"))
     current_stars = int(main_pet.get("stars", 1))
     if current_stars >= max_stars:
-        return False, f"{main_pet.get('form_name', main_pet.get('name', '宠物'))}已达到{main_pet.get('rarity', '')}稀有度上限（{format_stars(max_stars)}）。", main_pet, None
+        return False, f"{main_pet.get('form_name', main_pet.get('name', '宠物'))}已达到{main_pet.get('rarity', '')}稀有度上限（{format_stars(max_stars)}）。", main_pet, None, []
 
     if not requires_fusion_for_next_star(current_stars):
         return (
@@ -2296,6 +2300,7 @@ def fuse_pet(user_id: str | int, material_tokens: list[str]):
             f"融合失败：当前品阶为{format_stars(current_stars)}，尚未到四☆突破关口，请先通过【宠物喂食】提升☆。",
             main_pet,
             None,
+            [],
         )
 
     fusion_exp_need = exp_to_next_star(current_stars)
@@ -2306,6 +2311,7 @@ def fuse_pet(user_id: str | int, material_tokens: list[str]):
             f"融合失败：四☆突破经验不足（{current_exp} / {fusion_exp_need}），请先通过【宠物喂食】补足经验。",
             main_pet,
             None,
+            [],
         )
 
     need = fusion_need(current_stars)
@@ -2347,37 +2353,29 @@ def fuse_pet(user_id: str | int, material_tokens: list[str]):
             f"需要1只满★{breakthrough_requirement['rarity']}宠物"
         )
     if missing_msgs:
-        return False, "融合失败：\n" + "\n".join(missing_msgs), main_pet, None
+        return False, "融合失败：\n" + "\n".join(missing_msgs), main_pet, None, []
 
     consume_indexes = hit_indexes[:need]
     if breakthrough_index is not None:
         consume_indexes.append(breakthrough_index)
 
-    for idx in sorted(set(consume_indexes), reverse=True):
-        del data["bag"][idx]
-
     old_form = int(main_pet.get("form_index", 0))
-    main_pet["stars"] = current_stars + 1
-    main_pet["exp"] = max(0, current_exp - fusion_exp_need)
-    main_pet = _normalize_pet(main_pet)
+    updated_pet = _normalize_pet({**main_pet, "stars": current_stars + 1, "exp": max(0, current_exp - fusion_exp_need)})
     skill_offer = None
-    if int(main_pet.get("stars", 1)) % 5 == 0:
-        exclusive_chance = get_star_up_exclusive_chance(int(main_pet.get("stars", 1)))
+    if int(updated_pet.get("stars", 1)) % 5 == 0:
+        exclusive_chance = get_star_up_exclusive_chance(int(updated_pet.get("stars", 1)))
         skill_offer = {
-            "stars": int(main_pet.get("stars", 1)),
+            "stars": int(updated_pet.get("stars", 1)),
             "skill": roll_replacement_pet_skill(
-                main_pet,
+                updated_pet,
                 exclusive_chance=exclusive_chance,
+                rng=random.Random(str(random_seed)) if random_seed is not None else None,
             ),
         }
 
-    data["active"] = main_pet
-
-    save_pet_doc(user_id, data)
-
     form_msg = ""
-    if int(main_pet.get("form_index", 0)) != old_form:
-        form_msg = f"\n形态进化：{main_pet.get('form_name')}"
+    if int(updated_pet.get("form_index", 0)) != old_form:
+        form_msg = f"\n形态进化：{updated_pet.get('form_name')}"
 
     breakthrough_msg = ""
     if breakthrough_pet:
@@ -2386,7 +2384,14 @@ def fuse_pet(user_id: str | int, material_tokens: list[str]):
             f"【{breakthrough_pet.get('form_name', breakthrough_pet.get('name', '宠物'))}】"
         )
 
-    return True, f"融合成功：消耗四☆突破经验{fusion_exp_need}，{main_pet.get('name')}提升至{format_stars(main_pet.get('stars', 1))}。{form_msg}{breakthrough_msg}", main_pet, skill_offer
+    consumed = [data["bag"][idx] for idx in sorted(set(consume_indexes))]
+    return (
+        True,
+        f"融合成功：消耗四☆突破经验{fusion_exp_need}，{updated_pet.get('name')}提升至{format_stars(updated_pet.get('stars', 1))}。{form_msg}{breakthrough_msg}",
+        updated_pet,
+        skill_offer,
+        consumed,
+    )
 
 
 def replace_pet_skill(user_id: str | int, uid: str, skill: dict):

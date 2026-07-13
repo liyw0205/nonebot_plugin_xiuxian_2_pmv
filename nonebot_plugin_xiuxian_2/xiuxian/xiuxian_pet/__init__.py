@@ -31,7 +31,6 @@ from ..xiuxian_utils.pet_system import (
     feed_active_pet,
     format_pet_travel_time,
     format_stars,
-    fuse_pet,
     get_pet_travel_scenes,
     get_pet_travel_status,
     get_pet_doc,
@@ -49,6 +48,7 @@ from ..xiuxian_utils.pet_system import (
     remove_pet,
     replace_pet_skill,
     requires_fusion_for_next_star,
+    prepare_pet_fusion,
     reroll_pet_skill,
     set_active_pet,
     validate_pet_feed_item,
@@ -69,6 +69,7 @@ from .skill_replace_service import PetSkillReplaceService
 from .travel_start_service import PetTravelStartService
 from .hatch_service import PetHatchService
 from .release_service import PetReleaseService
+from .fusion_breakthrough_service import PetFusionBreakthroughService
 
 items = Items()
 sql_message = XiuxianDateManage()
@@ -78,6 +79,7 @@ pet_skill_replace_service = PetSkillReplaceService(get_paths().player_db)
 pet_travel_start_service = PetTravelStartService(get_paths().player_db)
 pet_hatch_service = PetHatchService(get_paths().game_db, get_paths().player_db)
 pet_release_service = PetReleaseService(get_paths().game_db, get_paths().player_db)
+pet_fusion_breakthrough_service = PetFusionBreakthroughService(get_paths().player_db)
 
 pet_help = on_command("宠物帮助", aliases={"宠物系统帮助"}, priority=10, block=True)
 pet_intro_help = on_command("宠物入门帮助", aliases={"宠物获取帮助", "宠物查看帮助"}, priority=10, block=True)
@@ -109,6 +111,19 @@ def _split_args(text: str):
     if not text:
         return []
     return [x for x in re.split(r"[\s,，、]+", text) if x]
+
+
+def _pet_transaction_snapshot(pet: dict, is_active: bool):
+    skill = pet.get("skill") or ((pet.get("skills") or [{}])[0])
+    return (
+        str(pet.get("uid", "")),
+        str(pet.get("pet_id", "")),
+        int(pet.get("stars", 1)),
+        int(pet.get("exp", 0)),
+        int(pet.get("total_exp", 0)),
+        str((skill or {}).get("skill_id", "")),
+        int(is_active),
+    )
 
 
 def _parse_feed_args(text: str):
@@ -1442,7 +1457,25 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "用法：宠物融合 本体UID [本体UID...] [破阶UID]\n默认以当前出战宠物作为主宠，UID顺序随意；仅用于当前品阶达到四个☆时突破为★。")
         return
 
-    ok, result_msg, pet, skill_offer = fuse_pet(str(user_info["user_id"]), tokens)
+    user_id = str(user_info["user_id"])
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns())
+    operation_id = f"pet-fusion-breakthrough:{event_id}:{user_id}"
+    ok, result_msg, pet, skill_offer, consumed = prepare_pet_fusion(user_id, tokens, operation_id)
+    if ok:
+        current = get_pet_doc(user_id).get("active")
+        result = pet_fusion_breakthrough_service.breakthrough(
+            operation_id,
+            user_id,
+            _pet_transaction_snapshot(current, True),
+            [_pet_transaction_snapshot(material, False) for material in consumed],
+            int(pet.get("stars", 1)),
+            int(pet.get("exp", 0)),
+            skill_offer,
+        )
+        if not result.succeeded:
+            result_msg = "融合失败：宠物状态已变化，请重试。"
+            pet = None
+            skill_offer = None
     has_skill_offer = False
     if ok and pet and skill_offer:
         skill_msg = _cache_skill_offer(str(user_info["user_id"]), pet, skill_offer)
