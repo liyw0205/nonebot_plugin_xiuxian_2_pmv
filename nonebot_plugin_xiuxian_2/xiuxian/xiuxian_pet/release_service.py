@@ -28,11 +28,21 @@ class PetReleaseService:
         self._player = Path(player)
         self._lock = lock or RLock()
 
-    def release(self, operation_id, user_id, uid, expected_exp, refund_item, refund, max_goods) -> PetReleaseResult:
+    def release(
+        self,
+        operation_id,
+        user_id,
+        uid,
+        expected_exp,
+        refund_item,
+        refund,
+        max_goods,
+        expected_is_active=True,
+    ) -> PetReleaseResult:
         return self.release_batch(
             operation_id,
             user_id,
-            [{"uid": uid, "total_exp": expected_exp, "is_active": 1}],
+            [{"uid": uid, "total_exp": expected_exp, "is_active": int(bool(expected_is_active))}],
             refund_item,
             "天地灵髓",
             "特殊道具",
@@ -112,6 +122,25 @@ class PetReleaseService:
                     conn.rollback()
                     return PetReleaseResult("active_pet")
 
+                active_uids = tuple(pet[0] for pet in pets if pet[2])
+                if active_uids:
+                    current_active = conn.execute(
+                        "SELECT uid FROM player_data.player_pet_item "
+                        "WHERE user_id=%s AND COALESCE(is_active,0)=1 ORDER BY uid",
+                        (user_id,),
+                    ).fetchall()
+                    meta = conn.execute(
+                        "SELECT active_uid FROM player_data.player_pet WHERE user_id=%s",
+                        (user_id,),
+                    ).fetchone()
+                    if (
+                        tuple(str(row[0]) for row in current_active) != active_uids
+                        or meta is None
+                        or str(meta[0] or "") != active_uids[0]
+                    ):
+                        conn.rollback()
+                        return PetReleaseResult("state_changed")
+
                 inventory = conn.execute(
                     "SELECT COALESCE(goods_num,0) FROM back WHERE user_id=%s AND goods_id=%s",
                     (user_id, refund_item),
@@ -127,11 +156,14 @@ class PetReleaseService:
                 if deleted != len(pets):
                     conn.rollback()
                     return PetReleaseResult("state_changed")
-                if allow_active and any(pet[2] for pet in pets):
-                    conn.execute(
-                        "UPDATE player_data.player_pet SET active_uid=NULL,active=NULL WHERE user_id=%s",
-                        (user_id,),
+                if active_uids:
+                    cleared = conn.execute(
+                        "UPDATE player_data.player_pet SET active_uid=NULL,active=NULL "
+                        "WHERE user_id=%s AND active_uid=%s",
+                        (user_id, active_uids[0]),
                     )
+                    if cleared.rowcount != 1:
+                        raise RuntimeError("active pet metadata changed")
                 if refund:
                     conn.execute(
                         "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num) VALUES (%s,%s,%s,%s,%s) "

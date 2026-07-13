@@ -1930,27 +1930,6 @@ def set_active_pet(user_id: str | int, uid: str):
     return True, f"已设置出战宠物：{pet.get('form_name', pet.get('name', '宠物'))}（UID:{pet.get('uid')}）", pet
 
 
-def remove_pet(user_id: str | int, token: str | None = None):
-    data = get_pet_doc(user_id)
-    removed = None
-
-    if not token:
-        removed = data.get("active")
-        data["active"] = None
-    else:
-        where, key, pet = find_pet_anywhere(data, token)
-        if where == "active":
-            removed = pet
-            data["active"] = None
-        elif where == "bag":
-            removed = pet
-            del data["bag"][key]
-
-    if removed:
-        save_pet_doc(user_id, data)
-    return removed
-
-
 def _pet_matches_release_keyword(pet: dict, keyword: str):
     keyword = str(keyword).strip()
     if not keyword:
@@ -1964,36 +1943,6 @@ def _pet_matches_release_keyword(pet: dict, keyword: str):
     if isinstance(forms, list):
         names.update(str(name) for name in forms)
     return keyword in names
-
-
-def remove_pets_by_keyword(user_id: str | int, keyword: str, include_active: bool = False):
-    data = get_pet_doc(user_id)
-    keyword = str(keyword).strip()
-    removed = []
-    skipped_active = False
-
-    if not keyword:
-        return removed, skipped_active
-
-    active = data.get("active")
-    if active and _pet_matches_release_keyword(active, keyword):
-        if include_active:
-            removed.append(active)
-            data["active"] = None
-        else:
-            skipped_active = True
-
-    kept_bag = []
-    for pet in data.get("bag", []):
-        if _pet_matches_release_keyword(pet, keyword):
-            removed.append(pet)
-        else:
-            kept_bag.append(pet)
-    data["bag"] = kept_bag
-
-    if removed:
-        save_pet_doc(user_id, data)
-    return removed, skipped_active
 
 
 def get_releasable_pets_by_keyword(user_id: str | int, keyword: str):
