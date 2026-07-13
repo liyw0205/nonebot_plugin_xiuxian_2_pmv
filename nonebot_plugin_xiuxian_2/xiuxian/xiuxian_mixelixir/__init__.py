@@ -31,10 +31,12 @@ from .mix_elixir_config import MIXELIXIRCONFIG
 from ...paths import get_paths
 from .settlement_service import MixelixirSettlementService
 from .harvest_service import MixelixirHarvestService
+from .recipe_service import MixelixirRecipeService
 
 sql_message = XiuxianDateManage()  # sql类
 mixelixir_settlement_service = MixelixirSettlementService(get_paths().game_db)
 mixelixir_harvest_service = MixelixirHarvestService(get_paths().game_db, get_paths().player_db)
+mixelixir_recipe_service = MixelixirRecipeService(get_paths().game_db)
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 items = Items()
 added_rank = added_ranks()
@@ -276,6 +278,40 @@ def remove_herbs_by_levels(herb_dict, levels_to_remove):
     return {k: v for k, v in herb_dict.items() if v.get("level") not in remove_levels}
 
 
+
+def _recipe_inventory_snapshot(user_back, goods_type):
+    return [
+        {"id": int(item["goods_id"]), "name": str(item["goods_name"]), "quantity": int(item["goods_num"])}
+        for item in user_back
+        if item.get("goods_type") == goods_type and int(item.get("goods_num", 0) or 0) > 0
+    ]
+
+
+def _saved_recipe(recipe, furnace_id, furnace_name):
+    material_specs = (
+        ("主药", "主药_num"),
+        ("药引", "药引_num"),
+        ("辅药", "辅药_num"),
+    )
+    materials = []
+    key_parts = []
+    for name_key, quantity_key in material_specs:
+        name = str(recipe.get(name_key, ""))
+        quantity = int(recipe.get(quantity_key, 0) or 0)
+        key_parts.append(f"{name_key}{name}{quantity}")
+        if quantity:
+            item_id, _ = items.get_data_by_item_name(name)
+            if not item_id:
+                raise ValueError(f"recipe material not found: {name}")
+            materials.append({"id": int(item_id), "name": name, "quantity": quantity})
+    reward = items.get_data_by_item_id(recipe["id"])
+    return {
+        "recipe_key": "".join(key_parts) + f"丹炉{furnace_name}",
+        "materials": materials,
+        "furnace": {"id": int(furnace_id), "name": str(furnace_name)},
+        "reward_id": int(recipe["id"]),
+        "reward_name": str(reward["name"]),
+    }
 @mix_elixir.handle(parameterless=[Cooldown(cd_time=10)])
 async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """炼丹,用来生成配方"""
@@ -350,7 +386,23 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="炼丹", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir.finish()
     else:
-        ldl_name = sorted(user_ldl_dict[user_id].items(), key=lambda x: x[0], reverse=False)[0][1]
+        furnace_id, ldl_name = sorted(user_ldl_dict[user_id].items(), key=lambda x: x[0], reverse=False)[0]
+        saved_recipes = [
+            _saved_recipe(recipe, furnace_id, ldl_name) for recipe in mix_elixir_msgs
+        ]
+        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        operation_id = f"mixelixir-recipe:{event_id}:{user_id}" if event_id else f"mixelixir-recipe:{user_id}:{time.time_ns()}"
+        saved = mixelixir_recipe_service.save(
+            operation_id,
+            user_id,
+            int(user_info.get("mixelixir_num", 0) or 0),
+            _recipe_inventory_snapshot(user_back, "药材"),
+            _recipe_inventory_snapshot(user_back, "炼丹炉"),
+            saved_recipes,
+        )
+        if not saved.succeeded:
+            await handle_send(bot, event, "背包或炼丹次数状态已变化，请重新生成丹方。")
+            await mix_elixir.finish()
         if not dan_name:
             title = "炼丹配方"
         else:
