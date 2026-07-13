@@ -1,6 +1,8 @@
 import random
+import time
 from datetime import datetime, timedelta
 from nonebot import get_bots, get_bot
+from ...paths import get_paths
 from ..on_compat import on_command
 from nonebot.params import CommandArg
 from ..adapter_compat import (
@@ -24,6 +26,7 @@ from ..xiuxian_utils.utils import (
 )
 from .riftconfig import get_rift_config
 from .jsondata import save_rift_data, read_rift_data
+from .entry_service import RiftEntryService
 from ..xiuxian_config import convert_rank
 from ..xiuxian_map import (
     get_player_current_position,
@@ -36,6 +39,7 @@ from .riftmake import (
 )
 
 sql_message = XiuxianDateManage()  # sql类
+rift_entry_service = RiftEntryService(get_paths().game_db)
 cache_help = {}
 group_rift = {}  # dict
 config = get_rift_config() # 获取秘境配置
@@ -401,17 +405,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await handle_send(bot, event, position_msg)
             await explore_rift.finish()
 
-        current_rift.l_user_id.append(user_id)
         rift_data = build_rift_data(current_rift)
+        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        entry = rift_entry_service.enter(f"rift-entry:{event_id or time.time_ns()}:{user_id}", user_id, GLOBAL_RIFT_KEY, rift_data, rift_data["time"])
+        if not entry.succeeded:
+            await handle_send(bot, event, "秘境进入状态已变化，请稍后重试。")
+            await explore_rift.finish()
+        current_rift.l_user_id.append(user_id)
         target_msg = ""
         target_nodes_msg = format_rift_target_nodes(current_rift)
         if target_nodes_msg:
             target_msg = f"\n秘境可探索地点：\n{target_nodes_msg}"
         msg = f"进入秘境：{current_rift.name}，探索需要花费时间：{current_rift.time}分钟！{target_msg}"
-
         save_rift_data(user_id, rift_data)
-        sql_message.do_work(user_id, 3, rift_data["time"])
-        update_statistics_value(user_id, "秘境次数")
         old_rift_info.save_rift(group_rift)
         await handle_send(bot, event, msg, md_type="秘境", k1="结算", v1="秘境结算", k2="加速", v2="道具使用 秘境加速券", k3="大加速", v3="道具使用 秘境大加速券", k4="钥匙", v4="道具使用 秘境钥匙")
         await explore_rift.finish()
@@ -451,18 +457,19 @@ async def use_rift_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 
         current_rift = check_msg_or_rift # 此时 check_msg_or_rift 是 Rift 对象
 
-        current_rift.l_user_id.append(user_id) # 添加用户到秘境参与者列表
         rift_data = build_rift_data(current_rift)
+        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        entry = rift_entry_service.enter(f"rift-ticket-entry:{event_id or time.time_ns()}:{user_id}", user_id, GLOBAL_RIFT_KEY, rift_data, rift_data["time"], item_id)
+        if not entry.succeeded:
+            await handle_send(bot, event, "秘藏令或秘境状态已变化，请稍后重试。")
+            return
+        current_rift.l_user_id.append(user_id)
         target_msg = ""
         target_nodes_msg = format_rift_target_nodes(current_rift)
         if target_nodes_msg:
             target_msg = f"\n秘藏令已绕过位置要求。\n秘境可探索地点：\n{target_nodes_msg}"
         msg = f"进入秘境：{current_rift.name}，探索需要花费时间：{current_rift.time}分钟！{target_msg}"
-
         save_rift_data(user_id, rift_data)
-        sql_message.do_work(user_id, 3, rift_data["time"])
-        sql_message.update_back_j(user_id, item_id) # 消耗道具
-        update_statistics_value(user_id, "秘境次数")
         old_rift_info.save_rift(group_rift)
         await handle_send(bot, event, msg, md_type="秘境", k1="结算", v1="秘境结算", k2="加速", v2="道具使用 秘境加速券", k3="大加速", v3="道具使用 秘境大加速券", k4="钥匙", v4="道具使用 秘境钥匙")
         return
