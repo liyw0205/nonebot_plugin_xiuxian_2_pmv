@@ -58,6 +58,14 @@ class SectTaskSettlementTests(unittest.TestCase):
         self.assertEqual(result.status, "stone_insufficient")
         self.assertEqual(self.state(), ((1000, 500, 2000, 0, 20), (50, 100, 200), ("accepted", 0, False), 0))
 
+    def test_task_snapshot_change_is_rejected(self) -> None:
+        result = self.service.settle_task(
+            "task-snapshot", "user", 1, "2026-07-11", "stone", 150, 300, 25,
+            "采购", {"type": 2},
+        )
+        self.assertEqual(result.status, "task_snapshot_changed")
+        self.assertEqual(self.state(), ((1000, 500, 2000, 0, 20), (50, 100, 200), ("accepted", 0, False), 0))
+
     def test_database_failure_rolls_back_assets_and_task(self) -> None:
         with db_backend.transaction(self.database) as conn:
             self.service._ensure_task_settlement_operations(conn)

@@ -32,12 +32,24 @@ def _md_cmd_link(text: str, cmd: str) -> str:
     return f"[{text}](mqqapi://aio/inlinecmd?command={quote(cmd)}&enter=false&reply=false)"
 
 
-def create_user_sect_task(user_id, sect_id=None):
+def create_user_sect_task(user_id, sect_id=None, operation_id=None, replace_existing=False,
+                          membership_service=None):
     tasklist = config["宗门任务"]
     if sect_id is None:
         user_info = sql_message.get_user_info_with_id(user_id) or {}
         sect_id = user_info.get("sect_id")
-    if sect_id:
+    if sect_id and membership_service is not None:
+        key = random.choice(list(tasklist))
+        claim = membership_service.claim_task(
+            operation_id, user_id, sect_id, sect_task_state_manager._period(),
+            key, tasklist[key], config["每日宗门任务次上限"], replace_existing,
+        )
+        if not claim.applied:
+            return None
+        task = {"任务名称": claim.task_key, "任务内容": dict(claim.task_data or {}),
+                "sect_id": claim.sect_id, "period": claim.period, "status": "accepted",
+                "progress": 0, "target": 1}
+    elif sect_id:
         task = sect_task_state_manager.accept_task(user_id, sect_id, tasklist)
     else:
         key = random.choices(list(tasklist))[0]
