@@ -5,6 +5,7 @@ except ImportError:
 
 import random
 import asyncio
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from ...paths import get_paths
@@ -25,10 +26,12 @@ from ..xiuxian_utils.utils import (
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.player_fight import Boss_fight
-from ..xiuxian_config import base_rank
+from ..xiuxian_config import XiuConfig, base_rank
+from .seed_purchase_service import SeedPurchaseService
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
+seed_purchase_service = SeedPurchaseService(get_paths().game_db)
 items = Items()
 
 MAP_FILE = get_paths().data / "地图.json"
@@ -1382,15 +1385,23 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, f"未找到种子【{seed_name}】")
         return
 
-    cost = SEED_CONFIG[seed_id]["price"] * num
-    if int(user_info.get("stone", 0)) < cost:
-        await handle_send(bot, event, f"灵石不足，需{number_to(cost)}。")
+    seed = SEED_CONFIG[seed_id]
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"map-seed-purchase:{uid}:{event_message_id or time.time_ns()}"
+    result = seed_purchase_service.purchase(
+        operation_id, uid, seed_id, seed["name"], num, seed["price"],
+        int(user_info.get("stone", 0)), XiuConfig().max_goods_num,
+    )
+    if result.status == "stone_insufficient":
+        await handle_send(bot, event, f"灵石不足，需{number_to(num * seed['price'])}。")
         return
-
-    sql_message.update_ls(uid, cost, 2)
-    sql_message.send_back(uid, seed_id, SEED_CONFIG[seed_id]["name"], "特殊物品", num, 1)
-    await handle_send(bot, event, f"购买成功：{SEED_CONFIG[seed_id]['name']} x{num}，花费{number_to(cost)}灵石。")
-
+    if result.status == "inventory_full":
+        await handle_send(bot, event, "背包物品已达上限，购买未完成。")
+        return
+    if result.status in {"state_changed", "user_missing"}:
+        await handle_send(bot, event, "账户状态已变化，请重新尝试。")
+        return
+    await handle_send(bot, event, f"购买成功：{seed['name']} x{result.quantity}，花费{number_to(result.cost)}灵石。")
 
 # =========================================
 # 采集逻辑（已加每日次数+持久化CD）
