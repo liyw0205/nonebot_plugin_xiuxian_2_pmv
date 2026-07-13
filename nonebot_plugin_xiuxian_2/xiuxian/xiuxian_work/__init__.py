@@ -31,9 +31,11 @@ from pathlib import Path
 from ...paths import get_paths
 from .settlement_service import WorkSettlementService
 from .claim_service import WorkClaimService
+from .item_use_service import WorkItemUseService
 
 work_settlement_service = WorkSettlementService(get_paths().game_db)
 work_claim_service = WorkClaimService(get_paths().game_db)
+work_item_use_service = WorkItemUseService(get_paths().game_db)
 sql_message = XiuxianDateManage()  # sql类
 items = Items()
 count = 5  # 每日刷新次数
@@ -620,9 +622,30 @@ async def use_work_order(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     
     status, work_data = get_user_work_status(user_id)
     if status in (1, 2):
-        sql_message.update_back_j(user_id, item_id, 1)
+        event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        operation_id = f"work-item-accelerate:{user_id}:{event_message_id or time.time_ns()}"
+        item_count = sql_message.goods_num(user_id, item_id)
+        result = work_item_use_service.accelerate(
+            operation_id,
+            user_id,
+            item_id,
+            item_count,
+            {
+                "type": work_data["type"],
+                "create_time": work_data["create_time"],
+                "scheduled_time": work_data["scheduled_time"],
+            },
+            "1970-01-01 00:00:00",
+        )
+        if result.status == "item_missing":
+            await handle_send(bot, event, "背包中的悬赏令数量不足。")
+            return
+        if result.status in {"state_changed", "user_missing", "operation_conflict"}:
+            await handle_send(bot, event, "悬赏或道具状态已变化，请重新查看后再试。")
+            return
         await handle_send(bot, event, "悬赏令燃起灵光，当前悬赏立即进入结算。")
-        await settle_work(bot, event, user_id, work_data)
+        _, current_work = get_user_work_status(user_id)
+        await settle_work(bot, event, user_id, current_work)
         return
 
     if status == 3:
@@ -651,11 +674,10 @@ async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMes
         await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="悬赏令帮助", v3="悬赏令帮助")
         return
     
-    # 生成新悬赏令
-    work_msg = workhandle().do_work(0, level=user_info['level'], exp=user_info['exp'], user_id=user_id)
-    
-    # 读取当前悬赏令数据
-    work_data = readf(user_id)
+    # 随机结果先固定，事务成功后再同步旧 JSON 读取投影。
+    work_msg, work_data = workhandle().do_work(
+        0, level=user_info['level'], exp=user_info['exp'], user_id=user_id, persist=False
+    )
     if not work_data:
         msg = "悬赏令数据异常，请重新尝试！"
         await handle_send(bot, event, msg, md_type="悬赏令", k1="接取", v1="悬赏令接取", k2="刷新", v2="悬赏令确认刷新", k3="帮助", v3="悬赏令帮助")
@@ -666,7 +688,25 @@ async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMes
     for task_name, task_data in work_data["tasks"].items():
         task_data["award"] = int(task_data["award"] * reward_multiplier)
     
-    # 保存修改后的数据
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"work-item-capture:{user_id}:{event_message_id or time.time_ns()}"
+    item_count = sql_message.goods_num(user_id, item_id)
+    user_cd = sql_message.get_user_cd(user_id)
+    result = work_item_use_service.capture(
+        operation_id,
+        user_id,
+        item_id,
+        item_count,
+        int(user_cd["type"] or 0),
+        work_data,
+    )
+    if result.status == "item_missing":
+        await handle_send(bot, event, "背包中的追捕令数量不足。")
+        return
+    if result.status in {"state_changed", "user_missing", "operation_conflict"}:
+        await handle_send(bot, event, "悬赏或道具状态已变化，请重新查看后再试。")
+        return
+    work_data = dict(result.result_snapshot["offer"])
     savef(user_id, work_data)
     
     # 更新work_msg显示数据
@@ -686,8 +726,6 @@ async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMes
     msg = generate_work_message(updated_work_msg, sql_message.get_work_num(user_id))
     msg2 = f"※使用追捕令效果：所有悬赏修为奖励提升{reward_multiplier}倍！"
     
-    # 消耗道具
-    sql_message.update_back_j(user_id, item_id)
     await handle_send(bot, event, msg2)
     await send_work_message(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3", k4="刷新", v4="悬赏令确认刷新")
     return

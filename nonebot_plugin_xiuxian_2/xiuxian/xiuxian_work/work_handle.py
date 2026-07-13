@@ -14,7 +14,7 @@ sql_message = XiuxianDateManage()  # sql类
 items = Items()
 
 class workhandle(XiuxianJsonDate):
-    def do_work(self, key, work_list=None, name=None, level="江湖好手", exp=None, user_id=None):
+    def do_work(self, key, work_list=None, name=None, level="江湖好手", exp=None, user_id=None, persist=True):
         """
         悬赏令核心处理逻辑(纯JSON版本)
         
@@ -69,10 +69,10 @@ class workhandle(XiuxianJsonDate):
                     "fail_msg": v[5]
                 }
             
-            # 保存到JSON文件
-            savef(user_id, work_data)
+            if persist:
+                savef(user_id, work_data)
             
-            return get_work_list
+            return (get_work_list, work_data) if not persist else get_work_list
 
         elif key == 1:  # 获取任务剩余时间
             # 读取任务数据
