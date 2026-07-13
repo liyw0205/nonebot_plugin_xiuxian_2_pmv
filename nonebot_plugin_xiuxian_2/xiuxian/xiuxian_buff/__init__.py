@@ -48,6 +48,7 @@ from ..xiuxian_training.training_limit import training_limit
 from ..xiuxian_Illusion import IllusionData
 from ..xiuxian_dungeon import dungeon_manager
 from .two_exp_cd import two_exp_cd
+from .blessed_spot_service import BlessedSpotService
 from nonebot.permission import SUPERUSER
 from .partner import (  # noqa: F401
     get_mentor_team_attack_buffs,
@@ -65,6 +66,15 @@ cache_help = {}
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
+blessed_spot_service = BlessedSpotService(get_paths().game_db, get_paths().player_db)
+
+def _blessed_spot_operation_id(event, action, user_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"blessed-spot:{event_id}:{action}:{user_id}"
+    return f"blessed-spot:{action}:{user_id}:{datetime.now().timestamp()}"
 BLESSEDSPOTCOST = 3500000 # 洞天福地购买消耗
 PLAYERSDATA = get_paths().players
 
@@ -135,14 +145,21 @@ async def blessed_spot_creat_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
         await blessed_spot_creat.finish()
     else:
-        sql_message.update_ls(user_id, BLESSEDSPOTCOST, 2)
-        sql_message.update_user_blessed_spot_flag(user_id)
-        mix_elixir_info = get_player_info(user_id, "mix_elixir_info")
-        mix_elixir_info['收取时间'] = str(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-        save_player_info(user_id, mix_elixir_info, 'mix_elixir_info')
-        msg = f"恭喜道友拥有了自己的洞天福地，请收集聚灵旗来提升洞天福地的等级吧~\n"
-        msg += f"默认名称为：{user_info['user_name']}道友的家"
-        sql_message.update_user_blessed_spot_name(user_id, f"{user_info['user_name']}道友的家")
+        default_name = f"{user_info['user_name']}道友的家"
+        harvest_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        result = blessed_spot_service.open(
+            _blessed_spot_operation_id(event, "open", user_id),
+            user_id,
+            BLESSEDSPOTCOST,
+            default_name,
+            harvest_time,
+        )
+        if not result.succeeded:
+            msg = "洞天福地状态或灵石数量已变化，请重新查看后再试。"
+            await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
+            await blessed_spot_creat.finish()
+        msg = "恭喜道友拥有了自己的洞天福地，请收集聚灵旗来提升洞天福地的等级吧~\n"
+        msg += f"默认名称为：{result.name}"
         await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
         await blessed_spot_creat.finish()
 
