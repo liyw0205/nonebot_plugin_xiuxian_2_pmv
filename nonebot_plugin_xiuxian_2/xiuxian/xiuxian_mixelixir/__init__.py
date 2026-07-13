@@ -30,12 +30,16 @@ from datetime import datetime
 from .mix_elixir_config import MIXELIXIRCONFIG
 from ...paths import get_paths
 from .harvest_service import MixelixirHarvestService
+from .harvest_level_upgrade_service import MixelixirHarvestLevelUpgradeService
 from .recipe_service import MixelixirRecipeService
 from .refine_cost_service import MixelixirRefineCostService
 from .refine_reward_service import MixelixirRefineRewardService
 
 sql_message = XiuxianDateManage()  # sql类
 mixelixir_harvest_service = MixelixirHarvestService(get_paths().game_db, get_paths().player_db)
+mixelixir_harvest_level_upgrade_service = MixelixirHarvestLevelUpgradeService(
+    get_paths().game_db, get_paths().player_db
+)
 mixelixir_recipe_service = MixelixirRecipeService(get_paths().game_db)
 mixelixir_refine_cost_service = MixelixirRefineCostService(get_paths().game_db)
 mixelixir_refine_reward_service = MixelixirRefineRewardService(get_paths().game_db, get_paths().player_db)
@@ -94,14 +98,26 @@ async def mix_elixir_sqdj_up_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir_sqdj_up.finish()
     next_level_cost = SQDJCONFIG[str(now_level + 1)]['level_up_cost']
-    if mix_elixir_info['炼丹经验'] < next_level_cost:
-        msg = f"下一个收取等级所需要的炼丹经验为{next_level_cost}点，道友请炼制更多的丹药再来升级吧~"
+    if int(user_info['stone']) < next_level_cost:
+        msg = f"下一个收取等级需要灵石{next_level_cost}枚，道友当前灵石不足。"
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir_sqdj_up.finish()
-    mix_elixir_info['炼丹经验'] = mix_elixir_info['炼丹经验'] - next_level_cost
-    mix_elixir_info['收取等级'] = now_level + 1
-    save_player_info(user_id, mix_elixir_info, 'mix_elixir_info')
-    msg = f"道友的收取等级目前为：{mix_elixir_info['收取等级']}级，可以使灵田收获的药材增加{mix_elixir_info['收取等级']}个！"
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"mixelixir-harvest-level:{event_id}:{user_id}" if event_id else f"mixelixir-harvest-level:{user_id}:{time.time_ns()}"
+    upgrade = mixelixir_harvest_level_upgrade_service.upgrade(
+        operation_id,
+        user_id,
+        now_level,
+        mix_elixir_info['炼丹经验'],
+        user_info['stone'],
+        now_level + 1,
+        next_level_cost,
+    )
+    if not upgrade.succeeded:
+        msg = "灵石或炼丹状态已变化，本次收取等级升级未结算，请重新查看后再试。"
+        await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级收取等级", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
+        await mix_elixir_sqdj_up.finish()
+    msg = f"道友消耗灵石{upgrade.cost}枚，收取等级目前为：{upgrade.level}级，可以使灵田收获的药材增加{upgrade.level}个！"
     await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
     await mix_elixir_sqdj_up.finish()
 
