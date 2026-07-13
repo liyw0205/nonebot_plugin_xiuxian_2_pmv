@@ -1,21 +1,27 @@
 import random
+import time
 from pathlib import Path
-from datetime import datetime
 
+from ...paths import get_paths
 from ..on_compat import on_command
 from nonebot.log import logger
 from nonebot.params import CommandArg
 
 from ..adapter_compat import Bot, GroupMessageEvent, PrivateMessageEvent, Message
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_utils.json_store import load_json_file, save_json_file
+from ..xiuxian_utils.json_store import load_json_file
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
+from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.utils import check_user, handle_send, number_to, send_help_message
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from .stone_limit import stone_limit
+from .xiangyuan_settlement_service import XiangyuanSettlementService
 
 items = Items()
 sql_message = XiuxianDateManage()
+xiangyuan_settlement_service = XiangyuanSettlementService(
+    get_paths().game_db, get_paths().player_db
+)
 
 give_xiangyuan = on_command("送仙缘", priority=5, block=True)
 get_xiangyuan = on_command("抢仙缘", priority=5, block=True)
@@ -38,12 +44,16 @@ XIANGYUAN_RECEIVE_LIMIT = 3        # 每日抢仙缘次数限制
 def get_xiangyuan_data(group_id):
     """获取群仙缘数据"""
     file_path = XIANGYUAN_DATA_PATH / f"xiangyuan_{group_id}.json"
-    return load_json_file(file_path, {"gifts": {}, "last_id": 1}, dict)
+    legacy_data = load_json_file(file_path, {"gifts": {}, "last_id": 1}, dict)
+    return xiangyuan_settlement_service.get_group(group_id, legacy_data=legacy_data)
 
-def save_xiangyuan_data(group_id, data):
-    """保存群仙缘数据"""
-    file_path = XIANGYUAN_DATA_PATH / f"xiangyuan_{group_id}.json"
-    save_json_file(file_path, data)
+def _xiangyuan_operation_id(event, action, user_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"xiangyuan:{event_id}:{action}:{user_id}"
+    return f"xiangyuan:{action}:{user_id}:{time.time_ns()}"
 
 def get_user_name(user_id):
     """根据用户 ID 获取道号"""
@@ -244,35 +254,27 @@ async def give_xiangyuan_(bot: Bot, event: GroupMessageEvent, args: Message = Co
             await handle_send(bot, event, msg)
             await give_xiangyuan.finish()
     
-    # 扣除资源
-    if stone_amount > 0:
-        sql_message.update_ls(user_id, stone_amount, 2)
-    
-    for item in items_list:
-        sql_message.update_back_j(user_id, item['goods_id'], num=item['quantity'])
-    
-    # 创建仙缘记录
-    xiangyuan_data = get_xiangyuan_data(group_id)
-    xiangyuan_id = xiangyuan_data["last_id"]
-    xiangyuan_data["last_id"] += 1
-    
-    xiangyuan_data["gifts"][str(xiangyuan_id)] = {
-        "id": xiangyuan_id,
-        "giver_id": user_id,
-        "giver_name": user_info['user_name'],
-        "stone_amount": stone_amount,
-        "remaining_stone": stone_amount,
-        "items": items_list,  # 新增物品列表
-        "receiver_count": receiver_count,
-        "received": 0,
-        "receivers": [],
-        "create_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
-    
-    save_xiangyuan_data(group_id, xiangyuan_data)
-    
-    # 更新送仙缘次数
-    stone_limit.update_xiangyuan_send_count(user_id)
+    legacy_path = XIANGYUAN_DATA_PATH / f"xiangyuan_{group_id}.json"
+    legacy_data = load_json_file(legacy_path, {"gifts": {}, "last_id": 1}, dict)
+    result = xiangyuan_settlement_service.create(
+        _xiangyuan_operation_id(event, "create", user_id),
+        group_id, user_id, user_info["user_name"], stone_amount, items_list,
+        receiver_count, XIANGYUAN_SEND_LIMIT, legacy_data=legacy_data,
+    )
+    if result.status == "limit_reached":
+        msg = f"道友今日已送{result.send_count}次仙缘，达到上限 ({XIANGYUAN_SEND_LIMIT}次/日)，明日再来吧！"
+        await handle_send(bot, event, msg)
+        await give_xiangyuan.finish()
+    if result.status == "stone_insufficient":
+        await handle_send(bot, event, "道友的灵石不够，请重新输入！")
+        await give_xiangyuan.finish()
+    if result.status == "item_insufficient":
+        await handle_send(bot, event, "可交易物品数量已发生变化，请重新输入！")
+        await give_xiangyuan.finish()
+    if not result.succeeded:
+        await handle_send(bot, event, "仙缘创建状态已变化，请重新操作！")
+        await give_xiangyuan.finish()
+    xiangyuan_id = result.gift_id
     
     # 构建消息
     msg = f"✨【仙缘 #{xiangyuan_id}】✨\n"
@@ -283,7 +285,7 @@ async def give_xiangyuan_(bot: Bot, event: GroupMessageEvent, args: Message = Co
         item_desc = ", ".join([f"{i['name']}x{i['quantity']}" for i in items_list])
         msg += f"包含物品：{item_desc}\n"
     msg += f"可领取人数：{receiver_count}人\n"
-    msg += f"今日剩余送仙缘次数：{XIANGYUAN_SEND_LIMIT - send_count - 1}次\n"
+    msg += f"今日剩余送仙缘次数：{XIANGYUAN_SEND_LIMIT - result.send_count}次\n"
     msg += "\n同群道友可发送【抢仙缘】获取仙缘"
     
     await handle_send(bot, event, msg, md_type="修仙", k1="抢仙缘", v1="抢仙缘", k2="仙缘列表", v2="仙缘列表", k3="帮助", v3="仙缘帮助")
@@ -338,48 +340,31 @@ async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
     # 计算灵石奖励
     reward = calculate_xiangyuan_reward(gift, is_last_receiver)
     
-    # 处理物品奖励 (先到先得，直到发完)
-    received_items = []
-    if gift.get("items"):
-        for item in gift["items"]:
-            if item["quantity"] > 0:
-                # 发放物品
-                sql_message.send_back(
-                    user_id,
-                    item["goods_id"],
-                    item["name"],
-                    item["type"],
-                    1,
-                    1
-                )
-                item["quantity"] -= 1
-                received_items.append(f"{item['name']}x1")
-    
-    if reward <= 0 and not received_items:
-        msg = f"仙缘 #{gift_id}\n（由【{gift['giver_name']}】送出）\n"
-        msg += "可惜仙缘池已空，道友来晚了一步！"
-        await handle_send(bot, event, msg)
+    item_ids = [item["goods_id"] for item in gift.get("items", ()) if item["quantity"] > 0]
+    legacy_path = XIANGYUAN_DATA_PATH / f"xiangyuan_{group_id}.json"
+    legacy_data = load_json_file(legacy_path, {"gifts": {}, "last_id": 1}, dict)
+    result = xiangyuan_settlement_service.claim(
+        _xiangyuan_operation_id(event, "claim", user_id), group_id, gift_id,
+        user_id, reward, item_ids, XIANGYUAN_RECEIVE_LIMIT,
+        XiuConfig().max_goods_num, legacy_data=legacy_data,
+    )
+    if result.status == "limit_reached":
+        await handle_send(bot, event, f"道友今日已抢{result.receive_count}次仙缘，达到上限 ({XIANGYUAN_RECEIVE_LIMIT}次/日)，明日再来吧！")
         await get_xiangyuan.finish()
-    
-    # 更新仙缘数据
-    gift["received"] += 1
-    gift["remaining_stone"] -= reward
-    gift["receivers"].append(user_id)
-    
-    # 保存更新后的仙缘数据
-    xiangyuan_data["gifts"][gift_id] = gift
-    save_xiangyuan_data(group_id, xiangyuan_data)
-    
-    # 发放灵石奖励
-    if reward > 0:
-        sql_message.update_ls(user_id, reward, 1)
-    
-    # 更新抢仙缘次数
-    stone_limit.update_xiangyuan_receive_count(user_id)
+    if result.status == "inventory_full":
+        await handle_send(bot, event, "背包空间不足，无法领取仙缘！")
+        await get_xiangyuan.finish()
+    if not result.succeeded:
+        await handle_send(bot, event, "这份仙缘已被抢先领取，请重新尝试！")
+        await get_xiangyuan.finish()
+    reward = result.stone
+    received_items = [f"{name}x{amount}" for _, name, amount in result.items]
+    is_last_receiver = result.received >= result.receiver_count
+    is_single_gift = result.receiver_count == 1
     
     # 构建消息
     msg = f"【仙缘 {gift_id}】\n"
-    msg += f"（由【{gift['giver_name']}】送出）\n"
+    msg += f"（由【{result.giver_name}】送出）\n"
     
     if reward > 0:
         if is_single_gift:
@@ -389,15 +374,15 @@ async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
             msg += f"🏆 最后机会！\n"
             msg += f"获得剩余全部：{number_to(reward)}\n"
         else:
-            remaining_receivers = gift["receiver_count"] - gift["received"]
+            remaining_receivers = result.receiver_count - result.received
             msg += f"💰 获得灵石：{number_to(reward)}\n"
             msg += f"剩余可领取：{remaining_receivers}人\n"
-            msg += f"池中剩余：{number_to(gift['remaining_stone'])}灵石\n"
+            msg += f"池中剩余：{number_to(result.remaining_stone)}灵石\n"
     
     if received_items:
         msg += f"🎁 获得物品：{', '.join(received_items)}\n"
     
-    msg += f"今日剩余抢仙缘次数：{XIANGYUAN_RECEIVE_LIMIT - receive_count - 1}次"
+    msg += f"今日剩余抢仙缘次数：{XIANGYUAN_RECEIVE_LIMIT - result.receive_count}次"
     
     await handle_send(bot, event, msg, md_type="修仙", k1="送仙缘", v1="送仙缘", k2="仙缘列表", v2="仙缘列表", k3="帮助", v3="仙缘帮助")
     await get_xiangyuan.finish()
@@ -510,77 +495,9 @@ async def reset_xiangyuan_daily():
 
 async def clear_all_xiangyuan():
     """清空所有群的仙缘（超级管理员）"""
-    
-    # 获取所有仙缘数据文件
-    xiangyuan_files = list(XIANGYUAN_DATA_PATH.glob("xiangyuan_*.json"))
-    
-    if not xiangyuan_files:
+    total_groups, total_gifts, total_refund_stone, total_refund_items = (
+        xiangyuan_settlement_service.clear_all(XiuConfig().max_goods_num)
+    )
+    if total_gifts == 0:
         return "当前没有仙缘数据可清空！"
-    
-    total_groups = 0
-    total_gifts = 0
-    total_refund_stone = 0
-    total_refund_items = 0
-    
-    # 遍历所有群的仙缘文件
-    for file_path in xiangyuan_files:
-        group_id = file_path.stem.split("_")[1]
-        
-        try:
-            # 读取该群的仙缘数据
-            xiangyuan_data = load_json_file(
-                file_path,
-                {"gifts": {}, "last_id": 1},
-                dict,
-            )
-            
-            if not xiangyuan_data.get("gifts"):
-                continue
-            
-            # 退还未领取的资源
-            group_refund_stone = 0
-            group_refund_items = 0
-            group_gifts = len(xiangyuan_data["gifts"])
-            
-            for gift_id, gift in xiangyuan_data["gifts"].items():
-                giver_id = gift["giver_id"]
-                
-                if gift.get("remaining_stone", 0) > 0:
-                    sql_message.update_ls(giver_id, gift["remaining_stone"], 1)
-                    group_refund_stone += gift["remaining_stone"]
-                    total_refund_stone += gift["remaining_stone"]
-                    logger.info(f"清空仙缘：已退还群{group_id}用户{giver_id}灵石{number_to(gift['remaining_stone'])}")
-
-                if gift.get("items"):
-                    for item in gift["items"]:
-                        if item.get("quantity", 0) > 0:
-                            sql_message.send_back(
-                                giver_id,
-                                item["goods_id"],
-                                item["name"],
-                                item["type"],
-                                item["quantity"],
-                                1
-                            )
-                            group_refund_items += item["quantity"]
-                            total_refund_items += item["quantity"]
-                            logger.info(f"清空仙缘：已退还群{group_id}用户{giver_id}物品{item['name']}x{item['quantity']}")
-            
-            # 清空该群的仙缘数据
-            xiangyuan_data["gifts"] = {}
-            xiangyuan_data["last_id"] = 1  # 重置 ID 计数器
-            
-            # 保存清空后的数据
-            save_json_file(file_path, xiangyuan_data)
-            
-            total_groups += 1
-            total_gifts += group_gifts
-            
-            if group_refund_stone > 0 or group_refund_items > 0:
-                logger.info(f"已清空群 {group_id} 的仙缘，退还灵石{number_to(group_refund_stone)}，物品{group_refund_items}个")
-            
-        except Exception as e:
-            logger.error(f"清空群 {group_id} 仙缘时出错：{str(e)}")
-            continue
-    
     return f"已清空{total_groups}个群{total_gifts}个记录，退还灵石{number_to(total_refund_stone)}，物品{total_refund_items}个"
