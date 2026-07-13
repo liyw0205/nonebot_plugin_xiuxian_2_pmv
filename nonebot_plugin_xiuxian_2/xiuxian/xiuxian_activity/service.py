@@ -59,10 +59,12 @@ from .activity_pass import *
 from .activity_progress import *
 from .point_shop_service import ActivityPointShopPurchaseService
 from .task_claim_service import ActivityTaskClaimService
+from .sign_settlement_service import ActivitySignSettlementService
 
 
 point_shop_purchase_service = ActivityPointShopPurchaseService(DB_PATH, get_paths().game_db)
 activity_task_claim_service = ActivityTaskClaimService(DB_PATH, get_paths().game_db)
+activity_sign_settlement_service = ActivitySignSettlementService(DB_PATH, get_paths().game_db)
 
 
 def _reward_by_day(config: dict, day_index: int) -> dict:
@@ -1733,7 +1735,7 @@ def _finish_sign_log(user_id: str, sign_date: str, status: str, message: str):
         conn.close()
 
 
-def claim_sign(user_id: str) -> tuple[bool, str]:
+def claim_sign(user_id: str, operation_id: str | None = None) -> tuple[bool, str]:
     cfg = load_config()
     runtime = activity_runtime_state(cfg)
     if not runtime.get("ok"):
@@ -1770,47 +1772,18 @@ def claim_sign(user_id: str) -> tuple[bool, str]:
         except Exception as e:
             return False, f"活动奖励配置错误：{e}"
 
-        cur.execute(
-            """
-            INSERT INTO activity_sign_log (
-                user_id, sign_date, day_index, reward, milestone_reward,
-                reward_status, create_time
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """,
-            (uid, today, sign_days, daily_reward_text, milestone_reward_text, "pending", ts),
-        )
-        cur.execute(
-            """
-            INSERT INTO activity_user (
-                user_id, sign_days, last_sign_date, total_sign_days, create_time, update_time
-            )
-            VALUES (%s, %s, %s, %s, %s, %s)
-            ON CONFLICT(user_id) DO UPDATE SET
-                sign_days = excluded.sign_days,
-                last_sign_date = excluded.last_sign_date,
-                total_sign_days = excluded.total_sign_days,
-                update_time = excluded.update_time
-            """,
-            (uid, sign_days, today, total_sign_days, ts, ts),
-        )
-        conn.commit()
-    except db_backend.IntegrityError:
-        conn.rollback()
-        return False, "今日已经领取过活动签到"
-    except Exception:
-        conn.rollback()
-        raise
     finally:
         conn.close()
 
-    try:
-        daily_msg = send_reward_items(uid, daily_reward_items)
-        milestone_msg = send_reward_items(uid, milestone_reward_items)
-    except Exception as e:
-        logger.warning(f"活动签到发奖失败 user_id={uid}: {e}")
-        _finish_sign_log(uid, today, "failed", str(e))
-        return False, f"签到已记录，奖励发放失败：{e}"
+    result = activity_sign_settlement_service.settle(
+        operation_id or f"activity-sign:{uid}:{time.time_ns()}", uid, today,
+        current_sign_days, current_total_sign_days, daily_reward_items,
+        milestone_reward_items, XiuConfig().max_goods_num,
+        daily_reward_text, milestone_reward_text,
+    )
+    if not result.succeeded:
+        return False, {"already_signed":"今日已经领取过活动签到","inventory_full":"背包空间不足，奖励未领取","user_missing":"角色不存在","state_changed":"签到状态已变化，请重试","operation_conflict":"签到请求冲突，请重新发送"}.get(result.status,"活动签到失败")
+    daily_msg, milestone_msg = [], []
 
     reply_mode = _sign_reply_mode(cfg)
     lines = [
@@ -1840,7 +1813,6 @@ def claim_sign(user_id: str) -> tuple[bool, str]:
         if milestone_reward_text or milestone_reward.get("name"):
             title = str(milestone_reward.get("name") or f"累计{sign_days}天奖励")
             log_lines.append(_format_reward_result(title, milestone_reward_text, milestone_msg))
-    _finish_sign_log(uid, today, "success", "\n".join(log_lines))
     return True, "\n".join(lines)
 
 
