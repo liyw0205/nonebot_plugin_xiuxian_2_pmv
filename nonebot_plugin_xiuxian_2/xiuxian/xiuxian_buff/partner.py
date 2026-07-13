@@ -30,6 +30,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
 )
 from .mentor_exp_cd import mentor_exp_cd
 from .partner_cultivation_service import PartnerCultivationService
+from .mentor_graduation_service import MentorGraduationService
 from .partner_breakthrough_service import PartnerBreakthroughService
 from .partner_storage import (
     PLAYERSDATA,
@@ -62,6 +63,7 @@ sql_message = XiuxianDateManage()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
 partner_cultivation_service = PartnerCultivationService(get_paths().game_db, get_paths().player_db)
+mentor_graduation_service = MentorGraduationService(get_paths().game_db, get_paths().player_db)
 partner_breakthrough_service = PartnerBreakthroughService(get_paths().game_db, get_paths().player_db)
 two_exp_limit = 3
 mentor_config = XiuConfig()
@@ -2018,7 +2020,6 @@ async def mentor_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     await mentor_rank.finish()
 
 
-@unbind_mentor.handle(parameterless=[Cooldown(cd_time=0)])
 async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """解除师徒关系 / 逐出师门 / 出师"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -2075,16 +2076,29 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     mentor_info = sql_message.get_user_real_info(mentor_id)
     mentor_name = mentor_info["user_name"] if mentor_info else str(mentor_id)
     if is_wujie_or_above(user_info["level"]):
-        reward_lines, title_lines = _grant_graduation_rewards(mentor_id, user_id)
-        _remove_mentor_relation(mentor_id, user_id)
-        _set_pair_rebind_cooldown(user_id, mentor_id, MENTOR_GRADUATE_PAIR_REBIND_COOLDOWN_DAYS)
-        _record_mentor_event(
-            mentor_id,
-            user_id,
-            "graduate",
-            f"徒弟{user_info['user_name']}修至无界境出师",
-            f"从师父{mentor_name}门下出师",
+        mentor_stats = player_data_manager.get_fields(mentor_id, "statistics") or {}
+        mentor_titles = [MENTOR_TITLE_IDS["mentor_graduate"]]
+        if safe_int(mentor_stats.get("培养出师徒弟"), 0) + 1 >= 5:
+            mentor_titles.append(MENTOR_TITLE_IDS["mentor_graduate_5"])
+        settlement = mentor_graduation_service.apply(
+            _relation_operation_id(event, "graduate", mentor_id, user_id), mentor_id, user_id,
+            expected_mentor_stone=mentor_info["stone"], expected_apprentice_stone=user_info["stone"],
+            apprentice_reward=MENTOR_GRADUATE_APPRENTICE_STONE_REWARD,
+            mentor_reward=MENTOR_GRADUATE_MENTOR_STONE_REWARD,
+            cooldown_days=MENTOR_GRADUATE_PAIR_REBIND_COOLDOWN_DAYS,
+            history_limit=MENTOR_HISTORY_LIMIT,
+            mentor_desc=f"徒弟{user_info['user_name']}修至无界境出师",
+            apprentice_desc=f"从师父{mentor_name}门下出师",
+            apprentice_title_ids=[MENTOR_TITLE_IDS["graduate"]], mentor_title_ids=mentor_titles,
         )
+        if not settlement.succeeded:
+            await handle_send(bot, event, "师徒状态发生变化，本次出师未结算，请重试。", **buttons)
+            await unbind_mentor.finish()
+        reward_lines = [
+            f"徒弟获得灵石{number_to(settlement.apprentice_stone)}",
+            f"师父获得灵石{number_to(settlement.mentor_stone)}",
+        ]
+        title_lines = ["出师称号奖励已发放"]
         extra_lines = reward_lines + title_lines
         extra_msg = "\n" + "\n".join(extra_lines) if extra_lines else ""
         msg = (
@@ -2116,19 +2130,6 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await unbind_mentor.finish()
 
 
-@mentor_transmission.handle(parameterless=[Cooldown(cd_time=0)])
-async def mentor_transmission_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """师徒传功"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, mentor_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙")
-        await mentor_transmission.finish()
-
-    mentor_id = str(mentor_info["user_id"])
-    apprentices = get_valid_apprentices(mentor_id)
-    target_id = _resolve_user_id_from_args(args)
-    buttons = _build_mentor_help_buttons()
 
     if not target_id:
         if len(apprentices) == 1:
