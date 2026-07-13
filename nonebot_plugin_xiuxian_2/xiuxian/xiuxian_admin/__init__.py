@@ -66,6 +66,7 @@ from .root_change_service import AdminRootChangeService
 from .exp_adjustment_service import AdminExpAdjustmentService
 from .stone_adjustment_service import AdminStoneAdjustmentService
 from .item_grant_service import AdminItemGrantService
+from .item_destroy_service import AdminItemDestroyService
 from . import command_controls as _command_controls  # noqa: F401
 from . import empty_fallback as _empty_fallback  # noqa: F401
 from . import event_debug as _event_debug  # noqa: F401
@@ -78,6 +79,7 @@ admin_root_change_service = AdminRootChangeService(get_paths().game_db)
 admin_exp_adjustment_service = AdminExpAdjustmentService(get_paths().game_db)
 admin_stone_adjustment_service = AdminStoneAdjustmentService(get_paths().game_db)
 admin_item_grant_service = AdminItemGrantService(get_paths().game_db)
+admin_item_destroy_service = AdminItemDestroyService(get_paths().game_db)
 
 
 def _admin_operation_id(event, action: str, user_id: str) -> str:
@@ -969,21 +971,28 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
                 await handle_send(bot, event, f"玩家 {target} 没有 {item_info['name']}！")
                 await hmll.finish()
 
-            deduct = min(quantity, have)
-            sql_message.update_back_j(
+            result = admin_item_destroy_service.destroy(
+                _admin_operation_id(event, "item-destroy", user_id),
+                str(get_user_id(event) or "unknown"),
                 user_id,
                 goods_id,
-                num=deduct,
-                log_context=_admin_economy_context(
-                    event,
-                    "admin_item_cost",
-                    item_id=goods_id,
-                    item_name=item_info["name"],
-                    target_name=target,
-                ),
+                item_info["name"],
+                item_info.get("type", ""),
+                quantity,
+                int(have),
+                target_name=target,
             )
-            msg = f"成功从 {target} 扣除 {item_info['name']} x{deduct}"
-            if deduct < quantity:
+            if result.status == "state_changed":
+                msg = "玩家背包状态已变化，请重新执行指令"
+            elif result.status == "operation_conflict":
+                msg = "本次管理员操作与已记录事件冲突"
+            elif result.status == "user_missing":
+                msg = f"玩家 {target} 已不存在！"
+            elif result.status == "item_missing":
+                msg = f"玩家 {target} 没有 {item_info['name']}！"
+            else:
+                msg = f"成功从 {target} 扣除 {item_info['name']} x{result.removed_quantity}"
+            if result.succeeded and result.removed_quantity < quantity:
                 msg += "（数量不足，已按实际可扣执行）"
             await handle_send(bot, event, msg)
             await hmll.finish()
@@ -1013,21 +1022,28 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await handle_send(bot, event, f"您没有 {item_info['name']}！")
             await hmll.finish()
 
-        deduct = min(quantity, have)
-        sql_message.update_back_j(
+        result = admin_item_destroy_service.destroy(
+            _admin_operation_id(event, "item-destroy", self_user_id),
+            str(get_user_id(event) or "unknown"),
             self_user_id,
             goods_id,
-            num=deduct,
-            log_context=_admin_economy_context(
-                event,
-                "admin_item_cost",
-                item_id=goods_id,
-                item_name=item_info["name"],
-                target="self",
-            ),
+            item_info["name"],
+            item_info.get("type", ""),
+            quantity,
+            int(have),
+            target_name="self",
         )
-        msg = f"成功从您这里扣除 {item_info['name']} x{deduct}"
-        if deduct < quantity:
+        if result.status == "state_changed":
+            msg = "您的背包状态已变化，请重新执行指令"
+        elif result.status == "operation_conflict":
+            msg = "本次管理员操作与已记录事件冲突"
+        elif result.status == "user_missing":
+            msg = "您的修仙数据已不存在！"
+        elif result.status == "item_missing":
+            msg = f"您没有 {item_info['name']}！"
+        else:
+            msg = f"成功从您这里扣除 {item_info['name']} x{result.removed_quantity}"
+        if result.succeeded and result.removed_quantity < quantity:
             msg += "（数量不足，已按实际可扣执行）"
         await handle_send(bot, event, msg)
         await hmll.finish()
