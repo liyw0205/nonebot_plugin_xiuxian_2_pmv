@@ -1,3 +1,4 @@
+import copy
 import re
 import time
 from urllib.parse import quote
@@ -24,6 +25,7 @@ from ..xiuxian_utils.pet_system import (
     calc_feed_exp,
     calc_pet_release_refund,
     can_add_pets,
+    create_pet_instance,
     prepare_pet_travel_completion,
     exp_to_next_star,
     feed_active_pet,
@@ -35,15 +37,19 @@ from ..xiuxian_utils.pet_system import (
     get_pet_doc,
     get_pet_bag_rows,
     get_pet_total_count,
+    get_pet_travel_scene_key,
     grant_pet,
     grant_pet_egg_pity_rewards,
+    PET_TRAVEL_ITEM_POOLS,
+    roll_egg_pity_rarity,
+    roll_pet_template_by_rarity,
+    _put_pet_into_doc,
     remove_pets_by_keyword,
     remove_pet,
     replace_pet_skill,
     requires_fusion_for_next_star,
     reroll_pet_skill,
     set_active_pet,
-    start_pet_travel,
     validate_pet_feed_item,
 )
 from ..xiuxian_utils.utils import (
@@ -59,12 +65,16 @@ from ...paths import get_paths
 from .travel_claim_service import PetTravelClaimService
 from .feed_service import PetFeedService
 from .skill_replace_service import PetSkillReplaceService
+from .travel_start_service import PetTravelStartService
+from .hatch_service import PetHatchService
 
 items = Items()
 sql_message = XiuxianDateManage()
 pet_travel_claim_service = PetTravelClaimService(get_paths().game_db, get_paths().player_db)
 pet_feed_service = PetFeedService(get_paths().game_db, get_paths().player_db)
 pet_skill_replace_service = PetSkillReplaceService(get_paths().player_db)
+pet_travel_start_service = PetTravelStartService(get_paths().player_db)
+pet_hatch_service = PetHatchService(get_paths().game_db, get_paths().player_db)
 
 pet_help = on_command("宠物帮助", aliases={"宠物系统帮助"}, priority=10, block=True)
 pet_intro_help = on_command("宠物入门帮助", aliases={"宠物获取帮助", "宠物查看帮助"}, priority=10, block=True)
@@ -758,8 +768,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     user_id = str(user_info["user_id"])
-    ok, result_msg, travel, pet = start_pet_travel(user_id, scene, duration)
-    if not ok:
+    data = get_pet_doc(user_id)
+    pet = data.get("active")
+    scene_key = get_pet_travel_scene_key(scene)
+    if data.get("travel") or not pet or not scene_key:
+        result_msg = "已有宠物正在游历，请先领取游历收获。" if data.get("travel") else "当前没有可派遣的出战宠物。"
         await handle_send(
             bot,
             event,
@@ -773,6 +786,27 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             v3="宠物游历帮助",
         )
         return
+
+    now = int(time.time())
+    travel = {
+        "pet_uid": str(pet.get("uid", "")),
+        "pet_name": str(pet.get("form_name", pet.get("name", "未知宠物"))),
+        "pet_rarity": str(pet.get("rarity", "常见")),
+        "pet_stars": int(pet.get("stars", 1)),
+        "scene": scene_key,
+        "scene_name": PET_TRAVEL_ITEM_POOLS[scene_key]["name"],
+        "start_at": now,
+        "end_at": now + duration * 3600,
+        "duration_hours": duration,
+    }
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    started = pet_travel_start_service.start(
+        f"pet-travel-start:{event_id or time.time_ns()}:{user_id}", user_id, pet["uid"], data.get("travel"), travel
+    )
+    if not started.succeeded:
+        await handle_send(bot, event, "宠物游历状态已变化，请重新查询后再试。")
+        return
+    result_msg = "派遣成功。"
 
     await handle_send(
         bot,
@@ -1035,34 +1069,29 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         )
         return
 
-    pets = []
-    error_msg = ""
-    success_cost = 0
-    try:
-        for _ in range(count):
-            pet, location = grant_pet(user_id)
-            pets.append((pet, location))
-            success_cost += EGG_COST
-    except Exception as e:
-        error_msg = str(e)
-
-    if not pets:
-        if error_msg:
-            await handle_send(bot, event, f"砸蛋失败：{error_msg}")
-            return
-        await handle_send(bot, event, "砸蛋失败：未能生成宠物。")
-        return
-
+    working = copy.deepcopy(data)
+    original_uids = {str(p.get("uid")) for p in ([working.get("active")] + working.get("bag", [])) if p}
+    pets = [_put_pet_into_doc(working, create_pet_instance()) for _ in range(count)]
     pity_rewards = []
-    pity_count = 0
-    no_mythic_count = 0
+    pity_count = int(working.get("egg_pity_count", 0)) + count
+    no_mythic_count = int(working.get("egg_pity_no_mythic_count", 0))
+    while pity_count >= EGG_PITY_THRESHOLD:
+        pity_count -= EGG_PITY_THRESHOLD
+        rarity, forced = roll_egg_pity_rarity(no_mythic_count)
+        pet, location = _put_pet_into_doc(working, create_pet_instance(roll_pet_template_by_rarity(rarity)))
+        no_mythic_count = 0 if rarity == "神话" else no_mythic_count + 1
+        pity_rewards.append({"pet": pet, "location": location, "rarity": rarity, "forced_mythic": forced})
+    new_rows = [(p, str(p.get("uid")) == str((working.get("active") or {}).get("uid", ""))) for p in ([working.get("active")] + working.get("bag", [])) if p and str(p.get("uid")) not in original_uids]
+    expected_meta = [str((data.get("active") or {}).get("uid", "")), int(data.get("egg_pity_count", 0)), int(data.get("egg_pity_no_mythic_count", 0)), data.get("travel")]
+    updated_meta = [str((working.get("active") or {}).get("uid", "")), pity_count, no_mythic_count]
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    hatched = pet_hatch_service.hatch(f"pet-hatch:{event_id or time.time_ns()}:{user_id}", user_id, int(user_info.get("stone", 0)), total_cost, expected_meta, new_rows, updated_meta, PET_BAG_LIMIT)
+    if not hatched.succeeded:
+        await handle_send(bot, event, "砸蛋状态已变化，请重新查询灵石和宠物背包后再试。")
+        return
+    success_cost = total_cost
+    error_msg = ""
     pity_error = ""
-    try:
-        pity_rewards, pity_count, no_mythic_count = grant_pet_egg_pity_rewards(user_id, len(pets))
-    except Exception as e:
-        pity_error = str(e)
-
-    sql_message.update_ls(user_id, success_cost, 2)
 
     if len(pets) == 1 and not error_msg:
         pet, location = pets[0]
