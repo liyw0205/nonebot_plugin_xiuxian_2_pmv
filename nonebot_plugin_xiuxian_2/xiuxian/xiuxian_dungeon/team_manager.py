@@ -1,6 +1,5 @@
 import json
 import asyncio
-from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from nonebot import Bot
@@ -102,56 +101,6 @@ def get_team_info(team_id: str) -> Optional[Dict]:
     if team_info:
         team_info = _normalize_team_record(team_info)
     return team_info
-
-
-def create_team(team_name: str, leader_id: str, group_id: int) -> str:
-    """
-    创建新队伍。
-    :param team_name: 队伍名称。
-    :param leader_id: 队长QQ号（字符串）。
-    :param group_id: 创建队伍的群号。
-    :return: 新创建队伍的ID字符串。
-    """
-    # 生成队伍ID，以group_id和时间戳组合，确保唯一性
-    team_id = f"{group_id}_{int(datetime.now().timestamp())}"
-
-    team_info = {
-        "team_id": team_id,
-        "team_name": team_name,
-        "group_id": str(group_id), # group_id也存为字符串
-        "leader": leader_id,
-        "members": [leader_id], # 成员列表作为JSON字符串存储
-        "create_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        "max_members": 4,  # 默认最大4人
-        "description": ""
-    }
-
-    save_team(team_info) # 保存到数据库
-
-    return team_id
-
-
-def add_member_to_team(team_id: str, user_id: str) -> bool:
-    """
-    添加成员到队伍。
-    :param team_id: 队伍ID。
-    :param user_id: 要加入的成员QQ号（字符串）。
-    :return: True如果成功，False否则。
-    """
-    team = get_team_info(team_id)
-    if not team:
-        return False
-
-    if user_id in team['members']:
-        return False
-
-    if len(team['members']) >= team['max_members']:
-        return False
-
-    team['members'].append(user_id)
-    save_team(team) # 更新到数据库
-
-    return True
 
 
 def remove_member_from_team(team_id: str, user_id: str) -> bool:

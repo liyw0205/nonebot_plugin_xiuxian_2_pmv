@@ -30,7 +30,6 @@ from ..xiuxian_utils.data_source import jsondata
 
 from .dungeon_manager import DungeonManager
 from .team_manager import (
-    create_team, add_member_to_team,
     remove_member_from_team, disband_team, get_user_team,
     get_team_info, team_invite_cache, expire_team_invite,
     load_teams, save_team
@@ -58,6 +57,7 @@ from .session_service import DungeonSessionService
 from .purchase_service import DungeonPurchaseService
 from .explore_event_service import DungeonExploreEventService
 from .battle_progress_service import DungeonBattleProgressService
+from .team_transaction_service import DungeonTeamTransactionService
 from ...paths import get_paths
 
 sql_message = XiuxianDateManage()
@@ -67,6 +67,7 @@ dungeon_session_service = DungeonSessionService(get_paths().player_db)
 dungeon_purchase_service = DungeonPurchaseService(get_paths().game_db)
 dungeon_explore_event_service = DungeonExploreEventService(get_paths().game_db, get_paths().player_db)
 dungeon_battle_progress_service = DungeonBattleProgressService(get_paths().game_db, get_paths().player_db)
+dungeon_team_transaction_service = DungeonTeamTransactionService(get_paths().player_db)
 DUNGEON_SHOP = {
     1999: {"name": "渡厄丹", "cost": 100000},
     20012: {"name": "秘境加速券", "cost": 500000},
@@ -255,7 +256,23 @@ async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
     if not team_name:
         team_name = f"{user_info['user_name']}的队伍"
 
-    team_id = create_team(team_name, user_id, group_id)
+    event_id = getattr(event, "message_id", None)
+    operation_id = f"dungeon-team-create:{event_id}:{user_id}" if event_id else f"dungeon-team-create:{time.time_ns()}:{user_id}"
+    team_id = f"{group_id}_{operation_id.rsplit(':', 2)[-2]}"
+    result = dungeon_team_transaction_service.create(
+        operation_id, team_id, team_name, user_id, group_id,
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    )
+    if result.status not in {"applied", "duplicate"}:
+        messages = {
+            "user_missing": "未找到道友数据，创建队伍失败！",
+            "user_has_team": "你已经在一个队伍中了，请先退出当前队伍！",
+            "session_active": "副本探索会话进行中，无法创建队伍！",
+            "state_changed": "队伍状态已变化，请稍后重试。",
+        }
+        await handle_send(bot, event, messages.get(result.status, "创建队伍失败！"), md_type="team", k1="队伍帮助", v1="队伍帮助")
+        await create_team_cmd.finish()
+    team_id = result.team_id
 
     msg = f"🎉 队伍【{team_name}】创建成功！\n队伍ID：{team_id}\n👑 队长：{user_info['user_name']}\n📢 使用【邀请组队 道号】来邀请其他人加入！"
     await handle_send(bot, event, msg, md_type="team", k1="邀请组队", v1="邀请组队", k2="查看队伍", v2="查看队伍", k3="队伍帮助", v3="队伍帮助")
@@ -343,6 +360,10 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
         'invite_id': invite_id,
         'group_id': event.group_id
     }
+    dungeon_team_transaction_service.record_invite(
+        invite_id, team_id, user_id, target_user_id, event.group_id,
+        team_invite_cache[target_user_id]['timestamp'] + 60,
+    )
 
     asyncio.create_task(expire_team_invite(target_user_id, invite_id, bot, event))
 
@@ -417,9 +438,14 @@ async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
         del team_invite_cache[user_id]
         await agree_team_cmd.finish()
 
-    success = add_member_to_team(team_id, user_id)
+    event_id = getattr(event, "message_id", None)
+    operation_id = f"dungeon-team-join:{event_id}:{user_id}" if event_id else f"dungeon-team-join:{time.time_ns()}:{user_id}"
+    join_result = dungeon_team_transaction_service.join(
+        operation_id, invite_data['invite_id'], team_id, inviter_id, user_id,
+        invite_group_id, datetime.now().timestamp(),
+    )
 
-    if success:
+    if join_result.status in {"applied", "duplicate"}:
         cd_info = get_team_cd_info(user_id)
         if int(cd_info.get("had_first_join", 0)) == 0:
             set_first_join_flag(user_id)
@@ -431,10 +457,10 @@ async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
         msg = build_invite_response_message(
             TeamInviteResponseResult(
                 "joined",
-                team_name=team_info['team_name'],
+                team_name=join_result.team_name or team_info['team_name'],
                 leader_name=inviter_info['user_name'],
-                member_count=len(team_info['members']),
-                max_members=team_info['max_members'],
+                member_count=join_result.member_count or len(team_info['members']) + 1,
+                max_members=join_result.max_members or team_info['max_members'],
             )
         )
         await handle_send(bot, event, msg, md_type="team", k1="查看队伍", v1="查看队伍", k2="副本信息", v2="副本信息", k3="队伍帮助", v3="队伍帮助")
@@ -449,7 +475,15 @@ async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
         except Exception as e:
             logger.warning(f"通知队长失败: {e}")
     else:
-        msg = build_invite_response_message(TeamInviteResponseResult("join_failed"))
+        status_results = {
+            "team_disbanded": TeamInviteResponseResult("team_disbanded"),
+            "user_has_team": TeamInviteResponseResult("user_has_team"),
+            "team_full": TeamInviteResponseResult("team_full"),
+        }
+        if join_result.status in {"invite_invalid", "user_missing", "session_active", "state_changed"}:
+            msg = "邀请、成员或副本会话状态已变化，加入队伍失败！"
+        else:
+            msg = build_invite_response_message(status_results.get(join_result.status, TeamInviteResponseResult("join_failed")))
         await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
 
     await agree_team_cmd.finish()
