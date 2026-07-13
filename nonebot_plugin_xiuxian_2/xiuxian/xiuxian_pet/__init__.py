@@ -50,7 +50,6 @@ from ..xiuxian_utils.pet_system import (
     requires_fusion_for_next_star,
     prepare_pet_fusion,
     prepare_pet_skill_reroll,
-    set_active_pet,
     validate_pet_feed_item,
 )
 from ..xiuxian_utils.utils import (
@@ -71,6 +70,7 @@ from .hatch_service import PetHatchService
 from .release_service import PetReleaseService
 from .fusion_breakthrough_service import PetFusionBreakthroughService
 from .skill_reroll_service import PetSkillRerollService
+from .active_switch_service import PetActiveSwitchService
 
 items = Items()
 sql_message = XiuxianDateManage()
@@ -82,6 +82,7 @@ pet_hatch_service = PetHatchService(get_paths().game_db, get_paths().player_db)
 pet_release_service = PetReleaseService(get_paths().game_db, get_paths().player_db)
 pet_fusion_breakthrough_service = PetFusionBreakthroughService(get_paths().player_db)
 pet_skill_reroll_service = PetSkillRerollService(get_paths().game_db, get_paths().player_db)
+pet_active_switch_service = PetActiveSwitchService(get_paths().player_db)
 
 pet_help = on_command("宠物帮助", aliases={"宠物系统帮助"}, priority=10, block=True)
 pet_intro_help = on_command("宠物入门帮助", aliases={"宠物获取帮助", "宠物查看帮助"}, priority=10, block=True)
@@ -1207,7 +1208,37 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "用法：出战宠物 宠物UID")
         return
 
-    _, result_msg, _ = set_active_pet(str(user_info["user_id"]), uid)
+    user_id = str(user_info["user_id"])
+    data = get_pet_doc(user_id)
+    active = data.get("active") or {}
+    target = next(
+        (pet for pet in [data.get("active"), *data.get("bag", [])] if pet and str(pet.get("uid")) == uid),
+        None,
+    )
+    travel_pet_uid = str((data.get("travel") or {}).get("pet_uid", ""))
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns())
+    result = pet_active_switch_service.switch(
+        f"pet-active-switch:{event_id}:{user_id}",
+        user_id,
+        active.get("uid", ""),
+        uid,
+        travel_pet_uid,
+    )
+    if result.succeeded:
+        pet_name = (target or {}).get("form_name", (target or {}).get("name", "宠物"))
+        result_msg = (
+            f"{pet_name}已在出战。"
+            if result.status == "already_active"
+            else f"已设置出战宠物：{pet_name}（UID:{result.active_uid}）"
+        )
+    else:
+        messages = {
+            "pet_missing": "未找到该宠物UID。",
+            "pet_traveling": "游历中的宠物无法出战。",
+            "state_changed": "宠物状态已变化，请重试。",
+            "operation_conflict": "本次出战请求与已处理记录冲突，请重新操作。",
+        }
+        result_msg = messages.get(result.status, "宠物出战切换失败，请重试。")
     await handle_send(
         bot,
         event,
