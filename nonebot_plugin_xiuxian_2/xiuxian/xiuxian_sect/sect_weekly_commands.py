@@ -1,17 +1,26 @@
+import time
+
 from nonebot.params import CommandArg
 
+from ...paths import get_paths
 from ..adapter_compat import Bot, GroupMessageEvent, Message, PrivateMessageEvent
 from ..on_compat import on_command
+from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.lay_out import Cooldown, assign_bot
-from ..xiuxian_utils.reward_service import safe_grant_reward
 from ..xiuxian_utils.utils import check_user, handle_send, number_to
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from .sect_weekly import sect_weekly_goal_manager
+from .sect_weekly_reward_service import SectWeeklyRewardClaimService
 
 
 items = Items()
 sql_message = XiuxianDateManage()
+sect_weekly_reward_service = SectWeeklyRewardClaimService(
+    get_paths().game_db,
+    get_paths().player_db,
+    sql_message.lock,
+)
 
 sect_weekly = on_command("宗门周常", priority=7, block=True)
 sect_weekly_claim = on_command("领取宗门周常", priority=7, block=True)
@@ -45,6 +54,38 @@ def _build_sect_weekly_status(goal: dict, user_id: str) -> str:
     if goal.get("completed"):
         return "可领取"
     return "进行中"
+
+
+def _sect_weekly_operation_id(event, user_id: str, goal_key: str) -> str:
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"sect-weekly:{event_id}:{user_id}:{goal_key}"
+    return f"sect-weekly:{user_id}:{goal_key}:{time.time_ns()}"
+
+
+def _prepare_claim_goals(goals: list[dict]) -> list[dict]:
+    prepared = []
+    for goal in goals:
+        reward = dict(goal["rewards"])
+        reward_items = []
+        for item in reward.get("items", []) or []:
+            item_id = int(item.get("id") or item.get("goods_id"))
+            item_info = items.get_data_by_item_id(item_id)
+            if not item_info:
+                raise ValueError(f"宗门周常奖励物品不存在：{item_id}")
+            reward_items.append(
+                {
+                    **item,
+                    "id": item_id,
+                    "name": item_info["name"],
+                    "type": item_info["type"],
+                }
+            )
+        reward["items"] = reward_items
+        prepared.append({**goal, "rewards": reward})
+    return prepared
 
 
 @sect_weekly.handle(parameterless=[Cooldown(cd_time=0)])
@@ -184,26 +225,30 @@ async def sect_weekly_claim_(
         await sect_weekly_claim.finish()
 
     week_key = sect_weekly_goal_manager.current_week_key()
-    reward_lines = []
-    for goal in claimable:
-        if not sect_weekly_goal_manager.mark_claimed(sect_id, user_id, goal["key"]):
-            continue
-        reward_result = safe_grant_reward(
-            user_id,
-            goal["rewards"],
-            "sect_weekly",
-            meta={
-                "sect_id": sect_id,
-                "action": "claim_weekly_goal",
-                "detail": {"goal_key": goal["key"], "week_key": week_key},
-            },
+    goal_scope = claimable[0]["key"] if len(claimable) == 1 else "all"
+    result = sect_weekly_reward_service.claim(
+        _sect_weekly_operation_id(event, user_id, goal_scope),
+        user_id,
+        sect_id,
+        week_key,
+        _prepare_claim_goals(claimable),
+        XiuConfig().max_goods_num,
+    )
+    status_messages = {
+        "not_completed": "宗门周常目标尚未完成或状态已变化。",
+        "already_claimed": "宗门周常奖励已经领取。",
+        "inventory_full": "背包物品已达上限，宗门周常奖励尚未领取。",
+        "sect_changed": "宗门归属已变化，宗门周常奖励尚未领取。",
+        "sect_missing": "宗门状态异常，宗门周常奖励尚未领取。",
+        "user_missing": "未找到道友数据，宗门周常奖励尚未领取。",
+        "operation_conflict": "领取请求状态冲突，请重新发送命令。",
+    }
+    if result.succeeded:
+        msg = "领取成功：\n" + "\n".join(
+            f"{name}：{reward_text}" for name, reward_text in result.rewards
         )
-        reward_lines.append(f"{goal['name']}：{reward_result['text']}")
-
-    if not reward_lines:
-        msg = "宗门周常奖励已领取或状态已变化。"
     else:
-        msg = "领取成功：\n" + "\n".join(reward_lines)
+        msg = status_messages.get(result.status, "宗门周常奖励领取失败，请稍后重试。")
     await handle_send(
         bot,
         event,

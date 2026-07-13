@@ -257,38 +257,6 @@ class SectWeeklyGoalManager:
             self.sql_message._commit_write()
         return updated
 
-    def mark_claimed(self, sect_id: int | str, user_id: str | int, goal_key: str) -> bool:
-        row = self._get_goal_row(sect_id, goal_key)
-        if not row:
-            return False
-        goal = SECT_WEEKLY_GOALS_BY_KEY.get(goal_key)
-        if not goal or int(row.get("progress", 0) or 0) < goal.target:
-            return False
-        claimed_users = [str(item) for item in _json_loads(row.get("claimed_users"), [])]
-        user_id = str(user_id)
-        if user_id in claimed_users:
-            return False
-        claimed_users.append(user_id)
-        with self.sql_message.lock:
-            cur = self.sql_message.conn.cursor()
-            cur.execute(
-                """
-                UPDATE sect_weekly_goal
-                SET claimed_users = %s,
-                    updated_at = %s
-                WHERE sect_id = %s AND week_key = %s AND goal_key = %s
-                """,
-                (
-                    _json_dumps(claimed_users),
-                    _now_text(),
-                    int(sect_id),
-                    self.current_week_key(),
-                    goal_key,
-                ),
-            )
-            self.sql_message._commit_write()
-        return True
-
     def weekly_rank(self, limit: int = 10, week_key: str | None = None) -> list[dict[str, Any]]:
         self.ensure_table()
         week_key = week_key or self.current_week_key()
