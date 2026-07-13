@@ -82,6 +82,7 @@ from .close_join_service import SectCloseJoinService
 from .member_join_service import SectMemberJoinService
 from .mainbuff_learn_service import SectMainBuffLearnService
 from .secbuff_learn_service import SectSecBuffLearnService
+from .disband_service import SectDisbandService
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
@@ -96,6 +97,7 @@ sect_close_join_service = SectCloseJoinService(get_paths().game_db)
 sect_member_join_service = SectMemberJoinService(get_paths().game_db)
 sect_mainbuff_learn_service = SectMainBuffLearnService(get_paths().game_db)
 sect_secbuff_learn_service = SectSecBuffLearnService(get_paths().game_db)
+sect_disband_service = SectDisbandService(get_paths().game_db)
 config = get_config()
 SECT_RENAME_CARD_ID = 20026
 SECT_RENAME_CARD_NAME = "宗门易名符"
@@ -3082,17 +3084,23 @@ async def sect_disband2_confirm(bot: Bot, event: GroupMessageEvent | PrivateMess
         await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_disband2.finish()
     
-    sect_position = user_info['sect_position']
     owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
     owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
-    
-    if sect_position == owner_position:
-        # 删除宗门
-        sql_message.delete_sect(sect_id)
-        
-        msg = f"宗门已解散！所有成员已被移除。"
-    else:
+
+    result = sect_disband_service.disband(
+        _sect_operation_id(event, "disband", sect_id),
+        user_info['user_id'],
+        expected_sect_id=sect_id,
+        owner_position=owner_position,
+    )
+    if result.applied:
+        msg = "宗门已解散！所有成员已被移除。"
+    elif result.status == "not_owner":
         msg = "只有宗主可以解散宗门！"
+    elif result.status in {"actor_without_sect", "sect_missing"}:
+        msg = "宗门已不存在或道友已不在该宗门中。"
+    else:
+        msg = "宗门状态已发生变化，当前无法解散。"
     
     await handle_send(bot, event, msg)
     await sect_disband2.finish()
