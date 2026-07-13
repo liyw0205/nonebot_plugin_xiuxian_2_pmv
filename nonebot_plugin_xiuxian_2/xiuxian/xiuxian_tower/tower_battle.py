@@ -110,16 +110,21 @@ class TowerBattle:
     async def _single_challenge(self, bot, event, user_info, boss_info):
         """单层挑战"""
         user_id = user_info["user_id"]
+        event_id = getattr(event, "message_id", None)
+        operation_id = f"tower-challenge:{event_id}:{user_id}:{boss_info['floor']}" if event_id else f"tower-challenge:{time.time_ns()}:{user_id}:{boss_info['floor']}"
+        stamina_cost = int(self.config["体力消耗"]["单层爬塔"])
+        expected_player = {key: int(user_info[key]) for key in ("hp", "mp", "user_stamina")}
+        if expected_player["user_stamina"] < stamina_cost:
+            return False, "你没有足够的体力，请等待体力恢复后再试！"
         user_buff_data = UserBuffDate(user_info['user_id'])
         sub_buff_data = user_buff_data.get_user_sub_buff_data()
         sub_buff_integral_buff = sub_buff_data.get('integral', 0) if sub_buff_data is not None else 0
         sub_buff_stone_buff = sub_buff_data.get('stone', 0) if sub_buff_data is not None else 0
         tower_info = tower_limit.get_user_tower_info(user_id)
-        result, victor, bossinfo_new = await Boss_fight(user_id, boss_info, bot_id=bot.self_id)        
+        result, victor, bossinfo_new, status_list = await Boss_fight(user_id, boss_info, type_in=0, bot_id=bot.self_id, return_status=True)
         await send_msg_handler(bot, event, result)
+        final_hp, final_mp = self._player_status(status_list, user_id)
         if victor == "群友赢了":
-            event_id = getattr(event, "message_id", None)
-            operation_id = f"tower-settlement:{event_id}:{user_id}:{boss_info['floor']}" if event_id else f"tower-settlement:{time.time_ns()}:{user_id}:{boss_info['floor']}"
             reward_rng = random.Random(operation_id)
             # 挑战成功
             total_score = 0
@@ -175,6 +180,8 @@ class TowerBattle:
             settlement = tower_settlement_service.settle(
                 operation_id, user_id, tower_info, boss_info["floor"], total_score, total_stone,
                 total_exp, reward_items, XiuConfig().max_goods_num,
+                expected_player=expected_player, final_hp=final_hp, final_mp=final_mp,
+                stamina_cost=stamina_cost, challenge_succeeded=True,
             )
             if not settlement.succeeded:
                 return False, "通天塔奖励结算失败，请稍后重试。"
@@ -189,9 +196,26 @@ class TowerBattle:
             
             return True, msg
         else:
-            # 挑战失败
+            settlement = tower_settlement_service.settle(
+                operation_id, user_id, tower_info, boss_info["floor"], 0, 0, 0, [], XiuConfig().max_goods_num,
+                expected_player=expected_player, final_hp=final_hp, final_mp=final_mp,
+                stamina_cost=stamina_cost, challenge_succeeded=False,
+            )
+            if not settlement.succeeded:
+                return False, "通天塔挑战结算失败，请稍后重试。"
             msg = f"道友不敌{boss_info['name']}，止步通天塔第{boss_info['floor'] - 1}层！"
             return False, msg
+
+    @staticmethod
+    def _player_status(status_list, user_id):
+        for team in status_list:
+            for attr in team.values():
+                if str(attr.get("user_id")) != str(user_id):
+                    continue
+                hp_divisor = float(attr.get("hp_multiplier", 1)) or 1
+                mp_divisor = float(attr.get("mp_multiplier", 1)) or 1
+                return max(1, int(attr.get("hp", 1) / hp_divisor)), max(1, int(attr.get("mp", 1) / mp_divisor))
+        raise ValueError("tower battle did not return player status")
     
     async def _continuous_challenge(self, bot, event, user_info, start_floor, target_floors=10):
         """连续挑战指定层数"""

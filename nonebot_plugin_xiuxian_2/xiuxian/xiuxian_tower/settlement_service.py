@@ -30,14 +30,18 @@ class TowerSettlementService:
         self._player_database = Path(player_database)
         self._lock = lock or RLock()
 
-    def settle(self, operation_id, user_id, expected_tower, floor, score, stone, exp, items, max_goods_num) -> TowerSettlementResult:
+    def settle(self, operation_id, user_id, expected_tower, floor, score, stone, exp, items, max_goods_num, *, expected_player=None, final_hp=None, final_mp=None, stamina_cost=0, challenge_succeeded=True) -> TowerSettlementResult:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         expected = {key: int(dict(expected_tower)[key]) for key in ("current_floor", "max_floor", "score")}
-        floor, score, stone, exp, max_goods_num = map(int, (floor, score, stone, exp, max_goods_num))
+        floor, score, stone, exp, max_goods_num, stamina_cost = map(int, (floor, score, stone, exp, max_goods_num, stamina_cost))
+        player = None if expected_player is None else {key: int(dict(expected_player)[key]) for key in ("hp", "mp", "user_stamina")}
+        final_hp = None if final_hp is None else max(1, int(final_hp))
+        final_mp = None if final_mp is None else max(1, int(final_mp))
+        challenge_succeeded = bool(challenge_succeeded)
         rewards = tuple((int(item["id"]), str(item["name"]), str(item["type"]), int(item["amount"])) for item in items if int(item.get("amount", 0)) > 0)
         if not operation_id or floor <= 0 or min(score, stone, exp, max_goods_num, *expected.values()) < 0:
             raise ValueError("valid operation, tower state and rewards are required")
-        payload = json.dumps([user_id, expected, floor, score, stone, exp, rewards, max_goods_num], ensure_ascii=True, sort_keys=True)
+        payload = json.dumps([user_id, expected, floor, score, stone, exp, rewards, max_goods_num, player, final_hp, final_mp, stamina_cost, challenge_succeeded], ensure_ascii=True, sort_keys=True)
 
         def result(status: str) -> TowerSettlementResult:
             return TowerSettlementResult(status, score if status in {"applied", "duplicate"} else 0, stone if status in {"applied", "duplicate"} else 0, exp if status in {"applied", "duplicate"} else 0)
@@ -53,9 +57,16 @@ class TowerSettlementService:
                 if previous is not None:
                     conn.rollback()
                     return result("duplicate" if str(previous[0]) == payload else "state_changed")
-                if conn.execute("SELECT 1 FROM user_xiuxian WHERE user_id=%s", (user_id,)).fetchone() is None:
+                user = conn.execute("SELECT hp, mp, user_stamina FROM user_xiuxian WHERE user_id=%s", (user_id,)).fetchone()
+                if user is None:
                     conn.rollback()
                     return result("user_missing")
+                if player is not None and tuple(map(int, user)) != (player["hp"], player["mp"], player["user_stamina"]):
+                    conn.rollback()
+                    return result("state_changed")
+                if player is not None and player["user_stamina"] < stamina_cost:
+                    conn.rollback()
+                    return result("stamina_insufficient")
                 columns = {str(column[1]) for column in conn.execute("PRAGMA player_data.table_info(tower)").fetchall()}
                 if not {"current_floor", "max_floor", "score"}.issubset(columns):
                     conn.rollback()
@@ -69,11 +80,15 @@ class TowerSettlementService:
                     if (int(inventory[0]) if inventory else 0) + amount > max_goods_num:
                         conn.rollback()
                         return result("inventory_full")
-                new_max_floor = max(expected["max_floor"], floor)
-                if conn.execute("UPDATE player_data.tower SET current_floor=%s, max_floor=%s, score=%s WHERE user_id=%s", (floor, new_max_floor, expected["score"] + score, user_id)).rowcount != 1:
-                    conn.rollback()
-                    return result("state_changed")
-                conn.execute("UPDATE user_xiuxian SET stone=stone+%s, exp=exp+%s WHERE user_id=%s", (stone, exp, user_id))
+                if challenge_succeeded:
+                    new_max_floor = max(expected["max_floor"], floor)
+                    if conn.execute("UPDATE player_data.tower SET current_floor=%s, max_floor=%s, score=%s WHERE user_id=%s", (floor, new_max_floor, expected["score"] + score, user_id)).rowcount != 1:
+                        conn.rollback()
+                        return result("state_changed")
+                if player is None:
+                    conn.execute("UPDATE user_xiuxian SET stone=stone+%s, exp=exp+%s WHERE user_id=%s", (stone, exp, user_id))
+                else:
+                    conn.execute("UPDATE user_xiuxian SET stone=stone+%s, exp=exp+%s, hp=%s, mp=%s, user_stamina=user_stamina-%s WHERE user_id=%s", (stone, exp, final_hp, final_mp, stamina_cost, user_id))
                 now = datetime.now()
                 for item_id, name, item_type, amount in rewards:
                     conn.execute("INSERT INTO back (user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+EXCLUDED.goods_num, bind_num=COALESCE(back.bind_num,0)+EXCLUDED.goods_num, update_time=EXCLUDED.update_time", (user_id, item_id, name, item_type, amount, now, now, amount))

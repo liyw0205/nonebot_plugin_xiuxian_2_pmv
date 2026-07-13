@@ -112,7 +112,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await send_help_message(bot, event, msg, k1="挑战", v1="挑战通天塔", k2="信息", v2="通天塔信息", k3="商店", v3="通天塔商店")
     await tower_help.finish()
 
-@tower_challenge.handle(parameterless=[Cooldown(stamina_cost=tower_data.config["体力消耗"]["单层爬塔"])])
+@tower_challenge.handle(parameterless=[Cooldown()])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """单层爬塔"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -132,7 +132,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         time = leave_harm_time(user_id)
         msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n"
         msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
-        sql_message.update_user_stamina(user_id, tower_data.config["体力消耗"]["单层爬塔"], 1)
         await handle_send(bot, event, msg, md_type="通天塔", k1="闭关", v1="闭关", k2="丹药", v2="丹药背包", k3="状态", v3="我的状态")
         await tower_challenge.finish()
     success, msg = await challenge_floor(bot, event, user_id)
