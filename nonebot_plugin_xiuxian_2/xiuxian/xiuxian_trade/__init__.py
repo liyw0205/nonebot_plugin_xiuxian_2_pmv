@@ -251,6 +251,15 @@ def _guishi_take_item_operation_id(event, user_id, goods_id):
     return f"guishi-item-take:{user_id}:{goods_id}:{timestamp}"
 
 
+def _guishi_order_operation_id(event, order_type, user_id, item_id, price, quantity):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"guishi-order:{order_type}:{event_id}:{user_id}:{item_id}:{price}:{quantity}"
+    return f"guishi-order:{order_type}:{user_id}:{item_id}:{price}:{quantity}:{time.time_ns()}"
+
+
 def _auction_queue_operation_id(event, action, user_id, item_id):
     event_id = str(
         getattr(event, "message_id", "") or getattr(event, "id", "") or ""
@@ -1540,6 +1549,9 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         price,
         quantity,
         max_orders=MAX_QIUGOU_ORDERS,
+        operation_id=_guishi_order_operation_id(
+            event, "qiugou", user_id, goods_id, price, quantity
+        ),
     )
     if result.status == "limit_reached":
         msg = f"您的求购订单已达上限({MAX_QIUGOU_ORDERS})，请明日再来！"
@@ -1713,6 +1725,9 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         price,
         quantity,
         max_orders=MAX_BAITAN_ORDERS,
+        operation_id=_guishi_order_operation_id(
+            event, "baitan", user_id, goods_id, price, quantity
+        ),
     )
     if result.status == "limit_reached":
         msg = f"您的摆摊订单已达上限({MAX_BAITAN_ORDERS})，请先收摊部分订单！"
@@ -2009,8 +2024,7 @@ async def process_guishi_transactions(user_id: str = None) -> str:
         unfilled_qiugou_quantity = qiugou_order['quantity'] - qiugou_order['filled_quantity']
         
         if unfilled_qiugou_quantity <= 0: # 订单已完成
-            trade_manager.remove_guishi_order(qiugou_order_id)
-            if user_id: transaction_log += f"求购订单 {qiugou_order_id} 已完成，已移除。\n"
+            if user_id: transaction_log += f"求购订单 {qiugou_order_id} 已完成，等待事务清理。\n"
             continue
         
         # 获取所有符合条件的摆摊订单（物品名称相同，价格低于或等于求购价，且非自己的摆摊）
@@ -2035,6 +2049,7 @@ async def process_guishi_transactions(user_id: str = None) -> str:
                 get_paths().trade_db,
                 qiugou_order_id,
                 baitan_order_id,
+                operation_id=f"guishi-match:{qiugou_order_id}:{baitan_order_id}",
             )
             if result.status == "qiugou_completed":
                 if user_id:

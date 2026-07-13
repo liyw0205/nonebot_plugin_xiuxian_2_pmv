@@ -33,6 +33,7 @@ PurchaseStatus = Literal[
     "seller_missing",
     "stone_insufficient",
     "inventory_full",
+    "state_changed",
 ]
 
 
@@ -200,7 +201,7 @@ class GuishiMatch:
 
     @property
     def matched(self) -> bool:
-        return self.status == "matched"
+        return self.status in {"matched", "duplicate"}
 
 
 @dataclass(frozen=True)
@@ -211,7 +212,7 @@ class GuishiQiugouCreate:
 
     @property
     def created(self) -> bool:
-        return self.status == "created"
+        return self.status in {"created", "duplicate"}
 
 
 @dataclass(frozen=True)
@@ -222,7 +223,7 @@ class GuishiBaitanCreate:
 
     @property
     def created(self) -> bool:
-        return self.status == "created"
+        return self.status in {"created", "duplicate"}
 
 
 @dataclass(frozen=True)
@@ -1378,6 +1379,7 @@ class TradeRepository:
         quantity,
         *,
         max_orders: int,
+        operation_id: str | None = None,
     ) -> GuishiQiugouCreate:
         import secrets
 
@@ -1387,9 +1389,29 @@ class TradeRepository:
         price = max(int(price), 0)
         quantity = max(int(quantity), 1)
         total_cost = price * quantity
+        operation_id = str(operation_id or "").strip()
+        payload = json.dumps(
+            [user_id, item_id, item_name, price, quantity, int(max_orders)],
+            ensure_ascii=False,
+        )
         with self._lock, closing(db_backend.connect(trade_database)) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS guishi_order_create_operations ("
+                    "operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, order_id TEXT NOT NULL, "
+                    "order_type TEXT NOT NULL, amount INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+                )
+                if operation_id:
+                    previous = conn.execute(
+                        "SELECT payload, order_id, order_type, amount FROM guishi_order_create_operations WHERE operation_id=%s",
+                        (operation_id,),
+                    ).fetchone()
+                    if previous is not None:
+                        conn.rollback()
+                        if str(previous[0]) != payload or str(previous[2]) != "qiugou":
+                            return GuishiQiugouCreate("state_changed", total_cost=total_cost)
+                        return GuishiQiugouCreate("duplicate", str(previous[1]), int(previous[3]))
                 count = conn.execute(
                     """
                     SELECT COUNT(*) FROM guishi_item
@@ -1446,6 +1468,12 @@ class TradeRepository:
                     "UPDATE guishi_info SET stored_stone=stored_stone-%s WHERE user_id=%s",
                     (total_cost, user_id),
                 )
+                if operation_id:
+                    conn.execute(
+                        "INSERT INTO guishi_order_create_operations "
+                        "(operation_id, payload, order_id, order_type, amount) VALUES (%s, %s, %s, %s, %s)",
+                        (operation_id, payload, order_id, "qiugou", total_cost),
+                    )
                 conn.commit()
                 return GuishiQiugouCreate("created", order_id, total_cost)
             except Exception:
@@ -1462,6 +1490,7 @@ class TradeRepository:
         quantity,
         *,
         max_orders: int,
+        operation_id: str | None = None,
     ) -> GuishiBaitanCreate:
         import secrets
 
@@ -1470,10 +1499,30 @@ class TradeRepository:
         item_name = str(item_name)
         price = max(int(price), 0)
         quantity = max(int(quantity), 1)
+        operation_id = str(operation_id or "").strip()
+        payload = json.dumps(
+            [user_id, item_id, item_name, price, quantity, int(max_orders)],
+            ensure_ascii=False,
+        )
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             conn.execute("ATTACH DATABASE %s AS guishi_trade", (str(trade_database),))
             try:
                 conn.execute("BEGIN IMMEDIATE")
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS guishi_trade.guishi_order_create_operations ("
+                    "operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, order_id TEXT NOT NULL, "
+                    "order_type TEXT NOT NULL, amount INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+                )
+                if operation_id:
+                    previous = conn.execute(
+                        "SELECT payload, order_id, order_type, amount FROM guishi_trade.guishi_order_create_operations WHERE operation_id=%s",
+                        (operation_id,),
+                    ).fetchone()
+                    if previous is not None:
+                        conn.rollback()
+                        if str(previous[0]) != payload or str(previous[2]) != "baitan":
+                            return GuishiBaitanCreate("state_changed")
+                        return GuishiBaitanCreate("duplicate", str(previous[1]), int(previous[3]))
                 count = conn.execute(
                     """
                     SELECT COUNT(*) FROM guishi_trade.guishi_item
@@ -1521,6 +1570,12 @@ class TradeRepository:
                 else:
                     conn.rollback()
                     raise RuntimeError("failed to allocate guishi order id")
+                if operation_id:
+                    conn.execute(
+                        "INSERT INTO guishi_trade.guishi_order_create_operations "
+                        "(operation_id, payload, order_id, order_type, amount) VALUES (%s, %s, %s, %s, %s)",
+                        (operation_id, payload, order_id, "baitan", quantity),
+                    )
                 conn.commit()
                 return GuishiBaitanCreate("created", order_id, quantity)
             except Exception:
@@ -1564,12 +1619,33 @@ class TradeRepository:
         trade_database: str | Path,
         qiugou_order_id,
         baitan_order_id,
+        *,
+        operation_id: str | None = None,
     ) -> GuishiMatch:
         qiugou_order_id = str(qiugou_order_id)
         baitan_order_id = str(baitan_order_id)
+        operation_id = str(operation_id or "").strip()
+        payload = json.dumps([qiugou_order_id, baitan_order_id])
         with self._lock, closing(db_backend.connect(trade_database)) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS guishi_match_operations ("
+                    "operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, result TEXT NOT NULL, "
+                    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+                )
+                if operation_id:
+                    previous = conn.execute(
+                        "SELECT payload, result FROM guishi_match_operations WHERE operation_id=%s",
+                        (operation_id,),
+                    ).fetchone()
+                    if previous is not None:
+                        conn.rollback()
+                        if str(previous[0]) != payload:
+                            return GuishiMatch("state_changed", qiugou_order_id, baitan_order_id)
+                        values = json.loads(str(previous[1]))
+                        values["status"] = "duplicate"
+                        return GuishiMatch(**values)
                 qiugou = conn.execute(
                     """
                     SELECT user_id, item_id, item_name, item_type, price,
@@ -1653,8 +1729,7 @@ class TradeRepository:
                         "UPDATE guishi_item SET filled_quantity=filled_quantity+%s WHERE id=%s",
                         (quantity, baitan_order_id),
                     )
-                conn.commit()
-                return GuishiMatch(
+                result = GuishiMatch(
                     "matched",
                     qiugou_order_id,
                     baitan_order_id,
@@ -1667,6 +1742,13 @@ class TradeRepository:
                     qiugou_completed,
                     baitan_completed,
                 )
+                if operation_id:
+                    conn.execute(
+                        "INSERT INTO guishi_match_operations (operation_id, payload, result) VALUES (%s, %s, %s)",
+                        (operation_id, payload, json.dumps(result.__dict__, ensure_ascii=False)),
+                    )
+                conn.commit()
+                return result
             except Exception:
                 conn.rollback()
                 raise
@@ -2235,6 +2317,8 @@ class TradeRepository:
                 existing = cur.fetchone()
                 if existing is not None:
                     conn.rollback()
+                    if str(existing[0]) != listing_id or str(existing[1]) != buyer_id or int(existing[6]) != quantity:
+                        return XianshiPurchase("state_changed", listing_id, buyer_id)
                     return self._row_purchase("duplicate", existing)
 
                 cur.execute(

@@ -125,6 +125,24 @@ class TradePurchaseTests(unittest.TestCase):
             2,
         )
 
+    def test_reused_operation_with_changed_quantity_is_rejected(self) -> None:
+        self.repository.purchase_xianshi_item(
+            "event-conflict", "buyer", self.listing_id, 1
+        )
+
+        result = self.repository.purchase_xianshi_item(
+            "event-conflict", "buyer", self.listing_id, 2
+        )
+
+        self.assertEqual(result.status, "state_changed")
+        self.assertEqual(
+            self.scalar("SELECT stone FROM user_xiuxian WHERE user_id=%s", ("buyer",)),
+            800,
+        )
+        self.assertEqual(
+            self.scalar("SELECT goods_num FROM back WHERE user_id=%s", ("buyer",)), 1
+        )
+
     def test_insufficient_balance_and_missing_seller_leave_no_partial_state(self) -> None:
         with db_backend.transaction(self.database) as conn:
             conn.execute(
