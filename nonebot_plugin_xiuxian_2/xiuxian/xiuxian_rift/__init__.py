@@ -28,10 +28,10 @@ from .riftconfig import get_rift_config
 from .jsondata import save_rift_data, read_rift_data
 from .entry_service import RiftEntryService
 from .termination_service import RiftTerminationService
-from .key_settlement_service import RiftKeySettlementService
+from .key_event_settlement_service import RiftKeyEventSettlementService
 from .boss_token_service import RiftBossTokenService
 from .settlement_service import RiftSettlementService
-from ..xiuxian_config import convert_rank
+from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_map import (
     get_player_current_position,
     get_random_trial_node,
@@ -45,7 +45,7 @@ from .riftmake import (
 sql_message = XiuxianDateManage()  # sql类
 rift_entry_service = RiftEntryService(get_paths().game_db)
 rift_termination_service = RiftTerminationService(get_paths().game_db)
-rift_key_settlement_service = RiftKeySettlementService(get_paths().game_db)
+rift_key_event_settlement_service = RiftKeyEventSettlementService(get_paths().game_db, get_paths().player_db)
 rift_boss_token_service = RiftBossTokenService(get_paths().game_db)
 rift_settlement_service = RiftSettlementService(get_paths().game_db)
 cache_help = {}
@@ -482,50 +482,47 @@ async def use_rift_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, msg, md_type="秘境", k1="结算", v1="秘境结算", k2="加速", v2="道具使用 秘境加速券", k3="大加速", v3="道具使用 秘境大加速券", k4="钥匙", v4="道具使用 秘境钥匙")
         return
 
-# 秘境结算
-async def _perform_rift_settlement(user_id, user_info, rift_info, bot, event):
-    """
-    执行秘境结算的核心逻辑，根据秘境事件类型发放奖励。
-    返回一个消息字符串。
-    """
+def _rift_progress_snapshot(user_id):
+    return int(PlayerDataManager().get_field_data(str(user_id), "rift", "explore_count") or 0)
+
+
+def _roll_rift_progress(count):
+    if int(count) + 1 < 10:
+        new_count = int(count) + 1
+        return None, f"\n当前秘境完成次数：{new_count}/10（再完成 {10 - new_count} 次可获秘境奖励）"
+    rewards = {
+        "秘藏令": 20007, "秘境钥匙": 20001, "神秘经书·残": 20008, "神秘经书": 20009,
+        "灵签宝箓": 20010, "秘境加速券": 20012, "秘境大加速券": 20013,
+        "斩妖令": 20018, "解绑符": 20019,
+    }
+    name, item_id = random.choice(list(rewards.items()))
+    reward = {"id": item_id, "name": name, "type": "特殊道具", "amount": 1}
+    return reward, f"\n【秘境累计完成10次！】\n赠送道友 {name} x1！"
+
+
+async def _roll_rift_event(user_info, rift_info, bot_id):
+    """Fix the random event, battle result and all persistence deltas."""
     rift_rank = rift_info["rank"]  # 秘境等级
     rift_type = get_story_type()  # 无事、宝物、战斗
+    battle_result = None
     result_msg = ""
     result_name = None
-    log_content = ""
-
-    count_msg = update_rift_explore_count(user_id, do_give=True) # 更新秘境探索次数
+    outcome = {"delta": {}, "items": [], "statistics": {}}
 
     if rift_type == "无事":
         result_msg = random.choice(NONEMSG)
-        log_content = result_msg
     elif rift_type == "战斗":
         battle_type = get_battle_type()
         if battle_type == "掉血事件":
-            result_msg = get_dxsj_info("掉血事件", user_info)
-            log_content = result_msg
+            result_msg, outcome = get_dxsj_info("掉血事件", user_info)
         elif battle_type == "Boss战斗":
-            # Boss战斗可能需要发送图片消息，所以要特殊处理
-            result, boss_msg = await get_boss_battle_info(user_info, rift_rank, bot.self_id)
-            await send_msg_handler(bot, event, result, title=boss_msg)
-            update_statistics_value(user_id, "秘境打怪")
-            result_msg = boss_msg # 将 boss_msg 作为主要结果消息
-            log_content = boss_msg
+            battle_result, result_msg, outcome = await get_boss_battle_info(
+                user_info, rift_rank, bot_id, persist=False
+            )
     elif rift_type == "宝物":
-        result_name, treasure_msg = get_treasure_info(user_info, rift_rank)
-        result_msg = treasure_msg
-        log_content = treasure_msg
-        if result_name:
-            # 宝物获得特殊处理，可以带上查看物品的快捷键
-            final_msg = f"{result_msg}{count_msg}"
-            await handle_send(bot, event, final_msg, md_type="秘境", k1="物品", v1=f"查看效果 {result_name}", k2="闭关", v2="闭关", k3="帮助", v3="秘境帮助")
-            log_message(user_id, final_msg)
-            return
-
-    final_msg = f"{result_msg}{count_msg}"
-    await handle_send(bot, event, final_msg)
-    log_message(user_id, final_msg)
-    return
+        result_name, result_msg, outcome = get_treasure_info(user_info, rift_rank)
+    outcome["message"] = result_msg
+    return battle_result, result_name, outcome
 
 @complete_rift.handle(parameterless=[Cooldown(cd_time=0)])
 async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -642,14 +639,31 @@ async def use_rift_key(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         return
 
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    result = rift_key_settlement_service.settle(
-        f"rift-key:{event_id or time.time_ns()}:{user_id}", user_id, item_id, rift_info
+    operation_id = f"rift-key-event:{event_id or time.time_ns()}:{user_id}"
+    replay = rift_key_event_settlement_service.replay(operation_id)
+    if replay is not None:
+        await handle_send(bot, event, replay.message)
+        return
+    battle_result, result_name, outcome = await _roll_rift_event(user_info, rift_info, bot.self_id)
+    explore_count = _rift_progress_snapshot(user_id)
+    progress_reward, progress_msg = _roll_rift_progress(explore_count)
+    outcome["progress_reward"] = progress_reward
+    outcome["message"] = f"{outcome['message']}{progress_msg}"
+    result = rift_key_event_settlement_service.settle(
+        operation_id, user_id, item_id, rift_info,
+        {key: int(user_info.get(key, 0)) for key in ("stone", "exp", "hp", "mp")},
+        explore_count, outcome, XiuConfig().max_goods_num,
     )
     if not result.succeeded:
         await handle_send(bot, event, "秘境钥匙或秘境状态已变化，请稍后重试。")
         return
-    
-    await _perform_rift_settlement(user_id, user_info, rift_info, bot, event)
+    if battle_result is not None:
+        await send_msg_handler(bot, event, battle_result, title=outcome["message"].split("\n", 1)[0])
+    if result_name:
+        await handle_send(bot, event, result.message, md_type="秘境", k1="物品", v1=f"查看效果 {result_name}", k2="闭关", v2="闭关", k3="帮助", v3="秘境帮助")
+    else:
+        await handle_send(bot, event, result.message)
+    log_message(user_id, result.message)
     return
 
 async def use_rift_boss(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
@@ -686,18 +700,16 @@ async def use_rift_boss(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     if not settlement.succeeded:
         await handle_send(bot, event, "斩妖令或秘境状态已变化，请稍后重试。")
         return
-    
-    # 直接触发Boss战斗结算，并消耗道具
+
     result, result_msg = await get_boss_battle_info(user_info, rift_rank, bot.self_id)
     update_statistics_value(user_id, "秘境打怪")
     await send_msg_handler(bot, event, result, title=result_msg)
 
-    # 更新秘境探索次数
     count_msg = update_rift_explore_count(user_id, do_give=True)
-    
+
     final_msg = f"秘境 {rift_info['name']} 已使用斩妖令结算！\n战斗结果：{result_msg}{count_msg}"
-    log_message(user_id, final_msg) # 记录完整消息
-    await handle_send(bot, event, final_msg) # 发送最终结算消息
+    log_message(user_id, final_msg)
+    await handle_send(bot, event, final_msg)
     return
 
 async def use_rift_speedup(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):

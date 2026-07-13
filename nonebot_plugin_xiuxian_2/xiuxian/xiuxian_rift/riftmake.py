@@ -189,8 +189,8 @@ STORY = {
 }
 
 
-async def get_boss_battle_info(user_info, rift_rank, bot_id):
-    """获取Boss战事件的内容"""
+async def get_boss_battle_info(user_info, rift_rank, bot_id, persist=True):
+    """Roll a Boss battle, optionally returning a persistence-free outcome."""
     boss_data = STORY['战斗']['Boss战斗']["Boss数据"]
     base_exp = user_info['exp']
     boss_hp = int(base_exp * random.choice(boss_data["hp"]) * 10)
@@ -205,7 +205,23 @@ async def get_boss_battle_info(user_info, rift_rank, bot_id):
     }
 
 
-    result, victor, bossinfo_new = await Boss_fight(user_info['user_id'], boss_info, bot_id=bot_id)
+    result, victor, bossinfo_new, status_list = await Boss_fight(
+        user_info['user_id'], boss_info, type_in=0 if not persist else 2,
+        bot_id=bot_id, return_status=True,
+    )
+    final_hp, final_mp = int(user_info['hp']), int(user_info['mp'])
+    for status in status_list:
+        for attr in status.values():
+            if str(attr.get("user_id")) != str(user_info['user_id']):
+                continue
+            hp_multiplier = attr.get("hp_multiplier", 1) or 1
+            mp_multiplier = attr.get("mp_multiplier", 1) or 1
+            final_hp = max(1, int(attr.get("hp", final_hp) / hp_multiplier))
+            final_mp = max(1, int(attr.get("mp", final_mp) / mp_multiplier))
+    outcome = {
+        "delta": {"hp": final_hp - int(user_info['hp']), "mp": final_mp - int(user_info['mp'])},
+        "statistics": {"秘境打怪": 1},
+    }
 
     if victor == "群友赢了":  # 获胜
         user_rank = convert_rank('练气境圆满')[0] - convert_rank(user_info['level'])[0]
@@ -216,28 +232,34 @@ async def get_boss_battle_info(user_info, rift_rank, bot_id):
         give_exp = int(random.choice(success_info["give"]["exp"]) * user_info['exp'])
         give_exp = min(give_exp, max_exp)
         give_stone = (rift_rank + user_rank) * success_info["give"]["stone"]
-        sql_message.update_exp(user_info['user_id'], give_exp)
-        sql_message.update_ls(user_info['user_id'], give_stone, 1)  # 负数也挺正常
+        outcome["delta"].update({"exp": give_exp, "stone": give_stone})
+        if persist:
+            sql_message.update_exp(user_info['user_id'], give_exp)
+            sql_message.update_ls(user_info['user_id'], give_stone, 1)
         msg += f"获得了修为：{number_to(give_exp)}点，灵石：{number_to(give_stone)}枚！"
     else:  # 输了
         fail_info = STORY['战斗']['Boss战斗']["fail"]
         msg = random.choice(fail_info['desc']).format(boss_info['name'])
-    return result, msg
+    outcome["message"] = msg
+    return (result, msg) if persist else (result, msg, outcome)
 
 
 def get_dxsj_info(rift_type, user_info):
-    """获取掉血事件的内容"""
+    """Roll a damage event without persisting it."""
     msg = None
+    outcome = {"delta": {}}
     battle_data = STORY['战斗']
     cost_type = get_dict_type_rate(battle_data[rift_type]['cost'])
     value = random.choice(battle_data[rift_type]['cost'][cost_type]['value'])
     if cost_type == "exp":
         exp = int(user_info['exp'] * value)
-        sql_message.update_j_exp(user_info['user_id'], exp)
-
         nowhp = user_info['hp'] - (exp / 2) if (user_info['hp'] - (exp / 2)) > 0 else 1
         nowmp = user_info['mp'] - exp if (user_info['mp'] - exp) > 0 else 1
-        sql_message.update_user_hp_mp(user_info['user_id'], nowhp, nowmp)  # 修为掉了，血量、真元也要掉
+        outcome["delta"] = {
+            "exp": -exp,
+            "hp": int(nowhp) - int(user_info['hp']),
+            "mp": int(nowmp) - int(user_info['mp']),
+        }
 
         msg = random.choice(battle_data[rift_type]['desc']).format(f"修为减少了：{number_to(exp)}点！")
     elif cost_type == "hp":
@@ -245,25 +267,27 @@ def get_dxsj_info(rift_type, user_info):
         now_hp = user_info['hp'] - cost_hp
         if now_hp < 0:
             now_hp = 1
-        sql_message.update_user_hp_mp(user_info['user_id'], now_hp, user_info['mp'])
+        outcome["delta"] = {"hp": int(now_hp) - int(user_info['hp'])}
         msg = random.choice(battle_data[rift_type]['desc']).format(f"气血减少了：{number_to(cost_hp)}点！")
     elif cost_type == "stone":
         cost_stone = value
-        sql_message.update_ls(user_info['user_id'], cost_stone, 2)  # 负数也挺正常
+        outcome["delta"] = {"stone": -int(cost_stone)}
         msg = random.choice(battle_data[rift_type]['desc']).format(f"灵石减少了：{number_to(cost_stone)}枚！")
-    return msg
+    outcome["message"] = msg
+    return msg, outcome
 
 
 def get_treasure_info(user_info, rift_rank):
     rift_type = get_goods_type()  # 功法、神通、法器、防具、法宝#todo
     msg = None
     item_name = None
+    outcome = {"delta": {}, "items": []}
     if rift_type == "法器":
         weapon_info = get_weapon(user_info, rift_rank)
         temp_msg = f"{weapon_info[1]['name']}!"
         msg = random.choice(TREASUREMSG).format(temp_msg)
         item_name = weapon_info[1]['name']
-        sql_message.send_back(user_info['user_id'], weapon_info[0], weapon_info[1]['name'], weapon_info[1]['type'], 1, 0)
+        outcome["items"].append({"id": weapon_info[0], "name": weapon_info[1]['name'], "type": weapon_info[1]['type'], "amount": 1})
         # 背包sql
 
     elif rift_type == "防具":  # todo
@@ -271,7 +295,7 @@ def get_treasure_info(user_info, rift_rank):
         temp_msg = f"{armor_info[1]['name']}!"
         msg = random.choice(TREASUREMSG_1).format(temp_msg)
         item_name = armor_info[1]['name']
-        sql_message.send_back(user_info['user_id'], armor_info[0], armor_info[1]['name'], armor_info[1]['type'], 1, 0)
+        outcome["items"].append({"id": armor_info[0], "name": armor_info[1]['name'], "type": armor_info[1]['type'], "amount": 1})
         # 背包sql
 
     elif rift_type == "功法":
@@ -282,7 +306,7 @@ def get_treasure_info(user_info, rift_rank):
             temp_msg = f"{main_buff['name']}"
             msg = random.choice(TREASUREMSG_2).format(temp_msg)
             item_name = main_buff['name']
-            sql_message.send_back(user_info['user_id'], main_buff_id, main_buff['name'], main_buff['type'], 1, 0)
+            outcome["items"].append({"id": main_buff_id, "name": main_buff['name'], "type": main_buff['type'], "amount": 1})
         else:
             msg = '道友在秘境中获得一本书籍，翻开一看居然是绿野仙踪...'
 
@@ -294,7 +318,7 @@ def get_treasure_info(user_info, rift_rank):
             temp_msg = f"{sec_buff['name']}!"
             msg = random.choice(TREASUREMSG_3).format(temp_msg)
             item_name = sec_buff['name']
-            sql_message.send_back(user_info['user_id'], sec_buff_id, sec_buff['name'], sec_buff['type'], 1, 0)
+            outcome["items"].append({"id": sec_buff_id, "name": sec_buff['name'], "type": sec_buff['type'], "amount": 1})
             # 背包sql
         else:
             msg = '道友在秘境中获得一本书籍，翻开一看居然是戏书...'
@@ -307,7 +331,7 @@ def get_treasure_info(user_info, rift_rank):
             temp_msg = f"{sub_buff['name']}!"
             msg = random.choice(TREASUREMSG_5).format(temp_msg)
             item_name = sub_buff['name']
-            sql_message.send_back(user_info['user_id'], sub_buff_id, sub_buff['name'], sub_buff['type'], 1, 0)
+            outcome["items"].append({"id": sub_buff_id, "name": sub_buff['name'], "type": sub_buff['type'], "amount": 1})
             # 背包sql
         else:
             msg = '道友在秘境中获得一本书籍，翻开一看居然是四库全书...'
@@ -317,11 +341,12 @@ def get_treasure_info(user_info, rift_rank):
         stone_base = STORY['宝物']['灵石']['stone']
         user_rank = random.randint(1, 3)  # 随机等级
         give_stone = (rift_rank + user_rank) * stone_base
-        sql_message.update_ls(user_info['user_id'], give_stone, 1)
+        outcome["delta"] = {"stone": give_stone}
         temp_msg = f"灵石：{number_to(give_stone)}枚！"
         msg = random.choice(TREASUREMSG_4).format(temp_msg)
 
-    return item_name, msg
+    outcome["message"] = msg
+    return item_name, msg, outcome
 
 
 
