@@ -519,11 +519,28 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             user_reminder_tasks[user_id].cancel()  # 取消任务
             del user_reminder_tasks[user_id]
         
-        # 确认刷新，删除旧悬赏令        
-        delete_work_file(user_id)
-        work_msg = workhandle().do_work(0, level=user_level, exp=user_info['exp'], user_id=user_id)
-        msg = generate_work_message(work_msg, usernums - 1)
-        sql_message.update_work_num(user_id, usernums - 1)
+        expected_offer = readf(user_id)
+        operation_id = _work_operation_id(event, "force-refresh", user_id)
+        work_msg, new_offer = _prepare_work_offer(
+            operation_id, user_id, user_level, user_info['exp']
+        )
+        result = work_refresh_service.refresh(
+            operation_id,
+            user_id,
+            usernums,
+            _work_cd_snapshot(user_id),
+            expected_offer,
+            new_offer,
+            force=True,
+        )
+        if result.status in {"state_changed", "user_missing"}:
+            await handle_send(bot, event, "悬赏状态或刷新次数已变化，请重新查看后再试。")
+            await do_work.finish()
+        if result.status == "operation_conflict":
+            await handle_send(bot, event, "该次刷新请求参数与首次处理不一致，请重新发起。")
+            await do_work.finish()
+        savef(user_id, result.offer, sync_snapshot=False)
+        msg = generate_work_message(work_msg, result.remaining_count)
         
         # 设置新悬赏令的提醒状态
         user_reminder_status[user_id] = {
