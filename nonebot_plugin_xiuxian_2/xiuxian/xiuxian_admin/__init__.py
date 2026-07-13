@@ -63,6 +63,7 @@ from .admin_helpers import (
 )
 from .level_change_service import AdminLevelChangeService
 from .root_change_service import AdminRootChangeService
+from .exp_adjustment_service import AdminExpAdjustmentService
 from . import command_controls as _command_controls  # noqa: F401
 from . import empty_fallback as _empty_fallback  # noqa: F401
 from . import event_debug as _event_debug  # noqa: F401
@@ -72,6 +73,7 @@ sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 admin_level_change_service = AdminLevelChangeService(get_paths().game_db)
 admin_root_change_service = AdminRootChangeService(get_paths().game_db)
+admin_exp_adjustment_service = AdminExpAdjustmentService(get_paths().game_db)
 
 
 def _admin_operation_id(event, action: str, user_id: str) -> str:
@@ -396,6 +398,9 @@ async def adjust_exp_command_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         msg = f"请输入有效的修为数量！"
         await handle_send(bot, event, msg)
         await adjust_exp_command.finish()
+    if give_exp_num == 0:
+        await handle_send(bot, event, "修为调整数量不能为 0")
+        await adjust_exp_command.finish()
 
     # 遍历Message对象，寻找艾特信息
     give_qq = get_at_user_id(args)
@@ -410,15 +415,24 @@ async def adjust_exp_command_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     if give_qq:
         give_user = sql_message.get_user_info_with_id(give_qq)
         if give_user:
-            current_exp = give_user['exp']
-            
-            # 更新用户修为
-            if give_exp_num > 0:
-                sql_message.update_exp(give_qq, give_exp_num)
-                msg = f"共增加{number_to(give_exp_num)}修为给{give_user['user_name']}道友！"
+            result = admin_exp_adjustment_service.adjust(
+                _admin_operation_id(event, "exp-adjust", str(give_qq)),
+                str(get_user_id(event) or "unknown"),
+                give_qq,
+                int(give_user["exp"] or 0),
+                give_exp_num,
+                target_name=give_user["user_name"],
+            )
+            if result.status == "state_changed":
+                msg = "玩家修为状态已变化，请重新执行指令"
+            elif result.status == "operation_conflict":
+                msg = "本次管理员操作与已记录事件冲突"
+            elif result.status == "user_missing":
+                msg = "对方未踏入修仙界，不可操作！"
+            elif result.applied_delta > 0:
+                msg = f"共增加{number_to(result.applied_delta)}修为给{give_user['user_name']}道友！"
             else:
-                sql_message.update_j_exp(give_qq, abs(give_exp_num))
-                msg = f"共减少{number_to(abs(give_exp_num))}修为给{give_user['user_name']}道友！"
+                msg = f"共减少{number_to(abs(result.applied_delta))}修为给{give_user['user_name']}道友！"
             
             await handle_send(bot, event, msg)
             await adjust_exp_command.finish()
