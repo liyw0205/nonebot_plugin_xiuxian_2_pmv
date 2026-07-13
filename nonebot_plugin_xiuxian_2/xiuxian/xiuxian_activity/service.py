@@ -1,4 +1,5 @@
 import random
+import time
 from copy import deepcopy
 
 from nonebot.log import logger
@@ -57,9 +58,11 @@ from .activity_rules import *
 from .activity_pass import *
 from .activity_progress import *
 from .point_shop_service import ActivityPointShopPurchaseService
+from .task_claim_service import ActivityTaskClaimService
 
 
 point_shop_purchase_service = ActivityPointShopPurchaseService(DB_PATH, get_paths().game_db)
+activity_task_claim_service = ActivityTaskClaimService(DB_PATH, get_paths().game_db)
 
 
 def _reward_by_day(config: dict, day_index: int) -> dict:
@@ -757,7 +760,7 @@ def _select_claimable_tasks(cur, config: dict, user_id: str, query: str = "") ->
     return selected
 
 
-def claim_activity_tasks(user_id: str, query: str = "") -> tuple[bool, str]:
+def claim_activity_tasks(user_id: str, query: str = "", operation_id: str | None = None) -> tuple[bool, str]:
     cfg = load_config()
     runtime = activity_runtime_state(cfg)
     if not runtime.get("ok"):
@@ -769,60 +772,36 @@ def claim_activity_tasks(user_id: str, query: str = "") -> tuple[bool, str]:
     ensure_activity_files()
     conn = db_backend.connect(DB_PATH)
     conn.row_factory = db_backend.Row
-    reward_jobs: list[tuple[dict, list[dict]]] = []
     try:
         cur = conn.cursor()
         claimable = _select_claimable_tasks(cur, cfg, uid, query)
         if not claimable:
             return False, "当前没有可领取的活动任务奖励"
+        tasks = []
         for task, scope_type, scope_key, target in claimable:
             reward_text = _clean_text(task.get("reward"))
             try:
                 reward_items = parse_reward(reward_text)
             except Exception as e:
-                conn.rollback()
                 return False, f"任务【{task['name']}】奖励配置错误：{e}"
-            ts = now_str()
-            cur.execute(
-                """
-                UPDATE activity_task_progress
-                SET claimed=1, claim_time=%s, update_time=%s, target=%s
-                WHERE activity_key=%s AND user_id=%s AND scope_type=%s AND scope_key=%s AND task_key=%s
-                    AND claimed=0 AND progress>=%s
-                """,
-                (ts, ts, target, activity_key, uid, scope_type, scope_key, task["key"], target),
-            )
-            if cur.rowcount <= 0:
-                continue
-            cur.execute(
-                """
-                INSERT INTO activity_task_claim_log (
-                    activity_key, user_id, scope_type, scope_key, task_key, reward, create_time
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """,
-                (activity_key, uid, scope_type, scope_key, task["key"], reward_text, ts),
-            )
-            reward_jobs.append((task, reward_items))
-        if not reward_jobs:
-            conn.rollback()
-            return False, "当前没有可领取的活动任务奖励"
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
+            tasks.append((task["key"], scope_type, scope_key, target, reward_text, reward_items, task["name"]))
     finally:
         conn.close()
 
+    result = activity_task_claim_service.claim(
+        operation_id or f"activity-task:{uid}:{time.time_ns()}", uid, activity_key, tasks, XiuConfig().max_goods_num
+    )
+    if not result.succeeded:
+        messages = {
+            "inventory_full": "背包空间不足，奖励未领取",
+            "user_missing": "角色不存在",
+            "state_changed": "任务状态已变化，请重新查询",
+            "operation_conflict": "领取请求冲突，请重新发送",
+        }
+        return False, messages.get(result.status, "当前没有可领取的活动任务奖励")
     lines = ["活动任务奖励领取成功："]
-    for task, reward_items in reward_jobs:
-        try:
-            reward_msg = send_reward_items(uid, reward_items)
-            reward_text = "，".join(reward_msg) if reward_msg else _clean_text(task.get("reward"), "暂无奖励")
-        except Exception as e:
-            logger.warning(f"活动任务发奖失败 user_id={uid}, task={task.get('key')}: {e}")
-            reward_text = f"奖励发放失败：{e}"
-        lines.append(f"- {task['name']}：{reward_text}")
+    for name, reward_text in result.rewards:
+        lines.append(f"- {name}：{reward_text or '暂无奖励'}")
     return True, "\n".join(lines)
 
 
