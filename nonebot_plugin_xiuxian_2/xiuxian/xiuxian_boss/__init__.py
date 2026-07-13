@@ -46,6 +46,7 @@ from ..xiuxian_title.title_data import check_and_unlock_titles
 from .boss_limit import boss_limit, player_data_manager
 from .purchase_service import BossPurchaseService
 from .battle_settlement_service import WorldBossBattleSettlementService
+from .manual_spawn_service import WorldBossManualSpawnService
 from .. import DRIVER
 # boss定时任务
 scheduler = require("nonebot_plugin_apscheduler").scheduler
@@ -61,6 +62,10 @@ world_boss_battle_settlement_service = WorldBossBattleSettlementService(
     get_paths().game_db,
     get_paths().player_db,
     get_paths().data / "activity" / "activity.db",
+)
+world_boss_manual_spawn_service = WorldBossManualSpawnService(
+    get_paths().player_db,
+    get_boss_config,
 )
 BOSSDROPSPATH = get_paths().data / "boss掉落物"
 
@@ -1012,19 +1017,32 @@ async def generate_all_bosses(bot: Bot, event: GroupMessageEvent | PrivateMessag
 async def create_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """生成世界boss - 每个境界只生成一个"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-
-    group_boss.setdefault(GLOBAL_BOSS_KEY, [])
-
-    boss_jj = createboss()
-    for boss in group_boss[GLOBAL_BOSS_KEY][:]:
-        if boss['jj'] == boss_jj:
-            group_boss[GLOBAL_BOSS_KEY].remove(boss)
-            break
-    
-    bossinfo = createboss_jj(boss_jj)
-    
-    group_boss[GLOBAL_BOSS_KEY].append(bossinfo)
-    old_boss_info.save_boss(group_boss)
+    event_id = str(
+        getattr(event, "message_id", "")
+        or getattr(event, "id", "")
+        or time_module.time_ns()
+    )
+    operation_id = f"world-boss-manual-spawn:{event_id}"
+    result = world_boss_manual_spawn_service.get_result(operation_id)
+    if result is None:
+        current_state = old_boss_info.read_boss_info()
+        expected_bosses = deepcopy(current_state.get(GLOBAL_BOSS_KEY, []))
+        boss_jj = createboss()
+        bossinfo = createboss_jj(boss_jj)
+        result = world_boss_manual_spawn_service.spawn(
+            operation_id=operation_id,
+            expected_bosses=expected_bosses,
+            expected_config=world_boss_manual_spawn_service.config_snapshot(config, boss_jj),
+            boss=bossinfo,
+        )
+    if not result.succeeded:
+        msg = "世界Boss场次或生成配置已变化，请重新执行生成指令。"
+        await handle_send(bot, event, msg)
+        await create.finish()
+    group_boss[GLOBAL_BOSS_KEY] = [dict(boss) for boss in result.bosses]
+    old_boss_info.data[GLOBAL_BOSS_KEY] = deepcopy(group_boss[GLOBAL_BOSS_KEY])
+    bossinfo = dict(result.boss)
+    boss_jj = bossinfo["jj"]
     msg = f"已生成{boss_jj}Boss:{bossinfo['name']}，诸位道友请击败Boss获得奖励吧!"
     await handle_send(bot, event, msg)
     await create.finish()
