@@ -260,6 +260,23 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
             )
         self.assertEqual(self.state(), before)
 
+    def test_real_lock_and_unlock_handlers_use_transaction_service(self) -> None:
+        source = (
+            Path(__file__).parents[1]
+            / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_back/accessory.py"
+        ).read_text(encoding="utf-8")
+        lock_handler = source.split("@lock_accessory_affix.handle", 1)[1].split(
+            "@unlock_accessory_affix.handle", 1
+        )[0]
+        unlock_handler = source.split("@unlock_accessory_affix.handle", 1)[1].split(
+            "@wash_accessory.handle", 1
+        )[0]
+
+        self.assertIn("accessory_transaction_service.set_affix_locks", lock_handler)
+        self.assertIn("accessory_transaction_service.set_affix_locks", unlock_handler)
+        self.assertNotIn("player_data_manager.patch_doc", lock_handler)
+        self.assertNotIn("player_data_manager.patch_doc", unlock_handler)
+
 
 if __name__ == "__main__":
     unittest.main()
