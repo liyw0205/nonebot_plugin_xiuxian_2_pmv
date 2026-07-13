@@ -17,12 +17,15 @@ from ..xiuxian_utils.game_events import safe_record_game_event
 from ..xiuxian_utils.utils import check_user, handle_send, number_to, send_help_message
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.item_json import Items
+from ..xiuxian_config import XiuConfig
 from .expansion_service import DongfuExpansionService
+from .harvest_settlement_service import DongfuHarvestSettlementService
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
 items = Items()
 dongfu_expansion_service = DongfuExpansionService(get_paths().game_db, get_paths().player_db)
+dongfu_harvest_settlement_service = DongfuHarvestSettlementService(get_paths().game_db, get_paths().player_db)
 
 MAP_TABLE = "map_status"
 DONGFU_TABLE = "dongfu_status"
@@ -228,6 +231,7 @@ def _default_dongfu():
         "planting": 0,
         "plant_seed_id": 0,
         "plant_start": "",
+        "harvest_settlement": "",
         "plant_finish": "",
         "plant_slots": _default_plant_slots(),
         "plot_count": DONGFU_PLOT_COUNT,
@@ -776,67 +780,96 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         else:
             wait_lines.append(f"{slot.get('slot')}号灵田状态异常，无法收获。")
 
-    if not harvest_slots:
-        detail = "\n".join(wait_lines) if wait_lines else "暂无成熟灵田。"
-        await handle_send(bot, event, f"{detail}\n{_format_plant_slots(d)}")
-        return
-
-    array_lv = _to_int(d.get("array_level"))
-    geomancy = _get_geomancy(d)
-    reward_map = {}
-    failed_slots = []
-    for slot in harvest_slots:
-        seed_id = _to_int(slot.get("seed_id"))
-        drops = _roll_harvest(seed_id, array_lv)
-        fertilizer = _to_int(slot.get("fertilizer"))
-        for _ in range(fertilizer):
-            extra_drops = _roll_harvest(seed_id, array_lv)
-            if extra_drops:
-                drops.append(random.choice(extra_drops))
-        extra_rate = float(geomancy.get("harvest_bonus", 0))
-        if SEED_CONFIG.get(seed_id, {}).get("pool", "").startswith("god"):
-            extra_rate += float(geomancy.get("god_bonus", 0))
-        if extra_rate > 0 and random.random() < extra_rate:
-            extra_drops = _roll_harvest(seed_id, array_lv)
-            if extra_drops:
-                drops.append(random.choice(extra_drops))
-        if not drops:
-            failed_slots.append(str(slot.get("slot")))
-        for gid, name, tp, num in drops:
-            if gid not in reward_map:
-                reward_map[gid] = {"name": name, "type": tp, "num": 0}
-            reward_map[gid]["num"] += num
-        slots[_to_int(slot.get("slot")) - 1] = _empty_plant_slot(_to_int(slot.get("slot")))
-
-    for gid, reward in reward_map.items():
-        sql_message.send_back(uid, gid, reward["name"], reward["type"], reward["num"], 1)
-
-    d["plant_slots"] = slots
-    _save_dongfu(uid, d)
-    safe_record_game_event(
-        uid,
-        "dongfu_harvest",
-        len(harvest_slots),
-        {
-            "source": "dongfu",
-            "action": "harvest",
-            "item_delta": [
-                {
-                    "id": gid,
-                    "name": reward["name"],
-                    "type": reward["type"],
-                    "amount": reward["num"],
-                }
+    snapshot = None
+    raw_snapshot = d.get("harvest_settlement", "")
+    if raw_snapshot:
+        try:
+            snapshot = json.loads(raw_snapshot)
+        except (TypeError, ValueError):
+            await handle_send(bot, event, "洞府收获结算数据异常，请联系管理员处理。")
+            return
+    if snapshot is None:
+        if not harvest_slots:
+            detail = "\n".join(wait_lines) if wait_lines else "暂无成熟灵田。"
+            await handle_send(bot, event, f"{detail}\n{_format_plant_slots(d)}")
+            return
+        array_lv = _to_int(d.get("array_level"))
+        geomancy = _get_geomancy(d)
+        reward_map = {}
+        failed_slots = []
+        for slot in harvest_slots:
+            seed_id = _to_int(slot.get("seed_id"))
+            drops = _roll_harvest(seed_id, array_lv)
+            for _ in range(_to_int(slot.get("fertilizer"))):
+                extra_drops = _roll_harvest(seed_id, array_lv)
+                if extra_drops:
+                    drops.append(random.choice(extra_drops))
+            extra_rate = float(geomancy.get("harvest_bonus", 0))
+            if SEED_CONFIG.get(seed_id, {}).get("pool", "").startswith("god"):
+                extra_rate += float(geomancy.get("god_bonus", 0))
+            if extra_rate > 0 and random.random() < extra_rate:
+                extra_drops = _roll_harvest(seed_id, array_lv)
+                if extra_drops:
+                    drops.append(random.choice(extra_drops))
+            if not drops:
+                failed_slots.append(str(slot.get("slot")))
+            for gid, name, item_type, amount in drops:
+                reward = reward_map.setdefault(gid, {"name": name, "type": item_type, "num": 0})
+                reward["num"] += amount
+        snapshot = {
+            "expected_slots": slots,
+            "failed_slots": failed_slots,
+            "items": [
+                {"id": gid, "name": reward["name"], "type": reward["type"], "amount": reward["num"]}
                 for gid, reward in reward_map.items()
             ],
-            "detail": {
-                "slots": [slot.get("slot") for slot in harvest_slots],
-                "failed_slots": failed_slots,
-            },
-        },
-    )
+            "slot_numbers": [int(slot["slot"]) for slot in harvest_slots],
+        }
+        d["harvest_settlement"] = json.dumps(snapshot, ensure_ascii=False, sort_keys=True)
+        _save_dongfu(uid, d)
+    else:
+        failed_slots = snapshot["failed_slots"]
 
-    lines = [f"洞府收获完成，共收获{len(harvest_slots)}块灵田："]
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"dongfu-harvest:{uid}:{event_message_id or d['harvest_settlement']}"
+    result = dongfu_harvest_settlement_service.harvest(
+        operation_id,
+        uid,
+        snapshot["expected_slots"],
+        snapshot["slot_numbers"],
+        snapshot["items"],
+        XiuConfig().max_goods_num,
+        _fmt_dt(now),
+    )
+    if result.status == "inventory_full":
+        await handle_send(bot, event, "背包物品已达上限，洞府收获尚未领取。")
+        return
+    if result.status in {"not_mature", "state_changed", "user_missing", "dongfu_missing"}:
+        await handle_send(bot, event, "洞府种植状态已变化，请重新尝试。")
+        return
+
+    reward_map = {
+        int(item["id"]): {"name": item["name"], "type": item["type"], "num": int(item["amount"])}
+        for item in snapshot["items"]
+    }
+    for number in snapshot["slot_numbers"]:
+        slots[number - 1] = _empty_plant_slot(number)
+    d["plant_slots"] = slots
+    d["harvest_settlement"] = ""
+    _sync_plant_fields(d)
+    if result.status == "harvested":
+        safe_record_game_event(
+            uid,
+            "dongfu_harvest",
+            len(snapshot["slot_numbers"]),
+            {
+                "source": "dongfu",
+                "action": "harvest",
+                "item_delta": snapshot["items"],
+                "detail": {"slots": snapshot["slot_numbers"], "failed_slots": failed_slots},
+            },
+        )
+    lines = [f"洞府收获完成，共收获{len(snapshot['slot_numbers'])}块灵田："]
     if reward_map:
         lines.extend(f"- {reward['name']} x{reward['num']}" for reward in reward_map.values())
     if failed_slots:
