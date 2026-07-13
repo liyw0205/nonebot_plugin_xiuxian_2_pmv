@@ -78,6 +78,12 @@ class EquipmentServiceTests(unittest.TestCase):
         self.assertEqual(second.status, "duplicate")
         self.assertEqual(self.scalar("SELECT faqi_buff FROM BuffInfo WHERE user_id=%s", ("u1",)), 102)
 
+    def test_reused_operation_with_different_payload_is_rejected(self) -> None:
+        first = self.service.change("conflict", "u1", 102, "法器", equip=True)
+        conflict = self.service.change("conflict", "u1", 101, "法器", equip=True)
+        self.assertEqual((first.status, conflict.status), ("equipped", "state_changed"))
+        self.assertEqual(self.scalar("SELECT faqi_buff FROM BuffInfo WHERE user_id=%s", ("u1",)), 102)
+
     def test_missing_item_and_wrong_unequip_do_not_mutate_state(self) -> None:
         missing = self.service.change("missing", "u1", 999, "法器", equip=True)
         wrong = self.service.change("wrong", "u1", 102, "法器", equip=False)

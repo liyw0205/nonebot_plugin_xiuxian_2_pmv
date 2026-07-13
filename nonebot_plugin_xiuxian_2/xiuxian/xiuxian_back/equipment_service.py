@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import closing
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
@@ -37,11 +38,14 @@ class EquipmentService:
                 goods_id INTEGER NOT NULL,
                 action TEXT NOT NULL,
                 previous_id INTEGER NOT NULL DEFAULT 0,
+                payload TEXT NOT NULL DEFAULT '',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
 
+        if "payload" not in conn.column_names("equipment_operations"):
+            conn.execute("ALTER TABLE equipment_operations ADD COLUMN payload TEXT NOT NULL DEFAULT ''")
     def change(self, operation_id, user_id, goods_id, item_type, *, equip: bool):
         column = self.SLOT_COLUMNS.get(str(item_type))
         if column is None:
@@ -50,6 +54,7 @@ class EquipmentService:
         if not operation_id:
             raise ValueError("operation_id must not be empty")
         user_id = str(user_id)
+        payload = json.dumps([user_id, goods_id, str(item_type), bool(equip)], ensure_ascii=True)
         goods_id = int(goods_id)
 
         with self._lock, closing(db_backend.connect(self._database)) as conn:
@@ -57,11 +62,13 @@ class EquipmentService:
                 conn.execute("BEGIN IMMEDIATE")
                 self._ensure_operations(conn)
                 row = conn.execute(
-                    "SELECT previous_id FROM equipment_operations WHERE operation_id=%s",
+                    "SELECT previous_id, payload FROM equipment_operations WHERE operation_id=%s",
                     (operation_id,),
                 ).fetchone()
                 if row:
                     conn.rollback()
+                    if str(row[1] or "") != payload:
+                        return EquipmentChange("state_changed", user_id, goods_id, int(row[0]))
                     return EquipmentChange("duplicate", user_id, goods_id, int(row[0]))
                 inventory = conn.execute(
                     "SELECT goods_num, state FROM back WHERE user_id=%s AND goods_id=%s",
@@ -102,8 +109,8 @@ class EquipmentService:
                     (target_id, user_id),
                 )
                 conn.execute(
-                    "INSERT INTO equipment_operations VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)",
-                    (operation_id, user_id, goods_id, "equip" if equip else "unequip", previous_id),
+                    "INSERT INTO equipment_operations (operation_id,user_id,goods_id,action,previous_id,payload,created_at) VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)",
+                    (operation_id, user_id, goods_id, "equip" if equip else "unequip", previous_id, payload),
                 )
                 conn.commit()
                 return EquipmentChange(
