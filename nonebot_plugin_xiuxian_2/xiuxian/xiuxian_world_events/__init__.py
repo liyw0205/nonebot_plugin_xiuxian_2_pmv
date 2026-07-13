@@ -30,6 +30,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
 )
 from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
+from .demon_attack_settlement_service import DemonAttackSettlementService
 from .demon_claim_service import DemonClaimService
 
 
@@ -38,6 +39,7 @@ sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
 items = Items()
 demon_claim_service = DemonClaimService(get_paths().game_db, get_paths().player_db)
+demon_attack_settlement_service = DemonAttackSettlementService(get_paths().player_db)
 
 EVENT_TABLE = "world_event_state"
 EVENT_KEY = "global"
@@ -1094,6 +1096,9 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
         attack_limit_msg = ""
         realm = ""
         boss_snapshot = {}
+        expected_boss_snapshot = {}
+        event_snapshot = {}
+        participants_snapshot = {}
         battle_hp = 1
         pursuit_mode = False
         if not no_active_event:
@@ -1113,10 +1118,12 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
                 else:
                     pursuit_mode = boss_defeated
                     boss_snapshot = dict(boss_info)
+                    expected_boss_snapshot = dict(boss_info)
+                    event_snapshot = {"status": state.get("status"), "event_id": state.get("event_id")}
+                    participants_snapshot = dict(state.get("participants", {}))
                     battle_hp = max(_to_int(boss_snapshot.get("battle_max_hp", boss_snapshot.get("battle_hp")), 0), 1)
                     boss_snapshot["气血"] = battle_hp
                     boss_snapshot["总血量"] = max(_to_int(boss_snapshot.get("battle_max_hp", boss_snapshot.get("总血量")), 0), 1)
-                    _save_state(state)
 
     if no_active_event:
         msg = f"当前没有正在进行的魔修入侵。\n开启时间：每日{EVENT_START_HOUR}:00-{EVENT_END_HOUR}:00。"
@@ -1143,83 +1150,33 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
     reward_multiplier = 1.0
     total_contribution = 0.0
     attack_duplicate_after_fight = False
+    event_message_id = getattr(event, "message_id", "") or getattr(event, "id", "")
+    operation_id = f"demon-attack:{event_snapshot.get('event_id')}:{user_id}:{event_message_id or time.time_ns()}"
     with _state_lock:
-        state = _ensure_daily_state()
-        battle_closed = state.get("status") != "active"
-        if not battle_closed:
-            boss_info = state.get("bosses", {}).get(realm)
-            if not boss_info:
-                battle_closed = True
-            else:
-                boss_wave = max(_to_int(boss_info.get("wave"), 1), 1)
-                snapshot_wave = max(_to_int(boss_snapshot.get("wave"), 1), 1)
-                if boss_wave != snapshot_wave:
-                    battle_closed = True
-                else:
-                    record_key, _ = _find_participant_record(state, user_id, realm, boss_wave)
-                    existing_attacks = _count_user_attacks(state, user_id)
-                    already_claimed = _has_user_claimed(state.get("claimed", {}), user_id, record_key)
-                    if already_claimed or existing_attacks >= DEMON_ATTACK_LIMIT:
-                        battle_closed = True
-                        attack_duplicate_after_fight = True
-                    else:
-                        boss_all_hp = max(_to_int(boss_info.get("boss_max_hp"), 0), 1)
-                        reward_multiplier = _boss_reward_multiplier(boss_info)
-                        current_hp = max(_to_int(boss_info.get("boss_hp"), 0), 0)
-                        pursuit_mode = current_hp <= 0
-                        damage_ratio = MAX_PURSUIT_DAMAGE_RATIO if pursuit_mode else MAX_SINGLE_DAMAGE_RATIO
-                        max_single_damage = max(int(boss_all_hp * damage_ratio), 1)
-                        raw_real_damage = total_damage * BOSS_REAL_HP_MULTIPLIER
-                        if pursuit_mode:
-                            real_damage = min(raw_real_damage, max_single_damage)
-                            boss_now_hp = current_hp
-                        else:
-                            real_damage = min(raw_real_damage, max_single_damage, current_hp)
-                            boss_now_hp = max(current_hp - real_damage, 0)
-                        boss_info["boss_hp"] = boss_now_hp
-                        boss_info["battle_hp"] = boss_info.get("battle_max_hp", boss_info.get("battle_hp", battle_hp))
-                        boss_info["气血"] = boss_info["battle_hp"]
-                        boss_info["总血量"] = boss_info.get("battle_max_hp", boss_info.get("总血量", battle_hp))
-                        killed = (not pursuit_mode) and boss_now_hp <= 0
-                        contribution_ratio = min(max(real_damage / boss_all_hp, 0.0), 1.0)
-
-                        _record_participant(
-                            state,
-                            user_info,
-                            realm,
-                            boss_wave,
-                            real_damage,
-                            contribution_ratio,
-                            reward_multiplier,
-                            killed,
-                            boss_all_hp,
-                            pursuit_mode,
-                        )
-                        if pursuit_mode:
-                            _mark_wave_reward_ready(state, realm, boss_wave)
-                            boss_info["last_result"] = f"{user_info.get('user_name', user_id)}追击了{realm}魔修。"
-                        elif killed:
-                            _mark_wave_reward_ready(state, realm, boss_wave)
-                            boss_info["battle_hp"] = 0
-                            boss_info["气血"] = 0
-                            boss_info["last_result"] = f"{user_info.get('user_name', user_id)}击退了{realm}魔修。"
-                        state["bosses"][realm] = boss_info
-                        _, total_contribution, _, _ = _sum_reward_contribution(
-                            state,
-                            _find_user_records(state, user_id, realm),
-                        )
-                        _save_state(state)
+        settlement = demon_attack_settlement_service.settle(
+            operation_id, EVENT_KEY, user_id, user_info.get("user_name", user_id), realm,
+            total_damage, event_snapshot, expected_boss_snapshot, participants_snapshot,
+            attack_limit=DEMON_ATTACK_LIMIT,
+            real_hp_multiplier=BOSS_REAL_HP_MULTIPLIER,
+            max_damage_ratio=MAX_SINGLE_DAMAGE_RATIO,
+            max_pursuit_ratio=MAX_PURSUIT_DAMAGE_RATIO,
+        )
+    battle_closed = settlement.status != "applied"
+    attack_duplicate_after_fight = settlement.status == "already_settled"
+    if not battle_closed:
+        real_damage = settlement.real_damage
+        boss_now_hp = settlement.boss_now_hp
+        boss_all_hp = settlement.boss_all_hp
+        killed = settlement.killed
+        pursuit_mode = settlement.pursuit_mode
+        contribution_ratio = settlement.contribution_ratio
+        reward_multiplier = settlement.reward_multiplier
+        total_contribution = settlement.total_contribution
 
     if battle_closed:
         msg = "你本期次数已用尽或已领取本期奖励，本次战斗未重复计入贡献。" if attack_duplicate_after_fight else "本场魔修入侵已经结束或已刷新，本次战斗未计入贡献。"
         await handle_send(bot, event, msg, md_type="世界事件", k1="领奖", v1="领取魔修奖励")
         await attack_demon_invasion.finish()
-
-    update_statistics_value(user_id, "魔修入侵参与")
-    if real_damage > 0:
-        update_statistics_value(user_id, "魔修入侵伤害", increment=real_damage)
-    if killed:
-        update_statistics_value(user_id, "魔修入侵击退")
 
     try:
         await send_msg_handler(bot, event, result)
