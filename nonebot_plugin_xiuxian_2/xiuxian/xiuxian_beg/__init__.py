@@ -1,5 +1,7 @@
 import random
+import time
 from datetime import datetime
+from ...paths import get_paths
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..on_compat import on_command
 from ..adapter_compat import (
@@ -16,6 +18,7 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.data_source import jsondata
+from .novice_gift_service import NoviceGiftClaimService
 from ..xiuxian_utils.utils import (
     check_user,Txt2Img,
     get_msg_pic,
@@ -27,6 +30,7 @@ items = Items()
 cache_level_help = {}
 cache_beg_help = {}
 sql_message = XiuxianDateManage()  # sql类
+novice_gift_claim_service = NoviceGiftClaimService(get_paths().game_db)
 
 __beg_help__ = f"""
 **仙途奇缘系统帮助**
@@ -147,29 +151,10 @@ async def novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="我要修仙")
         await novice.finish()
     user_id = str(user_info['user_id'])
-    # 检查是否已领取
-    if sql_message.get_novice(user_id) is None:
-        msg = '您已经领取过新手礼包了！'
-        await handle_send(bot, event, msg)
-        await novice.finish()
-    
-    # 检查是否是新用户
-    create_time = datetime.strptime(user_info['create_time'], "%Y-%m-%d %H:%M:%S.%f")
-    now_time = datetime.now()
-    diff_time = now_time - create_time
-    diff_days = diff_time.days
-    
-    if diff_days > XiuConfig().beg_max_days:  
-        msg = f'新手礼包仅限创建角色{XiuConfig().beg_max_days}天内领取！'
-        await handle_send(bot, event, msg)
-        await novice.finish()
-    
-    # 发放新手礼包
-    num = 1
-    goods_id = "18052"  # 新手礼包物品ID
-    goods_info = items.get_data_by_item_id(goods_id)
-    package_name = goods_info['name']
+    goods_info = items.get_data_by_item_id("18052")
     msg_parts = []
+    rewards = []
+    stone = 0
     i = 1
     while True:
         buff_key = f'buff_{i}'
@@ -181,13 +166,12 @@ async def novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             break
 
         item_name = goods_info[name_key]
-        item_amount = goods_info.get(amount_key, 1) * num
+        item_amount = int(goods_info.get(amount_key, 1))
         item_type = goods_info.get(type_key)
         buff_id = goods_info.get(buff_key)
 
         if item_name == "灵石":
-            key = 1 if item_amount > 0 else 2  # 正数增加，负数减少
-            sql_message.update_ls(user_id, abs(item_amount), key)
+            stone += item_amount
             msg_parts.append(f"获得灵石 {item_amount} 枚\n")
         else:
             if item_type in ["辅修功法", "神通", "功法", "身法", "瞳术"]:
@@ -197,13 +181,30 @@ async def novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             else:
                 goods_type_item = item_type
             if buff_id is not None:
-                sql_message.send_back(user_id, buff_id, item_name, goods_type_item, item_amount, 1)
+                rewards.append({
+                    "id": int(buff_id), "name": item_name,
+                    "type": goods_type_item, "amount": item_amount,
+                })
                 msg_parts.append(f"获得 {item_name} x{item_amount}\n")
         
         i += 1            
 
-    if buff_id is not None:
-        sql_message.send_back(user_id, buff_id, item_name, goods_type_item, item_amount, 1)
-    msg = f"道友的新手礼包:\n" + "".join(msg_parts)
-    sql_message.save_novice(user_id)
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"novice-gift:{event_id}:{user_id}" if event_id else f"novice-gift:{time.time_ns()}:{user_id}"
+    result = novice_gift_claim_service.claim(
+        operation_id, user_id, user_info["create_time"], datetime.now(),
+        XiuConfig().beg_max_days, stone, rewards, XiuConfig().max_goods_num,
+    )
+    if result.succeeded:
+        msg = f"道友的新手礼包:\n" + "".join(msg_parts)
+    elif result.status == "already_claimed":
+        msg = "您已经领取过新手礼包了！"
+    elif result.status == "expired":
+        msg = f"新手礼包仅限创建角色{XiuConfig().beg_max_days}天内领取！"
+    elif result.status == "inventory_full":
+        msg = "背包空间不足，无法领取新手礼包！"
+    elif result.status in {"state_changed", "operation_conflict"}:
+        msg = "角色状态已变化，请重新尝试领取！"
+    else:
+        msg = "未找到角色信息，无法领取新手礼包！"
     await handle_send(bot, event, msg)
