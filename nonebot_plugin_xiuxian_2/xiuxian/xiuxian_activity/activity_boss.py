@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import random
+import time
 
 from nonebot.log import logger
 
@@ -26,8 +26,11 @@ from .service import (
     today_str,
 )
 from .boss_reward_claim_service import BossRewardClaimService
+from .boss_coop_settlement_service import ActivityBossCoopSettlementService
 
 BOSS_MODES = {"item_raid", "cooperative", "both"}
+
+activity_boss_coop_settlement_service = ActivityBossCoopSettlementService(DB_PATH)
 
 
 def _runtime_gate(feature: str) -> tuple[bool, str, float]:
@@ -391,7 +394,7 @@ def record_cooperative_boss_hit(user_id: str, raw_damage: int | None = None) -> 
     return messages
 
 
-def fight_cooperative_boss(user_id: str, query: str = "") -> tuple[bool, str]:
+def fight_cooperative_boss(user_id: str, query: str = "", operation_id: str | None = None) -> tuple[bool, str]:
     allowed, reason, multiplier = _runtime_gate("boss")
     if not allowed:
         return False, reason
@@ -409,26 +412,39 @@ def fight_cooperative_boss(user_id: str, query: str = "") -> tuple[bool, str]:
         cur = conn.cursor()
         used = _today_fight_count(cur, activity["key"], str(user_id))
         limit = activity["daily_fight_limit"]
-        if used >= limit:
-            return False, f"今日挑战次数已用完（{limit}次）"
-
         damage = max(1, int(calc_coop_damage(activity, user_id) * multiplier))
-        actual, hp_left, max_hp = _apply_damage(cur, activity, str(user_id), damage, "coop")
-        conn.commit()
-        name = resolve_daohao(user_id)
-        cap_pct = int(float(activity.get("hit_hp_cap_ratio", 0.01)) * 100)
-        pct = 100.0 * hp_left / max_hp if max_hp else 0
-        lines = [
-            f"【{activity['boss_name']}】",
-            f"{name} 造成伤害 {number_to(actual)}（单次上限为首领血量 {cap_pct}%）",
-            f"首领剩余 {number_to(hp_left)} / {number_to(max_hp)}（{pct:.2f}%）",
-            f"今日剩余挑战 {limit - used - 1} 次",
-        ]
-        if hp_left <= 0:
-            lines.append("首领已被全服击破！可领取全服进度奖励与排行奖励。")
-        return True, "\n".join(lines)
+        cap = int(activity["max_hp"] * float(activity.get("hit_hp_cap_ratio", 0.01)))
+        damage = min(damage, max(1, cap))
+        hp_left, max_hp = _ensure_boss_hp(cur, activity)
     finally:
         conn.close()
+
+    result = activity_boss_coop_settlement_service.settle(
+        operation_id or f"activity-boss-coop:{user_id}:{time.time_ns()}",
+        str(user_id), activity["key"], hp_left, max_hp, used, limit, damage,
+        today_str(), now_str(), activity.get("server_milestones") or (),
+    )
+    if result.status == "limit_reached":
+        return False, f"今日挑战次数已用完（{limit}次）"
+    if result.status == "boss_defeated":
+        return False, "首领已被全服击破"
+    if result.status in {"state_changed", "operation_conflict"}:
+        return False, "首领状态已变化，请重试"
+    if not result.succeeded:
+        return False, "活动首领讨伐失败，请重试"
+
+    name = resolve_daohao(user_id)
+    cap_pct = int(float(activity.get("hit_hp_cap_ratio", 0.01)) * 100)
+    pct = 100.0 * result.hp_left / result.max_hp if result.max_hp else 0
+    lines = [
+        f"【{activity['boss_name']}】",
+        f"{name} 造成伤害 {number_to(result.damage)}（单次上限为首领血量 {cap_pct}%）",
+        f"首领剩余 {number_to(result.hp_left)} / {number_to(result.max_hp)}（{pct:.2f}%）",
+        f"今日剩余挑战 {max(0, limit - result.fight_count)} 次",
+    ]
+    if result.hp_left <= 0:
+        lines.append("首领已被全服击破！可领取全服进度奖励与排行奖励。")
+    return True, "\n".join(lines)
 
 
 def use_item_on_boss(user_id: str, query: str) -> tuple[bool, str]:
@@ -476,6 +492,7 @@ def use_item_on_boss(user_id: str, query: str) -> tuple[bool, str]:
         if have < need:
             return False, f"【{item_def['name']}】不足（需要{need}，持有{have}）"
 
+        import random
         dmg = max(1, int(random.randint(item_def["damage_min"], item_def["damage_max"]) * multiplier))
         cur.execute(
             """

@@ -332,11 +332,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     raw = args.extract_plain_text().strip()
     uid = str(user_info["user_id"])
+    operation_id = _activity_operation_id(event, "boss-item" if raw else "boss-coop", uid)
     if raw:
-        ok, text = use_item_on_boss(uid, raw)
+        ok, text = use_item_on_boss(uid, raw, operation_id)
         await handle_send(bot, event, text)
         return
-    ok, text = fight_cooperative_boss(uid)
+    ok, text = fight_cooperative_boss(uid, operation_id=operation_id)
     await handle_send(bot, event, text)
 
 
