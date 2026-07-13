@@ -83,6 +83,7 @@ from .member_join_service import SectMemberJoinService
 from .mainbuff_learn_service import SectMainBuffLearnService
 from .secbuff_learn_service import SectSecBuffLearnService
 from .disband_service import SectDisbandService
+from .daily_reset_maintenance_service import SectDailyResetMaintenanceService
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
@@ -98,6 +99,7 @@ sect_member_join_service = SectMemberJoinService(get_paths().game_db)
 sect_mainbuff_learn_service = SectMainBuffLearnService(get_paths().game_db)
 sect_secbuff_learn_service = SectSecBuffLearnService(get_paths().game_db)
 sect_disband_service = SectDisbandService(get_paths().game_db)
+sect_daily_reset_maintenance_service = SectDailyResetMaintenanceService(get_paths().game_db)
 config = get_config()
 SECT_RENAME_CARD_ID = 20026
 SECT_RENAME_CARD_NAME = "宗门易名符"
@@ -291,25 +293,29 @@ async def materialsupdate_():
 
 # 重置用户宗门任务次数、宗门丹药领取次数
 async def resetusertask():
-    sql_message.sect_task_reset()
-    sql_message.sect_elixir_get_num_reset()
-    maintenance_key = f"sect-elixir-maintenance:{datetime.now().date().isoformat()}"
     maintenance_costs = {
         int(level): room_config["level_up_cost"]["建设度"]
         for level, room_config in config["宗门丹房参数"]["elixir_room_level"].items()
     }
-    all_sects = sql_message.get_all_sects_id_scale()
-    for s in all_sects:
-        result = sect_membership_service.charge_elixir_room_maintenance(
-            maintenance_key,
-            s[0],
-            maintenance_costs,
+    result = sect_daily_reset_maintenance_service.settle(
+        datetime.now().date().isoformat(), maintenance_costs
+    )
+    if result.status == "operation_conflict":
+        logger.error("宗门每日重置 operation 配置冲突，本次未执行")
+        return
+    if result.status == "applied":
+        for outcome in result.outcomes:
+            if outcome.status in {"downgraded", "disabled"}:
+                change = "失效" if outcome.status == "disabled" else f"降至 {outcome.to_level} 级"
+                logger.opt(colors=True).info(
+                    f"<red>宗门：{outcome.sect_name}的资材无法维持丹房，丹房已{change}</red>"
+                )
+    if result.status == "duplicate":
+        logger.info(f"宗门每日重置 {result.business_date} 已执行，跳过重复调度")
+    else:
+        logger.opt(colors=True).info(
+            f"<green>已原子重置 {result.user_count} 名用户的宗门任务和丹药次数，并完成全部丹房维护</green>"
         )
-        if result.status == "insufficient" and not result.duplicate:
-            logger.opt(colors=True).info(
-                f"<red>宗门：{result.sect_name}的资材无法维持丹房</red>"
-            )
-    logger.opt(colors=True).info(f"<green>已重置所有宗门任务次数、宗门丹药领取次数，已扣除丹房维护费</green>")
 
 # 定时任务自动检测并处理宗门状态
 async def auto_handle_inactive_sect_owners():
