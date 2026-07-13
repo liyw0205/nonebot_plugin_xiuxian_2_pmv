@@ -1,5 +1,9 @@
+from copy import deepcopy
+import time
+
 from ..on_compat import on_command
 from nonebot.params import CommandArg
+from ...paths import get_paths
 
 from ..adapter_compat import (
     Bot,
@@ -15,10 +19,23 @@ from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, sen
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager, XiuxianDateManage, calc_accessory_effects
 from ..xiuxian_utils.lay_out import Cooldown
 from .accessory_helpers import *
+from .accessory_transaction_service import AccessoryTransactionService
 
 items = Items()
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
+accessory_transaction_service = AccessoryTransactionService(
+    get_paths().game_db, get_paths().player_db
+)
+
+
+def _accessory_operation_id(event, action, user_id, target):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"accessory:{event_id}:{action}:{user_id}:{target}"
+    return f"accessory:{action}:{user_id}:{target}:{time.time_ns()}"
 
 my_accessory = on_command("我的饰品", priority=10, block=True)
 accessory_bag = on_command("饰品背包", priority=10, block=True)
@@ -843,6 +860,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         md_type="背包", k1="查看", v1=f"查看饰品 {uid}", k2="洗练", v2=f"饰品洗练 {uid}"
     )
 
+@decompose_accessory.handle(parameterless=[Cooldown(cd_time=1.2)])
 @wash_accessory.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     isUser, user_info, msg = check_user(event)
@@ -856,9 +874,28 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     user_id = str(user_info["user_id"])
+    operation_id = _accessory_operation_id(event, "wash", user_id, uid)
+    replay = accessory_transaction_service.replay(operation_id, "wash")
+    if replay is not None and replay.accessory is not None:
+        updated = replay.accessory
+        q2 = max(1, min(5, int(updated.get("quality", 1))))
+        locked = _normalize_locked_affixes(updated)
+        wash_count = int(updated.get("wash_count", 0))
+        need = abs(replay.stone_delta)
+        tip = "（已触发150次保底：词条数值固定上限）" if wash_count >= 150 else ""
+        await handle_send(
+            bot,
+            event,
+            f"洗练完成：{updated.get('name','未知饰品')}（{quality_to_cn(q2)}）\n"
+            f"消耗{WASH_STONE_NAME}：{need}个\n"
+            f"锁定词条：{_format_locked_positions(locked)}\n"
+            f"当前洗练次数：{wash_count}/150 {tip}",
+            md_type="背包", k1="饰品", v1="饰品背包", k2="查看", v2="我的饰品"
+        )
+        return
 
     data = _get_data(user_id)
-    where, key, target = _find_accessory_anywhere(data, uid)
+    _, _, target = _find_accessory_anywhere(data, uid)
     if not target:
         await handle_send(bot, event, "未找到该饰品UID")
         return
@@ -883,19 +920,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         )
         return
 
-    sql_message.update_back_j(user_id, WASH_STONE_ID, num=need)
+    expected_accessory = deepcopy(target)
 
-    result = {"ok": False, "msg": "洗练失败：未找到饰品"}
-
-    def _mut(doc):
-        nonlocal result
-        doc = _normalize_accessory_doc(doc)
-
-        w, k, t = _find_accessory_anywhere(doc, uid)
-        if not t:
-            result["msg"] = "洗练失败：饰品不存在（可能刚被操作）"
-            return False
-
+    def _reroll(t):
         q2 = max(1, min(5, int(t.get("quality", 1))))
         old_affixes = t.get("affixes", [])
         if not isinstance(old_affixes, list):
@@ -903,8 +930,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         locked = _normalize_locked_affixes(t, len(old_affixes))
         target_cnt = _target_affix_count_for_quality(q2)
         if len(locked) >= target_cnt:
-            result["msg"] = f"洗练失败：{quality_to_cn(q2)}最多锁定{target_cnt - 1}条，至少保留1条参与洗练"
-            return False
+            raise ValueError("all affixes are locked")
 
         wash_count = int(t.get("wash_count", 0)) + 1
         t["wash_count"] = wash_count
@@ -917,36 +943,43 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             pity_reached=pity_reached
         )
         _set_locked_affixes(t, _normalize_locked_affixes(t, len(t["affixes"])))
+        return t
 
-        if w == "bag":
-            doc["bag"][k] = t
-        else:
-            doc["equipped"][k] = t
+    result = accessory_transaction_service.wash(
+        operation_id,
+        user_id,
+        uid,
+        expected_accessory,
+        have,
+        WASH_STONE_ID,
+        need,
+        _reroll,
+    )
 
-        tip = "（已触发150次保底：词条数值固定上限）" if pity_reached else ""
-        result["ok"] = True
-        result["msg"] = (
-            f"洗练完成：{t.get('name','未知饰品')}（{quality_to_cn(q2)}）\n"
+    if result.status == "item_insufficient":
+        text = f"洗练失败：{WASH_STONE_NAME}不足"
+    elif result.status in {"accessory_missing", "state_changed"}:
+        text = "洗练失败：饰品或材料状态已变化，请重新查看后再试"
+    elif not result.succeeded or result.accessory is None:
+        text = "洗练失败"
+    else:
+        updated = result.accessory
+        q2 = max(1, min(5, int(updated.get("quality", 1))))
+        locked = _normalize_locked_affixes(updated)
+        wash_count = int(updated.get("wash_count", 0))
+        tip = "（已触发150次保底：词条数值固定上限）" if wash_count >= 150 else ""
+        text = (
+            f"洗练完成：{updated.get('name','未知饰品')}（{quality_to_cn(q2)}）\n"
             f"消耗{WASH_STONE_NAME}：{need}个\n"
             f"锁定词条：{_format_locked_positions(locked)}\n"
             f"当前洗练次数：{wash_count}/150 {tip}"
         )
-        return True
-
-    player_data_manager.patch_doc(
-        user_id=user_id,
-        table_name=TABLE,
-        fields=["equipped", "bag"],
-        mutator=_mut,
-        default_factory=_default_accessory_doc
-    )
 
     await handle_send(
-        bot, event, result["msg"],
+        bot, event, text,
         md_type="背包", k1="饰品", v1="饰品背包", k2="查看", v2="我的饰品"
     )
 
-@decompose_accessory.handle(parameterless=[Cooldown(cd_time=1.2)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     isUser, user_info, msg = check_user(event)
     if not isUser:
