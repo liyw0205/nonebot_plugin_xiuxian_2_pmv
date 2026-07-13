@@ -46,6 +46,7 @@ from ..xiuxian_title.title_data import check_and_unlock_titles
 from .boss_limit import boss_limit, player_data_manager
 from .reward_service import BossRewardService
 from .purchase_service import BossPurchaseService
+from .battle_cost_service import BossBattleCostService
 from .. import DRIVER
 # boss定时任务
 scheduler = require("nonebot_plugin_apscheduler").scheduler
@@ -58,6 +59,7 @@ battle_flag = {}
 sql_message = XiuxianDateManage()  # sql类
 boss_reward_service = BossRewardService(get_paths().game_db, get_paths().player_db)
 boss_purchase_service = BossPurchaseService(get_paths().game_db, get_paths().player_db)
+boss_battle_cost_service = BossBattleCostService(get_paths().game_db, get_paths().player_db)
 BOSSDROPSPATH = get_paths().data / "boss掉落物"
 
 create = on_command("世界BOSS生成", aliases={"世界boss生成", "世界Boss生成", "生成世界BOSS", "生成世界boss", "生成世界Boss"}, permission=SUPERUSER, priority=5, block=True)
@@ -262,7 +264,7 @@ async def boss_delete_all_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     await handle_send(bot, event, msg)
     await boss_delete_all.finish()
 
-@battle.handle(parameterless=[Cooldown(stamina_cost=config['讨伐世界Boss体力消耗'])])
+@battle.handle(parameterless=[Cooldown()])
 async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """讨伐世界boss"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -299,8 +301,6 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         )
         await battle.finish()
 
-    sql_message.update_last_check_info_time(user_id)
-
     msg = args.extract_plain_text().strip()
     boss_num = re.findall(r"\d+", msg)
 
@@ -308,7 +308,6 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         boss_num = int(boss_num[0])
     else:
         msg = "请输入正确的世界Boss编号!"
-        sql_message.update_user_stamina(user_id, config['讨伐世界Boss体力消耗'], 1)
         await handle_send(
             bot,
             event,
@@ -327,20 +326,17 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         bosss = group_boss.get(GLOBAL_BOSS_KEY, [])
     except Exception:
         msg = "尚未生成世界Boss,请等待世界boss刷新!"
-        sql_message.update_user_stamina(user_id, config['讨伐世界Boss体力消耗'], 1)
         await handle_send(bot, event, msg)
         await battle.finish()
 
     if not bosss:
         msg = "尚未生成世界Boss,请等待世界boss刷新!"
-        sql_message.update_user_stamina(user_id, config['讨伐世界Boss体力消耗'], 1)
         await handle_send(bot, event, msg)
         await battle.finish()
 
     index = len(group_boss[GLOBAL_BOSS_KEY])
     if not (0 < boss_num <= index):
         msg = "请输入正确的世界Boss编号!"
-        sql_message.update_user_stamina(user_id, config['讨伐世界Boss体力消耗'], 1)
         await handle_send(
             bot,
             event,
@@ -365,7 +361,6 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n"
             f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
         )
-        sql_message.update_user_stamina(user_id, config['讨伐世界Boss体力消耗'], 1)
         await handle_send(
             bot,
             event,
@@ -395,7 +390,6 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
 
     if boss_rank - user_rank >= 5:
         msg = f"道友已是{user_info['level']}之人，妄图抢小辈的Boss，可耻！"
-        sql_message.update_user_stamina(user_id, config['讨伐世界Boss体力消耗'], 1)
         await handle_send(
             bot,
             event,
@@ -416,7 +410,6 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             f"道友，您的实力尚需提升至{required_rank_name}，"
             f"目前仅为{user_info['level']}，不宜过早挑战Boss，还请三思。"
         )
-        sql_message.update_user_stamina(user_id, config['讨伐世界Boss体力消耗'], 1)
         await handle_send(
             bot,
             event,
@@ -429,6 +422,24 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             k3="列表",
             v3="世界BOSS列表"
         )
+        await battle.finish()
+
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_key = event_id or str(time_module.time_ns())
+    checked_at = sql_message.get_last_check_info_time(user_id)
+    cost_result = boss_battle_cost_service.consume(
+        f"boss-cost:{operation_key}:{user_id}", user_id, config['讨伐世界Boss体力消耗'], battle_count,
+        user_info['user_stamina'], user_info['hp'], user_info['exp'], today_battle_count,
+        "" if checked_at is None else str(checked_at),
+    )
+    if cost_result.status == "stamina_insufficient":
+        await handle_send(bot, event, "你没有足够的体力，请等待体力恢复后再试！")
+        await battle.finish()
+    if cost_result.status in {"state_changed", "duplicate", "hp_insufficient"}:
+        await handle_send(bot, event, "世界BOSS挑战状态已变化，请重新讨伐！")
+        await battle.finish()
+    if cost_result.status == "limit_reached":
+        await handle_send(bot, event, f"今日讨伐次数已达上限（{battle_count}次），请明日再来！")
         await battle.finish()
 
     battle_flag[GLOBAL_BOSS_KEY] = True
@@ -547,6 +558,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     # 修为奖励
     # =========================
     exp_msg = ""
+    now_exp = 0
     if exp_buff > 0 and user_info['root'] != "凡人" and victor == "群友赢了":
         now_exp = int(
             user_info['exp']
@@ -555,31 +567,35 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             * min(0.1 * max(user_rank // 3, 1), 1)
         )
         if now_exp > 0:
-            sql_message.update_exp(user_id, now_exp)
             exp_msg = f"，获得修为{number_to(now_exp)}点！"
 
     # =========================
     # 掉落
     # =========================
     drops_id, drops_info = boss_drops(user_rank, boss_rank, bossinfo, user_info)
+    reward_drop = bool(drops_id and drops_info and boss_rank < convert_rank('遁一境中期')[0]
+                       and (boss_now_hp <= 0 or random.randint(1, 100) > 50))
 
     # =========================
     # 发放奖励
     # =========================
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = (
-        f"boss-reward:{event_id}:{user_id}"
-        if event_id
-        else f"boss-reward:{time_module.time_ns()}:{user_id}"
-    )
+    operation_id = f"boss-reward:{operation_key}:{user_id}"
     reward_result = boss_reward_service.grant(
         operation_id,
         user_id,
         today_stone,
         today_integral,
         total_integral,
+        user_info['exp'],
         get_stone,
         boss_integral,
+        now_exp,
+        drops_info['id'] if reward_drop else 0,
+        drops_info['name'] if reward_drop else "",
+        drops_info['type'] if reward_drop else "",
+        1 if reward_drop else 0,
+        1 if reward_drop and drops_info['type'] in ["特殊道具", "神物"] else 0,
+        XiuConfig().max_goods_num,
     )
     if reward_result.status == "state_changed":
         battle_flag[GLOBAL_BOSS_KEY] = False
@@ -588,6 +604,10 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     if reward_result.status == "user_missing":
         battle_flag[GLOBAL_BOSS_KEY] = False
         await handle_send(bot, event, "未找到道友数据，世界BOSS奖励结算失败！")
+        await battle.finish()
+    if reward_result.status == "inventory_full":
+        battle_flag[GLOBAL_BOSS_KEY] = False
+        await handle_send(bot, event, "世界BOSS掉落物背包已满，请整理后重新讨伐！")
         await battle.finish()
 
     # =========================
@@ -612,27 +632,10 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         if new_boss:
             group_boss[GLOBAL_BOSS_KEY].insert(boss_num - 1, new_boss)
 
-        if drops_id and drops_info and boss_rank < convert_rank('遁一境中期')[0]:
+        if reward_drop:
             drops_msg = f"boss的尸体上好像有什么东西，凑近一看居然是{drops_info['name']}！"
             msg += f"\n{drops_msg}"
 
-            if drops_info['type'] in ["特殊道具", "神物"]:
-                sql_message.send_back(
-                    user_info['user_id'],
-                    drops_info['id'],
-                    drops_info['name'],
-                    drops_info['type'],
-                    1,
-                    1
-                )
-            else:
-                sql_message.send_back(
-                    user_info['user_id'],
-                    drops_info['id'],
-                    drops_info['name'],
-                    drops_info['type'],
-                    1
-                )
 
     else:
         if victor == "群友赢了":
@@ -655,28 +658,10 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         # 未击杀，保存扣血后的BOSS状态
         group_boss[GLOBAL_BOSS_KEY][boss_num - 1] = bossinfo_new
 
-        roll = random.randint(1, 100)
-        if drops_id and drops_info and boss_rank < convert_rank('遁一境中期')[0] and roll > 50:
+        if reward_drop:
             drops_msg = f"路上好像有什么东西，凑近一看居然是{drops_info['name']}！"
             msg += f"\n{drops_msg}"
 
-            if drops_info['type'] in ["特殊道具", "神物"]:
-                sql_message.send_back(
-                    user_info['user_id'],
-                    drops_info['id'],
-                    drops_info['name'],
-                    drops_info['type'],
-                    1,
-                    1
-                )
-            else:
-                sql_message.send_back(
-                    user_info['user_id'],
-                    drops_info['id'],
-                    drops_info['name'],
-                    drops_info['type'],
-                    1
-                )
 
     if user_info['root'] == "凡人" and boss_integral < 0:
         msg += "\n如果出现负积分，说明你境界太高了，玩凡人就不要那么高境界了！！！"
@@ -684,7 +669,6 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     old_boss_info.save_boss(group_boss)
     battle_flag[GLOBAL_BOSS_KEY] = False
 
-    boss_limit.update_battle_count(user_id)
     update_statistics_value(user_id, "讨伐世界BOSS")
     if boss_now_hp <= 0:
         update_statistics_value(user_id, "击败世界BOSS")
