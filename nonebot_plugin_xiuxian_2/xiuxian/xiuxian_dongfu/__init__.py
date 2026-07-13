@@ -20,11 +20,13 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig
 from .expansion_service import DongfuExpansionService
 from .harvest_settlement_service import DongfuHarvestSettlementService
+from .plant_service import DongfuPlantService
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
 items = Items()
 dongfu_expansion_service = DongfuExpansionService(get_paths().game_db, get_paths().player_db)
+dongfu_plant_service = DongfuPlantService(get_paths().game_db, get_paths().player_db)
 dongfu_harvest_settlement_service = DongfuHarvestSettlementService(get_paths().game_db, get_paths().player_db)
 
 MAP_TABLE = "map_status"
@@ -699,33 +701,26 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             return
         if _to_int(slot.get("seed_id")) in SEED_CONFIG:
             await handle_send(bot, event, f"{slot_no}号灵田已有种植，请先收获后再播种。\n{_format_plant_slots(d)}")
-            return
-
-    have = sql_message.goods_num(uid, seed_id)
-    if _to_int(have) <= 0:
-        await handle_send(bot, event, f"你没有【{seed_name}】，请先去种子商店购买。")
-        return
-
-    # 扣种子
-    sql_message.update_back_j(uid, seed_id, 1)
-
-    # 阵法加速（平衡后：每级4%）
+    expected_slots = json.dumps(slots, ensure_ascii=False)
     array_lv = _to_int(d.get("array_level"))
     base_minutes = int(SEED_CONFIG[seed_id]["minutes"])
     geomancy = _get_geomancy(d)
     speed = 1 + array_lv * 0.04 + float(geomancy.get("grow_speed", 0))
     real_minutes = max(10, int(base_minutes / speed))
-
-    slots[_to_int(slot.get("slot")) - 1] = {
-        "slot": _to_int(slot.get("slot")),
-        "seed_id": seed_id,
-        "seed_name": seed_name,
-        "plant_start": _fmt_dt(now),
-        "plant_finish": _fmt_dt(now + timedelta(minutes=real_minutes)),
-        "fertilizer": 0,
-    }
-    d["plant_slots"] = slots
-    _save_dongfu(uid, d)
+    plant_start = _fmt_dt(now)
+    plant_finish = _fmt_dt(now + timedelta(minutes=real_minutes))
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"dongfu-plant:{uid}:{event_message_id or time.time_ns()}"
+    result = dongfu_plant_service.plant(
+        operation_id, uid, expected_slots, _to_int(slot.get("slot")), seed_id, seed_name, plant_start, plant_finish,
+    )
+    if result.status == "seed_insufficient":
+        await handle_send(bot, event, f"你没有【{seed_name}】，请先去种子商店购买。")
+        return
+    if result.status in {"plot_occupied", "state_changed", "dongfu_missing"}:
+        await handle_send(bot, event, "洞府灵田状态已变化，请重新尝试。")
+        return
+    d = _get_dongfu(uid)
 
     await handle_send(
         bot,
