@@ -77,6 +77,7 @@ from .impart_stone_batch_adjustment_service import (
     AdminImpartStoneBatchAdjustmentService,
 )
 from .player_status_reset_service import AdminPlayerStatusResetService
+from .player_status_batch_reset_service import AdminPlayerStatusBatchResetService
 from . import command_controls as _command_controls  # noqa: F401
 from . import empty_fallback as _empty_fallback  # noqa: F401
 from . import event_debug as _event_debug  # noqa: F401
@@ -107,6 +108,10 @@ admin_impart_stone_batch_adjustment_service = AdminImpartStoneBatchAdjustmentSer
     admin_impart_stone_adjustment_service,
 )
 admin_player_status_reset_service = AdminPlayerStatusResetService(get_paths().game_db)
+admin_player_status_batch_reset_service = AdminPlayerStatusBatchResetService(
+    get_paths().game_db,
+    admin_player_status_reset_service,
+)
 
 
 def _admin_operation_id(event, action: str, user_id: str) -> str:
@@ -1261,9 +1266,34 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     give_qq = get_at_user_id(args)
     if not args:
-        sql_message.restate()
-        sql_message.update_all_users_stamina(XiuConfig().max_stamina, XiuConfig().max_stamina)
-        msg = f"所有用户信息重置成功！"
+        all_users = sql_message.get_all_user_id()
+        operator_id = str(get_user_id(event) or "unknown")
+        max_stamina = XiuConfig().max_stamina
+        running_operation = admin_player_status_batch_reset_service.find_running(
+            operator_id, max_stamina
+        )
+        if not all_users and not running_operation:
+            await handle_send(bot, event, "当前没有可重置的用户")
+            await restate.finish()
+        operation_id = running_operation or _admin_operation_id(
+            event, "player-status-reset-all", "all"
+        )
+        while True:
+            result = admin_player_status_batch_reset_service.reset(
+                operation_id,
+                operator_id,
+                all_users or (),
+                max_stamina,
+            )
+            if result.status != "applied" or result.completed >= result.total:
+                break
+        if result.status == "operation_conflict":
+            msg = "本次全服状态重置与已记录计划冲突"
+        else:
+            msg = (
+                f"所有用户信息重置完成！已处理 {result.completed}/{result.total} 名玩家，"
+                f"成功重置 {result.reset_users} 名，跳过 {result.skipped_users} 名"
+            )
         await handle_send(bot, event, msg)
         await restate.finish()
     plain_args = args.extract_plain_text().split()

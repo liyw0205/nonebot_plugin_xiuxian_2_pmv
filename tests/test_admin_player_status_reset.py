@@ -115,7 +115,7 @@ class AdminPlayerStatusResetTests(unittest.TestCase):
                 ).fetchone()[0],
             )
 
-    def test_production_single_entry_uses_service_and_leaves_all_for_next_goal(self) -> None:
+    def test_production_single_entry_uses_service(self) -> None:
         source = (
             Path(__file__).parents[1]
             / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
@@ -126,8 +126,6 @@ class AdminPlayerStatusResetTests(unittest.TestCase):
         self.assertIn("admin_player_status_reset_service.reset(", single)
         self.assertNotIn("sql_message.restate(give_qq)", single)
         self.assertNotIn("sql_message.update_user_stamina(give_qq", single)
-        self.assertIn("sql_message.restate()", handler)
-        self.assertIn("sql_message.update_all_users_stamina(", handler)
 
 
 if __name__ == "__main__":
