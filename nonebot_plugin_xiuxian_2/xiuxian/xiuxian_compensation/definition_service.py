@@ -32,10 +32,18 @@ class CompensationMutationResult:
     version: int = 0
     removed_definitions: int = 0
     removed_claims: int = 0
+    record: dict[str, Any] | None = None
 
     @property
     def succeeded(self) -> bool:
-        return self.status in {"deleted", "cleared", "missing", "duplicate"}
+        return self.status in {
+            "created",
+            "updated",
+            "deleted",
+            "cleared",
+            "missing",
+            "duplicate",
+        }
 
 
 class CompensationDefinitionService:
@@ -112,8 +120,16 @@ class CompensationDefinitionService:
             "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,action TEXT NOT NULL,"
             "record_id TEXT NOT NULL DEFAULT '',version INTEGER NOT NULL DEFAULT 0,"
             "outcome TEXT NOT NULL,removed_definitions INTEGER NOT NULL DEFAULT 0,"
-            "removed_claims INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL)"
+            "removed_claims INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,"
+            "result_json TEXT NOT NULL DEFAULT '{}')"
         )
+        if "result_json" not in conn.column_names(
+            "compensation_definition_operations"
+        ):
+            conn.execute(
+                "ALTER TABLE compensation_definition_operations ADD COLUMN "
+                "result_json TEXT NOT NULL DEFAULT '{}'"
+            )
         conn.execute(
             "CREATE TABLE IF NOT EXISTS compensation_legacy_migrations("
             "migration_key TEXT PRIMARY KEY,definitions_payload TEXT NOT NULL,"
@@ -349,6 +365,9 @@ class CompensationDefinitionService:
 
     @staticmethod
     def _operation_result(row, status="duplicate") -> CompensationMutationResult:
+        record = json.loads(str(row[8])) if str(row[8]).strip() else None
+        if not isinstance(record, dict) or not record:
+            record = None
         return CompensationMutationResult(
             status,
             str(row[0]),
@@ -357,16 +376,200 @@ class CompensationDefinitionService:
             int(row[4]),
             int(row[6]),
             int(row[7]),
+            record,
         )
 
     @staticmethod
     def _operation(conn, operation_id: str):
         return conn.execute(
             "SELECT operation_id,payload,action,record_id,version,outcome,"
-            "removed_definitions,removed_claims "
+            "removed_definitions,removed_claims,result_json "
             "FROM compensation_definition_operations WHERE operation_id=%s",
             (operation_id,),
         ).fetchone()
+
+    @staticmethod
+    def _upsert_payload(request_identity) -> str:
+        return json.dumps(
+            ["upsert", str(request_identity).strip()],
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
+
+    def replay_upsert(
+        self,
+        operation_id,
+        request_identity,
+        *,
+        occurred_at=None,
+    ) -> CompensationMutationResult | None:
+        operation_id = str(operation_id).strip()
+        request_identity = str(request_identity).strip()
+        occurred_at = self._now(occurred_at)
+        if not operation_id or not request_identity:
+            raise ValueError("operation and request identity are required")
+        payload = self._upsert_payload(request_identity)
+
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._prepare(conn, occurred_at)
+                previous = self._operation(conn, operation_id)
+                if previous is None:
+                    conn.commit()
+                    return None
+                if str(previous[1]) != payload:
+                    conn.commit()
+                    return CompensationMutationResult(
+                        "operation_conflict", operation_id, "upsert"
+                    )
+                result = self._operation_result(previous)
+                conn.commit()
+                return result
+            except Exception:
+                conn.rollback()
+                raise
+
+    def upsert(
+        self,
+        operation_id,
+        request_identity,
+        record_id,
+        record: Mapping[str, Any],
+        expected_version: int | None = None,
+        *,
+        occurred_at=None,
+    ) -> CompensationMutationResult:
+        operation_id = str(operation_id).strip()
+        request_identity = str(request_identity).strip()
+        record_id = str(record_id).strip()
+        expected_version = (
+            None if expected_version in (None, "") else int(expected_version)
+        )
+        occurred_at = self._now(occurred_at)
+        if not operation_id or not request_identity or not record_id:
+            raise ValueError("operation, request identity and compensation id are required")
+        if not isinstance(record, Mapping):
+            raise ValueError("valid compensation definition is required")
+        payload = self._upsert_payload(request_identity)
+        normalized, record_payload = self._canonical_record(record)
+
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._prepare(conn, occurred_at)
+                previous = self._operation(conn, operation_id)
+                if previous is not None:
+                    if str(previous[1]) != payload:
+                        conn.commit()
+                        return CompensationMutationResult(
+                            "operation_conflict", operation_id, "upsert", record_id
+                        )
+                    result = self._operation_result(previous)
+                    conn.commit()
+                    return result
+
+                current = conn.execute(
+                    "SELECT version FROM compensation_definitions WHERE record_id=%s",
+                    (record_id,),
+                ).fetchone()
+                if current is not None and expected_version is None:
+                    conn.commit()
+                    return CompensationMutationResult(
+                        "version_required", operation_id, "upsert", record_id
+                    )
+                if current is None and expected_version not in (None, 0):
+                    conn.commit()
+                    return CompensationMutationResult(
+                        "definition_changed",
+                        operation_id,
+                        "upsert",
+                        record_id,
+                        expected_version,
+                    )
+                if current is not None and int(current[0]) != expected_version:
+                    conn.commit()
+                    return CompensationMutationResult(
+                        "definition_changed",
+                        operation_id,
+                        "upsert",
+                        record_id,
+                        int(current[0]),
+                    )
+
+                revision = conn.execute(
+                    "SELECT last_version FROM compensation_definition_revisions "
+                    "WHERE record_id=%s",
+                    (record_id,),
+                ).fetchone()
+                next_version = 1 if revision is None else int(revision[0]) + 1
+                conn.execute(
+                    "INSERT INTO compensation_definition_revisions(record_id,last_version) "
+                    "VALUES(%s,%s) ON CONFLICT(record_id) DO UPDATE SET "
+                    "last_version=EXCLUDED.last_version",
+                    (record_id, next_version),
+                )
+                outcome = "created" if current is None else "updated"
+                if current is None:
+                    conn.execute(
+                        "INSERT INTO compensation_definitions("
+                        "record_id,version,record_json,created_at,updated_at) "
+                        "VALUES(%s,%s,%s,%s,%s)",
+                        (
+                            record_id,
+                            next_version,
+                            record_payload,
+                            occurred_at,
+                            occurred_at,
+                        ),
+                    )
+                else:
+                    conn.execute(
+                        "UPDATE compensation_definitions SET version=%s,record_json=%s,"
+                        "updated_at=%s WHERE record_id=%s AND version=%s",
+                        (
+                            next_version,
+                            record_payload,
+                            occurred_at,
+                            record_id,
+                            expected_version,
+                        ),
+                    )
+
+                result_record = dict(normalized)
+                result_record["_definition_version"] = next_version
+                result_json = json.dumps(
+                    result_record,
+                    ensure_ascii=True,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                conn.execute(
+                    "INSERT INTO compensation_definition_operations("
+                    "operation_id,payload,action,record_id,version,outcome,created_at,"
+                    "result_json) VALUES(%s,%s,'upsert',%s,%s,%s,%s,%s)",
+                    (
+                        operation_id,
+                        payload,
+                        record_id,
+                        next_version,
+                        outcome,
+                        occurred_at,
+                        result_json,
+                    ),
+                )
+                conn.commit()
+                return CompensationMutationResult(
+                    outcome,
+                    operation_id,
+                    "upsert",
+                    record_id,
+                    next_version,
+                    record=result_record,
+                )
+            except Exception:
+                conn.rollback()
+                raise
 
     def catalog_version(self, *, occurred_at=None) -> str:
         occurred_at = self._now(occurred_at)

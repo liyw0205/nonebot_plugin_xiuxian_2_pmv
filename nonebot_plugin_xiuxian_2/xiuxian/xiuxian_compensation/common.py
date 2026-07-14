@@ -1,6 +1,7 @@
 import os
 import random
 import string
+import time
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Union
@@ -358,6 +359,18 @@ def format_reward_delivery(reward_items: List[Dict[str, Any]]) -> List[str]:
     ]
 
 
+def _compensation_upsert_operation_id(event: MessageEvent) -> str:
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    admin_id = str(event.get_user_id()).strip()
+    return (
+        f"compensation-upsert:{event_id}:{admin_id}"
+        if event_id
+        else f"compensation-upsert:{time.time_ns()}:{admin_id}"
+    )
+
+
 async def create_reward_record(
     bot: Bot,
     event: MessageEvent,
@@ -383,6 +396,17 @@ async def create_reward_record(
         if len(parts) < 3:
             raise ValueError(f"格式：新增{config['type_key']} ID 物品 原因 有效期 生效期")
 
+    request_identity = arg_str.strip()
+    operation_id = None
+    replay = None
+    if config["type_key"] == "补偿":
+        operation_id = _compensation_upsert_operation_id(event)
+        replay = compensation_definition_service.replay_upsert(
+            operation_id, request_identity
+        )
+        if replay is not None and replay.status == "operation_conflict":
+            raise ValueError("同一消息事件不能使用不同的补偿参数")
+
     record_id = parts[0]
     items_str = parts[1]
     third_arg = parts[2]
@@ -390,55 +414,76 @@ async def create_reward_record(
     expire_time_str = parts[3] if len(parts) >= 4 else "无限"
     start_time_str = parts[4] if len(parts) >= 5 else "0"
 
-    data = load_data(config)
-
-    if record_id in ["随机", "0"]:
-        record_id = generate_unique_id(list(data.keys()))
-
-    reward_items = get_item_list(items_str)
-
-    start_time = parse_duration(start_time_str, is_start_time=True)
-
-    expire_parsed = parse_duration(expire_time_str, is_start_time=False)
-
-    if expire_parsed == "无限":
-        expire_time = "无限"
-    elif isinstance(expire_parsed, timedelta):
-        expire_time = datetime.now() + expire_parsed
-    elif isinstance(expire_parsed, datetime):
-        expire_time = expire_parsed
+    if replay is not None:
+        record_id = replay.record_id
+        record = dict(replay.record or {})
+        reward_items = list(record.get("items") or [])
     else:
-        expire_time = "无限"
+        data = load_data(config)
 
-    if isinstance(expire_time, datetime) and isinstance(start_time, datetime):
-        if start_time > expire_time:
-            raise ValueError("生效时间不能晚于过期时间")
+        if record_id in ["随机", "0"]:
+            record_id = generate_unique_id(list(data.keys()))
 
-    record = {
-        "items": reward_items,
-        "expire_time": expire_time.strftime("%Y-%m-%d %H:%M:%S") if isinstance(expire_time, datetime) else expire_time,
-        "create_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "start_time": start_time.strftime("%Y-%m-%d %H:%M:%S") if isinstance(start_time, datetime) else None,
-    }
+        reward_items = get_item_list(items_str)
 
-    if is_redeem_code:
-        try:
-            usage_limit = int(third_arg)
-        except ValueError:
-            raise ValueError("兑换码使用上限必须是数字，0 表示无限")
+        start_time = parse_duration(start_time_str, is_start_time=True)
 
-        record["usage_limit"] = usage_limit
-        record["used_count"] = 0
-    else:
-        record["reason"] = third_arg
+        expire_parsed = parse_duration(expire_time_str, is_start_time=False)
 
-    if config["type_key"] == "补偿" and record_id in data:
-        record["_definition_version"] = data[record_id].get(
-            "_definition_version"
-        )
+        if expire_parsed == "无限":
+            expire_time = "无限"
+        elif isinstance(expire_parsed, timedelta):
+            expire_time = datetime.now() + expire_parsed
+        elif isinstance(expire_parsed, datetime):
+            expire_time = expire_parsed
+        else:
+            expire_time = "无限"
 
-    data[record_id] = record
-    save_data(config, data)
+        if isinstance(expire_time, datetime) and isinstance(start_time, datetime):
+            if start_time > expire_time:
+                raise ValueError("生效时间不能晚于过期时间")
+
+        record = {
+            "items": reward_items,
+            "expire_time": expire_time.strftime("%Y-%m-%d %H:%M:%S") if isinstance(expire_time, datetime) else expire_time,
+            "create_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "start_time": start_time.strftime("%Y-%m-%d %H:%M:%S") if isinstance(start_time, datetime) else None,
+        }
+
+        if is_redeem_code:
+            try:
+                usage_limit = int(third_arg)
+            except ValueError:
+                raise ValueError("兑换码使用上限必须是数字，0 表示无限")
+
+            record["usage_limit"] = usage_limit
+            record["used_count"] = 0
+        else:
+            record["reason"] = third_arg
+
+        if config["type_key"] == "补偿":
+            expected_version = (
+                data[record_id].get("_definition_version")
+                if record_id in data
+                else None
+            )
+            result = compensation_definition_service.upsert(
+                operation_id,
+                request_identity,
+                record_id,
+                record,
+                expected_version,
+            )
+            if result.status == "operation_conflict":
+                raise ValueError("同一消息事件不能使用不同的补偿参数")
+            if not result.succeeded:
+                raise ValueError("补偿定义已变化，请重新执行新增")
+            record_id = result.record_id
+            record = dict(result.record or {})
+            reward_items = list(record.get("items") or [])
+        else:
+            data[record_id] = record
+            save_data(config, data)
 
     items_msg = create_item_message(reward_items)
 
