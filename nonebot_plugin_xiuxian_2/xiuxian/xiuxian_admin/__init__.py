@@ -72,6 +72,7 @@ from .accessory_adjustment_service import AdminAccessoryAdjustmentService
 from .accessory_batch_adjustment_service import (
     AdminAccessoryBatchAdjustmentService,
 )
+from .impart_stone_adjustment_service import AdminImpartStoneAdjustmentService
 from . import command_controls as _command_controls  # noqa: F401
 from . import empty_fallback as _empty_fallback  # noqa: F401
 from . import event_debug as _event_debug  # noqa: F401
@@ -93,6 +94,9 @@ admin_accessory_batch_adjustment_service = AdminAccessoryBatchAdjustmentService(
     get_paths().game_db,
     get_paths().player_db,
     admin_accessory_adjustment_service,
+)
+admin_impart_stone_adjustment_service = AdminImpartStoneAdjustmentService(
+    get_paths().game_db, get_paths().impart_db
 )
 
 
@@ -440,10 +444,32 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         action = "增加" if amount > 0 else "扣除"
         msg = f"全服通告：{action}{number_to(abs(amount))}枚思恋结晶，请查收！"
     else:
-        key = 1 if amount > 0 else 2
-        xiuxian_impart.update_stone_num(abs(amount), user_id, key)
-        action = "赠送" if amount > 0 else "扣除"
-        msg = f"成功{action}{number_to(abs(amount))}枚思恋结晶给 {target_name}！"
+        if amount == 0:
+            await handle_send(bot, event, "单人思恋结晶调整数量不能为 0")
+            return
+        expected_stone = admin_impart_stone_adjustment_service.snapshot(user_id)
+        result = admin_impart_stone_adjustment_service.adjust(
+            _admin_operation_id(event, "impart-stone-adjust", str(user_id)),
+            str(get_user_id(event) or "unknown"),
+            user_id,
+            expected_stone,
+            amount,
+            target_name=target_name,
+        )
+        if result.status == "state_changed":
+            msg = "玩家思恋结晶状态已变化，请重新执行指令"
+        elif result.status == "operation_conflict":
+            msg = "本次管理员传承操作与已记录事件冲突"
+        elif result.status == "user_missing":
+            msg = "该玩家已不存在"
+        elif result.status == "invalid_state":
+            msg = "该玩家的传承数据异常，请先修复数据"
+        else:
+            action = "赠送" if result.applied_delta > 0 else "扣除"
+            msg = (
+                f"成功{action}{number_to(abs(result.applied_delta))}枚思恋结晶"
+                f"给 {target_name}！当前余额 {number_to(result.final_stone)}"
+            )
 
     await handle_send(bot, event, msg)
 
