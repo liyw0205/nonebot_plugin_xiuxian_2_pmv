@@ -225,6 +225,15 @@ def _xianshi_operation_id(event, listing_id, suffix=""):
     return f"xianshi-buy:{event_id}:{listing_id}{extra}"
 
 
+def _xianshi_fast_purchase_stamina_operation_id(event, buyer_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"xianshi-fast-buy-stamina:{event_id}:{buyer_id}"
+    return f"xianshi-fast-buy-stamina:{buyer_id}:{time.time_ns()}"
+
+
 def _xianshi_listing_operation_id(event, seller_id, goods_id, price, quantity, suffix=""):
     event_id = str(
         getattr(event, "message_id", "") or getattr(event, "id", "") or ""
@@ -290,6 +299,8 @@ def buy_xianshi_item_safely(
     quantity_to_buy,
     *,
     operation_id=None,
+    stamina_operation_id=None,
+    stamina_cost=0,
 ):
     """通过同库事务完成扣款、减库存、发货、卖家入账和幂等记录。"""
     result = xianshi_purchase_service.purchase(
@@ -297,6 +308,8 @@ def buy_xianshi_item_safely(
         item_to_buy["id"],
         quantity_to_buy,
         operation_id=operation_id,
+        stamina_operation_id=stamina_operation_id,
+        stamina_cost=stamina_cost,
     )
     messages = {
         "listing_missing": f"库存不足！{item_to_buy['name']} 已被其他道友购买。",
@@ -305,7 +318,9 @@ def buy_xianshi_item_safely(
         "buyer_missing": "未找到购买者修仙数据！",
         "seller_missing": "卖家修仙数据不存在，购买已取消！",
         "stone_insufficient": f"灵石不足！需要 {number_to(result.total_cost)} 灵石",
+        "stamina_insufficient": "体力不足！快速购买需要10点体力",
         "inventory_full": f"背包中的 {item_to_buy['name']} 已达到数量上限！",
+        "state_changed": "购买请求状态已变化，请重新查看仙肆！",
     }
     if not result.succeeded:
         return False, messages[result.status], None
@@ -1084,7 +1099,7 @@ async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     
     await xian_buy.finish()
 
-@xianshi_fast_buy.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=10)])
+@xianshi_fast_buy.handle(parameterless=[Cooldown(cd_time=0)])
 async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆快速购买 - 自动匹配最低价购买指定物品"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1100,7 +1115,6 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         msg = "指令格式：仙肆快速购买 物品名1,物品名2,... [数量1,数量2,...]\n" \
               "▶ 物品名：支持1-5个物品（可重复），用逗号分隔\n" \
               "▶ 数量：可选，支持1-10个数量，用逗号分隔，没有数量默认每个物品买1个"
-        sql_message.update_user_stamina(user_id, 10, 1)
         await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆快速购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
         await xianshi_fast_buy.finish()
     
@@ -1108,7 +1122,6 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     goods_names = args[0].split(",")
     if len(goods_names) > 5:
         msg = "一次最多指定5个物品名（可重复）！"
-        sql_message.update_user_stamina(user_id, 10, 1)
         await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆快速购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
         await xianshi_fast_buy.finish()
     
@@ -1127,7 +1140,6 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     all_xianshi_items = xianshi_repository.get_xianshi_items()
     if not all_xianshi_items:
         msg = "仙肆中没有物品可供购买！"
-        sql_message.update_user_stamina(user_id, 10, 1)
         await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆快速购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
         await xianshi_fast_buy.finish()
     
@@ -1136,7 +1148,6 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     if not purchasable_items:
         msg = "仙肆中没有符合条件的用户物品可供购买！"
-        sql_message.update_user_stamina(user_id, 10, 1)
         await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆快速购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
         await xianshi_fast_buy.finish()
     
@@ -1150,6 +1161,9 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     success_items = []
     failed_items = []
     seller_trade_summary = {}
+    stamina_operation_id = _xianshi_fast_purchase_stamina_operation_id(
+        event, user_id
+    )
     
     for i, target_item_name in enumerate(goods_names):
         target_quantity = quantities[i]
@@ -1178,6 +1192,8 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                         item_data["id"],
                         f"{i}:{purchased_count}",
                     ),
+                    stamina_operation_id=stamina_operation_id,
+                    stamina_cost=10,
                 )
                 if not success:
                     failed_items.append(f"{item_data['name']}×1 ({result_msg})")
@@ -1210,8 +1226,6 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         if purchased_count < target_quantity and not any(f.startswith(target_item_name) and "灵石不足" in f for f in failed_items):
             failed_items.append(f"{target_item_name}×{target_quantity - purchased_count}（库存不足）")
             
-    sql_message.update_user_stamina(user_id, 10, 1) # 恢复体力
-
     # 构建结果消息
     msg_parts = []
     if success_items:

@@ -16,6 +16,8 @@ class XianshiPurchaseService:
         quantity,
         *,
         operation_id: str | None = None,
+        stamina_operation_id: str | None = None,
+        stamina_cost: int = 0,
     ) -> XianshiPurchase:
         operation_id = operation_id or f"xianshi:{listing_id}:{buyer_id}:{uuid4().hex}"
         return self._repository.purchase_xianshi_item(
@@ -23,6 +25,8 @@ class XianshiPurchaseService:
             str(buyer_id),
             str(listing_id),
             quantity,
+            stamina_operation_id=stamina_operation_id,
+            stamina_cost=stamina_cost,
         )
 
 

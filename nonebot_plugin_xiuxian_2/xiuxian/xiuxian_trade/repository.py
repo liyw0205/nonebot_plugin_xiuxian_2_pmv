@@ -32,6 +32,7 @@ PurchaseStatus = Literal[
     "buyer_missing",
     "seller_missing",
     "stone_insufficient",
+    "stamina_insufficient",
     "inventory_full",
     "state_changed",
 ]
@@ -48,6 +49,7 @@ class XianshiPurchase:
     goods_type: str = ""
     quantity: int = 0
     total_cost: int = 0
+    stamina_charged: int = 0
 
     @property
     def succeeded(self) -> bool:
@@ -1874,6 +1876,29 @@ class TradeRepository:
                 goods_type TEXT NOT NULL,
                 quantity INTEGER NOT NULL,
                 total_cost INTEGER NOT NULL,
+                stamina_operation_id TEXT NOT NULL DEFAULT '',
+                stamina_cost INTEGER NOT NULL DEFAULT 0,
+                stamina_charged INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        for column_name, column_sql in (
+            ("stamina_operation_id", "TEXT NOT NULL DEFAULT ''"),
+            ("stamina_cost", "INTEGER NOT NULL DEFAULT 0"),
+            ("stamina_charged", "INTEGER NOT NULL DEFAULT 0"),
+        ):
+            if not conn.column_exists("xianshi_operations", column_name):
+                conn.execute(
+                    f"ALTER TABLE xianshi_operations ADD COLUMN {column_name} "
+                    f"{column_sql}"
+                )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS xianshi_stamina_operations (
+                operation_id TEXT PRIMARY KEY,
+                buyer_id TEXT NOT NULL,
+                stamina_cost INTEGER NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """
@@ -2379,6 +2404,7 @@ class TradeRepository:
             goods_type=str(row[5]),
             quantity=int(row[6]),
             total_cost=int(row[7]),
+            stamina_charged=int(row[10]),
         )
 
     def purchase_xianshi_item(
@@ -2387,13 +2413,20 @@ class TradeRepository:
         buyer_id: str,
         listing_id: str,
         quantity: int,
+        *,
+        stamina_operation_id: str | None = None,
+        stamina_cost: int = 0,
     ) -> XianshiPurchase:
         operation_id = str(operation_id).strip()
         buyer_id = str(buyer_id)
         listing_id = str(listing_id)
         quantity = max(1, int(quantity))
+        stamina_operation_id = str(stamina_operation_id or "").strip()
+        stamina_cost = int(stamina_cost)
         if not operation_id:
             raise ValueError("operation_id must not be empty")
+        if stamina_cost < 0 or bool(stamina_operation_id) != (stamina_cost > 0):
+            raise ValueError("stamina operation and positive cost must be provided together")
 
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             try:
@@ -2403,7 +2436,8 @@ class TradeRepository:
                 cur.execute(
                     """
                     SELECT listing_id, buyer_id, seller_id, goods_id, name,
-                           goods_type, quantity, total_cost
+                           goods_type, quantity, total_cost,
+                           stamina_operation_id, stamina_cost, stamina_charged
                     FROM xianshi_operations WHERE operation_id=%s
                     """,
                     (operation_id,),
@@ -2411,7 +2445,13 @@ class TradeRepository:
                 existing = cur.fetchone()
                 if existing is not None:
                     conn.rollback()
-                    if str(existing[0]) != listing_id or str(existing[1]) != buyer_id or int(existing[6]) != quantity:
+                    if (
+                        str(existing[0]) != listing_id
+                        or str(existing[1]) != buyer_id
+                        or int(existing[6]) != quantity
+                        or str(existing[8]) != stamina_operation_id
+                        or int(existing[9]) != stamina_cost
+                    ):
                         return XianshiPurchase("state_changed", listing_id, buyer_id)
                     return self._row_purchase("duplicate", existing)
 
@@ -2478,6 +2518,31 @@ class TradeRepository:
                     conn.rollback()
                     return replace(result, status="inventory_full")
 
+                if stamina_operation_id:
+                    cur.execute(
+                        "SELECT buyer_id, stamina_cost "
+                        "FROM xianshi_stamina_operations WHERE operation_id=%s",
+                        (stamina_operation_id,),
+                    )
+                    stamina_operation = cur.fetchone()
+                    if stamina_operation is not None:
+                        if (
+                            str(stamina_operation[0]) != buyer_id
+                            or int(stamina_operation[1]) != stamina_cost
+                        ):
+                            conn.rollback()
+                            return replace(result, status="state_changed")
+                    else:
+                        if not self._consume_stamina(conn, buyer_id, stamina_cost):
+                            conn.rollback()
+                            return replace(result, status="stamina_insufficient")
+                        cur.execute(
+                            "INSERT INTO xianshi_stamina_operations "
+                            "(operation_id, buyer_id, stamina_cost) VALUES (%s, %s, %s)",
+                            (stamina_operation_id, buyer_id, stamina_cost),
+                        )
+                        result = replace(result, stamina_charged=stamina_cost)
+
                 cur.execute(
                     "UPDATE user_xiuxian SET stone=stone-%s WHERE user_id=%s",
                     (total_cost, buyer_id),
@@ -2516,8 +2581,9 @@ class TradeRepository:
                     """
                     INSERT INTO xianshi_operations (
                         operation_id, listing_id, buyer_id, seller_id, goods_id,
-                        name, goods_type, quantity, total_cost
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        name, goods_type, quantity, total_cost,
+                        stamina_operation_id, stamina_cost, stamina_charged
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         operation_id,
@@ -2529,6 +2595,9 @@ class TradeRepository:
                         goods_type,
                         quantity,
                         total_cost,
+                        stamina_operation_id,
+                        stamina_cost,
+                        result.stamina_charged,
                     ),
                 )
                 conn.commit()
