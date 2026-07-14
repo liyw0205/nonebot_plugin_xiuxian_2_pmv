@@ -78,6 +78,7 @@ from .impart_stone_batch_adjustment_service import (
 )
 from .player_status_reset_service import AdminPlayerStatusResetService
 from .player_status_batch_reset_service import AdminPlayerStatusBatchResetService
+from .blackhouse_status_service import AdminBlackhouseStatusService
 from . import command_controls as _command_controls  # noqa: F401
 from . import empty_fallback as _empty_fallback  # noqa: F401
 from . import event_debug as _event_debug  # noqa: F401
@@ -112,6 +113,7 @@ admin_player_status_batch_reset_service = AdminPlayerStatusBatchResetService(
     get_paths().game_db,
     admin_player_status_reset_service,
 )
+admin_blackhouse_status_service = AdminBlackhouseStatusService(get_paths().game_db)
 
 
 def _admin_operation_id(event, action: str, user_id: str) -> str:
@@ -1630,11 +1632,23 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "该用户尚未踏入修仙界！")
         return
 
-    success = sql_message.ban_user(target_user_id)
-    if success:
-        await handle_send(bot, event, f"道友 {target_user['user_name']} 已被关入小黑屋！")
+    result = admin_blackhouse_status_service.set_banned(
+        _admin_operation_id(event, "blackhouse-ban", str(target_user_id)),
+        str(get_user_id(event) or "unknown"),
+        target_user_id,
+        admin_blackhouse_status_service.snapshot(target_user_id),
+        True,
+    )
+    if result.status == "state_changed":
+        await handle_send(bot, event, "玩家封禁状态已变化，请重新执行指令")
+    elif result.status == "operation_conflict":
+        await handle_send(bot, event, "本次封禁操作与已记录事件冲突")
+    elif result.status == "user_missing":
+        await handle_send(bot, event, "该用户尚未踏入修仙界！")
+    elif result.status == "unchanged":
+        await handle_send(bot, event, f"道友 {target_user['user_name']} 已在小黑屋中。")
     else:
-        await handle_send(bot, event, f"操作失败：用户 {target_user['user_name']} 可能已被封禁或不存在。")
+        await handle_send(bot, event, f"道友 {target_user['user_name']} 已被关入小黑屋！")
 
 
 @unblackhouse.handle(parameterless=[Cooldown(cd_time=0)])
@@ -1664,11 +1678,23 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "该用户尚未踏入修仙界！")
         return
 
-    success = sql_message.unban_user(target_user_id)
-    if success:
-        await handle_send(bot, event, f"道友 {target_user['user_name']} 已从小黑屋释放，恢复自由！")
+    result = admin_blackhouse_status_service.set_banned(
+        _admin_operation_id(event, "blackhouse-unban", str(target_user_id)),
+        str(get_user_id(event) or "unknown"),
+        target_user_id,
+        admin_blackhouse_status_service.snapshot(target_user_id),
+        False,
+    )
+    if result.status == "state_changed":
+        await handle_send(bot, event, "玩家封禁状态已变化，请重新执行指令")
+    elif result.status == "operation_conflict":
+        await handle_send(bot, event, "本次解封操作与已记录事件冲突")
+    elif result.status == "user_missing":
+        await handle_send(bot, event, "该用户尚未踏入修仙界！")
+    elif result.status == "unchanged":
+        await handle_send(bot, event, f"道友 {target_user['user_name']} 当前未被封禁。")
     else:
-        await handle_send(bot, event, f"操作失败：用户 {target_user['user_name']} 可能未被封禁或不存在。")
+        await handle_send(bot, event, f"道友 {target_user['user_name']} 已从小黑屋释放，恢复自由！")
 
 @view_blackhouse.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
