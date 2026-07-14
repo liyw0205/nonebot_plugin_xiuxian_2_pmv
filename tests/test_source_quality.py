@@ -1107,6 +1107,62 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("tribulation_state_migration_operations", service_source)
         self.assertIn("BEGIN IMMEDIATE", service_source)
 
+    def test_tribulation_events_replay_before_resolution(self) -> None:
+        base_root = SOURCE_ROOT / "xiuxian" / "xiuxian_base"
+        command_source = (base_root / "breakthrough_tribulation.py").read_text(
+            encoding="utf-8"
+        )
+        ordinary = command_source[
+            command_source.index("@start_tribulation.handle"):
+            command_source.index("@destiny_tribulation.handle")
+        ]
+        destiny = command_source[
+            command_source.index("@destiny_tribulation.handle"):
+            command_source.index("@heart_devil_tribulation.handle")
+        ]
+        heart_devil = command_source[
+            command_source.index("@heart_devil_tribulation.handle"):
+            command_source.index("@level_up.handle")
+        ]
+
+        self.assertLess(
+            ordinary.index("ordinary_tribulation_service.replay("),
+            ordinary.index("get_user_tribulation_info("),
+        )
+        self.assertLess(
+            ordinary.index("ordinary_tribulation_service.replay("),
+            ordinary.index("random.randint("),
+        )
+        self.assertLess(
+            destiny.index("destiny_tribulation_service.replay("),
+            destiny.index("get_user_tribulation_info("),
+        )
+        self.assertLess(
+            destiny.index("destiny_tribulation_service.replay("),
+            destiny.index("sql_message.get_back_msg("),
+        )
+        self.assertLess(
+            heart_devil.index("heart_devil_tribulation_service.replay("),
+            heart_devil.index("get_user_tribulation_info("),
+        )
+        self.assertLess(
+            heart_devil.index("heart_devil_tribulation_service.replay("),
+            heart_devil.index("random.choices("),
+        )
+        self.assertLess(
+            heart_devil.index("heart_devil_tribulation_service.replay("),
+            heart_devil.index("Boss_fight("),
+        )
+        self.assertIn("battle_messages=result", heart_devil)
+
+        for filename in (
+            "ordinary_tribulation_service.py",
+            "destiny_tribulation_service.py",
+            "heart_devil_tribulation_service.py",
+        ):
+            service_source = (base_root / filename).read_text(encoding="utf-8")
+            self.assertIn("def replay(", service_source)
+
     def test_tribulation_breakthrough_uses_transactional_service(self) -> None:
         base_root = SOURCE_ROOT / "xiuxian" / "xiuxian_base"
         command_source = (base_root / "breakthrough_tribulation.py").read_text(

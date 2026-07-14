@@ -29,6 +29,19 @@ class DestinyTribulationServiceTests(unittest.TestCase):
         args = dict(expected_level="元婴境圆满", expected_exp=1000, target_level="化神境初期", power=999, occurred_at="now")
         self.assertEqual("applied", self.service.settle("op", "u", **args).status)
         self.assertEqual("duplicate", self.service.settle("op", "u", **args).status)
+        replay = self.service.replay("op", "u")
+        self.assertEqual("duplicate", replay.status)
+        self.assertEqual("化神境初期", replay.target_level)
+        self.assertEqual(
+            "duplicate",
+            self.service.settle(
+                "op", "u", expected_level="changed", expected_exp=0,
+                target_level="changed", power=0, occurred_at="changed",
+            ).status,
+        )
+        self.assertEqual(
+            "operation_conflict", self.service.replay("op", "other").status
+        )
         with db_backend.connection(self.game) as conn:
             self.assertEqual(("化神境初期", 999), tuple(conn.execute("SELECT level,power FROM user_xiuxian").fetchone()))
             self.assertEqual(0, conn.execute("SELECT goods_num FROM back").fetchone()[0])

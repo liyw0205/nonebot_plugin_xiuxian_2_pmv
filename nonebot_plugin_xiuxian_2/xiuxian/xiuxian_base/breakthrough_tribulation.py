@@ -192,6 +192,43 @@ def record_heart_devil_result(user_id, success, rate, devil_name=None, item_used
     item_msg = "，消耗天命丹1个" if item_used else ""
     log_message(user_id, f"[渡心魔劫] {name_msg}{result}，当前渡劫成功率{rate}%{item_msg}")
 
+
+def _ordinary_tribulation_message(result, share_msg=""):
+    if result.successful:
+        return (
+            f"⚡⚡⚡渡劫成功⚡⚡⚡️\n"
+            f"历经九九雷劫，道友终成{result.target_level}！\n"
+            f"当前境界：{result.target_level}{share_msg}"
+        )
+    if result.item_used:
+        return (
+            "渡劫失败！\n"
+            "雷劫之下，道心受损！\n"
+            f"幸得天命丹护体，下次渡劫成功率提升至：{result.rate}%"
+        )
+    return (
+        "渡劫失败！\n"
+        "雷劫之下，道心受损！\n"
+        f"下次渡劫成功率提升至：{result.rate}%"
+    )
+
+
+def _destiny_tribulation_message(result, share_msg=""):
+    return (
+        "✨天命所归，渡劫成功✨\n"
+        f"道友轻松突破至{result.target_level}！\n"
+        f"当前境界：{result.target_level}{share_msg}"
+    )
+
+
+def _heart_devil_tribulation_message(result):
+    if result.message:
+        return result.message
+    outcome = "成功" if result.successful else "失败"
+    devil = f"，心魔：{result.devil_name}" if result.devil_name else ""
+    item = "，消耗天命丹1个" if result.item_used else ""
+    return f"心魔劫{outcome}{devil}，当前渡劫成功率{result.rate}%{item}"
+
 @tribulation_info.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看渡劫信息"""
@@ -398,6 +435,18 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await start_tribulation.finish()
     
     user_id = user_info['user_id']
+    operation_id = _tribulation_operation_id(event, "ordinary", user_id)
+    replay = ordinary_tribulation_service.replay(operation_id, user_id)
+    if replay is not None:
+        if not replay.succeeded:
+            await handle_send(bot, event, "渡劫事件标识冲突，请重新发起渡劫！")
+            await start_tribulation.finish()
+        await handle_send(
+            bot, event, _ordinary_tribulation_message(replay),
+            md_type="修仙", k1="开始", v1="开始渡劫", k2="天命",
+            v2="天命渡劫", k3="心魔劫", v3="渡心魔劫",
+        )
+        await start_tribulation.finish()
     tribulation_data = get_user_tribulation_info(user_id)
     tribulation_cd = tribulation_cd2
     user_buff_info = UserBuffDate(user_id).BuffInfo
@@ -475,7 +524,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     root_rate = sql_message.get_root_rate(user_info['root_type'], user_id)
     power = round(current_exp * root_rate * float(next_level_data['spend']), 0) if successful else int(user_info['power'])
     settlement = ordinary_tribulation_service.settle(
-        _tribulation_operation_id(event, "ordinary", user_id), user_id,
+        operation_id, user_id,
         expected_level=level_name, expected_exp=current_exp, expected_rate=success_rate,
         target_level=next_level, successful=successful, new_rate=new_rate,
         occurred_at=occurred_at, power=power, consume_destiny_pill=item_used,
@@ -484,32 +533,20 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, "渡劫状态已经变化，请重新查看后再试！")
         await start_tribulation.finish()
 
-    if successful:
-        share_msg = trigger_breakthrough_relation_rewards(user_id, next_level) if settlement.status == "applied" else ""
+    share_msg = ""
+    if settlement.status == "applied":
+        if settlement.successful:
+            share_msg = trigger_breakthrough_relation_rewards(
+                user_id, settlement.target_level
+            )
         refresh_achievement_titles(user_id)
-        log_message(user_id, f"[开始渡劫] 渡劫成功，目标境界：{next_level}，成功率{success_rate}%")
-        
-        msg = (
-            f"⚡⚡⚡渡劫成功⚡⚡⚡️\n"
-            f"历经九九雷劫，道友终成{next_level}！\n"
-            f"当前境界：{next_level}{share_msg}"
+        item_msg = "，消耗天命丹1个" if settlement.item_used else ""
+        log_message(
+            user_id,
+            f"[开始渡劫] 渡劫{'成功' if settlement.successful else '失败'}，"
+            f"目标境界：{settlement.target_level}，成功率{settlement.rate}%{item_msg}",
         )
-    else:  # 渡劫失败
-        if item_used:
-            msg = (
-                f"渡劫失败！\n"
-                f"雷劫之下，道心受损！\n"
-                f"幸得天命丹护体，下次渡劫成功率提升至：{new_rate}%"
-            )
-        else:
-            msg = (
-                f"渡劫失败！\n"
-                f"雷劫之下，道心受损！\n"
-                f"下次渡劫成功率提升至：{new_rate}%"
-            )
-        refresh_achievement_titles(user_id)
-        item_msg = "，消耗天命丹1个" if item_used else ""
-        log_message(user_id, f"[开始渡劫] 渡劫失败，目标境界：{next_level}，成功率{new_rate}%{item_msg}")
+    msg = _ordinary_tribulation_message(settlement, share_msg)
     await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
     await start_tribulation.finish()
 
@@ -523,6 +560,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await destiny_tribulation.finish()
     
     user_id = user_info['user_id']
+    operation_id = _tribulation_operation_id(event, "destiny", user_id)
+    replay = destiny_tribulation_service.replay(operation_id, user_id)
+    if replay is not None:
+        if not replay.succeeded:
+            await handle_send(bot, event, "天命渡劫事件标识冲突，请重新发起渡劫！")
+            await destiny_tribulation.finish()
+        await handle_send(bot, event, _destiny_tribulation_message(replay))
+        await destiny_tribulation.finish()
     tribulation_data = get_user_tribulation_info(user_id)
     tribulation_cd = tribulation_cd2
     user_buff_info = UserBuffDate(user_id).BuffInfo
@@ -597,22 +642,25 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     root_rate = sql_message.get_root_rate(user_info['root_type'], user_id)
     power = round(current_exp * root_rate * float(next_level_data['spend']), 0)
     settlement = destiny_tribulation_service.settle(
-        _tribulation_operation_id(event, "destiny", user_id), user_id,
+        operation_id, user_id,
         expected_level=level_name, expected_exp=current_exp, target_level=next_level,
         power=power, occurred_at=datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'),
     )
     if not settlement.succeeded:
         await handle_send(bot, event, "天命渡劫状态或丹药数量已经变化，请重新查看后再试！")
         await destiny_tribulation.finish()
-    share_msg = trigger_breakthrough_relation_rewards(user_id, next_level) if settlement.status == "applied" else ""
-    refresh_achievement_titles(user_id)
-    log_message(user_id, f"[天命渡劫] 渡劫成功，目标境界：{next_level}，消耗天命渡劫丹1个")
-    
-    msg = (
-        f"✨天命所归，渡劫成功✨\n"
-        f"道友轻松突破至{next_level}！\n"
-        f"当前境界：{next_level}{share_msg}"
-    )
+    share_msg = ""
+    if settlement.status == "applied":
+        share_msg = trigger_breakthrough_relation_rewards(
+            user_id, settlement.target_level
+        )
+        refresh_achievement_titles(user_id)
+        log_message(
+            user_id,
+            f"[天命渡劫] 渡劫成功，目标境界：{settlement.target_level}，"
+            "消耗天命渡劫丹1个",
+        )
+    msg = _destiny_tribulation_message(settlement, share_msg)
     
     await handle_send(bot, event, msg)
     await destiny_tribulation.finish()
@@ -627,6 +675,20 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await heart_devil_tribulation.finish()
     
     user_id = user_info['user_id']
+    operation_id = _tribulation_operation_id(event, "heart-devil", user_id)
+    replay = heart_devil_tribulation_service.replay(operation_id, user_id)
+    if replay is not None:
+        if not replay.succeeded:
+            await handle_send(bot, event, "心魔劫事件标识冲突，请重新发起渡劫！")
+            await heart_devil_tribulation.finish()
+        if replay.battle_messages:
+            await send_msg_handler(bot, event, replay.battle_messages)
+        await handle_send(
+            bot, event, _heart_devil_tribulation_message(replay),
+            md_type="修仙", k1="开始", v1="开始渡劫", k2="天命",
+            v2="天命渡劫", k3="心魔劫", v3="渡心魔劫",
+        )
+        await heart_devil_tribulation.finish()
     tribulation_data = get_user_tribulation_info(user_id)
     tribulation_cd = int(tribulation_cd2 * 0.5)
     user_buff_info = UserBuffDate(user_id).BuffInfo
@@ -712,23 +774,27 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     if tribulation_type == 1:  # 直接成功
         new_rate = min(tribulation_data['current_rate'] + 20, XiuConfig().tribulation_max_rate)
+        msg = (
+            "✨天赐良机，渡劫成功✨\n"
+            "道友福缘深厚，渡过了心魔劫！\n"
+            f"渡劫成功率提升至{new_rate}%！"
+        )
         settlement = heart_devil_tribulation_service.settle(
-            _tribulation_operation_id(event, "heart-devil", user_id), user_id,
+            operation_id, user_id,
             expected_rate=tribulation_data['current_rate'], expected_count=heart_devil_count,
             successful=True, new_rate=new_rate, occurred_at=occurred_at,
+            message=msg,
         )
         if not settlement.succeeded:
             await handle_send(bot, event, "心魔劫状态已经变化，请重新查看后再试！")
             await heart_devil_tribulation.finish()
-        refresh_achievement_titles(user_id)
-        log_message(user_id, f"[渡心魔劫] 成功，当前渡劫成功率{new_rate}%")
-        
-        msg = (
-            f"✨天赐良机，渡劫成功✨\n"
-            f"道友福缘深厚，渡过了心魔劫！\n"
-            f"渡劫成功率提升至{new_rate}%！"
-        )
-        await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
+        if settlement.status == "applied":
+            refresh_achievement_titles(user_id)
+            log_message(
+                user_id,
+                f"[渡心魔劫] 成功，当前渡劫成功率{settlement.rate}%",
+            )
+        await handle_send(bot, event, _heart_devil_tribulation_message(settlement), md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
         await heart_devil_tribulation.finish()
         
     elif tribulation_type == 2:  # 直接失败
@@ -748,18 +814,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 f"下次渡劫成功率降低至{new_rate}%！"
             )
         settlement = heart_devil_tribulation_service.settle(
-            _tribulation_operation_id(event, "heart-devil", user_id), user_id,
+            operation_id, user_id,
             expected_rate=tribulation_data['current_rate'], expected_count=heart_devil_count,
             successful=False, new_rate=new_rate, occurred_at=occurred_at,
-            consume_destiny_pill=item_used,
+            consume_destiny_pill=item_used, message=msg,
         )
         if not settlement.succeeded:
             await handle_send(bot, event, "心魔劫状态或丹药数量已经变化，请重新查看后再试！")
             await heart_devil_tribulation.finish()
-        refresh_achievement_titles(user_id)
-        item_msg = "，消耗天命丹1个" if item_used else ""
-        log_message(user_id, f"[渡心魔劫] 失败，当前渡劫成功率{new_rate}%{item_msg}")
-        await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
+        if settlement.status == "applied":
+            refresh_achievement_titles(user_id)
+            item_msg = "，消耗天命丹1个" if settlement.item_used else ""
+            log_message(user_id, f"[渡心魔劫] 失败，当前渡劫成功率{settlement.rate}%{item_msg}")
+        await handle_send(bot, event, _heart_devil_tribulation_message(settlement), md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
         await heart_devil_tribulation.finish()
         
     else:  # 战斗判断
@@ -822,17 +889,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         
         if victor == "群友赢了":  # 战斗胜利
             new_rate = min(tribulation_data['current_rate'] + 20, XiuConfig().tribulation_max_rate)
-            settlement = heart_devil_tribulation_service.settle(
-                _tribulation_operation_id(event, "heart-devil", user_id), user_id,
-                expected_rate=tribulation_data['current_rate'], expected_count=heart_devil_count,
-                successful=True, new_rate=new_rate, occurred_at=occurred_at, devil_name=devil_name,
-            )
-            
             msg = (
                 f"⚔️战胜{devil_name}，道心升华⚔️\n"
                 f"{devil_data['win_desc']}\n"
                 f"经过艰苦战斗，道友战胜了{devil_name}！\n"
                 f"渡劫成功率提升至{new_rate}%！"
+            )
+            settlement = heart_devil_tribulation_service.settle(
+                operation_id, user_id,
+                expected_rate=tribulation_data['current_rate'], expected_count=heart_devil_count,
+                successful=True, new_rate=new_rate, occurred_at=occurred_at,
+                devil_name=devil_name, message=msg, battle_messages=result,
             )
         else:  # 战斗失败
             item_used = bool(has_destiny_pill)
@@ -851,19 +918,22 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                     f"道友不敌{devil_name}，渡劫成功率降低至{new_rate}%！"
                 )
             settlement = heart_devil_tribulation_service.settle(
-                _tribulation_operation_id(event, "heart-devil", user_id), user_id,
+                operation_id, user_id,
                 expected_rate=tribulation_data['current_rate'], expected_count=heart_devil_count,
                 successful=False, new_rate=new_rate, occurred_at=occurred_at,
                 devil_name=devil_name, consume_destiny_pill=item_used,
+                message=msg, battle_messages=result,
             )
         if not settlement.succeeded:
             await handle_send(bot, event, "心魔劫状态或丹药数量已经变化，请重新查看后再试！")
             await heart_devil_tribulation.finish()
-        refresh_achievement_titles(user_id)
-        item_msg = "，消耗天命丹1个" if settlement.item_used else ""
-        log_message(user_id, f"[渡心魔劫] {devil_name}，{'成功' if settlement.successful else '失败'}，当前渡劫成功率{settlement.rate}%{item_msg}")
-        await send_msg_handler(bot, event, result, )
-        await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
+        if settlement.status == "applied":
+            refresh_achievement_titles(user_id)
+            item_msg = "，消耗天命丹1个" if settlement.item_used else ""
+            log_message(user_id, f"[渡心魔劫] {settlement.devil_name}，{'成功' if settlement.successful else '失败'}，当前渡劫成功率{settlement.rate}%{item_msg}")
+        if settlement.battle_messages:
+            await send_msg_handler(bot, event, settlement.battle_messages)
+        await handle_send(bot, event, _heart_devil_tribulation_message(settlement), md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
         await heart_devil_tribulation.finish()
 
 @level_up.handle(parameterless=[Cooldown(stamina_cost=1)])

@@ -13,9 +13,11 @@ from ..xiuxian_utils import db_backend
 @dataclass(frozen=True)
 class OrdinaryTribulationResult:
     status: str
-    successful: bool
-    rate: int
-    item_used: bool
+    successful: bool = False
+    rate: int = 0
+    item_used: bool = False
+    user_id: str = ""
+    target_level: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -29,6 +31,37 @@ class OrdinaryTribulationService:
         self._game_database = Path(game_database)
         self._player_database = Path(player_database)
         self._lock = lock or RLock()
+
+    @staticmethod
+    def _saved_result(payload, successful, rate, item_used, *, status="duplicate"):
+        data = json.loads(str(payload))
+        return OrdinaryTribulationResult(
+            status,
+            bool(successful),
+            int(rate),
+            bool(item_used),
+            str(data[0]),
+            str(data[4]),
+        )
+
+    def replay(self, operation_id, user_id):
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        if not operation_id:
+            raise ValueError("operation_id must not be empty")
+        with closing(db_backend.connect(self._game_database)) as conn:
+            if not conn.table_exists("ordinary_tribulation_operations"):
+                return None
+            previous = conn.execute(
+                "SELECT payload,successful,rate,item_used "
+                "FROM ordinary_tribulation_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            saved = self._saved_result(*previous)
+            if saved.user_id != user_id:
+                return OrdinaryTribulationResult("operation_conflict")
+            return saved
 
     def settle(
         self, operation_id, user_id, *, expected_level, expected_exp,
@@ -66,9 +99,10 @@ class OrdinaryTribulationService:
                 ).fetchone()
                 if previous:
                     conn.rollback()
-                    if str(previous[0]) != payload:
+                    saved = self._saved_result(*previous)
+                    if saved.user_id != user_id:
                         return OrdinaryTribulationResult("operation_conflict", False, 0, False)
-                    return OrdinaryTribulationResult("duplicate", bool(previous[1]), int(previous[2]), bool(previous[3]))
+                    return saved
                 user = conn.execute(
                     "SELECT level,exp FROM user_xiuxian WHERE user_id=%s", (user_id,)
                 ).fetchone()
@@ -78,7 +112,9 @@ class OrdinaryTribulationService:
                 actual_rate = int(state[0]) if state else 30
                 if user is None or str(user[0]) != expected_level or int(user[1] or 0) != expected_exp or actual_rate != expected_rate:
                     conn.rollback()
-                    return OrdinaryTribulationResult("state_changed", False, actual_rate, False)
+                    return OrdinaryTribulationResult(
+                        "state_changed", False, actual_rate, False, user_id, target_level
+                    )
                 if consume_destiny_pill:
                     changed = conn.execute(
                         "UPDATE back SET goods_num=goods_num-1,bind_num=MIN(COALESCE(bind_num,0),goods_num-1),"
@@ -88,7 +124,9 @@ class OrdinaryTribulationService:
                     )
                     if changed.rowcount != 1:
                         conn.rollback()
-                        return OrdinaryTribulationResult("item_missing", False, actual_rate, False)
+                        return OrdinaryTribulationResult(
+                            "item_missing", False, actual_rate, False, user_id, target_level
+                        )
                 if successful:
                     changed = conn.execute(
                         "UPDATE user_xiuxian SET level=%s,power=%s WHERE user_id=%s AND level=%s AND exp=%s",
@@ -102,7 +140,9 @@ class OrdinaryTribulationService:
                     )
                 if changed.rowcount != 1:
                     conn.rollback()
-                    return OrdinaryTribulationResult("state_changed", False, actual_rate, False)
+                    return OrdinaryTribulationResult(
+                        "state_changed", False, actual_rate, False, user_id, target_level
+                    )
                 increment_stat(conn, user_id, "渡劫次数", 1)
                 increment_stat(conn, user_id, "渡劫成功" if successful else "渡劫失败", 1)
                 if consume_destiny_pill:
@@ -112,7 +152,14 @@ class OrdinaryTribulationService:
                     (operation_id, payload, int(successful), new_rate, int(consume_destiny_pill)),
                 )
                 conn.commit()
-                return OrdinaryTribulationResult("applied", successful, new_rate, consume_destiny_pill)
+                return OrdinaryTribulationResult(
+                    "applied",
+                    successful,
+                    new_rate,
+                    consume_destiny_pill,
+                    user_id,
+                    target_level,
+                )
             except Exception:
                 conn.rollback()
                 raise

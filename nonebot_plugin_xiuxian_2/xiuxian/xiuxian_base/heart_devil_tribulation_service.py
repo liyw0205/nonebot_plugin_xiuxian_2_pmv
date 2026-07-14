@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from contextlib import closing
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from threading import RLock
 
@@ -13,10 +13,14 @@ from ..xiuxian_utils import db_backend
 @dataclass(frozen=True)
 class HeartDevilTribulationResult:
     status: str
-    successful: bool
-    rate: int
-    heart_devil_count: int
-    item_used: bool
+    successful: bool = False
+    rate: int = 0
+    heart_devil_count: int = 0
+    item_used: bool = False
+    user_id: str = ""
+    devil_name: str = ""
+    message: str = ""
+    battle_messages: list = field(default_factory=list)
 
     @property
     def succeeded(self) -> bool:
@@ -31,17 +35,65 @@ class HeartDevilTribulationService:
         self._player_database = Path(player_database)
         self._lock = lock or RLock()
 
+    @staticmethod
+    def _saved_result(
+        payload, successful, rate, heart_devil_count, item_used, *, status="duplicate"
+    ):
+        data = json.loads(str(payload))
+        return HeartDevilTribulationResult(
+            status=status,
+            successful=bool(successful),
+            rate=int(rate),
+            heart_devil_count=int(heart_devil_count),
+            item_used=bool(item_used),
+            user_id=str(data[0]),
+            devil_name=str(data[6] or ""),
+            message=str(data[8] or "") if len(data) > 8 else "",
+            battle_messages=list(data[9] or []) if len(data) > 9 else [],
+        )
+
+    def replay(self, operation_id, user_id):
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        if not operation_id:
+            raise ValueError("operation_id must not be empty")
+        with closing(db_backend.connect(self._game_database)) as conn:
+            if not conn.table_exists("heart_devil_tribulation_operations"):
+                return None
+            previous = conn.execute(
+                "SELECT payload,successful,rate,heart_devil_count,item_used "
+                "FROM heart_devil_tribulation_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            saved = self._saved_result(*previous)
+            if saved.user_id != user_id:
+                return HeartDevilTribulationResult("operation_conflict")
+            return saved
+
     def settle(
         self, operation_id, user_id, *, expected_rate, expected_count,
         successful, new_rate, occurred_at, devil_name="", consume_destiny_pill=False,
+        message="", battle_messages=None,
     ) -> HeartDevilTribulationResult:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         expected_rate, expected_count, new_rate = map(int, (expected_rate, expected_count, new_rate))
         successful, consume_destiny_pill = bool(successful), bool(consume_destiny_pill)
-        occurred_at, devil_name = str(occurred_at), str(devil_name)
+        occurred_at, devil_name, message = (
+            str(occurred_at), str(devil_name), str(message)
+        )
+        battle_messages = list(battle_messages or [])
         if not operation_id:
             raise ValueError("operation_id must not be empty")
-        payload = json.dumps([user_id, expected_rate, expected_count, successful, new_rate, occurred_at, devil_name, consume_destiny_pill], ensure_ascii=True, separators=(",", ":"))
+        payload = json.dumps(
+            [
+                user_id, expected_rate, expected_count, successful, new_rate,
+                occurred_at, devil_name, consume_destiny_pill, message,
+                battle_messages,
+            ],
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False
             try:
@@ -57,9 +109,10 @@ class HeartDevilTribulationService:
                 ).fetchone()
                 if previous:
                     conn.rollback()
-                    if str(previous[0]) != payload:
+                    saved = self._saved_result(*previous)
+                    if saved.user_id != user_id:
                         return HeartDevilTribulationResult("operation_conflict", False, 0, 0, False)
-                    return HeartDevilTribulationResult("duplicate", bool(previous[1]), int(previous[2]), int(previous[3]), bool(previous[4]))
+                    return saved
                 state = conn.execute("SELECT current_rate,heart_devil_count FROM user_tribulation WHERE user_id=%s", (user_id,)).fetchone()
                 actual_rate, actual_count = (int(state[0]), int(state[1])) if state else (30, 0)
                 if actual_rate != expected_rate or actual_count != expected_count:
@@ -93,7 +146,12 @@ class HeartDevilTribulationService:
                     "INSERT INTO heart_devil_tribulation_operations(operation_id,payload,successful,rate,heart_devil_count,item_used) VALUES(%s,%s,%s,%s,%s,%s)",
                     (operation_id, payload, int(successful), new_rate, new_count, int(consume_destiny_pill)),
                 )
-                conn.commit(); return HeartDevilTribulationResult("applied", successful, new_rate, new_count, consume_destiny_pill)
+                conn.commit()
+                return HeartDevilTribulationResult(
+                    "applied", successful, new_rate, new_count,
+                    consume_destiny_pill, user_id, devil_name, message,
+                    battle_messages,
+                )
             except Exception:
                 conn.rollback(); raise
             finally:

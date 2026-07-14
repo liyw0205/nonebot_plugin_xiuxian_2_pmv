@@ -31,6 +31,21 @@ class OrdinaryTribulationServiceTests(unittest.TestCase):
                     occurred_at="2026-07-13 12:00:00.000000", power=999)
         self.assertEqual("applied", self.service.settle("op", "u", **args).status)
         self.assertEqual("duplicate", self.service.settle("op", "u", **args).status)
+        replay = self.service.replay("op", "u")
+        self.assertEqual("duplicate", replay.status)
+        self.assertTrue(replay.successful)
+        self.assertEqual("化神境初期", replay.target_level)
+        self.assertEqual(
+            "duplicate",
+            self.service.settle(
+                "op", "u", expected_level="changed", expected_exp=0,
+                expected_rate=1, target_level="changed", successful=False,
+                new_rate=1, occurred_at="changed",
+            ).status,
+        )
+        self.assertEqual(
+            "operation_conflict", self.service.replay("op", "other").status
+        )
         with db_backend.connection(self.game) as conn:
             self.assertEqual(("化神境初期", 999), tuple(conn.execute("SELECT level,power FROM user_xiuxian").fetchone()))
             self.assertIsNone(conn.execute("SELECT * FROM user_tribulation").fetchone())
