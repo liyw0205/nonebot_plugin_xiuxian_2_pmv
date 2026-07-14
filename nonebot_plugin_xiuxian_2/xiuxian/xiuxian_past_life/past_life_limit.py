@@ -40,15 +40,6 @@ class PastLifeLimit:
             state[f] = val
         return state
 
-    def save_user_state(self, user_id, state):
-        user_id = str(user_id)
-        state["endings_log"] = self.normalize_endings_log(state.get("endings_log", []))
-        for f in FIELDS:
-            v = state.get(f, self._default_state().get(f))
-            player_data_manager.update_or_write_data(
-                user_id, self.table_name, f, v, data_type="TEXT"
-            )
-
     def _parse_run_time(self, value):
         if not value:
             return None
@@ -142,80 +133,5 @@ class PastLifeLimit:
             available_at = next_time.strftime("%Y-%m-%d %H:%M")
             return f"距离下次前尘刷新还需{''.join(time_parts)}，可于{available_at}后再次开启。"
         return f"距离下次前尘刷新还需{''.join(time_parts)}。"
-
-    def save_run_result(self, user_id, ending_name, score):
-        """记录一次完成的前世"""
-        state = self.get_user_state(user_id)
-        try:
-            total_runs = int(state.get("total_runs", 0))
-        except (TypeError, ValueError):
-            total_runs = 0
-        state["total_runs"] = total_runs + 1
-
-        log = state.get("endings_log", [])
-        if not isinstance(log, list):
-            log = []
-        log.append({
-            "run_number": state["total_runs"],
-            "name": ending_name,
-            "score": score,
-            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        })
-        state["endings_log"] = self.normalize_endings_log(log)
-
-        if score > state.get("best_score", 0):
-            state["best_score"] = score
-            state["best_ending"] = ending_name
-
-        state["last_run_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        state["state"] = 0
-        self.save_user_state(user_id, state)
-
-    def reset_user_state(self, user_id, clear_history=False):
-        """
-        重置用户前尘状态
-        clear_history=False: 仅重置当前流程/冷却，保留历史
-        clear_history=True:  完全清空前尘数据
-        """
-        state = self.get_user_state(user_id)
-        default = self._default_state()
-
-        # 重置当前流程相关
-        state["state"] = 0
-        state["stage"] = 0
-        state["revision"] = int(state.get("revision", 0) or 0) + 1
-        state["alloc"] = {}
-        state["accumulated"] = default["accumulated"]
-        state["talent"] = ""
-        state["birth_scenario"] = ""
-        state["total_score"] = 0
-        state["score_breakdown"] = {}
-        state["event_indices"] = []
-        state["event_snapshots"] = []
-        state["early_death_rolls"] = {}
-        state["history"] = []
-        state["last_run_time"] = None  # 清冷却
-
-        if clear_history:
-            state["total_runs"] = 0
-            state["best_ending"] = ""
-            state["best_score"] = 0
-            state["endings_log"] = []
-            state["achievement_points"] = 0
-
-        self.save_user_state(user_id, state)
-
-    def reset_all_user_state(self, clear_history=False):
-        """重置所有已有前尘记录的用户状态。"""
-        records = player_data_manager.get_all_records(self.table_name)
-        count = 0
-        for record in records:
-            user_id = record.get("user_id")
-            if not user_id:
-                continue
-            self.reset_user_state(user_id, clear_history=clear_history)
-            count += 1
-        return count
-
 
 past_life_limit = PastLifeLimit()

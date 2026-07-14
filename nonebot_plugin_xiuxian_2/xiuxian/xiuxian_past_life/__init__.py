@@ -2,6 +2,7 @@
 前尘往事 - 命令入口
 修仙版人生重开 · 剧本杀
 """
+import asyncio
 import hashlib
 from ..on_compat import on_command
 from nonebot.permission import SUPERUSER
@@ -14,9 +15,13 @@ from ..xiuxian_utils.utils import (
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from .past_life_limit import past_life_limit
 from .past_life_events import past_life_engine
+from .reset_service import PastLifeResetService
+from ...paths import get_paths
 
 player_data_manager = PlayerDataManager()
 sql_message = XiuxianDateManage()
+_paths = get_paths()
+past_life_reset_service = PastLifeResetService(_paths.game_db, _paths.player_db)
 
 PAST_LIFE_RESET_ALL_TOKENS = {"all", "全部", "全体", "所有"}
 PAST_LIFE_RESET_CLEAR_TOKENS = {"全清", "清空", "清空历史"}
@@ -260,11 +265,56 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     # 是否全清
     clear_history = _has_clear_history_token(text)
+    event_id = _stable_event_id(event)
 
     if _is_reset_all(text):
-        count = past_life_limit.reset_all_user_state(clear_history=clear_history)
+        pending = past_life_reset_service.find_pending_all()
+        if pending is not None and pending.clear_history != clear_history:
+            pending_mode = "全清" if pending.clear_history else "保留历史"
+            await handle_send(
+                bot,
+                event,
+                f"已有未完成的全服前尘重置任务（{pending_mode}），请先续跑完成。",
+            )
+            return
+        operation_id = (
+            pending.operation_id
+            if pending is not None
+            else f"past-life-reset-all:{event_id}"
+        )
+        result = pending or past_life_reset_service.create_all(
+            operation_id, clear_history
+        )
+        if not result.succeeded:
+            await handle_send(
+                bot,
+                event,
+                "已有不同模式的全服前尘重置任务正在执行，本次未创建新任务。",
+            )
+            return
+        operation_id = result.operation_id
+        try:
+            while not result.complete:
+                result = past_life_reset_service.run_batch(
+                    operation_id, batch_size=500
+                )
+                await asyncio.sleep(0)
+        except Exception:
+            progress = past_life_reset_service.find_pending_all() or result
+            await handle_send(
+                bot,
+                event,
+                f"全服前尘重置暂时中断，已保存进度 "
+                f"{progress.processed}/{progress.total}，再次执行同模式命令可续跑。",
+            )
+            return
         mode = "（已清空历史）" if clear_history else "（保留历史）"
-        await handle_send(bot, event, f"已重置所有用户的前尘状态，共{count}条记录 {mode}")
+        await handle_send(
+            bot,
+            event,
+            f"已重置所有用户的前尘状态，共{result.total}条记录，"
+            f"成功{result.applied}，冲突{result.conflicted}，缺失{result.missing} {mode}",
+        )
         return
 
     # 先尝试@目标
@@ -283,7 +333,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "未找到目标用户（请@或输入正确道号）")
         return
 
-    past_life_limit.reset_user_state(target_user["user_id"], clear_history=clear_history)
+    result = past_life_reset_service.reset_one(
+        f"past-life-reset-one:{event_id}",
+        target_user["user_id"],
+        clear_history,
+    )
+    if not result.succeeded:
+        await handle_send(bot, event, "前尘重置 operation 冲突，本次未修改状态。")
+        return
     mode = "（已清空历史）" if clear_history else "（保留历史）"
     await handle_send(bot, event, f"已重置 {target_user['user_name']} 的前尘状态 {mode}")
 
