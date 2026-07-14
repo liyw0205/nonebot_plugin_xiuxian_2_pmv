@@ -256,6 +256,7 @@ class XianshiListingBatch:
     listed_quantity: int = 0
     fee_charged: int = 0
     fee_refund: int = 0
+    stamina_charged: int = 0
 
     @property
     def succeeded(self) -> bool:
@@ -274,6 +275,7 @@ class XianshiListingPlanBatch:
     listed_quantity: int = 0
     fee_charged: int = 0
     fee_refund: int = 0
+    stamina_charged: int = 0
 
     @property
     def succeeded(self) -> bool:
@@ -297,6 +299,16 @@ class TradeRepository:
         self._database = Path(database)
         self._max_goods_num = max(1, int(max_goods_num))
         self._lock = lock or RLock()
+
+    @staticmethod
+    def _consume_stamina(conn, user_id: str, stamina_cost: int) -> bool:
+        if stamina_cost <= 0:
+            return True
+        return conn.execute(
+            "UPDATE user_xiuxian SET user_stamina=COALESCE(user_stamina,0)-%s "
+            "WHERE user_id=%s AND COALESCE(user_stamina,0)>=%s",
+            (stamina_cost, user_id, stamina_cost),
+        ).rowcount == 1
 
     def initialize(self, legacy_database: str | Path | None = None) -> None:
         with self._lock, closing(db_backend.connect(self._database)) as conn:
@@ -429,6 +441,7 @@ class TradeRepository:
         *,
         fee_charged: int,
         consume_assets: bool = False,
+        stamina_cost: int = 0,
     ) -> XianshiListingBatch:
         import secrets
 
@@ -440,12 +453,21 @@ class TradeRepository:
         price = int(price)
         quantity = int(quantity)
         fee_charged = int(fee_charged)
+        stamina_cost = int(stamina_cost)
         if not operation_id:
             raise ValueError("operation_id must not be empty")
         if quantity <= 0:
             raise ValueError("quantity must be positive")
+        if stamina_cost < 0 or (stamina_cost > 0 and not consume_assets):
+            raise ValueError("stamina cost requires asset consumption")
 
-        def result(status, listed_quantity=0, actual_fee=0, original_fee=None):
+        def result(
+            status,
+            listed_quantity=0,
+            actual_fee=0,
+            original_fee=None,
+            charged_stamina=0,
+        ):
             charged_fee = int(actual_fee if original_fee is None else original_fee)
             fee_refund = max(charged_fee - int(actual_fee), 0)
             return XianshiListingBatch(
@@ -459,6 +481,7 @@ class TradeRepository:
                 int(listed_quantity),
                 int(actual_fee),
                 int(fee_refund),
+                int(charged_stamina),
             )
 
         with self._lock, closing(db_backend.connect(self._database)) as conn:
@@ -476,14 +499,23 @@ class TradeRepository:
                         requested_quantity INTEGER NOT NULL,
                         listed_quantity INTEGER NOT NULL,
                         fee_charged INTEGER NOT NULL,
+                        stamina_cost INTEGER NOT NULL DEFAULT 0,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                     """
                 )
+                if not conn.column_exists(
+                    "xianshi_listing_operations", "stamina_cost"
+                ):
+                    conn.execute(
+                        "ALTER TABLE xianshi_listing_operations "
+                        "ADD COLUMN stamina_cost INTEGER NOT NULL DEFAULT 0"
+                    )
                 conn.execute("BEGIN IMMEDIATE")
                 previous = conn.execute(
                     "SELECT seller_id, goods_id, name, goods_type, price, requested_quantity, "
-                    "listed_quantity, fee_charged FROM xianshi_listing_operations "
+                    "listed_quantity, fee_charged, stamina_cost "
+                    "FROM xianshi_listing_operations "
                     "WHERE operation_id=%s",
                     (operation_id,),
                 ).fetchone()
@@ -498,6 +530,7 @@ class TradeRepository:
                         prev_requested,
                         prev_listed,
                         prev_fee,
+                        prev_stamina,
                     ) = previous
                     if (
                         str(prev_seller) != seller_id
@@ -506,11 +539,21 @@ class TradeRepository:
                         or str(prev_type) != goods_type
                         or int(prev_price) != price
                         or int(prev_requested) != quantity
+                        or int(prev_stamina) != stamina_cost
                     ):
                         return result("state_changed")
-                    return result("duplicate", prev_listed, prev_fee, prev_fee)
+                    return result(
+                        "duplicate",
+                        prev_listed,
+                        prev_fee,
+                        prev_fee,
+                        prev_stamina,
+                    )
 
                 if consume_assets:
+                    if not self._consume_stamina(conn, seller_id, stamina_cost):
+                        conn.rollback()
+                        return result("stamina_insufficient")
                     stone_update = conn.execute(
                         "UPDATE user_xiuxian SET stone=stone-%s "
                         "WHERE user_id=%s AND COALESCE(stone, 0)>=%s",
@@ -573,8 +616,8 @@ class TradeRepository:
                 conn.execute(
                     "INSERT INTO xianshi_listing_operations "
                     "(operation_id, seller_id, goods_id, name, goods_type, price, "
-                    "requested_quantity, listed_quantity, fee_charged) VALUES "
-                    "(%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    "requested_quantity, listed_quantity, fee_charged, stamina_cost) VALUES "
+                    "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                     (
                         operation_id,
                         seller_id,
@@ -585,22 +628,36 @@ class TradeRepository:
                         quantity,
                         listed_quantity,
                         actual_fee,
+                        stamina_cost,
                     ),
                 )
                 conn.commit()
-                return result("listed", listed_quantity, actual_fee)
+                return result(
+                    "listed",
+                    listed_quantity,
+                    actual_fee,
+                    charged_stamina=stamina_cost,
+                )
             except Exception:
                 conn.rollback()
                 raise
 
     def add_xianshi_plan_items(
-        self, operation_id, seller_id, listing_plan, *, fee_charged, consume_assets=False
+        self,
+        operation_id,
+        seller_id,
+        listing_plan,
+        *,
+        fee_charged,
+        consume_assets=False,
+        stamina_cost=0,
     ):
         import secrets
 
         operation_id = str(operation_id).strip()
         seller_id = str(seller_id)
         fee_charged = int(fee_charged)
+        stamina_cost = int(stamina_cost)
         plan = []
         for entry in listing_plan:
             quantity = int(entry["quantity"])
@@ -619,11 +676,19 @@ class TradeRepository:
             raise ValueError("operation_id must not be empty")
         if not plan:
             raise ValueError("listing_plan must not be empty")
+        if stamina_cost < 0 or (stamina_cost > 0 and not consume_assets):
+            raise ValueError("stamina cost requires asset consumption")
 
         def normalized_text():
             return json.dumps(plan, ensure_ascii=False, sort_keys=True)
 
-        def result(status, listed_quantity=0, actual_fee=0, original_fee=None):
+        def result(
+            status,
+            listed_quantity=0,
+            actual_fee=0,
+            original_fee=None,
+            charged_stamina=0,
+        ):
             charged_fee = int(actual_fee if original_fee is None else original_fee)
             return XianshiListingPlanBatch(
                 status,
@@ -632,6 +697,7 @@ class TradeRepository:
                 int(listed_quantity),
                 int(actual_fee),
                 max(charged_fee - int(actual_fee), 0),
+                int(charged_stamina),
             )
 
         with self._lock, closing(db_backend.connect(self._database)) as conn:
@@ -645,24 +711,46 @@ class TradeRepository:
                         listing_plan TEXT NOT NULL,
                         listed_quantity INTEGER NOT NULL,
                         fee_charged INTEGER NOT NULL,
+                        stamina_cost INTEGER NOT NULL DEFAULT 0,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                     """
                 )
+                if not conn.column_exists(
+                    "xianshi_plan_listing_operations", "stamina_cost"
+                ):
+                    conn.execute(
+                        "ALTER TABLE xianshi_plan_listing_operations "
+                        "ADD COLUMN stamina_cost INTEGER NOT NULL DEFAULT 0"
+                    )
                 conn.execute("BEGIN IMMEDIATE")
                 previous = conn.execute(
-                    "SELECT seller_id, listing_plan, listed_quantity, fee_charged "
+                    "SELECT seller_id, listing_plan, listed_quantity, fee_charged, "
+                    "stamina_cost "
                     "FROM xianshi_plan_listing_operations WHERE operation_id=%s",
                     (operation_id,),
                 ).fetchone()
                 if previous is not None:
-                    prev_seller, prev_plan, prev_listed, prev_fee = previous
+                    prev_seller, prev_plan, prev_listed, prev_fee, prev_stamina = previous
                     conn.rollback()
-                    if str(prev_seller) != seller_id or str(prev_plan) != normalized_text():
+                    if (
+                        str(prev_seller) != seller_id
+                        or str(prev_plan) != normalized_text()
+                        or int(prev_stamina) != stamina_cost
+                    ):
                         return result("state_changed")
-                    return result("duplicate", prev_listed, prev_fee, prev_fee)
+                    return result(
+                        "duplicate",
+                        prev_listed,
+                        prev_fee,
+                        prev_fee,
+                        prev_stamina,
+                    )
 
                 if consume_assets:
+                    if not self._consume_stamina(conn, seller_id, stamina_cost):
+                        conn.rollback()
+                        return result("stamina_insufficient")
                     stone_update = conn.execute(
                         "UPDATE user_xiuxian SET stone=stone-%s "
                         "WHERE user_id=%s AND COALESCE(stone, 0)>=%s",
@@ -731,18 +819,24 @@ class TradeRepository:
                     actual_fee += get_fee_price(entry["price"] * entry["quantity"])
                 conn.execute(
                     "INSERT INTO xianshi_plan_listing_operations "
-                    "(operation_id, seller_id, listing_plan, listed_quantity, fee_charged) "
-                    "VALUES (%s, %s, %s, %s, %s)",
+                    "(operation_id, seller_id, listing_plan, listed_quantity, fee_charged, "
+                    "stamina_cost) VALUES (%s, %s, %s, %s, %s, %s)",
                     (
                         operation_id,
                         seller_id,
                         normalized_text(),
                         listed_quantity,
                         actual_fee,
+                        stamina_cost,
                     ),
                 )
                 conn.commit()
-                return result("listed", listed_quantity, actual_fee)
+                return result(
+                    "listed",
+                    listed_quantity,
+                    actual_fee,
+                    charged_stamina=stamina_cost,
+                )
             except Exception:
                 conn.rollback()
                 raise

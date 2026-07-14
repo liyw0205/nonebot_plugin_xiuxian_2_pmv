@@ -455,7 +455,7 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆上架 {item_name} {price}", k2="查看", v2=f"仙肆查看 {goods_info['type']}", k3="购买", v3="仙肆购买")
     await xian_shop_add.finish()
 
-@xianshi_auto_add.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=30)])
+@xianshi_auto_add.handle(parameterless=[Cooldown(cd_time=0)])
 async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆自动上架（按类型和品阶批量上架）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -473,7 +473,6 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
               "▶ 类型：装备|法器|防具|药材|技能|全部\n" \
               "▶ 品阶：全部|人阶|黄阶|...|上品通天法器（输入'品阶帮助'查看完整列表）\n" \
               "▶ 数量：可选，默认1个，最多10个"
-        sql_message.update_user_stamina(user_id, 30, 1) # 恢复体力
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆自动上架", k2="查看", v2="仙肆查看", k3="品阶", v3="品阶帮助")
         await xianshi_auto_add.finish()
     
@@ -490,13 +489,11 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     if item_type not in type_mapping:
         msg = f"❌ 无效类型！可用类型：{', '.join(type_mapping.keys())}"
-        sql_message.update_user_stamina(user_id, 30, 1)
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆自动上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         await xianshi_auto_add.finish()
     
     if rank_name not in rank_map:
         msg = f"❌ 无效品阶！输入'品阶帮助'查看完整列表"
-        sql_message.update_user_stamina(user_id, 30, 1)
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆自动上架 {item_type}", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         await xianshi_auto_add.finish()
 
@@ -504,7 +501,6 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     back_msg = sql_message.get_back_msg(user_id)
     if not back_msg:
         msg = "💼 道友的背包空空如也！"
-        sql_message.update_user_stamina(user_id, 30, 1)
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆自动上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         await xianshi_auto_add.finish()
     
@@ -587,13 +583,11 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 
     if not processed_items_summary:
         msg = "符合条件的物品均为不可交易的珍贵物品，或没有可交易物品。"
-        sql_message.update_user_stamina(user_id, 30, 1)
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆自动上架 {item_type} {rank_name}", k2="查看", v2=f"仙肆查看 {item_type}", k3="购买", v3="仙肆购买")
         await xianshi_auto_add.finish()
     
     if user_info['stone'] < total_fees_to_deduct:
         msg = f"灵石不足支付总手续费！需要{number_to(total_fees_to_deduct)}灵石，当前拥有{number_to(user_info['stone'])}灵石"
-        sql_message.update_user_stamina(user_id, 30, 1) # 恢复体力
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆自动上架 {item_type} {rank_name}", k2="查看", v2=f"仙肆查看 {item_type}", k3="购买", v3="仙肆购买")
         await xianshi_auto_add.finish()
 
@@ -612,11 +606,14 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     )
     result = xianshi_repository.add_xianshi_plan_items(
         operation_id, user_id, listing_plan,
-        fee_charged=total_fees_to_deduct, consume_assets=True,
+        fee_charged=total_fees_to_deduct, consume_assets=True, stamina_cost=30,
     )
+    if result.status == "stamina_insufficient":
+        msg = "体力不足，自动上架需要30点体力！"
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆自动上架 {item_type} {rank_name}", k2="查看", v2=f"仙肆查看 {item_type}", k3="购买", v3="仙肆购买")
+        await xianshi_auto_add.finish()
     if result.status in {"stone_insufficient", "stock_insufficient"}:
         msg = "灵石或可交易物品数量不足，自动上架失败！"
-        sql_message.update_user_stamina(user_id, 30, 1)
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆自动上架 {item_type} {rank_name}", k2="查看", v2=f"仙肆查看 {item_type}", k3="购买", v3="仙肆购买")
         await xianshi_auto_add.finish()
     if not result.succeeded:
@@ -646,7 +643,7 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     await send_msg_handler(bot, event, '仙肆上架', bot.self_id, display_msg_lines, title=f"【仙肆自动上架 {item_type} {rank_name}】", page_param=msg)
     await xianshi_auto_add.finish()
 
-@xianshi_fast_add.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=10)])
+@xianshi_fast_add.handle(parameterless=[Cooldown(cd_time=0)])
 async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """仙肆快速上架（按物品名快速上架）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -662,7 +659,6 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         msg = "指令格式：仙肆快速上架 物品名 [价格]\n" \
               "▶ 价格：可选，不填则自动匹配仙肆最低价\n" \
               "▶ 数量：固定为10个（或背包中全部数量）"
-        sql_message.update_user_stamina(user_id, 10, 1)
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆快速上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         await xianshi_fast_add.finish()
     
@@ -672,7 +668,6 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         price = int(args[1]) if len(args) > 1 else None
     except ValueError:
         msg = "请输入有效的价格！"
-        sql_message.update_user_stamina(user_id, 10, 1)
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆快速上架 {item_name}", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         await xianshi_fast_add.finish()
     
@@ -680,28 +675,24 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     goods_id, goods_info = items.get_data_by_item_name(item_name)
     if not goods_id:
         msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
-        sql_message.update_user_stamina(user_id, 10, 1)
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆快速上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         return
     
     goods_num = sql_message.goods_num(str(user_info['user_id']), goods_id, num_type='trade')
     if goods_num <= 0:
         msg = f"背包中没有足够的 {item_name} 用于交易！"
-        sql_message.update_user_stamina(user_id, 10, 1)
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆快速上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         return
     
     # 检查物品类型是否允许
     if goods_info['type'] not in ITEM_TYPES:
         msg = f"该物品类型不允许交易！允许类型：{', '.join(ITEM_TYPES)}"
-        sql_message.update_user_stamina(user_id, 10, 1)
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆快速上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         return
     
     forbid_reason = get_trade_forbid_reason(goods_id, goods_info)
     if forbid_reason:
         msg = forbid_reason
-        sql_message.update_user_stamina(user_id, 10, 1)
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆快速上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         return
 
@@ -710,7 +701,6 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     if quantity <= 0:
         msg = f"可上架数量不足！"
-        sql_message.update_user_stamina(user_id, 10, 1)
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆快速上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         await xianshi_fast_add.finish()
 
@@ -731,7 +721,6 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     if user_info['stone'] < single_fee:
         msg = f"灵石不足支付手续费！需要{number_to(single_fee)}灵石，当前拥有{number_to(user_info['stone'])}灵石"
-        sql_message.update_user_stamina(user_id, 10, 1)
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆快速上架 {item_name} {price}", k2="查看", v2=f"仙肆查看 {goods_info['type']}", k3="购买", v3="仙肆购买")
         await xianshi_fast_add.finish()
 
@@ -740,11 +729,14 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     )
     result = xianshi_repository.add_xianshi_items(
         operation_id, user_id, goods_id, item_name, goods_info['type'], price,
-        quantity, fee_charged=single_fee, consume_assets=True,
+        quantity, fee_charged=single_fee, consume_assets=True, stamina_cost=10,
     )
+    if result.status == "stamina_insufficient":
+        msg = "体力不足，快速上架需要10点体力！"
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆快速上架 {item_name} {price}", k2="查看", v2=f"仙肆查看 {goods_info['type']}", k3="购买", v3="仙肆购买")
+        await xianshi_fast_add.finish()
     if result.status in {"stone_insufficient", "stock_insufficient"}:
         msg = f"灵石或可交易的 {item_name} 数量不足，上架失败！"
-        sql_message.update_user_stamina(user_id, 10, 1)
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆快速上架 {item_name} {price}", k2="查看", v2=f"仙肆查看 {goods_info['type']}", k3="购买", v3="仙肆购买")
         await xianshi_fast_add.finish()
     if not result.succeeded:
