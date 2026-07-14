@@ -288,6 +288,8 @@ class RiftEntryService:
         *,
         expected_generation_id,
         expected_revision,
+        stamina_cost=0,
+        expected_stamina=None,
     ) -> RiftEntryResult:
         operation_id = str(operation_id).strip()
         user_id = str(user_id).strip()
@@ -296,6 +298,10 @@ class RiftEntryService:
         expected_revision = int(expected_revision)
         duration = int(duration)
         ticket_id = int(ticket_id)
+        stamina_cost = int(stamina_cost)
+        expected_stamina = (
+            None if expected_stamina is None else int(expected_stamina)
+        )
         expected_rift, _ = _normalise_rift_data(rift_data)
         if (
             not operation_id
@@ -305,6 +311,8 @@ class RiftEntryService:
             or expected_revision <= 0
             or duration <= 0
             or ticket_id < 0
+            or stamina_cost < 0
+            or (stamina_cost > 0 and expected_stamina is None)
         ):
             raise ValueError("valid operation, user, generation and duration are required")
         payload = _canonical(
@@ -315,6 +323,7 @@ class RiftEntryService:
                 expected_rift,
                 duration,
                 ticket_id,
+                stamina_cost,
             ]
         )
 
@@ -375,15 +384,50 @@ class RiftEntryService:
                     conn.rollback()
                     return RiftEntryResult("busy", world=world)
 
+                if stamina_cost:
+                    stamina = conn.execute(
+                        "SELECT COALESCE(user_stamina,0) FROM user_xiuxian "
+                        "WHERE user_id=%s",
+                        (user_id,),
+                    ).fetchone()
+                    if stamina is None or int(stamina[0]) != expected_stamina:
+                        conn.rollback()
+                        return RiftEntryResult("state_changed", world=world)
+                    if expected_stamina < stamina_cost:
+                        conn.rollback()
+                        return RiftEntryResult("stamina_missing", world=world)
+
                 if ticket_id:
+                    bind_update = ""
+                    if conn.column_exists("back", "bind_num"):
+                        bind_update = (
+                            ",bind_num=MIN("
+                            "MAX(COALESCE(bind_num,0)-1,0),goods_num-1)"
+                        )
                     consumed = conn.execute(
-                        "UPDATE back SET goods_num=goods_num-1 "
+                        "UPDATE back SET goods_num=goods_num-1" + bind_update + " "
                         "WHERE user_id=%s AND goods_id=%s AND COALESCE(goods_num,0)>=1",
                         (user_id, ticket_id),
                     )
                     if consumed.rowcount != 1:
                         conn.rollback()
                         return RiftEntryResult("ticket_missing", world=world)
+
+                if stamina_cost:
+                    stamina_updated = conn.execute(
+                        "UPDATE user_xiuxian SET user_stamina=user_stamina-%s "
+                        "WHERE user_id=%s AND COALESCE(user_stamina,0)=%s "
+                        "AND COALESCE(user_stamina,0)>=%s",
+                        (
+                            stamina_cost,
+                            user_id,
+                            expected_stamina,
+                            stamina_cost,
+                        ),
+                    )
+                    if stamina_updated.rowcount != 1:
+                        conn.rollback()
+                        return RiftEntryResult("state_changed", world=world)
 
                 snapshot = _canonical(expected_rift)
                 conn.execute(
@@ -470,6 +514,29 @@ class RiftEntryService:
             except Exception:
                 conn.rollback()
                 raise
+
+    def replay(self, operation_id, rift_key) -> RiftEntryResult | None:
+        operation_id = str(operation_id).strip()
+        rift_key = str(rift_key).strip()
+        if not operation_id or not rift_key:
+            return None
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            if not conn.table_exists("rift_entry_operations"):
+                return None
+            previous = conn.execute(
+                "SELECT entry_count,rift_data FROM rift_entry_operations "
+                "WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            world = self._read_world(conn, rift_key)
+            return RiftEntryResult(
+                "duplicate",
+                int(previous[0]),
+                json.loads(str(previous[1])),
+                world,
+            )
 
     def read_entry(self, user_id, *, active_only=False) -> dict | None:
         user_id = str(user_id).strip()

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import random
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import nonebot
@@ -24,7 +27,10 @@ class RiftEntryServiceTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.db = self.root / "game.db"
         with db_backend.transaction(self.db) as conn:
-            conn.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY)")
+            conn.execute(
+                "CREATE TABLE user_xiuxian("
+                "user_id TEXT PRIMARY KEY,user_stamina INTEGER DEFAULT 100)"
+            )
             conn.executemany(
                 "INSERT INTO user_xiuxian(user_id) VALUES(%s)",
                 [("u",), ("v",)],
@@ -39,10 +45,12 @@ class RiftEntryServiceTests(unittest.TestCase):
             )
             conn.execute(
                 "CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_num INTEGER,"
+                "bind_num INTEGER DEFAULT 0,"
                 "PRIMARY KEY(user_id,goods_id))"
             )
             conn.executemany(
-                "INSERT INTO back(user_id,goods_id,goods_num) VALUES(%s,7,1)",
+                "INSERT INTO back(user_id,goods_id,goods_num,bind_num) "
+                "VALUES(%s,7,1,1)",
                 [("u",), ("v",)],
             )
         self.service = RiftEntryService(self.db)
@@ -81,7 +89,16 @@ class RiftEntryServiceTests(unittest.TestCase):
         self.assertIsNotNone(result.state)
         return result.state
 
-    def enter(self, operation_id, user_id, state, ticket_id=0):
+    def enter(
+        self,
+        operation_id,
+        user_id,
+        state,
+        ticket_id=0,
+        *,
+        stamina_cost=0,
+        expected_stamina=None,
+    ):
         return self.service.enter(
             operation_id,
             user_id,
@@ -91,6 +108,8 @@ class RiftEntryServiceTests(unittest.TestCase):
             ticket_id,
             expected_generation_id=state.generation_id,
             expected_revision=state.revision,
+            stamina_cost=stamina_cost,
+            expected_stamina=expected_stamina,
         )
 
     def test_generation_is_idempotent_and_replaces_one_snapshot(self):
@@ -157,6 +176,70 @@ class RiftEntryServiceTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(original_random_state, random.getstate())
 
+    def test_runtime_timestamp_parser_accepts_sqlite_timestamp_variants(self):
+        with_microseconds = "2026-07-14 15:39:09.123456"
+        without_microseconds = "2026-07-14 15:39:09"
+        expected = datetime(2026, 7, 14, 15, 39, 9)
+
+        self.assertEqual(
+            expected.replace(microsecond=123456),
+            rift_module._parse_rift_datetime(with_microseconds),
+        )
+        self.assertEqual(
+            expected,
+            rift_module._parse_rift_datetime(without_microseconds),
+        )
+        self.assertIs(
+            expected,
+            rift_module._parse_rift_datetime(expected),
+        )
+
+    def test_runtime_elapsed_uses_sqlite_utc_clock(self):
+        now = datetime(2026, 7, 14, 16, 22, 47, tzinfo=timezone.utc)
+        self.assertEqual(
+            3,
+            rift_module._rift_elapsed_minutes(
+                "2026-07-14 16:19:47",
+                now=now,
+            ),
+        )
+        self.assertEqual(
+            3,
+            rift_module._rift_elapsed_minutes(
+                "2026-07-14T16:19:47Z",
+                now=now,
+            ),
+        )
+
+    def test_runtime_event_roll_is_operation_deterministic(self):
+        user = {"user_id": "u", "exp": 100, "hp": 80, "mp": 60}
+        rift = {"rank": 1}
+        original_random_state = random.getstate()
+        try:
+            with patch.object(rift_module, "get_story_type", return_value="无事"):
+                first = asyncio.run(
+                    rift_module._roll_rift_event(
+                        user, rift, "bot", "fixed-op"
+                    )
+                )
+                self.assertEqual(original_random_state, random.getstate())
+                random.seed(999)
+                ambient_state = random.getstate()
+                second = asyncio.run(
+                    rift_module._roll_rift_event(
+                        user, rift, "bot", "fixed-op"
+                    )
+                )
+                self.assertEqual(ambient_state, random.getstate())
+            self.assertEqual(first, second)
+
+            progress_first = rift_module._roll_rift_progress(9, "fixed-op")
+            random.seed(123)
+            progress_second = rift_module._roll_rift_progress(9, "fixed-op")
+            self.assertEqual(progress_first, progress_second)
+        finally:
+            random.setstate(original_random_state)
+
     def test_bootstrap_imports_legacy_snapshot_only_once(self):
         legacy = self.plan()
         legacy["l_user_id"] = [12, "13", 12]
@@ -204,11 +287,12 @@ class RiftEntryServiceTests(unittest.TestCase):
 
         with db_backend.connection(self.db) as conn:
             self.assertEqual(
-                0,
-                int(
+                (0, 0),
+                tuple(
                     conn.execute(
-                        "SELECT goods_num FROM back WHERE user_id='u' AND goods_id=7"
-                    ).fetchone()[0]
+                        "SELECT goods_num,bind_num FROM back "
+                        "WHERE user_id='u' AND goods_id=7"
+                    ).fetchone()
                 ),
             )
             self.assertEqual(
@@ -243,6 +327,57 @@ class RiftEntryServiceTests(unittest.TestCase):
         self.assertEqual("applied", concurrent.status)
         self.assertEqual(("u", "v"), concurrent.world.participants)
         self.assertEqual(3, concurrent.world.revision)
+
+    def test_stamina_cost_is_atomic_and_duplicate_does_not_charge_again(self):
+        state = self.generate()
+        applied = self.enter(
+            "entry-stamina",
+            "u",
+            state,
+            stamina_cost=6,
+            expected_stamina=100,
+        )
+        duplicate = self.enter(
+            "entry-stamina",
+            "u",
+            state,
+            stamina_cost=6,
+            expected_stamina=94,
+        )
+        self.assertEqual(("applied", "duplicate"), (applied.status, duplicate.status))
+        with db_backend.connection(self.db) as conn:
+            self.assertEqual(
+                94,
+                int(
+                    conn.execute(
+                        "SELECT user_stamina FROM user_xiuxian WHERE user_id='u'"
+                    ).fetchone()[0]
+                ),
+            )
+
+    def test_stamina_snapshot_and_insufficient_stamina_are_rejected(self):
+        state = self.generate()
+        changed = self.enter(
+            "changed-stamina",
+            "u",
+            state,
+            stamina_cost=6,
+            expected_stamina=99,
+        )
+        with db_backend.transaction(self.db) as conn:
+            conn.execute(
+                "UPDATE user_xiuxian SET user_stamina=5 WHERE user_id='u'"
+            )
+        missing = self.enter(
+            "missing-stamina",
+            "u",
+            state,
+            stamina_cost=6,
+            expected_stamina=5,
+        )
+        self.assertEqual("state_changed", changed.status)
+        self.assertEqual("stamina_missing", missing.status)
+        self.assertEqual((), self.service.get_current("global").participants)
 
     def test_new_generation_and_repeat_participation_are_rejected(self):
         first = self.generate()
@@ -299,15 +434,23 @@ class RiftEntryServiceTests(unittest.TestCase):
                 "ON rift_entry_operations BEGIN SELECT RAISE(ABORT,'reject entry'); END"
             )
         with self.assertRaises(db_backend.IntegrityError):
-            self.enter("failed", "u", state, ticket_id=7)
+            self.enter(
+                "failed",
+                "u",
+                state,
+                ticket_id=7,
+                stamina_cost=6,
+                expected_stamina=100,
+            )
 
         with db_backend.connection(self.db) as conn:
             self.assertEqual(
-                1,
-                int(
+                (1, 1),
+                tuple(
                     conn.execute(
-                        "SELECT goods_num FROM back WHERE user_id='u' AND goods_id=7"
-                    ).fetchone()[0]
+                        "SELECT goods_num,bind_num FROM back "
+                        "WHERE user_id='u' AND goods_id=7"
+                    ).fetchone()
                 ),
             )
             self.assertEqual(
@@ -322,6 +465,14 @@ class RiftEntryServiceTests(unittest.TestCase):
                 conn.execute(
                     "SELECT 1 FROM rift_entries WHERE user_id='u'"
                 ).fetchone()
+            )
+            self.assertEqual(
+                100,
+                int(
+                    conn.execute(
+                        "SELECT user_stamina FROM user_xiuxian WHERE user_id='u'"
+                    ).fetchone()[0]
+                ),
             )
             self.assertIsNone(
                 conn.execute(
@@ -345,6 +496,29 @@ class RiftEntryServiceTests(unittest.TestCase):
         self.assertEqual("东玄域", loaded["name"])
         self.assertEqual(60, loaded["time"])
 
+    def test_progress_query_does_not_create_missing_table_or_field(self):
+        player_db = self.root / "empty-player.db"
+        with db_backend.transaction(player_db) as conn:
+            conn.execute("CREATE TABLE unrelated(value INTEGER)")
+        with patch.object(
+            rift_module,
+            "get_paths",
+            return_value=SimpleNamespace(player_db=player_db),
+        ):
+            self.assertEqual(0, rift_module._rift_progress_snapshot("missing"))
+        with db_backend.connection(player_db) as conn:
+            self.assertFalse(conn.table_exists("rift"))
+            self.assertEqual(
+                ["unrelated"],
+                [
+                    str(row[0])
+                    for row in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table' "
+                        "ORDER BY name"
+                    ).fetchall()
+                ],
+            )
+
     def test_production_entry_has_no_precommit_json_or_list_write(self):
         source = (
             Path(__file__).resolve().parents[1]
@@ -361,7 +535,9 @@ class RiftEntryServiceTests(unittest.TestCase):
         self.assertIn("rift_entry_service.enter(", handler)
         self.assertIn("expected_generation_id=", handler)
         self.assertIn("expected_revision=", handler)
+        self.assertIn("stamina_cost=stamina_cost", handler)
         self.assertIn("_sync_entry_projection(user_id, entry)", handler)
+        self.assertNotIn("Cooldown(stamina_cost=6)", handler)
         self.assertNotIn("l_user_id.append", handler)
         self.assertNotIn("old_rift_info.save_rift", handler)
 

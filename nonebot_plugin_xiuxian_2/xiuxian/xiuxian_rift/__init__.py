@@ -1,7 +1,7 @@
 import hashlib
 import random
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from nonebot import get_bots, get_bot
 from ...paths import get_paths
 from ..on_compat import on_command
@@ -19,7 +19,8 @@ from .old_rift_info import GLOBAL_RIFT_KEY, old_rift_info
 from .. import DRIVER
 from ..xiuxian_utils.lay_out import assign_bot, assign_bot_group, Cooldown
 from nonebot.log import logger
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
+from ..xiuxian_utils import db_backend
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.utils import (
     check_user, check_user_type,
     send_msg_handler, get_msg_pic, log_message, handle_send,
@@ -52,7 +53,9 @@ rift_demon_token_battle_settlement_service = RiftDemonTokenBattleSettlementServi
     get_paths().game_db, get_paths().player_db
 )
 rift_speedup_service = RiftSpeedupService(get_paths().game_db)
-rift_settlement_service = RiftSettlementService(get_paths().game_db)
+rift_settlement_service = RiftSettlementService(
+    get_paths().game_db, get_paths().player_db
+)
 cache_help = {}
 group_rift = {}  # dict
 config = get_rift_config() # 获取秘境配置
@@ -63,6 +66,29 @@ def _event_id(event) -> str:
     return str(
         getattr(event, "message_id", "") or getattr(event, "id", "") or ""
     ).strip()
+
+
+def _parse_rift_datetime(value) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    return datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+
+
+def _rift_elapsed_minutes(value, *, now: datetime | None = None) -> int:
+    started_at = _parse_rift_datetime(value)
+    current = now or datetime.now(timezone.utc)
+    if started_at.tzinfo is None:
+        current = current.astimezone(timezone.utc).replace(tzinfo=None)
+    else:
+        current = current.astimezone(started_at.tzinfo)
+    return max(0, int((current - started_at).total_seconds() // 60))
+
+
+def _rift_operation_seed(operation_id: str, scope: str) -> int:
+    return int.from_bytes(
+        hashlib.sha256(f"{scope}:{operation_id}".encode("utf-8")).digest(),
+        "big",
+    )
 
 
 def _scheduled_generation_operation_id(now: datetime | None = None) -> str:
@@ -272,6 +298,27 @@ def format_rift_target_nodes(rift: Rift) -> str:
     )
 
 
+def _entry_success_message(rift_data: dict, *, bypass_position=False) -> str:
+    target_nodes = [
+        node
+        for node in rift_data.get("target_nodes", [])
+        if isinstance(node, dict)
+    ]
+    target_msg = "\n".join(
+        f"{index}. {node.get('realm', '')}·{node.get('heaven', '')}·"
+        f"{node.get('node_name', '')}"
+        for index, node in enumerate(target_nodes, 1)
+    )
+    suffix = ""
+    if target_msg:
+        bypass_msg = "\n秘藏令已绕过位置要求。" if bypass_position else ""
+        suffix = f"{bypass_msg}\n秘境可探索地点：\n{target_msg}"
+    return (
+        f"进入秘境：{rift_data['name']}，探索需要花费时间："
+        f"{rift_data['time']}分钟！{suffix}"
+    )
+
+
 def assign_rift_trial_node(rift: Rift):
     """给秘境在每一界各绑定一个地图试炼节点。"""
     node_infos = get_random_trial_nodes_by_realm()
@@ -340,78 +387,18 @@ def check_rift_target_position(user_id: int, rift: Rift) -> tuple[bool, str]:
     return False, f"本次秘境可在以下地点探索：\n{target_msg}\n请先前往任一目标节点再探索。"
 
 def update_rift_explore_count(user_id: int, do_give: bool = True) -> str:
-    """
-    更新秘境完成次数，并判断是否达到10次赠送随机秘境道具
-
-    参数:
-        user_id: 用户ID
-        do_give: 是否执行赠送道具和清零操作（默认True）
-                 - True：用于秘境结算时（会赠送并清零）
-                 - False：用于查询次数时（只返回当前进度，不修改数据）
-
-    返回:
-        str: 给用户显示的消息
-    """
-    player_manager = PlayerDataManager()
-    user_id_str = str(user_id)
-    
-    # 定义可获得的奖励道具
-    reward_items = {
-        "秘藏令": 20007,
-        "秘境钥匙": 20001,
-        "神秘经书·残": 20008,
-        "神秘经书": 20009,
-        "灵签宝箓": 20010,
-        "秘境加速券": 20012,
-        "秘境加速券": 20012,
-        "秘境大加速券": 20013,
-        "斩妖令": 20018,
-        "解绑符": 20019
-    }
-    
-    # 获取当前次数，没有则初始化为0
-    count = player_manager.get_field_data(user_id_str, "rift", "explore_count")
-    if count is None:
-        count = 0
-        player_manager.update_or_write_data(user_id_str, "rift", "explore_count", 0)
-
-    if not do_give:
-        # 只查询，不赠送
-        need = 10 - count
-        if need <= 0:
-            return f"道友当前秘境完成次数：{count}/10\n已可领取秘境奖励，请进行一次秘境结算来领取！"
-        else:
-            return f"道友当前秘境完成次数：{count}/10\n再完成 {need} 次即可获得秘境奖励"
-
-    # +1
-    new_count = count + 1
-
-    msg = ""
-    if new_count >= 10:
-        # 随机选择一个奖励道具
-        reward_name, reward_id = random.choice(list(reward_items.items()))
-        
-        sql_message.send_back(
-            user_id,
-            reward_id,
-            reward_name,
-            "特殊道具",
-            1,
-            1
+    """Return the authoritative progress without mutating query state."""
+    count = _rift_progress_snapshot(user_id)
+    need = 10 - count
+    if need <= 0:
+        return (
+            f"道友当前秘境完成次数：{count}/10\n"
+            "已可领取秘境奖励，请进行一次秘境结算来领取！"
         )
-        # 清零
-        new_count = 0
-        msg = f"\n【秘境累计完成10次！】\n赠送道友 {reward_name} x1！"
-    else:
-        need = 10 - new_count
-        if need > 0:
-            msg = f"\n当前秘境完成次数：{new_count}/10（再完成 {need} 次可获秘境奖励）"
-
-    player_manager.update_or_write_data(
-        user_id_str, "rift", "explore_count", new_count
+    return (
+        f"道友当前秘境完成次数：{count}/10\n"
+        f"再完成 {need} 次即可获得秘境奖励"
     )
-
-    return msg
 
 @my_rift_count.handle(parameterless=[Cooldown(cd_time=3)])
 async def show_rift_progress(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -462,7 +449,7 @@ async def create_rift(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     return
 
 
-@explore_rift.handle(parameterless=[Cooldown(stamina_cost=6)])
+@explore_rift.handle(parameterless=[Cooldown(cd_time=0.5)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """探索秘境"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -471,6 +458,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="我要修仙")
         await explore_rift.finish()
     user_id = user_info['user_id']
+    event_id = _event_id(event)
+    operation_id = f"rift-entry:{event_id or time.time_ns()}:{user_id}"
+    if event_id:
+        replay = rift_entry_service.replay(operation_id, GLOBAL_RIFT_KEY)
+        if replay is not None:
+            _sync_entry_projection(user_id, replay)
+            await handle_send(bot, event, _entry_success_message(replay.rift_data))
+            await explore_rift.finish()
     is_type, msg = check_user_type(user_id, 0)  # 需要无状态的用户
     if not is_type:
         await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="秘境帮助", v3="秘境帮助")
@@ -502,28 +497,36 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await explore_rift.finish()
 
         rift_data = build_rift_data(current_rift)
-        event_id = _event_id(event)
-        entry = rift_entry_service.enter(
-            f"rift-entry:{event_id or time.time_ns()}:{user_id}",
-            user_id,
-            GLOBAL_RIFT_KEY,
-            rift_data,
-            rift_data["time"],
-            expected_generation_id=current_state.generation_id,
-            expected_revision=current_state.revision,
+        stamina_cost = (
+            0 if str(user_id) in DRIVER.config.superusers else 6
         )
+        try:
+            entry = rift_entry_service.enter(
+                operation_id,
+                user_id,
+                GLOBAL_RIFT_KEY,
+                rift_data,
+                rift_data["time"],
+                expected_generation_id=current_state.generation_id,
+                expected_revision=current_state.revision,
+                stamina_cost=stamina_cost,
+                expected_stamina=int(user_info.get("user_stamina", 0)),
+            )
+        except Exception as exc:
+            logger.opt(exception=exc).error("秘境进入事务执行失败")
+            await handle_send(bot, event, "秘境进入失败，请稍后重试。")
+            await explore_rift.finish()
         if not entry.succeeded:
             if entry.status == "already_joined":
                 await handle_send(bot, event, "道友已经参加过本次秘境啦，请把机会留给更多的道友！")
                 await explore_rift.finish()
+            if entry.status == "stamina_missing":
+                await handle_send(bot, event, "你没有足够的体力，请等待体力恢复后再试！")
+                await explore_rift.finish()
             await handle_send(bot, event, "秘境进入状态已变化，请稍后重试。")
             await explore_rift.finish()
         _sync_entry_projection(user_id, entry)
-        target_msg = ""
-        target_nodes_msg = format_rift_target_nodes(current_rift)
-        if target_nodes_msg:
-            target_msg = f"\n秘境可探索地点：\n{target_nodes_msg}"
-        msg = f"进入秘境：{current_rift.name}，探索需要花费时间：{current_rift.time}分钟！{target_msg}"
+        msg = _entry_success_message(entry.rift_data)
         await handle_send(bot, event, msg, md_type="秘境", k1="结算", v1="秘境结算", k2="加速", v2="道具使用 秘境加速券", k3="大加速", v3="道具使用 秘境大加速券", k4="钥匙", v4="道具使用 秘境钥匙")
         await explore_rift.finish()
 
@@ -548,6 +551,18 @@ async def use_rift_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
     user_id = user_info['user_id']
+    event_id = _event_id(event)
+    operation_id = f"rift-ticket-entry:{event_id or time.time_ns()}:{user_id}"
+    if event_id:
+        replay = rift_entry_service.replay(operation_id, GLOBAL_RIFT_KEY)
+        if replay is not None:
+            _sync_entry_projection(user_id, replay)
+            await handle_send(
+                bot,
+                event,
+                _entry_success_message(replay.rift_data, bypass_position=True),
+            )
+            return
     is_type, msg = check_user_type(user_id, 0)  # 需要无状态的用户
     if not is_type:
         await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="秘境帮助", v3="秘境帮助")
@@ -561,37 +576,49 @@ async def use_rift_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         current_state, current_rift = check_msg_or_rift
 
         rift_data = build_rift_data(current_rift)
-        event_id = _event_id(event)
-        entry = rift_entry_service.enter(
-            f"rift-ticket-entry:{event_id or time.time_ns()}:{user_id}",
-            user_id,
-            GLOBAL_RIFT_KEY,
-            rift_data,
-            rift_data["time"],
-            item_id,
-            expected_generation_id=current_state.generation_id,
-            expected_revision=current_state.revision,
-        )
+        try:
+            entry = rift_entry_service.enter(
+                operation_id,
+                user_id,
+                GLOBAL_RIFT_KEY,
+                rift_data,
+                rift_data["time"],
+                item_id,
+                expected_generation_id=current_state.generation_id,
+                expected_revision=current_state.revision,
+            )
+        except Exception as exc:
+            logger.opt(exception=exc).error("秘藏令进入秘境事务执行失败")
+            await handle_send(bot, event, "秘藏令进入秘境失败，请稍后重试。")
+            return
         if not entry.succeeded:
             if entry.status == "already_joined":
                 await handle_send(bot, event, "道友已经参加过本次秘境啦，请把机会留给更多的道友！")
                 return
+            if entry.status == "ticket_missing":
+                await handle_send(bot, event, "秘藏令数量不足，请重新查看背包。")
+                return
             await handle_send(bot, event, "秘藏令或秘境状态已变化，请稍后重试。")
             return
         _sync_entry_projection(user_id, entry)
-        target_msg = ""
-        target_nodes_msg = format_rift_target_nodes(current_rift)
-        if target_nodes_msg:
-            target_msg = f"\n秘藏令已绕过位置要求。\n秘境可探索地点：\n{target_nodes_msg}"
-        msg = f"进入秘境：{current_rift.name}，探索需要花费时间：{current_rift.time}分钟！{target_msg}"
+        msg = _entry_success_message(entry.rift_data, bypass_position=True)
         await handle_send(bot, event, msg, md_type="秘境", k1="结算", v1="秘境结算", k2="加速", v2="道具使用 秘境加速券", k3="大加速", v3="道具使用 秘境大加速券", k4="钥匙", v4="道具使用 秘境钥匙")
         return
 
 def _rift_progress_snapshot(user_id):
-    return int(PlayerDataManager().get_field_data(str(user_id), "rift", "explore_count") or 0)
+    with db_backend.connection(get_paths().player_db) as conn:
+        if not conn.table_exists("rift") or not conn.column_exists(
+            "rift", "explore_count"
+        ):
+            return 0
+        row = conn.execute(
+            'SELECT "explore_count" FROM "rift" WHERE user_id=%s',
+            (str(user_id),),
+        ).fetchone()
+        return int(row[0] or 0) if row else 0
 
 
-def _roll_rift_progress(count):
+def _roll_rift_progress(count, operation_id=""):
     if int(count) + 1 < 10:
         new_count = int(count) + 1
         return None, f"\n当前秘境完成次数：{new_count}/10（再完成 {10 - new_count} 次可获秘境奖励）"
@@ -600,34 +627,58 @@ def _roll_rift_progress(count):
         "灵签宝箓": 20010, "秘境加速券": 20012, "秘境大加速券": 20013,
         "斩妖令": 20018, "解绑符": 20019,
     }
-    name, item_id = random.choice(list(rewards.items()))
+    rng = (
+        random.Random(_rift_operation_seed(operation_id, "progress"))
+        if operation_id
+        else random
+    )
+    name, item_id = rng.choice(list(rewards.items()))
     reward = {"id": item_id, "name": name, "type": "特殊道具", "amount": 1}
     return reward, f"\n【秘境累计完成10次！】\n赠送道友 {name} x1！"
 
 
-async def _roll_rift_event(user_info, rift_info, bot_id):
+async def _roll_rift_event(user_info, rift_info, bot_id, operation_id=""):
     """Fix the random event, battle result and all persistence deltas."""
-    rift_rank = rift_info["rank"]  # 秘境等级
-    rift_type = get_story_type()  # 无事、宝物、战斗
-    battle_result = None
-    result_msg = ""
-    result_name = None
-    outcome = {"delta": {}, "items": [], "statistics": {}}
+    random_state = random.getstate()
+    if operation_id:
+        random.seed(_rift_operation_seed(operation_id, "event"))
+    try:
+        rift_rank = rift_info["rank"]  # 秘境等级
+        rift_type = get_story_type()  # 无事、宝物、战斗
+        battle_result = None
+        result_msg = ""
+        result_name = None
+        outcome = {"delta": {}, "items": [], "statistics": {}}
 
-    if rift_type == "无事":
-        result_msg = random.choice(NONEMSG)
-    elif rift_type == "战斗":
-        battle_type = get_battle_type()
-        if battle_type == "掉血事件":
-            result_msg, outcome = get_dxsj_info("掉血事件", user_info)
-        elif battle_type == "Boss战斗":
-            battle_result, result_msg, outcome = await get_boss_battle_info(
-                user_info, rift_rank, bot_id, persist=False
+        if rift_type == "无事":
+            result_msg = random.choice(NONEMSG)
+        elif rift_type == "战斗":
+            battle_type = get_battle_type()
+            if battle_type == "掉血事件":
+                result_msg, outcome = get_dxsj_info("掉血事件", user_info)
+            elif battle_type == "Boss战斗":
+                battle_result, result_msg, outcome = await get_boss_battle_info(
+                    user_info, rift_rank, bot_id, persist=False
+                )
+        elif rift_type == "宝物":
+            result_name, result_msg, outcome = get_treasure_info(
+                user_info, rift_rank
             )
-    elif rift_type == "宝物":
-        result_name, result_msg, outcome = get_treasure_info(user_info, rift_rank)
-    outcome["message"] = result_msg
-    return battle_result, result_name, outcome
+        outcome["message"] = result_msg
+        return battle_result, result_name, outcome
+    finally:
+        random.setstate(random_state)
+
+
+async def _roll_rift_boss_event(user_info, rift_rank, bot_id, operation_id):
+    random_state = random.getstate()
+    random.seed(_rift_operation_seed(operation_id, "demon-token"))
+    try:
+        return await get_boss_battle_info(
+            user_info, rift_rank, bot_id, persist=False
+        )
+    finally:
+        random.setstate(random_state)
 
 @complete_rift.handle(parameterless=[Cooldown(cd_time=0)])
 async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -639,6 +690,13 @@ async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await complete_rift.finish()
 
     user_id = user_info['user_id']
+    event_id = _event_id(event)
+    operation_id = f"rift-settlement:{event_id or time.time_ns()}:{user_id}"
+    if event_id:
+        replay = rift_settlement_service.replay(operation_id)
+        if replay is not None:
+            await handle_send(bot, event, replay.message)
+            await complete_rift.finish()
 
     is_type, msg = check_user_type(user_id, 3)  # 需要在秘境的用户
     if not is_type:
@@ -651,33 +709,89 @@ async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         except Exception as e:
             logger.error(f"读取用户 {user_id} 秘境数据失败: {e}")
             msg = '发生未知错误，秘境数据读取失败！'
-            sql_message.do_work(user_id, 0) # 清除工作状态，避免卡死
             await handle_send(bot, event, msg)
             await complete_rift.finish()
 
-        user_cd_message = sql_message.get_user_cd(user_id)
-        work_time = datetime.strptime(
-            user_cd_message['create_time'], "%Y-%m-%d %H:%M:%S.%f"
-        )
-        exp_time = (datetime.now() - work_time).seconds // 60  # 时长计算
-        time2 = rift_info["time"]
+        try:
+            user_cd_message = sql_message.get_user_cd(user_id)
+            exp_time = _rift_elapsed_minutes(user_cd_message['create_time'])
+            time2 = int(rift_info["time"])
+        except Exception as exc:
+            logger.opt(exception=exc).error("秘境结算时间读取失败")
+            await handle_send(bot, event, "秘境结算失败，请稍后重试。")
+            await complete_rift.finish()
         if exp_time < time2:
             msg = f"进行中的：{rift_info['name']}探索，预计{time2 - exp_time}分钟后可结束"
             await handle_send(bot, event, msg, md_type="秘境", k1="结算", v1="秘境结算", k2="加速", v2="道具使用 秘境加速券", k3="大加速", v3="道具使用 秘境大加速券", k4="钥匙", v4="道具使用 秘境钥匙")
             await complete_rift.finish()
         else:
-            event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-            result = rift_settlement_service.settle(
-                f"rift-settlement:{event_id or time.time_ns()}:{user_id}", user_id, rift_info,
-                {key: int(user_info.get(key, 0)) for key in ("stone", "exp", "hp", "mp")},
-                {"stone": 0, "exp": 0, "hp": 0, "mp": 0},
-            )
-            if not result.succeeded:
-                await handle_send(bot, event, "秘境结算状态已变化，请重新查询后再试。")
+            try:
+                battle_result, result_name, outcome = await _roll_rift_event(
+                    user_info, rift_info, bot.self_id, operation_id
+                )
+                explore_count = _rift_progress_snapshot(user_id)
+                progress_reward, progress_msg = _roll_rift_progress(
+                    explore_count, operation_id
+                )
+                outcome["progress_reward"] = progress_reward
+                outcome.setdefault("statistics", {})["秘境次数"] = (
+                    int(outcome.get("statistics", {}).get("秘境次数", 0)) + 1
+                )
+                outcome["message"] = f"{outcome['message']}{progress_msg}"
+                result = rift_settlement_service.settle(
+                    operation_id,
+                    user_id,
+                    rift_info,
+                    {
+                        key: int(user_info.get(key, 0))
+                        for key in ("stone", "exp", "hp", "mp")
+                    },
+                    explore_count,
+                    outcome,
+                    XiuConfig().max_goods_num,
+                )
+            except Exception as exc:
+                logger.opt(exception=exc).error("秘境普通结算事务执行失败")
+                await handle_send(bot, event, "秘境结算失败，请稍后重试。")
                 await complete_rift.finish()
-            final_msg = f"{random.choice(NONEMSG)}\n当前秘境完成次数：{result.explore_count}"
-            await handle_send(bot, event, final_msg)
-            log_message(user_id, final_msg)
+            if not result.succeeded:
+                messages = {
+                    "inventory_full": "背包容量不足，秘境结算未执行。",
+                    "resource_missing": "当前资源不足，秘境结算未执行。",
+                    "not_ready": "秘境探索尚未到结算时间。",
+                }
+                await handle_send(
+                    bot,
+                    event,
+                    messages.get(
+                        result.status,
+                        "秘境结算状态已变化，请重新查询后再试。",
+                    ),
+                )
+                await complete_rift.finish()
+            if battle_result is not None:
+                await send_msg_handler(
+                    bot,
+                    event,
+                    battle_result,
+                    title=result.message.split("\n", 1)[0],
+                )
+            if result_name:
+                await handle_send(
+                    bot,
+                    event,
+                    result.message,
+                    md_type="秘境",
+                    k1="物品",
+                    v1=f"查看效果 {result_name}",
+                    k2="闭关",
+                    v2="闭关",
+                    k3="帮助",
+                    v3="秘境帮助",
+                )
+            else:
+                await handle_send(bot, event, result.message)
+            log_message(user_id, result.message)
             await complete_rift.finish()
 
 
@@ -690,6 +804,17 @@ async def break_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="我要修仙")
         await break_rift.finish()
     user_id = user_info['user_id']
+    event_id = _event_id(event)
+    operation_id = f"rift-termination:{event_id or time.time_ns()}:{user_id}"
+    if event_id:
+        replay = rift_termination_service.replay(operation_id, user_id)
+        if replay is not None and replay.succeeded:
+            await handle_send(
+                bot,
+                event,
+                f"已终止{replay.rift_name}秘境的探索！",
+            )
+            await break_rift.finish()
 
     is_type, msg = check_user_type(user_id, 3)  # 需要在秘境的用户
     if not is_type:
@@ -706,10 +831,14 @@ async def break_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await handle_send(bot, event, msg)
             await break_rift.finish()
 
-        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-        result = rift_termination_service.terminate(
-            f"rift-termination:{event_id or time.time_ns()}:{user_id}", user_id, rift_info
-        )
+        try:
+            result = rift_termination_service.terminate(
+                operation_id, user_id, rift_info
+            )
+        except Exception as exc:
+            logger.opt(exception=exc).error("秘境终止事务执行失败")
+            await handle_send(bot, event, "秘境终止失败，请稍后重试。")
+            await break_rift.finish()
         if not result.succeeded:
             await handle_send(bot, event, "秘境状态已变化，请稍后重试。")
             await break_rift.finish()
@@ -726,6 +855,13 @@ async def use_rift_key(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         return
 
     user_id = user_info['user_id']
+    event_id = _event_id(event)
+    operation_id = f"rift-key-event:{event_id or time.time_ns()}:{user_id}"
+    if event_id:
+        replay = rift_key_event_settlement_service.replay(operation_id)
+        if replay is not None:
+            await handle_send(bot, event, replay.message)
+            return
 
     # 检查是否在秘境中
     is_type, msg = check_user_type(user_id, 3)  # 类型 3 表示在秘境中
@@ -743,24 +879,46 @@ async def use_rift_key(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, msg)
         return
 
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"rift-key-event:{event_id or time.time_ns()}:{user_id}"
-    replay = rift_key_event_settlement_service.replay(operation_id)
-    if replay is not None:
-        await handle_send(bot, event, replay.message)
+    try:
+        battle_result, result_name, outcome = await _roll_rift_event(
+            user_info, rift_info, bot.self_id, operation_id
+        )
+        explore_count = _rift_progress_snapshot(user_id)
+        progress_reward, progress_msg = _roll_rift_progress(
+            explore_count, operation_id
+        )
+        outcome["progress_reward"] = progress_reward
+        outcome.setdefault("statistics", {})["秘境次数"] = (
+            int(outcome.get("statistics", {}).get("秘境次数", 0)) + 1
+        )
+        outcome["message"] = f"{outcome['message']}{progress_msg}"
+        result = rift_key_event_settlement_service.settle(
+            operation_id, user_id, item_id, rift_info,
+            {
+                key: int(user_info.get(key, 0))
+                for key in ("stone", "exp", "hp", "mp")
+            },
+            explore_count, outcome, XiuConfig().max_goods_num,
+        )
+    except Exception as exc:
+        logger.opt(exception=exc).error("秘境钥匙结算事务执行失败")
+        await handle_send(bot, event, "秘境钥匙结算失败，请稍后重试。")
         return
-    battle_result, result_name, outcome = await _roll_rift_event(user_info, rift_info, bot.self_id)
-    explore_count = _rift_progress_snapshot(user_id)
-    progress_reward, progress_msg = _roll_rift_progress(explore_count)
-    outcome["progress_reward"] = progress_reward
-    outcome["message"] = f"{outcome['message']}{progress_msg}"
-    result = rift_key_event_settlement_service.settle(
-        operation_id, user_id, item_id, rift_info,
-        {key: int(user_info.get(key, 0)) for key in ("stone", "exp", "hp", "mp")},
-        explore_count, outcome, XiuConfig().max_goods_num,
-    )
     if not result.succeeded:
-        await handle_send(bot, event, "秘境钥匙或秘境状态已变化，请稍后重试。")
+        messages = {
+            "item_missing": "秘境钥匙数量不足，请重新查看背包。",
+            "inventory_full": "背包容量不足，秘境钥匙结算未执行。",
+            "resource_missing": "当前资源不足，秘境钥匙结算未执行。",
+            "not_active": "当前没有可使用秘境钥匙结算的秘境探索。",
+        }
+        await handle_send(
+            bot,
+            event,
+            messages.get(
+                result.status,
+                "秘境钥匙或秘境状态已变化，请稍后重试。",
+            ),
+        )
         return
     if battle_result is not None:
         await send_msg_handler(bot, event, battle_result, title=outcome["message"].split("\n", 1)[0])
@@ -780,6 +938,17 @@ async def use_rift_boss(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         return
 
     user_id = user_info['user_id']
+    event_id = _event_id(event)
+    operation_id = (
+        f"rift-demon-token-battle:{event_id or time.time_ns()}:{user_id}"
+    )
+    if event_id:
+        replay = rift_demon_token_battle_settlement_service.replay(
+            operation_id
+        )
+        if replay is not None:
+            await handle_send(bot, event, replay.message)
+            return
 
     # 检查是否在秘境中
     is_type, msg = check_user_type(user_id, 3)  # 类型 3 表示在秘境中
@@ -796,26 +965,49 @@ async def use_rift_boss(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, msg)
         return
 
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"rift-demon-token-battle:{event_id or time.time_ns()}:{user_id}"
-    replay = rift_demon_token_battle_settlement_service.replay(operation_id)
-    if replay is not None:
-        await handle_send(bot, event, replay.message)
+    try:
+        battle_result, result_msg, outcome = await _roll_rift_boss_event(
+            user_info, rift_info["rank"], bot.self_id, operation_id
+        )
+        explore_count = _rift_progress_snapshot(user_id)
+        progress_reward, progress_msg = _roll_rift_progress(
+            explore_count, operation_id
+        )
+        outcome["progress_reward"] = progress_reward
+        outcome.setdefault("statistics", {})["秘境次数"] = (
+            int(outcome.get("statistics", {}).get("秘境次数", 0)) + 1
+        )
+        outcome["message"] = (
+            f"秘境 {rift_info['name']} 已使用斩妖令结算！\n"
+            f"战斗结果：{result_msg}{progress_msg}"
+        )
+        settlement = rift_demon_token_battle_settlement_service.settle(
+            operation_id, user_id, item_id, rift_info,
+            {
+                key: int(user_info.get(key, 0))
+                for key in ("stone", "exp", "hp", "mp")
+            },
+            explore_count, outcome, XiuConfig().max_goods_num,
+        )
+    except Exception as exc:
+        logger.opt(exception=exc).error("斩妖令结算事务执行失败")
+        await handle_send(bot, event, "斩妖令结算失败，请稍后重试。")
         return
-    battle_result, result_msg, outcome = await get_boss_battle_info(
-        user_info, rift_info["rank"], bot.self_id, persist=False
-    )
-    explore_count = _rift_progress_snapshot(user_id)
-    progress_reward, progress_msg = _roll_rift_progress(explore_count)
-    outcome["progress_reward"] = progress_reward
-    outcome["message"] = f"秘境 {rift_info['name']} 已使用斩妖令结算！\n战斗结果：{result_msg}{progress_msg}"
-    settlement = rift_demon_token_battle_settlement_service.settle(
-        operation_id, user_id, item_id, rift_info,
-        {key: int(user_info.get(key, 0)) for key in ("stone", "exp", "hp", "mp")},
-        explore_count, outcome, XiuConfig().max_goods_num,
-    )
     if not settlement.succeeded:
-        await handle_send(bot, event, "斩妖令或秘境状态已变化，请稍后重试。")
+        messages = {
+            "item_missing": "斩妖令数量不足，请重新查看背包。",
+            "inventory_full": "背包容量不足，斩妖令结算未执行。",
+            "resource_missing": "当前资源不足，斩妖令结算未执行。",
+            "not_active": "当前没有可使用斩妖令结算的秘境探索。",
+        }
+        await handle_send(
+            bot,
+            event,
+            messages.get(
+                settlement.status,
+                "斩妖令或秘境状态已变化，请稍后重试。",
+            ),
+        )
         return
     await send_msg_handler(bot, event, battle_result, title=result_msg)
     log_message(user_id, settlement.message)
@@ -839,12 +1031,17 @@ async def _use_rift_speedup(
     
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"rift-speedup:{event_id or time.time_ns()}:{user_id}"
-    result = rift_speedup_service.apply(
-        operation_id,
-        user_id,
-        item_id,
-        remaining_ratio=remaining_ratio,
-    )
+    try:
+        result = rift_speedup_service.apply(
+            operation_id,
+            user_id,
+            item_id,
+            remaining_ratio=remaining_ratio,
+        )
+    except Exception as exc:
+        logger.opt(exception=exc).error("秘境加速事务执行失败")
+        await handle_send(bot, event, "秘境加速失败，请稍后重试。")
+        return
     if not result.succeeded:
         messages = {
             "not_needed": "秘境探索时间已经小于等于10分钟，无需使用加速券！",
@@ -860,8 +1057,7 @@ async def _use_rift_speedup(
     except Exception as exc:
         logger.error(f"同步用户 {user_id} 秘境加速缓存失败: {exc}")
 
-    work_time = datetime.strptime(result.create_time, "%Y-%m-%d %H:%M:%S.%f")
-    exp_time = (datetime.now() - work_time).seconds // 60
+    exp_time = _rift_elapsed_minutes(result.create_time)
     time2 = result.new_time
     
     if exp_time >= time2:

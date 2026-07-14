@@ -128,8 +128,14 @@ class RiftSpeedupService:
                 updated_rift = dict(current_rift)
                 updated_rift["time"] = new_time
                 updated_snapshot = json.dumps(updated_rift, ensure_ascii=False, sort_keys=True)
+                bind_update = ""
+                if conn.column_exists("back", "bind_num"):
+                    bind_update = (
+                        ",bind_num=MIN("
+                        "MAX(COALESCE(bind_num,0)-1,0),goods_num-1)"
+                    )
                 consumed = conn.execute(
-                    "UPDATE back SET goods_num=goods_num-1 "
+                    "UPDATE back SET goods_num=goods_num-1" + bind_update + " "
                     "WHERE user_id=%s AND goods_id=%s AND COALESCE(goods_num,0)>=1",
                     (user_id, item_id),
                 )
@@ -193,8 +199,16 @@ class RiftSpeedupService:
                 if item is None or int(item[0]) < 1:
                     conn.rollback()
                     return RiftSpeedupResult("item_missing", expected_time)
+                bind_update = ""
+                if conn.column_exists("back", "bind_num"):
+                    bind_update = (
+                        ",bind_num=MIN("
+                        "MAX(COALESCE(bind_num,0)-1,0),goods_num-1)"
+                    )
                 conn.execute(
-                    "UPDATE back SET goods_num=goods_num-1 WHERE user_id=%s AND goods_id=%s", (user_id, item_id)
+                    "UPDATE back SET goods_num=goods_num-1" + bind_update + " "
+                    "WHERE user_id=%s AND goods_id=%s",
+                    (user_id, item_id),
                 )
                 conn.execute("UPDATE rift_entries SET duration=%s WHERE user_id=%s", (new_time, user_id))
                 conn.execute("UPDATE user_cd SET scheduled_time=%s WHERE user_id=%s", (new_time, user_id))

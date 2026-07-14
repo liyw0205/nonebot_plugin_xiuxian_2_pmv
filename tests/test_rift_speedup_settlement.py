@@ -24,11 +24,14 @@ class RiftSpeedupSettlementTests(unittest.TestCase):
             conn.execute(
                 "CREATE TABLE user_cd(user_id TEXT PRIMARY KEY,type INTEGER,create_time TEXT,scheduled_time TEXT)"
             )
-            conn.execute("CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_num INTEGER)")
+            conn.execute(
+                "CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_num INTEGER,"
+                "bind_num INTEGER DEFAULT 0)"
+            )
             conn.execute("INSERT INTO rift_entries VALUES('u',%s,'active',60)", (json.dumps(self.rift),))
             conn.execute("INSERT INTO user_cd VALUES('u',3,%s,'60')", (self.cd["create_time"],))
-            conn.execute("INSERT INTO back VALUES('u',20012,1)")
-            conn.execute("INSERT INTO back VALUES('u',20013,1)")
+            conn.execute("INSERT INTO back VALUES('u',20012,1,1)")
+            conn.execute("INSERT INTO back VALUES('u',20013,1,1)")
         self.service = RiftSpeedupService(self.database)
 
     def tearDown(self):
@@ -43,7 +46,14 @@ class RiftSpeedupSettlementTests(unittest.TestCase):
             entry = conn.execute("SELECT rift_data,duration FROM rift_entries").fetchone()
             self.assertEqual((json.loads(entry[0])["time"], entry[1]), (30, 30))
             self.assertEqual(conn.execute("SELECT scheduled_time FROM user_cd").fetchone()[0], "30")
-            self.assertEqual(conn.execute("SELECT goods_num FROM back WHERE goods_id=20012").fetchone()[0], 0)
+            self.assertEqual(
+                tuple(
+                    conn.execute(
+                        "SELECT goods_num,bind_num FROM back WHERE goods_id=20012"
+                    ).fetchone()
+                ),
+                (0, 0),
+            )
 
     def test_production_entry_rechecks_database_and_retries_idempotently(self):
         first = self.service.apply("event", "u", 20012, remaining_ratio=50)
@@ -53,6 +63,25 @@ class RiftSpeedupSettlementTests(unittest.TestCase):
         self.assertEqual(duplicate.create_time, self.cd["create_time"])
         with db_backend.connection(self.database) as conn:
             self.assertEqual(conn.execute("SELECT goods_num FROM back WHERE goods_id=20012").fetchone()[0], 0)
+
+    def test_mixed_inventory_consumes_bound_item_and_preserves_invariant(self):
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "UPDATE back SET goods_num=3,bind_num=1 WHERE goods_id=20012"
+            )
+        result = self.service.apply(
+            "mixed-bound", "u", 20012, self.rift, self.cd, 50
+        )
+        self.assertEqual("applied", result.status)
+        with db_backend.connection(self.database) as conn:
+            self.assertEqual(
+                (2, 0),
+                tuple(
+                    conn.execute(
+                        "SELECT goods_num,bind_num FROM back WHERE goods_id=20012"
+                    ).fetchone()
+                ),
+            )
 
     def test_production_entry_rejects_inconsistent_rift_state_without_consuming_item(self):
         with db_backend.transaction(self.database) as conn:
@@ -68,7 +97,14 @@ class RiftSpeedupSettlementTests(unittest.TestCase):
         result = self.service.apply("big", "u", 20013, self.rift, self.cd, 10)
         self.assertEqual((result.status, result.new_time), ("applied", 6))
         with db_backend.connection(self.database) as conn:
-            self.assertEqual(conn.execute("SELECT goods_num FROM back WHERE goods_id=20013").fetchone()[0], 0)
+            self.assertEqual(
+                tuple(
+                    conn.execute(
+                        "SELECT goods_num,bind_num FROM back WHERE goods_id=20013"
+                    ).fetchone()
+                ),
+                (0, 0),
+            )
             self.assertEqual(conn.execute("SELECT duration FROM rift_entries").fetchone()[0], 6)
 
     def test_minimum_one_minute_and_no_speedup_boundary(self):
@@ -119,7 +155,14 @@ class RiftSpeedupSettlementTests(unittest.TestCase):
             entry = conn.execute("SELECT rift_data,duration FROM rift_entries").fetchone()
             self.assertEqual((json.loads(entry[0])["time"], entry[1]), (60, 60))
             self.assertEqual(conn.execute("SELECT scheduled_time FROM user_cd").fetchone()[0], "60")
-            self.assertEqual(conn.execute("SELECT goods_num FROM back WHERE goods_id=20012").fetchone()[0], 1)
+            self.assertEqual(
+                (1, 1),
+                tuple(
+                    conn.execute(
+                        "SELECT goods_num,bind_num FROM back WHERE goods_id=20012"
+                    ).fetchone()
+                ),
+            )
 
     def test_existing_operation_table_is_migrated(self):
         with db_backend.transaction(self.database) as conn:

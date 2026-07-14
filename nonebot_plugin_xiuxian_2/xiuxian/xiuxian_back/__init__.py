@@ -1249,15 +1249,17 @@ async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         
     # 祈愿石由结算服务按原始请求数量校验库存，确保同一消息可以幂等重放。
     if goods_id != 20005:
+        replay_safe_item_ids = {20001, 20007, 20012, 20013, 20018}
         goods_num = sql_message.goods_num(user_info['user_id'], goods_id)
-        if goods_num <= 0:
-            msg = f"背包中没有足够的 {item_name} ！"
-            await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="道具使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
-            return
+        if goods_id not in replay_safe_item_ids:
+            if goods_num <= 0:
+                msg = f"背包中没有足够的 {item_name} ！"
+                await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="道具使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
+                return
 
-        # 检查数量是否足够
-        if goods_num < quantity:
-            quantity = goods_num
+            # 检查数量是否足够
+            if goods_num < quantity:
+                quantity = goods_num
 
     # 特殊道具的处理函数映射
     ITEM_HANDLERS = {

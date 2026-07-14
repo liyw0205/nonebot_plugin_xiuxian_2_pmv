@@ -12,6 +12,7 @@ from ..xiuxian_utils import db_backend
 @dataclass(frozen=True)
 class RiftTerminationResult:
     status: str
+    rift_name: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -24,6 +25,29 @@ class RiftTerminationService:
     def __init__(self, database: str | Path, lock: RLock | None = None) -> None:
         self._database = Path(database)
         self._lock = lock or RLock()
+
+    def replay(self, operation_id, user_id) -> RiftTerminationResult | None:
+        operation_id = str(operation_id).strip()
+        user_id = str(user_id).strip()
+        if not operation_id or not user_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            if not conn.table_exists("rift_termination_operations"):
+                return None
+            row = conn.execute(
+                "SELECT payload FROM rift_termination_operations "
+                "WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            stored_user_id, snapshot = json.loads(str(row[0]))
+            if str(stored_user_id) != user_id:
+                return RiftTerminationResult("state_changed")
+            rift_data = json.loads(str(snapshot))
+            return RiftTerminationResult(
+                "duplicate", str(rift_data.get("name", ""))
+            )
 
     def terminate(self, operation_id, user_id, rift_data) -> RiftTerminationResult:
         operation_id = str(operation_id).strip()
@@ -45,7 +69,10 @@ class RiftTerminationService:
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    return RiftTerminationResult("duplicate" if str(previous[0]) == payload else "state_changed")
+                    return RiftTerminationResult(
+                        "duplicate" if str(previous[0]) == payload else "state_changed",
+                        str(rift_data.get("name", "")),
+                    )
                 entry = conn.execute(
                     "SELECT rift_data,status FROM rift_entries WHERE user_id=%s", (user_id,)
                 ).fetchone()
@@ -68,7 +95,9 @@ class RiftTerminationService:
                     (operation_id, payload),
                 )
                 conn.commit()
-                return RiftTerminationResult("applied")
+                return RiftTerminationResult(
+                    "applied", str(rift_data.get("name", ""))
+                )
             except Exception:
                 conn.rollback()
                 raise

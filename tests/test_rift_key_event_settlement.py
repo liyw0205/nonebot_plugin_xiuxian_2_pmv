@@ -25,7 +25,7 @@ class RiftKeyEventSettlementTests(unittest.TestCase):
             conn.execute("INSERT INTO user_xiuxian VALUES('u',100,200,80,60)")
             conn.execute("INSERT INTO user_cd VALUES('u',3,'now','30')")
             conn.execute("INSERT INTO rift_entries VALUES('u',%s,'active')", (json.dumps(self.rift),))
-            conn.execute("INSERT INTO back VALUES('u',20001,'key','item',1,'','',0)")
+            conn.execute("INSERT INTO back VALUES('u',20001,'key','item',1,'','',1)")
         with db_backend.transaction(self.player_db) as conn:
             conn.execute('CREATE TABLE rift(user_id TEXT PRIMARY KEY,"explore_count" INTEGER)')
             conn.execute("INSERT INTO rift VALUES('u',9)")
@@ -42,7 +42,14 @@ class RiftKeyEventSettlementTests(unittest.TestCase):
         self.assertEqual((first.status, first.explore_count, duplicate.status), ("applied", 0, "duplicate"))
         with db_backend.connection(self.game_db) as conn:
             self.assertEqual(tuple(conn.execute("SELECT stone,exp,hp,mp FROM user_xiuxian").fetchone()), (115, 200, 60, 60))
-            self.assertEqual(conn.execute("SELECT goods_num FROM back WHERE goods_id=20001").fetchone()[0], 0)
+            self.assertEqual(
+                tuple(
+                    conn.execute(
+                        "SELECT goods_num,bind_num FROM back WHERE goods_id=20001"
+                    ).fetchone()
+                ),
+                (0, 0),
+            )
             self.assertEqual(conn.execute("SELECT status FROM rift_entries").fetchone()[0], "settled")
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM back WHERE goods_id IN (300,20018)").fetchone()[0], 2)
         with db_backend.connection(self.player_db) as conn:
@@ -55,6 +62,104 @@ class RiftKeyEventSettlementTests(unittest.TestCase):
         self.assertEqual(self.service.settle("op", "u", 20001, self.rift, self.user, 9, self.outcome, 1000).status, "applied")
         self.assertEqual(self.service.settle("op", "u", 20001, self.rift, self.user, 9, {**self.outcome, "message": "changed"}, 1000).status, "state_changed")
 
+    def test_same_consumed_item_reward_is_allowed_at_inventory_limit(self):
+        outcome = {
+            **self.outcome,
+            "items": [],
+            "progress_reward": {
+                "id": 20001,
+                "name": "key",
+                "type": "item",
+                "amount": 1,
+            },
+        }
+        result = self.service.settle(
+            "same-item", "u", 20001, self.rift, self.user, 9, outcome, 1
+        )
+        self.assertEqual("applied", result.status)
+        with db_backend.connection(self.game_db) as conn:
+            self.assertEqual(
+                (1, 1),
+                tuple(
+                    conn.execute(
+                        "SELECT goods_num,bind_num FROM back WHERE goods_id=20001"
+                    ).fetchone()
+                ),
+            )
+
+    def test_progress_reward_must_match_tenth_completion(self):
+        with self.assertRaisesRegex(ValueError, "progress reward"):
+            self.service.settle(
+                "missing-tenth",
+                "u",
+                20001,
+                self.rift,
+                self.user,
+                9,
+                {**self.outcome, "progress_reward": None},
+                1000,
+            )
+        with self.assertRaisesRegex(ValueError, "positive"):
+            self.service.settle(
+                "empty-tenth",
+                "u",
+                20001,
+                self.rift,
+                self.user,
+                9,
+                {
+                    **self.outcome,
+                    "progress_reward": {
+                        **self.outcome["progress_reward"],
+                        "amount": 0,
+                    },
+                },
+                1000,
+            )
+        with self.assertRaisesRegex(ValueError, "between 0 and 9"):
+            self.service.settle(
+                "invalid-progress",
+                "u",
+                20001,
+                self.rift,
+                self.user,
+                10,
+                {**self.outcome, "progress_reward": None},
+                1000,
+            )
+
+    def test_missing_item_is_rejected_without_state_changes(self):
+        with db_backend.transaction(self.game_db) as conn:
+            conn.execute(
+                "UPDATE back SET goods_num=0 WHERE user_id='u' AND goods_id=20001"
+            )
+        result = self.service.settle(
+            "missing", "u", 20001, self.rift, self.user, 9, self.outcome, 1000
+        )
+        self.assertEqual("item_missing", result.status)
+        with db_backend.connection(self.game_db) as conn:
+            self.assertEqual(
+                (100, 200, 80, 60),
+                tuple(
+                    conn.execute(
+                        "SELECT stone,exp,hp,mp FROM user_xiuxian WHERE user_id='u'"
+                    ).fetchone()
+                ),
+            )
+            self.assertEqual(
+                "active",
+                conn.execute(
+                    "SELECT status FROM rift_entries WHERE user_id='u'"
+                ).fetchone()[0],
+            )
+        with db_backend.connection(self.player_db) as conn:
+            self.assertEqual(
+                9,
+                conn.execute(
+                    'SELECT "explore_count" FROM rift WHERE user_id=\'u\''
+                ).fetchone()[0],
+            )
+
     def test_operation_failure_rolls_back_both_databases(self):
         with db_backend.transaction(self.game_db) as conn:
             conn.execute("CREATE TABLE rift_key_event_operations(operation_id TEXT PRIMARY KEY,payload TEXT,explore_count INTEGER,message TEXT,created_at TEXT)")
@@ -62,7 +167,14 @@ class RiftKeyEventSettlementTests(unittest.TestCase):
         with self.assertRaises(Exception):
             self.service.settle("op", "u", 20001, self.rift, self.user, 9, self.outcome, 1000)
         with db_backend.connection(self.game_db) as conn:
-            self.assertEqual(conn.execute("SELECT goods_num FROM back WHERE goods_id=20001").fetchone()[0], 1)
+            self.assertEqual(
+                (1, 1),
+                tuple(
+                    conn.execute(
+                        "SELECT goods_num,bind_num FROM back WHERE goods_id=20001"
+                    ).fetchone()
+                ),
+            )
             self.assertEqual(conn.execute("SELECT status FROM rift_entries").fetchone()[0], "active")
         with db_backend.connection(self.player_db) as conn:
             self.assertEqual(conn.execute('SELECT "explore_count" FROM rift').fetchone()[0], 9)

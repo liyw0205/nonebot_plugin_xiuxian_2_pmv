@@ -34,6 +34,30 @@ def _increment_stat(conn, user_id, key, amount):
         conn.execute(f"INSERT INTO player_data.statistics(user_id,{field_sql}) VALUES(%s,%s)", (user_id, amount))
 
 
+def _normalise_progress_reward(expected_count, progress_reward):
+    expected_count = int(expected_count)
+    if not 0 <= expected_count <= 9:
+        raise ValueError("expected explore count must be between 0 and 9")
+    if expected_count != 9:
+        if progress_reward is not None:
+            raise ValueError("progress reward must match the tenth completion")
+        return None
+    if not isinstance(progress_reward, dict):
+        raise ValueError("progress reward must match the tenth completion")
+    try:
+        reward = (
+            int(progress_reward["id"]),
+            str(progress_reward["name"]).strip(),
+            str(progress_reward["type"]).strip(),
+            int(progress_reward.get("amount", 1)),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("progress reward must be complete") from exc
+    if reward[0] <= 0 or not reward[1] or not reward[2] or reward[3] <= 0:
+        raise ValueError("progress reward must be complete and positive")
+    return reward
+
+
 @dataclass(frozen=True)
 class RiftKeyEventSettlementResult:
     status: str
@@ -94,12 +118,11 @@ class RiftKeyEventSettlementService:
             for item in outcome.get("items", ())
             if int(item.get("amount", 1)) > 0
         )
-        progress_reward = outcome.get("progress_reward")
-        if progress_reward:
-            rewards += ((
-                int(progress_reward["id"]), str(progress_reward["name"]),
-                str(progress_reward["type"]), int(progress_reward.get("amount", 1)),
-            ),)
+        progress_reward = _normalise_progress_reward(
+            expected_count, outcome.get("progress_reward")
+        )
+        if progress_reward is not None:
+            rewards += (progress_reward,)
         statistics = tuple(sorted((str(key), int(value)) for key, value in outcome.get("statistics", {}).items() if int(value)))
         message = str(outcome.get("message", ""))
         if not operation_id or not user_id or item_id <= 0 or expected_count < 0 or max_goods_num < 0:
@@ -174,11 +197,27 @@ class RiftKeyEventSettlementService:
                     row = conn.execute(
                         "SELECT COALESCE(goods_num,0) FROM back WHERE user_id=%s AND goods_id=%s", (user_id, reward_id)
                     ).fetchone()
-                    if (int(row[0]) if row else 0) + amount > max_goods_num:
+                    current_amount = int(row[0]) if row else 0
+                    consumed_amount = 1 if reward_id == item_id else 0
+                    if current_amount - consumed_amount + amount > max_goods_num:
                         conn.rollback()
                         return RiftKeyEventSettlementResult("inventory_full")
 
-                conn.execute("UPDATE back SET goods_num=goods_num-1 WHERE user_id=%s AND goods_id=%s", (user_id, item_id))
+                bind_update = ""
+                if conn.column_exists("back", "bind_num"):
+                    bind_update = (
+                        ",bind_num=MIN("
+                        "MAX(COALESCE(bind_num,0)-1,0),goods_num-1)"
+                    )
+                consumed = conn.execute(
+                    "UPDATE back SET goods_num=goods_num-1" + bind_update + " "
+                    "WHERE user_id=%s AND goods_id=%s "
+                    "AND COALESCE(goods_num,0)>=1",
+                    (user_id, item_id),
+                )
+                if consumed.rowcount != 1:
+                    conn.rollback()
+                    return RiftKeyEventSettlementResult("item_missing")
                 final_exp = max(0, expected[1] + delta[1])
                 final_hp = max(1, expected[2] + delta[2])
                 final_mp = max(1, expected[3] + delta[3])

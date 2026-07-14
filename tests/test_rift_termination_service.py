@@ -28,7 +28,9 @@ class RiftTerminationServiceTests(unittest.TestCase):
     def test_terminate_is_atomic_and_idempotent(self):
         first = self.service.terminate("op", "u", self.snapshot)
         duplicate = self.service.terminate("op", "u", self.snapshot)
+        replay = self.service.replay("op", "u")
         self.assertEqual((first.status, duplicate.status), ("applied", "duplicate"))
+        self.assertEqual(("duplicate", "test"), (replay.status, replay.rift_name))
         with db_backend.transaction(self.database) as conn:
             self.assertEqual(conn.execute("SELECT status FROM rift_entries").fetchone()[0], "terminated")
             self.assertEqual(conn.execute("SELECT type FROM user_cd").fetchone()[0], 0)
