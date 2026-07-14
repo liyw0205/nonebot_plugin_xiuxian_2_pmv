@@ -43,7 +43,7 @@ from ..xiuxian_base import clear_all_xiangyuan
 from ..xiuxian_rift import create_rift
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, XiuxianJsonDate, OtherSet, 
-    UserBuffDate, XIUXIAN_IMPART_BUFF, migrate_user_id_to_openid, migrate_single_user_id, swap_two_user_ids
+    UserBuffDate, migrate_user_id_to_openid, migrate_single_user_id, swap_two_user_ids
 )
 from ..xiuxian_config import XiuConfig, JsonConfig, convert_rank
 from ..xiuxian_utils.utils import (
@@ -73,13 +73,15 @@ from .accessory_batch_adjustment_service import (
     AdminAccessoryBatchAdjustmentService,
 )
 from .impart_stone_adjustment_service import AdminImpartStoneAdjustmentService
+from .impart_stone_batch_adjustment_service import (
+    AdminImpartStoneBatchAdjustmentService,
+)
 from . import command_controls as _command_controls  # noqa: F401
 from . import empty_fallback as _empty_fallback  # noqa: F401
 from . import event_debug as _event_debug  # noqa: F401
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
-xiuxian_impart = XIUXIAN_IMPART_BUFF()
 admin_level_change_service = AdminLevelChangeService(get_paths().game_db)
 admin_root_change_service = AdminRootChangeService(get_paths().game_db)
 admin_exp_adjustment_service = AdminExpAdjustmentService(get_paths().game_db)
@@ -97,6 +99,11 @@ admin_accessory_batch_adjustment_service = AdminAccessoryBatchAdjustmentService(
 )
 admin_impart_stone_adjustment_service = AdminImpartStoneAdjustmentService(
     get_paths().game_db, get_paths().impart_db
+)
+admin_impart_stone_batch_adjustment_service = AdminImpartStoneBatchAdjustmentService(
+    get_paths().game_db,
+    get_paths().impart_db,
+    admin_impart_stone_adjustment_service,
 )
 
 
@@ -440,9 +447,37 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         target_name = user['user_name']
 
     if user_id is None:  # 全服
-        xiuxian_impart.update_impart_stone_all(amount)
-        action = "增加" if amount > 0 else "扣除"
-        msg = f"全服通告：{action}{number_to(abs(amount))}枚思恋结晶，请查收！"
+        if amount == 0:
+            await handle_send(bot, event, "全服思恋结晶调整数量不能为 0")
+            return
+        all_users = sql_message.get_all_user_id()
+        if not all_users:
+            await handle_send(bot, event, "当前没有可调整的用户")
+            return
+        operator_id = str(get_user_id(event) or "unknown")
+        operation_id = admin_impart_stone_batch_adjustment_service.find_running(
+            operator_id, amount
+        ) or _admin_operation_id(event, "impart-stone-adjust-all", "all")
+        while True:
+            result = admin_impart_stone_batch_adjustment_service.adjust(
+                operation_id,
+                operator_id,
+                all_users,
+                amount,
+            )
+            if result.status != "applied" or result.completed >= result.total:
+                break
+        if result.status == "operation_conflict":
+            msg = "本次全服思恋结晶调整与已记录计划冲突"
+        else:
+            action = "增加" if amount > 0 else "扣除"
+            msg = (
+                f"全服思恋结晶{action}完成！已处理 "
+                f"{result.completed}/{result.total} 名玩家，"
+                f"实际影响 {result.affected_users} 名，"
+                f"累计{action} {number_to(abs(result.applied_delta))} 枚，"
+                f"跳过 {result.skipped_users} 名"
+            )
     else:
         if amount == 0:
             await handle_send(bot, event, "单人思恋结晶调整数量不能为 0")

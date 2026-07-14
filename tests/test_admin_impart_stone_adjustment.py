@@ -149,7 +149,7 @@ class AdminImpartStoneAdjustmentTests(unittest.TestCase):
                 ).fetchone()[0],
             )
 
-    def test_production_single_entry_uses_service_and_keeps_all_for_next_goal(self) -> None:
+    def test_production_single_entry_uses_service(self) -> None:
         source = (
             Path(__file__).parents[1]
             / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
@@ -158,7 +158,7 @@ class AdminImpartStoneAdjustmentTests(unittest.TestCase):
         handler = source[start:source.index("@adjust_exp_command.handle", start)]
         self.assertIn("admin_impart_stone_adjustment_service.adjust(", handler)
         self.assertNotIn("xiuxian_impart.update_stone_num(", handler)
-        self.assertIn("xiuxian_impart.update_impart_stone_all(", handler)
+        self.assertIn("admin_impart_stone_batch_adjustment_service.adjust(", handler)
 
 
 if __name__ == "__main__":
