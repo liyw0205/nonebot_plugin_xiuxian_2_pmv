@@ -47,6 +47,7 @@ from .boss_limit import boss_limit, player_data_manager
 from .purchase_service import BossPurchaseService
 from .battle_settlement_service import WorldBossBattleSettlementService
 from .manual_spawn_service import WorldBossManualSpawnService
+from .full_refresh_service import WorldBossFullRefreshService
 from .. import DRIVER
 # boss定时任务
 scheduler = require("nonebot_plugin_apscheduler").scheduler
@@ -64,6 +65,10 @@ world_boss_battle_settlement_service = WorldBossBattleSettlementService(
     get_paths().data / "activity" / "activity.db",
 )
 world_boss_manual_spawn_service = WorldBossManualSpawnService(
+    get_paths().player_db,
+    get_boss_config,
+)
+world_boss_full_refresh_service = WorldBossFullRefreshService(
     get_paths().player_db,
     get_boss_config,
 )
@@ -160,16 +165,54 @@ async def set_boss_generation():
     except Exception as e:
         logger.opt(colors=True).warning(f"<red>警告,自动生成BOSS定时任务加载失败!,{e}!</red>")
 
-async def generate_all_bosses_task():
-    global group_boss
-    
-    # 生成全部BOSS
+
+def _sync_world_boss_cache(bosses):
+    cached = [dict(boss) for boss in bosses]
+    group_boss[GLOBAL_BOSS_KEY] = cached
+    old_boss_info.data[GLOBAL_BOSS_KEY] = deepcopy(cached)
+
+
+def _refresh_all_world_bosses(operation_id: str, trigger: str):
+    result = world_boss_full_refresh_service.get_result(operation_id)
+    if result is not None:
+        current_bosses, _ = world_boss_full_refresh_service.snapshot()
+        _sync_world_boss_cache(current_bosses)
+        return result
+
+    expected_bosses, expected_revision = world_boss_full_refresh_service.snapshot()
     bosses = create_all_bosses()
-    group_boss[GLOBAL_BOSS_KEY] = bosses
-    old_boss_info.save_boss(group_boss)
-    
-    # 发送通知
-    msg = f"天道循环，已自动生成全部 {len(bosses)} 个境界的世界BOSS！"
+    realms = [str(boss.get("jj", "")) for boss in bosses]
+    result = world_boss_full_refresh_service.refresh(
+        operation_id=operation_id,
+        trigger=trigger,
+        expected_revision=expected_revision,
+        expected_bosses=expected_bosses,
+        expected_config=world_boss_full_refresh_service.config_snapshot(
+            get_boss_config(),
+            realms,
+        ),
+        bosses=bosses,
+    )
+    if result.succeeded:
+        _sync_world_boss_cache(result.bosses)
+    return result
+
+
+async def generate_all_bosses_task():
+    hours = int(config['Boss生成时间参数']['hours'])
+    minutes = int(config['Boss生成时间参数']['minutes'])
+    interval_seconds = max((hours * 60 + minutes) * 60, 60)
+    slot = int(time_module.time() // interval_seconds)
+    operation_id = f"world-boss-full-refresh:scheduled:{interval_seconds}:{slot}"
+    result = _refresh_all_world_bosses(operation_id, "scheduled")
+    if not result.succeeded:
+        logger.warning(f"世界BOSS定时刷新未执行：{result.status}")
+        return
+    if result.status == "duplicate":
+        logger.info("世界BOSS定时刷新任务已处理，本次跳过重复通知。")
+        return
+
+    msg = f"天道循环，已自动生成全部 {len(result.bosses)} 个境界的世界BOSS！"
     
     # 只向已开启通知的群发送消息
     for notify_group_id in groups:
@@ -1007,10 +1050,18 @@ async def boss_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 
 @generate_all.handle(parameterless=[Cooldown(cd_time=0)])
 async def generate_all_bosses(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    bosses = create_all_bosses()  # 自动计算最高境界
-    group_boss[GLOBAL_BOSS_KEY] = bosses  # 替换当前 BOSS 列表
-    old_boss_info.save_boss(group_boss)
-    await delivery_service.reply(bot, event, f"已生成全部 {len(bosses)} 个境界的 BOSS！")
+    event_id = str(
+        getattr(event, "message_id", "")
+        or getattr(event, "id", "")
+        or time_module.time_ns()
+    )
+    operation_id = f"world-boss-full-refresh:manual:{event_id}"
+    result = _refresh_all_world_bosses(operation_id, "manual")
+    if result.succeeded:
+        msg = f"已生成全部 {len(result.bosses)} 个境界的 BOSS！"
+    else:
+        msg = "世界BOSS场次或生成配置已变化，请重新执行全部生成指令。"
+    await delivery_service.reply(bot, event, msg)
 
 
 @create.handle(parameterless=[Cooldown(cd_time=0)])
