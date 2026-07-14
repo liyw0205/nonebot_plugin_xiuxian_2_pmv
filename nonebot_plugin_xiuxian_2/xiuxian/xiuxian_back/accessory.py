@@ -1135,73 +1135,94 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     part = parts[0]
-    material_uids = parts[1:]
+    material_uids = list(dict.fromkeys(parts[1:]))
 
     if part not in SLOTS:
         await handle_send(bot, event, f"部位错误，可用：{'/'.join(SLOTS)}")
         return
 
     user_id = str(user_info["user_id"])
-    data = _get_data(user_id)
-
-    # 主饰品=该部位已装备饰品
-    main_acc = data.get("equipped", {}).get(part)
-    if not main_acc:
-        await handle_send(bot, event, f"{part}当前未装备饰品，无法升阶")
-        return
-
-    main_q = int(main_acc.get("quality", 1))
-    if main_q >= 5:
-        await handle_send(bot, event, "该饰品已达最高五阶，无法继续升阶")
-        return
-
-    need_cnt = _get_upgrade_cost(main_q)
-
-    # 材料UID去重，避免重复传同一个
-    material_uids = list(dict.fromkeys(material_uids))
-
-    if len(material_uids) < need_cnt:
-        await handle_send(bot, event, f"材料数量不足：当前升阶需 {need_cnt} 个材料UID")
-        return
-
-    bag = data.get("bag", [])
-    uid_to_idx = {}
-    for i, x in enumerate(bag):
-        uid_to_idx[str(x.get("uid", ""))] = i
-
-    consume_idx = []
-    for mu in material_uids:
-        idx = uid_to_idx.get(str(mu))
-        if idx is None:
-            await handle_send(bot, event, f"材料UID无效或不在背包中：{mu}")
+    operation_id = _accessory_operation_id(
+        event,
+        "upgrade",
+        user_id,
+        f"{part}:{','.join(material_uids)}",
+    )
+    result = accessory_transaction_service.replay(operation_id, "upgrade")
+    if result is None:
+        data = _get_data(user_id)
+        equipped = data.get("equipped", {})
+        bag = data.get("bag", [])
+        main_acc = equipped.get(part)
+        if not main_acc:
+            await handle_send(bot, event, f"{part}当前未装备饰品，无法升阶")
             return
 
-        mat = bag[idx]
-        # 材料必须同阶同款（同 item_id/part/set_type/quality）
-        if not _is_same_accessory_for_upgrade(main_acc, mat):
-            await handle_send(bot, event, f"材料不匹配：{mu} 不是同阶同款饰品")
+        main_q = int(main_acc.get("quality", 1))
+        if main_q >= 5:
+            await handle_send(bot, event, "该饰品已达最高五阶，无法继续升阶")
+            return
+        need_cnt = _get_upgrade_cost(main_q)
+        if len(material_uids) < need_cnt:
+            await handle_send(bot, event, f"材料数量不足：当前升阶需 {need_cnt} 个材料UID")
             return
 
-        consume_idx.append(idx)
+        uid_to_item = {
+            str(accessory.get("uid", "")): accessory for accessory in bag
+        }
+        for material_uid in material_uids:
+            material = uid_to_item.get(str(material_uid))
+            if material is None:
+                await handle_send(bot, event, f"材料UID无效或不在背包中：{material_uid}")
+                return
+            if not _is_same_accessory_for_upgrade(main_acc, material):
+                await handle_send(bot, event, f"材料不匹配：{material_uid} 不是同阶同款饰品")
+                return
 
-    # 只取需要数量
-    consume_idx = consume_idx[:need_cnt]
+        selected_uids = material_uids[:need_cnt]
+        upgraded = deepcopy(main_acc)
+        upgraded["quality"] = main_q + 1
+        upgraded["wash_count"] = 0
+        upgraded["affixes"] = _fit_affixes_to_quality(
+            main_q + 1, upgraded.get("affixes", [])
+        )
+        _set_locked_affixes(
+            upgraded,
+            _normalize_locked_affixes(
+                upgraded, len(upgraded.get("affixes", []))
+            ),
+        )
+        result = accessory_transaction_service.upgrade(
+            operation_id,
+            user_id,
+            part,
+            deepcopy(equipped),
+            deepcopy(bag),
+            selected_uids,
+            upgraded,
+        )
+        if not result.succeeded:
+            messages = {
+                "accessory_missing": f"{part}当前未装备饰品，无法升阶",
+                "max_quality": "该饰品已达最高五阶，无法继续升阶",
+                "material_missing": "升阶材料已变化，请重新查看饰品背包",
+                "material_mismatch": "升阶材料不再满足同阶同款要求",
+                "invalid_plan": "升阶结果校验失败，本次未消耗材料",
+            }
+            await handle_send(
+                bot,
+                event,
+                messages.get(result.status, "饰品状态已变化，请重新查看后再试"),
+            )
+            return
 
-    # 删除材料（倒序删）
-    for i in sorted(set(consume_idx), reverse=True):
-        del bag[i]
-
-    # 升阶：仅提升品阶 + 重置洗练次数；保留原词条
-    old_q = main_q
-    new_q = old_q + 1
-    main_acc["quality"] = new_q
-    main_acc["wash_count"] = 0
-    main_acc["affixes"] = _fit_affixes_to_quality(new_q, main_acc.get("affixes", []))
-    _set_locked_affixes(main_acc, _normalize_locked_affixes(main_acc, len(main_acc.get("affixes", []))))
-
-    data["equipped"][part] = main_acc
-    data["bag"] = bag
-    _save_data(user_id, data)
+    if result.accessory is None:
+        await handle_send(bot, event, "饰品升阶结果缺失，请联系管理员处理")
+        return
+    main_acc = result.accessory
+    new_q = int(main_acc.get("quality", 1))
+    old_q = new_q - 1
+    need_cnt = result.affected
 
     await handle_send(
         bot, event,

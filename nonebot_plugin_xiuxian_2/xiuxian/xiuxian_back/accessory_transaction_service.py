@@ -94,6 +94,15 @@ class AccessoryTransactionService:
         return None, None, None
 
     @staticmethod
+    def _upgrade_signature(accessory: dict) -> tuple[int, str, str, int]:
+        return (
+            int(accessory.get("item_id", 0)),
+            str(accessory.get("part", "")),
+            str(accessory.get("set_type", "")),
+            int(accessory.get("quality", 1)),
+        )
+
+    @staticmethod
     def _result_from_json(status: str, payload: str):
         value = json.loads(payload)
         return AccessoryTransactionResult(
@@ -364,6 +373,116 @@ class AccessoryTransactionService:
             )
 
         return self._run(operation_id, "decompose", payload, apply)
+
+    def upgrade(
+        self,
+        operation_id,
+        user_id,
+        part,
+        expected_equipped,
+        expected_bag,
+        material_uids,
+        upgraded_accessory,
+    ) -> AccessoryTransactionResult:
+        user_id = str(user_id)
+        part = str(part)
+        raw_material_uids = tuple(str(uid).strip() for uid in material_uids)
+        if (
+            not part
+            or not raw_material_uids
+            or any(not uid for uid in raw_material_uids)
+            or len(set(raw_material_uids)) != len(raw_material_uids)
+        ):
+            raise ValueError("part and unique material uids are required")
+        material_uids = raw_material_uids
+        upgraded_accessory = json.loads(self._json(upgraded_accessory))
+        payload = {
+            "user_id": user_id,
+            "part": part,
+            "expected_equipped": expected_equipped,
+            "expected_bag": expected_bag,
+            "material_uids": material_uids,
+            "upgraded_accessory": upgraded_accessory,
+        }
+
+        def apply(conn):
+            equipped, bag = self._load_accessories(conn, user_id)
+            if (
+                self._json(equipped) != self._json(expected_equipped)
+                or self._json(bag) != self._json(expected_bag)
+            ):
+                return AccessoryTransactionResult(
+                    "state_changed", "upgrade", user_id
+                )
+
+            current = equipped.get(part)
+            if not isinstance(current, dict):
+                return AccessoryTransactionResult(
+                    "accessory_missing", "upgrade", user_id
+                )
+            old_quality = int(current.get("quality", 1))
+            if old_quality >= 5:
+                return AccessoryTransactionResult(
+                    "max_quality", "upgrade", user_id
+                )
+            required = 1 if old_quality <= 1 else old_quality - 1
+            if len(material_uids) != required:
+                return AccessoryTransactionResult(
+                    "material_mismatch", "upgrade", user_id
+                )
+
+            material_indexes = []
+            current_signature = self._upgrade_signature(current)
+            for uid in material_uids:
+                matches = [
+                    (index, item)
+                    for index, item in enumerate(bag)
+                    if str(item.get("uid", "")) == uid
+                ]
+                if len(matches) != 1:
+                    return AccessoryTransactionResult(
+                        "material_missing", "upgrade", user_id
+                    )
+                index, material = matches[0]
+                if self._upgrade_signature(material) != current_signature:
+                    return AccessoryTransactionResult(
+                        "material_mismatch", "upgrade", user_id
+                    )
+                material_indexes.append(index)
+
+            updated = dict(upgraded_accessory)
+            if (
+                str(updated.get("uid", "")) != str(current.get("uid", ""))
+                or int(updated.get("quality", 0)) != old_quality + 1
+                or int(updated.get("wash_count", -1)) != 0
+            ):
+                return AccessoryTransactionResult(
+                    "invalid_plan", "upgrade", user_id
+                )
+            current_fixed = dict(current)
+            updated_fixed = dict(updated)
+            for field_name in (
+                "quality",
+                "wash_count",
+                "affixes",
+                "locked_affixes",
+            ):
+                current_fixed.pop(field_name, None)
+                updated_fixed.pop(field_name, None)
+            if self._json(current_fixed) != self._json(updated_fixed):
+                return AccessoryTransactionResult(
+                    "invalid_plan", "upgrade", user_id
+                )
+
+            for index in sorted(material_indexes, reverse=True):
+                del bag[index]
+            equipped[part] = updated
+            self._save_accessories(conn, user_id, equipped, bag)
+            return AccessoryTransactionResult(
+                "applied", "upgrade", user_id, required, 0, updated
+            )
+
+        return self._run(operation_id, "upgrade", payload, apply)
 
     def batch_decompose(
         self,

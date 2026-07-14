@@ -59,6 +59,9 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def write_bag(self, bag) -> None:
+        self.write_accessories({}, bag)
+
+    def write_accessories(self, equipped, bag) -> None:
         with db_backend.transaction(self.player_database) as conn:
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS player_accessory "
@@ -67,8 +70,16 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
             conn.execute(
                 "INSERT INTO player_accessory VALUES (%s, %s, %s) "
                 "ON CONFLICT (user_id) DO UPDATE SET equipped=EXCLUDED.equipped, bag=EXCLUDED.bag",
-                ("user", json.dumps({}), json.dumps(bag)),
+                ("user", json.dumps(equipped), json.dumps(bag)),
             )
+
+    def accessory_state(self):
+        with db_backend.connection(self.player_database) as conn:
+            row = conn.execute(
+                "SELECT equipped,bag FROM player_accessory WHERE user_id=%s",
+                ("user",),
+            ).fetchone()
+        return json.loads(row[0]), json.loads(row[1])
 
     def state(self):
         with db_backend.connection(self.game_database) as conn:
@@ -210,6 +221,148 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
         self.assertEqual((first.affected, duplicate.affected), (2, 2))
         self.assertEqual(self.state(), (43, []))
 
+    def test_upgrade_consumes_matching_materials_and_replays_result(self) -> None:
+        main = {
+            "uid": "main",
+            "item_id": 101,
+            "name": "烈阳项链",
+            "part": "项链",
+            "set_type": "烈阳",
+            "quality": 3,
+            "wash_count": 7,
+            "affixes": [{"type": "攻击", "value": 0.1}],
+            "locked_affixes": [0],
+        }
+        material_one = dict(main, uid="material-1", wash_count=0)
+        material_two = dict(main, uid="material-2", wash_count=0)
+        unrelated = dict(main, uid="other", item_id=102)
+        equipped = {"项链": main}
+        bag = [material_one, unrelated, material_two]
+        upgraded = dict(main)
+        upgraded.update(
+            {
+                "quality": 4,
+                "wash_count": 0,
+                "affixes": [
+                    {"type": "攻击", "value": 0.1},
+                    {"type": "速度", "value": 20},
+                    {"type": "气血", "value": 0.08},
+                ],
+            }
+        )
+        self.write_accessories(equipped, bag)
+
+        first = self.service.upgrade(
+            "upgrade-1",
+            "user",
+            "项链",
+            equipped,
+            bag,
+            ["material-1", "material-2"],
+            upgraded,
+        )
+        duplicate = self.service.upgrade(
+            "upgrade-1",
+            "user",
+            "项链",
+            equipped,
+            bag,
+            ["material-1", "material-2"],
+            upgraded,
+        )
+        self.assertEqual((first.status, duplicate.status), ("applied", "duplicate"))
+        self.assertEqual((first.affected, duplicate.affected), (2, 2))
+        self.assertEqual(first.accessory, duplicate.accessory)
+        saved_equipped, saved_bag = self.accessory_state()
+        self.assertEqual(4, saved_equipped["项链"]["quality"])
+        self.assertEqual(0, saved_equipped["项链"]["wash_count"])
+        self.assertEqual(["other"], [item["uid"] for item in saved_bag])
+
+    def test_upgrade_rejects_stale_snapshot_and_invalid_material(self) -> None:
+        main = {
+            "uid": "main",
+            "item_id": 101,
+            "name": "烈阳戒指",
+            "part": "戒指",
+            "set_type": "烈阳",
+            "quality": 2,
+            "wash_count": 4,
+            "affixes": [],
+        }
+        material = dict(main, uid="material")
+        equipped = {"戒指": main}
+        bag = [material]
+        upgraded = dict(main, quality=3, wash_count=0)
+        self.write_accessories(equipped, bag)
+
+        stale = self.service.upgrade(
+            "upgrade-stale",
+            "user",
+            "戒指",
+            equipped,
+            [],
+            ["material"],
+            upgraded,
+        )
+        self.assertEqual("state_changed", stale.status)
+
+        mismatch = dict(material, item_id=999)
+        self.write_accessories(equipped, [mismatch])
+        invalid = self.service.upgrade(
+            "upgrade-mismatch",
+            "user",
+            "戒指",
+            equipped,
+            [mismatch],
+            ["material"],
+            upgraded,
+        )
+        self.assertEqual("material_mismatch", invalid.status)
+        self.assertEqual((equipped, [mismatch]), self.accessory_state())
+
+    def test_operation_write_failure_rolls_back_upgrade(self) -> None:
+        main = {
+            "uid": "main",
+            "item_id": 101,
+            "name": "烈阳手镯",
+            "part": "手镯",
+            "set_type": "烈阳",
+            "quality": 1,
+            "wash_count": 2,
+            "affixes": [],
+        }
+        material = dict(main, uid="material")
+        equipped = {"手镯": main}
+        bag = [material]
+        upgraded = dict(main, quality=2, wash_count=0)
+        self.write_accessories(equipped, bag)
+        with db_backend.connection(self.game_database) as conn:
+            conn.execute(
+                "ATTACH DATABASE %s AS player_data", (str(self.player_database),)
+            )
+            self.service._ensure_schema(conn)
+            conn.commit()
+            conn.execute("DETACH DATABASE player_data")
+        with db_backend.transaction(self.game_database) as conn:
+            conn.execute(
+                "CREATE TRIGGER fail_accessory_upgrade_operation "
+                "BEFORE INSERT ON accessory_transaction_operations "
+                "WHEN NEW.action='upgrade' "
+                "BEGIN SELECT RAISE(ABORT, 'operation failed'); END"
+            )
+
+        with self.assertRaises(db_backend.IntegrityError):
+            self.service.upgrade(
+                "upgrade-fail",
+                "user",
+                "手镯",
+                equipped,
+                bag,
+                ["material"],
+                upgraded,
+            )
+        self.assertEqual((equipped, bag), self.accessory_state())
+
     def test_operation_write_failure_rolls_back_wash_and_decompose(self) -> None:
         with db_backend.connection(self.game_database) as conn:
             conn.execute("ATTACH DATABASE %s AS player_data", (str(self.player_database),))
@@ -276,6 +429,19 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
         self.assertIn("accessory_transaction_service.set_affix_locks", unlock_handler)
         self.assertNotIn("player_data_manager.patch_doc", lock_handler)
         self.assertNotIn("player_data_manager.patch_doc", unlock_handler)
+
+    def test_real_upgrade_handler_uses_transaction_service(self) -> None:
+        source = (
+            Path(__file__).parents[1]
+            / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_back/accessory.py"
+        ).read_text(encoding="utf-8")
+        handler = source.split("@upgrade_accessory.handle", 1)[1].split(
+            "@accessory_preset.handle", 1
+        )[0]
+        self.assertIn("accessory_transaction_service.replay(", handler)
+        self.assertIn("accessory_transaction_service.upgrade(", handler)
+        self.assertNotIn("_save_data(", handler)
+        self.assertNotIn("del bag[", handler)
 
 
 if __name__ == "__main__":
