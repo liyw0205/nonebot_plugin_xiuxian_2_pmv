@@ -63,6 +63,7 @@ from .stone_reward_service import StoneItemRewardService
 from .three_cultivation_pill_service import ThreeCultivationPillService
 from .unbind_item_service import UnbindItemService
 from .batch_item_use_service import BatchItemUseService
+from .backpack_repair_service import BackpackRepairService
 from . import accessory as _accessory  # noqa: F401
 from .accessory_helpers import AFFIX_KEY_MAP, SET_BONUS, ACCESSORY_BAG_LIMIT, add_accessory_to_bag, can_add_accessories, create_accessory_instance, quality_to_cn  # noqa: F401
 from .backpack_render import (
@@ -97,6 +98,7 @@ skill_learning_service = SkillLearningService(get_paths().game_db)
 batch_item_use_service = BatchItemUseService(
     get_paths().game_db, get_paths().player_db
 )
+backpack_repair_service = BackpackRepairService(get_paths().game_db)
 player_data_manager = PlayerDataManager()
 tianti_item_reward_service = TiantiItemRewardService(
     get_paths().game_db, get_paths().player_db
@@ -114,6 +116,15 @@ def _equipment_operation_id(event, action, goods_id):
     if event_id:
         return f"equipment:{event_id}:{action}:{goods_id}"
     return f"equipment:{action}:{goods_id}:{time.time_ns()}"
+
+
+def _backpack_repair_operation_id(event):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"backpack-repair:{event_id}"
+    return f"backpack-repair:{time.time_ns()}"
 
 
 def _stone_reward_operation_id(event, reward_type, user_id):
@@ -2268,89 +2279,68 @@ async def check_user_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     msg = "开始检测用户背包物品数量、名称和已装备状态，请稍候..."
     await handle_send(bot, event, msg)
     
-    quantity_name_result = sql_message.check_and_adjust_goods_quantity()
+    catalog = {
+        str(item_id): str(item_info["name"])
+        for item_id, item_info in items.items.items()
+        if isinstance(item_info, dict) and item_info.get("name")
+    }
+    operation_id = _backpack_repair_operation_id(event)
+    result = backpack_repair_service.run(
+        operation_id,
+        catalog,
+        int(XiuConfig().max_goods_num),
+        batch_size=100,
+    )
+    while result.succeeded and not result.done:
+        result = backpack_repair_service.run(
+            result.operation_id,
+            batch_size=100,
+        )
 
-    all_users = sql_message.get_all_user_id()
-    checked_users = 0
-    fixed_equipment_count = 0
-    equipment_problems = []
-
-    for user_id in all_users or []:
-        checked_users += 1
-        user_info = sql_message.get_user_info_with_id(user_id)
-        if not user_info:
-            continue
-
-        user_buff_info = UserBuffDate(user_id).BuffInfo
-        equipped_items = []
-
-        if user_buff_info.get('faqi_buff', 0) != 0:
-            equipped_items.append({'type': '法器', 'id': user_buff_info['faqi_buff']})
-        if user_buff_info.get('armor_buff', 0) != 0:
-            equipped_items.append({'type': '防具', 'id': user_buff_info['armor_buff']})
-
-        for equipped_item in equipped_items:
-            item_id = equipped_item['id']
-            item_type = equipped_item['type']
-            item_info = items.get_data_by_item_id(item_id)
-            if not item_info:
-                equipment_problems.append(
-                    f"{user_info['user_name']} 已装备{item_type}ID {item_id} 已不存在，未自动修复"
-                )
-                continue
-
-            item_data = sql_message.get_item_by_good_id_and_user_id(user_id, item_id)
-            now_time = datetime.now()
-
-            if not item_data or item_data['goods_num'] <= 0:
-                current_goods_num = item_data['goods_num'] if item_data else 0
-                fix_quantity = max(1, 1 - current_goods_num)
-                sql_message.send_back(
-                    user_id,
-                    item_id,
-                    item_info['name'],
-                    "装备",
-                    fix_quantity,
-                    1
-                )
-                sql_message.update_back_equipment(
-                    "UPDATE back SET state=1, goods_name=%s, update_time=%s, action_time=%s WHERE user_id=%s AND goods_id=%s",
-                    (item_info['name'], now_time, now_time, user_id, item_id)
-                )
-                equipment_problems.append(
-                    f"{user_info['user_name']} 的{item_info['name']}：已装备{item_type}但背包数量异常({current_goods_num})，已补足并设为已装备"
-                )
-                fixed_equipment_count += 1
-                continue
-
-            fixes = []
-            if item_data['state'] == 0:
-                fixes.append("状态修正为已装备")
-            if item_data.get('goods_name') != item_info['name']:
-                fixes.append(f"名称修正为{item_info['name']}")
-
-            if fixes:
-                sql_message.update_back_equipment(
-                    "UPDATE back SET state=1, goods_name=%s, update_time=%s, action_time=%s WHERE user_id=%s AND goods_id=%s",
-                    (item_info['name'], now_time, now_time, user_id, item_id)
-                )
-                equipment_problems.append(
-                    f"{user_info['user_name']} 的{item_info['name']}：{'; '.join(fixes)}"
-                )
-                fixed_equipment_count += 1
+    if not result.succeeded:
+        messages = {
+            "operation_conflict": "本次背包检测与已记录任务参数冲突",
+            "task_missing": "背包检测任务不存在，请重新执行指令",
+        }
+        await handle_send(
+            bot,
+            event,
+            messages.get(result.status, "背包检测任务执行失败，请稍后重试"),
+        )
+        await check_user_back.finish()
 
     result_msg = [
         "【背包检测完成】",
-        f"背包数量/名称检测结果：\n{quantity_name_result}",
-        f"已检查用户数：{checked_users}",
-        f"已装备物品修复数：{fixed_equipment_count}",
+        f"已检查用户数：{result.completed}/{result.total}",
+        f"物品数量修复数：{result.quantity_fixed}",
+        f"绑定数量修复数：{result.bind_fixed}",
+        f"物品名称修复数：{result.name_fixed}",
+        f"已装备物品修复数：{result.equipment_fixed}",
     ]
 
-    if equipment_problems:
-        result_msg.append("【已装备修复详情】")
-        result_msg.extend(equipment_problems[:10])
-        if len(equipment_problems) > 10:
-            result_msg.append(f"...等共{len(equipment_problems)}个已装备问题")
+    if result.missing_definitions:
+        result_msg.append(
+            f"未修复的已装备物品定义缺失数：{result.missing_definitions}"
+        )
+    if result.details:
+        result_msg.append("【修复详情（最多20条）】")
+        for detail in result.details:
+            kind = detail.get("kind")
+            if kind == "equipment":
+                result_msg.append(
+                    f"{detail['user_name']} 的{detail['item_name']}："
+                    f"{','.join(detail['fixes'])}"
+                )
+            elif kind == "missing_definition":
+                result_msg.append(
+                    f"{detail['user_name']} 已装备{detail['item_type']}ID "
+                    f"{detail['item_id']} 已不存在，未自动修复"
+                )
+            else:
+                result_msg.append(
+                    f"用户{detail['user_id']} 物品ID{detail['item_id']} "
+                    f"{kind}: {detail.get('before')} -> {detail.get('after')}"
+                )
 
     result_msg.append("\n备注：背包名称按 goods_id 读取当前物品配置，名称一致则跳过，不一致则修正。")
     await send_msg_handler(bot, event, '背包检测', bot.self_id, result_msg)
