@@ -69,6 +69,9 @@ from .item_grant_service import AdminItemGrantService
 from .item_destroy_service import AdminItemDestroyService
 from .admin_item_batch_grant_service import AdminItemBatchGrantService
 from .accessory_adjustment_service import AdminAccessoryAdjustmentService
+from .accessory_batch_adjustment_service import (
+    AdminAccessoryBatchAdjustmentService,
+)
 from . import command_controls as _command_controls  # noqa: F401
 from . import empty_fallback as _empty_fallback  # noqa: F401
 from . import event_debug as _event_debug  # noqa: F401
@@ -85,6 +88,11 @@ admin_item_destroy_service = AdminItemDestroyService(get_paths().game_db)
 admin_item_batch_grant_service = AdminItemBatchGrantService(get_paths().game_db)
 admin_accessory_adjustment_service = AdminAccessoryAdjustmentService(
     get_paths().game_db, get_paths().player_db
+)
+admin_accessory_batch_adjustment_service = AdminAccessoryBatchAdjustmentService(
+    get_paths().game_db,
+    get_paths().player_db,
+    admin_accessory_adjustment_service,
 )
 
 
@@ -749,24 +757,39 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
             await cz.finish()
 
         if is_accessory:
-            success_count = 0
-            for uid in all_users:
-                try:
-                    uid_str = str(uid)
-                    result = _grant_admin_accessory(
-                        event,
-                        uid_str,
-                        goods_id,
-                        item_info["name"],
-                        quality,
-                        quantity,
-                        "all",
-                    )
-                    if result.succeeded:
-                        success_count += 1
-                except Exception as e:
-                    logger.error(f"创造力量全服发放饰品失败 user_id={uid}: {e}")
-            msg = f"全服发放成功！共向 {success_count} 名玩家发放【{item_info['name']}】饰品 x{quantity}（{quality}阶）"
+            operator_id = str(get_user_id(event) or "unknown")
+            operation_id = admin_accessory_batch_adjustment_service.find_running(
+                "grant",
+                operator_id,
+                goods_id,
+                item_info["name"],
+                quality,
+                quantity,
+                ACCESSORY_BAG_LIMIT,
+            ) or _admin_operation_id(event, "accessory-grant-all", str(goods_id))
+            while True:
+                result = admin_accessory_batch_adjustment_service.grant(
+                    operation_id,
+                    operator_id,
+                    all_users,
+                    goods_id,
+                    item_info["name"],
+                    quality,
+                    quantity,
+                    ACCESSORY_BAG_LIMIT,
+                    lambda _user_id: create_accessory_instance(goods_id, quality),
+                )
+                if result.status != "applied" or result.completed >= result.total:
+                    break
+            if result.status == "operation_conflict":
+                msg = "本次全服饰品发放与已记录计划冲突"
+            else:
+                msg = (
+                    f"全服饰品发放完成！已处理 {result.completed}/{result.total} 名玩家，"
+                    f"实际向 {result.affected_users} 名玩家发放 "
+                    f"{item_info['name']} {result.affected_quantity} 件（{quality}阶），"
+                    f"跳过 {result.skipped_users} 名"
+                )
         else:
             operation_id = _admin_operation_id(event, "item-add-all", str(goods_id))
             operator_id = str(get_user_id(event) or "unknown")
@@ -968,32 +991,50 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await handle_send(bot, event, "当前没有可扣除的用户。")
             await hmll.finish()
 
-        success_user_count = 0
-        total_removed = 0
-        log_context = _admin_economy_context(
-            event,
-            "admin_item_cost_all",
-            item_id=goods_id,
-            item_name=item_info["name"],
-            target="all",
-        )
-
-        for uid in all_users:
-            uid_str = str(uid)
-            try:
-                if is_accessory:
-                    result = _destroy_admin_accessory(
-                        event,
-                        uid_str,
-                        goods_id,
-                        item_info["name"],
-                        quantity,
-                        "all",
-                    )
-                    if result.succeeded:
-                        success_user_count += 1
-                        total_removed += result.affected_quantity
-                else:
+        if is_accessory:
+            operator_id = str(get_user_id(event) or "unknown")
+            operation_id = admin_accessory_batch_adjustment_service.find_running(
+                "destroy",
+                operator_id,
+                goods_id,
+                item_info["name"],
+                0,
+                quantity,
+                0,
+            ) or _admin_operation_id(event, "accessory-destroy-all", str(goods_id))
+            while True:
+                result = admin_accessory_batch_adjustment_service.destroy(
+                    operation_id,
+                    operator_id,
+                    all_users,
+                    goods_id,
+                    item_info["name"],
+                    quantity,
+                )
+                if result.status != "applied" or result.completed >= result.total:
+                    break
+            if result.status == "operation_conflict":
+                msg = "本次全服饰品扣除与已记录计划冲突"
+            else:
+                msg = (
+                    f"全服饰品扣除完成！已处理 {result.completed}/{result.total} 名玩家，"
+                    f"共影响 {result.affected_users} 名玩家，累计扣除"
+                    f"【{item_info['name']}】{result.affected_quantity} 件，"
+                    f"跳过 {result.skipped_users} 名（仅背包，已装备未扣除）"
+                )
+        else:
+            success_user_count = 0
+            total_removed = 0
+            log_context = _admin_economy_context(
+                event,
+                "admin_item_cost_all",
+                item_id=goods_id,
+                item_name=item_info["name"],
+                target="all",
+            )
+            for uid in all_users:
+                uid_str = str(uid)
+                try:
                     # 普通物品：先检查数量再扣
                     have = sql_message.goods_num(uid_str, goods_id)
                     if have > 0:
@@ -1006,12 +1047,8 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
                         )
                         success_user_count += 1
                         total_removed += deduct
-            except Exception as e:
-                logger.error(f"毁灭力量全服扣除失败 user_id={uid}: {e}")
-
-        if is_accessory:
-            msg = f"全服扣除完成！共影响 {success_user_count} 名玩家，累计扣除【{item_info['name']}】饰品 {total_removed} 件（仅背包，已装备未扣除）"
-        else:
+                except Exception as e:
+                    logger.error(f"毁灭力量全服扣除失败 user_id={uid}: {e}")
             msg = f"全服扣除完成！共影响 {success_user_count} 名玩家，累计扣除 {item_info['name']} x{total_removed}"
 
         await handle_send(bot, event, msg)

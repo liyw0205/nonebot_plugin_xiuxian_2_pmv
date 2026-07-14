@@ -236,8 +236,8 @@ class AdminAccessoryAdjustmentTests(unittest.TestCase):
             Path(__file__).parents[1]
             / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
         ).read_text(encoding="utf-8")
-        self.assertGreaterEqual(source.count("_grant_admin_accessory("), 4)
-        self.assertGreaterEqual(source.count("_destroy_admin_accessory("), 4)
+        self.assertGreaterEqual(source.count("_grant_admin_accessory("), 3)
+        self.assertGreaterEqual(source.count("_destroy_admin_accessory("), 3)
         self.assertNotIn("add_accessory_to_bag", source)
         self.assertNotIn("remove_accessory_from_bag", source)
         self.assertNotIn("player_data_manager", source)
