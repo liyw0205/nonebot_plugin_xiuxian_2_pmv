@@ -1953,6 +1953,30 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("mentor_protection_operations", service)
         self.assertIn("rejected_applications", service)
 
+    def test_mentor_bind_replays_before_pending_validation(self) -> None:
+        root = SOURCE_ROOT / "xiuxian" / "xiuxian_buff"
+        source = (root / "partner.py").read_text(encoding="utf-8")
+        service = (root / "mentor_bind_service.py").read_text(encoding="utf-8")
+
+        start = source.index("async def agree_mentor_")
+        end = source.index("@reject_mentor.handle", start)
+        handler = source[start:end]
+        self.assertLess(
+            handler.index("mentor_bind_service.replay("),
+            handler.index("_get_pending_mentor_invites("),
+        )
+        self.assertIn('event, "mentor-bind", mentor_id', handler)
+        self.assertIn("mentor_bind_service.apply(\n        operation_id", handler)
+
+        send_start = source.index("async def _send_mentor_bind_success")
+        send_end = source.index("@agree_mentor.handle", send_start)
+        sender = source[send_start:send_end]
+        self.assertIn('if result.status == "applied":', sender)
+        self.assertIn("log_message(", sender)
+        self.assertIn("_grant_mentor_titles_by_stats(", sender)
+        self.assertIn("def replay(", service)
+        self.assertIn("_operation_identity", service)
+
     def test_statistics_data_migration_does_not_block_event_loop(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_buff" / "__init__.py"

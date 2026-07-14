@@ -28,6 +28,43 @@ class MentorBindService:
         self._player_database = Path(player_database)
         self._lock = lock or RLock()
 
+    @staticmethod
+    def _operation_identity(payload) -> list:
+        values = json.loads(str(payload))
+        if len(values) == 10:
+            return [*values[:3], *values[4:]]
+        return values
+
+    def replay(
+        self, operation_id, mentor_id, apprentice_id
+    ) -> MentorBindResult | None:
+        operation_id = str(operation_id).strip()
+        mentor_id = str(mentor_id)
+        apprentice_id = str(apprentice_id)
+        if not operation_id:
+            raise ValueError("invalid mentor bind operation")
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            table = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name='mentor_bind_operations'"
+            ).fetchone()
+            if table is None:
+                return None
+            previous = conn.execute(
+                "SELECT payload,bind_time FROM mentor_bind_operations "
+                "WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+        if previous is None:
+            return None
+        identity = self._operation_identity(previous[0])
+        status = (
+            "duplicate"
+            if [str(identity[0]), str(identity[1])] == [mentor_id, apprentice_id]
+            else "operation_conflict"
+        )
+        return MentorBindResult(status, str(previous[1]))
+
     def apply(
         self,
         operation_id,
@@ -51,9 +88,13 @@ class MentorBindService:
         max_apprentices, history_limit = int(max_apprentices), int(history_limit)
         if not operation_id or mentor_id == apprentice_id or not invite_id or max_apprentices <= 0 or history_limit <= 0:
             raise ValueError("invalid mentor bind operation")
+        identity = [
+            mentor_id, apprentice_id, invite_id,
+            str(expected_mentor_level), str(expected_apprentice_level),
+            max_apprentices, history_limit, mentor_desc, apprentice_desc,
+        ]
         payload = json.dumps(
-            [mentor_id, apprentice_id, invite_id, bind_time, str(expected_mentor_level), str(expected_apprentice_level),
-             max_apprentices, history_limit, mentor_desc, apprentice_desc],
+            identity,
             ensure_ascii=False, separators=(",", ":"),
         )
         check_time = now or datetime.now()
@@ -72,7 +113,11 @@ class MentorBindService:
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    status = "duplicate" if str(previous[0]) == payload else "operation_conflict"
+                    status = (
+                        "duplicate"
+                        if self._operation_identity(previous[0]) == identity
+                        else "operation_conflict"
+                    )
                     return MentorBindResult(status, str(previous[1]))
                 conn.execute(
                     "CREATE TABLE IF NOT EXISTS player_data.mentor_applications ("

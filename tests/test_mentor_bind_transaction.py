@@ -33,21 +33,54 @@ class MentorBindTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def call(self, operation="op", max_apprentices=5, invite_id="invite-1"):
-        return self.service.apply(operation, "m", "a", invite_id, bind_time="2026-07-13 12:00:00",
+    def call(self, operation="op", max_apprentices=5, invite_id="invite-1", bind_time="2026-07-13 12:00:00"):
+        return self.service.apply(operation, "m", "a", invite_id, bind_time=bind_time,
             expected_mentor_level="洞虚境", expected_apprentice_level="筑基境", max_apprentices=max_apprentices,
             history_limit=50, mentor_desc="收徒", apprentice_desc="拜师",
             invitation_validator=lambda m, a, i: (m, a, i) in self.invite,
             now=datetime(2026, 7, 13, 12, 0, 0))
 
     def test_atomic_idempotency_and_conflict(self):
-        self.assertEqual("applied", self.call().status)
+        applied = self.call()
+        self.assertEqual("applied", applied.status)
         self.invite.clear()
-        self.assertEqual("duplicate", self.call().status)
+        duplicate = self.call(bind_time="2026-07-13 12:01:00")
+        self.assertEqual("duplicate", duplicate.status)
+        self.assertEqual(applied.bind_time, duplicate.bind_time)
         self.assertEqual("operation_conflict", self.call(max_apprentices=6).status)
+        self.assertEqual("operation_conflict", self.call(invite_id="invite-2").status)
         with db_backend.connection(self.player) as conn:
             self.assertEqual("m", conn.execute("SELECT mentor_id FROM mentor WHERE user_id='a'").fetchone()[0])
             self.assertEqual(1, conn.execute('SELECT "收徒次数" FROM statistics WHERE user_id=\'m\'').fetchone()[0])
+
+    def test_replay_uses_actor_identity_before_business_checks(self):
+        applied = self.call()
+        self.invite.clear()
+
+        replayed = self.service.replay("op", "m", "a")
+        conflict = self.service.replay("op", "m", "x")
+
+        self.assertEqual("duplicate", replayed.status)
+        self.assertEqual(applied.bind_time, replayed.bind_time)
+        self.assertEqual("operation_conflict", conflict.status)
+        self.assertIsNone(self.service.replay("missing", "m", "a"))
+
+    def test_replays_legacy_payload_with_bind_time(self):
+        applied = self.call()
+        with db_backend.transaction(self.game) as conn:
+            payload = json.loads(conn.execute(
+                "SELECT payload FROM mentor_bind_operations WHERE operation_id='op'"
+            ).fetchone()[0])
+            payload.insert(3, applied.bind_time)
+            conn.execute(
+                "UPDATE mentor_bind_operations SET payload=%s WHERE operation_id='op'",
+                (json.dumps(payload, ensure_ascii=False, separators=(",", ":")),),
+            )
+
+        duplicate = self.call(bind_time="2026-07-13 12:10:00")
+
+        self.assertEqual("duplicate", duplicate.status)
+        self.assertEqual(applied.bind_time, duplicate.bind_time)
 
     def test_invitation_capacity_cooldown_and_existing_mentor(self):
         self.assertEqual("invitation_changed", self.call(invite_id="bad").status)

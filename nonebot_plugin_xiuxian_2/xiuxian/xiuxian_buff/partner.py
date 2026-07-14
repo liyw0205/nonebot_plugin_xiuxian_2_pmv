@@ -1734,6 +1734,34 @@ async def expire_mentor_invite(mentor_id, apprentice_id, invite_id, bot, event):
         )
 
 
+async def _send_mentor_bind_success(
+    bot, event, mentor_id, mentor_info, apprentice_id, apprentice_info, result
+):
+    title_lines = []
+    if result.status == "applied":
+        log_message(mentor_id, f"[师徒] 收{apprentice_info['user_name']}为徒")
+        log_message(apprentice_id, f"[师徒] 拜{mentor_info['user_name']}为师")
+        title_lines = (
+            _grant_mentor_titles_by_stats(mentor_id)
+            + _grant_mentor_titles_by_stats(apprentice_id)
+        )
+    title_msg = "\n" + "\n".join(title_lines) if title_lines else ""
+    msg = (
+        f"你已收{apprentice_info['user_name']}为徒，拜师时间为{result.bind_time}。\n"
+        f"新拜师后{MENTOR_NEW_BIND_TRANSMISSION_WAIT_HOURS}小时内不能传功。"
+        f"{title_msg}"
+    )
+    await handle_send(
+        bot,
+        event,
+        msg,
+        md_type="buff",
+        k1="传功", v1=f"师徒传功 {apprentice_info['user_name']}",
+        k2="师徒", v2="我的师徒",
+        k3="关系", v3="关系帮助",
+    )
+
+
 @agree_mentor.handle(parameterless=[Cooldown(cd_time=0)])
 async def agree_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """同意拜师"""
@@ -1746,8 +1774,26 @@ async def agree_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     mentor_id = str(user_info["user_id"])
     buttons = _build_mentor_help_buttons()
     apprentice_id = _resolve_user_id_from_args(args)
-    pending_invites = _get_pending_mentor_invites(mentor_id)
 
+    operation_id = None
+    if apprentice_id:
+        apprentice_id = str(apprentice_id)
+        operation_id = _relation_operation_id(event, "mentor-bind", mentor_id)
+        replayed = mentor_bind_service.replay(
+            operation_id, mentor_id, apprentice_id
+        )
+        if replayed is not None:
+            if not replayed.succeeded:
+                await handle_send(bot, event, "该事件已用于其他拜师确认。", **buttons)
+                await agree_mentor.finish()
+            apprentice_info = sql_message.get_user_real_info(apprentice_id)
+            await _send_mentor_bind_success(
+                bot, event, mentor_id, user_info, apprentice_id,
+                apprentice_info, replayed,
+            )
+            await agree_mentor.finish()
+
+    pending_invites = _get_pending_mentor_invites(mentor_id)
     if not pending_invites:
         await handle_send(bot, event, "没有待处理的拜师申请！", **buttons)
         await agree_mentor.finish()
@@ -1777,7 +1823,7 @@ async def agree_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     apprentice_info = sql_message.get_user_real_info(apprentice_id)
     bind_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     result = mentor_bind_service.apply(
-        f"mentor-bind:{mentor_id}:{invite_data['invite_id']}", mentor_id, apprentice_id,
+        operation_id, mentor_id, apprentice_id,
         invite_data["invite_id"], bind_time=bind_time,
         expected_mentor_level=user_info["level"], expected_apprentice_level=apprentice_info["level"],
         max_apprentices=MENTOR_MAX_APPRENTICES, history_limit=MENTOR_HISTORY_LIMIT,
@@ -1787,17 +1833,9 @@ async def agree_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     if not result.succeeded:
         await handle_send(bot, event, "拜师邀请或双方状态已变化，请重新申请。", **buttons)
         await agree_mentor.finish()
-    if result.status == "applied":
-        log_message(mentor_id, f"[师徒] 收{apprentice_info['user_name']}为徒")
-        log_message(apprentice_id, f"[师徒] 拜{user_info['user_name']}为师")
-    title_lines = _grant_mentor_titles_by_stats(mentor_id) + _grant_mentor_titles_by_stats(apprentice_id)
-    title_msg = "\n" + "\n".join(title_lines) if title_lines else ""
-    msg = (
-        f"你已收{apprentice_info['user_name']}为徒，拜师时间为{result.bind_time}。\n"
-        f"新拜师后{MENTOR_NEW_BIND_TRANSMISSION_WAIT_HOURS}小时内不能传功。"
-        f"{title_msg}"
+    await _send_mentor_bind_success(
+        bot, event, mentor_id, user_info, apprentice_id, apprentice_info, result
     )
-    await handle_send(bot, event, msg, md_type="buff", k1="传功", v1=f"师徒传功 {apprentice_info['user_name']}", k2="师徒", v2="我的师徒", k3="关系", v3="关系帮助")
     await agree_mentor.finish()
 
 
