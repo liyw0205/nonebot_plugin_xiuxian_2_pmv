@@ -408,7 +408,9 @@ def generate_main_buff(data, weapon_id):
     return buffs
 
 
-def update_all_user_status(status_list, bot_id, level_ratios=None):
+def resolve_final_user_statuses(status_list, bot_id, level_ratios=None):
+    """Return persisted HP/MP values without mutating player state."""
+    resolved = {}
     for item in status_list:
         for name, attr in item.items():
             user_id = attr.get("user_id", 0)
@@ -417,7 +419,9 @@ def update_all_user_status(status_list, bot_id, level_ratios=None):
 
             ratio = 1
             if level_ratios:
-                ratio = level_ratios.get(user_id, 1)
+                ratio = level_ratios.get(
+                    user_id, level_ratios.get(str(user_id), 1)
+                )
 
             hp_multiplier = attr.get("hp_multiplier", 1)
             mp_multiplier = attr.get("mp_multiplier", 1)
@@ -433,7 +437,15 @@ def update_all_user_status(status_list, bot_id, level_ratios=None):
             if mp < 1:
                 mp = 1
 
-            sql_message.update_user_hp_mp(user_id, int(hp), int(mp))
+            resolved[str(user_id)] = {"hp": int(hp), "mp": int(mp)}
+    return resolved
+
+
+def update_all_user_status(status_list, bot_id, level_ratios=None):
+    for user_id, status in resolve_final_user_statuses(
+        status_list, bot_id, level_ratios
+    ).items():
+        sql_message.update_user_hp_mp(user_id, status["hp"], status["mp"])
 
 
 def is_scarecrow_boss(boss):

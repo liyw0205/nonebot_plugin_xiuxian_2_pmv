@@ -43,7 +43,7 @@ class DungeonMemberLeaveTests(unittest.TestCase):
             )
             conn.executemany(
                 "INSERT INTO player_dungeon_status VALUES (%s, %s)",
-                [("leader", "exploring"), ("member", "not_started")],
+                [("leader", "not_started"), ("member", "not_started")],
             )
             conn.execute(
                 "CREATE TABLE dungeon_team_invites ("
@@ -103,7 +103,24 @@ class DungeonMemberLeaveTests(unittest.TestCase):
         stale = self.service.leave("leave-stale", "member", snapshot, "2026-07-14 15:00:00")
 
         self.assertEqual((first.status, duplicate.status, stale.status), ("applied", "duplicate", "state_changed"))
-        self.assertEqual(self.row("SELECT COUNT(*) FROM dungeon_team_exit_operations")[0], 1)
+        self.assertEqual(self.row("SELECT COUNT(*) FROM dungeon_team_exit_operations")[0], 2)
+
+    def test_leave_is_blocked_while_any_team_member_is_exploring(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "UPDATE player_dungeon_status SET dungeon_status=%s WHERE user_id=%s",
+                ("exploring", "member"),
+            )
+
+        result = self.service.leave(
+            "leave-active", "leader", self.snapshot(), "2026-07-14 15:00:00"
+        )
+
+        self.assertEqual(result.status, "session_active")
+        self.assertEqual(
+            json.loads(self.row("SELECT members FROM teams WHERE user_id=%s", ("team-1",))[0]),
+            ["leader", "member"],
+        )
 
     def test_last_member_leave_disbands_the_team(self) -> None:
         with db_backend.transaction(self.database) as conn:
@@ -144,7 +161,7 @@ class DungeonMemberLeaveTests(unittest.TestCase):
             self.row(
                 "SELECT dungeon_status FROM player_dungeon_status WHERE user_id=%s", ("leader",)
             )[0],
-            "exploring",
+            "not_started",
         )
 
     def test_production_leave_handler_uses_transaction_service_without_split_writes(self) -> None:

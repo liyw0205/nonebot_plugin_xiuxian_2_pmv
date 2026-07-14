@@ -55,8 +55,13 @@ class DungeonTeamTransactionServiceTests(unittest.TestCase):
         self.assertEqual(self.members(), ["leader", "member"])
         with db_backend.transaction(self.database) as conn:
             conn.execute("INSERT INTO user_xiuxian VALUES (%s)", ("late",))
-            conn.execute("INSERT INTO player_dungeon_status VALUES (%s,%s)", ("late", "exploring"))
+            conn.execute("INSERT INTO player_dungeon_status VALUES (%s,%s)", ("late", "not_started"))
         self.service.record_invite("invite-2", "team-1", "leader", "late", "100", 200)
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "UPDATE player_dungeon_status SET dungeon_status=%s WHERE user_id=%s",
+                ("exploring", "late"),
+            )
         self.assertEqual(self.service.join("join-2", "invite-2", "team-1", "leader", "late", "100", 100).status, "session_active")
         self.assertEqual(self.members(), ["leader", "member"])
 

@@ -58,7 +58,9 @@ class DungeonBattleProgressServiceTests(unittest.TestCase):
     def test_real_entry_has_no_reward_or_progress_write_bypass(self):
         source = (Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dungeon/__init__.py").read_text(encoding="utf-8")
         handler = source[source.index("async def handle_explore_dungeon"):source.index("async def handle_dungeon_status")]
-        self.assertIn("dungeon_battle_progress_service.settle", handler)
+        self.assertIn("dungeon_explore_operation_service.settle", handler)
+        self.assertIn("type_in=0", handler)
+        self.assertNotIn("dungeon_battle_progress_service.settle", handler)
         self.assertNotIn("dungeon_reward_service.award", handler)
         self.assertNotIn("dungeon_manager.update_player_progress", handler)
 

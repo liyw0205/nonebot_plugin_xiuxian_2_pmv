@@ -49,7 +49,7 @@ class DungeonKickDisbandTests(unittest.TestCase):
             )
             conn.executemany(
                 "INSERT INTO player_dungeon_status VALUES (%s, %s)",
-                [("leader", "exploring"), ("member", "exploring"), ("newcomer", "exploring")],
+                [("leader", "not_started"), ("member", "not_started"), ("newcomer", "not_started")],
             )
             conn.execute(
                 "CREATE TABLE dungeon_team_invites ("
@@ -128,6 +128,27 @@ class DungeonKickDisbandTests(unittest.TestCase):
         )
         self.assertEqual(self.row("SELECT COUNT(*) FROM dungeon_team_exit_operations")[0], 1)
 
+    def test_kick_and_disband_are_blocked_during_active_session(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "UPDATE player_dungeon_status SET dungeon_status=%s WHERE user_id=%s",
+                ("exploring", "newcomer"),
+            )
+        snapshot = self.snapshot()
+
+        kick = self.service.kick(
+            "kick-active", "leader", "member", snapshot, "2026-07-14 15:00:00"
+        )
+        disband = self.service.disband(
+            "disband-active", "leader", snapshot, "2026-07-14 15:00:00"
+        )
+
+        self.assertEqual((kick.status, disband.status), ("session_active", "session_active"))
+        self.assertEqual(
+            json.loads(self.row("SELECT members FROM teams WHERE user_id=%s", ("team-1",))[0]),
+            ["leader", "member", "newcomer"],
+        )
+
     def test_kick_operation_failure_rolls_back_team_and_member_state(self) -> None:
         with db_backend.transaction(self.database) as conn:
             self.service._ensure_schema(conn)
@@ -148,7 +169,7 @@ class DungeonKickDisbandTests(unittest.TestCase):
             self.row(
                 "SELECT dungeon_status FROM player_dungeon_status WHERE user_id=%s", ("member",)
             )[0],
-            "exploring",
+            "not_started",
         )
 
     def test_disband_operation_failure_rolls_back_team_cooldowns_and_sessions(self) -> None:
@@ -171,7 +192,7 @@ class DungeonKickDisbandTests(unittest.TestCase):
                 self.row(
                     "SELECT dungeon_status FROM player_dungeon_status WHERE user_id=%s", (user_id,)
                 )[0],
-                "exploring",
+                "not_started",
             )
 
     def test_production_kick_and_disband_handlers_use_transaction_service(self) -> None:

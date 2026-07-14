@@ -207,6 +207,12 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("coalesce=True", decorator)
         self.assertIn("max_instances=1", decorator)
         self.assertIn("misfire_grace_time=300", decorator)
+        handler_start = source.index("async def daily_dungeon_reset")
+        handler = source[
+            handler_start : source.index("async def handle_manual_reset", handler_start)
+        ]
+        self.assertIn('dungeon_manager.reset_dungeon(source="daily")', handler)
+        self.assertIn("raise", handler)
 
     def test_world_boss_scheduler_prevents_overlapping_runs(self) -> None:
         source = (
@@ -929,7 +935,7 @@ class SourceQualityTests(unittest.TestCase):
             source,
         )
 
-    def test_dungeon_team_command_presenter_extracts_view_and_transfer_copy(self) -> None:
+    def test_dungeon_team_handlers_use_persisted_lifecycle_results(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_dungeon" / "__init__.py"
         ).read_text(encoding="utf-8")
@@ -938,27 +944,23 @@ class SourceQualityTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("build_team_view_message(", source)
         self.assertIn("build_team_view(", source)
-        self.assertIn("build_leave_team_result(", source)
-        self.assertIn("build_leave_team_message(", source)
-        self.assertIn("resolve_kick_target(", source)
-        self.assertIn("build_kick_team_result(", source)
-        self.assertIn("build_kick_team_message(", source)
-        self.assertIn("resolve_team_invite(", source)
-        self.assertIn("build_team_invite_message(", source)
+        self.assertIn("def _team_mutation_message", source)
+        self.assertIn("def _team_exit_message", source)
+        self.assertIn("dungeon_team_transaction_service.operation_result(", source)
+        self.assertIn("dungeon_team_exit_service.exit_operation_result(", source)
+        self.assertIn("dungeon_team_transaction_service.pending_invite(", source)
+        self.assertIn("dungeon_team_transaction_service.invite(", source)
+        self.assertIn("dungeon_team_transaction_service.join(", source)
+        self.assertIn("dungeon_team_transaction_service.reject(", source)
+        self.assertIn("dungeon_team_transaction_service.transfer(", source)
+        self.assertIn("dungeon_team_exit_service.leave(", source)
+        self.assertIn("dungeon_team_exit_service.kick(", source)
+        self.assertIn("dungeon_team_exit_service.disband(", source)
         self.assertIn("build_team_invite_private_message(", source)
-        self.assertIn("resolve_invite_response(", source)
         self.assertIn("build_invite_response_message(", source)
-        self.assertIn("resolve_transfer_target(", source)
         self.assertIn("build_transfer_team_success_message(", source)
         self.assertIn("build_transfer_team_self_message(", source)
         self.assertIn("build_transfer_team_not_member_message(", source)
-        self.assertIn("class TeamLeaveResult", presenter_source)
-        self.assertIn("class TeamKickResult", presenter_source)
-        self.assertIn("def build_leave_team_result", presenter_source)
-        self.assertIn("def build_leave_team_message", presenter_source)
-        self.assertIn("def resolve_kick_target", presenter_source)
-        self.assertIn("def build_kick_team_result", presenter_source)
-        self.assertIn("def build_kick_team_message", presenter_source)
         self.assertIn("class TeamInviteResult", presenter_source)
         self.assertIn("class TeamInviteResponseResult", presenter_source)
         self.assertIn("def resolve_team_invite", presenter_source)
@@ -1748,18 +1750,24 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("sql_message.update_exp(", handler)
         self.assertNotIn("sql_message.send_back(", handler)
 
-    def test_dungeon_team_rewards_use_batch_transaction(self) -> None:
+    def test_dungeon_exploration_uses_cross_database_operation_transaction(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_dungeon"
         source = (root / "__init__.py").read_text(encoding="utf-8")
-        start = source.index("def battle_settlement")
-        handler = source[start:source.index("def check_user_state", start)]
-        self.assertIn("dungeon_reward_service.award(", handler)
+        start = source.index("async def handle_explore_dungeon")
+        handler = source[start:source.index("async def handle_dungeon_status", start)]
+        self.assertIn("dungeon_explore_operation_service.replay(", handler)
+        self.assertIn("dungeon_explore_operation_service.prepare(", handler)
+        self.assertIn("dungeon_explore_operation_service.settle(", handler)
+        self.assertNotIn("dungeon_reward_service.award(", handler)
         self.assertNotIn("sql_message.update_ls(", handler)
         self.assertNotIn("sql_message.update_exp(", handler)
         self.assertNotIn("sql_message.send_back(", handler)
-        service = (root / "reward_service.py").read_text(encoding="utf-8")
+        service = (root / "explore_operation_service.py").read_text(encoding="utf-8")
+        self.assertIn("ATTACH DATABASE", service)
         self.assertIn("BEGIN IMMEDIATE", service)
-        self.assertIn("dungeon_reward_operations", service)
+        self.assertIn("dungeon_explore_operations", service)
+        self.assertIn("UPDATE user_xiuxian SET hp=%s,mp=%s,stone=stone+%s,exp=exp+%s", service)
+        self.assertIn("UPDATE player_data.player_dungeon_status SET current_layer=%s,dungeon_status=%s", service)
 
     def test_training_completion_uses_cross_database_transaction(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_training"

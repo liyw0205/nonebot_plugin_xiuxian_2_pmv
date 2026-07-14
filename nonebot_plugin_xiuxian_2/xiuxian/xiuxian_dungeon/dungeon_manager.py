@@ -1,6 +1,7 @@
 import json
 import random
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Optional
@@ -12,6 +13,7 @@ from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import convert_rank
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
+from .reset_service import DungeonResetService
 
 item_s = Items()
 player_data = PlayerDataManager()
@@ -70,6 +72,11 @@ class DungeonTemplate:
 
         self.monster_templates = template_data.get("monster_templates", {})
         self.boss_config = template_data.get("boss", {})
+        self.snapshot_data = {
+            "events": template_data.get("events", []),
+            "monster_templates": self.monster_templates,
+            "boss": self.boss_config,
+        }
 
     def get_event_map(self) -> Dict[str, DungeonEvent]:
         return {e.event_id: e for e in self.events}
@@ -204,6 +211,7 @@ class DungeonManager:
 
             self.dungeon_templates = self._load_dungeon_templates()
             self._init_dungeon_tables()
+            self.reset_service = DungeonResetService(get_paths().player_db)
 
             self.current_dungeon: Optional[DungeonTemplate] = None
             self._load_or_init_today_dungeon()
@@ -221,6 +229,11 @@ class DungeonManager:
             "dungeon_id": "TEXT",
             "dungeon_name": "TEXT",
             "date": "TEXT",
+            "total_layers": "INTEGER",
+            "dungeon_type": "TEXT",
+            "description": "TEXT",
+            "reset_generation": "INTEGER",
+            "reset_operation_id": "TEXT",
         }
         for f, t in global_fields.items():
             player_data._ensure_field_exists(self.DUNGEON_GLOBAL_STATE_TABLE, f, t)
@@ -232,6 +245,8 @@ class DungeonManager:
             "current_layer": "INTEGER",
             "total_layers": "INTEGER",
             "last_reset_date": "TEXT",
+            "reset_generation": "INTEGER",
+            "reset_operation_id": "TEXT",
         }
         for f, t in player_fields.items():
             player_data._ensure_field_exists(self.PLAYER_DUNGEON_STATUS_TABLE, f, t)
@@ -260,20 +275,89 @@ class DungeonManager:
     def _get_global_state(self) -> dict | None:
         return player_data.get_fields(self.GLOBAL_USER_ID, self.DUNGEON_GLOBAL_STATE_TABLE)
 
-    def _save_global_state(self, dungeon: DungeonTemplate, date_str: str):
-        data = {
-            "dungeon_id": dungeon.id,
-            "dungeon_name": dungeon.name,
-            "date": date_str
-        }
-        for key, value in data.items():
-            player_data.update_or_write_data(self.GLOBAL_USER_ID, self.DUNGEON_GLOBAL_STATE_TABLE, key, value)
-
     def _find_template_by_id(self, dungeon_id: str) -> Optional[DungeonTemplate]:
         for template in self.dungeon_templates:
             if template.id == dungeon_id:
                 return template
         return None
+
+    @staticmethod
+    def _template_snapshot(dungeon: DungeonTemplate) -> dict:
+        snapshot = {
+            "dungeon_id": dungeon.id,
+            "dungeon_name": dungeon.name,
+            "total_layers": dungeon.total_layers,
+            "dungeon_type": dungeon.type,
+            "description": dungeon.description,
+        }
+        snapshot.update(getattr(dungeon, "snapshot_data", {}))
+        return snapshot
+
+    @staticmethod
+    def _template_from_snapshot(snapshot: dict) -> DungeonTemplate:
+        return DungeonTemplate(
+            {
+                "id": str(snapshot.get("dungeon_id", snapshot.get("id", ""))),
+                "name": str(
+                    snapshot.get("dungeon_name", snapshot.get("name", ""))
+                ),
+                "total_layers": int(snapshot.get("total_layers", 5) or 5),
+                "type": str(snapshot.get("dungeon_type", snapshot.get("type", "explore"))),
+                "description": str(snapshot.get("description", "")),
+                "events": snapshot.get("events", []),
+                "monster_templates": snapshot.get("monster_templates", {}),
+                "boss": snapshot.get("boss", {}),
+            }
+        )
+
+    def _published_template(self, global_state: dict) -> Optional[DungeonTemplate]:
+        dungeon_id = str(global_state.get("dungeon_id") or "")
+        if not dungeon_id:
+            return None
+        operation = None
+        operation_id = str(global_state.get("reset_operation_id") or "")
+        operation_reader = getattr(self.reset_service, "operation_result", None)
+        if operation_id and callable(operation_reader):
+            operation = operation_reader(operation_id)
+        snapshot = dict(operation.dungeon_snapshot) if operation is not None else {}
+        if snapshot and str(snapshot.get("dungeon_id", "")) != dungeon_id:
+            snapshot = {}
+
+        configured = self._find_template_by_id(dungeon_id)
+        if configured is not None and not snapshot:
+            return configured
+        if configured is not None:
+            configured_snapshot = self._template_snapshot(configured)
+            configured_snapshot.update(snapshot)
+            snapshot = configured_snapshot
+        if not snapshot:
+            snapshot = {}
+
+        snapshot["dungeon_id"] = dungeon_id
+        fallback_fields = {
+            "dungeon_name": "未知副本",
+            "total_layers": 5,
+            "dungeon_type": "explore",
+            "description": "",
+        }
+        for field, default in fallback_fields.items():
+            value = snapshot.get(field)
+            if value is None or (field != "description" and value == ""):
+                state_value = global_state.get(field)
+                snapshot[field] = default if state_value is None else state_value
+
+        try:
+            total_layers = int(snapshot["total_layers"])
+        except (TypeError, ValueError):
+            total_layers = 0
+        if total_layers < 1:
+            state_layers = global_state.get("total_layers")
+            try:
+                total_layers = int(state_layers)
+            except (TypeError, ValueError):
+                total_layers = 0
+            snapshot["total_layers"] = total_layers if total_layers > 0 else 5
+        return self._template_from_snapshot(snapshot)
 
     def _load_or_init_today_dungeon(self):
         """
@@ -285,7 +369,7 @@ class DungeonManager:
             global_state = self._get_global_state()
 
             if global_state and global_state.get("date") == current_date:
-                template = self._find_template_by_id(global_state.get("dungeon_id"))
+                template = self._published_template(global_state)
                 if template:
                     self.current_dungeon = template
                     return
@@ -295,10 +379,13 @@ class DungeonManager:
                 logger.error("未加载到任何副本模板")
                 return
 
-            self.current_dungeon = random.choice(self.dungeon_templates)
-            self._save_global_state(self.current_dungeon, current_date)
+            result = self.reset_dungeon(
+                DungeonResetService.automatic_operation_id(current_date),
+                source="crossday",
+            )
             logger.info(
-                f"初始化今日副本成功: {self.current_dungeon.id} - {self.current_dungeon.name} - {current_date}"
+                f"初始化今日副本成功: {self.current_dungeon.id} - "
+                f"{self.current_dungeon.name} - {current_date} - generation={result.generation}"
             )
 
     def sync_current_dungeon(self):
@@ -317,21 +404,24 @@ class DungeonManager:
 
             if global_state.get("date") != current_date:
                 logger.info("检测到跨天，自动刷新今日副本")
-                self.reset_dungeon()
+                self.reset_dungeon(
+                    DungeonResetService.automatic_operation_id(current_date),
+                    source="crossday",
+                )
                 return
 
             dungeon_id = global_state.get("dungeon_id")
             if self.current_dungeon and self.current_dungeon.id == dungeon_id:
                 return
 
-            template = self._find_template_by_id(dungeon_id)
+            template = self._published_template(global_state)
             if template:
                 self.current_dungeon = template
             else:
                 logger.warning(f"全局副本ID无效: {dungeon_id}，重新初始化今日副本")
                 self._load_or_init_today_dungeon()
 
-    def reset_dungeon(self) -> None:
+    def reset_dungeon(self, operation_id: str | None = None, source: str = "manual"):
         """
         每日刷新副本。
         只有这里才会重置所有玩家副本状态。
@@ -341,16 +431,37 @@ class DungeonManager:
 
             if not self.dungeon_templates:
                 self.current_dungeon = None
-                logger.error("副本刷新失败：没有可用副本模板")
-                return
+                raise RuntimeError("副本刷新失败：没有可用副本模板")
 
-            self.current_dungeon = random.choice(self.dungeon_templates)
-            self._save_global_state(self.current_dungeon, current_date)
-            self.clear_all_player_status()
+            source = str(source).lower()
+            if operation_id is None:
+                operation_id = (
+                    DungeonResetService.automatic_operation_id(current_date)
+                    if source in {"daily", "crossday"}
+                    else f"dungeon-reset:manual:{time.time_ns()}"
+                )
+            result = self.reset_service.reset(
+                operation_id,
+                current_date,
+                source,
+                lambda: self._template_snapshot(random.choice(self.dungeon_templates)),
+            )
+            if not result.succeeded:
+                raise RuntimeError(f"dungeon reset failed: {result.status}")
+
+            # A replayed manual operation can be older than the currently published
+            # generation. Keep runtime state aligned with the authoritative row.
+            global_state = self._get_global_state() or {}
+            template = self._published_template(global_state)
+            if template is None:
+                raise RuntimeError("published dungeon template is unavailable")
+            self.current_dungeon = template
 
             logger.info(
-                f"每日副本已刷新: {self.current_dungeon.id} - {self.current_dungeon.name} - {current_date}"
+                f"副本已刷新: {self.current_dungeon.id} - {self.current_dungeon.name} - "
+                f"{current_date} - generation={result.generation} - source={source}"
             )
+            return result
 
     def get_dungeon_progress(self) -> Dict[str, Any]:
         self.sync_current_dungeon()
@@ -365,11 +476,18 @@ class DungeonManager:
             }
 
         return {
+            "dungeon_id": self.current_dungeon.id,
             "name": self.current_dungeon.name,
             "description": self.current_dungeon.description,
             "total_layers": self.current_dungeon.total_layers,
             "date": self._get_current_date(),
-            "type": self.current_dungeon.type
+            "type": self.current_dungeon.type,
+            "reset_generation": int(
+                (self._get_global_state() or {}).get("reset_generation", 0) or 0
+            ),
+            "reset_operation_id": str(
+                (self._get_global_state() or {}).get("reset_operation_id", "") or ""
+            ),
         }
 
     def get_player_status(self, user_id) -> Dict[str, Any]:
@@ -380,116 +498,26 @@ class DungeonManager:
         """
         self.sync_current_dungeon()
 
-        user_id_str = str(user_id)
-        player_status_record = player_data.get_fields(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE)
-
-        current_dungeon_id = self.current_dungeon.id if self.current_dungeon else "unknown"
-        current_dungeon_name = self.current_dungeon.name if self.current_dungeon else "未知副本"
-        current_dungeon_layers = self.current_dungeon.total_layers if self.current_dungeon else 0
-        current_date = self._get_current_date()
-
-        need_init = False
-
-        if not player_status_record:
-            need_init = True
-        elif player_status_record.get("last_reset_date") != current_date:
-            need_init = True
-
-        if need_init:
-            new_status = {
-                "dungeon_id": current_dungeon_id,
-                "dungeon_name": current_dungeon_name,
-                "dungeon_status": "not_started",
-                "current_layer": 0,
-                "total_layers": current_dungeon_layers,
-                "last_reset_date": current_date
-            }
-            for key, value in new_status.items():
-                if key in ("current_layer", "total_layers"):
-                    player_data.update_or_write_data(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE, key, value, data_type="INTEGER")
-                else:
-                    player_data.update_or_write_data(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE, key, value, data_type="TEXT")
-
-            logger.info(f"初始化玩家副本状态: user_id={user_id_str}, dungeon_id={current_dungeon_id}")
-            return player_data.get_fields(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE)
-
-        # 如果今天记录存在，但副本名称/总层数不同，则温和同步，不重置进度
-        patched = False
-        if player_status_record.get("dungeon_id") != current_dungeon_id:
-            player_data.update_or_write_data(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE, "dungeon_id", current_dungeon_id, data_type="TEXT")
-            patched = True
-        if player_status_record.get("dungeon_name") != current_dungeon_name:
-            player_data.update_or_write_data(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE, "dungeon_name", current_dungeon_name, data_type="TEXT")
-            patched = True
-        if int(player_status_record.get("total_layers", 0) or 0) != int(current_dungeon_layers):
-            player_data.update_or_write_data(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE, "total_layers", current_dungeon_layers, data_type="INTEGER")
-            patched = True
-
-        if patched:
-            logger.warning(f"玩家副本状态字段已同步但未重置进度: user_id={user_id_str}")
-            return player_data.get_fields(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE)
-
-        return player_status_record
-
-    def update_player_progress(self, user_id, layer_increment=1, status: Optional[str] = None):
-        self.sync_current_dungeon()
-
-        user_id_str = str(user_id)
-        player_data_record = self.get_player_status(user_id)
-
-        if status:
-            player_data_record["dungeon_status"] = status
-
-        if player_data_record["dungeon_status"] != "completed":
-            if layer_increment > 0:
-                player_data_record["dungeon_status"] = "exploring"
-                player_data_record["current_layer"] += layer_increment
-
-                if player_data_record["current_layer"] >= player_data_record["total_layers"]:
-                    player_data_record["dungeon_status"] = "completed"
-                    player_data_record["current_layer"] = player_data_record["total_layers"]
-
-        for key, value in player_data_record.items():
-            if key in ("current_layer", "total_layers"):
-                player_data.update_or_write_data(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE, key, value, data_type="INTEGER")
-            else:
-                player_data.update_or_write_data(user_id_str, self.PLAYER_DUNGEON_STATUS_TABLE, key, value, data_type="TEXT")
+        if self.current_dungeon is None:
+            raise RuntimeError("current dungeon is unavailable")
+        return self.reset_service.ensure_player_status(
+            str(user_id), self._template_snapshot(self.current_dungeon)
+        )
 
     def clear_all_player_status(self) -> None:
         """
         重置所有玩家副本状态。
         仅应在 reset_dungeon() 时调用。
         """
-        self._init_dungeon_tables()
-
-        current_date = self._get_current_date()
-        current_dungeon_id = self.current_dungeon.id if self.current_dungeon else "unknown"
-        current_dungeon_name = self.current_dungeon.name if self.current_dungeon else "未知副本"
-        current_dungeon_layers = self.current_dungeon.total_layers if self.current_dungeon else 0
-
-        all_records = player_data.get_all_records(self.PLAYER_DUNGEON_STATUS_TABLE)
-
-        for record in all_records:
-            uid = str(record.get("user_id", "")).strip()
-            if not uid:
-                continue
-
-            reset_status = {
-                "dungeon_id": current_dungeon_id,
-                "dungeon_name": current_dungeon_name,
-                "dungeon_status": "not_started",
-                "current_layer": 0,
-                "total_layers": current_dungeon_layers,
-                "last_reset_date": current_date,
-            }
-
-            for key, value in reset_status.items():
-                if key in ("current_layer", "total_layers"):
-                    player_data.update_or_write_data(uid, self.PLAYER_DUNGEON_STATUS_TABLE, key, value, data_type="INTEGER")
-                else:
-                    player_data.update_or_write_data(uid, self.PLAYER_DUNGEON_STATUS_TABLE, key, value, data_type="TEXT")
-
-        logger.info(f"已重置全部玩家副本状态，共 {len(all_records)} 条")
+        if self.current_dungeon is None:
+            raise RuntimeError("current dungeon is unavailable")
+        result = self.reset_service.reset(
+            f"dungeon-reset:clear:{time.time_ns()}",
+            self._get_current_date(),
+            "manual",
+            lambda: self._template_snapshot(self.current_dungeon),
+        )
+        logger.info(f"已重置全部玩家副本状态，共 {result.reset_players} 条")
 
     # =========================
     # 业务辅助
