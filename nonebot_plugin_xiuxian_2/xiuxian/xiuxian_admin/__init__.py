@@ -1331,8 +1331,14 @@ async def tower_reset_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 async def boss_reset_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """重置所有用户的世界BOSS额度"""
     from ..xiuxian_boss import set_boss_limits_reset
-    await set_boss_limits_reset()
-    msg = "用户世界BOSS额度重置成功"
+    result = await set_boss_limits_reset()
+    if result.status == "duplicate":
+        msg = f"今日世界BOSS额度已重置，共 {result.total} 名玩家"
+    else:
+        msg = (
+            f"用户世界BOSS额度重置完成：已处理 {result.completed}/{result.total} 名玩家，"
+            f"重置 {result.changed} 名，跳过 {result.skipped} 名"
+        )
     await handle_send(bot, event, msg)
     await boss_reset.finish()
 

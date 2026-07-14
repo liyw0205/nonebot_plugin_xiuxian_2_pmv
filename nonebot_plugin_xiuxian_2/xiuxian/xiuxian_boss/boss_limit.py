@@ -107,10 +107,4 @@ class BossLimit:
             data["weekly_purchases"] = user_data
         self._save_data(user_id, data)
 
-    def reset_limits(self):
-        """重置所有每日BOSS奖励限制"""
-        player_data_manager.update_all_records("boss", "boss_integral", 0)
-        player_data_manager.update_all_records("boss", "boss_stone", 0)
-        player_data_manager.update_all_records("boss", "boss_battle_count", 0)
-
 boss_limit = BossLimit()

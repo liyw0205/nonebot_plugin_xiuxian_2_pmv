@@ -7,6 +7,7 @@ from datetime import datetime
 from copy import deepcopy
 import random
 import os
+import asyncio
 import time as time_module
 from nonebot.rule import Rule
 from nonebot import get_bots, get_bot, require
@@ -49,6 +50,7 @@ from .battle_settlement_service import WorldBossBattleSettlementService
 from .manual_spawn_service import WorldBossManualSpawnService
 from .full_refresh_service import WorldBossFullRefreshService
 from .punishment_service import WorldBossPunishmentService
+from .daily_limit_reset_service import WorldBossDailyLimitResetService
 from .. import DRIVER
 # boss定时任务
 scheduler = require("nonebot_plugin_apscheduler").scheduler
@@ -74,6 +76,9 @@ world_boss_full_refresh_service = WorldBossFullRefreshService(
     get_boss_config,
 )
 world_boss_punishment_service = WorldBossPunishmentService(get_paths().player_db)
+world_boss_daily_limit_reset_service = WorldBossDailyLimitResetService(
+    get_paths().player_db
+)
 BOSSDROPSPATH = get_paths().data / "boss掉落物"
 
 create = on_command("世界BOSS生成", aliases={"世界boss生成", "世界Boss生成", "生成世界BOSS", "生成世界boss", "生成世界Boss"}, permission=SUPERUSER, priority=5, block=True)
@@ -251,9 +256,20 @@ async def save_boss_():
     old_boss_info.save_boss(group_boss)
     logger.opt(colors=True).info(f"<green>boss数据已保存</green>")
 
-async def set_boss_limits_reset():
-    boss_limit.reset_limits()
-    logger.opt(colors=True).info(f"<green>世界BOSS重置成功！</green>")
+async def set_boss_limits_reset(business_date=None, *, chunk_size=500):
+    business_date = business_date or datetime.now().date().isoformat()
+    while True:
+        result = world_boss_daily_limit_reset_service.reset(
+            business_date,
+            chunk_size=chunk_size,
+        )
+        if result.task_status != "running":
+            logger.opt(colors=True).info(
+                f"<green>世界BOSS额度重置完成：{result.completed}/{result.total}，"
+                f"实际变更{result.changed}人，跳过{result.skipped}人</green>"
+            )
+            return result
+        await asyncio.sleep(0)
 
 @boss_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def boss_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
