@@ -870,16 +870,19 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("sign_in_operations", service_source)
 
-    def test_auction_session_uses_central_json_store(self) -> None:
-        source = (
-            SOURCE_ROOT / "xiuxian" / "xiuxian_trade" / "auction_config.py"
-        ).read_text(encoding="utf-8")
-        self.assertNotIn("json.loads(", source)
-        self.assertNotIn("json.dumps(", source)
-        self.assertNotIn("write_text(", source)
-        self.assertIn("load_json_file(", source)
-        self.assertIn("save_json_file(", source)
-        self.assertIn("delete_json_file(", source)
+    def test_auction_session_status_uses_database_authority(self) -> None:
+        trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
+        config_source = (trade_root / "auction_config.py").read_text(encoding="utf-8")
+        utils_source = (trade_root / "auction_utils.py").read_text(encoding="utf-8")
+        session_source = (trade_root / "auction_session_service.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("auction_session_service.get_active_session()", utils_source)
+        self.assertIn("auction_sessions", session_source)
+        self.assertNotIn("auction_session.json", config_source)
+        self.assertNotIn("load_json_file(", config_source)
+        self.assertNotIn("save_json_file(", config_source)
+        self.assertNotIn("persist_auction_status", utils_source)
 
     def test_auction_background_jobs_use_observable_boundary(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"

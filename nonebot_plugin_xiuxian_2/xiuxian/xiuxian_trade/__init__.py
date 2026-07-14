@@ -86,7 +86,7 @@ auction_session_service = AuctionSessionService(
 )
 scheduler = require("nonebot_plugin_apscheduler").scheduler # 全局调度器，用于鬼市
 auction_scheduler = require("nonebot_plugin_apscheduler").scheduler # 独立的拍卖调度器，避免冲突
-bind_auction_repository(xianshi_repository)
+bind_auction_repository(xianshi_repository, auction_session_service)
 bind_auction_service_dependencies(
     items=items,
     sql_message=sql_message,

@@ -1,16 +1,5 @@
 from copy import deepcopy
-from pathlib import Path
 from typing import Dict, Any, Optional
-from ...paths import get_paths
-from ..xiuxian_utils.json_store import (
-    delete_json_file,
-    load_json_file,
-    save_json_file,
-)
-
-XIUXIAN_DATABASE = get_paths().data
-
-AUCTION_SESSION_FILE = XIUXIAN_DATABASE / "auction_session.json"
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "schedule": {
@@ -26,13 +15,6 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "min_increment_percent": 0.1,
         "min_bid_increment": 1_000_000,
         "fee_rate": 0.2
-    },
-    "auction_status": {
-        "active": False,
-        "start_time": "",                 # YYYYMMDDHHMMSS
-        "end_time": "",                   # YYYYMMDDHHMMSS
-        "last_display_refresh_time": "",  # YYYYMMDDHHMMSS
-        "items_count": 0
     },
     "activity": {
         "hot_items_limit": 5,
@@ -129,13 +111,6 @@ def _normalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
     rules["min_bid_increment"] = max(int(rules.get("min_bid_increment", 1_000_000)), 1)
     rules["fee_rate"] = min(max(float(rules.get("fee_rate", 0.2)), 0.0), 1.0)
 
-    st = merged["auction_status"]
-    st["active"] = bool(st.get("active", False))
-    st["start_time"] = str(st.get("start_time", ""))
-    st["end_time"] = str(st.get("end_time", ""))
-    st["last_display_refresh_time"] = str(st.get("last_display_refresh_time", ""))
-    st["items_count"] = max(int(st.get("items_count", 0)), 0)
-
     activity = merged["activity"]
     activity["hot_items_limit"] = max(int(activity.get("hot_items_limit", 5)), 1)
     activity["recent_deals_limit"] = max(int(activity.get("recent_deals_limit", 5)), 1)
@@ -168,45 +143,8 @@ def get_auction_rules() -> Dict[str, Any]:
     return get_auction_config()["rules"]
 
 
-def get_auction_status_config() -> Dict[str, Any]:
-    return get_auction_config()["auction_status"]
-
-
 def get_auction_activity_config() -> Dict[str, Any]:
     return get_auction_config()["activity"]
-
-
-def get_auction_status_from_config_file() -> Dict[str, Any]:
-    return get_auction_status_config()
-
-
-def load_persisted_auction_status() -> Optional[Dict[str, Any]]:
-    """读取上次落盘的场次状态（与 trade.db 拍品配套）。"""
-    if not AUCTION_SESSION_FILE.is_file():
-        return None
-    raw = load_json_file(
-        AUCTION_SESSION_FILE,
-        deepcopy(DEFAULT_CONFIG["auction_status"]),
-        dict,
-    )
-    merged = _deep_merge({"auction_status": raw}, DEFAULT_CONFIG)["auction_status"]
-    normalized = _normalize_config({"auction_status": merged})["auction_status"]
-    if not normalized.get("active"):
-        return None
-    return normalized
-
-
-def persist_auction_status(status: Dict[str, Any]) -> None:
-    """把当前场次状态写到 data/xiuxian/auction_session.json。"""
-    normalized = _normalize_config({"auction_status": status})["auction_status"]
-    if not normalized.get("active"):
-        delete_json_file(AUCTION_SESSION_FILE)
-        return
-    save_json_file(AUCTION_SESSION_FILE, normalized, indent=2)
-
-
-def clear_persisted_auction_status() -> None:
-    delete_json_file(AUCTION_SESSION_FILE)
 
 
 def set_auction_config_value(key: str, value: Any, sub_key: Optional[str] = None) -> None:

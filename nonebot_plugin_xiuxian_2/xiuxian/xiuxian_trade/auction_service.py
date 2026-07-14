@@ -11,7 +11,6 @@ from ..xiuxian_utils.utils import number_to
 from . import auction_config
 from .auction_utils import (
     get_auction_status,
-    set_auction_status,
 )
 from .trade_utils import _trade_economy_context, record_trade_event
 
@@ -56,13 +55,11 @@ def start_auction_process(bot: Optional[Bot], operation_id: str | None = None) -
     operation_id = operation_id or f"auction-start:{time.time_ns()}"
     previous = session_service.get_start_operation(operation_id)
     if previous is not None:
-        start_dt = datetime.fromtimestamp(previous.start_time)
-        end_dt = datetime.fromtimestamp(previous.end_time)
-        set_auction_status(
-            active=True, start_time=start_dt, end_time=end_dt,
-            last_display_refresh_time=start_dt, items_count=previous.items_count,
+        active_session = session_service.get_active_session()
+        return bool(
+            active_session
+            and active_session["session_id"] == previous.session_id
         )
-        return True
     system_items_config = auction_config.get_system_items() # 从内置配置获取系统物品
 
     schedule_config = auction_config.get_auction_schedule()
@@ -85,12 +82,6 @@ def start_auction_process(bot: Optional[Bot], operation_id: str | None = None) -
     if not result.succeeded:
         logger.warning(f"拍卖开启失败：{result.status}")
         return False
-    start_dt = datetime.fromtimestamp(result.start_time)
-    end_dt = datetime.fromtimestamp(result.end_time)
-    set_auction_status(
-        active=True, start_time=start_dt, end_time=end_dt,
-        last_display_refresh_time=start_dt, items_count=result.items_count,
-    )
     current_date = datetime.now().strftime('%Y-%m-%d')
     auction_config.set_auction_config_value("schedule", current_date, "last_auto_start_date")
     logger.info(f"拍卖已开启，共 {result.items_count} 件物品参与拍卖！")
@@ -162,18 +153,13 @@ async def end_auction_process(
                 f"{settlement['item_name']}流拍，已退回背包，拍卖ID:{settlement['auction_id']}",
                 {"拍卖流拍次数": 1},
             )
-    set_auction_status(
-        active=False, start_time=None, end_time=None,
-        last_display_refresh_time=None, items_count=0,
-    )
-    auction_config.clear_persisted_auction_status()
     logger.info("拍卖已结束，结算完成！")
     return auction_results
 
 
 async def reconcile_auction_after_restart() -> None:
     """
-    重启后对账：有落盘场次且未到结束时间 → 继续本场；否则库内遗留拍品 → 收尾结算。
+    重启后对账：数据库场次未到结束时间则继续本场，否则收尾结算。
     不向群里发公告。
     """
     _, _, _, auction_repository, session_service = _auction_dependencies()
@@ -185,7 +171,6 @@ async def reconcile_auction_after_restart() -> None:
         raise RuntimeError("auction items exist without an active database session")
     now_dt = datetime.now()
     item_count = len(current_auctions)
-    start_dt = datetime.fromtimestamp(session["start_time"])
     end_dt = datetime.fromtimestamp(session["end_time"])
     if now_dt >= end_dt:
         logger.info(
@@ -194,10 +179,6 @@ async def reconcile_auction_after_restart() -> None:
         )
         await end_auction_process(None)
         return
-    set_auction_status(
-        active=True, start_time=start_dt, end_time=end_dt,
-        last_display_refresh_time=start_dt, items_count=item_count,
-    )
     left_min = max(int((end_dt - now_dt).total_seconds()) // 60, 0)
     logger.info(
         f"拍卖重启后继续本场，预计 {end_dt.strftime('%H:%M')} 结束，"

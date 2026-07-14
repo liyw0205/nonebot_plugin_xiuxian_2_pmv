@@ -1,73 +1,43 @@
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from nonebot.log import logger
-
 from ..adapter_compat import GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.utils import check_user, number_to
-from . import auction_config
 
 
 auction_repository: Any = None
+auction_session_service: Any = None
 
 
-def bind_auction_repository(repository: Any) -> None:
-    global auction_repository
+def bind_auction_repository(repository: Any, session_service: Any = None) -> None:
+    global auction_repository, auction_session_service
     auction_repository = repository
+    auction_session_service = session_service
 
 
 def get_auction_status() -> Dict[str, Any]:
-    """获取拍卖状态（是否活跃，开始/结束时间）"""
-    # 从内存配置中读取 auction_status 字段
-    status_dict = auction_config.get_auction_status_config()
-
-    # 辅助函数：将 YYYYMMDDhhmmss 格式字符串转换为 datetime 对象
-    def parse_time_str(time_str: str) -> Optional[datetime]:
-        if time_str:
-            try:
-                return datetime.strptime(time_str, "%Y%m%d%H%M%S")
-            except ValueError:
-                logger.error(f"无法解析拍卖时间字符串: {time_str}")
-        return None
-
-    # 确保返回的字典包含所有预期字段，并处理时间字符串到datetime对象的转换
+    """Return the active database session as the auction runtime status."""
+    session = (
+        auction_session_service.get_active_session()
+        if auction_session_service is not None
+        else None
+    )
+    if session is None:
+        return {
+            "active": False,
+            "start_time": None,
+            "end_time": None,
+            "last_display_refresh_time": None,
+            "items_count": 0,
+        }
+    start_time = datetime.fromtimestamp(float(session["start_time"]))
     return {
-        "active": status_dict.get("active", False),
-        "start_time": parse_time_str(status_dict.get("start_time", "")),
-        "end_time": parse_time_str(status_dict.get("end_time", "")),
-        "last_display_refresh_time": parse_time_str(status_dict.get("last_display_refresh_time", "")),
-        "items_count": status_dict.get("items_count", 0)
+        "active": True,
+        "start_time": start_time,
+        "end_time": datetime.fromtimestamp(float(session["end_time"])),
+        "last_display_refresh_time": start_time,
+        "items_count": int(session["items_count"]),
     }
-
-
-def set_auction_status(active: bool, start_time: Optional[datetime] = None, end_time: Optional[datetime] = None, last_display_refresh_time: Optional[datetime] = None, items_count: int = 0):
-    """
-    更新拍卖状态。
-    时间参数应为 datetime 对象或 None。
-    """
-    def format_time_to_str(dt: Optional[datetime]) -> str:
-        return dt.strftime("%Y%m%d%H%M%S") if dt else ""
-
-    status = {
-        "active": active,
-        "start_time": format_time_to_str(start_time), # 存储为 YYYYMMDDhhmmss 格式字符串
-        "end_time": format_time_to_str(end_time),     # 存储为 YYYYMMDDhhmmss 格式字符串
-        "last_display_refresh_time": format_time_to_str(last_display_refresh_time), # 存储为 YYYYMMDDhhmmss 格式字符串
-        "items_count": items_count
-    }
-    auction_config.set_auction_config_value("auction_status", status)
-    auction_config.persist_auction_status(status)
-
-
-def _restore_auction_status_from_disk() -> bool:
-    """启动时把落盘场次写回内存（不再写盘）。"""
-    persisted = auction_config.load_persisted_auction_status()
-    if not persisted:
-        return False
-    cfg = auction_config.get_auction_config()
-    cfg["auction_status"] = persisted
-    auction_config.save_config(cfg)
-    return True
 
 
 def _safe_auction_int(value: Any, default: int = 0) -> int:
