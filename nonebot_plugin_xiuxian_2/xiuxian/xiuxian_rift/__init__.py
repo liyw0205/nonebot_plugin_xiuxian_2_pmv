@@ -1,3 +1,4 @@
+import hashlib
 import random
 import time
 from datetime import datetime, timedelta
@@ -57,6 +58,78 @@ group_rift = {}  # dict
 config = get_rift_config() # 获取秘境配置
 groups = config['open']  # list
 
+
+def _event_id(event) -> str:
+    return str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+
+
+def _scheduled_generation_operation_id(now: datetime | None = None) -> str:
+    now = now or datetime.now()
+    slot = 0 if now.hour < 12 else 12
+    return f"rift-generation:scheduled:{now:%Y-%m-%d}:{slot:02d}"
+
+
+def _build_fixed_rift(operation_id: str) -> Rift:
+    """Roll the complete rift plan deterministically for an operation."""
+    random_state = random.getstate()
+    seed = int.from_bytes(
+        hashlib.sha256(str(operation_id).encode("utf-8")).digest(), "big"
+    )
+    try:
+        random.seed(seed)
+        rift = Rift()
+        rift.name = get_rift_type()
+        rift.rank = config['rift'][rift.name]['rank']
+        rift.time = config['rift'][rift.name]['time']
+        assign_rift_trial_node(rift)
+        return rift
+    finally:
+        random.setstate(random_state)
+
+
+def _rift_world_snapshot(rift: Rift) -> dict:
+    value = build_rift_data(rift)
+    value["l_user_id"] = [str(user_id) for user_id in rift.l_user_id]
+    return value
+
+
+def _rift_from_world_state(state) -> Rift:
+    rift = Rift()
+    for field_name, value in state.rift_data.items():
+        setattr(rift, field_name, value)
+    rift.l_user_id = list(state.participants)
+    return rift
+
+
+def _sync_world_projection(state, *, save_legacy=True) -> Rift:
+    rift = _rift_from_world_state(state)
+    group_rift[state.rift_key] = rift
+    if save_legacy:
+        try:
+            old_rift_info.save_rift(group_rift)
+        except Exception as exc:
+            logger.error(f"同步秘境全局兼容缓存失败: {exc}")
+    return rift
+
+
+def _load_current_rift():
+    state = rift_entry_service.get_current(GLOBAL_RIFT_KEY)
+    if state is None:
+        return None, None
+    return state, _sync_world_projection(state, save_legacy=False)
+
+
+def _sync_entry_projection(user_id, entry) -> None:
+    state = rift_entry_service.get_current(GLOBAL_RIFT_KEY)
+    if state is not None:
+        _sync_world_projection(state)
+    try:
+        save_rift_data(user_id, entry.rift_data)
+    except Exception as exc:
+        logger.error(f"同步用户 {user_id} 秘境兼容缓存失败: {exc}")
+
 my_rift_count = on_command("秘境次数", aliases={"秘境进度"}, priority=7, block=True)
 explore_rift = on_command("探索秘境", priority=5, block=True)
 rift_help = on_command("秘境帮助", priority=6, block=True)
@@ -109,15 +182,23 @@ __rift_help_md__ = f"""
 @DRIVER.on_startup
 async def read_rift_():
     """读取历史秘境数据"""
-    global group_rift
-    group_rift.update(old_rift_info.read_rift_info())
-    logger.opt(colors=True).info(f"<green>历史rift数据读取成功</green>")
+    legacy = old_rift_info.read_rift_info()
+    state = rift_entry_service.get_current(GLOBAL_RIFT_KEY)
+    if state is None and GLOBAL_RIFT_KEY in legacy:
+        state = rift_entry_service.bootstrap(
+            GLOBAL_RIFT_KEY,
+            _rift_world_snapshot(legacy[GLOBAL_RIFT_KEY]),
+        )
+    if state is not None:
+        _sync_world_projection(state)
+    logger.opt(colors=True).info("<green>历史rift数据读取成功</green>")
 
 @DRIVER.on_shutdown
 async def save_rift_():
     """保存秘境数据"""
-    global group_rift
-    old_rift_info.save_rift(group_rift)
+    state = rift_entry_service.get_current(GLOBAL_RIFT_KEY)
+    if state is not None:
+        _sync_world_projection(state)
     logger.opt(colors=True).info(f"<green>rift数据已保存</green>")
 
 # 定时任务生成秘境
@@ -125,7 +206,6 @@ async def scheduled_rift_generation():
     """
     定时任务：每天0,12点触发秘境生成
     """
-    global group_rift
     await generate_rift_for_group()   
     
     logger.info("秘境定时生成完成")
@@ -133,18 +213,24 @@ async def scheduled_rift_generation():
       
 async def generate_rift_for_group():
     """为群组生成新的秘境"""
-    rift = Rift()
-    rift.name = get_rift_type()
-    rift.rank = config['rift'][rift.name]['rank']
-    rift.time = config['rift'][rift.name]['time']
-    assign_rift_trial_node(rift)
-    group_rift[GLOBAL_RIFT_KEY] = rift
+    operation_id = _scheduled_generation_operation_id()
+    rift = _build_fixed_rift(operation_id)
+    result = rift_entry_service.generate(
+        operation_id,
+        GLOBAL_RIFT_KEY,
+        _rift_world_snapshot(rift),
+    )
+    if not result.succeeded or result.state is None:
+        logger.warning(f"秘境生成状态冲突: {result.status}")
+        return result
+    rift = _sync_world_projection(result.state)
     msg = build_rift_appear_msg(rift)
     logger.info(msg)
-    old_rift_info.save_rift(group_rift)
-    for notify_group_id in groups:
-        bot = get_bot()
-        await delivery_service.send_to_group(bot, notify_group_id, msg)
+    if result.status == "applied":
+        for notify_group_id in groups:
+            bot = get_bot()
+            await delivery_service.send_to_group(bot, notify_group_id, msg)
+    return result
 
 
 def _normalise_rift_target_node(node_info: dict) -> dict:
@@ -233,10 +319,7 @@ def check_rift_target_position(user_id: int, rift: Rift) -> tuple[bool, str]:
     """普通探索需要玩家位于秘境绑定的任一试炼节点。"""
     target_nodes = get_rift_target_nodes(rift)
     if not target_nodes:
-        assign_rift_trial_node(rift)
-        target_nodes = get_rift_target_nodes(rift)
-        if not target_nodes:
-            return True, ""
+        return True, ""
 
     current = get_player_current_position(str(user_id))
     target_positions = {
@@ -363,14 +446,18 @@ async def rift_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 async def create_rift(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """生成秘境（手动触发，通常由管理员使用）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    rift = Rift()
-    rift.name = get_rift_type()
-    rift.rank = config['rift'][rift.name]['rank']
-    rift.time = config['rift'][rift.name]['time']
-    assign_rift_trial_node(rift)
-    group_rift[GLOBAL_RIFT_KEY] = rift
+    operation_id = f"rift-generation:manual:{_event_id(event) or time.time_ns()}"
+    rift = _build_fixed_rift(operation_id)
+    result = rift_entry_service.generate(
+        operation_id,
+        GLOBAL_RIFT_KEY,
+        _rift_world_snapshot(rift),
+    )
+    if not result.succeeded or result.state is None:
+        await handle_send(bot, event, "秘境生成状态已变化，本次未覆盖当前秘境。")
+        return
+    rift = _sync_world_projection(result.state)
     msg = build_rift_appear_msg(rift)
-    old_rift_info.save_rift(group_rift)
     await handle_send(bot, event, msg, md_type="秘境", k1="探索", v1="探索秘境", k2="结算", v2="秘境结算", k3="帮助", v3="秘境帮助")
     return
 
@@ -378,7 +465,6 @@ async def create_rift(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 @explore_rift.handle(parameterless=[Cooldown(stamina_cost=6)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """探索秘境"""
-    group_rift.update(old_rift_info.read_rift_info()) # 确保秘境数据最新
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -390,13 +476,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="秘境帮助", v3="秘境帮助")
         await explore_rift.finish()
     else:
-        try:
-            current_rift = group_rift[GLOBAL_RIFT_KEY]
-        except Exception:
+        current_state, current_rift = _load_current_rift()
+        if current_state is None or current_rift is None:
             msg = '野外秘境尚未生成，请道友耐心等待!'
             await handle_send(bot, event, msg)
             await explore_rift.finish()
-        if user_id in current_rift.l_user_id:
+        if str(user_id) in current_rift.l_user_id:
             msg = '道友已经参加过本次秘境啦，请把机会留给更多的道友！'
             await handle_send(bot, event, msg)
             await explore_rift.finish()
@@ -413,33 +498,40 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
         can_reach_rift, position_msg = check_rift_target_position(user_id, current_rift)
         if not can_reach_rift:
-            old_rift_info.save_rift(group_rift)
             await handle_send(bot, event, position_msg)
             await explore_rift.finish()
 
         rift_data = build_rift_data(current_rift)
-        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-        entry = rift_entry_service.enter(f"rift-entry:{event_id or time.time_ns()}:{user_id}", user_id, GLOBAL_RIFT_KEY, rift_data, rift_data["time"])
+        event_id = _event_id(event)
+        entry = rift_entry_service.enter(
+            f"rift-entry:{event_id or time.time_ns()}:{user_id}",
+            user_id,
+            GLOBAL_RIFT_KEY,
+            rift_data,
+            rift_data["time"],
+            expected_generation_id=current_state.generation_id,
+            expected_revision=current_state.revision,
+        )
         if not entry.succeeded:
+            if entry.status == "already_joined":
+                await handle_send(bot, event, "道友已经参加过本次秘境啦，请把机会留给更多的道友！")
+                await explore_rift.finish()
             await handle_send(bot, event, "秘境进入状态已变化，请稍后重试。")
             await explore_rift.finish()
-        current_rift.l_user_id.append(user_id)
+        _sync_entry_projection(user_id, entry)
         target_msg = ""
         target_nodes_msg = format_rift_target_nodes(current_rift)
         if target_nodes_msg:
             target_msg = f"\n秘境可探索地点：\n{target_nodes_msg}"
         msg = f"进入秘境：{current_rift.name}，探索需要花费时间：{current_rift.time}分钟！{target_msg}"
-        save_rift_data(user_id, rift_data)
-        old_rift_info.save_rift(group_rift)
         await handle_send(bot, event, msg, md_type="秘境", k1="结算", v1="秘境结算", k2="加速", v2="道具使用 秘境加速券", k3="大加速", v3="道具使用 秘境大加速券", k4="钥匙", v4="道具使用 秘境钥匙")
         await explore_rift.finish()
 
 async def use_rift_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
     """使用秘藏令"""
     async def _check_and_enter_rift(user_id, user_info, bot, event):
-        try:
-            current_rift = group_rift[GLOBAL_RIFT_KEY]
-        except KeyError:
+        current_state, current_rift = _load_current_rift()
+        if current_state is None or current_rift is None:
             return False, '野外秘境尚未生成，请道友耐心等待!'
                 
         user_rank = convert_rank(user_info["level"])[0]
@@ -448,9 +540,8 @@ async def use_rift_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         if user_rank > required_rank_for_check:
             return False, f"秘境凶险万分，道友的境界不足，无法进入秘境：{current_rift.name}，请道友提升境界后再来！"
         
-        return True, current_rift
+        return True, (current_state, current_rift)
 
-    group_rift.update(old_rift_info.read_rift_info()) # 确保秘境数据最新
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -467,22 +558,32 @@ async def use_rift_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
             await handle_send(bot, event, check_msg_or_rift)
             return
 
-        current_rift = check_msg_or_rift # 此时 check_msg_or_rift 是 Rift 对象
+        current_state, current_rift = check_msg_or_rift
 
         rift_data = build_rift_data(current_rift)
-        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-        entry = rift_entry_service.enter(f"rift-ticket-entry:{event_id or time.time_ns()}:{user_id}", user_id, GLOBAL_RIFT_KEY, rift_data, rift_data["time"], item_id)
+        event_id = _event_id(event)
+        entry = rift_entry_service.enter(
+            f"rift-ticket-entry:{event_id or time.time_ns()}:{user_id}",
+            user_id,
+            GLOBAL_RIFT_KEY,
+            rift_data,
+            rift_data["time"],
+            item_id,
+            expected_generation_id=current_state.generation_id,
+            expected_revision=current_state.revision,
+        )
         if not entry.succeeded:
+            if entry.status == "already_joined":
+                await handle_send(bot, event, "道友已经参加过本次秘境啦，请把机会留给更多的道友！")
+                return
             await handle_send(bot, event, "秘藏令或秘境状态已变化，请稍后重试。")
             return
-        current_rift.l_user_id.append(user_id)
+        _sync_entry_projection(user_id, entry)
         target_msg = ""
         target_nodes_msg = format_rift_target_nodes(current_rift)
         if target_nodes_msg:
             target_msg = f"\n秘藏令已绕过位置要求。\n秘境可探索地点：\n{target_nodes_msg}"
         msg = f"进入秘境：{current_rift.name}，探索需要花费时间：{current_rift.time}分钟！{target_msg}"
-        save_rift_data(user_id, rift_data)
-        old_rift_info.save_rift(group_rift)
         await handle_send(bot, event, msg, md_type="秘境", k1="结算", v1="秘境结算", k2="加速", v2="道具使用 秘境加速券", k3="大加速", v3="道具使用 秘境大加速券", k4="钥匙", v4="道具使用 秘境钥匙")
         return
 
