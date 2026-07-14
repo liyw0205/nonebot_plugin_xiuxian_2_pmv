@@ -8,6 +8,7 @@ from pathlib import Path
 from threading import RLock
 
 from ..xiuxian_utils import db_backend
+from .state_service import normalize_weekly_purchases
 
 
 @dataclass(frozen=True)
@@ -22,19 +23,6 @@ class TowerPurchaseResult:
     @property
     def succeeded(self) -> bool:
         return self.status in {"applied", "duplicate"}
-
-
-
-def normalize_weekly_purchases(value, today=None):
-    today = today or date.today()
-    weekly = {str(key): item for key, item in dict(value or {}).items()}
-    try:
-        reset = date.fromisoformat(str(weekly.get("_last_reset", "")))
-    except ValueError:
-        reset = None
-    if reset is None or reset.isocalendar()[:2] != today.isocalendar()[:2]:
-        return {"_last_reset": today.isoformat()}
-    return weekly
 
 class TowerPurchaseService:
     """Exchange tower score for inventory items in one transaction."""
@@ -58,6 +46,7 @@ class TowerPurchaseService:
         expected_weekly_purchases,
         max_goods_num,
         bind_flag=1,
+        today=None,
     ) -> TowerPurchaseResult:
         operation_id = str(operation_id).strip()
         user_id = str(user_id)
@@ -70,7 +59,8 @@ class TowerPurchaseService:
         expected_score = int(expected_score)
         max_goods_num = int(max_goods_num)
         bind_flag = 1 if int(bind_flag) == 1 else 0
-        weekly = normalize_weekly_purchases(expected_weekly_purchases)
+        today = today or date.today()
+        weekly = normalize_weekly_purchases(expected_weekly_purchases, today)
         if not operation_id or quantity <= 0 or min(item_id, unit_cost, weekly_limit, expected_score, max_goods_num) < 0:
             raise ValueError("valid operation, item, quantity and purchase limits are required")
         payload = json.dumps(
@@ -125,12 +115,7 @@ class TowerPurchaseService:
                 if tower is None:
                     conn.rollback()
                     return result("state_changed")
-                try:
-                    current_weekly = json.loads(str(tower[1])) if tower[1] else {}
-                except (TypeError, ValueError):
-                    conn.rollback()
-                    return result("state_changed")
-                current_weekly = normalize_weekly_purchases(current_weekly)
+                current_weekly = normalize_weekly_purchases(tower[1], today)
                 if int(tower[0]) != expected_score or current_weekly != weekly:
                     conn.rollback()
                     return result("state_changed")

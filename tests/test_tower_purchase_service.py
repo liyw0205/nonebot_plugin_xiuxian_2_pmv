@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
 import nonebot
@@ -39,7 +40,7 @@ class TowerPurchaseServiceTests(unittest.TestCase):
     def purchase(self, operation_id="purchase", **overrides):
         values = dict(quantity=2, unit_cost=10, weekly_limit=5, expected_score=100, weekly=self.weekly, max_goods=99)
         values.update(overrides)
-        return self.service.purchase(operation_id, "user", 1, "item", "type", values["quantity"], values["unit_cost"], values["weekly_limit"], values["expected_score"], values["weekly"], values["max_goods"], 1)
+        return self.service.purchase(operation_id, "user", 1, "item", "type", values["quantity"], values["unit_cost"], values["weekly_limit"], values["expected_score"], values["weekly"], values["max_goods"], 1, values.get("today"))
 
     def state(self):
         with db_backend.connection(self.player_database) as conn:
@@ -78,11 +79,11 @@ class TowerPurchaseServiceTests(unittest.TestCase):
         stale = {"_last_reset": "2020-01-01", "1": 5}
         with db_backend.transaction(self.player_database) as conn:
             conn.execute("UPDATE tower SET weekly_purchases=%s WHERE user_id=%s", (json.dumps(stale), "user"))
-        result = self.purchase("new-week", weekly=stale)
+        result = self.purchase("new-week", weekly=stale, today=date(2026, 7, 20))
         self.assertEqual((result.status, result.purchased), ("applied", 2))
         score, weekly, inventory = self.state()
         self.assertEqual((score, weekly["1"], inventory), (80, 2, (2, 2)))
-        self.assertNotEqual(weekly["_last_reset"], "2020-01-01")
+        self.assertEqual(weekly["_last_reset"], "2026-07-20")
 
     def test_week_normalization_is_stable_within_current_week(self) -> None:
         self.assertEqual(normalize_weekly_purchases(self.weekly), self.weekly)
