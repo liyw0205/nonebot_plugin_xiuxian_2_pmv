@@ -13,6 +13,7 @@ from ..xiuxian_utils import db_backend
 @dataclass(frozen=True)
 class TrainingEventResult:
     status: str
+    message: str = ""
 
     @property
     def succeeded(self):
@@ -30,6 +31,31 @@ class TrainingEventService:
     def _value(key, value):
         return json.dumps(value, ensure_ascii=False, sort_keys=True) if key == "weekly_purchases" else str(value)
 
+    @classmethod
+    def _state_matches(cls, current, expected_state):
+        for key, actual in zip(cls._FIELDS, current):
+            expected = expected_state[key]
+            if key == "weekly_purchases":
+                try:
+                    if json.loads(str(actual)) == expected:
+                        continue
+                except (TypeError, ValueError):
+                    pass
+            elif str(actual) == str(expected):
+                continue
+            return False
+        return True
+
+    @staticmethod
+    def _stored_result(payload, user_id):
+        try:
+            stored = json.loads(str(payload))
+            if str(stored[0]) != user_id or not isinstance(stored[2], dict):
+                return TrainingEventResult("operation_conflict")
+            return TrainingEventResult("duplicate", str(stored[2].get("last_event", "")))
+        except (IndexError, TypeError, ValueError):
+            return TrainingEventResult("operation_conflict")
+
     def apply(self, operation_id, user_id, expected_state, state, expected_user, stone_delta=0,
               exp_delta=0, hp_delta=0, items=(), max_goods_num=0):
         operation_id, user_id = str(operation_id).strip(), str(user_id)
@@ -43,13 +69,13 @@ class TrainingEventService:
                 conn.execute("CREATE TABLE IF NOT EXISTS training_event_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL)")
                 old = conn.execute("SELECT payload FROM training_event_operations WHERE operation_id=%s", (operation_id,)).fetchone()
                 if old:
-                    conn.rollback(); return TrainingEventResult("duplicate" if old[0] == payload else "operation_conflict")
+                    conn.rollback(); return self._stored_result(old[0], user_id)
                 user = conn.execute("SELECT stone,exp,hp,mp FROM user_xiuxian WHERE user_id=%s", (user_id,)).fetchone()
                 wanted = tuple(int(expected_user[k]) for k in ("stone", "exp", "hp", "mp"))
                 if user is None or tuple(map(int, user)) != wanted:
                     conn.rollback(); return TrainingEventResult("state_changed")
                 current = conn.execute("SELECT progress,last_time,points,completed,max_progress,last_event,weekly_purchases FROM player_data.training WHERE user_id=%s", (user_id,)).fetchone()
-                if current is None or tuple(str(x) for x in current) != tuple(self._value(k, expected_state[k]) for k in self._FIELDS):
+                if current is None or not self._state_matches(current, expected_state):
                     conn.rollback(); return TrainingEventResult("state_changed")
                 for item_id, _, _, amount in rewards:
                     row = conn.execute("SELECT COALESCE(goods_num,0) FROM back WHERE user_id=%s AND goods_id=%s", (user_id, item_id)).fetchone()
@@ -73,7 +99,7 @@ class TrainingEventService:
                 except db_backend.Error: pass
                 conn.execute('INSERT INTO player_data.statistics(user_id,"历练次数") VALUES (%s,1) ON CONFLICT(user_id) DO UPDATE SET "历练次数"=COALESCE(statistics."历练次数",0)+1', (user_id,))
                 conn.execute("INSERT INTO training_event_operations VALUES (%s,%s)", (operation_id, payload)); conn.commit()
-                return TrainingEventResult("applied")
+                return TrainingEventResult("applied", str(state.get("last_event", "")))
             except Exception:
                 conn.rollback(); raise
 

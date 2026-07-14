@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 from datetime import datetime, timedelta
 from ..on_compat import on_command, on_regex
+from nonebot.log import logger
 from nonebot.params import CommandArg, RegexGroup
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 from nonebot.permission import SUPERUSER
@@ -103,7 +104,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 开始历练 - 随机选择事件类型
     event_id = getattr(event, "message_id", None)
     operation_id = f"training-completion:{event_id}:{user_id}" if event_id else f"training-completion:{time.time_ns()}:{user_id}"
-    result = make_choice(user_id, operation_id)
+    try:
+        result = make_choice(user_id, operation_id)
+    except Exception:
+        logger.exception("历练事件事务失败 user_id={}", user_id)
+        result = "历练事件结算失败，请稍后重试。"
     
     msg = f"{result}"
     await handle_send(bot, event, msg, md_type="历练", k1="开始历练", v1="开始历练", k2="历练状态", v2="历练状态", k3="商店", v3="历练商店")
@@ -265,11 +270,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"training-purchase:{event_id}:{user_id}" if event_id else f"training-purchase:{time.time_ns()}:{user_id}"
-    purchase_result = training_purchase_service.purchase(
-        operation_id, user_id, shop_id, item_info["name"], item_info["type"], quantity,
-        item_data["cost"], item_data["weekly_limit"], training_info["points"],
-        training_info["weekly_purchases"], XiuConfig().max_goods_num, 1,
-    )
+    try:
+        purchase_result = training_purchase_service.purchase(
+            operation_id, user_id, shop_id, item_info["name"], item_info["type"], quantity,
+            item_data["cost"], item_data["weekly_limit"], training_info["points"],
+            training_info["weekly_purchases"], XiuConfig().max_goods_num, 1,
+        )
+    except Exception:
+        logger.exception("历练兑换事务失败 user_id={} item_id={}", user_id, shop_id)
+        await handle_send(bot, event, "历练兑换失败，请稍后重试。", md_type="历练")
+        await training_buy.finish()
     if purchase_result.status == "points_insufficient":
         await handle_send(bot, event, "成就点状态已变化，当前成就点不足！", md_type="历练")
         await training_buy.finish()
@@ -462,7 +472,9 @@ def make_choice(user_id, operation_id):
     )
     if not settlement.succeeded:
         return "历练事件结算失败，请稍后重试。"
-    
+    if settlement.status == "duplicate":
+        return settlement.message
+
     return training_info["last_event"]
 
 def training_reset_limits(operation_id, operator_id, *, chunk_size=500):

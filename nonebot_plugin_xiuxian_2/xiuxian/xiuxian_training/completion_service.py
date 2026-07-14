@@ -38,6 +38,18 @@ class TrainingCompletionService:
             raise ValueError("valid operation, training state and rewards are required")
         def state_value(key, value):
             return json.dumps(value, ensure_ascii=False, sort_keys=True) if key == "weekly_purchases" else str(value)
+        def state_matches(current):
+            for key, actual in zip(self._STATE_FIELDS, current):
+                if key == "weekly_purchases":
+                    try:
+                        if json.loads(str(actual)) == expected[key]:
+                            continue
+                    except (TypeError, ValueError):
+                        pass
+                elif str(actual) == str(expected[key]):
+                    continue
+                return False
+            return True
         payload = json.dumps([user_id, expected, updated, stone, exp, rewards, max_goods_num], ensure_ascii=True, sort_keys=True, default=str)
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False
@@ -54,7 +66,7 @@ class TrainingCompletionService:
                     conn.rollback()
                     return TrainingCompletionResult("user_missing")
                 current = conn.execute("SELECT progress,last_time,points,completed,max_progress,last_event,weekly_purchases FROM player_data.training WHERE user_id=%s", (user_id,)).fetchone()
-                if current is None or {key: str(value) for key, value in zip(self._STATE_FIELDS, current)} != {key: state_value(key, expected[key]) for key in self._STATE_FIELDS}:
+                if current is None or not state_matches(current):
                     conn.rollback()
                     return TrainingCompletionResult("state_changed")
                 for item_id, _, _, amount in rewards:

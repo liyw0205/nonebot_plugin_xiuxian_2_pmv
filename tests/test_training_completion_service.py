@@ -43,3 +43,15 @@ class TrainingCompletionServiceTests(unittest.TestCase):
         self.assertEqual(self.service.complete("full", "u", self.expected, self.updated, 3, 4, [{"id": 1, "name": "item", "type": "type", "amount": 1}], 99).status, "inventory_full")
         with db_backend.connection(self.player) as conn:
             self.assertEqual(tuple(conn.execute("SELECT progress,completed FROM training").fetchone()), ("11", "0"))
+
+    def test_compact_weekly_json_matches_semantic_snapshot(self):
+        weekly = {"_last_reset": "2026-07-14", "1999": 1}
+        with db_backend.transaction(self.player) as conn:
+            conn.execute(
+                "UPDATE training SET weekly_purchases=%s WHERE user_id=%s",
+                ('{"1999":1,"_last_reset":"2026-07-14"}', "u"),
+            )
+        expected = dict(self.expected, weekly_purchases=weekly)
+        updated = dict(self.updated, weekly_purchases=weekly)
+        result = self.service.complete("compact", "u", expected, updated, 3, 4, [], 99)
+        self.assertEqual(result.status, "applied")

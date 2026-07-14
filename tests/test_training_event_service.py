@@ -32,7 +32,41 @@ class TrainingEventServiceTests(unittest.TestCase):
         duplicate = self.service.apply("op", "u", self.expected, state, {"stone":100,"exp":200,"hp":80,"mp":40}, 10, 20, 0, [{"id":1,"name":"药","type":"药材","amount":1}], 99)
         stale = self.service.apply("stale", "u", self.expected, state, {"stone":100,"exp":200,"hp":80,"mp":40}, 1, 0, 0, [], 99)
         self.assertEqual((first.status, duplicate.status, stale.status), ("applied", "duplicate", "state_changed"))
+        self.assertEqual((first.message, duplicate.message), ("reward", "reward"))
         with db_backend.connection(self.game) as conn: self.assertEqual(tuple(conn.execute("SELECT stone,exp,hp FROM user_xiuxian").fetchone()), (110,220,80))
+
+    def test_compact_weekly_json_matches_semantic_snapshot(self):
+        with db_backend.transaction(self.player) as conn:
+            conn.execute(
+                "UPDATE training SET weekly_purchases=%s WHERE user_id=%s",
+                ('{"_last_reset":"2026-07-14"}', "u"),
+            )
+        expected = dict(self.expected, weekly_purchases={"_last_reset": "2026-07-14"})
+        state = dict(expected, progress=1, last_event="compact")
+        result = self.service.apply(
+            "compact", "u", expected, state,
+            {"stone": 100, "exp": 200, "hp": 80, "mp": 40},
+        )
+        self.assertEqual((result.status, result.message), ("applied", "compact"))
+
+    def test_same_operation_replays_first_result_even_when_random_payload_differs(self):
+        first_state = dict(self.expected, progress=1, last_event="first")
+        self.assertEqual(
+            self.service.apply(
+                "replay", "u", self.expected, first_state,
+                {"stone": 100, "exp": 200, "hp": 80, "mp": 40},
+                10,
+            ).status,
+            "applied",
+        )
+        replay = self.service.apply(
+            "replay", "u", dict(first_state), dict(first_state, last_event="other"),
+            {"stone": 110, "exp": 200, "hp": 80, "mp": 40},
+            999,
+        )
+        self.assertEqual((replay.status, replay.message), ("duplicate", "first"))
+        with db_backend.connection(self.game) as conn:
+            self.assertEqual(conn.execute("SELECT stone FROM user_xiuxian").fetchone()[0], 110)
 
     def test_failure_rolls_back(self):
         with db_backend.transaction(self.game) as conn:

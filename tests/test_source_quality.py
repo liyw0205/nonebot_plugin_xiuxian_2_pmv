@@ -1766,15 +1766,15 @@ class SourceQualityTests(unittest.TestCase):
         source = (root / "__init__.py").read_text(encoding="utf-8")
         start = source.index("def make_choice")
         handler = source[start:source.index("def training_reset_limits", start)]
-        self.assertIn("training_completion_service.complete(", handler)
+        self.assertIn("training_event_service.apply(", handler)
         completion = handler[handler.index("if training_info[\"progress\"] >= 12:"):]
         self.assertNotIn("sql_message.update_exp(", completion)
         self.assertNotIn("sql_message.update_ls(", completion)
         self.assertNotIn("sql_message.send_back(", completion)
-        service = (root / "completion_service.py").read_text(encoding="utf-8")
+        service = (root / "event_service.py").read_text(encoding="utf-8")
         self.assertIn("ATTACH DATABASE", service)
         self.assertIn("BEGIN IMMEDIATE", service)
-        self.assertIn("training_completion_operations", service)
+        self.assertIn("training_event_operations", service)
 
     def test_sect_rename_uses_transactional_service(self) -> None:
         source = (
