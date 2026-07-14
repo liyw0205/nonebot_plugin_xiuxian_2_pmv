@@ -1958,8 +1958,11 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 get_exp = 1
                 msg = "修为已近当前境界上限，本次所得修为收束为1点！\n"
             sect_stone = int(userstask[user_id]['任务内容']['sect'])
+            task_operation_id = _sect_operation_id(
+                event, "task_complete", user_id
+            )
             settlement = sect_membership_service.settle_task(
-                _sect_operation_id(event, "task_complete", user_id),
+                task_operation_id,
                 user_id,
                 sect_id,
                 userstask[user_id]["period"],
@@ -1985,6 +1988,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                     1,
                     {
                         "source": "sect", "action": "task_complete", "skip_statistics": True,
+                        "trace_id": task_operation_id,
                         "sect_id": sect_id, "exp_delta": get_exp,
                         "sect_contribution_delta": int(sect_stone), "sect_scale_delta": sect_stone,
                         "sect_materials_delta": sect_stone * 10,
@@ -2022,8 +2026,11 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 get_exp = 1
                 msg = "修为已近当前境界上限，本次所得修为收束为1点！\n"
             sect_stone = int(userstask[user_id]['任务内容']['sect'])
+            task_operation_id = _sect_operation_id(
+                event, "task_complete", user_id
+            )
             settlement = sect_membership_service.settle_task(
-                _sect_operation_id(event, "task_complete", user_id),
+                task_operation_id,
                 user_id,
                 sect_id,
                 userstask[user_id]["period"],
@@ -2049,6 +2056,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                     1,
                     {
                         "source": "sect", "action": "task_complete", "skip_statistics": True,
+                        "trace_id": task_operation_id,
                         "sect_id": sect_id, "stone_delta": -int(costls), "exp_delta": get_exp,
                         "sect_contribution_delta": int(sect_stone), "sect_scale_delta": sect_stone,
                         "sect_materials_delta": sect_stone * 10,

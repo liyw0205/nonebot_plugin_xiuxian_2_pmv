@@ -955,6 +955,11 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
         user_id,
         f"[虚神界出关] 闭关{exp_time}分钟，祝福{int(exp_day_cost)}分钟，获得修为{number_to(total_exp)}"
     )
-    record_task_progress(user_id, "xu_out_closing", exp_time)
+    record_task_progress(
+        user_id,
+        "xu_out_closing",
+        exp_time,
+        operation_id=f"task-progress:{operation_id}",
+    )
     await handle_send(bot, event, msg, md_type="虚神界", k1="闭关", v1="虚神界闭关", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
     await impart_pk_out_closing.finish()

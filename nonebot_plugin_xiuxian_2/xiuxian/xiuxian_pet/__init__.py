@@ -249,68 +249,6 @@ def _format_travel_scenes():
     return "\n".join(lines)
 
 
-def _grant_pet_travel_rewards(user_id: str, result: dict):
-    lines = []
-    stone = int(result.get("stone", 0) or 0)
-    exp = int(result.get("exp", 0) or 0)
-
-    if stone > 0:
-        sql_message.update_ls(user_id, stone, 1)
-        update_statistics_value(user_id, "灵石获取", increment=stone)
-        lines.append(f"灵石：{number_to(stone)}")
-
-    if exp > 0:
-        sql_message.update_exp(user_id, exp)
-        sql_message.update_power2(user_id)
-        update_statistics_value(user_id, "宠物游历修为获取", increment=exp)
-        lines.append(f"修为：{number_to(exp)}")
-
-    for reward in result.get("items", []) or []:
-        item_id = int(reward.get("id", 0) or 0)
-        amount = int(reward.get("amount", 0) or 0)
-        if item_id <= 0 or amount <= 0:
-            continue
-        item_info = items.get_data_by_item_id(item_id)
-        if not item_info:
-            continue
-        sql_message.send_back(
-            user_id,
-            item_id,
-            item_info.get("name", f"未知物品{item_id}"),
-            item_info.get("type", "道具"),
-            amount,
-            1,
-        )
-        lines.append(f"{item_info.get('name', f'未知物品{item_id}')} x{amount}")
-
-    update_statistics_value(user_id, "宠物游历次数")
-    update_statistics_value(user_id, "宠物游历时长", increment=int(result.get("travel", {}).get("duration_hours", 0) or 0))
-    safe_record_game_event(
-        user_id,
-        "pet_travel_claim",
-        1,
-        {
-            "source": "pet",
-            "action": "travel_claim",
-            "stone_delta": stone,
-            "exp_delta": exp,
-            "item_delta": [
-                {
-                    "id": reward.get("id"),
-                    "amount": reward.get("amount", 0),
-                }
-                for reward in result.get("items", []) or []
-            ],
-            "detail": {
-                "duration_hours": int(result.get("travel", {}).get("duration_hours", 0) or 0),
-                "scene": result.get("travel", {}).get("scene"),
-                "pet_uid": result.get("travel", {}).get("pet_uid"),
-            },
-        },
-    )
-    return lines
-
-
 def _format_pet_release_refund(pets: list[dict], refund_item: dict, total_refund_count: int):
     refund_name = refund_item.get("name", "一阶天地灵髓")
     total_exp = 0
@@ -913,8 +851,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if claim_result.status == "user_missing":
         await handle_send(bot, event, "未找到道友数据，宠物游历奖励领取失败。")
         return
-    reward_result = dict(result)
-    reward_result["items"] = reward_items
     reward_lines = []
     if claim_result.stone > 0:
         reward_lines.append(f"灵石：{number_to(claim_result.stone)}")
@@ -923,6 +859,28 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     reward_lines.extend(f"{reward['name']} x{reward['amount']}" for reward in reward_items)
     update_statistics_value(user_id, "宠物游历次数")
     update_statistics_value(user_id, "宠物游历时长", increment=int(travel.get("duration_hours", 0) or 0))
+    if claim_result.status == "applied":
+        safe_record_game_event(
+            user_id,
+            "pet_travel_claim",
+            1,
+            {
+                "source": "pet",
+                "action": "travel_claim",
+                "trace_id": operation_id,
+                "stone_delta": claim_result.stone,
+                "exp_delta": claim_result.exp,
+                "item_delta": [
+                    {"id": reward["id"], "amount": reward["amount"]}
+                    for reward in reward_items
+                ],
+                "detail": {
+                    "duration_hours": int(travel.get("duration_hours", 0) or 0),
+                    "scene": travel.get("scene"),
+                    "pet_uid": travel.get("pet_uid"),
+                },
+            },
+        )
     pet = result.get("pet", {}) or {}
     travel = result.get("travel", {}) or {}
     lines = [

@@ -660,8 +660,11 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     new_mp = min(int(user_mes["mp"] or 0) + mp_gain, new_exp)
     new_atk = int(new_exp / 10)
     new_power = int(new_exp * level_rate * realm_rate)
+    closing_operation_id = _blessed_spot_operation_id(
+        event, "closing-settle", user_id
+    )
     result = closing_settlement_service.settle(
-        _blessed_spot_operation_id(event, "closing-settle", user_id),
+        closing_operation_id,
         user_id, create_time, exp, stone_cost, new_hp, new_mp, new_atk, new_power,
     )
     if not result.succeeded:
@@ -681,7 +684,12 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     if stone_cost:
         update_statistics_value(user_id, "闭关灵石消耗", increment=stone_cost)
     log_message(user_id, f"[出关] 闭关{exp_time}分钟，消耗灵石{number_to(stone_cost)}，获得修为{number_to(exp)}")
-    record_task_progress(user_id, "out_closing", exp_time)
+    record_task_progress(
+        user_id,
+        "out_closing",
+        exp_time,
+        operation_id=f"task-progress:{closing_operation_id}",
+    )
     await handle_send(bot, event, msg, md_type="buff", k1="闭关", v1="闭关", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
     await out_closing.finish()
 

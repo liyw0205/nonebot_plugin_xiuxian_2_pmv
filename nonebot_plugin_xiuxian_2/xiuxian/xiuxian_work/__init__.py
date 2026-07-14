@@ -281,7 +281,9 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     if result.status == "applied":
         log_message(user_id, msg)
         update_statistics_value(user_id, "悬赏令结算次数")
-        record_task_progress(user_id, "work")
+        record_task_progress(
+            user_id, "work", operation_id=f"task-progress:{operation_id}"
+        )
     await handle_send(bot, event, msg, md_type="悬赏令", k1="刷新", v1="悬赏令刷新", k2="数据", v2="统计数据", k3="帮助", v3="悬赏令帮助")
     return msg
 

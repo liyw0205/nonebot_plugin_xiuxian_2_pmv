@@ -2320,6 +2320,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             {
                 "source": "map",
                 "action": "mission_complete",
+                "trace_id": operation_id,
                 **reward_meta,
                 "detail": {"mission_type": mission_type, "target": target, "progress": progress},
             },

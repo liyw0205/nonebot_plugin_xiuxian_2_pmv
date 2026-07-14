@@ -677,7 +677,9 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if sign_result.applied:
         log_message(user_id, msg)
         update_statistics_value(user_id, "修仙签到")
-        record_task_progress(user_id, "sign_in")
+        record_task_progress(
+            user_id, "sign_in", operation_id=f"task-progress:{sign_operation_id}"
+        )
     await handle_send(bot, event, msg, md_type="修仙", k1="修仙签到", v1="修仙签到", k2="鸿运", v2="鸿运", k3="帮助", v3="修仙帮助")
     await sign_in.finish()
 

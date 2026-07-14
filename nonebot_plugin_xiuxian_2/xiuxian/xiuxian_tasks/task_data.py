@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+from uuid import uuid4
 
 from nonebot.log import logger
 
@@ -8,8 +9,11 @@ from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import number_to
-from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
 from .reward_claim_service import TaskRewardClaimService
+from .task_progress_event_service import (
+    TaskProgressEventResult,
+    TaskProgressEventService,
+)
 
 
 @dataclass(frozen=True)
@@ -177,12 +181,25 @@ TASKS_BY_CYCLE: dict[str, tuple[TaskDefinition, ...]] = {
 }
 
 
+def _normalize_progress_events(events) -> tuple[tuple[str, int], ...]:
+    normalized = []
+    seen = set()
+    for raw_key, raw_amount in events:
+        key = str(raw_key).strip()
+        amount = max(0, int(raw_amount))
+        if not key or amount <= 0 or key in seen:
+            continue
+        seen.add(key)
+        normalized.append((key, amount))
+    return tuple(normalized)
+
+
 class XiuxianTaskManager:
     table_name = "xiuxian_tasks"
 
     def __init__(self):
-        self.player_data_manager = PlayerDataManager()
         self.items = Items()
+        self.progress_event_service = TaskProgressEventService(get_paths().player_db)
         self.reward_claim_service = TaskRewardClaimService(
             get_paths().game_db, get_paths().player_db
         )
@@ -198,47 +215,6 @@ class XiuxianTaskManager:
             iso_year, iso_week, _ = now.isocalendar()
             return f"{iso_year}-W{iso_week:02d}"
         return now.strftime("%Y-%m-%d")
-
-    @staticmethod
-    def _period_field(cycle: str) -> str:
-        return f"{cycle}_period"
-
-    @staticmethod
-    def _progress_field(cycle: str) -> str:
-        return f"{cycle}_progress"
-
-    @staticmethod
-    def _claimed_field(cycle: str) -> str:
-        return f"{cycle}_claimed"
-
-    def _get_field(self, user_id: str, field: str, default: Any = None):
-        value = self.player_data_manager.get_field_data(user_id, self.table_name, field)
-        return default if value is None else value
-
-    def _write_field(self, user_id: str, field: str, value: Any):
-        self.player_data_manager.update_or_write_data(user_id, self.table_name, field, value)
-
-    def _ensure_cycle_state(self, user_id: str, cycle: str) -> tuple[dict[str, int], list[str], str]:
-        user_id = str(user_id)
-        period_key = self._period_key(cycle)
-        period_field = self._period_field(cycle)
-        progress_field = self._progress_field(cycle)
-        claimed_field = self._claimed_field(cycle)
-        stored_period = self._get_field(user_id, period_field, "")
-
-        if stored_period != period_key:
-            self._write_field(user_id, period_field, period_key)
-            self._write_field(user_id, progress_field, {})
-            self._write_field(user_id, claimed_field, [])
-            return {}, [], period_key
-
-        progress = self._get_field(user_id, progress_field, {})
-        claimed = self._get_field(user_id, claimed_field, [])
-        if not isinstance(progress, dict):
-            progress = {}
-        if not isinstance(claimed, list):
-            claimed = []
-        return progress, [str(item) for item in claimed], period_key
 
     @staticmethod
     def _legacy_reward_text(rewards: dict[str, Any]) -> list[str]:
@@ -264,59 +240,90 @@ class XiuxianTaskManager:
         parts.extend(self._legacy_reward_text(rewards))
         return "、".join(parts) if parts else "无"
 
-    def record_progress(self, user_id: str, event_key: str, amount: int = 1) -> list[str]:
-        user_id = str(user_id)
-        amount = max(0, int(amount))
-        if amount <= 0:
-            return []
-        completed: list[str] = []
+    @staticmethod
+    def _task_updates(events: tuple[tuple[str, int], ...]) -> tuple[dict[str, Any], ...]:
+        updates = []
+        for cycle in ("daily", "weekly"):
+            for task in TASKS_BY_CYCLE[cycle]:
+                amount = sum(
+                    event_amount
+                    for event_key, event_amount in events
+                    if event_key in task.events
+                )
+                if amount > 0:
+                    updates.append(
+                        {
+                            "key": task.key,
+                            "cycle": task.cycle,
+                            "name": task.name,
+                            "target": task.target,
+                            "amount": amount,
+                        }
+                    )
+        return tuple(updates)
 
-        with self.player_data_manager.lock:
-            for cycle, tasks in TASKS_BY_CYCLE.items():
-                matched_tasks = [task for task in tasks if event_key in task.events]
-                if not matched_tasks:
-                    continue
+    def record_progress_event(
+        self,
+        user_id: str,
+        events,
+        operation_id: str | None = None,
+    ) -> TaskProgressEventResult:
+        normalized_events = _normalize_progress_events(events)
+        if not normalized_events:
+            return TaskProgressEventResult("ignored")
+        operation_id = str(operation_id or "").strip()
+        if not operation_id:
+            operation_id = f"task-progress:untracked:{uuid4().hex}"
+        task_updates = self._task_updates(normalized_events)
+        cycles = {task["cycle"] for task in task_updates}
+        periods = {cycle: self._period_key(cycle) for cycle in cycles}
+        return self.progress_event_service.record(
+            operation_id,
+            str(user_id),
+            normalized_events,
+            periods,
+            task_updates,
+        )
 
-                progress, claimed, _ = self._ensure_cycle_state(user_id, cycle)
-                changed = False
-                for task in matched_tasks:
-                    old_value = int(progress.get(task.key, 0) or 0)
-                    new_value = min(old_value + amount, task.target)
-                    if new_value != old_value:
-                        progress[task.key] = new_value
-                        changed = True
-                    if old_value < task.target <= new_value and task.key not in claimed:
-                        completed.append(task.name)
-
-                if changed:
-                    self._write_field(user_id, self._progress_field(cycle), progress)
-
-        return completed
+    def record_progress(
+        self,
+        user_id: str,
+        event_key: str,
+        amount: int = 1,
+        operation_id: str | None = None,
+    ) -> list[str]:
+        return list(
+            self.record_progress_event(
+                user_id, ((event_key, amount),), operation_id
+            ).completed
+        )
 
     def build_status_message(self, user_id: str, cycle: str | None = None) -> str:
         cycles = [cycle] if cycle in TASKS_BY_CYCLE else ["daily", "weekly"]
         title = "修仙任务" if cycle is None else ("每日任务" if cycle == "daily" else "周常任务")
         msg_lines = [f"【{title}】"]
 
-        with self.player_data_manager.lock:
-            for item_cycle in cycles:
-                progress, claimed, period_key = self._ensure_cycle_state(str(user_id), item_cycle)
-                claimed_set = set(claimed)
-                cycle_name = "每日" if item_cycle == "daily" else "周常"
-                msg_lines.append(f"\n{cycle_name}进度：{period_key}")
-                for task in TASKS_BY_CYCLE[item_cycle]:
-                    current = min(int(progress.get(task.key, 0) or 0), task.target)
-                    if task.key in claimed_set:
-                        state = "已领取"
-                    elif current >= task.target:
-                        state = "可领取"
-                    else:
-                        state = "进行中"
-                    msg_lines.append(
-                        f"{state}｜{task.name} {current}/{task.target}\n"
-                        f"  {task.desc}\n"
-                        f"  奖励：{self._reward_text(task.rewards)}"
-                    )
+        states = self.progress_event_service.get_states(
+            str(user_id), {item_cycle: self._period_key(item_cycle) for item_cycle in cycles}
+        )
+        for item_cycle in cycles:
+            progress, claimed, period_key = states[item_cycle]
+            claimed_set = set(claimed)
+            cycle_name = "每日" if item_cycle == "daily" else "周常"
+            msg_lines.append(f"\n{cycle_name}进度：{period_key}")
+            for task in TASKS_BY_CYCLE[item_cycle]:
+                current = min(int(progress.get(task.key, 0) or 0), task.target)
+                if task.key in claimed_set:
+                    state = "已领取"
+                elif current >= task.target:
+                    state = "可领取"
+                else:
+                    state = "进行中"
+                msg_lines.append(
+                    f"{state}｜{task.name} {current}/{task.target}\n"
+                    f"  {task.desc}\n"
+                    f"  奖励：{self._reward_text(task.rewards)}"
+                )
 
         msg_lines.append("\n发送【领取任务奖励】领取已完成奖励。")
         return "\n".join(msg_lines)
@@ -389,16 +396,45 @@ class XiuxianTaskManager:
 task_manager = XiuxianTaskManager()
 
 
-def record_task_progress(user_id: str, event_key: str, amount: int = 1) -> list[str]:
+def record_task_progress_event(
+    user_id: str,
+    events,
+    operation_id: str | None = None,
+) -> list[str]:
+    normalized_events = _normalize_progress_events(events)
+    if not normalized_events:
+        return []
     messages: list[str] = []
+    task_status = "failed"
     try:
-        messages.extend(task_manager.record_progress(user_id, event_key, amount))
+        result = task_manager.record_progress_event(
+            user_id, normalized_events, operation_id
+        )
+        task_status = result.status
+        messages.extend(result.completed)
     except Exception as e:
-        logger.warning(f"记录修仙任务进度失败：user_id={user_id}, event={event_key}, error={e}")
-    try:
-        from ..xiuxian_activity.service import record_activity_event
+        logger.warning(
+            f"记录修仙任务进度失败：user_id={user_id}, events={normalized_events}, error={e}"
+        )
+    if task_status != "operation_conflict":
+        for event_key, amount in normalized_events:
+            try:
+                from ..xiuxian_activity.service import record_activity_event
 
-        messages.extend(record_activity_event(user_id, event_key, amount))
-    except Exception as e:
-        logger.warning(f"记录活动事件失败：user_id={user_id}, event={event_key}, error={e}")
+                messages.extend(record_activity_event(user_id, event_key, amount))
+            except Exception as e:
+                logger.warning(
+                    f"记录活动事件失败：user_id={user_id}, event={event_key}, error={e}"
+                )
     return messages
+
+
+def record_task_progress(
+    user_id: str,
+    event_key: str,
+    amount: int = 1,
+    operation_id: str | None = None,
+) -> list[str]:
+    return record_task_progress_event(
+        user_id, ((event_key, amount),), operation_id
+    )

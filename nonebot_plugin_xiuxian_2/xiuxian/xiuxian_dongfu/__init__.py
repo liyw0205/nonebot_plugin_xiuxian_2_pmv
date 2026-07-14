@@ -874,6 +874,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             {
                 "source": "dongfu",
                 "action": "harvest",
+                "trace_id": operation_id,
                 "item_delta": snapshot["items"],
                 "detail": {"slots": snapshot["slot_numbers"], "failed_slots": failed_slots},
             },

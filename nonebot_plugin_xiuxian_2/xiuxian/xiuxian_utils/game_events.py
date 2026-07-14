@@ -112,7 +112,7 @@ def _record_statistics(user_id: str, event_key: str, amount: int, meta: dict[str
 
 def _record_task_progress(user_id: str, event_key: str, amount: int, meta: dict[str, Any]) -> list[str]:
     try:
-        from ..xiuxian_tasks.task_data import record_task_progress
+        from ..xiuxian_tasks.task_data import record_task_progress_event
     except Exception as exc:
         _log_warning(f"加载任务入口失败：{exc}")
         return []
@@ -125,19 +125,29 @@ def _record_task_progress(user_id: str, event_key: str, amount: int, meta: dict[
     if isinstance(extra_task_keys, (list, tuple, set)):
         mappings.extend((str(key), None) for key in extra_task_keys if key)
 
-    completed: list[str] = []
+    updates = []
     seen: set[str] = set()
     for mapped_key, mapped_amount in mappings:
         if mapped_key in seen:
             continue
         seen.add(mapped_key)
-        try:
-            completed.extend(record_task_progress(user_id, mapped_key, mapped_amount or amount))
-        except Exception as exc:
-            _log_warning(
-                f"记录任务进度失败：user_id={user_id}, event={event_key}, task={mapped_key}, error={exc}"
-            )
-    return completed
+        updates.append(
+            (mapped_key, amount if mapped_amount is None else mapped_amount)
+        )
+    if not updates:
+        return []
+
+    trace_id = str(meta.get("trace_id") or "").strip()
+    operation_id = (
+        f"game-event:{trace_id}:{user_id}:{event_key}" if trace_id else None
+    )
+    try:
+        return record_task_progress_event(user_id, updates, operation_id)
+    except Exception as exc:
+        _log_warning(
+            f"记录任务进度失败：user_id={user_id}, event={event_key}, error={exc}"
+        )
+        return []
 
 
 def _check_titles(user_id: str, meta: dict[str, Any]) -> list[str]:
