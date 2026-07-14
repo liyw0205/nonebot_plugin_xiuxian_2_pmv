@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 from contextlib import closing
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from threading import RLock
 
 from ..xiuxian_utils import db_backend
+from .state_service import normalize_daily_purchase_state
 
 
 @dataclass(frozen=True)
@@ -28,12 +30,19 @@ class ArenaChallengePurchaseService:
         self._game_database, self._player_database = Path(game_database), Path(player_database)
         self._lock = lock or RLock()
 
-    def purchase(self, operation_id, user_id, amount, unit_cost, daily_limit, expected_stone, expected_bought, expected_extra):
+    def purchase(
+        self, operation_id, user_id, amount, unit_cost, daily_limit, expected_stone,
+        expected_bought, expected_extra, expected_last_buy_date, today=None,
+    ):
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         amount, unit_cost, daily_limit, expected_stone, expected_bought, expected_extra = map(int, (amount, unit_cost, daily_limit, expected_stone, expected_bought, expected_extra))
         if not operation_id or min(amount, unit_cost, daily_limit, expected_stone, expected_bought, expected_extra) < 0 or amount == 0:
             raise ValueError("valid operation and purchase state are required")
-        payload = json.dumps([user_id, amount, unit_cost, daily_limit, expected_stone, expected_bought, expected_extra])
+        today = today or date.today()
+        expected_bought, expected_extra, expected_last_buy_date = normalize_daily_purchase_state(
+            expected_bought, expected_extra, expected_last_buy_date, today
+        )
+        payload = json.dumps([user_id, amount, unit_cost, daily_limit, expected_stone, expected_bought, expected_extra, expected_last_buy_date])
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False
             try:
@@ -45,8 +54,9 @@ class ArenaChallengePurchaseService:
                     conn.rollback()
                     return ArenaChallengePurchaseResult("duplicate", *(map(int, previous[1:]))) if str(previous[0]) == payload else ArenaChallengePurchaseResult("state_changed", 0, 0, expected_stone, expected_bought, expected_extra)
                 user = conn.execute("SELECT stone FROM user_xiuxian WHERE user_id=%s", (user_id,)).fetchone()
-                arena = conn.execute("SELECT daily_challenge_buys,daily_extra_challenges FROM player_data.arena WHERE user_id=%s", (user_id,)).fetchone()
-                if not user or not arena or tuple(map(int, arena)) != (expected_bought, expected_extra) or int(user[0]) != expected_stone:
+                arena = conn.execute("SELECT daily_challenge_buys,daily_extra_challenges,last_buy_date FROM player_data.arena WHERE user_id=%s", (user_id,)).fetchone()
+                current = normalize_daily_purchase_state(*arena, today) if arena else None
+                if not user or current != (expected_bought, expected_extra, expected_last_buy_date) or int(user[0]) != expected_stone:
                     conn.rollback(); return ArenaChallengePurchaseResult("state_changed", 0, 0, expected_stone, expected_bought, expected_extra)
                 real_amount = min(amount, max(0, daily_limit - expected_bought))
                 cost = real_amount * unit_cost
@@ -56,7 +66,7 @@ class ArenaChallengePurchaseService:
                     conn.rollback(); return ArenaChallengePurchaseResult("stone_insufficient", 0, 0, expected_stone, expected_bought, expected_extra)
                 stone, bought, extra = expected_stone - cost, expected_bought + real_amount, expected_extra + real_amount
                 conn.execute("UPDATE user_xiuxian SET stone=%s WHERE user_id=%s", (stone, user_id))
-                conn.execute("UPDATE player_data.arena SET daily_challenge_buys=%s,daily_extra_challenges=%s WHERE user_id=%s", (bought, extra, user_id))
+                conn.execute("UPDATE player_data.arena SET daily_challenge_buys=%s,daily_extra_challenges=%s,last_buy_date=%s WHERE user_id=%s", (bought, extra, expected_last_buy_date, user_id))
                 conn.execute("INSERT INTO arena_challenge_purchase_operations VALUES (%s,%s,%s,%s,%s,%s,%s)", (operation_id, payload, real_amount, cost, stone, bought, extra))
                 conn.commit(); return ArenaChallengePurchaseResult("applied", real_amount, cost, stone, bought, extra)
             except Exception:

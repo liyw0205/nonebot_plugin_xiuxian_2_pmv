@@ -3,11 +3,12 @@ from __future__ import annotations
 import json
 from contextlib import closing
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from threading import RLock
 
 from ..xiuxian_utils import db_backend
+from .state_service import normalize_weekly_purchases
 
 
 @dataclass(frozen=True)
@@ -35,13 +36,15 @@ class ArenaPurchaseService:
     def purchase(
         self, operation_id, user_id, item_id, item_name, item_type, quantity, unit_cost,
         weekly_limit, expected_honor, expected_weekly_purchases, max_goods_num, bind_flag=1,
+        today=None,
     ) -> ArenaPurchaseResult:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         item_id, quantity, unit_cost, weekly_limit = map(int, (item_id, quantity, unit_cost, weekly_limit))
         expected_honor, max_goods_num = map(int, (expected_honor, max_goods_num))
         item_name, item_type = str(item_name), str(item_type)
         bind_flag = 1 if int(bind_flag) == 1 else 0
-        weekly = {str(key): value for key, value in dict(expected_weekly_purchases).items()}
+        today = today or date.today()
+        weekly = normalize_weekly_purchases(expected_weekly_purchases, today)
         if not operation_id or quantity <= 0 or min(item_id, unit_cost, weekly_limit, expected_honor, max_goods_num) < 0:
             raise ValueError("valid operation, item, quantity and purchase limits are required")
         payload = json.dumps(
@@ -88,11 +91,7 @@ class ArenaPurchaseService:
                 if arena is None:
                     conn.rollback()
                     return result("state_changed")
-                try:
-                    current_weekly = json.loads(str(arena[1])) if arena[1] else {}
-                except (TypeError, ValueError):
-                    conn.rollback()
-                    return result("state_changed")
+                current_weekly = normalize_weekly_purchases(arena[1], today)
                 if int(arena[0]) != expected_honor or current_weekly != weekly:
                     conn.rollback()
                     return result("state_changed")

@@ -1,231 +1,106 @@
-import json
-from datetime import datetime
+from __future__ import annotations
+
+from ...paths import get_paths
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
+from .state_service import ArenaStateService
+
 
 player_data_manager = PlayerDataManager()
 
+
 class ArenaLimit:
-    def __init__(self):
+    """Arena rules plus a compatibility facade for transactional state reads."""
+
+    def __init__(self, state_service: ArenaStateService | None = None) -> None:
         self.table_name = "arena"
-        # 竞技场配置
-        self.initial_score = 1000  # 初始积分
-        self.win_points = 20       # 胜利获得积分
-        self.lose_points = 10       # 失败扣除积分（对手）
-        self.no_match_points = 10   # 无匹配获得积分
-        self.daily_challenges = 10  # 每日挑战次数
-        self.daily_buy_limit = 3    # 每日可购买挑战次数
-        
-        # 段位荣誉值奖励配置
+        self.initial_score = 1000
+        self.win_points = 20
+        self.lose_points = 10
+        self.no_match_points = 10
+        self.daily_challenges = 10
+        self.daily_buy_limit = 3
         self.rank_honor_rewards = {
             "青铜": 100,
             "白银": 200,
             "黄金": 300,
             "铂金": 400,
             "钻石": 600,
-            "王者": 1000
+            "王者": 1000,
         }
-        
-        # 排名额外荣誉值奖励（前100名）
         self.ranking_honor_bonus = {
-            "1": 500,    # 第1名
-            "2-3": 300,  # 第2-3名
-            "4-10": 200, # 第4-10名
-            "11-50": 100, # 第11-50名
-            "51-100": 50  # 第51-100名
+            "1": 500,
+            "2-3": 300,
+            "4-10": 200,
+            "11-50": 100,
+            "51-100": 50,
         }
+        self._state_service = state_service or ArenaStateService(
+            get_paths().player_db,
+            player_data_manager.lock,
+        )
 
     def get_user_arena_info(self, user_id):
-        """获取用户竞技场信息，如果不存在则自动创建"""
-        user_id = str(user_id)
-        user_info = player_data_manager.get_fields(user_id, self.table_name)
-
-        default_data = {
-            "score": self.initial_score,           # 当前积分
-            "total_wins": 0,                       # 总胜利次数
-            "total_losses": 0,                     # 总失败次数
-            "daily_challenges_used": 0,            # 今日已用挑战次数
-            "daily_extra_challenges": 0,           # 今日额外挑战次数
-            "daily_challenge_buys": 0,             # 今日购买次数
-            "last_reset_date": datetime.now().strftime("%Y-%m-%d"),  # 最后重置日期
-            "last_buy_date": datetime.now().strftime("%Y-%m-%d"),
-            "last_challenge_time": "",
-            "win_streak": 0,                       # 连胜次数
-            "max_win_streak": 0,                   # 最大连胜
-            "rank": "青铜",                        # 当前段位
-            "honor_points": 0,                    # 荣誉值
-            "total_honor_earned": 0,              # 累计获得荣誉值
-            "weekly_purchases": {}                # 商店每周限购记录
-        }
-
-        if not user_info:
-            for key, value in default_data.items():
-                player_data_manager.update_or_write_data(user_id, self.table_name, key, value)
-            return default_data
-
-        today = datetime.now().strftime("%Y-%m-%d")
-        changed = False
-        for key, value in default_data.items():
-            if key not in user_info or user_info.get(key) is None:
-                user_info[key] = value
-                player_data_manager.update_or_write_data(user_id, self.table_name, key, value)
-                changed = True
-
-        if user_info.get("last_buy_date") != today:
-            user_info["daily_challenge_buys"] = 0
-            user_info["daily_extra_challenges"] = 0
-            user_info["last_buy_date"] = today
-            player_data_manager.update_or_write_data(user_id, self.table_name, "daily_challenge_buys", 0)
-            player_data_manager.update_or_write_data(user_id, self.table_name, "daily_extra_challenges", 0)
-            player_data_manager.update_or_write_data(user_id, self.table_name, "last_buy_date", today)
-            changed = True
-
-        if changed:
-            user_info = player_data_manager.get_fields(user_id, self.table_name) or user_info
-
-        return user_info
+        return self._state_service.get(user_id)
 
     def get_daily_challenge_cap(self, user_id):
-        """获取今日总挑战次数上限。"""
         arena_info = self.get_user_arena_info(user_id)
         return self.daily_challenges + int(arena_info.get("daily_extra_challenges", 0))
 
     def calculate_daily_honor(self, user_id):
-        """计算用户每日应获得的荣誉值"""
         arena_info = self.get_user_arena_info(user_id)
-        
-        # 基础荣誉值（根据段位）
         base_honor = self.rank_honor_rewards.get(arena_info["rank"], 100)
-        
-        # 排名额外荣誉值
         ranking_bonus = 0
         user_ranking = self.get_user_ranking(user_id)
-        
-        if user_ranking <= 100 and user_ranking > 0:
-            if user_ranking == 1:
-                ranking_bonus = self.ranking_honor_bonus["1"]
-            elif 2 <= user_ranking <= 3:
-                ranking_bonus = self.ranking_honor_bonus["2-3"]
-            elif 4 <= user_ranking <= 10:
-                ranking_bonus = self.ranking_honor_bonus["4-10"]
-            elif 11 <= user_ranking <= 50:
-                ranking_bonus = self.ranking_honor_bonus["11-50"]
-            elif 51 <= user_ranking <= 100:
-                ranking_bonus = self.ranking_honor_bonus["51-100"]
-        
-        total_honor = base_honor + ranking_bonus
-        return total_honor, base_honor, ranking_bonus
+        if user_ranking == 1:
+            ranking_bonus = self.ranking_honor_bonus["1"]
+        elif 2 <= user_ranking <= 3:
+            ranking_bonus = self.ranking_honor_bonus["2-3"]
+        elif 4 <= user_ranking <= 10:
+            ranking_bonus = self.ranking_honor_bonus["4-10"]
+        elif 11 <= user_ranking <= 50:
+            ranking_bonus = self.ranking_honor_bonus["11-50"]
+        elif 51 <= user_ranking <= 100:
+            ranking_bonus = self.ranking_honor_bonus["51-100"]
+        return base_honor + ranking_bonus, base_honor, ranking_bonus
 
     def get_user_ranking(self, user_id):
-        """获取用户当前排名"""
-        all_users = self.get_arena_ranking(limit=1000)  # 获取所有用户排名
-        for i, (uid, score) in enumerate(all_users, 1):
-            if str(uid) == str(user_id):
-                return i
-        return 0  # 未找到用户
-
-    def get_weekly_purchases(self, user_id, item_id):
-        """获取用户本周已购买竞技场商店某商品的数量。"""
-        arena_info = self.get_user_arena_info(user_id)
-        item_id = str(item_id)
-        purchases = arena_info.get("weekly_purchases") or {}
-
-        if "_last_reset" in purchases:
-            last_reset = datetime.strptime(purchases.get("_last_reset"), "%Y-%m-%d")
-            current_week = datetime.now().isocalendar()[1]
-            last_week = last_reset.isocalendar()[1]
-            current_year = datetime.now().year
-            last_year = last_reset.year
-
-            if current_week != last_week or current_year != last_year:
-                self.update_arena_data(user_id, {"weekly_purchases": {"_last_reset": datetime.now().strftime("%Y-%m-%d")}})
-                return 0
-            return int(purchases.get(item_id, 0) or 0)
-
-        self.update_arena_data(user_id, {"weekly_purchases": {"_last_reset": datetime.now().strftime("%Y-%m-%d")}})
+        for index, (candidate_id, _) in enumerate(self.get_arena_ranking(limit=1000), 1):
+            if str(candidate_id) == str(user_id):
+                return index
         return 0
 
-    def update_weekly_purchase(self, user_id, item_id, quantity):
-        """更新用户本周购买竞技场商店某商品的数量。"""
-        arena_info = self.get_user_arena_info(user_id)
-        item_id = str(item_id)
-        purchases = arena_info.get("weekly_purchases") or {}
-        if "_last_reset" not in purchases:
-            purchases = {"_last_reset": datetime.now().strftime("%Y-%m-%d")}
-        purchases[item_id] = int(purchases.get(item_id, 0) or 0) + int(quantity)
-        self.update_arena_data(user_id, {"weekly_purchases": purchases})
-
-    def update_arena_data(self, user_id, data):
-        """更新用户竞技场数据"""
-        user_id = str(user_id)
-        for key, value in data.items():
-            player_data_manager.update_or_write_data(user_id, self.table_name, key, value)
+    def get_weekly_purchases(self, user_id, item_id):
+        weekly = self.get_user_arena_info(user_id)["weekly_purchases"]
+        return int(weekly.get(str(item_id), 0))
 
     def can_challenge_today(self, user_id):
-        """检查今日是否还有挑战次数"""
         arena_info = self.get_user_arena_info(user_id)
         return int(arena_info["daily_challenges_used"]) < self.get_daily_challenge_cap(user_id)
 
-    def add_challenge_count(self, user_id, amount=1):
-        """增加今日剩余挑战次数，实际表现为扣减已用次数"""
-        arena_info = self.get_user_arena_info(user_id)
-        used = max(0, int(arena_info.get("daily_challenges_used", 0)) - int(amount))
-        self.update_arena_data(user_id, {"daily_challenges_used": used})
-        return self.get_daily_challenge_cap(user_id) - used
-
-    def buy_challenge_count(self, user_id, amount=1):
-        """购买今日额外挑战次数。"""
-        arena_info = self.get_user_arena_info(user_id)
-        bought = int(arena_info.get("daily_challenge_buys", 0))
-        amount = max(1, int(amount))
-        can_buy = max(0, self.daily_buy_limit - bought)
-        real_amount = min(amount, can_buy)
-        if real_amount <= 0:
-            return 0, bought, self.get_daily_challenge_cap(user_id)
-
-        extra = int(arena_info.get("daily_extra_challenges", 0)) + real_amount
-        bought += real_amount
-        self.update_arena_data(user_id, {
-            "daily_extra_challenges": extra,
-            "daily_challenge_buys": bought,
-            "last_buy_date": datetime.now().strftime("%Y-%m-%d")
-        })
-        return real_amount, bought, self.daily_challenges + extra
-
-    def calculate_rank(self, score):
-        """根据积分计算段位"""
+    @staticmethod
+    def calculate_rank(score):
         if score >= 3200:
             return "王者"
-        elif score >= 2700:
+        if score >= 2700:
             return "钻石"
-        elif score >= 2300:
+        if score >= 2300:
             return "铂金"
-        elif score >= 1900:
+        if score >= 1900:
             return "黄金"
-        elif score >= 1500:
+        if score >= 1500:
             return "白银"
-        else:
-            return "青铜"
-
-    def reset_daily_challenges(self):
-        """重置所有用户每日挑战次数（定时任务调用）"""
-        # 获取所有有竞技场数据的用户
-        all_users = player_data_manager.get_all_field_data(self.table_name, "score")
-        for user_id, _ in all_users:
-            player_data_manager.update_or_write_data(str(user_id), self.table_name, "daily_challenges_used", 0)
-            player_data_manager.update_or_write_data(str(user_id), self.table_name, "daily_extra_challenges", 0)
-            player_data_manager.update_or_write_data(str(user_id), self.table_name, "daily_challenge_buys", 0)
-            player_data_manager.update_or_write_data(str(user_id), self.table_name, "last_reset_date", datetime.now().strftime("%Y-%m-%d"))
-            player_data_manager.update_or_write_data(str(user_id), self.table_name, "last_buy_date", datetime.now().strftime("%Y-%m-%d"))
+        return "青铜"
 
     def get_arena_ranking(self, limit=50):
-        """获取竞技场排行榜"""
         all_users = player_data_manager.get_all_field_data(self.table_name, "score")
-        # 按积分排序
-        sorted_users = sorted(all_users, key=lambda x: x[1], reverse=True)
-        return sorted_users[:limit]
+        return sorted(all_users, key=lambda item: int(item[1]), reverse=True)[:limit]
 
-    def get_rank_order(self):
-        """段位顺序（低 -> 高）"""
+    @staticmethod
+    def get_rank_order():
         return ["青铜", "白银", "黄金", "铂金", "钻石", "王者"]
-    
+
+
 arena_limit = ArenaLimit()
+
+
+__all__ = ["ArenaLimit", "arena_limit"]

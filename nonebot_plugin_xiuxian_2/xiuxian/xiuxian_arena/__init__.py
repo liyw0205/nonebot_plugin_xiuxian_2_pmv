@@ -645,6 +645,7 @@ async def arena_buy_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         f"arena-challenge-purchase:{event_id}:{user_id}" if event_id else f"arena-challenge-purchase:{time.time_ns()}:{user_id}",
         user_id, buy_amount, ARENA_CHALLENGE_BUY_COST, arena_limit.daily_buy_limit,
         int(user_info["stone"]), bought, int(arena_info.get("daily_extra_challenges", 0)),
+        arena_info["last_buy_date"],
     )
     if not result.succeeded:
         await handle_send(bot, event, "竞技场购买状态已变化，请重新操作。")
