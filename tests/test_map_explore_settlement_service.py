@@ -80,6 +80,28 @@ class MapExploreSettlementServiceTests(unittest.TestCase):
             self.settle("rollback")
         self.assertEqual(self.current_state(), (10, (2, 5), 1, None))
 
+    def test_legacy_reward_plan_schema_is_migrated_and_settled(self):
+        with db_backend.transaction(self.player) as conn:
+            conn.execute("DROP TABLE map_explore_status")
+            conn.execute(
+                "CREATE TABLE map_explore_status ("
+                "user_id TEXT PRIMARY KEY,running INTEGER,node_type TEXT,node_name TEXT,start_time TEXT,"
+                "duration_min INTEGER,max_duration_min INTEGER,interval_min INTEGER,reward_plan TEXT)"
+            )
+            conn.execute(
+                "INSERT INTO map_explore_status VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                ("u", 1, "矿脉", "矿洞", "2026-07-13 10:00:00", 60, 120, 20, ' {"value":1} '),
+            )
+        self.state["settlement"] = '{"value": 1}'
+        result = self.settle("legacy-settle")
+        self.assertEqual((result.status, result.stone, result.rewards), ("applied", 7, ((1, 2),)))
+        self.assertEqual(self.current_state(), (17, (3, 6), 0, (2, 2)))
+        with db_backend.connection(self.player) as conn:
+            row = conn.execute(
+                "SELECT settlement,reward_plan FROM map_explore_status WHERE user_id=%s", ("u",)
+            ).fetchone()
+        self.assertEqual(tuple(row), ("", ""))
+
 
 if __name__ == "__main__":
     unittest.main()

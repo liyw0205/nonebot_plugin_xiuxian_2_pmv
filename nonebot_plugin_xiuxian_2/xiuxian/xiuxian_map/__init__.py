@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from ...paths import get_paths
 from ..on_compat import on_command
+from nonebot.log import logger
 from nonebot.params import CommandArg
 
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
@@ -2046,11 +2047,18 @@ def _get_explore_status(uid: str):
         }
         for k, v in d.items():
             player_data_manager.update_or_write_data(str(uid), EXPLORE_TABLE, k, v)
+    else:
+        snapshot = d.get("settlement") or d.get("reward_plan") or ""
+        if isinstance(snapshot, (dict, list)):
+            snapshot = json.dumps(snapshot, ensure_ascii=False, sort_keys=True)
+        d["settlement"] = str(snapshot)
     return d
 
 
 def _save_explore_status(uid: str, d: dict):
     for k, v in d.items():
+        if k == "reward_plan":
+            continue
         player_data_manager.update_or_write_data(str(uid), EXPLORE_TABLE, k, v)
 
 
@@ -2183,19 +2191,24 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     expected_cooldown = player_data_manager.get_field_data(uid, MAP_CD_TABLE, "explore_start_cd_until")
     cooldown_until = (start_at + timedelta(seconds=EXPLORE_START_COOLDOWN_SEC)).strftime("%Y-%m-%d %H:%M:%S")
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    result = map_explore_start_service.start(
-        f"map-explore-start:{uid}:{event_message_id or time.time_ns()}",
-        uid,
-        stamina,
-        need_stamina,
-        {key: position[key] for key in ("realm", "heaven", "node_id")},
-        expected_status,
-        expected_daily,
-        DAILY_LIMIT_CONFIG["explore"],
-        expected_cooldown,
-        cooldown_until,
-        new_st,
-    )
+    try:
+        result = map_explore_start_service.start(
+            f"map-explore-start:{uid}:{event_message_id or time.time_ns()}",
+            uid,
+            stamina,
+            need_stamina,
+            {key: position[key] for key in ("realm", "heaven", "node_id")},
+            expected_status,
+            expected_daily,
+            DAILY_LIMIT_CONFIG["explore"],
+            expected_cooldown,
+            cooldown_until,
+            new_st,
+        )
+    except Exception:
+        logger.exception("地图探索发起事务失败 user_id={}", uid)
+        await handle_send(bot, event, "探索发起失败，请稍后重试。")
+        return
     if result.status == "already_running":
         await handle_send(bot, event, "你已有进行中的探索，请先【探索结算】。")
         return
@@ -2289,16 +2302,21 @@ async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         "settlement": st.get("settlement", ""),
     }
     operation_id = f"map-explore:{uid}:{start_time}"
-    result = map_explore_settlement_service.settle(
-        operation_id,
-        uid,
-        expected_state,
-        snapshot["daily"],
-        DAILY_LIMIT_CONFIG["explore"],
-        snapshot["stone"],
-        snapshot["items"],
-        XiuConfig().max_goods_num,
-    )
+    try:
+        result = map_explore_settlement_service.settle(
+            operation_id,
+            uid,
+            expected_state,
+            snapshot["daily"],
+            DAILY_LIMIT_CONFIG["explore"],
+            snapshot["stone"],
+            snapshot["items"],
+            XiuConfig().max_goods_num,
+        )
+    except Exception:
+        logger.exception("地图探索结算事务失败 user_id={}", uid)
+        await handle_send(bot, event, "探索结算失败，请稍后重试。")
+        return
     if result.status == "inventory_full":
         await handle_send(bot, event, "背包物品已达上限，探索奖励尚未领取。")
         return

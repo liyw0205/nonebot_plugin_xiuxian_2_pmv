@@ -73,6 +73,56 @@ class MapExploreStartTransactionTests(unittest.TestCase):
             self.start("rollback")
         self.assertEqual(self.current(), (12, (0, "", 0), ""))
 
+    def test_legacy_reward_plan_schema_is_migrated_before_start(self):
+        with db_backend.transaction(self.player) as conn:
+            conn.execute("DROP TABLE map_explore_status")
+            conn.execute(
+                "CREATE TABLE map_explore_status ("
+                "user_id TEXT PRIMARY KEY,running INTEGER,node_type TEXT,node_name TEXT,start_time TEXT,"
+                "duration_min INTEGER,max_duration_min INTEGER,interval_min INTEGER,reward_plan TEXT)"
+            )
+            conn.execute(
+                "INSERT INTO map_explore_status VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                ("u", 0, "", "", "", 0, 0, 0, '{"legacy": true}'),
+            )
+        legacy_status = dict(self.status, settlement='{"legacy": true}')
+        result = self.start("legacy", status=legacy_status)
+        self.assertEqual((result.status, result.stamina), ("applied", 6))
+        with db_backend.connection(self.player) as conn:
+            columns = set(conn.column_names("map_explore_status"))
+            row = conn.execute(
+                "SELECT running,settlement,reward_plan FROM map_explore_status WHERE user_id=%s", ("u",)
+            ).fetchone()
+        self.assertIn("settlement", columns)
+        self.assertEqual(tuple(row), (1, "", ""))
+
+    def test_idle_snapshot_conflict_is_not_reported_as_running(self):
+        stale = dict(self.status, node_name="旧地点")
+        self.assertEqual(self.start("idle-conflict", status=stale).status, "state_changed")
+        self.assertEqual(self.current(), (12, (0, "", 0), ""))
+        with db_backend.transaction(self.player) as conn:
+            conn.execute("UPDATE map_explore_status SET running=%s WHERE user_id=%s", (1, "u"))
+        self.assertEqual(self.start("running-conflict").status, "already_running")
+
+    def test_legacy_null_reward_plan_is_normalized_to_empty_settlement(self):
+        with db_backend.transaction(self.player) as conn:
+            conn.execute("DROP TABLE map_explore_status")
+            conn.execute(
+                "CREATE TABLE map_explore_status ("
+                "user_id TEXT PRIMARY KEY,running INTEGER,node_type TEXT,node_name TEXT,start_time TEXT,"
+                "duration_min INTEGER,max_duration_min INTEGER,interval_min INTEGER,reward_plan TEXT)"
+            )
+            conn.execute(
+                "INSERT INTO map_explore_status VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                ("u", 0, "", "", "", 0, 0, 0, None),
+            )
+        self.assertEqual(self.start("legacy-null").status, "applied")
+        with db_backend.connection(self.player) as conn:
+            row = conn.execute(
+                "SELECT running,settlement,reward_plan FROM map_explore_status WHERE user_id=%s", ("u",)
+            ).fetchone()
+        self.assertEqual(tuple(row), (1, "", ""))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -7,6 +7,7 @@ from pathlib import Path
 from threading import RLock
 
 from ..xiuxian_utils import db_backend
+from .explore_schema import ensure_explore_status_schema, snapshot_value_matches
 
 
 @dataclass(frozen=True)
@@ -81,6 +82,7 @@ class MapExploreStartService:
                 conn.execute("ATTACH DATABASE %s AS player_data", (str(self._player_database),))
                 attached = True
                 conn.execute("BEGIN IMMEDIATE")
+                ensure_explore_status_schema(conn)
                 conn.execute(
                     "CREATE TABLE IF NOT EXISTS map_explore_start_operations ("
                     "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,stamina INTEGER NOT NULL,"
@@ -111,8 +113,13 @@ class MapExploreStartService:
                     conn.rollback()
                     return MapExploreStartResult("state_changed", stamina)
                 if not self._matches_row(conn, "map_explore_status", user_id, status):
+                    running_row = conn.execute(
+                        "SELECT running FROM player_data.map_explore_status WHERE user_id=%s", (user_id,)
+                    ).fetchone()
                     conn.rollback()
-                    return MapExploreStartResult("already_running", stamina)
+                    if running_row is not None and str(running_row[0]) == "1":
+                        return MapExploreStartResult("already_running", stamina)
+                    return MapExploreStartResult("state_changed", stamina)
                 if not self._matches_row(conn, "map_daily_limit", user_id, daily):
                     conn.rollback()
                     return MapExploreStartResult("state_changed", stamina)
@@ -174,7 +181,12 @@ class MapExploreStartService:
             "SELECT " + ",".join(f'"{key}"' for key in expected) + f" FROM player_data.{table} WHERE user_id=%s",
             (user_id,),
         ).fetchone()
-        return row is not None and tuple(str(value) for value in row) == tuple(expected.values())
+        if row is None:
+            return False
+        return all(
+            snapshot_value_matches(actual, wanted) if key == "settlement" else str(actual) == wanted
+            for key, actual, wanted in zip(expected, row, expected.values())
+        )
 
 
 __all__ = ["MapExploreStartResult", "MapExploreStartService"]

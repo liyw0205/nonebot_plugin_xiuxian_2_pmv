@@ -8,6 +8,7 @@ from pathlib import Path
 from threading import RLock
 
 from ..xiuxian_utils import db_backend
+from .explore_schema import ensure_explore_status_schema, snapshot_value_matches
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,7 @@ class MapExploreSettlementService:
                 conn.execute("ATTACH DATABASE %s AS player_data", (str(self._player_database),))
                 attached = True
                 conn.execute("BEGIN IMMEDIATE")
+                explore_columns = ensure_explore_status_schema(conn)
                 conn.execute(
                     "CREATE TABLE IF NOT EXISTS map_explore_settlement_operations ("
                     "operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, stone INTEGER NOT NULL, "
@@ -65,7 +67,6 @@ class MapExploreSettlementService:
                     conn.rollback()
                     return MapExploreSettlementResult("user_missing", 0, ())
 
-                explore_columns = {str(row[1]) for row in conn.execute("PRAGMA player_data.table_info(map_explore_status)").fetchall()}
                 daily_columns = {str(row[1]) for row in conn.execute("PRAGMA player_data.table_info(map_daily_limit)").fetchall()}
                 if not set(state).issubset(explore_columns) or not {"date", "explore_count", "resource_total_count"}.issubset(daily_columns):
                     conn.rollback()
@@ -73,7 +74,10 @@ class MapExploreSettlementService:
                 status_row = conn.execute(
                     "SELECT " + ",".join(state) + " FROM player_data.map_explore_status WHERE user_id=%s", (user_id,)
                 ).fetchone()
-                if status_row is None or tuple(str(value) for value in status_row) != tuple(state.values()):
+                if status_row is None or any(
+                    not (snapshot_value_matches(actual, wanted) if key == "settlement" else str(actual) == wanted)
+                    for key, actual, wanted in zip(state, status_row, state.values())
+                ):
                     conn.rollback()
                     return MapExploreSettlementResult("state_changed", 0, ())
                 daily_row = conn.execute(
