@@ -13,89 +13,27 @@ from ..xiuxian_utils.lay_out import Cooldown
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 import random
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 from pathlib import Path
 from ..xiuxian_config import convert_rank
 from ..xiuxian_utils.json_store import load_json_file, save_json_file
 from .exp_daily_reward_service import InteractiveExpDailyRewardService
 from .stone_daily_reward_service import InteractiveStoneDailyRewardService
+from .greeting_claim_service import InteractiveGreetingClaimService
 sql_message = XiuxianDateManage()
 interactive_exp_daily_reward_service = InteractiveExpDailyRewardService(get_paths().game_db)
 interactive_stone_daily_reward_service = InteractiveStoneDailyRewardService(get_paths().game_db)
+interactive_greeting_claim_service = InteractiveGreetingClaimService(get_paths().game_db)
 
 # 创建数据存储目录
 DATA_PATH = Path(__file__).parent / "morning_night_data"
 os.makedirs(DATA_PATH, exist_ok=True)
 
-# 加载或初始化计数数据
-def load_count_data():
-    count_file = DATA_PATH / "count_data.json"
-    return load_json_file(count_file, {
-        "morning_count": 0,
-        "night_count": 0,
-        "morning_users": {},
-        "night_users": {},
-    }, dict)
-
-def save_count_data(data):
-    count_file = DATA_PATH / "count_data.json"
-    save_json_file(count_file, data)
-
 async def reset_data_by_time():
-    """根据当前时间重置早安或晚安数据"""
-    now = datetime.now()
-    hour = now.hour
-    
-    data = load_count_data()
-    
-    # 午夜0点重置早安数据
-    if hour == 0:
-        data["morning_count"] = 0
-        data["morning_users"] = {}
-        save_count_data(data)
-        return "morning"
-    # 中午12点重置晚安数据
-    elif hour == 12:
-        data["night_count"] = 0
-        data["night_users"] = {}
-        save_count_data(data)
-        return "night"
-    else:
-        return None
-
-def has_user_triggered(user_id, is_morning=True):
-    """检查用户是否已经触发过"""
-    data = load_count_data()
-    current_date = datetime.now().strftime("%Y-%m-%d")
-    
-    if is_morning:
-        user_data = data.get("morning_users", {})
-    else:
-        user_data = data.get("night_users", {})
-    
-    # 检查用户是否在今天已经触发过
-    user_date = user_data.get(str(user_id))
-    return user_date == current_date
-
-def mark_user_triggered(user_id, is_morning=True):
-    """标记用户已触发"""
-    data = load_count_data()
-    current_date = datetime.now().strftime("%Y-%m-%d")
-    
-    if is_morning:
-        data["morning_users"][str(user_id)] = current_date
-        data["morning_count"] += 1
-    else:
-        data["night_users"][str(user_id)] = current_date
-        data["night_count"] += 1
-    
-    save_count_data(data)
-
-def get_current_count(is_morning=True):
-    """获取当前计数"""
-    data = load_count_data()
-    return data["morning_count"] if is_morning else data["night_count"]
+    """清理已过重放窗口的早晚安领取记录。"""
+    cutoff = datetime.now().date() - timedelta(days=30)
+    return interactive_greeting_claim_service.cleanup_before(cutoff)
 
 # 运势类型和对应的星数
 FORTUNE_TYPES = {
@@ -1105,17 +1043,23 @@ async def handle_good_morning(bot: Bot, event: GroupMessageEvent | PrivateMessag
 
     user_id = user_info["user_id"]
     
-    # 检查用户是否已经触发过
-    if has_user_triggered(user_id, is_morning=True):
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    result = interactive_greeting_claim_service.claim(
+        f"interactive-greeting:morning:{user_id}:{event_id or time.time_ns()}",
+        user_id,
+        "morning",
+        datetime.now(),
+    )
+    if result.status == "operation_conflict":
+        await handle_send(bot, event, "本次早安事件与已记录结果冲突，请重新尝试。")
+        return
+    if result.status == "user_missing":
+        await handle_send(bot, event, "未找到角色信息，无法记录早安。")
+        return
+    if not result.claimed:
         await handle_send(bot, event, "道友，你今天已经道过早安了哦~")
         return
-    
-    # 标记用户已触发并更新计数
-    mark_user_triggered(user_id, is_morning=True)
-    
-    # 根据时间获取不同的早安消息
-    current_count = get_current_count(is_morning=True)
-    message = get_morning_message_by_time(current_count)
+    message = get_morning_message_by_time(result.position)
     await handle_send(bot, event, message)
 
 @good_night.handle(parameterless=[Cooldown(cd_time=0)])
@@ -1128,17 +1072,23 @@ async def handle_good_night(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 
     user_id = user_info["user_id"]
     
-    # 检查用户是否已经触发过
-    if has_user_triggered(user_id, is_morning=False):
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    result = interactive_greeting_claim_service.claim(
+        f"interactive-greeting:night:{user_id}:{event_id or time.time_ns()}",
+        user_id,
+        "night",
+        datetime.now(),
+    )
+    if result.status == "operation_conflict":
+        await handle_send(bot, event, "本次晚安事件与已记录结果冲突，请重新尝试。")
+        return
+    if result.status == "user_missing":
+        await handle_send(bot, event, "未找到角色信息，无法记录晚安。")
+        return
+    if not result.claimed:
         await handle_send(bot, event, "道友，你今天已经道过晚安了哦~")
         return
-    
-    # 标记用户已触发并更新计数
-    mark_user_triggered(user_id, is_morning=False)
-    
-    # 根据时间获取不同的晚安消息
-    current_count = get_current_count(is_morning=False)
-    message = get_night_message_by_time(current_count)
+    message = get_night_message_by_time(result.position)
     await handle_send(bot, event, message)
 
 @cute_command.handle(parameterless=[Cooldown(cd_time=0)])
