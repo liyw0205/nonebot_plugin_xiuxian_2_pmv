@@ -229,6 +229,36 @@ def _punish_world_bosses(
     return result
 
 
+def _spawn_world_boss(
+    operation_id: str,
+    boss_jj: str | None = None,
+    boss_name: str | None = None,
+):
+    result = world_boss_manual_spawn_service.get_result(operation_id)
+    if result is not None:
+        current_bosses, _ = world_boss_manual_spawn_service.snapshot()
+        _sync_world_boss_cache(current_bosses)
+        return result
+
+    boss_jj = boss_jj or createboss()
+    bossinfo = createboss_jj(boss_jj, boss_name)
+    if bossinfo is None:
+        return None
+    expected_bosses, expected_revision = world_boss_manual_spawn_service.snapshot()
+    result = world_boss_manual_spawn_service.spawn(
+        operation_id=operation_id,
+        expected_revision=expected_revision,
+        expected_bosses=expected_bosses,
+        expected_config=world_boss_manual_spawn_service.config_snapshot(
+            get_boss_config(), boss_jj
+        ),
+        boss=bossinfo,
+    )
+    if result.succeeded:
+        _sync_world_boss_cache(result.bosses)
+    return result
+
+
 async def generate_all_bosses_task():
     hours = int(config['Boss生成时间参数']['hours'])
     minutes = int(config['Boss生成时间参数']['minutes'])
@@ -1107,24 +1137,11 @@ async def create_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         or time_module.time_ns()
     )
     operation_id = f"world-boss-manual-spawn:{event_id}"
-    result = world_boss_manual_spawn_service.get_result(operation_id)
-    if result is None:
-        current_state = old_boss_info.read_boss_info()
-        expected_bosses = deepcopy(current_state.get(GLOBAL_BOSS_KEY, []))
-        boss_jj = createboss()
-        bossinfo = createboss_jj(boss_jj)
-        result = world_boss_manual_spawn_service.spawn(
-            operation_id=operation_id,
-            expected_bosses=expected_bosses,
-            expected_config=world_boss_manual_spawn_service.config_snapshot(config, boss_jj),
-            boss=bossinfo,
-        )
-    if not result.succeeded:
+    result = _spawn_world_boss(operation_id)
+    if result is None or not result.succeeded:
         msg = "世界Boss场次或生成配置已变化，请重新执行生成指令。"
         await handle_send(bot, event, msg)
         await create.finish()
-    group_boss[GLOBAL_BOSS_KEY] = [dict(boss) for boss in result.bosses]
-    old_boss_info.data[GLOBAL_BOSS_KEY] = deepcopy(group_boss[GLOBAL_BOSS_KEY])
     bossinfo = dict(result.boss)
     boss_jj = bossinfo["jj"]
     msg = f"已生成{boss_jj}Boss:{bossinfo['name']}，诸位道友请击败Boss获得奖励吧!"
@@ -1136,8 +1153,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     """生成指定世界boss - 替换同境界BOSS"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
 
-    group_boss.setdefault(GLOBAL_BOSS_KEY, [])
-
     # 解析参数
     arg_list = args.extract_plain_text().split()
     if len(arg_list) < 1:
@@ -1148,21 +1163,25 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     boss_jj = arg_list[0]  # 用户指定的境界
     boss_name = arg_list[1] if len(arg_list) > 1 else None  # 用户指定的Boss名称
 
-    # 检查是否已有同境界BOSS，有则删除
-    for boss in group_boss[GLOBAL_BOSS_KEY][:]:
-        if boss['jj'] == boss_jj:
-            group_boss[GLOBAL_BOSS_KEY].remove(boss)
-            break
-
-    # 生成指定BOSS
-    bossinfo = createboss_jj(boss_jj, boss_name)
-    if bossinfo is None:
+    event_id = str(
+        getattr(event, "message_id", "")
+        or getattr(event, "id", "")
+        or time_module.time_ns()
+    )
+    result = _spawn_world_boss(
+        f"world-boss-appointed-spawn:{event_id}",
+        boss_jj,
+        boss_name,
+    )
+    if result is None:
         msg = f"请输入正确的境界，例如：生成指定世界boss 祭道境"
         await handle_send(bot, event, msg)
         await create_appoint.finish()
-
-    group_boss[GLOBAL_BOSS_KEY].append(bossinfo)
-    old_boss_info.save_boss(group_boss)
+    if not result.succeeded:
+        msg = "世界Boss场次或生成配置已变化，请重新执行指定生成指令。"
+        await handle_send(bot, event, msg)
+        await create_appoint.finish()
+    bossinfo = dict(result.boss)
     msg = f"已生成{boss_jj}Boss:{bossinfo['name']}，诸位道友请击败Boss获得奖励吧！"
     await handle_send(bot, event, msg)
     await create_appoint.finish()

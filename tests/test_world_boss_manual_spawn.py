@@ -46,11 +46,19 @@ def create_service(tmp_path):
     return database, WorldBossManualSpawnService(database, lambda: CONFIG)
 
 
-def spawn(service, operation_id="spawn-1", expected=None, config=None, boss=None):
+def spawn(
+    service,
+    operation_id="spawn-1",
+    expected_revision=0,
+    expected=None,
+    config=None,
+    boss=None,
+):
     expected = [OLD_BOSS, OTHER_BOSS] if expected is None else expected
     config = service.config_snapshot(CONFIG, "练气境") if config is None else config
     return service.spawn(
         operation_id=operation_id,
+        expected_revision=expected_revision,
         expected_bosses=expected,
         expected_config=config,
         boss=NEW_BOSS if boss is None else boss,
@@ -61,9 +69,12 @@ def test_spawn_rechecks_session_replaces_conflict_and_records_operation(tmp_path
     database, service = create_service(tmp_path)
     result = spawn(service)
     assert result.status == "spawned"
+    assert result.revision == 1
     assert list(result.bosses) == [OTHER_BOSS, NEW_BOSS]
     conn = sqlite3.connect(database)
-    assert json.loads(conn.execute("SELECT bosses FROM world_boss_state").fetchone()[0]) == [OTHER_BOSS, NEW_BOSS]
+    row = conn.execute("SELECT bosses,revision FROM world_boss_state").fetchone()
+    assert json.loads(row[0]) == [OTHER_BOSS, NEW_BOSS]
+    assert row[1] == 1
     assert conn.execute("SELECT operation_id FROM world_boss_manual_spawn_operations").fetchone()[0] == "spawn-1"
     conn.close()
 
@@ -91,10 +102,20 @@ def test_session_or_config_change_does_not_create_boss_or_operation(tmp_path):
     conn.close()
 
 
+def test_revision_change_rejects_stale_spawn(tmp_path):
+    database, service = create_service(tmp_path)
+    assert service.snapshot() == ([OLD_BOSS, OTHER_BOSS], 0)
+    with sqlite3.connect(database) as conn:
+        conn.execute(
+            "UPDATE world_boss_state SET revision=1 WHERE state_key='global'"
+        )
+    assert spawn(service, expected_revision=0).status == "session_changed"
+
+
 def test_operation_failure_rolls_back_boss_state(tmp_path):
     database, service = create_service(tmp_path)
+    service.snapshot()
     conn = sqlite3.connect(database)
-    service._ensure_schema(conn)
     conn.execute(
         "CREATE TRIGGER reject_manual_spawn BEFORE INSERT ON world_boss_manual_spawn_operations "
         "BEGIN SELECT RAISE(ABORT,'reject manual spawn'); END"
@@ -109,14 +130,33 @@ def test_operation_failure_rolls_back_boss_state(tmp_path):
     conn.close()
 
 
-def test_real_entry_uses_transaction_service_without_segmented_side_paths():
+def test_random_and_appointed_entries_share_transaction_without_side_paths():
     path = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/__init__.py"
     with open(path, encoding="utf-8") as source_file:
         text = source_file.read()
-    handler = text[text.index("async def create_("):text.index("@create_appoint.handle")]
-    assert "world_boss_manual_spawn_service.spawn(" in handler
-    assert "expected_bosses=" in handler
-    assert "expected_config=" in handler
-    assert "old_boss_info.save_boss(group_boss)" not in handler
-    assert "group_boss[GLOBAL_BOSS_KEY].remove(" not in handler
-    assert "group_boss[GLOBAL_BOSS_KEY].append(" not in handler
+    helper = text[
+        text.index("def _spawn_world_boss(") : text.index(
+            "async def generate_all_bosses_task"
+        )
+    ]
+    assert helper.index("world_boss_manual_spawn_service.get_result(") < helper.index(
+        "createboss_jj("
+    )
+    assert "world_boss_manual_spawn_service.snapshot()" in helper
+    assert "expected_revision=" in helper
+    assert "world_boss_manual_spawn_service.spawn(" in helper
+
+    random_handler = text[
+        text.index("async def create_(") : text.index("@create_appoint.handle")
+    ]
+    appointed_handler = text[
+        text.index("@create_appoint.handle") : text.index(
+            "@boss_integral_store.handle"
+        )
+    ]
+    for handler in (random_handler, appointed_handler):
+        assert "_spawn_world_boss(" in handler
+        assert "old_boss_info.save_boss(group_boss)" not in handler
+        assert "group_boss[GLOBAL_BOSS_KEY].remove(" not in handler
+        assert "group_boss[GLOBAL_BOSS_KEY].append(" not in handler
+    assert "world-boss-appointed-spawn:{event_id}" in appointed_handler
