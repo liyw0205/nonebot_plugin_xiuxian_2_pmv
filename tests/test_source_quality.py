@@ -2071,6 +2071,28 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("SET status='completed'", reward)
         self.assertIn("gather_cd_until=EXCLUDED.gather_cd_until", reward)
 
+    def test_map_node_combat_uses_persistent_start_task(self) -> None:
+        root = SOURCE_ROOT / "xiuxian" / "xiuxian_map"
+        source = (root / "__init__.py").read_text(encoding="utf-8")
+        lifecycle = (root / "combat_lifecycle_service.py").read_text(
+            encoding="utf-8"
+        )
+
+        start = source.index("async def _process_node_combat")
+        end = source.index("def _get_explore_status", start)
+        handler = source[start:end]
+        self.assertIn("map_combat_lifecycle_service.get_pending(", handler)
+        self.assertIn("map_combat_lifecycle_service.replay_start(", handler)
+        self.assertIn("map_combat_lifecycle_service.start(", handler)
+        self.assertIn("map_combat_lifecycle_service.save_plan(", handler)
+        self.assertNotIn("update_user_stamina(", handler)
+        self.assertNotIn('_set_cd(uid, "combat_cd_until"', handler)
+        self.assertNotIn("player_data_manager.update_or_write_data(", handler)
+
+        self.assertIn("map_combat_start_operations", lifecycle)
+        self.assertIn("BEGIN IMMEDIATE", lifecycle)
+        self.assertIn("combat_cd_until=EXCLUDED.combat_cd_until", lifecycle)
+
     def test_statistics_data_migration_does_not_block_event_loop(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_buff" / "__init__.py"

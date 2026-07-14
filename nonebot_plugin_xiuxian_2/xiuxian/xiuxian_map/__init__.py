@@ -32,6 +32,7 @@ from .resource_reward_service import MapResourceRewardService
 from .explore_settlement_service import MapExploreSettlementService
 from .mission_claim_service import MapMissionClaimService
 from .combat_settlement_service import MapCombatSettlementService
+from .combat_lifecycle_service import MapCombatLifecycleService
 from .dongfu_build_service import MapDongfuBuildService
 from .home_return_service import MapHomeReturnService
 from .interactive_action_service import MapInteractiveActionService
@@ -45,6 +46,9 @@ map_explore_settlement_service = MapExploreSettlementService(get_paths().game_db
 map_mission_claim_service = MapMissionClaimService(get_paths().game_db, get_paths().player_db)
 map_resource_reward_service = MapResourceRewardService(get_paths().game_db, get_paths().player_db)
 map_combat_settlement_service = MapCombatSettlementService(get_paths().game_db, get_paths().player_db)
+map_combat_lifecycle_service = MapCombatLifecycleService(
+    get_paths().game_db, get_paths().player_db
+)
 map_dongfu_build_service = MapDongfuBuildService(get_paths().game_db, get_paths().player_db)
 map_home_return_service = MapHomeReturnService(get_paths().player_db)
 map_interactive_action_service = MapInteractiveActionService(
@@ -1841,48 +1845,119 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
         return
 
     uid = str(user_info["user_id"])
-    pending = player_data_manager.get_fields(uid, "map_combat_settlement") or {}
-    raw_snapshot = pending.get("snapshot", "")
-    snapshot = None
-    if raw_snapshot:
-        try:
-            snapshot = json.loads(raw_snapshot)
-        except (TypeError, ValueError):
-            await handle_send(bot, event, "节点战斗结算数据异常，请联系管理员处理。")
-            return
+    pending = map_combat_lifecycle_service.get_pending(uid)
+    snapshot = None if pending is None else pending.task
+    raw_snapshot = "" if pending is None else pending.snapshot
+    if pending is not None and not snapshot:
+        await handle_send(bot, event, "节点战斗结算数据异常，请联系管理员处理。")
+        return
 
     if snapshot is None:
-        can_use, cur_cnt, cap = _check_daily_cap(uid, "combat_count", DAILY_LIMIT_CONFIG["combat"])
-        if not can_use:
-            await handle_send(bot, event, f"今日节点战斗次数已达上限（{cap}次），请明日再来。")
-            return
-        node = get_player_current_node(uid)
-        if not node:
-            await handle_send(bot, event, "当前位置异常，请先前往有效节点。")
-            return
-        ntype = node["type"]
-        if ntype not in COMBAT_NODE_TYPES:
-            await handle_send(bot, event, f"当前节点【{node['name']}】不是对战节点。")
-            return
-        now = datetime.now()
-        cd = _get_cd(uid, "combat_cd_until")
-        if cd and now < cd:
-            sec = int((cd - now).total_seconds())
-            await handle_send(bot, event, f"你刚经历一战，尚需冷却 {sec}s")
-            return
-        conf = COMBAT_CONFIG[ntype]
-        stamina = int(user_info.get("user_stamina", 0))
-        if stamina < conf["stamina_cost"]:
-            await handle_send(bot, event, f"体力不足！需要 {conf['stamina_cost']}，当前 {stamina}")
-            return
+        operation_id = _map_operation_id(event, "combat-start", uid)
+        replayed = map_combat_lifecycle_service.replay_start(operation_id, uid)
+        if replayed is not None:
+            if replayed.status == "duplicate":
+                current = map_combat_lifecycle_service.get_pending(uid)
+                if (
+                    current is None
+                    or current.task is None
+                    or str(current.task.get("task_id")) != operation_id
+                ):
+                    await handle_send(bot, event, "该节点战斗事件已经处理。")
+                    return
+                snapshot, raw_snapshot = current.task, current.snapshot
+            elif replayed.status == "limit_reached":
+                cap = DAILY_LIMIT_CONFIG["combat"]
+                await handle_send(bot, event, f"今日节点战斗次数已达上限（{cap}次），请明日再来。")
+                return
+            elif replayed.status == "cooldown":
+                cd = _parse_dt((replayed.task or {}).get("cooldown_until"))
+                sec = max(1, int((cd - datetime.now()).total_seconds())) if cd else 1
+                await handle_send(bot, event, f"你刚经历一战，尚需冷却 {sec}s")
+                return
+            elif replayed.status == "stamina_insufficient":
+                await handle_send(bot, event, f"体力不足！当前 {replayed.stamina}")
+                return
+            elif replayed.status == "already_running" and replayed.task:
+                current = map_combat_lifecycle_service.get_pending(uid)
+                if current is None or current.task is None:
+                    await handle_send(bot, event, "节点战斗任务状态已变化，请重新尝试。")
+                    return
+                snapshot, raw_snapshot = current.task, current.snapshot
+            else:
+                await handle_send(bot, event, "节点战斗状态已变化，请重新尝试。")
+                return
+        else:
+            position = get_player_current_position(uid)
+            if not position:
+                await handle_send(bot, event, "当前位置异常，请先前往有效节点。")
+                return
+            ntype = position["node_type"]
+            if ntype not in COMBAT_NODE_TYPES:
+                await handle_send(bot, event, f"当前节点【{position['node_name']}】不是对战节点。")
+                return
+            now = datetime.now()
+            conf = COMBAT_CONFIG[ntype]
+            daily = _get_daily_limit(uid)
+            cd = _get_cd(uid, "combat_cd_until")
+            cooldown_until = (
+                now + timedelta(seconds=conf["cooldown_sec"])
+            ).strftime("%Y-%m-%d %H:%M:%S")
+            task = {
+                "task_id": operation_id,
+                "status": "running",
+                "started_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+                "cooldown_until": cooldown_until,
+                "daily": daily,
+                "decay": _get_reward_decay(uid),
+                "enemy": _build_map_enemy(user_info, ntype, position["node_name"]),
+                "node_name": position["node_name"],
+                "node_type": ntype,
+            }
+            started = map_combat_lifecycle_service.start(
+                operation_id,
+                uid,
+                int(user_info.get("user_stamina", 0)),
+                conf["stamina_cost"],
+                {key: position[key] for key in ("realm", "heaven", "node_id")},
+                daily,
+                DAILY_LIMIT_CONFIG["combat"],
+                "" if cd is None else cd.strftime("%Y-%m-%d %H:%M:%S"),
+                task,
+            )
+            if started.status == "limit_reached":
+                cap = DAILY_LIMIT_CONFIG["combat"]
+                await handle_send(bot, event, f"今日节点战斗次数已达上限（{cap}次），请明日再来。")
+                return
+            if started.status == "cooldown":
+                stored_cd = _parse_dt((started.task or {}).get("cooldown_until"))
+                sec = max(1, int((stored_cd - now).total_seconds())) if stored_cd else 1
+                await handle_send(bot, event, f"你刚经历一战，尚需冷却 {sec}s")
+                return
+            if started.status == "stamina_insufficient":
+                await handle_send(bot, event, f"体力不足！需要 {conf['stamina_cost']}，当前 {started.stamina}")
+                return
+            if started.status == "already_running":
+                current = map_combat_lifecycle_service.get_pending(uid)
+                if current is None or current.task is None:
+                    await handle_send(bot, event, "节点战斗任务状态已变化，请重新尝试。")
+                    return
+                snapshot, raw_snapshot = current.task, current.snapshot
+            elif not started.succeeded or started.task is None:
+                await handle_send(bot, event, "节点战斗状态已变化，请重新尝试。")
+                return
+            else:
+                snapshot, raw_snapshot = started.task, started.snapshot
 
-        sql_message.update_user_stamina(uid, conf["stamina_cost"], 2)
-        _set_cd(uid, "combat_cd_until", conf["cooldown_sec"])
-        enemy = _build_map_enemy(user_info, ntype, node["name"])
-        battle_result, victor, bossinfo_new = await Boss_fight(uid, enemy, bot_id=bot.self_id)
+    if snapshot.get("status") == "running":
+        ntype = str(snapshot["node_type"])
+        conf = COMBAT_CONFIG[ntype]
+        battle_result, victor, bossinfo_new = await Boss_fight(
+            uid, snapshot["enemy"], bot_id=bot.self_id
+        )
         await send_msg_handler(bot, event, battle_result)
-        daily = _get_daily_limit(uid)
-        rewards, reward_items, stone, decay = [], [], 0, _get_reward_decay(uid)
+        rewards, reward_items, stone = [], [], 0
+        decay = float(snapshot["decay"])
         title = conf["fail_msg"]
         won = victor == "群友赢了"
         if won:
@@ -1907,22 +1982,30 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
             stone += material_stone
             reward_items.extend(material_items)
             title = "大胜而归" if big_win else "战而胜之"
-        snapshot = {
-            "daily": daily,
-            "decay": decay,
+        plan = dict(snapshot)
+        plan.update({
+            "status": "planned",
             "items": reward_items,
-            "node_name": node["name"],
-            "operation_id": f"map-combat:{uid}:{time.time_ns()}",
             "rewards": rewards,
             "stone": stone,
             "title": title,
             "won": won,
-        }
-        raw_snapshot = json.dumps(snapshot, ensure_ascii=False, sort_keys=True)
-        player_data_manager.update_or_write_data(uid, "map_combat_settlement", "snapshot", raw_snapshot)
+        })
+        planned = map_combat_lifecycle_service.save_plan(
+            uid, snapshot["task_id"], plan
+        )
+        if not planned.succeeded or planned.task is None:
+            await handle_send(bot, event, "节点战斗结果保存失败，请重新执行节点战斗。")
+            return
+        snapshot, raw_snapshot = planned.task, planned.snapshot
+
+    if snapshot.get("status") == "planned":
+        settlement_operation_id = f"map-combat-settle:{snapshot['task_id']}"
+    else:
+        settlement_operation_id = snapshot.get("operation_id", "")
 
     result = map_combat_settlement_service.settle(
-        snapshot["operation_id"],
+        settlement_operation_id,
         uid,
         snapshot["daily"],
         raw_snapshot,
