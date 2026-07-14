@@ -4,10 +4,12 @@ from typing import Any
 
 from nonebot.log import logger
 
+from ...paths import get_paths
+from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_utils.reward_service import grant_reward
 from ..xiuxian_utils.utils import number_to
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
+from .reward_claim_service import TaskRewardClaimService
 
 
 @dataclass(frozen=True)
@@ -181,6 +183,9 @@ class XiuxianTaskManager:
     def __init__(self):
         self.player_data_manager = PlayerDataManager()
         self.items = Items()
+        self.reward_claim_service = TaskRewardClaimService(
+            get_paths().game_db, get_paths().player_db
+        )
 
     @staticmethod
     def _now() -> datetime:
@@ -316,54 +321,68 @@ class XiuxianTaskManager:
         msg_lines.append("\n发送【领取任务奖励】领取已完成奖励。")
         return "\n".join(msg_lines)
 
-    def _grant_task_rewards(self, user_id: str, task: TaskDefinition) -> dict[str, Any]:
-        result = grant_reward(
-            user_id,
-            task.rewards,
-            "xiuxian_task",
-            meta={
-                "action": "claim_task_reward",
-                "detail": {"task_key": task.key, "cycle": task.cycle},
-            },
-        )
-        return result["granted"]
+    def _claim_task_snapshots(self, cycles: list[str]) -> list[dict[str, Any]]:
+        snapshots = []
+        for cycle in cycles:
+            for task in TASKS_BY_CYCLE[cycle]:
+                rewards = dict(task.rewards)
+                items = []
+                for reward in rewards.get("items", []) or []:
+                    item_id = int(reward.get("id", 0))
+                    item_info = self.items.get_data_by_item_id(item_id)
+                    if not item_info:
+                        raise ValueError(f"任务奖励物品不存在：{item_id}")
+                    items.append(
+                        {
+                            "id": item_id,
+                            "name": item_info["name"],
+                            "type": item_info["type"],
+                            "amount": int(reward.get("amount", 1) or 1),
+                            "bind_flag": int(reward.get("bind_flag", 1)),
+                        }
+                    )
+                rewards["items"] = items
+                snapshots.append(
+                    {
+                        "key": task.key,
+                        "cycle": task.cycle,
+                        "name": task.name,
+                        "target": task.target,
+                        "rewards": rewards,
+                    }
+                )
+        return snapshots
 
-    def claim_rewards(self, user_id: str, cycle: str | None = None) -> str:
+    def claim_rewards(
+        self, operation_id: str, user_id: str, cycle: str | None = None
+    ) -> str:
         user_id = str(user_id)
         cycles = [cycle] if cycle in TASKS_BY_CYCLE else ["daily", "weekly"]
-        claimed_tasks: list[tuple[TaskDefinition, dict[str, Any]]] = []
-
-        with self.player_data_manager.lock:
-            for item_cycle in cycles:
-                progress, claimed, _ = self._ensure_cycle_state(user_id, item_cycle)
-                claimed_set = set(claimed)
-                newly_claimed: list[str] = []
-                for task in TASKS_BY_CYCLE[item_cycle]:
-                    current = int(progress.get(task.key, 0) or 0)
-                    if current >= task.target and task.key not in claimed_set:
-                        granted = self._grant_task_rewards(user_id, task)
-                        claimed_tasks.append((task, granted))
-                        newly_claimed.append(task.key)
-
-                if newly_claimed:
-                    claimed.extend(newly_claimed)
-                    self._write_field(user_id, self._claimed_field(item_cycle), claimed)
-
-        if not claimed_tasks:
+        result = self.reward_claim_service.claim(
+            operation_id,
+            user_id,
+            cycles,
+            {item_cycle: self._period_key(item_cycle) for item_cycle in cycles},
+            self._claim_task_snapshots(cycles),
+            XiuConfig().max_goods_num,
+        )
+        if result.status == "operation_conflict":
+            return "本次任务领奖与已记录事件冲突，请重新执行指令。"
+        if result.status == "inventory_full":
+            return "背包容量不足，任务奖励尚未领取。"
+        if result.status == "user_missing":
+            return "未找到角色信息，无法领取任务奖励。"
+        if not result.tasks:
             return "当前没有可领取的任务奖励。"
 
         lines = ["任务奖励领取成功："]
-        for task, granted in claimed_tasks:
+        for task in result.tasks:
             reward_parts = []
-            for item in granted.get("items", []) or []:
+            for item in task.get("items", ()):
                 reward_parts.append(f"{item['name']}x{item['amount']}")
-            if granted.get("stone", 0) > 0:
-                reward_parts.append(f"灵石{number_to(granted['stone'])}")
-            if granted.get("exp", 0) > 0:
-                reward_parts.append(f"修为{number_to(granted['exp'])}")
-            if task.rewards.get("exp", 0) > 0 and granted.get("exp", 0) <= 0:
-                reward_parts.append("修为已达上限")
-            lines.append(f"- {task.name}：{'、'.join(reward_parts) if reward_parts else '无'}")
+            lines.append(
+                f"- {task['name']}：{'、'.join(reward_parts) if reward_parts else '无'}"
+            )
         return "\n".join(lines)
 
 

@@ -1,4 +1,5 @@
 from nonebot.params import CommandArg
+import time
 
 from ..adapter_compat import Bot, GroupMessageEvent, Message, PrivateMessageEvent
 from ..on_compat import on_command
@@ -104,7 +105,10 @@ async def claim_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 
     arg_text = args.extract_plain_text()
     cycle = _parse_cycle(arg_text) or _parse_cycle(str(event.message))
-    msg = task_manager.claim_rewards(user_info["user_id"], cycle)
+    user_id = str(user_info["user_id"])
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"task-reward-claim:{user_id}:{event_id or time.time_ns()}"
+    msg = task_manager.claim_rewards(operation_id, user_id, cycle)
     await handle_send(
         bot,
         event,
