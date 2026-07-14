@@ -2039,6 +2039,38 @@ class SourceQualityTests(unittest.TestCase):
             service.index('conn.table_exists("dongfu_status")'),
         )
 
+    def test_map_interactive_actions_use_persistent_lifecycle(self) -> None:
+        root = SOURCE_ROOT / "xiuxian" / "xiuxian_map"
+        source = (root / "__init__.py").read_text(encoding="utf-8")
+        lifecycle = (root / "interactive_action_service.py").read_text(
+            encoding="utf-8"
+        )
+        reward = (root / "resource_reward_service.py").read_text(
+            encoding="utf-8"
+        )
+
+        start = source.index("async def _process_node_action")
+        end = source.index("async def _resolve_interactive_action", start)
+        start_handler = source[start:end]
+        self.assertIn("map_interactive_action_service.replay_start(", start_handler)
+        self.assertIn("map_interactive_action_service.start(", start_handler)
+        self.assertNotIn("update_user_stamina(", start_handler)
+        self.assertNotIn("INTERACTIVE_ACTION_STATE", source)
+
+        resolve_start = source.index("async def _resolve_interactive_action")
+        resolve_end = source.index("def _build_map_enemy", resolve_start)
+        resolve_handler = source[resolve_start:resolve_end]
+        self.assertIn("map_interactive_action_service.get_active(", resolve_handler)
+        self.assertIn("map_interactive_action_service.save_settlement(", resolve_handler)
+        self.assertIn("action_settlement=settlement", resolve_handler)
+        self.assertNotIn('_set_cd(uid, "gather_cd_until"', resolve_handler)
+
+        self.assertIn("map_interactive_start_operations", lifecycle)
+        self.assertIn("map_interactive_terminal_operations", lifecycle)
+        self.assertIn("BEGIN IMMEDIATE", lifecycle)
+        self.assertIn("SET status='completed'", reward)
+        self.assertIn("gather_cd_until=EXCLUDED.gather_cd_until", reward)
+
     def test_statistics_data_migration_does_not_block_event_loop(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_buff" / "__init__.py"

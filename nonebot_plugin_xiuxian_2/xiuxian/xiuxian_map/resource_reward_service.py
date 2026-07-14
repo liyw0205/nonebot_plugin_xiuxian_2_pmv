@@ -29,14 +29,48 @@ class MapResourceRewardService:
         self._player_database = Path(player_database)
         self._lock = lock or RLock()
 
-    def settle(self, operation_id, user_id, expected_daily, daily_limit, stone, items, max_goods_num):
+    def settle(
+        self,
+        operation_id,
+        user_id,
+        expected_daily,
+        daily_limit,
+        stone,
+        items,
+        max_goods_num,
+        *,
+        action_id=None,
+        action_settlement=None,
+        cooldown_until=None,
+    ):
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         expected = {key: str(value) for key, value in dict(expected_daily).items()}
         daily_limit, stone, max_goods_num = map(int, (daily_limit, stone, max_goods_num))
         rewards = tuple((int(item["id"]), str(item["name"]), str(item["type"]), int(item["amount"])) for item in items if int(item["amount"]) > 0)
         if not operation_id or min(daily_limit, stone, max_goods_num) < 0 or not expected.get("date"):
             raise ValueError("valid operation, daily state and rewards are required")
-        payload = json.dumps([user_id, expected, daily_limit, stone, rewards, max_goods_num], ensure_ascii=True, sort_keys=True)
+        lifecycle = None
+        if any(value is not None for value in (action_id, action_settlement, cooldown_until)):
+            if (
+                not str(action_id or "").strip()
+                or not isinstance(action_settlement, dict)
+                or not str(cooldown_until or "").strip()
+            ):
+                raise ValueError("complete interactive action lifecycle is required")
+            lifecycle = {
+                "action_id": str(action_id).strip(),
+                "settlement": json.dumps(
+                    action_settlement,
+                    ensure_ascii=True,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+                "cooldown_until": str(cooldown_until).strip(),
+            }
+        payload_values = [user_id, expected, daily_limit, stone, rewards, max_goods_num]
+        if lifecycle is not None:
+            payload_values.append(lifecycle)
+        payload = json.dumps(payload_values, ensure_ascii=True, sort_keys=True)
 
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False
@@ -60,6 +94,32 @@ class MapResourceRewardService:
                 if conn.execute("SELECT 1 FROM user_xiuxian WHERE user_id=%s", (user_id,)).fetchone() is None:
                     conn.rollback()
                     return MapResourceRewardResult("user_missing", 0, ())
+                if lifecycle is not None:
+                    action_columns = {
+                        str(row[1])
+                        for row in conn.execute(
+                            "PRAGMA player_data.table_info(map_interactive_actions)"
+                        ).fetchall()
+                    }
+                    required_action = {
+                        "action_id", "status", "settlement_json"
+                    }
+                    if not required_action.issubset(action_columns):
+                        conn.rollback()
+                        return MapResourceRewardResult("state_changed", 0, ())
+                    action_row = conn.execute(
+                        "SELECT status,settlement_json "
+                        "FROM player_data.map_interactive_actions "
+                        "WHERE user_id=%s AND action_id=%s",
+                        (user_id, lifecycle["action_id"]),
+                    ).fetchone()
+                    if (
+                        action_row is None
+                        or str(action_row[0]) != "active"
+                        or str(action_row[1]) != lifecycle["settlement"]
+                    ):
+                        conn.rollback()
+                        return MapResourceRewardResult("state_changed", 0, ())
                 columns = {str(row[1]) for row in conn.execute("PRAGMA player_data.table_info(map_daily_limit)").fetchall()}
                 required = {"date", "gather_count", "resource_total_count"}
                 if not required.issubset(columns):
@@ -101,6 +161,20 @@ class MapResourceRewardService:
                         "ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=EXCLUDED.goods_name,goods_type=EXCLUDED.goods_type,"
                         "goods_num=back.goods_num+EXCLUDED.goods_num,bind_num=COALESCE(back.bind_num,0)+EXCLUDED.bind_num,update_time=EXCLUDED.update_time",
                         (user_id, item_id, name, item_type, amount, now, now, amount),
+                    )
+                if lifecycle is not None:
+                    conn.execute(
+                        "UPDATE player_data.map_interactive_actions "
+                        "SET status='completed',updated_at=%s "
+                        "WHERE user_id=%s AND action_id=%s AND status='active'",
+                        (now, user_id, lifecycle["action_id"]),
+                    )
+                    conn.execute(
+                        "INSERT INTO player_data.map_cooldown("
+                        "user_id,gather_cd_until) VALUES(%s,%s) "
+                        "ON CONFLICT(user_id) DO UPDATE SET "
+                        "gather_cd_until=EXCLUDED.gather_cd_until",
+                        (user_id, lifecycle["cooldown_until"]),
                     )
                 compact_rewards = tuple(sorted(totals.items()))
                 conn.execute(

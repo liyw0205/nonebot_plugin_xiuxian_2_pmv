@@ -34,6 +34,7 @@ from .mission_claim_service import MapMissionClaimService
 from .combat_settlement_service import MapCombatSettlementService
 from .dongfu_build_service import MapDongfuBuildService
 from .home_return_service import MapHomeReturnService
+from .interactive_action_service import MapInteractiveActionService
 from .explore_start_service import MapExploreStartService
 from .movement_settlement_service import MapMovementSettlementService
 from .dao_battle_settlement_service import MapDaoBattleSettlementService
@@ -46,6 +47,9 @@ map_resource_reward_service = MapResourceRewardService(get_paths().game_db, get_
 map_combat_settlement_service = MapCombatSettlementService(get_paths().game_db, get_paths().player_db)
 map_dongfu_build_service = MapDongfuBuildService(get_paths().game_db, get_paths().player_db)
 map_home_return_service = MapHomeReturnService(get_paths().player_db)
+map_interactive_action_service = MapInteractiveActionService(
+    get_paths().game_db, get_paths().player_db
+)
 map_explore_start_service = MapExploreStartService(get_paths().game_db, get_paths().player_db)
 map_movement_service = MapMovementSettlementService(get_paths().game_db, get_paths().player_db)
 map_dao_battle_service = MapDaoBattleSettlementService(get_paths().player_db, get_paths().game_db)
@@ -259,8 +263,6 @@ NODE_ACTION_CONFIG = {
     "灵林": {"cmd": "采集", "cost": 3, "pool_key": "herb_low", "desc": "采集灵草"},
     "仙山": {"cmd": "采集", "cost": 4, "pool_key": "herb_mid", "desc": "探寻灵材"},
 }
-
-INTERACTIVE_ACTION_STATE = {}
 
 # =========================================
 # 战斗节点玩法
@@ -1512,6 +1514,69 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 # =========================================
 # 采集逻辑（已加每日次数+持久化CD）
 # =========================================
+def _interactive_start_message(result, action_type: str) -> str:
+    action = result.action or {}
+    if result.status in {"applied", "duplicate"}:
+        config = INTERACTIVE_ACTION_CONFIG[action_type]
+        wait_sec = int(action.get("wait_sec", 0) or 0)
+        return f"{config['start_msg']}\n预计等待 {wait_sec}s..."
+    if result.status == "limit_reached":
+        cap = DAILY_LIMIT_CONFIG["gather"]
+        return f"今日采集次数已达上限（{cap}次），请明日再来。"
+    if result.status == "cooldown":
+        cooldown = _parse_dt(action.get("cooldown_until"))
+        seconds = max(1, int((cooldown - datetime.now()).total_seconds())) if cooldown else 1
+        return f"你刚忙完，先歇会儿吧（冷却剩余 {seconds}s）"
+    if result.status == "already_running":
+        return "你已有进行中的采集动作，请先完成。"
+    if result.status == "stamina_insufficient":
+        return f"体力不足！当前仅剩 {result.stamina}。"
+    if result.status == "operation_conflict":
+        return "该事件已用于其他资源行动。"
+    return "资源行动状态已变化，请重新尝试。"
+
+
+async def _interactive_ready_notice(bot, event, uid: str, action: dict):
+    action_id = str(action["action_id"])
+    action_type = str(action["action"])
+    config = INTERACTIVE_ACTION_CONFIG[action_type]
+    ready_at = _parse_dt(action.get("ready_ts"))
+    expires_at = _parse_dt(action.get("expire_ts"))
+    if ready_at is None or expires_at is None:
+        return
+    await asyncio.sleep(max(0, (ready_at - datetime.now()).total_seconds()))
+    current = map_interactive_action_service.get_active(uid)
+    if current is None or str(current.get("action_id")) != action_id:
+        return
+    if datetime.now() <= expires_at:
+        await handle_send(
+            bot,
+            event,
+            f"{config['trigger_msg']}（地点：{action['node_name']}）",
+        )
+
+    await asyncio.sleep(max(0, (expires_at - datetime.now()).total_seconds()))
+    current = map_interactive_action_service.get_active(uid)
+    if current is None or str(current.get("action_id")) != action_id:
+        return
+    cooldown_until = (
+        datetime.now() + timedelta(seconds=int(action["cooldown_sec"]))
+    ).strftime("%Y-%m-%d %H:%M:%S")
+    expired = map_interactive_action_service.finish_failure(
+        f"map-interactive-timeout:{action_id}",
+        uid,
+        action_id,
+        "expired",
+        cooldown_until,
+    )
+    if expired.status == "applied":
+        await handle_send(
+            bot,
+            event,
+            f"❌ 时机已过，{action_type}失败（{action['node_name']}）",
+        )
+
+
 async def _process_node_action(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, action_type: str):
     ok, user_info, m = check_user(event)
     if not ok:
@@ -1520,31 +1585,23 @@ async def _process_node_action(bot: Bot, event: GroupMessageEvent | PrivateMessa
 
     uid = str(user_info["user_id"])
     now = datetime.now()
-
-    can_use, cur_cnt, cap = _check_daily_cap(uid, "gather_count", DAILY_LIMIT_CONFIG["gather"])
-    if not can_use:
-        await handle_send(bot, event, f"今日采集次数已达上限（{cap}次），请明日再来。")
+    operation_id = _map_operation_id(event, "interactive-start", uid)
+    replayed = map_interactive_action_service.replay_start(
+        operation_id, uid, action_type
+    )
+    if replayed is not None:
+        await handle_send(bot, event, _interactive_start_message(replayed, action_type))
         return
 
-    gather_cd = _get_cd(uid, "gather_cd_until")
-    if gather_cd and now < gather_cd:
-        sec = int((gather_cd - now).total_seconds())
-        await handle_send(bot, event, f"你刚忙完，先歇会儿吧（冷却剩余 {sec}s）")
-        return
-
-    st = INTERACTIVE_ACTION_STATE.get(uid)
-    if st:
-        if st.get("expire_ts") and now > st["expire_ts"]:
-            INTERACTIVE_ACTION_STATE.pop(uid, None)
-        else:
-            await handle_send(bot, event, "你已有进行中的采集动作，请先完成。")
-            return
-
-    node = get_player_current_node(uid)
-    if not node:
+    position = get_player_current_position(uid)
+    if not position:
         await handle_send(bot, event, "当前位置节点数据异常。")
         return
-
+    node = {
+        "id": position["node_id"],
+        "name": position["node_name"],
+        "type": position["node_type"],
+    }
     config = NODE_ACTION_CONFIG.get(node["type"])
     if not config or config["cmd"] != action_type:
         await handle_send(bot, event, f"当前节点【{node['name']}】(类型:{node['type']}) 无法进行【{action_type}】。")
@@ -1552,52 +1609,42 @@ async def _process_node_action(bot: Bot, event: GroupMessageEvent | PrivateMessa
 
     ia = INTERACTIVE_ACTION_CONFIG[action_type]
     stamina = int(user_info.get("user_stamina", 0))
-    if stamina < config["cost"]:
-        await handle_send(bot, event, f"体力不足！{config['desc']}需消耗 {config['cost']} 体力，当前仅剩 {stamina}。")
-        return
-
-    sql_message.update_user_stamina(uid, config["cost"], 2)
-
     wait_sec = random.randint(ia["wait_min"], ia["wait_max"])
     ready_ts = now + timedelta(seconds=wait_sec)
     expire_ts = ready_ts + timedelta(seconds=ia["resolve_timeout"])
-
-    INTERACTIVE_ACTION_STATE[uid] = {
+    action = {
+        "action_id": operation_id,
         "action": action_type,
         "node_name": node["name"],
         "node_type": node["type"],
         "pool_key": config["pool_key"],
-        "ready": False,
-        "start_ts": now,
-        "ready_ts": ready_ts,
-        "expire_ts": expire_ts,
+        "start_ts": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "ready_ts": ready_ts.strftime("%Y-%m-%d %H:%M:%S"),
+        "expire_ts": expire_ts.strftime("%Y-%m-%d %H:%M:%S"),
+        "wait_sec": wait_sec,
         "cost": config["cost"],
+        "cooldown_sec": ia["cooldown_sec"],
+        "success": random.random() <= ia["success_rate"],
     }
-
-    await handle_send(bot, event, f"{ia['start_msg']}\n预计等待 {wait_sec}s...")
-
-    async def _ready_notice():
-        await asyncio.sleep(wait_sec)
-        cur = INTERACTIVE_ACTION_STATE.get(uid)
-        if not cur:
-            return
-        if cur.get("action") != action_type:
-            return
-
-        cur["ready"] = True
-        INTERACTIVE_ACTION_STATE[uid] = cur
-        await handle_send(bot, event, f"{ia['trigger_msg']}（地点：{node['name']}）")
-
-        await asyncio.sleep(ia["resolve_timeout"])
-        cur2 = INTERACTIVE_ACTION_STATE.get(uid)
-        if not cur2:
-            return
-        if cur2.get("action") == action_type and cur2.get("ready") is True:
-            INTERACTIVE_ACTION_STATE.pop(uid, None)
-            _set_cd(uid, "gather_cd_until", ia["cooldown_sec"])
-            await handle_send(bot, event, f"❌ 时机已过，{action_type}失败（{node['name']}）")
-
-    asyncio.create_task(_ready_notice())
+    daily = _get_daily_limit(uid)
+    gather_cd = _get_cd(uid, "gather_cd_until")
+    result = map_interactive_action_service.start(
+        operation_id,
+        uid,
+        action_type,
+        stamina,
+        config["cost"],
+        {key: position[key] for key in ("realm", "heaven", "node_id")},
+        daily,
+        DAILY_LIMIT_CONFIG["gather"],
+        "" if gather_cd is None else gather_cd.strftime("%Y-%m-%d %H:%M:%S"),
+        action,
+    )
+    await handle_send(bot, event, _interactive_start_message(result, action_type))
+    if result.status == "applied":
+        asyncio.create_task(
+            _interactive_ready_notice(bot, event, uid, result.action or action)
+        )
 
 
 async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, resolve_cmd: str):
@@ -1608,7 +1655,7 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
 
     uid = str(user_info["user_id"])
     now = datetime.now()
-    st = INTERACTIVE_ACTION_STATE.get(uid)
+    st = map_interactive_action_service.get_active(uid)
     if not st:
         await handle_send(bot, event, "你当前没有进行中的采集行为。")
         return
@@ -1616,28 +1663,65 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
     action = st.get("action")
     ia = INTERACTIVE_ACTION_CONFIG.get(action)
     if not ia:
-        INTERACTIVE_ACTION_STATE.pop(uid, None)
+        cooldown_until = (now + timedelta(seconds=25)).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        map_interactive_action_service.finish_failure(
+            f"map-interactive-invalid:{st['action_id']}",
+            uid,
+            st["action_id"],
+            "invalid",
+            cooldown_until,
+        )
         await handle_send(bot, event, "状态异常，已重置。")
         return
     if ia["resolve_cmd"] != resolve_cmd:
         await handle_send(bot, event, f"当前应使用【{ia['resolve_cmd']}】而不是【{resolve_cmd}】")
         return
-    if not st.get("ready"):
-        sec = max(1, int((st["ready_ts"] - now).total_seconds()))
+    ready_ts = _parse_dt(st.get("ready_ts"))
+    expire_ts = _parse_dt(st.get("expire_ts"))
+    if ready_ts is None or expire_ts is None or "success" not in st:
+        cooldown_until = (
+            now + timedelta(seconds=int(st.get("cooldown_sec", 25) or 25))
+        ).strftime("%Y-%m-%d %H:%M:%S")
+        map_interactive_action_service.finish_failure(
+            f"map-interactive-invalid:{st['action_id']}",
+            uid,
+            st["action_id"],
+            "invalid",
+            cooldown_until,
+        )
+        await handle_send(bot, event, "资源行动状态异常，已重置。")
+        return
+    if now < ready_ts:
+        sec = max(1, int((ready_ts - now).total_seconds()))
         await handle_send(bot, event, f"还没到时机，再等等（约 {sec}s）")
         return
-    if st.get("expire_ts") and now > st["expire_ts"]:
-        INTERACTIVE_ACTION_STATE.pop(uid, None)
-        _set_cd(uid, "gather_cd_until", ia["cooldown_sec"])
+    if now > expire_ts:
+        cooldown_until = (now + timedelta(seconds=ia["cooldown_sec"])).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        map_interactive_action_service.finish_failure(
+            f"map-interactive-timeout:{st['action_id']}",
+            uid,
+            st["action_id"],
+            "expired",
+            cooldown_until,
+        )
         await handle_send(bot, event, f"❌ 时机已过，{action}失败。")
         return
 
-    if "success" not in st:
-        st["success"] = random.random() <= ia["success_rate"]
-        INTERACTIVE_ACTION_STATE[uid] = st
     if not st["success"]:
-        INTERACTIVE_ACTION_STATE.pop(uid, None)
-        _set_cd(uid, "gather_cd_until", ia["cooldown_sec"])
+        cooldown_until = (now + timedelta(seconds=ia["cooldown_sec"])).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        map_interactive_action_service.finish_failure(
+            f"map-interactive-failed:{st['action_id']}",
+            uid,
+            st["action_id"],
+            "failed",
+            cooldown_until,
+        )
         await handle_send(bot, event, f"💨 你动作慢了半拍，{action}失败（目标跑了）")
         return
 
@@ -1672,11 +1756,19 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
         if extra_item:
             settlement["rewards"].append(extra_text)
             settlement["items"].append(extra_item)
-        st["settlement"] = settlement
-        INTERACTIVE_ACTION_STATE[uid] = st
+        planned = map_interactive_action_service.save_settlement(
+            uid, st["action_id"], settlement
+        )
+        if not planned.succeeded or planned.action is None:
+            await handle_send(bot, event, "资源行动状态已变化，请重新尝试。")
+            return
+        st = planned.action
+        settlement = st["settlement"]
 
-    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"map-resource:{uid}:{event_message_id or int(st['start_ts'].timestamp())}"
+    operation_id = f"map-resource:{st['action_id']}"
+    cooldown_until = (now + timedelta(seconds=ia["cooldown_sec"])).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
     result = map_resource_reward_service.settle(
         operation_id,
         uid,
@@ -1685,6 +1777,9 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
         settlement["stone"],
         settlement["items"],
         XiuConfig().max_goods_num,
+        action_id=st["action_id"],
+        action_settlement=settlement,
+        cooldown_until=cooldown_until,
     )
     if result.status == "inventory_full":
         await handle_send(bot, event, "背包物品已达上限，资源奖励尚未领取。")
@@ -1693,8 +1788,6 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
         await handle_send(bot, event, "资源行动状态已变化，请重新尝试。")
         return
 
-    INTERACTIVE_ACTION_STATE.pop(uid, None)
-    _set_cd(uid, "gather_cd_until", ia["cooldown_sec"])
     decay_tip = f"\n当前收益系数：{int(settlement['decay'] * 100)}%" if settlement["decay"] < 1 else ""
     if settlement["rewards"]:
         tip = f"\n{settlement['extra_msg']}" if settlement["extra_msg"] else ""
