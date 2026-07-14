@@ -28,6 +28,7 @@ from .destiny_tribulation_service import DestinyTribulationService
 from .heart_devil_tribulation_service import HeartDevilTribulationService
 from .ordinary_tribulation_service import OrdinaryTribulationService
 from .pill_fusion_service import PillFusionService
+from .tribulation_state_migration_service import TribulationStateMigrationService
 
 sql_message = XiuxianDateManage()
 breakthrough_service = BreakthroughService(get_paths().game_db)
@@ -35,6 +36,7 @@ pill_fusion_service = PillFusionService(get_paths().game_db)
 ordinary_tribulation_service = OrdinaryTribulationService(get_paths().game_db, get_paths().player_db)
 destiny_tribulation_service = DestinyTribulationService(get_paths().game_db, get_paths().player_db)
 heart_devil_tribulation_service = HeartDevilTribulationService(get_paths().game_db, get_paths().player_db)
+tribulation_state_migration_service = TribulationStateMigrationService(get_paths().game_db)
 PLAYERSDATA = get_paths().players
 tribulation_cd2 = int(XiuConfig().tribulation_cd * 60)
 
@@ -92,12 +94,20 @@ def get_user_tribulation_info(user_id):
         except Exception:
             legacy_data = None
 
-        if legacy_data and not sql_message.has_user_tribulation_info(user_id):
-            default_data = sql_message.get_user_tribulation_info(user_id)
-            for key in default_data:
-                if key in legacy_data:
-                    default_data[key] = legacy_data[key]
-            sql_message.save_user_tribulation_info(user_id, default_data)
+        if isinstance(legacy_data, dict) and legacy_data:
+            migration = tribulation_state_migration_service.migrate(
+                f"tribulation-state-migration:{user_id}",
+                user_id,
+                legacy_data,
+                base_rate=XiuConfig().tribulation_base_rate,
+            )
+            if migration.database_ready:
+                try:
+                    legacy_path.unlink()
+                except OSError:
+                    pass
+                return migration.state
+            return sql_message.get_user_tribulation_info(user_id)
 
         try:
             legacy_path.unlink()
@@ -105,21 +115,6 @@ def get_user_tribulation_info(user_id):
             pass
 
     return sql_message.get_user_tribulation_info(user_id)
-
-def save_user_tribulation_info(user_id, data):
-    """保存用户渡劫信息"""
-    sql_message.save_user_tribulation_info(user_id, data)
-
-def clear_user_tribulation_info(user_id):
-    """清空用户渡劫信息(渡劫成功后调用)"""
-    user_id = str(user_id)
-    sql_message.clear_user_tribulation_info(user_id)
-    legacy_path = PLAYERSDATA / user_id / "tribulation_info.json"
-    if legacy_path.exists():
-        try:
-            legacy_path.unlink()
-        except OSError:
-            pass
 
 def refresh_achievement_titles(user_id):
     """统计变更后自动解锁称号成就，失败不影响主流程。"""

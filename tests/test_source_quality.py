@@ -1092,6 +1092,21 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("direct_breakthrough_operations", service_source)
         self.assertIn("BEGIN IMMEDIATE", service_source)
 
+    def test_legacy_tribulation_state_uses_transactional_migration(self) -> None:
+        base_root = SOURCE_ROOT / "xiuxian" / "xiuxian_base"
+        command_source = (base_root / "breakthrough_tribulation.py").read_text(
+            encoding="utf-8"
+        )
+        service_source = (
+            base_root / "tribulation_state_migration_service.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("tribulation_state_migration_service.migrate(", command_source)
+        self.assertNotIn("sql_message.save_user_tribulation_info(", command_source)
+        self.assertNotIn("sql_message.clear_user_tribulation_info(", command_source)
+        self.assertIn("tribulation_state_migration_operations", service_source)
+        self.assertIn("BEGIN IMMEDIATE", service_source)
+
     def test_tribulation_breakthrough_uses_transactional_service(self) -> None:
         base_root = SOURCE_ROOT / "xiuxian" / "xiuxian_base"
         command_source = (base_root / "breakthrough_tribulation.py").read_text(
