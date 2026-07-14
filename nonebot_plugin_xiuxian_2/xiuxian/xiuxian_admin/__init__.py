@@ -76,6 +76,7 @@ from .impart_stone_adjustment_service import AdminImpartStoneAdjustmentService
 from .impart_stone_batch_adjustment_service import (
     AdminImpartStoneBatchAdjustmentService,
 )
+from .player_status_reset_service import AdminPlayerStatusResetService
 from . import command_controls as _command_controls  # noqa: F401
 from . import empty_fallback as _empty_fallback  # noqa: F401
 from . import event_debug as _event_debug  # noqa: F401
@@ -105,6 +106,7 @@ admin_impart_stone_batch_adjustment_service = AdminImpartStoneBatchAdjustmentSer
     get_paths().impart_db,
     admin_impart_stone_adjustment_service,
 )
+admin_player_status_reset_service = AdminPlayerStatusResetService(get_paths().game_db)
 
 
 def _admin_operation_id(event, action: str, user_id: str) -> str:
@@ -1257,7 +1259,6 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
 async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """重置用户状态"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    give_qq = None  # 艾特的时候存到这里
     give_qq = get_at_user_id(args)
     if not args:
         sql_message.restate()
@@ -1265,8 +1266,8 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         msg = f"所有用户信息重置成功！"
         await handle_send(bot, event, msg)
         await restate.finish()
-    else:
-        nick_name = args.extract_plain_text().split()[0]
+    plain_args = args.extract_plain_text().split()
+    nick_name = plain_args[0] if plain_args else ""
     if nick_name:
         give_message = sql_message.get_user_info_with_name(nick_name)
         if give_message:
@@ -1274,9 +1275,23 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         else:
             give_qq = None
     if give_qq:
-        sql_message.restate(give_qq)
-        sql_message.update_user_stamina(give_qq, XiuConfig().max_stamina, 1)  # 增加体力
-        msg = f"{give_qq}用户信息重置成功！"
+        expected_state = admin_player_status_reset_service.snapshot(give_qq)
+        result = admin_player_status_reset_service.reset(
+            _admin_operation_id(event, "player-status-reset", str(give_qq)),
+            str(get_user_id(event) or "unknown"),
+            give_qq,
+            expected_state,
+            XiuConfig().max_stamina,
+            target_name=nick_name or str(give_qq),
+        )
+        if result.status == "state_changed":
+            msg = "玩家状态已变化，请重新执行指令"
+        elif result.status == "operation_conflict":
+            msg = "本次管理员状态重置与已记录事件冲突"
+        elif result.status == "user_missing":
+            msg = "目标玩家已不存在"
+        else:
+            msg = f"{give_qq}用户信息重置成功！"
         await handle_send(bot, event, msg)
         await restate.finish()
     else:
