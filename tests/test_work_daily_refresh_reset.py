@@ -135,6 +135,40 @@ class WorkDailyRefreshResetTests(unittest.TestCase):
             ("applied", "completed", 0, "duplicate"),
         )
 
+    def test_duplicate_historical_user_rows_are_one_reset_target(self):
+        with db_backend.transaction(self.database) as conn:
+            conn.execute("DROP TABLE user_xiuxian")
+            conn.execute("CREATE TABLE user_xiuxian(user_id TEXT,work_num INTEGER)")
+            conn.executemany(
+                "INSERT INTO user_xiuxian VALUES(%s,%s)",
+                (("duplicate", 0), ("duplicate", 2), ("normal", 5)),
+            )
+
+        result = self.reset()
+
+        self.assertEqual(
+            (result.status, result.task_status, result.total, result.changed),
+            ("applied", "completed", 2, 1),
+        )
+        with db_backend.connection(self.database) as conn:
+            self.assertEqual(
+                [
+                    tuple(row)
+                    for row in conn.execute(
+                        "SELECT work_num FROM user_xiuxian "
+                        "WHERE user_id='duplicate' ORDER BY rowid"
+                    ).fetchall()
+                ],
+                [(5,), (5,)],
+            )
+        self.assertEqual(
+            self.targets(),
+            [
+                ("duplicate", "applied", 0, 5),
+                ("normal", "applied", 5, 5),
+            ],
+        )
+
     def test_production_reset_entry_uses_batch_service(self):
         source = (
             Path(__file__).parents[1]
@@ -144,6 +178,7 @@ class WorkDailyRefreshResetTests(unittest.TestCase):
             "async def delayed_reminder", 1
         )[0]
         self.assertIn("work_daily_refresh_reset_service.reset(", handler)
+        self.assertIn("return result", handler)
         self.assertIn("await asyncio.sleep(0)", handler)
         self.assertNotIn("sql_message.reset_work_num(", handler)
 

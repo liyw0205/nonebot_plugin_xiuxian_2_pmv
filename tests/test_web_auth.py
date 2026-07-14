@@ -147,7 +147,10 @@ class WebAuthorizationTests(unittest.TestCase):
                 return {"id": job_id, "enabled": enabled}
 
             def queue_manual_run(self, job_id):
-                return {"id": job_id, "queued": True}
+                return {"id": job_id, "queued": True, "run_id": "run-1", "status": "queued"}
+
+            def get_run(self, run_id):
+                return {"run_id": run_id, "job_id": "daily-reset", "status": "succeeded"}
 
             def reschedule(self, job_id, trigger):
                 return {"id": job_id, "trigger": trigger}
@@ -174,6 +177,9 @@ class WebAuthorizationTests(unittest.TestCase):
                 headers={"X-CSRF-Token": "csrf-token"},
             )
             self.assertTrue(response.get_json()["queued"])
+
+            response = self.client.get("/api/scheduler/runs/run-1")
+            self.assertEqual(response.get_json()["run"]["status"], "succeeded")
 
             response = self.client.post(
                 "/api/scheduler/jobs/daily-reset/schedule",

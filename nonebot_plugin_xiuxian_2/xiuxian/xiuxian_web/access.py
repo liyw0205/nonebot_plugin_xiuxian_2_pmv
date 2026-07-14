@@ -67,6 +67,7 @@ WEB_ENDPOINT_PERMISSIONS = {
     "api_scheduler_job_enabled": WebPermission.SCHEDULER,
     "api_scheduler_job_schedule": WebPermission.SCHEDULER,
     "api_scheduler_job_run": WebPermission.SCHEDULER,
+    "api_scheduler_run": WebPermission.SCHEDULER,
     "commands": WebPermission.READ,
     "execute_command": WebPermission.DATABASE_WRITE,
     "config_management": WebPermission.READ,

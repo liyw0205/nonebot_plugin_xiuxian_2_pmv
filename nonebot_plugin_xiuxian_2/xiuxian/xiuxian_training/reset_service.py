@@ -165,7 +165,7 @@ class TrainingResetService:
                     user_ids = tuple(
                         str(row[0])
                         for row in conn.execute(
-                            "SELECT user_id FROM user_xiuxian ORDER BY user_id"
+                            "SELECT DISTINCT user_id FROM user_xiuxian ORDER BY user_id"
                         ).fetchall()
                     )
                     task_status = "completed" if not user_ids else "running"

@@ -53,6 +53,16 @@
         if (!data.success) throw new Error(data.error || '操作失败');
         return data;
     }
+    async function waitForRun(runId) {
+        for (let attempt = 0; attempt < 120; attempt += 1) {
+            const response = await fetch('/api/scheduler/runs/' + encodeURIComponent(runId));
+            const data = await response.json();
+            if (!data.success) throw new Error(data.error || '无法读取执行结果');
+            if (data.run.status === 'succeeded' || data.run.status === 'failed') return data.run;
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        throw new Error('任务仍在执行，请稍后刷新查看');
+    }
     async function load() {
         rows.innerHTML = '<tr><td colspan="5">加载中</td></tr>';
         try {
@@ -83,7 +93,13 @@
         const row = event.target.closest('tr'); if (!row) return;
         const jobId = encodeURIComponent(row.dataset.jobId);
         if (event.target.closest('.job-run')) {
-            try { await post('/api/scheduler/jobs/' + jobId + '/run'); showToast('已加入手动执行队列', true); load(); } catch (error) { showToast(error.message, false); }
+            try {
+                const queued = await post('/api/scheduler/jobs/' + jobId + '/run');
+                showToast('任务已加入执行队列', true);
+                const run = await waitForRun(queued.run_id);
+                showToast(run.status === 'succeeded' ? '任务执行成功' : '任务执行失败：' + (run.error || '未知错误'), run.status === 'succeeded');
+                load();
+            } catch (error) { showToast(error.message, false); }
         }
         if (event.target.closest('.job-save')) {
             const editor = row.querySelector('.schedule-editor'); const previous = JSON.parse(editor.dataset.trigger);

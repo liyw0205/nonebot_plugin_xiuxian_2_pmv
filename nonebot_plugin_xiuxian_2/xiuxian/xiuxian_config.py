@@ -21,16 +21,15 @@ class XiuConfig:
 
         self.qqq = 144795954 
         # 官群设置
-        self.put_bot = []
-        # ["123456"]
+        self.put_bot = ["102569432", "900000021"]
+        # 官方 QQ 机器人与本地 OneBot 测试机器人
         # 接收消息qq,主qq，框架将只处理此qq的消息
         # 设置这个屏蔽群聊/私聊才能生效
-        self.shield_group = []
-        # ["123456"]
-        # 屏蔽的群聊
-        self.response_group = False
+        self.shield_group = ["01DEF55E88575D870F0FBA68AD1D0D72"]
+        # response_group=True 时，此列表为群聊白名单
+        self.response_group = True
         # 反转屏蔽的群聊，仅响应这些群的消息
-        self.shield_private = False
+        self.shield_private = True
         # 屏蔽私聊
         self.main_bo = []
         # 负责发送消息的qq

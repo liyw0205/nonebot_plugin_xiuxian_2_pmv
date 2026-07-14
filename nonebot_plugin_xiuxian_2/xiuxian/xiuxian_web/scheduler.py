@@ -41,3 +41,11 @@ def api_scheduler_job_run(job_id):
         return api_success(**job_manager.queue_manual_run(job_id))
     except ValueError as exc:
         return api_error(exc, status=400)
+
+
+@app.route("/api/scheduler/runs/<run_id>")
+def api_scheduler_run(run_id):
+    try:
+        return api_success(run=job_manager.get_run(run_id))
+    except ValueError as exc:
+        return api_error(exc, status=404)

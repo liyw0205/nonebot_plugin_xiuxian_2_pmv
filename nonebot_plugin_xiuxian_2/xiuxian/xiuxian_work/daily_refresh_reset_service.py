@@ -101,7 +101,7 @@ class WorkDailyRefreshResetService:
                     user_ids = tuple(
                         str(row[0])
                         for row in conn.execute(
-                            "SELECT user_id FROM user_xiuxian ORDER BY user_id"
+                            "SELECT DISTINCT user_id FROM user_xiuxian ORDER BY user_id"
                         ).fetchall()
                     )
                     task_status = "completed" if not user_ids else "running"
@@ -150,24 +150,29 @@ class WorkDailyRefreshResetService:
                 for pending_row in pending:
                     user_id = str(pending_row[0])
                     user = conn.execute(
-                        "SELECT work_num FROM user_xiuxian WHERE user_id=%s",
+                        "SELECT COUNT(*),MIN(COALESCE(work_num,0)),"
+                        "MAX(COALESCE(work_num,0)) FROM user_xiuxian WHERE user_id=%s",
                         (user_id,),
                     ).fetchone()
-                    if user is None:
+                    row_count = int(user[0] or 0) if user is not None else 0
+                    if row_count == 0:
                         conn.execute(
                             "UPDATE work_daily_refresh_reset_targets SET status='skipped',"
                             "updated_at=%s WHERE business_date=%s AND user_id=%s AND status='pending'",
                             (updated_at, business_date, user_id),
                         )
                         continue
-                    previous_count = int(user[0] or 0)
+                    previous_count = int(user[1] or 0)
+                    previous_max = int(user[2] or 0)
                     updated = conn.execute(
                         "UPDATE user_xiuxian SET work_num=%s WHERE user_id=%s",
                         (reset_count, user_id),
                     )
-                    if updated.rowcount != 1:
+                    if updated.rowcount != row_count:
                         raise db_backend.IntegrityError("work refresh reset target changed")
-                    changed += int(previous_count != reset_count)
+                    changed += int(
+                        previous_count != reset_count or previous_max != reset_count
+                    )
                     conn.execute(
                         "UPDATE work_daily_refresh_reset_targets SET status='applied',"
                         "previous_count=%s,final_count=%s,updated_at=%s "

@@ -49,10 +49,15 @@ async def _run_job(job_name: str, func, *args, **kwargs):
         logger.opt(colors=True).info(f"<cyan>[定时任务开始]</cyan> <green>{job_name}</green>")
         result = func(*args, **kwargs)
         if hasattr(result, "__await__"):
-            await result
+            result = await result
+        if result is False or getattr(result, "succeeded", True) is False:
+            status = getattr(result, "status", "failed")
+            raise RuntimeError(f"任务返回失败状态：{status}")
         logger.opt(colors=True).success(f"<cyan>[定时任务完成]</cyan> <green>{job_name}</green>")
+        return result
     except Exception as e:
         logger.opt(colors=True).error(f"<red>[定时任务失败] {job_name}: {e}</red>")
+        raise
 
 
 # =========================
@@ -71,11 +76,7 @@ async def _run_job(job_name: str, func, *args, **kwargs):
 )
 async def daily_reset_sign():
     """每日签到重置"""
-    try:
-        sql_message.sign_remake()
-        logger.opt(colors=True).info("<green>每日修仙签到重置成功！</green>")
-    except Exception as e:
-        logger.opt(colors=True).error(f"<red>每日修仙签到重置失败：{e}</red>")
+    await _run_job("每日修仙签到重置", sql_message.sign_remake)
 
 
 @scheduler.scheduled_job(
@@ -90,11 +91,7 @@ async def daily_reset_sign():
 )
 async def daily_reset_beg():
     """每日奇缘重置"""
-    try:
-        sql_message.beg_remake()
-        logger.opt(colors=True).info("<green>仙途奇缘重置成功！</green>")
-    except Exception as e:
-        logger.opt(colors=True).error(f"<red>仙途奇缘重置失败：{e}</red>")
+    await _run_job("仙途奇缘重置", sql_message.beg_remake)
 
 
 @scheduler.scheduled_job(
@@ -109,11 +106,7 @@ async def daily_reset_beg():
 )
 async def daily_reset_day_num():
     """每日丹药使用次数重置"""
-    try:
-        sql_message.day_num_reset()
-        logger.opt(colors=True).info("<green>每日丹药使用次数重置成功！</green>")
-    except Exception as e:
-        logger.opt(colors=True).error(f"<red>每日丹药使用次数重置失败：{e}</red>")
+    await _run_job("每日丹药使用次数重置", sql_message.day_num_reset)
 
 
 @scheduler.scheduled_job(
@@ -128,11 +121,7 @@ async def daily_reset_day_num():
 )
 async def daily_reset_mixelixir_num():
     """每日炼丹次数重置"""
-    try:
-        sql_message.mixelixir_num_reset()
-        logger.opt(colors=True).info("<green>每日炼丹次数重置成功！</green>")
-    except Exception as e:
-        logger.opt(colors=True).error(f"<red>每日炼丹次数重置失败：{e}</red>")
+    await _run_job("每日炼丹次数重置", sql_message.mixelixir_num_reset)
 
 
 @scheduler.scheduled_job(
@@ -147,11 +136,7 @@ async def daily_reset_mixelixir_num():
 )
 async def daily_reset_impart_num():
     """每日传承抽卡次数重置"""
-    try:
-        xiuxian_impart.impart_num_reset()
-        logger.opt(colors=True).info("<green>每日传承抽卡次数重置成功！</green>")
-    except Exception as e:
-        logger.opt(colors=True).error(f"<red>每日传承抽卡次数重置失败：{e}</red>")
+    await _run_job("每日传承抽卡次数重置", xiuxian_impart.impart_num_reset)
 
 
 @scheduler.scheduled_job(
@@ -465,6 +450,7 @@ async def backup_database_files():
             logger.opt(colors=True).info(f"<green>{message}</green>")
             logger.opt(colors=True).success("<cyan>[定时任务完成]</cyan> <green>数据库备份</green>")
         else:
-            logger.opt(colors=True).error(f"<red>{message}</red>")
+            raise RuntimeError(str(message or "数据库备份返回失败状态"))
     except Exception as e:
         logger.opt(colors=True).error(f"<red>[定时任务失败] 数据库备份: {e}</red>")
+        raise

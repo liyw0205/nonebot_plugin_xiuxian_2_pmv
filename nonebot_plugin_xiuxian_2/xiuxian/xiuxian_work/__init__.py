@@ -347,14 +347,13 @@ async def resetrefreshnum():
     while True:
         result = work_daily_refresh_reset_service.reset(business_date, count)
         if result.status == "operation_conflict":
-            logger.error(f"悬赏令刷新次数重置配置冲突：{business_date}")
-            return
+            raise RuntimeError(f"悬赏令刷新次数重置配置冲突：{business_date}")
         if result.task_status != "running":
             logger.opt(colors=True).info(
                 f"用户悬赏令刷新次数重置完成：{result.completed}/{result.total}，"
                 f"实际变更{result.changed}人"
             )
-            return
+            return result
         await asyncio.sleep(0)
 
 async def delayed_reminder(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, user_id: str):

@@ -4,7 +4,14 @@ from datetime import datetime
 from pathlib import Path
 from threading import RLock
 from typing import Any
+from uuid import uuid4
 
+from apscheduler.events import (
+    EVENT_JOB_ERROR,
+    EVENT_JOB_EXECUTED,
+    EVENT_JOB_MISSED,
+    EVENT_JOB_SUBMITTED,
+)
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from nonebot.log import logger
@@ -17,6 +24,7 @@ SCHEDULE_STORE = get_paths().data / "scheduler_overrides.json"
 _DEFAULT_STORE = {"version": 1, "jobs": {}}
 _CRON_FIELDS = ("year", "month", "day", "week", "day_of_week", "hour", "minute", "second")
 _MANUAL_PREFIX = "web-manual:"
+_RUN_HISTORY_LIMIT = 100
 
 
 class SchedulerJobManager:
@@ -26,6 +34,50 @@ class SchedulerJobManager:
         self._scheduler = scheduler
         self._store_path = Path(store_path)
         self._lock = RLock()
+        self._runs: dict[str, dict[str, Any]] = {}
+        self._manual_jobs: dict[str, str] = {}
+        self._last_runs: dict[str, dict[str, Any]] = {}
+        self._scheduler.add_listener(
+            self._handle_job_event,
+            EVENT_JOB_SUBMITTED | EVENT_JOB_EXECUTED | EVENT_JOB_ERROR | EVENT_JOB_MISSED,
+        )
+
+    def _now(self) -> str:
+        return datetime.now(getattr(self._scheduler, "timezone", None)).isoformat()
+
+    def _handle_job_event(self, event) -> None:
+        manual_job_id = str(event.job_id)
+        with self._lock:
+            run_id = self._manual_jobs.get(manual_job_id)
+            if run_id is None:
+                return
+            run = self._runs.get(run_id)
+            if run is None:
+                self._manual_jobs.pop(manual_job_id, None)
+                return
+            if event.code == EVENT_JOB_SUBMITTED:
+                if run["status"] == "queued":
+                    run["status"] = "running"
+                    run["started_at"] = self._now()
+                return
+
+            self._manual_jobs.pop(manual_job_id, None)
+            run["finished_at"] = self._now()
+            if event.code == EVENT_JOB_EXECUTED:
+                run["status"] = "succeeded"
+                run["error"] = None
+            elif event.code == EVENT_JOB_MISSED:
+                run["status"] = "failed"
+                run["error"] = "任务错过调度时间"
+            else:
+                run["status"] = "failed"
+                exception = getattr(event, "exception", None)
+                run["error"] = (
+                    f"{type(exception).__name__}: {exception}"
+                    if exception is not None
+                    else "任务执行失败"
+                )
+            self._last_runs[run["job_id"]] = dict(run)
 
     def _load_store(self) -> dict[str, Any]:
         data = load_json_file(self._store_path, _DEFAULT_STORE, dict)
@@ -86,7 +138,7 @@ class SchedulerJobManager:
         return job
 
     def _job_data(self, job) -> dict[str, Any]:
-        return {
+        data = {
             "id": str(job.id),
             "name": str(job.name or job.id),
             "enabled": job.next_run_time is not None,
@@ -95,6 +147,9 @@ class SchedulerJobManager:
             "max_instances": int(job.max_instances),
             "coalesce": bool(job.coalesce),
         }
+        last_run = self._last_runs.get(str(job.id))
+        data["last_run"] = dict(last_run) if last_run else None
+        return data
 
     def list_jobs(self) -> list[dict[str, Any]]:
         with self._lock:
@@ -138,20 +193,54 @@ class SchedulerJobManager:
         with self._lock:
             job = self._get_job(job_id)
             manual_id = f"{_MANUAL_PREFIX}{job.id}"
-            if self._scheduler.get_job(manual_id) is not None:
-                raise ValueError("该任务已有一次手动执行等待调度")
-            self._scheduler.add_job(
-                job.func,
-                trigger="date",
-                run_date=datetime.now(getattr(self._scheduler, "timezone", None)),
-                args=job.args,
-                kwargs=job.kwargs,
-                id=manual_id,
-                name=f"手动执行：{job.name or job.id}",
-                max_instances=1,
-                misfire_grace_time=300,
-            )
-            return {"id": str(job.id), "queued": True}
+            if (
+                manual_id in self._manual_jobs
+                or self._scheduler.get_job(manual_id) is not None
+            ):
+                raise ValueError("该任务已有一次手动执行正在排队或运行")
+            run_id = uuid4().hex
+            while len(self._runs) >= _RUN_HISTORY_LIMIT:
+                self._runs.pop(next(iter(self._runs)))
+            run = {
+                "run_id": run_id,
+                "job_id": str(job.id),
+                "status": "queued",
+                "queued_at": self._now(),
+                "started_at": None,
+                "finished_at": None,
+                "error": None,
+            }
+            self._runs[run_id] = run
+            self._manual_jobs[manual_id] = run_id
+            try:
+                self._scheduler.add_job(
+                    job.func,
+                    trigger="date",
+                    run_date=datetime.now(getattr(self._scheduler, "timezone", None)),
+                    args=job.args,
+                    kwargs=job.kwargs,
+                    id=manual_id,
+                    name=f"手动执行：{job.name or job.id}",
+                    max_instances=1,
+                    misfire_grace_time=300,
+                )
+            except Exception:
+                self._manual_jobs.pop(manual_id, None)
+                self._runs.pop(run_id, None)
+                raise
+            return {
+                "id": str(job.id),
+                "queued": True,
+                "run_id": run_id,
+                "status": "queued",
+            }
+
+    def get_run(self, run_id: str) -> dict[str, Any]:
+        with self._lock:
+            run = self._runs.get(str(run_id))
+            if run is None:
+                raise ValueError("手动执行记录不存在")
+            return dict(run)
 
     def apply_persisted_overrides(self) -> None:
         with self._lock:

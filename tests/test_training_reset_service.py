@@ -221,6 +221,37 @@ def test_same_operation_rejects_different_operator_and_empty_set_is_idempotent(
     assert service.reset("empty", "admin-a").status == "duplicate"
 
 
+def test_duplicate_historical_user_rows_create_one_reset_target(tmp_path):
+    game_database, player_database = create_databases(tmp_path)
+    with sqlite3.connect(game_database) as conn:
+        conn.executescript(
+            "DROP TABLE user_xiuxian;"
+            "CREATE TABLE user_xiuxian(user_id TEXT);"
+            "INSERT INTO user_xiuxian VALUES('u1');"
+            "INSERT INTO user_xiuxian VALUES('u1');"
+        )
+    service = TrainingResetService(game_database, player_database)
+
+    result = service.reset(
+        "duplicate-user",
+        "admin",
+        reset_date="2026-07-14",
+    )
+
+    assert (
+        result.status,
+        result.task_status,
+        result.total,
+        result.completed,
+        result.changed,
+    ) == ("applied", "completed", 1, 1, 1)
+    with sqlite3.connect(game_database) as conn:
+        assert conn.execute(
+            "SELECT user_id,status FROM admin_training_reset_targets "
+            "WHERE operation_id='duplicate-user'"
+        ).fetchall() == [("u1", "applied")]
+
+
 def test_production_entry_uses_resumable_reset_service():
     root = Path(__file__).parents[1]
     source = (
