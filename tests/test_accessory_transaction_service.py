@@ -61,16 +61,30 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
     def write_bag(self, bag) -> None:
         self.write_accessories({}, bag)
 
-    def write_accessories(self, equipped, bag) -> None:
+    def write_accessories(self, equipped, bag, presets=None) -> None:
+        presets = presets or {}
         with db_backend.transaction(self.player_database) as conn:
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS player_accessory "
-                "(user_id TEXT PRIMARY KEY, equipped TEXT, bag TEXT)"
+                "(user_id TEXT PRIMARY KEY, equipped TEXT, bag TEXT, "
+                "preset_1 TEXT, preset_2 TEXT, preset_3 TEXT)"
             )
             conn.execute(
-                "INSERT INTO player_accessory VALUES (%s, %s, %s) "
-                "ON CONFLICT (user_id) DO UPDATE SET equipped=EXCLUDED.equipped, bag=EXCLUDED.bag",
-                ("user", json.dumps(equipped), json.dumps(bag)),
+                "INSERT INTO player_accessory "
+                "(user_id, equipped, bag, preset_1, preset_2, preset_3) "
+                "VALUES (%s, %s, %s, %s, %s, %s) "
+                "ON CONFLICT (user_id) DO UPDATE SET "
+                "equipped=EXCLUDED.equipped, bag=EXCLUDED.bag, "
+                "preset_1=EXCLUDED.preset_1, preset_2=EXCLUDED.preset_2, "
+                "preset_3=EXCLUDED.preset_3",
+                (
+                    "user",
+                    json.dumps(equipped),
+                    json.dumps(bag),
+                    json.dumps(presets.get(1)) if presets.get(1) is not None else None,
+                    json.dumps(presets.get(2)) if presets.get(2) is not None else None,
+                    json.dumps(presets.get(3)) if presets.get(3) is not None else None,
+                ),
             )
 
     def accessory_state(self):
@@ -80,6 +94,15 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
                 ("user",),
             ).fetchone()
         return json.loads(row[0]), json.loads(row[1])
+
+    def preset_state(self, preset_idx):
+        with db_backend.connection(self.player_database) as conn:
+            row = conn.execute(
+                f"SELECT preset_{int(preset_idx)} FROM player_accessory "
+                "WHERE user_id=%s",
+                ("user",),
+            ).fetchone()
+        return json.loads(row[0]) if row and row[0] else None
 
     def state(self):
         with db_backend.connection(self.game_database) as conn:
@@ -320,6 +343,186 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
         self.assertEqual("material_mismatch", invalid.status)
         self.assertEqual((equipped, [mismatch]), self.accessory_state())
 
+    def test_save_preset_uses_equipped_snapshot_and_replays(self) -> None:
+        bracelet = {"uid": "bracelet", "name": "烈阳手镯", "part": "手镯"}
+        ring = {"uid": "ring", "name": "玄渊戒指", "part": "戒指"}
+        equipped = {"手镯": bracelet, "戒指": ring, "手环": None, "项链": None}
+        old_preset = {
+            "手镯": "old", "戒指": None, "手环": None, "项链": None
+        }
+        self.write_accessories(equipped, [], {1: old_preset})
+
+        first = self.service.save_preset(
+            "preset-save-1", "user", 1, equipped, old_preset
+        )
+        duplicate = self.service.save_preset(
+            "preset-save-1", "user", 1, equipped, old_preset
+        )
+        conflict = self.service.save_preset(
+            "preset-save-1", "user", 1, equipped, duplicate.details["preset"]
+        )
+
+        self.assertEqual((first.status, duplicate.status), ("applied", "duplicate"))
+        self.assertEqual("state_changed", conflict.status)
+        self.assertTrue(duplicate.details["had_old"])
+        self.assertEqual(
+            {
+                "手镯": "bracelet",
+                "戒指": "ring",
+                "手环": None,
+                "项链": None,
+            },
+            self.preset_state(1),
+        )
+
+    def test_save_preset_rejects_stale_equipment_or_preset(self) -> None:
+        equipped = {
+            "手镯": {"uid": "bracelet", "name": "手镯", "part": "手镯"},
+            "戒指": None,
+            "手环": None,
+            "项链": None,
+        }
+        empty = {"手镯": None, "戒指": None, "手环": None, "项链": None}
+        self.write_accessories(equipped, [], {1: empty})
+
+        stale_equipped = self.service.save_preset(
+            "preset-save-stale-equipment", "user", 1, {}, empty
+        )
+        stale_preset = self.service.save_preset(
+            "preset-save-stale-preset",
+            "user",
+            1,
+            equipped,
+            dict(empty, 手镯="missing"),
+        )
+
+        self.assertEqual("state_changed", stale_equipped.status)
+        self.assertEqual("state_changed", stale_preset.status)
+        self.assertEqual(empty, self.preset_state(1))
+
+    def test_preset_service_migrates_legacy_accessory_table(self) -> None:
+        equipped = {"手镯": None, "戒指": None, "手环": None, "项链": None}
+        empty = {"手镯": None, "戒指": None, "手环": None, "项链": None}
+        with db_backend.transaction(self.player_database) as conn:
+            conn.execute("DROP TABLE player_accessory")
+            conn.execute(
+                "CREATE TABLE player_accessory "
+                "(user_id TEXT PRIMARY KEY, equipped TEXT, bag TEXT)"
+            )
+            conn.execute(
+                "INSERT INTO player_accessory VALUES (%s, %s, %s)",
+                ("user", json.dumps(equipped), json.dumps([])),
+            )
+
+        result = self.service.save_preset(
+            "preset-migrate", "user", 1, equipped, empty
+        )
+
+        self.assertEqual("applied", result.status)
+        with db_backend.connection(self.player_database) as conn:
+            columns = set(conn.column_names("player_accessory"))
+        self.assertTrue({"preset_1", "preset_2", "preset_3"}.issubset(columns))
+        self.assertEqual(empty, self.preset_state(1))
+
+    def test_quick_equip_is_atomic_idempotent_and_cleans_missing_uid(self) -> None:
+        old_bracelet = {
+            "uid": "old-bracelet", "name": "旧手镯", "part": "手镯"
+        }
+        target_bracelet = {
+            "uid": "target-bracelet", "name": "新手镯", "part": "手镯"
+        }
+        current_ring = {"uid": "ring", "name": "戒指", "part": "戒指"}
+        equipped = {
+            "手镯": old_bracelet,
+            "戒指": current_ring,
+            "手环": None,
+            "项链": None,
+        }
+        bag = [target_bracelet]
+        preset = {
+            "手镯": "target-bracelet",
+            "戒指": "ring",
+            "手环": None,
+            "项链": "missing-necklace",
+        }
+        self.write_accessories(equipped, bag, {2: preset})
+
+        first = self.service.quick_equip_preset(
+            "preset-equip-1", "user", 2, equipped, bag, preset
+        )
+        duplicate = self.service.quick_equip_preset(
+            "preset-equip-1", "user", 2, equipped, bag, preset
+        )
+
+        self.assertEqual((first.status, duplicate.status), ("applied", "duplicate"))
+        self.assertEqual((first.affected, duplicate.affected), (1, 1))
+        self.assertEqual(first.details, duplicate.details)
+        saved_equipped, saved_bag = self.accessory_state()
+        self.assertEqual("target-bracelet", saved_equipped["手镯"]["uid"])
+        self.assertEqual(["old-bracelet"], [item["uid"] for item in saved_bag])
+        self.assertIsNone(self.preset_state(2)["项链"])
+        self.assertEqual(
+            [{"slot": "戒指", "reason": "already_equipped"}],
+            first.details["skipped"],
+        )
+
+    def test_quick_equip_part_mismatch_preserves_accessory(self) -> None:
+        wrong_part = {
+            "uid": "ring-in-bracelet-slot", "name": "错位戒指", "part": "戒指"
+        }
+        equipped = {"手镯": None, "戒指": None, "手环": None, "项链": None}
+        bag = [wrong_part]
+        preset = {
+            "手镯": "ring-in-bracelet-slot",
+            "戒指": None,
+            "手环": None,
+            "项链": None,
+        }
+        self.write_accessories(equipped, bag, {3: preset})
+
+        result = self.service.quick_equip_preset(
+            "preset-equip-mismatch", "user", 3, equipped, bag, preset
+        )
+
+        self.assertEqual("applied", result.status)
+        self.assertEqual(0, result.affected)
+        self.assertEqual((equipped, bag), self.accessory_state())
+        self.assertEqual(preset, self.preset_state(3))
+        self.assertEqual("part_mismatch", result.details["skipped"][0]["reason"])
+
+    def test_operation_write_failure_rolls_back_preset_save_and_equip(self) -> None:
+        equipped = {"手镯": None, "戒指": None, "手环": None, "项链": None}
+        target = {"uid": "target", "name": "目标手镯", "part": "手镯"}
+        bag = [target]
+        preset = {"手镯": "target", "戒指": None, "手环": None, "项链": None}
+        self.write_accessories(equipped, bag, {1: preset})
+        with db_backend.connection(self.game_database) as conn:
+            conn.execute(
+                "ATTACH DATABASE %s AS player_data", (str(self.player_database),)
+            )
+            self.service._ensure_schema(conn)
+            conn.commit()
+            conn.execute("DETACH DATABASE player_data")
+        with db_backend.transaction(self.game_database) as conn:
+            conn.execute(
+                "CREATE TRIGGER fail_accessory_preset_operation "
+                "BEFORE INSERT ON accessory_transaction_operations "
+                "WHEN NEW.action IN ('save_preset', 'quick_equip_preset') "
+                "BEGIN SELECT RAISE(ABORT, 'operation failed'); END"
+            )
+
+        before = self.accessory_state(), self.preset_state(1)
+        with self.assertRaises(db_backend.IntegrityError):
+            self.service.save_preset(
+                "preset-save-fail", "user", 1, equipped, preset
+            )
+        self.assertEqual(before, (self.accessory_state(), self.preset_state(1)))
+        with self.assertRaises(db_backend.IntegrityError):
+            self.service.quick_equip_preset(
+                "preset-equip-fail", "user", 1, equipped, bag, preset
+            )
+        self.assertEqual(before, (self.accessory_state(), self.preset_state(1)))
+
     def test_operation_write_failure_rolls_back_upgrade(self) -> None:
         main = {
             "uid": "main",
@@ -442,6 +645,28 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
         self.assertIn("accessory_transaction_service.upgrade(", handler)
         self.assertNotIn("_save_data(", handler)
         self.assertNotIn("del bag[", handler)
+
+    def test_real_preset_handlers_use_transaction_service(self) -> None:
+        root = Path(__file__).parents[1]
+        source = (
+            root / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_back/accessory.py"
+        ).read_text(encoding="utf-8")
+        save_handler = source.split("@accessory_preset.handle", 1)[1].split(
+            "@quick_equip_accessory.handle", 1
+        )[0]
+        equip_handler = source.split("@quick_equip_accessory.handle", 1)[1]
+        helpers = (
+            root
+            / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_back/accessory_helpers.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("accessory_transaction_service.save_preset(", save_handler)
+        self.assertNotIn("_save_accessory_preset(", save_handler)
+        self.assertIn(
+            "accessory_transaction_service.quick_equip_preset(", equip_handler
+        )
+        self.assertNotIn("player_data_manager.patch_doc(", equip_handler)
+        self.assertNotIn("def _save_accessory_preset(", helpers)
 
 
 if __name__ == "__main__":

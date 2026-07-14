@@ -1267,18 +1267,29 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     preset_idx = int(arg)
-    old_preset = _clean_accessory_preset(user_id, preset_idx)
+    operation_id = _accessory_operation_id(
+        event, "save_preset", user_id, str(preset_idx)
+    )
+    save_result = accessory_transaction_service.replay(
+        operation_id, "save_preset"
+    )
+    if save_result is None:
+        data = _get_data(user_id)
+        save_result = accessory_transaction_service.save_preset(
+            operation_id,
+            user_id,
+            preset_idx,
+            deepcopy(data.get("equipped", {})),
+            deepcopy(_get_accessory_preset(user_id, preset_idx)),
+        )
+        if not save_result.succeeded:
+            await handle_send(
+                bot, event, "饰品装备或预设状态已变化，请重新查看后再保存"
+            )
+            return
 
-    data = _get_data(user_id)
-    eq = data.get("equipped", {})
-
-    new_preset = _default_accessory_preset()
-    for s in SLOTS:
-        it = eq.get(s)
-        new_preset[s] = it.get("uid") if it else None
-
-    had_old = any(old_preset.get(s) for s in SLOTS)
-    _save_accessory_preset(user_id, preset_idx, new_preset)
+    details = save_result.details or {}
+    had_old = bool(details.get("had_old"))
 
     msg_lines = [f"已保存当前装备到饰品预设{preset_idx}。"]
     if had_old:
@@ -1309,94 +1320,67 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     preset_idx = int(arg)
-    preset = _clean_accessory_preset(user_id, preset_idx)
-
-    if not any(preset.get(s) for s in SLOTS):
-        await handle_send(bot, event, f"饰品预设{preset_idx}为空，无法快速装备。")
-        return
-
-    result = {
-        "equipped": [],
-        "skipped": [],
-        "missing": []
-    }
-
-    def _mut(doc):
-        doc = _normalize_accessory_doc(doc)
-
-        for s in SLOTS:
-            uid = preset.get(s)
-            if not uid:
-                continue
-
-            # 已在该部位装备
-            current_eq = doc.get("equipped", {}).get(s)
-            if current_eq and str(current_eq.get("uid", "")) == str(uid):
-                result["skipped"].append(f"{s}已是目标饰品")
-                continue
-
-            # 在背包中找
-            hit_idx = -1
-            hit = None
-            for i, x in enumerate(doc.get("bag", [])):
-                if str(x.get("uid", "")) == str(uid):
-                    hit_idx = i
-                    hit = x
-                    break
-
-            # 不在背包，再看看是不是装备在别的地方（理论上正常不会错部位，但做兼容）
-            if not hit:
-                for slot_name in SLOTS:
-                    it = doc.get("equipped", {}).get(slot_name)
-                    if it and str(it.get("uid", "")) == str(uid):
-                        hit = it
-                        doc["equipped"][slot_name] = None
-                        break
-
-            if not hit:
-                result["missing"].append(f"{s}预设饰品已不存在")
-                continue
-
-            # 部位校验
-            if hit.get("part") != s:
-                result["skipped"].append(f"{hit.get('name', '未知饰品')}部位不匹配，跳过")
-                continue
-
-            # 当前部位旧装备回背包
-            old = doc["equipped"].get(s)
-            if old:
-                doc["bag"].append(old)
-
-            # 如果命中对象来自背包则删掉
-            if hit_idx >= 0:
-                del doc["bag"][hit_idx]
-
-            doc["equipped"][s] = hit
-            result["equipped"].append(f"{s}→{hit.get('name', '未知饰品')}")
-
-        return True
-
-    player_data_manager.patch_doc(
-        user_id=user_id,
-        table_name=TABLE,
-        fields=["equipped", "bag"],
-        mutator=_mut,
-        default_factory=_default_accessory_doc
+    operation_id = _accessory_operation_id(
+        event, "quick_equip_preset", user_id, str(preset_idx)
     )
+    equip_result = accessory_transaction_service.replay(
+        operation_id, "quick_equip_preset"
+    )
+    if equip_result is None:
+        data = _get_data(user_id)
+        preset = _get_accessory_preset(user_id, preset_idx)
+        if not any(preset.get(slot) for slot in SLOTS):
+            await handle_send(bot, event, f"饰品预设{preset_idx}为空，无法快速装备。")
+            return
+        equip_result = accessory_transaction_service.quick_equip_preset(
+            operation_id,
+            user_id,
+            preset_idx,
+            deepcopy(data.get("equipped", {})),
+            deepcopy(data.get("bag", [])),
+            deepcopy(preset),
+        )
+        if not equip_result.succeeded:
+            messages = {
+                "preset_empty": f"饰品预设{preset_idx}为空，无法快速装备。",
+                "state_changed": "饰品装备、背包或预设状态已变化，请重新查看后再试",
+            }
+            await handle_send(
+                bot,
+                event,
+                messages.get(equip_result.status, "快速装备饰品失败，请稍后重试"),
+            )
+            return
+
+    result = equip_result.details or {}
+    equipped_items = result.get("equipped", [])
+    skipped_items = result.get("skipped", [])
+    missing_items = result.get("missing", [])
 
     msg_lines = [f"【快速装备饰品{preset_idx}】"]
 
-    if result["equipped"]:
+    if equipped_items:
         msg_lines.append("【成功装备】")
-        msg_lines.extend([f" - {x}" for x in result["equipped"]])
+        msg_lines.extend([
+            f" - {item['slot']}→{item['name']}" for item in equipped_items
+        ])
 
-    if result["skipped"]:
+    if skipped_items:
         msg_lines.append("【跳过】")
-        msg_lines.extend([f" - {x}" for x in result["skipped"]])
+        for item in skipped_items:
+            if item["reason"] == "already_equipped":
+                msg_lines.append(f" - {item['slot']}已是目标饰品")
+            else:
+                msg_lines.append(
+                    f" - {item.get('name', '未知饰品')}部位不匹配，跳过"
+                )
 
-    if result["missing"]:
+    if missing_items:
         msg_lines.append("【失效记录已清理】")
-        msg_lines.extend([f" - {x}" for x in result["missing"]])
+        msg_lines.extend([
+            f" - {item['slot']}预设饰品已不存在"
+            for item in missing_items
+        ])
 
     await handle_send(
         bot, event, "\n".join(msg_lines),

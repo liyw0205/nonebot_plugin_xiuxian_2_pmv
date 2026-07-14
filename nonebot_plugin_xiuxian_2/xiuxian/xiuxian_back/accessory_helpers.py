@@ -428,14 +428,6 @@ def _get_accessory_preset(user_id: str, preset_idx: int):
 
     return raw
 
-def _save_accessory_preset(user_id: str, preset_idx: int, preset_data: dict):
-    field = f"preset_{preset_idx}"
-    normalized = _default_accessory_preset()
-    if isinstance(preset_data, dict):
-        for s in SLOTS:
-            normalized[s] = preset_data.get(s)
-    player_data_manager.update_or_write_data(str(user_id), TABLE, field, normalized, data_type="TEXT")
-
 def _accessory_uid_exists(data: dict, uid: str):
     if not uid:
         return False
@@ -457,7 +449,6 @@ def _clean_accessory_preset(user_id: str, preset_idx: int):
     data = _get_data(str(user_id))
     preset = _get_accessory_preset(str(user_id), preset_idx)
 
-    changed = False
     result = _default_accessory_preset()
 
     for s in SLOTS:
@@ -465,12 +456,7 @@ def _clean_accessory_preset(user_id: str, preset_idx: int):
         if uid and _accessory_uid_exists(data, uid):
             result[s] = uid
         else:
-            if uid is not None:
-                changed = True
             result[s] = None
-
-    if changed:
-        _save_accessory_preset(str(user_id), preset_idx, result)
 
     return result
 

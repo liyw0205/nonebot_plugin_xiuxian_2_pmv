@@ -18,6 +18,7 @@ class AccessoryTransactionResult:
     affected: int = 0
     stone_delta: int = 0
     accessory: dict | None = None
+    details: dict | None = None
 
     @property
     def succeeded(self) -> bool:
@@ -26,6 +27,8 @@ class AccessoryTransactionResult:
 
 class AccessoryTransactionService:
     """Apply accessory and wash-stone changes in one attached DB transaction."""
+
+    _SLOTS = ("手镯", "戒指", "手环", "项链")
 
     def __init__(
         self,
@@ -60,10 +63,12 @@ class AccessoryTransactionService:
                 "PRAGMA player_data.table_info(player_accessory)"
             ).fetchall()
         }
-        if "equipped" not in columns:
-            conn.execute("ALTER TABLE player_data.player_accessory ADD COLUMN equipped TEXT")
-        if "bag" not in columns:
-            conn.execute("ALTER TABLE player_data.player_accessory ADD COLUMN bag TEXT")
+        for field_name in ("equipped", "bag", "preset_1", "preset_2", "preset_3"):
+            if field_name not in columns:
+                conn.execute(
+                    "ALTER TABLE player_data.player_accessory "
+                    f"ADD COLUMN {field_name} TEXT"
+                )
 
     @staticmethod
     def _json(value) -> str:
@@ -102,6 +107,20 @@ class AccessoryTransactionService:
             int(accessory.get("quality", 1)),
         )
 
+    @classmethod
+    def _normalize_equipped(cls, equipped) -> dict:
+        equipped = equipped if isinstance(equipped, dict) else {}
+        return {slot: equipped.get(slot) for slot in cls._SLOTS}
+
+    @classmethod
+    def _normalize_preset(cls, preset) -> dict:
+        preset = preset if isinstance(preset, dict) else {}
+        normalized = {}
+        for slot in cls._SLOTS:
+            value = preset.get(slot)
+            normalized[slot] = None if value is None or value == "" else str(value)
+        return normalized
+
     @staticmethod
     def _result_from_json(status: str, payload: str):
         value = json.loads(payload)
@@ -112,6 +131,7 @@ class AccessoryTransactionService:
             affected=int(value.get("affected", 0)),
             stone_delta=int(value.get("stone_delta", 0)),
             accessory=value.get("accessory"),
+            details=value.get("details"),
         )
 
     def replay(self, operation_id, action) -> AccessoryTransactionResult | None:
@@ -165,6 +185,7 @@ class AccessoryTransactionService:
                         "affected": result.affected,
                         "stone_delta": result.stone_delta,
                         "accessory": result.accessory,
+                        "details": result.details,
                     }
                 )
                 conn.execute(
@@ -189,6 +210,14 @@ class AccessoryTransactionService:
             return {}, []
         return self._load_dict(row[0]), self._load_list(row[1])
 
+    def _load_preset(self, conn, user_id: str, preset_idx: int) -> dict:
+        row = conn.execute(
+            f"SELECT preset_{preset_idx} FROM player_data.player_accessory "
+            "WHERE user_id=%s",
+            (user_id,),
+        ).fetchone()
+        return self._normalize_preset(self._load_dict(row[0]) if row else {})
+
     @staticmethod
     def _save_accessories(conn, user_id: str, equipped: dict, bag: list) -> None:
         conn.execute(
@@ -200,6 +229,16 @@ class AccessoryTransactionService:
                 json.dumps(equipped, ensure_ascii=False),
                 json.dumps(bag, ensure_ascii=False),
             ),
+        )
+
+    @staticmethod
+    def _save_preset(conn, user_id: str, preset_idx: int, preset: dict) -> None:
+        value = json.dumps(preset, ensure_ascii=False)
+        conn.execute(
+            f"INSERT INTO player_data.player_accessory (user_id, preset_{preset_idx}) "
+            f"VALUES (%s, %s) ON CONFLICT (user_id) DO UPDATE SET "
+            f"preset_{preset_idx}=EXCLUDED.preset_{preset_idx}",
+            (user_id, value),
         )
 
     @staticmethod
@@ -483,6 +522,166 @@ class AccessoryTransactionService:
             )
 
         return self._run(operation_id, "upgrade", payload, apply)
+
+    @staticmethod
+    def _validate_preset_index(preset_idx) -> int:
+        preset_idx = int(preset_idx)
+        if preset_idx not in {1, 2, 3}:
+            raise ValueError("preset index must be 1, 2, or 3")
+        return preset_idx
+
+    def save_preset(
+        self,
+        operation_id,
+        user_id,
+        preset_idx,
+        expected_equipped,
+        expected_preset,
+    ) -> AccessoryTransactionResult:
+        user_id = str(user_id)
+        preset_idx = self._validate_preset_index(preset_idx)
+        expected_equipped = self._normalize_equipped(expected_equipped)
+        expected_preset = self._normalize_preset(expected_preset)
+        payload = {
+            "user_id": user_id,
+            "preset_idx": preset_idx,
+            "expected_equipped": expected_equipped,
+            "expected_preset": expected_preset,
+        }
+
+        def apply(conn):
+            equipped, _ = self._load_accessories(conn, user_id)
+            equipped = self._normalize_equipped(equipped)
+            current_preset = self._load_preset(conn, user_id, preset_idx)
+            if (
+                self._json(equipped) != self._json(expected_equipped)
+                or self._json(current_preset) != self._json(expected_preset)
+            ):
+                return AccessoryTransactionResult(
+                    "state_changed", "save_preset", user_id
+                )
+
+            preset = {
+                slot: (
+                    str(equipped[slot].get("uid"))
+                    if isinstance(equipped[slot], dict)
+                    and equipped[slot].get("uid") is not None
+                    and equipped[slot].get("uid") != ""
+                    else None
+                )
+                for slot in self._SLOTS
+            }
+            self._save_preset(conn, user_id, preset_idx, preset)
+            return AccessoryTransactionResult(
+                "applied",
+                "save_preset",
+                user_id,
+                details={
+                    "preset_idx": preset_idx,
+                    "preset": preset,
+                    "had_old": any(current_preset.values()),
+                },
+            )
+
+        return self._run(operation_id, "save_preset", payload, apply)
+
+    def quick_equip_preset(
+        self,
+        operation_id,
+        user_id,
+        preset_idx,
+        expected_equipped,
+        expected_bag,
+        expected_preset,
+    ) -> AccessoryTransactionResult:
+        user_id = str(user_id)
+        preset_idx = self._validate_preset_index(preset_idx)
+        expected_equipped = self._normalize_equipped(expected_equipped)
+        expected_preset = self._normalize_preset(expected_preset)
+        payload = {
+            "user_id": user_id,
+            "preset_idx": preset_idx,
+            "expected_equipped": expected_equipped,
+            "expected_bag": expected_bag,
+            "expected_preset": expected_preset,
+        }
+
+        def apply(conn):
+            equipped, bag = self._load_accessories(conn, user_id)
+            equipped = self._normalize_equipped(equipped)
+            preset = self._load_preset(conn, user_id, preset_idx)
+            if (
+                self._json(equipped) != self._json(expected_equipped)
+                or self._json(bag) != self._json(expected_bag)
+                or self._json(preset) != self._json(expected_preset)
+            ):
+                return AccessoryTransactionResult(
+                    "state_changed", "quick_equip_preset", user_id
+                )
+            if not any(preset.values()):
+                return AccessoryTransactionResult(
+                    "preset_empty", "quick_equip_preset", user_id
+                )
+
+            equipped_results = []
+            skipped_results = []
+            missing_results = []
+            for slot in self._SLOTS:
+                uid = preset.get(slot)
+                if not uid:
+                    continue
+
+                current = equipped.get(slot)
+                if current and str(current.get("uid", "")) == uid:
+                    skipped_results.append(
+                        {"slot": slot, "reason": "already_equipped"}
+                    )
+                    continue
+
+                where, key, target = self._find(equipped, bag, uid)
+                if target is None:
+                    preset[slot] = None
+                    missing_results.append({"slot": slot})
+                    continue
+                if str(target.get("part", "")) != slot:
+                    skipped_results.append(
+                        {
+                            "slot": slot,
+                            "reason": "part_mismatch",
+                            "name": str(target.get("name", "未知饰品")),
+                        }
+                    )
+                    continue
+
+                old = equipped.get(slot)
+                if where == "bag":
+                    del bag[key]
+                else:
+                    equipped[key] = None
+                if old:
+                    bag.append(old)
+                equipped[slot] = target
+                equipped_results.append(
+                    {"slot": slot, "name": str(target.get("name", "未知饰品"))}
+                )
+
+            self._save_accessories(conn, user_id, equipped, bag)
+            self._save_preset(conn, user_id, preset_idx, preset)
+            return AccessoryTransactionResult(
+                "applied",
+                "quick_equip_preset",
+                user_id,
+                affected=len(equipped_results),
+                details={
+                    "preset_idx": preset_idx,
+                    "preset": preset,
+                    "equipped": equipped_results,
+                    "skipped": skipped_results,
+                    "missing": missing_results,
+                },
+            )
+
+        return self._run(operation_id, "quick_equip_preset", payload, apply)
 
     def batch_decompose(
         self,
