@@ -16,8 +16,6 @@
 | [🔌 跨适配器兼容层](docs/adapter_compat.md) | OneBot v11 + QQ 适配器、消息记录、撤回与主动发送接口文档 |
 | [🚦 Matcher 路由兼容层](docs/on_compat.md) | 空前缀命令环境下的 matcher 索引与路由说明 |
 | [🛡️ 数据层与 Web 面板治理](docs/database_web_governance.md) | SQLite 统一入口、迁移约定、Web 安全开关与路径约束 |
-| [🧭 后续开发路线](docs/development_roadmap.md) | 当前完成基线、P0 必须项、迁移顺序与完成定义 |
-| [✅ 架构验收基线](docs/architecture_acceptance.md) | QQ 能力、共享基础设施和 Adapter 契约验收记录 |
 | **Web 修仙管理面板** | 见下文 [🖥️ Web 修仙管理面板](#-web-修仙管理面板)（默认仅监听 `127.0.0.1:5888`） |
 
 ---
