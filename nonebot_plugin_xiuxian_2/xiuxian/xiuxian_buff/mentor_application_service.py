@@ -73,6 +73,31 @@ class MentorApplicationService:
                 conn.execute(f"ALTER TABLE mentor ADD COLUMN {field} TEXT")
 
     @staticmethod
+    def _ensure_create_operation_schema(conn) -> None:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS mentor_application_create_operations("
+            "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
+            "result_status TEXT NOT NULL,result_invite_id TEXT,"
+            "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+        )
+
+    @staticmethod
+    def _ensure_resolution_operation_schema(conn) -> None:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS mentor_application_resolution_operations("
+            "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
+            "result_status TEXT NOT NULL,result_invite_id TEXT,"
+            "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+        )
+
+    @staticmethod
+    def _table_exists(conn, table_name) -> bool:
+        return conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=%s",
+            (str(table_name),),
+        ).fetchone() is not None
+
+    @staticmethod
     def _require_protection(status) -> str:
         status = str(status).strip().lower()
         if status not in {"on", "off"}:
@@ -99,6 +124,24 @@ class MentorApplicationService:
             return None
         return MentorApplication(str(row[0]), str(row[1]), str(row[2]), str(row[3]), float(row[4]), float(row[5]))
 
+    @classmethod
+    def _application_by_id(cls, conn, invite_id) -> MentorApplication | None:
+        if not invite_id:
+            return None
+        row = conn.execute(
+            "SELECT invite_id,mentor_id,apprentice_id,status,created_at,expires_at "
+            "FROM mentor_applications WHERE invite_id=%s",
+            (str(invite_id),),
+        ).fetchone()
+        return cls._application(row)
+
+    @classmethod
+    def _stored_result(cls, conn, row) -> MentorApplicationResult:
+        status = "duplicate" if str(row[1]) == "applied" else str(row[1])
+        return MentorApplicationResult(
+            status, cls._application_by_id(conn, row[2])
+        )
+
     @staticmethod
     def _expire_stale(conn, now: float) -> None:
         conn.execute(
@@ -107,36 +150,101 @@ class MentorApplicationService:
             (now, now),
         )
 
+    def replay_create(
+        self, operation_id, mentor_id, apprentice_id
+    ) -> MentorApplicationResult | None:
+        operation_id = str(operation_id).strip()
+        mentor_id, apprentice_id = str(mentor_id), str(apprentice_id)
+        if not operation_id:
+            raise ValueError("invalid mentor application")
+        payload = json.dumps(
+            [mentor_id, apprentice_id], ensure_ascii=True, separators=(",", ":")
+        )
+        with self._lock, closing(db_backend.connect(self._player_database)) as conn:
+            if self._table_exists(conn, "mentor_application_create_operations"):
+                previous = conn.execute(
+                    "SELECT payload,result_status,result_invite_id "
+                    "FROM mentor_application_create_operations WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if previous is not None:
+                    if str(previous[0]) != payload:
+                        return MentorApplicationResult("invite_conflict")
+                    return self._stored_result(conn, previous)
+            if not self._table_exists(conn, "mentor_applications"):
+                return None
+            application = self._application_by_id(conn, operation_id)
+        if application is None:
+            return None
+        status = (
+            "duplicate"
+            if application.mentor_id == mentor_id
+            and application.apprentice_id == apprentice_id
+            else "invite_conflict"
+        )
+        return MentorApplicationResult(status, application)
+
     def create(self, invite_id, mentor_id, apprentice_id, *, ttl_seconds=60, now=None) -> MentorApplicationResult:
         invite_id, mentor_id, apprentice_id = str(invite_id), str(mentor_id), str(apprentice_id)
         created_at = float(time.time() if now is None else now)
         expires_at = created_at + max(1, int(ttl_seconds))
         if not invite_id or mentor_id == apprentice_id:
             raise ValueError("invalid mentor application")
+        payload = json.dumps(
+            [mentor_id, apprentice_id], ensure_ascii=True, separators=(",", ":")
+        )
         with self._lock, closing(db_backend.connect(self._player_database)) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 self._ensure_schema(conn)
-                self._expire_stale(conn, created_at)
-                previous = conn.execute(
-                    "SELECT invite_id,mentor_id,apprentice_id,status,created_at,expires_at "
-                    "FROM mentor_applications WHERE invite_id=%s", (invite_id,),
+                self._ensure_create_operation_schema(conn)
+                operation = conn.execute(
+                    "SELECT payload,result_status,result_invite_id "
+                    "FROM mentor_application_create_operations WHERE operation_id=%s",
+                    (invite_id,),
                 ).fetchone()
+                if operation is not None:
+                    conn.rollback()
+                    if str(operation[0]) != payload:
+                        return MentorApplicationResult("invite_conflict")
+                    return self._stored_result(conn, operation)
+                previous = self._application_by_id(conn, invite_id)
                 if previous is not None:
-                    conn.rollback()
-                    app = self._application(previous)
-                    status = "duplicate" if app.mentor_id == mentor_id and app.apprentice_id == apprentice_id else "invite_conflict"
-                    return MentorApplicationResult(status, app)
+                    if previous.mentor_id != mentor_id or previous.apprentice_id != apprentice_id:
+                        conn.rollback()
+                        return MentorApplicationResult("invite_conflict", previous)
+                    conn.execute(
+                        "INSERT INTO mentor_application_create_operations("
+                        "operation_id,payload,result_status,result_invite_id) "
+                        "VALUES(%s,%s,'applied',%s)",
+                        (invite_id, payload, invite_id),
+                    )
+                    conn.commit()
+                    return MentorApplicationResult("duplicate", previous)
+                self._expire_stale(conn, created_at)
                 if self._read_protection(conn, mentor_id) == "on":
-                    conn.rollback()
+                    conn.execute(
+                        "INSERT INTO mentor_application_create_operations("
+                        "operation_id,payload,result_status,result_invite_id) "
+                        "VALUES(%s,%s,'protected',NULL)",
+                        (invite_id, payload),
+                    )
+                    conn.commit()
                     return MentorApplicationResult("protected")
                 pending = conn.execute(
                     "SELECT invite_id,mentor_id,apprentice_id,status,created_at,expires_at "
                     "FROM mentor_applications WHERE apprentice_id=%s AND status='pending'", (apprentice_id,),
                 ).fetchone()
                 if pending is not None:
-                    conn.rollback()
-                    return MentorApplicationResult("already_pending", self._application(pending))
+                    application = self._application(pending)
+                    conn.execute(
+                        "INSERT INTO mentor_application_create_operations("
+                        "operation_id,payload,result_status,result_invite_id) "
+                        "VALUES(%s,%s,'already_pending',%s)",
+                        (invite_id, payload, application.invite_id),
+                    )
+                    conn.commit()
+                    return MentorApplicationResult("already_pending", application)
                 conn.execute(
                     "INSERT INTO mentor_applications VALUES(%s,%s,%s,'pending',%s,%s,NULL)",
                     (invite_id, mentor_id, apprentice_id, created_at, expires_at),
@@ -151,6 +259,12 @@ class MentorApplicationService:
                         "INSERT INTO mentor(user_id,mentor_apply_time,mentor_apply_target) VALUES(%s,%s,%s)",
                         (apprentice_id, apply_time, mentor_id),
                     )
+                conn.execute(
+                    "INSERT INTO mentor_application_create_operations("
+                    "operation_id,payload,result_status,result_invite_id) "
+                    "VALUES(%s,%s,'applied',%s)",
+                    (invite_id, payload, invite_id),
+                )
                 conn.commit()
                 return MentorApplicationResult(
                     "applied", MentorApplication(invite_id, mentor_id, apprentice_id, "pending", created_at, expires_at)
@@ -295,12 +409,62 @@ class MentorApplicationService:
             ).fetchone()
         return self._application(row)
 
-    def resolve(self, invite_id, mentor_id, apprentice_id, status, *, now=None) -> MentorApplicationResult:
+    def replay_resolution(
+        self, operation_id, mentor_id, apprentice_id, status
+    ) -> MentorApplicationResult | None:
+        operation_id = str(operation_id).strip()
+        mentor_id, apprentice_id = str(mentor_id), str(apprentice_id)
+        if status not in {"rejected", "expired", "cancelled"}:
+            raise ValueError("invalid mentor application status")
+        if not operation_id:
+            raise ValueError("invalid mentor application operation")
+        with self._lock, closing(db_backend.connect(self._player_database)) as conn:
+            if not self._table_exists(
+                conn, "mentor_application_resolution_operations"
+            ):
+                return None
+            previous = conn.execute(
+                "SELECT payload,result_status,result_invite_id "
+                "FROM mentor_application_resolution_operations "
+                "WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            identity = json.loads(str(previous[0]))
+            if [str(identity[1]), str(identity[2]), str(identity[3])] != [
+                mentor_id, apprentice_id, status,
+            ]:
+                return MentorApplicationResult("operation_conflict")
+            return self._stored_result(conn, previous)
+
+    def resolve(
+        self, invite_id, mentor_id, apprentice_id, status, *, operation_id=None,
+        now=None,
+    ) -> MentorApplicationResult:
         if status not in {"rejected", "expired", "cancelled"}:
             raise ValueError("invalid mentor application status")
         resolved_at = float(time.time() if now is None else now)
+        operation_id = None if operation_id is None else str(operation_id).strip()
+        payload = json.dumps(
+            [str(invite_id), str(mentor_id), str(apprentice_id), status],
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
         with self._lock, db_backend.transaction(self._player_database) as conn:
             self._ensure_schema(conn)
+            if operation_id:
+                self._ensure_resolution_operation_schema(conn)
+                previous = conn.execute(
+                    "SELECT payload,result_status,result_invite_id "
+                    "FROM mentor_application_resolution_operations "
+                    "WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if previous is not None:
+                    if str(previous[0]) != payload:
+                        return MentorApplicationResult("operation_conflict")
+                    return self._stored_result(conn, previous)
             changed = conn.execute(
                 "UPDATE mentor_applications SET status=%s,resolved_at=%s "
                 "WHERE invite_id=%s AND mentor_id=%s AND apprentice_id=%s AND status='pending'",
@@ -310,12 +474,24 @@ class MentorApplicationService:
                 "SELECT invite_id,mentor_id,apprentice_id,status,created_at,expires_at "
                 "FROM mentor_applications WHERE invite_id=%s", (str(invite_id),),
             ).fetchone()
-        app = self._application(row)
-        if changed.rowcount == 1:
-            return MentorApplicationResult("applied", app)
-        if app is not None and app.status == status:
-            return MentorApplicationResult("duplicate", app)
-        return MentorApplicationResult("state_changed", app)
+            app = self._application(row)
+            if changed.rowcount == 1:
+                result_status = "applied"
+            elif app is not None and app.status == status:
+                result_status = "duplicate"
+            else:
+                result_status = "state_changed"
+            if operation_id:
+                conn.execute(
+                    "INSERT INTO mentor_application_resolution_operations("
+                    "operation_id,payload,result_status,result_invite_id) "
+                    "VALUES(%s,%s,%s,%s)",
+                    (
+                        operation_id, payload, result_status,
+                        app.invite_id if app is not None else str(invite_id),
+                    ),
+                )
+        return MentorApplicationResult(result_status, app)
 
 
 __all__ = [

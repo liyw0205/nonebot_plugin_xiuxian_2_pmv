@@ -1631,6 +1631,38 @@ def _build_mentor_help_buttons():
     }
 
 
+def _mentor_application_result_message(result, requested_mentor_id):
+    if result.status == "protected":
+        return "对方已开启拜师保护，自动拒绝了你的拜师申请。"
+    if result.status == "invite_conflict":
+        return "该事件已用于其他拜师申请。"
+    application = result.application
+    if result.status == "already_pending" and application is not None:
+        mentor_info = sql_message.get_user_real_info(application.mentor_id)
+        mentor_name = (
+            mentor_info["user_name"] if mentor_info else application.mentor_id
+        )
+        return f"你已有向{mentor_name}发出的待处理拜师申请。"
+    if result.status == "duplicate" and application is not None:
+        mentor_info = sql_message.get_user_real_info(application.mentor_id)
+        mentor_name = (
+            mentor_info["user_name"] if mentor_info else application.mentor_id
+        )
+        status_messages = {
+            "pending": f"你已向{mentor_name}发送拜师申请，正在等待回应。",
+            "accepted": f"你向{mentor_name}发出的拜师申请已经被同意。",
+            "rejected": f"你向{mentor_name}发出的拜师申请已经被拒绝。",
+            "expired": f"你向{mentor_name}发出的拜师申请已经过期。",
+            "cancelled": f"你向{mentor_name}发出的拜师申请已经取消。",
+        }
+        return status_messages.get(
+            application.status, "这条拜师申请已经处理。"
+        )
+    mentor_info = sql_message.get_user_real_info(requested_mentor_id)
+    mentor_name = mentor_info["user_name"] if mentor_info else str(requested_mentor_id)
+    return f"向{mentor_name}发起拜师申请时状态发生变化，请稍后重试。"
+
+
 @apply_mentor.handle(parameterless=[Cooldown(cd_time=0)])
 async def apply_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """申请拜师"""
@@ -1648,26 +1680,20 @@ async def apply_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, "请指定拜师对象！格式：拜师 道号/QQ", **buttons)
         await apply_mentor.finish()
 
-    if mentor_id == user_id:
-        await handle_send(bot, event, "道友不能拜自己为师。", **buttons)
-        await apply_mentor.finish()
-
-    existing_mentor_id, existing_invite = _find_pending_mentor_invite_by_apprentice(user_id)
-    if existing_invite is not None:
-        mentor_info = sql_message.get_user_real_info(existing_mentor_id)
-        mentor_name = mentor_info["user_name"] if mentor_info else str(existing_mentor_id)
-        remaining_time = 60 - (datetime.now().timestamp() - existing_invite["timestamp"])
+    invite_id = _relation_operation_id(event, "mentor-application", user_id)
+    replayed = mentor_application_service.replay_create(
+        invite_id, mentor_id, user_id
+    )
+    if replayed is not None:
         await handle_send(
-            bot,
-            event,
-            f"你已向{mentor_name}发送过拜师申请，请等待{int(remaining_time)}秒后再试。",
+            bot, event,
+            _mentor_application_result_message(replayed, mentor_id),
             **buttons,
         )
         await apply_mentor.finish()
 
-    mentor_data = load_mentor(mentor_id)
-    if mentor_data.get("mentor_protect") == "on":
-        await handle_send(bot, event, "对方已开启拜师保护，自动拒绝了你的拜师申请。", **buttons)
+    if mentor_id == user_id:
+        await handle_send(bot, event, "道友不能拜自己为师。", **buttons)
         await apply_mentor.finish()
 
     ok, reason = _validate_mentor_application(user_id, mentor_id)
@@ -1689,16 +1715,20 @@ async def apply_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await apply_mentor.finish()
 
     mentor_info = sql_message.get_user_real_info(mentor_id)
-    invite_id = _relation_operation_id(
-        event, "mentor-application", user_id, mentor_id
-    )
     created = mentor_application_service.create(invite_id, mentor_id, user_id)
     if not created.succeeded:
-        if created.status == "protected":
-            msg = "对方已开启拜师保护，自动拒绝了你的拜师申请。"
-        else:
-            msg = "拜师申请状态已变化，请稍后重试。"
-        await handle_send(bot, event, msg, **buttons)
+        await handle_send(
+            bot, event,
+            _mentor_application_result_message(created, mentor_id),
+            **buttons,
+        )
+        await apply_mentor.finish()
+    if created.status == "duplicate":
+        await handle_send(
+            bot, event,
+            _mentor_application_result_message(created, mentor_id),
+            **buttons,
+        )
         await apply_mentor.finish()
     asyncio.create_task(expire_mentor_invite(mentor_id, user_id, invite_id, bot, event))
 
@@ -1720,9 +1750,11 @@ async def expire_mentor_invite(mentor_id, apprentice_id, invite_id, bot, event):
     await asyncio.sleep(60)
     mentor_id = str(mentor_id)
     apprentice_id = str(apprentice_id)
-    invite_data = _get_pending_mentor_invites(mentor_id).get(apprentice_id)
-    if invite_data and invite_data["invite_id"] == invite_id:
-        mentor_application_service.resolve(invite_id, mentor_id, apprentice_id, "expired")
+    expired = mentor_application_service.resolve(
+        invite_id, mentor_id, apprentice_id, "expired",
+        operation_id=f"mentor-application-expire:{invite_id}",
+    )
+    if expired.status == "applied":
         await handle_send(
             bot,
             event,
@@ -1851,12 +1883,36 @@ async def reject_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     mentor_id = str(user_info["user_id"])
     buttons = _build_mentor_help_buttons()
     apprentice_id = _resolve_user_id_from_args(args)
-    pending_invites = _get_pending_mentor_invites(mentor_id)
 
+    operation_id = None
+    if apprentice_id:
+        apprentice_id = str(apprentice_id)
+        operation_id = _relation_operation_id(
+            event, "mentor-application-reject", mentor_id
+        )
+        replayed = mentor_application_service.replay_resolution(
+            operation_id, mentor_id, apprentice_id, "rejected"
+        )
+        if replayed is not None:
+            if replayed.status == "operation_conflict":
+                await handle_send(bot, event, "该事件已用于其他拜师申请处理。", **buttons)
+            elif replayed.succeeded:
+                apprentice_info = sql_message.get_user_real_info(apprentice_id)
+                apprentice_name = (
+                    apprentice_info["user_name"] if apprentice_info else apprentice_id
+                )
+                await handle_send(
+                    bot, event, f"你拒绝了{apprentice_name}的拜师申请。",
+                    **buttons,
+                )
+            else:
+                await handle_send(bot, event, "拜师申请状态已经变化，未执行拒绝。", **buttons)
+            await reject_mentor.finish()
+
+    pending_invites = _get_pending_mentor_invites(mentor_id)
     if not pending_invites:
         await handle_send(bot, event, "没有待处理的拜师申请！", **buttons)
         await reject_mentor.finish()
-
     if not apprentice_id:
         pending_names = _format_pending_mentor_applicants(mentor_id)
         await handle_send(
@@ -1874,7 +1930,16 @@ async def reject_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
     apprentice_info = sql_message.get_user_real_info(apprentice_id)
     apprentice_name = apprentice_info["user_name"] if apprentice_info else apprentice_id
-    mentor_application_service.resolve(pending_invites[apprentice_id]["invite_id"], mentor_id, apprentice_id, "rejected")
+    rejected = mentor_application_service.resolve(
+        pending_invites[apprentice_id]["invite_id"],
+        mentor_id,
+        apprentice_id,
+        "rejected",
+        operation_id=operation_id,
+    )
+    if not rejected.succeeded:
+        await handle_send(bot, event, "拜师申请状态已经变化，未执行拒绝。", **buttons)
+        await reject_mentor.finish()
 
     await handle_send(bot, event, f"你拒绝了{apprentice_name}的拜师申请。", **buttons)
     await reject_mentor.finish()

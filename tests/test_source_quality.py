@@ -1944,7 +1944,9 @@ class SourceQualityTests(unittest.TestCase):
         apply_handler = source[apply_start:apply_end]
         self.assertIn('event, "mentor-application"', apply_handler)
         self.assertIn("mentor_application_service.create(", apply_handler)
-        self.assertIn('created.status == "protected"', apply_handler)
+        self.assertIn(
+            "_mentor_application_result_message(created, mentor_id)", apply_handler
+        )
 
         cooldown_start = source.index("def _get_mentor_apply_remaining")
         cooldown_end = source.index("def _get_pending_mentor_invites", cooldown_start)
@@ -1976,6 +1978,46 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("_grant_mentor_titles_by_stats(", sender)
         self.assertIn("def replay(", service)
         self.assertIn("_operation_identity", service)
+
+    def test_mentor_application_events_replay_before_mutable_state(self) -> None:
+        root = SOURCE_ROOT / "xiuxian" / "xiuxian_buff"
+        source = (root / "partner.py").read_text(encoding="utf-8")
+        service = (root / "mentor_application_service.py").read_text(
+            encoding="utf-8"
+        )
+
+        apply_start = source.index("async def apply_mentor_")
+        apply_end = source.index("async def expire_mentor_invite", apply_start)
+        apply_handler = source[apply_start:apply_end]
+        self.assertLess(
+            apply_handler.index("mentor_application_service.replay_create("),
+            apply_handler.index("_validate_mentor_application("),
+        )
+        self.assertIn('event, "mentor-application", user_id', apply_handler)
+        self.assertNotIn("_find_pending_mentor_invite_by_apprentice(", apply_handler)
+        self.assertNotIn("mentor_data.get(\"mentor_protect\")", apply_handler)
+
+        expire_start = source.index("async def expire_mentor_invite")
+        expire_end = source.index("async def _send_mentor_bind_success", expire_start)
+        expire_handler = source[expire_start:expire_end]
+        self.assertIn("mentor-application-expire:{invite_id}", expire_handler)
+        self.assertIn('if expired.status == "applied":', expire_handler)
+        self.assertNotIn("_get_pending_mentor_invites(", expire_handler)
+
+        reject_start = source.index("async def reject_mentor_")
+        reject_end = source.index("@my_mentor.handle", reject_start)
+        reject_handler = source[reject_start:reject_end]
+        self.assertLess(
+            reject_handler.index("mentor_application_service.replay_resolution("),
+            reject_handler.index("_get_pending_mentor_invites("),
+        )
+        self.assertIn('event, "mentor-application-reject", mentor_id', reject_handler)
+        self.assertIn("operation_id=operation_id", reject_handler)
+
+        self.assertIn("mentor_application_create_operations", service)
+        self.assertIn("mentor_application_resolution_operations", service)
+        self.assertIn("def replay_create(", service)
+        self.assertIn("def replay_resolution(", service)
 
     def test_statistics_data_migration_does_not_block_event_loop(self) -> None:
         source = (
