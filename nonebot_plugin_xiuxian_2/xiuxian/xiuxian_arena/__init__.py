@@ -1,3 +1,4 @@
+import asyncio
 import random
 import re
 import time
@@ -25,12 +26,14 @@ from .purchase_service import ArenaPurchaseService
 from .challenge_purchase_service import ArenaChallengePurchaseService
 from .challenge_ticket_service import ArenaChallengeTicketService
 from .challenge_settlement_service import ArenaChallengeSettlementService
+from .weekly_rank_reduction_service import ArenaWeeklyRankReductionService
 from .season_reward_service import ArenaSeasonRewardService
 
 arena_purchase_service = ArenaPurchaseService(get_paths().game_db, get_paths().player_db)
 arena_challenge_purchase_service = ArenaChallengePurchaseService(get_paths().game_db, get_paths().player_db)
 arena_challenge_ticket_service = ArenaChallengeTicketService(get_paths().game_db, get_paths().player_db)
 arena_challenge_settlement_service = ArenaChallengeSettlementService(get_paths().game_db, get_paths().player_db)
+arena_weekly_rank_reduction_service = ArenaWeeklyRankReductionService(get_paths().player_db)
 arena_season_reward_service = ArenaSeasonRewardService(get_paths().game_db, get_paths().player_db)
 
 arena_challenge = on_command("竞技场挑战", priority=10, block=True)
@@ -770,13 +773,24 @@ async def reset_arena_daily_challenges():
     
     logger.opt(colors=True).info(f"<green>竞技场每日挑战次数已重置！荣誉值发放完成，共发放{len(honor_distribution)}名玩家</green>")
 
-async def reduce_arena_rank(reduce_steps=2):
+async def reduce_arena_rank(reduce_steps=2, business_week=None, *, chunk_size=500):
     """每周竞技场统一降段"""
-    result = arena_limit.reduce_all_users_rank(reduce_steps)
+    while True:
+        result = arena_weekly_rank_reduction_service.reduce(
+            business_week,
+            reduce_steps,
+            chunk_size=chunk_size,
+        )
+        if result.status != "applied" or result.task_status == "completed":
+            break
+        await asyncio.sleep(0)
     logger.opt(colors=True).info(
-        f"<green>竞技场降段完成！共处理{result['total_users']}名玩家，"
-        f"实际降段{result['changed_users']}名玩家，降段数：{result['reduce_steps']}</green>"
+        f"<green>竞技场降段任务{result.task_status}！"
+        f"已处理{result.completed}/{result.total}名玩家，"
+        f"实际降段{result.changed}名，跳过{result.skipped}名，"
+        f"降段数：{result.reduce_steps}</green>"
     )
+    return result
 
 async def use_arena_challenge_ticket(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id, quantity):
     """使用竞技场挑战券增加今日竞技场挑战次数"""
