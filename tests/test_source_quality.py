@@ -1194,8 +1194,16 @@ class SourceQualityTests(unittest.TestCase):
         base_root = SOURCE_ROOT / "xiuxian" / "xiuxian_base"
         source = (base_root / "__init__.py").read_text(encoding="utf-8")
         handler = source[source.index("@steal_stone.handle"):source.index("@rob_stone.handle")]
-        self.assertIn("stone_contest_service.transfer(", handler)
+        self.assertIn("stone_contest_service.replay_theft(", handler)
+        self.assertIn("stone_contest_service.settle_theft(", handler)
+        self.assertNotIn("stone_contest_service.transfer(", handler)
+        self.assertLess(
+            handler.index("stone_contest_service.replay_theft("),
+            handler.index("random.randint("),
+        )
         self.assertNotIn("sql_message.update_ls(", handler)
+        self.assertNotIn("sql_message.update_user_stamina(", handler)
+        self.assertNotIn("Cooldown(stamina_cost=10", handler)
         service_source = (base_root / "stone_contest_service.py").read_text(encoding="utf-8")
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("stone_contest_operations", service_source)

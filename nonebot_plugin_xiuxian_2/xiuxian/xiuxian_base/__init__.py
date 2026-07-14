@@ -122,6 +122,33 @@ def _stone_gift_operation_id(event, sender_id, recipient_id):
     return f"stone-gift:{sender_id}:{recipient_id}:{time.time_ns()}"
 
 
+def _stone_theft_operation_id(event, thief_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"stone-theft:{event_id}:{thief_id}"
+    return f"stone-theft:{thief_id}:{time.time_ns()}"
+
+
+def _stone_theft_messages(result, thief_name, victim_name):
+    if result.outcome == "failure":
+        return (
+            "道友偷窃失手了，被对方发现并被派去华哥厕所义务劳工！"
+            f"赔款{number_to(result.transferred_amount)}灵石",
+            None,
+        )
+    if result.payer_balance == 0:
+        return (
+            f"{victim_name}道友已经被榨干了~",
+            f"灵石被{thief_name}道友榨干了~",
+        )
+    return (
+        f"共偷取{victim_name}道友{number_to(result.transferred_amount)}枚灵石！",
+        f"被{thief_name}道友偷取{number_to(result.transferred_amount)}枚灵石！",
+    )
+
+
 xiuxian_world_info = on_command("修仙界信息", priority=5, block=True)
 
 __level_help__ = """
@@ -1120,7 +1147,7 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
     await give_stone.finish()
 
 
-@steal_stone.handle(parameterless=[Cooldown(stamina_cost=10, cd_time=300)])
+@steal_stone.handle(parameterless=[Cooldown(cd_time=300)])
 async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -1128,96 +1155,92 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
         await handle_send(bot, event, msg, md_type="我要修仙")
         await steal_stone.finish()
     
-    user_id = user_info['user_id']
-    steal_user = None
-    steal_user_stone = None
-    user_stone_num = user_info['stone']
-    steal_qq = None  # 艾特的时候存到这里, 要偷的人
-    coststone_num = XiuConfig().tou
-    
-    if int(coststone_num) > int(user_stone_num):
-        msg = f"道友的偷窃准备(灵石)不足，请打工之后再切格瓦拉！"
-        sql_message.update_user_stamina(user_id, 10, 1)
-        await handle_send(bot, event, msg)
-        await steal_stone.finish()
-    
+    user_id = str(user_info['user_id'])
+    coststone_num = int(XiuConfig().tou)
     steal_qq = get_at_user_id(args)
-    
     nick_name = args.extract_plain_text().split()[0] if args.extract_plain_text().split() else None
-    
     if nick_name:
         give_message = sql_message.get_user_info_with_name(nick_name)
         if give_message:
             steal_qq = give_message['user_id']
         else:
             steal_qq = None
-    
-    if steal_qq:
-        if steal_qq == user_id:
-            msg = f"请不要偷自己刷成就！"
-            sql_message.update_user_stamina(user_id, 10, 1)
-            await handle_send(bot, event, msg)
+
+    if not steal_qq:
+        await handle_send(bot, event, "对方未踏入修仙界，不要对杂修出手！")
+        await steal_stone.finish()
+    steal_qq = str(steal_qq)
+    if steal_qq == user_id:
+        await handle_send(bot, event, "请不要偷自己刷成就！")
+        await steal_stone.finish()
+    steal_user = sql_message.get_user_info_with_id(steal_qq)
+    if not steal_user:
+        await handle_send(bot, event, "对方未踏入修仙界，不要对杂修出手！")
+        await steal_stone.finish()
+
+    operation_id = _stone_theft_operation_id(event, user_id)
+    previous = stone_contest_service.replay_theft(operation_id, user_id, steal_qq)
+    if previous is not None:
+        if not previous.succeeded:
+            await handle_send(bot, event, "本次偷窃与首次请求目标不一致，未重复结算。")
             await steal_stone.finish()
-        else:
-            steal_user = sql_message.get_user_info_with_id(steal_qq)
-            if steal_user:
-                # 限制偷取上限为1000000灵石
-                steal_user_stone = min(steal_user['stone'], 1000000)
-            else:
-                steal_user = None
-    
-    if steal_user:
-        steal_success = random.randint(0, 100)
-        result = OtherSet().get_power_rate(user_info['power'], steal_user['power'])
-        
-        if isinstance(result, int):
-            if int(steal_success) > result:
-                event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-                operation_id = f"steal-fail:{event_id}:{user_id}" if event_id else f"steal-fail:{user_id}:{time.time_ns()}"
-                transfer = stone_contest_service.transfer(operation_id, user_id, steal_qq, coststone_num)
-                if not transfer.succeeded:
-                    await handle_send(bot, event, "双方灵石状态已经变化，本次偷窃未结算。")
-                    await steal_stone.finish()
-                msg = f"道友偷窃失手了，被对方发现并被派去华哥厕所义务劳工！赔款{number_to(coststone_num)}灵石"
-                await handle_send(bot, event, msg)
-                await steal_stone.finish()
-            
-            get_stone = random.randint(
-                int(XiuConfig().tou_lower_limit * steal_user_stone),
-                int(XiuConfig().tou_upper_limit * steal_user_stone)
-            )
-            
-            # 确保偷取数量不超过1000000
-            get_stone = min(get_stone, 1000000)
-            
-            event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-            operation_id = f"steal-win:{event_id}:{user_id}" if event_id else f"steal-win:{user_id}:{time.time_ns()}"
-            transfer = stone_contest_service.transfer(operation_id, steal_qq, user_id, get_stone)
-            if not transfer.succeeded:
-                await handle_send(bot, event, "双方灵石状态已经变化，本次偷窃未结算。")
-                await steal_stone.finish()
-            if transfer.payer_balance == 0:
-                msg = f"{steal_user['user_name']}道友已经被榨干了~"
-                msg2 = f"灵石被{user_info['user_name']}道友榨干了~"
-                await handle_send(bot, event, msg)
-                log_message(user_id, msg)
-                log_message(steal_qq, msg2)
-                await steal_stone.finish()
-            else:
-                msg = f"共偷取{steal_user['user_name']}道友{number_to(transfer.transferred_amount)}枚灵石！"
-                msg2 = f"被{user_info['user_name']}道友偷取{number_to(transfer.transferred_amount)}枚灵石！"
-                await handle_send(bot, event, msg)
-                log_message(user_id, msg)
-                log_message(steal_qq, msg2)
-                await steal_stone.finish()
-        else:
-            msg = result
-            await handle_send(bot, event, msg)
-            await steal_stone.finish()
-    else:
-        msg = f"对方未踏入修仙界，不要对杂修出手！"
+        msg, _ = _stone_theft_messages(
+            previous, user_info['user_name'], steal_user['user_name']
+        )
         await handle_send(bot, event, msg)
         await steal_stone.finish()
+
+    if coststone_num > int(user_info['stone']):
+        await handle_send(bot, event, "道友的偷窃准备(灵石)不足，请打工之后再切格瓦拉！")
+        await steal_stone.finish()
+    steal_user_stone = min(max(0, int(steal_user['stone'])), 1000000)
+    if steal_user_stone <= 0:
+        await handle_send(bot, event, "对方已经没有灵石可偷了！")
+        await steal_stone.finish()
+
+    power_rate = OtherSet().get_power_rate(user_info['power'], steal_user['power'])
+    if not isinstance(power_rate, int):
+        await handle_send(bot, event, power_rate)
+        await steal_stone.finish()
+
+    steal_success = random.randint(0, 100)
+    if steal_success > power_rate:
+        outcome = "failure"
+        requested_amount = coststone_num
+    else:
+        lower = max(1, int(XiuConfig().tou_lower_limit * steal_user_stone))
+        upper = max(lower, int(XiuConfig().tou_upper_limit * steal_user_stone))
+        requested_amount = min(random.randint(lower, upper), 1000000)
+        outcome = "success"
+
+    settlement = stone_contest_service.settle_theft(
+        operation_id,
+        user_id,
+        steal_qq,
+        outcome=outcome,
+        requested_amount=requested_amount,
+        penalty_amount=coststone_num,
+        stamina_cost=10,
+    )
+    if settlement.status == "stamina_insufficient":
+        msg = "你没有足够的体力，请等待体力恢复后再试！"
+    elif settlement.status == "stone_insufficient":
+        msg = "道友的偷窃准备(灵石)不足，请打工之后再切格瓦拉！"
+    elif settlement.status == "payer_empty":
+        msg = "对方已经没有灵石可偷了！"
+    elif settlement.status == "user_missing":
+        msg = "对方未踏入修仙界，不要对杂修出手！"
+    elif not settlement.succeeded:
+        msg = "双方灵石或体力状态已经变化，本次偷窃未结算。"
+    else:
+        msg, victim_msg = _stone_theft_messages(
+            settlement, user_info['user_name'], steal_user['user_name']
+        )
+        if settlement.status == "settled" and victim_msg:
+            log_message(user_id, msg)
+            log_message(steal_qq, victim_msg)
+    await handle_send(bot, event, msg)
+    await steal_stone.finish()
 
 @rob_stone.handle(parameterless=[Cooldown(stamina_cost=15, cd_time=300)])
 async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
