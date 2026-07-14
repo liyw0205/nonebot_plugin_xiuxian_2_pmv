@@ -48,6 +48,7 @@ from .purchase_service import BossPurchaseService
 from .battle_settlement_service import WorldBossBattleSettlementService
 from .manual_spawn_service import WorldBossManualSpawnService
 from .full_refresh_service import WorldBossFullRefreshService
+from .punishment_service import WorldBossPunishmentService
 from .. import DRIVER
 # boss定时任务
 scheduler = require("nonebot_plugin_apscheduler").scheduler
@@ -72,6 +73,7 @@ world_boss_full_refresh_service = WorldBossFullRefreshService(
     get_paths().player_db,
     get_boss_config,
 )
+world_boss_punishment_service = WorldBossPunishmentService(get_paths().player_db)
 BOSSDROPSPATH = get_paths().data / "boss掉落物"
 
 create = on_command("世界BOSS生成", aliases={"世界boss生成", "世界Boss生成", "生成世界BOSS", "生成世界boss", "生成世界Boss"}, permission=SUPERUSER, priority=5, block=True)
@@ -198,6 +200,30 @@ def _refresh_all_world_bosses(operation_id: str, trigger: str):
     return result
 
 
+def _punish_world_bosses(
+    operation_id: str,
+    action: str,
+    boss_number: int | None = None,
+):
+    result = world_boss_punishment_service.get_result(operation_id)
+    if result is not None:
+        current_bosses, _ = world_boss_punishment_service.snapshot()
+        _sync_world_boss_cache(current_bosses)
+        return result
+
+    expected_bosses, expected_revision = world_boss_punishment_service.snapshot()
+    result = world_boss_punishment_service.punish(
+        operation_id=operation_id,
+        action=action,
+        expected_revision=expected_revision,
+        expected_bosses=expected_bosses,
+        boss_number=boss_number,
+    )
+    if result.succeeded:
+        _sync_world_boss_cache(result.bosses)
+    return result
+
+
 async def generate_all_bosses_task():
     hours = int(config['Boss生成时间参数']['hours'])
     minutes = int(config['Boss生成时间参数']['minutes'])
@@ -253,7 +279,6 @@ async def boss_delete_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     """天罚世界boss"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     msg = args.extract_plain_text().strip()
-    global group_boss
     boss_num = re.findall(r"\d+", msg)  # boss编号    
 
     if boss_num:
@@ -262,29 +287,24 @@ async def boss_delete_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         msg = f"请输入正确的世界Boss编号!"
         await handle_send(bot, event, msg)
         await boss_delete.finish()
-    bosss = None
-    try:
-        bosss = group_boss.get(GLOBAL_BOSS_KEY, [])
-    except Exception:
-        msg = f"尚未生成世界Boss,请等待世界boss刷新!"
-        await handle_send(bot, event, msg)
-        await boss_delete.finish()
-
-    if not bosss:
-        msg = f"尚未生成世界Boss,请等待世界boss刷新!"
-        await handle_send(bot, event, msg)
-        await boss_delete.finish()
-
-    index = len(group_boss[GLOBAL_BOSS_KEY])
-
-    if not (0 < boss_num <= index):
-        msg = f"请输入正确的世界Boss编号!"
-        await handle_send(bot, event, msg)
-        await boss_delete.finish()
-
-    group_boss[GLOBAL_BOSS_KEY].remove(group_boss[GLOBAL_BOSS_KEY][boss_num - 1])
-    old_boss_info.save_boss(group_boss)
-    msg = f"该世界Boss被突然从天而降的神雷劈中,烟消云散了"
+    event_id = str(
+        getattr(event, "message_id", "")
+        or getattr(event, "id", "")
+        or time_module.time_ns()
+    )
+    result = _punish_world_bosses(
+        f"world-boss-punishment:single:{event_id}",
+        "single",
+        boss_num,
+    )
+    if result.succeeded:
+        msg = "该世界Boss被突然从天而降的神雷劈中,烟消云散了"
+    elif result.status == "empty":
+        msg = "尚未生成世界Boss,请等待世界boss刷新!"
+    elif result.status == "invalid_target":
+        msg = "请输入正确的世界Boss编号!"
+    else:
+        msg = "世界Boss场次已变化，请重新查看列表后操作。"
     await handle_send(bot, event, msg)
     await boss_delete.finish()
 
@@ -293,24 +313,21 @@ async def boss_delete_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 async def boss_delete_all_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """天罚全部世界boss"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    msg = args.extract_plain_text().strip()
-    global group_boss
-    bosss = None
-    try:
-        bosss = group_boss.get(GLOBAL_BOSS_KEY, [])
-    except Exception:
-        msg = f"尚未生成世界Boss,请等待世界boss刷新!"
-        await handle_send(bot, event, msg)
-        await boss_delete_all.finish()
-
-    if not bosss:
-        msg = f"尚未生成世界Boss,请等待世界boss刷新!"
-        await handle_send(bot, event, msg)
-        await boss_delete_all.finish()
-
-    group_boss[GLOBAL_BOSS_KEY] = []    
-    old_boss_info.save_boss(group_boss)
-    msg = f"所有的世界Boss都烟消云散了~~"
+    event_id = str(
+        getattr(event, "message_id", "")
+        or getattr(event, "id", "")
+        or time_module.time_ns()
+    )
+    result = _punish_world_bosses(
+        f"world-boss-punishment:all:{event_id}",
+        "all",
+    )
+    if result.succeeded:
+        msg = "所有的世界Boss都烟消云散了~~"
+    elif result.status == "empty":
+        msg = "尚未生成世界Boss,请等待世界boss刷新!"
+    else:
+        msg = "世界Boss场次已变化，请重新查看列表后操作。"
     await handle_send(bot, event, msg)
     await boss_delete_all.finish()
 
