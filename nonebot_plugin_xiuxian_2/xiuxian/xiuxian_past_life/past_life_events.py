@@ -17,6 +17,7 @@ from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 from ...paths import get_paths
 from .final_settlement_service import PastLifeFinalSettlementService
+from .start_service import PastLifeStartService
 
 sql_message = XiuxianDateManage()
 items = Items()
@@ -24,20 +25,17 @@ _paths = get_paths()
 final_settlement_service = PastLifeFinalSettlementService(
     _paths.game_db, _paths.player_db, max_goods_num=XiuConfig().max_goods_num
 )
+start_service = PastLifeStartService(_paths.game_db, _paths.player_db)
 
 ATTR_NAMES = ["悟性", "机缘", "根骨", "气运", "心性"]
+INITIAL_APTITUDE_MIN = 3
+INITIAL_APTITUDE_MAX = 15
+INITIAL_APTITUDE_TOTAL_MIN = INITIAL_APTITUDE_MIN * len(ATTR_NAMES)
+INITIAL_APTITUDE_TOTAL_MAX = 20
 SCORE_CHOICE_MAX = 50
 SCORE_APTITUDE_MAX = 30
 SCORE_STAGE_MAX = 20
 SCORE_APTITUDE_RAW_CAP = 80
-
-# 天赋类型标记（用于显示）
-TALENT_TYPE_LABELS = {
-    "positive": "✦",
-    "mixed": "◈",
-    "negative": "✧",
-}
-
 
 class PastLifeEngine:
     """前世今生·剧本杀引擎"""
@@ -145,111 +143,181 @@ class PastLifeEngine:
             f"（{breakdown['completed_stages']}/{breakdown['total_stages']}幕）"
         )
 
-    def _roll_talent(self, alloc: dict):
+    def _roll_talent(self, alloc: dict, rng=None):
         """
         根据属性分配随机决定天赋
         返回: (talent_info, talent_type)
         """
-        roll = random.random()
+        rng = rng or random
+        roll = rng.random()
 
         if roll < 0.15:
             # 15% 负面天赋
-            return random.choice(NEGATIVE_TALENTS), "negative"
+            return rng.choice(NEGATIVE_TALENTS), "negative"
         elif roll < 0.40:
             # 25% 混合天赋
-            return random.choice(MIXED_TALENTS), "mixed"
+            return rng.choice(MIXED_TALENTS), "mixed"
         else:
             # 60% 正面天赋（根据最高属性从对应池中随机）
             max_attr = max(alloc, key=alloc.get)
             pool = POSITIVE_TALENTS.get(max_attr, POSITIVE_TALENTS["悟性"])
-            return random.choice(pool), "positive"
+            return rng.choice(pool), "positive"
 
-    # ── 开始新人生 ──────────────────────────────────
-    def start_new_life(self, user_id, alloc: dict):
-        """
-        分配属性后启动人生
-        alloc: {"悟性":5,"机缘":4,"根骨":3,"气运":4,"心性":4}
-        """
-        # 随机天赋
-        talent_info, talent_type = self._roll_talent(alloc)
-
-        # 应用天赋效果（正面+负面统一处理）
-        accumulated = {k: alloc.get(k, 0) for k in ATTR_NAMES}
-        effects = talent_info.get("effects", {})
-        for k, v in effects.items():
-            if k in accumulated:
-                accumulated[k] = max(accumulated[k] + v, 0)  # 不低于0
-
-        # 随机为每幕选定一个事件
-        event_indices = []
-        event_snapshots = []
-        for stage in STAGES:
-            event_idx = random.randint(0, len(stage["events"]) - 1)
-            event_indices.append(event_idx)
-            event_snapshots.append(copy.deepcopy(stage["events"][event_idx]))
-
-        state = past_life_limit.get_user_state(user_id)
-        state.update({
-            "state": 2,  # 等待选择
-            "stage": 0,
-            "alloc": alloc,
-            "accumulated": accumulated,
-            "talent": talent_info["name"],
-            "total_score": 0,
-            "score_breakdown": {},
-            "event_indices": event_indices,
-            "event_snapshots": event_snapshots,
-            "early_death_rolls": {},
-            "history": [],
-        })
-        past_life_limit.save_user_state(user_id, state)
-
-        # 获取出生场景
-        birth_list = BIRTH_SCENARIOS.get(
-            talent_info["name"],
-            BIRTH_SCENARIOS.get("_default", ["你降生于一个平凡的家庭。"])
+    def _generate_initial_aptitude(self, rng):
+        shuffled_attrs = rng.sample(ATTR_NAMES, len(ATTR_NAMES))
+        remaining = rng.randint(
+            INITIAL_APTITUDE_TOTAL_MIN, INITIAL_APTITUDE_TOTAL_MAX
         )
-        birth_desc = random.choice(birth_list)
+        values = {}
+        for index, attr in enumerate(shuffled_attrs):
+            slots_left = len(shuffled_attrs) - index - 1
+            low = max(
+                INITIAL_APTITUDE_MIN,
+                remaining - INITIAL_APTITUDE_MAX * slots_left,
+            )
+            high = min(
+                INITIAL_APTITUDE_MAX,
+                remaining - INITIAL_APTITUDE_MIN * slots_left,
+            )
+            values[attr] = rng.randint(low, high)
+            remaining -= values[attr]
+        return {attr: values[attr] for attr in ATTR_NAMES}
 
-        # 返回第一幕信息
-        stage_0 = STAGES[0]
-        event = self._get_stage_event(state, 0)
+    @staticmethod
+    def _start_rng(operation_id):
+        digest = hashlib.sha256(str(operation_id).encode("utf-8")).digest()
+        return random.Random(int.from_bytes(digest, "big"))
 
-        base_attrs_str = "  ".join(f"{k}:{alloc.get(k, 0)}" for k in ATTR_NAMES)
-        current_attrs_str = "  ".join(f"{k}:{accumulated[k]}" for k in ATTR_NAMES)
-        label = TALENT_TYPE_LABELS.get(talent_type, "")
-
-        # 构建天赋效果描述
+    def _format_start_message(
+        self,
+        alloc,
+        accumulated,
+        talent_info,
+        talent_type,
+        birth_scenario,
+        event,
+    ):
+        base_attrs_str = "  ".join(f"{key}:{alloc.get(key, 0)}" for key in ATTR_NAMES)
+        current_attrs_str = "  ".join(
+            f"{key}:{accumulated[key]}" for key in ATTR_NAMES
+        )
         effects_parts = []
-        for k, v in effects.items():
-            if k in ATTR_NAMES:
-                if v > 0:
-                    effects_parts.append(f"{k}+{v}")
-                elif v < 0:
-                    effects_parts.append(f"{k}{v}")
+        for key, value in talent_info.get("effects", {}).items():
+            if key not in ATTR_NAMES:
+                continue
+            if value > 0:
+                effects_parts.append(f"{key}+{value}")
+            elif value < 0:
+                effects_parts.append(f"{key}{value}")
         effects_str = " ".join(effects_parts) if effects_parts else "无"
-
         talent_prefix = ""
         if talent_type == "negative":
             talent_prefix = "⚠ "
         elif talent_type == "mixed":
             talent_prefix = "⚡ "
-
-        msg = (
+        stage = STAGES[0]
+        message = (
             f"【前尘往事】\n"
             f"{talent_prefix}天赋觉醒：【{talent_info['name']}】\n"
             f"{talent_info['desc']}\n"
             f"天赋效果：{effects_str}\n"
             f"先天资质：{base_attrs_str}\n"
             f"当前属性：{current_attrs_str}\n"
-            f"【第一幕·{stage_0['name']}】({stage_0['age']})\n"
-            f"{birth_desc}\n\n"
+            f"【第一幕·{stage['name']}】({stage['age']})\n"
+            f"{birth_scenario}\n\n"
             f"{event['text']}\n"
         )
-        for i, c in enumerate(event["choices"], 1):
-            msg += f"\n[{i}] {c['text']}"
+        for index, choice in enumerate(event["choices"], 1):
+            message += f"\n[{index}] {choice['text']}"
+        return message
 
-        return {"message": msg, "choices_count": len(event["choices"])}
+    # ── 开始新人生 ──────────────────────────────────
+    def start_new_life(self, user_id, operation_id, now=None):
+        """Freeze and atomically persist a new run for one command operation."""
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            raise ValueError("operation_id is required")
+        rng = self._start_rng(operation_id)
+        alloc = self._generate_initial_aptitude(rng)
+        talent_info, talent_type = self._roll_talent(alloc, rng)
+        accumulated = {k: alloc.get(k, 0) for k in ATTR_NAMES}
+        effects = talent_info.get("effects", {})
+        for k, v in effects.items():
+            if k in accumulated:
+                accumulated[k] = max(accumulated[k] + v, 0)
+
+        event_indices = []
+        event_snapshots = []
+        for stage in STAGES:
+            event_idx = rng.randint(0, len(stage["events"]) - 1)
+            event_indices.append(event_idx)
+            event_snapshots.append(copy.deepcopy(stage["events"][event_idx]))
+
+        birth_list = BIRTH_SCENARIOS.get(
+            talent_info["name"],
+            BIRTH_SCENARIOS.get("_default", ["你降生于一个平凡的家庭。"])
+        )
+        birth_scenario = rng.choice(birth_list)
+        first_event = event_snapshots[0]
+        message = self._format_start_message(
+            alloc,
+            accumulated,
+            talent_info,
+            talent_type,
+            birth_scenario,
+            first_event,
+        )
+        result = start_service.start(
+            operation_id,
+            user_id,
+            past_life_limit.get_user_state(user_id),
+            alloc=alloc,
+            accumulated=accumulated,
+            talent=talent_info["name"],
+            birth_scenario=birth_scenario,
+            event_indices=event_indices,
+            event_snapshots=event_snapshots,
+            first_stage_message=message,
+            choices_count=len(first_event["choices"]),
+            refresh_slot_start=past_life_limit.get_refresh_slot_start(now),
+        )
+        if result.succeeded:
+            return {
+                "status": result.status,
+                "message": result.message,
+                "choices_count": result.choices_count,
+                "alloc": result.alloc,
+                "state": 2,
+            }
+
+        if result.status == "cooldown":
+            return {
+                "status": result.status,
+                "message": (
+                    f"前尘往事尚未刷新，{past_life_limit.get_cooldown_text(user_id)}"
+                ),
+                "choices_count": 0,
+                "alloc": {},
+                "state": 0,
+            }
+        if result.status in {"already_started", "state_changed"}:
+            display = self.get_current_display(user_id)
+            if display["state"] == 2:
+                display["message"] = "本轮前尘已开始，资质与事件已锁定。\n" + display["message"]
+            return {
+                "status": result.status,
+                "message": display["message"],
+                "choices_count": 0,
+                "alloc": {},
+                "state": display["state"],
+            }
+        return {
+            "status": result.status,
+            "message": "前尘投胎未能完成，请重新查看当前进度。",
+            "choices_count": 0,
+            "alloc": {},
+            "state": -1,
+        }
 
     # ── 处理选择 ────────────────────────────────────
     def process_choice(self, user_id, choice_idx: int, operation_id=None):

@@ -2,7 +2,7 @@
 前尘往事 - 命令入口
 修仙版人生重开 · 剧本杀
 """
-import random
+import hashlib
 import time
 from ..on_compat import on_command
 from nonebot.permission import SUPERUSER
@@ -10,19 +10,15 @@ from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEven
 from nonebot.params import CommandArg
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import (
-    check_user, handle_send, send_msg_handler, log_message, update_statistics_value, number_to, send_help_message
+    check_user, handle_send, send_msg_handler, log_message, number_to, send_help_message
 )
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from .past_life_limit import past_life_limit
-from .past_life_events import past_life_engine, ATTR_NAMES
+from .past_life_events import past_life_engine
 
 player_data_manager = PlayerDataManager()
 sql_message = XiuxianDateManage()
 
-INITIAL_APTITUDE_MIN = 3
-INITIAL_APTITUDE_MAX = 15
-INITIAL_APTITUDE_TOTAL_MIN = INITIAL_APTITUDE_MIN * len(ATTR_NAMES)
-INITIAL_APTITUDE_TOTAL_MAX = 20
 PAST_LIFE_RESET_ALL_TOKENS = {"all", "全部", "全体", "所有"}
 PAST_LIFE_RESET_CLEAR_TOKENS = {"全清", "清空", "清空历史"}
 PAST_LIFE_RESET_HELP_TOKENS = {"help", "帮助", "用法", "?"}
@@ -100,41 +96,26 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await reincarnate_cmd.finish()
 
     user_id = user_info["user_id"]
-
-    state = past_life_limit.get_user_state(user_id)
-    if state.get("state") == 2:
-        result = past_life_engine.get_current_display(user_id)
-        result["message"] = "本轮前尘已开始，资质与事件已锁定。\n" + result["message"]
-        if result["state"] == 2:
-            await handle_send(bot, event, result["message"], md_type="前尘",
-                              k1="选择1", v1="前尘选择 1",
-                              k2="选择2", v2="前尘选择 2",
-                              k3="选择3", v3="前尘选择 3")
-        else:
-            await handle_send(bot, event, result["message"], md_type="前尘",
-                              k1="往事", v1="前尘往事",
-                              k2="回忆", v2="前尘回忆",
-                              k3="帮助", v3="前尘帮助")
-        await reincarnate_cmd.finish()
-
-    # 检查冷却
-    if not past_life_limit.check_cooldown(user_id):
-        msg = f"前尘往事尚未刷新，{past_life_limit.get_cooldown_text(user_id)}"
-        await handle_send(bot, event, msg, md_type="前尘", k1="回忆", v1="前尘回忆", k2="帮助", v2="前尘帮助", k3="排行", v3="前尘排行")
-        await reincarnate_cmd.finish()
-
     legacy_text = args.extract_plain_text().strip()
-    alloc = _generate_initial_aptitude()
-    result = past_life_engine.start_new_life(user_id, alloc)
-    if legacy_text:
+    event_id = _stable_event_id(event)
+    result = past_life_engine.start_new_life(
+        user_id, f"past-life-start:{user_id}:{event_id}"
+    )
+    if legacy_text and result["status"] in {"applied", "duplicate"}:
         result["message"] = "投胎时资质已由命数定下，输入的分配不会生效。\n" + result["message"]
-    log_message(user_id, f"[前尘往事] 开始新人生 - {alloc}")
-    update_statistics_value(user_id, "前尘往事次数")
+    if result["status"] == "applied":
+        log_message(user_id, f"[前尘往事] 开始新人生 - {result['alloc']}")
 
-    await handle_send(bot, event, result["message"], md_type="前尘",
-                      k1="选择1", v1="前尘选择 1",
-                      k2="选择2", v2="前尘选择 2",
-                      k3="选择3", v3="前尘选择 3")
+    if result["state"] == 2:
+        await handle_send(bot, event, result["message"], md_type="前尘",
+                          k1="选择1", v1="前尘选择 1",
+                          k2="选择2", v2="前尘选择 2",
+                          k3="选择3", v3="前尘选择 3")
+    else:
+        await handle_send(bot, event, result["message"], md_type="前尘",
+                          k1="往事", v1="前尘往事",
+                          k2="回忆", v2="前尘回忆",
+                          k3="帮助", v3="前尘帮助")
     await reincarnate_cmd.finish()
 
 
@@ -308,21 +289,24 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 # ═══ 工具函数 ═══
-def _generate_initial_aptitude():
-    """定下本轮先天资质：总和15~20随机，单项不低于3。"""
-    shuffled_attrs = random.sample(ATTR_NAMES, len(ATTR_NAMES))
-    remaining = random.randint(INITIAL_APTITUDE_TOTAL_MIN, INITIAL_APTITUDE_TOTAL_MAX)
-    values = {}
+def _stable_event_id(event):
+    direct = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if direct:
+        return direct
 
-    for idx, attr in enumerate(shuffled_attrs):
-        slots_left = len(shuffled_attrs) - idx - 1
-        low = max(INITIAL_APTITUDE_MIN, remaining - INITIAL_APTITUDE_MAX * slots_left)
-        high = min(INITIAL_APTITUDE_MAX, remaining - INITIAL_APTITUDE_MIN * slots_left)
-        value = random.randint(low, high)
-        values[attr] = value
-        remaining -= value
-
-    return {attr: values[attr] for attr in ATTR_NAMES}
+    values = [event.__class__.__module__, event.__class__.__qualname__]
+    for name in ("time", "timestamp", "user_id", "group_id", "message", "raw_message"):
+        values.append(str(getattr(event, name, "") or ""))
+    for method_name in ("get_user_id", "get_session_id", "get_event_description"):
+        method = getattr(event, method_name, None)
+        if callable(method):
+            try:
+                values.append(str(method()))
+            except Exception:
+                values.append("")
+    return hashlib.sha256("\x1f".join(values).encode("utf-8")).hexdigest()[:24]
 
 
 def _split_reset_tokens(text: str):

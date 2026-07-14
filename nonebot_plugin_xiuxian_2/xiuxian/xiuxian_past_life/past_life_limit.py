@@ -4,28 +4,11 @@
 import json
 from datetime import datetime, timedelta
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
+from .past_life_state import PAST_LIFE_FIELDS, new_default_state
 
 player_data_manager = PlayerDataManager()
 
-FIELDS = [
-    "state",            # 0=空闲, 1=等待投胎, 2=等待选择, 3=已完成
-    "stage",            # 当前幕数(0-9)
-    "alloc",            # 初始分配 {"悟性":x,"机缘":x,...}
-    "accumulated",      # 累计属性 {"悟性":x,...}
-    "talent",           # 天赋名
-    "total_score",      # 总分
-    "score_breakdown",  # 终局评分拆分
-    "event_indices",    # 每幕选中的事件索引
-    "event_snapshots",  # 每幕选中的事件快照
-    "early_death_rolls",  # 已判定过的提前终局风险
-    "history",          # 选择历史
-    "last_run_time",    # 上次运行时间
-    "total_runs",       # 总运行次数
-    "best_ending",      # 最佳结局名
-    "best_score",       # 最高分
-    "endings_log",      # 结局记录
-    "achievement_points",  # 前尘成就点
-]
+FIELDS = list(PAST_LIFE_FIELDS)
 
 REFRESH_INTERVAL_HOURS = 12
 MAX_ENDINGS_LOG = 10
@@ -36,25 +19,7 @@ class PastLifeLimit:
         self.table_name = "past_life"
 
     def _default_state(self):
-        return {
-            "state": 0,
-            "stage": 0,
-            "alloc": {},
-            "accumulated": {"悟性": 0, "机缘": 0, "根骨": 0, "气运": 0, "心性": 0},
-            "talent": "",
-            "total_score": 0,
-            "score_breakdown": {},
-            "event_indices": [],
-            "event_snapshots": [],
-            "early_death_rolls": {},
-            "history": [],
-            "last_run_time": None,
-            "total_runs": 0,
-            "best_ending": "",
-            "best_score": 0,
-            "endings_log": [],
-            "achievement_points": 0,
-        }
+        return new_default_state()
 
     def get_user_state(self, user_id):
         user_id = str(user_id)
@@ -119,6 +84,9 @@ class PastLifeLimit:
         now = now or datetime.now()
         refresh_hour = 12 if now.hour >= 12 else 0
         return now.replace(hour=refresh_hour, minute=0, second=0, microsecond=0)
+
+    def get_refresh_slot_start(self, now=None):
+        return self._get_refresh_slot_start(now)
 
     def _get_next_refresh_time(self, now=None):
         now = now or datetime.now()
@@ -215,9 +183,11 @@ class PastLifeLimit:
         # 重置当前流程相关
         state["state"] = 0
         state["stage"] = 0
+        state["revision"] = int(state.get("revision", 0) or 0) + 1
         state["alloc"] = {}
         state["accumulated"] = default["accumulated"]
         state["talent"] = ""
+        state["birth_scenario"] = ""
         state["total_score"] = 0
         state["score_breakdown"] = {}
         state["event_indices"] = []

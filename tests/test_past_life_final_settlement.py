@@ -49,8 +49,10 @@ class PastLifeFinalSettlementTests(unittest.TestCase):
     @staticmethod
     def make_state():
         return {
-            "state": 2, "stage": 9, "alloc": {"悟性": 4}, "accumulated": {"悟性": 8},
-            "talent": "test", "total_score": 70, "score_breakdown": {"total": 70},
+            "state": 2, "stage": 9, "revision": 10,
+            "alloc": {"悟性": 4}, "accumulated": {"悟性": 8},
+            "talent": "test", "birth_scenario": "test birth",
+            "total_score": 70, "score_breakdown": {"total": 70},
             "event_indices": [0], "event_snapshots": [{"text": "event"}],
             "early_death_rolls": {}, "history": [{"choice": 1}], "last_run_time": None,
             "total_runs": 1, "best_ending": "旧结局", "best_score": 60,

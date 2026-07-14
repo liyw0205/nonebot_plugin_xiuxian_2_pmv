@@ -8,18 +8,13 @@ from pathlib import Path
 from threading import RLock
 
 from ..xiuxian_utils import db_backend
-
-
-PAST_LIFE_FIELDS = (
-    "state", "stage", "alloc", "accumulated", "talent", "total_score",
-    "score_breakdown", "event_indices", "event_snapshots", "early_death_rolls",
-    "history", "last_run_time", "total_runs", "best_ending", "best_score",
-    "endings_log", "achievement_points",
+from .past_life_state import (
+    INTEGER_FIELDS,
+    JSON_FIELDS,
+    PAST_LIFE_FIELDS,
+    canonical as _canonical,
+    decode_field as _decode,
 )
-JSON_FIELDS = {
-    "alloc", "accumulated", "score_breakdown", "event_indices", "event_snapshots",
-    "early_death_rolls", "history", "endings_log",
-}
 
 
 @dataclass(frozen=True)
@@ -30,26 +25,6 @@ class PastLifeFinalSettlementResult:
     @property
     def succeeded(self) -> bool:
         return self.status in {"applied", "duplicate"}
-
-
-def _canonical(value):
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-
-
-def _decode(field, value):
-    if value is None:
-        return None
-    if field in JSON_FIELDS and isinstance(value, str):
-        try:
-            return json.loads(value)
-        except (TypeError, ValueError):
-            return value
-    if field in {"state", "stage", "total_score", "total_runs", "best_score", "achievement_points"}:
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return value
-    return value
 
 
 class PastLifeFinalSettlementService:
@@ -67,9 +42,10 @@ class PastLifeFinalSettlementService:
         }
         for field in PAST_LIFE_FIELDS:
             if field not in columns:
+                data_type = "INTEGER" if field in INTEGER_FIELDS else "TEXT"
                 conn.execute(
                     f"ALTER TABLE player_data.past_life ADD COLUMN "
-                    f"{db_backend.quote_ident(field)} TEXT DEFAULT NULL"
+                    f"{db_backend.quote_ident(field)} {data_type} DEFAULT NULL"
                 )
         conn.execute(
             "CREATE TABLE IF NOT EXISTS past_life_final_operations("
