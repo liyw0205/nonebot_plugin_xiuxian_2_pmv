@@ -63,6 +63,8 @@ class ActivityPassClaimTransactionTests(unittest.TestCase):
         replay = self.service.claim("op", "u", "festival", 2, self.rewards, 100)
         self.assertEqual("duplicate", replay.status)
         self.assertEqual(result.rewards, replay.rewards)
+        self.assertEqual(result.rewards, self.service.get_result("op", "u").rewards)
+        self.assertEqual("operation_conflict", self.service.get_result("op", "other").status)
         with db_backend.connection(self.activity) as conn:
             self.assertEqual(
                 [1, 2],

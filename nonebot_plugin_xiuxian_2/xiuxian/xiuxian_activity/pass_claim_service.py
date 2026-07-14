@@ -34,6 +34,35 @@ class ActivityPassClaimService:
         self._lock = lock or RLock()
 
     @staticmethod
+    def _ensure_schema(conn) -> None:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS activity_pass_claim_operations("
+            "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+            "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+        )
+
+    def get_result(self, operation_id, user_id=None) -> ActivityPassClaimResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            raise ValueError("operation_id is required")
+        with self._lock, closing(db_backend.connect(self._activity_database)) as conn:
+            self._ensure_schema(conn)
+            conn.commit()
+            previous = conn.execute(
+                "SELECT payload,result_json FROM activity_pass_claim_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            payload = json.loads(str(previous[0]))
+            if user_id is not None and str(payload[0]) != str(user_id):
+                return ActivityPassClaimResult("operation_conflict")
+            return ActivityPassClaimResult(
+                "duplicate",
+                tuple(tuple(row) for row in json.loads(str(previous[1]))),
+            )
+
+    @staticmethod
     def _normalize_rewards(rewards) -> tuple[tuple[int, str, str, tuple[dict, ...]], ...]:
         normalized = []
         levels = set()
@@ -118,11 +147,7 @@ class ActivityPassClaimService:
                 conn.execute("ATTACH DATABASE %s AS game_data", (str(self._game_database),))
                 attached = True
                 conn.execute("BEGIN IMMEDIATE")
-                conn.execute(
-                    "CREATE TABLE IF NOT EXISTS activity_pass_claim_operations("
-                    "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
-                    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-                )
+                self._ensure_schema(conn)
                 previous = conn.execute(
                     "SELECT payload,result_json FROM activity_pass_claim_operations WHERE operation_id=%s",
                     (operation_id,),

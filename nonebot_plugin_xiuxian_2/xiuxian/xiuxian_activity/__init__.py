@@ -133,7 +133,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="我要修仙")
         return
 
-    ok, text = claim_activity_rewards(str(user_info["user_id"]))
+    user_id = str(user_info["user_id"])
+    ok, text = claim_activity_rewards(
+        user_id,
+        _activity_operation_id(event, "claim-all", user_id),
+    )
     await handle_send(bot, event, text if ok else f"活动领取失败：{text}")
 
 

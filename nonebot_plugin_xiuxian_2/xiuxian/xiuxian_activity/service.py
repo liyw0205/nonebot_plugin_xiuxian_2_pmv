@@ -62,6 +62,7 @@ from .task_claim_service import ActivityTaskClaimService
 from .sign_settlement_service import ActivitySignSettlementService
 from .pass_claim_service import ActivityPassClaimService
 from .collect_exchange_service import ActivityCollectExchangeService
+from .claim_all_service import ActivityClaimAllService
 
 
 point_shop_purchase_service = ActivityPointShopPurchaseService(DB_PATH, get_paths().game_db)
@@ -69,6 +70,7 @@ activity_task_claim_service = ActivityTaskClaimService(DB_PATH, get_paths().game
 activity_sign_settlement_service = ActivitySignSettlementService(DB_PATH, get_paths().game_db)
 activity_pass_claim_service = ActivityPassClaimService(DB_PATH, get_paths().game_db)
 activity_collect_exchange_service = ActivityCollectExchangeService(DB_PATH, get_paths().game_db)
+activity_claim_all_service = ActivityClaimAllService(DB_PATH)
 
 
 def _reward_by_day(config: dict, day_index: int) -> dict:
@@ -722,13 +724,22 @@ def _select_claimable_tasks(cur, config: dict, user_id: str, query: str = "") ->
 
 
 def claim_activity_tasks(user_id: str, query: str = "", operation_id: str | None = None) -> tuple[bool, str]:
+    uid = str(user_id)
+    if operation_id:
+        previous = activity_task_claim_service.get_result(operation_id, uid)
+        if previous is not None:
+            if not previous.succeeded:
+                return False, "领取请求冲突，请重新发送"
+            lines = ["活动任务奖励领取成功："]
+            for name, reward_text in previous.rewards:
+                lines.append(f"- {name}：{reward_text or '暂无奖励'}")
+            return True, "\n".join(lines)
     cfg = load_config()
     runtime = activity_runtime_state(cfg)
     if not runtime.get("ok"):
         return False, runtime.get("reason") or "活动未开放"
     if "claim" not in set(runtime.get("features") or []):
         return False, f"当前阶段【{runtime.get('stage_name', '活动阶段')}】不开放活动领奖"
-    uid = str(user_id)
     activity_key = _activity_config_key(cfg)
     ensure_activity_files()
     conn = db_backend.connect(DB_PATH)
@@ -837,6 +848,16 @@ def build_activity_pass_text(user_id: str) -> str:
 
 
 def claim_activity_pass_rewards(user_id: str, query: str = "", operation_id: str | None = None) -> tuple[bool, str]:
+    uid = str(user_id)
+    if operation_id:
+        previous = activity_pass_claim_service.get_result(operation_id, uid)
+        if previous is not None:
+            if not previous.succeeded:
+                return False, "领取请求冲突，请重新发送"
+            lines = ["活动战令奖励领取成功："]
+            for level, name, reward_text in previous.rewards:
+                lines.append(f"- Lv.{level} {name}：{reward_text or '暂无奖励'}")
+            return True, "\n".join(lines)
     cfg = load_config()
     runtime = activity_runtime_state(cfg)
     if not runtime.get("ok"):
@@ -846,7 +867,6 @@ def claim_activity_pass_rewards(user_id: str, query: str = "", operation_id: str
     pass_cfg = _activity_pass_config(cfg)
     if not pass_cfg.get("enabled"):
         return False, "活动战令未开启"
-    uid = str(user_id)
     activity_key = _activity_config_key(cfg)
     target_text = _clean_text(query)
     target_level = _as_int(target_text, 0) if target_text.isdigit() else 0
@@ -902,46 +922,28 @@ def claim_activity_pass_rewards(user_id: str, query: str = "", operation_id: str
     return True, "\n".join(lines)
 
 
-def claim_activity_rewards(user_id: str) -> tuple[bool, str]:
+def claim_activity_rewards(user_id: str, operation_id: str | None = None) -> tuple[bool, str]:
     uid = str(user_id)
-    successes: list[str] = []
-    misses: list[str] = []
+    operation_id = operation_id or f"activity:claim-all:{uid}:{time.time_ns()}"
+    from .activity_boss import claim_boss_milestone_reward, claim_boss_rank_reward
 
-    try:
-        ok, text = claim_activity_tasks(uid)
-        if ok:
-            successes.append(text)
-        else:
-            misses.append(f"任务：{text}")
-    except Exception as e:
-        logger.warning(f"活动总领奖任务奖励检查失败 user_id={uid}: {e}")
-        misses.append(f"任务：{e}")
-
-    try:
-        ok, text = claim_activity_pass_rewards(uid)
-        if ok:
-            successes.append(text)
-        else:
-            misses.append(f"战令：{text}")
-    except Exception as e:
-        logger.warning(f"活动总领奖战令奖励检查失败 user_id={uid}: {e}")
-        misses.append(f"战令：{e}")
-
-    try:
-        from .activity_boss import claim_boss_rewards
-
-        ok, text = claim_boss_rewards(uid)
-        if ok:
-            successes.append(text)
-        else:
-            misses.append(f"首领：{text}")
-    except Exception as e:
-        logger.warning(f"活动总领奖首领奖励检查失败 user_id={uid}: {e}")
-        misses.append(f"首领：{e}")
-
-    if successes:
-        return True, "\n\n".join(successes)
-    return False, "暂无可领取奖励\n" + "\n".join(misses)
+    result = activity_claim_all_service.run(
+        operation_id,
+        uid,
+        {
+            "tasks": lambda child_id: claim_activity_tasks(uid, operation_id=child_id),
+            "pass": lambda child_id: claim_activity_pass_rewards(uid, operation_id=child_id),
+            "boss_milestone": lambda child_id: claim_boss_milestone_reward(
+                uid, operation_id=child_id
+            ),
+            "boss_rank": lambda child_id: claim_boss_rank_reward(uid, operation_id=child_id),
+        },
+    )
+    if result.status == "retryable_failure":
+        logger.warning(
+            f"活动总领奖可重试失败 operation_id={operation_id} user_id={uid}: {result.text}"
+        )
+    return result.ok, result.text
 
 
 def _parse_shop_query(query: str) -> tuple[str, int]:

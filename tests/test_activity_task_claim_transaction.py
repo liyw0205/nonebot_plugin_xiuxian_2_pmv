@@ -34,6 +34,8 @@ class ActivityTaskClaimTransactionTests(unittest.TestCase):
         result = self.service.claim("op", "u", "a", self.tasks, 100)
         self.assertEqual("applied", result.status)
         self.assertEqual("duplicate", self.service.claim("op", "u", "a", self.tasks, 100).status)
+        self.assertEqual("duplicate", self.service.get_result("op", "u").status)
+        self.assertEqual("operation_conflict", self.service.get_result("op", "other").status)
         with db_backend.connection(self.activity) as conn:
             self.assertEqual((1, 1), tuple(conn.execute("SELECT p.claimed,COUNT(l.id) FROM activity_task_progress p JOIN activity_task_claim_log l ON 1=1").fetchone()))
         with db_backend.connection(self.game) as conn:

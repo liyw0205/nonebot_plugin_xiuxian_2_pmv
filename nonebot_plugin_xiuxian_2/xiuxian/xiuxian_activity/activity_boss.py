@@ -639,7 +639,18 @@ def _boss_reward_claim_service() -> BossRewardClaimService:
     return BossRewardClaimService(DB_PATH, get_paths().game_db)
 
 
-def claim_boss_milestone_reward(user_id: str, query: str = "") -> tuple[bool, str]:
+def claim_boss_milestone_reward(
+    user_id: str,
+    query: str = "",
+    operation_id: str | None = None,
+) -> tuple[bool, str]:
+    service = _boss_reward_claim_service()
+    if operation_id:
+        previous = service.get_result(operation_id, user_id)
+        if previous is not None:
+            if previous.succeeded:
+                return True, "已领取：" + "、".join(previous.names)
+            return False, "领取请求冲突，请重新发送"
     allowed, reason, _ = _runtime_gate("claim")
     if not allowed:
         return False, reason
@@ -651,14 +662,27 @@ def claim_boss_milestone_reward(user_id: str, query: str = "") -> tuple[bool, st
         {"key": ms.get("key") or f"p{ms.get('hp_percent')}", "name": ms.get("name"), "reward": ms.get("reward", "")}
         for ms in activity.get("server_milestones") or []
     ]
-    result = _boss_reward_claim_service().claim_milestones(user_id, activity["key"], milestones)
+    result = service.claim_milestones(
+        user_id, activity["key"], milestones, operation_id=operation_id
+    )
     if result.succeeded:
         return True, "已领取：" + "、".join(result.names)
-    messages = {"not_unlocked": "全服进度奖励尚未解锁", "already_claimed": "没有可领取的全服进度奖励（可能已领过）", "inventory_full": "背包空间不足，奖励未领取", "user_missing": "角色不存在"}
+    messages = {"not_unlocked": "全服进度奖励尚未解锁", "already_claimed": "没有可领取的全服进度奖励（可能已领过）", "inventory_full": "背包空间不足，奖励未领取", "user_missing": "角色不存在", "operation_conflict": "领取请求冲突，请重新发送"}
     return False, messages.get(result.status, "领取失败，请稍后重试")
 
 
-def claim_boss_rank_reward(user_id: str, query: str = "") -> tuple[bool, str]:
+def claim_boss_rank_reward(
+    user_id: str,
+    query: str = "",
+    operation_id: str | None = None,
+) -> tuple[bool, str]:
+    service = _boss_reward_claim_service()
+    if operation_id:
+        previous = service.get_result(operation_id, user_id)
+        if previous is not None:
+            if previous.succeeded:
+                return True, f"{resolve_daohao(user_id)} 第{previous.rank}名，已领取【{previous.names[0]}】"
+            return False, "领取请求冲突，请重新发送"
     allowed, reason, _ = _runtime_gate("claim")
     if not allowed:
         return False, reason
@@ -666,14 +690,19 @@ def claim_boss_rank_reward(user_id: str, query: str = "") -> tuple[bool, str]:
     if not activity:
         return False, "未找到活动首领"
     ensure_activity_files()
-    result = _boss_reward_claim_service().claim_rank(user_id, activity["key"], activity.get("rank_rewards") or [])
+    result = service.claim_rank(
+        user_id,
+        activity["key"],
+        activity.get("rank_rewards") or [],
+        operation_id=operation_id,
+    )
     if result.succeeded:
         return True, f"{resolve_daohao(user_id)} 第{result.rank}名，已领取【{result.names[0]}】"
     if result.status == "not_participant":
         return False, "你尚未参与该首领讨伐，无法领取排行奖励"
     if result.status == "not_eligible":
         return False, f"你的排名为第{result.rank}名，不在奖励档位内"
-    messages = {"already_claimed": "该档排行奖励已领取", "inventory_full": "背包空间不足，奖励未领取", "user_missing": "角色不存在"}
+    messages = {"already_claimed": "该档排行奖励已领取", "inventory_full": "背包空间不足，奖励未领取", "user_missing": "角色不存在", "operation_conflict": "领取请求冲突，请重新发送"}
     return False, messages.get(result.status, "领取失败，请稍后重试")
 
 

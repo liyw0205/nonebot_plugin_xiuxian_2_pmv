@@ -31,8 +31,10 @@ class ActivityBossRewardClaimTests(unittest.TestCase):
 
     def test_milestone_assets_and_marker_are_atomic(self):
         rows = [{"key": "m1", "name": "进度奖", "reward": "灵石x50"}]
-        self.assertEqual("applied", self.service.claim_milestones("u", "a", rows).status)
-        self.assertEqual("already_claimed", self.service.claim_milestones("u", "a", rows).status)
+        self.assertEqual("applied", self.service.claim_milestones("u", "a", rows, "milestone-op").status)
+        self.assertEqual("duplicate", self.service.claim_milestones("u", "a", rows, "milestone-op").status)
+        self.assertEqual("duplicate", self.service.get_result("milestone-op", "u").status)
+        self.assertEqual("operation_conflict", self.service.get_result("milestone-op", "other").status)
         with db_backend.connection(self.game) as conn: self.assertEqual(50, conn.execute("SELECT stone FROM user_xiuxian").fetchone()[0])
 
     def test_rank_claim_and_failure_rollback(self):
