@@ -23,16 +23,14 @@ from .arena_limit import arena_limit
 from .arena_shop import arena_shop_data
 from .purchase_service import ArenaPurchaseService
 from .challenge_purchase_service import ArenaChallengePurchaseService
-from .challenge_cost_service import ArenaChallengeCostService
 from .challenge_ticket_service import ArenaChallengeTicketService
-from .battle_settlement_service import ArenaBattleSettlementService
+from .challenge_settlement_service import ArenaChallengeSettlementService
 from .season_reward_service import ArenaSeasonRewardService
 
 arena_purchase_service = ArenaPurchaseService(get_paths().game_db, get_paths().player_db)
 arena_challenge_purchase_service = ArenaChallengePurchaseService(get_paths().game_db, get_paths().player_db)
-arena_challenge_cost_service = ArenaChallengeCostService(get_paths().game_db, get_paths().player_db)
 arena_challenge_ticket_service = ArenaChallengeTicketService(get_paths().game_db, get_paths().player_db)
-arena_battle_settlement_service = ArenaBattleSettlementService(get_paths().game_db, get_paths().player_db)
+arena_challenge_settlement_service = ArenaChallengeSettlementService(get_paths().game_db, get_paths().player_db)
 arena_season_reward_service = ArenaSeasonRewardService(get_paths().game_db, get_paths().player_db)
 
 arena_challenge = on_command("竞技场挑战", priority=10, block=True)
@@ -49,16 +47,21 @@ ARENA_CHALLENGE_BUY_COST = 2000000
 ARENA_CHALLENGE_STAMINA_COST = 0
 
 
-def _arena_fight(user_id, opponent_id, bot_id):
-    players = []
-    for team_id, current_id in enumerate((user_id, opponent_id)):
-        data = get_players_attributes(current_id)
-        attributes = data["属性"]
-        attributes["natal_data"] = data.get("本命法宝")
-        player = Entity(attributes, team_id=team_id)
-        apply_player_buffs(player, data)
-        players.append(player)
-    return BattleSystem(players, bot_id=bot_id).run_battle()
+def _arena_fight(user_id, opponent_id, bot_id, operation_id):
+    random_state = random.getstate()
+    try:
+        random.seed(operation_id)
+        players = []
+        for team_id, current_id in enumerate((user_id, opponent_id)):
+            data = get_players_attributes(current_id)
+            attributes = data["属性"]
+            attributes["natal_data"] = data.get("本命法宝")
+            player = Entity(attributes, team_id=team_id)
+            apply_player_buffs(player, data)
+            players.append(player)
+        return BattleSystem(players, bot_id=bot_id).run_battle()
+    finally:
+        random.setstate(random_state)
 
 
 def _arena_final_vitals(status_list, user_id, fallback):
@@ -69,6 +72,23 @@ def _arena_final_vitals(status_list, user_id, fallback):
                 mp_multiplier = attributes.get("mp_multiplier", 1) or 1
                 return max(1, int(attributes.get("hp", 1) / hp_multiplier)), max(1, int(attributes.get("mp", 1) / mp_multiplier))
     return int(fallback["hp"]), int(fallback["mp"])
+
+
+def _arena_challenge_result_message(result):
+    if result.outcome == "win":
+        return (
+            f"挑战胜利！获得{result.score_delta}积分！\n"
+            f"当前积分：{result.challenger_score} ({result.challenger_rank})"
+        )
+    if result.outcome in {"loss", "draw"}:
+        return (
+            "挑战失败，积分不变。\n"
+            f"当前积分：{result.challenger_score} ({result.challenger_rank})"
+        )
+    return (
+        f"未找到有效对手，获得安慰积分{result.score_delta}点！\n"
+        f"当前积分：{result.challenger_score} ({result.challenger_rank})"
+    )
 
 __arena_help__ = """
 竞技场玩法
@@ -140,6 +160,19 @@ async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     
     user_id = str(user_info['user_id'])
     arg_text = args.extract_plain_text().strip()
+    event_id = str(
+        getattr(event, "message_id", "")
+        or getattr(event, "id", "")
+        or time.time_ns()
+    )
+    operation_id = f"arena-challenge:{event_id}:{user_id}"
+    previous = arena_challenge_settlement_service.get_result(operation_id, user_id)
+    if previous is not None:
+        if not previous.succeeded:
+            await handle_send(bot, event, "竞技场挑战请求冲突，请重新操作。")
+            await arena_challenge.finish()
+        await handle_send(bot, event, _arena_challenge_result_message(previous))
+        await arena_challenge.finish()
 
     opponent_id = None
     use_cached_target = False
@@ -160,40 +193,34 @@ async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         use_cached_target = True
     else:
         # 无参数则随机匹配
-        opponent_id = await find_arena_opponent(user_id)
+        opponent_id = await find_arena_opponent(user_id, operation_id)
 
     arena_info = arena_limit.get_user_arena_info(user_id)
     challenger_player = sql_message.get_user_info_with_id(user_id)
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns())
     challenged_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
-    cost = arena_challenge_cost_service.consume(
-        f"arena-challenge-cost:{event_id}:{user_id}", user_id, opponent_id,
-        arena_limit.daily_challenges + int(arena_info.get("daily_extra_challenges", 0)),
-        ARENA_CHALLENGE_STAMINA_COST, int(arena_info.get("daily_challenges_used", 0)),
-        int(arena_info.get("daily_extra_challenges", 0)), int(challenger_player["hp"]),
-        int(challenger_player["mp"]), int(challenger_player.get("user_stamina", 0)),
-        arena_info.get("last_challenge_time", ""), challenged_at,
+    challenge_cap = arena_limit.daily_challenges + int(
+        arena_info.get("daily_extra_challenges", 0)
     )
-    if not cost.succeeded:
-        message = "今日挑战次数已用完，请明日再来！" if cost.status == "limit_reached" else "竞技场挑战状态已变化，请重新操作。"
-        await handle_send(bot, event, message)
+    if int(arena_info.get("daily_challenges_used", 0)) >= challenge_cap:
+        await handle_send(bot, event, "今日挑战次数已用完，请明日再来！")
         await arena_challenge.finish()
-
+    if int(challenger_player.get("user_stamina", 0)) < ARENA_CHALLENGE_STAMINA_COST:
+        await handle_send(bot, event, "体力不足，无法发起竞技场挑战。")
+        await arena_challenge.finish()
     challenger_arena = dict(arena_info)
     challenger_player = dict(challenger_player)
-    challenger_player["user_stamina"] = cost.stamina
     opponent_arena = opponent_player = None
     outcome, final_challenger = "no_match", (int(challenger_player["hp"]), int(challenger_player["mp"]))
     final_opponent = (None, None)
+    battle_messages = None
 
     if opponent_id:
         opponent_arena = arena_limit.get_user_arena_info(opponent_id)
         opponent_player = sql_message.get_user_info_with_id(opponent_id)
         if opponent_player:
-            if use_cached_target:
-                clear_arena_opponent_cache(user_id)
-            battle_messages, winner, status_list = _arena_fight(user_id, opponent_id, bot.self_id)
-            await send_msg_handler(bot, event, battle_messages)
+            battle_messages, winner, status_list = _arena_fight(
+                user_id, opponent_id, bot.self_id, operation_id
+            )
             final_challenger = _arena_final_vitals(status_list, user_id, challenger_player)
             final_opponent = _arena_final_vitals(status_list, opponent_id, opponent_player)
             outcome = "win" if winner == 0 else "loss" if winner == 1 else "draw"
@@ -201,22 +228,28 @@ async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
             opponent_id = None
             opponent_arena = None
 
-    settlement = arena_battle_settlement_service.settle(
-        f"arena-battle-settlement:{event_id}:{user_id}", user_id, opponent_id, outcome,
+    settlement = arena_challenge_settlement_service.settle(
+        operation_id, user_id, opponent_id, outcome,
+        challenge_cap,
+        ARENA_CHALLENGE_STAMINA_COST, challenged_at,
         challenger_arena, opponent_arena, challenger_player, opponent_player,
         final_challenger[0], final_challenger[1], final_opponent[0], final_opponent[1],
         arena_limit.win_points, arena_limit.lose_points, arena_limit.no_match_points,
     )
     if not settlement.succeeded:
-        await handle_send(bot, event, "竞技场战斗结算状态已变化，请重新查看竞技场信息。")
+        if settlement.status == "limit_reached":
+            message = "今日挑战次数已用完，请明日再来！"
+        elif settlement.status == "stamina_insufficient":
+            message = "体力不足，无法发起竞技场挑战。"
+        else:
+            message = "竞技场挑战状态已变化，请重新操作。"
+        await handle_send(bot, event, message)
         await arena_challenge.finish()
-    new_score, new_rank = settlement.challenger_score, settlement.challenger_rank
-    if outcome == "win":
-        msg = f"挑战胜利！获得{arena_limit.win_points}积分！\n当前积分：{new_score} ({new_rank})"
-    elif outcome in {"loss", "draw"}:
-        msg = f"挑战失败，积分不变。\n当前积分：{new_score} ({new_rank})"
-    else:
-        msg = f"未找到有效对手，获得安慰积分{arena_limit.no_match_points}点！\n当前积分：{new_score} ({new_rank})"
+    if use_cached_target:
+        clear_arena_opponent_cache(user_id)
+    if battle_messages is not None:
+        await send_msg_handler(bot, event, battle_messages)
+    msg = _arena_challenge_result_message(settlement)
     
     await handle_send(bot, event, msg)
     await arena_challenge.finish()
@@ -639,7 +672,7 @@ def check_rank_requirement(current_rank, required_rank):
     required_index = rank_order.index(required_rank)
     return current_index >= required_index
 
-async def find_arena_opponent(user_id):
+async def find_arena_opponent(user_id, operation_id=None):
     """为玩家寻找合适的竞技场对手，优先积分相近，否则返回最近的一个"""
     user_id = str(user_id)
     user_arena_data = arena_limit.get_user_arena_info(user_id)
@@ -675,7 +708,7 @@ async def find_arena_opponent(user_id):
 
     # 优先随机选取积分接近的
     if close_candidates:
-        return random.choice(close_candidates)
+        return random.Random(operation_id).choice(close_candidates)
 
     # 没有接近的，就选最近的一个
     if candidates:
