@@ -4,6 +4,11 @@ from datetime import datetime
 from pathlib import Path
 from ...paths import get_paths
 from ..xiuxian_utils.json_store import load_json_file, save_json_file
+from .config_event_service import (
+    ActivityConfigEventService,
+    ActivityConfigMutationResult,
+    ActivityConfigState,
+)
 
 from ..xiuxian_utils.activity_helpers import default_stage_features as _default_stage_features
 from .activity_utils import _as_float, _as_int, _clean_text, _normalize_activity_key
@@ -12,6 +17,8 @@ from .activity_views import STAGE_FEATURES
 BASE_DIR = get_paths().data / "activity"
 CONFIG_PATH = BASE_DIR / "activity_config.json"
 DEFAULT_CONFIG_PATH = Path(__file__).parent / "activity_config.json"
+CONFIG_DB_PATH = BASE_DIR / "activity.db"
+activity_config_event_service = ActivityConfigEventService(CONFIG_DB_PATH)
 
 DATE_FMT = "%Y-%m-%d"
 TIME_FMT = "%Y-%m-%d %H:%M:%S"
@@ -149,18 +156,55 @@ def _migrate_config(config: dict) -> tuple[dict, bool]:
     return migrated, True
 
 
-def load_config() -> dict:
+def _save_config_projection(config: dict):
+    BASE_DIR.mkdir(parents=True, exist_ok=True)
+    save_json_file(CONFIG_PATH, config, indent=2)
+
+
+def _load_legacy_config() -> dict:
     _ensure_activity_files()
     config = load_json_file(CONFIG_PATH, _load_default_config(), dict)
     config, changed = _migrate_config(config)
     if changed:
-        save_config(config)
+        _save_config_projection(config)
     return config
 
 
-def save_config(config: dict):
-    _ensure_activity_files()
-    save_json_file(CONFIG_PATH, config, indent=2)
+def load_config_state() -> ActivityConfigState:
+    return activity_config_event_service.load_or_import(_load_legacy_config())
+
+
+def load_config() -> dict:
+    return load_config_state().config
+
+
+def replay_config_event(
+    operation_id, request_identity
+) -> ActivityConfigMutationResult | None:
+    result = activity_config_event_service.replay(operation_id, request_identity)
+    if result is not None and result.succeeded and result.config is not None:
+        _save_config_projection(result.config)
+    return result
+
+
+def save_config(
+    config: dict,
+    *,
+    operation_id,
+    request_identity,
+    expected_revision,
+    result_text: str = "",
+) -> ActivityConfigMutationResult:
+    result = activity_config_event_service.replace(
+        operation_id,
+        request_identity,
+        expected_revision,
+        config,
+        result_text=result_text,
+    )
+    if result.succeeded and result.config is not None:
+        _save_config_projection(result.config)
+    return result
 
 
 def parse_time(value, *, is_start: bool):

@@ -21,6 +21,8 @@ from .activity_config import (
     activity_runtime_state,
     activity_state,
     load_config,
+    load_config_state,
+    replay_config_event,
     save_config,
 )
 from .activity_rules import get_gameplay_activities
@@ -2175,14 +2177,50 @@ def build_rank_text(limit: int = 10) -> str:
     return "\n".join(lines)
 
 
-def set_enabled(enabled: bool, target: str | None = None) -> str:
-    cfg = load_config()
+def set_enabled(
+    enabled: bool,
+    target: str | None = None,
+    *,
+    operation_id: str | None = None,
+    operator_id: str = "",
+) -> str:
+    operation_id = str(operation_id or f"activity-config-toggle:{time.time_ns()}")
     target_text = _clean_text(target)
     action_text = "开启" if enabled else "关闭"
+    request_identity = {
+        "action": "toggle",
+        "enabled": bool(enabled),
+        "operator_id": str(operator_id),
+        "target": target_text,
+    }
+    replay = replay_config_event(operation_id, request_identity)
+    if replay is not None:
+        if replay.status == "operation_conflict":
+            return "同一消息事件不能用于不同的活动配置操作"
+        return replay.result_text
+
+    state = load_config_state()
+    cfg = deepcopy(state.config)
+
+    def commit(text: str) -> str:
+        result = save_config(
+            cfg,
+            operation_id=operation_id,
+            request_identity=request_identity,
+            expected_revision=state.revision,
+            result_text=text,
+        )
+        if result.status == "operation_conflict":
+            return "同一消息事件不能用于不同的活动配置操作"
+        if result.status == "state_changed":
+            return "活动配置已变化，请重新执行操作"
+        if not result.succeeded:
+            return "活动配置保存失败，请稍后重试"
+        return result.result_text
+
     if not target_text:
         cfg["enabled"] = bool(enabled)
-        save_config(cfg)
-        return f"已{action_text}签到活动"
+        return commit(f"已{action_text}签到活动")
 
     if target_text in {"全部", "所有", "all", "ALL"}:
         cfg["enabled"] = bool(enabled)
@@ -2194,13 +2232,11 @@ def set_enabled(enabled: bool, target: str | None = None) -> str:
             activity_pass = extensions.setdefault("activity_pass", deepcopy(DEFAULT_ACTIVITY_PASS))
             if isinstance(activity_pass, dict):
                 activity_pass["enabled"] = bool(enabled)
-        save_config(cfg)
-        return f"已{action_text}全部活动"
+        return commit(f"已{action_text}全部活动")
 
     if target_text in {"签到", "节日签到", "签到活动"}:
         cfg["enabled"] = bool(enabled)
-        save_config(cfg)
-        return f"已{action_text}签到活动"
+        return commit(f"已{action_text}签到活动")
 
     if target_text in {"玩法", "玩法活动"}:
         changed_count = 0
@@ -2209,9 +2245,8 @@ def set_enabled(enabled: bool, target: str | None = None) -> str:
                 activity["enabled"] = bool(enabled)
                 changed_count += 1
         if changed_count:
-            save_config(cfg)
-            return f"已{action_text}{changed_count}个玩法活动"
-        return "当前没有配置玩法活动"
+            return commit(f"已{action_text}{changed_count}个玩法活动")
+        return commit("当前没有配置玩法活动")
 
     if target_text in {"战令", "活动战令", "通行证", "活动通行证", "活跃"}:
         extensions = cfg.setdefault("extensions", {})
@@ -2223,8 +2258,7 @@ def set_enabled(enabled: bool, target: str | None = None) -> str:
             activity_pass = deepcopy(DEFAULT_ACTIVITY_PASS)
             extensions["activity_pass"] = activity_pass
         activity_pass["enabled"] = bool(enabled)
-        save_config(cfg)
-        return f"已{action_text}活动战令"
+        return commit(f"已{action_text}活动战令")
 
     type_targets = {
         "集字": "collect_words",
@@ -2246,9 +2280,8 @@ def set_enabled(enabled: bool, target: str | None = None) -> str:
                 activity["enabled"] = bool(enabled)
                 changed_count += 1
         if changed_count:
-            save_config(cfg)
-            return f"已{action_text}{changed_count}个{target_text}"
-        return f"当前没有配置{target_text}"
+            return commit(f"已{action_text}{changed_count}个{target_text}")
+        return commit(f"当前没有配置{target_text}")
 
     changed = False
     for activity in cfg.get("gameplay_activities") or []:
@@ -2266,9 +2299,8 @@ def set_enabled(enabled: bool, target: str | None = None) -> str:
             break
 
     if not changed:
-        return f"未找到活动：{target_text}"
-    save_config(cfg)
-    return f"已{action_text}{target_text}"
+        return commit(f"未找到活动：{target_text}")
+    return commit(f"已{action_text}{target_text}")
 
 
 ensure_activity_files()

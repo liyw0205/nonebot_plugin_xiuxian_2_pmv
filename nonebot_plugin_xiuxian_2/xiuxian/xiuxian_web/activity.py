@@ -29,7 +29,7 @@ from ..xiuxian_activity.service import (
     activity_runtime_state,
     activity_state,
     get_activity_data_overview,
-    load_config as load_activity_config,
+    load_config_state as load_activity_config_state,
     parse_reward,
     reset_activity_data,
     save_config as save_activity_config,
@@ -1743,12 +1743,14 @@ def activity_management():
     if "admin_id" not in session:
         return redirect(url_for("login"))
 
-    config = _prepare_activity_config(load_activity_config())
+    config_state = load_activity_config_state()
+    config = _prepare_activity_config(config_state.config)
     ok, reason = activity_state(config)
     runtime = activity_runtime_state(config)
     return render_template(
         "activity.html",
         activity_config=config,
+        activity_config_revision=config_state.revision,
         activity_templates=_serialize_templates(),
         gameplay_templates=_serialize_gameplay_templates(),
         gameplay_template_groups=_serialize_gameplay_template_groups(),
@@ -1764,11 +1766,13 @@ def api_activity_config():
         return api_error("未登录")
 
     if request.method == "GET":
-        config = _prepare_activity_config(load_activity_config())
+        config_state = load_activity_config_state()
+        config = _prepare_activity_config(config_state.config)
         ok, reason = activity_state(config)
         runtime = activity_runtime_state(config)
         return api_success(
             config=config,
+            config_revision=config_state.revision,
             templates=_serialize_templates(),
             gameplay_templates=_serialize_gameplay_templates(),
             gameplay_template_groups=_serialize_gameplay_template_groups(),
@@ -1780,12 +1784,40 @@ def api_activity_config():
     try:
         payload = request.get_json() or {}
         config = _normalize_activity_config(payload.get("config", payload))
-        save_activity_config(config)
+        operation_id = _clean_text(payload.get("operation_id"))
+        expected_revision = int(payload.get("expected_revision") or 0)
+        if not operation_id or expected_revision <= 0:
+            return api_error("缺少活动配置操作标识或版本，请重新载入", status=400)
+        request_identity = {
+            "action": "replace",
+            "config": config,
+            "operator_id": str(session.get("admin_id") or ""),
+        }
+        result = save_activity_config(
+            config,
+            operation_id=operation_id,
+            request_identity=request_identity,
+            expected_revision=expected_revision,
+            result_text="活动配置已保存",
+        )
+        if result.status == "operation_conflict":
+            return api_error("活动配置操作标识冲突，请重新保存", status=409)
+        if result.status == "state_changed":
+            return api_error(
+                "活动配置已被其他操作更新，请重新载入",
+                status=409,
+                config=result.config,
+                config_revision=result.revision,
+            )
+        if not result.succeeded or result.config is None:
+            return api_error("活动配置保存失败，请稍后重试", status=409)
+        config = result.config
         ok, reason = activity_state(config)
         runtime = activity_runtime_state(config)
         return api_success(
-            message="活动配置已保存",
+            message=result.result_text,
             config=config,
+            config_revision=result.revision,
             state={"ok": ok, "text": "进行中" if ok else reason, "runtime": runtime},
         )
     except Exception as e:

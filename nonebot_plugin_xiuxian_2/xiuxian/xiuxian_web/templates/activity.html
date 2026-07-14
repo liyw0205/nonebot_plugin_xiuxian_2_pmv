@@ -829,6 +829,8 @@ stageFeatureChoices.forEach(([value, label]) => {
     stageFeatureLabels[value] = label;
 });
 let activityConfig = {{ activity_config|tojson }};
+let activityConfigRevision = {{ activity_config_revision|tojson }};
+let pendingActivitySave = null;
 let taskRowSeq = 0;
 let gameplayRowSeq = 0;
 let stageRowSeq = 0;
@@ -2145,11 +2147,26 @@ async function saveActivityConfig(event) {
     button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 保存中...';
     try {
         const xiuxianWeb = getXiuxianWeb();
+        const config = collectActivityConfig();
+        const serializedConfig = JSON.stringify(config);
+        if (!pendingActivitySave || pendingActivitySave.serializedConfig !== serializedConfig) {
+            const nonce = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+            pendingActivitySave = {
+                operationId: `activity-config-web:${nonce}`,
+                serializedConfig
+            };
+        }
         const data = await xiuxianWeb.requestJson('/api/activity/config', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({config: collectActivityConfig()})
+            body: JSON.stringify({
+                config,
+                operation_id: pendingActivitySave.operationId,
+                expected_revision: activityConfigRevision
+            })
         });
+        activityConfigRevision = Number(data.config_revision || activityConfigRevision);
+        pendingActivitySave = null;
         fillActivityForm(data.config);
         updateStatePill(data.state);
         setResult(true, data.message || '活动配置已保存');
@@ -2165,6 +2182,8 @@ async function saveActivityConfig(event) {
 async function reloadActivityConfig() {
     try {
         const data = await getXiuxianWeb().requestJson('/api/activity/config');
+        activityConfigRevision = Number(data.config_revision || activityConfigRevision);
+        pendingActivitySave = null;
         fillActivityForm(data.config);
         updateStatePill(data.state);
         setResult(true, '已重新载入活动配置');

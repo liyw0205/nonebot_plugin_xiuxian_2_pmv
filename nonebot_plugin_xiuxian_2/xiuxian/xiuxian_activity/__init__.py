@@ -361,14 +361,26 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 @activity_open_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     await assign_bot(bot=bot, event=event)
-    text = set_enabled(True, args.extract_plain_text())
+    operator_id = str(event.get_user_id())
+    text = set_enabled(
+        True,
+        args.extract_plain_text(),
+        operation_id=_activity_operation_id(event, "config-open", operator_id),
+        operator_id=operator_id,
+    )
     await handle_send(bot, event, text)
 
 
 @activity_close_cmd.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     await assign_bot(bot=bot, event=event)
-    text = set_enabled(False, args.extract_plain_text())
+    operator_id = str(event.get_user_id())
+    text = set_enabled(
+        False,
+        args.extract_plain_text(),
+        operation_id=_activity_operation_id(event, "config-close", operator_id),
+        operator_id=operator_id,
+    )
     await handle_send(bot, event, text)
 
 
