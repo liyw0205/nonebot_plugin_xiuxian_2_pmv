@@ -23,7 +23,7 @@ class PartnerProtectionTransactionTests(unittest.TestCase):
 
     def test_applies_and_replays_the_same_operation(self):
         applied = self.service.set_status("op", "a", "off", "on")
-        duplicate = self.service.set_status("op", "a", "off", "on")
+        duplicate = self.service.set_status("op", "a", "on", "on")
 
         self.assertEqual(("applied", "off", "on"), (
             applied.status, applied.previous_status, applied.current_status,
@@ -44,7 +44,6 @@ class PartnerProtectionTransactionTests(unittest.TestCase):
 
         for user_id, expected, target in (
             ("b", "off", "on"),
-            ("a", "on", "on"),
             ("a", "off", "refusal"),
         ):
             with self.subTest(user_id=user_id, expected=expected, target=target):
@@ -52,6 +51,22 @@ class PartnerProtectionTransactionTests(unittest.TestCase):
                     "operation_conflict",
                     self.service.set_status("op", user_id, expected, target).status,
                 )
+
+    def test_replays_legacy_payload_without_reusing_its_expected_snapshot(self):
+        self.service.set_status("op", "a", "off", "on")
+        with db_backend.transaction(self.player) as conn:
+            conn.execute(
+                "UPDATE partner_protection_operations SET payload=%s "
+                "WHERE operation_id='op'",
+                ('["a","off","on"]',),
+            )
+
+        result = self.service.set_status("op", "a", "on", "on")
+
+        self.assertEqual("duplicate", result.status)
+        self.assertEqual(("off", "on"), (
+            result.previous_status, result.current_status,
+        ))
 
     def test_changed_snapshot_does_not_write_operation(self):
         with db_backend.transaction(self.player) as conn:

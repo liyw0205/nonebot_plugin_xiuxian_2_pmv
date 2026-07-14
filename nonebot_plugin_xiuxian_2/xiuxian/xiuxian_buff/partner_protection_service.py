@@ -82,7 +82,7 @@ class PartnerProtectionService:
         if not operation_id or not user_id:
             raise ValueError("invalid partner protection operation")
         payload = json.dumps(
-            [user_id, expected_status, new_status],
+            [user_id, new_status],
             ensure_ascii=True,
             separators=(",", ":"),
         )
@@ -104,7 +104,13 @@ class PartnerProtectionService:
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    if str(previous[0]) != payload:
+                    saved_payload = json.loads(str(previous[0]))
+                    saved_identity = (
+                        [str(saved_payload[0]), str(saved_payload[2])]
+                        if len(saved_payload) == 3
+                        else [str(value) for value in saved_payload]
+                    )
+                    if saved_identity != [user_id, new_status]:
                         return PartnerProtectionResult("operation_conflict")
                     return PartnerProtectionResult(
                         "duplicate", str(previous[1]), str(previous[2])
