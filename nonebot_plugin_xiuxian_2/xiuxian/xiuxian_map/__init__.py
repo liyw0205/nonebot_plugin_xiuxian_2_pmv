@@ -33,6 +33,7 @@ from .explore_settlement_service import MapExploreSettlementService
 from .mission_claim_service import MapMissionClaimService
 from .combat_settlement_service import MapCombatSettlementService
 from .dongfu_build_service import MapDongfuBuildService
+from .home_return_service import MapHomeReturnService
 from .explore_start_service import MapExploreStartService
 from .movement_settlement_service import MapMovementSettlementService
 from .dao_battle_settlement_service import MapDaoBattleSettlementService
@@ -44,6 +45,7 @@ map_mission_claim_service = MapMissionClaimService(get_paths().game_db, get_path
 map_resource_reward_service = MapResourceRewardService(get_paths().game_db, get_paths().player_db)
 map_combat_settlement_service = MapCombatSettlementService(get_paths().game_db, get_paths().player_db)
 map_dongfu_build_service = MapDongfuBuildService(get_paths().game_db, get_paths().player_db)
+map_home_return_service = MapHomeReturnService(get_paths().player_db)
 map_explore_start_service = MapExploreStartService(get_paths().game_db, get_paths().player_db)
 map_movement_service = MapMovementSettlementService(get_paths().game_db, get_paths().player_db)
 map_dao_battle_service = MapDaoBattleSettlementService(get_paths().player_db, get_paths().game_db)
@@ -1024,18 +1026,26 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     user_id = str(user_info["user_id"])
-    dongfu_data = player_data_manager.get_fields(user_id, DONGFU_TABLE) or {}
-
-    if int(dongfu_data.get("built", 0)) != 1:
+    result = map_home_return_service.return_home(
+        _map_operation_id(event, "home", user_id), user_id
+    )
+    if result.status == "dongfu_missing":
         await handle_send(bot, event, "你尚未建设洞府，请先使用【建设洞府】。")
         return
-
-    if not all(dongfu_data.get(k) for k in ("realm", "heaven", "node_id")):
+    if result.status == "dongfu_invalid":
         await handle_send(bot, event, "洞府数据异常，请联系管理员处理。")
         return
-
-    _save_map_status(user_id, dongfu_data["realm"], dongfu_data["heaven"], dongfu_data["node_id"])
-    await handle_send(bot, event, f"你已回到洞府：{dongfu_data['realm']}·{dongfu_data['heaven']}·{dongfu_data['node_name']}")
+    if result.status == "position_missing":
+        await handle_send(bot, event, "地图位置数据异常，请联系管理员处理。")
+        return
+    if result.status == "operation_conflict":
+        await handle_send(bot, event, "该事件已用于其他回府操作。")
+        return
+    await handle_send(
+        bot,
+        event,
+        f"你已回到洞府：{result.realm}·{result.heaven}·{result.node_name}",
+    )
 
 # =========================================
 # 地图基础

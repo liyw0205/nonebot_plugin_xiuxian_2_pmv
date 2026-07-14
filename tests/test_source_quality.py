@@ -2019,6 +2019,26 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("def replay_create(", service)
         self.assertIn("def replay_resolution(", service)
 
+    def test_map_home_return_uses_one_event_transaction(self) -> None:
+        root = SOURCE_ROOT / "xiuxian" / "xiuxian_map"
+        source = (root / "__init__.py").read_text(encoding="utf-8")
+        service = (root / "home_return_service.py").read_text(encoding="utf-8")
+
+        start = source.index("@go_home.handle")
+        end = source.index("@map_help.handle", start)
+        handler = source[start:end]
+        self.assertIn("map_home_return_service.return_home(", handler)
+        self.assertIn('_map_operation_id(event, "home", user_id)', handler)
+        self.assertNotIn("_save_map_status(", handler)
+        self.assertNotIn("player_data_manager.get_fields(", handler)
+
+        self.assertIn("BEGIN IMMEDIATE", service)
+        self.assertIn("map_home_return_operations", service)
+        self.assertLess(
+            service.index("FROM map_home_return_operations WHERE operation_id=%s"),
+            service.index('conn.table_exists("dongfu_status")'),
+        )
+
     def test_statistics_data_migration_does_not_block_event_loop(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_buff" / "__init__.py"
