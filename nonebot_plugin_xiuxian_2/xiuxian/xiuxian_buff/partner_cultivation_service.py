@@ -8,6 +8,7 @@ from threading import RLock
 
 from ..xiuxian_utils import db_backend
 from .partner_invite_service import PartnerInviteService
+from .partner_protection_service import PartnerProtectionService
 from .relation_transaction_utils import increment_stat, set_field
 
 
@@ -37,6 +38,7 @@ class PartnerCultivationService:
         level_rate_1=0, level_rate_2=0, expected_affection_1=None, expected_affection_2=None,
         affection_1=0, affection_2=0, invite_id=None,
         expected_used_count_1=None, expected_used_count_2=None,
+        expected_target_protection=None,
     ) -> PartnerCultivationResult:
         operation_id = str(operation_id).strip()
         user_id_1, user_id_2 = str(user_id_1), str(user_id_2)
@@ -52,11 +54,16 @@ class PartnerCultivationService:
         invite_id = None if invite_id is None else str(invite_id)
         expected_used_count_1 = None if expected_used_count_1 is None else int(expected_used_count_1)
         expected_used_count_2 = None if expected_used_count_2 is None else int(expected_used_count_2)
+        expected_target_protection = (
+            None if expected_target_protection is None
+            else PartnerProtectionService.require_valid(expected_target_protection)
+        )
         if invite_id and (expected_used_count_1 is None or expected_used_count_2 is None):
             raise ValueError("invite settlement requires usage snapshots")
         payload = json.dumps(
             [user_id_1, user_id_2, *values, expected_affection_1, expected_affection_2,
-             invite_id, expected_used_count_1, expected_used_count_2],
+             invite_id, expected_used_count_1, expected_used_count_2,
+             expected_target_protection],
             separators=(",", ":"), ensure_ascii=True,
         )
 
@@ -84,6 +91,14 @@ class PartnerCultivationService:
                     if str(previous[0]) != payload:
                         return result("operation_conflict")
                     return PartnerCultivationResult("duplicate", *(int(value) for value in previous[1:]))
+
+                if expected_target_protection is not None:
+                    actual_protection = PartnerProtectionService.read_status(
+                        conn, user_id_2, "player_data"
+                    )
+                    if actual_protection != expected_target_protection:
+                        conn.rollback()
+                        return result("protection_changed")
 
                 if invite_id:
                     PartnerInviteService.ensure_schema(conn, "player_data")

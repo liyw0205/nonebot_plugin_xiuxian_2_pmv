@@ -1901,6 +1901,30 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn(".iterdir()", handler)
         self.assertNotIn(".read_text(", handler)
 
+    def test_partner_protection_is_rechecked_inside_transactions(self) -> None:
+        root = SOURCE_ROOT / "xiuxian" / "xiuxian_buff"
+        source = (root / "partner.py").read_text(encoding="utf-8")
+
+        protection_start = source.index("async def two_exp_protect_")
+        protection_end = source.index("@mentor_protect.handle", protection_start)
+        protection_handler = source[protection_start:protection_end]
+        self.assertIn("partner_protection_service.set_status(", protection_handler)
+        self.assertNotIn("save_player_user(", source)
+
+        invite_start = source.index("async def two_exp_invite_")
+        invite_end = source.index("async def check_is_partner", invite_start)
+        invite_handler = source[invite_start:invite_end]
+        self.assertIn('expected_target_protection="on"', invite_handler)
+        self.assertIn('expected_target_protection="off"', invite_handler)
+
+        invite_service = (root / "partner_invite_service.py").read_text(encoding="utf-8")
+        cultivation_service = (root / "partner_cultivation_service.py").read_text(encoding="utf-8")
+        protection_service = (root / "partner_protection_service.py").read_text(encoding="utf-8")
+        self.assertIn("BEGIN IMMEDIATE", invite_service)
+        self.assertIn("BEGIN IMMEDIATE", cultivation_service)
+        self.assertIn("BEGIN IMMEDIATE", protection_service)
+        self.assertIn("partner_protection_operations", protection_service)
+
     def test_statistics_data_migration_does_not_block_event_loop(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_buff" / "__init__.py"

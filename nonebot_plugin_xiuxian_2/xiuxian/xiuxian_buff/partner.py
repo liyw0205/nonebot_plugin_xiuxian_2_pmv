@@ -39,6 +39,7 @@ from .mentor_transmission_service import MentorTransmissionService
 from .partner_breakthrough_service import PartnerBreakthroughService
 from .partner_cultivation_service import PartnerCultivationService
 from .partner_invite_service import PartnerInviteService
+from .partner_protection_service import PartnerProtectionService
 from .partner_token_service import PartnerTokenUseService
 from .partner_bind_service import PartnerBindService
 from .partner_unbind_service import PartnerUnbindService
@@ -78,6 +79,7 @@ partner_breakthrough_service = PartnerBreakthroughService(get_paths().game_db, g
 mentor_bind_service = MentorBindService(get_paths().game_db, get_paths().player_db)
 mentor_application_service = MentorApplicationService(get_paths().player_db)
 partner_invite_service = PartnerInviteService(get_paths().player_db)
+partner_protection_service = PartnerProtectionService(get_paths().player_db)
 mentor_expel_service = MentorExpelService(get_paths().game_db, get_paths().player_db)
 mentor_breakthrough_reward_service = MentorBreakthroughRewardService(get_paths().game_db, get_paths().player_db)
 apprentice_leave_service = ApprenticeLeaveService(get_paths().game_db, get_paths().player_db)
@@ -220,16 +222,7 @@ async def two_exp_cd_up():
 
 def load_player_user(user_id):
     """加载用户数据，如果不存在或为空，返回默认数据"""
-    user_id_str = str(user_id)
-    status = player_data_manager.get_field_data(user_id_str, "status", "two_exp_protect")
-    if status is None:
-        status = "off"  # 默认值为 False
-    return status
-
-def save_player_user(user_id, status):
-    """保存用户数据，确保目录存在"""
-    user_id_str = str(user_id)
-    player_data_manager.update_or_write_data(user_id_str, "status", "two_exp_protect", status)
+    return partner_protection_service.get_status(user_id)
 
 @two_exp_invite.handle(parameterless=[Cooldown(stamina_cost=10)])
 async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -338,10 +331,19 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         
         exp_count = max(exp_count, 1)
         # 创建邀请
-        invite_id = f"{user_id}_{two_qq}_{datetime.now().timestamp()}"
-        created = partner_invite_service.create(invite_id, user_id, two_qq, min(exp_count, max_count_2))
+        invite_id = _relation_operation_id(
+            event, "cultivation-invite", user_id, two_qq
+        )
+        created = partner_invite_service.create(
+            invite_id, user_id, two_qq, min(exp_count, max_count_2),
+            expected_target_protection="on",
+        )
         if not created.succeeded:
-            await handle_send(bot, event, "双方已有待处理的双修邀请，请稍后再试！", md_type="buff")
+            if created.status == "protection_changed":
+                msg = "对方的双修保护状态已经变化，请重新发起。"
+            else:
+                msg = "双方已有待处理的双修邀请，请稍后再试！"
+            await handle_send(bot, event, msg, md_type="buff")
             await two_exp_invite.finish()
 
         # 设置60秒过期
@@ -352,7 +354,10 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await two_exp_invite.finish()
     else:
         # 对方关闭保护，直接进行双修
-        await direct_two_exp(bot, event, user_id, two_qq, exp_count, is_partner=is_partner)
+        await direct_two_exp(
+            bot, event, user_id, two_qq, exp_count, is_partner=is_partner,
+            expected_target_protection="off",
+        )
         await two_exp_invite.finish()
 
 async def check_is_partner(user_id_1, user_id_2):
@@ -370,7 +375,10 @@ async def check_is_partner(user_id_1, user_id_2):
         and str(partner_data_2.get("partner_id")) == user_id_1
     )
 
-async def direct_two_exp(bot, event, user_id_1, user_id_2, exp_count=1, is_partner=False, invite_id=None):
+async def direct_two_exp(
+    bot, event, user_id_1, user_id_2, exp_count=1, is_partner=False,
+    invite_id=None, expected_target_protection=None,
+):
     """
     直接进行双修。
 
@@ -531,6 +539,7 @@ async def direct_two_exp(bot, event, user_id_1, user_id_2, exp_count=1, is_partn
         invite_id=invite_id,
         expected_used_count_1=limt_1 if invite_id else None,
         expected_used_count_2=limt_2 if invite_id else None,
+        expected_target_protection=expected_target_protection,
     )
     if not settlement.succeeded:
         await handle_send(bot, event, "双修状态发生变化，本次未结算，请重新发起。", md_type="buff")
@@ -816,7 +825,8 @@ async def two_exp_protect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     arg = args.extract_plain_text().strip().lower()
     
     # 默认双修保护状态为关闭
-    current_status = load_player_user(user_id)
+    expected_status = load_player_user(user_id)
+    current_status = expected_status
     
     if arg in ['开启', 'on']:
         current_status = "on"
@@ -842,8 +852,15 @@ async def two_exp_protect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, msg, md_type="buff", k1="开启", v1="双修保护 开启", k2="关闭", v2="双修保护 关闭", k3="拒绝", v3="双修保护 拒绝", k4="状态", v4="双修保护 状态")
         await two_exp_protect.finish()
     
-    # 保存用户数据
-    save_player_user(user_id, current_status)
+    changed = partner_protection_service.set_status(
+        _relation_operation_id(event, "cultivation-protection", user_id),
+        user_id,
+        expected_status,
+        current_status,
+    )
+    if not changed.succeeded:
+        await handle_send(bot, event, "双修保护状态已经变化，请重新设置。")
+        await two_exp_protect.finish()
     await handle_send(bot, event, msg, md_type="buff", k1="开启", v1="双修保护 开启", k2="关闭", v2="双修保护 关闭", k3="拒绝", v3="双修保护 拒绝", k4="状态", v4="双修保护 状态")
     await two_exp_protect.finish()
 

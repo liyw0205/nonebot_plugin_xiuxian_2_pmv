@@ -7,6 +7,7 @@ from threading import RLock
 import time
 
 from ..xiuxian_utils import db_backend
+from .partner_protection_service import PartnerProtectionService
 
 
 @dataclass(frozen=True)
@@ -65,11 +66,18 @@ class PartnerInviteService:
             "WHERE status='pending' AND expires_at<=%s", (now, now),
         )
 
-    def create(self, invite_id, inviter_id, target_id, count, *, ttl_seconds=60, now=None) -> PartnerInviteResult:
+    def create(
+        self, invite_id, inviter_id, target_id, count, *, ttl_seconds=60,
+        now=None, expected_target_protection=None,
+    ) -> PartnerInviteResult:
         invite_id, inviter_id, target_id = str(invite_id), str(inviter_id), str(target_id)
         count = int(count)
         created_at = float(time.time() if now is None else now)
         expires_at = created_at + max(1, int(ttl_seconds))
+        expected_target_protection = (
+            None if expected_target_protection is None
+            else PartnerProtectionService.require_valid(expected_target_protection)
+        )
         if not invite_id or inviter_id == target_id or count <= 0:
             raise ValueError("invalid partner invite")
         with self._lock, closing(db_backend.connect(self._player_database)) as conn:
@@ -86,6 +94,13 @@ class PartnerInviteService:
                     invite = self.from_row(previous)
                     identical = invite.inviter_id == inviter_id and invite.target_id == target_id and invite.count == count
                     return PartnerInviteResult("duplicate" if identical else "invite_conflict", invite)
+                if expected_target_protection is not None:
+                    actual_protection = PartnerProtectionService.read_status(
+                        conn, target_id
+                    )
+                    if actual_protection != expected_target_protection:
+                        conn.rollback()
+                        return PartnerInviteResult("protection_changed")
                 busy = conn.execute(
                     "SELECT invite_id,inviter_id,target_id,count,status,created_at,expires_at "
                     "FROM partner_cultivation_invites WHERE status='pending' AND "
