@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
 import nonebot
@@ -34,7 +35,7 @@ class TrainingPurchaseServiceTests(unittest.TestCase):
     def purchase(self, operation_id="purchase", **overrides):
         values = dict(quantity=2, unit_cost=10, weekly_limit=5, expected_points=100, weekly=self.weekly, max_goods=99)
         values.update(overrides)
-        return self.service.purchase(operation_id, "user", 1, "item", "type", values["quantity"], values["unit_cost"], values["weekly_limit"], values["expected_points"], values["weekly"], values["max_goods"], 1)
+        return self.service.purchase(operation_id, "user", 1, "item", "type", values["quantity"], values["unit_cost"], values["weekly_limit"], values["expected_points"], values["weekly"], values["max_goods"], 1, values.get("today"))
 
     def state(self):
         with db_backend.connection(self.player_database) as conn:
@@ -69,6 +70,14 @@ class TrainingPurchaseServiceTests(unittest.TestCase):
         with self.assertRaises(db_backend.IntegrityError):
             self.purchase("rollback")
         self.assertEqual(self.state(), (100, self.weekly, None))
+
+    def test_purchase_normalizes_week_inside_transaction(self) -> None:
+        result = self.purchase("new-week", today=date(2026, 7, 20))
+        self.assertEqual((result.status, result.purchased), ("applied", 2))
+        self.assertEqual(
+            self.state(),
+            (80, {"_last_reset": "2026-07-20", "1": 2}, (2, 2)),
+        )
 
 
 if __name__ == "__main__":
