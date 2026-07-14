@@ -14,26 +14,24 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 import random
 import time
 from datetime import datetime, timedelta
-import os
-from pathlib import Path
 from ..xiuxian_config import convert_rank
-from ..xiuxian_utils.json_store import load_json_file, save_json_file
 from .exp_daily_reward_service import InteractiveExpDailyRewardService
 from .stone_daily_reward_service import InteractiveStoneDailyRewardService
 from .greeting_claim_service import InteractiveGreetingClaimService
+from .daily_fortune_service import InteractiveDailyFortuneService
 sql_message = XiuxianDateManage()
 interactive_exp_daily_reward_service = InteractiveExpDailyRewardService(get_paths().game_db)
 interactive_stone_daily_reward_service = InteractiveStoneDailyRewardService(get_paths().game_db)
 interactive_greeting_claim_service = InteractiveGreetingClaimService(get_paths().game_db)
-
-# 创建数据存储目录
-DATA_PATH = Path(__file__).parent / "morning_night_data"
-os.makedirs(DATA_PATH, exist_ok=True)
+interactive_daily_fortune_service = InteractiveDailyFortuneService(get_paths().game_db)
 
 async def reset_data_by_time():
     """清理已过重放窗口的早晚安领取记录。"""
     cutoff = datetime.now().date() - timedelta(days=30)
-    return interactive_greeting_claim_service.cleanup_before(cutoff)
+    return (
+        interactive_greeting_claim_service.cleanup_before(cutoff)
+        + interactive_daily_fortune_service.cleanup_before(cutoff)
+    )
 
 # 运势类型和对应的星数
 FORTUNE_TYPES = {
@@ -121,16 +119,6 @@ FORTUNE_DESCRIPTIONS = {
     ]
 }
 
-# 加载运势数据
-def load_fortune_data():
-    fortune_file = DATA_PATH / "fortune_data.json"
-    return load_json_file(fortune_file, {}, dict)
-
-# 保存运势数据
-def save_fortune_data(data):
-    fortune_file = DATA_PATH / "fortune_data.json"
-    save_json_file(fortune_file, data)
-
 # 生成运势星号显示
 def generate_fortune_stars(fortune_type):
     stars_count = FORTUNE_TYPES[fortune_type]
@@ -139,34 +127,17 @@ def generate_fortune_stars(fortune_type):
     stars = "★" * stars_count
     return f"{stars}"
 
-# 获取用户今日运势
-def get_user_fortune(user_id):
-    data = load_fortune_data()
-    current_date = datetime.now().strftime("%Y-%m-%d")
-    
-    # 检查用户是否有今日的运势记录
-    user_key = str(user_id)
-    if user_key in data and data[user_key]["date"] == current_date:
-        return data[user_key]["fortune"]
-    
-    # 生成新的运势（加权概率，吉兆更容易出现）
+def generate_fortune():
+    """生成一份尚未持久化的随机签文。"""
     fortune_options = list(FORTUNE_TYPES.keys())
-    weights = [0.05, 0.1, 0.15, 0.25, 0.3, 0.15]  # 概率权重
+    weights = [0.05, 0.1, 0.15, 0.25, 0.3, 0.15]
     fortune_type = random.choices(fortune_options, weights=weights, k=1)[0]
     description = random.choice(FORTUNE_DESCRIPTIONS[fortune_type])
-    
-    # 保存用户运势
-    data[user_key] = {
-        "date": current_date,
-        "fortune": {
-            "type": fortune_type,
-            "description": description,
-            "stars": generate_fortune_stars(fortune_type)
-        }
+    return {
+        "type": fortune_type,
+        "description": description,
+        "stars": generate_fortune_stars(fortune_type),
     }
-    save_fortune_data(data)
-    
-    return data[user_key]["fortune"]
 
 good_morning = on_command("早安", aliases={"早上好", "早啊", "早", "晨安", "道友早"}, priority=30, block=True)
 good_night = on_command("晚安", aliases={"晚安啦", "睡觉", "睡了", "安寝", "道友晚安"}, priority=30, block=True)
@@ -1191,8 +1162,20 @@ async def handle_fortune_command(bot: Bot, event: GroupMessageEvent | PrivateMes
 
     user_id = user_info["user_id"]
     
-    # 获取用户运势
-    fortune_data = get_user_fortune(user_id)
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    result = interactive_daily_fortune_service.resolve(
+        f"interactive-fortune:{user_id}:{event_id or time.time_ns()}",
+        user_id,
+        datetime.now(),
+        generate_fortune,
+    )
+    if result.status == "operation_conflict":
+        await handle_send(bot, event, "本次运势事件与已记录结果冲突，请重新尝试。")
+        return
+    if result.status == "user_missing":
+        await handle_send(bot, event, "未找到角色信息，无法生成运势。")
+        return
+    fortune_data = result.fortune
     
     # 格式化运势消息
     fortune_message = (
