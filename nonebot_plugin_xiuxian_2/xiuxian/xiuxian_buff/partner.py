@@ -876,8 +876,7 @@ async def mentor_protect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
     user_id = str(user_info["user_id"])
     arg = args.extract_plain_text().strip().lower()
-    mentor_data = load_mentor(user_id)
-    current_status = mentor_data.get("mentor_protect", "off")
+    expected_status = mentor_application_service.get_protection(user_id)
     buttons = {
         "md_type": "buff",
         "k1": "开启", "v1": "拜师保护 开启",
@@ -887,25 +886,35 @@ async def mentor_protect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     }
 
     if arg in ["开启", "on"]:
-        mentor_data["mentor_protect"] = "on"
-        save_mentor(user_id, mentor_data)
+        current_status = "on"
         msg = "拜师保护已开启，新的拜师申请会被自动拒绝。"
-        pending_invites = _get_pending_mentor_invites(user_id)
-        if pending_invites:
-            pending_count = len(pending_invites)
-            pending_names = _format_pending_mentor_applicants(user_id, limit=10)
-            for apprentice_id, invite in list(pending_invites.items()):
-                mentor_application_service.resolve(invite["invite_id"], user_id, apprentice_id, "rejected")
-            msg += f"\n已自动拒绝当前{pending_count}条待处理拜师申请：{pending_names}。"
     elif arg in ["关闭", "off"]:
-        mentor_data["mentor_protect"] = "off"
-        save_mentor(user_id, mentor_data)
+        current_status = "off"
         msg = "拜师保护已关闭，其他道友可以向你发起拜师申请。"
     elif arg in ["", "状态", "status"]:
-        status_msg = "已开启（自动拒绝新的拜师申请）" if current_status == "on" else "已关闭（允许拜师申请）"
+        status_msg = "已开启（自动拒绝新的拜师申请）" if expected_status == "on" else "已关闭（允许拜师申请）"
         msg = f"拜师保护状态：{status_msg}"
     else:
         msg = "请使用：拜师保护 开启/关闭/状态"
+
+    if arg in ["开启", "on", "关闭", "off"]:
+        changed = mentor_application_service.set_protection(
+            _relation_operation_id(event, "mentor-protection", user_id),
+            user_id,
+            expected_status,
+            current_status,
+        )
+        if not changed.succeeded:
+            await handle_send(bot, event, "拜师保护状态已经变化，请重新设置。", **buttons)
+            await mentor_protect.finish()
+        if changed.rejected_apprentice_ids:
+            pending_names = _format_mentor_applicant_ids(
+                changed.rejected_apprentice_ids, limit=10
+            )
+            msg += (
+                f"\n已自动拒绝当前{len(changed.rejected_apprentice_ids)}条"
+                f"待处理拜师申请：{pending_names}。"
+            )
 
     await handle_send(bot, event, msg, **buttons)
     await mentor_protect.finish()
@@ -1206,19 +1215,9 @@ def _get_mentor_apply_remaining(apprentice_id):
     available_time = apply_time + timedelta(hours=MENTOR_APPLY_LIMIT_HOURS)
     now = datetime.now()
     if now >= available_time:
-        data["mentor_apply_time"] = None
-        data["mentor_apply_target"] = None
-        save_mentor(apprentice_id, data)
         return 0, None
 
     return int((available_time - now).total_seconds()), apply_target
-
-
-def _record_mentor_apply(apprentice_id, mentor_id):
-    data = load_mentor(apprentice_id)
-    data["mentor_apply_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    data["mentor_apply_target"] = str(mentor_id)
-    save_mentor(apprentice_id, data)
 
 
 def _get_pending_mentor_invites(mentor_id):
@@ -1248,15 +1247,21 @@ def _find_pending_mentor_invite_by_apprentice(apprentice_id):
     return None, None
 
 
-def _format_pending_mentor_applicants(mentor_id, limit=5):
-    invites = _get_pending_mentor_invites(mentor_id)
+def _format_mentor_applicant_ids(apprentice_ids, limit=5):
     names = []
-    for apprentice_id in list(invites.keys())[:limit]:
+    apprentice_ids = list(apprentice_ids)
+    for apprentice_id in apprentice_ids[:limit]:
         apprentice_info = sql_message.get_user_real_info(apprentice_id)
         names.append(apprentice_info["user_name"] if apprentice_info else str(apprentice_id))
-    if len(invites) > limit:
-        names.append(f"等{len(invites)}人")
+    if len(apprentice_ids) > limit:
+        names.append(f"等{len(apprentice_ids)}人")
     return "、".join(names)
+
+
+def _format_pending_mentor_applicants(mentor_id, limit=5):
+    return _format_mentor_applicant_ids(
+        _get_pending_mentor_invites(mentor_id).keys(), limit=limit
+    )
 
 
 def _count_pending_mentor_invites(mentor_id):
@@ -1684,10 +1689,16 @@ async def apply_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await apply_mentor.finish()
 
     mentor_info = sql_message.get_user_real_info(mentor_id)
-    invite_id = f"{user_id}_{mentor_id}_{datetime.now().timestamp()}"
+    invite_id = _relation_operation_id(
+        event, "mentor-application", user_id, mentor_id
+    )
     created = mentor_application_service.create(invite_id, mentor_id, user_id)
     if not created.succeeded:
-        await handle_send(bot, event, "拜师申请状态已变化，请稍后重试。", **buttons)
+        if created.status == "protected":
+            msg = "对方已开启拜师保护，自动拒绝了你的拜师申请。"
+        else:
+            msg = "拜师申请状态已变化，请稍后重试。"
+        await handle_send(bot, event, msg, **buttons)
         await apply_mentor.finish()
     asyncio.create_task(expire_mentor_invite(mentor_id, user_id, invite_id, bot, event))
 

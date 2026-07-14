@@ -1925,6 +1925,34 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", protection_service)
         self.assertIn("partner_protection_operations", protection_service)
 
+    def test_mentor_protection_uses_one_application_transaction(self) -> None:
+        root = SOURCE_ROOT / "xiuxian" / "xiuxian_buff"
+        source = (root / "partner.py").read_text(encoding="utf-8")
+        service = (root / "mentor_application_service.py").read_text(
+            encoding="utf-8"
+        )
+
+        protection_start = source.index("async def mentor_protect_")
+        protection_end = source.index("@my_exp_num.handle", protection_start)
+        protection_handler = source[protection_start:protection_end]
+        self.assertIn("mentor_application_service.set_protection(", protection_handler)
+        self.assertNotIn("save_mentor(", protection_handler)
+        self.assertNotIn("mentor_application_service.resolve(", protection_handler)
+
+        apply_start = source.index("async def apply_mentor_")
+        apply_end = source.index("async def expire_mentor_invite", apply_start)
+        apply_handler = source[apply_start:apply_end]
+        self.assertIn('event, "mentor-application"', apply_handler)
+        self.assertIn("mentor_application_service.create(", apply_handler)
+        self.assertIn('created.status == "protected"', apply_handler)
+
+        cooldown_start = source.index("def _get_mentor_apply_remaining")
+        cooldown_end = source.index("def _get_pending_mentor_invites", cooldown_start)
+        self.assertNotIn("save_mentor(", source[cooldown_start:cooldown_end])
+        self.assertIn("BEGIN IMMEDIATE", service)
+        self.assertIn("mentor_protection_operations", service)
+        self.assertIn("rejected_applications", service)
+
     def test_statistics_data_migration_does_not_block_event_loop(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_buff" / "__init__.py"

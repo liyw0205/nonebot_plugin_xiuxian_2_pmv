@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,6 +30,19 @@ class MentorApplicationResult:
         return self.status in {"applied", "duplicate"}
 
 
+@dataclass(frozen=True)
+class MentorProtectionResult:
+    status: str
+    previous_status: str = "off"
+    current_status: str = "off"
+    rejected_invite_ids: tuple[str, ...] = ()
+    rejected_apprentice_ids: tuple[str, ...] = ()
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"applied", "duplicate"}
+
+
 class MentorApplicationService:
     """Persist and conditionally resolve the complete mentor application lifecycle."""
 
@@ -47,6 +61,37 @@ class MentorApplicationService:
             "CREATE UNIQUE INDEX IF NOT EXISTS mentor_application_pending_apprentice "
             "ON mentor_applications(apprentice_id) WHERE status='pending'"
         )
+
+    @staticmethod
+    def _ensure_mentor_schema(conn) -> None:
+        conn.execute("CREATE TABLE IF NOT EXISTS mentor (user_id TEXT PRIMARY KEY)")
+        columns = {
+            str(row[1]) for row in conn.execute("PRAGMA table_info(mentor)").fetchall()
+        }
+        for field in ("mentor_protect", "mentor_apply_time", "mentor_apply_target"):
+            if field not in columns:
+                conn.execute(f"ALTER TABLE mentor ADD COLUMN {field} TEXT")
+
+    @staticmethod
+    def _require_protection(status) -> str:
+        status = str(status).strip().lower()
+        if status not in {"on", "off"}:
+            raise ValueError("invalid mentor protection status")
+        return status
+
+    @staticmethod
+    def _normalize_protection(status) -> str:
+        status = str(status or "off").strip().lower()
+        return status if status in {"on", "off"} else "off"
+
+    @classmethod
+    def _read_protection(cls, conn, mentor_id) -> str:
+        cls._ensure_mentor_schema(conn)
+        row = conn.execute(
+            "SELECT mentor_protect FROM mentor WHERE user_id=%s",
+            (str(mentor_id),),
+        ).fetchone()
+        return cls._normalize_protection(row[0] if row is not None else "off")
 
     @staticmethod
     def _application(row) -> MentorApplication | None:
@@ -82,17 +127,7 @@ class MentorApplicationService:
                     app = self._application(previous)
                     status = "duplicate" if app.mentor_id == mentor_id and app.apprentice_id == apprentice_id else "invite_conflict"
                     return MentorApplicationResult(status, app)
-                columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(mentor)").fetchall()}
-                if "mentor_protect" not in columns:
-                    conn.execute("ALTER TABLE mentor ADD COLUMN mentor_protect TEXT")
-                if "mentor_apply_time" not in columns:
-                    conn.execute("ALTER TABLE mentor ADD COLUMN mentor_apply_time TEXT")
-                if "mentor_apply_target" not in columns:
-                    conn.execute("ALTER TABLE mentor ADD COLUMN mentor_apply_target TEXT")
-                protect = conn.execute(
-                    "SELECT mentor_protect FROM mentor WHERE user_id=%s", (mentor_id,),
-                ).fetchone()
-                if protect is not None and str(protect[0] or "off") == "on":
+                if self._read_protection(conn, mentor_id) == "on":
                     conn.rollback()
                     return MentorApplicationResult("protected")
                 pending = conn.execute(
@@ -119,6 +154,118 @@ class MentorApplicationService:
                 conn.commit()
                 return MentorApplicationResult(
                     "applied", MentorApplication(invite_id, mentor_id, apprentice_id, "pending", created_at, expires_at)
+                )
+            except Exception:
+                conn.rollback()
+                raise
+
+    def get_protection(self, mentor_id) -> str:
+        with self._lock, db_backend.transaction(self._player_database) as conn:
+            return self._read_protection(conn, mentor_id)
+
+    def set_protection(
+        self, operation_id, mentor_id, expected_status, new_status, *, now=None
+    ) -> MentorProtectionResult:
+        operation_id = str(operation_id).strip()
+        mentor_id = str(mentor_id).strip()
+        expected_status = self._require_protection(expected_status)
+        new_status = self._require_protection(new_status)
+        if not operation_id or not mentor_id:
+            raise ValueError("invalid mentor protection operation")
+        changed_at = float(time.time() if now is None else now)
+        payload = json.dumps(
+            [mentor_id, new_status], ensure_ascii=True, separators=(",", ":")
+        )
+
+        with self._lock, closing(db_backend.connect(self._player_database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._ensure_schema(conn)
+                self._expire_stale(conn, changed_at)
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS mentor_protection_operations("
+                    "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
+                    "previous_status TEXT NOT NULL,current_status TEXT NOT NULL,"
+                    "rejected_applications TEXT NOT NULL,"
+                    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+                )
+                previous = conn.execute(
+                    "SELECT payload,previous_status,current_status,rejected_applications "
+                    "FROM mentor_protection_operations WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if previous is not None:
+                    conn.rollback()
+                    if str(previous[0]) != payload:
+                        return MentorProtectionResult("operation_conflict")
+                    rejected = json.loads(str(previous[3]))
+                    return MentorProtectionResult(
+                        "duplicate",
+                        str(previous[1]),
+                        str(previous[2]),
+                        tuple(str(item[0]) for item in rejected),
+                        tuple(str(item[1]) for item in rejected),
+                    )
+
+                current_status = self._read_protection(conn, mentor_id)
+                if current_status != expected_status:
+                    conn.rollback()
+                    return MentorProtectionResult(
+                        "state_changed", current_status, current_status
+                    )
+                changed = conn.execute(
+                    "UPDATE mentor SET mentor_protect=%s WHERE user_id=%s",
+                    (new_status, mentor_id),
+                )
+                if changed.rowcount == 0:
+                    conn.execute(
+                        "INSERT INTO mentor(user_id,mentor_protect) VALUES(%s,%s)",
+                        (mentor_id, new_status),
+                    )
+
+                rejected = []
+                if new_status == "on":
+                    rejected = conn.execute(
+                        "SELECT invite_id,apprentice_id FROM mentor_applications "
+                        "WHERE mentor_id=%s AND status='pending' AND expires_at>%s "
+                        "ORDER BY created_at,invite_id",
+                        (mentor_id, changed_at),
+                    ).fetchall()
+                    rejected_count = conn.execute(
+                        "UPDATE mentor_applications SET status='rejected',resolved_at=%s "
+                        "WHERE mentor_id=%s AND status='pending' AND expires_at>%s",
+                        (changed_at, mentor_id, changed_at),
+                    ).rowcount
+                    if rejected_count != len(rejected):
+                        raise RuntimeError("mentor applications changed during protection")
+
+                rejected_payload = [
+                    [str(invite_id), str(apprentice_id)]
+                    for invite_id, apprentice_id in rejected
+                ]
+                conn.execute(
+                    "INSERT INTO mentor_protection_operations("
+                    "operation_id,payload,previous_status,current_status,"
+                    "rejected_applications) VALUES(%s,%s,%s,%s,%s)",
+                    (
+                        operation_id,
+                        payload,
+                        current_status,
+                        new_status,
+                        json.dumps(
+                            rejected_payload,
+                            ensure_ascii=True,
+                            separators=(",", ":"),
+                        ),
+                    ),
+                )
+                conn.commit()
+                return MentorProtectionResult(
+                    "applied",
+                    current_status,
+                    new_status,
+                    tuple(item[0] for item in rejected_payload),
+                    tuple(item[1] for item in rejected_payload),
                 )
             except Exception:
                 conn.rollback()
@@ -171,4 +318,9 @@ class MentorApplicationService:
         return MentorApplicationResult("state_changed", app)
 
 
-__all__ = ["MentorApplication", "MentorApplicationResult", "MentorApplicationService"]
+__all__ = [
+    "MentorApplication",
+    "MentorApplicationResult",
+    "MentorApplicationService",
+    "MentorProtectionResult",
+]
