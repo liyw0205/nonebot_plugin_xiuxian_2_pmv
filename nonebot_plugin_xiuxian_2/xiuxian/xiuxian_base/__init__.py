@@ -47,6 +47,7 @@ from .sign_service import SignInService
 from .player_rename_service import PlayerRenameService
 from .stone_gift_service import StoneGiftService
 from .stone_contest_service import StoneContestService
+from .stone_robbery_service import StoneRobberySettlementService
 from .registration_batch import RegistrationBatcher, RegistrationRequest
 from .breakthrough_tribulation import *  # noqa: F401,F403
 from .xiangyuan import clear_all_xiangyuan, reset_xiangyuan_daily  # noqa: F401
@@ -61,6 +62,9 @@ lottery_settlement_service = LotterySettlementService(
 player_rename_service = PlayerRenameService(get_paths().game_db)
 stone_gift_service = StoneGiftService(get_paths().game_db)
 stone_contest_service = StoneContestService(get_paths().game_db)
+stone_robbery_service = StoneRobberySettlementService(
+    get_paths().game_db, get_paths().player_db
+)
 registration_batcher = RegistrationBatcher(sql_message)
 player_data_manager = PlayerDataManager()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
@@ -147,6 +151,59 @@ def _stone_theft_messages(result, thief_name, victim_name):
         f"共偷取{victim_name}道友{number_to(result.transferred_amount)}枚灵石！",
         f"被{thief_name}道友偷取{number_to(result.transferred_amount)}枚灵石！",
     )
+
+
+def _stone_robbery_operation_id(event, robber_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"stone-robbery:{event_id}:{robber_id}"
+    return f"stone-robbery:{robber_id}:{time.time_ns()}"
+
+
+def _stone_robbery_messages(result, robber_name):
+    if result.winner_id == result.robber_id:
+        if result.transferred_amount > 0:
+            return (
+                f"大战一番，战胜对手，获取灵石{number_to(result.transferred_amount)}枚！",
+                f"被{robber_name}道友抢走{number_to(result.transferred_amount)}枚灵石！",
+            )
+        return (
+            "大战一番，战胜对手，结果对方是个穷光蛋，一无所获！",
+            f"未能抵御{robber_name}道友的抢劫，幸好身无分文！",
+        )
+    if result.transferred_amount > 0:
+        return (
+            f"大战一番，被对手反杀，损失灵石{number_to(result.transferred_amount)}枚！",
+            f"成功反杀{robber_name}道友，获得{number_to(result.transferred_amount)}枚灵石战利品！",
+        )
+    return (
+        "大战一番，被对手反杀，幸好身无分文，没有损失！",
+        f"成功反杀{robber_name}道友，可惜对方是个穷光蛋，一无所获！",
+    )
+
+
+def _stone_robbery_player(user):
+    user_id = str(user['user_id'])
+    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
+    armor_data = UserBuffDate(user_id).get_user_armor_buff_data()
+    exp = int(user['exp'])
+    return {
+        "user_id": user_id,
+        "道号": user['user_name'],
+        "气血": exp // 2 if user['hp'] is None else int(user['hp']),
+        "攻击": exp // 10 if user['atk'] is None else int(user['atk']),
+        "真元": exp if user['mp'] is None else int(user['mp']),
+        "会心": int(
+            (0.01 + impart_data['impart_know_per'] if impart_data is not None else 0)
+            * 100
+        ),
+        "爆伤": int(
+            1.5 + impart_data['impart_burst_per'] if impart_data is not None else 0
+        ),
+        "防御": int(armor_data['def_buff']) if armor_data is not None else 0,
+    }
 
 
 xiuxian_world_info = on_command("修仙界信息", priority=5, block=True)
@@ -1242,7 +1299,7 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
     await handle_send(bot, event, msg)
     await steal_stone.finish()
 
-@rob_stone.handle(parameterless=[Cooldown(stamina_cost=15, cd_time=300)])
+@rob_stone.handle(parameterless=[Cooldown(cd_time=300)])
 async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     """抢劫"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1251,200 +1308,112 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
         await handle_send(bot, event, msg, md_type="我要修仙")
         await rob_stone.finish()
     
-    user_id = user_info["user_id"]
+    user_id = str(user_info["user_id"])
     user_mes = sql_message.get_user_info_with_id(user_id)
-    give_qq = None  # 艾特的时候存到这里
-    
     give_qq = get_at_user_id(args)
-    
     nick_name = args.extract_plain_text().split()[0] if args.extract_plain_text().split() else None
-    
     if nick_name:
         give_message = sql_message.get_user_info_with_name(nick_name)
         if give_message:
             give_qq = give_message['user_id']
         else:
             give_qq = None
-    
-    player1 = {"user_id": None, "道号": None, "气血": None, "攻击": None, "真元": None, '会心': None, '爆伤': None, '防御': 0}
-    player2 = {"user_id": None, "道号": None, "气血": None, "攻击": None, "真元": None, '会心': None, '爆伤': None, '防御': 0}
+
     if not give_qq:
-        msg = f"对方未踏入修仙界，不可抢劫！"
-        await handle_send(bot, event, msg)
+        await handle_send(bot, event, "对方未踏入修仙界，不可抢劫！")
         await rob_stone.finish()
-
+    give_qq = str(give_qq)
     user_2 = sql_message.get_user_info_with_id(give_qq)
-    
-    if user_mes and user_2:
-        if user_info['root'] == "凡人":
-            msg = f"目前职业无法抢劫！"
-            sql_message.update_user_stamina(user_id, 15, 1)
-            await handle_send(bot, event, msg)
+    if not user_mes or not user_2:
+        await handle_send(bot, event, "对方未踏入修仙界，不可抢劫！")
+        await rob_stone.finish()
+    if give_qq == user_id:
+        await handle_send(bot, event, "请不要抢自己刷成就！")
+        await rob_stone.finish()
+
+    operation_id = _stone_robbery_operation_id(event, user_id)
+    previous = stone_robbery_service.replay(operation_id, user_id, give_qq)
+    if previous is not None:
+        if not previous.succeeded:
+            await handle_send(bot, event, "本次抢劫与首次请求目标不一致，未重复结算。")
             await rob_stone.finish()
-        
-        if give_qq:
-            if str(give_qq) == str(user_id):
-                msg = f"请不要抢自己刷成就！"
-                sql_message.update_user_stamina(user_id, 15, 1)
-                await handle_send(bot, event, msg)
-                await rob_stone.finish()
-
-            if user_2['root'] == "凡人":
-                msg = f"对方职业无法被抢劫！"
-                sql_message.update_user_stamina(user_id, 15, 1)
-                await handle_send(bot, event, msg)
-                await rob_stone.finish()
-
-            is_type, msg = check_user_type(user_id, 0)  # 需要在无状态的用户
-            if not is_type:
-                await handle_send(bot, event, msg)
-                await rob_stone.finish()
-            
-            is_type, msg = check_user_type(give_qq, 0)  # 需要在无状态的用户
-            if not is_type:
-                msg = "对方现在在闭关呢，无法抢劫！"
-                await handle_send(bot, event, msg)
-                await rob_stone.finish()
-            
-            if user_2:
-                if user_info['hp'] is None:
-                    # 判断用户气血是否为None
-                    sql_message.update_user_hp(user_id)
-                    user_info = sql_message.get_user_info_with_id(user_id)
-                
-                if user_2['hp'] is None:
-                    sql_message.update_user_hp(give_qq)
-                    user_2 = sql_message.get_user_info_with_id(give_qq)
-
-                if user_2['hp'] <= user_2['exp'] / 10:
-                    time_2 = leave_harm_time(give_qq)
-                    msg = f"对方重伤藏匿了，无法抢劫！距离对方脱离生命危险还需要{time_2}分钟！"
-                    sql_message.update_user_stamina(user_id, 15, 1)
-                    await handle_send(bot, event, msg)
-                    await rob_stone.finish()
-
-                if user_info['hp'] <= user_info['exp'] / 10:
-                    time_msg = leave_harm_time(user_id)
-                    msg = f"重伤未愈，动弹不得！距离脱离生命危险还需要{time_msg}分钟！"
-                    msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
-                    sql_message.update_user_stamina(user_id, 15, 1)
-                    await handle_send(bot, event, msg)
-                    await rob_stone.finish()
-                
-                impart_data_1 = xiuxian_impart.get_user_impart_info_with_id(user_id)
-                player1['user_id'] = user_info['user_id']
-                player1['道号'] = user_info['user_name']
-                player1['气血'] = user_info['hp']
-                player1['攻击'] = user_info['atk']
-                player1['真元'] = user_info['mp']
-                player1['会心'] = int(
-                    (0.01 + impart_data_1['impart_know_per'] if impart_data_1 is not None else 0) * 100)
-                player1['爆伤'] = int(
-                    1.5 + impart_data_1['impart_burst_per'] if impart_data_1 is not None else 0)
-                
-                user_buff_data = UserBuffDate(user_id)
-                user_armor_data = user_buff_data.get_user_armor_buff_data()
-                if user_armor_data is not None:
-                    def_buff = int(user_armor_data['def_buff'])
-                else:
-                    def_buff = 0
-                player1['防御'] = def_buff
-
-                impart_data_2 = xiuxian_impart.get_user_impart_info_with_id(user_2['user_id'])
-                player2['user_id'] = user_2['user_id']
-                player2['道号'] = user_2['user_name']
-                player2['气血'] = user_2['hp']
-                player2['攻击'] = user_2['atk']
-                player2['真元'] = user_2['mp']
-                player2['会心'] = int(
-                    (0.01 + impart_data_2['impart_know_per'] if impart_data_2 is not None else 0) * 100)
-                player2['爆伤'] = int(
-                    1.5 + impart_data_2['impart_burst_per'] if impart_data_2 is not None else 0)
-                
-                user_buff_data = UserBuffDate(user_2['user_id'])
-                user_armor_data = user_buff_data.get_user_armor_buff_data()
-                if user_armor_data is not None:
-                    def_buff = int(user_armor_data['def_buff'])
-                else:
-                    def_buff = 0
-                player2['防御'] = def_buff
-
-                result, victor = OtherSet().player_fight(player1, player2)
-                await send_msg_handler(bot, event, '决斗场', bot.self_id, result)
-                
-                if victor == player1['道号']:
-                    # 限制抢劫上限为1000000灵石
-                    foe_stone = min(user_2['stone'], 1000000)
-                    
-                    robbed_amount = min(int(foe_stone * 0.1), 1000000)
-                    if robbed_amount > 0:
-                        # 限制抢劫金额为1000000
-                        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-                        operation_id = f"rob-win:{event_id}:{user_id}" if event_id else f"rob-win:{user_id}:{time.time_ns()}"
-                        transfer = stone_contest_service.transfer(operation_id, give_qq, user_id, robbed_amount)
-                        if not transfer.succeeded:
-                            await handle_send(bot, event, "双方灵石状态已经变化，本次抢劫未结算。")
-                            await rob_stone.finish()
-
-                        msg = f"大战一番，战胜对手，获取灵石{number_to(transfer.transferred_amount)}枚！"
-                        msg2 = f"被{user_info['user_name']}道友抢走{number_to(transfer.transferred_amount)}枚灵石！"
-                        update_statistics_value(user_id, "抢灵石成功")
-                        update_statistics_value(give_qq, "抢灵石失败")
-                        await handle_send(bot, event, msg)
-                        log_message(user_id, msg)
-                        log_message(give_qq, msg2)
-                        await rob_stone.finish()
-                    else:
-                        msg = f"大战一番，战胜对手，结果对方是个穷光蛋，一无所获！"
-                        msg2 = f"成功抵御了{user_info['user_name']}道友的抢劫，毫发无损！"
-                        update_statistics_value(user_id, "抢灵石成功")
-                        await handle_send(bot, event, msg)
-                        log_message(user_id, msg)
-                        log_message(give_qq, msg2)
-                        await rob_stone.finish()
-
-                elif victor == player2['道号']:
-                    # 限制被抢上限为1000000灵石
-                    mind_stone = min(user_info['stone'], 1000000)
-                    
-                    lost_amount = min(int(mind_stone * 0.1), 1000000)
-                    if lost_amount > 0:
-                        # 限制被抢金额为1000000
-                        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-                        operation_id = f"rob-lose:{event_id}:{user_id}" if event_id else f"rob-lose:{user_id}:{time.time_ns()}"
-                        transfer = stone_contest_service.transfer(operation_id, user_id, give_qq, lost_amount)
-                        if not transfer.succeeded:
-                            await handle_send(bot, event, "双方灵石状态已经变化，本次抢劫未结算。")
-                            await rob_stone.finish()
-
-                        msg = f"大战一番，被对手反杀，损失灵石{number_to(transfer.transferred_amount)}枚！"
-                        msg2 = f"成功反杀{user_info['user_name']}道友，获得{number_to(transfer.transferred_amount)}枚灵石战利品！"
-                        update_statistics_value(user_id, "抢灵石失败")
-                        update_statistics_value(give_qq, "抢灵石成功")
-                        
-                        await handle_send(bot, event, msg)
-                        log_message(user_id, msg)
-                        log_message(give_qq, msg2)
-                        await rob_stone.finish()
-                    else:
-                        msg = f"大战一番，被对手反杀，幸好身无分文，没有损失！"
-                        msg2 = f"成功反杀{user_info['user_name']}道友，可惜对方是个穷光蛋，一无所获！"
-                        
-                        await handle_send(bot, event, msg)
-                        log_message(user_id, msg)
-                        log_message(give_qq, msg2)
-                        update_statistics_value(give_qq, "抢灵石成功")
-                        await rob_stone.finish()
-
-                else:
-                    msg = f"发生错误，请检查后台！"
-                    await handle_send(bot, event, msg)
-                    await rob_stone.finish()
-
-    else:
-        msg = f"对方未踏入修仙界，不可抢劫！"
+        await send_msg_handler(bot, event, '决斗场', bot.self_id, previous.battle_messages)
+        msg, _ = _stone_robbery_messages(previous, user_mes['user_name'])
         await handle_send(bot, event, msg)
         await rob_stone.finish()
+
+    if user_mes['root'] == "凡人":
+        await handle_send(bot, event, "目前职业无法抢劫！")
+        await rob_stone.finish()
+    if user_2['root'] == "凡人":
+        await handle_send(bot, event, "对方职业无法被抢劫！")
+        await rob_stone.finish()
+
+    is_type, msg = check_user_type(user_id, 0)
+    if not is_type:
+        await handle_send(bot, event, msg)
+        await rob_stone.finish()
+    is_type, msg = check_user_type(give_qq, 0)
+    if not is_type:
+        await handle_send(bot, event, "对方现在在闭关呢，无法抢劫！")
+        await rob_stone.finish()
+
+    victim_hp = user_2['exp'] // 2 if user_2['hp'] is None else user_2['hp']
+    robber_hp = user_mes['exp'] // 2 if user_mes['hp'] is None else user_mes['hp']
+    if victim_hp <= user_2['exp'] / 10:
+        time_2 = leave_harm_time(give_qq)
+        msg = f"对方重伤藏匿了，无法抢劫！距离对方脱离生命危险还需要{time_2}分钟！"
+        await handle_send(bot, event, msg)
+        await rob_stone.finish()
+    if robber_hp <= user_mes['exp'] / 10:
+        time_msg = leave_harm_time(user_id)
+        msg = f"重伤未愈，动弹不得！距离脱离生命危险还需要{time_msg}分钟！"
+        msg += "请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
+        await handle_send(bot, event, msg)
+        await rob_stone.finish()
+    if int(user_mes['user_stamina'] or 0) < 15:
+        await handle_send(bot, event, "你没有足够的体力，请等待体力恢复后再试！")
+        await rob_stone.finish()
+
+    expected_robber = {
+        key: user_mes[key] for key in ("hp", "mp", "user_stamina", "exp", "stone")
+    }
+    expected_victim = {
+        key: user_2[key] for key in ("hp", "mp", "user_stamina", "exp", "stone")
+    }
+    player1 = _stone_robbery_player(user_mes)
+    player2 = _stone_robbery_player(user_2)
+    battle_messages, winner_id, final = OtherSet().player_fight(player1, player2)
+    settlement = stone_robbery_service.settle(
+        operation_id,
+        user_id,
+        give_qq,
+        expected_robber=expected_robber,
+        expected_victim=expected_victim,
+        robber_final=final[user_id],
+        victim_final=final[give_qq],
+        winner_id=winner_id,
+        battle_messages=battle_messages,
+        stamina_cost=15,
+    )
+    if settlement.status == "stamina_insufficient":
+        msg = "你没有足够的体力，请等待体力恢复后再试！"
+    elif settlement.status == "robber_injured":
+        msg = "重伤未愈，本次抢劫未结算。"
+    elif settlement.status == "victim_injured":
+        msg = "对方已经重伤，本次抢劫未结算。"
+    elif settlement.status == "user_missing":
+        msg = "对方未踏入修仙界，不可抢劫！"
+    elif not settlement.succeeded:
+        msg = "双方战斗、灵石或体力状态已经变化，本次抢劫未结算。"
+    else:
+        await send_msg_handler(bot, event, '决斗场', bot.self_id, settlement.battle_messages)
+        msg, victim_msg = _stone_robbery_messages(settlement, user_mes['user_name'])
+        if settlement.status == "applied":
+            log_message(user_id, msg)
+            log_message(give_qq, victim_msg)
+    await handle_send(bot, event, msg)
+    await rob_stone.finish()
 
 @view_logs.handle(parameterless=[Cooldown(cd_time=0)])
 async def view_logs_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):

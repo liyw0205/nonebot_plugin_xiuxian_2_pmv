@@ -150,14 +150,8 @@ class OtherSet(XiuConfig):
             return int(power_rate * 100)
 
     def player_fight(self, player1: dict, player2: dict):
-        """
-        回合制战斗
-        type_in : 1 为完整返回战斗过程（未加）
-        2：只返回战斗结果
-        数据示例：
-        {"道号": None, "气血": None, "攻击": None, "真元": None, '会心':None}
-        """
-        from .xiuxian2_handle import XiuxianDateManage, get_final_attributes
+        """Purely calculate a round-based fight and return both final states."""
+        from .xiuxian2_handle import get_final_attributes
 
         msg1 = "{}发起攻击，造成了{}伤害\n"
         msg2 = "{}发起攻击，造成了{}伤害\n"
@@ -205,18 +199,21 @@ class OtherSet(XiuConfig):
                 play_list.append(msg_tpl.format(attacker['道号'], damage))
                 defender['气血'] -= damage
                 play_list.append(f"{defender['道号']}剩余血量{defender['气血']}")
-                XiuxianDateManage().update_user_hp_mp(defender['user_id'], defender['气血'], defender['真元'])
 
                 if defender['气血'] <= 0:
                     play_list.append(f"{attacker['道号']}胜利")
-                    suc = f"{attacker['道号']}"
-                    XiuxianDateManage().update_user_hp_mp(defender['user_id'], 1, defender['真元'])
+                    suc = str(attacker['user_id'])
+                    defender['气血'] = 1
                     break
 
             if suc:
                 break
 
-        return play_list, suc
+        final = {
+            str(player1['user_id']): (int(player1['气血']), int(player1['真元'])),
+            str(player2['user_id']): (int(player2['气血']), int(player2['真元'])),
+        }
+        return play_list, suc, final
 
     def send_hp_mp(self, user_id, hp, mp):
         from .xiuxian2_handle import XiuxianDateManage

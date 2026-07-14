@@ -1213,8 +1213,30 @@ class SourceQualityTests(unittest.TestCase):
         source = (base_root / "__init__.py").read_text(encoding="utf-8")
         start = source.index("@rob_stone.handle")
         handler = source[start:source.index("@view_logs.handle", start)]
-        self.assertIn("stone_contest_service.transfer(", handler)
+        self.assertIn("stone_robbery_service.replay(", handler)
+        self.assertIn("stone_robbery_service.settle(", handler)
+        self.assertNotIn("stone_contest_service.transfer(", handler)
         self.assertNotIn("sql_message.update_ls(", handler)
+        self.assertNotIn("sql_message.update_user_stamina(", handler)
+        self.assertNotIn("sql_message.update_user_hp(", handler)
+        self.assertNotIn("update_statistics_value(", handler)
+        self.assertNotIn("Cooldown(stamina_cost=15", handler)
+        self.assertLess(
+            handler.index("stone_robbery_service.replay("),
+            handler.index("OtherSet().player_fight("),
+        )
+        service = (base_root / "stone_robbery_service.py").read_text(encoding="utf-8")
+        self.assertIn("BEGIN IMMEDIATE", service)
+        self.assertIn("ATTACH DATABASE", service)
+        self.assertIn("stone_robbery_operations", service)
+        fight_source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_utils" / "xiuxian_json_config.py"
+        ).read_text(encoding="utf-8")
+        fight = fight_source[
+            fight_source.index("    def player_fight("):
+            fight_source.index("    def send_hp_mp(")
+        ]
+        self.assertNotIn("update_user_hp_mp(", fight)
 
     def test_general_fusion_uses_transactional_service(self) -> None:
         fusion_root = SOURCE_ROOT / "xiuxian" / "xiuxian_fusion"
