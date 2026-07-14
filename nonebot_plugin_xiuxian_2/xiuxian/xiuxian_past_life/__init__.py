@@ -3,7 +3,6 @@
 修仙版人生重开 · 剧本杀
 """
 import hashlib
-import time
 from ..on_compat import on_command
 from nonebot.permission import SUPERUSER
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent, get_at_user_id
@@ -139,13 +138,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await past_choice_cmd.finish()
 
     # 处理选择
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns())
+    event_id = _stable_event_id(event)
     result = past_life_engine.process_choice(
-        user_id, choice_idx, f"past-life-final:{user_id}:{event_id}"
+        user_id, choice_idx, f"past-life-choice:{user_id}:{event_id}"
     )
 
-    if result["is_end"]:
+    if result["is_end"] and result.get("operation_status") == "applied":
         log_message(user_id, f"[前尘往事] 结局：{result['ending']['name']}")
+    if result["is_end"]:
         await handle_send(bot, event, result["message"], md_type="前尘",
                           k1="回忆", v1="前尘回忆",
                           k2="排行", v2="前尘排行",

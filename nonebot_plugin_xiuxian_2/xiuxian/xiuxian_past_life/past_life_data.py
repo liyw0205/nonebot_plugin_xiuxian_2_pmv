@@ -655,6 +655,8 @@ def _early_death_chance(value: int):
 def _should_roll_early_death_risk(rolls: dict, phase: str, attr: str, value: int):
     key = f"{phase}:{attr}"
     checked_value = rolls.get(key)
+    if isinstance(checked_value, dict):
+        checked_value = checked_value.get("value")
     try:
         checked_value = int(checked_value)
     except (TypeError, ValueError):
@@ -680,6 +682,7 @@ def check_early_death(
     current_attrs: dict,
     event=None,
     early_death_rolls=None,
+    rng=None,
 ):
     """前三幕触发夭折；之后触发提前终局并结算部分奖励。"""
     is_childhood = stage_idx < EARLY_DEATH_STAGE_LIMIT
@@ -690,6 +693,7 @@ def check_early_death(
         early_death_rolls = {}
 
     phase = "early" if is_childhood else "premature"
+    rng = rng or random
     triggered = []
     for attr in PAST_LIFE_ATTRS:
         raw_value = int(raw_attrs.get(attr, current_attrs.get(attr, 0)))
@@ -703,7 +707,15 @@ def check_early_death(
 
         reason = "负值" if risk_value < 0 else "过低"
         chance = _early_death_chance(risk_value)
-        if random.randint(1, 100) <= chance:
+        roll = rng.randint(1, 100)
+        did_trigger = roll <= chance
+        early_death_rolls[f"{phase}:{attr}"] = {
+            "value": risk_value,
+            "roll": roll,
+            "chance": chance,
+            "triggered": did_trigger,
+        }
+        if did_trigger:
             triggered.append((attr, risk_value, reason, chance))
 
     if not triggered:

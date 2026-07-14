@@ -8,12 +8,13 @@ from pathlib import Path
 from threading import RLock
 
 from ..xiuxian_utils import db_backend
+from .choice_service import PastLifeChoiceService
 from .past_life_state import (
     INTEGER_FIELDS,
     JSON_FIELDS,
     PAST_LIFE_FIELDS,
     canonical as _canonical,
-    decode_field as _decode,
+    normalize_state,
 )
 
 
@@ -49,9 +50,17 @@ class PastLifeFinalSettlementService:
                 )
         conn.execute(
             "CREATE TABLE IF NOT EXISTS past_life_final_operations("
-            "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+            "operation_id TEXT PRIMARY KEY,user_id TEXT,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
             "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
         )
+        operation_columns = {
+            str(row[1])
+            for row in conn.execute("PRAGMA table_info(past_life_final_operations)").fetchall()
+        }
+        if "user_id" not in operation_columns:
+            conn.execute(
+                "ALTER TABLE past_life_final_operations ADD COLUMN user_id TEXT"
+            )
 
     def settle(
         self,
@@ -66,6 +75,7 @@ class PastLifeFinalSettlementService:
         achievement_points,
         item_reward=None,
         completed_at=None,
+        choice_response=None,
     ) -> PastLifeFinalSettlementResult:
         operation_id = str(operation_id).strip()
         user_id = str(user_id)
@@ -85,7 +95,8 @@ class PastLifeFinalSettlementService:
                 "num": max(0, int(item_reward.get("num", 1))),
             }
         completed_at = str(completed_at or datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        expected_snapshot = {field: expected_state.get(field) for field in PAST_LIFE_FIELDS}
+        choice_response = None if choice_response is None else dict(choice_response)
+        expected_snapshot = normalize_state(expected_state)
         payload = _canonical({
             "user_id": user_id,
             "expected": expected_snapshot,
@@ -96,6 +107,7 @@ class PastLifeFinalSettlementService:
             "points": achievement_points,
             "item": item,
             "completed_at": completed_at,
+            "choice_response": choice_response,
         })
 
         with self.lock, closing(db_backend.connect(self.game_db)) as conn:
@@ -104,14 +116,21 @@ class PastLifeFinalSettlementService:
                 conn.execute("BEGIN IMMEDIATE")
                 self._ensure_schema(conn)
                 old = conn.execute(
-                    "SELECT payload,result_json FROM past_life_final_operations WHERE operation_id=%s",
+                    "SELECT user_id,payload,result_json FROM past_life_final_operations "
+                    "WHERE operation_id=%s",
                     (operation_id,),
                 ).fetchone()
                 if old:
                     conn.rollback()
-                    if str(old[0]) != payload:
+                    old_user_id = old[0]
+                    if old_user_id is None:
+                        try:
+                            old_user_id = json.loads(str(old[1])).get("user_id")
+                        except (TypeError, ValueError):
+                            old_user_id = None
+                    if str(old_user_id) != user_id:
                         return PastLifeFinalSettlementResult("operation_conflict", {})
-                    return PastLifeFinalSettlementResult("duplicate", json.loads(str(old[1])))
+                    return PastLifeFinalSettlementResult("duplicate", json.loads(str(old[2])))
 
                 user = conn.execute(
                     "SELECT COALESCE(exp,0),COALESCE(stone,0) FROM user_xiuxian WHERE user_id=%s",
@@ -126,9 +145,11 @@ class PastLifeFinalSettlementService:
                 columns = [str(col[0]) for col in conn.execute(
                     "SELECT * FROM player_data.past_life WHERE user_id=%s", (user_id,)
                 ).description]
-                current = {columns[index]: value for index, value in enumerate(row)}
+                current = normalize_state(
+                    {columns[index]: value for index, value in enumerate(row)}
+                )
                 for field in PAST_LIFE_FIELDS:
-                    if _canonical(_decode(field, current.get(field))) != _canonical(expected_snapshot.get(field)):
+                    if _canonical(current[field]) != _canonical(expected_snapshot[field]):
                         conn.rollback()
                         return PastLifeFinalSettlementResult("state_changed", {})
 
@@ -195,9 +216,22 @@ class PastLifeFinalSettlementService:
                 }
                 result_json = _canonical(rewards)
                 conn.execute(
-                    "INSERT INTO past_life_final_operations(operation_id,payload,result_json) VALUES(%s,%s,%s)",
-                    (operation_id, payload, result_json),
+                    "INSERT INTO past_life_final_operations("
+                    "operation_id,user_id,payload,result_json) VALUES(%s,%s,%s,%s)",
+                    (operation_id, user_id, payload, result_json),
                 )
+                if choice_response is not None:
+                    choice_status = PastLifeChoiceService.record_result(
+                        conn,
+                        operation_id,
+                        user_id,
+                        "final",
+                        payload,
+                        choice_response,
+                    )
+                    if choice_status != "applied":
+                        conn.rollback()
+                        return PastLifeFinalSettlementResult(choice_status, {})
                 conn.commit()
                 return PastLifeFinalSettlementResult("applied", rewards)
             except Exception:

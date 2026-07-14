@@ -16,6 +16,7 @@ from ..xiuxian_utils.utils import number_to
 from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 from ...paths import get_paths
+from .choice_service import PastLifeChoiceService
 from .final_settlement_service import PastLifeFinalSettlementService
 from .start_service import PastLifeStartService
 
@@ -26,6 +27,7 @@ final_settlement_service = PastLifeFinalSettlementService(
     _paths.game_db, _paths.player_db, max_goods_num=XiuConfig().max_goods_num
 )
 start_service = PastLifeStartService(_paths.game_db, _paths.player_db)
+choice_service = PastLifeChoiceService(_paths.game_db, _paths.player_db)
 
 ATTR_NAMES = ["悟性", "机缘", "根骨", "气运", "心性"]
 INITIAL_APTITUDE_MIN = 3
@@ -86,12 +88,37 @@ class PastLifeEngine:
 
     def _resolve_choice_effect(self, choice: dict, accumulated: dict):
         """从数据层选择当前资质对应的分支。"""
-        _, branch, _ = get_choice_branch(choice, accumulated)
+        branch_name, branch, _ = get_choice_branch(choice, accumulated)
         effects = copy.deepcopy(branch.get("effects", {}))
         score = int(branch.get("score", 0))
         result_text = branch.get("result", choice.get("result", ""))
         judge_msg = branch.get("judge", "")
-        return effects, score, result_text, f"\n{judge_msg}" if judge_msg else ""
+        return (
+            branch_name,
+            effects,
+            score,
+            result_text,
+            f"\n{judge_msg}" if judge_msg else "",
+        )
+
+    @staticmethod
+    def _choice_rng(operation_id):
+        digest = hashlib.sha256(str(operation_id).encode("utf-8")).digest()
+        return random.Random(int.from_bytes(digest, "big"))
+
+    @staticmethod
+    def _choice_response(result, status):
+        response = copy.deepcopy(result)
+        response["operation_status"] = str(status)
+        return response
+
+    @staticmethod
+    def _serializable_ending(ending):
+        return {
+            key: copy.deepcopy(value)
+            for key, value in ending.items()
+            if not callable(value)
+        }
 
     def _calculate_score_breakdown(self, state: dict):
         """终局评分：抉择分 + 最终资质分 + 完成幕数分。"""
@@ -324,17 +351,48 @@ class PastLifeEngine:
         """
         处理玩家的选择 (choice_idx 从1开始)
         """
+        operation_id = str(operation_id or "").strip()
+        if operation_id:
+            replay = choice_service.get_result(operation_id, user_id)
+            if replay is not None:
+                if replay.succeeded:
+                    return self._choice_response(replay.response, replay.status)
+                return {
+                    "message": "该前尘选择 operation 已被其他请求占用。",
+                    "is_end": False,
+                    "ending": None,
+                    "operation_status": replay.status,
+                }
+
         state = past_life_limit.get_user_state(user_id)
         if state["state"] != 2:
-            return {"message": "你当前没有进行中的前尘往事。", "is_end": False, "ending": None}
+            return {
+                "message": "你当前没有进行中的前尘往事。",
+                "is_end": False,
+                "ending": None,
+                "operation_status": "not_active",
+            }
         expected_state = copy.deepcopy(state)
+        if not operation_id:
+            fingerprint = hashlib.sha256(json.dumps(
+                [str(user_id), expected_state, int(choice_idx)],
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")).hexdigest()[:24]
+            operation_id = f"past-life-choice:{user_id}:{fingerprint}"
 
         current_stage = state["stage"]
         event = self._get_stage_event(state, current_stage)
 
         # 校验选项
         if choice_idx < 1 or choice_idx > len(event["choices"]):
-            return {"message": f"无效选项，请选择 1~{len(event['choices'])}。", "is_end": False, "ending": None}
+            return {
+                "message": f"无效选项，请选择 1~{len(event['choices'])}。",
+                "is_end": False,
+                "ending": None,
+                "operation_status": "invalid_choice",
+            }
 
         choice = event["choices"][choice_idx - 1]
 
@@ -342,7 +400,13 @@ class PastLifeEngine:
         accumulated = state["accumulated"]
         if not isinstance(accumulated, dict):
             accumulated = {k: 0 for k in ATTR_NAMES}
-        resolved_effects, branch_score, resolved_result, attr_result_msg = self._resolve_choice_effect(choice, accumulated)
+        (
+            branch_name,
+            resolved_effects,
+            branch_score,
+            resolved_result,
+            attr_result_msg,
+        ) = self._resolve_choice_effect(choice, accumulated)
         raw_accumulated = {k: int(accumulated.get(k, 0)) for k in ATTR_NAMES}
         for k, v in resolved_effects.items():
             raw_accumulated[k] = int(accumulated.get(k, 0)) + int(v)
@@ -360,6 +424,7 @@ class PastLifeEngine:
             accumulated,
             event,
             early_death_rolls,
+            self._choice_rng(operation_id),
         )
         state["early_death_rolls"] = early_death_rolls
 
@@ -371,8 +436,13 @@ class PastLifeEngine:
             "event_text": event["text"][:20] + "...",
             "choice_text": choice["text"],
             "result": f"{resolved_result}{attr_result_msg}",
+            "branch": branch_name,
+            "effects": resolved_effects,
+            "score": branch_score,
+            "early_death": bool(early_death),
         })
         state["history"] = history
+        state["revision"] = int(expected_state.get("revision", 0) or 0) + 1
 
         result_msg = f"你选择了【{choice['text']}】\n{resolved_result}{attr_result_msg}\n"
 
@@ -387,17 +457,17 @@ class PastLifeEngine:
             ending = early_death["ending"]
             if ending.get("partial_reward"):
                 reward_rate = self._calculate_partial_reward_rate(state)
-                reward_plan = self._prepare_rewards(user_id, ending, reward_rate, include_item=False)
+                reward_plan = self._prepare_rewards(
+                    user_id,
+                    ending,
+                    reward_rate,
+                    include_item=False,
+                    rng=self._choice_rng(operation_id),
+                )
             else:
                 reward_plan = self._empty_rewards(ending)
-            settlement = self._settle_final(
-                operation_id, user_id, choice_idx, expected_state, state, ending, reward_plan
-            )
-            if not settlement.succeeded:
-                return {"message": "前尘状态已变化，请重新查看当前进度。", "is_end": False, "ending": None}
-            rewards = self._format_rewards(reward_plan, settlement.rewards)
+            rewards = self._format_rewards(reward_plan, reward_plan)
             reward_msg = rewards["msg"] if ending.get("partial_reward") else "本世过早夭折，未能留下可继承的前世馈赠。"
-
             ending_msg = (
                 f"{result_msg}\n"
                 f"当前属性：{effects_str}\n"
@@ -409,7 +479,34 @@ class PastLifeEngine:
                 f"【前世奖励】\n"
                 f"{reward_msg}"
             )
-            return {"message": ending_msg, "is_end": True, "ending": ending, "rewards": rewards}
+            response = {
+                "message": ending_msg,
+                "is_end": True,
+                "ending": self._serializable_ending(ending),
+                "rewards": rewards,
+            }
+            settlement = self._settle_final(
+                operation_id,
+                user_id,
+                choice_idx,
+                expected_state,
+                state,
+                ending,
+                reward_plan,
+                response,
+            )
+            if not settlement.succeeded:
+                return {
+                    "message": "前尘状态已变化，请重新查看当前进度。",
+                    "is_end": False,
+                    "ending": None,
+                    "operation_status": settlement.status,
+                }
+            if settlement.status == "duplicate":
+                replay = choice_service.get_result(operation_id, user_id)
+                if replay is not None and replay.succeeded:
+                    return self._choice_response(replay.response, replay.status)
+            return self._choice_response(response, settlement.status)
 
         # 推进到下一幕
         next_stage = current_stage + 1
@@ -419,14 +516,10 @@ class PastLifeEngine:
             state["stage"] = next_stage
             score_breakdown = self._finalize_total_score(state)
             ending = self._calculate_ending(state)
-            reward_plan = self._prepare_rewards(user_id, ending)
-            settlement = self._settle_final(
-                operation_id, user_id, choice_idx, expected_state, state, ending, reward_plan
+            reward_plan = self._prepare_rewards(
+                user_id, ending, rng=self._choice_rng(operation_id)
             )
-            if not settlement.succeeded:
-                return {"message": "前尘状态已变化，请重新查看当前进度。", "is_end": False, "ending": None}
-            rewards = self._format_rewards(reward_plan, settlement.rewards)
-
+            rewards = self._format_rewards(reward_plan, reward_plan)
             ending_msg = (
                 f"{result_msg}\n"
                 f"当前属性：{effects_str}\n"
@@ -437,13 +530,36 @@ class PastLifeEngine:
                 f"【前世奖励】\n"
                 f"{rewards['msg']}"
             )
-
-            return {"message": ending_msg, "is_end": True, "ending": ending, "rewards": rewards}
+            response = {
+                "message": ending_msg,
+                "is_end": True,
+                "ending": self._serializable_ending(ending),
+                "rewards": rewards,
+            }
+            settlement = self._settle_final(
+                operation_id,
+                user_id,
+                choice_idx,
+                expected_state,
+                state,
+                ending,
+                reward_plan,
+                response,
+            )
+            if not settlement.succeeded:
+                return {
+                    "message": "前尘状态已变化，请重新查看当前进度。",
+                    "is_end": False,
+                    "ending": None,
+                    "operation_status": settlement.status,
+                }
+            if settlement.status == "duplicate":
+                replay = choice_service.get_result(operation_id, user_id)
+                if replay is not None and replay.succeeded:
+                    return self._choice_response(replay.response, replay.status)
+            return self._choice_response(response, settlement.status)
         else:
-            # 进入下一幕
             state["stage"] = next_stage
-            past_life_limit.save_user_state(user_id, state)
-
             next_event = self._get_stage_event(state, next_stage)
             stage_info = STAGES[next_stage]
 
@@ -455,8 +571,23 @@ class PastLifeEngine:
             )
             for i, c in enumerate(next_event["choices"], 1):
                 next_msg += f"\n[{i}] {c['text']}"
-
-            return {"message": next_msg, "is_end": False, "ending": None}
+            response = {"message": next_msg, "is_end": False, "ending": None}
+            settlement = choice_service.advance(
+                operation_id,
+                user_id,
+                choice_idx,
+                expected_state,
+                state,
+                response,
+            )
+            if not settlement.succeeded:
+                return {
+                    "message": "前尘状态已变化，请重新查看当前进度。",
+                    "is_end": False,
+                    "ending": None,
+                    "operation_status": settlement.status,
+                }
+            return self._choice_response(settlement.response, settlement.status)
 
     # ── 计算结局 ────────────────────────────────────
     def _calculate_ending(self, state):
@@ -488,8 +619,11 @@ class PastLifeEngine:
             "reward_rate": 0.0, "item": None,
         }
 
-    def _prepare_rewards(self, user_id, ending, reward_rate=1.0, include_item=True):
+    def _prepare_rewards(
+        self, user_id, ending, reward_rate=1.0, include_item=True, rng=None
+    ):
         reward_rate = max(0.0, min(float(reward_rate), 1.0))
+        rng = rng or random
         tier = ending["tier"]
         reward = REWARD_TABLE.get(tier, REWARD_TABLE[5])
 
@@ -511,13 +645,13 @@ class PastLifeEngine:
         if include_item:
             user_rank_val = convert_rank(user_info["level"])[0]
             min_rank = max(user_rank_val - 16 - reward["item_rank_offset"], 5)
-            item_rank = random.randint(min_rank, min_rank + 20)
+            item_rank = rng.randint(min_rank, min_rank + 20)
             item_types = ["功法", "神通", "药材"]
-            item_type = random.choice(item_types)
+            item_type = rng.choice(item_types)
             item_id_list = items.get_random_id_list_by_rank_and_item_type(item_rank, item_type)
 
             if item_id_list:
-                item_id = random.choice(item_id_list)
+                item_id = rng.choice(item_id_list)
                 item_info = items.get_data_by_item_id(item_id)
                 item_reward = {
                     "id": item_id, "name": item_info["name"], "type": item_info["type"],
@@ -561,16 +695,27 @@ class PastLifeEngine:
             }
         }
 
-    def _settle_final(self, operation_id, user_id, choice_idx, expected_state, state, ending, plan):
+    def _settle_final(
+        self,
+        operation_id,
+        user_id,
+        choice_idx,
+        expected_state,
+        state,
+        ending,
+        plan,
+        response,
+    ):
         if not operation_id:
             fingerprint = hashlib.sha256(json.dumps(
                 [str(user_id), expected_state, int(choice_idx)], ensure_ascii=False,
                 sort_keys=True, separators=(",", ":")
             ).encode("utf-8")).hexdigest()[:24]
-            operation_id = f"past-life-final:{user_id}:{fingerprint}"
+            operation_id = f"past-life-choice:{user_id}:{fingerprint}"
         return final_settlement_service.settle(
             operation_id, user_id, expected_state, state, ending["name"], state["total_score"],
             plan["exp"], plan["stone"], plan["points"], plan.get("item"),
+            choice_response=response,
         )
 
     # ── 获取当前状态描述 ────────────────────────────

@@ -14,6 +14,9 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_past_life.final_settlement_service
     PAST_LIFE_FIELDS,
     PastLifeFinalSettlementService,
 )
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_past_life.choice_service import (
+    PastLifeChoiceService,
+)
 from tests.test_db_backend import db_backend
 
 
@@ -105,10 +108,36 @@ class PastLifeFinalSettlementTests(unittest.TestCase):
         self.assertEqual(("0", "2", "旧结局", "60"), state[:4])
         self.assertEqual(17, int(state[5]))
 
+    def test_same_user_operation_replay_ignores_recomputed_payload(self):
+        self.assertEqual("applied", self.settle("unknown-commit").status)
+        duplicate = self.settle(
+            "unknown-commit",
+            completed_at="2026-07-13 12:00:01",
+            exp_reward=999,
+            stone_reward=999,
+        )
+        self.assertEqual("duplicate", duplicate.status)
+        user, bag, _ = self.read()
+        self.assertEqual((130, 240), user)
+        self.assertEqual([(1001, 1)], bag)
+
     def test_state_change_rejects_all_writes(self):
         before = self.read()
         self.assertEqual("state_changed", self.settle("stale", expected={**self.initial, "stage": 8}).status)
         self.assertEqual(before, self.read())
+
+    def test_legacy_null_revision_and_birth_use_default_values(self):
+        expected = {**self.initial, "revision": 0, "birth_scenario": ""}
+        final = {**expected, "stage": 10, "revision": 1, "total_score": 80}
+        with db_backend.transaction(self.player) as conn:
+            conn.execute(
+                "UPDATE past_life SET revision=NULL,birth_scenario=NULL WHERE user_id=%s",
+                ("u",),
+            )
+        self.assertEqual(
+            "applied",
+            self.settle("legacy-fields", expected=expected, final=final).status,
+        )
 
     def test_bag_failure_rolls_back_everything(self):
         before = self.read()
@@ -125,6 +154,41 @@ class PastLifeFinalSettlementTests(unittest.TestCase):
             conn.execute("CREATE TRIGGER reject_past_operation BEFORE INSERT ON past_life_final_operations BEGIN SELECT RAISE(ABORT,'reject operation'); END")
         with self.assertRaises(db_backend.IntegrityError):
             self.settle("operation-fail")
+        self.assertEqual(before, self.read())
+
+    def test_final_reward_and_choice_replay_commit_together(self):
+        response = {
+            "message": "前尘终局",
+            "is_end": True,
+            "ending": {"name": "证道"},
+            "rewards": {"exp": 30, "stone": 40},
+        }
+        result = self.settle("choice-final", choice_response=response)
+        self.assertEqual("applied", result.status)
+        replay = PastLifeChoiceService(self.game, self.player).get_result(
+            "choice-final", "u"
+        )
+        self.assertIsNotNone(replay)
+        self.assertEqual("duplicate", replay.status)
+        self.assertEqual(response, replay.response)
+
+    def test_choice_replay_failure_rolls_back_final_rewards(self):
+        before = self.read()
+        with db_backend.transaction(self.game) as conn:
+            PastLifeChoiceService.ensure_operation_schema(conn)
+            conn.execute(
+                "CREATE TRIGGER reject_final_choice BEFORE INSERT ON "
+                "past_life_choice_operations BEGIN SELECT RAISE(ABORT,'reject replay'); END"
+            )
+        with self.assertRaises(db_backend.IntegrityError):
+            self.settle(
+                "choice-replay-fail",
+                choice_response={
+                    "message": "前尘终局",
+                    "is_end": True,
+                    "ending": {"name": "证道"},
+                },
+            )
         self.assertEqual(before, self.read())
 
 
