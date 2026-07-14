@@ -52,7 +52,7 @@ from ..xiuxian_utils.utils import (
     parse_page_arg, paginate_text_blocks, build_pagination_buttons
 )
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_back import add_accessory_to_bag
+from ..xiuxian_back import ACCESSORY_BAG_LIMIT, create_accessory_instance
 from .admin_helpers import (
     _admin_economy_context,
     _extract_keyboard_command,
@@ -68,6 +68,7 @@ from .stone_adjustment_service import AdminStoneAdjustmentService
 from .item_grant_service import AdminItemGrantService
 from .item_destroy_service import AdminItemDestroyService
 from .admin_item_batch_grant_service import AdminItemBatchGrantService
+from .accessory_adjustment_service import AdminAccessoryAdjustmentService
 from . import command_controls as _command_controls  # noqa: F401
 from . import empty_fallback as _empty_fallback  # noqa: F401
 from . import event_debug as _event_debug  # noqa: F401
@@ -82,11 +83,62 @@ admin_stone_adjustment_service = AdminStoneAdjustmentService(get_paths().game_db
 admin_item_grant_service = AdminItemGrantService(get_paths().game_db)
 admin_item_destroy_service = AdminItemDestroyService(get_paths().game_db)
 admin_item_batch_grant_service = AdminItemBatchGrantService(get_paths().game_db)
+admin_accessory_adjustment_service = AdminAccessoryAdjustmentService(
+    get_paths().game_db, get_paths().player_db
+)
 
 
 def _admin_operation_id(event, action: str, user_id: str) -> str:
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     return f"admin-{action}:{event_id or __import__('time').time_ns()}:{user_id}"
+
+
+def _grant_admin_accessory(
+    event,
+    user_id: str,
+    item_id: int,
+    item_name: str,
+    quality: int,
+    quantity: int,
+    target_name: str,
+):
+    equipped, bag = admin_accessory_adjustment_service.snapshot(user_id)
+    return admin_accessory_adjustment_service.grant(
+        _admin_operation_id(event, "accessory-grant", user_id),
+        str(get_user_id(event) or "unknown"),
+        user_id,
+        item_id,
+        item_name,
+        quality,
+        quantity,
+        equipped,
+        bag,
+        ACCESSORY_BAG_LIMIT,
+        lambda: create_accessory_instance(item_id, quality),
+        target_name=target_name,
+    )
+
+
+def _destroy_admin_accessory(
+    event,
+    user_id: str,
+    item_id: int,
+    item_name: str,
+    quantity: int,
+    target_name: str,
+):
+    equipped, bag = admin_accessory_adjustment_service.snapshot(user_id)
+    return admin_accessory_adjustment_service.destroy(
+        _admin_operation_id(event, "accessory-destroy", user_id),
+        str(get_user_id(event) or "unknown"),
+        user_id,
+        item_id,
+        item_name,
+        quantity,
+        equipped,
+        bag,
+        target_name=target_name,
+    )
 
 
 gm_command = on_command("神秘力量", permission=SUPERUSER, priority=10, block=True)
@@ -701,9 +753,17 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
             for uid in all_users:
                 try:
                     uid_str = str(uid)
-                    for _ in range(quantity):
-                        add_accessory_to_bag(uid_str, goods_id, quality)
-                    success_count += 1
+                    result = _grant_admin_accessory(
+                        event,
+                        uid_str,
+                        goods_id,
+                        item_info["name"],
+                        quality,
+                        quantity,
+                        "all",
+                    )
+                    if result.succeeded:
+                        success_count += 1
                 except Exception as e:
                     logger.error(f"创造力量全服发放饰品失败 user_id={uid}: {e}")
             msg = f"全服发放成功！共向 {success_count} 名玩家发放【{item_info['name']}】饰品 x{quantity}（{quality}阶）"
@@ -745,9 +805,32 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
         user_id = str(user_info["user_id"])
 
         if is_accessory:
-            for _ in range(quantity):
-                add_accessory_to_bag(user_id, goods_id, quality)
-            msg = f"成功向 {target} 发放【{item_info['name']}】饰品 x{quantity}（{quality}阶）"
+            result = _grant_admin_accessory(
+                event,
+                user_id,
+                goods_id,
+                item_info["name"],
+                quality,
+                quantity,
+                target,
+            )
+            if result.status == "inventory_full":
+                msg = f"{target} 的饰品背包容量不足！"
+            elif result.status == "state_changed":
+                msg = "玩家饰品状态已变化，请重新执行指令"
+            elif result.status == "operation_conflict":
+                msg = "本次管理员饰品操作与已记录事件冲突"
+            elif result.status == "user_missing":
+                msg = f"玩家 {target} 已不存在！"
+            elif result.status == "invalid_plan":
+                msg = "饰品生成结果无效，请重新执行指令"
+            elif result.status == "invalid_state":
+                msg = f"{target} 的饰品数据异常，请先执行背包检测"
+            else:
+                msg = (
+                    f"成功向 {target} 发放【{item_info['name']}】饰品 "
+                    f"x{result.affected_quantity}（{quality}阶）"
+                )
         else:
             expected_quantity = int(sql_message.goods_num(user_id, goods_id) or 0)
             result = admin_item_grant_service.grant(
@@ -785,9 +868,32 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
     self_user_id = str(self_user_info["user_id"])
 
     if is_accessory:
-        for _ in range(quantity):
-            add_accessory_to_bag(self_user_id, goods_id, quality)
-        msg = f"成功向您发放【{item_info['name']}】饰品 x{quantity}（{quality}阶）"
+        result = _grant_admin_accessory(
+            event,
+            self_user_id,
+            goods_id,
+            item_info["name"],
+            quality,
+            quantity,
+            "self",
+        )
+        if result.status == "inventory_full":
+            msg = "您的饰品背包容量不足！"
+        elif result.status == "state_changed":
+            msg = "您的饰品状态已变化，请重新执行指令"
+        elif result.status == "operation_conflict":
+            msg = "本次管理员饰品操作与已记录事件冲突"
+        elif result.status == "user_missing":
+            msg = "您的修仙数据已不存在！"
+        elif result.status == "invalid_plan":
+            msg = "饰品生成结果无效，请重新执行指令"
+        elif result.status == "invalid_state":
+            msg = "您的饰品数据异常，请先执行背包检测"
+        else:
+            msg = (
+                f"成功向您发放【{item_info['name']}】饰品 "
+                f"x{result.affected_quantity}（{quality}阶）"
+            )
     else:
         expected_quantity = int(sql_message.goods_num(self_user_id, goods_id) or 0)
         result = admin_item_grant_service.grant(
@@ -855,49 +961,6 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
     goods_id = int(goods_id)
     is_accessory = item_info.get("item_type") == "饰品"
 
-    # ===== 饰品专门处理函数 =====
-    def remove_accessory_from_bag(user_id: str, target_item_id: int, amount: int):
-        """
-        只从饰品bag扣除，不动equipped。
-        返回：(ok: bool, removed: int, reason: str)
-        """
-        try:
-            data = player_data_manager.get_fields(str(user_id), "player_accessory")
-            if not data:
-                return False, 0, "未找到饰品数据"
-
-            bag = data.get("bag", [])
-            if not isinstance(bag, list):
-                return False, 0, "饰品数据异常"
-
-            kept = []
-            removed = 0
-            need = amount
-
-            for acc in bag:
-                if need > 0 and int(acc.get("item_id", 0)) == int(target_item_id):
-                    removed += 1
-                    need -= 1
-                else:
-                    kept.append(acc)
-
-            if removed <= 0:
-                return False, 0, "背包中无可扣除饰品"
-
-            if removed < amount:
-                # 数量不足也执行部分扣除，给出提示
-                pass
-
-            # 保存回去
-            player_data_manager.update_or_write_data(str(user_id), "player_accessory", "bag", kept, data_type="TEXT")
-            # 确保equipped字段存在（不改内容）
-            if "equipped" in data:
-                player_data_manager.update_or_write_data(str(user_id), "player_accessory", "equipped", data.get("equipped"), data_type="TEXT")
-
-            return True, removed, ""
-        except Exception as e:
-            return False, 0, str(e)
-
     # ===== 全服扣除 =====
     if target and str(target).lower() == "all":
         all_users = sql_message.get_all_user_id()
@@ -919,10 +982,17 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             uid_str = str(uid)
             try:
                 if is_accessory:
-                    ok, removed, _ = remove_accessory_from_bag(uid_str, goods_id, quantity)
-                    if ok and removed > 0:
+                    result = _destroy_admin_accessory(
+                        event,
+                        uid_str,
+                        goods_id,
+                        item_info["name"],
+                        quantity,
+                        "all",
+                    )
+                    if result.succeeded:
                         success_user_count += 1
-                        total_removed += removed
+                        total_removed += result.affected_quantity
                 else:
                     # 普通物品：先检查数量再扣
                     have = sql_message.goods_num(uid_str, goods_id)
@@ -957,15 +1027,31 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         user_id = str(user_info["user_id"])
 
         if is_accessory:
-            ok, removed, reason = remove_accessory_from_bag(user_id, goods_id, quantity)
-            if not ok:
-                await handle_send(bot, event, f"扣除失败：{reason}（已装备饰品不会被直接扣除）")
-                await hmll.finish()
-
-            if removed < quantity:
-                msg = f"成功从 {target} 扣除【{item_info['name']}】饰品 {removed} 件（数量不足，已按背包可扣最大值执行）"
+            result = _destroy_admin_accessory(
+                event,
+                user_id,
+                goods_id,
+                item_info["name"],
+                quantity,
+                target,
+            )
+            if result.status == "state_changed":
+                msg = "玩家饰品状态已变化，请重新执行指令"
+            elif result.status == "operation_conflict":
+                msg = "本次管理员饰品操作与已记录事件冲突"
+            elif result.status == "user_missing":
+                msg = f"玩家 {target} 已不存在！"
+            elif result.status == "item_missing":
+                msg = f"玩家 {target} 的背包中没有 {item_info['name']}！"
+            elif result.status == "invalid_state":
+                msg = f"{target} 的饰品数据异常，请先执行背包检测"
             else:
-                msg = f"成功从 {target} 扣除【{item_info['name']}】饰品 x{removed}"
+                msg = (
+                    f"成功从 {target} 扣除【{item_info['name']}】饰品 "
+                    f"x{result.affected_quantity}"
+                )
+                if result.affected_quantity < quantity:
+                    msg += "（数量不足，已按背包可扣最大值执行）"
             await handle_send(bot, event, msg)
             await hmll.finish()
         else:
@@ -1009,14 +1095,31 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
     self_user_id = str(self_user_info["user_id"])
 
     if is_accessory:
-        ok, removed, reason = remove_accessory_from_bag(self_user_id, goods_id, quantity)
-        if not ok:
-            await handle_send(bot, event, f"扣除失败：{reason}（已装备饰品不会被直接扣除）")
-            await hmll.finish()
-
-        msg = f"成功从您背包扣除【{item_info['name']}】饰品 x{removed}"
-        if removed < quantity:
-            msg += "（数量不足，已按实际可扣执行）"
+        result = _destroy_admin_accessory(
+            event,
+            self_user_id,
+            goods_id,
+            item_info["name"],
+            quantity,
+            "self",
+        )
+        if result.status == "state_changed":
+            msg = "您的饰品状态已变化，请重新执行指令"
+        elif result.status == "operation_conflict":
+            msg = "本次管理员饰品操作与已记录事件冲突"
+        elif result.status == "user_missing":
+            msg = "您的修仙数据已不存在！"
+        elif result.status == "item_missing":
+            msg = f"您的背包中没有 {item_info['name']}！"
+        elif result.status == "invalid_state":
+            msg = "您的饰品数据异常，请先执行背包检测"
+        else:
+            msg = (
+                f"成功从您背包扣除【{item_info['name']}】饰品 "
+                f"x{result.affected_quantity}"
+            )
+            if result.affected_quantity < quantity:
+                msg += "（数量不足，已按实际可扣执行）"
         await handle_send(bot, event, msg)
         await hmll.finish()
     else:

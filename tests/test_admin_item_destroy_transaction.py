@@ -104,7 +104,7 @@ class AdminItemDestroyTransactionTests(unittest.TestCase):
             / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
         ).read_text(encoding="utf-8")
         self.assertGreaterEqual(source.count("admin_item_destroy_service.destroy("), 2)
-        self.assertIn("remove_accessory_from_bag", source)
+        self.assertGreaterEqual(source.count("_destroy_admin_accessory("), 4)
 
 
 if __name__ == "__main__":
