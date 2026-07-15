@@ -83,10 +83,12 @@ def _parse_rift_datetime(value) -> datetime:
 
 
 def _rift_elapsed_minutes(value, *, now: datetime | None = None) -> int:
-    from ..xiuxian_utils.cd_time import elapsed_minutes_from_cd_time, is_blank_cd_time
+    from ..xiuxian_utils.cd_time import is_blank_cd_time, parse_cd_datetime
 
-    # 坏时间：给足时长，让 type=3 能走结算而不是卡「尚未到结算时间」
+    # 坏/空/不可解析时间：给足时长，让 type=3 能走结算而不是卡「尚未到结算时间」
     if is_blank_cd_time(value):
+        return 10**9
+    if not isinstance(value, datetime) and parse_cd_datetime(value, default=None) is None:
         return 10**9
     try:
         started_at = _parse_rift_datetime(value)
