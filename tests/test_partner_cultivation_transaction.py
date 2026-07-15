@@ -5,6 +5,8 @@ import nonebot
 nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import PartnerCultivationService
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import PartnerProtectionService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.relation_utils import safe_int
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.xiuxian2_handle import number_count
 from tests.test_db_backend import db_backend
 
 class Tests(unittest.TestCase):
@@ -18,7 +20,7 @@ class Tests(unittest.TestCase):
    PartnerProtectionService.ensure_schema(c)
   self.s=PartnerCultivationService(self.g,self.p)
  def tearDown(self): self.t.cleanup()
- def call(self,op='x',gain=100,aff=3,protection=None): return self.s.apply(op,'a','b',expected_exp_1=1000,expected_exp_2=2000,exp_1=gain,exp_2=200,used_count=2,power_1=1,power_2=2,hp_1=3,mp_1=4,atk_1=5,hp_2=6,mp_2=7,atk_2=8,expected_affection_1=aff,expected_affection_2=4,affection_1=40,affection_2=20,expected_target_protection=protection)
+ def call(self,op='x',gain=100,aff=3,protection=None,power_1=1,power_2=2,hp_1=3,mp_1=4,atk_1=5,hp_2=6,mp_2=7,atk_2=8,expected_exp_1=1000,expected_exp_2=2000): return self.s.apply(op,'a','b',expected_exp_1=expected_exp_1,expected_exp_2=expected_exp_2,exp_1=gain,exp_2=200,used_count=2,power_1=power_1,power_2=power_2,hp_1=hp_1,mp_1=mp_1,atk_1=atk_1,hp_2=hp_2,mp_2=mp_2,atk_2=atk_2,expected_affection_1=aff,expected_affection_2=4,affection_1=40,affection_2=20,expected_target_protection=protection)
  def test_idempotency_and_conflict(self):
   self.assertEqual('applied',self.call().status); self.assertEqual('duplicate',self.call().status); self.assertEqual('operation_conflict',self.call(gain=101).status)
   with db_backend.connection(self.g) as c: self.assertEqual([1100,2200],[r[0] for r in c.execute('SELECT exp FROM user_xiuxian ORDER BY user_id').fetchall()])
@@ -46,3 +48,31 @@ class Tests(unittest.TestCase):
      self.assertEqual([3,4],[r[0] for r in c.execute('SELECT affection FROM partner ORDER BY user_id')])
      self.assertEqual([0,0],[r[0] for r in c.execute('SELECT used_count FROM partner_two_exp_usage ORDER BY user_id')])
      self.assertIsNone(c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='statistics'").fetchone())
+ def test_overflow_power_uses_number_count_not_sqlite_int(self):
+  """High-realm dual cultivation used to crash with SQLite INTEGER overflow."""
+  huge = 10**24
+  self.assertIsInstance(number_count(huge), str)
+  self.assertEqual(safe_int("1.23e+3"), 1230)
+  self.assertEqual(safe_int(10**24), 10**24)
+  result = self.call(
+   op='overflow',
+   power_1=huge,
+   power_2=huge,
+   hp_1=huge,
+   mp_1=huge,
+   atk_1=huge,
+   hp_2=huge,
+   mp_2=huge,
+   atk_2=huge,
+  )
+  self.assertEqual('applied', result.status)
+  with db_backend.connection(self.g) as c:
+   rows = c.execute("SELECT user_id,exp,power,hp,mp,atk FROM user_xiuxian ORDER BY user_id").fetchall()
+  self.assertEqual(rows[0][0], 'a')
+  self.assertEqual(int(float(rows[0][1])), 1100)
+  # power/hp/mp/atk bound via number_count scientific TEXT
+  for col in rows[0][2:]:
+   self.assertTrue(isinstance(col, str) or int(float(col)) >= 0)
+   self.assertGreaterEqual(float(col), 1e20)
+  # replay still works
+  self.assertEqual('duplicate', self.call(op='overflow', power_1=huge, power_2=huge, hp_1=huge, mp_1=huge, atk_1=huge, hp_2=huge, mp_2=huge, atk_2=huge).status)

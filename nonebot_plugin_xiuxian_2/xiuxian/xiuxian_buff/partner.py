@@ -135,15 +135,17 @@ def _relation_operation_id(event, action, *user_ids):
 
 def _relation_power(user_info, new_exp):
     root_rate = sql_message.get_root_rate(user_info["root_type"], user_info["user_id"])
-    return round(int(new_exp) * root_rate * jsondata.level_data()[user_info["level"]]["spend"], 0)
+    # new_exp / rates may exceed SQLite INTEGER; service binds via number_count
+    return round(safe_int(new_exp) * root_rate * jsondata.level_data()[user_info["level"]]["spend"], 0)
 
 
 def _recovered_attributes(user_info, new_exp):
-    max_hp, max_mp = int(new_exp / 2), int(new_exp)
+    new_exp = safe_int(new_exp)
+    max_hp, max_mp = new_exp // 2, new_exp
     return (
-        min(int(user_info["hp"]) + int(new_exp / 10), max_hp),
-        min(int(user_info["mp"]) + int(new_exp / 20), max_mp),
-        int(new_exp / 10),
+        min(safe_int(user_info["hp"]) + new_exp // 10, max_hp),
+        min(safe_int(user_info["mp"]) + new_exp // 20, max_mp),
+        new_exp // 10,
     )
 
 two_exp_invite = on_command("双修", priority=6, block=True)
@@ -472,9 +474,9 @@ async def direct_two_exp(
     event_descriptions = []
     actual_used_count = 0
 
-    # 关键：临时修为，用于多次双修逐次重新计算上限
-    temp_exp_1 = int(user_1["exp"])
-    temp_exp_2 = int(user_2["exp"])
+    # 关键：临时修为，用于多次双修逐次重新计算上限（兼容科学计数法 TEXT）
+    temp_exp_1 = safe_int(user_1["exp"])
+    temp_exp_2 = safe_int(user_2["exp"])
 
     for _ in range(actual_count):
         exp_1, exp_2, event_desc = await process_two_exp(
@@ -528,7 +530,7 @@ async def direct_two_exp(
     settlement = partner_cultivation_service.apply(
         _relation_operation_id(event, "cultivation", user_id_1, user_id_2),
         user_id_1, user_id_2,
-        expected_exp_1=user_1["exp"], expected_exp_2=user_2["exp"],
+        expected_exp_1=safe_int(user_1["exp"]), expected_exp_2=safe_int(user_2["exp"]),
         exp_1=total_exp_1, exp_2=total_exp_2, used_count=actual_used_count,
         power_1=_relation_power(user_1, new_exp_1), power_2=_relation_power(user_2, new_exp_2),
         hp_1=hp_1, mp_1=mp_1, atk_1=atk_1, hp_2=hp_2, mp_2=mp_2, atk_2=atk_2,
@@ -620,9 +622,9 @@ async def process_two_exp(
     level_1 = user_mes_1["level"]
     level_2 = user_mes_2["level"]
 
-    # 多次双修时使用临时修为重新计算
-    calc_exp_1 = int(current_exp_1) if current_exp_1 is not None else int(user_mes_1["exp"])
-    calc_exp_2 = int(current_exp_2) if current_exp_2 is not None else int(user_mes_2["exp"])
+    # 多次双修时使用临时修为重新计算（兼容科学计数法 TEXT）
+    calc_exp_1 = safe_int(current_exp_1) if current_exp_1 is not None else safe_int(user_mes_1["exp"])
+    calc_exp_2 = safe_int(current_exp_2) if current_exp_2 is not None else safe_int(user_mes_2["exp"])
 
     max_exp_1_limit = int(OtherSet().set_closing_type(level_1)) * XiuConfig().closing_exp_upper_limit
     max_exp_2_limit = int(OtherSet().set_closing_type(level_2)) * XiuConfig().closing_exp_upper_limit

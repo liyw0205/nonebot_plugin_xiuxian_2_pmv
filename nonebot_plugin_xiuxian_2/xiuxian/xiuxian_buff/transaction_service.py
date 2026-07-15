@@ -1,24 +1,44 @@
 from __future__ import annotations
 
 import json
+import time
 from contextlib import closing
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from pathlib import Path
 from threading import RLock
-from ..xiuxian_utils import db_backend
-from ..xiuxian_utils.xiuxian2_handle import number_count
-import time
-from .relation_transaction_utils import increment_stat, set_field
-from .relation_transaction_utils import ensure_player_field
-from datetime import datetime, timedelta
-from datetime import datetime
 from typing import Callable
-from .relation_transaction_utils import append_mentor_history, ensure_player_field, get_json_field, increment_stat, set_field
-from .relation_transaction_utils import append_mentor_history, get_json_field, increment_stat, set_field
-from .relation_transaction_utils import append_mentor_history, get_json_field, increment_stat
-from .relation_transaction_utils import increment_stat
+
+from ..xiuxian_utils import db_backend
 from ..xiuxian_utils.fight_models import Entity
 from ..xiuxian_utils.player_fight import BattleSystem, apply_player_buffs, get_players_attributes
+from ..xiuxian_utils.xiuxian2_handle import number_count
+from .relation_transaction_utils import (
+    append_mentor_history,
+    ensure_player_field,
+    get_json_field,
+    increment_stat,
+    set_field,
+)
+
+
+def _sql_num(value):
+    """Bind-safe combat/exp value: int or scientific TEXT via number_count."""
+    return number_count(value)
+
+
+def _sql_num_nonneg(value):
+    out = number_count(value)
+    if float(out) < 0:
+        raise ValueError("numeric field must be non-negative")
+    return out
+
+
+def _as_int_like_num(value):
+    try:
+        return int(float(value))
+    except (TypeError, ValueError, OverflowError):
+        return 0
 
 @dataclass(frozen=True)
 class PartnerProtectionResult:
@@ -341,12 +361,31 @@ class PartnerCultivationService:
     ) -> PartnerCultivationResult:
         operation_id = str(operation_id).strip()
         user_id_1, user_id_2 = str(user_id_1), str(user_id_2)
-        values = tuple(int(value) for value in (
+        # expected_exp concurrency snapshot + used_count/affection/rate stay int;
+        # combat write fields may exceed SQLite INTEGER (high-realm dual cultivation).
+        expected_exp_1 = int(expected_exp_1)
+        expected_exp_2 = int(expected_exp_2)
+        used_count = int(used_count)
+        level_rate_1 = int(level_rate_1)
+        level_rate_2 = int(level_rate_2)
+        affection_1 = int(affection_1)
+        affection_2 = int(affection_2)
+        exp_1 = _sql_num_nonneg(exp_1)
+        exp_2 = _sql_num_nonneg(exp_2)
+        power_1 = _sql_num_nonneg(power_1)
+        power_2 = _sql_num_nonneg(power_2)
+        hp_1 = _sql_num_nonneg(hp_1)
+        mp_1 = _sql_num_nonneg(mp_1)
+        atk_1 = _sql_num_nonneg(atk_1)
+        hp_2 = _sql_num_nonneg(hp_2)
+        mp_2 = _sql_num_nonneg(mp_2)
+        atk_2 = _sql_num_nonneg(atk_2)
+        values = (
             expected_exp_1, expected_exp_2, exp_1, exp_2, used_count, power_1, power_2,
             hp_1, mp_1, atk_1, hp_2, mp_2, atk_2, level_rate_1, level_rate_2,
             affection_1, affection_2,
-        ))
-        if not operation_id or values[4] <= 0 or values[2] < 0 or values[3] < 0:
+        )
+        if not operation_id or values[4] <= 0 or float(values[2]) < 0 or float(values[3]) < 0:
             raise ValueError("invalid partner cultivation operation")
         expected_affection_1 = None if expected_affection_1 is None else int(expected_affection_1)
         expected_affection_2 = None if expected_affection_2 is None else int(expected_affection_2)
@@ -367,7 +406,7 @@ class PartnerCultivationService:
         )
 
         def result(status):
-            return PartnerCultivationResult(status, values[2], values[3], values[4], values[15], values[16])
+            return PartnerCultivationResult(status, _as_int_like_num(values[2]), _as_int_like_num(values[3]), int(values[4]), int(values[15]), int(values[16]))
 
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False
@@ -389,7 +428,7 @@ class PartnerCultivationService:
                     conn.rollback()
                     if str(previous[0]) != payload:
                         return result("operation_conflict")
-                    return PartnerCultivationResult("duplicate", *(int(value) for value in previous[1:]))
+                    return PartnerCultivationResult("duplicate", *(_as_int_like_num(value) for value in previous[1:]))
 
                 if expected_target_protection is not None:
                     actual_protection = PartnerProtectionService.read_status(
@@ -434,7 +473,7 @@ class PartnerCultivationService:
                     "SELECT user_id,exp FROM user_xiuxian WHERE user_id IN (%s,%s)",
                     (user_id_1, user_id_2),
                 ).fetchall()
-                current = {str(row[0]): int(row[1]) for row in rows}
+                current = {str(row[0]): int(float(row[1] or 0)) for row in rows}
                 if current != {user_id_1: values[0], user_id_2: values[1]}:
                     conn.rollback()
                     return result("state_changed")
@@ -456,8 +495,11 @@ class PartnerCultivationService:
                     (user_id_2, values[1], values[3], values[6], values[10], values[11], values[12], values[14]),
                 ):
                     changed = conn.execute(
-                        "UPDATE user_xiuxian SET exp=exp+%s,power=%s,hp=%s,mp=%s,atk=%s,"
-                        "level_up_rate=COALESCE(level_up_rate,0)+%s WHERE user_id=%s AND exp=%s",
+                        "UPDATE user_xiuxian SET "
+                        "exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),"
+                        "power=%s,hp=%s,mp=%s,atk=%s,"
+                        "level_up_rate=COALESCE(level_up_rate,0)+%s "
+                        "WHERE user_id=%s AND CAST(COALESCE(exp,0) AS REAL)=CAST(%s AS REAL)",
                         (gain, power, hp, mp, atk, rate, user_id, expected_exp),
                     )
                     if changed.rowcount != 1:
@@ -923,8 +965,10 @@ class PartnerBreakthroughService:
     def apply(self, operation_id, user_id, partner_id, new_level, *, expected_user_exp, expected_partner_exp, expected_affection, reward_exp, partner_power):
         operation_id, user_id, partner_id = str(operation_id).strip(), str(user_id), str(partner_id)
         expected_user_exp, expected_partner_exp = int(expected_user_exp), int(expected_partner_exp)
-        expected_affection, reward_exp, partner_power = int(expected_affection), int(reward_exp), int(partner_power)
-        if not operation_id or reward_exp <= 0:
+        expected_affection = int(expected_affection)
+        reward_exp = _sql_num_nonneg(reward_exp)
+        partner_power = _sql_num_nonneg(partner_power)
+        if not operation_id or float(reward_exp) <= 0:
             raise ValueError("invalid partner breakthrough reward")
         payload = json.dumps(
             [user_id, partner_id, str(new_level), expected_user_exp, expected_partner_exp, expected_affection, reward_exp, partner_power],
@@ -951,21 +995,23 @@ class PartnerBreakthroughService:
                 reciprocal = conn.execute("SELECT partner_id FROM player_data.partner WHERE user_id=%s", (partner_id,)).fetchone()
                 if relation is None or reciprocal is None or str(relation[0]) != partner_id or str(reciprocal[0]) != user_id or int(relation[1] or 0) != expected_affection:
                     conn.rollback()
-                    return PartnerBreakthroughResult("state_changed", reward_exp)
+                    return PartnerBreakthroughResult("state_changed", _as_int_like_num(reward_exp))
                 users = conn.execute("SELECT user_id,exp FROM user_xiuxian WHERE user_id IN (%s,%s)", (user_id, partner_id)).fetchall()
-                if {str(row[0]): int(row[1]) for row in users} != {user_id: expected_user_exp, partner_id: expected_partner_exp}:
+                if {str(row[0]): int(float(row[1] or 0)) for row in users} != {user_id: expected_user_exp, partner_id: expected_partner_exp}:
                     conn.rollback()
-                    return PartnerBreakthroughResult("state_changed", reward_exp)
+                    return PartnerBreakthroughResult("state_changed", _as_int_like_num(reward_exp))
                 changed = conn.execute(
-                    "UPDATE user_xiuxian SET exp=exp+%s,power=%s WHERE user_id=%s AND exp=%s",
+                    "UPDATE user_xiuxian SET "
+                    "exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),power=%s "
+                    "WHERE user_id=%s AND CAST(COALESCE(exp,0) AS REAL)=CAST(%s AS REAL)",
                     (reward_exp, partner_power, partner_id, expected_partner_exp),
                 )
                 if changed.rowcount != 1:
                     conn.rollback()
-                    return PartnerBreakthroughResult("state_changed", reward_exp)
+                    return PartnerBreakthroughResult("state_changed", _as_int_like_num(reward_exp))
                 conn.execute("INSERT INTO partner_breakthrough_operations (operation_id,payload,reward_exp) VALUES (%s,%s,%s)", (operation_id, payload, reward_exp))
                 conn.commit()
-                return PartnerBreakthroughResult("applied", reward_exp)
+                return PartnerBreakthroughResult("applied", _as_int_like_num(reward_exp))
             except Exception:
                 conn.rollback()
                 raise
@@ -1746,15 +1792,25 @@ class MentorBreakthroughRewardService:
               reward_exp, max_mentor_exp, mentor_power, history_limit, mentor_desc, apprentice_desc):
         operation_id, mentor_id, apprentice_id = str(operation_id).strip(), str(mentor_id), str(apprentice_id)
         new_level, business_event_id = str(new_level), str(business_event_id).strip()
-        values = tuple(int(v) for v in (expected_mentor_exp, expected_apprentice_exp, expected_reward_count,
-                                        reward_limit, reward_exp, max_mentor_exp, mentor_power, history_limit))
-        if not operation_id or not business_event_id or mentor_id == apprentice_id or values[4] <= 0 or values[2] < 0 or values[2] >= values[3]:
+        expected_mentor_exp = int(expected_mentor_exp)
+        expected_apprentice_exp = int(expected_apprentice_exp)
+        expected_reward_count = int(expected_reward_count)
+        reward_limit = int(reward_limit)
+        history_limit = int(history_limit)
+        max_mentor_exp = int(max_mentor_exp)
+        reward_exp = _sql_num_nonneg(reward_exp)
+        mentor_power = _sql_num_nonneg(mentor_power)
+        values = (
+            expected_mentor_exp, expected_apprentice_exp, expected_reward_count,
+            reward_limit, reward_exp, max_mentor_exp, mentor_power, history_limit,
+        )
+        if not operation_id or not business_event_id or mentor_id == apprentice_id or float(values[4]) <= 0 or values[2] < 0 or values[2] >= values[3]:
             raise ValueError("invalid mentor breakthrough reward")
-        if values[0] + values[4] > values[5]:
+        if expected_mentor_exp + float(reward_exp) > max_mentor_exp:
             raise ValueError("mentor exp cap exceeded")
         payload = json.dumps([mentor_id, apprentice_id, new_level, business_event_id, *values, mentor_desc, apprentice_desc],
                              ensure_ascii=False, separators=(",", ":"))
-        result = lambda status, count=values[2] + 1: MentorBreakthroughRewardResult(status, values[4], count)
+        result = lambda status, count=values[2] + 1: MentorBreakthroughRewardResult(status, _as_int_like_num(values[4]), count)
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False
             try:
@@ -1764,19 +1820,24 @@ class MentorBreakthroughRewardService:
                 previous = conn.execute("SELECT payload,reward_exp,reward_count FROM mentor_breakthrough_reward_operations WHERE operation_id=%s", (operation_id,)).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    return MentorBreakthroughRewardResult("duplicate" if str(previous[0]) == payload else "operation_conflict", int(previous[1]), int(previous[2]))
+                    return MentorBreakthroughRewardResult("duplicate" if str(previous[0]) == payload else "operation_conflict", _as_int_like_num(previous[1]), int(previous[2]))
                 event = conn.execute("SELECT payload,reward_exp,reward_count FROM mentor_breakthrough_reward_operations WHERE business_event_id=%s", (business_event_id,)).fetchone()
                 if event is not None:
-                    conn.rollback(); return MentorBreakthroughRewardResult("event_duplicate", int(event[1]), int(event[2]))
+                    conn.rollback(); return MentorBreakthroughRewardResult("event_duplicate", _as_int_like_num(event[1]), int(event[2]))
                 apprentices = [str(v) for v in get_json_field(conn, "mentor", mentor_id, "apprentice_ids", [])]
                 parent = conn.execute("SELECT mentor_id FROM player_data.mentor WHERE user_id=%s", (apprentice_id,)).fetchone()
                 count = get_json_field(conn, "mentor", apprentice_id, "breakthrough_reward_count", 0)
                 users = conn.execute("SELECT user_id,exp FROM user_xiuxian WHERE user_id IN (%s,%s)", (mentor_id, apprentice_id)).fetchall()
-                exps = {str(row[0]): int(row[1]) for row in users}
+                exps = {str(row[0]): int(float(row[1] or 0)) for row in users}
                 if apprentice_id not in apprentices or parent is None or str(parent[0]) != mentor_id or int(count or 0) != values[2] or exps != {mentor_id: values[0], apprentice_id: values[1]}:
                     conn.rollback(); return result("state_changed")
-                changed = conn.execute("UPDATE user_xiuxian SET exp=exp+%s,power=%s WHERE user_id=%s AND exp=%s AND exp+%s<=%s",
-                                       (values[4], values[6], mentor_id, values[0], values[4], values[5]))
+                changed = conn.execute(
+                    "UPDATE user_xiuxian SET "
+                    "exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),power=%s "
+                    "WHERE user_id=%s AND CAST(COALESCE(exp,0) AS REAL)=CAST(%s AS REAL) "
+                    "AND CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL)<=%s",
+                    (values[4], values[6], mentor_id, values[0], values[4], values[5]),
+                )
                 if changed.rowcount != 1:
                     conn.rollback(); return result("state_changed")
                 set_field(conn, "mentor", apprentice_id, "breakthrough_reward_count", values[2] + 1, "INTEGER")
@@ -1952,11 +2013,24 @@ class MentorTransmissionService:
 
     def apply(self, operation_id, mentor_id, apprentice_id, *, expected_apprentice_exp, reward_exp, power, hp, mp, atk, mentor_used, apprentice_used, daily_limit, history_limit, mentor_desc, apprentice_desc):
         operation_id, mentor_id, apprentice_id = str(operation_id).strip(), str(mentor_id), str(apprentice_id)
-        values = tuple(int(v) for v in (expected_apprentice_exp, reward_exp, power, hp, mp, atk, mentor_used, apprentice_used, daily_limit, history_limit))
-        if not operation_id or values[1] <= 0 or values[6] >= values[8] or values[7] >= values[8]:
+        expected_apprentice_exp = int(expected_apprentice_exp)
+        mentor_used = int(mentor_used)
+        apprentice_used = int(apprentice_used)
+        daily_limit = int(daily_limit)
+        history_limit = int(history_limit)
+        reward_exp = _sql_num_nonneg(reward_exp)
+        power = _sql_num_nonneg(power)
+        hp = _sql_num_nonneg(hp)
+        mp = _sql_num_nonneg(mp)
+        atk = _sql_num_nonneg(atk)
+        values = (
+            expected_apprentice_exp, reward_exp, power, hp, mp, atk,
+            mentor_used, apprentice_used, daily_limit, history_limit,
+        )
+        if not operation_id or float(values[1]) <= 0 or values[6] >= values[8] or values[7] >= values[8]:
             raise ValueError("invalid mentor transmission operation")
         payload = json.dumps([mentor_id, apprentice_id, *values, mentor_desc, apprentice_desc], separators=(",", ":"), ensure_ascii=False)
-        result = lambda status: MentorTransmissionResult(status, values[1])
+        result = lambda status: MentorTransmissionResult(status, _as_int_like_num(values[1]))
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False
             try:
@@ -1965,13 +2039,16 @@ class MentorTransmissionService:
                 previous = conn.execute("SELECT payload,reward_exp FROM mentor_transmission_operations WHERE operation_id=%s", (operation_id,)).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    return MentorTransmissionResult("duplicate" if str(previous[0]) == payload else "operation_conflict", int(previous[1]))
+                    return MentorTransmissionResult("duplicate" if str(previous[0]) == payload else "operation_conflict", _as_int_like_num(previous[1]))
                 apprentices = [str(v) for v in get_json_field(conn, "mentor", mentor_id, "apprentice_ids", [])]
                 apprentice_row = conn.execute("SELECT mentor_id FROM player_data.mentor WHERE user_id=%s", (apprentice_id,)).fetchone()
                 if apprentice_id not in apprentices or apprentice_row is None or str(apprentice_row[0]) != mentor_id:
                     conn.rollback(); return result("state_changed")
                 changed = conn.execute(
-                    "UPDATE user_xiuxian SET exp=exp+%s,power=%s,hp=%s,mp=%s,atk=%s WHERE user_id=%s AND exp=%s",
+                    "UPDATE user_xiuxian SET "
+                    "exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),"
+                    "power=%s,hp=%s,mp=%s,atk=%s "
+                    "WHERE user_id=%s AND CAST(COALESCE(exp,0) AS REAL)=CAST(%s AS REAL)",
                     (values[1], values[2], values[3], values[4], values[5], apprentice_id, values[0]),
                 )
                 if changed.rowcount != 1:
