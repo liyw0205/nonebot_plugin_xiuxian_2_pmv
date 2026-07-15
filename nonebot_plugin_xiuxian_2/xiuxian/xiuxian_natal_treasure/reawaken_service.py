@@ -32,6 +32,27 @@ class ReawakenService:
         self._player_database = Path(player_database)
         self._lock = lock or RLock()
 
+    def get_result(self, operation_id: str) -> ReawakenResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS natal_reawaken_operations ("
+                "operation_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, scripture_id INTEGER NOT NULL, "
+                "scripture_cost INTEGER NOT NULL, max_slots INTEGER NOT NULL, choice_seed INTEGER NOT NULL, "
+                "form INTEGER NOT NULL, "
+                "name TEXT NOT NULL, effect_type INTEGER NOT NULL, base_value REAL NOT NULL, "
+                "scripture_change INTEGER NOT NULL)"
+            )
+            previous = conn.execute(
+                "SELECT form, name, effect_type, base_value, scripture_change FROM natal_reawaken_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return ReawakenResult("duplicate", int(previous[0]), str(previous[1]), int(previous[2]), float(previous[3]), int(previous[4]))
+
     def reawaken(self, operation_id, user_id, scripture_id, scripture_name,
                  scripture_type, scripture_cost, max_slots, max_goods_num,
                  effect_configs, effect_names, fixed_base_effects,
@@ -85,9 +106,7 @@ class ReawakenService:
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    request = (user_id, scripture_id, scripture_cost, max_slots, choice_seed)
-                    recorded = (str(previous[0]), *(int(value) for value in previous[1:5]))
-                    if recorded != request:
+                    if str(previous[0]) != user_id or int(previous[1]) != scripture_id or int(previous[2]) != scripture_cost:
                         return result("state_changed")
                     return result("duplicate", *previous[5:])
 

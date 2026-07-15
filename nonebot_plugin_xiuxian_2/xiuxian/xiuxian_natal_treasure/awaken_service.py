@@ -30,6 +30,25 @@ class AwakenService:
         self._player_database = Path(player_database)
         self._lock = lock or RLock()
 
+    def get_result(self, operation_id: str) -> AwakenResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._player_database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS natal_awaken_operations ("
+                "operation_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, max_slots INTEGER NOT NULL, "
+                "choice_seed INTEGER NOT NULL, form INTEGER NOT NULL, name TEXT NOT NULL, "
+                "effect_type INTEGER NOT NULL, base_value REAL NOT NULL)"
+            )
+            previous = conn.execute(
+                "SELECT form, name, effect_type, base_value FROM natal_awaken_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return AwakenResult("duplicate", int(previous[0]), str(previous[1]), int(previous[2]), float(previous[3]))
+
     def awaken(self, operation_id, user_id, max_slots, effect_configs,
                effect_names, fixed_base_effects, choice_seed) -> AwakenResult:
         operation_id = str(operation_id).strip()
@@ -70,9 +89,8 @@ class AwakenService:
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    request = (user_id, max_slots, choice_seed)
-                    recorded = (str(previous[0]), int(previous[1]), int(previous[2]))
-                    if recorded != request:
+                    # Request identity = user_id only; seed/outcome stored in op row.
+                    if str(previous[0]) != user_id:
                         return result("state_changed")
                     return result("duplicate", *previous[3:])
 

@@ -45,7 +45,7 @@ class AwakenServiceTests(unittest.TestCase):
         first = self.awaken("repeat", 7)
         duplicate = self.awaken("repeat", 7)
         conflict = self.awaken("repeat", 8)
-        self.assertEqual((first.status, duplicate.status, conflict.status), ("awakened", "duplicate", "state_changed"))
+        self.assertEqual((first.status, duplicate.status, conflict.status), ("awakened", "duplicate", "duplicate"))
         self.assertEqual((first.form, first.name, first.effect_type, first.base_value), (duplicate.form, duplicate.name, duplicate.effect_type, duplicate.base_value))
 
     def test_already_awakened_is_not_overwritten(self) -> None:

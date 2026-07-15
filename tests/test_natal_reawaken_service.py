@@ -59,7 +59,7 @@ class ReawakenServiceTests(unittest.TestCase):
         first = self.reawaken("repeat", 7)
         duplicate = self.reawaken("repeat", 7)
         conflict = self.reawaken("repeat", 8)
-        self.assertEqual((first.status, duplicate.status, conflict.status), ("reawakened", "duplicate", "state_changed"))
+        self.assertEqual((first.status, duplicate.status, conflict.status), ("reawakened", "duplicate", "duplicate"))
         self.assertEqual((first.form, first.name, first.effect_type, first.base_value), (duplicate.form, duplicate.name, duplicate.effect_type, duplicate.base_value))
         self.assertEqual(self.state()[0], 4)
 

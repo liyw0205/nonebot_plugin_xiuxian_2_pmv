@@ -52,7 +52,7 @@ class EngravingServiceTests(unittest.TestCase):
         first = self.engrave("repeat", 5)
         duplicate = self.engrave("repeat", 5)
         conflict = self.engrave("repeat", 6)
-        self.assertEqual((first.status, duplicate.status, conflict.status), ("engraved", "duplicate", "state_changed"))
+        self.assertEqual((first.status, duplicate.status, conflict.status), ("engraved", "duplicate", "duplicate"))
         self.assertEqual((first.effect_type, first.base_value), (duplicate.effect_type, duplicate.base_value))
         self.assertEqual(self.state()[0], 1)
 

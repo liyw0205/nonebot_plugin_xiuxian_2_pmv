@@ -30,6 +30,25 @@ class EngravingService:
         self._player_database = Path(player_database)
         self._lock = lock or RLock()
 
+    def get_result(self, operation_id: str) -> EngravingResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS natal_engraving_operations ("
+                "operation_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, scripture_id INTEGER NOT NULL, "
+                "scripture_cost INTEGER NOT NULL, max_slots INTEGER NOT NULL, choice_seed INTEGER NOT NULL, "
+                "slot INTEGER NOT NULL, effect_type INTEGER NOT NULL, base_value REAL NOT NULL)"
+            )
+            previous = conn.execute(
+                "SELECT slot, effect_type, base_value FROM natal_engraving_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return EngravingResult("duplicate", int(previous[0]), int(previous[1]), float(previous[2]))
+
     def engrave(self, operation_id, user_id, scripture_id, scripture_cost,
                 max_slots, effect_configs, fixed_base_effects, choice_seed) -> EngravingResult:
         operation_id = str(operation_id).strip()
@@ -65,9 +84,7 @@ class EngravingService:
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    request = (user_id, scripture_id, scripture_cost, max_slots, choice_seed)
-                    recorded = (str(previous[0]), *(int(value) for value in previous[1:5]))
-                    if recorded != request:
+                    if str(previous[0]) != user_id or int(previous[1]) != scripture_id or int(previous[2]) != scripture_cost:
                         return result("state_changed")
                     return result("duplicate", *previous[5:])
 
@@ -112,15 +129,17 @@ class EngravingService:
                     conn.rollback()
                     return result("item_insufficient", slot, effect_type, base_value)
                 consumed = conn.execute(
-                    "UPDATE back SET goods_num=goods_num-%s WHERE user_id=%s AND goods_id=%s AND goods_num>=%s",
+                    "UPDATE back SET goods_num=CAST(goods_num AS INTEGER)-%s "
+                    "WHERE user_id=%s AND goods_id=%s AND CAST(COALESCE(goods_num,0) AS INTEGER)>=%s",
                     (scripture_cost, user_id, scripture_id, scripture_cost),
                 )
+                type_field = db_backend.quote_ident(f"effect{slot}_type")
+                base_field = db_backend.quote_ident(f"effect{slot}_base_value")
+                level_field = db_backend.quote_ident(f"effect{slot}_level")
                 engraved = conn.execute(
                     f"UPDATE player_data.natal_treasure SET "
-                    f"{db_backend.quote_ident(f'effect{slot}_type')}=%s, "
-                    f"{db_backend.quote_ident(f'effect{slot}_base_value')}=%s, "
-                    f"{db_backend.quote_ident(f'effect{slot}_level')}=1 "
-                    f"WHERE user_id=%s AND COALESCE({db_backend.quote_ident(f'effect{slot}_type')}, 0)=0",
+                    f"{type_field}=%s, {base_field}=%s, {level_field}=1 "
+                    f"WHERE user_id=%s AND CAST(COALESCE({type_field}, 0) AS INTEGER)=0",
                     (effect_type, base_value, user_id),
                 )
                 if consumed.rowcount != 1 or engraved.rowcount != 1:

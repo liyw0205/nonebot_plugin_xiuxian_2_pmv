@@ -50,7 +50,7 @@ class EffectUpgradeServiceTests(unittest.TestCase):
         first = self.upgrade("repeat", 7)
         duplicate = self.upgrade("repeat", 7)
         conflict = self.upgrade("repeat", 8)
-        self.assertEqual((first.status, duplicate.status, conflict.status), ("upgraded", "duplicate", "state_changed"))
+        self.assertEqual((first.status, duplicate.status, conflict.status), ("upgraded", "duplicate", "duplicate"))
         self.assertEqual((first.slot, duplicate.slot), (duplicate.slot, duplicate.slot))
         self.assertEqual(self.state()[0], 1)
 

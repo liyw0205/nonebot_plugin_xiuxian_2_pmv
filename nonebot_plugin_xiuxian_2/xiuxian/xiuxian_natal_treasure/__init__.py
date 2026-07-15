@@ -53,6 +53,11 @@ natal_forget_service = ForgetEffectService(get_paths().game_db, get_paths().play
 natal_reawaken_service = ReawakenService(get_paths().game_db, get_paths().player_db)
 natal_awaken_service = AwakenService(get_paths().player_db)
 
+def _natal_choice_seed(operation_id: str) -> int:
+    # Stable per event/op so same-event replay reuses first roll.
+    return int.from_bytes(str(operation_id).encode("utf-8"), "little") % (2**63)
+
+
 # 定义觉醒本命法宝命令
 natal_awaken = on_command(
     "觉醒本命法宝",
@@ -87,6 +92,14 @@ async def natal_awaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
         }
         event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
         operation_id = f"natal-awaken:{event_id}:{user_id}" if event_id else f"natal-awaken:{user_id}:{datetime.now().timestamp()}"
+        prior = natal_awaken_service.get_result(operation_id)
+        if prior is not None and prior.succeeded:
+            await handle_send(
+                bot, event,
+                f"恭喜！本命法宝觉醒成功！\n形态已固化，效果类型：{prior.effect_type}\n该觉醒请求已经处理，无需重复提交。",
+                md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="养成", v3="养成本命法宝"
+            )
+            await natal_awaken.finish()
         awakened = natal_awaken_service.awaken(
             operation_id, user_id, MAX_EFFECT_SLOTS,
             {
@@ -98,8 +111,15 @@ async def natal_awaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
                 for effect_type, names in NATAL_TREASURE_NAMES.items()
             },
             {effect_type.value for effect_type in fixed_base_effects},
-            random.getrandbits(63),
+            _natal_choice_seed(operation_id),
         )
+        if awakened.status == "duplicate":
+            await handle_send(
+                bot, event,
+                f"恭喜！本命法宝觉醒成功！\n形态已固化，效果类型：{awakened.effect_type}\n该觉醒请求已经处理，无需重复提交。",
+                md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="养成", v3="养成本命法宝"
+            )
+            await natal_awaken.finish()
         if not awakened.succeeded:
             failure_reasons = {
                 "treasure_missing": "法宝数据结构尚未准备完成",
@@ -188,7 +208,7 @@ async def natal_reawaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMes
             for effect_type, names in NATAL_TREASURE_NAMES.items()
         },
         {effect_type.value for effect_type in fixed_base_effects},
-        random.getrandbits(63),
+        _natal_choice_seed(operation_id),
     )
     if not reawakened.succeeded:
         failure_reasons = {
@@ -262,6 +282,26 @@ async def natal_upgrade_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
         return
 
     user_id = user_info['user_id']
+    exp_amount_str = args.extract_plain_text().strip()
+    try:
+        exp_to_add = int(exp_amount_str) if exp_amount_str else 1
+        if exp_to_add <= 0:
+            await handle_send(bot, event, "养成的经验数量必须是正整数！",
+                              md_type="法宝", k1="养成", v1="养成本命法宝", k2="升阶", v2="本命法宝升阶", k3="法宝", v3="我的本命法宝")
+            return
+    except ValueError:
+        await handle_send(bot, event, "养成的经验数量必须是整数！",
+                          md_type="法宝", k1="养成", v1="养成本命法宝", k2="升阶", v2="本命法宝升阶", k3="法宝", v3="我的本命法宝")
+        return
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"natal-train:{event_id}:{user_id}" if event_id else f"natal-train:{user_id}:{datetime.now().timestamp()}"
+    # 先回放：成功后等级/经验满会挡住同事件幂等。
+    prior = natal_training_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        final_msg = f"成功养成法宝，消耗灵石：{number_to(prior.stone_cost)}\n法宝经验 +{prior.exp_added}，当前经验 {prior.exp}/{prior.max_exp}。\n该养成请求已经处理，无需重复提交。"
+        await handle_send(bot, event, final_msg,
+                          md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="升阶", v3="本命法宝升阶")
+        return
     nt = NatalTreasure(user_id)
 
     if not nt.exists():
@@ -305,8 +345,6 @@ async def natal_upgrade_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
         await handle_send(bot, event, f"你本次最多只能再增加{remaining_exp_needed}点经验达到当前等级上限，已为你调整为{exp_to_add}点。",
                           md_type="法宝", k1="养成", v1="养成本命法宝", k2="升阶", v2="本命法宝升阶", k3="法宝", v3="我的本命法宝")
 
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"natal-train:{event_id}:{user_id}" if event_id else f"natal-train:{user_id}:{datetime.now().timestamp()}"
     training = natal_training_service.train(
         operation_id, user_id, exp_to_add,
         base_cost=1_000_000, growth_rate=0.5,
@@ -318,6 +356,11 @@ async def natal_upgrade_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
         msg = f"本次养成{training.exp_added}点经验需要{number_to(training.stone_cost)}灵石，你灵石不足！"
         await handle_send(bot, event, msg,
                           md_type="法宝", k1="养成", v1="养成本命法宝", k2="法宝", v2="我的本命法宝", k3="灵石", v3="灵石")
+        return
+    if training.status == "duplicate":
+        final_msg = f"成功养成法宝，消耗灵石：{number_to(training.stone_cost)}\n法宝经验 +{training.exp_added}，当前经验 {training.exp}/{training.max_exp}。\n该养成请求已经处理，无需重复提交。"
+        await handle_send(bot, event, final_msg,
+                          md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="升阶", v3="本命法宝升阶")
         return
     if not training.succeeded:
         await handle_send(bot, event, "本命法宝或灵石状态已经变化，本次养成未结算。")
@@ -358,6 +401,14 @@ async def natal_effect_upgrade_handler(bot: Bot, event: GroupMessageEvent | Priv
         return
 
     scripture_cost = 1
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"natal-effect-upgrade:{event_id}:{user_id}" if event_id else f"natal-effect-upgrade:{user_id}:{datetime.now().timestamp()}"
+    prior = natal_effect_upgrade_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        effect_name = EFFECT_NAME_MAP.get(NatalEffectType(prior.effect_type), "未知效果")
+        await handle_send(bot, event, f"效果升阶成功！消耗{scripture_cost}个【神秘经书】。\n效果【{effect_name}】等级提升至 {prior.level}。\n该升阶请求已经处理，无需重复提交。",
+                          md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="升阶", v3="本命法宝升阶")
+        return
     scripture_num = sql_message.goods_num(user_id, MYSTERIOUS_SCRIPTURE_ID)
     if scripture_num < scripture_cost:
         mysterious_scripture_info = items.get_data_by_item_id(MYSTERIOUS_SCRIPTURE_ID)
@@ -365,18 +416,19 @@ async def natal_effect_upgrade_handler(bot: Bot, event: GroupMessageEvent | Priv
                           md_type="法宝", k1="升阶", v1="本命法宝升阶", k2="法宝", v2="我的本命法宝", k3="觉醒", v3="觉醒本命法宝")
         return
 
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"natal-effect-upgrade:{event_id}:{user_id}" if event_id else f"natal-effect-upgrade:{user_id}:{datetime.now().timestamp()}"
     upgrade = natal_effect_upgrade_service.upgrade(
         operation_id, user_id, MYSTERIOUS_SCRIPTURE_ID, scripture_cost,
         MAX_EFFECT_SLOTS, nt.max_effect_level_all_effects,
-        random.getrandbits(63),
+        _natal_choice_seed(operation_id),
     )
-    if upgrade.succeeded:
+    if upgrade.status == "duplicate" or upgrade.succeeded:
         nt._natal_data_cache = None
         effect_name = EFFECT_NAME_MAP.get(NatalEffectType(upgrade.effect_type), "未知效果")
         upgrade_result_msg = f"效果【{effect_name}】等级提升至 {upgrade.level}。"
-        await handle_send(bot, event, f"效果升阶成功！消耗{scripture_cost}个【神秘经书】。\n{upgrade_result_msg}",
+        msg = f"效果升阶成功！消耗{scripture_cost}个【神秘经书】。\n{upgrade_result_msg}"
+        if upgrade.status == "duplicate":
+            msg += "\n该升阶请求已经处理，无需重复提交。"
+        await handle_send(bot, event, msg,
                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="升阶", v3="本命法宝升阶")
     else:
         reason = "所有效果已达最高等级" if upgrade.status == "all_maxed" else "法宝或神秘经书状态已经变化"
@@ -401,6 +453,16 @@ async def natal_engrave_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
         return
 
     user_id = user_info['user_id']
+    scripture_cost = MYSTERIOUS_SCRIPTURE_COST_ENGRAVE
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"natal-engrave:{event_id}:{user_id}" if event_id else f"natal-engrave:{user_id}:{datetime.now().timestamp()}"
+    # 先回放：成功后槽位已满会挡住同事件幂等。
+    prior = natal_engraving_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        effect_name = EFFECT_NAME_MAP.get(NatalEffectType(prior.effect_type), "未知效果")
+        await handle_send(bot, event, f"铭刻道纹成功！消耗{scripture_cost}个【神秘经书】。\n成功铭刻道纹：【{effect_name}】，等级1。\n该铭刻请求已经处理，无需重复提交。",
+                          md_type="法宝", k1="法宝", v1="我的本命法宝", k2="养成", v2="养成本命法宝", k3="升阶", v3="本命法宝升阶")
+        await natal_engrave.finish()
     nt = NatalTreasure(user_id)
 
     if not nt.exists():
@@ -410,14 +472,13 @@ async def natal_engrave_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
         return
 
     nt_data = nt.get_data()
-    current_effect_count = sum(1 for i in range(1, MAX_EFFECT_SLOTS + 1) if nt_data.get(f"effect{i}_type", 0) > 0)
+    current_effect_count = sum(1 for i in range(1, MAX_EFFECT_SLOTS + 1) if int(nt_data.get(f"effect{i}_type", 0) or 0) > 0)
 
     if current_effect_count >= MAX_EFFECT_SLOTS:
         await handle_send(bot, event, f"你的本命法宝效果槽位已满 ({MAX_EFFECT_SLOTS}个)，无法继续铭刻新的道纹。",
                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="升阶", v2="本命法宝升阶", k3="帮助", v3="本命法宝帮助")
         await natal_engrave.finish()
 
-    scripture_cost = MYSTERIOUS_SCRIPTURE_COST_ENGRAVE
     scripture_num = sql_message.goods_num(user_id, MYSTERIOUS_SCRIPTURE_ID)
     mysterious_scripture_info = items.get_data_by_item_id(MYSTERIOUS_SCRIPTURE_ID)
 
@@ -438,19 +499,20 @@ async def natal_engrave_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
         effect_type.value: (config["min_value"], config["max_value"])
         for effect_type, config in EFFECT_BASE_AND_GROWTH.items()
     }
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"natal-engrave:{event_id}:{user_id}" if event_id else f"natal-engrave:{user_id}:{datetime.now().timestamp()}"
     engraving = natal_engraving_service.engrave(
         operation_id, user_id, MYSTERIOUS_SCRIPTURE_ID, scripture_cost,
         MAX_EFFECT_SLOTS, effect_configs,
         {effect_type.value for effect_type in fixed_base_effects},
-        random.getrandbits(63),
+        _natal_choice_seed(operation_id),
     )
-    if engraving.succeeded:
+    if engraving.status == "duplicate" or engraving.succeeded:
         nt._natal_data_cache = None
         effect_name = EFFECT_NAME_MAP.get(NatalEffectType(engraving.effect_type), "未知效果")
         result_msg = f"成功铭刻道纹：【{effect_name}】，等级1。"
-        await handle_send(bot, event, f"铭刻道纹成功！消耗{scripture_cost}个【神秘经书】。\n{result_msg}",
+        msg = f"铭刻道纹成功！消耗{scripture_cost}个【神秘经书】。\n{result_msg}"
+        if engraving.status == "duplicate":
+            msg += "\n该铭刻请求已经处理，无需重复提交。"
+        await handle_send(bot, event, msg,
                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="养成", v2="养成本命法宝", k3="升阶", v3="本命法宝升阶")
     else:
         failure_reasons = {
