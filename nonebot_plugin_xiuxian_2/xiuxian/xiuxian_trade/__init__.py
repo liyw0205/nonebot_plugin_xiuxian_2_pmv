@@ -375,6 +375,11 @@ def buy_xianshi_item_safely(
         "quantity": result.quantity,
         "total_cost": result.total_cost,
         "applied": result.applied,
+        "name": result.name,
+        "goods_id": result.goods_id,
+        "goods_type": result.goods_type,
+        "listing_id": result.listing_id,
+        "status": result.status,
     }
     return True, msg, trade_info
 
@@ -1056,39 +1061,47 @@ async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     if quantity_to_buy <= 0:
         quantity_to_buy = 1 # 购买数量至少为1
 
-    # 从系统中查找物品
+    operation_id = _xianshi_operation_id(event, xianshi_id)
+    # 先走 operation：挂单售罄后同事件重放仍须回放首次结果，不能被“未找到”前置拦截。
     item_list = xianshi_repository.get_xianshi_items(id=xianshi_id)
-    
-    if not item_list:
-        msg = f"未找到仙肆ID为 {xianshi_id} 的物品！"
-        await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
-        await xian_buy.finish()
-    
-    item_to_buy = item_list[0] # get_xianshi_items返回列表，取第一个
-    
+    item_to_buy = item_list[0] if item_list else {
+        "id": xianshi_id,
+        "name": f"仙肆ID {xianshi_id}",
+    }
+
     try:
         success, msg, trade_info = buy_xianshi_item_safely(
             user_id,
             item_to_buy,
             quantity_to_buy,
-            operation_id=_xianshi_operation_id(event, xianshi_id),
+            operation_id=operation_id,
         )
         if not success:
+            if (
+                not item_list
+                and "已被其他道友购买" in msg
+            ):
+                msg = f"未找到仙肆ID为 {xianshi_id} 的物品！"
             await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
             await xian_buy.finish()
 
-        if trade_info["applied"]:
+        item_name = (
+            item_to_buy.get("name")
+            if item_list
+            else (trade_info or {}).get("name") or item_to_buy["name"]
+        )
+        if trade_info and trade_info.get("applied"):
             record_trade_event(
                 user_id,
                 "仙肆购买",
-                f"购买{item_to_buy['name']}x{trade_info['quantity']}，花费{number_to(trade_info['total_cost'])}灵石",
+                f"购买{item_name}x{trade_info['quantity']}，花费{number_to(trade_info['total_cost'])}灵石",
                 {"仙肆购买次数": 1, "仙肆购买数量": trade_info['quantity'], "仙肆消费灵石": trade_info['total_cost']}
             )
             if trade_info['seller_id'] != "0":
                 record_trade_event(
                     trade_info['seller_id'],
                     "仙肆售出",
-                    f"售出{item_to_buy['name']}x{trade_info['quantity']}，收入{number_to(trade_info['total_cost'])}灵石",
+                    f"售出{item_name}x{trade_info['quantity']}，收入{number_to(trade_info['total_cost'])}灵石",
                     {"仙肆售出次数": 1, "仙肆售出数量": trade_info['quantity'], "仙肆收入灵石": trade_info['total_cost']}
                 )
         await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
