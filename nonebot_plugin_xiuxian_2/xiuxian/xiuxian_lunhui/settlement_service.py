@@ -97,6 +97,27 @@ class LunhuiSettlementService:
         self._impart_database = Path(impart_database) if impart_database else None
         self._lock = lock or RLock()
 
+    def get_result(self, operation_id: str) -> LunhuiSettlementResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS lunhui_settlement_operations("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,stone INTEGER NOT NULL,"
+                "root_level INTEGER NOT NULL,wishing_stones INTEGER NOT NULL DEFAULT 0,"
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT payload,stone,root_level,wishing_stones FROM lunhui_settlement_operations "
+                "WHERE operation_id=%s", (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return LunhuiSettlementResult(
+                "duplicate", int(previous[1]), int(previous[2]), int(previous[3])
+            )
+
     def settle(
         self,
         operation_id,
@@ -121,12 +142,10 @@ class LunhuiSettlementService:
         root_key = int(root_key)
         reward_id = int(reward_id)
         expected_buffs = dict(expected_buffs or {})
-        payload_values = [
-            user_id, expected_level, root_key, expected_root_type, reward_id, reward_name,
-            expected_exp, expected_stone, expected_root_level, expected_buffs,
-            expected_impart_exp_day, expected_impart_stone, user_name,
-        ]
-        payload = json.dumps(payload_values, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        # Request identity only — level/stone/buffs/impart are concurrency checks; outcomes in op columns.
+        payload = json.dumps(
+            [user_id, root_key], ensure_ascii=False, separators=(",", ":"),
+        )
         if not operation_id or root_key not in {0, 6, 7, 8, 9}:
             raise ValueError("invalid reincarnation settlement")
 

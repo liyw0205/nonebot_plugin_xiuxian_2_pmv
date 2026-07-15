@@ -10,5 +10,9 @@ class T(unittest.TestCase):
   with db_backend.transaction(self.p) as c: c.execute('CREATE TABLE reincarnation_memory(user_id TEXT,main_buff INTEGER,retrieved_main INTEGER)'); c.execute("INSERT INTO reincarnation_memory VALUES ('u',7,0)")
   self.s=LunhuiRecallService(self.g,self.p)
  def tearDown(self): self.t.cleanup()
- def test_recall(self): self.assertEqual(self.s.recall('o','u','main_buff',7).status,'applied'); self.assertEqual(self.s.recall('o','u','main_buff',7).status,'duplicate')
+ def test_recall(self):
+  self.assertEqual(self.s.recall('o','u','main_buff',7).status,'applied')
+  # mutable expected skill_id must not break same-op replay when type matches
+  self.assertEqual(self.s.recall('o','u','main_buff',9).status,'duplicate')
+  self.assertIsNotNone(self.s.get_result('o'))
  def test_stale(self): self.assertEqual(self.s.recall('x','u','main_buff',8).status,'state_changed')

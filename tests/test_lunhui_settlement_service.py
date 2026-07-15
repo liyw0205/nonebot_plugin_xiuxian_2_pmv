@@ -36,8 +36,11 @@ class LunhuiSettlementServiceTests(unittest.TestCase):
     def test_comprehensive_atomic_settlement_and_idempotency(self):
         result = self.call()
         self.assertEqual(("applied", 100000000, 2, 2), (result.status, result.stone, result.root_level, result.wishing_stones))
-        self.assertEqual("duplicate", self.call().status)
+        # mutable expected_stone must not break same-op replay
+        self.assertEqual("duplicate", self.call(stone=1).status)
+        # different root_key is different request identity
         self.assertEqual("operation_conflict", self.call(root_key=8).status)
+        self.assertIsNotNone(self.service.get_result("op"))
         with db_backend.connection(self.game) as conn:
             user = conn.execute("SELECT level,exp,stone,root_type,root_level,hp,mp,atk FROM user_xiuxian").fetchone()
             items = conn.execute("SELECT goods_id,goods_num FROM back WHERE goods_type='特殊道具' ORDER BY goods_id").fetchall()

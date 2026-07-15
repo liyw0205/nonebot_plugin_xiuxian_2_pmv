@@ -24,6 +24,24 @@ class CultivationResetService:
         self._database = Path(database)
         self._lock = lock or RLock()
 
+    def get_result(self, operation_id: str) -> CultivationResetResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS cultivation_reset_operations ("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,reset_exp INTEGER NOT NULL,"
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT payload,reset_exp FROM cultivation_reset_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return CultivationResetResult("duplicate", int(previous[1]))
+
     def reset(self, operation_id: str, user_id: str, expected_level: str, expected_exp: int):
         operation_id = str(operation_id).strip()
         user_id = str(user_id)
@@ -31,11 +49,8 @@ class CultivationResetService:
         expected_exp = int(expected_exp)
         if not operation_id or expected_exp < 0:
             raise ValueError("invalid cultivation reset operation")
-        payload = json.dumps(
-            [user_id, expected_level, expected_exp],
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
+        # Request identity only — level/exp are concurrency checks, not the request key.
+        payload = json.dumps([user_id], ensure_ascii=False, separators=(",", ":"))
 
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             try:

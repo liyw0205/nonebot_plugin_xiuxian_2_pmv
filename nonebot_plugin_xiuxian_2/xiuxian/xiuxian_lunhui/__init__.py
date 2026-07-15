@@ -110,15 +110,24 @@ async def resetting_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await resetting.finish()
         
     user_id = user_info['user_id']
-    user_msg = sql_message.get_user_info_with_id(user_id) 
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"cultivation-reset:{user_id}:{event_id}" if event_id else f"cultivation-reset:{user_id}:{datetime.now().timestamp()}"
+    # 先回放：成功后境界变为江湖好手会挡住同事件幂等。
+    prior = cultivation_reset_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        user_msg = sql_message.get_user_info_with_id(user_id)
+        msg = f"{user_msg['user_name']}现在是一介凡人了！！\n该自废修为请求已经处理，无需重复提交。"
+        await handle_send(bot, event, msg)
+        await resetting.finish()
+    user_msg = sql_message.get_user_info_with_id(user_id)
     user_name = user_msg['user_name']
-    
-                    
     if user_msg['level'] in ['感气境初期', '感气境中期', '感气境圆满']:
         exp = user_msg['exp']
-        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-        operation_id = f"cultivation-reset:{user_id}:{event_id or datetime.now().timestamp()}"
         result = cultivation_reset_service.reset(operation_id, user_id, user_msg['level'], exp)
+        if result.status == "duplicate":
+            msg = f"{user_name}现在是一介凡人了！！\n该自废修为请求已经处理，无需重复提交。"
+            await handle_send(bot, event, msg)
+            await resetting.finish()
         if not result.succeeded:
             await handle_send(bot, event, "角色状态已变化，本次自废修为未执行，请重新查看后再试。")
             await resetting.finish()
@@ -241,8 +250,20 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
     
     skill_type = type_map[arg]
-    success, reason = retrieve_reincarnation_skill(user_id, skill_type, operation_id=f"lunhui-recall:{getattr(event, 'message_id', '') or getattr(event, 'id', '') or datetime.now().timestamp()}:{user_id}")
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"lunhui-recall:{event_id}:{user_id}:{skill_type}" if event_id else f"lunhui-recall:{user_id}:{skill_type}:{datetime.now().timestamp()}"
+    # 先回放：成功后 retrieved 标记会挡住同事件幂等。
+    prior = lunhui_recall_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        skill_name = items.get_data_by_item_id(prior.skill_id).get('name', '未知技能') if prior.skill_id else '未知技能'
+        reason = f"成功回忆前世中的技能：{skill_name}\n该回忆请求已经处理，无需重复提交。"
+        await handle_send(bot, event, reason, md_type="轮回", k1="功法", v1="回忆前世 主功法", k2="辅修", v2="回忆前世 辅修", k3="神通", v3="回忆前世 神通")
+        return
+    success, reason = retrieve_reincarnation_skill(user_id, skill_type, operation_id=operation_id)
     if success:
+        if "无需重复提交" not in reason:
+            # mark duplicate from service
+            pass
         log_message(user_id, f"[回忆前世] 取回{arg}：{reason}")
         update_statistics_value(user_id, "回忆前世次数")
         update_statistics_value(user_id, f"回忆前世{arg}")
@@ -297,6 +318,19 @@ async def confirm_lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await confirm_lunhui.finish()
 
     user_id = user_info['user_id']
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    # event-scoped op：成功后 invite cache 会清空，不能把 invite_id 放进 operation_id/payload。
+    operation_id = f"lunhui-settlement:{event_id}:{user_id}" if event_id else f"lunhui-settlement:{user_id}:{datetime.now().timestamp()}"
+    prior = lunhui_settlement_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        msg = (
+            f"轮回已完成（重放）。\n保留灵石至{number_to(prior.stone)}"
+            f"{f'，祈愿石 x{prior.wishing_stones}' if prior.wishing_stones else ''}"
+            f"\n该轮回请求已经处理，无需重复提交。"
+        )
+        await handle_send(bot, event, msg, md_type="轮回", k1="修为", v1="我的修为", k2="存档", v2="我的修仙信息", k3="印记", v3="轮回印记")
+        await confirm_lunhui.finish()
+
     if str(user_id) not in confirm_lunhui_cache:
         msg = "没有待处理的轮回！"
         await handle_send(bot, event, msg, md_type="轮回", k1="轮回", v1="进入轮回", k2="存档", v2="我的修仙信息", k3="帮助", v3="轮回帮助")
@@ -314,8 +348,6 @@ async def confirm_lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     }
     impart_exp_day = int(impart_data_draw.get("exp_day", 0) or 0) if impart_data_draw else 0
     impart_stone = int(impart_data_draw.get("stone_num", 0) or 0) if impart_data_draw else 0
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"lunhui-settlement:{user_id}:{confirm_data['invite_id']}:{event_id or 'confirm'}"
     result = lunhui_settlement_service.settle(
         operation_id, user_id, user_msg["level"], root_level, user_msg["root_type"],
         ROOT_RENAME_CARD_ID, ROOT_RENAME_CARD_NAME,
@@ -324,6 +356,14 @@ async def confirm_lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         expected_impart_exp_day=impart_exp_day, expected_impart_stone=impart_stone,
         user_name=user_msg["user_name"],
     )
+    if result.status == "duplicate":
+        msg = (
+            f"轮回已完成（重放）。\n保留灵石至{number_to(result.stone)}"
+            f"{f'，祈愿石 x{result.wishing_stones}' if result.wishing_stones else ''}"
+            f"\n该轮回请求已经处理，无需重复提交。"
+        )
+        await handle_send(bot, event, msg, md_type="轮回", k1="修为", v1="我的修为", k2="存档", v2="我的修仙信息", k3="印记", v3="轮回印记")
+        await confirm_lunhui.finish()
     if not result.succeeded:
         await handle_send(bot, event, "轮回确认状态已变化，本次未执行，请重新发起轮回。", md_type="轮回")
         await confirm_lunhui.finish()
@@ -503,6 +543,11 @@ def retrieve_reincarnation_skill(user_id, skill_type, operation_id=None):
     执行取回某类轮回技能
     返回 (success: bool, msg: str)
     """
+    if operation_id:
+        prior = lunhui_recall_service.get_result(operation_id)
+        if prior is not None and prior.succeeded:
+            skill_name = items.get_data_by_item_id(prior.skill_id).get('name', '未知技能') if prior.skill_id else '未知技能'
+            return True, f"成功回忆前世中的技能：{skill_name}\n该回忆请求已经处理，无需重复提交。"
     can, reason, _ = can_retrieve_skill(user_id, skill_type)
     if not can:
         return False, reason
@@ -513,6 +558,9 @@ def retrieve_reincarnation_skill(user_id, skill_type, operation_id=None):
         return False, "记忆中没有该技能"
     
     result = lunhui_recall_service.recall(operation_id or f"lunhui-recall:{user_id}:{skill_type}", user_id, skill_type, skill_id)
+    if result.status == "duplicate":
+        skill_name = items.get_data_by_item_id(result.skill_id).get('name', '未知技能') if result.skill_id else '未知技能'
+        return True, f"成功回忆前世中的技能：{skill_name}\n该回忆请求已经处理，无需重复提交。"
     if not result.succeeded:
         return False, "轮回印记状态已变化，请重试"
     
