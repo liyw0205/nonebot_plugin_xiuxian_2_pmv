@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_bank.withdrawal_service import BankWithdrawalService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_bank.transaction_service import BankWithdrawalService
 from tests.test_db_backend import db_backend
 
 

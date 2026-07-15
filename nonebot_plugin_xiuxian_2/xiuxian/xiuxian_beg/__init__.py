@@ -18,8 +18,10 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.data_source import jsondata
-from .daily_reward_service import BegDailyRewardService
-from .novice_gift_service import NoviceGiftClaimService
+from .transaction_service import (
+    BegDailyRewardService,
+    NoviceGiftClaimService,
+)
 from ..xiuxian_utils.utils import (
     check_user,Txt2Img,
     get_msg_pic,

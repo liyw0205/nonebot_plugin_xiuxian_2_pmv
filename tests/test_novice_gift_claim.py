@@ -7,7 +7,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_beg.novice_gift_service import NoviceGiftClaimService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_beg.transaction_service import NoviceGiftClaimService
 from tests.test_db_backend import db_backend
 
 

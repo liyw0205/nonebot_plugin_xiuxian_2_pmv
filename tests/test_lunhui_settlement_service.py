@@ -5,7 +5,7 @@ from pathlib import Path
 import nonebot
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_lunhui.settlement_service import LunhuiSettlementService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_lunhui.transaction_service import LunhuiSettlementService
 from tests.test_db_backend import db_backend
 
 

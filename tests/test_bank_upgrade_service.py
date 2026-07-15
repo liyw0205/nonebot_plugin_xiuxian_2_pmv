@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_bank.upgrade_service import BankUpgradeService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_bank.transaction_service import BankUpgradeService
 from tests.test_db_backend import db_backend
 
 

@@ -1,7 +1,7 @@
 import nonebot; nonebot.init()
 import tempfile, unittest
 from pathlib import Path
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_lunhui.recall_service import LunhuiRecallService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_lunhui.transaction_service import LunhuiRecallService
 from tests.test_db_backend import db_backend
 class T(unittest.TestCase):
  def setUp(self):

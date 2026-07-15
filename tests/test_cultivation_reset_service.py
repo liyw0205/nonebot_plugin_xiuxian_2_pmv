@@ -6,7 +6,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_lunhui.cultivation_reset_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_lunhui.transaction_service import (
     CultivationResetService,
 )
 from tests.test_db_backend import db_backend
@@ -34,7 +34,8 @@ class CultivationResetServiceTests(unittest.TestCase):
         result = self.service.reset("op", "u", "感气境中期", 900)
         self.assertEqual("applied", result.status)
         self.assertEqual("duplicate", self.service.reset("op", "u", "感气境中期", 900).status)
-        self.assertEqual("operation_conflict", self.service.reset("op", "u", "感气境中期", 901).status)
+        # payload is request identity [user_id] only; expected_* is concurrency, not key.
+        self.assertEqual("duplicate", self.service.reset("op", "u", "感气境中期", 901).status)
         with db_backend.connection(self.database) as conn:
             row = conn.execute(
                 "SELECT level,exp,level_up_rate,power,hp,mp,atk FROM user_xiuxian WHERE user_id='u'"

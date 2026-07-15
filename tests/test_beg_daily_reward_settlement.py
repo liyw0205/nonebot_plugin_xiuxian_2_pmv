@@ -7,7 +7,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_beg.daily_reward_service import BegDailyRewardService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_beg.transaction_service import BegDailyRewardService
 from tests.test_db_backend import db_backend
 
 

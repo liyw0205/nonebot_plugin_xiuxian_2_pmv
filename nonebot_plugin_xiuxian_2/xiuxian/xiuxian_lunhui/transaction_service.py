@@ -5,9 +5,196 @@ from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
-
 from ..xiuxian_utils import db_backend
 
+@dataclass(frozen=True)
+class CultivationResetResult:
+    status: str
+    reset_exp: int = 0
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"applied", "duplicate"}
+
+class CultivationResetService:
+    def __init__(self, database: str | Path, lock: RLock | None = None):
+        self._database = Path(database)
+        self._lock = lock or RLock()
+
+    def get_result(self, operation_id: str) -> CultivationResetResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS cultivation_reset_operations ("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,reset_exp INTEGER NOT NULL,"
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT payload,reset_exp FROM cultivation_reset_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return CultivationResetResult("duplicate", int(previous[1]))
+
+    def reset(self, operation_id: str, user_id: str, expected_level: str, expected_exp: int):
+        operation_id = str(operation_id).strip()
+        user_id = str(user_id)
+        expected_level = str(expected_level)
+        expected_exp = int(expected_exp)
+        if not operation_id or expected_exp < 0:
+            raise ValueError("invalid cultivation reset operation")
+        # Request identity only — level/exp are concurrency checks, not the request key.
+        payload = json.dumps([user_id], ensure_ascii=False, separators=(",", ":"))
+
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS cultivation_reset_operations ("
+                    "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,reset_exp INTEGER NOT NULL,"
+                    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+                )
+                previous = conn.execute(
+                    "SELECT payload,reset_exp FROM cultivation_reset_operations WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if previous is not None:
+                    conn.rollback()
+                    if str(previous[0]) != payload:
+                        return CultivationResetResult("operation_conflict")
+                    return CultivationResetResult("duplicate", int(previous[1]))
+
+                row = conn.execute(
+                    "SELECT level,exp FROM user_xiuxian WHERE user_id=%s",
+                    (user_id,),
+                ).fetchone()
+                if row is None:
+                    conn.rollback()
+                    return CultivationResetResult("user_missing")
+                if str(row[0]) != expected_level or int(row[1]) != expected_exp:
+                    conn.rollback()
+                    return CultivationResetResult("state_changed")
+                if expected_level not in {"感气境初期", "感气境中期", "感气境圆满"}:
+                    conn.rollback()
+                    return CultivationResetResult("level_rejected")
+
+                changed = conn.execute(
+                    "UPDATE user_xiuxian SET level='江湖好手',level_up_rate=0,exp=100,"
+                    "power=0,hp=50,mp=100,atk=10 WHERE user_id=%s AND level=%s AND exp=%s",
+                    (user_id, expected_level, expected_exp),
+                )
+                if changed.rowcount != 1:
+                    conn.rollback()
+                    return CultivationResetResult("state_changed")
+                conn.execute(
+                    "INSERT INTO cultivation_reset_operations(operation_id,payload,reset_exp) VALUES(%s,%s,%s)",
+                    (operation_id, payload, expected_exp),
+                )
+                conn.commit()
+                return CultivationResetResult("applied", expected_exp)
+            except Exception:
+                conn.rollback()
+                raise
+
+FIELDS = {
+    "main_buff": ("retrieved_main", "main_buff"),
+    "sub_buff": ("retrieved_sub", "sub_buff"),
+    "sec_buff": ("retrieved_sec", "sec_buff"),
+    "effect1_buff": ("retrieved_effect1", "effect1_buff"),
+    "effect2_buff": ("retrieved_effect2", "effect2_buff"),
+}
+
+@dataclass(frozen=True)
+class LunhuiRecallResult:
+    status: str
+    skill_id: int = 0
+
+    @property
+    def succeeded(self):
+        return self.status in {"applied", "duplicate"}
+
+class LunhuiRecallService:
+    def __init__(self, game_db: str | Path, player_db: str | Path, lock: RLock | None = None):
+        self.game = Path(game_db)
+        self.player = Path(player_db)
+        self.lock = lock or RLock()
+
+    def get_result(self, operation_id) -> LunhuiRecallResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self.lock, closing(db_backend.connect(self.game)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS lunhui_recall_operations("
+                "operation_id TEXT PRIMARY KEY,payload TEXT,skill_id INTEGER)"
+            )
+            old = conn.execute(
+                "SELECT payload,skill_id FROM lunhui_recall_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if old is None:
+                return None
+            return LunhuiRecallResult("duplicate", int(old[1] or 0))
+
+    def recall(self, operation_id, user_id, skill_type, expected_skill_id):
+        operation_id = str(operation_id).strip()
+        user_id = str(user_id)
+        skill_type = str(skill_type)
+        expected_skill_id = int(expected_skill_id)
+        # Request identity only — skill_id is outcome stored in op row.
+        payload = json.dumps([user_id, skill_type], ensure_ascii=True, separators=(",", ":"))
+        fields = FIELDS.get(skill_type)
+        if not fields:
+            return LunhuiRecallResult("invalid_type")
+        retrieved_field, buff_field = fields
+        with self.lock, closing(db_backend.connect(self.game)) as conn:
+            try:
+                conn.execute("ATTACH DATABASE %s AS player_data", (str(self.player),))
+                conn.execute("BEGIN IMMEDIATE")
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS lunhui_recall_operations("
+                    "operation_id TEXT PRIMARY KEY,payload TEXT,skill_id INTEGER)"
+                )
+                old = conn.execute(
+                    "SELECT payload,skill_id FROM lunhui_recall_operations WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if old:
+                    conn.rollback()
+                    if str(old[0]) != payload:
+                        return LunhuiRecallResult("state_changed")
+                    return LunhuiRecallResult("duplicate", int(old[1] or 0))
+                memory = conn.execute(
+                    f"SELECT {skill_type},{retrieved_field} FROM player_data.reincarnation_memory WHERE user_id=%s",
+                    (user_id,),
+                ).fetchone()
+                if memory is None or int(memory[0] or 0) != expected_skill_id or int(memory[1] or 0):
+                    conn.rollback()
+                    return LunhuiRecallResult("state_changed")
+                buff = conn.execute("SELECT 1 FROM BuffInfo WHERE user_id=%s", (user_id,)).fetchone()
+                if buff is None:
+                    conn.rollback()
+                    return LunhuiRecallResult("state_changed")
+                conn.execute(
+                    f"UPDATE player_data.reincarnation_memory SET {retrieved_field}=1 WHERE user_id=%s",
+                    (user_id,),
+                )
+                conn.execute(
+                    f"UPDATE BuffInfo SET {buff_field}=%s WHERE user_id=%s",
+                    (expected_skill_id, user_id),
+                )
+                conn.execute(
+                    "INSERT INTO lunhui_recall_operations VALUES (%s,%s,%s)",
+                    (operation_id, payload, expected_skill_id),
+                )
+                conn.commit()
+                return LunhuiRecallResult("applied", expected_skill_id)
+            except Exception:
+                conn.rollback()
+                raise
 
 ROOTS = {
     6: ("轮回千次不灭，只为臻至巅峰", "轮回道果"),
@@ -16,7 +203,6 @@ ROOTS = {
     9: (None, "命运道果"),
 }
 MEMORY_FIELDS = ("main_buff", "sub_buff", "sec_buff", "effect1_buff", "effect2_buff")
-
 
 @dataclass(frozen=True)
 class LunhuiSettlementResult:
@@ -28,7 +214,6 @@ class LunhuiSettlementResult:
     @property
     def succeeded(self) -> bool:
         return self.status in {"applied", "duplicate"}
-
 
 def _ensure_player_table(conn, table: str, fields: dict[str, str]) -> None:
     table_sql = db_backend.quote_ident(table)
@@ -43,7 +228,6 @@ def _ensure_player_table(conn, table: str, fields: dict[str, str]) -> None:
                 f"ALTER TABLE player_data.{table_sql} ADD COLUMN "
                 f"{db_backend.quote_ident(field)} {data_type}"
             )
-
 
 def _set_player_fields(conn, table: str, user_id: str, values: dict[str, object]) -> None:
     _ensure_player_table(
@@ -69,7 +253,6 @@ def _set_player_fields(conn, table: str, user_id: str, values: dict[str, object]
             (user_id, *values.values()),
         )
 
-
 def _increment_stat(conn, user_id: str, field: str) -> None:
     _ensure_player_table(conn, "statistics", {field: "INTEGER"})
     field_sql = db_backend.quote_ident(field)
@@ -82,7 +265,6 @@ def _increment_stat(conn, user_id: str, field: str) -> None:
             f"INSERT INTO player_data.statistics(user_id,{field_sql}) VALUES(%s,1)",
             (user_id,),
         )
-
 
 class LunhuiSettlementService:
     def __init__(
@@ -275,5 +457,11 @@ class LunhuiSettlementService:
                     try: conn.execute("DETACH DATABASE player_data")
                     except Exception: pass
 
-
-__all__ = ["LunhuiSettlementResult", "LunhuiSettlementService"]
+__all__ = [
+    "CultivationResetResult",
+    "CultivationResetService",
+    "LunhuiRecallResult",
+    "LunhuiRecallService",
+    "LunhuiSettlementResult",
+    "LunhuiSettlementService",
+]
