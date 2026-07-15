@@ -1000,6 +1000,62 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     total_cost = EGG_COST * count
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"pet-hatch:{event_id or time.time_ns()}:{user_id}"
+    # 先回放：成功后灵石/容量变化，且随机宠物不可重掷。
+    prior = pet_hatch_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        hatched_pets = list(prior.pets or ())
+        success_cost = int(prior.cost or total_cost)
+        pity_count = int((prior.updated_meta[1] if len(prior.updated_meta) > 1 else 0) or 0)
+        no_mythic_count = int((prior.updated_meta[2] if len(prior.updated_meta) > 2 else 0) or 0)
+        if len(hatched_pets) == 1:
+            pet, is_active = hatched_pets[0]
+            location_msg = "已自动出战" if is_active else "已放入宠物背包，可发送【出战宠物 UID】切换出战"
+            msg = (
+                f"砸蛋成功！消耗{number_to(success_cost)}灵石。\n"
+                f"获得宠物：{pet.get('form_name', pet.get('name', '未知宠物'))}\n"
+                f"稀有度：{pet.get('rarity')} | 种族：{pet.get('race')} | 类型：{pet.get('type')}\n"
+                f"初始技能：{(pet.get('skill') or {}).get('name', '未知技能')}\n"
+                f"UID：{pet.get('uid')}\n"
+                f"{location_msg}\n"
+                f"{_format_egg_pity_status(pity_count, no_mythic_count)}\n"
+                "该砸蛋请求已经处理，无需重复提交。"
+            )
+        else:
+            pet_list = [pet for pet, _ in hatched_pets]
+            lines = [
+                f"砸蛋完成：成功{len(hatched_pets)}/{count}次，消耗{number_to(success_cost)}灵石。",
+                f"稀有度统计：{_summarize_pet_rarities(pet_list)}",
+            ]
+            for index, (pet, is_active) in enumerate(hatched_pets, 1):
+                location_msg = "出战" if is_active else "背包"
+                lines.append(
+                    f"{index}. {pet.get('form_name', pet.get('name', '未知宠物'))}"
+                    f"（{pet.get('rarity')}·{pet.get('race')}·{pet.get('type')}，"
+                    f"UID:{pet.get('uid')}，{location_msg}）"
+                )
+            lines.append(_format_egg_pity_status(pity_count, no_mythic_count))
+            lines.append("该砸蛋请求已经处理，无需重复提交。")
+            msg = "\n".join(lines)
+        if count > 1:
+            page = ["宠物", "我的宠物", "宠物背包", "宠物背包", "帮助", "宠物帮助"]
+            await send_msg_handler(bot, event, "砸蛋", bot.self_id, [msg], title="【砸蛋结果】\n", page=page)
+            return
+        await handle_send(
+            bot,
+            event,
+            msg,
+            md_type="背包",
+            k1="宠物",
+            v1="我的宠物",
+            k2="宠物背包",
+            v2="宠物背包",
+            k3="帮助",
+            v3="宠物帮助",
+        )
+        return
+
     if int(user_info.get("stone", 0)) < total_cost:
         await handle_send(
             bot,
@@ -1050,8 +1106,47 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     new_rows = [(p, str(p.get("uid")) == str((working.get("active") or {}).get("uid", ""))) for p in ([working.get("active")] + working.get("bag", [])) if p and str(p.get("uid")) not in original_uids]
     expected_meta = [str((data.get("active") or {}).get("uid", "")), int(data.get("egg_pity_count", 0)), int(data.get("egg_pity_no_mythic_count", 0)), data.get("travel")]
     updated_meta = [str((working.get("active") or {}).get("uid", "")), pity_count, no_mythic_count]
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    hatched = pet_hatch_service.hatch(f"pet-hatch:{event_id or time.time_ns()}:{user_id}", user_id, int(user_info.get("stone", 0)), total_cost, expected_meta, new_rows, updated_meta, PET_BAG_LIMIT)
+    hatched = pet_hatch_service.hatch(
+        operation_id,
+        user_id,
+        int(user_info.get("stone", 0)),
+        total_cost,
+        expected_meta,
+        new_rows,
+        updated_meta,
+        PET_BAG_LIMIT,
+    )
+    if hatched.status == "duplicate":
+        # same-process race: rebuild from stored result
+        prior = hatched
+        hatched_pets = list(prior.pets or new_rows)
+        success_cost = int(prior.cost or total_cost)
+        pity_count = int((prior.updated_meta[1] if len(prior.updated_meta) > 1 else pity_count) or 0)
+        no_mythic_count = int((prior.updated_meta[2] if len(prior.updated_meta) > 2 else no_mythic_count) or 0)
+        if len(hatched_pets) == 1:
+            pet, is_active = hatched_pets[0]
+            location_msg = "已自动出战" if is_active else "已放入宠物背包，可发送【出战宠物 UID】切换出战"
+            msg = (
+                f"砸蛋成功！消耗{number_to(success_cost)}灵石。\n"
+                f"获得宠物：{pet.get('form_name', pet.get('name', '未知宠物'))}\n"
+                f"稀有度：{pet.get('rarity')} | 种族：{pet.get('race')} | 类型：{pet.get('type')}\n"
+                f"初始技能：{(pet.get('skill') or {}).get('name', '未知技能')}\n"
+                f"UID：{pet.get('uid')}\n"
+                f"{location_msg}\n"
+                f"{_format_egg_pity_status(pity_count, no_mythic_count)}\n"
+                "该砸蛋请求已经处理，无需重复提交。"
+            )
+        else:
+            pet_list = [pet for pet, _ in hatched_pets]
+            lines = [
+                f"砸蛋完成：成功{len(hatched_pets)}/{count}次，消耗{number_to(success_cost)}灵石。",
+                f"稀有度统计：{_summarize_pet_rarities(pet_list)}",
+                _format_egg_pity_status(pity_count, no_mythic_count),
+                "该砸蛋请求已经处理，无需重复提交。",
+            ]
+            msg = "\n".join(lines)
+        await handle_send(bot, event, msg, md_type="背包", k1="宠物", v1="我的宠物", k2="宠物背包", v2="宠物背包", k3="帮助", v3="宠物帮助")
+        return
     if not hatched.succeeded:
         await handle_send(bot, event, "砸蛋状态已变化，请重新查询灵石和宠物背包后再试。")
         return
@@ -1147,11 +1242,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     )
     if result.succeeded:
         pet_name = (target or {}).get("form_name", (target or {}).get("name", "宠物"))
-        result_msg = (
-            f"{pet_name}已在出战。"
-            if result.status == "already_active"
-            else f"已设置出战宠物：{pet_name}（UID:{result.active_uid}）"
-        )
+        if result.status == "duplicate":
+            result_msg = f"已设置出战宠物：{pet_name}（UID:{result.active_uid}）\n该出战请求已经处理，无需重复提交。"
+        elif result.status == "already_active":
+            result_msg = f"{pet_name}已在出战。"
+        else:
+            result_msg = f"已设置出战宠物：{pet_name}（UID:{result.active_uid}）"
     else:
         messages = {
             "pet_missing": "未找到该宠物UID。",
@@ -1334,11 +1430,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, reason)
         return
 
-    have = sql_message.goods_num(user_id, item_id)
-    if have < count:
-        await handle_send(bot, event, f"材料不足：当前仅有{have}个{item_info.get('name', item_name)}。")
-        return
-
     feed_exp = calc_feed_exp(item_info, count)
     if feed_exp <= 0:
         await handle_send(bot, event, "该材料无法提供宠物经验。")
@@ -1358,12 +1449,28 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         new_exp -= need
         new_stars += 1
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns())
+    # 先 settle：成功后材料/经验变化，前置库存检查会挡住同事件重放。
     result = pet_feed_service.feed(
         f"pet-feed:{event_id}:{user_id}", user_id, active_pet.get("uid"), item_id, count,
         (old_stars, old_exp, old_total_exp), (new_stars, new_exp, old_total_exp + feed_exp),
     )
+    if result.status == "duplicate":
+        pet = get_pet_doc(user_id).get("active") or active_pet
+        lines = [
+            f"喂食成功：消耗{item_info.get('name', item_name)} x{count}",
+            f"获得宠物经验：{feed_exp}",
+            f"当前宠物：{pet.get('form_name', pet.get('name', '未知宠物'))}",
+            f"当前品阶：{format_stars(pet.get('stars', 1))}",
+            "该喂食请求已经处理，无需重复提交。",
+        ]
+        await handle_send(bot, event, "\n".join(lines), md_type="背包", k1="宠物", v1="我的宠物", k2="帮助", v2="宠物帮助")
+        return
+    if result.status == "item_missing":
+        have = sql_message.goods_num(user_id, item_id)
+        await handle_send(bot, event, f"材料不足：当前仅有{have}个{item_info.get('name', item_name)}。")
+        return
     if not result.succeeded:
-        messages = {"item_missing": "材料不足，请重新检查背包。", "state_changed": "宠物或背包状态已变化，请重试。"}
+        messages = {"state_changed": "宠物或背包状态已变化，请重试。"}
         await handle_send(bot, event, messages.get(result.status, "喂食结算失败，请重试。"))
         return
     pet = get_pet_doc(user_id).get("active")

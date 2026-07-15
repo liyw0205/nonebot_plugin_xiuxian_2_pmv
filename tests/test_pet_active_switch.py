@@ -50,7 +50,9 @@ class PetActiveSwitchServiceTest(unittest.TestCase):
 
     def test_operation_payload_conflict(self):
         self.assertEqual(self.service.switch("op", "u", "old", "new").status, "applied")
-        self.assertEqual(self.service.switch("op", "u", "new", "old").status, "operation_conflict")
+        # Identity payload is only user+target; expected_active change must not conflict.
+        self.assertEqual(self.service.switch("op", "u", "new", "new").status, "duplicate")
+        self.assertEqual(self.service.switch("op", "u", "old", "old").status, "operation_conflict")
 
     def test_operation_failure_rolls_back_switch(self):
         with db_backend.transaction(self.database) as conn:

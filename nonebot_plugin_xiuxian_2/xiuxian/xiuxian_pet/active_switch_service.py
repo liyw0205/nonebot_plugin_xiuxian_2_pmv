@@ -33,8 +33,9 @@ class PetActiveSwitchService:
         travel_pet_uid = str(travel_pet_uid or "")
         if not operation_id or not user_id or not target_uid:
             raise ValueError("operation, user and target pet are required")
+        # Request identity only — expected_active_uid / travel_pet_uid are concurrency checks.
         payload = json.dumps(
-            [user_id, expected_active_uid, target_uid, travel_pet_uid],
+            [user_id, target_uid],
             ensure_ascii=True,
             separators=(",", ":"),
         )

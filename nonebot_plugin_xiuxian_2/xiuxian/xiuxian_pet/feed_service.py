@@ -32,7 +32,8 @@ class PetFeedService:
         item_id, count = int(item_id), int(count)
         expected = tuple(map(int, expected))
         updated = tuple(map(int, updated))
-        payload = json.dumps([user_id, uid, item_id, count, expected, updated])
+        # Request identity only — exp/stars snapshots are concurrency checks.
+        payload = json.dumps([user_id, uid, item_id, count], ensure_ascii=True, separators=(",", ":"))
         with self.lock, closing(db_backend.connect(self.game_db)) as conn:
             try:
                 conn.execute("ATTACH DATABASE %s AS player_data", (str(self.player_db),))
