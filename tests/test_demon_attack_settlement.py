@@ -46,7 +46,11 @@ def test_operation_replay_is_idempotent(tmp_path):
     db = tmp_path / "player.db"
     boss = create_db(db)
     service = DemonAttackSettlementService(db)
-    assert settle(service, boss) == settle(service, boss)
+    first = settle(service, boss)
+    second = settle(service, boss)
+    assert first.status == "applied"
+    assert second.status == "duplicate"
+    assert (first.real_damage, first.boss_now_hp) == (second.real_damage, second.boss_now_hp)
     conn = sqlite3.connect(db)
     participants = json.loads(conn.execute("SELECT participants FROM world_event_state").fetchone()[0])
     assert participants["练气境:1:10001"]["attacks"] == 1

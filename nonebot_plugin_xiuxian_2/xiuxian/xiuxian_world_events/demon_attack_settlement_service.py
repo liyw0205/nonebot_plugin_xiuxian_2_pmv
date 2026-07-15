@@ -41,6 +41,28 @@ class DemonAttackSettlementService:
     def __init__(self, player_db):
         self.player_db = player_db
 
+    def get_result(self, operation_id: str) -> DemonAttackSettlementResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        conn = db_backend.connect(self.player_db)
+        try:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS demon_attack_settlement_operations ("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,created_at TEXT NOT NULL)"
+            )
+            previous = conn.execute(
+                "SELECT result_json FROM demon_attack_settlement_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            data = json.loads(str(previous[0]))
+            data["status"] = "duplicate"
+            return DemonAttackSettlementResult(**data)
+        finally:
+            conn.close()
+
     @staticmethod
     def _participant_key(user_id, realm, wave):
         return f"{realm}:{max(_integer(wave, 1), 1)}:{user_id}"
@@ -98,17 +120,15 @@ class DemonAttackSettlementService:
         if not operation_id:
             raise ValueError("operation_id must not be empty")
 
+        # Request identity only; mutable boss/participants snapshots are concurrency checks.
         payload = json.dumps(
             {
                 "event_key": event_key,
                 "user_id": user_id,
                 "realm": realm,
-                "total_damage": int(total_damage),
-                "expected_event": expected_event,
-                "expected_boss": expected_boss,
-                "expected_participants": expected_participants,
+                "event_id": str(expected_event.get("event_id") or ""),
             },
-            ensure_ascii=False,
+            ensure_ascii=True,
             sort_keys=True,
             separators=(",", ":"),
         )
@@ -128,7 +148,9 @@ class DemonAttackSettlementService:
                     conn.rollback()
                     return DemonAttackSettlementResult("operation_conflict")
                 conn.commit()
-                return DemonAttackSettlementResult(**json.loads(str(previous[1])))
+                data = json.loads(str(previous[1]))
+                data["status"] = "duplicate"
+                return DemonAttackSettlementResult(**data)
 
             row = conn.execute(
                 "SELECT status,event_id,bosses,participants,claimed FROM world_event_state WHERE user_id=%s",

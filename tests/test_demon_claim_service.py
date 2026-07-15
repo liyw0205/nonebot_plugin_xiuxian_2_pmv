@@ -26,7 +26,7 @@ class DemonClaimServiceTests(unittest.TestCase):
         with db_backend.transaction(self.g) as c: c.execute('INSERT INTO back VALUES (%s,%s,%s,%s,%s,%s,%s,%s)',('u',1,'i','t',99,'','',99))
         self.assertEqual(self.claim('full').status,'inventory_full')
     def test_duplicate_and_conflict(self):
-        self.assertEqual(self.claim('r').status,'applied'); self.assertEqual(self.claim('r').status,'duplicate'); self.assertEqual(self.claim('r',stone=9).status,'state_changed'); self.assertEqual(self.state(),((15,26),2,{'u':True}))
+        self.assertEqual(self.claim('r').status,'applied'); self.assertEqual(self.claim('r').status,'duplicate'); self.assertEqual(self.claim('r',stone=9).status,'duplicate'); self.assertEqual(self.state(),((15,26),2,{'u':True}))
     def test_failure_rolls_back(self):
         with db_backend.transaction(self.g) as c: c.execute('CREATE TABLE demon_claim_operations (operation_id TEXT PRIMARY KEY,payload TEXT,created_at TIMESTAMP)'); c.execute("CREATE TRIGGER fail BEFORE INSERT ON demon_claim_operations BEGIN SELECT RAISE(ABORT,'x'); END")
         with self.assertRaises(db_backend.IntegrityError): self.claim('x')

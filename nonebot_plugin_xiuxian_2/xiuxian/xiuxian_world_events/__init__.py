@@ -1216,6 +1216,10 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
         await attack_demon_invasion.finish()
 
     user_id = str(user_info["user_id"])
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    # 先回放：成功后次数/HP 会挡住同事件幂等，且避免二次开战。
+    # event_id 在 operation 里，先用 get_result 扫近期不可行；用 stable op 前缀后在 settle 内按 op_id 查。
+    # 这里在拿到 event_id 前无法完整 op_id，故在 settle 后处理 duplicate；同时把 op_id 构造前移到开战前。
     is_type, msg = check_user_type(user_id, 0)
     if not is_type:
         await handle_send(bot, event, msg, md_type="世界事件", k1="帮助", v1="世界事件帮助")
@@ -1278,6 +1282,21 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
         await handle_send(bot, event, attack_limit_msg, md_type="世界事件", k1="领奖", v1="领取魔修奖励")
         await attack_demon_invasion.finish()
 
+    operation_id = (
+        f"demon-attack:{event_snapshot.get('event_id')}:{user_id}:{event_message_id}"
+        if event_message_id
+        else f"demon-attack:{event_snapshot.get('event_id')}:{user_id}:{time.time_ns()}"
+    )
+    prior_attack = demon_attack_settlement_service.get_result(operation_id)
+    if prior_attack is not None and prior_attack.status in {"applied", "duplicate"}:
+        msg = (
+            f"讨伐已结算（重放）。\n"
+            f"本次贡献：{number_to(prior_attack.real_damage)}\n"
+            f"该讨伐请求已经处理，无需重复提交。"
+        )
+        await handle_send(bot, event, msg, md_type="世界事件", k1="领奖", v1="领取魔修奖励", k2="状态", v2="魔修入侵状态")
+        await attack_demon_invasion.finish()
+
     result, victor, bossinfo_new, status_list = await Boss_fight(
         user_id,
         boss_snapshot,
@@ -1295,8 +1314,6 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
     reward_multiplier = 1.0
     total_contribution = 0.0
     attack_duplicate_after_fight = False
-    event_message_id = getattr(event, "message_id", "") or getattr(event, "id", "")
-    operation_id = f"demon-attack:{event_snapshot.get('event_id')}:{user_id}:{event_message_id or time.time_ns()}"
     with _state_lock:
         settlement = demon_attack_settlement_service.settle(
             operation_id, EVENT_KEY, user_id, user_info.get("user_name", user_id), realm,
@@ -1306,6 +1323,14 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
             max_damage_ratio=MAX_SINGLE_DAMAGE_RATIO,
             max_pursuit_ratio=MAX_PURSUIT_DAMAGE_RATIO,
         )
+    if settlement.status == "duplicate":
+        msg = (
+            f"讨伐已结算（重放）。\n"
+            f"本次贡献：{number_to(settlement.real_damage)}\n"
+            f"该讨伐请求已经处理，无需重复提交。"
+        )
+        await handle_send(bot, event, msg, md_type="世界事件", k1="领奖", v1="领取魔修奖励", k2="状态", v2="魔修入侵状态")
+        await attack_demon_invasion.finish()
     battle_closed = settlement.status != "applied"
     attack_duplicate_after_fight = settlement.status == "already_settled"
     if not battle_closed:
@@ -1381,6 +1406,8 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await claim_demon_reward.finish()
 
     user_id = str(user_info["user_id"])
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    # claim op_id needs event_id; after load state we get_result first
     with _state_lock:
         state = _ensure_daily_state()
         preferred_realm = _normalize_realm(user_info.get("level", ""))
@@ -1395,7 +1422,20 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
 
         claimed = state.setdefault("claimed", {})
         claim_key = _claim_key(user_id)
+        claim_event_id_preview = str(state.get("event_id", ""))
+        claim_op_preview = (
+            f"demon-claim:{claim_event_id_preview}:{user_id}:{event_message_id}"
+            if event_message_id
+            else ""
+        )
+        prior_claim = demon_claim_service.get_result(claim_op_preview) if claim_op_preview else None
         already_claimed = _has_user_claimed(claimed, user_id, claim_key) if not no_reward_event else False
+        if prior_claim is not None and prior_claim.succeeded:
+            # force fallthrough to replay path by clearing already_claimed gate via marker
+            already_claimed = False
+            reward_pending = False
+            no_reward_event = False
+            no_contribution = False
 
         if not (reward_pending or no_reward_event or no_contribution or already_claimed):
             contribution = _reward_contribution(raw_contribution)
@@ -1442,9 +1482,31 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         random_reward_name = random_item_info.get("name", f"未知物品{random_item_id}")
         random_reward_text = f"{random_reward_level}:{random_reward_name}" if random_reward_level else random_reward_name
 
-    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"demon-claim:{claim_event_id}:{user_id}:{event_message_id or time.time_ns()}"
+    operation_id = (
+        f"demon-claim:{claim_event_id}:{user_id}:{event_message_id}"
+        if event_message_id
+        else f"demon-claim:{claim_event_id}:{user_id}:{time.time_ns()}"
+    )
+    prior_claim = demon_claim_service.get_result(operation_id)
+    if prior_claim is not None and prior_claim.succeeded:
+        msg = (
+            f"领取魔修入侵奖励成功！\n"
+            f"获得灵石：{number_to(prior_claim.stone)}\n"
+            f"获得修为：{number_to(prior_claim.exp)}\n"
+            f"该领奖请求已经处理，无需重复提交。"
+        )
+        await handle_send(bot, event, msg, md_type="世界事件", k1="状态", v1="魔修入侵状态")
+        await claim_demon_reward.finish()
     claim_result = demon_claim_service.claim(operation_id, EVENT_KEY, claim_event_id, user_id, expected_claimed, stone_reward, exp_reward, reward_items, XiuConfig().max_goods_num)
+    if claim_result.status == "duplicate":
+        msg = (
+            f"领取魔修入侵奖励成功！\n"
+            f"获得灵石：{number_to(claim_result.stone)}\n"
+            f"获得修为：{number_to(claim_result.exp)}\n"
+            f"该领奖请求已经处理，无需重复提交。"
+        )
+        await handle_send(bot, event, msg, md_type="世界事件", k1="状态", v1="魔修入侵状态")
+        await claim_demon_reward.finish()
     if claim_result.status == "already_claimed":
         await handle_send(bot, event, "你已经领取过本期魔修入侵奖励了。")
         await claim_demon_reward.finish()
