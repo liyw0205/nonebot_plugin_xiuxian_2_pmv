@@ -1135,6 +1135,8 @@ class XiuxianDateManage:
 
     def get_user_info_with_id_fast(self, user_id):
         """独立连接查询用户，供高并发入口避开主连接锁。"""
+        from .numeric_bind import normalize_user_row
+
         conn = None
         reusable = True
         try:
@@ -1144,7 +1146,7 @@ class XiuxianDateManage:
             result = cur.fetchone()
             if result:
                 columns = [column[0] for column in cur.description]
-                return dict(zip(columns, result))
+                return normalize_user_row(dict(zip(columns, result)))
             return None
         except Exception as exc:
             reusable = False
@@ -4168,7 +4170,9 @@ def get_user_accessory_data(user_id: str | int) -> dict:
 
 def final_user_data(user_data, columns):
     """传入数据库行与列描述，返回叠加buff后的用户信息（统一口径）"""
-    user_dict = dict(zip((col[0] for col in columns), user_data))
+    from .numeric_bind import as_int_like, normalize_user_row
+
+    user_dict = normalize_user_row(dict(zip((col[0] for col in columns), user_data)))
     user_id = user_dict.get("user_id")
     if not user_id:
         return user_dict
@@ -4178,13 +4182,15 @@ def final_user_data(user_data, columns):
         return user_dict
 
     # 仅覆盖需要动态计算的字段，其他字段保持原样
-    user_dict["hp"] = int(final_attr["current_hp"])
-    user_dict["mp"] = int(final_attr["current_mp"])
-    user_dict["atk"] = int(final_attr["final_atk"])
+    user_dict["hp"] = as_int_like(final_attr["current_hp"])
+    user_dict["mp"] = as_int_like(final_attr["current_mp"])
+    user_dict["atk"] = as_int_like(final_attr["final_atk"])
     return user_dict
 
 def get_base_attributes(user_id: str | int) -> dict | None:
     """获取基础属性（不吃任何buff）"""
+    from .numeric_bind import as_int_like
+
     user = sql_message.get_user_info_with_id(user_id)
     if not user:
         return None
@@ -4193,16 +4199,16 @@ def get_base_attributes(user_id: str | int) -> dict | None:
         "user_id": user["user_id"],
         "nickname": user["user_name"],
         "level": user["level"],
-        "exp": int(user["exp"]),
-        "stone": int(user["stone"]),
+        "exp": as_int_like(user["exp"]),
+        "stone": as_int_like(user["stone"]),
 
-        "base_hp": int(user["hp"]),
-        "base_mp": int(user["mp"]),
-        "base_atk": int(user["atk"]),
+        "base_hp": as_int_like(user["hp"]),
+        "base_mp": as_int_like(user["mp"]),
+        "base_atk": as_int_like(user["atk"]),
 
-        "atkpractice": int(user.get("atkpractice", 0)),
-        "hppractice": int(user.get("hppractice", 0)),
-        "mppractice": int(user.get("mppractice", 0)),
+        "atkpractice": as_int_like(user.get("atkpractice", 0)),
+        "hppractice": as_int_like(user.get("hppractice", 0)),
+        "mppractice": as_int_like(user.get("mppractice", 0)),
     }
 
 

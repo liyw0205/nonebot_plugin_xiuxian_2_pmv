@@ -19,22 +19,32 @@ class UserRepository:
         self._build_real_user = build_real_user
 
     def get_by_id(self, user_id: str):
-        return self._read_query(
-            "SELECT * FROM user_xiuxian WHERE user_id=%s",
-            (user_id,),
-            one=True,
-            dict_row=True,
+        from .numeric_bind import normalize_user_row
+
+        return normalize_user_row(
+            self._read_query(
+                "SELECT * FROM user_xiuxian WHERE user_id=%s",
+                (user_id,),
+                one=True,
+                dict_row=True,
+            )
         )
 
     def get_by_name(self, user_name: str):
-        return self._read_query(
-            "SELECT * FROM user_xiuxian WHERE user_name=%s",
-            (user_name,),
-            one=True,
-            dict_row=True,
+        from .numeric_bind import normalize_user_row
+
+        return normalize_user_row(
+            self._read_query(
+                "SELECT * FROM user_xiuxian WHERE user_name=%s",
+                (user_name,),
+                one=True,
+                dict_row=True,
+            )
         )
 
     def get_with_attributes(self, user_id: str):
+        from .numeric_bind import normalize_user_row
+
         with self._connection() as conn:
             cur = conn.cursor()
             cur.execute(
@@ -44,7 +54,7 @@ class UserRepository:
             result = cur.fetchone()
             if result is None:
                 return None
-            return self._build_real_user(result, cur.description)
+            return normalize_user_row(self._build_real_user(result, cur.description))
 
 
 class EconomyRepository:

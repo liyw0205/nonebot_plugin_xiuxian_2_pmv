@@ -85,3 +85,56 @@ def as_int_like(value: Any, default: int = 0) -> int:
         return int(text)
     except (TypeError, ValueError, OverflowError):
         return default
+
+
+_COMBAT_NUM_FIELDS = frozenset(
+    {
+        "exp",
+        "power",
+        "hp",
+        "mp",
+        "atk",
+        "stone",
+        "sect_materials",
+        "sect_used_stone",
+        "sect_scale",
+        "combat_power",
+    }
+)
+
+
+def normalize_user_row(row: Any) -> Any:
+    """Coerce overflow-normalized combat fields so callers can safely int()/math them.
+
+    Scientific TEXT from ``number_count`` / ``bind_sqlite_param`` becomes int via
+    float parse (precision may drop for huge values — same as display path).
+    """
+    if not isinstance(row, dict):
+        return row
+    out = dict(row)
+    for key in _COMBAT_NUM_FIELDS:
+        if key not in out:
+            continue
+        value = out[key]
+        if value is None or isinstance(value, bool):
+            continue
+        if isinstance(value, int):
+            continue
+        if isinstance(value, float):
+            try:
+                out[key] = int(value)
+            except (OverflowError, ValueError):
+                out[key] = as_int_like(value)
+            continue
+        text = str(value).strip()
+        if not text:
+            continue
+        if any(ch in text for ch in (".", "e", "E")):
+            out[key] = as_int_like(text)
+        else:
+            try:
+                out[key] = int(text)
+            except (TypeError, ValueError):
+                out[key] = as_int_like(text)
+    return out
+
