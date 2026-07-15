@@ -29,13 +29,32 @@ class DufangPayoutService:
         self._player_database = Path(player_database)
         self._lock = lock or RLock()
 
+    def get_result(self, operation_id: str) -> DufangPayoutResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS dufang_payout_operations ("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,wallet_stone INTEGER NOT NULL,"
+                "gain INTEGER NOT NULL,loss INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT wallet_stone,gain,loss FROM dufang_payout_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return DufangPayoutResult("duplicate", int(previous[0]), int(previous[1]), int(previous[2]))
+
     def settle(self, operation_id, bet_id, user_id, outcome, gain, requested_loss, settled_at) -> DufangPayoutResult:
         operation_id, bet_id, user_id = str(operation_id).strip(), str(bet_id).strip(), str(user_id)
         outcome, settled_at = str(outcome), str(settled_at)
         gain, requested_loss = int(gain), int(requested_loss)
         if not operation_id or not bet_id or outcome not in {"win", "loss"} or gain < 0 or requested_loss < 0:
             raise ValueError("valid operation, bet and payout values are required")
-        payload = json.dumps([bet_id, user_id, outcome, gain, requested_loss, settled_at], ensure_ascii=True)
+        # Request identity = bet + user; outcome/gain/loss stored as result.
+        payload = json.dumps([bet_id, user_id], ensure_ascii=True, separators=(",", ":"))
 
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False

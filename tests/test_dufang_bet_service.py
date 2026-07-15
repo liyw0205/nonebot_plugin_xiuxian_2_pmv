@@ -36,7 +36,8 @@ class DufangBetServiceTests(unittest.TestCase):
 
     def test_place_and_duplicate(self) -> None:
         first = self.service.place("bet", "user", 300, "now")
-        duplicate = self.service.place("bet", "user", 300, "now")
+        # placed_at is metadata; same request identity must still replay.
+        duplicate = self.service.place("bet", "user", 300, "later")
         self.assertEqual((first.status, duplicate.status), ("applied", "duplicate"))
         self.assertEqual(self.state(), (700, 1, (1, 300)))
 

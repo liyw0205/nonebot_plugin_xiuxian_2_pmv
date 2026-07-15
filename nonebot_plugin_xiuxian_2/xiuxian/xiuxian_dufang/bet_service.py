@@ -29,6 +29,24 @@ class DufangBetService:
         self._player_database = Path(player_database)
         self._lock = lock or RLock()
 
+    def get_result(self, operation_id: str) -> DufangBetResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS dufang_bet_operations ("
+                "operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, cost INTEGER NOT NULL, "
+                "wallet_stone INTEGER NOT NULL, bet_id TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT cost,wallet_stone,bet_id FROM dufang_bet_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return DufangBetResult("duplicate", int(previous[0]), int(previous[1]), str(previous[2]))
+
     def place(self, operation_id, user_id, cost, placed_at) -> DufangBetResult:
         operation_id = str(operation_id).strip()
         user_id = str(user_id)
@@ -36,7 +54,8 @@ class DufangBetService:
         placed_at = str(placed_at).strip()
         if not operation_id or cost <= 0 or not placed_at:
             raise ValueError("operation id, positive cost and placement time are required")
-        payload = json.dumps([user_id, cost, placed_at], ensure_ascii=True)
+        # Request identity only; placed_at is placement metadata, not the key.
+        payload = json.dumps([user_id, cost], ensure_ascii=True, separators=(",", ":"))
 
         def result(status, wallet_stone=0, bet_id=""):
             return DufangBetResult(status, cost if status in {"applied", "duplicate"} else 0, wallet_stone, bet_id)
@@ -84,7 +103,8 @@ class DufangBetService:
                     "shared_profit INTEGER, shared_loss INTEGER, received_profit INTEGER, received_loss INTEGER, last_update TEXT)"
                 )
                 charged = conn.execute(
-                    "UPDATE user_xiuxian SET stone=stone-%s WHERE user_id=%s AND stone>=%s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS INTEGER)-%s "
+                    "WHERE user_id=%s AND CAST(COALESCE(stone,0) AS INTEGER)>=%s",
                     (cost, user_id, cost),
                 )
                 if charged.rowcount != 1:
