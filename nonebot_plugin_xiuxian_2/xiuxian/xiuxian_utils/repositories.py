@@ -71,7 +71,19 @@ class EconomyRepository:
         self._log_change = log_change
 
     def update_stones(self, user_id, amount, operation, log_context=None) -> None:
-        amount = abs(int(amount))
+        from .numeric_bind import as_int_like, number_count
+
+        # amount may exceed SQLite INTEGER; bind layer also guards, but abs(int())
+        # would OverflowError before execute.
+        amount = number_count(abs(as_int_like(amount)))
+        if isinstance(amount, str):
+            # still bindable; for delta math use as_int_like
+            amount_int = as_int_like(amount)
+        else:
+            amount_int = int(amount)
+        if amount_int <= 0 and operation in (1, 2):
+            # zero no-op for economy; keep legacy behaviour of still executing for 0
+            pass
         current_stones = None
         stone_delta = 0
 
@@ -84,24 +96,24 @@ class EconomyRepository:
                 )
                 row = cur.fetchone()
                 if row:
-                    current_stones = int(row[0] or 0)
+                    current_stones = as_int_like(row[0])
 
             if operation == 1:
                 cur.execute(
-                    "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                     (amount, user_id),
                 )
                 if cur.rowcount > 0:
-                    stone_delta = amount
+                    stone_delta = amount_int
             elif operation == 2:
                 cur.execute(
-                    "UPDATE user_xiuxian SET stone=GREATEST(stone-%s, 0) WHERE user_id=%s",
+                    "UPDATE user_xiuxian SET stone=MAX(CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL), 0) WHERE user_id=%s",
                     (amount, user_id),
                 )
                 if cur.rowcount > 0:
                     stone_delta = -min(
-                        current_stones if current_stones is not None else amount,
-                        amount,
+                        current_stones if current_stones is not None else amount_int,
+                        amount_int,
                     )
             conn.commit()
 
@@ -115,28 +127,31 @@ class EconomyRepository:
                     "asset": "stone",
                     "method": "update_ls",
                     "key": operation,
-                    "requested_amount": amount,
+                    "requested_amount": amount_int,
                 },
             )
 
     def try_update_stones(self, user_id, amount, operation, log_context=None) -> bool:
-        amount = abs(int(amount))
-        if amount <= 0:
+        from .numeric_bind import as_int_like, number_count
+
+        amount = number_count(abs(as_int_like(amount)))
+        amount_int = as_int_like(amount)
+        if amount_int <= 0:
             return True
 
         with self._connection() as conn:
             cur = conn.cursor()
             if operation == 1:
                 cur.execute(
-                    "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                     (amount, user_id),
                 )
             elif operation == 2:
                 cur.execute(
                     """
                     UPDATE user_xiuxian
-                    SET stone=stone-%s
-                    WHERE user_id=%s AND COALESCE(stone, 0) >= %s
+                    SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL)
+                    WHERE user_id=%s AND CAST(COALESCE(stone,0) AS REAL) >= CAST(%s AS REAL)
                     """,
                     (amount, user_id, amount),
                 )
@@ -150,12 +165,12 @@ class EconomyRepository:
                 log_context,
                 user_id=user_id,
                 default_action="stone_add" if operation == 1 else "stone_cost",
-                stone_delta=amount if operation == 1 else -amount,
+                stone_delta=amount_int if operation == 1 else -amount_int,
                 detail={
                     "asset": "stone",
                     "method": "try_update_ls",
                     "key": operation,
-                    "requested_amount": amount,
+                    "requested_amount": amount_int,
                 },
             )
         return success
@@ -168,8 +183,11 @@ class EconomyRepository:
         amount: int,
     ) -> bool:
         """Atomically transfer stones; repeated operation IDs are no-ops."""
-        amount = abs(int(amount))
-        if amount <= 0 or str(sender_id) == str(recipient_id):
+        from .numeric_bind import as_int_like, number_count
+
+        amount = number_count(abs(as_int_like(amount)))
+        amount_int = as_int_like(amount)
+        if amount_int <= 0 or str(sender_id) == str(recipient_id):
             return False
 
         with self._connection() as conn:
@@ -191,15 +209,16 @@ class EconomyRepository:
                 return False
             cur.execute(
                 """
-                UPDATE user_xiuxian SET stone=stone-%s
-                WHERE user_id=%s AND COALESCE(stone, 0) >= %s
+                UPDATE user_xiuxian
+                SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL)
+                WHERE user_id=%s AND CAST(COALESCE(stone,0) AS REAL) >= CAST(%s AS REAL)
                 """,
                 (amount, sender_id, amount),
             )
             if cur.rowcount != 1:
                 return False
             cur.execute(
-                "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                 (amount, recipient_id),
             )
             if cur.rowcount != 1:
@@ -223,12 +242,12 @@ class EconomyRepository:
             cur = conn.cursor()
             if subtract:
                 cur.execute(
-                    "UPDATE user_xiuxian SET exp=GREATEST(exp-%s, 0) WHERE user_id=%s",
+                    "UPDATE user_xiuxian SET exp=MAX(CAST(COALESCE(exp,0) AS REAL)-CAST(%s AS REAL), 0) WHERE user_id=%s",
                     (amount, user_id),
                 )
             else:
                 cur.execute(
-                    "UPDATE user_xiuxian SET exp=exp+%s WHERE user_id=%s",
+                    "UPDATE user_xiuxian SET exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                     (amount, user_id),
                 )
             conn.commit()

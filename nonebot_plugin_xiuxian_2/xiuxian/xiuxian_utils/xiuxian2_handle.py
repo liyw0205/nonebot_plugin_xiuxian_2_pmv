@@ -931,11 +931,15 @@ class XiuxianDateManage:
         """
         通过宗门编号获取宗门信息
         """
-        return self._read_query(
-            "select * from sects WHERE sect_id=%s",
-            (sect_id,),
-            one=True,
-            dict_row=True,
+        from .numeric_bind import normalize_sect_row
+
+        return normalize_sect_row(
+            self._read_query(
+                "select * from sects WHERE sect_id=%s",
+                (sect_id,),
+                one=True,
+                dict_row=True,
+            )
         )
 
     def get_sect_owners(self):
@@ -1622,30 +1626,38 @@ class XiuxianDateManage:
 
     def get_sect_info_by_qq(self, user_id):
         """通过用户qq获取宗门信息"""
-        return self._read_query(
-            "select * from sects WHERE sect_owner=%s",
-            (user_id,),
-            one=True,
-            dict_row=True,
+        from .numeric_bind import normalize_sect_row
+
+        return normalize_sect_row(
+            self._read_query(
+                "select * from sects WHERE sect_owner=%s",
+                (user_id,),
+                one=True,
+                dict_row=True,
+            )
         )
 
     def calculate_sect_combat_power(self, sect_id):
         """计算宗门战力"""
+        from .numeric_bind import as_int_like
+
         members = self.get_all_users_by_sect_id(sect_id)
         total_power = 0
         for member in members:
             user_real_info = self.get_user_real_info(member['user_id'])
             if user_real_info and 'power' in user_real_info:
-                total_power += user_real_info['power']
+                total_power += as_int_like(user_real_info['power'])
         return total_power
 
     def update_sect_combat_power(self, sect_id):
         """更新宗门战力"""
+        from .numeric_bind import number_count
+
         with self._conn_lock:
             total_power = self.calculate_sect_combat_power(sect_id)
             sql = "UPDATE sects SET combat_power = %s WHERE sect_id = %s"
             cur = self.conn.cursor()
-            cur.execute(sql, (total_power, sect_id))
+            cur.execute(sql, (number_count(total_power), sect_id))
             self._commit_write()
             return total_power
 
@@ -1656,11 +1668,15 @@ class XiuxianDateManage:
 
     def get_sect_info_by_id(self, sect_id):
         """通过宗门id获取宗门信息"""
-        return self._read_query(
-            "select * from sects WHERE sect_id=%s",
-            (sect_id,),
-            one=True,
-            dict_row=True,
+        from .numeric_bind import normalize_sect_row
+
+        return normalize_sect_row(
+            self._read_query(
+                "select * from sects WHERE sect_id=%s",
+                (sect_id,),
+                one=True,
+                dict_row=True,
+            )
         )
 
     def update_usr_sect(self, user_id, usr_sect_id, usr_sect_position):
@@ -1904,35 +1920,44 @@ class XiuxianDateManage:
 
     def donate_update(self, sect_id, stone_num):
         """宗门捐献更新建设度及可用灵石"""
+        from .numeric_bind import number_count
+
+        stone_num = number_count(stone_num)
         with self._conn_lock:
-            sql = f"UPDATE sects SET sect_used_stone=sect_used_stone+%s,sect_scale=sect_scale+%s WHERE sect_id=%s"
+            sql = f"UPDATE sects SET sect_used_stone=CAST(COALESCE(sect_used_stone,0) AS REAL)+CAST(%s AS REAL),sect_scale=CAST(COALESCE(sect_scale,0) AS REAL)+CAST(%s AS REAL) WHERE sect_id=%s"
             cur = self.conn.cursor()
-            cur.execute(sql, (stone_num, stone_num * 1, sect_id))
+            cur.execute(sql, (stone_num, stone_num, sect_id))
             self._commit_write()
 
     def update_sect_used_stone(self, sect_id, sect_used_stone, key):
         """更新宗门灵石储备"""
+        from .numeric_bind import number_count
+
+        sect_used_stone = number_count(sect_used_stone)
         with self._conn_lock:
             cur = self.conn.cursor()
             if key == 1:
-                sql = f"UPDATE sects SET sect_used_stone=sect_used_stone+%s WHERE sect_id=%s"
+                sql = f"UPDATE sects SET sect_used_stone=CAST(COALESCE(sect_used_stone,0) AS REAL)+CAST(%s AS REAL) WHERE sect_id=%s"
                 cur.execute(sql, (sect_used_stone, sect_id))
                 self._commit_write()
             elif key == 2:
-                sql = f"UPDATE sects SET sect_used_stone=sect_used_stone-%s WHERE sect_id=%s"
+                sql = f"UPDATE sects SET sect_used_stone=CAST(COALESCE(sect_used_stone,0) AS REAL)-CAST(%s AS REAL) WHERE sect_id=%s"
                 cur.execute(sql, (sect_used_stone, sect_id))
                 self._commit_write()
 
     def update_sect_materials(self, sect_id, sect_materials, key):
         """更新资材"""
+        from .numeric_bind import number_count
+
+        sect_materials = number_count(sect_materials)
         with self._conn_lock:
             cur = self.conn.cursor()
             if key == 1:
-                sql = f"UPDATE sects SET sect_materials=sect_materials+%s WHERE sect_id=%s"
+                sql = f"UPDATE sects SET sect_materials=CAST(COALESCE(sect_materials,0) AS REAL)+CAST(%s AS REAL) WHERE sect_id=%s"
                 cur.execute(sql, (sect_materials, sect_id))
                 self._commit_write()
             elif key == 2:
-                sql = f"UPDATE sects SET sect_materials=sect_materials-%s WHERE sect_id=%s"
+                sql = f"UPDATE sects SET sect_materials=CAST(COALESCE(sect_materials,0) AS REAL)-CAST(%s AS REAL) WHERE sect_id=%s"
                 cur.execute(sql, (sect_materials, sect_id))
                 self._commit_write()
 
@@ -1943,11 +1968,16 @@ class XiuxianDateManage:
 
     def get_all_users_by_sect_id(self, sect_id):
         """获取宗门所有成员信息"""
-        return self._read_query(
+        from .numeric_bind import normalize_user_row
+
+        rows = self._read_query(
             "SELECT * FROM user_xiuxian WHERE sect_id = %s",
             (sect_id,),
             dict_row=True,
         )
+        if not rows:
+            return rows
+        return [normalize_user_row(row) for row in rows]
 
     def do_work(self, user_id, the_type, sc_time=None):
         """更新用户操作CD"""
@@ -2000,18 +2030,22 @@ class XiuxianDateManage:
 
     def update_user_sect_contribution(self, user_id, sect_contribution):
         """更新用户宗门贡献度"""
+        from .numeric_bind import number_count
+
         with self._conn_lock:
             sql = f"UPDATE user_xiuxian SET sect_contribution=%s WHERE user_id=%s"
             cur = self.conn.cursor()
-            cur.execute(sql, (sect_contribution, user_id))
+            cur.execute(sql, (number_count(sect_contribution), user_id))
             self._commit_write()
 
     def deduct_sect_contribution(self, user_id, contribution):
         """扣除用户宗门贡献度"""
+        from .numeric_bind import number_count
+
         with self._conn_lock:
             cur = self.conn.cursor()
-            sql = "UPDATE user_xiuxian SET sect_contribution=sect_contribution-%s WHERE user_id=%s"
-            cur.execute(sql, (contribution, user_id))
+            sql = "UPDATE user_xiuxian SET sect_contribution=CAST(COALESCE(sect_contribution,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s"
+            cur.execute(sql, (number_count(contribution), user_id))
             self._commit_write()
 
     def update_user_hp(self, user_id):
