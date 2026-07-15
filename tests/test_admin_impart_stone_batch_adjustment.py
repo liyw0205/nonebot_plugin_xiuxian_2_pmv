@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin.impart_stone_batch_adjustment_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin.transaction_service import (
     AdminImpartStoneBatchAdjustmentService,
 )
 from tests.test_db_backend import db_backend

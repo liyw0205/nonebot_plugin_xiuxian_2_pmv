@@ -5,7 +5,7 @@ import pytest
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin.root_change_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin.transaction_service import (
     AdminRootChangeService,
 )
 

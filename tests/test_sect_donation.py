@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.membership_service import SectMembershipService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.transaction_service import SectMembershipService
 from tests.test_db_backend import db_backend
 
 

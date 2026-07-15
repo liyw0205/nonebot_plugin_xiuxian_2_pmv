@@ -4,7 +4,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.shop_purchase_service import SectShopPurchaseService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.transaction_service import SectShopPurchaseService
 
 
 def make_database(path):

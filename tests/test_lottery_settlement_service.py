@@ -9,7 +9,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_base.lottery_settlement_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_base.transaction_service import (
     LotterySettlementService,
 )
 from tests.test_db_backend import db_backend

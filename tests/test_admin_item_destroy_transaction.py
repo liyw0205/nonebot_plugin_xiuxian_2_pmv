@@ -7,7 +7,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin.item_destroy_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin.transaction_service import (
     AdminItemDestroyService,
 )
 from tests.test_db_backend import db_backend

@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_base.sign_service import SignInService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_base.transaction_service import SignInService
 from tests.test_db_backend import db_backend
 
 

@@ -11,7 +11,7 @@ from ..xiuxian_utils.lay_out import Cooldown, assign_bot
 from ..xiuxian_utils.utils import check_user, handle_send, number_to
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from .sect_weekly import sect_weekly_goal_manager
-from .sect_weekly_reward_service import SectWeeklyRewardClaimService
+from .transaction_service import SectWeeklyRewardClaimService
 
 
 items = Items()

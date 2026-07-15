@@ -4,7 +4,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin.admin_item_batch_grant_service import AdminItemBatchGrantService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin.transaction_service import AdminItemBatchGrantService
 
 
 def create_database(tmp_path):

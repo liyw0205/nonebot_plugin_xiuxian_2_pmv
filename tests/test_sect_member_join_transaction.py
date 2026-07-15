@@ -6,7 +6,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.member_join_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.transaction_service import (
     SectMemberJoinService,
 )
 from tests.test_db_backend import db_backend

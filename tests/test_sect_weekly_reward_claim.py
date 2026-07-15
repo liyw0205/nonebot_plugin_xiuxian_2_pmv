@@ -6,7 +6,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.sect_weekly_reward_service import SectWeeklyRewardClaimService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.transaction_service import SectWeeklyRewardClaimService
 from tests.test_db_backend import db_backend
 
 

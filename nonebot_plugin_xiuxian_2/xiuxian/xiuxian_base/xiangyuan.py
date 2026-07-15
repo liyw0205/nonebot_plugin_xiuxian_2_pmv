@@ -15,7 +15,7 @@ from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.utils import check_user, handle_send, number_to, send_help_message
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from .stone_limit import stone_limit
-from .xiangyuan_settlement_service import XiangyuanSettlementService
+from .transaction_service import XiangyuanSettlementService
 
 items = Items()
 sql_message = XiuxianDateManage()

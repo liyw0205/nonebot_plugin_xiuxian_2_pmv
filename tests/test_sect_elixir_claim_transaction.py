@@ -4,7 +4,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.elixir_claim_service import SectElixirClaimService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.transaction_service import SectElixirClaimService
 
 
 def make_database(path):

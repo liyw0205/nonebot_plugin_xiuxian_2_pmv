@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.disband_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.transaction_service import (
     SectDisbandService,
 )
 from tests.test_db_backend import db_backend
