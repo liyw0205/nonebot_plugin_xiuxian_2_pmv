@@ -390,7 +390,10 @@ class XiuxianTaskManager:
             lines.append(
                 f"- {task['name']}：{'、'.join(reward_parts) if reward_parts else '无'}"
             )
-        return "\n".join(lines)
+        msg = "\n".join(lines)
+        if result.status == "duplicate":
+            msg += "\n该领奖请求已经处理，无需重复提交。"
+        return msg
 
 
 task_manager = XiuxianTaskManager()

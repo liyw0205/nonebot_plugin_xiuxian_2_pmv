@@ -205,6 +205,22 @@ class TaskRewardClaimService:
         if updated.rowcount != 1:
             raise RuntimeError("task reward inventory changed")
 
+    def get_result(self, operation_id: str) -> TaskRewardClaimResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            self._ensure_game_schema(conn)
+            previous = conn.execute(
+                "SELECT result_json FROM task_reward_claim_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return TaskRewardClaimResult(
+                "duplicate", tuple(json.loads(str(previous[0])))
+            )
+
     def claim(
         self,
         operation_id,
@@ -229,10 +245,10 @@ class TaskRewardClaimService:
             or max_goods_num <= 0
         ):
             raise ValueError("valid task reward claim arguments are required")
+        # Request identity only; periods/task defs/max bag are concurrency/outcome context.
         payload = json.dumps(
-            [user_id, cycles, periods, normalized_tasks, max_goods_num],
-            ensure_ascii=False,
-            sort_keys=True,
+            [user_id, list(cycles)],
+            ensure_ascii=True,
             separators=(",", ":"),
         )
 
