@@ -392,7 +392,7 @@ class CardDisassembleService:
                     (quantity, user_id, card_name, card_quantity),
                 )
                 rewarded = conn.execute(
-                    "UPDATE xiuxian_impart SET stone_num=stone_num+%s WHERE user_id=%s "
+                    "UPDATE xiuxian_impart SET stone_num=CAST(COALESCE(stone_num,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s "
                     "AND stone_num=%s",
                     (quantity * reward_per_card, user_id, stone_quantity),
                 )

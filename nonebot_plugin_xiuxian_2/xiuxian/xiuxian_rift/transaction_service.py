@@ -845,7 +845,7 @@ class RiftKeyEventSettlementService:
                 final_hp = max(1, expected[2] + delta[2])
                 final_mp = max(1, expected[3] + delta[3])
                 conn.execute(
-                    "UPDATE user_xiuxian SET stone=stone+%s,exp=%s,hp=%s,mp=%s WHERE user_id=%s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL),exp=%s,hp=%s,mp=%s WHERE user_id=%s",
                     (delta[0], final_exp, final_hp, final_mp, user_id),
                 )
                 now = datetime.now()
@@ -1350,7 +1350,7 @@ class RiftSettlementService:
                 final_hp = max(1, expected[2] + delta[2])
                 final_mp = max(1, expected[3] + delta[3])
                 conn.execute(
-                    "UPDATE user_xiuxian SET stone=stone+%s,exp=%s,hp=%s,mp=%s "
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL),exp=%s,hp=%s,mp=%s "
                     "WHERE user_id=%s",
                     (delta[0], final_exp, final_hp, final_mp, user_id),
                 )

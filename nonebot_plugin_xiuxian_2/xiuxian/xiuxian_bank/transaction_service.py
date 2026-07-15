@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
 from ..xiuxian_utils import db_backend
+from ..xiuxian_utils.numeric_bind import as_int_like, number_count
 
 @dataclass(frozen=True)
 class BankDepositResult:
@@ -31,7 +32,7 @@ class BankDepositService:
     @staticmethod
     def _payload(user_id, amount) -> str:
         # Request identity only — balances/interest/settled_at are concurrency checks or outcomes.
-        return json.dumps([str(user_id), int(amount)], ensure_ascii=True, separators=(",", ":"))
+        return json.dumps([str(user_id), as_int_like(amount)], ensure_ascii=True, separators=(",", ":"))
 
     def get_result(self, operation_id: str) -> BankDepositResult | None:
         operation_id = str(operation_id).strip()
@@ -67,7 +68,7 @@ class BankDepositService:
     ) -> BankDepositResult:
         operation_id = str(operation_id).strip()
         user_id = str(user_id)
-        amount = int(amount)
+        amount = as_int_like(amount)
         expected_saved_stone = int(expected_saved_stone)
         expected_saved_at = str(expected_saved_at)
         bank_level = str(bank_level)
@@ -158,7 +159,7 @@ class BankDepositService:
 
                 wallet_stone = int(user[0]) - amount + interest
                 charged = conn.execute(
-                    "UPDATE user_xiuxian SET stone=stone-%s+%s WHERE user_id=%s AND stone>=%s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL)+%s WHERE user_id=%s AND stone>=%s",
                     (amount, interest, user_id, amount),
                 )
                 saved_stone = expected_saved_stone + amount
@@ -206,7 +207,7 @@ class BankWithdrawalService:
 
     @staticmethod
     def _payload(user_id, amount) -> str:
-        return json.dumps([str(user_id), int(amount)], ensure_ascii=True, separators=(",", ":"))
+        return json.dumps([str(user_id), as_int_like(amount)], ensure_ascii=True, separators=(",", ":"))
 
     def get_result(self, operation_id: str) -> BankWithdrawalResult | None:
         operation_id = str(operation_id).strip()
@@ -241,7 +242,7 @@ class BankWithdrawalService:
     ) -> BankWithdrawalResult:
         operation_id = str(operation_id).strip()
         user_id = str(user_id)
-        amount = int(amount)
+        amount = as_int_like(amount)
         expected_saved_stone = int(expected_saved_stone)
         expected_saved_at = str(expected_saved_at)
         bank_level = str(bank_level)
@@ -313,7 +314,7 @@ class BankWithdrawalService:
 
                 wallet_stone = int(user[0]) + amount + interest
                 credited = conn.execute(
-                    "UPDATE user_xiuxian SET stone=stone+%s+%s WHERE user_id=%s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL)+%s WHERE user_id=%s",
                     (amount, interest, user_id),
                 )
                 saved_stone = expected_saved_stone - amount
@@ -446,7 +447,7 @@ class BankUpgradeService:
 
                 wallet_stone = int(user[0]) - cost
                 charged = conn.execute(
-                    "UPDATE user_xiuxian SET stone=stone-%s WHERE user_id=%s AND stone>=%s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND stone>=%s",
                     (cost, user_id, cost),
                 )
                 updated = conn.execute(
@@ -588,7 +589,7 @@ class BankInterestService:
 
                 wallet_stone = int(user[0]) + interest
                 credited = conn.execute(
-                    "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s", (interest, user_id)
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (interest, user_id)
                 )
                 updated = conn.execute(
                     "UPDATE player_data.bankinfo SET savetime=%s WHERE user_id=%s "

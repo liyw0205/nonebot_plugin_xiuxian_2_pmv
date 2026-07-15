@@ -440,7 +440,7 @@ class DongfuExpansionService:
                     (deed_cost, user_id, int(deed_id), deed_cost),
                 )
                 deducted_stone = conn.execute(
-                    "UPDATE user_xiuxian SET stone=stone-%s WHERE user_id=%s AND stone >= %s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND stone >= %s",
                     (stone_cost, user_id, stone_cost),
                 )
                 updated_dongfu = conn.execute(
@@ -514,7 +514,7 @@ class DongfuArrayUpgradeService:
                 if item_cost:
                     item = conn.execute("SELECT goods_num FROM back WHERE user_id=%s AND goods_id=%s", (user_id, item_id)).fetchone()
                     if item is None or int(item[0] or 0) < item_cost: conn.rollback(); return DongfuArrayUpgradeResult("item_insufficient")
-                stone = conn.execute("UPDATE user_xiuxian SET stone=stone-%s WHERE user_id=%s AND stone>=%s", (stone_cost, user_id, stone_cost))
+                stone = conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND stone>=%s", (stone_cost, user_id, stone_cost))
                 item = conn.execute("UPDATE back SET goods_num=goods_num-%s WHERE user_id=%s AND goods_id=%s AND goods_num>=%s", (item_cost, user_id, item_id, item_cost)) if item_cost else None
                 dongfu = conn.execute('UPDATE player_data."dongfu_status" SET array_level=%s WHERE user_id=%s AND array_level=%s', (next_level, user_id, expected_level))
                 if stone.rowcount != 1 or dongfu.rowcount != 1 or (item is not None and item.rowcount != 1): conn.rollback(); return DongfuArrayUpgradeResult("state_changed")
@@ -603,7 +603,7 @@ class DongfuPatrolService:
                         conn.rollback()
                         return DongfuPatrolResult("inventory_full", count, guard)
                 count, guard = count + 1, min(3, guard + 1)
-                stamina = conn.execute("UPDATE user_xiuxian SET user_stamina=user_stamina-%s,stone=stone+%s WHERE user_id=%s AND user_stamina>=%s", (stamina_cost, stone_gain, user_id, stamina_cost))
+                stamina = conn.execute("UPDATE user_xiuxian SET user_stamina=user_stamina-%s,stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s AND user_stamina>=%s", (stamina_cost, stone_gain, user_id, stamina_cost))
                 dongfu = conn.execute('UPDATE player_data."dongfu_status" SET patrol_date=%s,patrol_count=%s,patrol_guard=%s WHERE user_id=%s', (day, count, guard, user_id))
                 if stamina.rowcount != 1 or dongfu.rowcount != 1:
                     conn.rollback()
@@ -798,7 +798,7 @@ class DongfuVisitRewardService:
                 target = conn.execute('SELECT built FROM player_data."dongfu_status" WHERE user_id=%s', (target_id,)).fetchone()
                 if visitor is None or int(visitor[0] or 0) != 1 or target is None or int(target[0] or 0) != 1:
                     conn.rollback(); return DongfuVisitRewardResult("dongfu_changed")
-                updated = conn.execute("UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s", (gain, visitor_id))
+                updated = conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (gain, visitor_id))
                 if updated.rowcount != 1:
                     conn.rollback(); return DongfuVisitRewardResult("state_changed")
                 conn.execute("INSERT INTO dongfu_visit_reward_operations (operation_id,payload) VALUES (%s,%s)", (operation_id, payload)); conn.commit(); return DongfuVisitRewardResult("rewarded")
@@ -885,7 +885,7 @@ class InfiltrateSuccessService:
                 conn.execute(f'UPDATE player_data."dongfu_status" SET infiltrate_date=%s,{mode_field}=%s WHERE user_id=%s', (day, mode_count, visitor_id))
                 conn.execute('UPDATE player_data."dongfu_status" SET intrude_date=%s,intrude_count=%s,patrol_guard=MAX(patrol_guard-%s,0),plant_slots=%s WHERE user_id=%s', (day, intrude_count, consume_guard, self._canonical(slots), target_id))
                 if stone:
-                    conn.execute("UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s", (stone, visitor_id))
+                    conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone, visitor_id))
                 now = datetime.now()
                 for item_id, amount in totals.items():
                     name, item_type = metadata[item_id]

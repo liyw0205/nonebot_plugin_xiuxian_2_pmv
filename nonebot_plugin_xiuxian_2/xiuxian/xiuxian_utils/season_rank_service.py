@@ -158,7 +158,7 @@ def add_season_rank_score(
         cur.execute(
             """
             UPDATE season_rank
-            SET score = score + %s,
+            SET score=CAST(COALESCE(score,0) AS REAL)+CAST(%s AS REAL),
                 extra = %s,
                 updated_at = %s
             WHERE rank_key = %s AND user_id = %s AND sect_id = %s

@@ -500,7 +500,7 @@ class DufangShareSettlementService:
 
                     stone_delta = actual_amount if frozen_event_type == "profit" else -actual_amount
                     changed = conn.execute(
-                        "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                         (stone_delta, target_id),
                     )
                     if changed.rowcount != 1:

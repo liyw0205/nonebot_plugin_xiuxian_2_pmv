@@ -1673,7 +1673,7 @@ class MapCombatSettlementService:
                 )
                 conn.execute("UPDATE player_data.map_combat_settlement SET snapshot=%s WHERE user_id=%s", ("", user_id))
                 if stone:
-                    conn.execute("UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s", (stone, user_id))
+                    conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone, user_id))
                 now = datetime.now()
                 for item_id, amount in totals.items():
                     name, item_type = metadata[item_id]
@@ -2085,7 +2085,7 @@ class MapExploreSettlementService:
                     (*clear_values.values(), user_id),
                 )
                 if stone:
-                    conn.execute("UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s", (stone, user_id))
+                    conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone, user_id))
                 now = datetime.now()
                 for item_id, amount in totals.items():
                     name, item_type = metadata[item_id]
@@ -2201,7 +2201,7 @@ class MapMissionClaimService:
 
                 conn.execute("UPDATE player_data.map_mission SET claimed=%s WHERE user_id=%s", (1, user_id))
                 if stone:
-                    conn.execute("UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s", (stone, user_id))
+                    conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone, user_id))
                 now = datetime.now()
                 for item_id, amount in totals.items():
                     name, item_type = metadata[item_id]
@@ -2366,7 +2366,7 @@ class MapResourceRewardService:
                     (int(daily[1] or 0) + 1, int(daily[2] or 0) + 1, user_id),
                 )
                 if stone:
-                    conn.execute("UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s", (stone, user_id))
+                    conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone, user_id))
                 now = datetime.now()
                 for item_id, amount in totals.items():
                     name, item_type = metadata[item_id]

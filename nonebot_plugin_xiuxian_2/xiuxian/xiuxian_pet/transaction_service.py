@@ -105,7 +105,7 @@ class PetTravelClaimService:
                 ).rowcount != 1:
                     conn.rollback()
                     return result("state_changed")
-                conn.execute("UPDATE user_xiuxian SET stone=stone+%s, exp=exp+%s WHERE user_id=%s", (stone, exp, user_id))
+                conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL), exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone, exp, user_id))
                 now = datetime.now()
                 for item_id, name, item_type, amount in rewards:
                     conn.execute(
@@ -426,7 +426,7 @@ class PetHatchService:
                         ),
                     )
                 conn.execute(
-                    "UPDATE user_xiuxian SET stone=stone-%s WHERE user_id=%s AND stone=%s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND stone=%s",
                     (cost, user_id, expected_stone),
                 )
                 conn.execute(

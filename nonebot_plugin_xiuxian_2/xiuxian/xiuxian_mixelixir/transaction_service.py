@@ -476,7 +476,7 @@ class MixelixirHarvestLevelUpgradeService:
                     return result("stone_insufficient", stone=current_stone)
 
                 charged = conn.execute(
-                    "UPDATE user_xiuxian SET stone=stone-%s WHERE user_id=%s AND stone=%s AND stone>=%s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND stone=%s AND stone>=%s",
                     (cost, user_id, expected_stone, cost),
                 )
                 upgraded = conn.execute(
@@ -646,7 +646,7 @@ class MixelixirFireControlUpgradeService:
                     return result("stone_insufficient", stone=current_stone)
 
                 charged = conn.execute(
-                    "UPDATE user_xiuxian SET stone=stone-%s WHERE user_id=%s AND stone=%s AND stone>=%s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND stone=%s AND stone>=%s",
                     (cost, user_id, expected_stone, cost),
                 )
                 upgraded = conn.execute(

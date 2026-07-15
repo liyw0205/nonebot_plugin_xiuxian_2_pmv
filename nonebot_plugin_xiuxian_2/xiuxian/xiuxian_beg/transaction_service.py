@@ -373,7 +373,7 @@ class NoviceGiftClaimService:
                         return NoviceGiftClaimResult("inventory_full")
 
                 changed = conn.execute(
-                    "UPDATE user_xiuxian SET stone=COALESCE(stone,0)+%s,is_novice=1 "
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL),is_novice=1 "
                     "WHERE user_id=%s AND COALESCE(is_novice,0)=0 AND create_time=%s",
                     (stone, user_id, user[0]),
                 )

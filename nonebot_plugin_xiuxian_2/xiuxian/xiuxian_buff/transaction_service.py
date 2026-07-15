@@ -1951,7 +1951,7 @@ class MentorGraduationService:
                     conn.rollback()
                     return result("state_changed")
                 for uid, expected, reward in ((mentor_id, values[0], values[3]), (apprentice_id, values[1], values[2])):
-                    if conn.execute("UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s AND stone=%s", (reward, uid, expected)).rowcount != 1:
+                    if conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s AND stone=%s", (reward, uid, expected)).rowcount != 1:
                         conn.rollback()
                         return result("state_changed")
                     increment_stat(conn, uid, "灵石获取", reward)
@@ -2150,7 +2150,7 @@ class BlessedSpotService:
                     conn.rollback()
                     return BlessedSpotResult("stone_insufficient", user_id, stone_cost)
                 changed = conn.execute(
-                    "UPDATE user_xiuxian SET stone=stone-%s,blessed_spot_flag=1,blessed_spot_name=%s "
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL),blessed_spot_flag=1,blessed_spot_name=%s "
                     "WHERE user_id=%s AND stone>=%s AND COALESCE(blessed_spot_flag,0)=0",
                     (stone_cost, default_name, user_id, stone_cost),
                 )
@@ -2224,7 +2224,7 @@ class BlessedSpotService:
                 if int(user[0]) < stone_cost:
                     conn.rollback()
                     return BlessedSpotResult("stone_insufficient", user_id, stone_cost, previous_level=current, current_level=current)
-                conn.execute("UPDATE user_xiuxian SET stone=stone-%s WHERE user_id=%s AND stone>=%s", (stone_cost, user_id, stone_cost))
+                conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND stone>=%s", (stone_cost, user_id, stone_cost))
                 changed = conn.execute(f"UPDATE player_data.mix_elixir_info SET {db_backend.quote_ident('灵田数量')}=%s WHERE user_id=%s AND CAST({db_backend.quote_ident('灵田数量')} AS INTEGER)=%s", (str(current + 1), user_id, current))
                 if changed.rowcount != 1:
                     conn.rollback()
@@ -2354,7 +2354,7 @@ class ClosingSettlementService:
                 changed = conn.execute(
                     "UPDATE user_xiuxian SET "
                     "exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),"
-                    "stone=stone-%s,"
+                    "stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL),"
                     "hp=%s,mp=%s,atk=%s,power=%s "
                     "WHERE user_id=%s AND stone>=%s",
                     (exp_gain, stone_cost, hp, mp, atk, power, user_id, stone_cost),
@@ -2574,7 +2574,7 @@ class NormalTrainingLifecycleService:
                     self._increment_training_task(conn, user_id, task_period)
                 else:
                     changed = conn.execute(
-                        "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s AND COALESCE(exp,0)=%s AND COALESCE(stone,0)=%s",
+                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s AND COALESCE(exp,0)=%s AND COALESCE(stone,0)=%s",
                         (stone_gain, user_id, expected_exp, expected_stone),
                     )
                     increment_stat(conn, user_id, "凡人挖矿次数", 1)
@@ -2925,7 +2925,7 @@ class StoneTrainingSettlementService:
                     conn.rollback()
                     return StoneTrainingResult("stone_insufficient", exp_gain, stone_cost)
                 changed = conn.execute(
-                    "UPDATE user_xiuxian SET exp=exp+%s,stone=stone-%s,power=ROUND((exp+%s)*%s,0) "
+                    "UPDATE user_xiuxian SET exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL),power=ROUND((exp+%s)*%s,0) "
                     "WHERE user_id=%s AND exp=%s AND stone=%s AND stone>=%s",
                     (exp_gain, stone_cost, exp_gain, power_multiplier, user_id, expected_exp, expected_stone, stone_cost),
                 )

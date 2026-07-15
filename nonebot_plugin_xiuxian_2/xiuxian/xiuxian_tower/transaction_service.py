@@ -586,12 +586,12 @@ class TowerSettlementService:
                         return result("state_changed")
                 if player is None:
                     conn.execute(
-                        "UPDATE user_xiuxian SET stone=stone+%s, exp=exp+%s WHERE user_id=%s",
+                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL), exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                         (stone, exp, user_id),
                     )
                 else:
                     conn.execute(
-                        "UPDATE user_xiuxian SET stone=stone+%s, exp=exp+%s, hp=%s, mp=%s, user_stamina=user_stamina-%s WHERE user_id=%s",
+                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL), exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL), hp=%s, mp=%s, user_stamina=user_stamina-%s WHERE user_id=%s",
                         (stone, exp, final_hp, final_mp, stamina_cost, user_id),
                     )
                 now = datetime.now()

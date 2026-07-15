@@ -12,6 +12,7 @@ from .economy_log import safe_log_economy_change
 from .item_json import Items
 from .utils import number_to
 from .xiuxian2_handle import OtherSet, PlayerDataManager, XiuxianDateManage
+from .numeric_bind import as_int_like, number_count
 
 
 def _to_int(value: Any, default: int = 0) -> int:
@@ -75,7 +76,7 @@ class RewardService:
         return granted
 
     def _grant_sect_contribution(self, user_id: str, amount: int) -> int:
-        amount = max(0, int(amount))
+        amount = max(0, as_int_like(amount))
         if amount <= 0:
             return 0
         self.sql_message.update_user_sect_contribution(
@@ -89,7 +90,7 @@ class RewardService:
         return _to_int(user_info.get("sect_contribution"), 0)
 
     def _grant_sect_resource(self, sect_id: int | None, amount: int, field: str) -> int:
-        amount = max(0, int(amount))
+        amount = max(0, as_int_like(amount))
         if not sect_id or amount <= 0:
             return 0
         sect_info = self.sql_message.get_sect_info_by_id(sect_id) or {}
@@ -106,7 +107,7 @@ class RewardService:
         return amount
 
     def _grant_boss_integral(self, user_id: str, amount: int) -> int:
-        amount = max(0, int(amount))
+        amount = max(0, as_int_like(amount))
         if amount <= 0:
             return 0
         current = _to_int(self.player_data_manager.get_field_data(user_id, "boss_limit", "integral"), 0)

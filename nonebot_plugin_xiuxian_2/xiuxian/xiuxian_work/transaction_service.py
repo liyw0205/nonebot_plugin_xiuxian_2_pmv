@@ -277,7 +277,7 @@ class WorkSettlementService:
                         conn.rollback()
                         return WorkSettlementResult("inventory_full", 0, False)
 
-                conn.execute("UPDATE user_xiuxian SET exp=exp+%s WHERE user_id=%s", (applied_exp, user_id))
+                conn.execute("UPDATE user_xiuxian SET exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (applied_exp, user_id))
                 conn.execute(
                     "UPDATE user_cd SET type=%s, create_time=%s, scheduled_time=%s WHERE user_id=%s",
                     (0, 0, None, user_id),

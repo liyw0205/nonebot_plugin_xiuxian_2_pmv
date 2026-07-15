@@ -24,6 +24,7 @@ from .trade_utils import _trade_economy_context, record_trade_event
 from datetime import datetime
 import hashlib
 from typing import Any
+from ..xiuxian_utils.numeric_bind import as_int_like, number_count
 
 class XianshiPurchaseService:
     def __init__(self, repository: TradeRepository) -> None:
@@ -121,7 +122,7 @@ class GuishiStoneService:
             status,
             str(operation_type),
             str(user_id),
-            int(amount),
+            as_int_like(amount),
             int(fee),
             int(actual_amount),
             int(balance),
@@ -131,7 +132,7 @@ class GuishiStoneService:
         operation_id = str(operation_id).strip()
         operation_type = str(operation_type)
         user_id = str(user_id)
-        amount = int(amount)
+        amount = as_int_like(amount)
         if not operation_id:
             raise ValueError("operation_id must not be empty")
         if operation_type not in {"deposit", "withdraw"}:
@@ -174,7 +175,7 @@ class GuishiStoneService:
 
                 if operation_type == "deposit":
                     charged = conn.execute(
-                        "UPDATE user_xiuxian SET stone=stone-%s "
+                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
                         "WHERE user_id=%s AND COALESCE(stone, 0)>=%s",
                         (amount, user_id, amount),
                     )
@@ -198,7 +199,7 @@ class GuishiStoneService:
                     actual_amount = amount - fee
                     new_balance = stored_balance - amount
                     conn.execute(
-                        "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                         (actual_amount, user_id),
                     )
 
@@ -1145,12 +1146,12 @@ class AuctionSessionService:
                         earnings = 0 if is_system else final_price - fee
                         if not is_system:
                             conn.execute(
-                                "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                                "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                                 (earnings, seller_id),
                             )
                         for bidder_id, locked in bids.items():
                             if bidder_id != winner_id and conn.execute(
-                                "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                                "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                                 (locked, bidder_id),
                             ).rowcount != 1:
                                 conn.rollback()

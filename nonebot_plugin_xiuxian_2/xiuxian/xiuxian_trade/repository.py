@@ -557,7 +557,7 @@ class TradeRepository:
                         conn.rollback()
                         return result("stamina_insufficient")
                     stone_update = conn.execute(
-                        "UPDATE user_xiuxian SET stone=stone-%s "
+                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
                         "WHERE user_id=%s AND COALESCE(stone, 0)>=%s",
                         (fee_charged, seller_id, fee_charged),
                     )
@@ -754,7 +754,7 @@ class TradeRepository:
                         conn.rollback()
                         return result("stamina_insufficient")
                     stone_update = conn.execute(
-                        "UPDATE user_xiuxian SET stone=stone-%s "
+                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
                         "WHERE user_id=%s AND COALESCE(stone, 0)>=%s",
                         (fee_charged, seller_id, fee_charged),
                     )
@@ -1561,7 +1561,7 @@ class TradeRepository:
                     raise RuntimeError("failed to allocate guishi order id")
 
                 conn.execute(
-                    "UPDATE guishi_info SET stored_stone=stored_stone-%s WHERE user_id=%s",
+                    "UPDATE guishi_info SET stored_stone=CAST(COALESCE(stored_stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s",
                     (total_cost, user_id),
                 )
                 if operation_id:
@@ -2048,12 +2048,12 @@ class TradeRepository:
                 debit = bid_price - current_bids.get(bidder_id,0)
                 if debit <= 0:
                     conn.rollback(); return AuctionBid("bid_too_low",auction_id,bidder_id)
-                changed = conn.execute("UPDATE user_xiuxian SET stone=stone-%s WHERE user_id=%s AND stone>=%s", (debit,bidder_id,debit))
+                changed = conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND stone>=%s", (debit,bidder_id,debit))
                 if changed.rowcount != 1:
                     conn.rollback(); return AuctionBid("stone_insufficient",auction_id,bidder_id)
                 refunded_bidder, refunded_amount = "",0
                 if previous_bidder and previous_bidder != bidder_id:
-                    if conn.execute("UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s", (previous_amount,previous_bidder)).rowcount != 1:
+                    if conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (previous_amount,previous_bidder)).rowcount != 1:
                         conn.rollback(); return AuctionBid("participant_missing",auction_id,bidder_id)
                     refunded_bidder, refunded_amount = previous_bidder, previous_amount
                 new_bids = {bidder_id:bid_price}
@@ -2286,13 +2286,13 @@ class TradeRepository:
                     )
                     if not is_system:
                         conn.execute(
-                            "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                            "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                             (seller_earnings, seller_id),
                         )
                     for bidder_id, locked_price in bids.items():
                         if bidder_id != winner_id:
                             refund = conn.execute(
-                                "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                                "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                                 (int(locked_price), bidder_id),
                             )
                             if refund.rowcount == 0:
@@ -2544,12 +2544,12 @@ class TradeRepository:
                         result = replace(result, stamina_charged=stamina_cost)
 
                 cur.execute(
-                    "UPDATE user_xiuxian SET stone=stone-%s WHERE user_id=%s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s",
                     (total_cost, buyer_id),
                 )
                 if seller_id != "0":
                     cur.execute(
-                        "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                         (total_cost, seller_id),
                     )
 

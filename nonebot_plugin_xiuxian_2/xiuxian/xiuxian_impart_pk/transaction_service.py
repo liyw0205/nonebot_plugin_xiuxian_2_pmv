@@ -7,6 +7,7 @@ from pathlib import Path
 from threading import RLock
 from ..xiuxian_utils import db_backend
 from .settlement_state import increment_stat, load_daily_state
+from ..xiuxian_utils.numeric_bind import as_int_like, number_count
 
 _LOCKS_GUARD = RLock()
 _DATABASE_LOCKS = {}
@@ -363,12 +364,12 @@ def _increment_stat(conn, user_id: str, key: str, amount: int) -> None:
     field = db_backend.quote_ident(key)
     changed = conn.execute(
         f"UPDATE player_data.statistics SET {field}=COALESCE({field},0)+%s WHERE user_id=%s",
-        (int(amount), user_id),
+        (as_int_like(amount), user_id),
     )
     if changed.rowcount == 0:
         conn.execute(
             f"INSERT INTO player_data.statistics(user_id,{field}) VALUES(%s,%s)",
-            (user_id, int(amount)),
+            (user_id, as_int_like(amount)),
         )
 
 class ImpartClosingSettlementService:
@@ -485,7 +486,7 @@ class ImpartClosingSettlementService:
                     return ImpartClosingSettlementResult("state_changed")
 
                 changed = conn.execute(
-                    "UPDATE user_xiuxian SET exp=exp+%s,hp=%s,mp=%s,atk=%s,power=%s "
+                    "UPDATE user_xiuxian SET exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),hp=%s,mp=%s,atk=%s,power=%s "
                     "WHERE user_id=%s AND exp=%s",
                     (exp_gain, hp, mp, atk, power, user_id, expected_exp),
                 )
@@ -945,7 +946,7 @@ class ImpartBattleBatchService:
                         conn.rollback()
                         return ImpartBattleBatchResult("state_changed")
                     conn.execute(
-                        "UPDATE xiuxian_impart SET stone_num=COALESCE(stone_num,0)+%s WHERE user_id=%s",
+                        "UPDATE xiuxian_impart SET stone_num=CAST(COALESCE(stone_num,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                         (stones, user_id),
                     )
                     _increment_stat(conn, user_id, "虚神界对决次数", wins + losses)

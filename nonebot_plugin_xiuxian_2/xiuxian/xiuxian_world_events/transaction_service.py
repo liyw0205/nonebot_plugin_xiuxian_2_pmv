@@ -7,6 +7,7 @@ from pathlib import Path
 from threading import RLock
 from ..xiuxian_utils import db_backend
 from datetime import datetime
+from ..xiuxian_utils.numeric_bind import as_int_like, number_count
 
 STATE_FIELDS = (
     "active", "status", "event_id", "event_type", "name", "period", "manual",
@@ -632,12 +633,12 @@ class DemonAttackSettlementService:
             conn.execute(f"ALTER TABLE statistics ADD COLUMN {key_sql} INTEGER")
         changed = conn.execute(
             f"UPDATE statistics SET {key_sql}=COALESCE({key_sql},0)+%s WHERE user_id=%s",
-            (int(amount), user_id),
+            (as_int_like(amount), user_id),
         )
         if changed.rowcount == 0:
             conn.execute(
                 f"INSERT INTO statistics (user_id,{key_sql}) VALUES (%s,%s)",
-                (user_id, int(amount)),
+                (user_id, as_int_like(amount)),
             )
 
     def settle(

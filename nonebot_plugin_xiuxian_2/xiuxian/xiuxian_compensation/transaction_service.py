@@ -930,7 +930,7 @@ class RewardClaimService:
                         continue
                     if item["type"] == "stone":
                         updated = conn.execute(
-                            "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                            "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                             (quantity, user_id),
                         )
                         if updated.rowcount != 1:
@@ -1280,7 +1280,7 @@ class InvitationRewardClaimService:
                 now = datetime.now()
                 if stone:
                     changed = conn.execute(
-                        "UPDATE user_xiuxian SET stone=COALESCE(stone,0)+%s "
+                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) "
                         "WHERE user_id=%s",
                         (stone, user_id),
                     )

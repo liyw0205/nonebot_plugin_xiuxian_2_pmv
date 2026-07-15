@@ -518,7 +518,7 @@ class PuppetHarvestService:
                     return PuppetHarvest("harvest_time_changed", user_id)
                 deducted = conn.execute(
                     """
-                    UPDATE user_xiuxian SET stone=stone-%s
+                    UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL)
                     WHERE user_id=%s AND stone >= %s AND puppet_status=1
                     """,
                     (harvest_cost, user_id, harvest_cost),

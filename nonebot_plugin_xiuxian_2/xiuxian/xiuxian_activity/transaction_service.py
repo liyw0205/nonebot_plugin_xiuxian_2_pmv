@@ -462,7 +462,7 @@ class ActivitySignSettlementService:
                 )
                 if stone:
                     conn.execute(
-                        "UPDATE game_data.user_xiuxian SET stone=COALESCE(stone,0)+%s "
+                        "UPDATE game_data.user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) "
                         "WHERE user_id=%s",
                         (stone, user_id),
                     )
@@ -629,7 +629,7 @@ class ActivityTaskClaimService:
                         (activity_key, user_id, scope_type, scope_key, task_key, reward_text, now),
                     )
                 if stone:
-                    conn.execute("UPDATE game_data.user_xiuxian SET stone=COALESCE(stone,0)+%s WHERE user_id=%s", (stone, user_id))
+                    conn.execute("UPDATE game_data.user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone, user_id))
                 for item_id, name, item_type, quantity in item_rows:
                     conn.execute(
                         "INSERT INTO game_data.back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
@@ -838,7 +838,7 @@ class ActivityPassClaimService:
                 )
                 if stone:
                     conn.execute(
-                        "UPDATE game_data.user_xiuxian SET stone=COALESCE(stone,0)+%s WHERE user_id=%s",
+                        "UPDATE game_data.user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                         (stone, user_id),
                     )
                 for item_id, name, item_type, quantity in item_rows:
@@ -993,7 +993,7 @@ class ActivityPointShopPurchaseService:
                 total_count += quantity
                 now = datetime.now()
                 changed = conn.execute(
-                    "UPDATE activity_point_balance SET points=points-%s,update_time=%s "
+                    "UPDATE activity_point_balance SET points=CAST(COALESCE(points,0) AS REAL)-CAST(%s AS REAL),update_time=%s "
                     "WHERE activity_key=%s AND user_id=%s AND points >= %s",
                     (cost, now, activity_key, user_id, cost),
                 )
@@ -1007,7 +1007,7 @@ class ActivityPointShopPurchaseService:
                     (activity_key, user_id, item_key, quantity, now),
                 )
                 if stone:
-                    conn.execute("UPDATE game_data.user_xiuxian SET stone=COALESCE(stone,0)+%s WHERE user_id=%s", (stone, user_id))
+                    conn.execute("UPDATE game_data.user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone, user_id))
                 for item_id, name, item_type, amount in item_rows:
                     conn.execute(
                         "INSERT INTO game_data.back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
@@ -1201,7 +1201,7 @@ class ActivityCollectExchangeService:
 
                 if stone:
                     conn.execute(
-                        "UPDATE game_data.user_xiuxian SET stone=COALESCE(stone,0)+%s WHERE user_id=%s",
+                        "UPDATE game_data.user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                         (stone, user_id),
                     )
                 for item_id, name, item_type, quantity in item_rows:
@@ -1567,7 +1567,7 @@ class BossRewardClaimService:
                 return "inventory_full"
         stone = sum(row[4] for row in rewards if row[0] == "stone")
         if stone:
-            conn.execute("UPDATE game_data.user_xiuxian SET stone=COALESCE(stone,0)+%s WHERE user_id=%s", (stone, user_id))
+            conn.execute("UPDATE game_data.user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone, user_id))
         for kind, item_id, name, item_type, amount in rewards:
             if kind != "item":
                 continue

@@ -255,7 +255,7 @@ class PlayerRenameService:
                         return result("item_missing", previous_name)
                 elif stone_cost:
                     charged = conn.execute(
-                        "UPDATE user_xiuxian SET stone=stone-%s "
+                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
                         "WHERE user_id=%s AND stone>=%s",
                         (stone_cost, user_id, stone_cost),
                     )
@@ -402,7 +402,7 @@ class StoneGiftService:
                     conn.rollback()
                     return result("recipient_missing")
                 charged = conn.execute(
-                    "UPDATE user_xiuxian SET stone=stone-%s "
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
                     "WHERE user_id=%s AND COALESCE(stone, 0)>=%s",
                     (gross_amount, sender_id, gross_amount),
                 )
@@ -410,7 +410,7 @@ class StoneGiftService:
                     conn.rollback()
                     return result("stone_insufficient")
                 credited = conn.execute(
-                    "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                     (net_amount, recipient_id),
                 )
                 if credited.rowcount != 1:
@@ -652,11 +652,11 @@ class StoneContestService:
                     return self._result("payer_empty", payer_id, receiver_id, requested_amount)
 
                 charged = conn.execute(
-                    "UPDATE user_xiuxian SET stone=stone-%s WHERE user_id=%s AND stone>=%s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND stone>=%s",
                     (transferred, payer_id, transferred),
                 )
                 credited = conn.execute(
-                    "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                     (transferred, receiver_id),
                 )
                 if charged.rowcount != 1 or credited.rowcount != 1:
@@ -777,12 +777,12 @@ class StoneContestService:
                     return current_result("payer_empty", thief_stamina=thief_stamina)
 
                 charged = conn.execute(
-                    "UPDATE user_xiuxian SET stone=stone-%s "
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
                     "WHERE user_id=%s AND COALESCE(stone,0)=%s AND stone>=%s",
                     (transferred, payer_id, payer_stone, transferred),
                 )
                 credited = conn.execute(
-                    "UPDATE user_xiuxian SET stone=stone+%s "
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) "
                     "WHERE user_id=%s AND COALESCE(stone,0)=%s",
                     (transferred, receiver_id, receiver_stone),
                 )
@@ -1454,7 +1454,7 @@ class LotterySettlementService:
 
                 if prize > 0:
                     updated = conn.execute(
-                        "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                         (prize, user_id),
                     )
                     if updated.rowcount != 1:
@@ -1779,7 +1779,7 @@ class XiangyuanSettlementService:
                 gift_id = int(conn.execute(
                     "SELECT next_gift_id FROM xiangyuan_groups WHERE group_id=%s", (group_id,)
                 ).fetchone()[0])
-                conn.execute("UPDATE user_xiuxian SET stone=stone-%s WHERE user_id=%s", (stone, giver_id))
+                conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s", (stone, giver_id))
                 for goods_id, _, _, quantity in item_rows:
                     conn.execute(
                         "UPDATE back SET goods_num=goods_num-%s,update_time=%s WHERE user_id=%s AND goods_id=%s",
@@ -1892,7 +1892,7 @@ class XiangyuanSettlementService:
                     if (int(current[0]) if current else 0) + amount > max_goods_num:
                         conn.rollback()
                         return XiangyuanClaimResult("inventory_full", gift_id=gift_id)
-                conn.execute("UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s", (stone_reward, user_id))
+                conn.execute("UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s", (stone_reward, user_id))
                 back_columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(back)").fetchall()}
                 now = datetime.now()
                 for item_id, name, amount in awarded:
@@ -2012,7 +2012,7 @@ class XiangyuanSettlementService:
                     remaining_stone = int(remaining_stone)
                     if remaining_stone > 0:
                         conn.execute(
-                            "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                            "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                             (remaining_stone, str(giver_id)),
                         )
                         refund_stone += remaining_stone
@@ -2658,13 +2658,13 @@ class BreakthroughService:
 
                 if outcome == "failure":
                     conn.execute(
-                        "UPDATE user_xiuxian SET exp=exp+%s, level_up_rate=%s, level_up_cd=%s "
+                        "UPDATE user_xiuxian SET exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL), level_up_rate=%s, level_up_cd=%s "
                         "WHERE user_id=%s",
                         (exp_gain, int(new_rate), occurred_at, user_id),
                     )
                 elif outcome == "success":
                     conn.execute(
-                        "UPDATE user_xiuxian SET level=%s, exp=exp+%s, "
+                        "UPDATE user_xiuxian SET level=%s, exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL), "
                         "power=ROUND((exp+%s)*%s*%s, 0), level_up_cd=%s, "
                         "level_up_rate=0, hp=(exp+%s)/2, mp=exp+%s, atk=(exp+%s)/10 "
                         "WHERE user_id=%s",

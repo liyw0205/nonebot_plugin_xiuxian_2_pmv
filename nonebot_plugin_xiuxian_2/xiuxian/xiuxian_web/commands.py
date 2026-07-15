@@ -186,7 +186,7 @@ def execute_command():
                 if not user_info:
                     return jsonify({"success": False, "error": f"用户 {username} 不存在"})
                 
-                sql = "UPDATE user_xiuxian SET stone = stone + %s WHERE user_id = %s"
+                sql = "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id = %s"
                 execute_sql(DATABASE, sql, (amount, user_info['user_id']))
                 
                 return jsonify({
@@ -194,7 +194,7 @@ def execute_command():
                     "message": f"成功向 {username} {'增加' if amount >= 0 else '减少'} {abs(amount)} 灵石"
                 })
             else:
-                sql = "UPDATE user_xiuxian SET stone = stone + %s"
+                sql = "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL)"
                 execute_sql(DATABASE, sql, (amount,))
                 return jsonify({
                     "success": True, 
@@ -212,18 +212,18 @@ def execute_command():
                     return jsonify({"success": False, "error": f"用户 {username} 不存在"})
                 
                 if amount > 0:
-                    sql = "UPDATE user_xiuxian SET exp = exp + %s WHERE user_id = %s"
+                    sql = "UPDATE user_xiuxian SET exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL) WHERE user_id = %s"
                     execute_sql(DATABASE, sql, (amount, user_info['user_id']))
                     return jsonify({"success": True, "message": f"成功向 {username} 增加 {amount} 修为"})
                 else:
-                    sql = "UPDATE user_xiuxian SET exp = exp - %s WHERE user_id = %s"
+                    sql = "UPDATE user_xiuxian SET exp=CAST(COALESCE(exp,0) AS REAL)-CAST(%s AS REAL) WHERE user_id = %s"
                     execute_sql(DATABASE, sql, (abs(amount), user_info['user_id']))
                     return jsonify({"success": True, "message": f"成功从 {username} 减少 {abs(amount)} 修为"})
             else:
                 if amount > 0:
-                    sql = "UPDATE user_xiuxian SET exp = exp + %s"
+                    sql = "UPDATE user_xiuxian SET exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL)"
                 else:
-                    sql = "UPDATE user_xiuxian SET exp = exp - %s"
+                    sql = "UPDATE user_xiuxian SET exp=CAST(COALESCE(exp,0) AS REAL)-CAST(%s AS REAL)"
                 execute_sql(DATABASE, sql, (abs(amount),))
                 return jsonify({
                     "success": True, 
@@ -515,7 +515,7 @@ def execute_command():
                 impart_data = execute_sql(IMPART_DB, sql_check, (user_info['user_id'],))
                 
                 if impart_data:
-                    sql_update = "UPDATE xiuxian_impart SET stone_num = stone_num + %s WHERE user_id = %s"
+                    sql_update = "UPDATE xiuxian_impart SET stone_num=CAST(COALESCE(stone_num,0) AS REAL)+CAST(%s AS REAL) WHERE user_id = %s"
                     execute_sql(IMPART_DB, sql_update, (amount, user_info['user_id']))
                 else:
                     sql_insert = "INSERT INTO xiuxian_impart (user_id, stone_num) VALUES (%s, %s)"
@@ -537,7 +537,7 @@ def execute_command():
                         impart_data = execute_sql(IMPART_DB, sql_check, (user_id,))
                         
                         if impart_data:
-                            sql_update = "UPDATE xiuxian_impart SET stone_num = stone_num + %s WHERE user_id = %s"
+                            sql_update = "UPDATE xiuxian_impart SET stone_num=CAST(COALESCE(stone_num,0) AS REAL)+CAST(%s AS REAL) WHERE user_id = %s"
                             execute_sql(IMPART_DB, sql_update, (amount, user_id))
                         else:
                             sql_insert = "INSERT INTO xiuxian_impart (user_id, stone_num) VALUES (%s, %s)"

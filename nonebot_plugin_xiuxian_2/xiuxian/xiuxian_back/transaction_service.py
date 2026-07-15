@@ -155,7 +155,7 @@ class PackageRewardService:
                 )
                 if stone_delta:
                     stone_update = conn.execute(
-                        "UPDATE user_xiuxian SET stone=stone+%s "
+                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) "
                         "WHERE user_id=%s AND stone+%s>=0",
                         (stone_delta, user_id, stone_delta),
                     )
@@ -404,7 +404,7 @@ class AccessoryPackageService:
 
                 if stone_delta:
                     updated = conn.execute(
-                        "UPDATE user_xiuxian SET stone=stone+%s "
+                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) "
                         "WHERE user_id=%s AND stone+%s>=0",
                         (stone_delta, user_id, stone_delta),
                     )
@@ -1276,7 +1276,7 @@ class AlchemyService:
                         return result("item_insufficient")
 
                 granted = conn.execute(
-                    "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                     (reward_stone, user_id),
                 )
                 if granted.rowcount != 1:
@@ -2408,10 +2408,10 @@ class CultivationItemService:
                 updated = conn.execute(
                     """
                     UPDATE user_xiuxian
-                    SET exp=COALESCE(exp, 0)+%s,
-                        hp=COALESCE(hp, 0)+%s,
-                        mp=COALESCE(mp, 0)+%s,
-                        atk=COALESCE(atk, 0)+%s,
+                    SET exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),
+                        hp=CAST(COALESCE(hp,0) AS REAL)+CAST(%s AS REAL),
+                        mp=CAST(COALESCE(mp,0) AS REAL)+CAST(%s AS REAL),
+                        atk=CAST(COALESCE(atk,0) AS REAL)+CAST(%s AS REAL),
                         power=ROUND((COALESCE(exp, 0)+%s)*%s, 0)
                     WHERE user_id=%s
                     """,
@@ -3244,7 +3244,7 @@ class StoneItemRewardService:
                      (quantity, user_id, item_id, quantity)),
                 )
                 granted = conn.execute(
-                    "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                     (sum(fixed_rewards), user_id),
                 )
                 if consumed.rowcount != 1:

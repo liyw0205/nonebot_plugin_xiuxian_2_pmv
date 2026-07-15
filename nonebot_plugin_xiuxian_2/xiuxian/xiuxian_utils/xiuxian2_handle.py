@@ -1171,7 +1171,7 @@ class XiuxianDateManage:
                 return f"修仙界没有你的足迹，输入 我要修仙 加入修仙世界吧！"
             elif result[0] == 0:
                 ls = random.randint(XiuConfig().sign_in_lingshi_lower_limit, XiuConfig().sign_in_lingshi_upper_limit)
-                sql2 = f"UPDATE user_xiuxian SET is_sign=1,stone=stone+%s WHERE user_id=%s"
+                sql2 = f"UPDATE user_xiuxian SET is_sign=1,stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s"
                 cur.execute(sql2, (ls, user_id))
                 self._commit_write()
                 return f"签到成功，获取{ls}块灵石!"
@@ -1187,7 +1187,7 @@ class XiuxianDateManage:
             result = cur.fetchone()
             if result[0] == 0:
                 ls = random.randint(XiuConfig().beg_lingshi_lower_limit, XiuConfig().beg_lingshi_upper_limit)
-                sql2 = f"UPDATE user_xiuxian SET is_beg=1,stone=stone+%s WHERE user_id=%s"
+                sql2 = f"UPDATE user_xiuxian SET is_beg=1,stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s"
                 cur.execute(sql2, (ls, user_id))
                 self._commit_write()
                 return ls
@@ -1229,7 +1229,7 @@ class XiuxianDateManage:
         """洗灵根"""
         with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE user_xiuxian SET root=%s,root_type=%s,stone=stone-%s WHERE user_id=%s"
+            sql = f"UPDATE user_xiuxian SET root=%s,root_type=%s,stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s"
             cur.execute(sql, (lg, type, XiuConfig().remake, user_id))
             self._commit_write()
 
@@ -1448,7 +1448,7 @@ class XiuxianDateManage:
         """所有用户增加灵石"""
         with self._conn_lock:
             cur = self.conn.cursor()
-            sql = f"UPDATE user_xiuxian SET stone=stone+%s"
+            sql = f"UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL)"
             cur.execute(sql, (price,))
             self._commit_write()
 
@@ -2633,7 +2633,7 @@ class XiuxianDateManage:
 
                 if stone_cost > 0:
                     cur.execute(
-                        "UPDATE user_xiuxian SET stone=stone-%s WHERE user_id=%s AND COALESCE(stone, 0) >= %s",
+                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND COALESCE(stone, 0) >= %s",
                         (stone_cost, user_id, stone_cost),
                     )
                     if cur.rowcount <= 0:
@@ -2735,7 +2735,7 @@ class XiuxianDateManage:
                         return False
 
                 cur.execute(
-                    "UPDATE user_xiuxian SET stone=stone+%s WHERE user_id=%s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                     (reward_stone, user_id),
                 )
                 if cur.rowcount <= 0:
@@ -3248,7 +3248,7 @@ class TradeDataManager:
                 cur.execute("SELECT 1 FROM guishi_info WHERE user_id=%s", (user_id,))
                 if cur.fetchone():
                     cur.execute(
-                        "UPDATE guishi_info SET stored_stone=stored_stone+%s WHERE user_id=%s",
+                        "UPDATE guishi_info SET stored_stone=CAST(COALESCE(stored_stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
                         (amount, user_id),
                     )
                 else:
@@ -3260,7 +3260,7 @@ class TradeDataManager:
                 cur.execute(
                     """
                     UPDATE guishi_info
-                    SET stored_stone=stored_stone-%s
+                    SET stored_stone=CAST(COALESCE(stored_stone,0) AS REAL)-CAST(%s AS REAL)
                     WHERE user_id=%s AND COALESCE(stored_stone, 0) >= %s
                     """,
                     (amount, user_id, amount),
@@ -3916,13 +3916,13 @@ class XIUXIAN_IMPART_BUFF:
         with self._conn_lock:
             if type_ == 1:
                 cur = self.conn.cursor()
-                sql = f"UPDATE xiuxian_impart SET stone_num=stone_num+%s WHERE user_id=%s"
+                sql = f"UPDATE xiuxian_impart SET stone_num=CAST(COALESCE(stone_num,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s"
                 cur.execute(sql, (impart_num, user_id))
                 self._commit_write()
                 return True
             if type_ == 2:
                 cur = self.conn.cursor()
-                sql = f"UPDATE xiuxian_impart SET stone_num=stone_num-%s WHERE user_id=%s"
+                sql = f"UPDATE xiuxian_impart SET stone_num=CAST(COALESCE(stone_num,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s"
                 cur.execute(sql, (impart_num, user_id))
                 self._commit_write()
                 return True
@@ -3931,7 +3931,7 @@ class XIUXIAN_IMPART_BUFF:
         """所有用户增加结晶"""
         with self._conn_lock:
             cur = self.conn.cursor()
-            sql = "UPDATE xiuxian_impart SET stone_num=stone_num+%s"
+            sql = "UPDATE xiuxian_impart SET stone_num=CAST(COALESCE(stone_num,0) AS REAL)+CAST(%s AS REAL)"
             cur.execute(sql, (impart_stone,))
             self._commit_write()
 
