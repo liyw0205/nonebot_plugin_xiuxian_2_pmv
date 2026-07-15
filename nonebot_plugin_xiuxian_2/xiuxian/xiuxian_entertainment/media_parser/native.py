@@ -836,11 +836,88 @@ def parse_douyin(url: str) -> dict[str, Any]:
     return meta
 
 
-def parse_kuaishou(url: str) -> dict[str, Any]:
-    """快手：优先 window.INIT_STATE 的 mainMvUrls/coverUrls/caption。
+def _find_kuaishou_photo(state: Any) -> dict[str, Any] | None:
+    """在 INIT_STATE 中定位 photo 对象。"""
+    found: dict[str, Any] | None = None
 
-    注意：INIT_STATE 常带同一作品的多清晰度 mp4 + 多 CDN 封面，
-    不是 3 个视频/6 张图。展示与发送只保留主视频 + 主封面。
+    def dig(o: Any) -> None:
+        nonlocal found
+        if found is not None:
+            return
+        if isinstance(o, dict):
+            if (
+                "caption" in o
+                and "userName" in o
+                and ("mainMvUrls" in o or "coverUrls" in o or "ext_params" in o)
+            ):
+                found = o
+                return
+            for v in o.values():
+                dig(v)
+        elif isinstance(o, list):
+            for v in o[:80]:
+                dig(v)
+
+    dig(state)
+    return found
+
+
+def _kuaishou_cdn_urls(items: Any) -> list[str]:
+    out: list[str] = []
+    if not isinstance(items, list):
+        return out
+    for it in items:
+        if isinstance(it, dict):
+            u = it.get("url")
+            if isinstance(u, str) and u.startswith("http"):
+                out.append(u)
+        elif isinstance(it, str) and it.startswith("http"):
+            out.append(it)
+    return out
+
+
+def _kuaishou_atlas_urls(photo: dict[str, Any]) -> list[str]:
+    """图集：ext_params.atlas.list + cdnList 拼完整 URL。"""
+    ext = photo.get("ext_params") or {}
+    if not isinstance(ext, dict):
+        return []
+    atlas = ext.get("atlas") or {}
+    if not isinstance(atlas, dict):
+        return []
+    routes = atlas.get("list") or []
+    cdns = atlas.get("cdnList") or atlas.get("cdn_list") or []
+    if not routes:
+        return []
+    cdn_host = None
+    if isinstance(cdns, list) and cdns:
+        first = cdns[0]
+        if isinstance(first, dict):
+            cdn_host = first.get("cdn") or first.get("url")
+        elif isinstance(first, str):
+            cdn_host = first
+    if not cdn_host:
+        cdn_host = atlas.get("cdn")
+    if not cdn_host:
+        return []
+    host = str(cdn_host).removeprefix("https://").removeprefix("http://").strip("/")
+    urls: list[str] = []
+    for route in routes:
+        if not isinstance(route, str) or not route:
+            continue
+        if route.startswith("http"):
+            urls.append(route)
+        else:
+            path = route if route.startswith("/") else f"/{route}"
+            urls.append(f"https://{host}{path}")
+    return urls
+
+
+def parse_kuaishou(url: str) -> dict[str, Any]:
+    """快手：INIT_STATE.photo
+
+    - 视频：mainMvUrls（高清优先，只取 1 路）+ coverUrls 作封面
+    - 图集：ext_params.atlas.list 全量图片（不是 coverUrls 那 1 张封面）
+    - 附带 headUrl / timestamp 供卡片展示
     """
     meta = _base_meta("kuaishou", url)
     final = expand_url(url)
@@ -857,39 +934,44 @@ def parse_kuaishou(url: str) -> dict[str, Any]:
 
     state = _extract_json_assignment(html, "window.INIT_STATE")
     if state is None:
-        # 回退通用解析
         return _parse_html_og("kuaishou", url)
 
-    videos: list[str] = []
-    images: list[str] = []
-    # 优先主视频字段，避免把所有清晰度/CDN 副本都当成多个视频
-    _walk_cdn_urls(state, {"mainMvUrls"}, videos)
-    if not videos:
-        _walk_cdn_urls(state, {"mp4Url", "photoUrl"}, videos)
-    _walk_cdn_urls(state, {"coverUrls", "coverUrl"}, images)
-    if not images:
-        _walk_cdn_urls(state, {"webpCoverUrls"}, images)
+    photo = _find_kuaishou_photo(state)
+    if not isinstance(photo, dict):
+        return _parse_html_og("kuaishou", final)
 
-    # 仅在主字段为空时，才从全树兜底捞 mp4/封面
-    if not videos or not images:
-        found: list[str] = []
-        _collect_http_urls(state, found)
-        for u in found:
-            low = u.lower()
-            if not videos and ".mp4" in low and u.startswith("http"):
-                videos.append(u)
-            elif (
-                not images
-                and any(x in low for x in (".jpg", ".jpeg", ".png", ".webp"))
-                and "uhead" not in low
-                and "emotion" not in low
-            ):
-                images.append(u)
+    caption = str(photo.get("caption") or "").strip()
+    if caption in {"去快手享超清画质", "参与免费领道具！", "快手", "快手视频"}:
+        caption = ""
+    author = str(photo.get("userName") or "").replace("\u3164", "").strip()
+    meta["title"] = caption or "快手内容"
+    meta["author"] = author
+    meta["desc"] = caption[:400] if caption else ""
+    meta["avatar_url"] = str(photo.get("headUrl") or "") or None
+    if not meta["avatar_url"]:
+        heads = _kuaishou_cdn_urls(photo.get("headUrls"))
+        meta["avatar_url"] = heads[0] if heads else None
+    ts = photo.get("timestamp")
+    try:
+        ts_i = int(ts)
+        # 毫秒 → 秒
+        if ts_i > 10_000_000_000:
+            ts_i //= 1000
+        meta["timestamp"] = ts_i
+    except Exception:
+        meta["timestamp"] = None
+
+    videos = _kuaishou_cdn_urls(photo.get("mainMvUrls"))
+    covers = _kuaishou_cdn_urls(photo.get("coverUrls")) or _kuaishou_cdn_urls(
+        photo.get("webpCoverUrls")
+    )
+    atlas = _kuaishou_atlas_urls(photo)
+    single_pic = bool(photo.get("singlePicture"))
+    photo_type = str(photo.get("photoType") or photo.get("type") or "")
 
     def _video_rank(u: str) -> tuple[int, int]:
         low = u.lower()
         score = 0
-        # 优先高清晰度（Ultra/High），再主链/pkey
         if any(x in low for x in ("ultrav", "ultra", "v6ultra")):
             score += 8
         elif any(x in low for x in ("highv", "v6high", "1080", "hd15")):
@@ -900,68 +982,30 @@ def parse_kuaishou(url: str) -> dict[str, Any]:
             score += 2
         if "clientcachekey" in low or "mainmv" in low:
             score += 1
-        if "kwaicdn.com" in low or "kwimgs.com" in low or "yximgs.com" in low:
-            score += 1
-        # 极低清/预览链略降权
         if any(x in low for x in ("360p", "240p", "preview", "thumb")):
             score -= 3
         return (-score, -len(u))
 
-    def _image_rank(u: str) -> tuple[int, int]:
-        low = u.lower()
-        score = 0
-        if "emotion" in low or "emoji" in low:
-            score -= 10
-        if "uhead" in low or "/bg" in urlparse(u).path.lower():
-            score -= 5
-        if any(x in low for x in (".jpg", ".jpeg", ".png", ".webp")):
-            score += 1
-        if "upic" in low or "cover" in low:
-            score += 2
-        return (-score, -len(u))
+    videos = sorted(dict.fromkeys(videos), key=_video_rank)
 
-    videos = sorted(dict.fromkeys(v for v in videos if v.startswith("http")), key=_video_rank)
-    images = sorted(
-        dict.fromkeys(
-            u
-            for u in images
-            if u.startswith("http")
-            and "uhead" not in u.lower()
-            and "emotion" not in u.lower()
-            and "emoji" not in u.lower()
-            and "/bg" not in urlparse(u).path.lower()
-        ),
-        key=_image_rank,
-    )
+    # 图集优先用 atlas 全量；视频作品只留 1 封面
+    is_atlas = bool(atlas) or single_pic or "ATLAS" in photo_type.upper()
+    if is_atlas and atlas:
+        meta["video_urls"] = []
+        meta["image_urls"] = list(dict.fromkeys(atlas))[:12]
+        # 封面兜底：atlas 为空时用 cover
+        if not meta["image_urls"] and covers:
+            meta["image_urls"] = covers[:1]
+    else:
+        meta["video_urls"] = videos[:1]
+        meta["image_urls"] = (covers[:1] if covers else [])
 
-    caption = _walk_pick_str(state, {"caption"})
-    if not caption:
-        raw_title = _walk_pick_str(state, {"title"})
-        if raw_title and raw_title not in {
-            "去快手享超清画质",
-            "参与免费领道具！",
-            "快手",
-            "快手视频",
-        }:
-            caption = raw_title
-    author = _walk_pick_str(state, {"userName"})
-    if not author:
-        author = _walk_pick_str(state, {"authorName", "name"})
-    meta["title"] = caption or "快手视频"
-    meta["author"] = author or ""
-    meta["desc"] = (caption or "")[:400]
-    # 单作品：只保留最佳 1 路视频 + 1 张封面（避免卡片显示 视频×3 图6张）
-    meta["video_urls"] = videos[:1]
-    meta["image_urls"] = images[:1]
     if not meta["video_urls"] and not meta["image_urls"]:
         fallback = _parse_html_og("kuaishou", final)
         if fallback.get("video_urls") or fallback.get("image_urls"):
-            # 回退也收敛
-            fb_v = list(fallback.get("video_urls") or [])[:1]
-            fb_i = list(fallback.get("image_urls") or [])[:1]
-            fallback["video_urls"] = fb_v
-            fallback["image_urls"] = fb_i
             fallback["source_url"] = url
+            fallback.setdefault("avatar_url", meta.get("avatar_url"))
+            fallback.setdefault("timestamp", meta.get("timestamp"))
             return fallback
         meta["error"] = "快手未解析到可发送媒体（可能风控/登录）"
     return meta

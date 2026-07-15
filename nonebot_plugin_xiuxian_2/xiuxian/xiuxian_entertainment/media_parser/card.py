@@ -1,17 +1,17 @@
-"""简化版媒体卡片渲染（参考 astrbot_plugin_parser / nonebot-plugin-parser 风格）。
+"""媒体卡片渲染（参考 Zhalslar/astrbot_plugin_parser 布局）。
 
-布局：白底卡片
-- 顶栏：平台徽章 + 作者
-- 标题（多行截断）
-- 封面（可选播放按钮遮罩）
-- 底栏：简介/提示
-
-不依赖 apilmoji / 上游资源包，用本机中文字体。
+布局：
+- 顶栏：圆形头像 + @作者 + 发布时间；右侧平台图标
+- 标题
+- 封面（视频叠播放钮；图集用首图）
+- 底栏：简介（不再显示「视频×N / 图N张」）
 """
 from __future__ import annotations
 
 import io
 import re
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -30,6 +30,18 @@ _FONT_CANDIDATES = [
     Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
 ]
 
+_ASSETS = Path(__file__).resolve().parent / "assets"
+_LOGO_DIR = _ASSETS / "logos"
+_PLATFORM_LOGO = {
+    "bilibili": "bilibili.png",
+    "douyin": "douyin.png",
+    "kuaishou": "kuaishou.png",
+    "tiktok": "tiktok.png",
+    "twitter": "twitter.png",
+    "weibo": "weibo.png",
+    "xiaohongshu": "xhs.png",
+    "youtube": "youtube.png",
+}
 _PLATFORM_LABEL = {
     "bilibili": "B站",
     "douyin": "抖音",
@@ -45,11 +57,13 @@ _PLATFORM_LABEL = {
 
 CARD_W = 720
 PAD = 28
-BADGE_H = 36
 GAP = 14
+AVATAR = 64
+LOGO = 42
 TITLE_SIZE = 30
-META_SIZE = 22
-FOOT_SIZE = 20
+META_SIZE = 24
+TIME_SIZE = 20
+FOOT_SIZE = 22
 MAX_COVER_H = 720
 MIN_COVER_H = 240
 
@@ -90,12 +104,12 @@ def _wrap(font: ImageFont.ImageFont, text: str, max_w: int, max_lines: int = 4) 
             break
     if cur and len(lines) < max_lines:
         lines.append(cur)
-    if len(lines) == max_lines and (cur and lines[-1] != text[-len(lines[-1]) :]):
-        # ellipsis
+    if len(lines) == max_lines:
         s = lines[-1]
         while s and _text_width(font, s + "…") > max_w:
             s = s[:-1]
-        lines[-1] = (s + "…") if s else "…"
+        if s != lines[-1]:
+            lines[-1] = (s + "…") if s else "…"
     return lines
 
 
@@ -129,12 +143,38 @@ def _download_image(url: str, *, use_proxy: bool = False, timeout: int = 20) -> 
         img = Image.open(io.BytesIO(bytes(data)))
         return img.convert("RGBA")
     except Exception as e:
-        logger.debug(f"媒体卡片封面下载失败: {e}")
+        logger.debug(f"媒体卡片图片下载失败: {e}")
         return None
 
 
-def _round_rect(draw: ImageDraw.ImageDraw, box, radius: int, fill) -> None:
-    draw.rounded_rectangle(box, radius=radius, fill=fill)
+def _circle_avatar(img: Image.Image | None, size: int = AVATAR) -> Image.Image:
+    if img is None:
+        # placeholder
+        out = Image.new("RGBA", (size, size), (230, 230, 230, 255))
+        d = ImageDraw.Draw(out)
+        d.ellipse((0, 0, size - 1, size - 1), fill=(200, 200, 200, 255))
+        return out
+    av = img.convert("RGBA").resize((size, size), Image.Resampling.LANCZOS)
+    mask = Image.new("L", (size, size), 0)
+    ImageDraw.Draw(mask).ellipse((0, 0, size - 1, size - 1), fill=255)
+    out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    out.paste(av, (0, 0))
+    out.putalpha(mask)
+    return out
+
+
+def _load_platform_logo(platform: str) -> Image.Image | None:
+    name = _PLATFORM_LOGO.get(platform)
+    if not name:
+        return None
+    path = _LOGO_DIR / name
+    if not path.is_file():
+        return None
+    try:
+        img = Image.open(path).convert("RGBA")
+        return img.resize((LOGO, LOGO), Image.Resampling.LANCZOS)
+    except Exception:
+        return None
 
 
 def _fit_cover(img: Image.Image, target_w: int) -> Image.Image:
@@ -142,15 +182,11 @@ def _fit_cover(img: Image.Image, target_w: int) -> Image.Image:
     if w <= 0 or h <= 0:
         return Image.new("RGB", (target_w, MIN_COVER_H), (30, 30, 30))
     scale = target_w / w
-    nh = max(MIN_COVER_H, min(MAX_COVER_H, int(h * scale)))
-    # scale width first then center-crop height if needed
     resized = img.resize((target_w, max(1, int(h * scale))), Image.Resampling.LANCZOS)
     if resized.height > MAX_COVER_H:
         top = (resized.height - MAX_COVER_H) // 2
         resized = resized.crop((0, top, target_w, top + MAX_COVER_H))
-        nh = MAX_COVER_H
     elif resized.height < MIN_COVER_H:
-        # pad
         canvas = Image.new("RGB", (target_w, MIN_COVER_H), (24, 24, 28))
         y = (MIN_COVER_H - resized.height) // 2
         canvas.paste(resized.convert("RGB"), (0, y))
@@ -165,7 +201,6 @@ def _draw_play_button(cover: Image.Image) -> Image.Image:
     cx, cy = out.width // 2, out.height // 2
     r = max(28, min(out.width, out.height) // 10)
     d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=(0, 0, 0, 110))
-    # triangle
     tri = [
         (cx - r // 3, cy - r // 2),
         (cx - r // 3, cy + r // 2),
@@ -173,6 +208,24 @@ def _draw_play_button(cover: Image.Image) -> Image.Image:
     ]
     d.polygon(tri, fill=(255, 255, 255, 230))
     return Image.alpha_composite(out, overlay).convert("RGB")
+
+
+def _format_time(meta: dict[str, Any]) -> str:
+    ts = meta.get("timestamp") or meta.get("publish_time") or meta.get("create_time")
+    if ts is None or ts == "":
+        return ""
+    try:
+        if isinstance(ts, str) and not ts.isdigit():
+            # already formatted?
+            return ts[:32]
+        val = int(float(ts))
+        if val > 10_000_000_000:
+            val //= 1000
+        if val <= 0:
+            return ""
+        return datetime.fromtimestamp(val).strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return ""
 
 
 def render_media_card(
@@ -189,82 +242,77 @@ def render_media_card(
     author = (meta.get("author") or "").strip()
     desc = (meta.get("desc") or "").strip()
     if desc == title:
-        desc = ""
+        # 标题即简介时底栏仍可显示标题摘要
+        desc = title
     label = _PLATFORM_LABEL.get(platform, platform)
+    time_str = _format_time(meta)
 
-    images = meta.get("image_urls") or []
+    images = list(meta.get("image_urls") or [])
+    videos = list(meta.get("video_urls") or [])
+    has_video = bool(has_video or videos)
     if not cover_url and images:
         cover_url = images[0]
+
+    avatar_url = meta.get("avatar_url") or meta.get("author_avatar") or ""
+    avatar_img = _download_image(str(avatar_url), use_proxy=use_proxy) if avatar_url else None
+    avatar = _circle_avatar(avatar_img, AVATAR)
+    logo = _load_platform_logo(platform)
     cover_img = _download_image(str(cover_url or ""), use_proxy=use_proxy) if cover_url else None
 
     font_title = _pick_font(TITLE_SIZE)
     font_meta = _pick_font(META_SIZE)
+    font_time = _pick_font(TIME_SIZE)
     font_foot = _pick_font(FOOT_SIZE)
-    font_badge = _pick_font(20)
+    font_badge = _pick_font(18)
 
     content_w = CARD_W - 2 * PAD
+    # 作者区文字宽度：扣掉头像、logo
+    header_text_w = content_w - AVATAR - 12 - (LOGO + 8 if logo else 0)
+    name_lines = _wrap(font_meta, f"@{author}" if author else f"@{label}", header_text_w, max_lines=1)
     title_lines = _wrap(font_title, title, content_w, max_lines=3)
-    author_line = f"@{author}" if author else ""
-    foot_bits = []
-    videos = list(meta.get("video_urls") or [])
-    # 卡片脚注：有视频时只说「视频」，不要把多清晰度副本显示成「含视频×3」
-    if has_video or videos:
-        foot_bits.append("视频")
-    elif images:
-        # 纯图帖才显示张数；视频帖的封面不算「图N张」
-        n = len(images)
-        foot_bits.append("图片" if n <= 1 else f"图{n}张")
-    if desc:
-        foot_bits.append(desc[:40] + ("…" if len(desc) > 40 else ""))
-    foot = " · ".join(foot_bits) if foot_bits else "链接解析"
+    foot_lines = _wrap(font_foot, desc, content_w, max_lines=3) if desc else []
 
     # heights
+    header_h = max(AVATAR, (META_SIZE + 4) + (TIME_SIZE + 4 if time_str else 0))
     y = PAD
-    y += BADGE_H + 8
-    if author_line:
-        y += META_SIZE + 8
-    title_h = (TITLE_SIZE + 8) * max(1, len(title_lines))
-    y += title_h + GAP
+    y += header_h + GAP
+    y += (TITLE_SIZE + 8) * max(1, len(title_lines)) + GAP
 
-    cover_h = 0
     cover_rgb = None
     if cover_img is not None:
         cover_rgb = _fit_cover(cover_img, content_w)
-        if has_video or (meta.get("video_urls") or []):
+        if has_video:
             cover_rgb = _draw_play_button(cover_rgb)
-        cover_h = cover_rgb.height
-        y += cover_h + GAP
-    y += FOOT_SIZE + PAD
+        y += cover_rgb.height + GAP
+    if foot_lines:
+        y += (FOOT_SIZE + 6) * len(foot_lines)
+    y += PAD
 
-    card_h = y
-    img = Image.new("RGB", (CARD_W, card_h), (255, 255, 255))
+    img = Image.new("RGB", (CARD_W, y), (255, 255, 255))
     draw = ImageDraw.Draw(img)
-
-    # subtle outer border
-    draw.rectangle((0, 0, CARD_W - 1, card_h - 1), outline=(230, 230, 230), width=1)
+    draw.rectangle((0, 0, CARD_W - 1, y - 1), outline=(230, 230, 230), width=1)
 
     cur = PAD
-    # badge
-    badge_text = f" {label} "
-    bw = _text_width(font_badge, badge_text) + 16
-    _round_rect(draw, (PAD, cur, PAD + bw, cur + BADGE_H), 10, (0, 122, 255))
-    # center text in badge
-    try:
-        tb = font_badge.getbbox(badge_text)
-        th = tb[3] - tb[1]
-    except Exception:
-        th = 18
-    draw.text(
-        (PAD + 8, cur + (BADGE_H - th) // 2 - 1),
-        badge_text,
-        font=font_badge,
-        fill=(255, 255, 255),
-    )
-    cur += BADGE_H + 8
-
-    if author_line:
-        draw.text((PAD, cur), author_line, font=font_meta, fill=(100, 100, 100))
-        cur += META_SIZE + 8
+    # header: avatar + name/time + logo
+    img.paste(avatar, (PAD, cur), avatar)
+    text_x = PAD + AVATAR + 12
+    name_y = cur + max(0, (AVATAR - ((META_SIZE + 4) + (TIME_SIZE + 4 if time_str else 0))) // 2)
+    draw.text((text_x, name_y), name_lines[0] if name_lines else f"@{label}", font=font_meta, fill=(30, 100, 200))
+    if time_str:
+        draw.text((text_x, name_y + META_SIZE + 4), time_str, font=font_time, fill=(140, 140, 140))
+    if logo is not None:
+        lx = CARD_W - PAD - LOGO
+        ly = cur + (AVATAR - LOGO) // 2
+        img.paste(logo, (lx, ly), logo)
+    else:
+        # text badge fallback
+        badge = f" {label} "
+        bw = _text_width(font_badge, badge) + 12
+        bx = CARD_W - PAD - bw
+        by = cur + (AVATAR - 28) // 2
+        draw.rounded_rectangle((bx, by, bx + bw, by + 28), radius=8, fill=(0, 122, 255))
+        draw.text((bx + 6, by + 4), badge, font=font_badge, fill=(255, 255, 255))
+    cur += header_h + GAP
 
     for line in title_lines or ["已解析内容"]:
         draw.text((PAD, cur), line, font=font_title, fill=(30, 30, 30))
@@ -273,7 +321,6 @@ def render_media_card(
 
     if cover_rgb is not None:
         img.paste(cover_rgb, (PAD, cur))
-        # border around cover
         draw.rectangle(
             (PAD, cur, PAD + cover_rgb.width - 1, cur + cover_rgb.height - 1),
             outline=(235, 235, 235),
@@ -281,15 +328,16 @@ def render_media_card(
         )
         cur += cover_rgb.height + GAP
 
-    draw.text((PAD, cur), foot, font=font_foot, fill=(136, 136, 136))
+    for line in foot_lines:
+        draw.text((PAD, cur), line, font=font_foot, fill=(100, 100, 100))
+        cur += FOOT_SIZE + 6
 
-    # save
     if out_path is None:
         from ....paths import get_paths
 
         out_dir = get_paths().data / "media_parser_cache" / "cards"
         out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = out_dir / f"card_{abs(hash((platform, title, cover_url))) % (10**12)}.png"
+        out_path = out_dir / f"card_{abs(hash((platform, title, cover_url, time_str))) % (10**12)}.png"
     else:
         out_path = Path(out_path)
         out_path.parent.mkdir(parents=True, exist_ok=True)

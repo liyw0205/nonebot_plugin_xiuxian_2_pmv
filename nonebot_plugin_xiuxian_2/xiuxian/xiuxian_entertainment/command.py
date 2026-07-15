@@ -376,18 +376,16 @@ async def fun_media_send_parse_result(
         gallery = [
             u
             for u in images
-            if "emotion" not in u.lower() and "emoji" not in u.lower()
+            if "emotion" not in u.lower()
+            and "emoji" not in u.lower()
+            and "uhead" not in u.lower()
+            and "/bg" not in u.lower()
         ]
         if not gallery:
             return
 
-        # 已发卡时，图集里第一张若是封面可跳过（减少重复）
-        if has_card and len(gallery) > 1:
-            # 卡片封面可能与第一张同源；仍允许发，但限制数量
-            pass
-
-        if md_on and len(gallery) >= 2:
-            # Markdown 开启：用图片链一次发出多图
+        # 优先 Markdown 一次发全图（开启 md 时）
+        if md_on and len(gallery) >= 1:
             md_body = _build_gallery_md(gallery, caption="" if has_card else body)
             try:
                 await handle_send(
@@ -407,8 +405,8 @@ async def fun_media_send_parse_result(
                 if _is_passive_limit_error(e):
                     return
 
-        # 关闭 MD 或 MD 失败：最多再发 3 张，避免被动超限
-        for img in gallery[:3]:
+        # 关闭 MD 或 MD 失败：尽量多发，受被动次数限制时提前停
+        for img in gallery[:9]:
             try:
                 await _safe_send_media(
                     img, media_type="图片", label=f"发送解析图片 {img[:80]}"
