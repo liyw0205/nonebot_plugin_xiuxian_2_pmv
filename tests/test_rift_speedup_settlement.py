@@ -7,7 +7,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift.speedup_service import RiftSpeedupService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift.transaction_service import RiftSpeedupService
 from tests.test_db_backend import db_backend
 
 

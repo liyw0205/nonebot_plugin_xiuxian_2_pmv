@@ -6,7 +6,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift.termination_service import RiftTerminationService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift.transaction_service import RiftTerminationService
 from tests.test_db_backend import db_backend
 
 

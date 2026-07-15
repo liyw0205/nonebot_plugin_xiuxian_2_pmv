@@ -6,7 +6,7 @@ import pytest
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.demon_attack_settlement_service import DemonAttackSettlementService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.transaction_service import DemonAttackSettlementService
 
 
 def create_db(path):

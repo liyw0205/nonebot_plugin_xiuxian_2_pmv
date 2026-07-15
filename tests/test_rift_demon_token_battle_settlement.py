@@ -7,7 +7,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift.demon_token_battle_settlement_service import RiftDemonTokenBattleSettlementService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift.transaction_service import RiftDemonTokenBattleSettlementService
 from tests.test_db_backend import db_backend
 
 

@@ -7,7 +7,7 @@ from pathlib import Path
 from nonebot.log import logger
 from ...paths import get_paths
 from ..xiuxian_utils.json_store import save_json_file
-from .entry_service import RiftEntryService
+from .transaction_service import RiftEntryService
 
 SKILLPATH = get_paths().data / "功法" / "功法概率设置.json"
 PLAYERSDATA = get_paths().players

@@ -7,7 +7,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift.key_event_settlement_service import RiftKeyEventSettlementService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift.transaction_service import RiftKeyEventSettlementService
 from tests.test_db_backend import db_backend
 
 

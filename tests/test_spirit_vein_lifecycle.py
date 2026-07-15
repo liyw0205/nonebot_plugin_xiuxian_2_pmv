@@ -9,10 +9,10 @@ import pytest
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.demon_wave_refresh_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.transaction_service import (
     STATE_FIELDS,
 )
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.spirit_vein_lifecycle_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.transaction_service import (
     SpiritVeinLifecycleService,
 )
 

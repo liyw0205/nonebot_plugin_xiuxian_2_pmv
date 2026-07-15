@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_natal_treasure.forget_service import ForgetEffectService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_natal_treasure.transaction_service import ForgetEffectService
 from tests.test_db_backend import db_backend
 
 

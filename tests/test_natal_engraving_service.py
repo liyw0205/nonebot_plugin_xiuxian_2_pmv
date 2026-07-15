@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_natal_treasure.engraving_service import EngravingService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_natal_treasure.transaction_service import EngravingService
 from tests.test_db_backend import db_backend
 
 

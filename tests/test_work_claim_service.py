@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_work.claim_service import WorkClaimService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_work.transaction_service import WorkClaimService
 from tests.test_db_backend import db_backend
 
 

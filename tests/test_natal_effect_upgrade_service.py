@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_natal_treasure.effect_upgrade_service import EffectUpgradeService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_natal_treasure.transaction_service import EffectUpgradeService
 from tests.test_db_backend import db_backend
 
 

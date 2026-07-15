@@ -15,7 +15,7 @@ nonebot.init()
 
 import nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift as rift_module
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift import jsondata
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift.entry_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift.transaction_service import (
     RiftEntryService,
 )
 from tests.test_db_backend import db_backend

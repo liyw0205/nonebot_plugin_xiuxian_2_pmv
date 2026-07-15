@@ -3,7 +3,7 @@ import json, tempfile, unittest
 from pathlib import Path
 import nonebot
 nonebot.init()
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.demon_claim_service import DemonClaimService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.transaction_service import DemonClaimService
 from tests.test_db_backend import db_backend
 
 class DemonClaimServiceTests(unittest.TestCase):

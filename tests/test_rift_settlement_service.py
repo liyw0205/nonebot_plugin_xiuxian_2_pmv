@@ -9,7 +9,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift.settlement_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift.transaction_service import (
     RiftSettlementService,
 )
 from tests.test_db_backend import db_backend

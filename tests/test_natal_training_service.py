@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_natal_treasure.training_service import NatalTrainingService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_natal_treasure.transaction_service import NatalTrainingService
 from tests.test_db_backend import db_backend
 
 

@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_work.daily_refresh_reset_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_work.transaction_service import (
     WorkDailyRefreshResetService,
 )
 from tests.test_db_backend import db_backend
