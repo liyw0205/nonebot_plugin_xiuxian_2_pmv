@@ -1692,15 +1692,23 @@ def claim_sign(user_id: str, operation_id: str | None = None) -> tuple[bool, str
 
     uid = str(user_id)
     today = today_str()
-    ts = now_str()
+    operation_id = str(operation_id or f"activity-sign:{uid}:{time.time_ns()}")
+    # 同事件重放优先回放 operation，避免“今日已签到”前置拦截。
+    previous = activity_sign_settlement_service.get_result(operation_id)
+    if previous is not None:
+        lines = [
+            f"{cfg.get('festival_name', '节日')}签到成功",
+            f"累计签到：{previous.sign_days} 天",
+            "该签到请求已经处理，无需重复提交。",
+        ]
+        return True, "\n".join(lines)
+
     conn = db_backend.connect(DB_PATH)
     conn.row_factory = db_backend.Row
     try:
         cur = conn.cursor()
         cur.execute("SELECT * FROM activity_user WHERE user_id=%s", (uid,))
         row = cur.fetchone()
-        if row and row["last_sign_date"] == today:
-            return False, "今日已经领取过活动签到"
 
         current_sign_days = _as_int(row["sign_days"] if row else 0)
         if row and "total_sign_days" in row.keys():
@@ -1723,14 +1731,22 @@ def claim_sign(user_id: str, operation_id: str | None = None) -> tuple[bool, str
         conn.close()
 
     result = activity_sign_settlement_service.settle(
-        operation_id or f"activity-sign:{uid}:{time.time_ns()}", uid, today,
+        operation_id, uid, today,
         current_sign_days, current_total_sign_days, daily_reward_items,
         milestone_reward_items, XiuConfig().max_goods_num,
         daily_reward_text, milestone_reward_text,
     )
+    if result.status == "duplicate":
+        lines = [
+            f"{cfg.get('festival_name', '节日')}签到成功",
+            f"累计签到：{result.sign_days} 天",
+            "该签到请求已经处理，无需重复提交。",
+        ]
+        return True, "\n".join(lines)
     if not result.succeeded:
         return False, {"already_signed":"今日已经领取过活动签到","inventory_full":"背包空间不足，奖励未领取","user_missing":"角色不存在","state_changed":"签到状态已变化，请重试","operation_conflict":"签到请求冲突，请重新发送"}.get(result.status,"活动签到失败")
     daily_msg, milestone_msg = [], []
+    sign_days = result.sign_days
 
     reply_mode = _sign_reply_mode(cfg)
     lines = [

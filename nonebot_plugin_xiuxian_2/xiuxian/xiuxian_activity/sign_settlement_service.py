@@ -86,6 +86,27 @@ class ActivitySignSettlementService:
             for item_id, values in sorted(items.items())
         )
 
+    def get_result(self, operation_id: str) -> ActivitySignSettlementResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._activity_database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS activity_sign_settlement_operations("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,sign_days INTEGER NOT NULL,"
+                "total_sign_days INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT sign_days,total_sign_days FROM activity_sign_settlement_operations "
+                "WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return ActivitySignSettlementResult(
+                "duplicate", int(previous[0]), int(previous[1])
+            )
+
     def settle(
         self,
         operation_id,
@@ -119,18 +140,9 @@ class ActivitySignSettlementService:
         stone, item_rows = self._reward_rows(daily_rewards, milestone_rewards)
         next_sign_days = expected_sign_days + 1
         next_total_sign_days = expected_total_sign_days + 1
+        # Request identity only — counters/rewards are concurrency checks / outcomes.
         payload = json.dumps(
-            [
-                user_id,
-                sign_date,
-                expected_sign_days,
-                expected_total_sign_days,
-                daily_rewards,
-                milestone_rewards,
-                max_goods_num,
-                daily_reward_text,
-                milestone_reward_text,
-            ],
+            [user_id, sign_date, max_goods_num],
             ensure_ascii=True,
             separators=(",", ":"),
         )

@@ -102,7 +102,8 @@ class ActivitySignSettlementTests(unittest.TestCase):
         self.assertEqual("applied", self.settle().status)
         duplicate = self.settle()
         self.assertEqual(("duplicate", 3, 6), (duplicate.status, duplicate.sign_days, duplicate.total_sign_days))
-        self.assertEqual("operation_conflict", self.settle(daily_rewards=()).status)
+        # request identity differs (sign_date); mutable counters/rewards are not the payload key
+        self.assertEqual("operation_conflict", self.settle(sign_date="2026-07-15").status)
         with db_backend.connection(self.game) as conn:
             self.assertEqual(90, conn.execute("SELECT stone FROM user_xiuxian").fetchone()[0])
 
