@@ -80,9 +80,10 @@ class NormalPvpSettlementTests(unittest.TestCase):
                 (1,),
             )
 
-    def test_same_operation_rejects_changed_battle_result(self):
+    def test_same_operation_replays_even_if_battle_result_differs(self):
         self.assertEqual("applied", self.settle().status)
-        self.assertEqual("operation_conflict", self.settle(challenger_final_hp=54).status)
+        # Identity-only payload: mutable battle outcomes must not break replay.
+        self.assertEqual("duplicate", self.settle(challenger_final_hp=54).status)
         self.assertEqual(
             [tuple(row) for row in self.player_state()],
             [("challenger", 55, 30, 2, 500), ("opponent", 70, 40, 4, 600)],

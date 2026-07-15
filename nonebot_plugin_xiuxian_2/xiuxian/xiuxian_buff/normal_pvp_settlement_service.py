@@ -35,26 +35,13 @@ class NormalPvpSettlementService:
         self._lock = lock or RLock()
 
     @staticmethod
-    def _payload(
-        challenger_id,
-        opponent_id,
-        snapshots,
-        finals,
-        winner_id,
-        winner_name,
-        battle_messages,
-        stamina_cost,
-    ) -> str:
+    def _payload(challenger_id, opponent_id, stamina_cost) -> str:
+        # Request identity only — HP/MP/exp snapshots and battle results are outcomes.
         return json.dumps(
             {
-                "battle_messages": battle_messages,
                 "challenger_id": str(challenger_id),
-                "finals": [int(value) for value in finals],
                 "opponent_id": str(opponent_id),
-                "snapshots": [int(value) for value in snapshots],
                 "stamina_cost": int(stamina_cost),
-                "winner_id": str(winner_id),
-                "winner_name": str(winner_name),
             },
             ensure_ascii=True,
             separators=(",", ":"),
@@ -163,11 +150,6 @@ class NormalPvpSettlementService:
         payload = self._payload(
             challenger_id,
             opponent_id,
-            snapshots,
-            finals,
-            winner_id,
-            winner_name,
-            battle_messages,
             stamina_cost,
         )
 

@@ -39,8 +39,9 @@ class StoneTrainingSettlementService:
         possible_exp = requested_stone // 10
         exp_gain = min(possible_exp, max(0, exp_cap - expected_exp))
         stone_cost = exp_gain * 10 if possible_exp >= max(0, exp_cap - expected_exp) else requested_stone
+        # Request identity only — exp/stone snapshots are concurrency checks.
         payload = json.dumps(
-            [user_id, requested_stone, expected_exp, expected_stone, exp_cap, power_multiplier],
+            [user_id, requested_stone, exp_cap, power_multiplier],
             separators=(",", ":"),
         )
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:

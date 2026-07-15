@@ -164,32 +164,40 @@ async def blessed_spot_creat_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, msg, md_type="我要修仙")
         await blessed_spot_creat.finish()
     user_id = user_info['user_id']
-    if int(user_info['blessed_spot_flag']) != 0:
+    default_name = f"{user_info['user_name']}道友的家"
+    harvest_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    # 先走 operation，避免已拥有洞天福地时同事件重放被前置拦截。
+    result = blessed_spot_service.open(
+        _blessed_spot_operation_id(event, "open", user_id),
+        user_id,
+        BLESSEDSPOTCOST,
+        default_name,
+        harvest_time,
+    )
+    if result.status == "duplicate":
+        msg = (
+            f"恭喜道友拥有了自己的洞天福地，请收集聚灵旗来提升洞天福地的等级吧~\n"
+            f"默认名称为：{result.name}\n"
+            f"该购买请求已经处理，无需重复提交。"
+        )
+        await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
+        await blessed_spot_creat.finish()
+    if result.status == "already_owned":
         msg = f"道友已经拥有洞天福地了，请发送洞天福地查看吧~"
         await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
         await blessed_spot_creat.finish()
-    if user_info['stone'] < BLESSEDSPOTCOST:
+    if result.status == "stone_insufficient":
         msg = f"道友的灵石不足{BLESSEDSPOTCOST}枚，无法购买洞天福地"
         await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
         await blessed_spot_creat.finish()
-    else:
-        default_name = f"{user_info['user_name']}道友的家"
-        harvest_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        result = blessed_spot_service.open(
-            _blessed_spot_operation_id(event, "open", user_id),
-            user_id,
-            BLESSEDSPOTCOST,
-            default_name,
-            harvest_time,
-        )
-        if not result.succeeded:
-            msg = "洞天福地状态或灵石数量已变化，请重新查看后再试。"
-            await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
-            await blessed_spot_creat.finish()
-        msg = "恭喜道友拥有了自己的洞天福地，请收集聚灵旗来提升洞天福地的等级吧~\n"
-        msg += f"默认名称为：{result.name}"
+    if not result.succeeded:
+        msg = "洞天福地状态或灵石数量已变化，请重新查看后再试。"
         await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
         await blessed_spot_creat.finish()
+    msg = "恭喜道友拥有了自己的洞天福地，请收集聚灵旗来提升洞天福地的等级吧~\n"
+    msg += f"默认名称为：{result.name}"
+    await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
+    await blessed_spot_creat.finish()
 
 
 @blessed_spot_info.handle(parameterless=[Cooldown(cd_time=0)])
@@ -314,7 +322,12 @@ async def blessed_spot_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessa
             str(user_info.get("blessed_spot_name", "") or ""),
             arg,
         )
-        msg = f"道友的洞天福地成功改名为：{result.name}" if result.succeeded else "洞天福地状态已变化，请重新查看后再试。"
+        if result.status == "duplicate":
+            msg = f"道友的洞天福地成功改名为：{result.name}\n该改名请求已经处理，无需重复提交。"
+        elif result.succeeded:
+            msg = f"道友的洞天福地成功改名为：{result.name}"
+        else:
+            msg = "洞天福地状态已变化，请重新查看后再试。"
     await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
     await blessed_spot_rename.finish()
 
@@ -329,7 +342,6 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
         await qc.finish()
     user_id = user_info['user_id']
 
-    user1 = sql_message.get_user_real_info(user_id)
     give_qq = get_at_user_id(args)  # 艾特的时候存到这里
     if give_qq:
         if give_qq == str(user_id):
@@ -340,30 +352,36 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
         arg = args.extract_plain_text().strip()
         give_info = sql_message.get_user_info_with_name(str(arg))
         give_qq = give_info['user_id'] if give_info else None
-    
-    user2 = sql_message.get_user_real_info(give_qq)
 
-    if user_info['hp'] is None or user_info['hp'] == 0:
+    # raw DB rows for concurrency checks; real_info is buff-amplified and must not seed expected_*.
+    base1 = sql_message.get_user_info_with_id(user_id)
+    base2 = sql_message.get_user_info_with_id(give_qq) if give_qq else None
+    user1 = sql_message.get_user_real_info(user_id)
+    user2 = sql_message.get_user_real_info(give_qq) if give_qq else None
+
+    if base1 and (base1['hp'] is None or base1['hp'] == 0):
         sql_message.update_user_hp(user_id)
+        base1 = sql_message.get_user_info_with_id(user_id)
         user1 = sql_message.get_user_real_info(user_id)
 
-    if not user1 or not user2:
+    if not base1 or not base2 or not user1 or not user2:
         msg = "修仙界没有对方的信息，快邀请对方加入修仙界吧！"
         await handle_send(bot, event, msg, md_type="buff", k1="切磋", v1="切磋", k2="状态", v2="我的状态", k3="修为", v3="我的修为")
         await qc.finish()
 
-    operation_id = _normal_pvp_operation_id(event, user1['user_id'], user2['user_id'])
-    replay = normal_pvp_settlement_service.replay(operation_id, user1['user_id'], user2['user_id'])
+    operation_id = _normal_pvp_operation_id(event, base1['user_id'], base2['user_id'])
+    replay = normal_pvp_settlement_service.replay(operation_id, base1['user_id'], base2['user_id'])
     if replay is not None:
         if replay.succeeded:
             await send_msg_handler(bot, event, replay.battle_messages)
             msg = f"获胜的是{replay.winner_name}" if replay.winner_id else "没有人获胜"
+            msg += "\n该切磋请求已经处理，无需重复提交。"
         else:
             msg = "本次切磋请求与已结算记录不一致，请重新发起。"
         await handle_send(bot, event, msg, md_type="buff", k1="切磋", v1="切磋", k2="状态", v2="我的状态", k3="修为", v3="我的修为")
         await qc.finish()
 
-    if int(user1['hp']) <= int(user1['exp']) / 10:
+    if int(base1['hp']) <= int(base1['exp']) / 10:
         time = leave_harm_time(user_id)
         msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！"
         msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
@@ -371,24 +389,24 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
         await qc.finish()
 
     result, winner_id, winner_name, final = normal_pvp_settlement_service.calculate_battle(
-        user1['user_id'], user2['user_id'], bot.self_id
+        base1['user_id'], base2['user_id'], bot.self_id
     )
     settlement = normal_pvp_settlement_service.settle(
         operation_id,
-        user1['user_id'],
-        user2['user_id'],
-        expected_challenger_hp=user1['hp'],
-        expected_challenger_mp=user1['mp'],
-        expected_challenger_stamina=user1['user_stamina'],
-        expected_challenger_exp=user1['exp'],
-        expected_opponent_hp=user2['hp'],
-        expected_opponent_mp=user2['mp'],
-        expected_opponent_stamina=user2['user_stamina'],
-        expected_opponent_exp=user2['exp'],
-        challenger_final_hp=final[str(user1['user_id'])][0],
-        challenger_final_mp=final[str(user1['user_id'])][1],
-        opponent_final_hp=final[str(user2['user_id'])][0],
-        opponent_final_mp=final[str(user2['user_id'])][1],
+        base1['user_id'],
+        base2['user_id'],
+        expected_challenger_hp=base1['hp'],
+        expected_challenger_mp=base1['mp'],
+        expected_challenger_stamina=base1['user_stamina'],
+        expected_challenger_exp=base1['exp'],
+        expected_opponent_hp=base2['hp'],
+        expected_opponent_mp=base2['mp'],
+        expected_opponent_stamina=base2['user_stamina'],
+        expected_opponent_exp=base2['exp'],
+        challenger_final_hp=final[str(base1['user_id'])][0],
+        challenger_final_mp=final[str(base1['user_id'])][1],
+        opponent_final_hp=final[str(base2['user_id'])][0],
+        opponent_final_mp=final[str(base2['user_id'])][1],
         winner_id=winner_id,
         winner_name=winner_name,
         battle_messages=result,
@@ -396,6 +414,8 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
     if settlement.succeeded:
         await send_msg_handler(bot, event, settlement.battle_messages)
         msg = f"获胜的是{settlement.winner_name}" if settlement.winner_id else "没有人获胜"
+        if settlement.status == "duplicate":
+            msg += "\n该切磋请求已经处理，无需重复提交。"
     elif settlement.status == "stamina_insufficient":
         msg = "你没有足够的体力，请等待体力恢复后再试！"
     else:
@@ -558,19 +578,18 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await handle_send(bot, event, msg, md_type="buff", k1="灵石修炼", v1="灵石修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await stone_exp.finish()
     stone_num = int(stone_num[0])
-    if use_stone < stone_num:
-        msg = "你的灵石还不够呢，快去赚点灵石吧！"
-        await handle_send(bot, event, msg, md_type="buff", k1="灵石修炼", v1="灵石修炼", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
-        await stone_exp.finish()
-
+    # 先 settle：成功后灵石减少，前置“灵石不足”会挡住同事件重放。
     level_rate = sql_message.get_root_rate(user_mes['root_type'], user_id)
     realm_rate = jsondata.level_data()[level]["spend"]
+    stone_op_id = _stone_training_operation_id(event, user_id)
     result = stone_training_settlement_service.settle(
-        _stone_training_operation_id(event, user_id), user_id,
+        stone_op_id, user_id,
         requested_stone=stone_num, expected_exp=use_exp, expected_stone=use_stone,
         exp_cap=max_exp, power_multiplier=level_rate * realm_rate,
     )
-    if result.status == "stone_insufficient":
+    if result.status == "duplicate":
+        msg = f"修炼结束，共增加修为：{result.exp_gain},消耗灵石：{result.stone_cost}\n该修炼请求已经处理，无需重复提交。"
+    elif result.status == "stone_insufficient":
         msg = "你的灵石还不够呢，快去赚点灵石吧！"
     elif result.status == "exp_capped":
         msg = "当前修为已到达上限，无法继续灵石修炼！"

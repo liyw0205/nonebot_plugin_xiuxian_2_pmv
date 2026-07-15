@@ -74,7 +74,8 @@ class BlessedSpotService:
         harvest_time = str(harvest_time)
         if not operation_id or stone_cost <= 0 or not default_name or not harvest_time:
             raise ValueError("valid operation, cost, name and harvest time are required")
-        payload = self._payload([user_id, stone_cost, default_name, harvest_time])
+        # Request identity only — harvest_time is an outcome of first apply, not the request key.
+        payload = self._payload([user_id, stone_cost, default_name])
 
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             conn.execute("ATTACH DATABASE %s AS player_data", (str(self._player_database),))
@@ -202,7 +203,8 @@ class BlessedSpotService:
         expected_name, new_name = str(expected_name), str(new_name).strip()
         if not operation_id or not new_name or len(new_name) > 9:
             raise ValueError("valid operation and name up to 9 characters are required")
-        payload = self._payload([user_id, expected_name, new_name])
+        # Request identity only — expected_name is a concurrency check.
+        payload = self._payload([user_id, new_name])
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
