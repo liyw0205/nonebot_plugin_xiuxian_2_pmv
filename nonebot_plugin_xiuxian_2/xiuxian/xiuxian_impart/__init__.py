@@ -285,16 +285,24 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, "发生未知错误！")
         return
 
+    msg_text = args.extract_plain_text().strip()
+    times = int(msg_text) if msg_text and msg_text.isdigit() and int(msg_text) > 0 else 1
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"impart-draw:{event_id}:{user_id}" if event_id else f"impart-draw:{user_id}:{time.time_ns()}"
+    # 先回放：成功后每日次数/灵石会挡住同事件幂等。
+    prior = impart_draw_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        await handle_send(
+            bot, event,
+            f"道友的传承抽卡\n抽卡{prior.draw_count}次已完成。\n"
+            f"该抽卡请求已经处理，无需重复提交。"
+        )
+        return
     if impart_data_draw['impart_num'] >= 100:
         msg = "道友今日抽卡已达上限，请明日再来！"
         await handle_send(bot, event, msg)
         return
     max_impart_num = 100 - impart_data_draw['impart_num']
-    
-    # 解析抽卡次数
-    msg_text = args.extract_plain_text().strip()
-    times = int(msg_text) if msg_text and 0 < int(msg_text) else 1
-
     if times > max_impart_num:
         times = max_impart_num
 
@@ -356,12 +364,18 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         more_duplicates_msg = f"\n(还有{total_duplicates - duplicate_display_limit}张重复卡未显示)"
 
     # 更新用户数据
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or random.getrandbits(64))
     result = impart_draw_service.draw(
-        f"impart-draw:{event_id}:{user_id}", user_id, user_stone_num,
+        operation_id, user_id, user_stone_num,
         impart_data_draw["wish"], impart_data_draw["impart_num"], required_crystals,
         current_wish, times, drawn_cards,
     )
+    if result.status == "duplicate":
+        await handle_send(
+            bot, event,
+            f"道友的传承抽卡\n抽卡{result.draw_count}次已完成。\n"
+            f"该抽卡请求已经处理，无需重复提交。"
+        )
+        return
     if not result.succeeded:
         await handle_send(bot, event, "抽卡状态已变化，请重试。")
         return
@@ -415,6 +429,9 @@ async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns())
     operation_id = f"impart-prayer:{event_id}:{user_id}:{item_id}"
     result = impart_prayer_service.replay(operation_id, user_id, item_id, quantity)
+    if result is not None and result.succeeded:
+        # fall through to existing message builder using result fields
+        pass
     if result is None:
         drawn_cards = [random.choice(img_list) for _ in range(quantity)]
         result = impart_prayer_service.settle(
@@ -467,6 +484,8 @@ async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 {new_cards_msg}
 {duplicate_cards_msg}
 """
+    if result.status == "duplicate":
+        final_msg = final_msg.rstrip() + "\n该祈愿请求已经处理，无需重复提交。"
     await handle_send(bot, event, final_msg, md_type="传承", k1="再次", v1="道具使用 祈愿石", k2="背包", v2="传承背包", k3="卡图", v3="传承卡图")
     return
 
@@ -487,21 +506,32 @@ async def use_love_sand(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     current_stones = impart_data_draw["stone_num"]
     
-    # 使用思恋流沙，随机获得思恋结晶
-    total_gained = sum(random.choice([10, 20, 30]) for _ in range(quantity))
-    
     item_count = sql_message.goods_num(user_id, item_id)
-    event_id = getattr(event, "message_id", None)
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"love-sand:{event_id}:{user_id}:{item_id}" if event_id else f"love-sand:{time.time_ns()}:{user_id}:{item_id}"
+    prior = love_sand_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        final_msg = (
+            f"获得思恋结晶 {prior.gained} 颗\n当前思恋结晶：{prior.stone_num}颗\n"
+            f"该使用请求已经处理，无需重复提交。"
+        )
+        await handle_send(bot, event, final_msg)
+        return
+    # 使用思恋流沙，随机获得思恋结晶（首次结果固化在 operation）
+    total_gained = sum(random.choice([10, 20, 30]) for _ in range(quantity))
     result = love_sand_service.apply(operation_id, user_id, item_id, quantity, total_gained, item_count, current_stones)
+    if result.status == "duplicate":
+        final_msg = (
+            f"获得思恋结晶 {result.gained} 颗\n当前思恋结晶：{result.stone_num}颗\n"
+            f"该使用请求已经处理，无需重复提交。"
+        )
+        await handle_send(bot, event, final_msg)
+        return
     if not result.succeeded:
         await handle_send(bot, event, "道具或传承状态已变化，请刷新后重试。")
         return
-    log_message(user_id, f"[思恋流沙] 使用{quantity}个，获得思恋结晶{total_gained}颗")
-    
-    # 构建结果消息
+    log_message(user_id, f"[思恋流沙] 使用{quantity}个，获得思恋结晶{result.gained}颗")
     final_msg = f"获得思恋结晶 {result.gained} 颗\n当前思恋结晶：{result.stone_num}颗"
-    
     await handle_send(bot, event, final_msg)
     return
 
@@ -675,10 +705,26 @@ async def impart_compose_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, "传承卡名不存在，请检查后重试！")
         return
     user_id = str(user_info["user_id"])
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"impart-compose:{event_id}:{user_id}" if event_id else f"impart-compose:{user_id}:{time.time_ns()}"
+    prior = card_compose_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        await handle_send(
+            bot, event,
+            f"合成成功：{source_card}剩余{prior.source_quantity}张，{target_card}现有{prior.target_quantity}张\n"
+            f"该合成请求已经处理，无需重复提交。"
+        )
+        return
     cards = impart_data_json.data_person_list(user_id) or {}
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or random.getrandbits(64))
-    result = card_compose_service.compose(f"impart-compose:{event_id}:{user_id}", user_id, source_card, target_card, cards.get(source_card, 0), cards.get(target_card, 0), 5, impart_data_json.data_all_())
+    result = card_compose_service.compose(operation_id, user_id, source_card, target_card, cards.get(source_card, 0), cards.get(target_card, 0), 5, impart_data_json.data_all_())
     messages = {"same_card": "合成材料卡与目标卡不能相同！", "card_missing": "重复卡不足5张，无法合成！", "state_changed": "传承卡牌状态已变化，请重新操作！"}
+    if result.status == "duplicate":
+        await handle_send(
+            bot, event,
+            f"合成成功：{source_card}剩余{result.source_quantity}张，{target_card}现有{result.target_quantity}张\n"
+            f"该合成请求已经处理，无需重复提交。"
+        )
+        return
     if not result.succeeded:
         await handle_send(bot, event, messages.get(result.status, "传承合成失败！"))
         return
@@ -702,14 +748,30 @@ async def impart_disassemble_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, "传承卡名或数量无效！")
         return
     user_id = str(user_info["user_id"])
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"impart-disassemble:{event_id}:{user_id}" if event_id else f"impart-disassemble:{user_id}:{time.time_ns()}"
+    prior = card_disassemble_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        await handle_send(
+            bot, event,
+            f"分解成功：{card_name}剩余{prior.card_quantity}张，思恋结晶现有{prior.stone_quantity}颗\n"
+            f"该分解请求已经处理，无需重复提交。"
+        )
+        return
     cards = impart_data_json.data_person_list(user_id) or {}
     impart_state = await impart_check(user_id)
     if impart_state is None:
         await handle_send(bot, event, "未找到传承数据！")
         return
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or random.getrandbits(64))
-    result = card_disassemble_service.disassemble(f"impart-disassemble:{event_id}:{user_id}", user_id, card_name, quantity, cards.get(card_name, 0), impart_state["stone_num"], 2, impart_data_json.data_all_())
+    result = card_disassemble_service.disassemble(operation_id, user_id, card_name, quantity, cards.get(card_name, 0), impart_state["stone_num"], 2, impart_data_json.data_all_())
     messages = {"card_missing": "卡牌不足；分解后必须至少保留1张！", "state_changed": "传承卡牌状态已变化，请重新操作！", "user_missing": "未找到传承数据！"}
+    if result.status == "duplicate":
+        await handle_send(
+            bot, event,
+            f"分解成功：{card_name}剩余{result.card_quantity}张，思恋结晶现有{result.stone_quantity}颗\n"
+            f"该分解请求已经处理，无需重复提交。"
+        )
+        return
     if not result.succeeded:
         await handle_send(bot, event, messages.get(result.status, "传承分解失败！"))
         return

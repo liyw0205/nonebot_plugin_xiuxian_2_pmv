@@ -28,8 +28,9 @@ class CardComposeServiceTests(unittest.TestCase):
     def test_success_duplicate_and_conflict(self):
         first = self.service.compose("op", "u", "源卡", "目标卡", 6, 1)
         duplicate = self.service.compose("op", "u", "源卡", "目标卡", 6, 1)
+        # mutable expected quantities no longer break same-op replay
         conflict = self.service.compose("op", "u", "源卡", "目标卡", 5, 2)
-        self.assertEqual((first.status, duplicate.status, conflict.status), ("applied", "duplicate", "state_changed"))
+        self.assertEqual((first.status, duplicate.status, conflict.status), ("applied", "duplicate", "duplicate"))
         self.assertEqual(self.state(), {"源卡": 1, "目标卡": 2})
 
     def test_rejections_and_stale_snapshot_change_nothing(self):

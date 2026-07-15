@@ -28,9 +28,35 @@ class CardComposeService:
         self._database = Path(database)
         self._lock = lock or RLock()
 
+    def get_result(self, operation_id: str) -> CardComposeResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS impart_card_compose_operations ("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
+                "source_quantity INTEGER NOT NULL,target_quantity INTEGER NOT NULL)"
+            )
+            old = conn.execute(
+                "SELECT source_quantity,target_quantity FROM "
+                "impart_card_compose_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if old is None:
+                return None
+            return CardComposeResult("duplicate", int(old[0]), int(old[1]))
+
     def compose(
-        self, operation_id, user_id, source_card, target_card,
-        expected_source_quantity, expected_target_quantity, cost=5, card_definitions=None,
+        self,
+        operation_id,
+        user_id,
+        source_card,
+        target_card,
+        expected_source_quantity,
+        expected_target_quantity,
+        cost=5,
+        card_definitions=None,
     ) -> CardComposeResult:
         operation_id = str(operation_id).strip()
         user_id, source_card, target_card = map(str, (user_id, source_card, target_card))
@@ -41,9 +67,11 @@ class CardComposeService:
             raise ValueError("invalid compose request")
         if source_card == target_card:
             return CardComposeResult("same_card")
+        # Request identity only.
         payload = json.dumps(
-            [user_id, source_card, target_card, expected_source_quantity,
-             expected_target_quantity, cost], ensure_ascii=False,
+            [user_id, source_card, target_card, cost],
+            ensure_ascii=True,
+            separators=(",", ":"),
         )
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             try:
@@ -55,11 +83,12 @@ class CardComposeService:
                 )
                 old = conn.execute(
                     "SELECT payload,source_quantity,target_quantity FROM "
-                    "impart_card_compose_operations WHERE operation_id=%s", (operation_id,),
+                    "impart_card_compose_operations WHERE operation_id=%s",
+                    (operation_id,),
                 ).fetchone()
                 if old:
                     conn.rollback()
-                    status = "duplicate" if old[0] == payload else "state_changed"
+                    status = "duplicate" if str(old[0]) == payload else "state_changed"
                     return CardComposeResult(status, int(old[1]), int(old[2]))
                 source = conn.execute(
                     "SELECT quantity FROM impart_cards WHERE user_id=%s AND card_name=%s",
@@ -72,7 +101,8 @@ class CardComposeService:
                 source_quantity = int(source[0]) if source else 0
                 target_quantity = int(target[0]) if target else 0
                 if (source_quantity, target_quantity) != (
-                    expected_source_quantity, expected_target_quantity,
+                    expected_source_quantity,
+                    expected_target_quantity,
                 ):
                     conn.rollback()
                     return CardComposeResult("state_changed", source_quantity, target_quantity)

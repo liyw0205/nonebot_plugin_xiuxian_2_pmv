@@ -28,9 +28,35 @@ class CardDisassembleService:
         self._database = Path(database)
         self._lock = lock or RLock()
 
+    def get_result(self, operation_id: str) -> CardDisassembleResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS impart_card_disassemble_operations ("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
+                "card_quantity INTEGER NOT NULL,stone_quantity INTEGER NOT NULL)"
+            )
+            old = conn.execute(
+                "SELECT card_quantity,stone_quantity FROM "
+                "impart_card_disassemble_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if old is None:
+                return None
+            return CardDisassembleResult("duplicate", int(old[0]), int(old[1]))
+
     def disassemble(
-        self, operation_id, user_id, card_name, quantity,
-        expected_card_quantity, expected_stone_quantity, reward_per_card=2, card_definitions=None,
+        self,
+        operation_id,
+        user_id,
+        card_name,
+        quantity,
+        expected_card_quantity,
+        expected_stone_quantity,
+        reward_per_card=2,
+        card_definitions=None,
     ) -> CardDisassembleResult:
         operation_id = str(operation_id).strip()
         user_id, card_name = str(user_id), str(card_name)
@@ -40,8 +66,9 @@ class CardDisassembleService:
         if not operation_id or not card_name or quantity <= 0 or reward_per_card <= 0:
             raise ValueError("invalid disassemble request")
         payload = json.dumps(
-            [user_id, card_name, quantity, expected_card_quantity,
-             expected_stone_quantity, reward_per_card], ensure_ascii=False,
+            [user_id, card_name, quantity, reward_per_card],
+            ensure_ascii=True,
+            separators=(",", ":"),
         )
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             try:
@@ -53,11 +80,12 @@ class CardDisassembleService:
                 )
                 old = conn.execute(
                     "SELECT payload,card_quantity,stone_quantity FROM "
-                    "impart_card_disassemble_operations WHERE operation_id=%s", (operation_id,),
+                    "impart_card_disassemble_operations WHERE operation_id=%s",
+                    (operation_id,),
                 ).fetchone()
                 if old:
                     conn.rollback()
-                    status = "duplicate" if old[0] == payload else "state_changed"
+                    status = "duplicate" if str(old[0]) == payload else "state_changed"
                     return CardDisassembleResult(status, int(old[1]), int(old[2]))
                 card = conn.execute(
                     "SELECT quantity FROM impart_cards WHERE user_id=%s AND card_name=%s",
@@ -72,7 +100,8 @@ class CardDisassembleService:
                     return CardDisassembleResult("user_missing", card_quantity)
                 stone_quantity = int(state[0] or 0)
                 if (card_quantity, stone_quantity) != (
-                    expected_card_quantity, expected_stone_quantity,
+                    expected_card_quantity,
+                    expected_stone_quantity,
                 ):
                     conn.rollback()
                     return CardDisassembleResult("state_changed", card_quantity, stone_quantity)

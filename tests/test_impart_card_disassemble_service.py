@@ -31,8 +31,9 @@ class CardDisassembleServiceTests(unittest.TestCase):
     def test_success_duplicate_and_conflict(self):
         first = self.service.disassemble("op", "u", "卡", 2, 4, 10)
         duplicate = self.service.disassemble("op", "u", "卡", 2, 4, 10)
-        conflict = self.service.disassemble("op", "u", "卡", 1, 2, 14)
-        self.assertEqual((first.status, duplicate.status, conflict.status), ("applied", "duplicate", "state_changed"))
+        # different expected snapshot on same op must still replay
+        conflict = self.service.disassemble("op", "u", "卡", 2, 1, 99)
+        self.assertEqual((first.status, duplicate.status, conflict.status), ("applied", "duplicate", "duplicate"))
         self.assertEqual(self.state(), (2, 14))
 
     def test_rejections_and_stale_snapshot_change_nothing(self):
