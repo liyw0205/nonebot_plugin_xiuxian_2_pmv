@@ -65,6 +65,24 @@ class TiantiBreakthroughService:
             status, user_id, str(row[0]), str(row[1]), int(row[2]), int(row[3]), bool(row[4])
         )
 
+    def get_result(self, operation_id: str) -> TiantiBreakthroughResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._player_database)) as conn:
+            self._ensure_schema(conn, tuple(self._manager._default().keys()))
+            previous = conn.execute(
+                "SELECT user_id, old_level, new_level, hp_cost, new_hp, success "
+                "FROM tianti_breakthrough_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return TiantiBreakthroughResult(
+                "duplicate", str(previous[0]), str(previous[1]), str(previous[2]),
+                int(previous[3]), int(previous[4]), bool(previous[5]),
+            )
+
     def attempt(self, operation_id, user_id, *, cultivation_rank: int,
                 roll_success: bool) -> TiantiBreakthroughResult:
         operation_id = str(operation_id).strip()

@@ -45,6 +45,20 @@ class TiantiSettlementService:
             if field not in columns:
                 conn.execute(f"ALTER TABLE tianti_info ADD COLUMN {db_backend.quote_ident(field)} TEXT")
 
+    def get_result(self, operation_id: str) -> TiantiSettlementResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._player_database)) as conn:
+            self._ensure_schema(conn, tuple(self._manager._default().keys()))
+            previous = conn.execute(
+                "SELECT user_id, detail_json FROM tianti_settlement_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return TiantiSettlementResult("duplicate", str(previous[0]), json.loads(previous[1]))
+
     def settle(self, operation_id, user_id, now_t: datetime,
                *, sect_fairyland_level=0) -> TiantiSettlementResult:
         operation_id = str(operation_id).strip()

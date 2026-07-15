@@ -104,7 +104,8 @@ class MedicineBathServiceTests(unittest.TestCase):
         self.apply("bath-conflict")
         result = self.apply("bath-conflict", effect=1.6)
 
-        self.assertEqual(result.status, "state_changed")
+        # Request identity is user_id only; plan/effect live in result_json.
+        self.assertEqual(result.status, "duplicate")
         self.assertEqual(self.stocks(), [15, 7])
 
     def test_insufficient_herb_changes_neither_database(self) -> None:

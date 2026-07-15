@@ -41,6 +41,10 @@ medicine_bath_service = MedicineBathService(get_paths().game_db, get_paths().pla
 tianti_breakthrough_service = TiantiBreakthroughService(get_paths().player_db)
 qiaoxue_service = QiaoxueService(get_paths().player_db)
 tianti_settlement_service = TiantiSettlementService(get_paths().player_db)
+
+def _tianti_choice_seed(operation_id: str) -> int:
+    return int.from_bytes(str(operation_id).encode("utf-8"), "little") % (2**63)
+
 items = Items()
 
 tianti_help = on_command("炼体帮助", priority=10, block=True)
@@ -219,9 +223,36 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         f"tianti-settle:{event_id}:{user_id}" if event_id
         else f"tianti-settle:{user_id}:{time.time_ns()}"
     )
+    prior = tianti_settlement_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        result = prior.detail
+        if result.get("status") == "ok":
+            await handle_send(
+                bot, event,
+                f"炼体结算完成，间隔{result.get('mins', 0)}分钟。\n"
+                f"本次获得炼体气血：{number_to(result.get('real_gain', 0))}\n"
+                f"当前炼体气血：{number_to(result.get('new_hp', 0))}\n"
+                f"该结算请求已经处理，无需重复提交。"
+            )
+            return
+        await handle_send(bot, event, "该结算请求已经处理，无需重复提交。")
+        return
     settlement = tianti_settlement_service.settle(
         operation_id, user_id, now_t, sect_fairyland_level=sect_fairyland_level
     )
+    if settlement.status == "duplicate":
+        result = settlement.detail
+        if result.get("status") == "ok":
+            await handle_send(
+                bot, event,
+                f"炼体结算完成，间隔{result.get('mins', 0)}分钟。\n"
+                f"本次获得炼体气血：{number_to(result.get('real_gain', 0))}\n"
+                f"当前炼体气血：{number_to(result.get('new_hp', 0))}\n"
+                f"该结算请求已经处理，无需重复提交。"
+            )
+            return
+        await handle_send(bot, event, "该结算请求已经处理，无需重复提交。")
+        return
     if not settlement.succeeded:
         raise RuntimeError(f"unexpected tianti settlement status: {settlement.status}")
     result = settlement.detail
@@ -276,7 +307,22 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         f"tianti-stone:{event_id}:{user_id}" if event_id
         else f"tianti-stone:{user_id}:{time.time_ns()}"
     )
+    prior = stone_training_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        await handle_send(
+            bot, event,
+            f"灵石炼体完成：消耗灵石{number_to(prior.stone_cost)}，获得炼体气血{number_to(prior.hp_gain)}。\n"
+            f"该炼体请求已经处理，无需重复提交。"
+        )
+        return
     result = stone_training_service.train(operation_id, user_id, stone_cost)
+    if result.status == "duplicate":
+        await handle_send(
+            bot, event,
+            f"灵石炼体完成：消耗灵石{number_to(result.stone_cost)}，获得炼体气血{number_to(result.hp_gain)}。\n"
+            f"该炼体请求已经处理，无需重复提交。"
+        )
+        return
     if result.status == "at_cap":
         await handle_send(bot, event, "已达当前炼体境界上限，无法继续灵石炼体。")
         return
@@ -397,10 +443,25 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         f"tianti-bath:{event_id}:{user_id}" if event_id
         else f"tianti-bath:{user_id}:{time.time_ns()}"
     )
+    prior = medicine_bath_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        await handle_send(
+            bot, event,
+            f"炼体药浴开启成功：{prior.bath_name}，效果至{prior.end_time}。\n"
+            f"该药浴请求已经处理，无需重复提交。"
+        )
+        return
     result = medicine_bath_service.apply(
         operation_id, user_id, consume_plan, effect, slot["name"], now_t,
         MEDICINE_BATH_DURATION_MINUTES, sect_fairyland_level=sect_fairyland_level,
     )
+    if result.status == "duplicate":
+        await handle_send(
+            bot, event,
+            f"炼体药浴开启成功：{result.bath_name}，效果至{result.end_time}。\n"
+            f"该药浴请求已经处理，无需重复提交。"
+        )
+        return
     if result.status == "bath_active":
         await handle_send(bot, event, "当前药浴仍在生效，药浴结束后再使用新的药材。")
         return
@@ -452,6 +513,28 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     user_id = str(user_info["user_id"])
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = (
+        f"tianti-break:{event_id}:{user_id}" if event_id
+        else f"tianti-break:{user_id}:{time.time_ns()}"
+    )
+    prior = tianti_breakthrough_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        if prior.success:
+            await handle_send(
+                bot, event,
+                f"炼体突破成功！当前境界：{prior.new_level}\n"
+                f"本次消耗炼体气血：{number_to(prior.hp_cost)}\n"
+                f"该突破请求已经处理，无需重复提交。"
+            )
+        else:
+            await handle_send(
+                bot, event,
+                f"炼体突破失败！\n"
+                f"本次消耗炼体气血：{number_to(prior.hp_cost)}\n"
+                f"该突破请求已经处理，无需重复提交。"
+            )
+        return
     data = tianti_manager.get_user_tianti_info(user_id)
     next_name = get_next_tianti_level_name(data["tianti_level"])
     if not next_name:
@@ -460,14 +543,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     next_cfg = get_tianti_level_data(next_name)
     min_xx = next_cfg["min_xx_level"]
     user_xx_rank = get_tianti_level_index(user_info["level"], is_xiuxian=True)
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = (
-        f"tianti-break:{event_id}:{user_id}" if event_id
-        else f"tianti-break:{user_id}:{time.time_ns()}"
-    )
     result = tianti_breakthrough_service.attempt(
         operation_id, user_id, cultivation_rank=user_xx_rank,
-        roll_success=random.random() < 0.5,
+        roll_success=(_tianti_choice_seed(operation_id) % 2) == 0,
     )
     if result.status == "max_level":
         await handle_send(bot, event, "你的炼体已达最高境界。")
@@ -477,6 +555,22 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
     if result.status == "hp_insufficient":
         await handle_send(bot, event, f"突破失败：炼体气血不足，需{number_to(int(next_cfg['need_hp']))}。")
+        return
+    if result.status == "duplicate":
+        if result.success:
+            await handle_send(
+                bot, event,
+                f"炼体突破成功！当前境界：{result.new_level}\n"
+                f"本次消耗炼体气血：{number_to(result.hp_cost)}\n"
+                f"该突破请求已经处理，无需重复提交。"
+            )
+        else:
+            await handle_send(
+                bot, event,
+                f"炼体突破失败！\n"
+                f"本次消耗炼体气血：{number_to(result.hp_cost)}\n"
+                f"该突破请求已经处理，无需重复提交。"
+            )
         return
     if not result.succeeded:
         raise RuntimeError(f"unexpected tianti breakthrough status: {result.status}")
@@ -576,7 +670,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         f"tianti-qiaoxue:{event_id}:{user_id}" if event_id
         else f"tianti-qiaoxue:{user_id}:{time.time_ns()}"
     )
-    result = qiaoxue_service.open(operation_id, user_id, random.randrange(max(1, len(pool))))
+    prior = qiaoxue_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        await handle_send(
+            bot, event,
+            f"冲窍成功！开启【{prior.qiaoxue.get('name','?')}】\n"
+            f"该冲窍请求已经处理，无需重复提交。"
+        )
+        return
+    result = qiaoxue_service.open(
+        operation_id, user_id, _tianti_choice_seed(operation_id) % max(1, len(pool))
+    )
     if result.status == "limit_reached":
         await handle_send(
             bot,

@@ -60,6 +60,24 @@ class QiaoxueService:
             int(opened_count), int(unlock_limit),
         )
 
+    def get_result(self, operation_id: str) -> QiaoxueResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._player_database)) as conn:
+            self._ensure_schema(conn, tuple(self._manager._default().keys()))
+            previous = conn.execute(
+                "SELECT user_id, qiaoxue_json, hp_cost, new_hp, opened_count, unlock_limit "
+                "FROM tianti_qiaoxue_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return QiaoxueResult(
+                "duplicate", str(previous[0]), json.loads(previous[1]),
+                int(previous[2]), int(previous[3]), int(previous[4]), int(previous[5]),
+            )
+
     def open(self, operation_id, user_id, roll) -> QiaoxueResult:
         operation_id = str(operation_id).strip()
         user_id = str(user_id)

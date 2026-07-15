@@ -70,6 +70,24 @@ class MedicineBathService:
             insufficient=tuple(payload.get("insufficient", ())),
         )
 
+    def get_result(self, operation_id: str) -> MedicineBathResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS tianti_medicine_bath_operations ("
+                "operation_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, request_json TEXT NOT NULL, "
+                "result_json TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT user_id, result_json FROM tianti_medicine_bath_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return self._result_from_payload("duplicate", str(previous[0]), json.loads(previous[1]))
+
     def apply(self, operation_id, user_id, consume_plan, effect, slot_name,
               now_t: datetime, duration_minutes: int, *, sect_fairyland_level=0):
         operation_id = str(operation_id).strip()
@@ -104,7 +122,8 @@ class MedicineBathService:
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    if str(previous[0]) != user_id or str(previous[1]) != request_json:
+                    # Request identity = user_id; plan/effect stored in result_json.
+                    if str(previous[0]) != user_id:
                         return self._result_from_payload("state_changed", user_id, {})
                     return self._result_from_payload("duplicate", user_id, json.loads(previous[2]))
 
