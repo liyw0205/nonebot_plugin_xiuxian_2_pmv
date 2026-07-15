@@ -93,12 +93,28 @@ class ImpartProjectJoinService:
                 (user_id,),
             )
 
+    def get_result(self, operation_id: str) -> ImpartProjectJoinResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._player_database)) as conn:
+            self._ensure_schema(conn)
+            old = conn.execute(
+                "SELECT payload,result_json FROM impart_project_join_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if old is None:
+                return None
+            saved = json.loads(str(old[1]))
+            return ImpartProjectJoinResult("duplicate", int(saved[0]), int(saved[1]))
+
     def join(self, operation_id, user_id, *, legacy_pk_num=7, legacy_members=None):
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         legacy_pk_num = int(legacy_pk_num)
         if not operation_id or not user_id or legacy_pk_num < 0 or self._capacity <= 0:
             raise ValueError("invalid impart project join")
-        payload = json.dumps([user_id, legacy_pk_num], ensure_ascii=True, separators=(",", ":"))
+        # Request identity only — legacy_pk_num is init seed, not request key.
+        payload = json.dumps([user_id], ensure_ascii=True, separators=(",", ":"))
         with self._lock, closing(db_backend.connect(self._player_database)) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")

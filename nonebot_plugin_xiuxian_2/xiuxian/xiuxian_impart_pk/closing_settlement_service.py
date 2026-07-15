@@ -8,6 +8,9 @@ from threading import RLock
 
 from ..xiuxian_utils import db_backend
 
+SQLITE_MAX_INT = 2**63 - 1
+
+
 
 @dataclass(frozen=True)
 class ImpartClosingSettlementResult:
@@ -47,6 +50,25 @@ class ImpartClosingSettlementService:
         self.player_db = Path(player_db)
         self.lock = lock or RLock()
 
+    def get_result(self, operation_id: str) -> ImpartClosingSettlementResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self.lock, closing(db_backend.connect(self.game_db)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS impart_closing_operations("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            old = conn.execute(
+                "SELECT payload,result_json FROM impart_closing_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if old is None:
+                return None
+            saved = json.loads(str(old[1]))
+            return ImpartClosingSettlementResult("duplicate", *saved)
+
     def settle(
         self,
         operation_id,
@@ -79,10 +101,17 @@ class ImpartClosingSettlementService:
             )
         )
         expected_exp, expected_exp_day, exp_gain, blessing_cost, closing_minutes, hp, mp, atk, power = values
+        power = max(0, min(power, SQLITE_MAX_INT))
+        expected_exp = max(0, min(expected_exp, SQLITE_MAX_INT))
+        exp_gain = max(0, min(exp_gain, SQLITE_MAX_INT))
+        hp = max(0, min(hp, SQLITE_MAX_INT))
+        mp = max(0, min(mp, SQLITE_MAX_INT))
+        atk = max(0, min(atk, SQLITE_MAX_INT))
         if not operation_id or min(values) < 0 or blessing_cost > expected_exp_day:
             raise ValueError("invalid impart closing settlement")
+        # Request identity only — exp/hp rolls live in result_json; create_time identifies the closing session.
         payload = json.dumps(
-            [user_id, expected_create_time, *values], ensure_ascii=False, separators=(",", ":")
+            [user_id, expected_create_time], ensure_ascii=False, separators=(",", ":")
         )
         with self.lock, closing(db_backend.connect(self.game_db)) as conn:
             try:

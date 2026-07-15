@@ -7,6 +7,9 @@ from pathlib import Path
 from threading import RLock
 
 from ..xiuxian_utils import db_backend
+
+SQLITE_MAX_INT = 2**63 - 1
+
 from .settlement_state import increment_stat, load_daily_state
 
 
@@ -53,6 +56,23 @@ class ImpartTrainingSettlementService:
             conn.execute("DELETE FROM impart_pk_daily") if conn.table_exists("impart_pk_daily") else None
             conn.commit()
 
+    def get_result(self, operation_id: str) -> ImpartTrainingSettlementResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS impart_training_operations ("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT payload,result_json FROM impart_training_operations WHERE operation_id=%s", (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return ImpartTrainingSettlementResult("duplicate", *json.loads(str(previous[1])))
+
     def settle(
         self, operation_id, user_id, *, expected_exp, expected_exp_day, expected_daily,
         exp_cost, exp_gain, exp_load_gain, power, legacy_state=None,
@@ -62,12 +82,13 @@ class ImpartTrainingSettlementService:
         expected_exp, expected_exp_day, exp_cost, exp_gain, exp_load_gain, power = map(
             int, (expected_exp, expected_exp_day, exp_cost, exp_gain, exp_load_gain, power)
         )
+        power = max(0, min(power, SQLITE_MAX_INT))
+        expected_exp = max(0, min(expected_exp, SQLITE_MAX_INT))
+        exp_gain = max(0, min(exp_gain, SQLITE_MAX_INT))
         if not operation_id or exp_cost <= 0 or exp_gain <= 0 or exp_load_gain < 0 or power < 0:
             raise ValueError("invalid impart training settlement")
-        payload = json.dumps(
-            [user_id, expected_exp, expected_exp_day, expected_daily, exp_cost, exp_gain, exp_load_gain, power],
-            ensure_ascii=True, sort_keys=True, separators=(",", ":"),
-        )
+        # Request identity only — exp/daily snapshots are concurrency checks; roll outcome in result_json.
+        payload = json.dumps([user_id, exp_cost], ensure_ascii=True, separators=(",", ":"))
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached_impart = attached_player = False
             try:
@@ -99,7 +120,7 @@ class ImpartTrainingSettlementService:
                     conn.rollback(); return ImpartTrainingSettlementResult("time_insufficient", 0, 0, 0, 0, 0, 0)
 
                 new_exp_day = expected_exp_day - exp_cost
-                new_exp = expected_exp + exp_gain
+                new_exp = min(SQLITE_MAX_INT, expected_exp + exp_gain)
                 new_used = expected_daily["exp_used"] + exp_cost
                 new_count = expected_daily["exp_count"] + 1
                 new_load = min(100, expected_daily["exp_load"] + exp_load_gain)

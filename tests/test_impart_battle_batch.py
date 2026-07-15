@@ -20,7 +20,11 @@ class ImpartBattleBatchTests(unittest.TestCase):
         return stones,pk
     def test_two_player_batch_is_atomic_and_idempotent(self):
         args=("op","a",7,2,1,50,"b",6,1,2,40)
-        self.assertEqual("applied",self.service.settle(*args).status); self.assertEqual("duplicate",self.service.settle(*args).status)
+        self.assertEqual("applied",self.service.settle(*args).status)
+        # mutable win/loss/stone must not break same-op replay
+        alt=("op","a",7,9,0,1,"b",6,0,0,0)
+        self.assertEqual("duplicate",self.service.settle(*alt).status)
+        self.assertIsNotNone(self.service.get_result("op"))
         self.assertEqual(((50,45),(("a",6,2),("b",4,1))),self.state())
         with db_backend.connection(self.player) as c: stats=tuple(c.execute('SELECT "虚神界对决次数","虚神界对决胜利","虚神界对决失败","思恋结晶获取" FROM statistics WHERE user_id=%s',( "a",)).fetchone())
         self.assertEqual((3,2,1,50),stats)

@@ -57,13 +57,33 @@ class ImpartClosingEnterService:
         self._player_database = Path(player_database)
         self._lock = lock or RLock()
 
+    def get_result(self, operation_id: str) -> ImpartClosingEnterResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS impart_closing_enter_operations("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            old = conn.execute(
+                "SELECT payload,result_json FROM impart_closing_enter_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if old is None:
+                return None
+            saved = json.loads(str(old[1]))
+            return ImpartClosingEnterResult("duplicate", str(saved[0]), int(saved[1]))
+
     def enter(self, operation_id, user_id, started_at) -> ImpartClosingEnterResult:
         operation_id = str(operation_id).strip()
         user_id = str(user_id)
         started_at = str(started_at).strip()
         if not operation_id or not user_id or not started_at:
             raise ValueError("operation, user and start time are required")
-        payload = json.dumps([user_id, started_at], ensure_ascii=True, separators=(",", ":"))
+        # Request identity only — started_at is outcome, stored in result_json.
+        payload = json.dumps([user_id], ensure_ascii=True, separators=(",", ":"))
 
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             try:

@@ -27,7 +27,10 @@ class ImpartExploreSettlementTests(unittest.TestCase):
             new_impart_lv=5, legacy_state=self.legacy)
 
     def test_atomic_event_and_idempotency(self):
-        self.assertEqual("applied", self.call().status); self.assertEqual("duplicate", self.call().status)
+        self.assertEqual("applied", self.call().status)
+        # mutable expected_impart_num must not break same-op replay
+        self.assertEqual("duplicate", self.call(expected_num=9).status)
+        self.assertIsNotNone(self.service.get_result("explore"))
         with db_backend.connection(self.impart) as conn: self.assertEqual((250, 5), tuple(conn.execute("SELECT exp_day,impart_lv FROM xiuxian_impart").fetchone()))
         with db_backend.connection(self.player) as conn:
             self.assertEqual(9, conn.execute("SELECT impart_num FROM impart_pk_daily").fetchone()[0])

@@ -45,6 +45,25 @@ class ImpartBattleBatchService:
                 return legacy_pk_num
             return int(row[0])
 
+    def get_result(self, operation_id: str) -> ImpartBattleBatchResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self.lock, closing(db_backend.connect(self.impart_db)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS impart_battle_batch_operations("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            old = conn.execute(
+                "SELECT payload,result_json FROM impart_battle_batch_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if old is None:
+                return None
+            saved = json.loads(str(old[1]))
+            return ImpartBattleBatchResult("duplicate", saved[0], saved[1])
+
     def settle(
         self,
         operation_id,
@@ -85,10 +104,9 @@ class ImpartBattleBatchService:
             or (expected_opponent_pk_num is not None and opponent_losses > expected_opponent_pk_num)
         ):
             raise ValueError("invalid impart battle batch")
+        # Request identity only — win/loss/stone rolls + pk snapshots are concurrency checks.
         payload = json.dumps(
-            [challenger_id, *values, opponent_id, expected_opponent_pk_num],
-            ensure_ascii=False,
-            separators=(",", ":"),
+            [challenger_id, opponent_id], ensure_ascii=False, separators=(",", ":"),
         )
         with self.lock, closing(db_backend.connect(self.impart_db)) as conn:
             try:

@@ -25,7 +25,10 @@ class ImpartClosingSettlementTests(unittest.TestCase):
         return user,cd,day
     def test_atomic_idempotent_settlement(self):
         args=("op","u","start",100,30,20,10,60,40,50,6,999)
-        self.assertEqual("applied",self.service.settle(*args).status); self.assertEqual("duplicate",self.service.settle(*args).status)
+        self.assertEqual("applied",self.service.settle(*args).status)
+        alt=("op","u","start",100,30,999,10,60,40,50,6,999)
+        self.assertEqual("duplicate",self.service.settle(*alt).status)
+        self.assertIsNotNone(self.service.get_result("op"))
         self.assertEqual(((120,40,50,6,999),(0,"0"),20),self.state())
         with db_backend.connection(self.player) as c: stats=tuple(c.execute('SELECT "虚神界闭关时长","虚神界闭关修为","虚神界闭关祝福时长" FROM statistics').fetchone())
         self.assertEqual((60,20,10),stats)

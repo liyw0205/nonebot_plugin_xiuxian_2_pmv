@@ -39,7 +39,10 @@ class ImpartProjectJoinTests(unittest.TestCase):
         result = self.service.join("join-a", "a", legacy_pk_num=4)
         self.assertEqual(("applied", 4, 1), (result.status, result.pk_num, result.member_count))
         self.assertEqual("duplicate", self.service.join("join-a", "a", legacy_pk_num=4).status)
+        # different user is different request identity
         self.assertEqual("operation_conflict", self.service.join("join-a", "b", legacy_pk_num=4).status)
+        # mutable legacy_pk_num must not break same-op replay
+        self.assertEqual("duplicate", self.service.join("join-a", "a", legacy_pk_num=9).status)
         self.assertEqual("already_joined", self.service.join("join-a-2", "a", legacy_pk_num=4).status)
         self.assertEqual((("a",), (("a", 4),), (("a", 1),)), self.state())
 

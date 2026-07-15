@@ -30,7 +30,10 @@ class ImpartTrainingSettlementTests(unittest.TestCase):
             exp_cost=100, exp_gain=250, exp_load_gain=5, power=2500, legacy_state=self.daily)
 
     def test_atomic_settlement_and_idempotency(self):
-        self.assertEqual("applied", self.call().status); self.assertEqual("duplicate", self.call().status)
+        self.assertEqual("applied", self.call().status)
+        # mutable expected_exp snapshot must not break same-op replay
+        self.assertEqual("duplicate", self.call(expected_exp=999).status)
+        self.assertIsNotNone(self.service.get_result("train"))
         with db_backend.connection(self.game) as conn: self.assertEqual((1250, 2500), tuple(conn.execute("SELECT exp,power FROM user_xiuxian").fetchone()))
         with db_backend.connection(self.impart) as conn: self.assertEqual(400, conn.execute("SELECT exp_day FROM xiuxian_impart").fetchone()[0])
         with db_backend.connection(self.player) as conn:

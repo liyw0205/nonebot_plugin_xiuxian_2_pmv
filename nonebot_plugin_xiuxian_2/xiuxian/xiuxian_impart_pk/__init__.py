@@ -10,6 +10,8 @@ from ..adapter_compat import (
 )
 import random
 import time
+
+SQLITE_MAX_INT = 2**63 - 1
 from typing import Dict, List
 from ...paths import get_paths
 import time
@@ -134,6 +136,8 @@ async def impart_pk_project_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     )
     if result.status in {"applied", "duplicate"}:
         msg = "加入虚神界成功！"
+        if result.status == "duplicate":
+            msg += "\n该投影请求已经处理，无需重复提交。"
         if result.status == "applied":
             log_message(user_id, f"[虚神界] 投影虚神界成功")
     elif result.status == "already_joined":
@@ -284,6 +288,13 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
     # 无目标编号的情况（与机器人对决）
     if not target_num:
+        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        operation_id = f"impart-battle:{event_id}:{user_id}" if event_id else f"impart-battle:{user_id}:{time.time_ns()}"
+        prior_battle = impart_battle_batch_service.get_result(operation_id)
+        if prior_battle is not None and prior_battle.succeeded:
+            msg = f"【对决结束】（重放）\n剩余对决次数：{prior_battle.challenger_pk_num}\n该对决请求已经处理，无需重复提交。"
+            await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="祈愿", v3="传承祈愿")
+            await impart_pk_now.finish()
         while current_loss_count < max_loss_count and user_data["pk_num"] > 0:
             total_battles += 1
             msg, win = await impart_pk_uitls.impart_pk_now_msg_to_bot(user_info['user_name'], NICKNAME)
@@ -312,8 +323,6 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                     xu_world.del_xu_world(user_id)
                 break
 
-        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-        operation_id = f"impart-battle:{event_id}:{user_id}" if event_id else f"impart-battle:{user_id}:{time.time_ns()}"
         settlement = impart_battle_batch_service.settle(
             operation_id,
             user_id,
@@ -322,6 +331,10 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             total_losses,
             player_1_stones,
         )
+        if settlement.status == "duplicate":
+            msg = f"【对决结束】（重放）\n剩余对决次数：{settlement.challenger_pk_num}\n该对决请求已经处理，无需重复提交。"
+            await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="祈愿", v3="传承祈愿")
+            await impart_pk_now.finish()
         if not settlement.succeeded:
             await handle_send(bot, event, "对决状态已变化，请重新发起虚神界对决！")
             await impart_pk_now.finish()
@@ -453,6 +466,10 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         player_1_wins,
         player_2_stones,
     )
+    if settlement.status == "duplicate":
+        msg = f"【对决结束】（重放）\n剩余对决次数：{settlement.challenger_pk_num}\n该对决请求已经处理，无需重复提交。"
+        await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="祈愿", v3="传承祈愿")
+        await impart_pk_now.finish()
     if not settlement.succeeded:
         await handle_send(bot, event, "对决双方状态已变化，请重新发起虚神界对决！")
         await impart_pk_now.finish()
@@ -493,6 +510,24 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="我要修仙")
         await impart_pk_exp.finish()
     user_id = user_info['user_id']
+    impaer_exp_time = args.extract_plain_text().strip()
+    if not impaer_exp_time.isdigit():
+        impaer_exp_time = 1
+    else:
+        impaer_exp_time = int(impaer_exp_time)
+    impaer_exp_time = max(1, impaer_exp_time)
+    # 先回放：成功后时间/日额度变化会挡住同事件幂等。
+    op_id = _impart_operation_id(event, "training", user_id)
+    prior = impart_training_settlement_service.get_result(op_id)
+    if prior is not None and prior.succeeded:
+        msg = (
+            f"虚神界修炼结束（重放），共修炼{impaer_exp_time}分钟\n"
+            f"今日虚神界修炼收益：{number_to(prior.exp_gain)}\n"
+            f"该修炼请求已经处理，无需重复提交。"
+        )
+        await handle_send(bot, event, msg, md_type="虚神界", k1="修炼", v1="虚神界修炼", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
+        await impart_pk_exp.finish()
+
     impart_data_draw = await impart_pk_check(user_id)
     if impart_data_draw is None:
         msg = f"发生未知错误！"
@@ -500,14 +535,6 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await impart_pk_exp.finish()
 
     level = user_info['level']
-    impaer_exp_time = args.extract_plain_text().strip()
-    
-    # 处理输入时间
-    if not impaer_exp_time.isdigit():
-        impaer_exp_time = 1
-    else:
-        impaer_exp_time = int(impaer_exp_time)
-    impaer_exp_time = max(1, impaer_exp_time)
     
     # 检查可用时间
     if impaer_exp_time > int(impart_data_draw['exp_day']):
@@ -563,12 +590,20 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await impart_pk_exp.finish()
 
     result = impart_training_settlement_service.settle(
-        _impart_operation_id(event, "training", user_id), user_id,
+        op_id, user_id,
         expected_exp=current_exp, expected_exp_day=int(impart_data_draw['exp_day']),
         expected_daily={key: user_data[key] for key in ("exp_used", "exp_count", "exp_load", "exp_gain")},
         exp_cost=exp_cost_time, exp_gain=exp, exp_load_gain=actual_exp_load,
-        power=round((current_exp + exp) * level_rate * realm_rate), legacy_state=user_data,
+        power=min(SQLITE_MAX_INT, int(round((current_exp + exp) * level_rate * realm_rate))), legacy_state=user_data,
     )
+    if result.status == "duplicate":
+        msg = (
+            f"虚神界修炼结束（重放），共修炼{impaer_exp_time}分钟\n"
+            f"今日虚神界修炼收益：{number_to(result.exp_gain)}\n"
+            f"该修炼请求已经处理，无需重复提交。"
+        )
+        await handle_send(bot, event, msg, md_type="虚神界", k1="修炼", v1="虚神界修炼", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
+        await impart_pk_exp.finish()
     if not result.succeeded:
         msg = "累计时间不足，修炼失败!" if result.status == "time_insufficient" else "虚神界状态已变化，请重新尝试。"
         await handle_send(bot, event, msg, md_type="虚神界", k1="修炼", v1="虚神界修炼", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
@@ -671,6 +706,16 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, msg, md_type="我要修仙")
         await impart_pk_go.finish()
     user_id = user_info['user_id']
+    # 先回放：成功后次数/层数变化会挡住同事件幂等。
+    op_id = _impart_operation_id(event, "explore", user_id)
+    prior = impart_explore_settlement_service.get_result(op_id)
+    if prior is not None and prior.succeeded:
+        msg = (
+            f"探索完成（重放）。\n现位于层级：{prior.impart_lv}\n"
+            f"剩余时间：{prior.exp_day}\n该探索请求已经处理，无需重复提交。"
+        )
+        await handle_send(bot, event, msg, md_type="虚神界", k1="探索", v1="虚神界探索", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
+        await impart_pk_go.finish()
     user_data = _daily_impart_state(user_info['user_id'])
     if user_data["impart_num"] <= 0:
         msg = f"\n道友今日探索次数耗尽，需打坐调息，明日方可再探虚神界！"
@@ -774,12 +819,19 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             impart_lv = min(impart_lv + impart_rate, 30)
 
     result = impart_explore_settlement_service.settle(
-        _impart_operation_id(event, "explore", user_id), user_id,
+        op_id, user_id,
         event_type=msg_type, expected_exp_day=int(impart_data_draw['exp_day']),
         expected_impart_lv=int(impart_data_draw['impart_lv']),
         expected_impart_num=int(user_data['impart_num']), time_cost=impart_time,
         new_impart_lv=impart_lv, legacy_state=user_data,
     )
+    if result.status == "duplicate":
+        msg = (
+            f"探索完成（重放）。\n现位于层级：{result.impart_lv}\n"
+            f"剩余时间：{result.exp_day}\n该探索请求已经处理，无需重复提交。"
+        )
+        await handle_send(bot, event, msg, md_type="虚神界", k1="探索", v1="虚神界探索", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
+        await impart_pk_go.finish()
     if not result.succeeded:
         msg = "虚神界时间不足，探索失败。" if result.status == "time_insufficient" else "虚神界状态已变化，请重新探索。"
         await handle_send(bot, event, msg, md_type="虚神界", k1="探索", v1="虚神界探索", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
@@ -806,13 +858,22 @@ async def impart_pk_in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMess
         await handle_send(bot, event, msg, md_type="我要修仙")
         await impart_pk_in_closing.finish()
     user_id = user_info['user_id']
+    op_id = _impart_operation_id(event, "closing-enter", user_id)
+    # 先回放：成功后 type=4 会挡住同事件幂等；started_at 每次不同不能进 payload。
+    prior = impart_closing_enter_service.get_result(op_id)
+    if prior is not None and prior.succeeded:
+        msg = "进入虚神界闭关状态，如需出关，发送【虚神界出关】！\n该闭关请求已经处理，无需重复提交。"
+        await handle_send(bot, event, msg, md_type="虚神界", k1="出关", v1="虚神界出关", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
+        await impart_pk_in_closing.finish()
     started_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
-    result = impart_closing_enter_service.enter(
-        _impart_operation_id(event, "closing-enter", user_id), user_id, started_at
-    )
+    result = impart_closing_enter_service.enter(op_id, user_id, started_at)
     if result.status == "ineligible":
         msg = "凡人无法虚神界闭关！"
         await handle_send(bot, event, msg)
+        await impart_pk_in_closing.finish()
+    if result.status == "duplicate":
+        msg = "进入虚神界闭关状态，如需出关，发送【虚神界出关】！\n该闭关请求已经处理，无需重复提交。"
+        await handle_send(bot, event, msg, md_type="虚神界", k1="出关", v1="虚神界出关", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_in_closing.finish()
     if result.succeeded:
         msg = f"进入虚神界闭关状态，如需出关，发送【虚神界出关】！"
@@ -835,6 +896,17 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
         await impart_pk_out_closing.finish()
     
     user_id = user_info['user_id']
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"impart-closing:{event_id}:{user_id}" if event_id else f"impart-closing:{user_id}:{time.time_ns()}"
+    # 先回放：出关成功后 type!=4 会挡住同事件幂等。
+    prior = impart_closing_settlement_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        msg = (
+            f"虚神界闭关结束（重放），本次闭关增加修为：{number_to(prior.exp_gain)}\n"
+            f"该出关请求已经处理，无需重复提交。"
+        )
+        await handle_send(bot, event, msg, md_type="虚神界", k1="闭关", v1="虚神界闭关", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
+        await impart_pk_out_closing.finish()
     
     # 检查用户是否在虚神界闭关状态
     is_type, msg = check_user_type(user_id, 4)
@@ -926,14 +998,19 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     result_msg, result_hp_mp = OtherSet().send_hp_mp(
         user_id, int(use_exp / 10 * exp_time), int(use_exp / 5 * exp_time)
     )
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"impart-closing:{event_id}:{user_id}" if event_id else f"impart-closing:{user_id}:{time.time_ns()}"
     settlement = impart_closing_settlement_service.settle(
         operation_id, user_id, user_cd_message["create_time"], use_exp,
         available_exp_day, total_exp, int(exp_day_cost), exp_time,
         result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10),
-        int(round((use_exp + total_exp) * level_rate * realm_rate)),
+        min(SQLITE_MAX_INT, int(round((use_exp + total_exp) * level_rate * realm_rate))),
     )
+    if settlement.status == "duplicate":
+        msg = (
+            f"虚神界闭关结束（重放），本次闭关增加修为：{number_to(settlement.exp_gain)}\n"
+            f"该出关请求已经处理，无需重复提交。"
+        )
+        await handle_send(bot, event, msg, md_type="虚神界", k1="闭关", v1="虚神界闭关", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
+        await impart_pk_out_closing.finish()
     if not settlement.succeeded:
         await handle_send(bot, event, "闭关状态已变化，请重新尝试出关！")
         await impart_pk_out_closing.finish()

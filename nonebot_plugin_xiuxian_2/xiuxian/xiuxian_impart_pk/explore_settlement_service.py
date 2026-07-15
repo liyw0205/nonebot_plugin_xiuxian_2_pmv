@@ -29,6 +29,23 @@ class ImpartExploreSettlementService:
         self._player_database = Path(player_database)
         self._lock = lock or RLock()
 
+    def get_result(self, operation_id: str) -> ImpartExploreSettlementResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS impart_explore_operations ("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT payload,result_json FROM impart_explore_operations WHERE operation_id=%s", (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return ImpartExploreSettlementResult("duplicate", *json.loads(str(previous[1])))
+
     def settle(
         self, operation_id, user_id, *, event_type, expected_exp_day, expected_impart_lv,
         expected_impart_num, time_cost, new_impart_lv, legacy_state=None,
@@ -41,10 +58,8 @@ class ImpartExploreSettlementService:
             raise ValueError("invalid impart exploration settlement")
         if expected_impart_num <= 0 or time_cost < 0 or not 0 <= new_impart_lv <= 30:
             raise ValueError("invalid impart exploration values")
-        payload = json.dumps(
-            [user_id, event_type, expected_exp_day, expected_impart_lv, expected_impart_num, time_cost, new_impart_lv],
-            separators=(",", ":"), ensure_ascii=True,
-        )
+        # Request identity only — event_type/time/lv rolls live in result_json.
+        payload = json.dumps([user_id], ensure_ascii=True, separators=(",", ":"))
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached_impart = attached_player = False
             try:

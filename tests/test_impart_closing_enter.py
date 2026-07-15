@@ -79,8 +79,9 @@ class ImpartClosingEnterTests(unittest.TestCase):
         )
         self.assertEqual(((0, "0", None), None), self.state("mortal"))
         self.assertEqual("applied", self.service.enter("same", "u", self.started_at).status)
+        # started_at is outcome; same op with different clock still duplicate
         self.assertEqual(
-            "operation_conflict",
+            "duplicate",
             self.service.enter("same", "u", "2026-07-13 12:35:00.000000").status,
         )
         self.assertEqual(((4, self.started_at, None), 1), self.state())
