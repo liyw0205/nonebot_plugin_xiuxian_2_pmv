@@ -141,9 +141,16 @@ def _convert_sql(sql: str) -> str:
 
 
 def _adapt_param(value: Any) -> Any:
-    if isinstance(value, bool):
-        return int(value)
-    return value
+    # Central SQLite INTEGER overflow guard for ALL transaction_service writes.
+    # Large Python ints become scientific TEXT; floats/rates stay as-is.
+    try:
+        from .numeric_bind import bind_sqlite_param
+    except ImportError:  # file-loaded tests / bare module
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.numeric_bind import (  # type: ignore
+            bind_sqlite_param,
+        )
+
+    return bind_sqlite_param(value)
 
 
 def _adapt_params(params: Any) -> Any:

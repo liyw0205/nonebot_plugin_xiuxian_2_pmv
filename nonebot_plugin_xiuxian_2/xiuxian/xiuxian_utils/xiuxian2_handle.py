@@ -4503,17 +4503,12 @@ def number_count(num):
     数据库安全处理：
     如果数值超过 SQLite INTEGER 限制 (9,223,372,036,854,775,807)，返回科学计数法字符串。
     否则返回 int。
+
+    实现迁至 ``numeric_bind``，供 ``db_backend`` 绑定层与原子 service 共用。
     """
-    MAX_SQLITE_INT = 9223372036854775807
-    try:
-        val = float(num)
-    except (TypeError, ValueError):
-        raise ValueError("输入必须是数字")
-    
-    if val > MAX_SQLITE_INT:
-        # 超过上限，返回科学计数法字符串，例如 "1.23e+20"
-        return "{:.2e}".format(val)
-    return int(val)
+    from .numeric_bind import number_count as _number_count
+
+    return _number_count(num)
 
 driver = get_driver()
 sql_message = XiuxianDateManage()  # sql类

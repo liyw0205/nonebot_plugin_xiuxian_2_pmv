@@ -12,7 +12,9 @@ from typing import Callable
 from ..xiuxian_utils import db_backend
 from ..xiuxian_utils.fight_models import Entity
 from ..xiuxian_utils.player_fight import BattleSystem, apply_player_buffs, get_players_attributes
-from ..xiuxian_utils.xiuxian2_handle import number_count
+from ..xiuxian_utils.numeric_bind import as_int_like as _as_int_like_num
+from ..xiuxian_utils.numeric_bind import number_count, sql_num as _sql_num
+from ..xiuxian_utils.numeric_bind import sql_num_nonneg as _sql_num_nonneg
 from .relation_transaction_utils import (
     append_mentor_history,
     ensure_player_field,
@@ -22,24 +24,7 @@ from .relation_transaction_utils import (
 )
 
 
-def _sql_num(value):
-    """Bind-safe combat/exp value: int or scientific TEXT via number_count."""
-    return number_count(value)
-
-
-def _sql_num_nonneg(value):
-    out = number_count(value)
-    if float(out) < 0:
-        raise ValueError("numeric field must be non-negative")
-    return out
-
-
-def _as_int_like_num(value):
-    try:
-        return int(float(value))
-    except (TypeError, ValueError, OverflowError):
-        return 0
-
+# number_count / _sql_num* re-exported helpers live in numeric_bind (shared)
 @dataclass(frozen=True)
 class PartnerProtectionResult:
     status: str
