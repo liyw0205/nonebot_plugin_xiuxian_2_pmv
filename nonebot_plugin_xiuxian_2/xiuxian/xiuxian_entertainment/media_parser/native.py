@@ -327,6 +327,14 @@ def parse_bilibili(url: str) -> dict[str, Any]:
         owner = info.get("owner") or {}
         meta["author"] = str(owner.get("name") or "")
         meta["desc"] = str(info.get("desc") or "")[:400]
+        if owner.get("face"):
+            meta["avatar_url"] = str(owner.get("face"))
+        # 发布时间
+        try:
+            ts = int(info.get("pubdate") or info.get("ctime") or 0)
+            meta["timestamp"] = ts if ts > 0 else None
+        except Exception:
+            meta["timestamp"] = None
         pic = info.get("pic")
         if pic:
             meta["image_urls"] = [str(pic)]

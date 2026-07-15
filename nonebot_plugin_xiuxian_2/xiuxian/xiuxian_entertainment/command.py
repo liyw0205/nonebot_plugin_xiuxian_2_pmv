@@ -256,6 +256,7 @@ async def fun_media_send_parse_result(
     策略（兼顾 QQ 被动回复次数）：
     1. 卡片 + 解析文案：图文接口一次发出（信息不会丢）
     2. 有视频：再发 1 条高清视频
+       - B 站 CDN 需 Referer，QQ 直链常 850026，改为本地下载后 file_video
     3. 图集且开启 markdown：用原生 MD 图片链一次发出，避免多图被动超限
     """
     if fun_media_should_skip_duplicate_event(event):
@@ -278,6 +279,79 @@ async def fun_media_send_parse_result(
             or ("被动回复" in text and "超过" in text)
         )
 
+    def _needs_local_video_download(url: str) -> bool:
+        """B 站等 CDN 对 QQ 无 Referer 的直链拉取会 850026。"""
+        low = (url or "").lower()
+        return any(
+            x in low
+            for x in (
+                "bilivideo.com",
+                "hdslb.com",
+                "bilibili.com/bfs",
+                "upgcxcode",
+            )
+        )
+
+    def _download_video_local(url: str, referer: str = "https://www.bilibili.com") -> Path:
+        """带 Referer 下载到缓存，返回本地路径。"""
+        import hashlib
+
+        from nonebot_plugin_xiuxian_2.paths import get_paths
+
+        cache = get_paths().data / "media_parser_cache" / "videos"
+        cache.mkdir(parents=True, exist_ok=True)
+        name = hashlib.sha1(url.encode("utf-8")).hexdigest()[:20] + ".mp4"
+        out = cache / name
+        if out.is_file() and out.stat().st_size > 1024:
+            return out
+
+        resp = http_client.request(
+            "GET",
+            url,
+            timeout=90,
+            stream=True,
+            check_status=False,
+            use_config_proxy=False,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/122.0.0.0 Safari/537.36"
+                ),
+                "Referer": referer,
+                "Origin": "https://www.bilibili.com",
+                "Accept": "*/*",
+            },
+        )
+        code = int(getattr(resp, "status_code", 0) or 0)
+        if code >= 400:
+            raise RuntimeError(f"视频下载 HTTP {code}")
+        max_bytes = 25 * 1024 * 1024
+        size = 0
+        tmp = out.with_suffix(".tmp")
+        with tmp.open("wb") as f:
+            for chunk in resp.iter_content(256 * 1024):
+                if not chunk:
+                    continue
+                size += len(chunk)
+                if size > max_bytes:
+                    try:
+                        tmp.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                    raise RuntimeError(
+                        f"视频超过 {max_bytes // (1024 * 1024)}MB，放弃本地下载"
+                    )
+                f.write(chunk)
+        if size < 1024:
+            try:
+                tmp.unlink(missing_ok=True)
+            except Exception:
+                pass
+            raise RuntimeError("视频下载内容过小")
+        tmp.replace(out)
+        return out
+
     async def _safe_send_media(media, *, media_type: str, label: str) -> bool:
         try:
             await send_entertainment_media(bot, event, media, media_type=media_type)
@@ -288,6 +362,30 @@ async def fun_media_send_parse_result(
                 raise
             logger.warning(f"{label}失败: {e}")
             return False
+
+    async def _send_video_url(vid: str) -> bool:
+        """发送视频：B 站等先本地下载，其它仍 URL 直发。"""
+        if _needs_local_video_download(vid):
+            try:
+                local = await run_blocking_io(
+                    _download_video_local,
+                    vid,
+                    "https://www.bilibili.com",
+                    timeout=120,
+                )
+                return await _safe_send_media(
+                    Path(local),
+                    media_type="视频",
+                    label=f"发送本地下载视频 {Path(local).name}",
+                )
+            except Exception as e:
+                logger.warning(f"B站视频本地下载失败，尝试直链: {e}")
+
+        return await _safe_send_media(
+            MessageSegment.video(bot, vid),
+            media_type="视频",
+            label=f"发送解析视频 {vid[:80]}",
+        )
 
     async def _send_card_with_info() -> bool:
         """卡片 + 解析信息 用图文接口同发（1 条被动回复）。"""
@@ -326,7 +424,6 @@ async def fun_media_send_parse_result(
     def _build_gallery_md(urls: list[str], caption: str = "") -> str:
         lines: list[str] = []
         if caption:
-            # 原生 MD 用 \r 换行更稳；这里先 \n，发送层会替换
             lines.append(caption.replace("\r", "\n"))
             lines.append("")
         for i, u in enumerate(urls[:9], 1):
@@ -334,20 +431,14 @@ async def fun_media_send_parse_result(
         return "\n".join(lines)
 
     try:
-        # 1) 卡片 + 信息（图文一体）
         await _send_card_with_info()
 
-        # 2) 视频：高清优先（native 已排序），只发 1 条
         if has_video:
             sent_video = False
             last_err: Exception | None = None
             for vid in videos[:2]:
                 try:
-                    ok = await _safe_send_media(
-                        MessageSegment.video(bot, vid),
-                        media_type="视频",
-                        label=f"发送解析视频 {vid[:80]}",
-                    )
+                    ok = await _send_video_url(vid)
                     if ok:
                         sent_video = True
                         break
@@ -361,7 +452,8 @@ async def fun_media_send_parse_result(
                     await handle_send(
                         bot,
                         event,
-                        f"【媒体解析】视频发送失败：{last_err}\n可尝试打开原始链接观看。",
+                        f"【媒体解析】视频发送失败：{last_err}\n"
+                        f"可尝试打开原始链接观看。",
                         md_type="娱乐",
                         k1="链接解析",
                         v1="链接解析",
@@ -372,7 +464,6 @@ async def fun_media_send_parse_result(
                     pass
             return
 
-        # 3) 图集（无视频）
         gallery = [
             u
             for u in images
@@ -384,7 +475,6 @@ async def fun_media_send_parse_result(
         if not gallery:
             return
 
-        # 优先 Markdown 一次发全图（开启 md 时）
         if md_on and len(gallery) >= 1:
             md_body = _build_gallery_md(gallery, caption="" if has_card else body)
             try:
@@ -405,7 +495,6 @@ async def fun_media_send_parse_result(
                 if _is_passive_limit_error(e):
                     return
 
-        # 关闭 MD 或 MD 失败：尽量多发，受被动次数限制时提前停
         for img in gallery[:9]:
             try:
                 await _safe_send_media(
