@@ -28,6 +28,31 @@ class WorkClaimService:
         self._database = Path(database)
         self._lock = lock or RLock()
 
+    @staticmethod
+    def _payload(user_id, task_index) -> str:
+        # Request identity only — count/offer/start time are concurrency checks or outcomes.
+        return json.dumps([str(user_id), int(task_index)], ensure_ascii=True, separators=(",", ":"))
+
+    def get_result(self, operation_id: str) -> WorkClaimResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS work_claim_operations ("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,task_name TEXT NOT NULL,"
+                "started_at TEXT NOT NULL,remaining_count INTEGER NOT NULL,"
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT payload,task_name,started_at,remaining_count FROM work_claim_operations "
+                "WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return WorkClaimResult("duplicate", str(previous[1]), str(previous[2]), int(previous[3]))
+
     def claim(
         self,
         operation_id,
@@ -55,12 +80,7 @@ class WorkClaimService:
             "selected_task": task_name,
             "selected_task_data": task_data,
         }
-        payload = json.dumps(
-            [user_id, expected_count, offer, task_index, started_at],
-            ensure_ascii=True,
-            sort_keys=True,
-            separators=(",", ":"),
-        )
+        payload = self._payload(user_id, task_index)
         snapshot_json = json.dumps(snapshot, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
 
         with self._lock, closing(db_backend.connect(self._database)) as conn:

@@ -31,6 +31,30 @@ class WorkRefreshSettlementService:
         self._database = Path(database)
         self._lock = lock or RLock()
 
+    @staticmethod
+    def _payload(user_id, force: bool) -> str:
+        # Request identity only — count/cd/offer blobs are concurrency checks or outcomes.
+        return json.dumps([str(user_id), bool(force)], ensure_ascii=True, separators=(",", ":"))
+
+    def get_result(self, operation_id: str) -> WorkRefreshResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS work_refresh_operations("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,remaining_count INTEGER NOT NULL,"
+                "offer_snapshot TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT payload,remaining_count,offer_snapshot FROM work_refresh_operations "
+                "WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return WorkRefreshResult("duplicate", int(previous[1]), json.loads(str(previous[2])))
+
     def refresh(
         self,
         operation_id,
@@ -49,7 +73,7 @@ class WorkRefreshSettlementService:
         force = bool(force)
         if not operation_id or expected_count <= 0 or not new_offer.get("tasks"):
             raise ValueError("valid operation, refresh count and fixed offer are required")
-        payload = _dump([user_id, expected_count, expected_cd, expected_offer, new_offer, force])
+        payload = self._payload(user_id, force)
         offer_json = _dump(new_offer)
 
         with self._lock, closing(db_backend.connect(self._database)) as conn:
@@ -66,7 +90,8 @@ class WorkRefreshSettlementService:
                 )
                 previous = conn.execute(
                     "SELECT payload,remaining_count,offer_snapshot FROM work_refresh_operations "
-                    "WHERE operation_id=%s", (operation_id,),
+                    "WHERE operation_id=%s",
+                    (operation_id,),
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
@@ -120,7 +145,8 @@ class WorkRefreshSettlementService:
                 )
                 conn.execute(
                     "INSERT INTO work_refresh_operations(operation_id,payload,remaining_count,offer_snapshot) "
-                    "VALUES(%s,%s,%s,%s)", (operation_id, payload, remaining, offer_json),
+                    "VALUES(%s,%s,%s,%s)",
+                    (operation_id, payload, remaining, offer_json),
                 )
                 conn.commit()
                 return WorkRefreshResult("applied", remaining, new_offer)

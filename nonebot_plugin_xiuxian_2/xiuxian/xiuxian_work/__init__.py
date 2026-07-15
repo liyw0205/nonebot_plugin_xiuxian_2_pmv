@@ -227,6 +227,27 @@ async def get_work_status_message(user_id: str, work_data: dict) -> str:
         return "没有查到您的悬赏令信息，请输入【悬赏令刷新】获取新悬赏！"
 async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, user_id: str, work_data: dict):
     """结算悬赏令。随机结果先固定，再由事务服务一次提交。"""
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"work-settlement:{user_id}:{event_message_id or time.time_ns()}"
+    # 先回放：成功后 type=0 / 奖励已发，前置状态检查会挡住同事件重放；随机结果不可重掷。
+    prior = work_settlement_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        success_msg = {
+            "big": "悬赏大成功！",
+            "ok": "悬赏完成！",
+            "half": "悬赏勉强完成",
+        }.get(prior.success_kind, "悬赏完成！")
+        msg = (
+            f"{success_msg}\n"
+            f"悬赏名称：{prior.scheduled_time or work_data.get('scheduled_time', '')}\n"
+            f"获得修为：{number_to(prior.exp)}"
+        )
+        if prior.item_awarded and prior.item_msg:
+            msg += f"\n额外奖励：{prior.item_msg}！"
+        msg += "\n该结算请求已经处理，无需重复提交。"
+        await handle_send(bot, event, msg, md_type="悬赏令", k1="刷新", v1="悬赏令刷新", k2="数据", v2="统计数据", k3="帮助", v3="悬赏令帮助")
+        return msg
+
     user_info = sql_message.get_user_info_with_id(user_id)
     _, give_exp, s_o_f, item_id, big_suc = workhandle().do_work(
         2,
@@ -243,15 +264,16 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     if big_suc:
         gain_exp = int(give_exp * random.uniform(1.5, 2.5))
         success_msg = "悬赏大成功！"
+        success_kind = "big"
     elif s_o_f:
         gain_exp = give_exp
         success_msg = "悬赏完成！"
+        success_kind = "ok"
     else:
         gain_exp = give_exp // 2
         success_msg = "悬赏勉强完成"
+        success_kind = "half"
 
-    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"work-settlement:{user_id}:{event_message_id or time.time_ns()}"
     result = work_settlement_service.settle(
         operation_id,
         user_id,
@@ -260,7 +282,25 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         {"id": item_id, "name": item_info["name"], "type": item_info["type"]} if item_flag else None,
         max_exp,
         XiuConfig().max_goods_num,
+        success_kind=success_kind,
+        item_msg=item_msg or "",
     )
+    if result.status == "duplicate":
+        success_msg = {
+            "big": "悬赏大成功！",
+            "ok": "悬赏完成！",
+            "half": "悬赏勉强完成",
+        }.get(result.success_kind, success_msg)
+        msg = (
+            f"{success_msg}\n"
+            f"悬赏名称：{result.scheduled_time or work_data['scheduled_time']}\n"
+            f"获得修为：{number_to(result.exp)}"
+        )
+        if result.item_awarded:
+            msg += f"\n额外奖励：{result.item_msg or item_msg}！"
+        msg += "\n该结算请求已经处理，无需重复提交。"
+        await handle_send(bot, event, msg, md_type="悬赏令", k1="刷新", v1="悬赏令刷新", k2="数据", v2="统计数据", k3="帮助", v3="悬赏令帮助")
+        return msg
     if result.status == "inventory_full":
         msg = "背包物品已达上限，悬赏奖励尚未结算。"
         await handle_send(bot, event, msg)
@@ -422,6 +462,24 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         
     mode = args[0]  # 刷新、终止、结算、接取等操作
 
+    def _offer_task_list(offer: dict | None) -> list:
+        task_list = []
+        for name, data in ((offer or {}).get("tasks") or {}).items():
+            task_list.append([
+                name,
+                data.get("rate", data.get("成功率", 0)),
+                data.get("award", data.get("修为", 0)),
+                data.get("time", 0),
+                data.get("item_id", 0),
+            ])
+        return task_list
+
+    def _refresh_replay_msg(offer: dict | None, remaining_count: int, fallback_list=None) -> str:
+        task_list = _offer_task_list(offer) or list(fallback_list or [])
+        if task_list:
+            return generate_work_message(task_list, remaining_count) + "\n该刷新请求已经处理，无需重复提交。"
+        return f"【道友的悬赏令】\n剩余刷新次数：{remaining_count}次\n该刷新请求已经处理，无需重复提交。"
+
     if mode == "查看":            
         status, work_data = get_user_work_status(user_id)
         msg = await get_work_status_message(user_id, work_data)
@@ -429,6 +487,14 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         await do_work.finish()
 
     elif mode == "刷新":
+        # 先回放：成功后已有未接取悬赏/次数变化，前置拦截会挡住同事件重放。
+        operation_id = _work_operation_id(event, "refresh", user_id)
+        prior = work_refresh_service.get_result(operation_id)
+        if prior is not None and prior.succeeded:
+            msg = _refresh_replay_msg(prior.offer, prior.remaining_count)
+            await send_work_message(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3", k4="刷新", v4="悬赏令确认刷新")
+            await do_work.finish()
+
         is_type, msg = check_user_type(user_id, 0)
         if not is_type:
             await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="悬赏令帮助", v3="悬赏令帮助")
@@ -477,7 +543,6 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await handle_send(bot, event, msg, md_type="悬赏令", k1="接取", v1="悬赏令接取", k2="刷新", v2="悬赏令确认刷新", k3="查看", v3="悬赏令查看")
             await do_work.finish()
         elif status == 4 or status == 0:  # 已过期的悬赏令/无悬赏令
-            operation_id = _work_operation_id(event, "refresh", user_id)
             work_msg, new_offer = _prepare_work_offer(
                 operation_id, user_id, user_level, user_info['exp']
             )
@@ -489,6 +554,10 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 work_data,
                 new_offer,
             )
+            if result.status == "duplicate":
+                msg = _refresh_replay_msg(result.offer, result.remaining_count, work_msg)
+                await send_work_message(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3", k4="刷新", v4="悬赏令确认刷新")
+                await do_work.finish()
             if result.status in {"state_changed", "user_missing", "offer_exists"}:
                 await handle_send(bot, event, "悬赏状态或刷新次数已变化，请重新查看后再试。")
                 await do_work.finish()
@@ -517,6 +586,13 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await do_work.finish()
 
     elif mode == "确认刷新":
+        operation_id = _work_operation_id(event, "force-refresh", user_id)
+        prior = work_refresh_service.get_result(operation_id)
+        if prior is not None and prior.succeeded:
+            msg = _refresh_replay_msg(prior.offer, prior.remaining_count)
+            await send_work_message(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3", k4="刷新", v4="悬赏令确认刷新")
+            await do_work.finish()
+
         is_type, msg = check_user_type(user_id, 0)
         if not is_type:
             await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="悬赏令帮助", v3="悬赏令帮助")
@@ -534,7 +610,6 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             del user_reminder_tasks[user_id]
         
         expected_offer = readf(user_id)
-        operation_id = _work_operation_id(event, "force-refresh", user_id)
         work_msg, new_offer = _prepare_work_offer(
             operation_id, user_id, user_level, user_info['exp']
         )
@@ -547,6 +622,10 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             new_offer,
             force=True,
         )
+        if result.status == "duplicate":
+            msg = _refresh_replay_msg(result.offer, result.remaining_count, work_msg)
+            await send_work_message(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3", k4="刷新", v4="悬赏令确认刷新")
+            await do_work.finish()
         if result.status in {"state_changed", "user_missing"}:
             await handle_send(bot, event, "悬赏状态或刷新次数已变化，请重新查看后再试。")
             await do_work.finish()
@@ -570,6 +649,14 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         await do_work.finish()
 
     elif mode == "结算":
+        # 先回放：成功后 type=0，check_user_type(2) 会误拒同事件。
+        event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        settle_operation_id = f"work-settlement:{user_id}:{event_message_id or time.time_ns()}"
+        prior_settle = work_settlement_service.get_result(settle_operation_id)
+        if prior_settle is not None and prior_settle.succeeded:
+            await settle_work(bot, event, user_id, {"scheduled_time": prior_settle.scheduled_time})
+            await do_work.finish()
+
         is_type, msg = check_user_type(user_id, 2)
         if not is_type:
             await handle_send(bot, event, msg, md_type="2", k2="修仙帮助", v2="修仙帮助", k3="悬赏令帮助", v3="悬赏令帮助")
@@ -636,6 +723,26 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         await do_work.finish()
 
     elif mode == "接取":
+        # 先解析编号并回放：成功后 type=2，check_user_type(0) 会误拒同事件。
+        num = args[1]
+        if num is None or str(num) not in ['1', '2', '3']:
+            msg = '请输入正确的悬赏编号（1、2或3）'
+            await handle_send(bot, event, msg, md_type="悬赏令", k1="接取", v1="悬赏令接取", k2="刷新", v2="悬赏令确认刷新", k3="查看", v3="悬赏令查看")
+            await do_work.finish()
+        work_num = int(num)
+        event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        operation_id = f"work-claim:{user_id}:{event_message_id or time.time_ns()}"
+        prior = work_claim_service.get_result(operation_id)
+        if prior is not None and prior.succeeded:
+            msg = (
+                f"成功接取悬赏令！\n"
+                f"悬赏名称：{prior.task_name}\n"
+                f"请努力完成悬赏！\n"
+                "该接取请求已经处理，无需重复提交。"
+            )
+            await send_work_message(bot, event, msg, md_type="悬赏令", k1="结算", v1="悬赏令结算", k2="终止", v2="悬赏令终止", k3="帮助", v3="悬赏令帮助")
+            await do_work.finish()
+
         is_type, msg = check_user_type(user_id, 0)
         if not is_type:
             await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="悬赏令帮助", v3="悬赏令帮助")
@@ -653,14 +760,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             msg = "没有查到您的悬赏令信息，请输入【悬赏令刷新】获取新悬赏！"
             await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="刷新", v2="悬赏令确认刷新", k3="帮助", v3="悬赏令帮助")
             await do_work.finish()
-            
-        num = args[1]
-        if num is None or str(num) not in ['1', '2', '3']:
-            msg = '请输入正确的悬赏编号（1、2或3）'
-            await handle_send(bot, event, msg, md_type="悬赏令", k1="接取", v1="悬赏令接取", k2="刷新", v2="悬赏令确认刷新", k3="查看", v3="悬赏令查看")
-            await do_work.finish()
         
-        work_num = int(num)
         tasks = list(work_data["tasks"].items())
         if work_num < 1 or work_num > len(tasks):
             msg = "没有这样的悬赏编号！"
@@ -668,8 +768,6 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await do_work.finish()
             
         task_name, task_data = tasks[work_num - 1]
-        event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-        operation_id = f"work-claim:{user_id}:{event_message_id or time.time_ns()}"
         started_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         result = work_claim_service.claim(
             operation_id,
@@ -679,6 +777,15 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             work_num,
             started_at,
         )
+        if result.status == "duplicate":
+            msg = (
+                f"成功接取悬赏令！\n"
+                f"悬赏名称：{result.task_name or task_name}\n"
+                f"请努力完成悬赏！\n"
+                "该接取请求已经处理，无需重复提交。"
+            )
+            await send_work_message(bot, event, msg, md_type="悬赏令", k1="结算", v1="悬赏令结算", k2="终止", v2="悬赏令终止", k3="帮助", v3="悬赏令帮助")
+            await do_work.finish()
         if result.status in {"state_changed", "user_missing"}:
             await handle_send(bot, event, "悬赏状态或可用次数已变化，请重新查看后再试。")
             await do_work.finish()
@@ -692,7 +799,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 
         msg = (
             f"成功接取悬赏令！\n"
-            f"悬赏名称：{task_name}\n"
+            f"悬赏名称：{result.task_name or task_name}\n"
             f"请努力完成悬赏！"
         )
         await send_work_message(bot, event, msg, md_type="悬赏令", k1="结算", v1="悬赏令结算", k2="终止", v2="悬赏令终止", k3="帮助", v3="悬赏令帮助")

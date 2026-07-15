@@ -62,11 +62,17 @@ class WorkRefreshSettlementTests(unittest.TestCase):
 
     def test_duplicate_conflict_and_stale_count(self):
         self.assertEqual(self.refresh("same").status, "applied")
-        self.assertEqual(self.refresh("same").status, "duplicate")
+        # mutable offer blob must not break same-op replay (identity is user+force)
         changed = dict(self.offer)
         changed["refresh_time"] = "later"
-        self.assertEqual(self.refresh("same", offer=changed).status, "operation_conflict")
+        self.assertEqual(self.refresh("same", offer=changed).status, "duplicate")
+        # force flag is request identity
+        self.assertEqual(self.refresh("same", force=True, offer=changed).status, "operation_conflict")
         self.assertEqual(self.refresh("stale", count=3, old=self.offer, force=True).status, "state_changed")
+        prior = self.service.get_result("same")
+        self.assertIsNotNone(prior)
+        self.assertEqual(prior.status, "duplicate")
+        self.assertEqual(prior.remaining_count, 2)
 
     def test_force_refresh_replaces_expected_legacy_offer(self):
         old = dict(self.offer)

@@ -55,10 +55,15 @@ class WorkSettlementServiceTests(unittest.TestCase):
 
     def test_duplicate_reuses_first_result_and_conflicting_retry_is_rejected(self) -> None:
         first = self.settle("repeat")
-        duplicate = self.settle("repeat")
-        conflict = self.settle("repeat", exp_gain=10)
-        self.assertEqual((first.status, duplicate.status, conflict.status), ("applied", "duplicate", "state_changed"))
+        # mutable reward amounts must not break same-op replay (identity is user only)
+        duplicate = self.settle("repeat", exp_gain=10, item=None)
+        self.assertEqual((first.status, duplicate.status), ("applied", "duplicate"))
+        self.assertEqual((duplicate.exp, duplicate.item_awarded), (10, True))
         self.assertEqual(self.state(), (100, (0, "0", None), (1, 1)))
+        prior = self.service.get_result("repeat")
+        self.assertIsNotNone(prior)
+        self.assertEqual(prior.status, "duplicate")
+        self.assertEqual(prior.exp, 10)
 
     def test_operation_write_failure_rolls_back_everything(self) -> None:
         with db_backend.transaction(self.database) as conn:

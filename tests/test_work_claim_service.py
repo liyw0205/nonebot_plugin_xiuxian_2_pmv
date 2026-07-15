@@ -52,10 +52,15 @@ class WorkClaimServiceTests(unittest.TestCase):
 
     def test_duplicate_conflict_and_stale_count(self):
         self.assertEqual(self.claim("same").status, "applied")
-        self.assertEqual(self.claim("same").status, "duplicate")
+        # mutable started_at / count must not break same-op replay
+        self.assertEqual(self.claim("same", started="later", count=9).status, "duplicate")
         self.assertEqual(self.claim("same", index=1).status, "operation_conflict")
         self.assertEqual(self.claim("stale", count=3).status, "state_changed")
         self.assertEqual(self.state()[0], 2)
+        prior = self.service.get_result("same")
+        self.assertIsNotNone(prior)
+        self.assertEqual(prior.status, "duplicate")
+        self.assertEqual(prior.task_name, "镇妖")
 
     def test_operation_failure_rolls_back_everything(self):
         with db_backend.transaction(self.database) as conn:
