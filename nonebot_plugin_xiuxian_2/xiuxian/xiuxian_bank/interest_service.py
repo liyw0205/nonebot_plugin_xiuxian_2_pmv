@@ -12,9 +12,9 @@ from ..xiuxian_utils import db_backend
 @dataclass(frozen=True)
 class BankInterestResult:
     status: str
-    interest: int
-    wallet_stone: int
-    saved_at: str
+    interest: int = 0
+    wallet_stone: int = 0
+    saved_at: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -28,6 +28,30 @@ class BankInterestService:
         self._game_database = Path(game_database)
         self._player_database = Path(player_database)
         self._lock = lock or RLock()
+
+    @staticmethod
+    def _payload(user_id) -> str:
+        # Request identity only — interest/settled_at/account snapshots are outcomes or concurrency checks.
+        return json.dumps([str(user_id)], ensure_ascii=True, separators=(",", ":"))
+
+    def get_result(self, operation_id: str) -> BankInterestResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS bank_interest_operations ("
+                "operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, interest INTEGER NOT NULL, "
+                "wallet_stone INTEGER NOT NULL, saved_at TEXT NOT NULL, "
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT payload, interest, wallet_stone, saved_at FROM bank_interest_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return BankInterestResult("duplicate", int(previous[1]), int(previous[2]), str(previous[3]))
 
     def settle(
         self,
@@ -48,10 +72,7 @@ class BankInterestService:
         settled_at = str(settled_at)
         if not operation_id or expected_saved_stone < 0 or interest < 0 or not settled_at:
             raise ValueError("valid operation, account state, interest and settlement time are required")
-        payload = json.dumps(
-            [user_id, expected_saved_stone, expected_saved_at, bank_level, interest, settled_at],
-            ensure_ascii=True,
-        )
+        payload = self._payload(user_id)
 
         def result(status, wallet_stone=0):
             return BankInterestResult(status, interest if status in {"applied", "duplicate"} else 0, wallet_stone, settled_at)

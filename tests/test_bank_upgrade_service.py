@@ -56,11 +56,16 @@ class BankUpgradeServiceTests(unittest.TestCase):
 
     def test_duplicate_reuses_result_and_conflict_is_rejected(self) -> None:
         first = self.upgrade("repeat")
-        duplicate = self.upgrade("repeat")
-        conflict = self.upgrade("repeat", cost=301)
-        self.assertEqual((first.status, duplicate.status, conflict.status), ("applied", "duplicate", "state_changed"))
+        # expected level is concurrency only; same target/cost still duplicate
+        duplicate = self.upgrade("repeat", expected="9")
+        self.assertEqual((first.status, duplicate.status), ("applied", "duplicate"))
         self.assertEqual((duplicate.cost, duplicate.wallet_stone, duplicate.bank_level), (300, 700, "2"))
+        conflict = self.upgrade("repeat", cost=301)
+        self.assertEqual(conflict.status, "state_changed")
         self.assertEqual(self.state(), (700, "2"))
+        prior = self.service.get_result("repeat")
+        self.assertIsNotNone(prior)
+        self.assertEqual(prior.bank_level, "2")
 
     def test_operation_failure_rolls_back_wallet_and_level(self) -> None:
         with db_backend.transaction(self.game_database) as conn:

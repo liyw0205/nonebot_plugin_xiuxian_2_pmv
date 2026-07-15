@@ -99,6 +99,19 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         }
 
     if mode == '存灵石':  # 存灵石逻辑
+        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        operation_id = f"bank-deposit:{event_id}:{user_id}" if event_id else f"bank-deposit:{user_id}:{time.time_ns()}"
+        # 先回放：成功后余额/额度变化会挡住“灵石不足/额度不足”前置检查。
+        prior = bank_deposit_service.get_result(operation_id)
+        if prior is not None and prior.succeeded:
+            msg = (
+                f"道友本次结息时间为：已处理，获得灵石：{prior.interest}枚!\n"
+                f"道友存入灵石{prior.deposited}枚，当前所拥有灵石{prior.wallet_stone}枚，灵庄存有灵石{prior.saved_stone}枚\n"
+                "该存款请求已经处理，无需重复提交。"
+            )
+            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
+            await bank.finish()
+
         if int(user_info['stone']) < num:
             msg = f"道友所拥有的灵石为{user_info['stone']}枚，金额不足，请重新输入！"
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
@@ -115,8 +128,6 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         expected_saved_stone = bankinfo['savestone']
         expected_saved_at = bankinfo['savetime']
         bankinfo, give_stone, timedeff = get_give_stone(bankinfo)
-        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-        operation_id = f"bank-deposit:{event_id}:{user_id}" if event_id else f"bank-deposit:{user_id}:{time.time_ns()}"
         deposit = bank_deposit_service.deposit(
             operation_id,
             user_id,
@@ -128,6 +139,14 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             bankinfo['savetime'],
             max,
         )
+        if deposit.status == "duplicate":
+            msg = (
+                f"道友本次结息时间为：{timedeff}小时，获得灵石：{deposit.interest}枚!\n"
+                f"道友存入灵石{deposit.deposited}枚，当前所拥有灵石{deposit.wallet_stone}枚，灵庄存有灵石{deposit.saved_stone}枚\n"
+                "该存款请求已经处理，无需重复提交。"
+            )
+            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
+            await bank.finish()
         if deposit.status in {"stone_insufficient", "limit_exceeded", "state_changed"}:
             msg = "灵庄账户状态已变化，本次存款未结算，请重新查看后再试。"
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
@@ -140,6 +159,18 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         await bank.finish()
 
     elif mode == '取灵石':  # 取灵石逻辑
+        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        operation_id = f"bank-withdrawal:{event_id}:{user_id}" if event_id else f"bank-withdrawal:{user_id}:{time.time_ns()}"
+        prior = bank_withdrawal_service.get_result(operation_id)
+        if prior is not None and prior.succeeded:
+            msg = (
+                f"道友本次结息时间为：已处理，获得灵石：{prior.interest}枚!\n"
+                f"取出灵石{prior.withdrawn}枚，当前所拥有灵石{prior.wallet_stone}枚，灵庄存有灵石{prior.saved_stone}枚!\n"
+                "该取款请求已经处理，无需重复提交。"
+            )
+            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
+            await bank.finish()
+
         if int(bankinfo['savestone']) < num:
             msg = f"道友当前灵庄所存有的灵石为{bankinfo['savestone']}枚，金额不足，请重新输入！"
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
@@ -148,8 +179,6 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         expected_saved_stone = bankinfo['savestone']
         expected_saved_at = bankinfo['savetime']
         bankinfo, give_stone, timedeff = get_give_stone(bankinfo)
-        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-        operation_id = f"bank-withdrawal:{event_id}:{user_id}" if event_id else f"bank-withdrawal:{user_id}:{time.time_ns()}"
         withdrawal = bank_withdrawal_service.withdraw(
             operation_id,
             user_id,
@@ -160,6 +189,14 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             give_stone,
             bankinfo['savetime'],
         )
+        if withdrawal.status == "duplicate":
+            msg = (
+                f"道友本次结息时间为：{timedeff}小时，获得灵石：{withdrawal.interest}枚!\n"
+                f"取出灵石{withdrawal.withdrawn}枚，当前所拥有灵石{withdrawal.wallet_stone}枚，灵庄存有灵石{withdrawal.saved_stone}枚!\n"
+                "该取款请求已经处理，无需重复提交。"
+            )
+            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
+            await bank.finish()
         if withdrawal.status in {"saved_stone_insufficient", "state_changed"}:
             msg = "灵庄账户状态已变化，本次取款未结算，请重新查看后再试。"
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
@@ -172,6 +209,18 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         await bank.finish()
 
     elif mode == '升级会员':  # 升级会员逻辑
+        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        operation_id = f"bank-upgrade:{event_id}:{user_id}" if event_id else f"bank-upgrade:{user_id}:{time.time_ns()}"
+        prior = bank_upgrade_service.get_result(operation_id)
+        if prior is not None and prior.succeeded:
+            msg = (
+                f"道友成功升级灵庄会员等级，消耗灵石{prior.cost}枚，当前为：{BANKLEVEL[prior.bank_level]['level']}，"
+                f"灵庄可存有灵石上限{BANKLEVEL[prior.bank_level]['savemax']}枚\n"
+                "该升级请求已经处理，无需重复提交。"
+            )
+            await handle_send(bot, event, msg, md_type="灵庄", k1="升级", v1="灵庄升级会员", k2="信息", v2="灵庄信息", k3="帮助", v3="灵庄帮助")
+            await bank.finish()
+
         userlevel = bankinfo["banklevel"]
         if userlevel == str(len(BANKLEVEL)):
             msg = f"道友已经是本灵庄最大的会员啦！"
@@ -185,9 +234,15 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await bank.finish()
 
         next_level = f"{int(userlevel) + 1}"
-        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-        operation_id = f"bank-upgrade:{event_id}:{user_id}" if event_id else f"bank-upgrade:{user_id}:{time.time_ns()}"
         upgrade = bank_upgrade_service.upgrade(operation_id, user_id, userlevel, next_level, stonecost)
+        if upgrade.status == "duplicate":
+            msg = (
+                f"道友成功升级灵庄会员等级，消耗灵石{upgrade.cost}枚，当前为：{BANKLEVEL[upgrade.bank_level]['level']}，"
+                f"灵庄可存有灵石上限{BANKLEVEL[upgrade.bank_level]['savemax']}枚\n"
+                "该升级请求已经处理，无需重复提交。"
+            )
+            await handle_send(bot, event, msg, md_type="灵庄", k1="升级", v1="灵庄升级会员", k2="信息", v2="灵庄信息", k3="帮助", v3="灵庄帮助")
+            await bank.finish()
         if upgrade.status in {"stone_insufficient", "state_changed"}:
             msg = "灵庄账户状态已变化，本次会员升级未结算，请重新查看后再试。"
             await handle_send(bot, event, msg, md_type="灵庄", k1="升级", v1="灵庄升级会员", k2="信息", v2="灵庄信息", k3="帮助", v3="灵庄帮助")
@@ -212,11 +267,17 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         await bank.finish()
 
     elif mode == '结算':
+        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        operation_id = f"bank-interest:{event_id}:{user_id}" if event_id else f"bank-interest:{user_id}:{time.time_ns()}"
+        prior = bank_interest_service.get_result(operation_id)
+        if prior is not None and prior.succeeded:
+            msg = f"道友本次结息时间为：已处理，获得灵石：{prior.interest}枚！\n该结息请求已经处理，无需重复提交。"
+            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
+            await bank.finish()
+
         expected_saved_stone = bankinfo['savestone']
         expected_saved_at = bankinfo['savetime']
         bankinfo, give_stone, timedeff = get_give_stone(bankinfo)
-        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-        operation_id = f"bank-interest:{event_id}:{user_id}" if event_id else f"bank-interest:{user_id}:{time.time_ns()}"
         settlement = bank_interest_service.settle(
             operation_id,
             user_id,
@@ -226,6 +287,10 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             give_stone,
             bankinfo['savetime'],
         )
+        if settlement.status == "duplicate":
+            msg = f"道友本次结息时间为：{timedeff}小时，获得灵石：{settlement.interest}枚！\n该结息请求已经处理，无需重复提交。"
+            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
+            await bank.finish()
         if settlement.status == "state_changed":
             msg = "灵庄账户状态已变化，本次结息未处理，请重新查看后再试。"
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")

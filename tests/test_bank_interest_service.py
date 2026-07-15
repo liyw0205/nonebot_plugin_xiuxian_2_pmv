@@ -58,11 +58,14 @@ class BankInterestServiceTests(unittest.TestCase):
 
     def test_duplicate_reuses_result_and_conflict_is_rejected(self) -> None:
         first = self.settle("repeat")
-        duplicate = self.settle("repeat")
-        conflict = self.settle("repeat", interest=21)
-        self.assertEqual((first.status, duplicate.status, conflict.status), ("applied", "duplicate", "state_changed"))
+        # interest amount is outcome; same op with different interest still duplicate
+        duplicate = self.settle("repeat", interest=21)
+        self.assertEqual((first.status, duplicate.status), ("applied", "duplicate"))
         self.assertEqual((duplicate.interest, duplicate.wallet_stone, duplicate.saved_at), (20, 1020, "new"))
         self.assertEqual(self.state(), (1020, (500, "new", "1")))
+        prior = self.service.get_result("repeat")
+        self.assertIsNotNone(prior)
+        self.assertEqual(prior.interest, 20)
 
     def test_operation_failure_rolls_back_wallet_and_time(self) -> None:
         with db_backend.transaction(self.game_database) as conn:

@@ -65,11 +65,16 @@ class BankDepositServiceTests(unittest.TestCase):
 
     def test_duplicate_reuses_result_and_conflict_is_rejected(self) -> None:
         first = self.deposit("repeat")
-        duplicate = self.deposit("repeat")
+        # mutable interest/settled_at must not break same-op replay
+        duplicate = self.deposit("repeat", interest=99, settled_at="later")
+        self.assertEqual((first.status, duplicate.status), ("applied", "duplicate"))
+        self.assertEqual((duplicate.deposited, duplicate.interest, duplicate.wallet_stone), (300, 20, 720))
         conflict = self.deposit("repeat", amount=301)
-        self.assertEqual((first.status, duplicate.status, conflict.status), ("applied", "duplicate", "state_changed"))
-        self.assertEqual(duplicate, first.__class__("duplicate", 300, 20, 720, 500, "new"))
+        self.assertEqual(conflict.status, "state_changed")
         self.assertEqual(self.state(), (720, (500, "new", "1")))
+        prior = self.service.get_result("repeat")
+        self.assertIsNotNone(prior)
+        self.assertEqual(prior.deposited, 300)
 
     def test_operation_failure_rolls_back_wallet_and_account(self) -> None:
         with db_backend.transaction(self.game_database) as conn:

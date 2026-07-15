@@ -12,11 +12,11 @@ from ..xiuxian_utils import db_backend
 @dataclass(frozen=True)
 class BankWithdrawalResult:
     status: str
-    withdrawn: int
-    interest: int
-    wallet_stone: int
-    saved_stone: int
-    saved_at: str
+    withdrawn: int = 0
+    interest: int = 0
+    wallet_stone: int = 0
+    saved_stone: int = 0
+    saved_at: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -30,6 +30,30 @@ class BankWithdrawalService:
         self._game_database = Path(game_database)
         self._player_database = Path(player_database)
         self._lock = lock or RLock()
+
+    @staticmethod
+    def _payload(user_id, amount) -> str:
+        return json.dumps([str(user_id), int(amount)], ensure_ascii=True, separators=(",", ":"))
+
+    def get_result(self, operation_id: str) -> BankWithdrawalResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS bank_withdrawal_operations ("
+                "operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, withdrawn INTEGER NOT NULL, "
+                "interest INTEGER NOT NULL, wallet_stone INTEGER NOT NULL, saved_stone INTEGER NOT NULL, "
+                "saved_at TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT payload, withdrawn, interest, wallet_stone, saved_stone, saved_at "
+                "FROM bank_withdrawal_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return BankWithdrawalResult("duplicate", *map(int, previous[1:5]), str(previous[5]))
 
     def withdraw(
         self,
@@ -53,10 +77,7 @@ class BankWithdrawalService:
         if not operation_id or amount <= 0 or interest < 0 or not settled_at:
             raise ValueError("valid operation, amount, interest and settlement time are required")
 
-        payload = json.dumps(
-            [user_id, amount, expected_saved_stone, expected_saved_at, bank_level, interest, settled_at],
-            ensure_ascii=True,
-        )
+        payload = self._payload(user_id, amount)
 
         def result(status, withdrawn=0, wallet_stone=0, saved_stone=expected_saved_stone):
             return BankWithdrawalResult(

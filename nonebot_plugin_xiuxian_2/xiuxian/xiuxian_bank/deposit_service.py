@@ -12,11 +12,11 @@ from ..xiuxian_utils import db_backend
 @dataclass(frozen=True)
 class BankDepositResult:
     status: str
-    deposited: int
-    interest: int
-    wallet_stone: int
-    saved_stone: int
-    saved_at: str
+    deposited: int = 0
+    interest: int = 0
+    wallet_stone: int = 0
+    saved_stone: int = 0
+    saved_at: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -30,6 +30,31 @@ class BankDepositService:
         self._game_database = Path(game_database)
         self._player_database = Path(player_database)
         self._lock = lock or RLock()
+
+    @staticmethod
+    def _payload(user_id, amount) -> str:
+        # Request identity only — balances/interest/settled_at are concurrency checks or outcomes.
+        return json.dumps([str(user_id), int(amount)], ensure_ascii=True, separators=(",", ":"))
+
+    def get_result(self, operation_id: str) -> BankDepositResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS bank_deposit_operations ("
+                "operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, deposited INTEGER NOT NULL, "
+                "interest INTEGER NOT NULL, wallet_stone INTEGER NOT NULL, saved_stone INTEGER NOT NULL, "
+                "saved_at TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT payload, deposited, interest, wallet_stone, saved_stone, saved_at "
+                "FROM bank_deposit_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return BankDepositResult("duplicate", *map(int, previous[1:5]), str(previous[5]))
 
     def deposit(
         self,
@@ -55,13 +80,17 @@ class BankDepositService:
         if not operation_id or amount <= 0 or interest < 0 or save_limit < 0 or not settled_at:
             raise ValueError("valid operation, amount, interest, limit and settlement time are required")
 
-        payload = json.dumps(
-            [user_id, amount, expected_saved_stone, expected_saved_at, bank_level, interest, settled_at, save_limit],
-            ensure_ascii=True,
-        )
+        payload = self._payload(user_id, amount)
 
-        def result(status, deposited=0, wallet_stone=0, saved_stone=expected_saved_stone):
-            return BankDepositResult(status, deposited, interest if deposited else 0, wallet_stone, saved_stone, settled_at)
+        def result(status, deposited=0, wallet_stone=0, saved_stone=expected_saved_stone, interest_out=0, saved_at=settled_at):
+            return BankDepositResult(
+                status,
+                deposited,
+                interest_out if deposited else 0,
+                wallet_stone,
+                saved_stone,
+                saved_at,
+            )
 
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False

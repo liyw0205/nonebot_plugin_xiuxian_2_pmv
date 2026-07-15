@@ -12,9 +12,9 @@ from ..xiuxian_utils import db_backend
 @dataclass(frozen=True)
 class BankUpgradeResult:
     status: str
-    cost: int
-    wallet_stone: int
-    bank_level: str
+    cost: int = 0
+    wallet_stone: int = 0
+    bank_level: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -29,6 +29,30 @@ class BankUpgradeService:
         self._player_database = Path(player_database)
         self._lock = lock or RLock()
 
+    @staticmethod
+    def _payload(user_id, next_level, cost) -> str:
+        # Request identity: target level + fixed cost. expected_level is concurrency only.
+        return json.dumps([str(user_id), str(next_level), int(cost)], ensure_ascii=True, separators=(",", ":"))
+
+    def get_result(self, operation_id: str) -> BankUpgradeResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS bank_upgrade_operations ("
+                "operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, cost INTEGER NOT NULL, "
+                "wallet_stone INTEGER NOT NULL, bank_level TEXT NOT NULL, "
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT payload, cost, wallet_stone, bank_level FROM bank_upgrade_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return BankUpgradeResult("duplicate", int(previous[1]), int(previous[2]), str(previous[3]))
+
     def upgrade(self, operation_id, user_id, expected_level, next_level, cost) -> BankUpgradeResult:
         operation_id = str(operation_id).strip()
         user_id = str(user_id)
@@ -37,7 +61,7 @@ class BankUpgradeService:
         cost = int(cost)
         if not operation_id or cost < 0 or expected_level == next_level:
             raise ValueError("valid operation, non-negative cost and distinct levels are required")
-        payload = json.dumps([user_id, expected_level, next_level, cost], ensure_ascii=True)
+        payload = self._payload(user_id, next_level, cost)
 
         def result(status, wallet_stone=0, bank_level=expected_level):
             return BankUpgradeResult(status, cost if status in {"applied", "duplicate"} else 0, wallet_stone, bank_level)
