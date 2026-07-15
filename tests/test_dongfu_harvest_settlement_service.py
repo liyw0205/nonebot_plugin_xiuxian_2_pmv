@@ -9,7 +9,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dongfu.harvest_settlement_service import DongfuHarvestSettlementService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dongfu.transaction_service import DongfuHarvestSettlementService
 from tests.test_db_backend import db_backend
 
 

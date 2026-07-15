@@ -7,7 +7,7 @@ from pathlib import Path
 import nonebot
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dongfu.patrol_service import DongfuPatrolService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dongfu.transaction_service import DongfuPatrolService
 from tests.test_db_backend import db_backend
 
 

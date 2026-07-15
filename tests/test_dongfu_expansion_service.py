@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dongfu.expansion_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dongfu.transaction_service import (
     DongfuExpansionService,
 )
 from tests.test_db_backend import db_backend

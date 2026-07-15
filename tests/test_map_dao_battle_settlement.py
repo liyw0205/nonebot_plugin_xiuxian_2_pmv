@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_map.dao_battle_settlement_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_map.transaction_service import (
     MapDaoBattleSettlementService,
 )
 from tests.test_db_backend import db_backend

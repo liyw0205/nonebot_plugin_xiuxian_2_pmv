@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_map.explore_start_service import MapExploreStartService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_map.transaction_service import MapExploreStartService
 from tests.test_db_backend import db_backend
 
 

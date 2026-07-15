@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_map.mission_claim_service import MapMissionClaimService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_map.transaction_service import MapMissionClaimService
 from tests.test_db_backend import db_backend
 
 

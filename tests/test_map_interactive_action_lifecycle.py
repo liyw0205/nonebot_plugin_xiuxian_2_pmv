@@ -9,10 +9,10 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_map.interactive_action_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_map.transaction_service import (
     MapInteractiveActionService,
 )
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_map.resource_reward_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_map.transaction_service import (
     MapResourceRewardService,
 )
 from tests.test_db_backend import db_backend

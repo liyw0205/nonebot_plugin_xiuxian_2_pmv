@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_map.seed_purchase_service import SeedPurchaseService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_map.transaction_service import SeedPurchaseService
 from tests.test_db_backend import db_backend
 
 

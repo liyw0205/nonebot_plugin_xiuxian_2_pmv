@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 import nonebot
 nonebot.init()
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dongfu.array_upgrade_service import DongfuArrayUpgradeService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dongfu.transaction_service import DongfuArrayUpgradeService
 from tests.test_db_backend import db_backend
 
 class DongfuArrayUpgradeServiceTests(unittest.TestCase):

@@ -8,10 +8,10 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_map.combat_lifecycle_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_map.transaction_service import (
     MapCombatLifecycleService,
 )
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_map.combat_settlement_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_map.transaction_service import (
     MapCombatSettlementService,
 )
 from tests.test_db_backend import db_backend
