@@ -24,6 +24,7 @@ class TowerPurchaseResult:
     def succeeded(self) -> bool:
         return self.status in {"applied", "duplicate"}
 
+
 class TowerPurchaseService:
     """Exchange tower score for inventory items in one transaction."""
 
@@ -31,6 +32,15 @@ class TowerPurchaseService:
         self._game_database = Path(game_database)
         self._player_database = Path(player_database)
         self._lock = lock or RLock()
+
+    @staticmethod
+    def _payload(user_id, item_id, quantity, unit_cost, weekly_limit, max_goods_num, bind_flag) -> str:
+        # Request identity only — score/weekly snapshots are concurrency checks.
+        return json.dumps(
+            [str(user_id), int(item_id), int(quantity), int(unit_cost), int(weekly_limit), int(max_goods_num), int(bind_flag)],
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
 
     def purchase(
         self,
@@ -63,14 +73,17 @@ class TowerPurchaseService:
         weekly = normalize_weekly_purchases(expected_weekly_purchases, today)
         if not operation_id or quantity <= 0 or min(item_id, unit_cost, weekly_limit, expected_score, max_goods_num) < 0:
             raise ValueError("valid operation, item, quantity and purchase limits are required")
-        payload = json.dumps(
-            [user_id, item_id, item_name, item_type, quantity, unit_cost, weekly_limit, expected_score, weekly, max_goods_num, bind_flag],
-            ensure_ascii=True,
-            sort_keys=True,
-        )
+        payload = self._payload(user_id, item_id, quantity, unit_cost, weekly_limit, max_goods_num, bind_flag)
 
         def result(status: str, score=expected_score, purchased=0, inventory=0) -> TowerPurchaseResult:
-            return TowerPurchaseResult(status, quantity if status in {"applied", "duplicate"} else 0, quantity * unit_cost if status in {"applied", "duplicate"} else 0, int(score), int(purchased), int(inventory))
+            return TowerPurchaseResult(
+                status,
+                quantity if status in {"applied", "duplicate"} else 0,
+                quantity * unit_cost if status in {"applied", "duplicate"} else 0,
+                int(score),
+                int(purchased),
+                int(inventory),
+            )
 
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False
@@ -86,7 +99,8 @@ class TowerPurchaseService:
                 )
                 previous = conn.execute(
                     "SELECT payload, quantity, cost, score, purchased, inventory FROM tower_purchase_operations "
-                    "WHERE operation_id=%s", (operation_id,)
+                    "WHERE operation_id=%s",
+                    (operation_id,),
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
@@ -99,11 +113,13 @@ class TowerPurchaseService:
                     conn.rollback()
                     return result("user_missing")
                 table = conn.execute(
-                    "SELECT 1 FROM player_data.sqlite_master WHERE type='table' AND name=%s", ("tower",)
+                    "SELECT 1 FROM player_data.sqlite_master WHERE type='table' AND name=%s",
+                    ("tower",),
                 ).fetchone()
                 columns = (
                     {str(column[1]) for column in conn.execute("PRAGMA player_data.table_info(tower)").fetchall()}
-                    if table is not None else set()
+                    if table is not None
+                    else set()
                 )
                 if not {"score", "weekly_purchases"}.issubset(columns):
                     conn.rollback()
@@ -129,7 +145,8 @@ class TowerPurchaseService:
                     conn.rollback()
                     return result("score_insufficient", purchased=purchased)
                 inventory_row = conn.execute(
-                    "SELECT COALESCE(goods_num, 0) FROM back WHERE user_id=%s AND goods_id=%s", (user_id, item_id)
+                    "SELECT COALESCE(goods_num, 0) FROM back WHERE user_id=%s AND goods_id=%s",
+                    (user_id, item_id),
                 ).fetchone()
                 inventory = int(inventory_row[0]) if inventory_row else 0
                 if inventory + quantity > max_goods_num:
@@ -140,10 +157,13 @@ class TowerPurchaseService:
                 new_purchased = purchased + quantity
                 new_inventory = inventory + quantity
                 weekly[str(item_id)] = new_purchased
-                if conn.execute(
-                    "UPDATE player_data.tower SET score=%s, weekly_purchases=%s WHERE user_id=%s AND COALESCE(score, 0)=%s",
-                    (new_score, json.dumps(weekly, ensure_ascii=False), user_id, expected_score),
-                ).rowcount != 1:
+                if (
+                    conn.execute(
+                        "UPDATE player_data.tower SET score=%s, weekly_purchases=%s WHERE user_id=%s AND COALESCE(score, 0)=%s",
+                        (new_score, json.dumps(weekly, ensure_ascii=False), user_id, expected_score),
+                    ).rowcount
+                    != 1
+                ):
                     conn.rollback()
                     return result("state_changed")
                 now = datetime.now()

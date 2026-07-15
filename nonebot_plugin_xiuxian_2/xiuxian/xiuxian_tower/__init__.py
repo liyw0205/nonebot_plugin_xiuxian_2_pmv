@@ -25,6 +25,7 @@ from .tower_data import tower_data
 from .tower_battle import tower_battle
 from .tower_limit import tower_limit
 from .purchase_service import TowerPurchaseService, normalize_weekly_purchases
+from .settlement_service import TowerSettlementService
 from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_title.title_data import check_and_unlock_titles
@@ -32,6 +33,7 @@ player_data_manager = PlayerDataManager()
 sql_message = XiuxianDateManage()
 items = Items()
 tower_purchase_service = TowerPurchaseService(get_paths().game_db, get_paths().player_db)
+tower_settlement_service = TowerSettlementService(get_paths().game_db, get_paths().player_db)
 
 # 定义命令
 tower_challenge = on_command("爬塔", aliases={"挑战通天塔", "通天塔挑战"}, priority=5, block=True)
@@ -121,6 +123,24 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="我要修仙")
         await tower_challenge.finish()
     user_id = user_info["user_id"]
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"tower-challenge:{event_id}:{user_id}" if event_id else ""
+    if operation_id:
+        prior = tower_settlement_service.get_result(operation_id)
+        if prior is not None and prior.succeeded:
+            if prior.challenge_succeeded:
+                msg = (
+                    f"恭喜道友成功通关通天塔第{prior.floor}层！\n"
+                    f"共获得积分：{prior.score}点，灵石：{number_to(prior.stone)}枚\n"
+                    "该挑战请求已经处理，无需重复提交。"
+                )
+            else:
+                msg = (
+                    f"道友止步通天塔第{max(int(prior.floor or 1) - 1, 0)}层！\n"
+                    "该挑战请求已经处理，无需重复提交。"
+                )
+            await handle_send(bot, event, msg, md_type="通天塔", k1="挑战", v1="挑战通天塔", k2="状态", v2="我的状态", k3="商店", v3="通天塔商店")
+            await tower_challenge.finish()
     is_type, msg = check_user_type(user_id, 0)  # 需要无状态的用户
     if not is_type:
         await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="通天塔帮助", v3="通天塔帮助")
@@ -154,6 +174,30 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await tower_continuous.finish()
     
     user_id = user_info["user_id"]
+    # 解析层数参数（请求身份的一部分）
+    floor_input = args.extract_plain_text().strip()
+    if floor_input:
+        try:
+            target_floors = int(floor_input)
+            # 限制最大层数为100
+            target_floors = min(max(target_floors, 1), 100)
+        except ValueError:
+            target_floors = 10
+    else:
+        target_floors = 10  # 默认10层
+
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"tower-continuous:{event_id}:{user_id}:{target_floors}" if event_id else ""
+    if operation_id:
+        prior = tower_settlement_service.get_result(operation_id)
+        if prior is not None and prior.succeeded:
+            msg = (
+                f"连续挑战完成，成功通关第{prior.floor}层！共获得积分：{prior.score}点，"
+                f"灵石：{number_to(prior.stone)}枚\n该挑战请求已经处理，无需重复提交。"
+            )
+            await handle_send(bot, event, msg, md_type="通天塔", k1="速通", v1="速通通天塔", k2="状态", v2="我的状态", k3="商店", v3="通天塔商店")
+            await tower_continuous.finish()
+
     is_type, msg = check_user_type(user_id, 0)  # 需要无状态的用户
     if not is_type:
         await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="通天塔帮助", v3="通天塔帮助")
@@ -169,18 +213,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         sql_message.update_user_stamina(user_id, tower_data.config["体力消耗"]["连续爬塔"], 1)
         await handle_send(bot, event, msg, md_type="通天塔", k1="闭关", v1="闭关", k2="丹药", v2="丹药背包", k3="状态", v3="我的状态")
         await tower_continuous.finish()
-    
-    # 解析层数参数
-    floor_input = args.extract_plain_text().strip()
-    if floor_input:
-        try:
-            target_floors = int(floor_input)
-            # 限制最大层数为100
-            target_floors = min(max(target_floors, 1), 100)
-        except ValueError:
-            target_floors = 10
-    else:
-        target_floors = 10  # 默认10层
     
     success, msg = await challenge_floor(bot, event, user_id, continuous=True, target_floors=target_floors)
     try:
@@ -299,8 +331,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await tower_buy.finish()
     
     item_data = shop_items[item_id]
-    tower_info = tower_limit.get_user_tower_info(user_id)
-    
     # 检查物品是否存在
     item_info = items.get_data_by_item_id(item_id)
     if not item_info:
@@ -308,22 +338,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg, md_type="通天塔", k1="兑换", v1="通天塔兑换", k2="商店", v2="通天塔帮助", k3="信息", v3="通天塔信息")
         await tower_buy.finish()
 
-    # 周快照只在兑换事务内持久化，预检查不再提前写库。
+    # 先走 purchase operation，避免成功后限购/积分变化挡住同事件重放。
+    tower_info = tower_limit.get_user_tower_info(user_id)
     tower_info["weekly_purchases"] = normalize_weekly_purchases(tower_info.get("weekly_purchases", {}))
-    already_purchased = int(tower_info["weekly_purchases"].get(str(item_id), 0))
-    max_quantity = item_data['weekly_limit'] - already_purchased
-    quantity = min(quantity, max_quantity)
-    if quantity <= 0:
-        await handle_send(bot, event, f"{item_info['name']}已到限购无法再购买！")
-        await tower_buy.finish()
-
-    # 检查积分是否足够
-    total_cost = item_data["cost"] * quantity
-    if tower_info["score"] < total_cost:
-        msg = f"积分不足！需要{total_cost}点，当前拥有{tower_info['score']}点"
-        await handle_send(bot, event, msg, md_type="通天塔", k1="兑换", v1="通天塔兑换", k2="商店", v2="通天塔帮助", k3="信息", v3="通天塔信息")
-        await tower_buy.finish()
-    
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = (
         f"tower-purchase:{event_id}:{user_id}"
@@ -344,8 +361,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         XiuConfig().max_goods_num,
         1,
     )
+    if purchase_result.status == "duplicate":
+        msg = (
+            f"成功兑换{item_info['name']}×{purchase_result.quantity}，"
+            f"消耗{purchase_result.cost}积分！\n该兑换请求已经处理，无需重复提交。"
+        )
+        await handle_send(bot, event, msg, md_type="通天塔", k1="兑换", v1="通天塔兑换", k2="商店", v2="通天塔帮助", k3="信息", v3="通天塔信息")
+        await tower_buy.finish()
     if purchase_result.status == "score_insufficient":
-        await handle_send(bot, event, "积分状态已变化，当前积分不足！")
+        total_cost = item_data["cost"] * quantity
+        msg = f"积分不足！需要{total_cost}点，当前拥有{tower_info['score']}点"
+        await handle_send(bot, event, msg, md_type="通天塔", k1="兑换", v1="通天塔兑换", k2="商店", v2="通天塔帮助", k3="信息", v3="通天塔信息")
         await tower_buy.finish()
     if purchase_result.status == "limit_reached":
         await handle_send(bot, event, f"{item_info['name']}已到限购无法再购买！")
@@ -359,8 +385,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if purchase_result.status == "user_missing":
         await handle_send(bot, event, "未找到道友数据，通天塔兑换失败！")
         await tower_buy.finish()
-    
-    msg = f"成功兑换{item_info['name']}×{quantity}，消耗{total_cost}积分！"
+    if not purchase_result.succeeded:
+        await handle_send(bot, event, "通天塔兑换失败，请重试！")
+        await tower_buy.finish()
+
+    msg = f"成功兑换{item_info['name']}×{purchase_result.quantity}，消耗{purchase_result.cost}积分！"
     await handle_send(bot, event, msg, md_type="通天塔", k1="兑换", v1="通天塔兑换", k2="商店", v2="通天塔帮助", k3="信息", v3="通天塔信息")
     await tower_buy.finish()
 

@@ -69,7 +69,8 @@ class TowerPurchaseServiceTests(unittest.TestCase):
 
     def test_duplicate_reuses_result_and_conflict_is_rejected(self) -> None:
         first = self.purchase("repeat")
-        duplicate = self.purchase("repeat")
+        # mutable score/weekly snapshots must not break same-op replay
+        duplicate = self.purchase("repeat", expected_score=1, weekly={"_last_reset": "2026-07-13", "1": 9})
         conflict = self.purchase("repeat", quantity=1)
         self.assertEqual((first.status, duplicate.status, conflict.status), ("applied", "duplicate", "state_changed"))
         self.assertEqual((duplicate.score, duplicate.inventory), (80, 2))

@@ -49,9 +49,18 @@ class TowerSettlementServiceTests(unittest.TestCase):
         self.assertEqual(self.state(), ((10, 10, 58), (30, 130, 50, 80, 12), (1, 1)))
 
     def test_duplicate_reuses_result_and_conflict_is_rejected(self) -> None:
-        first, duplicate, conflict = self.settle("repeat"), self.settle("repeat"), self.settle("repeat", score=9)
+        first = self.settle("repeat")
+        # mutable score/reward snapshots must not break same-op replay
+        duplicate = self.settle("repeat", score=999, stone=1, exp=1, items=[])
+        # different request identity (floor) should conflict
+        conflict = self.settle("repeat", floor=11)
         self.assertEqual((first.status, duplicate.status, conflict.status), ("applied", "duplicate", "state_changed"))
+        self.assertEqual((duplicate.score, duplicate.stone, duplicate.exp), (8, 20, 30))
         self.assertEqual(self.state(), ((10, 10, 58), (30, 130, 50, 80, 12), (1, 1)))
+        prior = self.service.get_result("repeat")
+        self.assertIsNotNone(prior)
+        self.assertEqual(prior.status, "duplicate")
+        self.assertEqual(prior.score, 8)
 
     def test_stale_state_and_full_inventory_leave_everything_unchanged(self) -> None:
         self.assertEqual(self.settle("stale", expected={"current_floor": 8, "max_floor": 9, "score": 50}).status, "state_changed")

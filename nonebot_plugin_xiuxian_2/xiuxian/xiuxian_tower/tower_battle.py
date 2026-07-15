@@ -111,9 +111,26 @@ class TowerBattle:
         """单层挑战"""
         user_id = user_info["user_id"]
         event_id = getattr(event, "message_id", None)
-        operation_id = f"tower-challenge:{event_id}:{user_id}:{boss_info['floor']}" if event_id else f"tower-challenge:{time.time_ns()}:{user_id}:{boss_info['floor']}"
+        operation_id = f"tower-challenge:{event_id}:{user_id}" if event_id else f"tower-challenge:{time.time_ns()}:{user_id}"
         stamina_cost = int(self.config["体力消耗"]["单层爬塔"])
-        expected_player = {key: int(user_info[key]) for key in ("hp", "mp", "user_stamina")}
+        # 先回放：成功后楼层/体力变化，且不可重开战。
+        prior = tower_settlement_service.get_result(operation_id)
+        if prior is not None and prior.succeeded:
+            if prior.challenge_succeeded:
+                msg = (
+                    f"恭喜道友击败{boss_info['name']}，成功通关通天塔第{prior.floor or boss_info['floor']}层！\n"
+                    f"共获得积分：{prior.score}点，灵石：{number_to(prior.stone)}枚\n"
+                    "该挑战请求已经处理，无需重复提交。"
+                )
+                return True, msg
+            msg = (
+                f"道友不敌{boss_info['name']}，止步通天塔第{(prior.floor or boss_info['floor']) - 1}层！\n"
+                "该挑战请求已经处理，无需重复提交。"
+            )
+            return False, msg
+        # expected_* 必须用原始 DB 状态，避免 buff 放大后的 real_info 导致 concurrency 误冲突。
+        raw_user = sql_message.get_user_info_with_id(user_id) or user_info
+        expected_player = {key: int(raw_user[key]) for key in ("hp", "mp", "user_stamina")}
         if expected_player["user_stamina"] < stamina_cost:
             return False, "你没有足够的体力，请等待体力恢复后再试！"
         user_buff_data = UserBuffDate(user_info['user_id'])
@@ -183,6 +200,13 @@ class TowerBattle:
                 expected_player=expected_player, final_hp=final_hp, final_mp=final_mp,
                 stamina_cost=stamina_cost, challenge_succeeded=True,
             )
+            if settlement.status == "duplicate":
+                msg = (
+                    f"恭喜道友击败{boss_info['name']}，成功通关通天塔第{boss_info['floor']}层！\n"
+                    f"共获得积分：{settlement.score}点，灵石：{number_to(settlement.stone)}枚\n"
+                    "该挑战请求已经处理，无需重复提交。"
+                )
+                return True, msg
             if not settlement.succeeded:
                 return False, "通天塔奖励结算失败，请稍后重试。"
             update_statistics_value(user_id, "通天塔通关层数")
@@ -201,6 +225,11 @@ class TowerBattle:
                 expected_player=expected_player, final_hp=final_hp, final_mp=final_mp,
                 stamina_cost=stamina_cost, challenge_succeeded=False,
             )
+            if settlement.status == "duplicate":
+                return False, (
+                    f"道友不敌{boss_info['name']}，止步通天塔第{boss_info['floor'] - 1}层！\n"
+                    "该挑战请求已经处理，无需重复提交。"
+                )
             if not settlement.succeeded:
                 return False, "通天塔挑战结算失败，请稍后重试。"
             msg = f"道友不敌{boss_info['name']}，止步通天塔第{boss_info['floor'] - 1}层！"
@@ -227,7 +256,14 @@ class TowerBattle:
         tower_info = tower_limit.get_user_tower_info(user_id)
         initial_max_floor = tower_info["max_floor"]  # 保存初始的最大层数
         event_id = getattr(event, "message_id", None)
-        operation_id = f"tower-continuous:{event_id}:{user_id}:{start_floor}:{target_floors}" if event_id else f"tower-continuous:{time.time_ns()}:{user_id}:{start_floor}:{target_floors}"
+        operation_id = f"tower-continuous:{event_id}:{user_id}:{target_floors}" if event_id else f"tower-continuous:{time.time_ns()}:{user_id}:{target_floors}"
+        prior = tower_settlement_service.get_result(operation_id)
+        if prior is not None and prior.succeeded:
+            msg = (
+                f"连续挑战完成，成功通关第{prior.floor or start_floor}层！共获得积分：{prior.score}点，"
+                f"灵石：{number_to(prior.stone)}枚\n该挑战请求已经处理，无需重复提交。"
+            )
+            return True, msg
         reward_rng = random.Random(operation_id)
         
         # 计算最大挑战层数，限制为100层
@@ -303,6 +339,12 @@ class TowerBattle:
                 operation_id, user_id, tower_info, max_success, total_score, total_stone,
                 total_exp, reward_items, XiuConfig().max_goods_num,
             )
+            if settlement.status == "duplicate":
+                msg = (
+                    f"连续挑战完成，成功通关第{max_success}层！共获得积分：{settlement.score}点，"
+                    f"灵石：{number_to(settlement.stone)}枚\n该挑战请求已经处理，无需重复提交。"
+                )
+                return True, msg
             if not settlement.succeeded:
                 return False, "通天塔奖励结算失败，请稍后重试。"
             update_statistics_value(user_id, "通天塔通关层数", increment=len(success_floors))
