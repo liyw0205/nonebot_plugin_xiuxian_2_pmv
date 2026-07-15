@@ -12,7 +12,7 @@ from ..xiuxian_config import convert_rank, base_rank
 from ..xiuxian_utils.item_json import Items
 from .tower_data import tower_data
 from .tower_limit import tower_limit
-from .settlement_service import TowerSettlementService
+from .transaction_service import TowerSettlementService
 from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
 

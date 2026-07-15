@@ -11,14 +11,14 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_compensation.definition_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_compensation.transaction_service import (
     CompensationDefinitionConflict,
     CompensationDefinitionService,
 )
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_compensation import (
     common as compensation_common,
 )
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_compensation.reward_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_compensation.transaction_service import (
     RewardClaimService,
 )
 from tests.test_db_backend import db_backend

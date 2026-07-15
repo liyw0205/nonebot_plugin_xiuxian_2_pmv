@@ -12,7 +12,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_past_life.choice_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_past_life.transaction_service import (
     PastLifeChoiceService,
 )
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_past_life.past_life_data import (

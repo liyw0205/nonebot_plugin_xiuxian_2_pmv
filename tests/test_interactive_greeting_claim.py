@@ -9,7 +9,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_Interactive.greeting_claim_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_Interactive.transaction_service import (
     InteractiveGreetingClaimService,
 )
 from tests.test_db_backend import db_backend

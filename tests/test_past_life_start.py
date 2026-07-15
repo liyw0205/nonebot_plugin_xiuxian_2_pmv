@@ -16,7 +16,7 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_past_life.past_life_state import (
     encode_field,
     new_default_state,
 )
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_past_life.start_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_past_life.transaction_service import (
     STATISTICS_FIELD,
     PastLifeStartResult,
     PastLifeStartService,

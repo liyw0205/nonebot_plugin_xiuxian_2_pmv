@@ -1720,7 +1720,7 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("sql_message.send_back(", handler)
         for status in ("score_insufficient", "limit_reached", "inventory_full", "state_changed", "user_missing"):
             self.assertIn(f'"{status}"', handler)
-        service = (tower_root / "purchase_service.py").read_text(encoding="utf-8")
+        service = (tower_root / "transaction_service.py").read_text(encoding="utf-8")
         self.assertIn("ATTACH DATABASE", service)
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("tower_purchase_operations", service)
@@ -1735,7 +1735,7 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("sql_message.update_ls(", handler)
         self.assertNotIn("sql_message.update_exp(", handler)
         self.assertNotIn("sql_message.send_back(", handler)
-        service = (tower_root / "settlement_service.py").read_text(encoding="utf-8")
+        service = (tower_root / "transaction_service.py").read_text(encoding="utf-8")
         self.assertIn("ATTACH DATABASE", service)
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("tower_settlement_operations", service)

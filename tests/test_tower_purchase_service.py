@@ -10,7 +10,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tower.purchase_service import TowerPurchaseService, normalize_weekly_purchases
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tower.transaction_service import TowerPurchaseService, normalize_weekly_purchases
 from tests.test_db_backend import db_backend
 
 

@@ -15,7 +15,7 @@ from ..xiuxian_utils.utils import (
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from .past_life_limit import past_life_limit
 from .past_life_events import past_life_engine
-from .reset_service import PastLifeResetService
+from .transaction_service import PastLifeResetService
 from ...paths import get_paths
 
 player_data_manager = PlayerDataManager()

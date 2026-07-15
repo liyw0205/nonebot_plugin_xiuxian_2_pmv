@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ...paths import get_paths
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
-from .state_service import TowerStateService
+from .transaction_service import TowerStateService
 
 
 player_data_manager = PlayerDataManager()

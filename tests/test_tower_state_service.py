@@ -9,7 +9,7 @@ import pytest
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tower.state_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tower.transaction_service import (
     TOWER_FIELDS,
     TowerStateService,
 )
@@ -198,7 +198,7 @@ def test_operation_failure_rolls_back_week_switch(tmp_path):
 def test_production_facade_has_no_per_field_write_bypass():
     root = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tower"
     facade = (root / "tower_limit.py").read_text(encoding="utf-8")
-    service = (root / "state_service.py").read_text(encoding="utf-8")
+    service = (root / "transaction_service.py").read_text(encoding="utf-8")
 
     assert "TowerStateService(" in facade
     assert "update_or_write_data" not in facade

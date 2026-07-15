@@ -14,8 +14,8 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.json_store import load_json_file, save_json_file
 from ..xiuxian_config import XiuConfig
-from .reward_service import RewardClaimService
-from .definition_service import CompensationDefinitionService
+from .transaction_service import RewardClaimService
+from .transaction_service import CompensationDefinitionService
 from ..xiuxian_utils.utils import (
     check_user,
     handle_send,

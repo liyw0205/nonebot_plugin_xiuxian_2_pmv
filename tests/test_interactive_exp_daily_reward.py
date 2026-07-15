@@ -9,7 +9,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_Interactive.exp_daily_reward_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_Interactive.transaction_service import (
     InteractiveExpDailyRewardService,
 )
 from tests.test_db_backend import db_backend

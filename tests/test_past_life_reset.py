@@ -15,7 +15,7 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_past_life.past_life_state import (
     new_default_state,
     normalize_state,
 )
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_past_life.reset_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_past_life.transaction_service import (
     PastLifeResetService,
 )
 from tests.test_db_backend import db_backend

@@ -9,12 +9,12 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_past_life.final_settlement_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_past_life.transaction_service import (
     JSON_FIELDS,
     PAST_LIFE_FIELDS,
     PastLifeFinalSettlementService,
 )
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_past_life.choice_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_past_life.transaction_service import (
     PastLifeChoiceService,
 )
 from tests.test_db_backend import db_backend

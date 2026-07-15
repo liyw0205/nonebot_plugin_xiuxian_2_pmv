@@ -18,7 +18,7 @@ from .common import (
     get_item_list,
     create_item_message,
 )
-from .invitation_reward_service import InvitationRewardClaimService
+from .transaction_service import InvitationRewardClaimService
 
 INVITATION_DATA_PATH = DATA_PATH / "invitation_data"
 INVITATION_REWARDS_FILE = INVITATION_DATA_PATH / "invitation_rewards.json"
