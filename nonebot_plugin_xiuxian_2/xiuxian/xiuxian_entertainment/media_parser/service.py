@@ -1,62 +1,30 @@
-"""封装上游 ParserManager：解析文本并格式化为 QQ 可发送内容。"""
+"""封装本插件原生 Parser：解析文本并格式化为 QQ 可发送内容。
+
+不再从 GitHub 下载 astrbot_plugin_media_parser core。
+"""
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
-import aiohttp
 from nonebot.log import logger
 
 from .config import get_fun_media_parser_config
-from .install_core import ensure_vendor_core, vendor_core_ready
-from ..io_runtime import run_blocking_io
-
-_manager = None
-_init_lock = asyncio.Lock()
-_init_error: str | None = None
-
-
-async def _get_manager():
-    global _manager, _init_error
-    if _manager is not None:
-        return _manager
-    async with _init_lock:
-        if _manager is not None:
-            return _manager
-        try:
-            await run_blocking_io(ensure_vendor_core, timeout=180)
-            from core.config_manager import ConfigManager
-            from core.parser.manager import ParserManager
-
-            raw = get_fun_media_parser_config().as_upstream_dict()
-            cm = ConfigManager(raw)
-            parsers = cm.create_parsers()
-            _manager = ParserManager(parsers)
-            _init_error = None
-            logger.info(f"娱乐媒体解析：已加载 {len(parsers)} 个平台解析器")
-        except Exception as e:
-            _init_error = str(e)
-            logger.warning(f"娱乐媒体解析初始化失败: {e}")
-            raise
-    return _manager
-
-
-def last_init_error() -> str | None:
-    return _init_error
+from .io_runtime_safe import run_native_parse
+from .native import extract_supported_links, parse_text_native
 
 
 async def extract_links(text: str) -> list[tuple[str, str]]:
-    """返回 [(url, parser_name), ...]"""
-    mgr = await _get_manager()
-    pairs = mgr.extract_all_links(text)
-    return [(url, p.name) for url, p in pairs]
+    """返回 [(url, parser_name), ...]；纯本地正则，无需网络。"""
+    return extract_supported_links(text or "")
 
 
 async def parse_text(text: str) -> list[dict[str, Any]]:
-    mgr = await _get_manager()
-    timeout = aiohttp.ClientTimeout(total=45)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        return await mgr.parse_text(text, session)
+    # 平台请求走线程池，避免阻塞事件循环
+    return await run_native_parse(text or "")
+
+
+def last_init_error() -> str | None:
+    return None
 
 
 def _format_meta_line(meta: dict[str, Any]) -> str:
@@ -82,13 +50,14 @@ def _format_meta_line(meta: dict[str, Any]) -> str:
         lines.append(f"简介：{d}")
     if url:
         lines.append(f"原始链接：{url}")
+    if not meta.get("video_urls") and not meta.get("image_urls"):
+        lines.append("提示：未提取到可发送媒体，可尝试打开原始链接")
     if len(lines) == 1:
         lines.append("提示：无标题信息")
     return "\n".join(lines)
 
 
 def collect_media_urls(meta: dict[str, Any]) -> tuple[list[str], list[str]]:
-    """扁平化 image_urls / video_urls（上游多为嵌套列表），单条 meta 内去重。"""
     images: list[str] = []
     videos: list[str] = []
     seen_i: set[str] = set()
@@ -133,19 +102,18 @@ def dedupe_media_urls_preserve_order(urls: list[str]) -> list[str]:
 async def run_parse_and_build_messages(
     text: str,
 ) -> tuple[list[str], list[str], list[str]]:
-    """
-    解析文本，返回 (text_chunks, image_urls, video_urls)。
-    """
+    """解析文本，返回 (text_chunks, image_urls, video_urls)。"""
     if not text or not text.strip():
         return (["【媒体解析】\n请在消息中附带可解析的链接。"], [], [])
+
+    # 配置仍可用于 auto_parse 等入口开关（解析本身不依赖上游）
+    _ = get_fun_media_parser_config()
 
     try:
         metas = await parse_text(text)
     except Exception as e:
-        hint = ""
-        if not vendor_core_ready():
-            hint = "（首次使用需联网下载解析核心，或查看日志）"
-        return ([f"【媒体解析】\n状态：不可用\n原因：{e}{hint}"], [], [])
+        logger.warning(f"娱乐媒体解析失败: {e}")
+        return ([f"【媒体解析】\n状态：不可用\n原因：{e}"], [], [])
 
     if not metas:
         return (["【媒体解析】\n未识别到支持的流媒体链接。"], [], [])
@@ -173,5 +141,4 @@ async def run_parse_and_build_messages(
 
     all_images = dedupe_media_urls_preserve_order(all_images)[:12]
     all_videos = dedupe_media_urls_preserve_order(all_videos)[:3]
-
     return (texts, all_images, all_videos)

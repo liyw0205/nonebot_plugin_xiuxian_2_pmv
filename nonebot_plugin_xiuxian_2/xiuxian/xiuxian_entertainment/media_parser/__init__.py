@@ -1,1 +1,1 @@
-"""娱乐流媒体解析（上游 core 来自 astrbot_plugin_media_parser）。"""
+"""娱乐流媒体解析（本插件原生实现，不下载外部 core）。"""
