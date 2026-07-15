@@ -69,8 +69,17 @@ class InvitationRewardClaimTests(unittest.TestCase):
     def test_batch_claim_is_atomic_and_operation_is_idempotent(self):
         result = self.claim()
         self.assertEqual(("applied", (1, 3), 3), (result.status, result.thresholds, result.invitation_count))
-        self.assertEqual("duplicate", self.claim().status)
+        # mutable invite list / rewards must not break same-op replay
+        self.assertEqual("duplicate", self.claim(invited_user_ids=["x"], rewards_by_threshold={"1": self.rewards["1"]}).status)
+        prior = self.service.get_result("op-1")
+        self.assertIsNotNone(prior)
+        self.assertEqual(prior.thresholds, (1, 3))
         self.assertEqual((60, 2, [(1, "transaction"), (3, "transaction")], 1), self.snapshot())
+        with db_backend.connection(self.database) as conn:
+            payload = conn.execute(
+                "SELECT payload FROM invitation_reward_operations WHERE operation_id=%s", ("op-1",)
+            ).fetchone()[0]
+        self.assertEqual(payload, '["u1",[1,3,5]]')
 
     def test_single_threshold_and_qualification_are_rechecked(self):
         result = self.claim(requested_thresholds=[3], invited_user_ids=["a", "b"])

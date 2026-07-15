@@ -247,6 +247,24 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     user_id = str(user_info["user_id"])
     arg = args.extract_plain_text().strip()
+    operation_id = _invitation_operation_id(event, user_id)
+    # 先回放：成功后门槛已领会变 no_available，挡住同事件幂等。
+    prior = invitation_reward_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        rewards = load_invitation_rewards()
+        claimed_msgs = [
+            f"邀请{threshold}人奖励："
+            f"{', '.join(create_item_message(rewards[str(threshold)]))}"
+            for threshold in prior.thresholds
+            if str(threshold) in rewards
+        ]
+        body = "\n".join(f"- {line}" for line in claimed_msgs) if claimed_msgs else f"门槛：{', '.join(map(str, prior.thresholds))}"
+        await handle_send(
+            bot,
+            event,
+            f"邀请奖励领取成功\n{body}\n该邀请奖励请求已经处理，无需重复提交。",
+        )
+        return
 
     invitation_records = load_invitation_records()
     invited_user_ids = invitation_records.get(user_id, [])
@@ -270,7 +288,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         thresholds = sorted([int(x) for x in rewards.keys()])
 
     result = invitation_reward_service.claim(
-        operation_id=_invitation_operation_id(event, user_id),
+        operation_id=operation_id,
         user_id=user_id,
         invited_user_ids=invited_user_ids,
         rewards_by_threshold=rewards,
@@ -278,6 +296,20 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         legacy_claimed_thresholds=load_claimed_records().get(user_id, []),
         max_goods_num=XiuConfig().max_goods_num,
     )
+    if result.status == "duplicate":
+        claimed_msgs = [
+            f"邀请{threshold}人奖励："
+            f"{', '.join(create_item_message(rewards[str(threshold)]))}"
+            for threshold in result.thresholds
+            if str(threshold) in rewards
+        ]
+        body = "\n".join(f"- {line}" for line in claimed_msgs) if claimed_msgs else f"门槛：{', '.join(map(str, result.thresholds))}"
+        await handle_send(
+            bot,
+            event,
+            f"邀请奖励领取成功\n{body}\n该邀请奖励请求已经处理，无需重复提交。",
+        )
+        return
     if not result.succeeded:
         await handle_send(bot, event, "没有可领取的邀请奖励")
         return

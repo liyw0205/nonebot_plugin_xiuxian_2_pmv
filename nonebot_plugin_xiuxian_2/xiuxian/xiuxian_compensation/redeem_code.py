@@ -106,10 +106,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     redeem_info = data.get(code)
 
     if not redeem_info:
+        if reward_claim_service.has_claimed(config["type_key"], code, user_id):
+            await handle_send(bot, event, f"你已经使用过兑换码 {code}\n该兑换请求已经处理，无需重复提交。")
+            return
         await handle_send(bot, event, "兑换码不存在")
         return
 
     if is_expired(redeem_info):
+        if reward_claim_service.has_claimed(config["type_key"], code, user_id):
+            await handle_send(bot, event, f"你已经使用过兑换码 {code}\n该兑换请求已经处理，无需重复提交。")
+            return
         await handle_send(bot, event, "该兑换码已过期")
         return
 
@@ -123,20 +129,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     usage_limit = redeem_info.get("usage_limit", 0)
     legacy_used_count = redeem_info.get("used_count", 0)
-    used_count = reward_claim_service.get_used_count(
-        config["type_key"], code, legacy_used_count
-    )
-
-    if usage_limit != 0 and used_count >= usage_limit:
-        await handle_send(bot, event, "该兑换码已被使用完")
-        return
-
-    if has_claimed(user_id, code, config) or reward_claim_service.has_claimed(
-        config["type_key"], code, user_id
-    ):
-        await handle_send(bot, event, f"你已经使用过兑换码 {code}")
-        return
-
+    # 先 claim：成功后 has_claimed/used_count 会挡住同事件重放。
     result = reward_claim_service.claim(
         config["type_key"],
         code,
@@ -146,10 +139,21 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         legacy_used_count=legacy_used_count,
     )
     if result.status == "duplicate":
-        await handle_send(bot, event, f"你已经使用过兑换码 {code}")
+        reward_msg = format_reward_delivery(redeem_info["items"])
+        await handle_send(
+            bot,
+            event,
+            f"兑换成功\n"
+            f"兑换码：{code}\n"
+            f"奖励：\n" + "\n".join(f"- {line}" for line in reward_msg)
+            + "\n该兑换请求已经处理，无需重复提交。",
+        )
         return
     if result.status == "exhausted":
         await handle_send(bot, event, "该兑换码已被使用完")
+        return
+    if result.status != "claimed":
+        await handle_send(bot, event, f"你已经使用过兑换码 {code}")
         return
     reward_msg = format_reward_delivery(redeem_info["items"])
 

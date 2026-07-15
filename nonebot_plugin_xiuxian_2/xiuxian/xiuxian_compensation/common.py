@@ -526,10 +526,25 @@ async def claim_normal_reward(
     record = data.get(record_id)
 
     if not record:
+        # 已领后定义被删时仍允许服务层 duplicate 回放（若 claim 表有记录）
+        if reward_claim_service.has_claimed(config["type_key"], record_id, user_id):
+            await handle_send(
+                bot,
+                event,
+                f"你已经领取过该{config['type_key']}了\n该领取请求已经处理，无需重复提交。",
+            )
+            return
         await handle_send(bot, event, f"{config['type_key']}不存在")
         return
 
     if is_expired(record):
+        if reward_claim_service.has_claimed(config["type_key"], record_id, user_id):
+            await handle_send(
+                bot,
+                event,
+                f"你已经领取过该{config['type_key']}了\n该领取请求已经处理，无需重复提交。",
+            )
+            return
         await handle_send(bot, event, f"{config['type_key']}已过期")
         return
 
@@ -537,12 +552,7 @@ async def claim_normal_reward(
         await handle_send(bot, event, f"{config['type_key']}尚未生效，生效时间：{record.get('start_time')}")
         return
 
-    if has_claimed(user_id, record_id, config) or reward_claim_service.has_claimed(
-        config["type_key"], record_id, user_id
-    ):
-        await handle_send(bot, event, f"你已经领取过该{config['type_key']}了")
-        return
-
+    # 先 claim：成功后 has_claimed 会挡住同事件重放。
     result = reward_claim_service.claim(
         config["type_key"],
         record_id,
@@ -555,13 +565,24 @@ async def claim_normal_reward(
         ),
     )
     if result.status == "duplicate":
-        await handle_send(bot, event, f"你已经领取过该{config['type_key']}了")
+        reward_msg = format_reward_delivery(record["items"])
+        await handle_send(
+            bot,
+            event,
+            f"{config['type_key']}领取成功\n"
+            f"ID：{record_id}\n"
+            f"奖励：\n" + "\n".join(f"- {line}" for line in reward_msg)
+            + "\n该领取请求已经处理，无需重复提交。",
+        )
         return
     if result.status == "user_missing":
         await handle_send(bot, event, "修仙界没有你的足迹，输入 我要修仙 加入修仙世界吧！")
         return
     if result.status in {"record_missing", "definition_changed"}:
         await handle_send(bot, event, "补偿定义已变更，请重新查询后领取")
+        return
+    if result.status != "claimed":
+        await handle_send(bot, event, f"你已经领取过该{config['type_key']}了")
         return
     reward_msg = format_reward_delivery(record["items"])
 

@@ -94,6 +94,26 @@ class InvitationRewardClaimService:
             conn.commit()
             return {int(row[0]) for row in rows}
 
+    def get_result(self, operation_id: str) -> InvitationRewardClaimResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            self._ensure_tables(conn)
+            previous = conn.execute(
+                "SELECT payload,thresholds_json,invitation_count "
+                "FROM invitation_reward_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            conn.commit()
+            if previous is None:
+                return None
+            return InvitationRewardClaimResult(
+                "duplicate",
+                tuple(int(value) for value in json.loads(str(previous[1]))),
+                int(previous[2]),
+            )
+
     def claim(
         self,
         operation_id,
@@ -125,7 +145,7 @@ class InvitationRewardClaimService:
             sorted({int(value) for value in legacy_claimed_thresholds if int(value) > 0})
         )
         payload = json.dumps(
-            [user_id, invited_ids, rewards, requested, legacy_claimed, max_goods_num],
+            [user_id, requested],
             ensure_ascii=True,
             separators=(",", ":"),
         )
