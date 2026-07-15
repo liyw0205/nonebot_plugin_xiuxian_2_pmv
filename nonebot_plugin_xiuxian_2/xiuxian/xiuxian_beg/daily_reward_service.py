@@ -60,9 +60,34 @@ class BegDailyRewardService:
     def _normalize_optional(value):
         return None if value is None else str(value)
 
+    @staticmethod
+    def _payload(user_id) -> str:
+        # Request identity only — balances/reward rolls are concurrency checks or outcomes.
+        return json.dumps([str(user_id)], ensure_ascii=True, separators=(",", ":"))
+
     def _checkpoint(self, name: str) -> None:
         if self._failure_hook is not None:
             self._failure_hook(name)
+
+    def get_result(self, operation_id: str) -> BegDailyRewardResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS beg_daily_reward_operations ("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
+                "stone_reward INTEGER NOT NULL,stone INTEGER NOT NULL,"
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT payload,stone_reward,stone FROM beg_daily_reward_operations "
+                "WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return BegDailyRewardResult("duplicate", int(previous[1]), int(previous[2]))
 
     def settle(
         self,
@@ -98,22 +123,7 @@ class BegDailyRewardService:
         ):
             raise ValueError("valid daily beg reward settlement is required")
 
-        payload = json.dumps(
-            [
-                user_id,
-                expected_create_time,
-                expected_stone,
-                expected_sect_id,
-                expected_root_type,
-                expected_level,
-                settled_at.isoformat(),
-                max_age_days,
-                eligible_levels,
-                stone_reward,
-            ],
-            ensure_ascii=True,
-            separators=(",", ":"),
-        )
+        payload = self._payload(user_id)
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")

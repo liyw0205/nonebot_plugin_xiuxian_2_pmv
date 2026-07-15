@@ -88,6 +88,15 @@ async def beg_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await beg_stone.finish()
 
     user_id = str(user_info['user_id'])
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"beg-daily:{event_id}:{user_id}" if event_id else f"beg-daily:{time.time_ns()}:{user_id}"
+    # 先回放：成功后 is_beg/stone 变化，或随机奖励重掷，都会挡住同事件幂等。
+    prior = beg_daily_reward_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        msg = f"你获得了 {prior.stone_reward} 枚灵石。\n该奇缘请求已经处理，无需重复提交。"
+        await handle_send(bot, event, msg)
+        await beg_stone.finish()
+
     user_msg = sql_message.get_user_info_with_id(user_id)
     user_root = user_msg['root_type']
     sect = user_info['sect_id']
@@ -103,45 +112,48 @@ async def beg_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if sect != None and user_root == "伪灵根":
         msg = f"道友已有宗门庇佑，又何必来此寻求机缘呢？"
         await handle_send(bot, event, msg)
+        await beg_stone.finish()
 
     elif user_root in {"轮回道果", "真·轮回道果"}:
         msg = f"道友已是轮回大能，又何必来此寻求机缘呢？"
         await handle_send(bot, event, msg)
+        await beg_stone.finish()
     
     elif list_level_all.index(level) >= list_level_all.index(XiuConfig().beg_max_level):
         msg = f"道友已跻身于{user_info['level']}层次的修行之人，可徜徉于四海八荒，自寻机缘与造化矣。"
         await handle_send(bot, event, msg)
+        await beg_stone.finish()
 
     elif diff_days > XiuConfig().beg_max_days:
         msg = f"道友已经过了新手期,不能再来此寻求机缘了。"
         await handle_send(bot, event, msg)
+        await beg_stone.finish()
 
-    else:
-        stone_reward = random.randint(
-            XiuConfig().beg_lingshi_lower_limit,
-            XiuConfig().beg_lingshi_upper_limit,
-        )
-        max_level_index = list_level_all.index(XiuConfig().beg_max_level)
-        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-        operation_id = f"beg-daily:{event_id}:{user_id}" if event_id else f"beg-daily:{time.time_ns()}:{user_id}"
-        result = beg_daily_reward_service.settle(
-            operation_id=operation_id,
-            user_id=user_id,
-            expected_create_time=user_info["create_time"],
-            expected_stone=user_info["stone"],
-            expected_sect_id=sect,
-            expected_root_type=user_root,
-            expected_level=level,
-            settled_at=now_time,
-            max_age_days=XiuConfig().beg_max_days,
-            eligible_levels=list_level_all[:max_level_index],
-            stone_reward=stone_reward,
-        )
-        if result.status == "already_claimed":
-            msg = '贪心的人是不会有好运的！'
-        elif result.succeeded:
-            stone = result.stone_reward
-            msg = random.choice(
+    stone_reward = random.randint(
+        XiuConfig().beg_lingshi_lower_limit,
+        XiuConfig().beg_lingshi_upper_limit,
+    )
+    max_level_index = list_level_all.index(XiuConfig().beg_max_level)
+    result = beg_daily_reward_service.settle(
+        operation_id=operation_id,
+        user_id=user_id,
+        expected_create_time=user_info["create_time"],
+        expected_stone=user_info["stone"],
+        expected_sect_id=sect,
+        expected_root_type=user_root,
+        expected_level=level,
+        settled_at=now_time,
+        max_age_days=XiuConfig().beg_max_days,
+        eligible_levels=list_level_all[:max_level_index],
+        stone_reward=stone_reward,
+    )
+    if result.status == "already_claimed":
+        msg = '贪心的人是不会有好运的！'
+    elif result.status == "duplicate":
+        msg = f"你获得了 {result.stone_reward} 枚灵石。\n该奇缘请求已经处理，无需重复提交。"
+    elif result.succeeded:
+        stone = result.stone_reward
+        msg = random.choice(
     [
         f"在一次深入古老森林的修炼旅程中，你意外地遇到了一位神秘的前辈高人。这位前辈不仅给予了你宝贵的修炼指导，还在临别时赠予了你 {stone} 枚灵石，以表达对你的认可和鼓励。",
         f"某日，在一个清澈的小溪边，一只珍稀的灵兽突然出现在你面前。它似乎对你的气息感到亲切，竟然留下了 {stone} 枚灵石，好像是在对你展示它的友好和感激。",
@@ -161,20 +173,20 @@ async def beg_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         f"你在一次随机的交易中获得了一个外表不起眼的神秘盒子。当你好奇心驱使下打开它时，发现里面竟是一枚装满灵石的纳戒，收获了 {stone} 枚灵石！",
     ]
 )
-        elif result.status == "ineligible_sect":
-            msg = "道友已有宗门庇佑，又何必来此寻求机缘呢？"
-        elif result.status == "ineligible_root":
-            msg = "道友已是轮回大能，又何必来此寻求机缘呢？"
-        elif result.status == "ineligible_level":
-            msg = f"道友已跻身于{level}层次的修行之人，可徜徉于四海八荒，自寻机缘与造化矣。"
-        elif result.status == "expired":
-            msg = "道友已经过了新手期,不能再来此寻求机缘了。"
-        elif result.status in {"state_changed", "operation_conflict"}:
-            msg = "角色状态已变化，请重新尝试领取！"
-        else:
-            msg = "未找到角色信息，无法领取仙途奇缘！"
-        await handle_send(bot, event, msg)
-        await beg_help.finish()
+    elif result.status == "ineligible_sect":
+        msg = "道友已有宗门庇佑，又何必来此寻求机缘呢？"
+    elif result.status == "ineligible_root":
+        msg = "道友已是轮回大能，又何必来此寻求机缘呢？"
+    elif result.status == "ineligible_level":
+        msg = f"道友已跻身于{level}层次的修行之人，可徜徉于四海八荒，自寻机缘与造化矣。"
+    elif result.status == "expired":
+        msg = "道友已经过了新手期,不能再来此寻求机缘了。"
+    elif result.status in {"state_changed", "operation_conflict"}:
+        msg = "角色状态已变化，请重新尝试领取！"
+    else:
+        msg = "未找到角色信息，无法领取仙途奇缘！"
+    await handle_send(bot, event, msg)
+    await beg_stone.finish()
 
     
 @novice.handle(parameterless=[Cooldown(cd_time=0)])
@@ -185,6 +197,15 @@ async def novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="我要修仙")
         await novice.finish()
     user_id = str(user_info['user_id'])
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"novice-gift:{event_id}:{user_id}" if event_id else f"novice-gift:{time.time_ns()}:{user_id}"
+    # 先回放：成功后 is_novice=1 会走“已领取”前置语义，挡住同事件幂等。
+    prior = novice_gift_claim_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        msg = f"道友的新手礼包已发放（灵石 {prior.stone}）。\n该礼包请求已经处理，无需重复提交。"
+        await handle_send(bot, event, msg)
+        await novice.finish()
+
     goods_info = items.get_data_by_item_id("18052")
     msg_parts = []
     rewards = []
@@ -223,13 +244,13 @@ async def novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         
         i += 1            
 
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"novice-gift:{event_id}:{user_id}" if event_id else f"novice-gift:{time.time_ns()}:{user_id}"
     result = novice_gift_claim_service.claim(
         operation_id, user_id, user_info["create_time"], datetime.now(),
         XiuConfig().beg_max_days, stone, rewards, XiuConfig().max_goods_num,
     )
-    if result.succeeded:
+    if result.status == "duplicate":
+        msg = f"道友的新手礼包已发放（灵石 {result.stone}）。\n该礼包请求已经处理，无需重复提交。"
+    elif result.succeeded:
         msg = f"道友的新手礼包:\n" + "".join(msg_parts)
     elif result.status == "already_claimed":
         msg = "您已经领取过新手礼包了！"
@@ -242,3 +263,4 @@ async def novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     else:
         msg = "未找到角色信息，无法领取新手礼包！"
     await handle_send(bot, event, msg)
+    await novice.finish()

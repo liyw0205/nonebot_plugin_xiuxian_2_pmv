@@ -55,9 +55,33 @@ class NoviceGiftClaimService:
     def _canonical_create_time(value) -> str:
         return NoviceGiftClaimService._parse_datetime(value).isoformat(sep=" ")
 
+    @staticmethod
+    def _payload(user_id) -> str:
+        # Request identity only — reward rolls/create_time snapshots are outcomes or concurrency checks.
+        return json.dumps([str(user_id)], ensure_ascii=True, separators=(",", ":"))
+
     def _checkpoint(self, name: str) -> None:
         if self._failure_hook is not None:
             self._failure_hook(name)
+
+    def get_result(self, operation_id: str) -> NoviceGiftClaimResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS novice_gift_claim_operations ("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,stone INTEGER "
+                "NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT payload,stone FROM novice_gift_claim_operations "
+                "WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return NoviceGiftClaimResult("duplicate", int(previous[1]))
 
     def claim(
         self,
@@ -103,19 +127,7 @@ class NoviceGiftClaimService:
         ):
             raise ValueError("valid novice gift claim is required")
 
-        payload = json.dumps(
-            [
-                user_id,
-                expected_create_time,
-                claimed_at.isoformat(),
-                max_age_days,
-                stone,
-                reward_rows,
-                max_goods_num,
-            ],
-            ensure_ascii=True,
-            separators=(",", ":"),
-        )
+        payload = self._payload(user_id)
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")

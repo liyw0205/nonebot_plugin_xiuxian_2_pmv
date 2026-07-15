@@ -59,12 +59,21 @@ class BegDailyRewardServiceTests(unittest.TestCase):
 
     def test_operation_is_idempotent_and_conflicting_reward_is_rejected(self):
         self.assertEqual("applied", self.settle().status)
-        duplicate = self.settle()
+        # mutable stone/reward snapshots must not break same-op replay
+        duplicate = self.settle(expected_stone=999, stone_reward=1)
         self.assertEqual(("duplicate", 456, 556), (duplicate.status, duplicate.stone_reward, duplicate.stone))
-        self.assertEqual("operation_conflict", self.settle(stone_reward=999).status)
+        prior = self.service.get_result("beg-op")
+        self.assertIsNotNone(prior)
+        self.assertEqual(prior.stone_reward, 456)
+        # identity is user_id only — different user on same op id conflicts
+        self.assertEqual("operation_conflict", self.settle(user_id="other").status)
         with db_backend.connection(self.database) as conn:
             self.assertEqual(556, conn.execute("SELECT stone FROM user_xiuxian").fetchone()[0])
             self.assertEqual(1, conn.execute("SELECT COUNT(*) FROM beg_daily_reward_operations").fetchone()[0])
+            payload = conn.execute(
+                "SELECT payload FROM beg_daily_reward_operations WHERE operation_id=%s", ("beg-op",)
+            ).fetchone()[0]
+            self.assertEqual(payload, '["u1"]')
 
     def test_rechecks_daily_flag_eligibility_and_asset_snapshot(self):
         with db_backend.transaction(self.database) as conn:

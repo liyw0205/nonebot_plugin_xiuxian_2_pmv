@@ -52,11 +52,19 @@ class NoviceGiftClaimServiceTests(unittest.TestCase):
 
     def test_same_operation_is_idempotent_and_new_operation_is_rejected(self):
         self.assertEqual(self.claim().status, "applied")
-        self.assertEqual(self.claim().status, "duplicate")
+        # mutable reward/create_time must not break same-op replay
+        self.assertEqual(self.claim(stone=1, rewards=[]).status, "duplicate")
+        prior = self.service.get_result("op-1")
+        self.assertIsNotNone(prior)
+        self.assertEqual(prior.stone, 500)
         self.assertEqual(self.claim("op-2").status, "already_claimed")
         with db_backend.connection(self.database) as conn:
             self.assertEqual(tuple(conn.execute("SELECT stone,is_novice FROM user_xiuxian").fetchone()), (510, 1))
             self.assertEqual(conn.execute("SELECT SUM(goods_num) FROM back").fetchone()[0], 3)
+            payload = conn.execute(
+                "SELECT payload FROM novice_gift_claim_operations WHERE operation_id=%s", ("op-1",)
+            ).fetchone()[0]
+            self.assertEqual(payload, '["u1"]')
 
     def test_expired_character_is_unchanged(self):
         result = self.claim(claimed_at=self.created_at + timedelta(days=7, seconds=1))
