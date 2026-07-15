@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back.lottery_talisman_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back.transaction_service import (
     LotteryReward,
     LotteryTalismanService,
 )

@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back.skill_learning_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back.transaction_service import (
     SkillLearningService,
 )
 from tests.test_db_backend import db_backend

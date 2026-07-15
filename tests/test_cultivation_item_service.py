@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back.cultivation_item_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back.transaction_service import (
     CultivationItemService,
 )
 from tests.test_db_backend import db_backend

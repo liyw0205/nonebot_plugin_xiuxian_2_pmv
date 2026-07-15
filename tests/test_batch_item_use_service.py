@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back.batch_item_use_service import BatchItemUseService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back.transaction_service import BatchItemUseService
 from tests.test_db_backend import db_backend
 
 

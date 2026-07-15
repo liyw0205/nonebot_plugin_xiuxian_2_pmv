@@ -19,7 +19,7 @@ from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, sen
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager, XiuxianDateManage, calc_accessory_effects
 from ..xiuxian_utils.lay_out import Cooldown
 from .accessory_helpers import *
-from .accessory_transaction_service import AccessoryTransactionService
+from .transaction_service import AccessoryTransactionService
 
 items = Items()
 sql_message = XiuxianDateManage()

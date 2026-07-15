@@ -9,10 +9,10 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back.accessory_package_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back.transaction_service import (
     AccessoryPackageService,
 )
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back.package_reward_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back.transaction_service import (
     PackageReward,
 )
 from tests.test_db_backend import db_backend

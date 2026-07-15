@@ -9,7 +9,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back.accessory_transaction_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back.transaction_service import (
     AccessoryTransactionService,
 )
 from tests.test_db_backend import db_backend

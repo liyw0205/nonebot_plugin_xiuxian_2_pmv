@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back.alchemy_service import AlchemyService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back.transaction_service import AlchemyService
 from tests.test_db_backend import db_backend
 
 
