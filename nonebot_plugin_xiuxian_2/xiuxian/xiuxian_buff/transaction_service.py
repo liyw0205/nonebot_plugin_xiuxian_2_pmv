@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from threading import RLock
 from ..xiuxian_utils import db_backend
+from ..xiuxian_utils.xiuxian2_handle import number_count
 import time
 from .relation_transaction_utils import increment_stat, set_field
 from .relation_transaction_utils import ensure_player_field
@@ -2232,12 +2233,39 @@ class ClosingSettlementService:
     def settle(self, operation_id, user_id, expected_create_time, exp_gain, stone_cost, hp, mp, atk, power) -> ClosingSettlementResult:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         expected_create_time = str(expected_create_time)
-        values = tuple(int(value) for value in (exp_gain, stone_cost, hp, mp, atk, power))
-        exp_gain, stone_cost, hp, mp, atk, power = values
-        if not operation_id or min(exp_gain, stone_cost, hp, mp, atk, power) < 0:
+        # stone_cost must stay integer (spend compare); combat stats may exceed INTEGER
+        stone_cost = int(stone_cost)
+        exp_gain = number_count(exp_gain)
+        hp = number_count(hp)
+        mp = number_count(mp)
+        atk = number_count(atk)
+        power = number_count(power)
+        # identity payload uses string forms so scientific values are stable
+        values = (exp_gain, stone_cost, hp, mp, atk, power)
+        if not operation_id:
             raise ValueError("valid operation and non-negative settlement values are required")
-        payload = json.dumps([user_id, expected_create_time, *values], separators=(",", ":"))
-        result = ClosingSettlementResult("", exp_gain, stone_cost, hp, mp, atk)
+        for value in (stone_cost,):
+            if int(value) < 0:
+                raise ValueError("valid operation and non-negative settlement values are required")
+        for value in (exp_gain, hp, mp, atk, power):
+            try:
+                if float(value) < 0:
+                    raise ValueError("valid operation and non-negative settlement values are required")
+            except (TypeError, ValueError) as exc:
+                raise ValueError("valid operation and non-negative settlement values are required") from exc
+        payload = json.dumps(
+            [user_id, expected_create_time, str(exp_gain), stone_cost, str(hp), str(mp), str(atk), str(power)],
+            separators=(",", ":"),
+        )
+        # result_json keeps numeric-friendly values for duplicate replay
+        saved_nums = [
+            int(float(exp_gain)) if not isinstance(exp_gain, str) else exp_gain,
+            stone_cost,
+            int(float(hp)) if not isinstance(hp, str) else hp,
+            int(float(mp)) if not isinstance(mp, str) else mp,
+            int(float(atk)) if not isinstance(atk, str) else atk,
+        ]
+        result = ClosingSettlementResult("", *[_as_int_like(v) for v in saved_nums])
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
@@ -2248,7 +2276,7 @@ class ClosingSettlementService:
                     if str(previous[0]) != payload:
                         return ClosingSettlementResult("state_changed")
                     saved = json.loads(str(previous[1]))
-                    return ClosingSettlementResult("duplicate", *saved)
+                    return ClosingSettlementResult("duplicate", *[_as_int_like(v) for v in saved])
                 user = conn.execute("SELECT COALESCE(stone,0) FROM user_xiuxian WHERE user_id=%s", (user_id,)).fetchone()
                 cd = conn.execute("SELECT type,create_time FROM user_cd WHERE user_id=%s", (user_id,)).fetchone()
                 if user is None or cd is None:
@@ -2260,19 +2288,54 @@ class ClosingSettlementService:
                 if int(user[0]) < stone_cost:
                     conn.rollback()
                     return ClosingSettlementResult("stone_insufficient")
-                changed = conn.execute("UPDATE user_xiuxian SET exp=COALESCE(exp,0)+%s,stone=stone-%s,hp=%s,mp=%s,atk=%s,power=%s WHERE user_id=%s AND stone>=%s", (exp_gain, stone_cost, hp, mp, atk, power, user_id, stone_cost))
+                # exp may already be TEXT scientific; use CAST for arithmetic
+                changed = conn.execute(
+                    "UPDATE user_xiuxian SET "
+                    "exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),"
+                    "stone=stone-%s,"
+                    "hp=%s,mp=%s,atk=%s,power=%s "
+                    "WHERE user_id=%s AND stone>=%s",
+                    (exp_gain, stone_cost, hp, mp, atk, power, user_id, stone_cost),
+                )
                 cleared = conn.execute("UPDATE user_cd SET type=0,create_time=0,scheduled_time=NULL WHERE user_id=%s AND type=1 AND CAST(create_time AS TEXT)=%s", (user_id, expected_create_time))
                 if changed.rowcount != 1 or cleared.rowcount != 1:
                     conn.rollback()
                     return ClosingSettlementResult("state_changed")
-                saved = [exp_gain, stone_cost, hp, mp, atk]
-                conn.execute("INSERT INTO closing_settlement_operations (operation_id,payload,result_json) VALUES (%s,%s,%s)", (operation_id, payload, json.dumps(saved)))
+                conn.execute(
+                    "INSERT INTO closing_settlement_operations (operation_id,payload,result_json) VALUES (%s,%s,%s)",
+                    (operation_id, payload, json.dumps(saved_nums, ensure_ascii=True)),
+                )
                 conn.commit()
-                return ClosingSettlementResult("applied", *saved)
+                return ClosingSettlementResult("applied", *[_as_int_like(v) for v in saved_nums])
             except Exception:
                 conn.rollback()
                 raise
 
+    def get_result(self, operation_id: str):
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS closing_settlement_operations ("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            row = conn.execute(
+                "SELECT result_json FROM closing_settlement_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            saved = json.loads(str(row[0]))
+            return ClosingSettlementResult("duplicate", *[_as_int_like(v) for v in saved])
+
+
+def _as_int_like(value):
+    try:
+        return int(float(value))
+    except (TypeError, ValueError, OverflowError):
+        return 0
 @dataclass(frozen=True)
 class NormalTrainingResult:
     status: str

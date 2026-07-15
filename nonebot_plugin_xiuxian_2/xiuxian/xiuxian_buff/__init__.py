@@ -638,6 +638,24 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await handle_send(bot, event, msg, md_type="我要修仙")
         await out_closing.finish()
     user_id = user_info["user_id"]
+    closing_operation_id = _blessed_spot_operation_id(
+        event, "closing-settle", user_id
+    )
+    previous = closing_settlement_service.get_result(closing_operation_id)
+    if previous is not None and previous.succeeded:
+        await handle_send(
+            bot,
+            event,
+            f"出关结算已完成：修为+{number_to(previous.exp_gain)}\n该出关请求已经处理，无需重复提交。",
+            md_type="buff",
+            k1="闭关",
+            v1="闭关",
+            k2="存档",
+            v2="我的修仙信息",
+            k3="修为",
+            v3="我的修为",
+        )
+        await out_closing.finish()
     user_mes = sql_message.get_user_info_with_id(user_id)
     user_cd_message = sql_message.get_user_cd(user_id)
     is_type, msg = check_user_type(user_id, 1)
@@ -679,13 +697,14 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     new_mp = min(int(user_mes["mp"] or 0) + mp_gain, new_exp)
     new_atk = int(new_exp / 10)
     new_power = int(new_exp * level_rate * realm_rate)
-    closing_operation_id = _blessed_spot_operation_id(
-        event, "closing-settle", user_id
-    )
-    result = closing_settlement_service.settle(
-        closing_operation_id,
-        user_id, create_time, exp, stone_cost, new_hp, new_mp, new_atk, new_power,
-    )
+    try:
+        result = closing_settlement_service.settle(
+            closing_operation_id,
+            user_id, create_time, exp, stone_cost, new_hp, new_mp, new_atk, new_power,
+        )
+    except Exception:
+        await handle_send(bot, event, "出关结算失败，请稍后重试。")
+        await out_closing.finish()
     if not result.succeeded:
         await handle_send(bot, event, "闭关状态或资源已变化，请重新查看后再试。")
         await out_closing.finish()
