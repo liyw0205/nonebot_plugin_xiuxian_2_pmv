@@ -62,6 +62,28 @@ class PuppetOperationService:
         except (TypeError, ValueError):
             return 0
 
+    def get_result(self, operation_id: str) -> PuppetOperation | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            self._ensure_operations(conn)
+            previous = conn.execute(
+                "SELECT user_id, action, previous_level, current_level, stone_cost "
+                "FROM puppet_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return PuppetOperation(
+                "duplicate",
+                str(previous[0]),
+                str(previous[1]),
+                self._as_int(previous[2]),
+                self._as_int(previous[3]),
+                self._as_int(previous[4]),
+            )
+
     def purchase(self, operation_id, user_id, stone_cost: int) -> PuppetOperation:
         return self._apply(
             operation_id,
@@ -186,8 +208,8 @@ class PuppetOperationService:
 
                 deducted = conn.execute(
                     """
-                    UPDATE user_xiuxian SET stone=stone-%s
-                    WHERE user_id=%s AND stone >= %s
+                    UPDATE user_xiuxian SET stone=CAST(stone AS INTEGER)-%s
+                    WHERE user_id=%s AND CAST(COALESCE(stone, 0) AS INTEGER) >= %s
                     """,
                     (stone_cost, user_id, stone_cost),
                 )
@@ -204,9 +226,9 @@ class PuppetOperationService:
                 updated = conn.execute(
                     """
                     UPDATE player_data."mix_elixir_info" SET "灵田傀儡"=%s
-                    WHERE user_id=%s AND "灵田傀儡"=%s
+                    WHERE user_id=%s AND CAST(COALESCE("灵田傀儡", 0) AS INTEGER)=%s
                     """,
-                    (str(current_level), user_id, str(previous_level)),
+                    (str(current_level), user_id, previous_level),
                 )
                 if updated.rowcount != 1:
                     conn.rollback()

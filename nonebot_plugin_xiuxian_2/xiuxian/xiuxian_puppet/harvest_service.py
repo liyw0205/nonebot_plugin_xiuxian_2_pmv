@@ -7,6 +7,8 @@ from pathlib import Path
 from threading import RLock
 from typing import Callable, Iterable
 
+import json
+
 from ..xiuxian_utils import db_backend
 
 
@@ -28,7 +30,7 @@ class PuppetHarvest:
 
     @property
     def harvested(self) -> bool:
-        return self.status == "harvested"
+        return self.status in {"harvested", "duplicate"}
 
 
 RewardFactory = Callable[[str, int], Iterable[PuppetHarvestReward]]
@@ -100,6 +102,30 @@ class PuppetHarvestService:
             )
         return tuple(grouped.values())
 
+    def get_result(self, operation_id: str) -> PuppetHarvest | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS puppet_harvest_operations ("
+                "operation_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, payload TEXT NOT NULL, "
+                "rewards_json TEXT NOT NULL, stone_cost INTEGER NOT NULL, "
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT user_id, rewards_json, stone_cost FROM puppet_harvest_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            rewards = tuple(
+                PuppetHarvestReward(**item) for item in json.loads(str(previous[1]))
+            )
+            return PuppetHarvest(
+                "duplicate", str(previous[0]), rewards=rewards, stone_cost=int(previous[2] or 0)
+            )
+
     def harvest(
         self,
         user_id,
@@ -110,8 +136,10 @@ class PuppetHarvestService:
         harvest_costs: dict[int, int],
         harvest_bonus: int,
         reward_factory: RewardFactory,
+        operation_id: str | None = None,
     ) -> PuppetHarvest:
         user_id = str(user_id)
+        operation_id = str(operation_id or "").strip()
         now_text = now.strftime("%Y-%m-%d %H:%M:%S")
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             conn.execute(
@@ -119,6 +147,27 @@ class PuppetHarvestService:
             )
             try:
                 conn.execute("BEGIN IMMEDIATE")
+                if operation_id:
+                    conn.execute(
+                        "CREATE TABLE IF NOT EXISTS puppet_harvest_operations ("
+                        "operation_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, payload TEXT NOT NULL, "
+                        "rewards_json TEXT NOT NULL, stone_cost INTEGER NOT NULL, "
+                        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+                    )
+                    previous = conn.execute(
+                        "SELECT user_id, rewards_json, stone_cost FROM puppet_harvest_operations WHERE operation_id=%s",
+                        (operation_id,),
+                    ).fetchone()
+                    if previous is not None:
+                        conn.rollback()
+                        if str(previous[0]) != user_id:
+                            return PuppetHarvest("state_changed", user_id)
+                        rewards = tuple(
+                            PuppetHarvestReward(**item) for item in json.loads(str(previous[1]))
+                        )
+                        return PuppetHarvest(
+                            "duplicate", user_id, rewards=rewards, stone_cost=int(previous[2] or 0)
+                        )
                 user = conn.execute(
                     """
                     SELECT level, stone, blessed_spot_flag, puppet_status
@@ -241,6 +290,27 @@ class PuppetHarvestService:
                             now_text,
                             now_text,
                         ),
+                    )
+                if operation_id:
+                    rewards_json = json.dumps(
+                        [
+                            {
+                                "goods_id": r.goods_id,
+                                "goods_name": r.goods_name,
+                                "goods_type": r.goods_type,
+                                "quantity": r.quantity,
+                            }
+                            for r in rewards
+                        ],
+                        ensure_ascii=True,
+                        separators=(",", ":"),
+                    )
+                    # Request identity only.
+                    payload = json.dumps([user_id], ensure_ascii=True, separators=(",", ":"))
+                    conn.execute(
+                        "INSERT INTO puppet_harvest_operations "
+                        "(operation_id, user_id, payload, rewards_json, stone_cost) VALUES (%s,%s,%s,%s,%s)",
+                        (operation_id, user_id, payload, rewards_json, harvest_cost),
                     )
                 conn.commit()
                 return PuppetHarvest(

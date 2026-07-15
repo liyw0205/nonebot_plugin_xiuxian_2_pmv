@@ -75,16 +75,24 @@ PUPPET_CONFIG = {
 }
 
 
-def _puppet_operation_id(event, action: str) -> str:
+def _puppet_operation_id(event, action: str, user_id: str) -> str:
     event_id = str(
         getattr(event, "message_id", "") or getattr(event, "id", "") or ""
     ).strip()
+    user_id = str(user_id)
     if event_id:
-        return f"puppet:{event_id}:{action}"
-    return f"puppet:{action}:{time.time_ns()}"
+        return f"puppet:{action}:{event_id}:{user_id}"
+    return f"puppet:{action}:{user_id}:{time.time_ns()}"
 
 
 def _puppet_operation_message(result: PuppetOperation) -> str:
+    if result.status == "duplicate":
+        base = (
+            f"恭喜道友成功购买灵田傀儡！消耗灵石：{result.stone_cost}，当前傀儡等级：{result.current_level}级"
+            if result.action == "purchase"
+            else f"恭喜道友成功将灵田傀儡升级到{result.current_level}级！消耗灵石：{result.stone_cost}"
+        )
+        return base + "\n该请求已经处理，无需重复提交。"
     if result.status == "blessed_spot_missing":
         return "道友还没有洞天福地呢，请发送洞天福地购买来购买吧~"
     if result.status == "already_owned":
@@ -224,7 +232,7 @@ async def buy_puppet_handler(bot: Bot, event: GroupMessageEvent | PrivateMessage
     get_player_info(user_id, "mix_elixir_info")
     cost = 10000000
     result = puppet_operation_service.purchase(
-        _puppet_operation_id(event, "purchase"), user_id, cost
+        _puppet_operation_id(event, "purchase", user_id), user_id, cost
     )
     msg = _puppet_operation_message(result)
     await handle_send(bot, event, msg)
@@ -244,7 +252,7 @@ async def upgrade_puppet_handler(bot: Bot, event: GroupMessageEvent | PrivateMes
     user_id = user_info['user_id']
     get_player_info(user_id, "mix_elixir_info")
     result = puppet_operation_service.upgrade(
-        _puppet_operation_id(event, "upgrade"),
+        _puppet_operation_id(event, "upgrade", user_id),
         user_id,
         {level: config["upgrade_cost"] for level, config in PUPPET_CONFIG.items()},
         max_level=max(PUPPET_CONFIG),
