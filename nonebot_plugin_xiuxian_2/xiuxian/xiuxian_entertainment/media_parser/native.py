@@ -16,7 +16,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from nonebot.log import logger
 
-from ...xiuxian_utils.http_proxy import http_client
+from ...xiuxian_utils.http_proxy import get_custom_proxy_url, http_client
 
 _URL_RE = re.compile(
     r"https?://[^\s\u200b\u00a0<>\"'，。！？、；：（）【】《》]+",
@@ -48,6 +48,9 @@ _PLATFORM_HOSTS: list[tuple[str, str]] = [
     ("instagram.com", "instagram"),
 ]
 
+# 这些平台在配置了 custom_proxy 时走代理（国内平台保持直连）
+_PROXY_PLATFORMS = frozenset({"twitter", "tiktok", "instagram"})
+
 _MOBILE_UA = (
     "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) "
     "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 "
@@ -72,6 +75,14 @@ def detect_platform(url: str) -> str | None:
         if host == key or host.endswith("." + key) or key in host:
             return name
     return None
+
+
+def _use_proxy_for(platform: str | None = None, url: str | None = None) -> bool:
+    """X/Twitter 等：仅当配置了 custom_proxy 时走代理。"""
+    plat = platform or (detect_platform(url or "") if url else None)
+    if plat not in _PROXY_PLATFORMS:
+        return False
+    return bool(get_custom_proxy_url())
 
 
 def extract_urls(text: str) -> list[str]:
@@ -100,8 +111,13 @@ def extract_supported_links(text: str) -> list[tuple[str, str]]:
     return pairs
 
 
-def _get_text(url: str, *, headers: dict | None = None, timeout: int = 20) -> tuple[str, str]:
-    """返回 (final_url, text)。"""
+def _http_get(
+    url: str,
+    *,
+    headers: dict | None = None,
+    timeout: int = 20,
+    use_proxy: bool = False,
+):
     hdrs = {
         "User-Agent": _MOBILE_UA,
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -109,29 +125,48 @@ def _get_text(url: str, *, headers: dict | None = None, timeout: int = 20) -> tu
     }
     if headers:
         hdrs.update(headers)
-    resp = http_client.request(
+    return http_client.request(
         "GET",
         url,
         headers=hdrs,
         timeout=timeout,
         allow_redirects=True,
         check_status=False,
+        # 默认不用全局代理；X/Twitter 等按需打开
+        use_config_proxy=bool(use_proxy),
     )
+
+
+def _get_text(
+    url: str,
+    *,
+    headers: dict | None = None,
+    timeout: int = 20,
+    use_proxy: bool = False,
+) -> tuple[str, str]:
+    """返回 (final_url, text)。"""
+    resp = _http_get(url, headers=headers, timeout=timeout, use_proxy=use_proxy)
     text = getattr(resp, "text", "") or ""
     final = str(getattr(resp, "url", url) or url)
     return final, text
 
 
-def expand_url(url: str, timeout: int = 15) -> str:
+def expand_url(
+    url: str,
+    timeout: int = 15,
+    *,
+    use_proxy: bool | None = None,
+    platform: str | None = None,
+) -> str:
     """跟随短链，失败则返回原 URL。"""
+    if use_proxy is None:
+        use_proxy = _use_proxy_for(platform, url)
     try:
-        resp = http_client.request(
-            "GET",
+        resp = _http_get(
             url,
             headers={"User-Agent": _MOBILE_UA, "Accept": "*/*"},
             timeout=timeout,
-            allow_redirects=True,
-            check_status=False,
+            use_proxy=bool(use_proxy),
         )
         final = str(getattr(resp, "url", "") or "")
         return final or url
@@ -282,6 +317,7 @@ def parse_bilibili(url: str) -> dict[str, Any]:
             params=params,
             timeout=15,
             headers={"User-Agent": _DESKTOP_UA, "Referer": "https://www.bilibili.com"},
+            use_config_proxy=False,
         )
         if int(data.get("code", -1)) != 0:
             meta["error"] = f"B站接口：{data.get('message') or data.get('code')}"
@@ -316,6 +352,7 @@ def parse_bilibili(url: str) -> dict[str, Any]:
                     "User-Agent": _DESKTOP_UA,
                     "Referer": final if "bilibili.com" in final else "https://www.bilibili.com",
                 },
+                use_config_proxy=False,
             )
             if int(play.get("code", -1)) == 0:
                 durl = ((play.get("data") or {}).get("durl") or [])
@@ -335,18 +372,26 @@ def parse_bilibili(url: str) -> dict[str, Any]:
     return meta
 
 
-def _parse_html_og(platform: str, url: str) -> dict[str, Any]:
+def _parse_html_og(
+    platform: str,
+    url: str,
+    *,
+    use_proxy: bool | None = None,
+) -> dict[str, Any]:
     meta = _base_meta(platform, url)
-    final = expand_url(url)
+    if use_proxy is None:
+        use_proxy = _use_proxy_for(platform, url)
+    final = expand_url(url, use_proxy=use_proxy, platform=platform)
     meta["url"] = final
     try:
         _, html = _get_text(
             final,
             headers={
-                "User-Agent": _MOBILE_UA,
+                "User-Agent": _MOBILE_UA if platform != "twitter" else _DESKTOP_UA,
                 "Referer": final,
             },
-            timeout=20,
+            timeout=25 if use_proxy else 20,
+            use_proxy=bool(use_proxy),
         )
     except Exception as e:
         meta["error"] = f"页面获取失败：{e}"
@@ -363,6 +408,7 @@ def _parse_html_og(platform: str, url: str) -> dict[str, Any]:
         _meta_content(html, "og:video:url")
         or _meta_content(html, "og:video")
         or _meta_content(html, "twitter:player:stream")
+        or _meta_content(html, "twitter:player")
     )
     meta["title"] = title
     meta["desc"] = (desc or "")[:400]
@@ -376,17 +422,23 @@ def _parse_html_og(platform: str, url: str) -> dict[str, Any]:
     for marker in (
         "window._ROUTER_DATA",
         "window.__INITIAL_STATE__",
+        "window.INIT_STATE",
         "RENDER_DATA",
         "playAddr",
         "play_addr",
         '"mp4"',
+        "video_url",
+        "playbackUrl",
     ):
-        obj = _first_json_script(html, marker)
+        obj = _first_json_script(html, marker) or _extract_json_assignment(html, marker)
         if obj is not None:
             _collect_http_urls(obj, found)
     # regex mp4：匹配到引号/空白/尖括号为止，避免 pkey 等 query 被截断
     for m in re.finditer(r"https?://[^\s\"'<>]+?\.mp4(?:\?[^\s\"'<>]*)?", html):
         found.append(m.group(0).encode("utf-8").decode("unicode_escape", errors="ignore"))
+    # m3u8 also useful for some platforms
+    for m in re.finditer(r"https?://[^\s\"'<>]+?\.m3u8(?:\?[^\s\"'<>]*)?", html):
+        found.append(m.group(0))
     # unescape \/
     found = [u.replace("\\/", "/").replace("\\u002F", "/") for u in found]
     imgs, vids = _pick_media(found)
@@ -482,18 +534,101 @@ def _walk_cdn_urls(obj: Any, field_names: set[str], out: list[str]) -> None:
 
 
 def parse_douyin(url: str) -> dict[str, Any]:
-    # 优先移动端页 + 通用 og / 内嵌 JSON
-    meta = _parse_html_og("douyin", url)
-    if meta.get("video_urls") or meta.get("image_urls"):
-        return meta
-    # 再试 iesdouyin share 页
-    final = meta.get("url") or url
-    m = re.search(r"/video/(\d+)", final)
+    """抖音：短链展开 → aweme id → iteminfo / 分享页。"""
+    meta = _base_meta("douyin", url)
+    final = expand_url(url, use_proxy=False, platform="douyin")
+    meta["url"] = final
+    aweme_id = None
+    m = re.search(r"/video/(\d+)", final) or re.search(r"/note/(\d+)", final)
     if m:
-        share = f"https://www.iesdouyin.com/share/video/{m.group(1)}/"
-        meta2 = _parse_html_og("douyin", share)
-        if meta2.get("video_urls") or meta2.get("image_urls") or meta2.get("title"):
-            return meta2
+        aweme_id = m.group(1)
+    if not aweme_id:
+        m = re.search(r"modal_id=(\d+)", final)
+        if m:
+            aweme_id = m.group(1)
+    if not aweme_id:
+        # 回退通用页
+        return _parse_html_og("douyin", final)
+
+    # 1) 旧版 iteminfo（仍可用时直接出 play_addr）
+    for api in (
+        f"https://www.iesdouyin.com/web/api/v2/aweme/iteminfo/?item_ids={aweme_id}",
+        f"https://www.iesdouyin.com/aweme/v1/web/aweme/detail/?aweme_id={aweme_id}",
+    ):
+        try:
+            resp = _http_get(
+                api,
+                headers={
+                    "User-Agent": _MOBILE_UA,
+                    "Referer": "https://www.douyin.com/",
+                    "Accept": "application/json, text/plain, */*",
+                },
+                timeout=20,
+                use_proxy=False,
+            )
+            raw = getattr(resp, "text", "") or ""
+            if not raw.strip().startswith("{"):
+                continue
+            data = json.loads(raw)
+            item_list = data.get("item_list") or data.get("aweme_list") or []
+            item = None
+            if item_list:
+                item = item_list[0]
+            elif isinstance(data.get("aweme_detail"), dict):
+                item = data["aweme_detail"]
+            if not isinstance(item, dict):
+                continue
+            meta["title"] = str(
+                item.get("desc") or item.get("share_info", {}).get("share_title") or ""
+            )[:200]
+            author = item.get("author") or {}
+            if isinstance(author, dict):
+                meta["author"] = str(
+                    author.get("nickname") or author.get("unique_id") or ""
+                )
+            video = item.get("video") or {}
+            play = video.get("play_addr") or video.get("play_addr_h264") or {}
+            urls = []
+            if isinstance(play, dict):
+                urls = list(play.get("url_list") or [])
+            cover = video.get("cover") or video.get("origin_cover") or {}
+            images = []
+            if isinstance(cover, dict):
+                images = list(cover.get("url_list") or [])
+            # 图集
+            for im in item.get("images") or []:
+                if isinstance(im, dict):
+                    ul = (im.get("url_list") or [])
+                    images.extend([u for u in ul if isinstance(u, str)])
+            # 去水印：playwm -> play
+            clean = []
+            for u in urls:
+                if not isinstance(u, str):
+                    continue
+                clean.append(u.replace("playwm", "play"))
+            meta["video_urls"] = list(dict.fromkeys(clean))[:3]
+            meta["image_urls"] = list(dict.fromkeys(images))[:6]
+            if meta["video_urls"] or meta["image_urls"]:
+                meta["error"] = None
+                return meta
+        except Exception as e:
+            logger.debug(f"抖音 iteminfo 失败 {api}: {e}")
+
+    # 2) 分享页（部分环境有完整 HTML）
+    share = f"https://www.iesdouyin.com/share/video/{aweme_id}/"
+    page = _parse_html_og("douyin", share, use_proxy=False)
+    if page.get("video_urls") or page.get("image_urls"):
+        return page
+    # 至少带回标题
+    if page.get("title") and not meta.get("title"):
+        meta["title"] = page["title"]
+    if not meta.get("video_urls") and not meta.get("image_urls"):
+        # 最后原链页
+        page2 = _parse_html_og("douyin", final, use_proxy=False)
+        if page2.get("video_urls") or page2.get("image_urls"):
+            return page2
+        meta["title"] = meta.get("title") or page2.get("title") or page.get("title") or ""
+        meta["error"] = "抖音未解析到可发送媒体（页面风控/需登录）"
     return meta
 
 
@@ -587,6 +722,188 @@ def parse_weibo(url: str) -> dict[str, Any]:
     return _parse_html_og("weibo", url)
 
 
+def parse_twitter(url: str) -> dict[str, Any]:
+    """X/Twitter：有 custom_proxy 时走代理；优先 fxtwitter / vxtwitter 公开接口。"""
+    meta = _base_meta("twitter", url)
+    use_proxy = _use_proxy_for("twitter", url)
+    if not use_proxy:
+        # 无代理时仍尝试，多数环境直连会失败
+        meta["error"] = "X/Twitter 解析需要配置 custom_proxy（当前未启用）"
+        # 继续尝试 fxtwitter（部分环境可直连）
+
+    final = expand_url(url, use_proxy=use_proxy, platform="twitter")
+    meta["url"] = final
+    m = re.search(r"/status(?:es)?/(\d+)", final) or re.search(r"/status(?:es)?/(\d+)", url)
+    status_id = m.group(1) if m else None
+
+    # 1) fxtwitter API（返回结构化媒体）
+    if status_id:
+        for api in (
+            f"https://api.fxtwitter.com/status/{status_id}",
+            f"https://api.vxtwitter.com/Twitter/status/{status_id}",
+        ):
+            try:
+                resp = _http_get(
+                    api,
+                    headers={
+                        "User-Agent": _DESKTOP_UA,
+                        "Accept": "application/json",
+                    },
+                    timeout=25,
+                    use_proxy=bool(use_proxy),
+                )
+                raw = getattr(resp, "text", "") or ""
+                data = json.loads(raw) if raw.strip().startswith("{") else {}
+                # fxtwitter: {code, tweet:{...}} 或直接 tweet
+                tweet = data.get("tweet") or data.get("text") and data or {}
+                if isinstance(tweet, dict) and (tweet.get("text") or tweet.get("media") or tweet.get("author")):
+                    meta["title"] = str(tweet.get("text") or tweet.get("title") or "")[:200]
+                    author = tweet.get("author") or {}
+                    if isinstance(author, dict):
+                        meta["author"] = str(
+                            author.get("name") or author.get("screen_name") or ""
+                        )
+                    else:
+                        meta["author"] = str(author or "")
+                    media = tweet.get("media") or {}
+                    videos: list[str] = []
+                    images: list[str] = []
+                    if isinstance(media, dict):
+                        for v in media.get("videos") or []:
+                            if isinstance(v, dict):
+                                u = v.get("url") or v.get("src")
+                                if u:
+                                    videos.append(str(u))
+                            elif isinstance(v, str):
+                                videos.append(v)
+                        for im in media.get("photos") or media.get("images") or []:
+                            if isinstance(im, dict):
+                                u = im.get("url") or im.get("src")
+                                if u:
+                                    images.append(str(u))
+                            elif isinstance(im, str):
+                                images.append(im)
+                        # allUrls fallback
+                        for u in media.get("allUrls") or []:
+                            if isinstance(u, str) and u.startswith("http"):
+                                if ".mp4" in u.lower():
+                                    videos.append(u)
+                                else:
+                                    images.append(u)
+                    # vxtwitter shape
+                    for key in ("mediaURLs", "media_urls"):
+                        for u in tweet.get(key) or data.get(key) or []:
+                            if isinstance(u, str) and u.startswith("http"):
+                                if ".mp4" in u.lower():
+                                    videos.append(u)
+                                else:
+                                    images.append(u)
+                    if not videos:
+                        # 遍历任意 mp4
+                        found: list[str] = []
+                        _collect_http_urls(data, found)
+                        videos = [u for u in found if ".mp4" in u.lower()]
+                        if not images:
+                            images = [
+                                u
+                                for u in found
+                                if any(x in u.lower() for x in (".jpg", ".jpeg", ".png", ".webp"))
+                            ]
+                    meta["video_urls"] = list(dict.fromkeys(videos))[:3]
+                    meta["image_urls"] = list(dict.fromkeys(images))[:6]
+                    if meta["video_urls"] or meta["image_urls"] or meta["title"]:
+                        meta["error"] = None
+                        return meta
+            except Exception as e:
+                logger.debug(f"fxtwitter/vxtwitter 失败 {api}: {e}")
+
+    # 2) 页面 OG 回退
+    page = _parse_html_og("twitter", final if final else url, use_proxy=use_proxy)
+    if page.get("video_urls") or page.get("image_urls") or page.get("title"):
+        return page
+    if not meta.get("error"):
+        meta["error"] = page.get("error") or "X/Twitter 未解析到媒体"
+    return meta
+
+
+def parse_xiaoheihe(url: str) -> dict[str, Any]:
+    """小黑盒：分享页多为 SPA，尝试公开 web share / 链接接口。"""
+    meta = _base_meta("xiaoheihe", url)
+    final = expand_url(url, use_proxy=False, platform="xiaoheihe")
+    meta["url"] = final
+    link_id = None
+    m = re.search(r"link_id=(\d+)", final) or re.search(r"/link/(\d+)", final) or re.search(
+        r"/link/(\d+)", url
+    )
+    if m:
+        link_id = m.group(1)
+    if link_id:
+        candidates = [
+            f"https://api.xiaoheihe.cn/bbs/app/link/web/share?link_id={link_id}",
+            f"https://api.xiaoheihe.cn/bbs/app/api/web/share?link_id={link_id}",
+            f"https://www.xiaoheihe.cn/bbs/app/api/web/share/link?link_id={link_id}",
+            f"https://api.xiaoheihe.cn/bbs/app/link/tree?link_id={link_id}&h_src=web",
+        ]
+        for api in candidates:
+            try:
+                resp = _http_get(
+                    api,
+                    headers={
+                        "User-Agent": _DESKTOP_UA,
+                        "Referer": "https://www.xiaoheihe.cn/",
+                        "Accept": "application/json",
+                    },
+                    timeout=15,
+                    use_proxy=False,
+                )
+                raw = getattr(resp, "text", "") or ""
+                if not raw.strip().startswith("{"):
+                    continue
+                data = json.loads(raw)
+                # 常见 result/link
+                node = data.get("result") or data.get("data") or data
+                if not isinstance(node, dict):
+                    continue
+                link = node.get("link") or node.get("share") or node
+                if not isinstance(link, dict):
+                    continue
+                title = link.get("title") or link.get("text") or link.get("description")
+                if title:
+                    meta["title"] = str(title)[:200]
+                # 视频/图
+                found: list[str] = []
+                _collect_http_urls(link, found)
+                vids = [u for u in found if ".mp4" in u.lower() or "video" in u.lower()]
+                imgs = [
+                    u
+                    for u in found
+                    if any(x in u.lower() for x in (".jpg", ".jpeg", ".png", ".webp"))
+                ]
+                # thumbs
+                for k in ("img", "imgs", "thumb", "image", "cover"):
+                    v = link.get(k)
+                    if isinstance(v, str) and v.startswith("http"):
+                        imgs.append(v)
+                    elif isinstance(v, list):
+                        imgs.extend([x for x in v if isinstance(x, str) and x.startswith("http")])
+                meta["video_urls"] = list(dict.fromkeys(vids))[:3]
+                meta["image_urls"] = list(dict.fromkeys(imgs))[:6]
+                if meta["video_urls"] or meta["image_urls"] or meta["title"]:
+                    meta["error"] = None
+                    if meta["video_urls"] or meta["image_urls"]:
+                        return meta
+            except Exception as e:
+                logger.debug(f"小黑盒接口失败 {api}: {e}")
+    page = _parse_html_og("xiaoheihe", final, use_proxy=False)
+    if page.get("video_urls") or page.get("image_urls"):
+        return page
+    if page.get("title") and page.get("title") not in ("小黑盒 - 玩家高能聚集地", "小黑盒"):
+        meta["title"] = page["title"]
+    if not meta.get("video_urls") and not meta.get("image_urls"):
+        meta["error"] = meta.get("error") or "小黑盒未解析到媒体（分享页多为前端渲染）"
+    return meta
+
+
 def parse_generic(platform: str, url: str) -> dict[str, Any]:
     return _parse_html_og(platform, url)
 
@@ -597,6 +914,10 @@ _PARSERS = {
     "kuaishou": parse_kuaishou,
     "xiaohongshu": parse_xiaohongshu,
     "weibo": parse_weibo,
+    "twitter": parse_twitter,
+    "xiaoheihe": parse_xiaoheihe,
+    "tiktok": lambda u: _parse_html_og("tiktok", u),
+    "instagram": lambda u: _parse_html_og("instagram", u),
 }
 
 
