@@ -889,15 +889,22 @@ def parse_kuaishou(url: str) -> dict[str, Any]:
     def _video_rank(u: str) -> tuple[int, int]:
         low = u.lower()
         score = 0
-        # 主播放链通常带 pkey / clientCacheKey；Ultra/High 为转码副本
-        if "pkey=" in low:
+        # 优先高清晰度（Ultra/High），再主链/pkey
+        if any(x in low for x in ("ultrav", "ultra", "v6ultra")):
+            score += 8
+        elif any(x in low for x in ("highv", "v6high", "1080", "hd15")):
+            score += 6
+        elif any(x in low for x in ("720", "mid", "standard")):
             score += 3
-        if "clientcachekey" in low or "mainmv" in low:
+        if "pkey=" in low:
             score += 2
+        if "clientcachekey" in low or "mainmv" in low:
+            score += 1
         if "kwaicdn.com" in low or "kwimgs.com" in low or "yximgs.com" in low:
             score += 1
-        if any(x in low for x in ("ultrav", "highv", "hd15", "photo-video-mz")):
-            score -= 1
+        # 极低清/预览链略降权
+        if any(x in low for x in ("360p", "240p", "preview", "thumb")):
+            score -= 3
         return (-score, -len(u))
 
     def _image_rank(u: str) -> tuple[int, int]:

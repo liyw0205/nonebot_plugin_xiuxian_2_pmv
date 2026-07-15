@@ -251,22 +251,31 @@ async def fun_media_send_parse_result(
     event: GroupMessageEvent | PrivateMessageEvent,
     source_text: str,
 ) -> None:
+    """发送解析结果。
+
+    策略（兼顾 QQ 被动回复次数）：
+    1. 卡片 + 解析文案：图文接口一次发出（信息不会丢）
+    2. 有视频：再发 1 条高清视频
+    3. 图集且开启 markdown：用原生 MD 图片链一次发出，避免多图被动超限
+    """
     if fun_media_should_skip_duplicate_event(event):
         logger.debug(f"娱乐媒体解析：跳过重复消息 {_fun_media_event_dedupe_key(event)}")
         return
+
     texts, images, videos, cards = await run_parse_and_build_messages(source_text)
     images = dedupe_media_urls_preserve_order(images)
     videos = dedupe_media_urls_preserve_order(videos)
-    body = "\n\n".join(texts)
+    body = "\n\n".join(t for t in texts if t).strip()
     has_video = bool(videos)
     has_card = bool(cards)
+    md_on = bool(getattr(XiuConfig(), "markdown_status", False))
 
     def _is_passive_limit_error(exc: BaseException) -> bool:
         text = str(exc)
         return (
             "40034128" in text
             or "被动回复时间或者次数超过限制" in text
-            or "被动回复" in text and "超过" in text
+            or ("被动回复" in text and "超过" in text)
         )
 
     async def _safe_send_media(media, *, media_type: str, label: str) -> bool:
@@ -280,10 +289,55 @@ async def fun_media_send_parse_result(
             logger.warning(f"{label}失败: {e}")
             return False
 
-    # QQ 官方群：同一 msg_id 被动回复次数/窗口有限。
-    # 视频场景优先「视频 +（可选）卡片」，避免 文案+卡片+视频 三连打满 40034128。
-    # 卡片文件名 card_<hash>.png 是内容哈希，不是写死的用户/群 ID。
+    async def _send_card_with_info() -> bool:
+        """卡片 + 解析信息 用图文接口同发（1 条被动回复）。"""
+        if has_card and body:
+            try:
+                card_path = Path(cards[0])
+                await handle_pic_msg_send(bot, event, card_path, body)
+                return True
+            except Exception as e:
+                logger.warning(f"卡片图文发送失败，降级: {e}")
+                if _is_passive_limit_error(e):
+                    raise
+        if has_card:
+            return await _safe_send_media(
+                cards[0], media_type="图片", label=f"发送解析卡片 {cards[0]}"
+            )
+        if body:
+            try:
+                await handle_send(
+                    bot,
+                    event,
+                    body,
+                    md_type="娱乐",
+                    k1="娱乐帮助",
+                    v1="娱乐帮助",
+                    k2="链接解析",
+                    v2="链接解析",
+                )
+                return True
+            except Exception as e:
+                logger.warning(f"发送解析文案失败: {e}")
+                if _is_passive_limit_error(e):
+                    raise
+        return False
+
+    def _build_gallery_md(urls: list[str], caption: str = "") -> str:
+        lines: list[str] = []
+        if caption:
+            # 原生 MD 用 \r 换行更稳；这里先 \n，发送层会替换
+            lines.append(caption.replace("\r", "\n"))
+            lines.append("")
+        for i, u in enumerate(urls[:9], 1):
+            lines.append(f"![图{i}]({u})")
+        return "\n".join(lines)
+
     try:
+        # 1) 卡片 + 信息（图文一体）
+        await _send_card_with_info()
+
+        # 2) 视频：高清优先（native 已排序），只发 1 条
         if has_video:
             sent_video = False
             last_err: Exception | None = None
@@ -300,59 +354,14 @@ async def fun_media_send_parse_result(
                 except Exception as e:
                     last_err = e
                     if _is_passive_limit_error(e):
-                        break
+                        return
                     continue
-
-            # 视频已出则卡片尽量再发；被动超限就停
-            if sent_video and has_card:
-                try:
-                    await _safe_send_media(cards[0], media_type="图片", label=f"发送解析卡片 {cards[0]}")
-                except Exception as e:
-                    if not _is_passive_limit_error(e):
-                        pass
-            elif not sent_video:
-                # 视频全失败：退回文案 + 卡片/封面（仍控制条数）
-                if body:
-                    try:
-                        await handle_send(
-                            bot,
-                            event,
-                            body,
-                            md_type="娱乐",
-                            k1="娱乐帮助",
-                            v1="娱乐帮助",
-                            k2="链接解析",
-                            v2="链接解析",
-                        )
-                    except Exception as e:
-                        logger.warning(f"发送解析文案失败: {e}")
-                        if _is_passive_limit_error(e):
-                            return
-                if has_card:
-                    try:
-                        await _safe_send_media(
-                            cards[0], media_type="图片", label=f"发送解析卡片 {cards[0]}"
-                        )
-                    except Exception as e:
-                        if _is_passive_limit_error(e):
-                            return
-                for img in images[:1]:
-                    try:
-                        await _safe_send_media(
-                            img, media_type="图片", label=f"发送解析封面 {img[:80]}"
-                        )
-                    except Exception as e:
-                        if _is_passive_limit_error(e):
-                            return
-                        break
-                tip = "视频发送失败"
-                if last_err:
-                    tip = f"视频发送失败：{last_err}"
+            if not sent_video and last_err:
                 try:
                     await handle_send(
                         bot,
                         event,
-                        f"【媒体解析】{tip}\n可尝试打开上方原始链接观看。",
+                        f"【媒体解析】视频发送失败：{last_err}\n可尝试打开原始链接观看。",
                         md_type="娱乐",
                         k1="链接解析",
                         v1="链接解析",
@@ -363,51 +372,47 @@ async def fun_media_send_parse_result(
                     pass
             return
 
-        # 无视频：文案（无卡片时） + 卡片 + 少量图
-        if body and not has_card:
-            try:
-                await handle_send(
-                    bot,
-                    event,
-                    body,
-                    md_type="娱乐",
-                    k1="娱乐帮助",
-                    v1="娱乐帮助",
-                    k2="链接解析",
-                    v2="链接解析",
-                )
-            except Exception as e:
-                logger.warning(f"发送解析文案失败: {e}")
-                if _is_passive_limit_error(e):
-                    return
-        elif body and has_card:
-            # 有卡片时正文已在卡上，只发极短提示避免占被动次数
-            try:
-                await handle_send(
-                    bot,
-                    event,
-                    "【媒体解析】见下方卡片",
-                    md_type="娱乐",
-                    k1="娱乐帮助",
-                    v1="娱乐帮助",
-                    k2="链接解析",
-                    v2="链接解析",
-                )
-            except Exception as e:
-                logger.warning(f"发送解析短提示失败: {e}")
-                if _is_passive_limit_error(e):
-                    # 仍尝试发卡
-                    pass
+        # 3) 图集（无视频）
+        gallery = [
+            u
+            for u in images
+            if "emotion" not in u.lower() and "emoji" not in u.lower()
+        ]
+        if not gallery:
+            return
 
-        if has_card:
+        # 已发卡时，图集里第一张若是封面可跳过（减少重复）
+        if has_card and len(gallery) > 1:
+            # 卡片封面可能与第一张同源；仍允许发，但限制数量
+            pass
+
+        if md_on and len(gallery) >= 2:
+            # Markdown 开启：用图片链一次发出多图
+            md_body = _build_gallery_md(gallery, caption="" if has_card else body)
             try:
-                await _safe_send_media(cards[0], media_type="图片", label=f"发送解析卡片 {cards[0]}")
+                await handle_send(
+                    bot,
+                    event,
+                    md_body,
+                    native_markdown=True,
+                    fallback_msg=body or "【媒体解析】图集",
+                    k1="娱乐帮助",
+                    v1="娱乐帮助",
+                    k2="链接解析",
+                    v2="链接解析",
+                )
+                return
             except Exception as e:
+                logger.warning(f"图集 Markdown 发送失败，降级逐张: {e}")
                 if _is_passive_limit_error(e):
                     return
-        for img in images[:3]:
+
+        # 关闭 MD 或 MD 失败：最多再发 3 张，避免被动超限
+        for img in gallery[:3]:
             try:
-                await _safe_send_media(img, media_type="图片", label=f"发送解析图片 {img[:80]}")
+                await _safe_send_media(
+                    img, media_type="图片", label=f"发送解析图片 {img[:80]}"
+                )
             except Exception as e:
                 if _is_passive_limit_error(e):
                     return
@@ -417,7 +422,6 @@ async def fun_media_send_parse_result(
             logger.warning(f"媒体解析因 QQ 被动回复限制提前结束: {e}")
             return
         raise
-
 
 def _get_json_api_sync(api_url: str, params: dict | None = None, timeout: int = 15) -> dict:
     """

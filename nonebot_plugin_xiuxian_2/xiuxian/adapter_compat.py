@@ -570,6 +570,13 @@ class CompatMessageSegment:
             return data.getvalue()
         if isinstance(data, Path):
             return data.read_bytes()
+        # 本地文件路径字符串（非 http/https）也允许
+        if isinstance(data, str):
+            s = data.strip()
+            if s and not s.startswith(("http://", "https://", "base64://")):
+                p = Path(s).expanduser()
+                if p.is_file():
+                    return p.read_bytes()
         raise TypeError(f"不支持的本地文件类型: {type(data)}")
 
     @staticmethod
