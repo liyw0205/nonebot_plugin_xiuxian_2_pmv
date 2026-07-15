@@ -10,7 +10,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.normal_training_lifecycle_service import NormalTrainingLifecycleService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import NormalTrainingLifecycleService
 from tests.test_db_backend import db_backend
 
 

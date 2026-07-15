@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 import nonebot
 nonebot.init()
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.partner_breakthrough_service import PartnerBreakthroughService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import PartnerBreakthroughService
 from tests.test_db_backend import db_backend
 
 class Tests(unittest.TestCase):

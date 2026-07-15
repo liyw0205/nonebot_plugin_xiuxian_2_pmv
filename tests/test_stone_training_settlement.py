@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.stone_training_settlement_service import StoneTrainingSettlementService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import StoneTrainingSettlementService
 from tests.test_db_backend import db_backend
 
 

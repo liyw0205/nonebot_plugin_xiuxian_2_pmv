@@ -7,7 +7,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.mentor_breakthrough_reward_service import MentorBreakthroughRewardService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import MentorBreakthroughRewardService
 from tests.test_db_backend import db_backend
 
 

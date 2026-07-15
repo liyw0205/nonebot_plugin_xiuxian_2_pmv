@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 import nonebot
 nonebot.init()
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.closing_settlement_service import ClosingSettlementService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import ClosingSettlementService
 from tests.test_db_backend import db_backend
 
 class ClosingSettlementServiceTests(unittest.TestCase):

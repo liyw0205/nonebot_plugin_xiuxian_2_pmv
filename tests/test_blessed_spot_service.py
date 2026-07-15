@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.blessed_spot_service import BlessedSpotService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import BlessedSpotService
 from tests.test_db_backend import db_backend
 
 

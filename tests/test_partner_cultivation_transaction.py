@@ -3,8 +3,8 @@ import unittest
 from pathlib import Path
 import nonebot
 nonebot.init()
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.partner_cultivation_service import PartnerCultivationService
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.partner_protection_service import PartnerProtectionService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import PartnerCultivationService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import PartnerProtectionService
 from tests.test_db_backend import db_backend
 
 class Tests(unittest.TestCase):

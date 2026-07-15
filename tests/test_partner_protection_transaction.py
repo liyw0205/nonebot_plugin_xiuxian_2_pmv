@@ -6,7 +6,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.partner_protection_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import (
     PartnerProtectionService,
 )
 from tests.test_db_backend import db_backend

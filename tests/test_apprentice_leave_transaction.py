@@ -7,7 +7,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.apprentice_leave_service import ApprenticeLeaveService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import ApprenticeLeaveService
 from tests.test_db_backend import db_backend
 
 

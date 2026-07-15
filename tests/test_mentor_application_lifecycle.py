@@ -7,8 +7,8 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.mentor_application_service import MentorApplicationService
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.mentor_bind_service import MentorBindService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import MentorApplicationService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import MentorBindService
 from tests.test_db_backend import db_backend
 
 

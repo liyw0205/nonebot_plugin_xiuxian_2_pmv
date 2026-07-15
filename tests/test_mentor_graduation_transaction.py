@@ -2,7 +2,7 @@ import json,tempfile,unittest
 from pathlib import Path
 import nonebot
 nonebot.init()
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.mentor_graduation_service import MentorGraduationService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import MentorGraduationService
 from tests.test_db_backend import db_backend
 class Tests(unittest.TestCase):
  def setUp(self):
