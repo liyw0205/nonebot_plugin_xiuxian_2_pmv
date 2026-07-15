@@ -57,10 +57,18 @@ class IllusionChoiceServiceTests(unittest.TestCase):
 
     def test_duplicate_reuses_result_and_conflict_is_rejected(self) -> None:
         first = self.choose("repeat")
-        duplicate = self.choose("repeat")
-        conflict = self.choose("repeat", stone=11)
-        self.assertEqual((first.status, duplicate.status, conflict.status), ("applied", "duplicate", "state_changed"))
+        # mutable reward amounts must not break same-op replay (identity is user/period/question/choice)
+        duplicate = self.choose("repeat", stone=11, exp=0, item=None)
+        self.assertEqual((first.status, duplicate.status), ("applied", "duplicate"))
+        self.assertEqual((duplicate.stone, duplicate.exp, duplicate.item_id), (10, 20, 1))
         self.assertEqual(self.state(), ((110, 220), (2, 2), 1, 1))
+        prior = self.service.get_result("repeat")
+        self.assertIsNotNone(prior)
+        self.assertEqual(prior.status, "duplicate")
+        self.assertEqual(prior.stone, 10)
+        # different choice index is identity conflict
+        conflict = self.choose("repeat", choice=2, stone=10, exp=20)
+        self.assertEqual(conflict.status, "state_changed")
 
     def test_operation_failure_rolls_back_everything(self) -> None:
         with db_backend.transaction(self.database) as conn:

@@ -101,21 +101,54 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await illusion_choice.finish()
     
     user_id = user_info["user_id"]
+    # 解析选择编号（请求身份的一部分）
+    choice_input = args.extract_plain_text().strip()
+    try:
+        choice_num = int(choice_input)
+    except ValueError:
+        msg = "请输入有效的数字！"
+        await handle_send(bot, event, msg)
+        await illusion_choice.finish()
+
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"illusion-choice:{event_id}:{user_id}" if event_id else f"illusion-choice:{time.time_ns()}:{user_id}"
+    # 先回放：成功后 today_choice 已写，前置“今日已参与”会挡住同事件重放；随机奖励不可重掷。
+    prior = illusion_choice_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        q_index = prior.question_index
+        question_data = DEFAULT_QUESTIONS[q_index] if 0 <= q_index < len(DEFAULT_QUESTIONS) else {"question": "幻境寻心", "explanations": []}
+        selected_option = prior.selected_option
+        selected_explanation = ""
+        if selected_option and question_data.get("options"):
+            try:
+                idx = question_data["options"].index(selected_option)
+                selected_explanation = (question_data.get("explanations") or [""] * (idx + 1))[idx]
+            except Exception:
+                selected_explanation = "暂无详细解释"
+        if prior.exp > 0:
+            reward_msg = f"你的选择是少数派的选择(第{prior.choice_count}位道友)，获得修为：{number_to(prior.exp)}点"
+        elif prior.stone > 0:
+            reward_msg = f"你的选择是多数派的选择(第{prior.choice_count}位道友)，获得灵石：{number_to(prior.stone)}枚"
+        elif prior.item_id:
+            reward_msg = f"你的选择是平均派的选择(第{prior.choice_count}位道友)，获得：{prior.item_type}:{prior.item_name}"
+        else:
+            reward_msg = f"你的选择是平均派的选择(第{prior.choice_count}位道友)，本次未获得物品"
+        msg = (
+            f"【幻境寻心】\n"
+            f"今日问题：{question_data.get('question', '')}\n"
+            f"你的选择：{selected_option}\n"
+            f"\n【解析】\n{selected_explanation or '暂无详细解释'}\n"
+            f"\n【奖励】\n{reward_msg}\n"
+            f"\n该选择请求已经处理，无需重复提交。"
+        )
+        await handle_send(bot, event, msg)
+        await illusion_choice.finish()
+
     illusion_info = IllusionData.get_or_create_user_illusion_info(user_id)
     
     # 检查问题索引是否有效
     if illusion_info["question_index"] is None or illusion_info["question_index"] >= len(DEFAULT_QUESTIONS):
         msg = "幻境寻心功能暂时无法使用，请联系管理员检查问题配置"
-        await handle_send(bot, event, msg)
-        await illusion_choice.finish()
-    
-    # 获取用户输入的数字
-    choice_input = args.extract_plain_text().strip()
-    
-    try:
-        choice_num = int(choice_input)
-    except ValueError:
-        msg = "请输入有效的数字！"
         await handle_send(bot, event, msg)
         await illusion_choice.finish()
     
@@ -187,13 +220,30 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     elif selected_reward_type == 'item':  # 物品奖励
         item_reward = _select_random_item(user_info["level"])
 
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     period_key = illusion_choice_service.period_key()
-    operation_id = f"illusion-choice:{event_id}:{user_id}" if event_id else f"illusion-choice:{period_key}:{user_id}:{time.time_ns()}"
     choice_result = illusion_choice_service.choose(
         operation_id, user_id, period_key, illusion_info["question_index"], choice_num - 1,
         selected_option, stone_reward, exp_reward, item_reward, XiuConfig().max_goods_num,
     )
+    if choice_result.status == "duplicate":
+        if choice_result.exp > 0:
+            reward_msg = f"你的选择是少数派的选择(第{choice_result.choice_count}位道友)，获得修为：{number_to(choice_result.exp)}点"
+        elif choice_result.stone > 0:
+            reward_msg = f"你的选择是多数派的选择(第{choice_result.choice_count}位道友)，获得灵石：{number_to(choice_result.stone)}枚"
+        elif choice_result.item_id:
+            reward_msg = f"你的选择是平均派的选择(第{choice_result.choice_count}位道友)，获得：{choice_result.item_type}:{choice_result.item_name}"
+        else:
+            reward_msg = f"你的选择是平均派的选择(第{choice_result.choice_count}位道友)，本次未获得物品"
+        msg = (
+            f"【幻境寻心】\n"
+            f"今日问题：{question_data['question']}\n"
+            f"你的选择：{choice_result.selected_option or selected_option}\n"
+            f"\n【解析】\n{selected_explanation}\n"
+            f"\n【奖励】\n{reward_msg}\n"
+            f"\n该选择请求已经处理，无需重复提交。"
+        )
+        await handle_send(bot, event, msg)
+        await illusion_choice.finish()
     if choice_result.status == "already_chosen":
         await handle_send(bot, event, "今日已经参与过幻境寻心，请明日再来！")
         await illusion_choice.finish()
