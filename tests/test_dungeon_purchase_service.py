@@ -14,7 +14,7 @@ from nonebot.exception import FinishedException
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.purchase_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.transaction_service import (
     DungeonPurchaseService,
 )
 from tests.test_db_backend import db_backend

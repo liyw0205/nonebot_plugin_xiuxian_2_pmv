@@ -13,7 +13,7 @@ from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import convert_rank
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
-from .reset_service import DungeonResetService
+from .transaction_service import DungeonResetService
 
 item_s = Items()
 player_data = PlayerDataManager()

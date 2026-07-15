@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_arena.weekly_rank_reduction_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_arena.transaction_service import (
     ArenaWeeklyRankReductionService,
 )
 from tests.test_db_backend import db_backend

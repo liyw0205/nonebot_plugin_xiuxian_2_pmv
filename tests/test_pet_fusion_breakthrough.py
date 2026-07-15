@@ -9,7 +9,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_pet.fusion_breakthrough_service import (  # noqa: E402
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_pet.transaction_service import (  # noqa: E402
     PetFusionBreakthroughService,
 )
 from tests.test_db_backend import db_backend  # noqa: E402

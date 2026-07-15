@@ -904,7 +904,7 @@ class SourceQualityTests(unittest.TestCase):
     def test_normal_compensation_claim_uses_transactional_service(self) -> None:
         compensation_root = SOURCE_ROOT / "xiuxian" / "xiuxian_compensation"
         common_source = (compensation_root / "common.py").read_text(encoding="utf-8")
-        service_source = (compensation_root / "reward_service.py").read_text(
+        service_source = (compensation_root / "transaction_service.py").read_text(
             encoding="utf-8"
         )
         claim_body = common_source.split("async def claim_normal_reward", 1)[1].split(
@@ -940,7 +940,7 @@ class SourceQualityTests(unittest.TestCase):
             SOURCE_ROOT / "xiuxian" / "xiuxian_dungeon" / "__init__.py"
         ).read_text(encoding="utf-8")
         presenter_source = (
-            SOURCE_ROOT / "xiuxian" / "xiuxian_dungeon" / "team_command_service.py"
+            SOURCE_ROOT / "xiuxian" / "xiuxian_dungeon" / "transaction_service.py"
         ).read_text(encoding="utf-8")
         self.assertIn("build_team_view_message(", source)
         self.assertIn("build_team_view(", source)
@@ -1638,7 +1638,7 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("save_user_boss_fight_info(", handler)
         for status in ("state_changed", "user_missing"):
             self.assertIn(f'"{status}"', handler)
-        service = (boss_root / "reward_service.py").read_text(encoding="utf-8")
+        service = (boss_root / "transaction_service.py").read_text(encoding="utf-8")
         self.assertIn("ATTACH DATABASE", service)
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("boss_reward_operations", service)
@@ -1654,7 +1654,7 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("sql_message.send_back(", handler)
         for status in ("integral_insufficient", "limit_reached", "inventory_full", "state_changed", "user_missing"):
             self.assertIn(f'"{status}"', handler)
-        service = (boss_root / "purchase_service.py").read_text(encoding="utf-8")
+        service = (boss_root / "transaction_service.py").read_text(encoding="utf-8")
         self.assertIn("ATTACH DATABASE", service)
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("boss_purchase_operations", service)
@@ -1672,7 +1672,7 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("sql_message.send_back(", handler)
         for status in ("inventory_full", "state_changed", "user_missing"):
             self.assertIn(f'"{status}"', handler)
-        service = (pet_root / "travel_claim_service.py").read_text(encoding="utf-8")
+        service = (pet_root / "transaction_service.py").read_text(encoding="utf-8")
         self.assertIn("ATTACH DATABASE", service)
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("pet_travel_claim_operations", service)
@@ -1762,7 +1762,7 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("sql_message.update_ls(", handler)
         self.assertNotIn("sql_message.update_exp(", handler)
         self.assertNotIn("sql_message.send_back(", handler)
-        service = (root / "explore_operation_service.py").read_text(encoding="utf-8")
+        service = (root / "transaction_service.py").read_text(encoding="utf-8")
         self.assertIn("ATTACH DATABASE", service)
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("dungeon_explore_operations", service)

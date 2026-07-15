@@ -1,7 +1,7 @@
 import nonebot; nonebot.init()
 import tempfile, unittest
 from pathlib import Path
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_pet.skill_replace_service import PetSkillReplaceService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_pet.transaction_service import PetSkillReplaceService
 from tests.test_db_backend import db_backend
 class T(unittest.TestCase):
  def setUp(self):

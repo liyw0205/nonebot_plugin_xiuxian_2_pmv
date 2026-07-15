@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_pet.release_service import PetReleaseService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_pet.transaction_service import PetReleaseService
 from tests.test_db_backend import db_backend
 
 

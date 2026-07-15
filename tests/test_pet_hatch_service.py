@@ -3,7 +3,7 @@ from pathlib import Path
 import nonebot
 
 nonebot.init()
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_pet.hatch_service import PetHatchService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_pet.transaction_service import PetHatchService
 from tests.test_db_backend import db_backend
 
 class T(unittest.TestCase):

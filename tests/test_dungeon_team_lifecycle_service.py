@@ -14,7 +14,7 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.team_manager import (
     PersistentTeamInviteMapping,
 )
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.team_transaction_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.transaction_service import (
     DungeonTeamTransactionService,
 )
 from tests.test_db_backend import db_backend

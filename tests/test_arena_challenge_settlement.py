@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_arena.challenge_settlement_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_arena.transaction_service import (
     ArenaChallengeSettlementService,
 )
 from tests.test_db_backend import db_backend

@@ -10,7 +10,7 @@ from nonebot import Bot
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.utils import handle_send
 from ...paths import get_paths
-from .team_transaction_service import DungeonTeamTransactionService, TeamInviteSnapshot
+from .transaction_service import DungeonTeamTransactionService, TeamInviteSnapshot
 
 sql_message = XiuxianDateManage()  # sql类
 player_data = PlayerDataManager() # PlayerDataManager实例

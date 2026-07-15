@@ -12,7 +12,7 @@ from nonebot.exception import FinishedException
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.explore_operation_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.transaction_service import (
     DungeonExploreOperationService,
 )
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.player_fight import (

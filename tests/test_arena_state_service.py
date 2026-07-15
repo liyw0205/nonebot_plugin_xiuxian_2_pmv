@@ -9,7 +9,7 @@ import pytest
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_arena.state_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_arena.transaction_service import (
     ARENA_FIELDS,
     ArenaStateService,
 )
@@ -214,7 +214,7 @@ def test_operation_failure_rolls_back_day_and_week_switch(tmp_path):
 def test_production_facade_has_no_legacy_write_bypass():
     root = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_arena"
     facade = (root / "arena_limit.py").read_text(encoding="utf-8")
-    service = (root / "state_service.py").read_text(encoding="utf-8")
+    service = (root / "transaction_service.py").read_text(encoding="utf-8")
     handler = (root / "__init__.py").read_text(encoding="utf-8")
 
     assert "ArenaStateService(" in facade
