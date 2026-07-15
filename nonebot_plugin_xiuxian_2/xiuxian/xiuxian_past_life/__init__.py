@@ -107,6 +107,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     )
     if legacy_text and result["status"] in {"applied", "duplicate"}:
         result["message"] = "投胎时资质已由命数定下，输入的分配不会生效。\n" + result["message"]
+    if result["status"] == "duplicate":
+        result["message"] = result["message"].rstrip() + "\n该投胎请求已经处理，无需重复提交。"
     if result["status"] == "applied":
         log_message(user_id, f"[前尘往事] 开始新人生 - {result['alloc']}")
 
@@ -150,6 +152,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     if result["is_end"] and result.get("operation_status") == "applied":
         log_message(user_id, f"[前尘往事] 结局：{result['ending']['name']}")
+    if result.get("operation_status") == "duplicate":
+        result["message"] = result["message"].rstrip() + "\n该前尘选择请求已经处理，无需重复提交。"
     if result["is_end"]:
         await handle_send(bot, event, result["message"], md_type="前尘",
                           k1="回忆", v1="前尘回忆",
@@ -342,7 +346,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "前尘重置 operation 冲突，本次未修改状态。")
         return
     mode = "（已清空历史）" if clear_history else "（保留历史）"
-    await handle_send(bot, event, f"已重置 {target_user['user_name']} 的前尘状态 {mode}")
+    msg = f"已重置 {target_user['user_name']} 的前尘状态 {mode}"
+    if result.status == "duplicate":
+        msg += "\n该重置请求已经处理，无需重复提交。"
+    await handle_send(bot, event, msg)
 
 
 # ═══ 工具函数 ═══
