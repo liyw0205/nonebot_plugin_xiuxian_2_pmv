@@ -1157,11 +1157,16 @@ def parse_url(url: str, platform: str | None = None) -> dict[str, Any]:
     plat = platform or detect_platform(url) or "unknown"
     fn = _PARSERS.get(plat)
     if fn:
-        return fn(url)
-    if plat != "unknown":
-        return parse_generic(plat, url)
-    meta = _base_meta("unknown", url)
-    meta["error"] = "不支持的平台"
+        meta = fn(url)
+    elif plat != "unknown":
+        meta = parse_generic(plat, url)
+    else:
+        meta = _base_meta("unknown", url)
+        meta["error"] = "不支持的平台"
+    # 始终保留用户输入的原始短链，供文案展示；展开落地页放在 url 字段
+    if isinstance(meta, dict):
+        meta["source_url"] = url
+        meta.setdefault("url", url)
     return meta
 
 

@@ -35,14 +35,17 @@ def _format_meta_line(meta: dict[str, Any]) -> str:
     title = (meta.get("title") or "").strip()
     author = (meta.get("author") or "").strip()
     desc = (meta.get("desc") or "").strip()
-    url = meta.get("url") or meta.get("source_url") or ""
+    # 展示用户原始短链；展开后的落地页只在内部解析用，不直接当「原始链接」刷屏
+    source = (meta.get("source_url") or "").strip()
+    resolved = (meta.get("url") or "").strip()
+    display_url = source or resolved
     lines: list[str] = [f"【媒体解析】{platform}"]
     err = meta.get("error")
     if err:
         lines.append("状态：解析失败")
         lines.append(f"原因：{err}")
-        if url:
-            lines.append(f"原始链接：{url}")
+        if display_url:
+            lines.append(f"原始链接：{display_url}")
         return "\n".join(lines)
     if title:
         lines.append(f"标题：{title}")
@@ -51,8 +54,8 @@ def _format_meta_line(meta: dict[str, Any]) -> str:
     if desc and desc != title:
         d = desc if len(desc) <= 400 else desc[:400] + "…"
         lines.append(f"简介：{d}")
-    if url:
-        lines.append(f"原始链接：{url}")
+    if display_url:
+        lines.append(f"原始链接：{display_url}")
     if not meta.get("video_urls") and not meta.get("image_urls"):
         lines.append("提示：未提取到可发送媒体，可尝试打开原始链接")
     if len(lines) == 1:
