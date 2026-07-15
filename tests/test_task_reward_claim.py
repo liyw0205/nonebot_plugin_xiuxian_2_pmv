@@ -10,7 +10,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tasks.reward_claim_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tasks.transaction_service import (
     TaskRewardClaimService,
 )
 from tests.test_db_backend import db_backend

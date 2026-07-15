@@ -9,10 +9,10 @@ from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import number_to
-from .reward_claim_service import TaskRewardClaimService
-from .task_progress_event_service import (
+from .transaction_service import (
     TaskProgressEventResult,
     TaskProgressEventService,
+    TaskRewardClaimService,
 )
 
 

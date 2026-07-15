@@ -9,7 +9,7 @@ import pytest
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tasks.task_progress_event_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tasks.transaction_service import (
     TaskProgressEventService,
 )
 

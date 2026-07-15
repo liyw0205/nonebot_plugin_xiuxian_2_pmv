@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_puppet.operation_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_puppet.transaction_service import (
     PuppetOperationService,
 )
 from tests.test_db_backend import db_backend

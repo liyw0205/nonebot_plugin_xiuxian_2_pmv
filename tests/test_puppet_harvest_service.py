@@ -9,7 +9,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_puppet.harvest_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_puppet.transaction_service import (
     PuppetHarvestReward,
     PuppetHarvestService,
 )
