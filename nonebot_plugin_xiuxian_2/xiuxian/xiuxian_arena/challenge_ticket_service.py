@@ -125,7 +125,7 @@ class ArenaChallengeTicketService:
                     "WHERE user_id=%s AND goods_id=%s",
                     (user_id, item_id),
                 ).fetchone()
-                if arena is None or tuple(map(int, arena)) != (
+                if arena is None or tuple(int(value or 0) for value in arena) != (
                     expected_challenges_used,
                     expected_extra_challenges,
                 ):
@@ -160,10 +160,11 @@ class ArenaChallengeTicketService:
                 if updated.rowcount != 1:
                     conn.rollback()
                     return result("state_changed")
+                # Historical rows may store daily counters as text; cast before compare.
                 updated = conn.execute(
                     "UPDATE player_data.arena SET daily_challenges_used=%s WHERE user_id=%s "
-                    "AND COALESCE(daily_challenges_used,0)=%s "
-                    "AND COALESCE(daily_extra_challenges,0)=%s",
+                    "AND CAST(COALESCE(daily_challenges_used,0) AS INTEGER)=%s "
+                    "AND CAST(COALESCE(daily_extra_challenges,0) AS INTEGER)=%s",
                     (
                         challenges_used,
                         user_id,
