@@ -52,15 +52,17 @@ def _runtime_gate(feature: str) -> tuple[bool, str, float]:
 
 
 def _eternal_boss_max_hp() -> int:
+    # SQLite INTEGER is signed 64-bit; clamp so activity/world-boss co-damage can persist.
+    sqlite_max = 2**63 - 1
     try:
         from ..xiuxian_boss.makeboss import get_boss_exp
 
         info = get_boss_exp("永恒境")
         if info and info.get("总血量"):
-            return max(1, int(info["总血量"]))
+            return max(1, min(int(info["总血量"]), sqlite_max))
     except Exception as e:
         logger.warning(f"读取永恒境首领血量失败: {e}")
-    return 10**18
+    return min(10**18, sqlite_max)
 
 
 def normalize_activity_boss(raw: dict, index: int, key: str) -> dict:

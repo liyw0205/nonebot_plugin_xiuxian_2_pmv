@@ -392,6 +392,21 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
 
     user_id = user_info['user_id']
 
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_key = event_id or str(time_module.time_ns())
+    operation_id = f"world-boss-battle:{operation_key}:{user_id}"
+    # 先查 operation：同事件重放必须在限购/重伤/境界前置拦截之前回放。
+    previous_settlement = world_boss_battle_settlement_service.get_result(operation_id)
+    if previous_settlement is not None:
+        msg = (
+            "该讨伐请求已经处理，无需重复提交。\n"
+            f"当前体力：{previous_settlement.stamina}，今日讨伐：{previous_settlement.battle_count}次"
+        )
+        if previous_settlement.activity_lines:
+            msg += "\n" + "\n".join(previous_settlement.activity_lines)
+        await handle_send(bot, event, msg, md_type="世界BOSS", k1="列表", v1="世界BOSS列表", k2="信息", v2="世界BOSS信息", k3="状态", v3="我的状态")
+        await battle.finish()
+
     # 检查每日讨伐次数限制
     today_battle_count = boss_limit.get_battle_count(user_id)
     battle_count = 30
@@ -542,8 +557,6 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await handle_send(bot, event, "你没有足够的体力，请等待体力恢复后再试！")
         await battle.finish()
 
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_key = event_id or str(time_module.time_ns())
     checked_at = sql_message.get_last_check_info_time(user_id)
 
     battle_flag[GLOBAL_BOSS_KEY] = True
@@ -720,7 +733,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
 
     now = datetime.now()
     settlement = world_boss_battle_settlement_service.settle(
-        operation_id=f"world-boss-battle:{operation_key}:{user_id}",
+        operation_id=operation_id,
         user_id=user_id,
         expected_bosses=expected_bosses,
         settled_bosses=settled_bosses,
@@ -765,6 +778,16 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     if settlement.status == "inventory_full":
         battle_flag[GLOBAL_BOSS_KEY] = False
         await handle_send(bot, event, "世界BOSS掉落物背包已满，请整理后重新讨伐！")
+        await battle.finish()
+    if settlement.status == "duplicate":
+        battle_flag[GLOBAL_BOSS_KEY] = False
+        msg = (
+            "该讨伐请求已经处理，无需重复提交。\n"
+            f"当前体力：{settlement.stamina}，今日讨伐：{settlement.battle_count}次"
+        )
+        if settlement.activity_lines:
+            msg += "\n" + "\n".join(settlement.activity_lines)
+        await handle_send(bot, event, msg, md_type="世界BOSS", k1="列表", v1="世界BOSS列表", k2="信息", v2="世界BOSS信息", k3="状态", v3="我的状态")
         await battle.finish()
     if not settlement.succeeded:
         battle_flag[GLOBAL_BOSS_KEY] = False
@@ -1322,54 +1345,65 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await boss_integral_use.finish()
         
     if is_in:
-        # 检查每周限购
+        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        operation_id = (
+            f"boss-purchase:{event_id}:{user_id}"
+            if event_id
+            else f"boss-purchase:{time_module.time_ns()}:{user_id}"
+        )
+        # 先走 operation：重放必须在限购/积分前置拦截之前完成。
         already_purchased = boss_limit.get_weekly_purchases(user_id, shop_id)
         max_quantity = weekly_limit - already_purchased
-        if quantity > max_quantity:
-            quantity = max_quantity
-        if quantity <= 0:
+        request_quantity = quantity
+        if request_quantity > max_quantity:
+            request_quantity = max_quantity
+        if request_quantity <= 0 and not event_id:
             msg = f"{item_info['name']}已到限购无法再购买！"
             await handle_send(bot, event, msg, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")
             await boss_integral_use.finish()
-            
+        if request_quantity <= 0:
+            request_quantity = max(1, quantity)
+
         user_boss_fight_info = get_user_boss_fight_info(user_id)
-        total_cost = cost * quantity
-        
-        if user_boss_fight_info['boss_integral'] < total_cost:
-            msg = f"道友的世界积分不满足兑换条件呢"
+        boss_data = boss_limit._load_data(user_id)
+        purchase_result = boss_purchase_service.purchase(
+            operation_id,
+            user_id,
+            item_id,
+            item_info["name"],
+            item_info["type"],
+            request_quantity,
+            cost,
+            weekly_limit,
+            user_boss_fight_info["boss_integral"],
+            boss_data.get("weekly_purchases", {}),
+            XiuConfig().max_goods_num,
+        )
+        if purchase_result.status == "duplicate":
+            msg = f"道友成功兑换获得：{item_info['name']}{purchase_result.quantity}个"
             await handle_send(bot, event, msg, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")
             await boss_integral_use.finish()
-        else:
-            boss_data = boss_limit._load_data(user_id)
-            event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-            operation_id = (
-                f"boss-purchase:{event_id}:{user_id}"
-                if event_id
-                else f"boss-purchase:{time_module.time_ns()}:{user_id}"
-            )
-            purchase_result = boss_purchase_service.purchase(
-                operation_id, user_id, item_id, item_info['name'], item_info['type'], quantity,
-                cost, weekly_limit, user_boss_fight_info['boss_integral'],
-                boss_data.get('weekly_purchases', {}), XiuConfig().max_goods_num,
-            )
-            if purchase_result.status == "integral_insufficient":
-                await handle_send(bot, event, "世界积分状态已变化，当前积分不足！")
-                await boss_integral_use.finish()
-            if purchase_result.status == "limit_reached":
-                await handle_send(bot, event, f"{item_info['name']}已到限购无法再购买！")
-                await boss_integral_use.finish()
-            if purchase_result.status == "inventory_full":
-                await handle_send(bot, event, f"{item_info['name']}持有数量已达上限！")
-                await boss_integral_use.finish()
-            if purchase_result.status == "state_changed":
-                await handle_send(bot, event, "世界BOSS兑换状态已变化，请重新兑换！")
-                await boss_integral_use.finish()
-            if purchase_result.status == "user_missing":
-                await handle_send(bot, event, "未找到道友数据，世界BOSS兑换失败！")
-                await boss_integral_use.finish()
-            msg = f"道友成功兑换获得：{item_info['name']}{quantity}个"
-            await handle_send(bot, event, msg, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")
+        if purchase_result.status == "integral_insufficient":
+            await handle_send(bot, event, "世界积分状态已变化，当前积分不足！")
             await boss_integral_use.finish()
+        if purchase_result.status == "limit_reached":
+            await handle_send(bot, event, f"{item_info['name']}已到限购无法再购买！")
+            await boss_integral_use.finish()
+        if purchase_result.status == "inventory_full":
+            await handle_send(bot, event, f"{item_info['name']}持有数量已达上限！")
+            await boss_integral_use.finish()
+        if purchase_result.status == "state_changed":
+            await handle_send(bot, event, "世界BOSS兑换状态已变化，请重新兑换！")
+            await boss_integral_use.finish()
+        if purchase_result.status == "user_missing":
+            await handle_send(bot, event, "未找到道友数据，世界BOSS兑换失败！")
+            await boss_integral_use.finish()
+        if purchase_result.status != "applied":
+            await handle_send(bot, event, "世界BOSS兑换状态已变化，请重新兑换！")
+            await boss_integral_use.finish()
+        msg = f"道友成功兑换获得：{item_info['name']}{purchase_result.quantity}个"
+        await handle_send(bot, event, msg, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")
+        await boss_integral_use.finish()
     else:
         msg = f"该编号不在商品列表内哦，请检查后再兑换"
         await handle_send(bot, event, msg, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")

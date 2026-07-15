@@ -69,10 +69,12 @@ class BossPurchaseService:
         weekly = normalize_weekly_purchases(expected_weekly_purchases, today)
         if not operation_id or quantity <= 0 or min(item_id, unit_cost, weekly_limit, expected_integral, max_goods_num) < 0:
             raise ValueError("valid operation, item, quantity and purchase limits are required")
+        # Request identity only — integral/weekly snapshots are concurrency checks.
         payload = json.dumps(
-            [user_id, item_id, item_name, item_type, quantity, unit_cost, weekly_limit, expected_integral, weekly, max_goods_num],
+            [user_id, item_id, item_name, item_type, quantity, unit_cost, weekly_limit, max_goods_num],
             ensure_ascii=True,
             sort_keys=True,
+            separators=(",", ":"),
         )
 
         def rejected(status: str, purchased=0, inventory=0) -> BossPurchaseResult:

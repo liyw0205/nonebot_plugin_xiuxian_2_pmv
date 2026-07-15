@@ -17,14 +17,24 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_boss.old_boss_info import (
 class BossStateStoreTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
-        self.path = Path(self.temp_dir.name) / "boss_info.json"
+        root = Path(self.temp_dir.name)
+        self.path = root / "boss_info.json"
+        self.player_db = root / "player.sqlite3"
+        # isolate world_boss_state from the live host database
+        self._paths_patch = patch(
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_boss.old_boss_info.get_paths",
+            return_value=type("P", (), {"player_db": self.player_db})(),
+        )
+        self._paths_patch.start()
 
     def tearDown(self) -> None:
+        self._paths_patch.stop()
         self.temp_dir.cleanup()
 
     def test_missing_state_is_initialized_and_round_trips(self) -> None:
         store = OLD_BOSS_INFO(self.path)
-        self.assertEqual(store.read_boss_info(), {})
+        # DB truth always exposes the global key (empty list when uninitialized).
+        self.assertEqual(store.read_boss_info(), {"global": []})
         self.assertFalse(self.path.exists())
         self.assertTrue(store.save_boss({"global": [{"name": "测试Boss"}]}))
         self.assertEqual(
@@ -37,7 +47,7 @@ class BossStateStoreTests(unittest.TestCase):
 
         store = OLD_BOSS_INFO(self.path)
 
-        self.assertEqual(store.read_boss_info(), {})
+        self.assertEqual(store.read_boss_info(), {"global": []})
         self.assertTrue(list(self.path.parent.glob("boss_info.json.invalid.*.bak")))
 
     def test_wrong_root_type_is_backed_up_before_reset(self) -> None:
@@ -45,7 +55,7 @@ class BossStateStoreTests(unittest.TestCase):
 
         store = OLD_BOSS_INFO(self.path)
 
-        self.assertEqual(store.read_boss_info(), {})
+        self.assertEqual(store.read_boss_info(), {"global": []})
         self.assertTrue(list(self.path.parent.glob("boss_info.json.invalid.*.bak")))
 
     def test_two_instances_merge_against_latest_disk_state(self) -> None:

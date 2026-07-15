@@ -53,16 +53,16 @@ def create_databases(tmp_path):
     return game, player, activity
 
 
-def settle(service, operation_id="op-1", settled=None, item=None, activities=None, killed=False):
+def settle(service, operation_id="op-1", settled=None, item=None, activities=None, killed=False, boss_index=0, stamina_cost=10):
     settled = settled or [{**OLD_BOSS, "气血": 800}]
     return service.settle(
         operation_id=operation_id,
         user_id="10001",
         expected_bosses=[OLD_BOSS],
         settled_bosses=settled,
-        boss_index=0,
+        boss_index=boss_index,
         expected_stamina=100,
-        stamina_cost=10,
+        stamina_cost=stamina_cost,
         expected_hp=2000,
         expected_mp=500,
         final_hp=600,
@@ -133,7 +133,8 @@ def test_operation_replay_is_idempotent_and_conflict_is_rejected(tmp_path):
     first = settle(service)
     second = settle(service)
     assert (first.status, second.status) == ("applied", "duplicate")
-    assert settle(service, settled=[{**OLD_BOSS, "气血": 700}]).status == "state_changed"
+    # request identity differs (stamina_cost); mutable settled snapshot is not part of payload key
+    assert settle(service, stamina_cost=11).status == "state_changed"
     conn = sqlite3.connect(player)
     assert conn.execute("SELECT boss_battle_count FROM boss").fetchone()[0] == 3
     conn.close()

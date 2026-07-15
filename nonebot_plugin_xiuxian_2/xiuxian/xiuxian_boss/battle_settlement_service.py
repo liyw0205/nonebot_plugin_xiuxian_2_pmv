@@ -56,6 +56,35 @@ class WorldBossBattleSettlementService:
             return default
         return parsed if isinstance(parsed, type(default)) else default
 
+    def get_result(self, operation_id: str) -> WorldBossBattleSettlementResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS world_boss_battle_operations(operation_id TEXT PRIMARY KEY,"
+                "payload TEXT NOT NULL,boss_hp INTEGER NOT NULL,stamina INTEGER NOT NULL,battle_count INTEGER NOT NULL,"
+                "stone INTEGER NOT NULL,exp INTEGER NOT NULL,integral INTEGER NOT NULL,activity_lines TEXT NOT NULL,"
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT boss_hp,stamina,battle_count,stone,exp,integral,activity_lines "
+                "FROM world_boss_battle_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return WorldBossBattleSettlementResult(
+                "duplicate",
+                int(previous[0]),
+                int(previous[1]),
+                int(previous[2]),
+                int(previous[3]),
+                int(previous[4]),
+                int(previous[5]),
+                tuple(self._loads(previous[6], [])),
+            )
+
     @staticmethod
     def _ensure_column(conn, schema: str, table: str, field: str, data_type: str) -> None:
         columns = {str(row[1]) for row in conn.execute(f"PRAGMA {schema}.table_info({table})").fetchall()}
@@ -110,6 +139,19 @@ class WorldBossBattleSettlementService:
     def _apply_activity_damage(cls, conn, user_id: str, raw_damage: int, activities: list[dict]) -> list[str]:
         if not activities:
             return []
+        # SQLite INTEGER is signed 64-bit; activity max_hp derived from eternal-realm
+        # totals can overflow and abort the whole world-boss settlement.
+        sqlite_max = 2**63 - 1
+
+        def _safe_int(value, default=0) -> int:
+            try:
+                number = int(value)
+            except (TypeError, ValueError):
+                number = int(default)
+            if number < 0:
+                return 0
+            return min(number, sqlite_max)
+
         conn.execute(
             "CREATE TABLE IF NOT EXISTS activity.activity_boss_state(activity_key TEXT PRIMARY KEY,"
             "hp_left INTEGER NOT NULL,max_hp INTEGER NOT NULL,update_time TEXT DEFAULT '')"
@@ -141,22 +183,23 @@ class WorldBossBattleSettlementService:
             ).fetchone()[0]
             if int(used) >= limit:
                 continue
-            max_hp = max(1, int(activity["max_hp"]))
+            max_hp = max(1, _safe_int(activity.get("max_hp"), 1))
             row = conn.execute(
                 "SELECT hp_left,max_hp FROM activity.activity_boss_state WHERE activity_key=%s", (key,)
             ).fetchone()
-            hp_left = max_hp if row is None else max(0, int(row[0]))
+            hp_left = max_hp if row is None else max(0, _safe_int(row[0], 0))
             if row is None:
                 conn.execute(
                     "INSERT INTO activity.activity_boss_state(activity_key,hp_left,max_hp,update_time) VALUES (%s,%s,%s,%s)",
                     (key, max_hp, max_hp, now_text),
                 )
             multiplier = max(0.0, float(activity.get("multiplier", 1.0)))
-            cap = max(1, int(max_hp * float(activity.get("hit_hp_cap_ratio", 0.01))))
-            damage = min(max(1, int(raw_damage * multiplier)), cap, hp_left)
+            cap = max(1, _safe_int(max_hp * float(activity.get("hit_hp_cap_ratio", 0.01)), 1))
+            scaled = max(1, _safe_int(raw_damage * multiplier, 1))
+            damage = min(scaled, cap, hp_left, sqlite_max)
             if damage <= 0:
                 continue
-            new_hp = hp_left - damage
+            new_hp = max(0, hp_left - damage)
             conn.execute(
                 "UPDATE activity.activity_boss_state SET hp_left=%s,max_hp=%s,update_time=%s WHERE activity_key=%s",
                 (new_hp, max_hp, now_text, key),
@@ -164,8 +207,9 @@ class WorldBossBattleSettlementService:
             conn.execute(
                 "INSERT INTO activity.activity_boss_damage(activity_key,user_id,total_damage,update_time) "
                 "VALUES (%s,%s,%s,%s) ON CONFLICT(activity_key,user_id) DO UPDATE SET "
-                "total_damage=activity_boss_damage.total_damage+excluded.total_damage,update_time=excluded.update_time",
-                (key, user_id, damage, now_text),
+                "total_damage=MIN(%s, COALESCE(activity_boss_damage.total_damage,0)+excluded.total_damage),"
+                "update_time=excluded.update_time",
+                (key, user_id, damage, now_text, sqlite_max),
             )
             conn.execute(
                 "INSERT INTO activity.activity_boss_fight_log(activity_key,user_id,damage,fight_date,source,create_time) "
@@ -228,17 +272,13 @@ class WorldBossBattleSettlementService:
         if not operation_id or not (0 <= boss_index < len(expected_bosses)):
             raise ValueError("valid operation and boss index are required")
         payload_data = {
-            "user_id": user_id, "expected_bosses": expected_bosses, "settled_bosses": settled_bosses,
-            "boss_index": boss_index, "expected_stamina": int(expected_stamina), "stamina_cost": int(stamina_cost),
-            "expected_hp": int(expected_hp), "expected_mp": int(expected_mp), "final_hp": int(final_hp),
-            "final_mp": int(final_mp), "expected_exp": int(expected_exp), "exp_reward": int(exp_reward),
-            "expected_stone": int(expected_stone), "stone_reward": int(stone_reward),
-            "expected_daily_stone": int(expected_daily_stone), "expected_daily_integral": int(expected_daily_integral),
-            "expected_total_integral": int(expected_total_integral), "integral_reward": int(integral_reward),
-            "expected_battle_count": int(expected_battle_count), "battle_limit": int(battle_limit),
-            "expected_checked_at": str(expected_checked_at or ""), "checked_at": str(checked_at), "item": item,
-            "max_goods_num": int(max_goods_num), "actual_damage": int(actual_damage), "killed": bool(killed),
-            "daily_period": str(daily_period), "weekly_period": str(weekly_period), "activity_bosses": activity_bosses,
+            "user_id": user_id,
+            "boss_index": boss_index,
+            "stamina_cost": int(stamina_cost),
+            "battle_limit": int(battle_limit),
+            "max_goods_num": int(max_goods_num),
+            "daily_period": str(daily_period),
+            "weekly_period": str(weekly_period),
         }
         payload = self._json(payload_data)
 

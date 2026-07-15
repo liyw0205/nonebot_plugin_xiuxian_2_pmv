@@ -55,10 +55,11 @@ class BossBattleCostService:
         checked_at = str(checked_at or datetime.now())
         if not operation_id or min(stamina_cost, battle_limit, expected_stamina, expected_hp, expected_exp, expected_battle_count) < 0:
             raise ValueError("valid operation and non-negative battle state are required")
+        # Request identity only — stamina/hp/battle counters are concurrency checks.
         payload = json.dumps(
-            [user_id, stamina_cost, battle_limit, expected_stamina, expected_hp, expected_exp,
-             expected_battle_count, expected_checked_at],
+            [user_id, stamina_cost, battle_limit],
             ensure_ascii=True,
+            separators=(",", ":"),
         )
 
         def rejected(status: str) -> BossBattleCostResult:

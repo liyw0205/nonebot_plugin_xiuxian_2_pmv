@@ -39,11 +39,29 @@ class BossPurchaseServiceTests(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def purchase(self, operation_id="purchase", **overrides):
-        values = dict(quantity=2, unit_cost=10, weekly_limit=5, integral=100, weekly=self.weekly, max_goods=99)
+        values = dict(
+            quantity=2,
+            unit_cost=10,
+            weekly_limit=5,
+            integral=100,
+            weekly=self.weekly,
+            max_goods=99,
+            today=date(2026, 7, 13),
+        )
         values.update(overrides)
         return self.service.purchase(
-            operation_id, "user", 1, "item", "type", values["quantity"], values["unit_cost"],
-            values["weekly_limit"], values["integral"], values["weekly"], values["max_goods"],
+            operation_id,
+            "user",
+            1,
+            "item",
+            "type",
+            values["quantity"],
+            values["unit_cost"],
+            values["weekly_limit"],
+            values["integral"],
+            values["weekly"],
+            values["max_goods"],
+            today=values["today"],
         )
 
     def state(self):
