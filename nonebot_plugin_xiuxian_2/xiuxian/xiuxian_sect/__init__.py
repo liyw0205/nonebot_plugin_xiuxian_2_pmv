@@ -737,12 +737,10 @@ async def sect_fairyland_claim_(bot: Bot, event: GroupMessageEvent | PrivateMess
         await sect_fairyland_claim.finish()
 
     today = datetime.now().strftime("%Y-%m-%d")
-    if _get_fairyland_last_claim(user_info["user_id"], sect_id) == today:
-        await handle_send(bot, event, "今日已经完成过宗门淬体修行。", md_type="宗门", k1="炼体堂", v1="宗门炼体堂", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
-        await sect_fairyland_claim.finish()
-
+    # 事件幂等优先：同 event 必须先走 operation，避免“今日已完成”前置拦截。
+    operation_id = _sect_operation_id(event, "fairyland_claim", f"{user_info['user_id']}:{sect_id}:{today}")
     claim = fairyland_claim_service.claim(
-        f"sect-fairyland:{user_info['user_id']}:{sect_id}:{today}",
+        operation_id,
         user_info["user_id"],
         sect_id,
         today,
@@ -751,6 +749,19 @@ async def sect_fairyland_claim_(bot: Bot, event: GroupMessageEvent | PrivateMess
     )
     if claim.status == "already_claimed":
         await handle_send(bot, event, "今日已经完成过宗门淬体修行。", md_type="宗门", k1="炼体堂", v1="宗门炼体堂", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
+        await sect_fairyland_claim.finish()
+    if claim.status == "duplicate":
+        result = claim.detail
+        msg = (
+            f"宗门淬体修行完成！\n"
+            f"炼体堂：{level}级【{conf['name']}】\n"
+            f"获得炼体结算时间：{conf['minutes']}分钟\n"
+            f"宗门炼体堂加成：{float(result.get('sect_bonus', 0) or 0) * 100:.0f}%\n"
+            f"本次获得炼体气血：{number_to(result.get('real_gain', 0))}\n"
+            f"当前炼体气血：{number_to(result.get('new_hp', 0))}\n"
+            f"该淬体请求已经处理，无需重复提交。"
+        )
+        await handle_send(bot, event, msg, md_type="宗门", k1="炼体堂", v1="宗门炼体堂", k2="炼体", v2="我的炼体", k3="宗门", v3="我的宗门")
         await sect_fairyland_claim.finish()
     if not claim.succeeded:
         raise RuntimeError(f"unexpected fairyland claim status: {claim.status}")
@@ -3280,58 +3291,64 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await sect_buy.finish()
 
     item_data = shop_items[shop_id]
-    sect_contribution = user_info['sect_contribution']
-
-    # 检查贡献度是否足够
-    total_cost = item_data["cost"] * quantity
-    if sect_contribution < total_cost:
-        msg = f"贡献度不足！需要{number_to(total_cost)}点，当前拥有{number_to(sect_contribution)}点"
-        await handle_send(bot, event, msg, md_type="宗门", k1="捐献", v1="宗门捐献", k2="宗门", v2="我的宗门", k3="商店", v3="宗门商店")
-        await sect_buy.finish()
-
-    # 检查封锁
-    if sect_info['closed']:
-        msg = "宗门已封闭，无法进行兑换。"
+    item_info = items.get_data_by_item_id(shop_id)
+    if not item_info:
+        msg = "商品数据不存在！"
         await handle_send(bot, event, msg)
         await sect_buy.finish()
 
-    # 检查限购
+    # 先走 purchase operation，避免成功后贡献/限购前置拦截挡住同事件重放。
     already_purchased = get_sect_weekly_purchases(user_id, shop_id)
-    if already_purchased + quantity > item_data["weekly_limit"]:
-        msg = (
-            f"该商品每周限购{item_data['weekly_limit']}个\n"
-            f"本周已购买{already_purchased}个\n"
-            f"无法再购买{quantity}个！"
-        )
-        await handle_send(bot, event, msg, md_type="宗门", k1="兑换", v1="宗门兑换", k2="宗门", v2="我的宗门", k3="商店", v3="宗门商店")
-        await sect_buy.finish()
-
-    item_info = items.get_data_by_item_id(shop_id)
     result = sect_shop_purchase_service.purchase(
         _sect_operation_id(event, "shop_purchase", f"{user_id}:{shop_id}"),
         user_id, user_info['sect_id'], shop_id, item_info["name"], item_info["type"],
         quantity, item_data["cost"], item_data["weekly_limit"], already_purchased,
         XiuConfig().max_goods_num,
     )
+    total_cost = item_data["cost"] * quantity
+    if result.status == "duplicate":
+        msg = (
+            f"成功兑换{item_info['name']}×{quantity}，消耗{number_to(result.cost or total_cost)}宗门贡献度！\n"
+            f"该兑换请求已经处理，无需重复提交。"
+        )
+        await handle_send(bot, event, msg, md_type="宗门", k1="兑换", v1="宗门兑换", k2="宗门", v2="我的宗门", k3="商店", v3="宗门商店")
+        await sect_buy.finish()
     if not result.succeeded:
         failure_messages = {
             "membership_changed": "宗门成员状态已变化，请重新查看宗门信息。",
             "sect_closed": "宗门已封闭，无法进行兑换。",
-            "limit_reached": "该商品已达到本周限购数量。",
-            "contribution_insufficient": "宗门贡献度不足，无法兑换。",
+            "limit_reached": (
+                f"该商品每周限购{item_data['weekly_limit']}个\n"
+                f"本周已购买{result.purchased}个\n"
+                f"无法再购买{quantity}个！"
+            ),
+            "contribution_insufficient": (
+                f"贡献度不足！需要{number_to(total_cost)}点，当前拥有{number_to(result.contribution)}点"
+            ),
             "materials_insufficient": "宗门资材不足，无法兑换。",
             "inventory_full": "背包已满，无法兑换。",
             "state_changed": "兑换状态已变化，请重试。",
         }
-        await handle_send(bot, event, failure_messages.get(result.status, "兑换失败，请稍后重试。"))
+        await handle_send(
+            bot,
+            event,
+            failure_messages.get(result.status, "兑换失败，请稍后重试。"),
+            md_type="宗门",
+            k1="兑换",
+            v1="宗门兑换",
+            k2="宗门",
+            v2="我的宗门",
+            k3="商店",
+            v3="宗门商店",
+        )
         await sect_buy.finish()
     safe_log_economy_change(
         user_id=user_id,
         sect_id=user_info["sect_id"],
         source="sect",
         action="shop_exchange",
-        sect_contribution_delta=-total_cost,
-        sect_materials_delta=-total_cost,
+        sect_contribution_delta=-result.cost,
+        sect_materials_delta=-result.cost,
         item_delta=[
             {
                 "id": shop_id,
@@ -3343,7 +3360,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         detail={"shop_id": shop_id, "quantity": quantity},
     )
 
-    msg = f"成功兑换{item_info['name']}×{quantity}，消耗{number_to(total_cost)}宗门贡献度！"
+    msg = f"成功兑换{item_info['name']}×{quantity}，消耗{number_to(result.cost)}宗门贡献度！"
     await handle_send(bot, event, msg, md_type="宗门", k1="兑换", v1="宗门兑换", k2="宗门", v2="我的宗门", k3="商店", v3="宗门商店")
 
     await sect_buy.finish()

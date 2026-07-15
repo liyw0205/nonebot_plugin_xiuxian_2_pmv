@@ -95,7 +95,19 @@ class SectShopPurchaseService:
                 if user is None or sect is None or int(user[0] or 0) != sect_id:
                     conn.rollback()
                     return SectShopPurchaseResult("membership_changed")
-                contribution, materials = int(user[1]), int(sect[0])
+                # Historical sect_materials can exceed SQLite INTEGER; clamp for safe compare/write.
+                sqlite_max = 2**63 - 1
+
+                def _safe_int(value, default=0) -> int:
+                    try:
+                        number = int(float(value))
+                    except (TypeError, ValueError):
+                        number = int(default)
+                    if number < 0:
+                        return 0
+                    return min(number, sqlite_max)
+
+                contribution, materials = _safe_int(user[1]), _safe_int(sect[0])
                 if int(sect[1]):
                     conn.rollback()
                     return SectShopPurchaseResult("sect_closed", contribution=contribution, materials=materials)
@@ -125,8 +137,8 @@ class SectShopPurchaseService:
                     conn.rollback()
                     return SectShopPurchaseResult("inventory_full", contribution=contribution, materials=materials, purchased=purchased)
 
-                contribution -= cost
-                materials -= cost
+                contribution = _safe_int(contribution - cost)
+                materials = _safe_int(materials - cost)
                 purchased += quantity
                 conn.execute("UPDATE user_xiuxian SET sect_contribution=%s WHERE user_id=%s", (contribution, user_id))
                 conn.execute("UPDATE sects SET sect_materials=%s WHERE sect_id=%s", (materials, sect_id))
