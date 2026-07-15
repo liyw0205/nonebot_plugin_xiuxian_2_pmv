@@ -124,7 +124,10 @@ async def claim_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         else:
             msg = "当前没有可领取的任务奖励。\n该领奖请求已经处理，无需重复提交。"
     else:
-        msg = task_manager.claim_rewards(operation_id, user_id, cycle)
+        try:
+            msg = task_manager.claim_rewards(operation_id, user_id, cycle)
+        except Exception:
+            msg = "任务奖励领取失败，请稍后重试。"
     await handle_send(
         bot,
         event,
