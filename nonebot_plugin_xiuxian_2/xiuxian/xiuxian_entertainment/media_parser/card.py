@@ -206,13 +206,14 @@ def render_media_card(
     title_lines = _wrap(font_title, title, content_w, max_lines=3)
     author_line = f"@{author}" if author else ""
     foot_bits = []
-    if has_video or (meta.get("video_urls") or []):
-        foot_bits.append("含视频")
-        n = len(meta.get("video_urls") or [])
-        if n > 1:
-            foot_bits[-1] = f"含视频×{n}"
-    if images:
-        foot_bits.append(f"图{len(images)}张")
+    videos = list(meta.get("video_urls") or [])
+    # 卡片脚注：有视频时只说「视频」，不要把多清晰度副本显示成「含视频×3」
+    if has_video or videos:
+        foot_bits.append("视频")
+    elif images:
+        # 纯图帖才显示张数；视频帖的封面不算「图N张」
+        n = len(images)
+        foot_bits.append("图片" if n <= 1 else f"图{n}张")
     if desc:
         foot_bits.append(desc[:40] + ("…" if len(desc) > 40 else ""))
     foot = " · ".join(foot_bits) if foot_bits else "链接解析"

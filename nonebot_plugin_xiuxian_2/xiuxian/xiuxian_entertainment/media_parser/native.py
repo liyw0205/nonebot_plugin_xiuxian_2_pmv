@@ -837,7 +837,11 @@ def parse_douyin(url: str) -> dict[str, Any]:
 
 
 def parse_kuaishou(url: str) -> dict[str, Any]:
-    """快手：优先 window.INIT_STATE 的 mainMvUrls/coverUrls/caption。"""
+    """快手：优先 window.INIT_STATE 的 mainMvUrls/coverUrls/caption。
+
+    注意：INIT_STATE 常带同一作品的多清晰度 mp4 + 多 CDN 封面，
+    不是 3 个视频/6 张图。展示与发送只保留主视频 + 主封面。
+    """
     meta = _base_meta("kuaishou", url)
     final = expand_url(url)
     meta["url"] = final
@@ -858,38 +862,70 @@ def parse_kuaishou(url: str) -> dict[str, Any]:
 
     videos: list[str] = []
     images: list[str] = []
-    _walk_cdn_urls(state, {"mainMvUrls", "mp4Url", "photoUrl"}, videos)
-    _walk_cdn_urls(state, {"coverUrls", "webpCoverUrls", "coverUrl"}, images)
-    # 再捞 manifest representation 里的 mp4
-    found: list[str] = []
-    _collect_http_urls(state, found)
-    for u in found:
-        low = u.lower()
-        if ".mp4" in low and u.startswith("http"):
-            videos.append(u)
-        elif any(x in low for x in (".jpg", ".jpeg", ".png", ".webp")) and "uhead" not in low:
-            images.append(u)
+    # 优先主视频字段，避免把所有清晰度/CDN 副本都当成多个视频
+    _walk_cdn_urls(state, {"mainMvUrls"}, videos)
+    if not videos:
+        _walk_cdn_urls(state, {"mp4Url", "photoUrl"}, videos)
+    _walk_cdn_urls(state, {"coverUrls", "coverUrl"}, images)
+    if not images:
+        _walk_cdn_urls(state, {"webpCoverUrls"}, images)
 
-    # 去重保序；优先 kwimgs/yximgs 等相对完整的直链
-    def _rank(u: str) -> tuple[int, int]:
+    # 仅在主字段为空时，才从全树兜底捞 mp4/封面
+    if not videos or not images:
+        found: list[str] = []
+        _collect_http_urls(state, found)
+        for u in found:
+            low = u.lower()
+            if not videos and ".mp4" in low and u.startswith("http"):
+                videos.append(u)
+            elif (
+                not images
+                and any(x in low for x in (".jpg", ".jpeg", ".png", ".webp"))
+                and "uhead" not in low
+                and "emotion" not in low
+            ):
+                images.append(u)
+
+    def _video_rank(u: str) -> tuple[int, int]:
         low = u.lower()
         score = 0
-        if "mainmv" in low or "clientcachekey" in low:
-            score += 2
+        # 主播放链通常带 pkey / clientCacheKey；Ultra/High 为转码副本
         if "pkey=" in low:
+            score += 3
+        if "clientcachekey" in low or "mainmv" in low:
+            score += 2
+        if "kwaicdn.com" in low or "kwimgs.com" in low or "yximgs.com" in low:
             score += 1
-        if "kwimgs.com" in low or "yximgs.com" in low or "kwaicdn.com" in low:
-            score += 1
+        if any(x in low for x in ("ultrav", "highv", "hd15", "photo-video-mz")):
+            score -= 1
         return (-score, -len(u))
 
-    videos = sorted(dict.fromkeys(videos), key=_rank)
-    images = list(dict.fromkeys(images))
-    # 去掉头像类
-    images = [
-        u
-        for u in images
-        if "uhead" not in u.lower() and "/bg" not in urlparse(u).path.lower()
-    ]
+    def _image_rank(u: str) -> tuple[int, int]:
+        low = u.lower()
+        score = 0
+        if "emotion" in low or "emoji" in low:
+            score -= 10
+        if "uhead" in low or "/bg" in urlparse(u).path.lower():
+            score -= 5
+        if any(x in low for x in (".jpg", ".jpeg", ".png", ".webp")):
+            score += 1
+        if "upic" in low or "cover" in low:
+            score += 2
+        return (-score, -len(u))
+
+    videos = sorted(dict.fromkeys(v for v in videos if v.startswith("http")), key=_video_rank)
+    images = sorted(
+        dict.fromkeys(
+            u
+            for u in images
+            if u.startswith("http")
+            and "uhead" not in u.lower()
+            and "emotion" not in u.lower()
+            and "emoji" not in u.lower()
+            and "/bg" not in urlparse(u).path.lower()
+        ),
+        key=_image_rank,
+    )
 
     caption = _walk_pick_str(state, {"caption"})
     if not caption:
@@ -907,12 +943,18 @@ def parse_kuaishou(url: str) -> dict[str, Any]:
     meta["title"] = caption or "快手视频"
     meta["author"] = author or ""
     meta["desc"] = (caption or "")[:400]
-    meta["video_urls"] = videos[:3]
-    meta["image_urls"] = images[:6]
+    # 单作品：只保留最佳 1 路视频 + 1 张封面（避免卡片显示 视频×3 图6张）
+    meta["video_urls"] = videos[:1]
+    meta["image_urls"] = images[:1]
     if not meta["video_urls"] and not meta["image_urls"]:
-        # 最后回退
         fallback = _parse_html_og("kuaishou", final)
         if fallback.get("video_urls") or fallback.get("image_urls"):
+            # 回退也收敛
+            fb_v = list(fallback.get("video_urls") or [])[:1]
+            fb_i = list(fallback.get("image_urls") or [])[:1]
+            fallback["video_urls"] = fb_v
+            fallback["image_urls"] = fb_i
+            fallback["source_url"] = url
             return fallback
         meta["error"] = "快手未解析到可发送媒体（可能风控/登录）"
     return meta
