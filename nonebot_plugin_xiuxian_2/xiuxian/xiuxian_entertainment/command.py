@@ -230,7 +230,7 @@ async def fun_media_send_parse_result(
     if fun_media_should_skip_duplicate_event(event):
         logger.debug(f"娱乐媒体解析：跳过重复消息 {_fun_media_event_dedupe_key(event)}")
         return
-    texts, images, videos = await run_parse_and_build_messages(source_text)
+    texts, images, videos, cards = await run_parse_and_build_messages(source_text)
     images = dedupe_media_urls_preserve_order(images)
     videos = dedupe_media_urls_preserve_order(videos)
     body = "\n\n".join(texts)
@@ -245,6 +245,12 @@ async def fun_media_send_parse_result(
             k2="链接解析",
             v2="链接解析",
         )
+    # 先发卡片（封面摘要），再发原图/视频
+    for card in cards:
+        try:
+            await send_entertainment_media(bot, event, card, media_type="图片")
+        except Exception as e:
+            logger.debug(f"发送解析卡片失败 {card}: {e}")
     for img in images:
         try:
             await send_entertainment_media(
