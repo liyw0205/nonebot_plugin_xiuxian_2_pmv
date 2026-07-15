@@ -49,9 +49,12 @@ class DongfuPlantServiceTests(unittest.TestCase):
         self.assertEqual((seed, slots[0]["seed_id"], planting, seed_id), (1, 21001, 1, 21001))
 
     def test_duplicate_and_state_rejections_do_not_consume_more_seeds(self):
-        first, duplicate = self.plant("repeat"), self.plant("repeat")
+        first = self.plant("repeat")
+        # mutable expected_slots/times must not break same-op replay
+        duplicate = self.plant("repeat", plant_start="later", plant_finish="later2", slots="[]")
         self.assertEqual((first.status, duplicate.status), ("planted", "duplicate"))
         self.assertEqual(self.state()[0], 1)
+        self.assertIsNotNone(self.service.get_result("repeat"))
         self.setUp()
         self.assertEqual(self.plant("stale", slots="[]").status, "state_changed")
         self.assertEqual(self.plant("bad", seed_id=21002).status, "seed_insufficient")

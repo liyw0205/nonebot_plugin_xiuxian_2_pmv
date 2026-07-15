@@ -26,6 +26,26 @@ class DongfuPlantService:
         self._player_database = Path(player_database)
         self._lock = lock or RLock()
 
+    @staticmethod
+    def _payload(user_id, slot_no, seed_id) -> str:
+        return "|".join((str(user_id), str(int(slot_no)), str(int(seed_id))))
+
+    def get_result(self, operation_id: str) -> DongfuPlantResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS dongfu_plant_operations ("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            old = conn.execute(
+                "SELECT payload FROM dongfu_plant_operations WHERE operation_id=%s", (operation_id,)
+            ).fetchone()
+            if old is None:
+                return None
+            return DongfuPlantResult("duplicate")
+
     def plant(self, operation_id, user_id, expected_slots, slot_no, seed_id, seed_name, plant_start, plant_finish):
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         try:
@@ -37,7 +57,8 @@ class DongfuPlantService:
         seed_name, plant_start, plant_finish = str(seed_name), str(plant_start), str(plant_finish)
         if not operation_id or slot_no < 1 or seed_id <= 0 or not plant_finish:
             raise ValueError("valid operation, seed and plot are required")
-        payload = "|".join((user_id, expected_slots, str(slot_no), str(seed_id), seed_name, plant_start, plant_finish))
+        # Request identity only — slot occupancy/seed stock are concurrency checks; times are outcomes.
+        payload = self._payload(user_id, slot_no, seed_id)
 
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False

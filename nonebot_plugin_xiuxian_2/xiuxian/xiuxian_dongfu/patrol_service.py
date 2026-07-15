@@ -28,6 +28,21 @@ class DongfuPatrolService:
         self._player_database = Path(player_database)
         self._lock = lock or RLock()
 
+    @staticmethod
+    def _payload(user_id, day) -> str:
+        return json.dumps((str(user_id), str(day)), ensure_ascii=False, separators=(",", ":"))
+
+    def get_result(self, operation_id: str) -> DongfuPatrolResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute("CREATE TABLE IF NOT EXISTS dongfu_patrol_operations (operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,patrol_count INTEGER NOT NULL,patrol_guard INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            old = conn.execute("SELECT payload,patrol_count,patrol_guard FROM dongfu_patrol_operations WHERE operation_id=%s", (operation_id,)).fetchone()
+            if old is None:
+                return None
+            return DongfuPatrolResult("duplicate", int(old[1]), int(old[2]))
+
     def patrol(self, operation_id, user_id, day, stamina_cost, daily_limit, stone_gain, reward=None, max_goods_num=999999999):
         operation_id, user_id, day = str(operation_id).strip(), str(user_id), str(day)
         stamina_cost, daily_limit, stone_gain, max_goods_num = map(int, (stamina_cost, daily_limit, stone_gain, max_goods_num))
@@ -36,7 +51,8 @@ class DongfuPatrolService:
             raise ValueError("valid patrol operation is required")
         if reward is not None and (len(reward) != 3 or int(reward[0]) <= 0 or int(reward[2]) <= 0):
             raise ValueError("reward must contain item id, name and amount")
-        payload = json.dumps((user_id, day, stamina_cost, daily_limit, stone_gain, reward), ensure_ascii=False, separators=(",", ":"))
+        # Request identity only — stone/item gains are outcomes; limits/stamina are concurrency checks.
+        payload = self._payload(user_id, day)
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False
             try:

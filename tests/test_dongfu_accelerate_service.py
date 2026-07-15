@@ -49,7 +49,8 @@ class DongfuAccelerateServiceTests(unittest.TestCase):
 
     def test_duplicate_and_rejections_do_not_consume_more_items(self):
         self.assertEqual(self.accelerate("repeat").status, "accelerated")
-        self.assertEqual(self.accelerate("repeat").status, "duplicate")
+        self.assertEqual(self.accelerate("repeat", now="later", new_finish="later2", slots="[]").status, "duplicate")
+        self.assertIsNotNone(self.service.get_result("repeat"))
         self.assertEqual(self.state()[0], 1)
         self.setUp()
         self.assertEqual(self.accelerate("stale", slots="[]").status, "state_changed")

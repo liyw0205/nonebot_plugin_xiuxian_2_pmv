@@ -54,8 +54,12 @@ class DongfuHarvestSettlementServiceTests(unittest.TestCase):
         self.assertEqual((slots[0]["seed_id"], planting, snapshot, item), (0, 0, "", (2, 2)))
 
     def test_duplicate_and_rejections_preserve_plot(self):
-        first, duplicate = self.harvest("repeat"), self.harvest("repeat")
-        self.assertEqual((first.status, duplicate.status), ("harvested", "duplicate"))
+        first = self.harvest("repeat")
+        # mutable reward amounts must not break same-op replay
+        duplicate = self.harvest("repeat", items=[{"id": 1, "name": "材料", "type": "材料", "amount": 9}], settled_at="2099-01-01 00:00:00")
+        self.assertEqual((first.status, duplicate.status, first.rewards), ("harvested", "duplicate", ((1, 2),)))
+        self.assertEqual(duplicate.rewards, first.rewards)
+        self.assertIsNotNone(self.service.get_result("repeat"))
         self.setUp()
         self.assertEqual(self.harvest("early", settled_at="2026-07-13 09:59:00").status, "not_mature")
         with db_backend.transaction(self.game) as conn:

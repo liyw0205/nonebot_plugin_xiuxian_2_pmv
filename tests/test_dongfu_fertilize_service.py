@@ -21,7 +21,12 @@ class DongfuFertilizeServiceTests(unittest.TestCase):
   with db_backend.connection(self.game) as c: item=c.execute("SELECT goods_num FROM back WHERE user_id=%s AND goods_id=%s",("u",21006)).fetchone()
   with db_backend.connection(self.player) as c: slots=c.execute("SELECT plant_slots FROM dongfu_status WHERE user_id=%s",("u",)).fetchone()
   return int(item[0]),int(json.loads(slots[0])[0]["fertilizer"])
- def test_success_and_duplicate(self): self.assertEqual(self.fertilize("same").status,"fertilized");self.assertEqual(self.fertilize("same").status,"duplicate");self.assertEqual(self.state(),(1,1))
+ def test_success_and_duplicate(self):
+  self.assertEqual(self.fertilize("same").status,"fertilized")
+  # mutable expected_slots must not break same-op replay
+  self.assertEqual(self.fertilize("same",slots="[]").status,"duplicate")
+  self.assertEqual(self.state(),(1,1))
+  self.assertIsNotNone(self.service.get_result("same"))
  def test_rejections_preserve_state(self):
   self.assertEqual(self.fertilize("stale",slots="[]").status,"state_changed")
   self.assertEqual(self.fertilize("none",item=1).status,"item_insufficient")

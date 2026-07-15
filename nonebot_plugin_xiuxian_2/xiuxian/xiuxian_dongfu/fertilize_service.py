@@ -23,6 +23,21 @@ class DongfuFertilizeService:
         self._game_database, self._player_database, self._lock = Path(game_database), Path(player_database), lock or RLock()
 
     @staticmethod
+    def _payload(user_id, slot_no, item_id) -> str:
+        return "|".join(map(str, (user_id, int(slot_no), int(item_id))))
+
+    def get_result(self, operation_id: str) -> DongfuFertilizeResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute("CREATE TABLE IF NOT EXISTS dongfu_fertilize_operations (operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            old = conn.execute("SELECT payload FROM dongfu_fertilize_operations WHERE operation_id=%s", (operation_id,)).fetchone()
+            if old is None:
+                return None
+            return DongfuFertilizeResult("duplicate")
+
+    @staticmethod
     def _canonical(slots) -> str:
         return json.dumps(slots, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -32,7 +47,7 @@ class DongfuFertilizeService:
         except (TypeError, ValueError): raise ValueError("expected slots must be valid JSON")
         slot_no, item_id, fertilizer_max = map(int, (slot_no, item_id, fertilizer_max))
         if not operation_id or slot_no < 1 or item_id <= 0 or fertilizer_max < 1: raise ValueError("valid fertilize operation is required")
-        payload = "|".join(map(str, (user_id, expected_slots, slot_no, item_id, fertilizer_max)))
+        payload = self._payload(user_id, slot_no, item_id)
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False
             try:

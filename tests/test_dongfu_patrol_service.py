@@ -46,8 +46,10 @@ class DongfuPatrolServiceTests(unittest.TestCase):
 
     def test_duplicate_limit_and_capacity_do_not_change_state(self):
         self.assertEqual(self.patrol("same").status, "patrolled")
-        self.assertEqual(self.patrol("same").status, "duplicate")
+        # mutable stone/reward must not break same-op replay
+        self.assertEqual(self.patrol("same", stone=1, reward=None).status, "duplicate")
         self.assertEqual(self.state()[0], (8, 50100))
+        self.assertIsNotNone(self.service.get_result("same"))
         self.setUp()
         self.assertEqual(self.patrol("limit", limit=0).status, "daily_limit") if False else None
         with db_backend.transaction(self.player) as conn: conn.execute("UPDATE dongfu_status SET patrol_date=%s,patrol_count=%s WHERE user_id=%s", ("2026-07-13", 3, "u"))

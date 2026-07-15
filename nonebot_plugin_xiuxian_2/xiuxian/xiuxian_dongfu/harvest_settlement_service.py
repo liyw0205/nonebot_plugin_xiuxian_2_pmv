@@ -29,6 +29,29 @@ class DongfuHarvestSettlementService:
         self._lock = lock or RLock()
 
     @staticmethod
+    def _payload(user_id, slot_numbers) -> str:
+        return DongfuHarvestSettlementService._canonical([str(user_id), tuple(sorted({int(v) for v in slot_numbers}))])
+
+    def get_result(self, operation_id: str) -> DongfuHarvestResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS dongfu_harvest_operations ("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,rewards TEXT NOT NULL,"
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            old = conn.execute(
+                "SELECT payload,rewards FROM dongfu_harvest_operations WHERE operation_id=%s", (operation_id,)
+            ).fetchone()
+            if old is None:
+                return None
+            return DongfuHarvestResult(
+                "duplicate", tuple(tuple(map(int, value)) for value in json.loads(str(old[1])))
+            )
+
+    @staticmethod
     def _canonical(value) -> str:
         return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -44,7 +67,8 @@ class DongfuHarvestSettlementService:
         settled_at = str(settled_at)
         if not operation_id or not slot_numbers or max_goods_num < 0:
             raise ValueError("valid operation, plots and capacity are required")
-        payload = self._canonical([user_id, expected_slots, slot_numbers, reward_rows, max_goods_num, settled_at])
+        # Request identity only — rewards stored in rewards column; slots are concurrency checks.
+        payload = self._payload(user_id, slot_numbers)
 
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False

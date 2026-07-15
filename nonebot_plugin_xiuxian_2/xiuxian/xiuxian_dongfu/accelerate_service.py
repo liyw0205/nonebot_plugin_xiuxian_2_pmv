@@ -27,6 +27,24 @@ class DongfuAccelerateService:
         self._lock = lock or RLock()
 
     @staticmethod
+    def _payload(user_id, slot_no, item_id) -> str:
+        return "|".join((str(user_id), str(int(slot_no)), str(int(item_id))))
+
+    def get_result(self, operation_id: str) -> DongfuAccelerateResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS dongfu_accelerate_operations ("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            old = conn.execute("SELECT payload FROM dongfu_accelerate_operations WHERE operation_id=%s", (operation_id,)).fetchone()
+            if old is None:
+                return None
+            return DongfuAccelerateResult("duplicate")
+
+    @staticmethod
     def _canonical(slots) -> str:
         return json.dumps(slots, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -40,7 +58,7 @@ class DongfuAccelerateService:
         now, new_finish = str(now), str(new_finish)
         if not operation_id or slot_no < 1 or item_id <= 0 or not now or not new_finish:
             raise ValueError("valid operation, item, plot and times are required")
-        payload = "|".join((user_id, expected_slots, str(slot_no), str(item_id), now, new_finish))
+        payload = self._payload(user_id, slot_no, item_id)
 
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False
