@@ -6,7 +6,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity.point_shop_service import ActivityPointShopPurchaseService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity.transaction_service import ActivityPointShopPurchaseService
 from tests.test_db_backend import db_backend
 
 

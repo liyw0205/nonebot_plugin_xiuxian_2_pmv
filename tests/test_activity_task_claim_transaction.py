@@ -6,7 +6,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity.task_claim_service import ActivityTaskClaimService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity.transaction_service import ActivityTaskClaimService
 from tests.test_db_backend import db_backend
 
 

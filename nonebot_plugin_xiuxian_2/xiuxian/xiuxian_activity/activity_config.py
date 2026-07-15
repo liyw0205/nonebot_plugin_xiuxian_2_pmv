@@ -81,7 +81,7 @@ DEFAULT_ACTIVITY_STAGES = [
 
 
 def _ensure_activity_files():
-    from .service import ensure_activity_files
+    from .activity_storage import ensure_activity_files
 
     ensure_activity_files()
 

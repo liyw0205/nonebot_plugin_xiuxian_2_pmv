@@ -6,7 +6,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity.sign_settlement_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity.transaction_service import (
     ActivitySignSettlementService,
 )
 from tests.test_db_backend import db_backend

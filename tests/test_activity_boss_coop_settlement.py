@@ -5,7 +5,7 @@ import pytest
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity.boss_coop_settlement_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity.transaction_service import (
     ActivityBossCoopSettlementService,
 )
 

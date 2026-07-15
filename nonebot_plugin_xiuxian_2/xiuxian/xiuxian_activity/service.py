@@ -59,12 +59,12 @@ from .activity_storage import *
 from .activity_rules import *
 from .activity_pass import *
 from .activity_progress import *
-from .point_shop_service import ActivityPointShopPurchaseService
-from .task_claim_service import ActivityTaskClaimService
-from .sign_settlement_service import ActivitySignSettlementService
-from .pass_claim_service import ActivityPassClaimService
-from .collect_exchange_service import ActivityCollectExchangeService
-from .claim_all_service import ActivityClaimAllService
+from .transaction_service import ActivityPointShopPurchaseService
+from .transaction_service import ActivityTaskClaimService
+from .transaction_service import ActivitySignSettlementService
+from .transaction_service import ActivityPassClaimService
+from .transaction_service import ActivityCollectExchangeService
+from .transaction_service import ActivityClaimAllService
 
 
 point_shop_purchase_service = ActivityPointShopPurchaseService(DB_PATH, get_paths().game_db)

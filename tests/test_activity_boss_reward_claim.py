@@ -6,7 +6,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity.boss_reward_claim_service import BossRewardClaimService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity.transaction_service import BossRewardClaimService
 from tests.test_db_backend import db_backend
 
 
