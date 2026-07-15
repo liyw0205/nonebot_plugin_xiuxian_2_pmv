@@ -36,10 +36,22 @@ def is_msg_seq_conflict(exc: BaseException) -> bool:
     )
 
 
+def is_passive_reply_limit(exc: BaseException) -> bool:
+    """QQ 官方：同一条用户消息被动回复次数/时间窗口超限。"""
+    code = _exception_code(exc)
+    text = str(exc)
+    return code == 40034128 or "40034128" in text or (
+        "被动回复" in text and "超过" in text
+    )
+
+
 def classify_delivery_error(exc: BaseException) -> tuple[DeliveryErrorKind, bool]:
     name = exc.__class__.__name__.lower()
     code = _exception_code(exc)
     text = str(exc).lower()
+    if is_passive_reply_limit(exc):
+        # 同一 msg_id 再发也不会好，勿重试
+        return "rate_limited", False
     if "ratelimit" in name or code == 429 or "rate limit" in text or "频率" in text:
         return "rate_limited", True
     if "network" in name or isinstance(exc, (ConnectionError, TimeoutError)):
@@ -89,4 +101,5 @@ __all__ = [
     "MessageSequenceStrategy",
     "classify_delivery_error",
     "is_msg_seq_conflict",
+    "is_passive_reply_limit",
 ]
