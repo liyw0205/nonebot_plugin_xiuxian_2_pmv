@@ -47,10 +47,14 @@ class FusionBatchTransactionTests(unittest.TestCase):
 
     def test_duplicate_reuses_stored_batch_and_parameter_conflict_is_rejected(self) -> None:
         first = self.apply("repeat")
+        # mutable outcomes content must not break same-op replay when attempt count matches
         duplicate = self.apply("repeat", outcomes=(False, False, True, True))
-        conflict = self.apply("repeat", outcomes=(True, False))
-        self.assertEqual((first.status, duplicate.status, conflict.status), ("applied", "duplicate", "state_changed"))
+        self.assertEqual((first.status, duplicate.status), ("applied", "duplicate"))
         self.assertEqual((duplicate.successful_count, duplicate.failed_count, duplicate.protected_count), (1, 3, 2))
+        self.assertIsNotNone(self.service.get_batch_result("repeat"))
+        # different attempt count is different request identity
+        conflict = self.apply("repeat", outcomes=(True, False))
+        self.assertEqual(conflict.status, "state_changed")
         self.assertEqual(self.state(), (140, {1: (6, 1), 2: (1, 1), 20006: (0, 0)}))
 
     def test_live_material_shortage_rolls_back_entire_batch(self) -> None:

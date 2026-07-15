@@ -39,6 +39,61 @@ class FusionService:
         self._database = Path(database)
         self._lock = lock or RLock()
 
+    @staticmethod
+    def _apply_payload(user_id, stone_cost, materials, target_id, protection_item_id) -> str:
+        # Request identity only — roll outcome (successful/protected) is stored separately.
+        return json.dumps(
+            [str(user_id), int(stone_cost), sorted((int(k), int(v)) for k, v in materials.items()),
+             int(target_id), None if protection_item_id is None else int(protection_item_id)],
+            ensure_ascii=True, separators=(",", ":"),
+        )
+
+    @staticmethod
+    def _batch_payload(user_id, stone_cost, materials, target_id, attempt_count, protection_item_id) -> str:
+        return json.dumps(
+            [str(user_id), int(stone_cost), sorted((int(k), int(v)) for k, v in materials.items()),
+             int(target_id), int(attempt_count),
+             None if protection_item_id is None else int(protection_item_id)],
+            ensure_ascii=True, separators=(",", ":"),
+        )
+
+    def get_result(self, operation_id: str) -> FusionResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS fusion_operations ("
+                "operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, successful INTEGER NOT NULL, "
+                "protected INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT payload, successful, protected FROM fusion_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return FusionResult("duplicate", bool(previous[1]), bool(previous[2]))
+
+    def get_batch_result(self, operation_id: str) -> FusionBatchResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS fusion_batch_operations ("
+                "operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, outcomes TEXT NOT NULL, "
+                "successful_count INTEGER NOT NULL, failed_count INTEGER NOT NULL, "
+                "protected_count INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT payload, successful_count, failed_count, protected_count "
+                "FROM fusion_batch_operations WHERE operation_id=%s", (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return FusionBatchResult("duplicate", int(previous[1]), int(previous[2]), int(previous[3]))
+
     def apply(
         self,
         operation_id,
@@ -66,11 +121,7 @@ class FusionService:
         if not operation_id or stone_cost < 0 or max_goods_num <= 0:
             raise ValueError("valid operation, non-negative cost and positive capacity are required")
 
-        payload = json.dumps(
-            [user_id, stone_cost, sorted(materials.items()), target_id, str(target_name),
-             str(target_type), protection_item_id, sorted(reserved.items()), max_goods_num],
-            ensure_ascii=True,
-        )
+        payload = self._apply_payload(user_id, stone_cost, materials, target_id, protection_item_id)
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
@@ -206,12 +257,7 @@ class FusionService:
         if target_limit is not None and target_limit <= 0:
             raise ValueError("target_limit must be positive")
 
-        payload = json.dumps(
-            [user_id, stone_cost, sorted(materials.items()), target_id, target_name,
-             target_type, len(outcomes), protection_item_id, sorted(reserved.items()),
-             max_goods_num, target_limit],
-            ensure_ascii=True,
-        )
+        payload = self._batch_payload(user_id, stone_cost, materials, target_id, len(outcomes), protection_item_id)
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")

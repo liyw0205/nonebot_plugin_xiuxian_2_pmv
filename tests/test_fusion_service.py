@@ -64,10 +64,14 @@ class FusionServiceTests(unittest.TestCase):
 
     def test_duplicate_reuses_first_roll_and_conflict_is_rejected(self) -> None:
         first = self.apply("repeat", True)
+        # mutable successful roll must not break same-op replay
         duplicate = self.apply("repeat", False)
-        conflict = self.service.apply("repeat", "user", 31, {1: 2}, 2, "target", "装备", successful=True, max_goods_num=999)
-        self.assertEqual((first.status, duplicate.status, conflict.status), ("applied", "duplicate", "state_changed"))
+        self.assertEqual((first.status, duplicate.status), ("applied", "duplicate"))
         self.assertTrue(duplicate.successful)
+        self.assertIsNotNone(self.service.get_result("repeat"))
+        # different target identity conflicts
+        conflict = self.service.apply("repeat", "user", 30, {1: 2}, 3, "other", "装备", successful=True, max_goods_num=999)
+        self.assertEqual(conflict.status, "state_changed")
         self.assertEqual(self.state(), (70, {1: 3, 2: 1, 20006: 1}))
 
     def test_operation_failure_rolls_back_every_change(self) -> None:

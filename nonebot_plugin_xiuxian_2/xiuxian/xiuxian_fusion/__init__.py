@@ -146,6 +146,26 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
     quantity = int(quantity)
     if quantity <= 0:
         return False, "合成数量必须是正整数！"
+    # 先回放：成功后 limit/库存变化会挡住同事件幂等。
+    if quantity == 1:
+        prior = fusion_service.get_result(operation_id)
+        if prior is not None and prior.succeeded:
+            if prior.successful:
+                item_type = equipment.get('type', '物品')
+                return True, f"道友成功合成了{item_type}: {equipment['name']}！！\n该合成请求已经处理，无需重复提交。"
+            if prior.protected:
+                return False, "合成失败！幸好使用了福缘石，材料没有损失。\n该合成请求已经处理，无需重复提交。"
+            return False, "合成失败！材料已消耗。\n该合成请求已经处理，无需重复提交。"
+    else:
+        prior_batch = fusion_service.get_batch_result(operation_id)
+        if prior_batch is not None and prior_batch.succeeded:
+            consumed_failures = prior_batch.failed_count - prior_batch.protected_count
+            return prior_batch.successful_count > 0, (
+                f"批量合成完成：共 {quantity} 次，成功 {prior_batch.successful_count} 次，"
+                f"失败 {prior_batch.failed_count} 次；福缘石保护 {prior_batch.protected_count} 次，"
+                f"损失材料 {consumed_failures} 次。\n该合成请求已经处理，无需重复提交。"
+            )
+
     user_info = sql_message.get_user_info_with_id(user_id)
     back_msg = sql_message.get_back_msg(user_id) or []
     
@@ -256,6 +276,13 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
             reserved_items=reserved_items,
             max_goods_num=XiuConfig().max_goods_num,
         )
+        if result.status == "duplicate":
+            if result.successful:
+                item_type = equipment.get('type', '物品')
+                return True, f"道友成功合成了{item_type}: {equipment['name']}！！\n该合成请求已经处理，无需重复提交。"
+            if result.protected:
+                return False, "合成失败！幸好使用了福缘石，材料没有损失。\n该合成请求已经处理，无需重复提交。"
+            return False, "合成失败！材料已消耗。\n该合成请求已经处理，无需重复提交。"
         if not result.succeeded:
             return False, "合成所需的灵石或材料状态已经变化，本次合成未结算。"
         if result.successful:
@@ -279,6 +306,13 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
         max_goods_num=XiuConfig().max_goods_num,
         target_limit=limit,
     )
+    if result.status == "duplicate":
+        consumed_failures = result.failed_count - result.protected_count
+        return result.successful_count > 0, (
+            f"批量合成完成：共 {quantity} 次，成功 {result.successful_count} 次，"
+            f"失败 {result.failed_count} 次；福缘石保护 {result.protected_count} 次，"
+            f"损失材料 {consumed_failures} 次。\n该合成请求已经处理，无需重复提交。"
+        )
     if not result.succeeded:
         status_messages = {
             "stone_insufficient": "灵石不足，批量合成未结算。",
