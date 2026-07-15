@@ -284,7 +284,7 @@ def render_media_card(
 
     # save
     if out_path is None:
-        from ...paths import get_paths
+        from ....paths import get_paths
 
         out_dir = get_paths().data / "media_parser_cache" / "cards"
         out_dir.mkdir(parents=True, exist_ok=True)

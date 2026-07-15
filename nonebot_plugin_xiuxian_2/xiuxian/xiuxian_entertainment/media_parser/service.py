@@ -161,7 +161,7 @@ async def run_parse_and_build_messages(
                 if path:
                     card_paths.append(path)
             except Exception as e:
-                logger.debug(f"媒体卡片渲染失败: {e}")
+                logger.warning(f"媒体卡片渲染失败: {e}")
 
     all_images = dedupe_media_urls_preserve_order(all_images)[:12]
     # 视频优先挑较短/更可发的：kwaicdn 主链在前（native 已排序），这里只截前 3

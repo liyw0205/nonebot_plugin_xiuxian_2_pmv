@@ -3,6 +3,7 @@ import re
 import asyncio
 import time
 import random
+from pathlib import Path
 from typing import Any, Tuple
 from urllib.parse import quote
 
@@ -48,12 +49,35 @@ from .io_runtime import (
 
 
 async def send_entertainment_media(bot: Bot, event, media, *, media_type: str):
+    """发送娱乐媒体。
+
+    - 普通 URL / 本地路径 / bytes：走 MediaInput + reply_media
+    - 已构造好的 MessageSegment / Attachment：直接 reply，禁止再塞进 MediaInput
+      （否则 QQ Adapter 的 Attachment 会触发「不支持的媒体输入」）
+    """
     timeouts = {
         "图片": IMAGE_SEND_TIMEOUT,
         "音频": AUDIO_SEND_TIMEOUT,
         "视频": VIDEO_SEND_TIMEOUT,
     }
     media_names = {"图片": "image", "音频": "audio", "视频": "video"}
+
+    # 已是消息段 / 适配器 Attachment：直接发
+    if not isinstance(media, (str, bytes, bytearray, memoryview, Path)) and not hasattr(
+        media, "read"
+    ):
+        await run_media_send(
+            lambda: delivery_service.reply(
+                bot,
+                event,
+                media,
+                include_reference=False,
+            ),
+            timeout=timeouts[media_type],
+            media_type=media_type,
+        )
+        return
+
     await run_media_send(
         lambda: delivery_service.reply_media(
             bot,
