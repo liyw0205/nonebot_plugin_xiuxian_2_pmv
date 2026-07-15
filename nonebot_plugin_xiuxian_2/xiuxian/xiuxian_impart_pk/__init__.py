@@ -41,6 +41,30 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuf
 from .. import NICKNAME
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 sql_message = XiuxianDateManage()  # sql类
+
+
+def _resolve_impart_closing_user_id(event, user_info) -> str:
+    """Prefer the character actually in 虚神界闭关 (type=4).
+
+    check_user maps to avatar active_id. If the player switched avatars while the
+    main body (or another identity) remains type=4, settle that closing target
+    instead of reporting idle on the active avatar.
+    """
+    active_id = str(user_info["user_id"])
+    candidates = [active_id]
+    try:
+        original_id = str(event.get_user_id())
+    except Exception:
+        original_id = active_id
+    if original_id and original_id not in candidates:
+        candidates.append(original_id)
+    for uid in candidates:
+        cd = sql_message.get_user_cd(uid)
+        if cd is not None and int(cd.get("type") or 0) == 4:
+            return uid
+    return active_id
+
+
 impart_training_settlement_service = ImpartTrainingSettlementService(get_paths().game_db, get_paths().impart_db, get_paths().player_db)
 impart_explore_settlement_service = ImpartExploreSettlementService(get_paths().game_db, get_paths().impart_db, get_paths().player_db)
 impart_closing_settlement_service = ImpartClosingSettlementService(
@@ -896,7 +920,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
         await handle_send(bot, event, msg, md_type="我要修仙")
         await impart_pk_out_closing.finish()
     
-    user_id = user_info['user_id']
+    user_id = _resolve_impart_closing_user_id(event, user_info)
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"impart-closing:{event_id}:{user_id}" if event_id else f"impart-closing:{user_id}:{time.time_ns()}"
     # 先回放：出关成功后 type!=4 会挡住同事件幂等。
@@ -909,11 +933,13 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
         await handle_send(bot, event, msg, md_type="虚神界", k1="闭关", v1="虚神界闭关", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_out_closing.finish()
     
-    # 检查用户是否在虚神界闭关状态
-    is_type, msg = check_user_type(user_id, 4)
-    if not is_type:
-        await handle_send(bot, event, msg, md_type="4", k2="修仙帮助", v2="修仙帮助", k3="虚神界帮助", v3="虚神界帮助")
-        await impart_pk_out_closing.finish()
+    # 直接读 user_cd：避免 check_user_type 再映射到 active 化身导致误判
+    user_cd_message = sql_message.get_user_cd(user_id)
+    if user_cd_message is None or int(user_cd_message.get("type") or 0) != 4:
+        is_type, msg = check_user_type(user_id, 4)
+        if not is_type:
+            await handle_send(bot, event, msg, md_type="4", k2="修仙帮助", v2="修仙帮助", k3="虚神界帮助", v3="虚神界帮助")
+            await impart_pk_out_closing.finish()
     
     # 获取用户信息和传承数据
     user_mes = sql_message.get_user_info_with_id(user_id)

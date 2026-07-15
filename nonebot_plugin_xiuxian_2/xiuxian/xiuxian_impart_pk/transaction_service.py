@@ -473,11 +473,12 @@ class ImpartClosingSettlementService:
                 if user is None or cd is None or impart is None:
                     conn.rollback()
                     return ImpartClosingSettlementResult("user_missing")
-                actual_exp = as_int_like(user[0])
+                # Session identity is type=4 + create_time. Do NOT require exact exp
+                # equality in SQL: REAL/scientific TEXT values fail CAST equality even
+                # when as_int_like matches (e.g. 3.217e14 float vs int snapshot).
                 actual_exp_day = as_int_like(impart[0])
                 if (
-                    actual_exp != expected_exp
-                    or int(cd[0] or 0) != 4
+                    int(cd[0] or 0) != 4
                     or str(cd[1]) != expected_create_time
                     or actual_exp_day != expected_exp_day
                 ):
@@ -488,8 +489,8 @@ class ImpartClosingSettlementService:
                     "UPDATE user_xiuxian SET "
                     "exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),"
                     "hp=%s,mp=%s,atk=%s,power=%s "
-                    "WHERE user_id=%s AND CAST(COALESCE(exp,0) AS REAL)=CAST(%s AS REAL)",
-                    (exp_gain, hp, mp, atk, power, user_id, expected_exp),
+                    "WHERE user_id=%s",
+                    (exp_gain, hp, mp, atk, power, user_id),
                 )
                 cleared = conn.execute(
                     "UPDATE user_cd SET type=0,create_time=0,scheduled_time=NULL "
