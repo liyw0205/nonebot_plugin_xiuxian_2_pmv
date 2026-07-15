@@ -49,6 +49,20 @@ class SignInService:
             """
         )
 
+    def get_result(self, operation_id: str) -> SignInResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            self._ensure_operations(conn)
+            previous = conn.execute(
+                "SELECT user_id, stone FROM sign_in_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return SignInResult("duplicate", str(previous[0]), int(previous[1]))
+
     def sign(self, operation_id, user_id, stone_lower: int, stone_upper: int) -> SignInResult:
         operation_id = str(operation_id).strip()
         if not operation_id:
@@ -84,8 +98,8 @@ class SignInService:
 
                 stone = int(self._randint(stone_lower, stone_upper))
                 updated = conn.execute(
-                    "UPDATE user_xiuxian SET is_sign=1, stone=stone+%s "
-                    "WHERE user_id=%s AND is_sign=0",
+                    "UPDATE user_xiuxian SET is_sign=1, stone=CAST(COALESCE(stone,0) AS INTEGER)+%s "
+                    "WHERE user_id=%s AND CAST(COALESCE(is_sign,0) AS INTEGER)=0",
                     (stone, user_id),
                 )
                 if updated.rowcount != 1:

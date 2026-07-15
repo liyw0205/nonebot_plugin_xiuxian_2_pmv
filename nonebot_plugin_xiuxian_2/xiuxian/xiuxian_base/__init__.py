@@ -557,6 +557,16 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         await handle_send(bot, event, msg, md_type="我要修仙")
         await remaname.finish()
     user_id = user_info['user_id']
+    operation_id = _player_rename_operation_id(event, "user-name", user_id)
+    prior = player_rename_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        msg = f"你获得了随机道号：{prior.new_name}\n" if prior.previous_name != prior.new_name else ""
+        # previous random vs explicit unknown; use generic
+        msg = f"道友的道号更新成啦~\n该改名请求已经处理，无需重复提交。"
+        if prior.new_name:
+            msg = f"道号：{prior.new_name}\n道友的道号更新成啦~\n该改名请求已经处理，无需重复提交。"
+        await handle_send(bot, event, msg, md_type="修仙", k1="改名", v1="修仙改名", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
+        await remaname.finish()
     
     # 如果没有提供新道号，则生成随机道号
     user_name = args.extract_plain_text().strip()
@@ -568,7 +578,7 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
             if not sql_message.get_user_info_with_name(user_name):
                 break
         result = player_rename_service.rename_user(
-            _player_rename_operation_id(event, "user-name", user_id),
+            operation_id,
             user_id,
             user_name,
             stone_cost=XiuConfig().remaname,
@@ -582,7 +592,7 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
             
         msg = ""
         result = player_rename_service.rename_user(
-            _player_rename_operation_id(event, "user-name", user_id),
+            operation_id,
             user_id,
             user_name,
             item_id=20011,
@@ -595,10 +605,14 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         msg = "该道号已被使用，请选择其他道号！"
     elif result.status == "unchanged":
         msg = "新道号不能与当前道号相同！"
-    elif result.succeeded:
+    elif result.status == "duplicate" or result.succeeded:
         if random_name:
             msg = f"你获得了随机道号：{result.new_name}\n"
+        else:
+            msg = ""
         msg += "道友的道号更新成啦~"
+        if result.status == "duplicate":
+            msg += "\n该改名请求已经处理，无需重复提交。"
     else:
         msg = "道号或资产状态已经变化，请稍后重试！"
     await handle_send(bot, event, msg, md_type="修仙", k1="改名", v1="修仙改名", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
@@ -740,12 +754,28 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_id = user_info['user_id']
     
     sign_operation_id = _sign_operation_id(event, user_id)
+    # 先回放：成功后 is_sign=1 会走 already_signed。
+    prior = sign_in_service.get_result(sign_operation_id)
+    if prior is not None and prior.succeeded:
+        lottery_result = await handle_lottery(
+            user_info, _lottery_operation_id(sign_operation_id)
+        )
+        msg = f"签到成功，获取{prior.stone}块灵石!\n\n{lottery_result}\n该签到请求已经处理，无需重复提交。"
+        await handle_send(bot, event, msg, md_type="修仙", k1="修仙签到", v1="修仙签到", k2="鸿运", v2="鸿运", k3="帮助", v3="修仙帮助")
+        await sign_in.finish()
     sign_result = sign_in_service.sign(
         sign_operation_id,
         user_id,
         XiuConfig().sign_in_lingshi_lower_limit,
         XiuConfig().sign_in_lingshi_upper_limit,
     )
+    if sign_result.status == "duplicate":
+        lottery_result = await handle_lottery(
+            user_info, _lottery_operation_id(sign_operation_id)
+        )
+        msg = f"签到成功，获取{sign_result.stone}块灵石!\n\n{lottery_result}\n该签到请求已经处理，无需重复提交。"
+        await handle_send(bot, event, msg, md_type="修仙", k1="修仙签到", v1="修仙签到", k2="鸿运", v2="鸿运", k3="帮助", v3="修仙帮助")
+        await sign_in.finish()
     if not sign_result.succeeded:
         await handle_send(bot, event, "贪心的人是不会有好运的！")
         await sign_in.finish()

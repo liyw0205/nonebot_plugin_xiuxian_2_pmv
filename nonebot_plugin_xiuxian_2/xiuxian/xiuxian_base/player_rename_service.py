@@ -60,6 +60,23 @@ class PlayerRenameService:
         )
         return changed.rowcount == 1
 
+    def get_result(self, operation_id: str) -> PlayerRenameResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            self._ensure_operations(conn)
+            previous = conn.execute(
+                "SELECT user_id, rename_type, new_name, previous_name "
+                "FROM player_rename_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return PlayerRenameResult(
+                "duplicate", str(previous[0]), str(previous[1]), str(previous[2]), str(previous[3] or "")
+            )
+
     def _rename(
         self,
         operation_id,

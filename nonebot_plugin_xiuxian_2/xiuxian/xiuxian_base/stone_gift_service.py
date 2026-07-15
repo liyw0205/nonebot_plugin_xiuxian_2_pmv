@@ -140,6 +140,28 @@ class StoneGiftService:
                 conn.rollback()
                 raise
 
+    def get_result(self, operation_id: str) -> StoneGiftResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            exists = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=%s",
+                ("stone_gift_operations",),
+            ).fetchone()
+            if exists is None:
+                return None
+            previous = conn.execute(
+                "SELECT sender_id, recipient_id, gross_amount, net_amount, fee_amount "
+                "FROM stone_gift_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return StoneGiftResult(
+                "duplicate", str(previous[0]), str(previous[1]), int(previous[2]), int(previous[3]), int(previous[4])
+            )
+
     def get_operation(
         self, operation_id, sender_id, recipient_id
     ) -> StoneGiftResult | None:
