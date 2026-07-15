@@ -42,7 +42,13 @@ class ArenaChallengePurchaseService:
         expected_bought, expected_extra, expected_last_buy_date = normalize_daily_purchase_state(
             expected_bought, expected_extra, expected_last_buy_date, today
         )
-        payload = json.dumps([user_id, amount, unit_cost, daily_limit, expected_stone, expected_bought, expected_extra, expected_last_buy_date])
+        # Request identity only — daily counters/stone snapshots are concurrency checks,
+        # not part of the idempotent request key.
+        payload = json.dumps(
+            [user_id, amount, unit_cost, daily_limit],
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False
             try:

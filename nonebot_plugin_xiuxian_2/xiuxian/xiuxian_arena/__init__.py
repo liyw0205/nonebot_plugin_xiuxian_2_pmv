@@ -62,7 +62,8 @@ def _arena_fight(user_id, opponent_id, bot_id, operation_id):
             player = Entity(attributes, team_id=team_id)
             apply_player_buffs(player, data)
             players.append(player)
-        return BattleSystem(players, bot_id=bot_id).run_battle()
+        # BattleSystem requires two teams, not a single flat player list.
+        return BattleSystem([players[0]], [players[1]], bot_id).run_battle()
     finally:
         random.setstate(random_state)
 
@@ -529,30 +530,46 @@ async def arena_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await handle_send(bot, event, msg)
         await arena_buy.finish()
 
-    # 检查限购
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = (
+        f"arena-purchase:{event_id}:{user_id}"
+        if event_id
+        else f"arena-purchase:{time.time_ns()}:{user_id}"
+    )
+    # 先走 operation 事务：重放必须在限购/荣誉值前置拦截之前完成。
     already_purchased = arena_limit.get_weekly_purchases(user_id, shop_id)
     max_quantity = item_data["weekly_limit"] - already_purchased
-    if quantity > max_quantity:
-        quantity = max_quantity
-    if quantity <= 0:
+    request_quantity = quantity
+    if request_quantity > max_quantity:
+        request_quantity = max_quantity
+    if request_quantity <= 0 and not event_id:
         msg = f"{item_info['name']}已到限购无法再购买！"
         await handle_send(bot, event, msg)
         await arena_buy.finish()
-    
-    # 检查荣誉值是否足够
-    total_cost = item_data["cost"] * quantity
-    if arena_info["honor_points"] < total_cost:
-        msg = f"荣誉值不足！需要{total_cost}点，当前拥有{arena_info['honor_points']}点"
+    if request_quantity <= 0:
+        request_quantity = max(1, quantity)
+
+    purchase_result = arena_purchase_service.purchase(
+        operation_id,
+        user_id,
+        shop_id,
+        item_info["name"],
+        item_info["type"],
+        request_quantity,
+        item_data["cost"],
+        item_data["weekly_limit"],
+        arena_info["honor_points"],
+        arena_info["weekly_purchases"],
+        XiuConfig().max_goods_num,
+        1,
+    )
+    if purchase_result.status == "duplicate":
+        msg = (
+            f"成功兑换{item_info['name']}×{purchase_result.quantity}，"
+            f"消耗{purchase_result.cost}荣誉值！"
+        )
         await handle_send(bot, event, msg)
         await arena_buy.finish()
-    
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"arena-purchase:{event_id}:{user_id}" if event_id else f"arena-purchase:{time.time_ns()}:{user_id}"
-    purchase_result = arena_purchase_service.purchase(
-        operation_id, user_id, shop_id, item_info["name"], item_info["type"], quantity,
-        item_data["cost"], item_data["weekly_limit"], arena_info["honor_points"],
-        arena_info["weekly_purchases"], XiuConfig().max_goods_num, 1,
-    )
     if purchase_result.status == "honor_insufficient":
         await handle_send(bot, event, "荣誉值状态已变化，当前荣誉值不足！")
         await arena_buy.finish()
@@ -565,8 +582,14 @@ async def arena_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     if purchase_result.status in {"state_changed", "user_missing"}:
         await handle_send(bot, event, "竞技场兑换状态已变化，请重新兑换！")
         await arena_buy.finish()
-    
-    msg = f"成功兑换{item_info['name']}×{quantity}，消耗{total_cost}荣誉值！"
+    if not purchase_result.succeeded:
+        await handle_send(bot, event, "竞技场兑换状态已变化，请重新兑换！")
+        await arena_buy.finish()
+
+    msg = (
+        f"成功兑换{item_info['name']}×{purchase_result.quantity}，"
+        f"消耗{purchase_result.cost}荣誉值！"
+    )
     await handle_send(bot, event, msg)
     await arena_buy.finish()
 
@@ -624,49 +647,63 @@ async def arena_buy_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessa
 
     arena_info = arena_limit.get_user_arena_info(user_id)
     bought = int(arena_info.get("daily_challenge_buys", 0))
-    can_buy = max(0, arena_limit.daily_buy_limit - bought)
-    if can_buy <= 0:
-        await handle_send(bot, event, f"今日竞技场购买次数已用完（{arena_limit.daily_buy_limit}/{arena_limit.daily_buy_limit}）。")
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = (
+        f"arena-challenge-purchase:{event_id}:{user_id}"
+        if event_id
+        else f"arena-challenge-purchase:{time.time_ns()}:{user_id}"
+    )
+    # 先走 operation：同一事件重放不能被“今日已买满”前置拦截。
+    result = arena_challenge_purchase_service.purchase(
+        operation_id,
+        user_id,
+        buy_amount,
+        ARENA_CHALLENGE_BUY_COST,
+        arena_limit.daily_buy_limit,
+        int(user_info.get("stone", 0)),
+        bought,
+        int(arena_info.get("daily_extra_challenges", 0)),
+        arena_info["last_buy_date"],
+    )
+    if result.status == "duplicate" or result.succeeded:
+        real_amount, new_bought, total_cap = (
+            result.amount,
+            result.bought,
+            arena_limit.daily_challenges + result.extra,
+        )
+        arena_info = arena_limit.get_user_arena_info(user_id)
+        remaining = max(0, int(total_cap) - int(arena_info.get("daily_challenges_used", 0)))
+        await handle_send(
+            bot,
+            event,
+            f"竞技场挑战次数购买成功！\n"
+            f"本次购买：{real_amount}次\n"
+            f"消耗灵石：{number_to(result.cost)}\n"
+            f"今日购买：{new_bought}/{arena_limit.daily_buy_limit}\n"
+            f"今日剩余挑战：{remaining}/{total_cap}",
+            md_type="竞技场",
+            k1="挑战", v1="竞技场挑战",
+            k2="查看", v2="竞技场查看",
+            k3="我的", v3="我的竞技场",
+        )
         await arena_buy_challenge.finish()
-
-    buy_amount = min(buy_amount, can_buy)
-    total_cost = ARENA_CHALLENGE_BUY_COST * buy_amount
-    if int(user_info.get("stone", 0)) < total_cost:
+    if result.status == "limit_reached":
+        await handle_send(
+            bot,
+            event,
+            f"今日竞技场购买次数已用完（{arena_limit.daily_buy_limit}/{arena_limit.daily_buy_limit}）。",
+        )
+        await arena_buy_challenge.finish()
+    if result.status == "stone_insufficient":
+        total_cost = ARENA_CHALLENGE_BUY_COST * buy_amount
         await handle_send(
             bot,
             event,
             f"灵石不足，购买{buy_amount}次需要{number_to(total_cost)}灵石。\n"
-            f"当前灵石：{number_to(int(user_info.get('stone', 0)))}"
+            f"当前灵石：{number_to(int(user_info.get('stone', 0)))}",
         )
         await arena_buy_challenge.finish()
-
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    result = arena_challenge_purchase_service.purchase(
-        f"arena-challenge-purchase:{event_id}:{user_id}" if event_id else f"arena-challenge-purchase:{time.time_ns()}:{user_id}",
-        user_id, buy_amount, ARENA_CHALLENGE_BUY_COST, arena_limit.daily_buy_limit,
-        int(user_info["stone"]), bought, int(arena_info.get("daily_extra_challenges", 0)),
-        arena_info["last_buy_date"],
-    )
-    if not result.succeeded:
-        await handle_send(bot, event, "竞技场购买状态已变化，请重新操作。")
-        await arena_buy_challenge.finish()
-    real_amount, new_bought, total_cap = result.amount, result.bought, arena_limit.daily_challenges + result.extra
-    arena_info = arena_limit.get_user_arena_info(user_id)
-    remaining = max(0, int(total_cap) - int(arena_info.get("daily_challenges_used", 0)))
-
-    await handle_send(
-        bot,
-        event,
-        f"竞技场挑战次数购买成功！\n"
-        f"本次购买：{real_amount}次\n"
-        f"消耗灵石：{number_to(total_cost)}\n"
-        f"今日购买：{new_bought}/{arena_limit.daily_buy_limit}\n"
-        f"今日剩余挑战：{remaining}/{total_cap}",
-        md_type="竞技场",
-        k1="挑战", v1="竞技场挑战",
-        k2="查看", v2="竞技场查看",
-        k3="我的", v3="我的竞技场"
-    )
+    await handle_send(bot, event, "竞技场购买状态已变化，请重新操作。")
     await arena_buy_challenge.finish()
 
 def check_rank_requirement(current_rank, required_rank):
@@ -804,21 +841,11 @@ async def use_arena_challenge_ticket(bot: Bot, event: GroupMessageEvent | Privat
     user_id = user_info["user_id"]
     arena_info = arena_limit.get_user_arena_info(user_id)
     used_count = int(arena_info.get("daily_challenges_used", 0))
-    if used_count <= 0:
-        await handle_send(
-            bot, event,
-            "今日竞技场挑战次数未消耗，无需使用挑战券。",
-            md_type="竞技场",
-            k1="挑战", v1="竞技场挑战",
-            k2="查看", v2="竞技场查看",
-            k3="我的", v3="我的竞技场"
-        )
-        return
-
     item_count = int(sql_message.goods_num(user_id, item_id))
     extra_challenges = int(arena_info.get("daily_extra_challenges", 0))
     challenge_cap = arena_limit.daily_challenges + extra_challenges
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    # 先走 operation：成功后 used_count 可能已归零，重放不能被前置拦截。
     result = arena_challenge_ticket_service.use(
         f"arena-challenge-ticket:{event_id}:{user_id}" if event_id
         else f"arena-challenge-ticket:{time.time_ns()}:{user_id}",
@@ -830,22 +857,21 @@ async def use_arena_challenge_ticket(bot: Bot, event: GroupMessageEvent | Privat
         extra_challenges,
         challenge_cap,
     )
-    if not result.succeeded:
-        if result.status == "no_challenges_used":
-            message = "今日竞技场挑战次数未消耗，无需使用挑战券。"
-        elif result.status == "item_missing":
-            message = "背包中没有可用的竞技场挑战券。"
-        else:
-            message = "竞技场挑战券使用状态已变化，请重新操作。"
-        await handle_send(bot, event, message, md_type="竞技场")
+    if result.status == "duplicate" or result.succeeded:
+        await handle_send(
+            bot, event,
+            f"使用竞技场挑战券 {result.used_tickets} 张，今日剩余竞技场挑战次数："
+            f"{result.challenges_remaining}/{result.challenge_cap}",
+            md_type="竞技场",
+            k1="挑战", v1="竞技场挑战",
+            k2="查看", v2="竞技场查看",
+            k3="我的", v3="我的竞技场"
+        )
         return
-
-    await handle_send(
-        bot, event,
-        f"使用竞技场挑战券 {result.used_tickets} 张，今日剩余竞技场挑战次数："
-        f"{result.challenges_remaining}/{result.challenge_cap}",
-        md_type="竞技场",
-        k1="挑战", v1="竞技场挑战",
-        k2="查看", v2="竞技场查看",
-        k3="我的", v3="我的竞技场"
-    )
+    if result.status == "no_challenges_used":
+        message = "今日竞技场挑战次数未消耗，无需使用挑战券。"
+    elif result.status == "item_missing":
+        message = "背包中没有可用的竞技场挑战券。"
+    else:
+        message = "竞技场挑战券使用状态已变化，请重新操作。"
+    await handle_send(bot, event, message, md_type="竞技场")

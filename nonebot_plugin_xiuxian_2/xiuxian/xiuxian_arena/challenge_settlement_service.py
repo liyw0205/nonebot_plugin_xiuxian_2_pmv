@@ -128,6 +128,18 @@ class ArenaChallengeSettlementService:
                 return ArenaChallengeSettlementResult("operation_conflict")
             return self._decode_result("duplicate", str(row[1]))
 
+    @classmethod
+    def _normalize_arena_row(cls, row, challenger: bool) -> tuple:
+        fields = cls._CHALLENGER_FIELDS if challenger else cls._BATTLE_FIELDS
+        values = []
+        for index, field in enumerate(fields):
+            value = row[index]
+            if field in {"rank", "last_challenge_time"}:
+                values.append(str(value or ""))
+            else:
+                values.append(int(value or 0))
+        return tuple(values)
+
     def settle(
         self,
         operation_id,
@@ -288,7 +300,7 @@ class ArenaChallengeSettlementService:
                 if (
                     challenger_arena_row is None
                     or challenger_player_row is None
-                    or tuple(challenger_arena_row)
+                    or self._normalize_arena_row(challenger_arena_row, True)
                     != tuple(challenger[field] for field in self._CHALLENGER_FIELDS)
                     or tuple(map(int, challenger_player_row))
                     != (
@@ -314,7 +326,7 @@ class ArenaChallengeSettlementService:
                     if (
                         opponent_arena_row is None
                         or opponent_player_row is None
-                        or tuple(opponent_arena_row)
+                        or self._normalize_arena_row(opponent_arena_row, False)
                         != tuple(opponent[field] for field in self._BATTLE_FIELDS)
                         or tuple(map(int, opponent_player_row))
                         != (opponent_player["hp"], opponent_player["mp"])

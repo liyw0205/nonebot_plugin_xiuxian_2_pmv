@@ -60,14 +60,12 @@ class ArenaChallengeTicketService:
             challenge_cap,
         ) < 0:
             raise ValueError("valid operation and non-negative arena snapshot are required")
+        # Request identity only — inventory/used counters are concurrency checks.
         payload = json.dumps(
             [
                 user_id,
                 item_id,
                 requested_count,
-                expected_item_count,
-                expected_challenges_used,
-                expected_extra_challenges,
                 challenge_cap,
             ],
             ensure_ascii=True,

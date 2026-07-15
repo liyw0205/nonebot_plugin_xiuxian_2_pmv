@@ -47,8 +47,10 @@ class ArenaPurchaseService:
         weekly = normalize_weekly_purchases(expected_weekly_purchases, today)
         if not operation_id or quantity <= 0 or min(item_id, unit_cost, weekly_limit, expected_honor, max_goods_num) < 0:
             raise ValueError("valid operation, item, quantity and purchase limits are required")
+        # Request identity only — mutable snapshots stay out of payload so replays
+        # can reuse the first result after honor/weekly state has already changed.
         payload = json.dumps(
-            [user_id, item_id, item_name, item_type, quantity, unit_cost, weekly_limit, expected_honor, weekly, max_goods_num, bind_flag],
+            [user_id, item_id, item_name, item_type, quantity, unit_cost, weekly_limit, max_goods_num, bind_flag],
             ensure_ascii=True, sort_keys=True,
         )
 
