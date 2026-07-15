@@ -447,18 +447,11 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         
     # 判断输入是ID还是名称
     item_name = args[0]
-    # 检查背包物品
     goods_id, goods_info = items.get_data_by_item_name(item_name)
     if not goods_id:
         msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
         await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
         return
-    back_item = sql_message.get_item_by_good_id_and_user_id(user_id, goods_id)
-    if not back_item or int(back_item.get("goods_num", 0) or 0) <= 0:
-        msg = f"背包中没有足够的 {item_name} ！"
-        await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
-        return
-    goods_num = int(back_item.get("goods_num", 0) or 0)
 
     # 检查是否是禁止炼金的物品
     if str(goods_id) in BANNED_ITEM_IDS_ALCHEMY:
@@ -471,12 +464,6 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
         await goods_re_root.finish()
 
-    available_num = get_alchemy_available_num(back_item)
-    if available_num <= 0:
-        msg = f"{item_name}当前没有可炼金数量，已装备或使用中的物品会被保留！"
-        await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
-        await goods_re_root.finish()
-
     num = 1
     try:
         if len(args) > 1:
@@ -485,30 +472,46 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                 msg = "炼金数量必须大于0！"
                 await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
                 await goods_re_root.finish()
-            if input_num > available_num:
-                reserved_num = get_alchemy_reserved_num(back_item)
-                msg = f"道友背包中的{item_name}可炼金数量不足，当前共有{goods_num}个，可炼金{available_num}个"
-                if reserved_num > 0:
-                    msg += f"，已装备或使用中保留{reserved_num}个"
-                msg += "！"
-                await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
-                await goods_re_root.finish()
             num = input_num
     except ValueError: # 如果第二个参数不是有效数字，则默认为1
-            num = 1 
-    
+            num = 1
+
     price = get_recover(goods_id, num)
     if price <= 0: # 某些物品炼金价格可能为0或负数
         msg = f"物品：{item_name}炼金失败，凝聚{number_to(price)}枚灵石！"
         await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
         await goods_re_root.finish()
 
+    # 先走 alchemy operation，避免成功后数量归零挡住同事件重放。
     alchemy_result = alchemy_service.apply(
         _alchemy_operation_id(event, user_id, "single"),
         user_id,
         price,
         [(goods_id, num)],
     )
+    if alchemy_result.status == "duplicate":
+        msg = (
+            f"物品：{item_name} 数量：{num} 炼金成功，凝聚{number_to(alchemy_result.reward_stone or price)}枚灵石！\n"
+            f"该炼金请求已经处理，无需重复提交。"
+        )
+        await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
+        await goods_re_root.finish()
+    if alchemy_result.status == "item_insufficient":
+        back_item = sql_message.get_item_by_good_id_and_user_id(user_id, goods_id)
+        goods_num = int((back_item or {}).get("goods_num", 0) or 0)
+        available_num = get_alchemy_available_num(back_item) if back_item else 0
+        if not back_item or goods_num <= 0:
+            msg = f"背包中没有足够的 {item_name} ！"
+        elif available_num <= 0:
+            msg = f"{item_name}当前没有可炼金数量，已装备或使用中的物品会被保留！"
+        else:
+            reserved_num = get_alchemy_reserved_num(back_item)
+            msg = f"道友背包中的{item_name}可炼金数量不足，当前共有{goods_num}个，可炼金{available_num}个"
+            if reserved_num > 0:
+                msg += f"，已装备或使用中保留{reserved_num}个"
+            msg += "！"
+        await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
+        await goods_re_root.finish()
     if not alchemy_result.succeeded:
         msg = "炼金失败，背包数量发生变化，请重试！"
         await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
@@ -793,21 +796,16 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
         return
 
-    goods_num = sql_message.goods_num(user_info['user_id'], goods_id)
-    if goods_num <= 0:
-        msg = f"背包中没有足够的 {item_name} ！"
-        await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
-        return
-
-    # 使用数量
+    # 使用数量：解析在前；库存不足由各 service 返回后处理，避免成功后 goods_num=0 挡住重放。
     num = 1
     try:
-        if len(args) > 1 and 1 <= int(args[1]) <= int(goods_num):
-            num = int(args[1])
-        elif len(args) > 1 and int(args[1]) > int(goods_num):
-            msg = f"道友背包中的{item_name}数量不足，当前仅有{goods_num}个！"
-            await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
-            await use.finish()
+        if len(args) > 1:
+            requested = int(args[1])
+            if requested <= 0:
+                msg = "使用数量必须大于0！"
+                await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
+                await use.finish()
+            num = requested
     except ValueError:
         num = 1
 
@@ -936,6 +934,32 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 max_goods_num=XiuConfig().max_goods_num,
                 accessory_limit=ACCESSORY_BAG_LIMIT,
             )
+            if result.status == "duplicate":
+                reward_msgs = []
+                for reward in result.rewards:
+                    if reward.name == "灵石":
+                        action = "获得" if reward.quantity > 0 else "扣除"
+                        reward_msgs.append(f"{action}灵石 {number_to(abs(reward.quantity))} 枚")
+                    else:
+                        reward_msgs.append(f"获得 {reward.name} x{reward.quantity}")
+                accessory_summary = {}
+                for accessory in result.accessories:
+                    key = (accessory["name"], int(accessory["quality"]))
+                    accessory_summary[key] = accessory_summary.get(key, 0) + 1
+                for (name, quality), amount in accessory_summary.items():
+                    reward_msgs.append(f"获得饰品 {name} x{amount}（{quality_to_cn(quality)}）")
+                msg = f"道友打开了 {result.quantity} 个 {package_name}：\n" + "\n".join(reward_msgs[:80])
+                if len(reward_msgs) > 80:
+                    msg += f"\n...其余{len(reward_msgs)-80}条已省略"
+                msg += "\n该礼包请求已经处理，无需重复提交。"
+                await handle_send(bot, event, msg, md_type="背包", k1="背包", v1="我的背包", k2="道具", v2="道具使用", k3="饰品", v3="饰品背包")
+                await use.finish()
+                return
+            if result.status in {"package_insufficient", "item_insufficient"}:
+                msg = f"背包中没有足够的 {item_name} ！"
+                await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
+                await use.finish()
+                return
             if not result.succeeded:
                 msg = "礼包数量、奖励容量、灵石余额或角色状态已经变化，请刷新背包后重试！"
                 await handle_send(bot, event, msg, md_type="背包", k1="背包", v1="我的背包")
@@ -1004,6 +1028,28 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 fixed_rewards,
                 max_goods_num=XiuConfig().max_goods_num,
             )
+            if result.status == "duplicate":
+                reward_msgs = []
+                for reward in result.rewards:
+                    if reward.name == "灵石":
+                        action = "获得" if reward.quantity > 0 else "扣除"
+                        reward_msgs.append(
+                            f"{action}灵石 {number_to(abs(reward.quantity))} 枚"
+                        )
+                    else:
+                        reward_msgs.append(f"获得 {reward.name} x{reward.quantity}")
+                msg = f"道友打开了 {result.quantity} 个 {package_name}：\n" + "\n".join(reward_msgs[:80])
+                if len(reward_msgs) > 80:
+                    msg += f"\n...其余{len(reward_msgs)-80}条已省略"
+                msg += "\n该礼包请求已经处理，无需重复提交。"
+                await handle_send(bot, event, msg, md_type="背包", k1="背包", v1="我的背包", k2="道具", v2="道具使用", k3="饰品", v3="饰品背包")
+                await use.finish()
+                return
+            if result.status in {"package_insufficient", "item_insufficient"}:
+                msg = f"背包中没有足够的 {item_name} ！"
+                await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
+                await use.finish()
+                return
             if not result.succeeded:
                 msg = "礼包数量、灵石余额或角色状态已经变化，请刷新背包后重试！"
                 await handle_send(bot, event, msg, md_type="背包", k1="背包", v1="我的背包")
@@ -1029,8 +1075,6 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
     elif goods_type == "装备":
         if goods_rank_calculated <= user_rank:
             msg = f"道友实力不足使用{goods_info['name']}\n请提升至：{required_rank_name}{lh_msg}"
-        elif check_equipment_use_msg(user_id, goods_id):
-            msg = "该装备已被装备，请勿重复装备！"
         else:
             item_type = goods_info["item_type"]
             result = equipment_service.change(
@@ -1040,13 +1084,23 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 item_type,
                 equip=True,
             )
-            msg = (
-                f"成功装备 {item_name}！"
-                if result.succeeded
-                else "装备状态发生变化，请刷新背包后重试！"
-            )
+            if result.status == "duplicate":
+                msg = f"成功装备 {item_name}！\n该换装请求已经处理，无需重复提交。"
+            elif result.status == "already_equipped":
+                msg = "该装备已被装备，请勿重复装备！"
+            elif result.status == "item_missing":
+                msg = f"背包中没有足够的 {item_name} ！"
+            elif result.succeeded:
+                msg = f"成功装备 {item_name}！"
+            else:
+                msg = "装备状态发生变化，请刷新背包后重试！"
 
     elif goods_type == "技能":
+        goods_num = sql_message.goods_num(user_info['user_id'], goods_id)
+        if goods_num <= 0:
+            msg = f"背包中没有足够的 {item_name} ！"
+            await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
+            return
         user_buff_info = UserBuffDate(user_id).BuffInfo
         skill_type = goods_info['item_type']
         if goods_rank_calculated <= user_rank:
@@ -1066,6 +1120,15 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 return
 
     elif goods_type == "丹药":
+        goods_num = sql_message.goods_num(user_info['user_id'], goods_id)
+        if goods_num <= 0:
+            msg = f"背包中没有足够的 {item_name} ！"
+            await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
+            return
+        if num > int(goods_num):
+            msg = f"道友背包中的{item_name}数量不足，当前仅有{goods_num}个！"
+            await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
+            await use.finish()
         msg = check_use_elixir(
             user_id,
             goods_id,
@@ -1077,6 +1140,15 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         msg = f"请使用【道具使用 {goods_info['name']}】命令来使用此道具。"
 
     elif goods_type == "神物":
+        goods_num = sql_message.goods_num(user_info['user_id'], goods_id)
+        if goods_num <= 0:
+            msg = f"背包中没有足够的 {item_name} ！"
+            await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
+            return
+        if num > int(goods_num):
+            msg = f"道友背包中的{item_name}数量不足，当前仅有{goods_num}个！"
+            await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
+            await use.finish()
         user_info_full = sql_message.get_user_info_with_id(user_id)
         if (goods_info['rank'] + added_ranks) < convert_rank(user_info_full['level'])[0]:
             msg = f"神物：{goods_info['name']}的使用境界为{goods_info['境界']}以上，道友不满足条件！"
