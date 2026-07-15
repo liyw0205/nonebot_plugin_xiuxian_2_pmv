@@ -33,6 +33,8 @@ class TitleEquipTransactionTests(unittest.TestCase):
         self.assertEqual(self.service.equip("locked", "u", ["1", "2"], "1", "3").status, "title_locked")
         self.assertEqual(self.service.equip("stale", "u", ["1"], "1", "1").status, "state_changed")
         self.service.equip("same", "u", ["1", "2"], "1", "2")
+        # Request identity is equip+user+title_id; mutable expected_* no longer cause conflict.
+        self.assertEqual(self.service.equip("same", "u", ["1", "2"], "2", "2").status, "duplicate")
         self.assertEqual(self.service.equip("same", "u", ["1", "2"], "2", "1").status, "operation_conflict")
 
     def test_operation_failure_rolls_back(self):

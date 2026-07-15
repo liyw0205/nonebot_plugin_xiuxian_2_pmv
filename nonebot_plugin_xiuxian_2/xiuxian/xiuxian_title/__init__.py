@@ -203,15 +203,26 @@ async def title_equip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     if not title_id:
         await handle_send(bot, event, "称号不存在！")
         await title_equip_cmd.finish()
+    operation_id = _title_operation_id(event, "equip", str(user_id))
+    # 先回放：成功后 equipped 变化会挡住同事件幂等。
+    prior = title_transaction_service.get_result(operation_id)
+    title_data = get_title_by_id(title_id) or {}
+    if prior is not None and prior.succeeded:
+        await handle_send(
+            bot, event,
+            f"成功装备称号【{title_data.get('name', prior.title_id or title_id)}】！\n"
+            f"该装备请求已经处理，无需重复提交。",
+            md_type="修仙", k1="称号", v1="我的称号", k2="卸下", v2="卸下称号", k3="存档", v3="我的修仙信息",
+        )
+        await title_equip_cmd.finish()
     unlocked = get_user_unlocked_titles(user_id)
     equipped = get_user_equipped_title(user_id) or ""
     result = title_transaction_service.equip(
-        _title_operation_id(event, "equip", str(user_id)), user_id, unlocked, equipped, title_id
+        operation_id, user_id, unlocked, equipped, title_id
     )
-    title_data = get_title_by_id(title_id) or {}
     messages = {
         "applied": f"成功装备称号【{title_data.get('name', title_id)}】！",
-        "duplicate": f"成功装备称号【{title_data.get('name', title_id)}】！",
+        "duplicate": f"成功装备称号【{title_data.get('name', title_id)}】！\n该装备请求已经处理，无需重复提交。",
         "already_equipped": f"称号【{title_data.get('name', title_id)}】已在装备中。",
         "title_locked": "你还未解锁该称号！",
         "state_changed": "称号状态已变化，请重新查看后再试。",
@@ -232,14 +243,23 @@ async def title_unequip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await title_unequip_cmd.finish()
 
     user_id = user_info['user_id']
+    operation_id = _title_operation_id(event, "unequip", str(user_id))
+    prior = title_transaction_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        title_data = get_title_by_id(prior.title_id) or {}
+        await handle_send(
+            bot, event,
+            f"成功卸下称号【{title_data.get('name', prior.title_id)}】！\n"
+            f"该卸下请求已经处理，无需重复提交。",
+            md_type="修仙", k1="称号", v1="我的称号", k2="装备", v2="装备称号", k3="存档", v3="我的修仙信息",
+        )
+        await title_unequip_cmd.finish()
     equipped = get_user_equipped_title(user_id) or ""
-    result = title_transaction_service.unequip(
-        _title_operation_id(event, "unequip", str(user_id)), user_id, equipped
-    )
+    result = title_transaction_service.unequip(operation_id, user_id, equipped)
     title_data = get_title_by_id(equipped) or {}
     messages = {
         "applied": f"成功卸下称号【{title_data.get('name', equipped)}】！",
-        "duplicate": f"成功卸下称号【{title_data.get('name', result.title_id)}】！",
+        "duplicate": f"成功卸下称号【{title_data.get('name', result.title_id)}】！\n该卸下请求已经处理，无需重复提交。",
         "not_equipped": "你当前没有装备任何称号！",
         "state_changed": "称号状态已变化，请重新查看后再试。",
         "operation_conflict": "本次称号请求与已处理记录冲突，请重新操作。",
