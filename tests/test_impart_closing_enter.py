@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart_pk.closing_enter_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart_pk.transaction_service import (
     ImpartClosingEnterService,
 )
 from tests.test_db_backend import db_backend

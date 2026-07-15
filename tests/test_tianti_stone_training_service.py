@@ -9,7 +9,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.stone_training_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.transaction_service import (
     StoneTrainingService,
 )
 from tests.test_db_backend import db_backend
@@ -52,7 +52,7 @@ class StoneTrainingServiceTests(unittest.TestCase):
 
     def train(self, operation_id="stone-training-1", requested_stone=100, cap=1000):
         with patch(
-            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.stone_training_service.get_tianti_cap",
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.transaction_service.get_tianti_cap",
             return_value=cap,
         ):
             return self.service.train(operation_id, "user", requested_stone)

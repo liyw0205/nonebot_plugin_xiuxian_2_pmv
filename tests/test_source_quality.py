@@ -595,7 +595,7 @@ class SourceQualityTests(unittest.TestCase):
             encoding="utf-8"
         )
         service_source = (
-            SOURCE_ROOT / "xiuxian" / "xiuxian_tianti" / "item_reward_service.py"
+            SOURCE_ROOT / "xiuxian" / "xiuxian_tianti" / "transaction_service.py"
         ).read_text(encoding="utf-8")
         start = back_source.index('if goods_info.get("buff_type") == "tianti_hp_time"')
         end = back_source.index("else:", start)

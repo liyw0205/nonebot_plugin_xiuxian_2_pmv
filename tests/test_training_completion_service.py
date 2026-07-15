@@ -6,7 +6,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_training.completion_service import TrainingCompletionService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_training.transaction_service import TrainingCompletionService
 from tests.test_db_backend import db_backend
 
 

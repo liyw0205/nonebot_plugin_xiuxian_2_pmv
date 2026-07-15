@@ -9,7 +9,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart_pk.project_join_service import ImpartProjectJoinService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart_pk.transaction_service import ImpartProjectJoinService
 from tests.test_db_backend import db_backend
 
 

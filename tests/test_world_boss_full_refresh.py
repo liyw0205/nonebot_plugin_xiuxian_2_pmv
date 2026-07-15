@@ -9,7 +9,7 @@ import pytest
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_boss.full_refresh_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_boss.transaction_service import (
     WorldBossFullRefreshService,
 )
 

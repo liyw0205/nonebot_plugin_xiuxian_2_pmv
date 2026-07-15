@@ -8,7 +8,7 @@ from threading import RLock
 
 from ..xiuxian_utils import db_backend
 from ..xiuxian_tianti.tianti_data import TiantiDataManager
-from ..xiuxian_tianti.tianti_service import grant_tianti_settle_minutes
+from ..xiuxian_tianti.transaction_service import grant_tianti_settle_minutes
 from .sect_fairyland import SECT_FAIRYLAND_CLAIM_TABLE, _fairyland_claim_key
 
 

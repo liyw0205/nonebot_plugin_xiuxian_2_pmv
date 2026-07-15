@@ -7,7 +7,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_boss.daily_limit_reset_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_boss.transaction_service import (
     WorldBossDailyLimitResetService,
 )
 

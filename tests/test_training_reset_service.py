@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_training.reset_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_training.transaction_service import (
     TrainingResetService,
 )
 

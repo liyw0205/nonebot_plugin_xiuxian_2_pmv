@@ -38,7 +38,7 @@ from ..xiuxian_impart import use_wishing_stone, use_love_sand
 from ..xiuxian_work import use_work_order, use_work_capture_order
 from ..xiuxian_buff import use_two_exp_token
 from ..xiuxian_arena import use_arena_challenge_ticket
-from ..xiuxian_tianti.item_reward_service import TiantiItemRewardService
+from ..xiuxian_tianti.transaction_service import TiantiItemRewardService
 from ..xiuxian_config import XiuConfig, convert_rank, added_ranks
 from ...paths import get_paths
 from ..xiuxian_utils.pet_system import (

@@ -6,7 +6,7 @@ from pathlib import Path
 import nonebot
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_training.event_service import TrainingEventService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_training.transaction_service import TrainingEventService
 from tests.test_db_backend import db_backend
 
 

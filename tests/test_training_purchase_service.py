@@ -10,7 +10,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_training.purchase_service import TrainingPurchaseService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_training.transaction_service import TrainingPurchaseService
 from tests.test_db_backend import db_backend
 
 

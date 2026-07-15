@@ -10,7 +10,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.settlement_service import TiantiSettlementService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.transaction_service import TiantiSettlementService
 from tests.test_db_backend import db_backend
 
 
@@ -41,7 +41,7 @@ class TiantiSettlementServiceTests(unittest.TestCase):
                     "spirit_vein_bonus": 0.0}
 
         with patch(
-            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.settlement_service.settle_tianti_gain",
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.transaction_service.settle_tianti_gain",
             side_effect=apply,
         ):
             return self.service.settle(

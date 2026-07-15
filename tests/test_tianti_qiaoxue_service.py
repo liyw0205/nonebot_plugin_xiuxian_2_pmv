@@ -10,7 +10,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.qiaoxue_service import QiaoxueService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.transaction_service import QiaoxueService
 from tests.test_db_backend import db_backend
 
 
@@ -38,10 +38,10 @@ class QiaoxueServiceTests(unittest.TestCase):
 
     def open(self, operation_id="qiaoxue-1", roll=0, rank=1):
         with patch(
-            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.qiaoxue_service.get_qiaoxue_pool",
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.transaction_service.get_qiaoxue_pool",
             return_value=self.pool,
         ), patch(
-            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.qiaoxue_service.get_tianti_level_data",
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.transaction_service.get_tianti_level_data",
             return_value={"rank": rank},
         ):
             return self.service.open(operation_id, "user", roll)

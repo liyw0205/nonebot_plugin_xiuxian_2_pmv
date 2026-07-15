@@ -9,7 +9,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_mixelixir.refine_cost_service import MixelixirRefineCostService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_mixelixir.transaction_service import MixelixirRefineCostService
 from tests.test_db_backend import db_backend
 
 

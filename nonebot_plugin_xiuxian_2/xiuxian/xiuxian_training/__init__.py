@@ -16,10 +16,10 @@ from ..xiuxian_utils.item_json import Items
 from .training_data import training_data
 from .training_limit import training_limit
 from .training_events import training_events
-from .completion_service import TrainingCompletionService
-from .event_service import TrainingEventService
-from .purchase_service import TrainingPurchaseService
-from .reset_service import TrainingResetService
+from .transaction_service import TrainingCompletionService
+from .transaction_service import TrainingEventService
+from .transaction_service import TrainingPurchaseService
+from .transaction_service import TrainingResetService
 from ...paths import get_paths
 from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.item_json import Items

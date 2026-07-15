@@ -13,7 +13,7 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade import auction_config
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade import auction_service
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade import auction_utils
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade.auction_session_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade.transaction_service import (
     AuctionSessionService,
 )
 from tests.test_db_backend import db_backend

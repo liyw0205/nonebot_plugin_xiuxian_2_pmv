@@ -50,7 +50,7 @@ from .auction_utils import (
     _format_user_auction_quota,
     bind_auction_repository,
 )
-from .auction_service import (
+from .transaction_service import (
     bind_auction_service_dependencies,
     start_auction_process,
     end_auction_process,
@@ -59,10 +59,10 @@ from .auction_service import (
 )
 from .auction_jobs import run_auction_job
 from .repository import TradeRepository
-from .service import XianshiPurchaseService
-from .guishi_stone_service import GuishiStoneService
-from .auction_queue_service import AuctionQueueService
-from .auction_session_service import AuctionSessionService
+from .transaction_service import XianshiPurchaseService
+from .transaction_service import GuishiStoneService
+from .transaction_service import AuctionQueueService
+from .transaction_service import AuctionSessionService
 from ...paths import get_paths
 from urllib.parse import quote
 

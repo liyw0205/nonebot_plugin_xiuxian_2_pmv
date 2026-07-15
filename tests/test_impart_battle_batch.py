@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 import nonebot
 nonebot.init()
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart_pk.battle_batch_service import ImpartBattleBatchService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart_pk.transaction_service import ImpartBattleBatchService
 from tests.test_db_backend import db_backend
 
 class ImpartBattleBatchTests(unittest.TestCase):

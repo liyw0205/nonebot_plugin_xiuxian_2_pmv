@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_mixelixir.harvest_level_upgrade_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_mixelixir.transaction_service import (
     MixelixirHarvestLevelUpgradeService,
 )
 from tests.test_db_backend import db_backend

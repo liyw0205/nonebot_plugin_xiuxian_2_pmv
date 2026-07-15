@@ -10,7 +10,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.medicine_bath_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.transaction_service import (
     MedicineBathService,
 )
 from tests.test_db_backend import db_backend
@@ -60,10 +60,10 @@ class MedicineBathServiceTests(unittest.TestCase):
             return dict(settlement)
 
         with patch(
-            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.medicine_bath_service.settle_tianti_gain",
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.transaction_service.settle_tianti_gain",
             side_effect=settle,
         ), patch(
-            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.medicine_bath_service.get_active_medicine_bath",
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.transaction_service.get_active_medicine_bath",
             return_value=None,
         ):
             return self.service.apply(
@@ -119,7 +119,7 @@ class MedicineBathServiceTests(unittest.TestCase):
 
     def test_active_bath_does_not_consume_herbs(self) -> None:
         with patch(
-            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.medicine_bath_service.get_active_medicine_bath",
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.transaction_service.get_active_medicine_bath",
             return_value={"name": "existing"},
         ):
             result = self.service.apply(

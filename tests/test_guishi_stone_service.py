@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade.guishi_stone_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade.transaction_service import (
     GuishiStoneService,
 )
 from tests.test_db_backend import db_backend

@@ -9,7 +9,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.item_reward_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.transaction_service import (
     TiantiItemRewardService,
 )
 from tests.test_db_backend import db_backend
@@ -58,7 +58,7 @@ class TiantiItemRewardServiceTests(unittest.TestCase):
 
     def apply(self, operation_id="tianti-item-1", quantity=2):
         with patch(
-            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.item_reward_service.grant_tianti_settle_minutes",
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.transaction_service.grant_tianti_settle_minutes",
             side_effect=self.grant,
         ):
             return self.service.apply(operation_id, "user", 2001, quantity, 30)
@@ -82,7 +82,7 @@ class TiantiItemRewardServiceTests(unittest.TestCase):
     def test_same_operation_with_changed_minutes_is_rejected(self) -> None:
         first = self.apply("tianti-conflict")
         with patch(
-            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.item_reward_service.grant_tianti_settle_minutes",
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.transaction_service.grant_tianti_settle_minutes",
             side_effect=self.grant,
         ):
             conflict = self.service.apply(

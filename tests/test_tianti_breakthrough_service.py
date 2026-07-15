@@ -9,7 +9,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.breakthrough_service import (
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.transaction_service import (
     TiantiBreakthroughService,
 )
 from tests.test_db_backend import db_backend
@@ -35,13 +35,13 @@ class TiantiBreakthroughServiceTests(unittest.TestCase):
 
     def attempt(self, operation_id="break-1", cultivation_rank=1, success=True):
         with patch(
-            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.breakthrough_service.get_next_tianti_level_name",
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.transaction_service.get_next_tianti_level_name",
             return_value="次境",
         ), patch(
-            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.breakthrough_service.get_tianti_level_data",
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.transaction_service.get_tianti_level_data",
             return_value={"need_hp": 100, "min_xx_level": "筑基"},
         ), patch(
-            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.breakthrough_service.get_tianti_level_index",
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.transaction_service.get_tianti_level_index",
             return_value=2,
         ):
             return self.service.attempt(
