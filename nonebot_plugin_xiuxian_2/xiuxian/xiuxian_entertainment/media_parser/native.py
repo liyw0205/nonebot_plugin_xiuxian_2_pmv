@@ -552,14 +552,21 @@ def parse_kuaishou(url: str) -> dict[str, Any]:
         if "uhead" not in u.lower() and "/bg" not in urlparse(u).path.lower()
     ]
 
-    caption = _walk_pick_str(state, {"caption", "title"})
-    author = _walk_pick_str(state, {"userName", "name", "authorName"})
-    # caption 优先；避免广告 config 里的 title 抢答
-    if caption and caption not in ("去快手享超清画质", "参与免费领道具！"):
-        meta["title"] = caption
-    else:
-        meta["title"] = caption or "快手视频"
-    meta["author"] = author if author and "快手" not in author else author
+    caption = _walk_pick_str(state, {"caption"})
+    if not caption:
+        raw_title = _walk_pick_str(state, {"title"})
+        if raw_title and raw_title not in {
+            "去快手享超清画质",
+            "参与免费领道具！",
+            "快手",
+            "快手视频",
+        }:
+            caption = raw_title
+    author = _walk_pick_str(state, {"userName"})
+    if not author:
+        author = _walk_pick_str(state, {"authorName", "name"})
+    meta["title"] = caption or "快手视频"
+    meta["author"] = author or ""
     meta["desc"] = (caption or "")[:400]
     meta["video_urls"] = videos[:3]
     meta["image_urls"] = images[:6]
