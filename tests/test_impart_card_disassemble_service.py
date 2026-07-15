@@ -4,7 +4,7 @@ from pathlib import Path
 
 import nonebot
 nonebot.init()
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart.card_disassemble_service import CardDisassembleService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart.transaction_service import CardDisassembleService
 from tests.test_db_backend import db_backend
 
 

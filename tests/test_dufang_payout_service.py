@@ -4,8 +4,7 @@ import unittest
 from pathlib import Path
 import nonebot
 nonebot.init()
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dufang.bet_service import DufangBetService
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dufang.payout_service import DufangPayoutService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dufang.transaction_service import DufangBetService, DufangPayoutService
 from tests.test_db_backend import db_backend
 
 class DufangPayoutServiceTests(unittest.TestCase):

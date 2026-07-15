@@ -8,7 +8,7 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dufang.bet_service import DufangBetService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dufang.transaction_service import DufangBetService
 from tests.test_db_backend import db_backend
 
 
