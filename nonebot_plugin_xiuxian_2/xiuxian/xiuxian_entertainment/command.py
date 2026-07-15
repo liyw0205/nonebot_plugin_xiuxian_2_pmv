@@ -245,26 +245,65 @@ async def fun_media_send_parse_result(
             k2="链接解析",
             v2="链接解析",
         )
-    # 先发卡片（封面摘要），再发原图/视频
+
+    # 有视频时：卡片 + 视频 URL 直发（不要整文件下载，避免 20MB/超时静默失败）
+    # 无视频时：卡片 + 原图
+    has_video = bool(videos)
     for card in cards:
         try:
             await send_entertainment_media(bot, event, card, media_type="图片")
         except Exception as e:
-            logger.debug(f"发送解析卡片失败 {card}: {e}")
-    for img in images:
+            logger.warning(f"发送解析卡片失败 {card}: {e}")
+
+    if not has_video:
+        for img in images[:6]:
+            try:
+                await send_entertainment_media(bot, event, img, media_type="图片")
+            except Exception as e:
+                logger.warning(f"发送解析图片失败 {img[:80]}: {e}")
+        return
+
+    # 视频：与「随机小姐姐」一致，MessageSegment.video(bot, url) 直传 URL
+    sent_video = False
+    last_err: Exception | None = None
+    for vid in videos[:2]:
         try:
             await send_entertainment_media(
-                bot, event, img, media_type="图片"
+                bot,
+                event,
+                MessageSegment.video(bot, vid),
+                media_type="视频",
             )
+            sent_video = True
+            break
         except Exception as e:
-            logger.debug(f"发送解析图片失败 {img[:80]}: {e}")
-    for vid in videos:
+            last_err = e
+            logger.warning(f"发送解析视频失败 {vid[:100]}: {e}")
+            continue
+
+    if not sent_video:
+        # 视频全失败时再补发封面图，并提示原因，避免用户只看到卡片却不知视频失败
+        for img in images[:2]:
+            try:
+                await send_entertainment_media(bot, event, img, media_type="图片")
+            except Exception as e:
+                logger.warning(f"发送解析封面失败 {img[:80]}: {e}")
+        tip = "视频发送失败"
+        if last_err:
+            tip = f"视频发送失败：{last_err}"
         try:
-            await send_entertainment_media(
-                bot, event, vid, media_type="视频"
+            await handle_send(
+                bot,
+                event,
+                f"【媒体解析】{tip}\n可尝试打开上方原始链接观看。",
+                md_type="娱乐",
+                k1="链接解析",
+                v1="链接解析",
+                k2="娱乐帮助",
+                v2="娱乐帮助",
             )
-        except Exception as e:
-            logger.debug(f"发送解析视频失败 {vid[:80]}: {e}")
+        except Exception:
+            pass
 
 
 def _get_json_api_sync(api_url: str, params: dict | None = None, timeout: int = 15) -> dict:

@@ -164,5 +164,12 @@ async def run_parse_and_build_messages(
                 logger.debug(f"媒体卡片渲染失败: {e}")
 
     all_images = dedupe_media_urls_preserve_order(all_images)[:12]
+    # 视频优先挑较短/更可发的：kwaicdn 主链在前（native 已排序），这里只截前 3
     all_videos = dedupe_media_urls_preserve_order(all_videos)[:3]
+    # 过滤明显非内容图（表情包等）
+    all_images = [
+        u
+        for u in all_images
+        if "emotion" not in u.lower() and "emoji" not in u.lower()
+    ][:12]
     return (texts, all_images, all_videos, card_paths)
