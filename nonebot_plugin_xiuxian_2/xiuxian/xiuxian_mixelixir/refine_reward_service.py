@@ -46,12 +46,32 @@ class MixelixirRefineRewardService:
             ).fetchone()
         return None if row is None else str(row[0])
 
+    def get_result(self, operation_id: str) -> MixelixirRefineRewardResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS mixelixir_refine_reward_operations ("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,task_id TEXT NOT NULL,reward_id INTEGER NOT NULL,"
+                "reward_name TEXT NOT NULL,reward_quantity INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT payload,reward_id,reward_name,reward_quantity FROM mixelixir_refine_reward_operations "
+                "WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return MixelixirRefineRewardResult("duplicate", int(previous[1]), str(previous[2]), int(previous[3]))
+
     def claim(self, operation_id, user_id, task_id, max_goods_num) -> MixelixirRefineRewardResult:
         operation_id, user_id, task_id = str(operation_id).strip(), str(user_id), str(task_id)
         max_goods_num = int(max_goods_num)
         if not operation_id or not task_id or max_goods_num <= 0:
             raise ValueError("valid operation, task and capacity are required")
-        payload = json.dumps([user_id, task_id, max_goods_num], ensure_ascii=True)
+        # Request identity only — max_goods_num is capacity config.
+        payload = json.dumps([user_id, task_id], ensure_ascii=True, separators=(",", ":"))
 
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False

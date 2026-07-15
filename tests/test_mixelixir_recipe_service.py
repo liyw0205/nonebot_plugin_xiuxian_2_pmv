@@ -36,7 +36,8 @@ class RecipeServiceTests(unittest.TestCase):
     def test_success_and_idempotency(self):
         self.assertEqual(self.save().status, "applied")
         self.assertEqual(self.save().status, "duplicate")
-        self.assertEqual(self.save(recipes=[{**self.recipes[0], "reward_id": 9}]).status, "state_changed")
+        # mutable recipe roll must not break same-op replay
+        self.assertEqual(self.save(recipes=[{**self.recipes[0], "reward_id": 9}]).status, "duplicate")
         self.assertEqual(self.service.find("u", "r"), ("op", self.recipes[0]))
 
     def test_operation_failure_rolls_back_recipe(self):

@@ -26,6 +26,23 @@ class MixelixirRefineCostService:
         self._database = Path(database)
         self._lock = lock or RLock()
 
+    def get_result(self, operation_id: str) -> MixelixirRefineCostResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS mixelixir_refine_cost_operations ("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,task_id TEXT NOT NULL,"
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT payload,task_id FROM mixelixir_refine_cost_operations WHERE operation_id=%s", (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return MixelixirRefineCostResult("duplicate", str(previous[1]))
+
     def start(
         self,
         operation_id,
@@ -44,10 +61,9 @@ class MixelixirRefineCostService:
         if not operation_id or not recipe_set_id or not recipe_key or expected_daily_count < 0 or reward_quantity <= 0:
             raise ValueError("valid operation, saved recipe and reward snapshot are required")
         task_id = operation_id
+        # Request identity only — daily/mix/reward snapshots are concurrency/outcome.
         payload = json.dumps(
-            [user_id, recipe_set_id, recipe_key, expected_daily_count, reward_quantity, expected_mix_state, updated_mix_state],
-            ensure_ascii=True,
-            sort_keys=True,
+            [user_id, recipe_set_id, recipe_key], ensure_ascii=True, separators=(",", ":"),
         )
 
         with self._lock, closing(db_backend.connect(self._database)) as conn:

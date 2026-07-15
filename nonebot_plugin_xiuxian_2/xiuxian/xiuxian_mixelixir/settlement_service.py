@@ -26,6 +26,24 @@ class MixelixirSettlementService:
         self._database = Path(database)
         self._lock = lock or RLock()
 
+    def get_result(self, operation_id: str) -> MixelixirSettlementResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS mixelixir_settlement_operations ("
+                "operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, reward_quantity INTEGER NOT NULL, "
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT payload, reward_quantity FROM mixelixir_settlement_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return MixelixirSettlementResult("duplicate", int(previous[1]))
+
     def settle(
         self,
         operation_id,
@@ -51,9 +69,10 @@ class MixelixirSettlementService:
         if not operation_id or not normalized_materials or reward_quantity <= 0 or max_goods_num <= 0:
             raise ValueError("operation, materials, reward quantity and capacity are required")
 
+        # Request identity only — reward_name/max_goods_num are display/config.
         payload = json.dumps(
-            [user_id, sorted(normalized_materials.items()), reward_id, str(reward_name), reward_quantity, max_goods_num],
-            ensure_ascii=True,
+            [user_id, sorted(normalized_materials.items()), reward_id, reward_quantity],
+            ensure_ascii=True, separators=(",", ":"),
         )
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             try:

@@ -82,7 +82,8 @@ class MixelixirHarvestServiceTests(unittest.TestCase):
         conflict = self.service.harvest(
             "repeat", "user", "old", "different", [(1, "一号药材", 2)], max_goods_num=999
         )
-        self.assertEqual((first.status, duplicate.status, conflict.status), ("applied", "duplicate", "state_changed"))
+        # mutable rewards/time must not break same-op replay
+        self.assertEqual((first.status, duplicate.status, conflict.status), ("applied", "duplicate", "duplicate"))
         self.assertEqual(duplicate.rewards, first.rewards)
         self.assertEqual(self.state(), ("new", {1: 2, 2: 3}))
 

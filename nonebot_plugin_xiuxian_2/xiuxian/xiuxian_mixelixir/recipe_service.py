@@ -40,6 +40,24 @@ class MixelixirRecipeService:
     def _decode_recipes(value: str) -> tuple[dict, ...]:
         return tuple(dict(recipe) for recipe in json.loads(value))
 
+    def get_result(self, operation_id: str) -> MixelixirRecipeSaveResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS mixelixir_recipe_save_operations ("
+                "operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, recipe_set_id TEXT NOT NULL, "
+                "recipes_json TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT payload,recipe_set_id,recipes_json FROM mixelixir_recipe_save_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return MixelixirRecipeSaveResult("duplicate", str(previous[1]), self._decode_recipes(str(previous[2])))
+
     def save(
         self,
         operation_id,
@@ -57,11 +75,8 @@ class MixelixirRecipeService:
         if not operation_id or expected_daily_count < 0 or not material_snapshot or not furnace_snapshot or not normalized_recipes:
             raise ValueError("valid operation, inventory snapshot and recipes are required")
         recipes_json = json.dumps(normalized_recipes, ensure_ascii=False, sort_keys=True)
-        payload = json.dumps(
-            [user_id, expected_daily_count, material_snapshot, furnace_snapshot, normalized_recipes],
-            ensure_ascii=True,
-            sort_keys=True,
-        )
+        # Request identity only — inventory/recipes are snapshot+roll outcomes.
+        payload = json.dumps([user_id], ensure_ascii=True, separators=(",", ":"))
         recipe_set_id = operation_id
 
         with self._lock, closing(db_backend.connect(self._database)) as conn:

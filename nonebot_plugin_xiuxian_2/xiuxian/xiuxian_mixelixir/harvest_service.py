@@ -39,6 +39,24 @@ class MixelixirHarvestService:
     def _decode_rewards(payload: str) -> tuple[HarvestReward, ...]:
         return tuple(HarvestReward(**reward) for reward in json.loads(payload))
 
+    def get_result(self, operation_id: str) -> MixelixirHarvestResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS mixelixir_harvest_operations ("
+                "operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, harvested_at TEXT NOT NULL, "
+                "rewards_json TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT payload, harvested_at, rewards_json FROM mixelixir_harvest_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return MixelixirHarvestResult("duplicate", str(previous[1]), self._decode_rewards(str(previous[2])))
+
     def harvest(
         self,
         operation_id,
@@ -71,9 +89,8 @@ class MixelixirHarvestService:
         rewards_json = json.dumps(
             [reward.__dict__ for reward in normalized_rewards], ensure_ascii=True, sort_keys=True
         )
-        payload = json.dumps(
-            [user_id, expected_last_time, harvested_at, rewards_json, max_goods_num], ensure_ascii=True
-        )
+        # Request identity only — harvest time/rewards are outcomes stored in op row.
+        payload = json.dumps([user_id], ensure_ascii=True, separators=(",", ":"))
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False
             try:

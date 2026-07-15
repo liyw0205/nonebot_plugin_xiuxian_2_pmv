@@ -45,7 +45,7 @@ class RefineRewardServiceTests(unittest.TestCase):
     def test_success_and_idempotency(self):
         self.assertEqual(self.claim().status, "applied")
         self.assertEqual(self.claim().status, "duplicate")
-        self.assertEqual(self.claim(capacity=100).status, "state_changed")
+        self.assertEqual(self.claim(capacity=100).status, "duplicate")
         self.assertEqual(self.scalar(self.game, "SELECT goods_num FROM back WHERE goods_id=3"), 2)
         self.assertEqual(self.scalar(self.game, "SELECT status FROM mixelixir_refine_tasks"), "claimed")
         self.assertEqual(self.scalar(self.player, 'SELECT "炼丹经验" FROM mix_elixir_info'), "3")

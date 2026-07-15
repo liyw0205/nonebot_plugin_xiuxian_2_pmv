@@ -93,6 +93,14 @@ async def mix_elixir_sqdj_up_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     SQDJCONFIG = MIXELIXIRCONFIG['收取等级']
     mix_elixir_info = get_player_info(user_id, "mix_elixir_info")
     now_level = mix_elixir_info['收取等级']
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"mixelixir-harvest-level:{event_id}:{user_id}" if event_id else f"mixelixir-harvest-level:{user_id}:{time.time_ns()}"
+    # 先回放：成功后等级达上限会挡住同事件幂等。
+    prior = mixelixir_harvest_level_upgrade_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        msg = f"道友消耗灵石{prior.cost}枚，收取等级目前为：{prior.level}级，可以使灵田收获的药材增加{prior.level}个！\n该升级请求已经处理，无需重复提交。"
+        await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
+        await mix_elixir_sqdj_up.finish()
     if now_level >= len(SQDJCONFIG):
         msg = f"道友的收取等级已达到最高等级，无法升级了"
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
@@ -102,8 +110,6 @@ async def mix_elixir_sqdj_up_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         msg = f"下一个收取等级需要灵石{next_level_cost}枚，道友当前灵石不足。"
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir_sqdj_up.finish()
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"mixelixir-harvest-level:{event_id}:{user_id}" if event_id else f"mixelixir-harvest-level:{user_id}:{time.time_ns()}"
     upgrade = mixelixir_harvest_level_upgrade_service.upgrade(
         operation_id,
         user_id,
@@ -113,6 +119,10 @@ async def mix_elixir_sqdj_up_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         now_level + 1,
         next_level_cost,
     )
+    if upgrade.status == "duplicate":
+        msg = f"道友消耗灵石{upgrade.cost}枚，收取等级目前为：{upgrade.level}级，可以使灵田收获的药材增加{upgrade.level}个！\n该升级请求已经处理，无需重复提交。"
+        await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
+        await mix_elixir_sqdj_up.finish()
     if not upgrade.succeeded:
         msg = "灵石或炼丹状态已变化，本次收取等级升级未结算，请重新查看后再试。"
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级收取等级", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
@@ -136,6 +146,14 @@ async def mix_elixir_dykh_up_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     DYKHCONFIG = MIXELIXIRCONFIG['丹药控火']
     mix_elixir_info = get_player_info(user_id, "mix_elixir_info")
     now_level = mix_elixir_info['丹药控火']
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"mixelixir-fire-control:{event_id}:{user_id}" if event_id else f"mixelixir-fire-control:{user_id}:{time.time_ns()}"
+    upgrade_service = MixelixirFireControlUpgradeService(get_paths().game_db, get_paths().player_db)
+    prior = upgrade_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        msg = f"道友消耗灵石{prior.cost}枚，丹药控火等级目前为：{prior.level}级，可以使炼丹收获的丹药增加{prior.level}个！\n该升级请求已经处理，无需重复提交。"
+        await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
+        await mix_elixir_dykh_up.finish()
     if now_level >= len(DYKHCONFIG):
         msg = f"道友的丹药控火等级已达到最高等级，无法升级了"
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
@@ -145,9 +163,6 @@ async def mix_elixir_dykh_up_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         msg = f"下一个丹药控火等级需要灵石{next_level_cost}枚，道友当前灵石不足。"
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir_dykh_up.finish()
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"mixelixir-fire-control:{event_id}:{user_id}" if event_id else f"mixelixir-fire-control:{user_id}:{time.time_ns()}"
-    upgrade_service = MixelixirFireControlUpgradeService(get_paths().game_db, get_paths().player_db)
     upgrade = upgrade_service.upgrade(
         operation_id,
         user_id,
@@ -157,6 +172,10 @@ async def mix_elixir_dykh_up_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         now_level + 1,
         next_level_cost,
     )
+    if upgrade.status == "duplicate":
+        msg = f"道友消耗灵石{upgrade.cost}枚，丹药控火等级目前为：{upgrade.level}级，可以使炼丹收获的丹药增加{upgrade.level}个！\n该升级请求已经处理，无需重复提交。"
+        await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
+        await mix_elixir_dykh_up.finish()
     if not upgrade.succeeded:
         msg = "灵石或炼丹状态已变化，本次丹药控火升级未结算，请重新查看后再试。"
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
@@ -185,6 +204,18 @@ async def yaocai_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "time_cost": 23,  # 单位小时
         "加速基数": 0.05
     }
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"mixelixir-harvest:{event_id}:{user_id}" if event_id else f"mixelixir-harvest:{user_id}:{time.time_ns()}"
+    # 先回放：成功后收取时间推进会挡住同事件幂等。
+    prior = mixelixir_harvest_service.get_result(operation_id)
+    if prior is not None and prior.succeeded:
+        msg = "".join(
+            f"道友成功收获药材：{reward.name} {reward.quantity} 个！\n"
+            for reward in prior.rewards
+        ) + "该收取请求已经处理，无需重复提交。"
+        l_msg = [msg]
+        await send_msg_handler(bot, event, '灵田收取', bot.self_id, l_msg)
+        await yaocai_get.finish()
     last_time = mix_elixir_info['收取时间']
     if last_time != 0:
         nowtime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # str
@@ -222,8 +253,6 @@ async def yaocai_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 for k, v in give_dict.items():
                     goods_info = items.get_data_by_item_id(k)
                     rewards.append((k, goods_info['name'], v))
-            event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-            operation_id = f"mixelixir-harvest:{event_id}:{user_id}" if event_id else f"mixelixir-harvest:{user_id}:{time.time_ns()}"
             harvest = mixelixir_harvest_service.harvest(
                 operation_id,
                 user_id,
@@ -232,6 +261,14 @@ async def yaocai_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 rewards,
                 max_goods_num=XiuConfig().max_goods_num,
             )
+            if harvest.status == "duplicate":
+                msg = "".join(
+                    f"道友成功收获药材：{reward.name} {reward.quantity} 个！\n"
+                    for reward in harvest.rewards
+                ) + "该收取请求已经处理，无需重复提交。"
+                l_msg = [msg]
+                await send_msg_handler(bot, event, '灵田收取', bot.self_id, l_msg)
+                await yaocai_get.finish()
             if harvest.status in {"state_changed", "user_missing"}:
                 msg = "灵田状态已变化，本次未发放药材，请重新查看后再试。"
                 await handle_send(bot, event, msg, md_type="炼丹", k1="收取", v1="灵田收取", k2="查看", v2="洞天福地查看", k3="帮助", v3="洞天福地帮助")
@@ -588,6 +625,15 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                     expected_mix_state,
                     updated_mix_state,
                 )
+                if started.status == "duplicate":
+                    claim_operation = f"mixelixir-reward:{event_id}:{user_id}" if event_id else f"mixelixir-reward:{user_id}:{time.time_ns()}"
+                    claimed = mixelixir_refine_reward_service.claim(
+                        claim_operation, user_id, started.task_id, XiuConfig().max_goods_num
+                    )
+                    if claimed.succeeded:
+                        msg = f"恭喜道友成功炼成丹药：{claimed.reward_name}{claimed.reward_quantity}枚\n该炼丹请求已经处理，无需重复提交。"
+                        await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
+                        await mix_make.finish()
                 if not started.succeeded:
                     msg = "药材、丹炉或炼丹状态已变化，本次未消耗药材，请重新生成丹方。"
                     await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="炼丹", k2="信息", v2="我的炼丹信息", k3="药材", v3="药材背包")
@@ -597,6 +643,10 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                 claimed = mixelixir_refine_reward_service.claim(
                     claim_operation, user_id, started.task_id, XiuConfig().max_goods_num
                 )
+                if claimed.status == "duplicate":
+                    msg = f"恭喜道友成功炼成丹药：{claimed.reward_name}{claimed.reward_quantity}枚\n该炼丹请求已经处理，无需重复提交。"
+                    await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
+                    await mix_make.finish()
                 if not claimed.succeeded:
                     msg = "丹药领取状态已变化，材料消耗记录已保留，请重新提交同一配方领取。"
                     await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")

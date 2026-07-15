@@ -33,6 +33,27 @@ class MixelixirHarvestLevelUpgradeService:
         self._player_database = Path(player_database)
         self._lock = lock or RLock()
 
+    def get_result(self, operation_id: str) -> MixelixirHarvestLevelUpgradeResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS mixelixir_harvest_level_upgrade_operations ("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,cost INTEGER NOT NULL,"
+                "wallet_stone INTEGER NOT NULL,level INTEGER NOT NULL,experience INTEGER NOT NULL,"
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = conn.execute(
+                "SELECT payload,cost,wallet_stone,level,experience FROM mixelixir_harvest_level_upgrade_operations WHERE operation_id=%s",
+                (operation_id,),
+            ).fetchone()
+            if previous is None:
+                return None
+            return MixelixirHarvestLevelUpgradeResult(
+                "duplicate", int(previous[1]), int(previous[2]), int(previous[3]), int(previous[4])
+            )
+
     def upgrade(
         self,
         operation_id,
@@ -54,10 +75,9 @@ class MixelixirHarvestLevelUpgradeService:
             or cost <= 0
         ):
             raise ValueError("valid operation, state snapshot, next level and cost are required")
+        # Request identity only — expected level/exp/stone are concurrency checks.
         payload = json.dumps(
-            [user_id, expected_level, expected_experience, expected_stone, next_level, cost],
-            ensure_ascii=True,
-            separators=(",", ":"),
+            [user_id, next_level, cost], ensure_ascii=True, separators=(",", ":"),
         )
 
         def result(status, *, stone=expected_stone, level=expected_level):

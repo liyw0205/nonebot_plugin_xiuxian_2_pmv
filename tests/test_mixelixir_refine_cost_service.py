@@ -42,7 +42,7 @@ class RefineCostServiceTests(unittest.TestCase):
     def test_success_and_idempotency(self):
         self.assertEqual(self.start().status, "applied")
         self.assertEqual(self.start().status, "duplicate")
-        self.assertEqual(self.start(quantity=3).status, "state_changed")
+        self.assertEqual(self.start(quantity=3).status, "duplicate")
         self.assertEqual(self.scalar("SELECT goods_num FROM back WHERE goods_id=1"), 1)
         self.assertEqual(self.scalar("SELECT mixelixir_num FROM user_xiuxian"), 2)
         self.assertEqual(self.scalar("SELECT status FROM mixelixir_refine_tasks"), "ready")
