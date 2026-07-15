@@ -17,6 +17,7 @@ from ...paths import get_paths
 import time
 from ...paths import get_paths
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
+from ..xiuxian_utils.numeric_bind import as_int_like
 from ..xiuxian_utils.data_source import jsondata
 from nonebot.log import logger
 from datetime import datetime
@@ -925,9 +926,10 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
         await handle_send(bot, event, msg)
         await impart_pk_out_closing.finish()
 
-    # 计算经验上限
+    # 计算经验上限（兼容科学计数法 / 超大修为）
     max_exp = int(OtherSet().set_closing_type(level)) * XiuConfig().closing_exp_upper_limit
-    user_get_exp_max = max(0, int(max_exp) - use_exp)  # 确保不为负数
+    use_exp = as_int_like(use_exp)
+    user_get_exp_max = max(0, as_int_like(max_exp) - use_exp)  # 确保不为负数
 
     now_time = datetime.now()
     user_cd_message = sql_message.get_user_cd(user_id)
@@ -963,7 +965,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     base_exp_rate2 = f"{int((level_rate + mainbuffratebuff + mainbuffcloexp + user_blessed_spot_data + impart_exp_up + impart_exp_up2) * 100)}%"
 
     # 计算可用虚神界修炼时间
-    available_exp_day = int(impart_data_draw['exp_day'])
+    available_exp_day = as_int_like(impart_data_draw['exp_day'])
     max_double_exp_time = available_exp_day
     double_exp_time = min(exp_time, max_double_exp_time)
     double_exp = int(double_exp_time * base_exp_rate * (1 + impart_exp_up2))
@@ -980,14 +982,14 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     if total_exp > user_get_exp_max:
         remaining_exp = user_get_exp_max
         if double_exp >= remaining_exp:
-            effective_double_exp_time = remaining_exp / (base_exp_rate * (1 + impart_exp_up2))
+            effective_double_exp_time = remaining_exp / (base_exp_rate * (1 + impart_exp_up2)) if base_exp_rate else 0
             double_exp = int(effective_double_exp_time * base_exp_rate * (1 + impart_exp_up2))
             effective_single_exp_time = 0
             single_exp = 0
             exp_day_cost = int(effective_double_exp_time)
         else:
             remaining_exp -= double_exp
-            effective_single_exp_time = remaining_exp / base_exp_rate
+            effective_single_exp_time = remaining_exp / base_exp_rate if base_exp_rate else 0
             single_exp = int(effective_single_exp_time * base_exp_rate)
         
         total_exp = double_exp + single_exp
@@ -998,11 +1000,12 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     result_msg, result_hp_mp = OtherSet().send_hp_mp(
         user_id, int(use_exp / 10 * exp_time), int(use_exp / 5 * exp_time)
     )
+    new_power = as_int_like(round((use_exp + total_exp) * level_rate * realm_rate))
     settlement = impart_closing_settlement_service.settle(
         operation_id, user_id, user_cd_message["create_time"], use_exp,
         available_exp_day, total_exp, int(exp_day_cost), exp_time,
         result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10),
-        min(SQLITE_MAX_INT, int(round((use_exp + total_exp) * level_rate * realm_rate))),
+        new_power,
     )
     if settlement.status == "duplicate":
         msg = (

@@ -415,28 +415,25 @@ class ImpartClosingSettlementService:
     ) -> ImpartClosingSettlementResult:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         expected_create_time = str(expected_create_time)
-        values = tuple(
-            int(value)
-            for value in (
-                expected_exp,
-                expected_exp_day,
-                exp_gain,
-                blessing_cost,
-                closing_minutes,
-                hp,
-                mp,
-                atk,
-                power,
-            )
-        )
-        expected_exp, expected_exp_day, exp_gain, blessing_cost, closing_minutes, hp, mp, atk, power = values
-        power = max(0, min(power, SQLITE_MAX_INT))
-        expected_exp = max(0, min(expected_exp, SQLITE_MAX_INT))
-        exp_gain = max(0, min(exp_gain, SQLITE_MAX_INT))
-        hp = max(0, min(hp, SQLITE_MAX_INT))
-        mp = max(0, min(mp, SQLITE_MAX_INT))
-        atk = max(0, min(atk, SQLITE_MAX_INT))
-        if not operation_id or min(values) < 0 or blessing_cost > expected_exp_day:
+        # Snapshots / counters: use as_int_like (no SQLITE_MAX clamp — that caused
+        # high-realm users to always hit state_changed on 虚神界出关).
+        expected_exp = as_int_like(expected_exp)
+        expected_exp_day = as_int_like(expected_exp_day)
+        exp_gain = number_count(max(0, as_int_like(exp_gain)))
+        blessing_cost = as_int_like(blessing_cost)
+        closing_minutes = as_int_like(closing_minutes)
+        hp = number_count(max(0, as_int_like(hp)))
+        mp = number_count(max(0, as_int_like(mp)))
+        atk = number_count(max(0, as_int_like(atk)))
+        power = number_count(max(0, as_int_like(power)))
+        if (
+            not operation_id
+            or expected_exp < 0
+            or expected_exp_day < 0
+            or blessing_cost < 0
+            or closing_minutes < 0
+            or blessing_cost > expected_exp_day
+        ):
             raise ValueError("invalid impart closing settlement")
         # Request identity only — exp/hp rolls live in result_json; create_time identifies the closing session.
         payload = json.dumps(
@@ -476,18 +473,22 @@ class ImpartClosingSettlementService:
                 if user is None or cd is None or impart is None:
                     conn.rollback()
                     return ImpartClosingSettlementResult("user_missing")
+                actual_exp = as_int_like(user[0])
+                actual_exp_day = as_int_like(impart[0])
                 if (
-                    int(user[0]) != expected_exp
+                    actual_exp != expected_exp
                     or int(cd[0] or 0) != 4
                     or str(cd[1]) != expected_create_time
-                    or int(impart[0]) != expected_exp_day
+                    or actual_exp_day != expected_exp_day
                 ):
                     conn.rollback()
                     return ImpartClosingSettlementResult("state_changed")
 
                 changed = conn.execute(
-                    "UPDATE user_xiuxian SET exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),hp=%s,mp=%s,atk=%s,power=%s "
-                    "WHERE user_id=%s AND exp=%s",
+                    "UPDATE user_xiuxian SET "
+                    "exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),"
+                    "hp=%s,mp=%s,atk=%s,power=%s "
+                    "WHERE user_id=%s AND CAST(COALESCE(exp,0) AS REAL)=CAST(%s AS REAL)",
                     (exp_gain, hp, mp, atk, power, user_id, expected_exp),
                 )
                 cleared = conn.execute(
@@ -505,10 +506,10 @@ class ImpartClosingSettlementService:
                     return ImpartClosingSettlementResult("state_changed")
 
                 _increment_stat(conn, user_id, "虚神界闭关时长", closing_minutes)
-                _increment_stat(conn, user_id, "虚神界闭关修为", exp_gain)
+                _increment_stat(conn, user_id, "虚神界闭关修为", as_int_like(exp_gain))
                 _increment_stat(conn, user_id, "虚神界闭关祝福时长", blessing_cost)
                 remaining = expected_exp_day - blessing_cost
-                saved = [exp_gain, blessing_cost, remaining]
+                saved = [as_int_like(exp_gain), blessing_cost, remaining]
                 conn.execute(
                     "INSERT INTO impart_closing_operations(operation_id,payload,result_json) VALUES(%s,%s,%s)",
                     (operation_id, payload, json.dumps(saved, separators=(",", ":"))),
