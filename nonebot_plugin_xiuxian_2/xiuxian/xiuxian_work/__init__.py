@@ -112,26 +112,23 @@ def calculate_remaining_time(create_time: str, work_name: str = None, user_id: s
     :return: (remaining_minutes, elapsed_minutes, total_minutes) 
              剩余分钟数、已过分钟数和总分钟数（如果是进行中悬赏）
     """
-    try:
-        # 统一处理时间格式（兼容带和不带毫秒）
-        try:
-            work_time = datetime.strptime(create_time, "%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            work_time = datetime.strptime(create_time, "%Y-%m-%d %H:%M:%S.%f")
-        
-        # 计算时间差
-        time_diff = datetime.now() - work_time
-        elapsed_minutes = int(time_diff.total_seconds() // 60)
-        
+    from ..xiuxian_utils.cd_time import elapsed_minutes_from_cd_time, is_blank_cd_time
+
+    # 坏/空时间：视为已到期，允许结算，避免 type=2 卡死
+    if is_blank_cd_time(create_time):
         total_minutes = None
         if work_name and user_id:
-            # 如果是进行中悬赏，获取总耗时
             total_minutes = workhandle().do_work(key=1, name=work_name, user_id=user_id)
-            remaining_minutes = max(total_minutes - elapsed_minutes, 0)
+        return 0, int(total_minutes or 0), total_minutes
+
+    try:
+        elapsed_minutes = elapsed_minutes_from_cd_time(create_time, on_error=0)
+        total_minutes = None
+        if work_name and user_id:
+            total_minutes = workhandle().do_work(key=1, name=work_name, user_id=user_id)
+            remaining_minutes = max(int(total_minutes) - elapsed_minutes, 0)
         else:
-            # 计算悬赏令过期剩余时间
             remaining_minutes = max(WORK_EXPIRE_MINUTES - elapsed_minutes, 0)
-        
         return remaining_minutes, elapsed_minutes, total_minutes
     except Exception as e:
         logger.error(f"计算悬赏令剩余时间失败: {e}, 时间: {create_time}")

@@ -2344,7 +2344,10 @@ class ClosingSettlementService:
                 if user is None or cd is None:
                     conn.rollback()
                     return ClosingSettlementResult("user_missing")
-                if int(cd[0] or 0) != 1 or str(cd[1]) != expected_create_time:
+                from ..xiuxian_utils.cd_time import cd_time_matches, is_blank_cd_time, normalize_cd_time_token
+
+                expected_create_time = normalize_cd_time_token(expected_create_time)
+                if int(cd[0] or 0) != 1 or not cd_time_matches(cd[1], expected_create_time):
                     conn.rollback()
                     return ClosingSettlementResult("state_changed")
                 if int(user[0]) < stone_cost:
@@ -2359,7 +2362,19 @@ class ClosingSettlementService:
                     "WHERE user_id=%s AND stone>=%s",
                     (exp_gain, stone_cost, hp, mp, atk, power, user_id, stone_cost),
                 )
-                cleared = conn.execute("UPDATE user_cd SET type=0,create_time=0,scheduled_time=NULL WHERE user_id=%s AND type=1 AND CAST(create_time AS TEXT)=%s", (user_id, expected_create_time))
+                # 坏时间只按 type 清；正常时间仍带 create_time 防并发
+                if is_blank_cd_time(cd[1]) or is_blank_cd_time(expected_create_time):
+                    cleared = conn.execute(
+                        "UPDATE user_cd SET type=0,create_time=0,scheduled_time=NULL "
+                        "WHERE user_id=%s AND type=1",
+                        (user_id,),
+                    )
+                else:
+                    cleared = conn.execute(
+                        "UPDATE user_cd SET type=0,create_time=0,scheduled_time=NULL "
+                        "WHERE user_id=%s AND type=1 AND CAST(create_time AS TEXT)=%s",
+                        (user_id, expected_create_time),
+                    )
                 if changed.rowcount != 1 or cleared.rowcount != 1:
                     conn.rollback()
                     return ClosingSettlementResult("state_changed")

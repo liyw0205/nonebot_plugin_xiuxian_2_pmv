@@ -260,10 +260,16 @@ class WorkSettlementService:
                 if user is None:
                     conn.rollback()
                     return WorkSettlementResult("user_missing", 0, False)
-                if work is None or int(work[0] or 0) != 2 or tuple(map(str, work[1:])) != (
-                    str(expected.get("create_time")),
-                    str(expected.get("scheduled_time")),
-                ):
+                from ..xiuxian_utils.cd_time import cd_time_matches
+
+                if work is None or int(work[0] or 0) != 2:
+                    conn.rollback()
+                    return WorkSettlementResult("state_changed", 0, False)
+                # scheduled_time 是任务名，必须一致；create_time 坏值不拦
+                if str(work[2] or "") != str(expected.get("scheduled_time") or ""):
+                    conn.rollback()
+                    return WorkSettlementResult("state_changed", 0, False)
+                if not cd_time_matches(work[1], expected.get("create_time")):
                     conn.rollback()
                     return WorkSettlementResult("state_changed", 0, False)
 

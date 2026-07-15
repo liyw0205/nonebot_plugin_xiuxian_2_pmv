@@ -473,13 +473,19 @@ class ImpartClosingSettlementService:
                 if user is None or cd is None or impart is None:
                     conn.rollback()
                     return ImpartClosingSettlementResult("user_missing")
-                # Session identity is type=4 + create_time. Do NOT require exact exp
-                # equality in SQL: REAL/scientific TEXT values fail CAST equality even
-                # when as_int_like matches (e.g. 3.217e14 float vs int snapshot).
+                # Session identity is type=4 (+ create_time when real). Blank/garbage create_time
+                # must not trap high-realm players already in type=4.
+                from ..xiuxian_utils.cd_time import (
+                    cd_time_matches,
+                    is_blank_cd_time,
+                    normalize_cd_time_token,
+                )
+
+                expected_create_time = normalize_cd_time_token(expected_create_time)
                 actual_exp_day = as_int_like(impart[0])
                 if (
                     int(cd[0] or 0) != 4
-                    or str(cd[1]) != expected_create_time
+                    or not cd_time_matches(cd[1], expected_create_time)
                     or actual_exp_day != expected_exp_day
                 ):
                     conn.rollback()
@@ -492,11 +498,18 @@ class ImpartClosingSettlementService:
                     "WHERE user_id=%s",
                     (exp_gain, hp, mp, atk, power, user_id),
                 )
-                cleared = conn.execute(
-                    "UPDATE user_cd SET type=0,create_time=0,scheduled_time=NULL "
-                    "WHERE user_id=%s AND type=4 AND CAST(create_time AS TEXT)=%s",
-                    (user_id, expected_create_time),
-                )
+                if is_blank_cd_time(cd[1]) or is_blank_cd_time(expected_create_time):
+                    cleared = conn.execute(
+                        "UPDATE user_cd SET type=0,create_time=0,scheduled_time=NULL "
+                        "WHERE user_id=%s AND type=4",
+                        (user_id,),
+                    )
+                else:
+                    cleared = conn.execute(
+                        "UPDATE user_cd SET type=0,create_time=0,scheduled_time=NULL "
+                        "WHERE user_id=%s AND type=4 AND CAST(create_time AS TEXT)=%s",
+                        (user_id, expected_create_time),
+                    )
                 blessed = conn.execute(
                     "UPDATE impart_data.xiuxian_impart SET exp_day=exp_day-%s "
                     "WHERE user_id=%s AND exp_day=%s AND exp_day>=%s",

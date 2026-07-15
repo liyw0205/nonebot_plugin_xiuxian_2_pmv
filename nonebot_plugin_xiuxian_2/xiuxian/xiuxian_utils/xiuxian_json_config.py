@@ -124,21 +124,19 @@ class OtherSet(XiuConfig):
         return list(rate.keys())[index_num]
 
     def date_diff(self, new_time, old_time):
-        """计算日期差"""
-        if isinstance(new_time, datetime):
-            pass
-        else:
-            new_time = datetime.strptime(new_time, '%Y-%m-%d %H:%M:%S.%f')
+        """计算日期差（坏/空时间返回 0，避免结算入口直接炸死）"""
+        from .cd_time import parse_cd_datetime
 
-        if isinstance(old_time, datetime):
-            pass
-        else:
-            old_time = datetime.strptime(old_time, '%Y-%m-%d %H:%M:%S.%f')
-
-        day = (new_time - old_time).days
-        sec = (new_time - old_time).seconds
-
-        return (day * 24 * 60 * 60) + sec
+        if not isinstance(new_time, datetime):
+            new_time = parse_cd_datetime(new_time, default=None)
+        if not isinstance(old_time, datetime):
+            old_time = parse_cd_datetime(old_time, default=None)
+        if new_time is None or old_time is None:
+            return 0
+        try:
+            return max(0, int((new_time - old_time).total_seconds()))
+        except Exception:
+            return 0
 
     def get_power_rate(self, mind, other):
         power_rate = mind / (other + mind)

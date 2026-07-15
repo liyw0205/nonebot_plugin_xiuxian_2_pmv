@@ -664,12 +664,14 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await out_closing.finish()
 
     level = user_mes["level"]
-    use_exp = int(user_mes["exp"])
+    from ..xiuxian_utils.cd_time import elapsed_minutes_from_cd_time, normalize_cd_time_token
+    from ..xiuxian_utils.numeric_bind import as_int_like
+    use_exp = as_int_like(user_mes["exp"])
     max_exp = int(OtherSet().set_closing_type(level)) * XiuConfig().closing_exp_upper_limit
-    user_get_exp_max = max(0, int(max_exp) - use_exp)
-    create_time = str(user_cd_message["create_time"])
-    in_closing_time = datetime.strptime(create_time, "%Y-%m-%d %H:%M:%S.%f")
-    exp_time = OtherSet().date_diff(datetime.now(), in_closing_time) // 60
+    user_get_exp_max = max(0, as_int_like(max_exp) - use_exp)
+    # 坏 create_time（0/空/脏数据）→ 时长 0，仍允许按 type=1 出关清状态
+    create_time = normalize_cd_time_token(user_cd_message.get("create_time"))
+    exp_time = elapsed_minutes_from_cd_time(user_cd_message.get("create_time"), on_error=0)
     level_rate = sql_message.get_root_rate(user_mes["root_type"], user_id)
     realm_rate = jsondata.level_data()[level]["spend"]
     user_buff_data = UserBuffDate(user_id)

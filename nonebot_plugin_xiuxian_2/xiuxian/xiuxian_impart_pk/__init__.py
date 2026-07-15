@@ -960,11 +960,10 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     now_time = datetime.now()
     user_cd_message = sql_message.get_user_cd(user_id)
     
-    # 计算闭关时长
-    impart_pk_in_closing_time = datetime.strptime(
-        user_cd_message['create_time'], "%Y-%m-%d %H:%M:%S.%f"
-    )
-    exp_time = OtherSet().date_diff(now_time, impart_pk_in_closing_time) // 60  # 闭关时长(分钟)
+    # 计算闭关时长：坏 create_time → 0 分钟，仍可出关清 type=4
+    from ..xiuxian_utils.cd_time import elapsed_minutes_from_cd_time, normalize_cd_time_token
+    create_time_token = normalize_cd_time_token(user_cd_message.get("create_time"))
+    exp_time = elapsed_minutes_from_cd_time(user_cd_message.get("create_time"), on_error=0)
 
     # 获取各种增益倍率
     level_rate = sql_message.get_root_rate(user_mes['root_type'], user_id)
@@ -1028,7 +1027,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     )
     new_power = as_int_like(round((use_exp + total_exp) * level_rate * realm_rate))
     settlement = impart_closing_settlement_service.settle(
-        operation_id, user_id, user_cd_message["create_time"], use_exp,
+        operation_id, user_id, create_time_token, use_exp,
         available_exp_day, total_exp, int(exp_day_cost), exp_time,
         result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10),
         new_power,

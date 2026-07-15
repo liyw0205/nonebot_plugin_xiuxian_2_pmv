@@ -69,19 +69,36 @@ def _event_id(event) -> str:
 
 
 def _parse_rift_datetime(value) -> datetime:
+    from ..xiuxian_utils.cd_time import is_blank_cd_time, parse_cd_datetime
+
     if isinstance(value, datetime):
         return value
-    return datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+    # 坏/空时间：用 epoch，elapsed → 极大，避免 type=3 永远 not_ready
+    if is_blank_cd_time(value):
+        return datetime(1970, 1, 1)
+    parsed = parse_cd_datetime(value, default=None)
+    if parsed is None:
+        return datetime(1970, 1, 1)
+    return parsed
 
 
 def _rift_elapsed_minutes(value, *, now: datetime | None = None) -> int:
-    started_at = _parse_rift_datetime(value)
-    current = now or datetime.now(timezone.utc)
-    if started_at.tzinfo is None:
-        current = current.astimezone(timezone.utc).replace(tzinfo=None)
-    else:
-        current = current.astimezone(started_at.tzinfo)
-    return max(0, int((current - started_at).total_seconds() // 60))
+    from ..xiuxian_utils.cd_time import elapsed_minutes_from_cd_time, is_blank_cd_time
+
+    # 坏时间：给足时长，让 type=3 能走结算而不是卡「尚未到结算时间」
+    if is_blank_cd_time(value):
+        return 10**9
+    try:
+        started_at = _parse_rift_datetime(value)
+        current = now or datetime.now(timezone.utc)
+        if started_at.tzinfo is None:
+            current = current.astimezone(timezone.utc).replace(tzinfo=None)
+        else:
+            current = current.astimezone(started_at.tzinfo)
+        return max(0, int((current - started_at).total_seconds() // 60))
+    except Exception:
+        return 10**9
+
 
 
 def _rift_operation_seed(operation_id: str, scope: str) -> int:
