@@ -384,8 +384,8 @@ def _parse_html_og(platform: str, url: str) -> dict[str, Any]:
         obj = _first_json_script(html, marker)
         if obj is not None:
             _collect_http_urls(obj, found)
-    # regex mp4
-    for m in re.finditer(r"https?://[^\"'\\s<>]+\.mp4[^\"'\\s<>]*", html):
+    # regex mp4：匹配到引号/空白/尖括号为止，避免 pkey 等 query 被截断
+    for m in re.finditer(r"https?://[^\s\"'<>]+?\.mp4(?:\?[^\s\"'<>]*)?", html):
         found.append(m.group(0).encode("utf-8").decode("unicode_escape", errors="ignore"))
     # unescape \/
     found = [u.replace("\\/", "/").replace("\\u002F", "/") for u in found]
@@ -398,6 +398,87 @@ def _parse_html_og(platform: str, url: str) -> dict[str, Any]:
     if not meta["video_urls"] and not meta["image_urls"] and not meta["title"]:
         meta["error"] = "未能从页面提取标题或媒体直链（平台可能风控/需登录）"
     return meta
+
+
+def _extract_json_assignment(html: str, marker: str) -> dict | list | None:
+    """从 window.XXX = {...} 提取完整 JSON（比标记后首个对象更稳）。"""
+    idx = html.find(marker)
+    if idx < 0:
+        return None
+    eq = html.find("=", idx)
+    if eq < 0:
+        return None
+    start = -1
+    for i in range(eq + 1, min(eq + 80, len(html))):
+        if html[i] in "{[":
+            start = i
+            break
+    if start < 0:
+        return None
+    open_ch = html[start]
+    close_ch = "}" if open_ch == "{" else "]"
+    depth = 0
+    in_str = False
+    esc = False
+    for j in range(start, min(start + 800_000, len(html))):
+        ch = html[j]
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+            continue
+        if ch == open_ch:
+            depth += 1
+        elif ch == close_ch:
+            depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(html[start : j + 1])
+                except Exception:
+                    return None
+    return None
+
+
+def _walk_pick_str(obj: Any, keys: set[str]) -> str:
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k in keys and isinstance(v, str) and v.strip():
+                return v.strip()
+        for v in obj.values():
+            got = _walk_pick_str(v, keys)
+            if got:
+                return got
+    elif isinstance(obj, list):
+        for v in obj:
+            got = _walk_pick_str(v, keys)
+            if got:
+                return got
+    return ""
+
+
+def _walk_cdn_urls(obj: Any, field_names: set[str], out: list[str]) -> None:
+    """快手等平台常见 {cdn,url} 列表字段。"""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k in field_names and isinstance(v, list):
+                for item in v:
+                    if isinstance(item, dict) and isinstance(item.get("url"), str):
+                        u = item["url"].strip()
+                        if u.startswith("http"):
+                            out.append(u)
+                    elif isinstance(item, str) and item.startswith("http"):
+                        out.append(item.strip())
+            else:
+                _walk_cdn_urls(v, field_names, out)
+    elif isinstance(obj, list):
+        for v in obj:
+            _walk_cdn_urls(v, field_names, out)
 
 
 def parse_douyin(url: str) -> dict[str, Any]:
@@ -417,7 +498,78 @@ def parse_douyin(url: str) -> dict[str, Any]:
 
 
 def parse_kuaishou(url: str) -> dict[str, Any]:
-    return _parse_html_og("kuaishou", url)
+    """快手：优先 window.INIT_STATE 的 mainMvUrls/coverUrls/caption。"""
+    meta = _base_meta("kuaishou", url)
+    final = expand_url(url)
+    meta["url"] = final
+    try:
+        _, html = _get_text(
+            final,
+            headers={"User-Agent": _MOBILE_UA, "Referer": "https://v.kuaishou.com/"},
+            timeout=20,
+        )
+    except Exception as e:
+        meta["error"] = f"页面获取失败：{e}"
+        return meta
+
+    state = _extract_json_assignment(html, "window.INIT_STATE")
+    if state is None:
+        # 回退通用解析
+        return _parse_html_og("kuaishou", url)
+
+    videos: list[str] = []
+    images: list[str] = []
+    _walk_cdn_urls(state, {"mainMvUrls", "mp4Url", "photoUrl"}, videos)
+    _walk_cdn_urls(state, {"coverUrls", "webpCoverUrls", "coverUrl"}, images)
+    # 再捞 manifest representation 里的 mp4
+    found: list[str] = []
+    _collect_http_urls(state, found)
+    for u in found:
+        low = u.lower()
+        if ".mp4" in low and u.startswith("http"):
+            videos.append(u)
+        elif any(x in low for x in (".jpg", ".jpeg", ".png", ".webp")) and "uhead" not in low:
+            images.append(u)
+
+    # 去重保序；优先 kwimgs/yximgs 等相对完整的直链
+    def _rank(u: str) -> tuple[int, int]:
+        low = u.lower()
+        score = 0
+        if "mainmv" in low or "clientcachekey" in low:
+            score += 2
+        if "pkey=" in low:
+            score += 1
+        if "kwimgs.com" in low or "yximgs.com" in low or "kwaicdn.com" in low:
+            score += 1
+        return (-score, -len(u))
+
+    videos = sorted(dict.fromkeys(videos), key=_rank)
+    images = list(dict.fromkeys(images))
+    # 去掉头像类
+    images = [
+        u
+        for u in images
+        if "uhead" not in u.lower() and "/bg" not in urlparse(u).path.lower()
+    ]
+
+    caption = _walk_pick_str(state, {"caption", "title"})
+    author = _walk_pick_str(state, {"userName", "name", "authorName"})
+    # caption 优先；避免广告 config 里的 title 抢答
+    if caption and caption not in ("去快手享超清画质", "参与免费领道具！"):
+        meta["title"] = caption
+    else:
+        meta["title"] = caption or "快手视频"
+    meta["author"] = author if author and "快手" not in author else author
+    meta["desc"] = (caption or "")[:400]
+    meta["video_urls"] = videos[:3]
+    meta["image_urls"] = images[:6]
+    if not meta["video_urls"] and not meta["image_urls"]:
+        # 最后回退
+        fallback = _parse_html_og("kuaishou", final)
+        if fallback.get("video_urls") or fallback.get("image_urls"):
+            return fallback
+        meta["error"] = "快手未解析到可发送媒体（可能风控/登录）"
+    return meta
 
 
 def parse_xiaohongshu(url: str) -> dict[str, Any]:
