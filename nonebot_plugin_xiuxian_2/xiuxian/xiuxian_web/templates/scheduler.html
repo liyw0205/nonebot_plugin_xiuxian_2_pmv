@@ -264,8 +264,138 @@
         statEnabled.innerHTML = '<i class="fas fa-toggle-on"></i> 启用 ' + enabled;
     }
 
+    const CRON_PRESET_LABELS = {}; // filled by PRESETS loop below
+
+    // 前端兜底中文名：覆盖 UUID 任务的 raw name / id / 函数名
+    const JOB_TITLE_MAP = {
+        auto_guishi_transactions: '鬼市自动交易',
+        auto_guishi_transactions_job: '鬼市自动交易',
+        clear_expired_baitan_orders: '清理超时摆摊',
+        clear_expired_baitan_orders_job: '清理超时摆摊',
+        auto_start_auction: '自动开启拍卖',
+        auto_start_auction_job: '自动开启拍卖',
+        check_auction_end: '拍卖收尾检查',
+        check_auction_end_job: '拍卖收尾检查',
+        materialsupdate_: '发放宗门资材',
+        materialsupdate: '发放宗门资材',
+        sect_materials_grant: '发放宗门资材',
+        auto_harvest: '灵田傀儡自动收取',
+        auto_harvest_scheduled: '灵田傀儡自动收取',
+        generate_all_bosses: '自动生成世界BOSS',
+        generate_all_bosses_task: '自动生成世界BOSS',
+        daily_dungeon_reset: '每日副本重置',
+        demon_invasion_schedule: '魔修入侵开关',
+        demon_invasion_schedule_job: '魔修入侵开关',
+        demon_invasion_refresh_schedule: '魔修入侵刷新',
+        demon_invasion_refresh_schedule_job: '魔修入侵刷新',
+        spirit_vein_schedule: '灵脉争夺',
+        spirit_vein_schedule_job: '灵脉争夺',
+        reset_message_rate_limits: '重置消息频率限制',
+        limit_all_message_: '重置消息频率限制',
+        recover_user_stamina: '体力恢复',
+        limit_all_stamina_: '体力恢复',
+        daily_reset_sign: '每日签到重置',
+        daily_reset_beg: '仙途奇缘重置',
+        daily_reset_day_num: '丹药次数重置',
+        daily_reset_mixelixir_num: '炼丹次数重置',
+        daily_reset_impart_num: '传承抽卡重置',
+        daily_reset_arena: '竞技场每日重置',
+        weekly_reduce_arena_rank: '竞技场周排名衰减',
+        daily_reset_lottery: '抽奖次数重置',
+        daily_reset_stone_limits: '灵石获取上限重置',
+        daily_reset_stone_limits_job: '灵石获取上限重置',
+        daily_reset_xiangyuan: '香缘重置',
+        daily_reset_boss_limits: 'Boss次数重置',
+        daily_reset_two_exp: '双修次数重置',
+        daily_reset_impart_pk: '传承对决重置',
+        daily_clean_expired_items: '清理过期物品',
+        weekly_reduce_impart_lv: '传承等级周衰减',
+        weekly_reset_tower_floors: '通天塔周重置',
+        daily_add_impart_lv: '传承等级日增长',
+        daily_reset_illusion: '幻境重置',
+        daily_reset_sect_task: '宗门任务重置',
+        daily_reset_work_refresh_num: '悬赏令次数重置',
+        scheduled_rift_generation_job: '秘境重置',
+        auto_handle_inactive_sect_owners_job: '处理不活跃宗主',
+        reset_data_by_time_job: '早晚数据重置',
+        backup_database_files: '数据库备份',
+        newapi_auto_checkin_daily: 'NewAPI 自动签到'
+    };
+
+    function looksLikeUuid(value) {
+        const t = String(value || '').replace(/-/g, '').toLowerCase();
+        return t.length === 32 && /^[0-9a-f]+$/.test(t);
+    }
+
+    function mapJobTitle(value) {
+        const key = String(value || '').trim();
+        if (!key) return '';
+        if (JOB_TITLE_MAP[key]) return JOB_TITLE_MAP[key];
+        // strip common suffixes
+        for (const suffix of ['_job', '_scheduled', '_task', '_']) {
+            if (key.endsWith(suffix) && key.length > suffix.length) {
+                const base = key.slice(0, -suffix.length);
+                if (JOB_TITLE_MAP[base]) return JOB_TITLE_MAP[base];
+            }
+        }
+        return '';
+    }
+
     function displayName(job) {
-        return job.title || job.name || job.id;
+        // 优先后端中文 title；否则用 id/函数名/raw_name 映射
+        const backend = String(job.title || job.name || '').trim();
+        if (backend && !looksLikeUuid(backend) && /[\u4e00-\u9fff]/.test(backend)) {
+            return backend;
+        }
+        const mapped = mapJobTitle(job.id) || mapJobTitle(job.func_name) || mapJobTitle(job.raw_name) || mapJobTitle(job.name);
+        if (mapped) return mapped;
+        if (backend && !looksLikeUuid(backend)) return backend;
+        if (job.func_name && !looksLikeUuid(job.func_name)) return '定时任务·' + job.func_name;
+        return '后台定时任务';
+    }
+
+    function naturalSchedule(job) {
+        const direct = String(job.schedule_text || (job.trigger && job.trigger.summary) || '').trim();
+        if (direct && !/时=|分=|秒=|月=|日=|周=/.test(direct)) return direct;
+        const trigger = job.trigger || {};
+        if (trigger.type === 'interval') {
+            const n = Number(trigger.seconds) || 0;
+            if (n % 86400 === 0) return '每 ' + (n / 86400) + ' 天';
+            if (n % 3600 === 0) return '每 ' + (n / 3600) + ' 小时';
+            if (n % 60 === 0) return '每 ' + (n / 60) + ' 分钟';
+            return '每 ' + n + ' 秒';
+        }
+        if (trigger.type === 'cron') {
+            const f = trigger.fields || {};
+            const minute = String(f.minute != null ? f.minute : '*');
+            const hour = String(f.hour != null ? f.hour : '*');
+            const day = String(f.day != null ? f.day : '*');
+            const month = String(f.month != null ? f.month : '*');
+            const dow = String(f.day_of_week != null ? f.day_of_week : '*');
+            const norm = function (v) { return (v === '*/1' ? '*' : v); };
+            const m = norm(minute), h = norm(hour), d = norm(day), mo = norm(month), w = norm(dow);
+            if (h === '*' && /^\d+$/.test(m) && d === '*' && mo === '*' && w === '*') {
+                return m === '0' ? '每小时' : ('每小时的第 ' + Number(m) + ' 分');
+            }
+            if (h.indexOf('*/') === 0 && d === '*' && mo === '*' && w === '*') {
+                const n = Number(h.slice(2));
+                if (n > 0) {
+                    if (m === '0' || m === '*') return '每 ' + n + ' 小时';
+                    if (/^\d+$/.test(m)) return '每 ' + n + ' 小时的第 ' + Number(m) + ' 分';
+                }
+            }
+            if (/^\d+$/.test(h) && /^\d+$/.test(m) && d === '*' && mo === '*' && w === '*') {
+                return '每天 ' + String(Number(h)).padStart(2, '0') + ':' + String(Number(m)).padStart(2, '0');
+            }
+            if (h.indexOf('-') !== -1 && /^\d+$/.test(m) && d === '*' && mo === '*' && w === '*') {
+                return m === '0' ? ('每天 ' + h + ' 点') : ('每小时 ' + h + ' 点段的第 ' + Number(m) + ' 分');
+            }
+            if (h.indexOf(',') !== -1 && h.split(',').every(function (p) { return /^\d+$/.test(p); }) && /^\d+$/.test(m)) {
+                return '每天 ' + h.split(',').map(function (p) { return String(Number(p)).padStart(2, '0'); }).join(',') + ':' + String(Number(m)).padStart(2, '0');
+            }
+            return fieldsToExpression(f);
+        }
+        return direct || triggerText(trigger) || '未知';
     }
 
     function render() {
@@ -282,7 +412,7 @@
         listEl.innerHTML = jobs.map(function (job) {
             const editable = job.trigger && (job.trigger.type === 'cron' || job.trigger.type === 'interval');
             const typeLabel = (job.trigger && job.trigger.type) || 'other';
-            const scheduleLabel = job.schedule_text || triggerText(job.trigger);
+            const scheduleLabel = naturalSchedule(job);
             return (
                 '<article class="scheduler-card' + (job.enabled ? '' : ' is-disabled') + '" data-job-id="' +
                 escapeHtml(job.id) + '">' +

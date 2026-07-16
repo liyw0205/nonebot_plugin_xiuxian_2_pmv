@@ -43,6 +43,9 @@ _JOB_TITLES: dict[str, str] = {
     "sect_materials_grant": "发放宗门资材",
     "auto_harvest": "灵田傀儡自动收取",
     "auto_harvest_scheduled": "灵田傀儡自动收取",
+    "generate_all_bosses": "自动生成世界BOSS",
+    "generate_all_bosses_task": "自动生成世界BOSS",
+    "daily_dungeon_reset": "每日副本重置",
     # 世界事件
     "demon_invasion_schedule": "魔修入侵开关",
     "demon_invasion_schedule_job": "魔修入侵开关",
@@ -93,26 +96,33 @@ def _humanize_job_id(job_id: str) -> str:
     text = str(job_id or "").strip()
     if not text:
         return "未命名任务"
-    if _looks_like_uuid(text):
-        return "未命名定时任务"
+    # 先直接查表（含函数名 materialsupdate_ / limit_all_stamina_）
     if text in _JOB_TITLES:
         return _JOB_TITLES[text]
-    # 去掉常见后缀
+    # 去掉常见后缀再查
     base = text
-    for suffix in ("_job", "_scheduled", "_"):
+    for suffix in ("_job", "_scheduled", "_task", "_"):
         if base.endswith(suffix) and len(base) > len(suffix):
-            base = base[: -len(suffix)]
+            candidate = base[: -len(suffix)]
+            if candidate in _JOB_TITLES:
+                return _JOB_TITLES[candidate]
+            base = candidate
     if base in _JOB_TITLES:
         return _JOB_TITLES[base]
-    # snake_case → 中文优先词表后再空格化
+    # UUID 本身不当标题
+    if _looks_like_uuid(text):
+        return ""
+    # snake_case 可读化
     pretty = base.replace("-", " ").replace("_", " ").strip()
-    # 常见英文词替换
     replacements = (
         ("daily reset ", "每日重置·"),
         ("weekly reset ", "每周重置·"),
+        ("daily ", "每日·"),
+        ("weekly ", "每周·"),
         ("auto ", "自动·"),
         ("reset ", "重置·"),
         ("check ", "检查·"),
+        ("generate all ", "生成·"),
     )
     lower = pretty.lower()
     for old, new in replacements:
@@ -120,6 +130,43 @@ def _humanize_job_id(job_id: str) -> str:
             pretty = new + pretty[len(old):]
             break
     return pretty or text
+
+
+def _resolve_job_title(job_id: str, raw_name: str = "", func_name: str = "") -> str:
+    """按 id → 函数名 → APScheduler name 解析中文标题，避免 UUID 裸奔。"""
+    candidates = [job_id, func_name, raw_name]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        title = _humanize_job_id(str(candidate))
+        if not title:
+            continue
+        # 跳过仍是 UUID / 空
+        if _looks_like_uuid(title):
+            continue
+        if title in {"未命名任务", "未命名定时任务"}:
+            continue
+        # 若标题几乎等于原始英文 id，继续尝试更好候选
+        if title.replace(" ", "_").replace("·", "_") in {
+            str(candidate),
+            str(candidate).replace("-", "_"),
+        } and candidate not in _JOB_TITLES:
+            # 可能是可读化英文，先记下，后面没更好的再用
+            continue
+        if any("\u4e00" <= ch <= "\u9fff" for ch in title) or candidate in _JOB_TITLES:
+            return title
+    # 第二轮：接受可读英文/中文混合
+    for candidate in candidates:
+        if not candidate or _looks_like_uuid(str(candidate)):
+            continue
+        title = _humanize_job_id(str(candidate))
+        if title and not _looks_like_uuid(title):
+            return title
+    # 最后：用函数名拼一个不丢人的标题
+    for candidate in (func_name, raw_name, job_id):
+        if candidate and not _looks_like_uuid(str(candidate)):
+            return f"定时任务·{candidate}"
+    return "后台定时任务"
 
 
 class SchedulerJobManager:
@@ -389,16 +436,7 @@ class SchedulerJobManager:
         except Exception:
             func_name = ""
 
-        title = _humanize_job_id(job_id)
-        # UUID / 无中文名时，尝试函数名、APScheduler name
-        if _looks_like_uuid(job_id) or title in {job_id, "未命名定时任务"}:
-            for candidate in (func_name, raw_name):
-                if not candidate:
-                    continue
-                cand_title = _humanize_job_id(candidate)
-                if cand_title and cand_title not in {candidate, "未命名定时任务"} and not _looks_like_uuid(candidate):
-                    title = cand_title
-                    break
+        title = _resolve_job_title(job_id, raw_name=raw_name, func_name=func_name)
         # 若 APScheduler name 已是中文且与 id 不同，优先用 name
         if raw_name and raw_name != job_id and any("\u4e00" <= ch <= "\u9fff" for ch in raw_name):
             title = raw_name
