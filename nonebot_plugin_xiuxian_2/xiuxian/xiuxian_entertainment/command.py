@@ -373,7 +373,20 @@ async def fun_media_send_parse_result(
         """带 Referer 下载到缓存，返回本地路径。超过 max_bytes 抛错供降档。"""
         import hashlib
 
-        from nonebot_plugin_xiuxian_2.paths import get_paths
+        # 相对导入优先；绝对包名在部分运行路径下会 No module named nonebot_plugin_xiuxian_2
+        try:
+            from ...paths import get_paths
+        except Exception:
+            try:
+                from nonebot_plugin_xiuxian_2.paths import get_paths  # type: ignore
+            except Exception:
+                from pathlib import Path as _P
+
+                def get_paths():  # type: ignore
+                    class _Pth:
+                        data = _P("/root/xiu2/data/xiuxian")
+
+                    return _Pth()
 
         cache = get_paths().data / "media_parser_cache" / "videos"
         cache.mkdir(parents=True, exist_ok=True)

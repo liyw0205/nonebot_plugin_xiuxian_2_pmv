@@ -164,6 +164,7 @@ def _circle_avatar(img: Image.Image | None, size: int = AVATAR) -> Image.Image:
 
 
 def _load_platform_logo(platform: str) -> Image.Image | None:
+    """加载平台图标；保持宽高比，不强制压成正方形（横屏 logo 不拉伸）。"""
     name = _PLATFORM_LOGO.get(platform)
     if not name:
         return None
@@ -172,9 +173,23 @@ def _load_platform_logo(platform: str) -> Image.Image | None:
         return None
     try:
         img = Image.open(path).convert("RGBA")
-        return img.resize((LOGO, LOGO), Image.Resampling.LANCZOS)
+        return _fit_logo(img, LOGO)
     except Exception:
         return None
+
+
+def _fit_logo(img: Image.Image, max_side: int) -> Image.Image:
+    """等比缩放到 max_side 内，避免横向 logo 被正方形拉伸。"""
+    w, h = img.size
+    if w <= 0 or h <= 0:
+        return img
+    scale = min(max_side / w, max_side / h, 1.0)
+    # 也允许略放大到 max_side 高度，保证可见
+    if max(w, h) < max_side:
+        scale = max_side / max(w, h)
+    nw = max(1, int(round(w * scale)))
+    nh = max(1, int(round(h * scale)))
+    return img.resize((nw, nh), Image.Resampling.LANCZOS)
 
 
 def _fit_cover(img: Image.Image, target_w: int) -> Image.Image:
@@ -301,8 +316,8 @@ def render_media_card(
     if time_str:
         draw.text((text_x, name_y + META_SIZE + 4), time_str, font=font_time, fill=(140, 140, 140))
     if logo is not None:
-        lx = CARD_W - PAD - LOGO
-        ly = cur + (AVATAR - LOGO) // 2
+        lx = CARD_W - PAD - logo.width
+        ly = cur + max(0, (AVATAR - logo.height) // 2)
         img.paste(logo, (lx, ly), logo)
     else:
         # text badge fallback
