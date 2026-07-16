@@ -13,10 +13,14 @@
 |:-----|:-----|
 | [🧾 物品 ID 速查表](docs/items.md) | 所有物品类型、ID 范围、品阶总览 |
 | [🔮 物品系统详解](docs/buff.md) | 功法 / 神通 / 装备 / 丹药 / 药材等完整说明 |
-| [🔌 跨适配器兼容层](docs/adapter_compat.md) | OneBot v11 + QQ 适配器、消息记录、撤回与主动发送接口文档 |
-| [🚦 Matcher 路由兼容层](docs/on_compat.md) | 空前缀命令环境下的 matcher 索引与路由说明 |
-| [🛡️ 数据层与 Web 面板治理](docs/database_web_governance.md) | SQLite 统一入口、迁移约定、Web 安全开关与路径约束 |
-| **Web 修仙管理面板** | 见下文 [🖥️ Web 修仙管理面板](#-web-修仙管理面板)（默认仅监听 `127.0.0.1:5888`） |
+| [🎬 链接解析（流媒体）](docs/media_parser.md) | B 站 / 抖音 / 快手 / 微博 / 小红书等解析与发送说明 |
+| [🖥️ Web 管理面板](docs/web_panel.md) | 面板访问、定时任务页、安全开关（默认 `127.0.0.1:5888`） |
+| [🎮 常用玩法说明](docs/gameplay_notes.md) | 悬赏令 / 探索 / 秘藏令 / 双修等高频说明 |
+| [🔌 跨适配器兼容层](docs/adapter_compat.md) | OneBot v11 + QQ 适配器、消息记录、撤回与主动发送 |
+| [🚦 Matcher 路由兼容层](docs/on_compat.md) | 空前缀命令环境下的 matcher 索引与路由 |
+| [🛡️ 数据层与 Web 面板治理](docs/database_web_governance.md) | SQLite 统一入口、迁移约定、Web 路径约束 |
+
+插件内模块索引：[nonebot_plugin_xiuxian_2/xiuxian/README.md](nonebot_plugin_xiuxian_2/xiuxian/README.md)
 
 ---
 
@@ -126,8 +130,8 @@ self.layout_bot_dict = {
 | `web_status` | `True` | 是否启动 **Web 修仙管理面板**（Flask，与 NoneBot 的 `HOST`/`PORT` 独立） |
 | `web_host` | `127.0.0.1` | 管理面板监听地址；需要远程访问时可显式改为 `0.0.0.0` 并配置认证、HTTPS 与防火墙 |
 | `web_port` | `5888` | 管理面板端口，默认 `http://127.0.0.1:5888` |
-| `custom_proxy_enabled` | `False` | 是否启用自定义代理（Bangumi 等境外 API） |
-| `custom_proxy` | `""` | 代理地址 |
+| `custom_proxy_enabled` | `False` | 是否启用自定义代理（境外流媒体 / Bangumi 等） |
+| `custom_proxy` | `""` | 代理地址（如 `socks5h://user:pass@host:port`） |
 
 也可在 **Web 面板 → 配置管理** 中在线修改上述项（保存后需重启 NoneBot 生效）。
 
@@ -556,7 +560,9 @@ screen -S xiu2 -X quit
 
 ## 🖥️ Web 修仙管理面板
 
-插件内置 **修仙管理面板**（后台 Web），与 QQ 游戏共用同一套 `data/xiuxian/` 数据，适合超管在浏览器里运维，无需记一堆管理指令。
+插件内置 **修仙管理面板**（后台 Web），与 QQ 游戏共用同一套 `data/xiuxian/` 数据，适合超管在浏览器里运维。
+
+**完整说明（含定时任务页）→ [docs/web_panel.md](docs/web_panel.md)**
 
 ### 访问与登录
 
@@ -564,25 +570,16 @@ screen -S xiu2 -X quit
 |:-----|:-----|
 | 开关 | `xiuxian_config.py` 中 `web_status = True`（默认开启） |
 | 地址 | `http://127.0.0.1:5888`（可通过 `web_host` / `web_port` 修改） |
-| 登录 | 打开 `/login`，填写 `.env` 中的 `SUPERUSERS` ID 和独立面板密码 |
+| 登录 | 打开 `/login`，填写 `.env` 中 **`SUPERUSERS` 任一 ID**（无需单独面板密码） |
 | 日志 | 启动成功会输出：`修仙管理面板已启动：<host>:<port>` |
 
-> NoneBot 反代端口（如 `.env` 的 `PORT=8080`）用于 OneBot WebSocket；**管理面板端口默认 5888**，两者不要混用。需要远程访问时可将 `web_host` 显式改为 `0.0.0.0`，但应通过 HTTPS 反向代理和防火墙限制来源。
+> NoneBot 反代端口（如 `.env` 的 `PORT=8080`）用于 OneBot WebSocket；**管理面板端口默认 5888**，两者不要混用。需要远程访问时可将 `web_host` 显式改为 `0.0.0.0`，并配合 HTTPS 与防火墙。
 
-首次启用面板前生成独立密码哈希：
+`SUPERUSERS` 为空时，Web 面板不要求登录（仅适合本机调试）。
 
-Web 登录使用 NoneBot 的 `SUPERUSERS` 配置。配置了超级用户时，输入任一超级用户 ID 即可进入管理面板；`SUPERUSERS` 为空时，Web 面板不要求登录。
+### 定时任务（摘要）
 
-### 安全开关
-
-Web 会话密钥会优先读取环境变量 `XIUXIAN_WEB_SECRET_KEY`，否则读取配置项，未配置时自动生成到 `data/xiuxian/web_secret_key`。写请求默认开启 CSRF 校验；普通页面发起的同源 `fetch` 会自动携带 Token。
-
-| 配置项 | 默认值 | 说明 |
-|:------|:------:|:-----|
-| `web_host` | `127.0.0.1` | 默认仅本机监听；可显式配置为 `0.0.0.0` |
-| `web_require_csrf` | `True` | Web 写请求 CSRF 校验 |
-| `web_allowed_hosts` | `[]` | Host 白名单，留空不限制 |
-| `web_session_cookie_secure` | `False` | HTTPS 反代时建议开启 |
+路径 **`/scheduler`**：中文任务名、常用周期一键改计划（每小时 / 每天 / 每周等）、启用禁用、手动运行。详见 [web_panel.md](docs/web_panel.md#定时任务页)。
 
 ### 功能一览
 
@@ -594,6 +591,7 @@ Web 会话密钥会优先读取环境变量 `XIUXIAN_WEB_SECRET_KEY`，否则读
 | 活动管理 | `/activity` | 活动配置、模板、玩法数据调整 |
 | 发放中心 | `/reward-center` | 奖励发放记录维护 |
 | 配置管理 | `/config` | 可视化改 `xiuxian_config`（含 **网络代理**） |
+| **定时任务** | `/scheduler` | 启停 / 改计划 / 立即运行 |
 | 消息面板 | `/messages` | 会话列表、发消息/群发、Markdown 预览、撤回等 |
 | 经济流水 | `/economy_logs` | 灵石等经济日志查询与导出 |
 | 日志查看 | `/logs` | 运行日志、按用户查消息 |
@@ -647,8 +645,25 @@ Linux 一键安装里的 `xiu2 update-deps`、Termux 的 `xiu2 update-deps` / `i
 |:-----|:-----|
 | `修仙帮助` | 查看功能列表 |
 | `修仙手册` | 查看管理员指令 |
-| `娱乐帮助` | 娱乐模块总览（别名：`娱乐菜单` / `娱乐功能`）；番剧、点歌、NewAPI、链接解析、小游戏等见该帮助，支持 `娱乐帮助 页码` 翻页 |
+| `娱乐帮助` | 娱乐模块总览（别名：`娱乐菜单` / `娱乐功能`）；番剧、点歌、NewAPI、链接解析、小游戏等，支持 `娱乐帮助 页码` 翻页 |
 | `小游戏帮助` | 五子棋 / 扫雷 / 十点半 / 猜数字 / 猜数谜等 |
+| `链接解析 <链接>` | 解析 B 站 / 抖音 / 快手等分享链（详见下节） |
+
+高频玩法补充说明：[docs/gameplay_notes.md](docs/gameplay_notes.md)
+
+### 娱乐 · 链接解析
+
+把抖音 / B 站 / 快手 / 微博 / 小红书等分享链接发给机器人，或使用：
+
+```text
+链接解析 https://b23.tv/xxxxx
+```
+
+别名：`视频解析` / `解析视频` / `解析链接` / `流媒体解析`。
+
+- 发送**信息卡片 + 视频/图集**；优先最高画质，超过约 20MB 自动降档  
+- 境外平台（X / TikTok / IG / YouTube）建议在配置或 Web「网络代理」中开启 `custom_proxy`  
+- 完整平台列表与排错：[docs/media_parser.md](docs/media_parser.md)
 
 ### 娱乐 · 趣味接口
 
@@ -715,10 +730,12 @@ Linux 一键安装里的 `xiu2 update-deps`、Termux 的 `xiu2 update-deps` / `i
 
 | 项目 | 说明 |
 |:-----|:-----|
-| [NoneBot2](https://github.com/nonebot/nonebot2) | 本插件基于的开发框架，NB 天下第一可爱 |
+| [NoneBot2](https://github.com/nonebot/nonebot2) | 本插件基于的开发框架 |
+| [nonebot/adapter-qq](https://github.com/nonebot/adapter-qq) | QQ 官方适配器（本仓库 vendor 含兼容补丁） |
 | [nonebot_plugin_xiuxian](https://github.com/s52047qwas/nonebot_plugin_xiuxian) | 原版修仙 |
 | [nonebot_plugin_xiuxian_2](https://github.com/QingMuCat/nonebot_plugin_xiuxian_2) | 原版修仙2 |
 | [nonebot_plugin_xiuxian_2_pmv](https://github.com/MyXiaoNan/nonebot_plugin_xiuxian_2_pmv) | 修仙2魔改版 |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | YouTube 等境外站点提链 |
 
 ---
 
