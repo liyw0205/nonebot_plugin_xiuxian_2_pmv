@@ -992,14 +992,21 @@ class PartnerBreakthroughService:
                     conn.rollback()
                     return PartnerBreakthroughResult("state_changed", _as_int_like_num(reward_exp))
                 users = conn.execute("SELECT user_id,exp FROM user_xiuxian WHERE user_id IN (%s,%s)", (user_id, partner_id)).fetchall()
-                if {str(row[0]): int(float(row[1] or 0)) for row in users} != {user_id: expected_user_exp, partner_id: expected_partner_exp}:
+                current = {str(row[0]): _as_int_like_num(row[1]) for row in users}
+                expected_map = {
+                    user_id: _as_int_like_num(expected_user_exp),
+                    partner_id: _as_int_like_num(expected_partner_exp),
+                }
+                if current != expected_map:
                     conn.rollback()
                     return PartnerBreakthroughResult("state_changed", _as_int_like_num(reward_exp))
+                # High-realm REAL exp: Python concurrency check under BEGIN IMMEDIATE;
+                # do not CAST-equal huge ints (bind truncates to scientific TEXT).
                 changed = conn.execute(
                     "UPDATE user_xiuxian SET "
                     "exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),power=%s "
-                    "WHERE user_id=%s AND CAST(COALESCE(exp,0) AS REAL)=CAST(%s AS REAL)",
-                    (reward_exp, partner_power, partner_id, expected_partner_exp),
+                    "WHERE user_id=%s",
+                    (reward_exp, partner_power, partner_id),
                 )
                 if changed.rowcount != 1:
                     conn.rollback()
@@ -1823,15 +1830,16 @@ class MentorBreakthroughRewardService:
                 parent = conn.execute("SELECT mentor_id FROM player_data.mentor WHERE user_id=%s", (apprentice_id,)).fetchone()
                 count = get_json_field(conn, "mentor", apprentice_id, "breakthrough_reward_count", 0)
                 users = conn.execute("SELECT user_id,exp FROM user_xiuxian WHERE user_id IN (%s,%s)", (mentor_id, apprentice_id)).fetchall()
-                exps = {str(row[0]): int(float(row[1] or 0)) for row in users}
-                if apprentice_id not in apprentices or parent is None or str(parent[0]) != mentor_id or int(count or 0) != values[2] or exps != {mentor_id: values[0], apprentice_id: values[1]}:
+                exps = {str(row[0]): _as_int_like_num(row[1]) for row in users}
+                if apprentice_id not in apprentices or parent is None or str(parent[0]) != mentor_id or int(count or 0) != values[2] or exps != {mentor_id: _as_int_like_num(values[0]), apprentice_id: _as_int_like_num(values[1])}:
                     conn.rollback(); return result("state_changed")
+                # High-realm: avoid CAST(exp)=CAST(%s) truncation on huge ints.
                 changed = conn.execute(
                     "UPDATE user_xiuxian SET "
                     "exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),power=%s "
-                    "WHERE user_id=%s AND CAST(COALESCE(exp,0) AS REAL)=CAST(%s AS REAL) "
+                    "WHERE user_id=%s "
                     "AND CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL)<=%s",
-                    (values[4], values[6], mentor_id, values[0], values[4], values[5]),
+                    (values[4], values[6], mentor_id, values[4], values[5]),
                 )
                 if changed.rowcount != 1:
                     conn.rollback(); return result("state_changed")
@@ -2039,12 +2047,18 @@ class MentorTransmissionService:
                 apprentice_row = conn.execute("SELECT mentor_id FROM player_data.mentor WHERE user_id=%s", (apprentice_id,)).fetchone()
                 if apprentice_id not in apprentices or apprentice_row is None or str(apprentice_row[0]) != mentor_id:
                     conn.rollback(); return result("state_changed")
+                # Concurrency: verify apprentice exp in Python (high-realm REAL safe).
+                exp_row = conn.execute(
+                    "SELECT exp FROM user_xiuxian WHERE user_id=%s", (apprentice_id,)
+                ).fetchone()
+                if exp_row is None or _as_int_like_num(exp_row[0]) != _as_int_like_num(values[0]):
+                    conn.rollback(); return result("state_changed")
                 changed = conn.execute(
                     "UPDATE user_xiuxian SET "
                     "exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),"
                     "power=%s,hp=%s,mp=%s,atk=%s "
-                    "WHERE user_id=%s AND CAST(COALESCE(exp,0) AS REAL)=CAST(%s AS REAL)",
-                    (values[1], values[2], values[3], values[4], values[5], apprentice_id, values[0]),
+                    "WHERE user_id=%s",
+                    (values[1], values[2], values[3], values[4], values[5], apprentice_id),
                 )
                 if changed.rowcount != 1:
                     conn.rollback(); return result("state_changed")

@@ -359,7 +359,9 @@ class RiftEntryService:
                 ):
                     conn.rollback()
                     return RiftEntryResult("rift_changed", world=world)
-                if user_id in world.participants:
+                if user_id in world.participants and not ticket_id:
+                    # 普通进入：本轮已进过不可重复。
+                    # 秘藏令(ticket)是额外进入，允许绕过「本轮已参加」限制。
                     conn.rollback()
                     return RiftEntryResult("already_joined", world=world)
 

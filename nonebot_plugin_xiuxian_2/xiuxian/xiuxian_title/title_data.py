@@ -404,6 +404,8 @@ def find_unlockable_titles(user_id: str) -> List[dict]:
     检查用户是否有新的可解锁称号
     返回: 新解锁的称号列表
     """
+    from ..xiuxian_utils.xiuxian2_handle import player_data_manager
+
     newly_unlocked = []
 
     # 获取已解锁称号
