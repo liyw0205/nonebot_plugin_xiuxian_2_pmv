@@ -1,115 +1,390 @@
 {% extends "base.html" %}
 {% block title %}定时任务 - 修仙管理面板{% endblock %}
 {% block content %}
-<div class="content-header">
+<section class="page-hero scheduler-hero">
     <div>
-        <h1>定时任务</h1>
+        <p class="page-kicker">Scheduler</p>
+        <h1 class="page-title">定时任务</h1>
+        <p class="page-subtitle">查看、启停、改计划并手动运行后台定时任务。手机端以卡片展示，计划字段可直接编辑。</p>
     </div>
-    <button type="button" class="btn btn-secondary" id="schedulerRefresh"><i class="fas fa-rotate"></i> 刷新</button>
-</div>
+    <div class="hero-actions scheduler-hero-actions">
+        <span class="status-pill" id="schedulerStatTotal"><i class="fas fa-clock"></i> —</span>
+        <span class="status-pill" id="schedulerStatEnabled"><i class="fas fa-toggle-on"></i> —</span>
+        <button type="button" class="btn btn-secondary" id="schedulerRefresh">
+            <i class="fas fa-rotate"></i> 刷新
+        </button>
+    </div>
+</section>
 
-<div id="schedulerToast" class="alert" hidden></div>
-<div class="table-container">
-    <table class="data-table">
-        <thead><tr><th>任务</th><th>状态</th><th>计划</th><th>下次执行</th><th>操作</th></tr></thead>
-        <tbody id="schedulerRows"><tr><td colspan="5">加载中</td></tr></tbody>
-    </table>
-</div>
+<div id="schedulerToast" class="alert scheduler-toast" hidden></div>
+
+<section class="card scheduler-toolbar-card">
+    <div class="scheduler-toolbar">
+        <div class="form-group scheduler-search-group">
+            <label for="schedulerSearch">筛选</label>
+            <input id="schedulerSearch" type="search" placeholder="任务名 / ID / 计划，如 backup、cron、秒">
+        </div>
+        <div class="scheduler-filter-chips" role="group" aria-label="状态筛选">
+            <button type="button" class="chip is-active" data-filter="all">全部</button>
+            <button type="button" class="chip" data-filter="enabled">仅启用</button>
+            <button type="button" class="chip" data-filter="disabled">仅禁用</button>
+            <button type="button" class="chip" data-filter="editable">可改计划</button>
+        </div>
+    </div>
+</section>
+
+<section class="scheduler-list" id="schedulerList" aria-live="polite">
+    <div class="scheduler-empty">加载中…</div>
+</section>
 
 <script>
 (function () {
-    const rows = document.getElementById('schedulerRows');
+    const listEl = document.getElementById('schedulerList');
     const toast = document.getElementById('schedulerToast');
     const refresh = document.getElementById('schedulerRefresh');
+    const searchInput = document.getElementById('schedulerSearch');
+    const statTotal = document.getElementById('schedulerStatTotal');
+    const statEnabled = document.getElementById('schedulerStatEnabled');
 
-    function text(value) { return String(value == null ? '' : value); }
-    function escapeHtml(value) { const el = document.createElement('div'); el.textContent = text(value); return el.innerHTML; }
+    const CRON_LABELS = {
+        year: '年',
+        month: '月',
+        day: '日',
+        week: '周',
+        day_of_week: '周几',
+        hour: '时',
+        minute: '分',
+        second: '秒',
+        start_date: '开始',
+        end_date: '结束',
+        timezone: '时区',
+        jitter: '抖动'
+    };
+
+    let jobsCache = [];
+    let statusFilter = 'all';
+    let searchText = '';
+
+    function text(value) {
+        return String(value == null ? '' : value);
+    }
+
+    function escapeHtml(value) {
+        const el = document.createElement('div');
+        el.textContent = text(value);
+        return el.innerHTML;
+    }
+
     function showToast(message, ok) {
         toast.hidden = false;
         toast.textContent = message;
-        toast.className = 'alert ' + (ok ? 'alert-success' : 'alert-error');
-        setTimeout(() => { toast.hidden = true; }, 3500);
+        toast.className = 'alert scheduler-toast ' + (ok ? 'alert-success' : 'alert-error');
+        clearTimeout(showToast._t);
+        showToast._t = setTimeout(function () { toast.hidden = true; }, 3500);
     }
+
+    function formatNextRun(value) {
+        if (!value) return '已暂停';
+        const raw = text(value);
+        // ISO-ish → 本地可读
+        const d = new Date(raw);
+        if (!Number.isNaN(d.getTime())) {
+            const pad = function (n) { return String(n).padStart(2, '0'); };
+            return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+                ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+        }
+        return raw;
+    }
+
+    function formatIntervalSeconds(seconds) {
+        const n = Number(seconds) || 0;
+        if (n <= 0) return text(seconds) + ' 秒';
+        if (n % 86400 === 0) return (n / 86400) + ' 天（' + n + ' 秒）';
+        if (n % 3600 === 0) return (n / 3600) + ' 小时（' + n + ' 秒）';
+        if (n % 60 === 0) return (n / 60) + ' 分钟（' + n + ' 秒）';
+        return n + ' 秒';
+    }
+
     function triggerText(trigger) {
-        if (trigger.type === 'interval') return '每 ' + trigger.seconds + ' 秒';
-        if (trigger.type === 'cron') return Object.entries(trigger.fields).map(([key, value]) => key + '=' + value).join(' ');
-        return trigger.description || '不可编辑';
+        if (!trigger) return '未知';
+        if (trigger.type === 'interval') return '每 ' + formatIntervalSeconds(trigger.seconds);
+        if (trigger.type === 'cron') {
+            return Object.entries(trigger.fields || {}).map(function (pair) {
+                const key = pair[0];
+                const value = pair[1];
+                return (CRON_LABELS[key] || key) + '=' + value;
+            }).join(' · ');
+        }
+        return trigger.description || trigger.type || '不可编辑';
     }
+
     function triggerForm(trigger) {
+        if (!trigger) return '';
         if (trigger.type === 'interval') {
-            return '<input class="schedule-value" type="number" min="1" max="2678400" value="' + escapeHtml(trigger.seconds) + '"> 秒';
+            return (
+                '<div class="schedule-interval">' +
+                '<label class="schedule-field">' +
+                '<span class="schedule-field-label">间隔（秒）</span>' +
+                '<input class="schedule-value" type="number" inputmode="numeric" min="1" max="2678400" value="' +
+                escapeHtml(trigger.seconds) + '">' +
+                '</label>' +
+                '<p class="schedule-hint">提示：60=1分钟，3600=1小时，86400=1天</p>' +
+                '</div>'
+            );
         }
         if (trigger.type === 'cron') {
-            return Object.entries(trigger.fields).map(([key, value]) =>
-                '<label style="display:inline-flex;gap:4px;align-items:center;margin:2px 6px 2px 0">' + key +
-                '<input class="cron-value" data-field="' + escapeHtml(key) + '" value="' + escapeHtml(value) + '" style="width:74px"></label>'
-            ).join('');
+            const fields = Object.entries(trigger.fields || {});
+            if (!fields.length) return '<p class="muted-text">无可编辑字段</p>';
+            return (
+                '<div class="schedule-cron-grid">' +
+                fields.map(function (pair) {
+                    const key = pair[0];
+                    const value = pair[1];
+                    const label = CRON_LABELS[key] || key;
+                    return (
+                        '<label class="schedule-field">' +
+                        '<span class="schedule-field-label" title="' + escapeHtml(key) + '">' + escapeHtml(label) +
+                        '<small>' + escapeHtml(key) + '</small></span>' +
+                        '<input class="cron-value" data-field="' + escapeHtml(key) + '" value="' +
+                        escapeHtml(value) + '" autocomplete="off" spellcheck="false">' +
+                        '</label>'
+                    );
+                }).join('') +
+                '</div>'
+            );
         }
-        return '';
+        return '<p class="muted-text">此触发器类型不可在网页改计划</p>';
     }
+
     async function post(url, payload) {
-        const response = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload || {})});
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload || {})
+        });
         const data = await response.json();
         if (!data.success) throw new Error(data.error || '操作失败');
         return data;
     }
+
     async function waitForRun(runId) {
         for (let attempt = 0; attempt < 120; attempt += 1) {
             const response = await fetch('/api/scheduler/runs/' + encodeURIComponent(runId));
             const data = await response.json();
             if (!data.success) throw new Error(data.error || '无法读取执行结果');
             if (data.run.status === 'succeeded' || data.run.status === 'failed') return data.run;
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(function (resolve) { setTimeout(resolve, 500); });
         }
         throw new Error('任务仍在执行，请稍后刷新查看');
     }
+
+    function jobMatches(job) {
+        const editable = job.trigger && (job.trigger.type === 'cron' || job.trigger.type === 'interval');
+        if (statusFilter === 'enabled' && !job.enabled) return false;
+        if (statusFilter === 'disabled' && job.enabled) return false;
+        if (statusFilter === 'editable' && !editable) return false;
+        if (!searchText) return true;
+        const hay = [
+            job.name, job.id, triggerText(job.trigger), job.next_run_time || ''
+        ].join(' ').toLowerCase();
+        return hay.indexOf(searchText) !== -1;
+    }
+
+    function updateStats(jobs) {
+        const total = jobs.length;
+        const enabled = jobs.filter(function (j) { return j.enabled; }).length;
+        statTotal.innerHTML = '<i class="fas fa-clock"></i> 共 ' + total + ' 个';
+        statEnabled.innerHTML = '<i class="fas fa-toggle-on"></i> 启用 ' + enabled;
+    }
+
+    function render() {
+        updateStats(jobsCache);
+        const jobs = jobsCache.filter(jobMatches);
+        if (!jobsCache.length) {
+            listEl.innerHTML = '<div class="scheduler-empty">没有已注册的定时任务</div>';
+            return;
+        }
+        if (!jobs.length) {
+            listEl.innerHTML = '<div class="scheduler-empty">没有匹配的任务，试试清空筛选</div>';
+            return;
+        }
+        listEl.innerHTML = jobs.map(function (job) {
+            const editable = job.trigger && (job.trigger.type === 'cron' || job.trigger.type === 'interval');
+            const typeLabel = (job.trigger && job.trigger.type) || 'other';
+            return (
+                '<article class="scheduler-card' + (job.enabled ? '' : ' is-disabled') + '" data-job-id="' +
+                escapeHtml(job.id) + '">' +
+                '<header class="scheduler-card-head">' +
+                '<div class="scheduler-card-title">' +
+                '<strong>' + escapeHtml(job.name || job.id) + '</strong>' +
+                '<code class="scheduler-job-id">' + escapeHtml(job.id) + '</code>' +
+                '</div>' +
+                '<div class="scheduler-card-badges">' +
+                '<span class="badge badge-type">' + escapeHtml(typeLabel) + '</span>' +
+                '<span class="badge ' + (job.enabled ? 'badge-on' : 'badge-off') + '">' +
+                (job.enabled ? '启用中' : '已禁用') + '</span>' +
+                '</div>' +
+                '</header>' +
+                '<div class="scheduler-card-body">' +
+                '<div class="scheduler-meta-row">' +
+                '<span class="scheduler-meta-label">下次执行</span>' +
+                '<span class="scheduler-meta-value">' + escapeHtml(formatNextRun(job.next_run_time)) + '</span>' +
+                '</div>' +
+                '<div class="scheduler-meta-row">' +
+                '<span class="scheduler-meta-label">当前计划</span>' +
+                '<code class="scheduler-meta-value schedule-summary">' + escapeHtml(triggerText(job.trigger)) + '</code>' +
+                '</div>' +
+                '<div class="schedule-editor" data-trigger="' + escapeHtml(JSON.stringify(job.trigger || {})) + '">' +
+                triggerForm(job.trigger || {}) +
+                '</div>' +
+                '</div>' +
+                '<footer class="scheduler-card-actions">' +
+                '<label class="cmd-toggle scheduler-enable-toggle" title="启用/禁用">' +
+                '<input class="cmd-toggle-input job-enabled" type="checkbox" ' + (job.enabled ? 'checked' : '') + '>' +
+                '<span class="cmd-toggle-track" aria-hidden="true"></span>' +
+                '<span class="cmd-toggle-label">' + (job.enabled ? '启用' : '禁用') + '</span>' +
+                '</label>' +
+                '<div class="scheduler-action-btns">' +
+                '<button type="button" class="btn btn-secondary btn-sm job-run"><i class="fas fa-play"></i> 运行</button>' +
+                (editable
+                    ? '<button type="button" class="btn btn-primary btn-sm job-save"><i class="fas fa-floppy-disk"></i> 保存计划</button>'
+                    : '') +
+                '</div>' +
+                '</footer>' +
+                '</article>'
+            );
+        }).join('');
+    }
+
     async function load() {
-        rows.innerHTML = '<tr><td colspan="5">加载中</td></tr>';
+        listEl.innerHTML = '<div class="scheduler-empty">加载中…</div>';
         try {
             const response = await fetch('{{ url_for("api_scheduler_jobs") }}');
             const data = await response.json();
             if (!data.success) throw new Error(data.error || '加载失败');
-            rows.innerHTML = data.jobs.map(job => {
-                const editable = job.trigger.type === 'cron' || job.trigger.type === 'interval';
-                return '<tr data-job-id="' + escapeHtml(job.id) + '">' +
-                    '<td><strong>' + escapeHtml(job.name) + '</strong><br><code>' + escapeHtml(job.id) + '</code></td>' +
-                    '<td><label class="cmd-toggle"><input class="job-enabled" type="checkbox" ' + (job.enabled ? 'checked' : '') + '><span class="cmd-toggle-track"></span><span class="cmd-toggle-label">' + (job.enabled ? '启用' : '禁用') + '</span></label></td>' +
-                    '<td><div class="schedule-editor" data-trigger="' + escapeHtml(JSON.stringify(job.trigger)) + '">' + triggerForm(job.trigger) + '<div><code>' + escapeHtml(triggerText(job.trigger)) + '</code></div></div></td>' +
-                    '<td>' + escapeHtml(job.next_run_time || '已暂停') + '</td>' +
-                    '<td><button type="button" class="btn btn-secondary btn-sm job-run"><i class="fas fa-play"></i> 运行</button> ' + (editable ? '<button type="button" class="btn btn-primary btn-sm job-save"><i class="fas fa-floppy-disk"></i> 保存</button>' : '') + '</td>' +
-                    '</tr>';
-            }).join('') || '<tr><td colspan="5">没有已注册的定时任务</td></tr>';
-        } catch (error) { rows.innerHTML = '<tr><td colspan="5">加载失败</td></tr>'; showToast(error.message, false); }
+            jobsCache = Array.isArray(data.jobs) ? data.jobs : [];
+            render();
+        } catch (error) {
+            listEl.innerHTML = '<div class="scheduler-empty scheduler-empty-error">加载失败：' +
+                escapeHtml(error.message) + '</div>';
+            showToast(error.message, false);
+        }
     }
-    rows.addEventListener('change', async function (event) {
+
+    listEl.addEventListener('change', async function (event) {
         if (!event.target.classList.contains('job-enabled')) return;
-        const input = event.target; const row = input.closest('tr'); const enabled = input.checked;
+        const input = event.target;
+        const card = input.closest('.scheduler-card');
+        if (!card) return;
+        const enabled = input.checked;
+        const label = card.querySelector('.cmd-toggle-label');
+        if (label) label.textContent = enabled ? '启用' : '禁用';
         input.disabled = true;
-        try { await post('/api/scheduler/jobs/' + encodeURIComponent(row.dataset.jobId) + '/enabled', {enabled}); showToast(enabled ? '已启用' : '已禁用', true); load(); }
-        catch (error) { input.checked = !enabled; showToast(error.message, false); }
-        finally { input.disabled = false; }
+        try {
+            await post('/api/scheduler/jobs/' + encodeURIComponent(card.dataset.jobId) + '/enabled', { enabled: enabled });
+            showToast(enabled ? '已启用' : '已禁用', true);
+            await load();
+        } catch (error) {
+            input.checked = !enabled;
+            if (label) label.textContent = !enabled ? '启用' : '禁用';
+            showToast(error.message, false);
+        } finally {
+            input.disabled = false;
+        }
     });
-    rows.addEventListener('click', async function (event) {
-        const row = event.target.closest('tr'); if (!row) return;
-        const jobId = encodeURIComponent(row.dataset.jobId);
+
+    listEl.addEventListener('click', async function (event) {
+        const card = event.target.closest('.scheduler-card');
+        if (!card) return;
+        const jobId = encodeURIComponent(card.dataset.jobId);
+
         if (event.target.closest('.job-run')) {
+            const btn = event.target.closest('.job-run');
+            btn.disabled = true;
+            btn.classList.add('is-busy');
             try {
                 const queued = await post('/api/scheduler/jobs/' + jobId + '/run');
                 showToast('任务已加入执行队列', true);
                 const run = await waitForRun(queued.run_id);
-                showToast(run.status === 'succeeded' ? '任务执行成功' : '任务执行失败：' + (run.error || '未知错误'), run.status === 'succeeded');
-                load();
-            } catch (error) { showToast(error.message, false); }
+                showToast(
+                    run.status === 'succeeded'
+                        ? '任务执行成功'
+                        : '任务执行失败：' + (run.error || '未知错误'),
+                    run.status === 'succeeded'
+                );
+                await load();
+            } catch (error) {
+                showToast(error.message, false);
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('is-busy');
+            }
+            return;
         }
+
         if (event.target.closest('.job-save')) {
-            const editor = row.querySelector('.schedule-editor'); const previous = JSON.parse(editor.dataset.trigger);
+            const btn = event.target.closest('.job-save');
+            const editor = card.querySelector('.schedule-editor');
+            let previous;
+            try {
+                previous = JSON.parse(editor.dataset.trigger || '{}');
+            } catch (e) {
+                showToast('计划数据损坏，请刷新后重试', false);
+                return;
+            }
             let trigger;
-            if (previous.type === 'interval') trigger = {type: 'interval', seconds: Number(editor.querySelector('.schedule-value').value)};
-            else { const fields = {}; editor.querySelectorAll('.cron-value').forEach(input => { fields[input.dataset.field] = input.value; }); trigger = {type: 'cron', fields}; }
-            try { await post('/api/scheduler/jobs/' + jobId + '/schedule', {trigger}); showToast('计划已保存', true); load(); } catch (error) { showToast(error.message, false); }
+            if (previous.type === 'interval') {
+                const seconds = Number((editor.querySelector('.schedule-value') || {}).value);
+                if (!Number.isFinite(seconds) || seconds < 1) {
+                    showToast('间隔秒数需 ≥ 1', false);
+                    return;
+                }
+                trigger = { type: 'interval', seconds: seconds };
+            } else if (previous.type === 'cron') {
+                const fields = {};
+                editor.querySelectorAll('.cron-value').forEach(function (input) {
+                    fields[input.dataset.field] = input.value;
+                });
+                trigger = { type: 'cron', fields: fields };
+            } else {
+                showToast('该任务不支持改计划', false);
+                return;
+            }
+            btn.disabled = true;
+            try {
+                await post('/api/scheduler/jobs/' + jobId + '/schedule', { trigger: trigger });
+                showToast('计划已保存', true);
+                await load();
+            } catch (error) {
+                showToast(error.message, false);
+            } finally {
+                btn.disabled = false;
+            }
         }
     });
-    refresh.addEventListener('click', load); load();
+
+    document.querySelectorAll('.scheduler-filter-chips .chip').forEach(function (chip) {
+        chip.addEventListener('click', function () {
+            document.querySelectorAll('.scheduler-filter-chips .chip').forEach(function (c) {
+                c.classList.remove('is-active');
+            });
+            chip.classList.add('is-active');
+            statusFilter = chip.dataset.filter || 'all';
+            render();
+        });
+    });
+
+    let searchTimer = null;
+    searchInput.addEventListener('input', function () {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(function () {
+            searchText = (searchInput.value || '').trim().toLowerCase();
+            render();
+        }, 120);
+    });
+
+    refresh.addEventListener('click', load);
+    load();
 })();
 </script>
 {% endblock %}

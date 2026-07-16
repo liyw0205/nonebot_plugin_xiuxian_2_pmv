@@ -4546,3 +4546,483 @@ div[style*="overflow-x: auto"] {
         justify-content: flex-end;
     }
 }
+
+/* ========== 定时任务（scheduler） ========== */
+.scheduler-hero {
+    gap: 14px;
+}
+
+.scheduler-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.scheduler-toast {
+    margin: 0 0 12px;
+}
+
+.scheduler-toolbar-card {
+    margin-bottom: 14px;
+    padding: 14px 16px;
+}
+
+.scheduler-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 16px;
+    align-items: flex-end;
+}
+
+.scheduler-search-group {
+    flex: 1 1 220px;
+    min-width: 0;
+    margin: 0;
+}
+
+.scheduler-search-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.scheduler-search-group input[type="search"] {
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.95rem;
+}
+
+.scheduler-filter-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.scheduler-filter-chips .chip {
+    appearance: none;
+    border: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--bg-secondary) 88%, var(--bg-primary));
+    color: var(--text-secondary);
+    border-radius: 999px;
+    padding: 7px 12px;
+    font-size: 0.82rem;
+    cursor: pointer;
+    min-height: 36px;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.scheduler-filter-chips .chip.is-active {
+    background: color-mix(in srgb, var(--accent-color) 18%, var(--bg-secondary));
+    border-color: color-mix(in srgb, var(--accent-color) 45%, var(--border-color));
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.scheduler-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
+    gap: 12px;
+}
+
+.scheduler-empty {
+    grid-column: 1 / -1;
+    padding: 28px 16px;
+    text-align: center;
+    border: 1px dashed var(--border-color);
+    border-radius: 12px;
+    color: var(--text-secondary);
+    background: color-mix(in srgb, var(--bg-secondary) 70%, transparent);
+}
+
+.scheduler-empty-error {
+    color: var(--danger-color);
+    border-color: color-mix(in srgb, var(--danger-color) 35%, var(--border-color));
+}
+
+.scheduler-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    box-shadow: 0 8px 20px color-mix(in srgb, var(--shadow-color) 55%, transparent);
+    min-width: 0;
+}
+
+.scheduler-card.is-disabled {
+    opacity: 0.88;
+}
+
+.scheduler-card-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: flex-start;
+}
+
+.scheduler-card-title {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.scheduler-card-title strong {
+    font-size: 1.02rem;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+.scheduler-job-id {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    word-break: break-all;
+    background: color-mix(in srgb, var(--bg-primary) 80%, transparent);
+    border-radius: 6px;
+    padding: 2px 6px;
+    width: fit-content;
+    max-width: 100%;
+}
+
+.scheduler-card-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: flex-end;
+    flex-shrink: 0;
+}
+
+.scheduler-card .badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 3px 9px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+
+.scheduler-card .badge-type {
+    background: color-mix(in srgb, var(--info-color) 16%, var(--bg-primary));
+    color: var(--text-primary);
+    border-color: color-mix(in srgb, var(--info-color) 28%, var(--border-color));
+}
+
+.scheduler-card .badge-on {
+    background: color-mix(in srgb, var(--success-color) 18%, var(--bg-primary));
+    color: var(--success-color);
+    border-color: color-mix(in srgb, var(--success-color) 30%, var(--border-color));
+}
+
+.scheduler-card .badge-off {
+    background: color-mix(in srgb, var(--text-secondary) 14%, var(--bg-primary));
+    color: var(--text-secondary);
+    border-color: var(--border-color);
+}
+
+.scheduler-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+}
+
+.scheduler-meta-row {
+    display: grid;
+    grid-template-columns: 4.5rem minmax(0, 1fr);
+    gap: 8px;
+    align-items: start;
+}
+
+.scheduler-meta-label {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    padding-top: 2px;
+}
+
+.scheduler-meta-value {
+    font-size: 0.9rem;
+    word-break: break-word;
+}
+
+.schedule-summary {
+    display: block;
+    padding: 4px 8px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-primary) 85%, transparent);
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+.schedule-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--border-color) 90%, transparent);
+    background: color-mix(in srgb, var(--bg-primary) 55%, var(--bg-secondary));
+}
+
+.schedule-interval {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.schedule-hint {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.schedule-cron-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
+}
+
+.schedule-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.schedule-field-label {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.schedule-field-label small {
+    font-size: 0.68rem;
+    opacity: 0.75;
+    font-family: var(--font-mono, "IBM Plex Mono", monospace);
+}
+
+.schedule-field input,
+.schedule-value,
+.cron-value {
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 0.92rem;
+}
+
+.schedule-field input:focus,
+.schedule-value:focus,
+.cron-value:focus,
+.scheduler-search-group input:focus {
+    outline: none;
+    border-color: color-mix(in srgb, var(--accent-color) 55%, var(--border-color));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-color) 18%, transparent);
+}
+
+.scheduler-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 4px;
+    border-top: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+}
+
+.scheduler-action-btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-left: auto;
+}
+
+.scheduler-action-btns .btn {
+    min-height: 38px;
+}
+
+.scheduler-action-btns .btn.is-busy {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.scheduler-enable-toggle {
+    min-height: 38px;
+}
+
+/* 兼容旧 class，避免其它页引用时报空 */
+.content-header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.content-header h1 {
+    font-size: 1.4rem;
+    margin: 0;
+}
+
+.table-container {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--bg-secondary);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 640px;
+}
+
+.data-table th,
+.data-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+    text-align: left;
+    vertical-align: top;
+}
+
+.data-table th {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    background: color-mix(in srgb, var(--bg-primary) 70%, var(--bg-secondary));
+    position: sticky;
+    top: 0;
+}
+
+.data-table tr:last-child td {
+    border-bottom: none;
+}
+
+@media (max-width: 768px) {
+    .scheduler-hero {
+        align-items: stretch;
+    }
+
+    .scheduler-hero-actions {
+        width: 100%;
+    }
+
+    .scheduler-hero-actions .btn {
+        flex: 1 1 auto;
+    }
+
+    .scheduler-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .scheduler-filter-chips {
+        width: 100%;
+    }
+
+    .scheduler-filter-chips .chip {
+        flex: 1 1 calc(50% - 8px);
+        text-align: center;
+        justify-content: center;
+    }
+
+    .scheduler-list {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .scheduler-card {
+        padding: 12px;
+        border-radius: 12px;
+    }
+
+    .scheduler-card-head {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .scheduler-card-badges {
+        justify-content: flex-start;
+    }
+
+    .scheduler-meta-row {
+        grid-template-columns: 1fr;
+        gap: 2px;
+    }
+
+    .scheduler-card-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .scheduler-action-btns {
+        width: 100%;
+        margin-left: 0;
+    }
+
+    .scheduler-action-btns .btn {
+        flex: 1 1 calc(50% - 4px);
+    }
+
+    .schedule-cron-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    /* 手机端开关更大，好点 */
+    .scheduler-enable-toggle .cmd-toggle-track {
+        width: 2.8rem;
+        height: 1.55rem;
+    }
+
+    .scheduler-enable-toggle .cmd-toggle-track::after {
+        width: calc(1.55rem - 4px);
+        height: calc(1.55rem - 4px);
+    }
+
+    .scheduler-enable-toggle .cmd-toggle-input:checked + .cmd-toggle-track::after {
+        transform: translateX(1.25rem);
+    }
+}
+
+@media (max-width: 420px) {
+    .schedule-cron-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .scheduler-filter-chips .chip {
+        flex: 1 1 100%;
+    }
+
+    .scheduler-action-btns .btn {
+        flex: 1 1 100%;
+    }
+}
+
+@media (hover: none) and (pointer: coarse) {
+    .schedule-field input,
+    .schedule-value,
+    .cron-value,
+    .scheduler-search-group input[type="search"],
+    .scheduler-filter-chips .chip,
+    .scheduler-action-btns .btn {
+        min-height: 44px;
+    }
+}
