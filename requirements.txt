@@ -21,3 +21,4 @@ wcwidth
 wget
 Werkzeug
 yarl
+yt-dlp

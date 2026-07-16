@@ -44,12 +44,14 @@ _PLATFORM_HOSTS: list[tuple[str, str]] = [
     ("twitter.com", "twitter"),
     ("x.com", "twitter"),
     ("tiktok.com", "tiktok"),
+    ("youtu.be", "youtube"),
+    ("youtube.com", "youtube"),
     ("goofish.com", "xianyu"),
     ("instagram.com", "instagram"),
 ]
 
 # 这些平台在配置了 custom_proxy 时走代理（国内平台保持直连）
-_PROXY_PLATFORMS = frozenset({"twitter", "tiktok", "instagram"})
+_PROXY_PLATFORMS = frozenset({"twitter", "tiktok", "instagram", "youtube"})
 
 _MOBILE_UA = (
     "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) "
@@ -276,6 +278,7 @@ def _base_meta(platform: str, url: str) -> dict[str, Any]:
         "desc": "",
         "image_urls": [],
         "video_urls": [],
+        "audio_urls": [],
         "error": None,
     }
 
@@ -1206,11 +1209,529 @@ def parse_kuaishou(url: str) -> dict[str, Any]:
 
 
 def parse_xiaohongshu(url: str) -> dict[str, Any]:
-    return _parse_html_og("xiaohongshu", url)
+    """小红书：参考上游，从 __INITIAL_STATE__ 抽 noteDetailMap / noteData。
+
+    国内直连常不可达时，若配置了 custom_proxy 则走代理重试。
+    """
+    meta = _base_meta("xiaohongshu", url)
+    # 小红书在部分机房直连不通，有代理时优先代理
+    use_proxy = bool(get_custom_proxy_url())
+    final = expand_url(url, use_proxy=use_proxy, platform="xiaohongshu")
+    meta["url"] = final
+
+    m = re.search(r"/(?:explore|discovery/item)/([0-9a-zA-Z]+)", final) or re.search(
+        r"/(?:explore|discovery/item)/([0-9a-zA-Z]+)", url
+    )
+    note_id = m.group(1) if m else None
+    pages: list[str] = []
+    if note_id:
+        # 保留 query（含 xsec_token 时更稳）
+        if "xiaohongshu.com" in final and note_id in final:
+            pages.append(final)
+        pages.append(f"https://www.xiaohongshu.com/explore/{note_id}")
+        pages.append(f"https://www.xiaohongshu.com/discovery/item/{note_id}")
+    else:
+        pages.append(final)
+
+    state = None
+    for page in pages:
+        for proxy_flag in ((True, False) if use_proxy else (False,)):
+            try:
+                _, html = _get_text(
+                    page,
+                    headers={
+                        "User-Agent": _DESKTOP_UA if not proxy_flag else _MOBILE_UA,
+                        "Referer": "https://www.xiaohongshu.com/",
+                        "Accept": "text/html,application/xhtml+xml",
+                    },
+                    timeout=20,
+                    use_proxy=proxy_flag,
+                )
+            except Exception as e:
+                logger.debug(f"小红书页面失败 proxy={proxy_flag} {page}: {e}")
+                continue
+            state = _extract_json_object_after(html, "window.__INITIAL_STATE__")
+            if isinstance(state, dict):
+                # 兼容 undefined 已被 json 解析失败的情况：再做一次文本替换
+                meta["url"] = page
+                break
+            # 有时 JSON 含 undefined，手动修
+            try:
+                idx = html.find("window.__INITIAL_STATE__")
+                if idx >= 0:
+                    raw = _extract_json_object_after(
+                        html.replace("undefined", "null"), "window.__INITIAL_STATE__"
+                    )
+                    if isinstance(raw, dict):
+                        state = raw
+                        meta["url"] = page
+                        break
+            except Exception:
+                pass
+        if isinstance(state, dict):
+            break
+
+    note: dict[str, Any] | None = None
+    if isinstance(state, dict):
+        # PC explore: note.noteDetailMap[id].note
+        ndm = ((state.get("note") or {}).get("noteDetailMap") or {}) if isinstance(
+            state.get("note"), dict
+        ) else {}
+        if note_id and isinstance(ndm, dict) and note_id in ndm:
+            node = ndm.get(note_id) or {}
+            note = node.get("note") if isinstance(node, dict) else None
+            if not isinstance(note, dict):
+                note = node if isinstance(node, dict) else None
+        if not note and isinstance(ndm, dict) and ndm:
+            first = next(iter(ndm.values()))
+            if isinstance(first, dict):
+                note = first.get("note") if isinstance(first.get("note"), dict) else first
+        # mobile discovery: noteData.data.noteData
+        if not note:
+            nd = state.get("noteData") or {}
+            if isinstance(nd, dict):
+                data = nd.get("data") or {}
+                if isinstance(data, dict):
+                    cand = data.get("noteData") or data.get("note") or data
+                    if isinstance(cand, dict) and (
+                        cand.get("imageList") or cand.get("title") or cand.get("video")
+                    ):
+                        note = cand
+                preload = nd.get("normalNotePreloadData")
+                if not note and isinstance(preload, dict):
+                    note = preload
+
+    if isinstance(note, dict):
+        meta["title"] = str(note.get("title") or note.get("desc") or "")[:200]
+        meta["desc"] = str(note.get("desc") or "")[:400]
+        user = note.get("user") or note.get("userInfo") or {}
+        if isinstance(user, dict):
+            meta["author"] = str(
+                user.get("nickname") or user.get("nickName") or user.get("name") or ""
+            )
+            meta["avatar_url"] = (
+                user.get("avatar") or user.get("avatarUrl") or user.get("images")
+            )
+        # images
+        images: list[str] = []
+        for im in note.get("imageList") or note.get("imagesList") or []:
+            if isinstance(im, dict):
+                u = (
+                    im.get("urlDefault")
+                    or im.get("urlSizeLarge")
+                    or im.get("url")
+                    or im.get("infoList", [{}])[0].get("url")
+                    if isinstance(im.get("infoList"), list) and im.get("infoList")
+                    else None
+                )
+                if isinstance(u, str) and u.startswith("http"):
+                    images.append(u)
+            elif isinstance(im, str) and im.startswith("http"):
+                images.append(im)
+        # video
+        videos: list[str] = []
+        video = note.get("video") or {}
+        if isinstance(video, dict):
+            media = video.get("media") or {}
+            stream = media.get("stream") or video.get("stream") or {}
+            # h264 list
+            for key in ("h264", "h265", "av1", "h266"):
+                for item in (stream.get(key) or []) if isinstance(stream, dict) else []:
+                    if isinstance(item, dict):
+                        for kk in ("masterUrl", "master_url", "url", "backupUrls"):
+                            val = item.get(kk)
+                            if isinstance(val, str) and val.startswith("http"):
+                                videos.append(val)
+                            elif isinstance(val, list):
+                                videos.extend(
+                                    [x for x in val if isinstance(x, str) and x.startswith("http")]
+                                )
+            # consumer originVideoKey sometimes
+            consumer = video.get("consumer") or {}
+            if isinstance(consumer, dict):
+                ovk = consumer.get("originVideoKey")
+                if isinstance(ovk, str) and ovk.startswith("http"):
+                    videos.append(ovk)
+            for kk in ("url", "videoUrl", "masterUrl"):
+                if isinstance(video.get(kk), str) and video[kk].startswith("http"):
+                    videos.append(video[kk])
+        meta["image_urls"] = list(dict.fromkeys(images))[:12]
+        # 小红书 CDN 用 https 更稳
+        meta["image_urls"] = [
+            u.replace("http://", "https://", 1) if u.startswith("http://") else u
+            for u in meta["image_urls"]
+        ]
+        meta["video_urls"] = list(dict.fromkeys(videos))[:3]
+        if meta["image_urls"] or meta["video_urls"]:
+            meta["error"] = None
+            return meta
+        if meta.get("title"):
+            meta["error"] = "小红书拿到标题但无媒体（可能需 xsec_token/登录）"
+            return meta
+
+    # 回退 OG（代理）
+    page = _parse_html_og("xiaohongshu", final, use_proxy=use_proxy)
+    if page.get("video_urls") or page.get("image_urls"):
+        return page
+    meta["error"] = page.get("error") or "小红书未解析到媒体（直连失败或页面无 note 数据）"
+    if not use_proxy:
+        meta["error"] = "小红书建议配置 custom_proxy；" + str(meta["error"])
+    return meta
+
+
+def _weibo_strip_html(text: str) -> str:
+    text = (text or "").replace("<br />", "\n").replace("<br/>", "\n")
+    text = re.sub(r"<[^>]+>", "", text)
+    return text.replace("\u200b", "").strip()
+
+
+def _weibo_fill_from_status(meta: dict[str, Any], data: dict[str, Any]) -> None:
+    """从 m.weibo.cn statuses/show 的 data 填充媒体。含转发链。"""
+    if not isinstance(data, dict):
+        return
+    # 优先当前层，否则吃 retweeted_status
+    layers = [data]
+    if isinstance(data.get("retweeted_status"), dict):
+        layers.append(data["retweeted_status"])
+
+    images: list[str] = list(meta.get("image_urls") or [])
+    videos: list[str] = list(meta.get("video_urls") or [])
+    title = meta.get("title") or ""
+    desc = meta.get("desc") or ""
+    author = meta.get("author") or ""
+    avatar = meta.get("avatar_url")
+    ts = meta.get("timestamp")
+
+    for layer in layers:
+        user = layer.get("user") or {}
+        if isinstance(user, dict) and not author:
+            author = str(user.get("screen_name") or "")
+            avatar = user.get("profile_image_url") or avatar
+        text = _weibo_strip_html(str(layer.get("text") or ""))
+        if text and not desc:
+            desc = text[:400]
+        if not title:
+            title = str(layer.get("status_title") or text[:80] or "")
+        for pic in layer.get("pics") or []:
+            if not isinstance(pic, dict):
+                continue
+            large = pic.get("large") or {}
+            u = (large.get("url") if isinstance(large, dict) else None) or pic.get("url")
+            if isinstance(u, str) and u.startswith("http"):
+                images.append(u)
+        page = layer.get("page_info") or {}
+        if isinstance(page, dict):
+            if page.get("title") and not title:
+                title = str(page.get("title"))
+            urls = page.get("urls") or {}
+            if isinstance(urls, dict):
+                for key in ("mp4_720p_mp4", "mp4_hd_mp4", "mp4_ld_mp4"):
+                    v = urls.get(key)
+                    if isinstance(v, str) and v:
+                        if v.startswith("//"):
+                            v = "https:" + v
+                        elif not v.startswith("http"):
+                            v = "https:" + v
+                        videos.append(v)
+            # stream_url fallback
+            for key in ("stream_url_hd", "stream_url", "media_info"):
+                v = page.get(key)
+                if isinstance(v, str) and ".mp4" in v:
+                    videos.append(v if v.startswith("http") else "https:" + v)
+                if isinstance(v, dict):
+                    for kk in ("stream_url_hd", "stream_url", "mp4_720p_mp4", "mp4_hd_mp4"):
+                        vv = v.get(kk)
+                        if isinstance(vv, str) and vv:
+                            videos.append(vv if vv.startswith("http") else "https:" + vv)
+            pic = page.get("page_pic") or {}
+            if isinstance(pic, dict) and isinstance(pic.get("url"), str):
+                images.append(pic["url"])
+        # created_at: "Tue Nov 18 16:19:12 +0800 2025"
+        if not ts and layer.get("created_at"):
+            try:
+                from email.utils import parsedate_to_datetime
+
+                ts = int(parsedate_to_datetime(str(layer["created_at"])).timestamp())
+            except Exception:
+                pass
+
+    meta["title"] = (title or desc or "微博")[:200]
+    meta["desc"] = (desc or title)[:400]
+    meta["author"] = author
+    meta["avatar_url"] = avatar
+    meta["timestamp"] = ts
+    meta["image_urls"] = list(dict.fromkeys(images))[:12]
+    meta["video_urls"] = list(dict.fromkeys(videos))[:3]
 
 
 def parse_weibo(url: str) -> dict[str, Any]:
-    return _parse_html_og("weibo", url)
+    """微博：m.weibo.cn/statuses/show 接口（对齐上游），支持图/视频/转发。"""
+    meta = _base_meta("weibo", url)
+    final = expand_url(url, use_proxy=False, platform="weibo")
+    meta["url"] = final
+
+    wid = None
+    for pat in (
+        r"weibo\.com/\d+/([0-9a-zA-Z]+)",
+        r"weibo\.cn/(?:status|detail|\d+)/([0-9a-zA-Z]+)",
+        r"[?&]id=([0-9a-zA-Z]+)",
+        r"/([0-9a-zA-Z]{6,})$",
+    ):
+        m = re.search(pat, final) or re.search(pat, url)
+        if m:
+            wid = m.group(1)
+            break
+    # mid numeric from tv show
+    if not wid:
+        m = re.search(r"[?&]mid=(\d+)", final) or re.search(r"[?&]mid=(\d+)", url)
+        if m:
+            wid = m.group(1)
+
+    if wid:
+        import time as _time
+
+        api = f"https://m.weibo.cn/statuses/show?id={wid}&_={int(_time.time() * 1000)}"
+        try:
+            resp = http_client.request(
+                "GET",
+                api,
+                timeout=15,
+                check_status=False,
+                use_config_proxy=False,
+                headers={
+                    "User-Agent": _MOBILE_UA,
+                    "Accept": "application/json, text/plain, */*",
+                    "Referer": f"https://m.weibo.cn/detail/{wid}",
+                    "Origin": "https://m.weibo.cn",
+                    "X-Requested-With": "XMLHttpRequest",
+                    "MWeibo-PWA": "1",
+                },
+            )
+            raw = getattr(resp, "text", "") or ""
+            data = json.loads(raw) if raw.strip().startswith("{") else {}
+            if int(data.get("ok") or 0) == 1 and isinstance(data.get("data"), dict):
+                _weibo_fill_from_status(meta, data["data"])
+                if meta.get("video_urls") or meta.get("image_urls") or meta.get("title"):
+                    meta["error"] = None
+                    return meta
+            else:
+                meta["error"] = f"微博接口：{data.get('msg') or data.get('errno') or 'ok!=1'}"
+        except Exception as e:
+            meta["error"] = f"微博接口失败：{e}"
+
+    # video.weibo.com/show?fid=
+    m = re.search(r"fid=(\d+:\d+)", final) or re.search(r"fid=(\d+:\d+)", url)
+    if m:
+        fid = m.group(1)
+        try:
+            req_url = f"https://h5.video.weibo.com/api/component?page=/show/{fid}"
+            post = 'data={"Component_Play_Playinfo":{"oid":"' + fid + '"}}'
+            resp = http_client.request(
+                "POST",
+                req_url,
+                data=post,
+                timeout=15,
+                check_status=False,
+                use_config_proxy=False,
+                headers={
+                    "User-Agent": _MOBILE_UA,
+                    "Referer": f"https://h5.video.weibo.com/show/{fid}",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+            )
+            raw = getattr(resp, "text", "") or ""
+            data = json.loads(raw) if raw.strip().startswith("{") else {}
+            info = ((data.get("data") or {}).get("Component_Play_Playinfo") or {})
+            if isinstance(info, dict) and info:
+                meta["title"] = str(info.get("title") or "")[:200]
+                text = re.sub(r"<[^>]+>", "", str(info.get("text") or ""))
+                meta["desc"] = text[:400]
+                user = ((info.get("reward") or {}).get("user") or {})
+                if isinstance(user, dict):
+                    meta["author"] = str(user.get("name") or "")
+                    meta["avatar_url"] = user.get("profile_image_url")
+                cover = info.get("cover_image")
+                if isinstance(cover, str) and cover:
+                    if cover.startswith("//"):
+                        cover = "https:" + cover
+                    meta["image_urls"] = [cover]
+                urls = info.get("urls") or {}
+                vids = []
+                if isinstance(urls, dict):
+                    for v in urls.values():
+                        if isinstance(v, str) and v:
+                            vids.append(v if v.startswith("http") else "https:" + v)
+                if not vids and info.get("stream_url"):
+                    v = info["stream_url"]
+                    vids.append(v if str(v).startswith("http") else "https:" + str(v))
+                meta["video_urls"] = list(dict.fromkeys(vids))[:3]
+                if meta["video_urls"] or meta["image_urls"]:
+                    meta["error"] = None
+                    return meta
+        except Exception as e:
+            logger.debug(f"微博视频 fid 接口失败: {e}")
+
+    page = _parse_html_og("weibo", final, use_proxy=False)
+    if page.get("video_urls") or page.get("image_urls"):
+        return page
+    if not meta.get("error"):
+        meta["error"] = page.get("error") or "微博未解析到媒体"
+    return meta
+
+
+def _ytdlp_extract(url: str, *, use_proxy: bool = True) -> dict[str, Any] | None:
+    """可选依赖 yt-dlp；失败返回 None。"""
+    try:
+        import yt_dlp  # type: ignore
+    except Exception:
+        return None
+    proxy = get_custom_proxy_url() if use_proxy else None
+    opts: dict[str, Any] = {
+        "quiet": True,
+        "noprogress": True,
+        "skip_download": True,
+        "noplaylist": True,
+        "socket_timeout": 20,
+        "retries": 0,
+        "fragment_retries": 0,
+        "extractor_retries": 0,
+    }
+    if proxy:
+        opts["proxy"] = proxy
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:  # type: ignore
+            info = ydl.extract_info(url, download=False)
+        return info if isinstance(info, dict) else None
+    except Exception as e:
+        logger.debug(f"yt-dlp 失败 {url}: {e}")
+        return None
+
+
+def _meta_from_ytdlp(platform: str, url: str, info: dict[str, Any]) -> dict[str, Any]:
+    meta = _base_meta(platform, url)
+    meta["title"] = str(info.get("title") or "")[:200]
+    meta["author"] = str(
+        info.get("uploader") or info.get("channel") or info.get("creator") or ""
+    )
+    meta["desc"] = str(info.get("description") or "")[:400]
+    if info.get("thumbnail"):
+        meta["image_urls"] = [str(info["thumbnail"])]
+    ts = info.get("timestamp") or info.get("release_timestamp")
+    try:
+        meta["timestamp"] = int(ts) if ts else None
+    except Exception:
+        meta["timestamp"] = None
+
+    videos: list[str] = []
+    audios: list[str] = []
+    # best direct url
+    if isinstance(info.get("url"), str) and info["url"].startswith("http"):
+        if info.get("vcodec") not in (None, "none") or any(
+            x in info["url"].lower() for x in (".mp4", ".m3u8", ".webm")
+        ):
+            videos.append(info["url"])
+        elif info.get("acodec") not in (None, "none"):
+            audios.append(info["url"])
+    for fmt in info.get("formats") or []:
+        if not isinstance(fmt, dict):
+            continue
+        u = fmt.get("url")
+        if not isinstance(u, str) or not u.startswith("http"):
+            continue
+        protocol = str(fmt.get("protocol") or "http")
+        if not protocol.startswith("http"):
+            continue
+        vcodec = fmt.get("vcodec")
+        acodec = fmt.get("acodec")
+        if vcodec not in (None, "none"):
+            # 优先渐进 mp4
+            if str(fmt.get("ext") or "").lower() in ("mp4", "m4v", "webm") or "mp4" in u:
+                videos.append(u)
+        elif acodec not in (None, "none"):
+            audios.append(u)
+    # playlist entry
+    if info.get("_type") == "playlist":
+        for entry in info.get("entries") or []:
+            if isinstance(entry, dict):
+                sub = _meta_from_ytdlp(platform, url, entry)
+                videos.extend(sub.get("video_urls") or [])
+                audios.extend(sub.get("audio_urls") or [])
+                if not meta.get("image_urls") and sub.get("image_urls"):
+                    meta["image_urls"] = sub["image_urls"]
+                if not meta.get("title") and sub.get("title"):
+                    meta["title"] = sub["title"]
+                break
+    meta["video_urls"] = list(dict.fromkeys(videos))[:3]
+    meta["audio_urls"] = list(dict.fromkeys(audios))[:2]
+    if not meta["video_urls"] and not meta["audio_urls"] and not meta["image_urls"]:
+        meta["error"] = "yt-dlp 未提取到可发送媒体"
+    return meta
+
+
+def parse_youtube(url: str) -> dict[str, Any]:
+    """YouTube：yt-dlp 提取（需代理/cookie 时按环境）。"""
+    meta = _base_meta("youtube", url)
+    use_proxy = _use_proxy_for("youtube", url) or bool(get_custom_proxy_url())
+    final = expand_url(url, use_proxy=use_proxy, platform="youtube")
+    meta["url"] = final
+    info = _ytdlp_extract(final, use_proxy=use_proxy)
+    if info:
+        out = _meta_from_ytdlp("youtube", url, info)
+        out["source_url"] = url
+        out["url"] = final
+        if out.get("video_urls") or out.get("audio_urls") or out.get("image_urls"):
+            return out
+        meta["error"] = out.get("error") or "YouTube 未解析到媒体"
+    else:
+        meta["error"] = "YouTube 解析失败（需 yt-dlp，且可能需代理/cookie）"
+    # 不二次反转代理硬重试（机房直连 YouTube 常不可达，会拖很久）
+    page = _parse_html_og("youtube", final, use_proxy=use_proxy)
+    if page.get("image_urls") and not meta.get("image_urls"):
+        meta["image_urls"] = page["image_urls"]
+        meta["title"] = meta.get("title") or page.get("title") or ""
+    return meta
+
+
+def parse_tiktok(url: str) -> dict[str, Any]:
+    """TikTok：优先 yt-dlp，再 OG。"""
+    meta = _base_meta("tiktok", url)
+    use_proxy = _use_proxy_for("tiktok", url) or bool(get_custom_proxy_url())
+    final = expand_url(url, use_proxy=use_proxy, platform="tiktok")
+    meta["url"] = final
+    info = _ytdlp_extract(final, use_proxy=use_proxy)
+    if info:
+        out = _meta_from_ytdlp("tiktok", url, info)
+        out["source_url"] = url
+        out["url"] = final
+        if out.get("video_urls") or out.get("image_urls"):
+            return out
+        meta["error"] = out.get("error")
+    page = _parse_html_og("tiktok", final, use_proxy=use_proxy)
+    if page.get("video_urls") or page.get("image_urls"):
+        return page
+    meta["error"] = meta.get("error") or page.get("error") or "TikTok 未解析到媒体"
+    return meta
+
+
+def parse_instagram(url: str) -> dict[str, Any]:
+    """Instagram：yt-dlp 回退 + OG。"""
+    meta = _base_meta("instagram", url)
+    use_proxy = _use_proxy_for("instagram", url) or bool(get_custom_proxy_url())
+    final = expand_url(url, use_proxy=use_proxy, platform="instagram")
+    meta["url"] = final
+    info = _ytdlp_extract(final, use_proxy=use_proxy)
+    if info:
+        out = _meta_from_ytdlp("instagram", url, info)
+        out["source_url"] = url
+        out["url"] = final
+        if out.get("video_urls") or out.get("image_urls"):
+            return out
+        meta["error"] = out.get("error")
+    page = _parse_html_og("instagram", final, use_proxy=use_proxy)
+    if page.get("video_urls") or page.get("image_urls"):
+        return page
+    meta["error"] = meta.get("error") or page.get("error") or "Instagram 未解析到媒体（常需登录 cookie）"
+    return meta
 
 
 def parse_twitter(url: str) -> dict[str, Any]:
@@ -1338,6 +1859,18 @@ def parse_twitter(url: str) -> dict[str, Any]:
 
     page = _parse_html_og("twitter", final if final else url, use_proxy=use_proxy)
     if page.get("video_urls") or page.get("image_urls") or page.get("title"):
+        # 若只有 title 无媒体，再试 yt-dlp
+        if page.get("video_urls") or page.get("image_urls"):
+            return page
+    # 3) yt-dlp 回退（部分视频推文 xdown 不稳）
+    info = _ytdlp_extract(query_url, use_proxy=bool(use_proxy or get_custom_proxy_url()))
+    if info:
+        out = _meta_from_ytdlp("twitter", url, info)
+        out["source_url"] = url
+        out["url"] = final
+        if out.get("video_urls") or out.get("image_urls"):
+            return out
+    if page.get("video_urls") or page.get("image_urls") or page.get("title"):
         return page
     meta["error"] = meta.get("error") or page.get("error") or "X/Twitter 未解析到媒体"
     if not use_proxy:
@@ -1435,8 +1968,9 @@ _PARSERS = {
     "weibo": parse_weibo,
     "twitter": parse_twitter,
     "xiaoheihe": parse_xiaoheihe,
-    "tiktok": lambda u: _parse_html_og("tiktok", u),
-    "instagram": lambda u: _parse_html_og("instagram", u),
+    "tiktok": parse_tiktok,
+    "instagram": parse_instagram,
+    "youtube": parse_youtube,
 }
 
 
