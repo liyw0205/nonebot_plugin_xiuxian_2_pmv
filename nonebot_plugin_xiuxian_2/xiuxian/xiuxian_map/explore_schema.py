@@ -1,6 +1,20 @@
 from __future__ import annotations
 
 
+def _blank_snapshot(value) -> str:
+    """Normalize legacy snapshot fields; 'None'/'null' are empty."""
+    if value is None:
+        return ""
+    if isinstance(value, (dict, list)):
+        import json
+
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    text = str(value).strip()
+    if not text or text.lower() in {"none", "null", "undefined"}:
+        return ""
+    return text
+
+
 def ensure_explore_status_schema(conn, schema: str = "player_data") -> set[str]:
     """Upgrade the legacy exploration snapshot column inside the caller's transaction."""
 
@@ -19,10 +33,15 @@ def ensure_explore_status_schema(conn, schema: str = "player_data") -> set[str]:
         )
         columns.add("settlement")
     if "reward_plan" in columns:
+        # 仅迁移真实 JSON；忽略遗留字面量 None/null
         conn.execute(
             'UPDATE player_data.map_explore_status '
-            'SET "settlement"=COALESCE(NULLIF(CAST("settlement" AS TEXT),\'\'),CAST("reward_plan" AS TEXT),\'\') '
-            'WHERE COALESCE(CAST("reward_plan" AS TEXT),\'\')<>\'\''
+            'SET "settlement"=CAST("reward_plan" AS TEXT) '
+            'WHERE (COALESCE(CAST("settlement" AS TEXT),\'\')=\'\' '
+            'OR LOWER(TRIM(CAST("settlement" AS TEXT))) IN (\'none\',\'null\')) '
+            'AND COALESCE(CAST("reward_plan" AS TEXT),\'\')<>\'\' '
+            'AND LOWER(TRIM(CAST("reward_plan" AS TEXT))) NOT IN (\'none\',\'null\') '
+            'AND (CAST("reward_plan" AS TEXT) LIKE \'{%\' OR CAST("reward_plan" AS TEXT) LIKE \'[%\')'
         )
         conn.execute(
             'UPDATE player_data.map_explore_status SET "reward_plan"=\'\' '
@@ -30,7 +49,8 @@ def ensure_explore_status_schema(conn, schema: str = "player_data") -> set[str]:
         )
     conn.execute(
         'UPDATE player_data.map_explore_status SET "settlement"=\'\' '
-        'WHERE "settlement" IS NULL'
+        'WHERE "settlement" IS NULL '
+        'OR LOWER(TRIM(CAST("settlement" AS TEXT))) IN (\'none\',\'null\')'
     )
     return columns
 
@@ -46,4 +66,4 @@ def snapshot_value_matches(actual, expected) -> bool:
         return False
 
 
-__all__ = ["ensure_explore_status_schema", "snapshot_value_matches"]
+__all__ = ["ensure_explore_status_schema", "snapshot_value_matches", "_blank_snapshot"]

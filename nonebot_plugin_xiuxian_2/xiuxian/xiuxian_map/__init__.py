@@ -2048,17 +2048,32 @@ def _get_explore_status(uid: str):
         for k, v in d.items():
             player_data_manager.update_or_write_data(str(uid), EXPLORE_TABLE, k, v)
     else:
-        snapshot = d.get("settlement") or d.get("reward_plan") or ""
-        if isinstance(snapshot, (dict, list)):
-            snapshot = json.dumps(snapshot, ensure_ascii=False, sort_keys=True)
-        d["settlement"] = str(snapshot)
+        from .explore_schema import _blank_snapshot
+
+        # 优先 settlement；reward_plan 仅作遗留兼容。字面量 "None" 视为空。
+        snapshot = _blank_snapshot(d.get("settlement"))
+        if not snapshot:
+            snapshot = _blank_snapshot(d.get("reward_plan"))
+        d["settlement"] = snapshot
+        # 清掉脏 reward_plan，避免下次再次污染
+        if _blank_snapshot(d.get("reward_plan")) != str(d.get("reward_plan") or "").strip() or str(
+            d.get("reward_plan") or ""
+        ).strip().lower() in {"none", "null"}:
+            try:
+                player_data_manager.update_or_write_data(str(uid), EXPLORE_TABLE, "reward_plan", "")
+            except Exception:
+                pass
     return d
 
 
 def _save_explore_status(uid: str, d: dict):
+    from .explore_schema import _blank_snapshot
+
     for k, v in d.items():
         if k == "reward_plan":
             continue
+        if k == "settlement":
+            v = _blank_snapshot(v)
         player_data_manager.update_or_write_data(str(uid), EXPLORE_TABLE, k, v)
 
 
@@ -2251,11 +2266,25 @@ async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     snapshot = None
     raw_snapshot = st.get("settlement", "")
     if raw_snapshot:
-        try:
-            snapshot = json.loads(raw_snapshot)
-        except (TypeError, ValueError):
-            await handle_send(bot, event, "探索结算数据异常，请联系管理员处理。")
-            return
+        from .explore_schema import _blank_snapshot
+
+        cleaned = _blank_snapshot(raw_snapshot)
+        if not cleaned:
+            raw_snapshot = ""
+            st["settlement"] = ""
+        else:
+            try:
+                snapshot = json.loads(cleaned)
+            except (TypeError, ValueError):
+                # 脏数据：清空后按当前探索重算，而不是卡死
+                logger.warning(
+                    "探索结算快照损坏，已清空重算 user_id={} raw={!r}",
+                    uid,
+                    str(raw_snapshot)[:120],
+                )
+                snapshot = None
+                st["settlement"] = ""
+                raw_snapshot = ""
     if snapshot is None:
         elapsed_min = max(0, int((datetime.now() - start_at).total_seconds() // 60))
         duration_min = int(st.get("duration_min", 0))
