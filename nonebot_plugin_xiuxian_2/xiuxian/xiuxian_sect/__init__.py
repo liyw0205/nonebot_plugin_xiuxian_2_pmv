@@ -274,7 +274,14 @@ __sect_manage_help__ = """
 """.strip()
 
 # 定时任务每1小时按照宗门贡献度增加资材
-@materialsupdate.scheduled_job("cron", hour=config["发放宗门资材"]["时间"])
+@materialsupdate.scheduled_job(
+    "cron",
+    hour=config["发放宗门资材"]["时间"],
+    id="sect_materials_grant",
+    coalesce=True,
+    max_instances=1,
+    misfire_grace_time=300,
+)
 async def materialsupdate_():
     grant_key = f"sect-materials:{datetime.now().date().isoformat()}"
     all_sects = sql_message.get_all_sects_id_scale()

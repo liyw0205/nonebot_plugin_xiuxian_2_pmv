@@ -48,7 +48,14 @@ def limit_all_message_():
     limit_all_data  = {}
     logger.opt(colors=True).success(f"<green>已重置消息字典！</green>")
 
-@limit_all_stamina.scheduled_job('interval', minutes=1, max_instances=1, coalesce=True, misfire_grace_time=30)
+@limit_all_stamina.scheduled_job(
+    "interval",
+    minutes=1,
+    id="recover_user_stamina",
+    max_instances=1,
+    coalesce=True,
+    misfire_grace_time=30,
+)
 def limit_all_stamina_():
     # 恢复体力
     started_at = time.monotonic()

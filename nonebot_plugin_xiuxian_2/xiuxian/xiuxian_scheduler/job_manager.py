@@ -28,35 +28,97 @@ _RUN_HISTORY_LIMIT = 100
 
 # 前端展示用中文名（按 job.id / 函数名匹配）
 _JOB_TITLES: dict[str, str] = {
+    # 鬼市 / 拍卖
     "auto_guishi_transactions": "鬼市自动交易",
     "auto_guishi_transactions_job": "鬼市自动交易",
     "clear_expired_baitan_orders": "清理超时摆摊",
     "clear_expired_baitan_orders_job": "清理超时摆摊",
+    "auto_start_auction": "自动开启拍卖",
+    "auto_start_auction_job": "自动开启拍卖",
+    "check_auction_end": "拍卖收尾检查",
+    "check_auction_end_job": "拍卖收尾检查",
+    # 宗门 / 傀儡
     "materialsupdate_": "发放宗门资材",
     "materialsupdate": "发放宗门资材",
+    "sect_materials_grant": "发放宗门资材",
+    "auto_harvest": "灵田傀儡自动收取",
+    "auto_harvest_scheduled": "灵田傀儡自动收取",
+    # 世界事件
+    "demon_invasion_schedule": "魔修入侵开关",
+    "demon_invasion_schedule_job": "魔修入侵开关",
+    "demon_invasion_refresh_schedule": "魔修入侵刷新",
+    "demon_invasion_refresh_schedule_job": "魔修入侵刷新",
+    "spirit_vein_schedule": "灵脉争夺",
+    "spirit_vein_schedule_job": "灵脉争夺",
+    # 系统限流 / 体力
+    "reset_message_rate_limits": "重置消息频率限制",
+    "limit_all_message_": "重置消息频率限制",
+    "recover_user_stamina": "体力恢复",
+    "limit_all_stamina_": "体力恢复",
+    # 日常重置
+    "daily_reset_sign": "每日签到重置",
+    "daily_reset_beg": "仙途奇缘重置",
+    "daily_reset_day_num": "丹药次数重置",
+    "daily_reset_mixelixir_num": "炼丹次数重置",
+    "daily_reset_impart_num": "传承抽卡重置",
+    "daily_reset_arena": "竞技场每日重置",
+    "weekly_reduce_arena_rank": "竞技场周排名衰减",
+    "daily_reset_lottery": "抽奖次数重置",
+    "daily_reset_stone_limits": "灵石获取上限重置",
+    "daily_reset_xiangyuan": "香缘重置",
+    "daily_reset_boss_limits": "Boss次数重置",
+    "daily_reset_two_exp": "双修次数重置",
+    "daily_reset_impart_pk": "传承对决重置",
+    "daily_clean_expired_items": "清理过期物品",
+    "weekly_reduce_impart_lv": "传承等级周衰减",
+    "weekly_reset_tower_floors": "通天塔周重置",
+    "daily_add_impart_lv": "传承等级日增长",
+    "daily_reset_illusion": "幻境重置",
+    "daily_reset_sect_task": "宗门任务重置",
     "daily_reset_work_refresh_num": "悬赏令次数重置",
     "scheduled_rift_generation_job": "秘境重置",
-    "auto_handle_inactive_sect_owners_job": "处理宗门状态",
-    "reset_data_by_time_job": "处理早晚数据",
+    "auto_handle_inactive_sect_owners_job": "处理不活跃宗主",
+    "reset_data_by_time_job": "早晚数据重置",
     "backup_database_files": "数据库备份",
+    "newapi_auto_checkin_daily": "NewAPI 自动签到",
 }
+
+
+def _looks_like_uuid(value: str) -> bool:
+    text = str(value or "").strip().lower().replace("-", "")
+    return len(text) == 32 and all(ch in "0123456789abcdef" for ch in text)
 
 
 def _humanize_job_id(job_id: str) -> str:
     text = str(job_id or "").strip()
     if not text:
         return "未命名任务"
+    if _looks_like_uuid(text):
+        return "未命名定时任务"
     if text in _JOB_TITLES:
         return _JOB_TITLES[text]
     # 去掉常见后缀
     base = text
-    for suffix in ("_job", "_"):
+    for suffix in ("_job", "_scheduled", "_"):
         if base.endswith(suffix) and len(base) > len(suffix):
             base = base[: -len(suffix)]
     if base in _JOB_TITLES:
         return _JOB_TITLES[base]
-    # snake_case → 空格，尽量可读
+    # snake_case → 中文优先词表后再空格化
     pretty = base.replace("-", " ").replace("_", " ").strip()
+    # 常见英文词替换
+    replacements = (
+        ("daily reset ", "每日重置·"),
+        ("weekly reset ", "每周重置·"),
+        ("auto ", "自动·"),
+        ("reset ", "重置·"),
+        ("check ", "检查·"),
+    )
+    lower = pretty.lower()
+    for old, new in replacements:
+        if lower.startswith(old):
+            pretty = new + pretty[len(old):]
+            break
     return pretty or text
 
 
@@ -163,28 +225,59 @@ class SchedulerJobManager:
     @staticmethod
     def _cron_summary(fields: dict[str, str]) -> str:
         f = {k: str(v) for k, v in (fields or {}).items()}
-        minute = f.get("minute", "*")
-        hour = f.get("hour", "*")
-        day = f.get("day", "*")
-        month = f.get("month", "*")
-        dow = f.get("day_of_week", "*")
-        second = f.get("second", "0")
 
-        # 常见模式
-        if hour == "*" and minute.isdigit() and day in {"*", "*/1"} and month in {"*", "*/1"} and dow in {"*", "*/1"}:
-            if minute == "0":
+        def _norm(value: str) -> str:
+            text = str(value or "*").strip()
+            return "*" if text in {"*", "*/1"} else text
+
+        minute = _norm(f.get("minute", "*"))
+        hour = _norm(f.get("hour", "*"))
+        day = _norm(f.get("day", "*"))
+        month = _norm(f.get("month", "*"))
+        dow = _norm(f.get("day_of_week", "*"))
+        second = _norm(f.get("second", "0"))
+        if second in {"0", "00"}:
+            second = "0"
+
+        # 每小时 / 每小时的第 N 分
+        if hour == "*" and minute.isdigit() and day == "*" and month == "*" and dow == "*":
+            if minute in {"0", "00"}:
                 return "每小时"
-            return f"每小时的第 {minute} 分"
-        if hour.startswith("*/") and minute in {"0", "00"}:
+            return f"每小时的第 {int(minute)} 分"
+
+        # 每 N 小时 / 每 N 小时的第 M 分  （如 时=*/4 分=10）
+        if hour.startswith("*/") and day == "*" and month == "*" and dow == "*":
             try:
                 n = int(hour[2:])
-                if n > 0:
-                    return f"每 {n} 小时"
             except ValueError:
-                pass
-        if hour.isdigit() and minute.isdigit() and day in {"*", "*/1"} and month in {"*", "*/1"} and dow in {"*", "*/1"}:
+                n = 0
+            if n > 0:
+                if minute in {"0", "00", "*"}:
+                    return f"每 {n} 小时"
+                if minute.isdigit():
+                    return f"每 {n} 小时的第 {int(minute)} 分"
+
+        # 每天 HH:MM
+        if hour.isdigit() and minute.isdigit() and day == "*" and month == "*" and dow == "*":
             return f"每天 {int(hour):02d}:{int(minute):02d}"
-        if dow not in {"*", "*/1"} and hour.isdigit() and minute.isdigit():
+
+        # 每天多个整点：如 0,12
+        if (
+            all(part.isdigit() for part in hour.split(","))
+            and minute.isdigit()
+            and day == "*"
+            and month == "*"
+            and dow == "*"
+        ):
+            hours = ",".join(f"{int(part):02d}" for part in hour.split(","))
+            return f"每天 {hours}:{int(minute):02d}"
+
+        # 每小时段：如 8-22 的第 30 分
+        if "-" in hour and minute.isdigit() and day == "*" and month == "*" and dow == "*":
+            return f"每小时 {hour} 点段的第 {int(minute)} 分"
+
+        # 每周 X HH:MM
+        if dow != "*" and hour.isdigit() and minute.isdigit():
             dow_map = {
                 "mon": "周一", "tue": "周二", "wed": "周三", "thu": "周四",
                 "fri": "周五", "sat": "周六", "sun": "周日",
@@ -194,20 +287,21 @@ class SchedulerJobManager:
             label = dow_map.get(str(dow).lower(), f"周{dow}")
             return f"每{label} {int(hour):02d}:{int(minute):02d}"
 
+        # 兜底：尽量自然
         parts = []
-        if month not in {"*", "*/1"}:
-            parts.append(f"月={month}")
-        if day not in {"*", "*/1"}:
-            parts.append(f"日={day}")
-        if dow not in {"*", "*/1"}:
-            parts.append(f"周={dow}")
-        if hour not in {"*", "*/1"}:
-            parts.append(f"时={hour}")
-        if minute not in {"*", "*/1"}:
-            parts.append(f"分={minute}")
-        if second not in {"0", "00", "*", "*/1"}:
-            parts.append(f"秒={second}")
-        return " ".join(parts) if parts else "自定义 cron"
+        if month != "*":
+            parts.append(f"每年 {month} 月")
+        if day != "*":
+            parts.append(f"{day} 日")
+        if dow != "*":
+            parts.append(f"周 {dow}")
+        if hour != "*":
+            parts.append(f"{hour} 时")
+        if minute != "*":
+            parts.append(f"{minute} 分")
+        if second not in {"0", "*"}:
+            parts.append(f"{second} 秒")
+        return "、".join(parts) if parts else "自定义计划"
 
     @classmethod
     def _build_trigger(cls, spec: object, *, timezone=None):
@@ -288,15 +382,33 @@ class SchedulerJobManager:
     def _job_data(self, job) -> dict[str, Any]:
         job_id = str(job.id)
         raw_name = str(job.name or job.id)
+        func_name = ""
+        try:
+            func = getattr(job, "func", None)
+            func_name = str(getattr(func, "__name__", "") or "")
+        except Exception:
+            func_name = ""
+
         title = _humanize_job_id(job_id)
+        # UUID / 无中文名时，尝试函数名、APScheduler name
+        if _looks_like_uuid(job_id) or title in {job_id, "未命名定时任务"}:
+            for candidate in (func_name, raw_name):
+                if not candidate:
+                    continue
+                cand_title = _humanize_job_id(candidate)
+                if cand_title and cand_title not in {candidate, "未命名定时任务"} and not _looks_like_uuid(candidate):
+                    title = cand_title
+                    break
         # 若 APScheduler name 已是中文且与 id 不同，优先用 name
         if raw_name and raw_name != job_id and any("\u4e00" <= ch <= "\u9fff" for ch in raw_name):
             title = raw_name
+
         trigger = self._serialize_trigger(job.trigger)
         data = {
             "id": job_id,
             "name": title,
             "raw_name": raw_name,
+            "func_name": func_name,
             "title": title,
             "enabled": job.next_run_time is not None,
             "next_run_time": job.next_run_time.isoformat() if job.next_run_time else None,
