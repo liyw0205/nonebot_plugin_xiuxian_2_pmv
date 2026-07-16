@@ -4774,6 +4774,53 @@ div[style*="overflow-x: auto"] {
     background: color-mix(in srgb, var(--bg-primary) 55%, var(--bg-secondary));
 }
 
+.schedule-preset-block {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.schedule-preset-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.schedule-preset-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.schedule-preset-chip {
+    appearance: none;
+    border: 1px solid var(--border-color);
+    background: color-mix(in srgb, var(--bg-secondary) 90%, var(--bg-primary));
+    color: var(--text-secondary);
+    border-radius: 999px;
+    padding: 8px 12px;
+    font-size: 0.82rem;
+    cursor: pointer;
+    min-height: 36px;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.schedule-preset-chip:active {
+    transform: scale(0.98);
+}
+
+.schedule-preset-chip.is-active {
+    background: color-mix(in srgb, var(--accent-color) 22%, var(--bg-secondary));
+    border-color: color-mix(in srgb, var(--accent-color) 50%, var(--border-color));
+    color: var(--text-primary);
+    font-weight: 700;
+}
+
+.schedule-cron-expr-field input.cron-expression {
+    font-family: var(--font-mono, "IBM Plex Mono", ui-monospace, monospace);
+    letter-spacing: 0.02em;
+}
+
 .schedule-interval {
     display: flex;
     flex-direction: column;
@@ -4790,6 +4837,28 @@ div[style*="overflow-x: auto"] {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
     gap: 8px;
+}
+
+@media (max-width: 768px) {
+    .schedule-preset-chips {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .schedule-preset-chip {
+        width: 100%;
+        text-align: center;
+        padding-left: 6px;
+        padding-right: 6px;
+        min-height: 42px;
+    }
+}
+
+@media (max-width: 420px) {
+    .schedule-preset-chips {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 .schedule-field {

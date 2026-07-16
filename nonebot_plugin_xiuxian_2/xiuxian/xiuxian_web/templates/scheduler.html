@@ -5,7 +5,7 @@
     <div>
         <p class="page-kicker">Scheduler</p>
         <h1 class="page-title">定时任务</h1>
-        <p class="page-subtitle">查看、启停、改计划并手动运行后台定时任务。手机端以卡片展示，计划字段可直接编辑。</p>
+        <p class="page-subtitle">查看、启停、改计划并手动运行后台任务。点选「每小时 / 每天 / 每周」等常用周期即可保存。</p>
     </div>
     <div class="hero-actions scheduler-hero-actions">
         <span class="status-pill" id="schedulerStatTotal"><i class="fas fa-clock"></i> —</span>
@@ -22,7 +22,7 @@
     <div class="scheduler-toolbar">
         <div class="form-group scheduler-search-group">
             <label for="schedulerSearch">筛选</label>
-            <input id="schedulerSearch" type="search" placeholder="任务名 / ID / 计划，如 backup、cron、秒">
+            <input id="schedulerSearch" type="search" placeholder="任务名 / ID，如 鬼市、备份、宗门">
         </div>
         <div class="scheduler-filter-chips" role="group" aria-label="状态筛选">
             <button type="button" class="chip is-active" data-filter="all">全部</button>
@@ -46,19 +46,32 @@
     const statTotal = document.getElementById('schedulerStatTotal');
     const statEnabled = document.getElementById('schedulerStatEnabled');
 
-    const CRON_LABELS = {
-        year: '年',
-        month: '月',
-        day: '日',
-        week: '周',
-        day_of_week: '周几',
-        hour: '时',
-        minute: '分',
-        second: '秒',
-        start_date: '开始',
-        end_date: '结束',
-        timezone: '时区',
-        jitter: '抖动'
+    // 常用计划：点一下即选中，再点「保存计划」
+    const PRESETS = [
+        { key: 'hourly', label: '每小时', hint: '每小时整点' },
+        { key: 'every_2h', label: '每2小时', hint: '0,2,4…点' },
+        { key: 'every_4h', label: '每4小时', hint: '0,4,8…点' },
+        { key: 'every_6h', label: '每6小时', hint: '0,6,12,18点' },
+        { key: 'every_12h', label: '每12小时', hint: '0点/12点' },
+        { key: 'daily', label: '每天', hint: '每天 00:00' },
+        { key: 'daily_8', label: '每天8点', hint: '每天 08:00' },
+        { key: 'daily_12', label: '每天12点', hint: '每天 12:00' },
+        { key: 'weekly', label: '每周一', hint: '周一 00:00' },
+        { key: 'every_30m', label: '每30分钟', hint: '间隔 30 分' },
+        { key: 'every_10m', label: '每10分钟', hint: '间隔 10 分' },
+        { key: 'custom', label: '自定义', hint: '手写 cron' }
+    ];
+
+    const PRESET_FIELDS = {
+        hourly: { minute: '0', hour: '*', day: '*', month: '*', day_of_week: '*', second: '0' },
+        every_2h: { minute: '0', hour: '*/2', day: '*', month: '*', day_of_week: '*', second: '0' },
+        every_4h: { minute: '0', hour: '*/4', day: '*', month: '*', day_of_week: '*', second: '0' },
+        every_6h: { minute: '0', hour: '*/6', day: '*', month: '*', day_of_week: '*', second: '0' },
+        every_12h: { minute: '0', hour: '*/12', day: '*', month: '*', day_of_week: '*', second: '0' },
+        daily: { minute: '0', hour: '0', day: '*', month: '*', day_of_week: '*', second: '0' },
+        daily_8: { minute: '0', hour: '8', day: '*', month: '*', day_of_week: '*', second: '0' },
+        daily_12: { minute: '0', hour: '12', day: '*', month: '*', day_of_week: '*', second: '0' },
+        weekly: { minute: '0', hour: '0', day: '*', month: '*', day_of_week: 'mon', second: '0' }
     };
 
     let jobsCache = [];
@@ -86,7 +99,6 @@
     function formatNextRun(value) {
         if (!value) return '已暂停';
         const raw = text(value);
-        // ISO-ish → 本地可读
         const d = new Date(raw);
         if (!Number.isNaN(d.getTime())) {
             const pad = function (n) { return String(n).padStart(2, '0'); };
@@ -96,64 +108,118 @@
         return raw;
     }
 
-    function formatIntervalSeconds(seconds) {
-        const n = Number(seconds) || 0;
-        if (n <= 0) return text(seconds) + ' 秒';
-        if (n % 86400 === 0) return (n / 86400) + ' 天（' + n + ' 秒）';
-        if (n % 3600 === 0) return (n / 3600) + ' 小时（' + n + ' 秒）';
-        if (n % 60 === 0) return (n / 60) + ' 分钟（' + n + ' 秒）';
-        return n + ' 秒';
+    function fieldsToExpression(fields) {
+        const f = fields || {};
+        return [
+            f.minute != null ? f.minute : '*',
+            f.hour != null ? f.hour : '*',
+            f.day != null ? f.day : '*',
+            f.month != null ? f.month : '*',
+            f.day_of_week != null ? f.day_of_week : '*'
+        ].join(' ');
+    }
+
+    function expressionToFields(expression) {
+        const parts = String(expression || '').trim().split(/\s+/);
+        if (parts.length !== 5) return null;
+        return {
+            minute: parts[0],
+            hour: parts[1],
+            day: parts[2],
+            month: parts[3],
+            day_of_week: parts[4],
+            second: '0'
+        };
+    }
+
+    function detectPreset(trigger) {
+        if (!trigger) return 'custom';
+        if (trigger.type === 'interval') {
+            const s = Number(trigger.seconds);
+            if (s === 600) return 'every_10m';
+            if (s === 1800) return 'every_30m';
+            if (s === 3600) return 'hourly';
+            return 'custom';
+        }
+        if (trigger.type !== 'cron') return 'custom';
+        const f = trigger.fields || {};
+        const norm = {
+            minute: String(f.minute != null ? f.minute : '*'),
+            hour: String(f.hour != null ? f.hour : '*'),
+            day: String(f.day != null ? f.day : '*'),
+            month: String(f.month != null ? f.month : '*'),
+            day_of_week: String(f.day_of_week != null ? f.day_of_week : '*')
+        };
+        // * and */1 等价
+        function eq(a, b) {
+            const x = a === '*/1' ? '*' : a;
+            const y = b === '*/1' ? '*' : b;
+            return x === y;
+        }
+        for (const key of Object.keys(PRESET_FIELDS)) {
+            const p = PRESET_FIELDS[key];
+            if (
+                eq(norm.minute, p.minute) &&
+                eq(norm.hour, p.hour) &&
+                eq(norm.day, p.day) &&
+                eq(norm.month, p.month) &&
+                eq(norm.day_of_week, p.day_of_week)
+            ) {
+                return key;
+            }
+        }
+        return 'custom';
     }
 
     function triggerText(trigger) {
         if (!trigger) return '未知';
-        if (trigger.type === 'interval') return '每 ' + formatIntervalSeconds(trigger.seconds);
+        if (trigger.summary) return trigger.summary;
+        if (trigger.type === 'interval') {
+            const n = Number(trigger.seconds) || 0;
+            if (n % 86400 === 0) return '每 ' + (n / 86400) + ' 天';
+            if (n % 3600 === 0) return '每 ' + (n / 3600) + ' 小时';
+            if (n % 60 === 0) return '每 ' + (n / 60) + ' 分钟';
+            return '每 ' + n + ' 秒';
+        }
         if (trigger.type === 'cron') {
-            return Object.entries(trigger.fields || {}).map(function (pair) {
-                const key = pair[0];
-                const value = pair[1];
-                return (CRON_LABELS[key] || key) + '=' + value;
-            }).join(' · ');
+            return fieldsToExpression(trigger.fields);
         }
         return trigger.description || trigger.type || '不可编辑';
     }
 
     function triggerForm(trigger) {
-        if (!trigger) return '';
-        if (trigger.type === 'interval') {
-            return (
-                '<div class="schedule-interval">' +
-                '<label class="schedule-field">' +
-                '<span class="schedule-field-label">间隔（秒）</span>' +
-                '<input class="schedule-value" type="number" inputmode="numeric" min="1" max="2678400" value="' +
-                escapeHtml(trigger.seconds) + '">' +
-                '</label>' +
-                '<p class="schedule-hint">提示：60=1分钟，3600=1小时，86400=1天</p>' +
-                '</div>'
-            );
+        const editable = trigger && (trigger.type === 'cron' || trigger.type === 'interval');
+        if (!editable) {
+            return '<p class="muted-text">此触发器类型不可在网页改计划</p>';
         }
-        if (trigger.type === 'cron') {
-            const fields = Object.entries(trigger.fields || {});
-            if (!fields.length) return '<p class="muted-text">无可编辑字段</p>';
+        const active = detectPreset(trigger);
+        const expr = trigger.type === 'cron'
+            ? fieldsToExpression(trigger.fields)
+            : (active === 'every_10m' ? '*/10 * * * *' : active === 'every_30m' ? '*/30 * * * *' : '0 * * * *');
+
+        const chips = PRESETS.map(function (p) {
             return (
-                '<div class="schedule-cron-grid">' +
-                fields.map(function (pair) {
-                    const key = pair[0];
-                    const value = pair[1];
-                    const label = CRON_LABELS[key] || key;
-                    return (
-                        '<label class="schedule-field">' +
-                        '<span class="schedule-field-label" title="' + escapeHtml(key) + '">' + escapeHtml(label) +
-                        '<small>' + escapeHtml(key) + '</small></span>' +
-                        '<input class="cron-value" data-field="' + escapeHtml(key) + '" value="' +
-                        escapeHtml(value) + '" autocomplete="off" spellcheck="false">' +
-                        '</label>'
-                    );
-                }).join('') +
-                '</div>'
+                '<button type="button" class="schedule-preset-chip' +
+                (p.key === active ? ' is-active' : '') +
+                '" data-preset="' + escapeHtml(p.key) + '" title="' + escapeHtml(p.hint) + '">' +
+                escapeHtml(p.label) +
+                '</button>'
             );
-        }
-        return '<p class="muted-text">此触发器类型不可在网页改计划</p>';
+        }).join('');
+
+        return (
+            '<div class="schedule-preset-block">' +
+            '<div class="schedule-preset-label">常用周期（点选后点保存）</div>' +
+            '<div class="schedule-preset-chips" role="group">' + chips + '</div>' +
+            '<label class="schedule-field schedule-cron-expr-field">' +
+            '<span class="schedule-field-label">Cron 表达式 <small>分 时 日 月 周</small></span>' +
+            '<input class="cron-expression" type="text" value="' + escapeHtml(expr) + '" ' +
+            'placeholder="0 * * * *  （每小时）" autocomplete="off" spellcheck="false">' +
+            '</label>' +
+            '<p class="schedule-hint">例：每小时 <code>0 * * * *</code> · 每天0点 <code>0 0 * * *</code> · 每周一 <code>0 0 * * mon</code></p>' +
+            '<input type="hidden" class="schedule-preset-value" value="' + escapeHtml(active) + '">' +
+            '</div>'
+        );
     }
 
     async function post(url, payload) {
@@ -185,7 +251,8 @@
         if (statusFilter === 'editable' && !editable) return false;
         if (!searchText) return true;
         const hay = [
-            job.name, job.id, triggerText(job.trigger), job.next_run_time || ''
+            job.name, job.title, job.id, job.raw_name,
+            job.schedule_text, triggerText(job.trigger), job.next_run_time || ''
         ].join(' ').toLowerCase();
         return hay.indexOf(searchText) !== -1;
     }
@@ -195,6 +262,10 @@
         const enabled = jobs.filter(function (j) { return j.enabled; }).length;
         statTotal.innerHTML = '<i class="fas fa-clock"></i> 共 ' + total + ' 个';
         statEnabled.innerHTML = '<i class="fas fa-toggle-on"></i> 启用 ' + enabled;
+    }
+
+    function displayName(job) {
+        return job.title || job.name || job.id;
     }
 
     function render() {
@@ -211,13 +282,14 @@
         listEl.innerHTML = jobs.map(function (job) {
             const editable = job.trigger && (job.trigger.type === 'cron' || job.trigger.type === 'interval');
             const typeLabel = (job.trigger && job.trigger.type) || 'other';
+            const scheduleLabel = job.schedule_text || triggerText(job.trigger);
             return (
                 '<article class="scheduler-card' + (job.enabled ? '' : ' is-disabled') + '" data-job-id="' +
                 escapeHtml(job.id) + '">' +
                 '<header class="scheduler-card-head">' +
                 '<div class="scheduler-card-title">' +
-                '<strong>' + escapeHtml(job.name || job.id) + '</strong>' +
-                '<code class="scheduler-job-id">' + escapeHtml(job.id) + '</code>' +
+                '<strong>' + escapeHtml(displayName(job)) + '</strong>' +
+                '<code class="scheduler-job-id" title="任务 ID">' + escapeHtml(job.id) + '</code>' +
                 '</div>' +
                 '<div class="scheduler-card-badges">' +
                 '<span class="badge badge-type">' + escapeHtml(typeLabel) + '</span>' +
@@ -232,11 +304,14 @@
                 '</div>' +
                 '<div class="scheduler-meta-row">' +
                 '<span class="scheduler-meta-label">当前计划</span>' +
-                '<code class="scheduler-meta-value schedule-summary">' + escapeHtml(triggerText(job.trigger)) + '</code>' +
+                '<code class="scheduler-meta-value schedule-summary">' + escapeHtml(scheduleLabel) + '</code>' +
                 '</div>' +
-                '<div class="schedule-editor" data-trigger="' + escapeHtml(JSON.stringify(job.trigger || {})) + '">' +
-                triggerForm(job.trigger || {}) +
-                '</div>' +
+                (editable
+                    ? ('<div class="schedule-editor" data-trigger="' +
+                        escapeHtml(JSON.stringify(job.trigger || {})) + '">' +
+                        triggerForm(job.trigger || {}) +
+                        '</div>')
+                    : '') +
                 '</div>' +
                 '<footer class="scheduler-card-actions">' +
                 '<label class="cmd-toggle scheduler-enable-toggle" title="启用/禁用">' +
@@ -271,6 +346,36 @@
         }
     }
 
+    // 点选常用周期：填入表达式并高亮
+    listEl.addEventListener('click', function (event) {
+        const chip = event.target.closest('.schedule-preset-chip');
+        if (!chip) return;
+        const editor = chip.closest('.schedule-editor');
+        if (!editor) return;
+        const key = chip.dataset.preset || 'custom';
+        editor.querySelectorAll('.schedule-preset-chip').forEach(function (c) {
+            c.classList.toggle('is-active', c === chip);
+        });
+        const presetInput = editor.querySelector('.schedule-preset-value');
+        if (presetInput) presetInput.value = key;
+        const exprInput = editor.querySelector('.cron-expression');
+        if (!exprInput) return;
+        if (key === 'custom') {
+            exprInput.focus();
+            return;
+        }
+        if (key === 'every_10m') {
+            exprInput.value = '*/10 * * * *';
+            return;
+        }
+        if (key === 'every_30m') {
+            exprInput.value = '*/30 * * * *';
+            return;
+        }
+        const fields = PRESET_FIELDS[key];
+        if (fields) exprInput.value = fieldsToExpression(fields);
+    });
+
     listEl.addEventListener('change', async function (event) {
         if (!event.target.classList.contains('job-enabled')) return;
         const input = event.target;
@@ -296,6 +401,9 @@
     listEl.addEventListener('click', async function (event) {
         const card = event.target.closest('.scheduler-card');
         if (!card) return;
+        // 预设 chip 已处理
+        if (event.target.closest('.schedule-preset-chip')) return;
+
         const jobId = encodeURIComponent(card.dataset.jobId);
 
         if (event.target.closest('.job-run')) {
@@ -325,31 +433,28 @@
         if (event.target.closest('.job-save')) {
             const btn = event.target.closest('.job-save');
             const editor = card.querySelector('.schedule-editor');
-            let previous;
-            try {
-                previous = JSON.parse(editor.dataset.trigger || '{}');
-            } catch (e) {
-                showToast('计划数据损坏，请刷新后重试', false);
-                return;
-            }
+            if (!editor) return;
+            const preset = (editor.querySelector('.schedule-preset-value') || {}).value || 'custom';
             let trigger;
-            if (previous.type === 'interval') {
-                const seconds = Number((editor.querySelector('.schedule-value') || {}).value);
-                if (!Number.isFinite(seconds) || seconds < 1) {
-                    showToast('间隔秒数需 ≥ 1', false);
+
+            // 间隔类快捷
+            if (preset === 'every_10m') {
+                trigger = { type: 'interval', seconds: 600 };
+            } else if (preset === 'every_30m') {
+                trigger = { type: 'interval', seconds: 1800 };
+            } else if (preset !== 'custom' && PRESET_FIELDS[preset]) {
+                // 优先用 preset，后端也认
+                trigger = { type: 'cron', preset: preset };
+            } else {
+                const expr = ((editor.querySelector('.cron-expression') || {}).value || '').trim();
+                const fields = expressionToFields(expr);
+                if (!fields) {
+                    showToast('请填写 5 段 cron：分 时 日 月 周', false);
                     return;
                 }
-                trigger = { type: 'interval', seconds: seconds };
-            } else if (previous.type === 'cron') {
-                const fields = {};
-                editor.querySelectorAll('.cron-value').forEach(function (input) {
-                    fields[input.dataset.field] = input.value;
-                });
-                trigger = { type: 'cron', fields: fields };
-            } else {
-                showToast('该任务不支持改计划', false);
-                return;
+                trigger = { type: 'cron', fields: fields, expression: expr };
             }
+
             btn.disabled = true;
             try {
                 await post('/api/scheduler/jobs/' + jobId + '/schedule', { trigger: trigger });
