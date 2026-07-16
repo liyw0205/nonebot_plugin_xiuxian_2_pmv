@@ -1945,81 +1945,500 @@ def parse_twitter(url: str) -> dict[str, Any]:
     return meta
 
 
+# ---------- 小黑盒签名（对齐 Zhalslar/astrbot_plugin_parser） ----------
+
+_XHH_CHAR_TABLE = "AB45STUVWZEFGJ6CH01D237IXYPQRKLMN89"
+_XHH_V4_EP = (
+    "V1ZCERzVgMWrKv+VcTl5QmS9JuPWLOQ8A0mACeTyYXtTbiguOrHhwaqnagZ6zdAgF"
+    "4WpAYBvUH3EDnPRlNWut4CTDU1tCa80BSnvTMC9X1j9Kh6IMlGmzPIqpBzzx9r7Nt"
+    "9XtUhv2WiQ2BgPnUwOFe7gN9r8Yj3184qxn1btJL8="
+)
+_XHH_V4_DATA = (
+    "abbbe96a1579aa6fe4fa84e875851b7d7a843a14c5c9573c771d9c1443c9b3a"
+    "d7603a8d9d67dbc9bd001bf42702ac82e4a6979323ff305eecd74b9620ee140"
+    "0c135f840b35d9402ec3e3a93fcb3d0d3d6b3e740f5176b72225b6fb8a0d483"
+    "cab753aa71062dc9b59bc8de950628f23607301c6cd94e75f680b86485a11ac"
+    "36eba1413e9f14b274eadff30114dfb1cedadc4bd08ef83c5b2d048970d07d3"
+    "943afef809b44e3b9fee602c91e274fee1523a8beee7e7cec85680b279d616d"
+    "da15e98b1b0aa718276bcdb05d4ac3e44e72da220e0ea798ad7452aec01d0db"
+    "c31ad6bf147eab7f7e539d35fe5149110aae5c7069a67eba4aae638505819f8"
+    "9e2a58bc3b5001c8a5045334121ef04a8e442d7dbb7776bd6013674d2c0028a"
+    "f131bf6bde47b90dce5c8b9463c9f83d0e7264145c2f6f259d70c4d63a4996b"
+    "b7c0074e8a59fa298ad144ec139cb29bc94074fbe2f4a88400d85c003793e2b"
+    "e2077184c3ba2e792926fce25f24d3a764a7c2667446173c74aa704d0d517f2"
+    "10926aaef05376230b43c3a676dad6ff1c9603553d66eadfb492445eac44745"
+    "acc620b325560d4941c10e05f3099a17a553fd763a1b7d6ef29f512e436bdfa"
+    "9fa7c5a70b6a5f91bbcb21946fc2ce92db0c92930008b0fc82e90c3c73f9265"
+    "2ca388f77b262a918cf59160fa88e481138ee7fe9a9b51d7949a74d22d1dab4"
+    "e865c12325bfb5b9e748526afb6d8a05c543fd6dc72e81b06a4ebbf8149fca5"
+    "37a19330da2011eec0229e2302babe239397aa1c2292ab3807cf0aa129d078a"
+    "a9da010003eac5bb2c06435fbbe9bee7543290c1224745bb485d78f42ee4e82"
+    "afb27a38befc60a688fb2514795064926bf205357bd46b7c14dd15aea2cab48"
+    "5c993f0df5a20811d0a7b3bfb1fcb0737c8305675e9bdac396ef8cffb0b6bc4"
+    "700c3d881c1945329b721b9080bed46b18105b7c9fea4f8276f0fcd09fe99ec"
+    "52fa50b11e12a19eb9d091ecde701ab2879e2d7727386b28bbde8d62832e1ad"
+    "822ea57b383cdd3767e8ee64e201bf00fe9cc8428ece3262550764fea47c69e"
+    "e4339de98767f034d8852993fdefa315d9dcda71a74b665804706d4f9a8c139"
+    "3670c2220e4ceac833620e0dc8175eb7a77b8b37c1a9d9940c67d44c8bc6b5f"
+    "9e46273e2f5149d3d3148e8f7a02c4a4c3c998924b7d0e93528952034adc20d"
+    "c342404a8606f0c07cb2b98c4a5434e69b69282daf952f586b9eed4b4f1ef0c"
+    "fe5c6d156d14fb5057c8c32a355d07e2f56737d1ccfad573d42c840bbe8b750"
+    "388211f2c0c5d6a1e34e7741389a742dff58bb0b9f339707a349a09519ca78d"
+    "5e4f1baaf2598ab9001c15824494eecc17735e69a193e5437cbe44c6f156a0b"
+    "b8df4fed5edefd4f56f4ef0b4d8cc40fe623836da3c5e662005825c9d344074"
+    "be2306d6241c163fe92a6ce40ff60538d7464f5a06b6bb9ca1e6f18491ca3c7"
+    "d6c00e299cbb1ca1c525a981fc6c6f2bb05f709101099b8bd0d2c2a628d94c6"
+    "1aa97fdd58c9f357359fbd5be9e8f0f534f4481fb780d58e3e599e01fdd5a7f"
+    "c5fb7e01b76fd58b2f264947d2149fefa57577ef326e264fc827939329031d9"
+    "01be7579ecf5fccdab11c615c1a053f198297c0723faf8b17ea3335d49df2bf"
+    "dd17271c2b64745b1f412d87297edd4404a4ae5312debf73b66afcc3d884b93"
+    "8de41b6ee87265ce624897f3557ebe2d97e6fb17f1dc6a893e48dfa16ef2bff"
+    "d8f3e06f0a1fcf44c7f2efa372e0ff61344c93f4a2a66538fcc134cd0bf94d5"
+    "4c969cda4392af70608cbab6cfa340b674ba3a59385c0ed9bb236ff6ed10e1e"
+    "5a9d4b6529c075dc1ac23cfdae18ab1651a5ee747322e51e3cc6035ca929789"
+    "00924e661a2694a47873569baa95fd821711dc53a1e0299ed707e337b570591"
+    "a3f61a5e39f8a75771da1613e8236c9b1b94cb5617fdaf2424d68a7fbd83ebf"
+    "356fc87e8a805bee5bbd20a55a70881394d7624b1dcf5a135f1cf40b842eca3"
+    "3d46b72447e0a2e85adf6c26efa6cc73b63573840f7b6229fb03ab45a8b639b"
+    "5a66bbd6f63d10e59db49d7a9c9af3e3aeb79b7b756e24d5002917e7e788018"
+    "4f80fcc605a1ba825c779e6083fd7fb0920bbcee021ec8e35427391b871b149"
+    "c306c2dbda602044cd53ec424dd70cfd1c14a23c9964c039258cff4b75112f8"
+    "15d9717433c1989ec398cd2acd67c89be82a409e0ef8f3e9ea8ec8b51b5ea5a"
+    "005b5e735978d9a2987a76d62a2af230e30dc6327f7c0d153add27c7e8a320e"
+    "4df6c05ab91fe0b9f6f9e13c50f39454066776503eb2ec84b74b4b2d5228627"
+    "d81c938f7201610c9b703e4fd283a94835b7387db2880443a050d3eb0859aa1"
+    "efd0f9bb7613b6b918ec2f7b5bb3e7722105b595e7973a93e3de8153a0f8e5b"
+    "fd1aa6cefc6285fea85e8381ddcce98b31dda33db2a3c80ac04df14b872c805"
+    "15373f231c3653fb2db799b32e83e59fb0f5763febca3d291b49bf83dd7ebd6"
+    "1229300b65d44964d9e679f6061a0b2ea1bcd9f5af9bf710047237d87d13394"
+    "ea8b4627c6997589d0b58379d025b076460eab88d6615ee92b0aa6c47f721f9"
+    "7e0b5bbe721f06544d0a1bb81402697f2d72ad32c791dab45064b4d18460602"
+    "9494b268feaebb268e7f92352dc3482f857c14885aabbad98a43e5f8fa5d77d"
+    "61dc22f23080b9e6403c76f5fb862d7520ab85ae7c1d0e339729f664e7d668f"
+    "4b9d1301acabb62fda5940db236ea9d2ca896cbb6a13eda6120fa5881453cb4"
+    "490438460c00db4cd4bdf5df993d3a8d5726c756015eed542e0a4b910570f39"
+    "7211c3f84f6a0d038e82270f94543e8da1e8d0cffd8f4f561daaf6003ad1fad"
+    "fdd89c50f057a79225d8647aead74b33216e328c4204686b4ae93ce5f7ee25e"
+    "1c83fe2cb72c67589aa4865d278ff7a112d09c16707de8acd61b49b901a3266"
+    "e8ef55f1351fdc3013154635e51e649cbf31fc9b32f6956800834ca73e0b75b"
+    "2b54d7125257eb6c24ebff52b741109be6da99bb6e0ffab85c3c219550ec3fc"
+    "b12e2e4d0234627b061193c290baa1be73241be70925c08d33e6efdd44eca9a"
+    "5160bdc5b47bd1f9d3f2cbf38848cf1aaa2a4827f86e43e06246b3bf94cb0b9"
+    "f050c89533a3be9ffecefebd1a92e04197f18d7fadc0bfc8664de18425d5c03"
+    "59b58049267934756f513bd68ea427b38f15213f42cce05cd59f5ea502967ec"
+    "6a096daaa5e5d2a373227f2fe4514e27dfa012d708f7e94a286452972b5fab4"
+    "581ecee3df40bad802cbb50b1a5d9dd3323a5f7c61ab893b16782a0ba64fd42"
+    "10c30ac00f9d21b9124e5e5b323f43badf56761e1eea5c86ff61f19ce1485f4"
+    "2cf6cadd751bbfb2ef87229eee5068ef6e209f123d29a571a374974ceac2e77"
+    "f143faba60fc5d16f88d801fa01d879420b5d1393ad5b2bc913e3b0ba7155a6"
+    "7648196573126273cccc79f2eac32ab68d72cc0f7170feca9c9726af9d65962"
+    "663d5281372386ec88bd2fa82316f687535ecd39f00658523708ca4785529f5"
+    "93baf100597ed00c15ae8ff87baa295871680b4096ac03a550f0f015297198b"
+    "1a93f38cfefbeceabc099c1026664d77f616b4f069cf8bf53d2684b9a4d933c"
+    "3c65a3aef21559527bfc6586e0247efa244a0a355b43751bc09be8012699468"
+    "a8c332d60b11bb4881bf56b92ead10e059ac40f83a4d6725cacbc1bb307c839"
+    "c4edc8b5484b9e2935842e867e739223f2eaaaff04d9701cfa49e3f80be4f2d"
+    "1b7e8eb76fd7f33dfa79831f75ee65a75b7c7fff98254818f1ab77bca856656"
+    "4d48e0012733dd426bf841f27f960394b1bacb8a3e36b96c41d751584cd580f"
+    "ef1b6a8bf990487268348f682a27549ecbb9674b14f2fc97f203f3468f248ec"
+    "3cf5171aa5e8a8d31a9a433c4f7644736aaf6695b28771fe66b4736e3afb322"
+    "11ad534b05641600d2cdc79a251fc4c4e5540df9a40aaad329fedd49a429b20"
+    "70e1345a4146c297ee2a03f056675054e83207d17de21242032c30398259440"
+    "84e60cbd70eb4c469859824cd7d04340de0d19e614a0826a63c63e15c3372b1"
+    "7515d4b6951ff6c612f65c3e6538fd0515bcb4814bb641fca5a45c7dae9"
+)
+
+
+def _xhh_xtime(value: int) -> int:
+    return ((value << 1) ^ 27) & 0xFF if value & 128 else value << 1
+
+
+def _xhh_mul3(value: int) -> int:
+    return _xhh_xtime(value) ^ value
+
+
+def _xhh_mul6(value: int) -> int:
+    return _xhh_mul3(_xhh_xtime(value))
+
+
+def _xhh_mul12(value: int) -> int:
+    return _xhh_mul6(_xhh_mul3(_xhh_xtime(value)))
+
+
+def _xhh_mul14(value: int) -> int:
+    return _xhh_mul12(value) ^ _xhh_mul6(value) ^ _xhh_mul3(value)
+
+
+def _xhh_mix_columns(col: list[int]) -> list[int]:
+    values = list(col)
+    while len(values) < 4:
+        values.append(0)
+    mixed = [
+        _xhh_mul14(values[0])
+        ^ _xhh_mul12(values[1])
+        ^ _xhh_mul6(values[2])
+        ^ _xhh_mul3(values[3]),
+        _xhh_mul3(values[0])
+        ^ _xhh_mul14(values[1])
+        ^ _xhh_mul12(values[2])
+        ^ _xhh_mul6(values[3]),
+        _xhh_mul6(values[0])
+        ^ _xhh_mul3(values[1])
+        ^ _xhh_mul14(values[2])
+        ^ _xhh_mul12(values[3]),
+        _xhh_mul12(values[0])
+        ^ _xhh_mul6(values[1])
+        ^ _xhh_mul3(values[2])
+        ^ _xhh_mul14(values[3]),
+    ]
+    if len(values) > 4:
+        mixed.extend(values[4:])
+    return mixed
+
+
+def _xhh_av(text: str, cut: int) -> str:
+    table = _XHH_CHAR_TABLE[:cut]
+    return "".join(table[ord(c) % len(table)] for c in text)
+
+
+def _xhh_sv(text: str) -> str:
+    return "".join(_XHH_CHAR_TABLE[ord(c) % len(_XHH_CHAR_TABLE)] for c in text)
+
+
+def _xhh_interleave(parts: list[str]) -> str:
+    result: list[str] = []
+    max_len = max(len(part) for part in parts)
+    for i in range(max_len):
+        for part in parts:
+            if i < len(part):
+                result.append(part[i])
+    return "".join(result)
+
+
+def _xhh_ov(path: str, ts: int, nonce: str) -> str:
+    path = "/" + "/".join(p for p in path.split("/") if p) + "/"
+    interleaved = _xhh_interleave(
+        [_xhh_av(str(ts), -2), _xhh_sv(path), _xhh_sv(nonce)]
+    )[:20]
+    md5_hex = __import__("hashlib").md5(interleaved.encode()).hexdigest()
+    prefix = _xhh_av(md5_hex[:5], -4)
+    suffix = str(
+        sum(_xhh_mix_columns([ord(c) for c in md5_hex[-6:]])) % 100
+    ).zfill(2)
+    return prefix + suffix
+
+
+def _xhh_sign_path(path: str) -> dict[str, Any]:
+    import random
+    import time as _time
+    import hashlib as _hashlib
+
+    now = int(_time.time())
+    nonce = _hashlib.md5((str(now) + str(random.random())).encode()).hexdigest().upper()
+    return {"hkey": _xhh_ov(path, now + 1, nonce), "_time": now, "nonce": nonce}
+
+
+def _xhh_request_json(
+    method: str,
+    url: str,
+    *,
+    params: dict[str, Any] | None = None,
+    json_body: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+    cookies: dict[str, str] | None = None,
+    timeout: int = 20,
+) -> dict[str, Any]:
+    """优先 curl_cffi chrome 伪装；失败回退 http_client/requests。"""
+    hdrs = {
+        "accept": "application/json, text/plain, */*",
+        "referer": "https://www.xiaoheihe.cn/",
+        "origin": "https://www.xiaoheihe.cn",
+        "user-agent": _DESKTOP_UA,
+    }
+    if headers:
+        hdrs.update(headers)
+    # 1) curl_cffi
+    try:
+        from curl_cffi import requests as curl_requests  # type: ignore
+
+        resp = curl_requests.request(
+            method,
+            url,
+            params=params,
+            json=json_body,
+            headers=hdrs,
+            cookies=cookies,
+            timeout=timeout,
+            impersonate="chrome131",
+        )
+        data = resp.json()
+        if isinstance(data, dict):
+            return data
+    except Exception as e:
+        logger.debug(f"小黑盒 curl_cffi 请求失败: {e}")
+    # 2) http_client
+    try:
+        if method.upper() == "GET":
+            resp = http_client.request(
+                "GET",
+                url,
+                params=params,
+                timeout=timeout,
+                check_status=False,
+                use_config_proxy=False,
+                headers=hdrs,
+            )
+        else:
+            resp = http_client.request(
+                method.upper(),
+                url,
+                params=params,
+                timeout=timeout,
+                check_status=False,
+                use_config_proxy=False,
+                headers=hdrs,
+                data=None if json_body is None else json.dumps(json_body),
+            )
+            # some clients need json= ; fallback below
+        raw = getattr(resp, "text", "") or ""
+        if raw.strip().startswith("{"):
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                return data
+    except Exception as e:
+        logger.debug(f"小黑盒 http_client 请求失败: {e}")
+    # 3) requests
+    try:
+        import requests as _requests
+
+        resp = _requests.request(
+            method,
+            url,
+            params=params,
+            json=json_body,
+            headers=hdrs,
+            cookies=cookies,
+            timeout=timeout,
+        )
+        data = resp.json()
+        if isinstance(data, dict):
+            return data
+    except Exception as e:
+        logger.debug(f"小黑盒 requests 请求失败: {e}")
+    return {}
+
+
+def _xhh_fetch_device_token() -> tuple[str, str]:
+    """返回 (x_xhh_tokenid, device_id)。"""
+    payload = {
+        "appId": "heybox_website",
+        "organization": "0yD85BjYvGFAvHaSQ1mc",
+        "ep": _XHH_V4_EP,
+        "data": _XHH_V4_DATA,
+        "os": "web",
+        "encode": 5,
+        "compress": 2,
+    }
+    data = _xhh_request_json(
+        "POST",
+        "https://fp-it.portal101.cn/deviceprofile/v4",
+        json_body=payload,
+        headers={"accept": "application/json, text/plain, */*"},
+        timeout=20,
+    )
+    detail = data.get("detail") if isinstance(data, dict) else None
+    device_id = ""
+    if isinstance(detail, dict) and detail.get("deviceId"):
+        device_id = str(detail["deviceId"])
+    if not device_id:
+        raise RuntimeError("小黑盒 deviceprofile 未返回 deviceId")
+    return f"B{device_id}", device_id
+
+
+def _xhh_fetch_link_tree(link_id: str) -> dict[str, Any]:
+    token, device_id = _xhh_fetch_device_token()
+    sig = _xhh_sign_path("/bbs/app/link/tree")
+    params: dict[str, Any] = {
+        "os_type": "web",
+        "app": "heybox",
+        "client_type": "web",
+        "version": "999.0.4",
+        "web_version": "2.5",
+        "x_client_type": "web",
+        "x_app": "heybox_website",
+        "heybox_id": "",
+        "x_os_type": "Windows",
+        "device_info": "Chrome",
+        "device_id": device_id,
+        "link_id": str(link_id),
+        "owner_only": "1",
+        **sig,
+    }
+    payload = _xhh_request_json(
+        "GET",
+        "https://api.xiaoheihe.cn/bbs/app/link/tree",
+        params=params,
+        cookies={"x_xhh_tokenid": token},
+        timeout=20,
+    )
+    return payload if isinstance(payload, dict) else {}
+
+
+def _xhh_clean_text(text: str) -> str:
+    import html as _html
+
+    text = _html.unescape((text or "").replace("\xa0", " "))
+    text = re.sub(r"[ \t\r\f\v]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _xhh_normalize_image_url(url: str) -> str:
+    import html as _html
+
+    if not url:
+        return ""
+    url = _html.unescape(url)
+    if not url.startswith("http"):
+        return ""
+    # 正文图通常在 /bbs/ 路径；也接受 heybox/max-c 图床
+    low = url.lower()
+    if "/bbs/" in url or "max-c.com" in low or "heybox" in low:
+        return url
+    if any(x in low for x in (".jpg", ".jpeg", ".png", ".webp")):
+        return url
+    return ""
+
+
+def _xhh_parse_body(link: dict[str, Any]) -> tuple[str, list[str]]:
+    raw_text = link.get("text")
+    if not isinstance(raw_text, str) or not raw_text.strip():
+        return "", []
+    try:
+        blocks = json.loads(raw_text)
+    except Exception:
+        return _xhh_clean_text(raw_text), []
+    if not isinstance(blocks, list):
+        return _xhh_clean_text(raw_text), []
+
+    text_parts: list[str] = []
+    images: list[str] = []
+    seen: set[str] = set()
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        btype = str(block.get("type") or "")
+        if btype == "img":
+            u = _xhh_normalize_image_url(str(block.get("url") or "").strip())
+            key = u.split("?", 1)[0]
+            if u and key not in seen:
+                seen.add(key)
+                images.append(u)
+            continue
+        html_text = str(block.get("text") or "")
+        if not html_text:
+            continue
+        # 抽 html 内图片
+        for m in re.finditer(
+            r'data-original="([^"]+)"|src="([^"]+)"', html_text, re.I
+        ):
+            cand = m.group(1) or m.group(2) or ""
+            u = _xhh_normalize_image_url(cand)
+            key = u.split("?", 1)[0]
+            if u and key not in seen:
+                seen.add(key)
+                images.append(u)
+        # 文本
+        frag = re.sub(r"<br\s*/?>", "\n", html_text, flags=re.I)
+        frag = re.sub(r"<[^>]+>", "", frag)
+        cleaned = _xhh_clean_text(frag)
+        if cleaned:
+            text_parts.append(cleaned)
+    return "\n\n".join(text_parts).strip(), images
+
+
 def parse_xiaoheihe(url: str) -> dict[str, Any]:
-    """小黑盒：分享页多为 SPA，尝试公开 web share / 链接接口。"""
+    """小黑盒：对齐上游，走签名 link/tree + device token。
+
+    分享页是 SPA 无 OG；旧 web/share 接口已 404。
+    若风控返回 show_captcha，给出可读错误。
+    """
     meta = _base_meta("xiaoheihe", url)
     final = expand_url(url, use_proxy=False, platform="xiaoheihe")
     meta["url"] = final
-    link_id = None
-    m = re.search(r"link_id=(\d+)", final) or re.search(r"/link/(\d+)", final) or re.search(
-        r"/link/(\d+)", url
+    m = (
+        re.search(r"link_id=(\d+)", final)
+        or re.search(r"/link/(\d+)", final)
+        or re.search(r"/link/(\d+)", url)
+        or re.search(r"link/(\d+)", url)
     )
-    if m:
-        link_id = m.group(1)
-    if link_id:
-        candidates = [
-            f"https://api.xiaoheihe.cn/bbs/app/link/web/share?link_id={link_id}",
-            f"https://api.xiaoheihe.cn/bbs/app/api/web/share?link_id={link_id}",
-            f"https://www.xiaoheihe.cn/bbs/app/api/web/share/link?link_id={link_id}",
-            f"https://api.xiaoheihe.cn/bbs/app/link/tree?link_id={link_id}&h_src=web",
-        ]
-        for api in candidates:
-            try:
-                resp = _http_get(
-                    api,
-                    headers={
-                        "User-Agent": _DESKTOP_UA,
-                        "Referer": "https://www.xiaoheihe.cn/",
-                        "Accept": "application/json",
-                    },
-                    timeout=15,
-                    use_proxy=False,
-                )
-                raw = getattr(resp, "text", "") or ""
-                if not raw.strip().startswith("{"):
-                    continue
-                data = json.loads(raw)
-                # 常见 result/link
-                node = data.get("result") or data.get("data") or data
-                if not isinstance(node, dict):
-                    continue
-                link = node.get("link") or node.get("share") or node
-                if not isinstance(link, dict):
-                    continue
-                title = link.get("title") or link.get("text") or link.get("description")
-                if title:
-                    meta["title"] = str(title)[:200]
-                # 视频/图
-                found: list[str] = []
-                _collect_http_urls(link, found)
-                vids = [u for u in found if ".mp4" in u.lower() or "video" in u.lower()]
-                imgs = [
-                    u
-                    for u in found
-                    if any(x in u.lower() for x in (".jpg", ".jpeg", ".png", ".webp"))
-                ]
-                # thumbs
-                for k in ("img", "imgs", "thumb", "image", "cover"):
-                    v = link.get(k)
-                    if isinstance(v, str) and v.startswith("http"):
-                        imgs.append(v)
-                    elif isinstance(v, list):
-                        imgs.extend([x for x in v if isinstance(x, str) and x.startswith("http")])
-                meta["video_urls"] = list(dict.fromkeys(vids))[:3]
-                meta["image_urls"] = list(dict.fromkeys(imgs))[:6]
-                if meta["video_urls"] or meta["image_urls"] or meta["title"]:
-                    meta["error"] = None
-                    if meta["video_urls"] or meta["image_urls"]:
-                        return meta
-            except Exception as e:
-                logger.debug(f"小黑盒接口失败 {api}: {e}")
-    page = _parse_html_og("xiaoheihe", final, use_proxy=False)
-    if page.get("video_urls") or page.get("image_urls"):
-        return page
-    if page.get("title") and page.get("title") not in ("小黑盒 - 玩家高能聚集地", "小黑盒"):
-        meta["title"] = page["title"]
-    if not meta.get("video_urls") and not meta.get("image_urls"):
-        meta["error"] = meta.get("error") or "小黑盒未解析到媒体（分享页多为前端渲染）"
+    if not m:
+        meta["error"] = "未能识别小黑盒 link_id"
+        return meta
+    link_id = m.group(1)
+    meta["url"] = f"https://www.xiaoheihe.cn/app/bbs/link/{link_id}"
+
+    try:
+        payload = _xhh_fetch_link_tree(link_id)
+    except Exception as e:
+        meta["error"] = f"小黑盒鉴权/签名请求失败：{e}"
+        return meta
+
+    status = str(payload.get("status") or "")
+    if status == "show_captcha":
+        meta["error"] = (
+            "小黑盒触发验证码风控(show_captcha)，"
+            "当前环境无法自动过验证；可稍后重试或换网络"
+        )
+        return meta
+    if status != "ok":
+        meta["error"] = f"小黑盒 link/tree 失败：{payload.get('msg') or status or 'unknown'}"
+        return meta
+
+    result = payload.get("result") or {}
+    link = result.get("link") if isinstance(result, dict) else None
+    if not isinstance(link, dict):
+        meta["error"] = "小黑盒返回缺少 link 节点"
+        return meta
+
+    title = _xhh_clean_text(str(link.get("title") or ""))
+    body, images = _xhh_parse_body(link)
+    user = link.get("user") or {}
+    if isinstance(user, dict):
+        meta["author"] = _xhh_clean_text(
+            str(user.get("username") or user.get("nickname") or "")
+        )
+        if user.get("avatar"):
+            meta["avatar_url"] = str(user.get("avatar"))
+    meta["title"] = title or (body[:80] if body else "小黑盒帖子")
+    meta["desc"] = (body or title)[:400]
+
+    videos: list[str] = []
+    if link.get("has_video") and link.get("video_url"):
+        vu = str(link.get("video_url")).strip()
+        if vu.startswith("http"):
+            videos.append(vu)
+    # 兜底从 link 树抽
+    found: list[str] = []
+    _collect_http_urls(link, found)
+    for u in found:
+        low = u.lower()
+        if any(x in low for x in (".mp4", ".m3u8", ".mov")) and u not in videos:
+            videos.append(u)
+        if any(x in low for x in (".jpg", ".jpeg", ".png", ".webp")):
+            nu = _xhh_normalize_image_url(u)
+            if nu and nu not in images:
+                images.append(nu)
+
+    meta["image_urls"] = sort_media_urls_by_quality(images, kind="image")[:12]
+    meta["video_urls"] = sort_media_urls_by_quality(videos, kind="video")[:5]
+    if meta["image_urls"] or meta["video_urls"]:
+        meta["error"] = None
+        return meta
+    if meta.get("title") and meta["title"] != "小黑盒帖子":
+        meta["error"] = "小黑盒拿到标题但无媒体"
+        return meta
+    meta["error"] = "小黑盒未解析到媒体"
     return meta
 
 

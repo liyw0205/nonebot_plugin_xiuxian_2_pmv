@@ -22,3 +22,4 @@ wget
 Werkzeug
 yarl
 yt-dlp
+curl_cffi
