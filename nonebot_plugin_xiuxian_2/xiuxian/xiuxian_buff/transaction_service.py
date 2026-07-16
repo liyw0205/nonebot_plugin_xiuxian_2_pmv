@@ -458,8 +458,17 @@ class PartnerCultivationService:
                     "SELECT user_id,exp FROM user_xiuxian WHERE user_id IN (%s,%s)",
                     (user_id_1, user_id_2),
                 ).fetchall()
-                current = {str(row[0]): int(float(row[1] or 0)) for row in rows}
-                if current != {user_id_1: values[0], user_id_2: values[1]}:
+                # High-realm exp may be REAL/scientific TEXT. Do NOT use SQL
+                # CAST(exp)=CAST(%s) with huge ints — bind_sqlite_param rewrites
+                # them to "5.65e+19" and loses precision → false state_changed.
+                current = {
+                    str(row[0]): _as_int_like_num(row[1]) for row in rows
+                }
+                expected_map = {
+                    user_id_1: _as_int_like_num(values[0]),
+                    user_id_2: _as_int_like_num(values[1]),
+                }
+                if current != expected_map:
                     conn.rollback()
                     return result("state_changed")
 
@@ -471,21 +480,22 @@ class PartnerCultivationService:
                         row = conn.execute(
                             "SELECT partner_id,affection FROM player_data.partner WHERE user_id=%s", (user_id,),
                         ).fetchone()
-                        if row is None or str(row[0]) != partner_id or int(row[1] or 0) != expected:
+                        if row is None or str(row[0]) != partner_id or int(float(row[1] or 0)) != expected:
                             conn.rollback()
                             return result("state_changed")
 
-                for user_id, expected_exp, gain, power, hp, mp, atk, rate in (
-                    (user_id_1, values[0], values[2], values[5], values[7], values[8], values[9], values[13]),
-                    (user_id_2, values[1], values[3], values[6], values[10], values[11], values[12], values[14]),
+                for user_id, gain, power, hp, mp, atk, rate in (
+                    (user_id_1, values[2], values[5], values[7], values[8], values[9], values[13]),
+                    (user_id_2, values[3], values[6], values[10], values[11], values[12], values[14]),
                 ):
+                    # Concurrency already checked in Python under BEGIN IMMEDIATE.
                     changed = conn.execute(
                         "UPDATE user_xiuxian SET "
                         "exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),"
                         "power=%s,hp=%s,mp=%s,atk=%s,"
                         "level_up_rate=COALESCE(level_up_rate,0)+%s "
-                        "WHERE user_id=%s AND CAST(COALESCE(exp,0) AS REAL)=CAST(%s AS REAL)",
-                        (gain, power, hp, mp, atk, rate, user_id, expected_exp),
+                        "WHERE user_id=%s",
+                        (gain, power, hp, mp, atk, rate, user_id),
                     )
                     if changed.rowcount != 1:
                         conn.rollback()

@@ -345,7 +345,12 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
                 msg = "对方的双修保护状态已经变化，请重新发起。"
             else:
                 msg = "双方已有待处理的双修邀请，请稍后再试！"
-            await handle_send(bot, event, msg, md_type="buff")
+            await handle_send(
+                bot, event, msg, md_type="buff",
+                k1="双修", v1="双修",
+                k2="次数", v2="我的双修次数",
+                k3="修为", v3="我的修为",
+            )
             await two_exp_invite.finish()
 
         # 设置60秒过期
@@ -544,7 +549,15 @@ async def direct_two_exp(
         expected_target_protection=expected_target_protection,
     )
     if not settlement.succeeded:
-        await handle_send(bot, event, "双修状态发生变化，本次未结算，请重新发起。", md_type="buff")
+        # 必须传 k1/v1，否则 md 模板按钮会显示 None
+        await handle_send(
+            bot, event,
+            "双修状态发生变化，本次未结算，请重新发起。",
+            md_type="buff",
+            k1="双修", v1="双修",
+            k2="次数", v2="我的双修次数",
+            k3="修为", v3="我的修为",
+        )
         return
     if settlement.status == "applied" and not invite_id:
         for _ in range(actual_used_count):
