@@ -283,10 +283,188 @@ def _base_meta(platform: str, url: str) -> dict[str, Any]:
 # ---------- platform parsers ----------
 
 
+def _extract_json_object_after(html: str, marker: str) -> Any | None:
+    """从 html 中 marker 后的首个 { ... } 解析 JSON。"""
+    idx = html.find(marker)
+    if idx < 0:
+        return None
+    start = html.find("{", idx + len(marker))
+    if start < 0:
+        return None
+    depth = 0
+    in_str = False
+    esc = False
+    for j in range(start, min(start + 2_500_000, len(html))):
+        ch = html[j]
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(html[start : j + 1])
+                except Exception:
+                    return None
+    return None
+
+
+def _parse_bilibili_opus(url: str, final: str) -> dict[str, Any]:
+    """B站图文动态/opus 图集：从页面 __INITIAL_STATE__ 抽 album/content 图片。"""
+    meta = _base_meta("bilibili", url)
+    meta["url"] = final
+    m = re.search(r"/opus/(\d+)", final) or re.search(r"/opus/(\d+)", url)
+    opus_id = m.group(1) if m else None
+    page_urls = []
+    if opus_id:
+        page_urls.append(f"https://www.bilibili.com/opus/{opus_id}")
+        page_urls.append(f"https://m.bilibili.com/opus/{opus_id}")
+    page_urls.append(final)
+
+    state = None
+    for page in page_urls:
+        try:
+            _, html = _get_text(
+                page,
+                headers={
+                    "User-Agent": _DESKTOP_UA,
+                    "Referer": "https://www.bilibili.com/",
+                },
+                timeout=20,
+            )
+        except Exception as e:
+            logger.debug(f"B站 opus 页面失败 {page}: {e}")
+            continue
+        state = _extract_json_object_after(html, "window.__INITIAL_STATE__")
+        if isinstance(state, dict):
+            meta["url"] = page
+            break
+    if not isinstance(state, dict):
+        meta["error"] = "B站图文页未拿到 INITIAL_STATE"
+        return meta
+
+    detail = state.get("detail") if isinstance(state.get("detail"), dict) else state
+    modules = detail.get("modules") if isinstance(detail, dict) else None
+    if not isinstance(modules, list):
+        modules = []
+
+    images: list[str] = []
+    title = ""
+    author = ""
+    avatar = ""
+    ts = None
+    texts: list[str] = []
+
+    for mod in modules:
+        if not isinstance(mod, dict):
+            continue
+        # album top
+        top = ((mod.get("module_top") or {}).get("display") or {}).get("album") or {}
+        for pic in top.get("pics") or []:
+            if isinstance(pic, dict) and isinstance(pic.get("url"), str):
+                images.append(pic["url"])
+        # author
+        ma = mod.get("module_author") or {}
+        if isinstance(ma, dict) and ma.get("name"):
+            author = str(ma.get("name") or author)
+            avatar = str(ma.get("face") or avatar)
+            try:
+                ts = int(ma.get("pub_ts") or ts or 0) or ts
+            except Exception:
+                pass
+        # content paragraphs
+        mc = mod.get("module_content") or {}
+        for para in mc.get("paragraphs") or []:
+            if not isinstance(para, dict):
+                continue
+            pic = para.get("pic") or {}
+            for p in pic.get("pics") or []:
+                if isinstance(p, dict) and isinstance(p.get("url"), str):
+                    images.append(p["url"])
+            # text nodes
+            text = para.get("text") or {}
+            for node in text.get("nodes") or []:
+                if not isinstance(node, dict):
+                    continue
+                if node.get("type") == "TEXT_NODE_TYPE_WORD":
+                    w = (node.get("word") or {}).get("words")
+                    if w:
+                        texts.append(str(w))
+                elif node.get("type") == "TEXT_NODE_TYPE_RICH":
+                    rich = node.get("rich") or {}
+                    w = rich.get("text") or rich.get("orig_text")
+                    if w:
+                        texts.append(str(w))
+        # title sometimes in basic / module_title
+        for key in ("module_title", "basic"):
+            block = mod.get(key) or {}
+            if isinstance(block, dict) and block.get("title"):
+                title = str(block.get("title") or title)
+
+    # fallback title from page state
+    if not title:
+        for cand in (
+            ((detail.get("basic") or {}).get("title") if isinstance(detail, dict) else None),
+            state.get("title"),
+        ):
+            if cand:
+                title = str(cand)
+                break
+    if not title and texts:
+        title = texts[0][:80]
+    if not title:
+        # last resort from HTML title handled earlier externally
+        title = "B站图文"
+
+    # clean images: keep article/album content, drop vip icons/app logo
+    clean: list[str] = []
+    seen: set[str] = set()
+    for u in images:
+        if not isinstance(u, str) or not u.startswith("http"):
+            continue
+        low = u.lower()
+        if any(x in low for x in ("vip/", "app_logo", "emote", "/face/", "activity-plat")):
+            continue
+        key = u.split("@")[0].split("?")[0]
+        if key in seen:
+            continue
+        seen.add(key)
+        clean.append(u)
+
+    meta["title"] = title.strip() or "B站图文"
+    meta["author"] = author
+    meta["desc"] = ("".join(texts).strip() or title)[:400]
+    meta["avatar_url"] = avatar or None
+    try:
+        meta["timestamp"] = int(ts) if ts else None
+    except Exception:
+        meta["timestamp"] = None
+    meta["image_urls"] = clean[:18]
+    meta["video_urls"] = []
+    if not meta["image_urls"]:
+        meta["error"] = "B站图文未解析到图片"
+    return meta
+
+
 def parse_bilibili(url: str) -> dict[str, Any]:
     meta = _base_meta("bilibili", url)
     final = expand_url(url)
     meta["url"] = final
+
+    # 图文动态 / opus 图集（无 BV 号）
+    if "/opus/" in final or "/opus/" in url:
+        return _parse_bilibili_opus(url, final)
+
     bvid = None
     m = re.search(r"\b(BV[\w]+)\b", final)
     if m:
@@ -303,11 +481,19 @@ def parse_bilibili(url: str) -> dict[str, Any]:
             m = re.search(r"\b(BV[\w]+)\b", html)
             if m:
                 bvid = m.group(1)
+            # 页面可能是 opus 跳转残留
+            if not bvid and ("/opus/" in html or "window.__INITIAL_STATE__" in html):
+                om = re.search(r"/opus/(\d+)", html) or re.search(r"/opus/(\d+)", final)
+                if om:
+                    return _parse_bilibili_opus(url, f"https://www.bilibili.com/opus/{om.group(1)}")
         except Exception as e:
             meta["error"] = f"B站页面读取失败：{e}"
             return meta
     if not bvid and not aid:
-        meta["error"] = "未能识别 B 站 BV/av 号"
+        # 再尝试按 opus 解析展开后的 URL
+        if "opus" in final:
+            return _parse_bilibili_opus(url, final)
+        meta["error"] = "未能识别 B 站 BV/av/opus"
         return meta
     try:
         api = "https://api.bilibili.com/x/web-interface/view"
