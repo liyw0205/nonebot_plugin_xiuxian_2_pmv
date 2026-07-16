@@ -13,7 +13,12 @@ from ..io_runtime import run_blocking_io
 from .card import render_media_card
 from .config import get_fun_media_parser_config
 from .io_runtime_safe import run_native_parse
-from .native import _use_proxy_for, extract_supported_links, parse_text_native
+from .native import (
+    _use_proxy_for,
+    extract_supported_links,
+    parse_text_native,
+    sort_media_urls_by_quality,
+)
 
 
 async def extract_links(text: str) -> list[tuple[str, str]]:
@@ -166,13 +171,15 @@ async def run_parse_and_build_messages(
             except Exception as e:
                 logger.warning(f"媒体卡片渲染失败: {e}")
 
-    all_images = dedupe_media_urls_preserve_order(all_images)[:12]
-    # 视频优先挑较短/更可发的：kwaicdn 主链在前（native 已排序），这里只截前 3
-    all_videos = dedupe_media_urls_preserve_order(all_videos)[:3]
-    # 过滤明显非内容图（表情包等）
+    all_images = dedupe_media_urls_preserve_order(all_images)
+    all_videos = dedupe_media_urls_preserve_order(all_videos)
+    # 最高质量优先；发送侧再按 20MB 降档
+    all_videos = sort_media_urls_by_quality(all_videos, kind="video")[:5]
+    # 过滤明显非内容图（表情包等），图片也按质量排序
     all_images = [
         u
         for u in all_images
         if "emotion" not in u.lower() and "emoji" not in u.lower()
-    ][:12]
+    ]
+    all_images = sort_media_urls_by_quality(all_images, kind="image")[:12]
     return (texts, all_images, all_videos, card_paths)

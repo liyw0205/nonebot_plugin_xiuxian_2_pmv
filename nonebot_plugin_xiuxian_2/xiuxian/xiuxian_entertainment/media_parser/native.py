@@ -283,6 +283,69 @@ def _base_meta(platform: str, url: str) -> dict[str, Any]:
     }
 
 
+# 发送侧上限（字节）：优先最高清，超过则降档
+MEDIA_MAX_BYTES = 20 * 1024 * 1024
+
+
+def media_quality_score(url: str, *, kind: str = "video") -> int:
+    """URL 质量分：越高越好。用于排序候选链。"""
+    low = (url or "").lower()
+    score = 0
+    if kind == "video":
+        # 分辨率/档位
+        if any(x in low for x in ("ultrav", "v6ultra", "4k", "2160", "uhd")):
+            score += 100
+        elif any(x in low for x in ("1080", "fhd", "highv", "v6high", "hd15", "mp4_720p")):
+            score += 80
+        if "mp4_720p" in low or "720p" in low:
+            score += 70
+        elif "high" in low and "highlight" not in low:
+            score += 55
+        if any(x in low for x in ("720", "mid", "standard", "mp4_hd")):
+            score += 50
+        if any(x in low for x in ("480", "540", "mp4_ld", "low")):
+            score += 25
+        if any(x in low for x in ("360p", "240p", "preview", "thumb", "gif")):
+            score -= 40
+        # B站 qn 痕迹 / 码率提示
+        for mark, pts in (
+            ("-120.", 95),
+            ("-116.", 90),
+            ("-112.", 85),
+            ("-80.", 70),
+            ("-64.", 55),
+            ("-32.", 30),
+            ("-16.", 15),
+        ):
+            if mark in low:
+                score += pts
+                break
+        # 主链/完整文件略加分
+        if "pkey=" in low or "clientcachekey" in low or "mainmv" in low:
+            score += 8
+        # 非 mp4 流略降（QQ 更爱 progressive mp4）
+        if ".m3u8" in low:
+            score -= 15
+        # 更长 URL 常带更完整鉴权/更高档，弱加权
+        score += min(len(url) // 80, 5)
+    else:
+        # 图片：大图/原图优先
+        if any(x in low for x in ("original", "origin", "large", "orj1080", "orj960", "1080", "raw", "urldefault")):
+            score += 60
+        if any(x in low for x in ("orj480", "mw690", "thumbnail", "thumb", "small", "avatar", "face")):
+            score -= 30
+        if any(x in low for x in (".png", ".jpg", ".jpeg", ".webp")):
+            score += 5
+        score += min(len(url) // 100, 5)
+    return score
+
+
+def sort_media_urls_by_quality(urls: list[str], *, kind: str = "video") -> list[str]:
+    """去重后按质量分从高到低排序。"""
+    uniq = list(dict.fromkeys(u for u in urls if isinstance(u, str) and u.startswith("http")))
+    return sorted(uniq, key=lambda u: (-media_quality_score(u, kind=kind), -len(u)))
+
+
 # ---------- platform parsers ----------
 
 
@@ -535,33 +598,44 @@ def parse_bilibili(url: str) -> dict[str, Any]:
             cid = info.get("cid")
         aid_n = info.get("aid") or aid
         if cid and aid_n:
-            play = http_client.get_json(
-                "https://api.bilibili.com/x/player/playurl",
-                params={
-                    "avid": aid_n,
-                    "cid": cid,
-                    "qn": 64,
-                    "fnval": 1,
-                    "fourk": 1,
-                },
-                timeout=15,
-                headers={
-                    "User-Agent": _DESKTOP_UA,
-                    "Referer": final if "bilibili.com" in final else "https://www.bilibili.com",
-                },
-                use_config_proxy=False,
-            )
-            if int(play.get("code", -1)) == 0:
+            # 多档清晰度：80(1080)→64(720)→32(480)→16，发送侧再按 20MB 降档
+            videos: list[str] = []
+            for qn in (80, 64, 32, 16):
+                try:
+                    play = http_client.get_json(
+                        "https://api.bilibili.com/x/player/playurl",
+                        params={
+                            "avid": aid_n,
+                            "cid": cid,
+                            "qn": qn,
+                            "fnval": 1,
+                            "fourk": 1,
+                        },
+                        timeout=15,
+                        headers={
+                            "User-Agent": _DESKTOP_UA,
+                            "Referer": final
+                            if "bilibili.com" in final
+                            else "https://www.bilibili.com",
+                        },
+                        use_config_proxy=False,
+                    )
+                except Exception as e:
+                    logger.debug(f"B站 playurl qn={qn} 失败: {e}")
+                    continue
+                if int(play.get("code", -1)) != 0:
+                    continue
                 durl = ((play.get("data") or {}).get("durl") or [])
-                videos = [str(x.get("url")) for x in durl if x.get("url")]
-                # dash backup
+                for x in durl:
+                    if x.get("url"):
+                        videos.append(str(x["url"]))
                 dash = ((play.get("data") or {}).get("dash") or {})
-                for v in (dash.get("video") or [])[:2]:
+                for v in (dash.get("video") or [])[:3]:
                     if v.get("baseUrl"):
                         videos.append(str(v["baseUrl"]))
                     elif v.get("base_url"):
                         videos.append(str(v["base_url"]))
-                meta["video_urls"] = videos[:3]
+            meta["video_urls"] = sort_media_urls_by_quality(videos, kind="video")[:5]
         if not meta["video_urls"] and not meta["image_urls"]:
             meta["error"] = "B站未解析到可发送媒体（可能需 cookie/大会员清晰度）"
     except Exception as e:
@@ -1166,35 +1240,20 @@ def parse_kuaishou(url: str) -> dict[str, Any]:
     single_pic = bool(photo.get("singlePicture"))
     photo_type = str(photo.get("photoType") or photo.get("type") or "")
 
-    def _video_rank(u: str) -> tuple[int, int]:
-        low = u.lower()
-        score = 0
-        if any(x in low for x in ("ultrav", "ultra", "v6ultra")):
-            score += 8
-        elif any(x in low for x in ("highv", "v6high", "1080", "hd15")):
-            score += 6
-        elif any(x in low for x in ("720", "mid", "standard")):
-            score += 3
-        if "pkey=" in low:
-            score += 2
-        if "clientcachekey" in low or "mainmv" in low:
-            score += 1
-        if any(x in low for x in ("360p", "240p", "preview", "thumb")):
-            score -= 3
-        return (-score, -len(u))
+    # 保留多档清晰度（高清优先排序），发送侧按 20MB 降档
+    videos = sort_media_urls_by_quality(videos, kind="video")
 
-    videos = sorted(dict.fromkeys(videos), key=_video_rank)
-
-    # 图集优先用 atlas 全量；视频作品只留 1 封面
+    # 图集优先用 atlas 全量；视频作品封面只留最佳 1 张
     is_atlas = bool(atlas) or single_pic or "ATLAS" in photo_type.upper()
     if is_atlas and atlas:
         meta["video_urls"] = []
-        meta["image_urls"] = list(dict.fromkeys(atlas))[:12]
-        # 封面兜底：atlas 为空时用 cover
+        meta["image_urls"] = sort_media_urls_by_quality(
+            list(dict.fromkeys(atlas)), kind="image"
+        )[:12]
         if not meta["image_urls"] and covers:
             meta["image_urls"] = covers[:1]
     else:
-        meta["video_urls"] = videos[:1]
+        meta["video_urls"] = videos[:5]
         meta["image_urls"] = (covers[:1] if covers else [])
 
     if not meta["video_urls"] and not meta["image_urls"]:
@@ -1460,8 +1519,9 @@ def _weibo_fill_from_status(meta: dict[str, Any], data: dict[str, Any]) -> None:
     meta["author"] = author
     meta["avatar_url"] = avatar
     meta["timestamp"] = ts
-    meta["image_urls"] = list(dict.fromkeys(images))[:12]
-    meta["video_urls"] = list(dict.fromkeys(videos))[:3]
+    meta["image_urls"] = sort_media_urls_by_quality(images, kind="image")[:12]
+    # 微博多档：720p > hd > ld
+    meta["video_urls"] = sort_media_urls_by_quality(videos, kind="video")[:5]
 
 
 def parse_weibo(url: str) -> dict[str, Any]:
@@ -1624,12 +1684,15 @@ def _meta_from_ytdlp(platform: str, url: str, info: dict[str, Any]) -> dict[str,
 
     videos: list[str] = []
     audios: list[str] = []
-    # best direct url
+    # 收集带 height 的 format，按清晰度排序
+    ranked: list[tuple[int, int, str]] = []  # (-height, -tbr, url)
     if isinstance(info.get("url"), str) and info["url"].startswith("http"):
         if info.get("vcodec") not in (None, "none") or any(
             x in info["url"].lower() for x in (".mp4", ".m3u8", ".webm")
         ):
-            videos.append(info["url"])
+            h = int(info.get("height") or 0)
+            tbr = int(info.get("tbr") or info.get("vbr") or 0)
+            ranked.append((-h, -tbr, info["url"]))
         elif info.get("acodec") not in (None, "none"):
             audios.append(info["url"])
     for fmt in info.get("formats") or []:
@@ -1644,24 +1707,28 @@ def _meta_from_ytdlp(platform: str, url: str, info: dict[str, Any]) -> dict[str,
         vcodec = fmt.get("vcodec")
         acodec = fmt.get("acodec")
         if vcodec not in (None, "none"):
-            # 优先渐进 mp4
+            # 优先 progressive 容器
             if str(fmt.get("ext") or "").lower() in ("mp4", "m4v", "webm") or "mp4" in u:
-                videos.append(u)
+                h = int(fmt.get("height") or 0)
+                tbr = int(fmt.get("tbr") or fmt.get("vbr") or 0)
+                ranked.append((-h, -tbr, u))
         elif acodec not in (None, "none"):
             audios.append(u)
+    ranked.sort()
+    videos = [u for _, __, u in ranked]
     # playlist entry
     if info.get("_type") == "playlist":
         for entry in info.get("entries") or []:
             if isinstance(entry, dict):
                 sub = _meta_from_ytdlp(platform, url, entry)
-                videos.extend(sub.get("video_urls") or [])
+                videos = list(sub.get("video_urls") or []) + videos
                 audios.extend(sub.get("audio_urls") or [])
                 if not meta.get("image_urls") and sub.get("image_urls"):
                     meta["image_urls"] = sub["image_urls"]
                 if not meta.get("title") and sub.get("title"):
                     meta["title"] = sub["title"]
                 break
-    meta["video_urls"] = list(dict.fromkeys(videos))[:3]
+    meta["video_urls"] = sort_media_urls_by_quality(videos, kind="video")[:5]
     meta["audio_urls"] = list(dict.fromkeys(audios))[:2]
     if not meta["video_urls"] and not meta["audio_urls"] and not meta["image_urls"]:
         meta["error"] = "yt-dlp 未提取到可发送媒体"

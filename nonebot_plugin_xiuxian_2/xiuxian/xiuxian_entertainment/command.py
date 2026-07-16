@@ -39,6 +39,7 @@ from ..xiuxian_utils.lay_out import Cooldown
 
 from .media_parser.config import get_fun_media_parser_config
 from .media_parser.service import extract_links, run_parse_and_build_messages, dedupe_media_urls_preserve_order
+from .media_parser.native import MEDIA_MAX_BYTES, sort_media_urls_by_quality
 from .io_runtime import (
     AUDIO_SEND_TIMEOUT,
     IMAGE_SEND_TIMEOUT,
@@ -264,12 +265,17 @@ async def fun_media_send_parse_result(
         return
 
     texts, images, videos, cards = await run_parse_and_build_messages(source_text)
-    images = dedupe_media_urls_preserve_order(images)
-    videos = dedupe_media_urls_preserve_order(videos)
+    images = sort_media_urls_by_quality(
+        dedupe_media_urls_preserve_order(images), kind="image"
+    )
+    videos = sort_media_urls_by_quality(
+        dedupe_media_urls_preserve_order(videos), kind="video"
+    )
     body = "\n\n".join(t for t in texts if t).strip()
     has_video = bool(videos)
     has_card = bool(cards)
     md_on = bool(getattr(XiuConfig(), "markdown_status", False))
+    max_bytes = int(MEDIA_MAX_BYTES)
 
     def _is_passive_limit_error(exc: BaseException) -> bool:
         text = str(exc)
@@ -292,8 +298,79 @@ async def fun_media_send_parse_result(
             )
         )
 
-    def _download_video_local(url: str, referer: str = "https://www.bilibili.com") -> Path:
-        """带 Referer 下载到缓存，返回本地路径。"""
+    def _media_headers(url: str) -> dict[str, str]:
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/122.0.0.0 Safari/537.36"
+            ),
+            "Accept": "*/*",
+        }
+        low = (url or "").lower()
+        if any(x in low for x in ("bilivideo", "hdslb", "bilibili")):
+            headers["Referer"] = "https://www.bilibili.com"
+            headers["Origin"] = "https://www.bilibili.com"
+        elif "weibo" in low or "sinaimg" in low:
+            headers["Referer"] = "https://weibo.com/"
+        elif "xhscdn" in low or "xiaohongshu" in low:
+            headers["Referer"] = "https://www.xiaohongshu.com/"
+        elif "douyin" in low or "byte" in low:
+            headers["Referer"] = "https://www.douyin.com/"
+        elif "kuaishou" in low or "kwimgs" in low or "yximgs" in low:
+            headers["Referer"] = "https://www.kuaishou.com/"
+        return headers
+
+    def _probe_media_size(url: str) -> int | None:
+        """探测媒体大小（字节）。未知返回 None。"""
+        headers = _media_headers(url)
+        # 1) HEAD
+        try:
+            resp = http_client.request(
+                "HEAD",
+                url,
+                timeout=12,
+                check_status=False,
+                use_config_proxy=False,
+                headers=headers,
+            )
+            cl = resp.headers.get("Content-Length") or resp.headers.get("content-length")
+            if cl and str(cl).isdigit():
+                return int(cl)
+        except Exception:
+            pass
+        # 2) Range 0-0
+        try:
+            h2 = dict(headers)
+            h2["Range"] = "bytes=0-0"
+            resp = http_client.request(
+                "GET",
+                url,
+                timeout=15,
+                check_status=False,
+                use_config_proxy=False,
+                headers=h2,
+                stream=True,
+            )
+            cr = resp.headers.get("Content-Range") or resp.headers.get("content-range") or ""
+            # bytes 0-0/12345
+            if "/" in cr:
+                total = cr.rsplit("/", 1)[-1]
+                if total.isdigit():
+                    return int(total)
+            cl = resp.headers.get("Content-Length") or resp.headers.get("content-length")
+            if cl and str(cl).isdigit() and int(getattr(resp, "status_code", 0) or 0) != 206:
+                return int(cl)
+        except Exception:
+            pass
+        return None
+
+    def _download_video_local(
+        url: str,
+        referer: str = "https://www.bilibili.com",
+        max_bytes: int = MEDIA_MAX_BYTES,
+    ) -> Path:
+        """带 Referer 下载到缓存，返回本地路径。超过 max_bytes 抛错供降档。"""
         import hashlib
 
         from nonebot_plugin_xiuxian_2.paths import get_paths
@@ -302,9 +379,18 @@ async def fun_media_send_parse_result(
         cache.mkdir(parents=True, exist_ok=True)
         name = hashlib.sha1(url.encode("utf-8")).hexdigest()[:20] + ".mp4"
         out = cache / name
-        if out.is_file() and out.stat().st_size > 1024:
+        if out.is_file() and 1024 < out.stat().st_size <= max_bytes:
             return out
+        # 缓存过大则删掉重下/换档
+        if out.is_file() and out.stat().st_size > max_bytes:
+            try:
+                out.unlink(missing_ok=True)
+            except Exception:
+                pass
 
+        headers = _media_headers(url)
+        if referer:
+            headers["Referer"] = referer
         resp = http_client.request(
             "GET",
             url,
@@ -312,21 +398,11 @@ async def fun_media_send_parse_result(
             stream=True,
             check_status=False,
             use_config_proxy=False,
-            headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/122.0.0.0 Safari/537.36"
-                ),
-                "Referer": referer,
-                "Origin": "https://www.bilibili.com",
-                "Accept": "*/*",
-            },
+            headers=headers,
         )
         code = int(getattr(resp, "status_code", 0) or 0)
         if code >= 400:
             raise RuntimeError(f"视频下载 HTTP {code}")
-        max_bytes = 25 * 1024 * 1024
         size = 0
         tmp = out.with_suffix(".tmp")
         with tmp.open("wb") as f:
@@ -339,9 +415,7 @@ async def fun_media_send_parse_result(
                         tmp.unlink(missing_ok=True)
                     except Exception:
                         pass
-                    raise RuntimeError(
-                        f"视频超过 {max_bytes // (1024 * 1024)}MB，放弃本地下载"
-                    )
+                    raise RuntimeError(f"视频超过 {max_bytes // (1024 * 1024)}MB")
                 f.write(chunk)
         if size < 1024:
             try:
@@ -363,29 +437,63 @@ async def fun_media_send_parse_result(
             logger.warning(f"{label}失败: {e}")
             return False
 
-    async def _send_video_url(vid: str) -> bool:
-        """发送视频：B 站等先本地下载，其它仍 URL 直发。"""
-        if _needs_local_video_download(vid):
+    async def _pick_and_send_video(candidates: list[str]) -> bool:
+        """最高清优先；>20MB 自动降档。"""
+        last_err: Exception | None = None
+        for vid in candidates[:5]:
             try:
-                local = await run_blocking_io(
-                    _download_video_local,
-                    vid,
-                    "https://www.bilibili.com",
-                    timeout=120,
+                size = await run_blocking_io(_probe_media_size, vid, timeout=20)
+            except Exception:
+                size = None
+            if isinstance(size, int) and size > max_bytes:
+                logger.info(
+                    f"跳过超限视频 {size / (1024 * 1024):.1f}MB > "
+                    f"{max_bytes // (1024 * 1024)}MB: {vid[:80]}"
                 )
-                return await _safe_send_media(
-                    Path(local),
-                    media_type="视频",
-                    label=f"发送本地下载视频 {Path(local).name}",
-                )
-            except Exception as e:
-                logger.warning(f"B站视频本地下载失败，尝试直链: {e}")
+                continue
 
-        return await _safe_send_media(
-            MessageSegment.video(bot, vid),
-            media_type="视频",
-            label=f"发送解析视频 {vid[:80]}",
-        )
+            # B站等：本地下载（同样受 20MB 限制）
+            if _needs_local_video_download(vid):
+                try:
+                    local = await run_blocking_io(
+                        _download_video_local,
+                        vid,
+                        "https://www.bilibili.com",
+                        max_bytes,
+                        timeout=120,
+                    )
+                    ok = await _safe_send_media(
+                        Path(local),
+                        media_type="视频",
+                        label=f"发送本地下载视频 {Path(local).name}",
+                    )
+                    if ok:
+                        return True
+                except Exception as e:
+                    last_err = e
+                    msg = str(e)
+                    if "超过" in msg and "MB" in msg:
+                        logger.info(f"本地下载超限降档: {e}")
+                        continue
+                    logger.warning(f"B站视频本地下载失败，尝试下一档/直链: {e}")
+
+            # URL 直发（快手/微博等）
+            try:
+                ok = await _safe_send_media(
+                    MessageSegment.video(bot, vid),
+                    media_type="视频",
+                    label=f"发送解析视频 {vid[:80]}",
+                )
+                if ok:
+                    return True
+            except Exception as e:
+                last_err = e
+                if _is_passive_limit_error(e):
+                    raise
+                continue
+        if last_err:
+            raise last_err
+        return False
 
     async def _send_card_with_info() -> bool:
         """卡片 + 解析信息 用图文接口同发（1 条被动回复）。"""
@@ -434,26 +542,25 @@ async def fun_media_send_parse_result(
         await _send_card_with_info()
 
         if has_video:
-            sent_video = False
             last_err: Exception | None = None
-            for vid in videos[:2]:
+            try:
+                sent = await _pick_and_send_video(videos)
+            except Exception as e:
+                sent = False
+                last_err = e
+                if _is_passive_limit_error(e):
+                    return
+            if not sent:
                 try:
-                    ok = await _send_video_url(vid)
-                    if ok:
-                        sent_video = True
-                        break
-                except Exception as e:
-                    last_err = e
-                    if _is_passive_limit_error(e):
-                        return
-                    continue
-            if not sent_video and last_err:
-                try:
+                    tip = (
+                        f"【媒体解析】视频发送失败"
+                        + (f"：{last_err}" if last_err else "（可能均超过20MB或链路失败）")
+                        + "\n可尝试打开原始链接观看。"
+                    )
                     await handle_send(
                         bot,
                         event,
-                        f"【媒体解析】视频发送失败：{last_err}\n"
-                        f"可尝试打开原始链接观看。",
+                        tip,
                         md_type="娱乐",
                         k1="链接解析",
                         v1="链接解析",
