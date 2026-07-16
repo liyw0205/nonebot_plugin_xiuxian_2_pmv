@@ -121,8 +121,10 @@ class WorkClaimService:
                     return WorkClaimResult("state_changed")
 
                 remaining = expected_count - 1
+                # 同一 user_id 若有重复行，更新多行也算成功
                 conn.execute(
-                    "UPDATE user_xiuxian SET work_num=%s WHERE user_id=%s AND work_num=%s",
+                    "UPDATE user_xiuxian SET work_num=%s WHERE user_id=%s "
+                    "AND CAST(COALESCE(work_num,0) AS INTEGER)=%s",
                     (remaining, user_id, expected_count),
                 )
                 conn.execute(
@@ -557,13 +559,25 @@ class WorkRefreshSettlementService:
                 if user is None or cd is None:
                     conn.rollback()
                     return WorkRefreshResult("user_missing")
-                actual_cd = {"type": int(cd[0]), "create_time": cd[1], "scheduled_time": cd[2]}
-                normalized_cd = {
-                    "type": int(expected_cd.get("type", 0)),
-                    "create_time": expected_cd.get("create_time"),
-                    "scheduled_time": expected_cd.get("scheduled_time"),
+
+                def _blank(v):
+                    if v is None:
+                        return None
+                    s = str(v).strip()
+                    return None if s == "" or s.lower() in {"none", "null"} else v
+
+                actual_cd = {
+                    "type": int(cd[0] or 0),
+                    "create_time": _blank(cd[1]),
+                    "scheduled_time": _blank(cd[2]),
                 }
-                if int(user[0]) != expected_count or actual_cd != normalized_cd or actual_cd["type"] != 0:
+                normalized_cd = {
+                    "type": int(expected_cd.get("type", 0) or 0),
+                    "create_time": _blank(expected_cd.get("create_time")),
+                    "scheduled_time": _blank(expected_cd.get("scheduled_time")),
+                }
+                # work_num may be TEXT historically; coerce both sides
+                if int(float(user[0] or 0)) != expected_count or actual_cd != normalized_cd or actual_cd["type"] != 0:
                     conn.rollback()
                     return WorkRefreshResult("state_changed")
 
@@ -579,11 +593,13 @@ class WorkRefreshSettlementService:
                     return WorkRefreshResult("offer_exists")
 
                 remaining = expected_count - 1
+                # 同一 user_id 若有重复 user_xiuxian 行，会更新多行；rowcount>=1 即成功
                 changed = conn.execute(
-                    "UPDATE user_xiuxian SET work_num=%s WHERE user_id=%s AND work_num=%s",
+                    "UPDATE user_xiuxian SET work_num=%s WHERE user_id=%s "
+                    "AND CAST(COALESCE(work_num,0) AS INTEGER)=%s",
                     (remaining, user_id, expected_count),
                 )
-                if changed.rowcount != 1:
+                if changed.rowcount < 1:
                     conn.rollback()
                     return WorkRefreshResult("state_changed")
                 conn.execute(
@@ -708,11 +724,13 @@ class WorkAbortCleanupService:
                 applied_penalty = min(penalty, stone) if reason == "active_abort" else 0
                 remaining = stone - applied_penalty
                 if applied_penalty:
+                    # 重复 user_id 行：CAST 比较 + rowcount>=1
                     changed = conn.execute(
-                        "UPDATE user_xiuxian SET stone=%s WHERE user_id=%s AND stone=%s",
+                        "UPDATE user_xiuxian SET stone=%s WHERE user_id=%s "
+                        "AND CAST(COALESCE(stone,0) AS REAL)=CAST(%s AS REAL)",
                         (remaining, user_id, stone),
                     )
-                    if changed.rowcount != 1:
+                    if changed.rowcount < 1:
                         conn.rollback()
                         return WorkAbortCleanupResult("state_changed")
                 conn.execute(
