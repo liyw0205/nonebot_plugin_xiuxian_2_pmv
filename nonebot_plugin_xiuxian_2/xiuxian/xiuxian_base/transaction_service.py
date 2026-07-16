@@ -86,24 +86,26 @@ class SignInService:
                     conn.rollback()
                     return SignInResult("duplicate", user_id, int(previous[0]))
 
-                user = conn.execute(
-                    "SELECT is_sign FROM user_xiuxian WHERE user_id=%s",
+                # 同一 openid 可能有多行；只要还有未签到行就允许签到
+                users = conn.execute(
+                    "SELECT CAST(COALESCE(is_sign,0) AS INTEGER) FROM user_xiuxian WHERE user_id=%s",
                     (user_id,),
-                ).fetchone()
-                if user is None:
+                ).fetchall()
+                if not users:
                     conn.rollback()
                     return SignInResult("user_missing", user_id)
-                if int(user[0] or 0) == 1:
+                if all(int(row[0] or 0) == 1 for row in users):
                     conn.rollback()
                     return SignInResult("already_signed", user_id)
 
                 stone = int(self._randint(stone_lower, stone_upper))
+                # 重复 user_id 会更新多行：rowcount>=1 即成功，避免误报「贪心」
                 updated = conn.execute(
                     "UPDATE user_xiuxian SET is_sign=1, stone=CAST(COALESCE(stone,0) AS INTEGER)+%s "
                     "WHERE user_id=%s AND CAST(COALESCE(is_sign,0) AS INTEGER)=0",
                     (stone, user_id),
                 )
-                if updated.rowcount != 1:
+                if updated.rowcount < 1:
                     conn.rollback()
                     return SignInResult("already_signed", user_id)
                 conn.execute(

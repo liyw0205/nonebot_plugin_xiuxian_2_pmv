@@ -193,7 +193,7 @@ class BegDailyRewardService:
                     "AND COALESCE(is_beg,0)=0",
                     (final_stone, user_id, expected_stone),
                 )
-                if changed.rowcount != 1:
+                if changed.rowcount < 1:
                     conn.rollback()
                     return BegDailyRewardResult("state_changed")
                 self._checkpoint("after_user_update")
@@ -377,7 +377,7 @@ class NoviceGiftClaimService:
                     "WHERE user_id=%s AND COALESCE(is_novice,0)=0 AND create_time=%s",
                     (stone, user_id, user[0]),
                 )
-                if changed.rowcount != 1:
+                if changed.rowcount < 1:
                     conn.rollback()
                     return NoviceGiftClaimResult("state_changed")
                 self._checkpoint("after_user_update")
