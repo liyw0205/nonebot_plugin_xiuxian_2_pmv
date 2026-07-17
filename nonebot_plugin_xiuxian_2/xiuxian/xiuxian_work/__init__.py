@@ -204,7 +204,7 @@ async def get_work_status_message(user_id: str, work_data: dict) -> str:
         
         work_list = []
         work_msg_f = f"【道友的悬赏令】\n剩余时间：{remaining_minutes}分钟\n"
-        tasks = list(work_data["tasks"].items())
+        tasks = _ordered_work_tasks(work_data)
         for n, (task_name, task_data) in enumerate(tasks, 1):
             item_msg = format_reward_item(task_data["item_id"])
             work_list.append([task_name, task_data["time"]])
@@ -343,6 +343,32 @@ def generate_work_message(work_list: list, freenum: int) -> str:
     return work_msg_f
 
 
+def _ordered_work_tasks(work_data: dict | None) -> list[tuple[str, dict]]:
+    """
+    按刷新时的固定顺序返回任务列表。
+    原因：save 时 sort_keys=True 会把 tasks 字典按任务名重排，
+    展示编号与接取编号会错位（例如显示第2条，接取却变成第3条）。
+    """
+    data = work_data or {}
+    tasks = dict(data.get("tasks") or {})
+    if not tasks:
+        return []
+    order = data.get("task_order")
+    if isinstance(order, list) and order:
+        ordered: list[tuple[str, dict]] = []
+        seen: set[str] = set()
+        for name in order:
+            key = str(name)
+            if key in tasks and key not in seen:
+                ordered.append((key, tasks[key]))
+                seen.add(key)
+        for name, task in tasks.items():
+            if name not in seen:
+                ordered.append((name, task))
+        return ordered
+    return list(tasks.items())
+
+
 def _work_operation_id(event, action: str, user_id: str) -> str:
     message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     return f"work-{action}:{user_id}:{message_id or time.time_ns()}"
@@ -461,7 +487,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 
     def _offer_task_list(offer: dict | None) -> list:
         task_list = []
-        for name, data in ((offer or {}).get("tasks") or {}).items():
+        for name, data in _ordered_work_tasks(offer):
             task_list.append([
                 name,
                 data.get("rate", data.get("成功率", 0)),
@@ -758,7 +784,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="刷新", v2="悬赏令确认刷新", k3="帮助", v3="悬赏令帮助")
             await do_work.finish()
         
-        tasks = list(work_data["tasks"].items())
+        tasks = _ordered_work_tasks(work_data)
         if work_num < 1 or work_num > len(tasks):
             msg = "没有这样的悬赏编号！"
             await handle_send(bot, event, msg)

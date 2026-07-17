@@ -53,30 +53,40 @@ def _fallback_rule() -> Rule:
             return False
         if not isinstance(event, (GroupMessageEvent, PrivateMessageEvent)):
             return False
-        # 全量群：表情/闲聊也会进消息事件，不要刷默认回复
+
+        # 私聊：保持默认回复
+        if isinstance(event, PrivateMessageEvent):
+            return True
+
+        # 全量消息事件：仅艾特机器人时才默认回复
+        event_name = " ".join(
+            str(x)
+            for x in (
+                getattr(event, "__type__", None),
+                getattr(event, "type", None),
+            )
+            if x is not None
+        )
+        try:
+            event_name = f"{event_name} {event.get_event_name()}"
+        except Exception:
+            pass
+        event_name = event_name.upper()
+
+        to_me = bool(getattr(event, "to_me", False))
+        if "GROUP_MESSAGE_CREATE" in event_name:
+            return to_me
+
+        # 已标记全量群：闲聊不刷，艾特才回
         try:
             from ..xiuxian_config import JsonConfig
 
             group_id = str(getattr(event, "group_id", "") or "").strip()
             if group_id and JsonConfig().is_full_message_group(group_id):
-                return False
-            # QQ 全量消息事件：即便尚未标记，也不用默认回复刷屏
-            event_name = " ".join(
-                str(x)
-                for x in (
-                    getattr(event, "__type__", None),
-                    getattr(event, "type", None),
-                )
-                if x is not None
-            )
-            try:
-                event_name = f"{event_name} {event.get_event_name()}"
-            except Exception:
-                pass
-            if "GROUP_MESSAGE_CREATE" in event_name.upper():
-                return False
+                return to_me
         except Exception:
             pass
+
         return True
 
     return Rule(_checker)

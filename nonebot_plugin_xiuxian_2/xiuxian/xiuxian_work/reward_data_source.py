@@ -56,8 +56,13 @@ def savef(user_id, data, sync_snapshot=True):
         os.makedirs(PLAYERSDATA / user_id)
     
     FILEPATH = PLAYERSDATA / user_id / "workinfo.json"
+    # 保留 task_order，保证「悬赏编号」与接取一致（避免 sort_keys 打乱 dict 顺序）
+    task_order = data.get("task_order")
+    if not task_order:
+        task_order = list((data.get("tasks") or {}).keys())
     save_data = {
         "tasks": data["tasks"],
+        "task_order": list(task_order),
         "status": data.get("status", 1),  # 默认1-未接取
         "refresh_time": data.get("refresh_time", datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')),
         "user_level": data.get("user_level")

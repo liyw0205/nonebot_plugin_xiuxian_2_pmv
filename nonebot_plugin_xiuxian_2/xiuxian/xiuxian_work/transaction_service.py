@@ -68,11 +68,25 @@ class WorkClaimService:
         started_at = str(started_at)
         offer = dict(expected_offer)
         tasks = list(dict(offer.get("tasks") or {}).items())
+        # 优先使用刷新时固化的 task_order，避免 sort_keys 后编号错位
+        order = offer.get("task_order")
+        if isinstance(order, list) and order:
+            task_map = dict(tasks)
+            ordered = []
+            for name in order:
+                key = str(name)
+                if key in task_map:
+                    ordered.append((key, task_map[key]))
+            for name, data in tasks:
+                if name not in {n for n, _ in ordered}:
+                    ordered.append((name, data))
+            tasks = ordered
         if not operation_id or expected_count <= 0 or task_index < 1 or task_index > len(tasks):
             raise ValueError("valid operation, available count and task index are required")
         task_name, task_data = tasks[task_index - 1]
         snapshot = {
             "tasks": offer["tasks"],
+            "task_order": [name for name, _ in tasks],
             "status": 2,
             "refresh_time": offer.get("refresh_time"),
             "user_level": offer.get("user_level"),

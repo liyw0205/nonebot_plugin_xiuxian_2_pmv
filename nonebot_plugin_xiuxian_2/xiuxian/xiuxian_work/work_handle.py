@@ -39,9 +39,10 @@ class workhandle(XiuxianJsonDate):
             data = workmake(level, exp, user_info['level'])
             get_work_list = []
             
-            # 构建悬赏令数据结构
+            # 构建悬赏令数据结构（task_order 固定展示/接取编号，避免 JSON sort_keys 打乱顺序）
             work_data = {
                 "tasks": {},
+                "task_order": [],
                 "status": 1,
                 "refresh_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 "user_level": level
@@ -58,6 +59,7 @@ class workhandle(XiuxianJsonDate):
                     v[4],       # 成功消息
                     v[5]        # 失败消息
                 ])
+                work_data["task_order"].append(k)
                 
                 # 保存完整任务数据
                 work_data["tasks"][k] = {
