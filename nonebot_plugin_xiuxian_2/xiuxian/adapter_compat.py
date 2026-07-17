@@ -1101,6 +1101,15 @@ def get_chat_scene(event: BaseEvent) -> str:
         return "group"
     if is_private_event(event):
         return "private"
+    # QQ 群生命周期 notice（bot 入群 / 成员入群等）带 group_openid，按群聊处理
+    if HAS_QQ:
+        et = str(
+            getattr(event, "__type__", None)
+            or getattr(event, "type", None)
+            or ""
+        ).upper()
+        if "GROUP" in et and _to_nonempty_str(getattr(event, "group_openid", None)):
+            return "group"
     return "unknown"
 
 

@@ -1,4 +1,4 @@
-"""进群欢迎：成员欢迎 / bot入驻 分开；全量群标记不在此处理。"""
+"""进群欢迎：成员欢迎 / bot入驻 分开；开启 Markdown 时发蓝字+按钮。"""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from nonebot.log import logger
 from nonebot.matcher import Matcher
 from nonebot.permission import SUPERUSER
 
-from ..adapter_compat import Bot, GroupMessageEvent, PrivateMessageEvent
+from ..adapter_compat import Bot, GroupMessageEvent, MessageSegment, PrivateMessageEvent
 from ..on_compat import on_command
 from ..qq_compat.lifecycle import apply_lifecycle_event, is_lifecycle_event
 from ..xiuxian_config import JsonConfig, XiuConfig
@@ -63,11 +63,54 @@ def _bot_join_text() -> str:
     msg = (getattr(XiuConfig(), "group_bot_join_msg", None) or "").strip()
     if msg:
         return msg
-    # 未配置时也不复用成员欢迎文案，避免“同一段话”
     return (
         "修仙之路波澜壮阔，修仙助手到了。\n"
         "先发【我要修仙】入门，不会玩就【修仙帮助】/【娱乐帮助】。"
     )
+
+
+def _format_welcome_markdown(msg: str, *, kind: str) -> str:
+    """把纯文案整理成更易读的 Markdown（不破坏已有 md 语法）。"""
+    text = (msg or "").strip() or " "
+    # 已是 md 链接/加粗则不重复加工
+    if "[" in text and "](" in text:
+        body = text.replace("\n", "\r")
+    else:
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        if not lines:
+            body = " "
+        else:
+            title = lines[0]
+            rest = lines[1:]
+            parts = [f"**{title}**"]
+            for ln in rest:
+                # 指令名轻微强调，提升可读
+                for cmd in ("我要修仙", "修仙帮助", "娱乐帮助", "关闭进群欢迎", "开启进群欢迎"):
+                    ln = ln.replace(f"【{cmd}】", f"**{cmd}**").replace(cmd, f"**{cmd}**")
+                parts.append(f"> {ln}" if not ln.startswith(">") else ln)
+            body = "\r".join(parts)
+
+    # 蓝字快捷指令
+    links = (
+        "[我要修仙](mqqapi://aio/inlinecmd?command=我要修仙&enter=false&reply=false)"
+        " | [修仙帮助](mqqapi://aio/inlinecmd?command=修仙帮助&enter=false&reply=false)"
+        " | [娱乐帮助](mqqapi://aio/inlinecmd?command=娱乐帮助&enter=false&reply=false)"
+        " | [关闭欢迎](mqqapi://aio/inlinecmd?command=关闭进群欢迎&enter=false&reply=false)"
+    )
+    return f"{body}\r\r---\r\r{links}"
+
+
+def _welcome_buttons(kind: str) -> list[list[tuple[str, str]]]:
+    # keyboard 真按钮（markdown_button_status 开启时）
+    if kind == "Bot入驻":
+        return [
+            [("我要修仙", "我要修仙"), ("修仙帮助", "修仙帮助"), ("娱乐帮助", "娱乐帮助")],
+            [("关闭欢迎", "关闭进群欢迎")],
+        ]
+    return [
+        [("我要修仙", "我要修仙"), ("修仙帮助", "修仙帮助"), ("娱乐帮助", "娱乐帮助")],
+        [("关闭欢迎", "关闭进群欢迎")],
+    ]
 
 
 async def _send_group_notice(bot: Bot, event, group_id: str, msg: str, *, kind: str) -> None:
@@ -78,12 +121,75 @@ async def _send_group_notice(bot: Bot, event, group_id: str, msg: str, *, kind: 
     except Exception:
         pass
 
-    # lifecycle notice：优先 bot.send（带 event_id）
+    cfg = XiuConfig()
+    plain = msg
+    md_text = _format_welcome_markdown(msg, kind=kind)
+
+    # 1) 优先统一 Markdown 体系（模板 / 原生蓝字 / 真按钮）
+    if bool(getattr(cfg, "markdown_status", False)):
+        try:
+            await handle_send(
+                bot,
+                event,
+                plain,
+                md_type="修仙",
+                k1="我要修仙",
+                v1="我要修仙",
+                k2="修仙帮助",
+                v2="修仙帮助",
+                k3="娱乐帮助",
+                v3="娱乐帮助",
+                k4="关闭欢迎",
+                v4="关闭进群欢迎",
+                # 入群 notice 不宜 @ 一个不存在的“消息发送者”
+                at_msg=False,
+            )
+            logger.info(f"[{kind}] 已发送 group={group_id} via=handle_send(md)")
+            return
+        except Exception as e:
+            logger.warning(f"[{kind}] handle_send(md) 失败 group={group_id}: {e}")
+
+        # 2) 直接构造 Markdown 段，走 bot.send（lifecycle 适配器已支持）
+        try:
+            if bool(getattr(cfg, "markdown_button_status", False)):
+                message = MessageSegment.markdown_keyboard(
+                    bot, md_text.split("\r\r---\r\r")[0], _welcome_buttons(kind)
+                )
+            else:
+                message = MessageSegment.markdown(bot, md_text)
+            send = getattr(bot, "send", None)
+            if callable(send):
+                await send(event, message)
+                logger.info(f"[{kind}] 已发送 group={group_id} via=bot.send(md)")
+                return
+        except Exception as e:
+            logger.warning(f"[{kind}] bot.send(md) 失败 group={group_id}: {e}")
+
+        try:
+            send_to_group = getattr(bot, "send_to_group", None)
+            if callable(send_to_group):
+                event_id = getattr(event, "event_id", None) or getattr(event, "id", None)
+                if bool(getattr(cfg, "markdown_button_status", False)):
+                    message = MessageSegment.markdown_keyboard(
+                        bot, md_text.split("\r\r---\r\r")[0], _welcome_buttons(kind)
+                    )
+                else:
+                    message = MessageSegment.markdown(bot, md_text)
+                kwargs = {"group_openid": group_id, "message": message}
+                if event_id:
+                    kwargs["event_id"] = event_id
+                await send_to_group(**kwargs)
+                logger.info(f"[{kind}] 已发送 group={group_id} via=send_to_group(md)")
+                return
+        except Exception as e:
+            logger.warning(f"[{kind}] send_to_group(md) 失败 group={group_id}: {e}")
+
+    # 3) 纯文本兜底
     try:
         send = getattr(bot, "send", None)
         if callable(send):
-            await send(event, msg)
-            logger.info(f"[{kind}] 已发送 group={group_id} via=bot.send")
+            await send(event, plain)
+            logger.info(f"[{kind}] 已发送 group={group_id} via=bot.send(plain)")
             return
     except Exception as e:
         logger.warning(f"[{kind}] bot.send 失败 group={group_id}: {e}")
@@ -92,31 +198,18 @@ async def _send_group_notice(bot: Bot, event, group_id: str, msg: str, *, kind: 
         send_to_group = getattr(bot, "send_to_group", None)
         if callable(send_to_group):
             event_id = getattr(event, "event_id", None) or getattr(event, "id", None)
-            kwargs = {"group_openid": group_id, "message": msg}
+            kwargs = {"group_openid": group_id, "message": plain}
             if event_id:
                 kwargs["event_id"] = event_id
             await send_to_group(**kwargs)
-            logger.info(f"[{kind}] 已发送 group={group_id} via=send_to_group")
+            logger.info(f"[{kind}] 已发送 group={group_id} via=send_to_group(plain)")
             return
     except Exception as e:
         logger.warning(f"[{kind}] send_to_group 失败 group={group_id}: {e}")
 
     try:
-        await handle_send(
-            bot,
-            event,
-            msg,
-            md_type="修仙",
-            k1="我要修仙",
-            v1="我要修仙",
-            k2="修仙帮助",
-            v2="修仙帮助",
-            k3="关闭欢迎",
-            v3="关闭进群欢迎",
-            k4="娱乐帮助",
-            v4="娱乐帮助",
-        )
-        logger.info(f"[{kind}] 已发送 group={group_id} via=handle_send")
+        await handle_send(bot, event, plain, at_msg=False)
+        logger.info(f"[{kind}] 已发送 group={group_id} via=handle_send(plain)")
     except Exception as e:
         logger.warning(f"[{kind}] 发送失败 group={group_id}: {e}")
 
@@ -145,13 +238,11 @@ async def handle_group_lifecycle(bot: Bot, event, matcher: Matcher):
         if not gid or not conf.is_group_welcome_enabled(gid):
             return
 
-        # bot 入群：单独文案（入驻提示）
         if action == "bot_join_group":
             logger.info(f"[Bot入驻] group={gid} event={event_name}")
             await _send_group_notice(bot, event, gid, _bot_join_text(), kind="Bot入驻")
             await matcher.finish()
 
-        # 成员入群：欢迎文案（需要 intent.group_members）
         if action == "member_join_group":
             logger.info(f"[成员欢迎] group={gid} event={event_name}")
             await _send_group_notice(bot, event, gid, _member_welcome_text(), kind="成员欢迎")
