@@ -120,6 +120,89 @@ def get_random_chat_notice():
 bu_ji_notice = random.choice(["别急！","急也没用!","让我先急!"])
 
 
+def _event_type_name(event) -> str:
+    names: list[str] = []
+    for attr in ("__type__", "type"):
+        value = getattr(event, attr, None)
+        if value is not None:
+            names.append(str(value))
+    try:
+        names.append(str(event.get_event_name()))
+    except Exception:
+        pass
+    return " ".join(names).upper()
+
+
+def _is_full_message_event(event) -> bool:
+    """QQ 全量消息事件（非艾特专用通道）。"""
+    return "GROUP_MESSAGE_CREATE" in _event_type_name(event)
+
+
+def _is_explicit_command_intent(event, matcher: Matcher | None = None) -> bool:
+    """
+    是否像“真的在打指令”，用于全量群冷却提示：
+    - 私聊：始终视为指令意图
+    - 群聊：@机器人 / 非全量事件 / 有命令主键且带文本
+    纯表情、空文本闲聊：不算
+    """
+    if isinstance(event, PrivateMessageEvent):
+        return True
+
+    # 明确艾特机器人：保留提示
+    if bool(getattr(event, "to_me", False)):
+        return True
+
+    # 非全量消息事件（如 GROUP_AT_MESSAGE_CREATE）通常就是指令通道
+    if not _is_full_message_event(event):
+        return True
+
+    # 全量消息：必须有可识别文本，且 matcher 本身是命令路由
+    plain = ""
+    try:
+        plain = str(event.get_plaintext() if hasattr(event, "get_plaintext") else "").strip()
+    except Exception:
+        plain = ""
+    if not plain:
+        try:
+            msg = event.get_message()
+            if hasattr(msg, "extract_plain_text"):
+                plain = str(msg.extract_plain_text() or "").strip()
+        except Exception:
+            plain = ""
+    if not plain:
+        # 纯表情/图片/空消息：不提示
+        return False
+
+    # 有文本 + 已进入带 Cooldown 的命令 handler：视为指令意图
+    # （matcher 能命中说明不是完全无关闲聊）
+    if matcher is not None:
+        try:
+            from ..on_compat import _PRIMARY_COMMAND_NAMES  # type: ignore
+
+            primary = _PRIMARY_COMMAND_NAMES.get(type(matcher)) or _PRIMARY_COMMAND_NAMES.get(matcher)
+            if primary:
+                return True
+        except Exception:
+            pass
+        cmds = getattr(matcher, "commands", None) or set()
+        if cmds:
+            return True
+
+    return False
+
+
+def _should_silence_full_group_notice(conf: JsonConfig, group_id: str | None, event, matcher: Matcher | None = None) -> bool:
+    """
+    全量群冷却/限流提示策略：
+    - 非全量群：不静默
+    - 全量群 + 明确指令意图（艾特/命令）：不静默，正常提示
+    - 全量群 + 闲聊/表情：静默
+    """
+    if not group_id or not conf.is_full_message_group(group_id):
+        return False
+    return not _is_explicit_command_intent(event, matcher)
+
+
 class CooldownIsolateLevel(IntEnum):
     """命令冷却的隔离级别"""
 
@@ -207,8 +290,8 @@ def Cooldown(
 
         limit_type = limit_all_run(str(event.get_user_id()))
         if limit_type is True:
-            # 全量群：表情/闲聊也会进事件，不发“别急”提示
-            if group_id and conf.is_full_message_group(group_id):
+            # 全量群：闲聊/表情不刷“别急”；正常艾特/指令仍提示
+            if _should_silence_full_group_notice(conf, group_id, event, matcher):
                 await matcher.finish()
             bot = await assign_bot_group(group_id=group_id)
             await delivery_service.reply(bot, event, bu_ji_notice)
@@ -304,8 +387,8 @@ def Cooldown(
             return
         if running[key] <= 0:
             if cd_time >= 1.5:
-                # 全量群不刷冷却随机回复
-                if group_id and conf.is_full_message_group(group_id):
+                # 全量群：闲聊/表情静默；正常艾特/指令保留冷却提示
+                if _should_silence_full_group_notice(conf, group_id, event, matcher):
                     await matcher.finish()
                 time = int(cd_time - (loop.time() - time_sy[key]))
                 if time <= 1:
