@@ -24,6 +24,7 @@ class AdapterSelection:
 
 
 def normalize_adapter_source(value: object) -> AdapterSource:
+    # 默认 vendor：无 env 时也强制内置，不依赖 pip 版本
     source = str(value or "vendor").strip().lower()
     if source not in {"vendor", "installed", "auto"}:
         raise ValueError(
@@ -41,6 +42,9 @@ def get_requested_adapter_source() -> AdapterSource:
             configured = getattr(get_driver().config, "xiuxian_adapter_source", None)
         except Exception:
             configured = None
+    # None / 空串 -> vendor
+    if configured is None or str(configured).strip() == "":
+        return "vendor"
     return normalize_adapter_source(configured)
 
 
@@ -75,12 +79,11 @@ def configure_adapter_paths(source: object = None) -> AdapterSelection:
     if adapter_path is None:
         return AdapterSelection(requested=requested, effective={})
 
-    vendor_paths = {str(path) for path in _ADAPTER_PATHS.values()}
+    vendor_paths = {str(path) for path in _ADAPTER_PATHS.values() if path.exists()}
+    # 去掉旧 vendor 条目后重建：vendor 请求时一律放最前
     current = [path for path in map(str, adapter_path) if path not in vendor_paths]
     while len(adapter_path):
         adapter_path.pop()
-    for path in current:
-        adapter_path.append(path)
 
     installed = {
         name: _installed_adapter_available(name)
@@ -89,27 +92,34 @@ def configure_adapter_paths(source: object = None) -> AdapterSelection:
     effective: dict[str, str] = {}
 
     if requested == "installed":
+        for path in current:
+            adapter_path.append(path)
         effective = {
             name: "installed" if available else "unavailable"
             for name, available in installed.items()
         }
         return AdapterSelection(requested=requested, effective=effective)
 
+    # vendor / auto：vendor 路径优先
+    ordered_vendor: list[str] = []
     for name, path in _ADAPTER_PATHS.items():
         if not path.exists():
             effective[name] = "installed" if installed[name] else "unavailable"
             continue
-
         path_text = str(path)
         if requested == "vendor":
-            adapter_path.insert(0, path_text)
+            ordered_vendor.append(path_text)
             effective[name] = "vendor"
         elif installed[name]:
-            adapter_path.append(path_text)
+            # auto 且已安装：仍把 vendor 挂上作为 fallback，但标记 effective=installed
+            ordered_vendor.append(path_text)
             effective[name] = "installed"
         else:
-            adapter_path.append(path_text)
+            ordered_vendor.append(path_text)
             effective[name] = "vendor"
+
+    for path in ordered_vendor + current:
+        adapter_path.append(path)
 
     return AdapterSelection(requested=requested, effective=effective)
 

@@ -40,7 +40,22 @@ from .qq_compat import (
 )
 
 DRIVER = get_driver()
-_INTERNAL_PACKAGES = {"infrastructure", "messaging", "qq_compat"}
+_INTERNAL_PACKAGES = {
+    "infrastructure",
+    "messaging",
+    "qq_compat",
+    "xiuxian_adapter",
+    "xiuxian_utils",
+    "adapter_compat",
+    "adapter_message_actions",
+    "adapter_message_records",
+    "adapter_message_sender",
+    "broadcast_manager",
+    "command_disable",
+    "on_compat",
+    "runtime",
+    "xiuxian_config",
+}
 
 try:
     NICKNAME: str = list(DRIVER.config.nickname)[0]

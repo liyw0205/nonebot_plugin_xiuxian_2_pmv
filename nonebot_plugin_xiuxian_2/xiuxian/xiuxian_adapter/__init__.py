@@ -9,8 +9,14 @@ from .selector import (
 
 
 def ensure_vendored_adapters(prefer_vendored: bool = True) -> None:
-    """Backward-compatible wrapper for older internal imports."""
+    """强制内置 vendor 能力（路径 + intent + 成员事件）。"""
     configure_adapter_paths("vendor" if prefer_vendored else "auto")
+    try:
+        from .early_inject import force_builtin_qq_adapter
+
+        force_builtin_qq_adapter()
+    except Exception:
+        pass
 
 
 __all__ = [

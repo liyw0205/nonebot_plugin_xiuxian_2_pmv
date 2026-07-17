@@ -79,6 +79,25 @@ def _install_dependencies() -> None:
 @driver.on_startup
 async def initialize_xiuxian_runtime() -> None:
     """Run filesystem, dependency and database maintenance after imports finish."""
+    # 启动前再钉一次：Identify 前确保 group_members + 成员事件
+    try:
+        import importlib.util
+        from pathlib import Path
+
+        early = Path(__file__).resolve().parent / "xiuxian_adapter" / "early_inject.py"
+        spec = importlib.util.spec_from_file_location(
+            "nonebot_plugin_xiuxian_2_early_inject_startup",
+            early,
+        )
+        if spec and spec.loader:
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            force = getattr(mod, "force_builtin_qq_adapter", None)
+            if callable(force):
+                force()
+    except Exception as exc:
+        logger.debug(f"强制内置 QQ 适配能力失败: {exc}")
+
     if _config_bool("xiuxian_auto_install_dependencies", False):
         await _run_blocking("安装缺失依赖", _install_dependencies)
 
