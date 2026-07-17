@@ -100,6 +100,18 @@ CONFIG_EDITABLE_FIELDS = {
         "type": "bool",
         "category": "消息设置"
     },
+    "group_welcome": {
+        "name": "进群欢迎（全局）",
+        "description": "全局默认开启；本群可用【关闭进群欢迎】单独关闭",
+        "type": "bool",
+        "category": "消息设置"
+    },
+    "group_welcome_msg": {
+        "name": "进群欢迎文案",
+        "description": "成员进群时发送的欢迎内容",
+        "type": "str",
+        "category": "消息设置"
+    },
     "xiuxian_user_command_rate_window": {
         "name": "单用户限流窗口",
         "description": "单用户命令限流统计窗口（秒）",

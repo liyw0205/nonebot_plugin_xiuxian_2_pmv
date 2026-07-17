@@ -51,6 +51,13 @@ class XiuConfig:
         # 默认回复内容
         self.empty_fallback_image = False
         # 默认回复是否请求外部随机图片；高并发环境建议关闭
+        self.group_welcome = True
+        # 是否开启进群欢迎（全局默认开；本群可单独关闭）
+        self.group_welcome_msg = (
+            "欢迎道友入群！\n"
+            "发送【我要修仙】踏入修仙界，【修仙帮助】查看玩法，【娱乐帮助】查看娱乐功能。"
+        )
+        # 进群欢迎文案
 
         self.xiuxian_user_command_rate_window = 60
         # 单用户命令限流统计窗口（秒）
@@ -350,15 +357,37 @@ def base_rank(user_level, rank, up=0):
 class JsonConfig:
     _cache_data = None
     _cache_mtime_ns = None
+    _LIST_KEYS = ("group", "welcome_disabled_groups", "full_message_groups")
 
     def __init__(self):
         self.config_jsonpath = DATABASE / "config.json"
         self.create_default_config()
 
     @staticmethod
-    def _normalize_data(data):
-        if "group" not in data:
-            data["group"] = []
+    def _as_str_list(value) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        out: list[str] = []
+        seen: set[str] = set()
+        for item in value:
+            text = str(item or "").strip()
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            out.append(text)
+        return out
+
+    @classmethod
+    def _normalize_data(cls, data):
+        if not isinstance(data, dict):
+            data = {}
+        data["group"] = cls._as_str_list(data.get("group", []))
+        data["welcome_disabled_groups"] = cls._as_str_list(
+            data.get("welcome_disabled_groups", [])
+        )
+        data["full_message_groups"] = cls._as_str_list(
+            data.get("full_message_groups", [])
+        )
         if "private" not in data:
             data["private"] = True
         if "root_selection" not in data:
@@ -367,23 +396,26 @@ class JsonConfig:
             data["sect_name"] = True
         return data
 
-    @staticmethod
-    def _clone_data(data):
+    @classmethod
+    def _clone_data(cls, data):
         cloned = dict(data)
-        cloned["group"] = list(data.get("group", []))
+        for key in cls._LIST_KEYS:
+            cloned[key] = list(data.get(key, []))
         return cloned
-    
+
     def create_default_config(self):
         """创建默认配置文件"""
         if not self.config_jsonpath.exists():
             default_data = {
-                "group": [],  # 群聊禁用列表
+                "group": [],  # 群聊禁用修仙列表（默认全开）
+                "welcome_disabled_groups": [],  # 关闭进群欢迎的群（默认全开）
+                "full_message_groups": [],  # 全量消息群（自动/手动标记）
                 "private": True,  # 私聊功能开关
                 "root_selection": True,  # 自动选择灵根开关
-                "sect_name": True  # 自动宗名开关
+                "sect_name": True,  # 自动宗名开关
             }
-            with open(self.config_jsonpath, 'w', encoding='utf-8') as f:
-                json.dump(default_data, f)
+            with open(self.config_jsonpath, "w", encoding="utf-8") as f:
+                json.dump(default_data, f, ensure_ascii=False, indent=4)
 
     def read_data(self):
         """读取配置数据"""
@@ -391,30 +423,40 @@ class JsonConfig:
         if self._cache_data is not None and self._cache_mtime_ns == mtime_ns:
             return self._clone_data(self._cache_data)
 
-        with open(self.config_jsonpath, 'r', encoding='utf-8') as f:
+        with open(self.config_jsonpath, "r", encoding="utf-8") as f:
             data = self._normalize_data(json.load(f))
             self.__class__._cache_data = self._clone_data(data)
             self.__class__._cache_mtime_ns = mtime_ns
             return self._clone_data(data)
 
+    def _persist(self, json_data: dict) -> bool:
+        with open(self.config_jsonpath, "w", encoding="utf-8") as f:
+            json.dump(json_data, f, ensure_ascii=False, indent=4)
+        self.__class__._cache_data = self._clone_data(json_data)
+        self.__class__._cache_mtime_ns = self.config_jsonpath.stat().st_mtime_ns
+        return True
+
     def write_data(self, key, id=None):
         """
         设置修仙功能或私聊功能的开启/关闭
-        key: 
-            1 为开启群聊，2 为关闭群聊
+        key:
+            1 为禁用群聊修仙，2 为启用群聊修仙
             3 为开启私聊，4 为关闭私聊
             5 为开启自动选择灵根，6 为关闭自动选择灵根
             7 为开启自动宗名，8 为关闭自动宗名
+            9 为关闭本群进群欢迎，10 为开启本群进群欢迎
+            11 为标记全量群，12 为取消全量群标记
         id: 群聊ID（仅群聊使用）
         """
         json_data = self.read_data()
-        if key in [1, 2]:  # 群聊相关
-            group_list = json_data.get('group', [])
-            if key == 1 and id and id not in group_list:
-                group_list.append(id)
-            elif key == 2 and id and id in group_list:
-                group_list.remove(id)
-            json_data['group'] = list(set(group_list))
+        if key in [1, 2]:  # 群聊修仙禁用列表
+            group_list = list(json_data.get("group", []))
+            gid = str(id or "").strip()
+            if key == 1 and gid and gid not in group_list:
+                group_list.append(gid)
+            elif key == 2 and gid and gid in group_list:
+                group_list.remove(gid)
+            json_data["group"] = self._as_str_list(group_list)
         elif key == 3:  # 开启私聊
             json_data["private"] = True
         elif key == 4:  # 关闭私聊
@@ -427,23 +469,79 @@ class JsonConfig:
             json_data["sect_name"] = True
         elif key == 8:  # 关闭自动宗名
             json_data["sect_name"] = False
+        elif key in [9, 10]:  # 进群欢迎本群开关（9关 10开）
+            disabled = list(json_data.get("welcome_disabled_groups", []))
+            gid = str(id or "").strip()
+            if key == 9 and gid and gid not in disabled:
+                disabled.append(gid)
+            elif key == 10 and gid and gid in disabled:
+                disabled.remove(gid)
+            json_data["welcome_disabled_groups"] = self._as_str_list(disabled)
+        elif key in [11, 12]:  # 全量群标记（11标记 12取消）
+            groups = list(json_data.get("full_message_groups", []))
+            gid = str(id or "").strip()
+            if key == 11 and gid and gid not in groups:
+                groups.append(gid)
+            elif key == 12 and gid and gid in groups:
+                groups.remove(gid)
+            json_data["full_message_groups"] = self._as_str_list(groups)
 
-        with open(self.config_jsonpath, 'w', encoding='utf-8') as f:
-            json.dump(json_data, f, ensure_ascii=False, indent=4)
-        self.__class__._cache_data = self._clone_data(json_data)
-        self.__class__._cache_mtime_ns = self.config_jsonpath.stat().st_mtime_ns
-        return True
+        return self._persist(json_data)
 
     def is_private_enabled(self):
         """检查私聊功能是否启用"""
         data = self.read_data()
         return data.get("private", True)
-            
+
+    def is_group_xiuxian_disabled(self, group_id) -> bool:
+        """本群是否禁用了修仙（默认开启）"""
+        gid = str(group_id or "").strip()
+        if not gid:
+            return False
+        return gid in set(self.read_data().get("group", []))
+
     def get_enabled_groups(self):
-        """获取开启修仙功能的群聊列表"""
+        """历史接口：实际返回的是禁用修仙的群列表"""
         data = self.read_data()
         return list(set(data.get("group", [])))
-    
+
+    def is_group_welcome_enabled(self, group_id) -> bool:
+        """本群进群欢迎是否开启（全局默认开，本群可关）"""
+        if not XiuConfig().group_welcome:
+            return False
+        gid = str(group_id or "").strip()
+        if not gid:
+            return False
+        disabled = set(self.read_data().get("welcome_disabled_groups", []))
+        return gid not in disabled
+
+    def set_group_welcome(self, group_id, *, enabled: bool) -> tuple[bool, str]:
+        gid = str(group_id or "").strip()
+        if not gid:
+            return False, "缺少群ID"
+        currently = self.is_group_welcome_enabled(gid)
+        if enabled and currently:
+            return False, "本群进群欢迎已开启，无需重复操作"
+        if (not enabled) and (not currently):
+            return False, "本群进群欢迎已关闭，无需重复操作"
+        self.write_data(10 if enabled else 9, gid)
+        return True, "本群进群欢迎已开启" if enabled else "本群进群欢迎已关闭"
+
+    def is_full_message_group(self, group_id) -> bool:
+        """是否为全量消息群（表情/闲聊也会进事件）"""
+        gid = str(group_id or "").strip()
+        if not gid:
+            return False
+        return gid in set(self.read_data().get("full_message_groups", []))
+
+    def mark_full_message_group(self, group_id) -> bool:
+        """标记全量群；已标记返回 False"""
+        gid = str(group_id or "").strip()
+        if not gid or self.is_full_message_group(gid):
+            return False
+        self.write_data(11, gid)
+        return True
+
     def is_auto_root_selection_enabled(self):
         """检查自动选择灵根功能是否启用"""
         data = self.read_data()

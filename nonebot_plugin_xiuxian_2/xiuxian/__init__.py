@@ -572,6 +572,32 @@ async def track_qq_lifecycle_event(bot, event):
             event.xiuxian_lifecycle_result = result
         except (AttributeError, TypeError):
             pass
+        # 申请全量 / 机器人进群：自动标记全量群
+        try:
+            from .xiuxian_config import JsonConfig
+
+            action = result.context.action
+            gid = result.context.group_id
+            if action in {"group_receive", "bot_join_group"} and gid:
+                if JsonConfig().mark_full_message_group(gid):
+                    logger.info(f"[全量群] 自动标记 group={gid} via={action}")
+        except Exception as e:
+            logger.debug(f"[全量群] 生命周期标记失败: {e}")
+
+
+@event_preprocessor
+async def mark_full_message_group_from_event(bot, event):
+    """收到 GROUP_MESSAGE_CREATE 时自动标记全量群。"""
+    if not _is_qq_group_message_create(event):
+        return
+    try:
+        from .xiuxian_config import JsonConfig
+
+        gid = str(get_group_id(event) or getattr(event, "group_openid", "") or "").strip()
+        if gid and JsonConfig().mark_full_message_group(gid):
+            logger.info(f"[全量群] 自动标记 group={gid} via=GROUP_MESSAGE_CREATE")
+    except Exception as e:
+        logger.debug(f"[全量群] 消息事件标记失败: {e}")
 
 
 @event_preprocessor

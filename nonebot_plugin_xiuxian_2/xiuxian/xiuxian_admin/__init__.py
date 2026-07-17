@@ -82,6 +82,7 @@ from .transaction_service import AdminBlackhouseStatusService
 from . import command_controls as _command_controls  # noqa: F401
 from . import empty_fallback as _empty_fallback  # noqa: F401
 from . import event_debug as _event_debug  # noqa: F401
+from . import group_welcome as _group_welcome  # noqa: F401
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
@@ -1333,41 +1334,35 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 
 @set_xiuxian.handle(parameterless=[Cooldown(cd_time=0)])
 async def open_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """群修仙开关配置"""
+    """群修仙开关配置（默认开启；禁用列表记录关闭的群）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     group_msg = str(event.message)
     group_id = str(event.group_id)
-    conf_data = JsonConfig().read_data()
+    conf = JsonConfig()
+    conf_data = conf.read_data()
+    disabled = set(conf_data.get("group", []))
 
     if "启用" in group_msg:
-        if group_id not in conf_data["group"]:
-            # This logic seems inverted: if group_id not in conf_data["group"], it means it's currently disabled.
-            # So, enabling it means removing it from the disabled list (or adding to enabled list).
-            # JsonConfig().write_data(2, group_id) removes from 'group' list, which means enabling.
-            # The current check `if group_id not in conf_data["group"]` implies it's already enabled in terms of the message text.
-            # Let's assume 'group' is a list of *disabled* groups.
-            if group_id not in conf_data["group"]: # If it's not in the disabled list, it means it's already enabled.
-                msg = "当前群聊修仙模组已启用，请勿重复操作！"
-                await handle_send(bot, event, msg)
-                await set_xiuxian.finish()
-            JsonConfig().write_data(2, group_id) # Removes group_id from the 'group' list (disabling).
+        if group_id not in disabled:
+            msg = "当前群聊修仙模组已启用，请勿重复操作！"
+        else:
+            conf.write_data(2, group_id)
             msg = "当前群聊修仙基础模组已启用，快发送 我要修仙 加入修仙世界吧！"
-            await handle_send(bot, event, msg)
-            await set_xiuxian.finish()
+        await handle_send(bot, event, msg, md_type="修仙", k1="我要修仙", v1="我要修仙", k2="修仙帮助", v2="修仙帮助")
+        await set_xiuxian.finish()
 
-    elif "禁用" in group_msg:
-        if group_id in conf_data["group"]: # If it's in the disabled list, it means it's already disabled.
+    if "禁用" in group_msg:
+        if group_id in disabled:
             msg = "当前群聊修仙模组已禁用，请勿重复操作！"
-            await handle_send(bot, event, msg)
-            await set_xiuxian.finish()
-        JsonConfig().write_data(1, group_id) # Adds group_id to the 'group' list (enabling).
-        msg = "当前群聊修仙基础模组已禁用！"
-        await handle_send(bot, event, msg)
+        else:
+            conf.write_data(1, group_id)
+            msg = "当前群聊修仙基础模组已禁用！\n（娱乐功能不受影响；发送【修仙帮助】可查看开启命令）"
+        await handle_send(bot, event, msg, md_type="修仙", k1="开启修仙", v1="启用修仙功能", k2="娱乐帮助", v2="娱乐帮助")
         await set_xiuxian.finish()
-    else:
-        msg = "指令错误，请输入：启用修仙功能/禁用修仙功能"
-        await handle_send(bot, event, msg)
-        await set_xiuxian.finish()
+
+    msg = "指令错误，请输入：启用修仙功能/禁用修仙功能"
+    await handle_send(bot, event, msg)
+    await set_xiuxian.finish()
 
 @set_private_chat.handle(parameterless=[Cooldown(cd_time=0)])
 async def set_private_chat_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -1787,7 +1782,8 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 → 修仙适配 - 适配修仙2的境界到修仙2魔改版
 → 背包检测 - 检测背包数量、物品名和已装备物品异常并修复
 → 重载items - 重新加载物品数据
-→ 启用修仙功能 / 禁用修仙功能 - 群修仙功能开关
+→ 启用修仙功能 / 禁用修仙功能 - 群修仙功能开关（默认开；关闭后仅修仙帮助提示开启命令，娱乐不受限）
+→ 开启进群欢迎 / 关闭进群欢迎 - 本群进群欢迎（全局默认开，欢迎消息可带关闭按钮）
 → 指令禁用 [指令/子模块,...] - 禁用指令（可批量；xiuxian_admin 不可禁）
 → 指令解禁 [指令/子模块,...] - 解禁指令
 → 指令列表 [页码] - 按来源分页查看（每页30条）；指令列表 禁用 [页码] 仅看禁用；可加关键词筛选

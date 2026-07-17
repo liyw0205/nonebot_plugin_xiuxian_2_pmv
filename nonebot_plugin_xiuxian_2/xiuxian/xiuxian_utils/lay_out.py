@@ -174,10 +174,42 @@ def Cooldown(
         is_private = isinstance(event, PrivateMessageEvent)
         user_id = str(event.get_user_id())
         group_id = str(event.group_id) if not is_private else None
-        conf_data = JsonConfig().read_data()
+        conf = JsonConfig()
+        conf_data = conf.read_data()
+
+        # 娱乐模块：不受修仙开关限制
+        plugin_name = str(getattr(matcher, "plugin_name", "") or "")
+        module_name = str(getattr(matcher, "module_name", "") or getattr(matcher, "module", "") or "")
+        is_entertainment = (
+            "xiuxian_entertainment" in plugin_name
+            or "xiuxian_entertainment" in module_name
+        )
+
+        # 修仙帮助：关闭时仅提示开启命令；其他修仙指令静默
+        is_xiuxian_help = False
+        try:
+            from ..on_compat import _PRIMARY_COMMAND_NAMES  # type: ignore
+
+            primary = _PRIMARY_COMMAND_NAMES.get(type(matcher)) or _PRIMARY_COMMAND_NAMES.get(matcher)
+            if primary in {"修仙帮助", "修仙菜单"}:
+                is_xiuxian_help = True
+        except Exception:
+            primary = None
+        if not is_xiuxian_help:
+            cmds = getattr(matcher, "commands", None) or set()
+            is_xiuxian_help = any(
+                (isinstance(c, tuple) and c and str(c[0]) in {"修仙帮助", "修仙菜单"})
+                or str(c) in {"修仙帮助", "修仙菜单"}
+                for c in cmds
+            )
+        if not is_xiuxian_help and primary:
+            is_xiuxian_help = str(primary) in {"修仙帮助", "修仙菜单"}
 
         limit_type = limit_all_run(str(event.get_user_id()))
         if limit_type is True:
+            # 全量群：表情/闲聊也会进事件，不发“别急”提示
+            if group_id and conf.is_full_message_group(group_id):
+                await matcher.finish()
             bot = await assign_bot_group(group_id=group_id)
             await delivery_service.reply(bot, event, bu_ji_notice)
             await matcher.finish()
@@ -204,28 +236,38 @@ def Cooldown(
             )
         else:
             key = CooldownIsolateLevel.GLOBAL.name
-        if not is_private and group_id in conf_data["group"]:
-            if (
-                    event.sender.role == "admin" or
-                    event.sender.role == "owner" or
-                    event.get_user_id() in bot.config.superusers
-            ):
+
+        # 修仙开关：默认开启；禁用列表里的群仅限制修仙，不限制娱乐
+        if (
+            not is_private
+            and not is_entertainment
+            and group_id
+            and conf.is_group_xiuxian_disabled(group_id)
+        ):
+            if is_xiuxian_help:
                 bot = await assign_bot_group(group_id=group_id)
-                if XiuConfig().at_sender:
-                    await delivery_service.reply(bot, event, MessageSegment.at(event.get_user_id()) + "本群已关闭修仙模组,请联系管理员开启,开启命令为【启用修仙功能】!")
-                else:
-                    await delivery_service.reply(bot, event, "本群已关闭修仙模组,请联系管理员开启,开启命令为【启用修仙功能】!")
+                await handle_send(
+                    bot,
+                    event,
+                    "本群修仙功能已关闭。\n开启命令：【启用修仙功能】",
+                    md_type="修仙",
+                    k1="开启修仙",
+                    v1="启用修仙功能",
+                    k2="娱乐帮助",
+                    v2="娱乐帮助",
+                )
+            await matcher.finish()
+
+        if is_private:
+            if is_private and not conf_data.get("private", True) and not is_entertainment:
+                if is_xiuxian_help:
+                    await delivery_service.reply(
+                        bot,
+                        event,
+                        "私聊修仙功能未启用，请联系管理员在群聊中发送「启用私聊功能」！",
+                    )
                 await matcher.finish()
-            else:
-                await matcher.finish()
-        else:
-            pass
-        
-        if is_private:        
-            if is_private and not conf_data.get("private", True):
-                await delivery_service.reply(bot, event, "私聊修仙功能未启用，请联系管理员在群聊中发送「启用私聊功能」！")
-                await matcher.finish()
-        
+
         if XiuConfig().admin_debug:
             if event.get_user_id() not in bot.config.superusers:
                 await matcher.finish()
@@ -262,6 +304,9 @@ def Cooldown(
             return
         if running[key] <= 0:
             if cd_time >= 1.5:
+                # 全量群不刷冷却随机回复
+                if group_id and conf.is_full_message_group(group_id):
+                    await matcher.finish()
                 time = int(cd_time - (loop.time() - time_sy[key]))
                 if time <= 1:
                     time = 1

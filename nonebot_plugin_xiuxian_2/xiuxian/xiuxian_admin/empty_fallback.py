@@ -51,7 +51,33 @@ def _fallback_rule() -> Rule:
     async def _checker(event: BaseEvent, text: str = EventPlainText()) -> bool:
         if not XiuConfig().empty_fallback or not XiuConfig().empty_msg:
             return False
-        return isinstance(event, (GroupMessageEvent, PrivateMessageEvent))
+        if not isinstance(event, (GroupMessageEvent, PrivateMessageEvent)):
+            return False
+        # 全量群：表情/闲聊也会进消息事件，不要刷默认回复
+        try:
+            from ..xiuxian_config import JsonConfig
+
+            group_id = str(getattr(event, "group_id", "") or "").strip()
+            if group_id and JsonConfig().is_full_message_group(group_id):
+                return False
+            # QQ 全量消息事件：即便尚未标记，也不用默认回复刷屏
+            event_name = " ".join(
+                str(x)
+                for x in (
+                    getattr(event, "__type__", None),
+                    getattr(event, "type", None),
+                )
+                if x is not None
+            )
+            try:
+                event_name = f"{event_name} {event.get_event_name()}"
+            except Exception:
+                pass
+            if "GROUP_MESSAGE_CREATE" in event_name.upper():
+                return False
+        except Exception:
+            pass
+        return True
 
     return Rule(_checker)
 
