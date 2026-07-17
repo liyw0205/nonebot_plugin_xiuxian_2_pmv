@@ -13,7 +13,8 @@ class Intents(BaseModel):
     direct_message: bool = False
     open_forum_event: bool = False
     audio_live_member: bool = False
-    group_members: bool = False
+    group_members: bool = True
+    # 群成员进退群事件（GROUP_MEMBER_ADD/REMOVE）；内置默认开启，无需 env 声明
     c2c_group_at_messages: bool = False
     interaction: bool = False
     message_audit: bool = True

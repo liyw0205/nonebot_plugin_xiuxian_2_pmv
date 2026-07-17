@@ -8,6 +8,7 @@ local changes: keep
 - bot.py: REFIDX/msg_idx extraction, auto message_reference when only msg_ref_id, stream/prompt_keyboard/action_button send paths
 - event.py: C2C/group get_user_id fallback to author.id when openid missing
 - models/qq.py: optional/default author & scene fields, PostMessagesExtInfo, richer post message returns
+- config.py: Intents.group_members default True (member join/leave without env)
 merged from upstream:
 - bot.py: Guard GroupAtMessageCreateEvent from producing empty message (#216)
 source scope: nonebot/adapters/qq runtime package and LICENSE
