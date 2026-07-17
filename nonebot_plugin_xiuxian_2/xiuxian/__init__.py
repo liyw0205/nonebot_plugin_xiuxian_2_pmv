@@ -565,6 +565,10 @@ async def deduplicate_qq_event(bot, event):
 
 @event_preprocessor
 async def track_qq_lifecycle_event(bot, event):
+    """只记录生命周期状态，不据此标记全量群。
+
+    全量群标记仅由 GROUP_MESSAGE_CREATE 触发，避免申请全量后取消仍被误标。
+    """
     if is_lifecycle_event(event):
         result = apply_lifecycle_event(bot, event)
         try:
@@ -572,22 +576,11 @@ async def track_qq_lifecycle_event(bot, event):
             event.xiuxian_lifecycle_result = result
         except (AttributeError, TypeError):
             pass
-        # 申请全量 / 机器人进群：自动标记全量群
-        try:
-            from .xiuxian_config import JsonConfig
-
-            action = result.context.action
-            gid = result.context.group_id
-            if action in {"group_receive", "bot_join_group"} and gid:
-                if JsonConfig().mark_full_message_group(gid):
-                    logger.info(f"[全量群] 自动标记 group={gid} via={action}")
-        except Exception as e:
-            logger.debug(f"[全量群] 生命周期标记失败: {e}")
 
 
 @event_preprocessor
 async def mark_full_message_group_from_event(bot, event):
-    """收到 GROUP_MESSAGE_CREATE 时自动标记全量群。"""
+    """仅 GROUP_MESSAGE_CREATE 自动标记全量群（已标记则不重复写）。"""
     if not _is_qq_group_message_create(event):
         return
     try:
