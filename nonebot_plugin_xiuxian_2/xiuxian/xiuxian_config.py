@@ -402,6 +402,7 @@ class JsonConfig:
             data.get("full_message_groups", [])
         )
         data["group_remarks"] = cls._as_str_dict(data.get("group_remarks", {}))
+        data["pinned_sessions"] = cls._as_str_list(data.get("pinned_sessions", []))
         if "private" not in data:
             data["private"] = True
         if "root_selection" not in data:
@@ -416,6 +417,7 @@ class JsonConfig:
         for key in cls._LIST_KEYS:
             cloned[key] = list(data.get(key, []))
         cloned["group_remarks"] = dict(data.get("group_remarks", {}) or {})
+        cloned["pinned_sessions"] = list(data.get("pinned_sessions", []) or [])
         return cloned
 
     def create_default_config(self):
@@ -426,6 +428,7 @@ class JsonConfig:
                 "welcome_disabled_groups": [],  # 关闭进群欢迎的群（默认全开）
                 "full_message_groups": [],  # 全量消息群（自动/手动标记）
                 "group_remarks": {},  # 群备注 {group_id: 备注名}
+                "pinned_sessions": [],  # 置顶会话 key: scene:target_id
                 "private": True,  # 私聊功能开关
                 "root_selection": True,  # 自动选择灵根开关
                 "sect_name": True,  # 自动宗名开关
@@ -592,6 +595,39 @@ class JsonConfig:
 
     def get_group_remarks(self) -> dict:
         return dict(self.read_data().get("group_remarks") or {})
+
+    @staticmethod
+    def session_pin_key(scene: str, target_id: str) -> str:
+        return f"{str(scene or '').strip()}:{str(target_id or '').strip()}"
+
+    def get_pinned_sessions(self) -> list[str]:
+        return list(self.read_data().get("pinned_sessions") or [])
+
+    def is_session_pinned(self, scene: str, target_id: str) -> bool:
+        key = self.session_pin_key(scene, target_id)
+        if not key or key == ":":
+            return False
+        return key in set(self.get_pinned_sessions())
+
+    def set_session_pinned(self, scene: str, target_id: str, pinned: bool) -> tuple[bool, str]:
+        key = self.session_pin_key(scene, target_id)
+        if not key or key.endswith(":") or key.startswith(":"):
+            return False, "缺少会话标识"
+        json_data = self.read_data()
+        pins = list(json_data.get("pinned_sessions") or [])
+        if pinned:
+            if key in pins:
+                return False, "已置顶"
+            pins.insert(0, key)
+            msg = "已置顶"
+        else:
+            if key not in pins:
+                return False, "未置顶"
+            pins = [x for x in pins if x != key]
+            msg = "已取消置顶"
+        json_data["pinned_sessions"] = self._as_str_list(pins)
+        self._persist(json_data)
+        return True, msg
 
     def is_auto_root_selection_enabled(self):
         """检查自动选择灵根功能是否启用"""

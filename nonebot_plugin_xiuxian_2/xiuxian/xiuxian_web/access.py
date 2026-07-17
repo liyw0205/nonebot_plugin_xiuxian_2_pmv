@@ -102,6 +102,8 @@ WEB_ENDPOINT_PERMISSIONS = {
     "api_messages_bots": WebPermission.READ,
     "api_messages_media_proxy": WebPermission.READ,
     "api_messages_markdown_preview": WebPermission.READ,
+    "api_messages_group_remark": WebPermission.MESSAGE,
+    "api_messages_session_pin": WebPermission.MESSAGE,
     "update": WebPermission.UPDATE,
     "check_update": WebPermission.UPDATE,
     "get_releases": WebPermission.UPDATE,

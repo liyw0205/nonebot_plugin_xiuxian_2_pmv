@@ -118,13 +118,16 @@ def _prepare_session_rows(rows: list[dict], conn=None) -> list[dict]:
 
     full_groups: set[str] = set()
     remarks: dict[str, str] = {}
+    pinned_keys: set[str] = set()
     try:
         conf = JsonConfig()
         full_groups = set(conf.read_data().get("full_message_groups", []) or [])
         remarks = conf.get_group_remarks()
+        pinned_keys = set(conf.get_pinned_sessions())
     except Exception:
         full_groups = set()
         remarks = {}
+        pinned_keys = set()
 
     for r in rows:
         # 修复私聊标题显示成 Bot 的问题
@@ -137,7 +140,8 @@ def _prepare_session_rows(rows: list[dict], conn=None) -> list[dict]:
                 r["title"] = human_name or str(r.get("target_id") or "未知会话")
 
         target_id = str(r.get("target_id") or "").strip()
-        is_group_scene = r.get("scene") in ("group", "channel_group")
+        scene = str(r.get("scene") or "").strip()
+        is_group_scene = scene in ("group", "channel_group")
         r["is_full_message"] = bool(is_group_scene and target_id and target_id in full_groups)
         remark = remarks.get(target_id, "") if is_group_scene else ""
         r["group_remark"] = remark
@@ -145,6 +149,9 @@ def _prepare_session_rows(rows: list[dict], conn=None) -> list[dict]:
             # 显示备注，原始 title 保留
             r["raw_title"] = r.get("title") or target_id
             r["title"] = remark
+        pin_key = f"{scene}:{target_id}"
+        r["is_pinned"] = bool(pin_key in pinned_keys)
+        r["pin_key"] = pin_key
 
         preview_source = {
             "scene": r.get("scene"),
@@ -187,6 +194,32 @@ def api_messages_group_remark():
         })
     except Exception as e:
         return jsonify({"success": False, "error": f"设置群备注失败: {e}"})
+
+
+@app.route('/api/messages/session_pin', methods=['POST'])
+def api_messages_session_pin():
+    """会话置顶/取消置顶。"""
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    try:
+        data = request.get_json(silent=True) or {}
+        scene = str(data.get("scene") or "").strip()
+        target_id = str(data.get("target_id") or data.get("group_id") or "").strip()
+        if "pinned" in data:
+            pinned = bool(data.get("pinned"))
+        else:
+            # 未传则切换
+            pinned = not JsonConfig().is_session_pinned(scene, target_id)
+        ok, msg = JsonConfig().set_session_pinned(scene, target_id, pinned)
+        return jsonify({
+            "success": bool(ok),
+            "message": msg,
+            "scene": scene,
+            "target_id": target_id,
+            "is_pinned": JsonConfig().is_session_pinned(scene, target_id),
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": f"设置置顶失败: {e}"})
 
 
 @app.route('/api/messages/config', methods=['GET'])

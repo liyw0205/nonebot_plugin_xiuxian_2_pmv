@@ -103,6 +103,22 @@
             </div>
         </aside>
 
+        <!-- 会话长按操作：备注 / 置顶 -->
+        <div id="sessionActionSheet" class="session-action-sheet" onclick="hideSessionActionSheet(event)">
+            <div class="session-action-panel" onclick="event.stopPropagation()">
+                <div id="sessionActionTitle" class="session-action-title">会话操作</div>
+                <button type="button" class="session-action-btn" id="sessionActionRemarkBtn" onclick="onSessionActionRemark()">
+                    <i class="fas fa-pen"></i><span>备注</span>
+                </button>
+                <button type="button" class="session-action-btn" id="sessionActionPinBtn" onclick="onSessionActionPin()">
+                    <i class="fas fa-thumbtack"></i><span>置顶</span>
+                </button>
+                <button type="button" class="session-action-btn session-action-cancel" onclick="hideSessionActionSheet()">
+                    <i class="fas fa-times"></i><span>取消</span>
+                </button>
+            </div>
+        </div>
+
         <!-- 右侧聊天 -->
         <section id="chatPane" class="qq-chat-pane">
             <div id="chatHeader" class="qq-chat-header">
@@ -621,10 +637,104 @@
     flex-shrink: 0;
 }
 
+.session-badge-pin {
+    font-size: 0.62rem;
+    line-height: 1;
+    padding: 2px 5px;
+    border-radius: 4px;
+    background: #fff7e6;
+    color: #b7791f;
+    border: 1px solid #f6d98b;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
 [data-theme='dark'] .session-badge-full {
     background: rgba(66, 153, 225, 0.18);
     color: #90cdf4;
     border-color: rgba(66, 153, 225, 0.35);
+}
+
+[data-theme='dark'] .session-badge-pin {
+    background: rgba(237, 137, 54, 0.16);
+    color: #f6ad55;
+    border-color: rgba(237, 137, 54, 0.35);
+}
+
+/* 会话操作菜单：备注 / 置顶 */
+.session-action-sheet {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.42);
+    padding: 16px;
+}
+
+.session-action-sheet.show {
+    display: flex;
+}
+
+.session-action-panel {
+    width: min(420px, 100%);
+    background: var(--card-bg, #fff);
+    border-radius: 16px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.18);
+    overflow: hidden;
+    border: 1px solid var(--border-color, #e5e7eb);
+}
+
+.session-action-title {
+    padding: 14px 16px 8px;
+    font-size: 0.82rem;
+    color: var(--text-secondary, #64748b);
+    word-break: break-all;
+}
+
+.session-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    padding: 14px 16px;
+    font-size: 1rem;
+    color: var(--text-primary, #0f172a);
+    cursor: pointer;
+    min-height: 48px;
+}
+
+.session-action-btn:active,
+.session-action-btn:hover {
+    background: rgba(59, 130, 246, 0.08);
+}
+
+.session-action-btn i {
+    width: 18px;
+    text-align: center;
+    color: #3b82f6;
+}
+
+.session-action-cancel {
+    border-top: 1px solid var(--border-color, #e5e7eb);
+    color: var(--text-secondary, #64748b);
+}
+
+.session-action-cancel i {
+    color: var(--text-secondary, #94a3b8);
+}
+
+[data-theme='dark'] .session-action-panel {
+    background: #1e293b;
+    border-color: #334155;
+}
+
+[data-theme='dark'] .session-action-btn {
+    color: #e2e8f0;
 }
 
 .session-time {
@@ -4481,8 +4591,9 @@ function sortSessionsByLatest(rows) {
     });
 }
 
-// 群会话长按/右键备注（手机 long-press 与桌面右键）
+// 群会话长按/右键：自定义菜单（备注 + 置顶），不用原生 prompt
 const _sessionLongPress = { timer: null, idx: -1, moved: false };
+let _sessionActionIdx = -1;
 
 function clearSessionLongPress() {
     if (_sessionLongPress.timer) {
@@ -4493,11 +4604,58 @@ function clearSessionLongPress() {
     _sessionLongPress.moved = false;
 }
 
+function hideSessionActionSheet(event) {
+    if (event && event.target && event.target.id !== 'sessionActionSheet' && !event.target.classList.contains('session-action-sheet')) {
+        // allow explicit cancel button (no event) and backdrop click
+    }
+    const sheet = document.getElementById('sessionActionSheet');
+    if (sheet) sheet.classList.remove('show');
+    _sessionActionIdx = -1;
+}
+
+function showSessionActionSheet(idx) {
+    const s = sessionsCache[idx];
+    if (!s) return;
+    _sessionActionIdx = idx;
+    const titleEl = document.getElementById('sessionActionTitle');
+    const pinBtn = document.getElementById('sessionActionPinBtn');
+    const remarkBtn = document.getElementById('sessionActionRemarkBtn');
+    const name = s.title || s.target_id || '会话';
+    if (titleEl) {
+        titleEl.textContent = `${name}\n${s.scene || ''} · ${s.target_id || ''}`;
+    }
+    if (remarkBtn) {
+        const canRemark = (s.scene === 'group' || s.scene === 'channel_group');
+        remarkBtn.style.display = canRemark ? 'flex' : 'none';
+        remarkBtn.querySelector('span').textContent = s.group_remark ? '修改备注' : '备注';
+    }
+    if (pinBtn) {
+        pinBtn.querySelector('span').textContent = s.is_pinned ? '取消置顶' : '置顶';
+        pinBtn.querySelector('i').className = s.is_pinned ? 'fas fa-thumbtack' : 'fas fa-thumbtack';
+    }
+    const sheet = document.getElementById('sessionActionSheet');
+    if (sheet) sheet.classList.add('show');
+}
+
 function onSessionContextMenu(event, idx) {
     event.preventDefault();
     event.stopPropagation();
-    promptGroupRemark(idx);
+    showSessionActionSheet(idx);
     return false;
+}
+
+async function onSessionActionRemark() {
+    const idx = _sessionActionIdx;
+    hideSessionActionSheet();
+    if (idx < 0) return;
+    await promptGroupRemark(idx);
+}
+
+async function onSessionActionPin() {
+    const idx = _sessionActionIdx;
+    hideSessionActionSheet();
+    if (idx < 0) return;
+    await toggleSessionPin(idx);
 }
 
 async function promptGroupRemark(idx) {
@@ -4539,6 +4697,30 @@ async function promptGroupRemark(idx) {
     }
 }
 
+async function toggleSessionPin(idx) {
+    const s = sessionsCache[idx];
+    if (!s) return;
+    try {
+        const res = await fetch('/api/messages/session_pin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                scene: s.scene,
+                target_id: s.target_id,
+                pinned: !s.is_pinned
+            })
+        });
+        const data = await res.json();
+        if (!data.success) {
+            alert(data.error || data.message || '置顶失败');
+            return;
+        }
+        await loadSessions(true);
+    } catch (e) {
+        alert('置顶请求失败：' + e);
+    }
+}
+
 // touch long-press for mobile
 (function bindSessionLongPress() {
     const list = document.getElementById('sessionList');
@@ -4554,7 +4736,7 @@ async function promptGroupRemark(idx) {
         _sessionLongPress.moved = false;
         _sessionLongPress.timer = setTimeout(() => {
             if (!_sessionLongPress.moved && _sessionLongPress.idx >= 0) {
-                promptGroupRemark(_sessionLongPress.idx);
+                showSessionActionSheet(_sessionLongPress.idx);
             }
             clearSessionLongPress();
         }, 550);
@@ -4566,6 +4748,16 @@ async function promptGroupRemark(idx) {
     list.addEventListener('touchend', clearSessionLongPress, { passive: true });
     list.addEventListener('touchcancel', clearSessionLongPress, { passive: true });
 })();
+
+function sortSessionsByPinnedThenLatest(rows) {
+    return (rows || []).slice().sort((a, b) => {
+        const pinDelta = Number(!!b.is_pinned) - Number(!!a.is_pinned);
+        if (pinDelta) return pinDelta;
+        const idDelta = Number(b.last_row_id || 0) - Number(a.last_row_id || 0);
+        if (idDelta) return idDelta;
+        return String(b.last_time || '').localeCompare(String(a.last_time || ''));
+    });
+}
 
 function renderSessionsFromCache(silent = false) {
     const list = document.getElementById('sessionList');
@@ -4594,6 +4786,9 @@ function renderSessionsFromCache(silent = false) {
         const fullBadge = (isGroup && s.is_full_message)
             ? `<span class="session-badge-full" title="全量消息群">全量</span>`
             : '';
+        const pinBadge = s.is_pinned
+            ? `<span class="session-badge-pin" title="已置顶">置顶</span>`
+            : '';
         const remarkHint = s.group_remark
             ? ` title="备注：${escapeHtml(s.group_remark)}\n原名：${escapeHtml(s.raw_title || s.target_id || '')}"`
             : ` title="${escapeHtml(s.target_id || title)}"`;
@@ -4610,7 +4805,7 @@ function renderSessionsFromCache(silent = false) {
                 <div class="session-info">
                     <div class="session-title-row">
                         <div class="session-title"${remarkHint}>${escapeHtml(title)}</div>
-                        <div class="session-badges">${fullBadge}</div>
+                        <div class="session-badges">${pinBadge}${fullBadge}</div>
                         <div class="session-time">${escapeHtml(shortTime(s.last_time))}</div>
                     </div>
                     <div class="session-meta">${escapeHtml(s.last_preview || s.target_id || '')}</div>
@@ -4647,7 +4842,7 @@ async function loadSessions(silent = false) {
             return;
         }
 
-        sessionsCache = sortSessionsByLatest(normalizeSessionRows(data.rows || []));
+        sessionsCache = sortSessionsByPinnedThenLatest(normalizeSessionRows(data.rows || []));
         updateLastSessionRowId(sessionsCache, true, data.last_row_id || 0);
         renderSessionsFromCache(silent);
     } catch (e) {
@@ -4689,7 +4884,7 @@ async function loadSessionUpdates() {
         const byKey = new Map();
         sessionsCache.forEach(s => byKey.set(getSessionKey(s), s));
         updates.forEach(s => byKey.set(getSessionKey(s), s));
-        sessionsCache = sortSessionsByLatest(Array.from(byKey.values()));
+        sessionsCache = sortSessionsByPinnedThenLatest(Array.from(byKey.values()));
         renderSessionsFromCache(true);
     } catch (e) {
         console.error('会话增量加载失败', e);
@@ -4718,7 +4913,8 @@ async function selectSession(index) {
         avatar: s.avatar || '',
         is_full_message: !!s.is_full_message,
         group_remark: s.group_remark || '',
-        raw_title: s.raw_title || s.title || s.target_id || ''
+        raw_title: s.raw_title || s.title || s.target_id || '',
+        is_pinned: !!s.is_pinned
     };
 
     selectedReplyMessageId = '';
