@@ -98,6 +98,19 @@ async def initialize_xiuxian_runtime() -> None:
     except Exception as exc:
         logger.debug(f"强制内置 QQ 适配能力失败: {exc}")
 
+    # 自愈 xiuxian_config.py：版本更新同步配置可能把 \n 写成真换行
+    try:
+        from pathlib import Path
+
+        from .xiuxian_utils.config_literal import heal_config_file
+
+        cfg_path = Path(__file__).resolve().parent / "xiuxian_config.py"
+        ok, msg = heal_config_file(cfg_path)
+        if ok and "修复" in msg:
+            logger.warning(f"[config] {msg}")
+    except Exception as exc:
+        logger.debug(f"配置自愈跳过: {exc}")
+
     if _config_bool("xiuxian_auto_install_dependencies", False):
         await _run_blocking("安装缺失依赖", _install_dependencies)
 

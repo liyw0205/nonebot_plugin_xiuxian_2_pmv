@@ -1249,93 +1249,16 @@ class UpdateManager:
             return False, f"恢复配置失败: {str(e)}"
 
     def save_config_values(self, new_values):
-        """保存配置到文件"""
-        config_file_path = Xiu_Plugin / "xiuxian" / "xiuxian_config.py"
+        """保存配置到文件（合法字面量 + 写后语法自愈）。"""
+        from ..xiuxian_utils.config_literal import write_config_values
         from ..xiuxian_web import CONFIG_EDITABLE_FIELDS
 
-        if not config_file_path.exists():
-            return False, "配置文件不存在"
-
-        try:
-            with open(config_file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-
-            for field_name, new_value in new_values.items():
-                if field_name in CONFIG_EDITABLE_FIELDS:
-                    field_type = CONFIG_EDITABLE_FIELDS[field_name]["type"]
-
-                    if field_type == "list[int]":
-                        if isinstance(new_value, str):
-                            cleaned_value = re.sub(r'[\[\]\'"\s]', '', new_value)
-                            if cleaned_value:
-                                try:
-                                    int_list = [int(x.strip()) for x in cleaned_value.split(',') if x.strip()]
-                                    formatted_value = f"[{', '.join(map(str, int_list))}]"
-                                except ValueError:
-                                    formatted_value = "[]"
-                            else:
-                                formatted_value = "[]"
-                        else:
-                            formatted_value = str(new_value)
-
-                    elif field_type == "list[str]":
-                        if isinstance(new_value, str):
-                            cleaned_value = re.sub(r'[\[\]]', '', new_value)
-                            str_list = []
-                            for item in cleaned_value.split(','):
-                                item = item.strip()
-                                item = re.sub(r'^[\'"]|[\'"]$', '', item)
-                                if item:
-                                    str_list.append(f'"{item}"')
-                            formatted_value = f"[{', '.join(str_list)}]"
-                        else:
-                            formatted_value = str(new_value)
-
-                    elif field_type == "bool":
-                        formatted_value = "True" if str(new_value).lower() in ('true', '1', 'yes') else "False"
-
-                    elif field_type == "select":
-                        formatted_value = repr(str(new_value))
-
-                    elif field_type == "int":
-                        try:
-                            formatted_value = str(int(new_value))
-                        except (ValueError, TypeError):
-                            formatted_value = "0"
-
-                    elif field_type == "float":
-                        try:
-                            formatted_value = str(float(new_value))
-                        except (ValueError, TypeError):
-                            formatted_value = "0.0"
-
-                    else:
-                        # 字符串：必须 repr，转义真换行，避免同步配置后 SyntaxError
-                        if isinstance(new_value, str):
-                            val_str = new_value
-                            if len(val_str) >= 2 and (
-                                (val_str.startswith('"') and val_str.endswith('"'))
-                                or (val_str.startswith("'") and val_str.endswith("'"))
-                            ):
-                                val_str = val_str[1:-1]
-                        else:
-                            val_str = str(new_value)
-                        formatted_value = repr(val_str)
-
-                    pattern = rf"(self\.{re.escape(field_name)}\s*=\s*).+"
-                    if re.search(pattern, content):
-                        content = re.sub(
-                            pattern,
-                            lambda m, fv=formatted_value: f"{m.group(1)}{fv}",
-                            content
-                        )
-
-            with open(config_file_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-
-            return True, "配置保存成功"
-        except Exception as e:
-            return False, f"保存配置时出错: {str(e)}"
+        config_file_path = Xiu_Plugin / "xiuxian" / "xiuxian_config.py"
+        field_types = {
+            name: meta.get("type", "str")
+            for name, meta in CONFIG_EDITABLE_FIELDS.items()
+        }
+        return write_config_values(config_file_path, new_values or {}, field_types)
 
     def _restore_files_from_backup(self, backup_root):
         """从备份根目录恢复文件"""

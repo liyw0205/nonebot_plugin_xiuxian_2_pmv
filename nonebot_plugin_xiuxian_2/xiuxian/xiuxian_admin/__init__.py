@@ -1833,7 +1833,8 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 → 同步鉴石 - 迁移鉴石数据
 
 **调试工具**
-→ 消息信息 - 查看当前事件信息
+→ 消息信息 - 查看当前/引用消息事件信息
+→ 取链接 - 引用一条消息，提取图片/附件链接
 → dm [Markdown内容] - 直接发送原生Markdown
 → md模板 [模板参数] - 测试自定义Markdown模板
 → 按钮测试 [按钮] - 测试原生Markdown + 自定义键盘

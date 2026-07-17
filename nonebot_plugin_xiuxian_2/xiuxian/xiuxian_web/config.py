@@ -626,109 +626,18 @@ def get_config_values():
     return values
 
 def save_config_values(new_values):
-    """
-    保存配置到文件。
-    支持自动格式化布尔值、数字、列表以及包含特殊字符的 WebDAV 字符串。
-    """
-    config_file_path = Xiu_Plugin / "xiuxian" / "xiuxian_config.py"
-    
-    if not config_file_path.exists():
-        return False, "配置文件不存在"
-    
-    try:
-        # 读取原文件内容
-        with open(config_file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
-        for field_name, new_value in new_values.items():
-            # 只有在可编辑字段列表中的项才允许处理
-            if field_name in CONFIG_EDITABLE_FIELDS:
-                field_type = CONFIG_EDITABLE_FIELDS[field_name]["type"]
-                
-                # --- 1. 布尔类型转换 ---
-                if field_type == "bool":
-                    # 处理来自 Web 的 'true'/'false' 字符串或 checkbox 的 'on'
-                    if str(new_value).lower() in ('true', '1', 'yes', 'on'):
-                        formatted_value = "True"
-                    else:
-                        formatted_value = "False"
-                
-                # --- 2. 整数列表转换 [1, 2, 3] ---
-                elif field_type == "list[int]":
-                    if isinstance(new_value, str):
-                        # 移除所有非数字和非逗号字符
-                        cleaned = re.sub(r'[^0-9,]', '', new_value)
-                        items = [i.strip() for i in cleaned.split(',') if i.strip()]
-                        formatted_value = f"[{', '.join(items)}]"
-                    else:
-                        formatted_value = str(new_value)
-                
-                # --- 3. 字符串列表转换 ["a", "b"] ---
-                elif field_type == "list[str]":
-                    if isinstance(new_value, str):
-                        # 移除外层方括号，按逗号分割，并去除每个元素两端的引号和空格
-                        cleaned = new_value.strip().replace('[', '').replace(']', '')
-                        items = [i.strip().strip("'").strip('"') for i in cleaned.split(',') if i.strip()]
-                        # 统一使用双引号包裹每个元素
-                        formatted_value = "[" + ", ".join([f'"{i}"' for i in items]) + "]"
-                    else:
-                        formatted_value = str(new_value)
-                
-                # --- 4. 数字类型转换 ---
-                elif field_type == "int":
-                    try:
-                        formatted_value = str(int(float(new_value)))
-                    except (ValueError, TypeError):
-                        formatted_value = "0"
-                
-                elif field_type == "float":
-                    try:
-                        formatted_value = str(float(new_value))
-                    except (ValueError, TypeError):
-                        formatted_value = "0.0"
-                
-                # --- 5. 字符串/选择类型 (最关键：处理 URL、路径、密码、多行文案) ---
-                else:
-                    # 确保是字符串并去除首尾空格（保留内部换行）
-                    if isinstance(new_value, str):
-                        val_str = new_value
-                        # 去掉首尾成对引号，但不要 strip 掉有意义的中间空白
-                        if len(val_str) >= 2 and (
-                            (val_str.startswith('"') and val_str.endswith('"'))
-                            or (val_str.startswith("'") and val_str.endswith("'"))
-                        ):
-                            val_str = val_str[1:-1]
-                    else:
-                        val_str = str(new_value)
-                    # 必须用 repr 生成合法 Python 字符串字面量：
-                    # 会正确转义 \n \r \t \" 等，避免版本更新同步配置后真换行导致 SyntaxError
-                    formatted_value = repr(val_str)
+    """保存配置到文件（合法字面量 + 写后语法自愈）。"""
+    from ..xiuxian_utils.config_literal import write_config_values
 
-                # --- 6. 执行正则替换 ---
-                # 匹配模式：捕获 self.变量名 = 这一部分，然后替换掉后面直到行尾的内容
-                # 能够处理 self.xxx=yyy, self.xxx = yyy, self.xxx   =   yyy 等各种写法
-                pattern = rf"(self\.{re.escape(field_name)}\s*=\s*).+"
-                # 检查文件中是否存在该配置项
-                if re.search(pattern, content):
-                    # \1 代表保留第一个捕获组 (即 self.变量名 = )
-                        content = re.sub(
-                            pattern,
-                            lambda m, fv=formatted_value: f"{m.group(1)}{fv}",
-                            content
-                        )
-                else:
-                    # 如果配置项在文件中不存在，可能是手动删除了，这里记录日志但不中断
-                    from nonebot.log import logger
-                    logger.warning(f"[Web管理] 配置项 {field_name} 在 xiuxian_config.py 中未找到匹配行，跳过修改。")
-        
-        # 写入更新后的内容
-        with open(config_file_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-        
-        return True, "配置保存成功，重启机器人后生效。"
-    
-    except Exception as e:
-        return False, f"保存配置时出错: {str(e)}"
+    config_file_path = Xiu_Plugin / "xiuxian" / "xiuxian_config.py"
+    field_types = {
+        name: meta.get("type", "str")
+        for name, meta in CONFIG_EDITABLE_FIELDS.items()
+    }
+    ok, msg = write_config_values(config_file_path, new_values or {}, field_types)
+    if ok and "重启" not in msg:
+        msg = msg.rstrip("。") + "，重启机器人后生效。"
+    return ok, msg
 
 # 配置管理路由
 @app.route('/config')
