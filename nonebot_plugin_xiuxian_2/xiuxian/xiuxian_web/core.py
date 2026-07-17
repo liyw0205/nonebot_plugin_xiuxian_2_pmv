@@ -237,9 +237,21 @@ def safe_path_under(base_dir, *parts) -> Path:
 
 
 def _authorization_error():
-    permission = get_endpoint_permission()
+    # 未匹配到路由时 endpoint 为 None（favicon/扫描探针/拼写错误等），
+    # 不能当成“权限未声明”刷 ERROR；静默 404 即可。
+    endpoint = request.endpoint
+    if endpoint is None:
+        path = (request.path or "").strip() or "/"
+        logger.debug(f"Web 未匹配路由：{request.method} {path}")
+        return web_error("Not Found", 404)
+
+    permission = get_endpoint_permission(endpoint)
     if permission is None:
-        logger.error(f"拒绝访问未声明 Web 权限的端点：{request.endpoint}")
+        # 真实注册了路由却漏写权限表：这才是需要修代码的问题
+        logger.error(
+            f"拒绝访问未声明 Web 权限的端点：{endpoint} "
+            f"method={request.method} path={request.path}"
+        )
         return web_error("Web 端点未声明访问权限", 403)
     if permission == WebPermission.PUBLIC:
         return None
@@ -247,11 +259,16 @@ def _authorization_error():
         if _is_local_request():
             return None
     if not is_admin_logged_in():
-        if request.endpoint in {"home", "logout", "update", "backups", "database", "commands", "logs", "messages_page", "activity_management", "reward_center", "command_registry", "config_management", "economy_logs", "terminal", "terminal_confirm"}:
+        if endpoint in {
+            "home", "logout", "update", "backups", "database", "commands", "logs",
+            "messages_page", "activity_management", "reward_center", "command_registry",
+            "config_management", "economy_logs", "terminal", "terminal_confirm",
+            "scheduler_management",
+        }:
             return redirect(url_for("login"))
         return api_error("未登录", status=401)
     if permission == WebPermission.TERMINAL and not terminal_authorization_is_valid():
-        if request.endpoint == "terminal":
+        if endpoint == "terminal":
             return redirect(url_for("terminal_confirm"))
         return api_error("Web 终端需要重新确认密码", status=403)
     return None
@@ -334,6 +351,8 @@ def enforce_web_panel_security():
 
 @app.after_request
 def audit_sensitive_web_operation(response):
+    if request.endpoint is None:
+        return response
     permission = get_endpoint_permission()
     if permission in {
         WebPermission.DATABASE_WRITE,

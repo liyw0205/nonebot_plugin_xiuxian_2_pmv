@@ -20,6 +20,8 @@ class WebPermission(str, Enum):
 WEB_ENDPOINT_PERMISSIONS = {
     "static": WebPermission.PUBLIC,
     "login": WebPermission.PUBLIC,
+    "favicon": WebPermission.PUBLIC,
+    "robots_txt": WebPermission.PUBLIC,
     "home": WebPermission.READ,
     "logout": WebPermission.READ,
     "activity_management": WebPermission.READ,

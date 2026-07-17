@@ -18,6 +18,17 @@ def home():
         return redirect(url_for('login'))
     return render_template('home.html', admin_id=session['admin_id'])
 
+
+@app.route('/favicon.ico')
+def favicon():
+    # 浏览器默认探测；无图标时返回 204，避免刷权限 ERROR
+    return ("", 204)
+
+
+@app.route('/robots.txt')
+def robots_txt():
+    return ("User-agent: *\nDisallow: /\n", 200, {"Content-Type": "text/plain; charset=utf-8"})
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if not web_auth_is_enabled():
