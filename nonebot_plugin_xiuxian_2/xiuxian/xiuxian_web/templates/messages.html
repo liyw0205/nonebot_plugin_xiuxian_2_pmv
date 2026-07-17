@@ -4556,16 +4556,24 @@ async function loadBots() {
 
 function normalizeSessionRows(rows) {
     return (rows || []).map(s => {
-        if (!s.title || String(s.title).trim().toLowerCase() === 'bot') {
+        // 后端已用备注覆盖 title；前端不要用 target_id 盖掉备注
+        const remark = String(s.group_remark || '').trim();
+        if (remark) {
+            if (!s.raw_title) s.raw_title = s.title || s.target_id || '';
+            s.title = remark;
+        } else if (!s.title || String(s.title).trim().toLowerCase() === 'bot') {
             s.title = s.target_id || '未知会话';
         }
+        s.is_pinned = !!s.is_pinned;
+        s.is_full_message = !!s.is_full_message;
         s.last_preview = buildSessionPreview(s);
         return s;
     });
 }
 
 function getSessionRenderKey(s) {
-    return `${getSessionKey(s)}__${s.last_row_id || ''}__${s.last_time || ''}`;
+    // 含备注/置顶，silent 刷新时列表标题也能更新
+    return `${getSessionKey(s)}__${s.last_row_id || ''}__${s.last_time || ''}__${s.group_remark || ''}__${s.is_pinned ? 1 : 0}__${s.title || ''}`;
 }
 
 function updateLastSessionRowId(rows, reset = false, fallback = 0) {

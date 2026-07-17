@@ -1514,6 +1514,24 @@ def guess_image_mimetype(data: bytes, fallback: str = "") -> str:
     return "application/octet-stream"
 
 
+def _download_media_bytes(url: str):
+    return http_client.request(
+        "GET",
+        url,
+        headers={
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0 Safari/537.36"
+            ),
+            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+            "Referer": "https://im.qq.com/",
+        },
+        timeout=15,
+        allow_redirects=True,
+    )
+
+
 @app.route('/api/messages/media_proxy')
 def api_messages_media_proxy():
     if 'admin_id' not in session:
@@ -1523,25 +1541,53 @@ def api_messages_media_proxy():
     if not is_allowed_media_proxy_url(url):
         abort(400)
 
-    try:
-        resp = http_client.request(
-            "GET",
-            url,
-            headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/124.0 Safari/537.36"
-                ),
-                "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-                "Referer": "https://im.qq.com/",
-            },
-            timeout=15,
-            allow_redirects=True,
-        )
-        resp.raise_for_status()
-    except Exception as e:
-        logger.warning(f"[web.message] 代理下载媒体失败: {url} {e}")
+    from .qq_rkey import (
+        apply_day_rkey,
+        extract_rkey,
+        is_multimedia_url,
+        learn_rkey_from_message_db,
+        remember_rkey_from_url,
+        replace_rkey,
+        get_day_rkey,
+    )
+
+    # 渲染时优先用当天 rkey
+    candidate = apply_day_rkey(url)
+    tried: list[str] = []
+    last_err: Exception | None = None
+    resp = None
+
+    for attempt_url in (candidate, url):
+        if not attempt_url or attempt_url in tried:
+            continue
+        tried.append(attempt_url)
+        try:
+            resp = _download_media_bytes(attempt_url)
+            resp.raise_for_status()
+            # 成功：记住该 rkey
+            if is_multimedia_url(attempt_url):
+                remember_rkey_from_url(attempt_url, source="media_proxy_ok")
+            break
+        except Exception as e:
+            last_err = e
+            resp = None
+
+    # 失败且是 multimedia：从消息库学最新 rkey 再试一次
+    if resp is None and is_multimedia_url(url):
+        fresh = learn_rkey_from_message_db()
+        if fresh:
+            retry_url = replace_rkey(url, fresh)
+            if retry_url not in tried:
+                try:
+                    resp = _download_media_bytes(retry_url)
+                    resp.raise_for_status()
+                    remember_rkey_from_url(retry_url, source="media_proxy_db_rkey")
+                except Exception as e:
+                    last_err = e
+                    resp = None
+
+    if resp is None:
+        logger.warning(f"[web.message] 代理下载媒体失败: {url} {last_err}")
         abort(502)
 
     data = resp.content
@@ -1551,6 +1597,10 @@ def api_messages_media_proxy():
     content_type = guess_image_mimetype(data, resp.headers.get("Content-Type", ""))
     proxy_resp = Response(data, mimetype=content_type)
     proxy_resp.headers["Cache-Control"] = "private, max-age=300"
+    # 调试可见：当天 rkey 是否已缓存
+    day_rkey = get_day_rkey()
+    if day_rkey:
+        proxy_resp.headers["X-QQ-RKey-Day"] = day_rkey[:16]
     return proxy_resp
 
 

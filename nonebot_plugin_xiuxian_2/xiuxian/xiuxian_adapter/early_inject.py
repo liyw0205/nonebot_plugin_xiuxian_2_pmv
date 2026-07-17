@@ -2,7 +2,7 @@
 
 即使 `nb run` 已先 register 了 pip adapter，也能在 WebSocket Identify 前：
 1. 打开 group_members intent（bit 24）
-2. 注册 GROUP_MEMBER_ADD / GROUP_MEMBER_REMOVE 事件类
+2. 注册 GROUP_MEMBER_ADD / GROUP_MEMBER_REMOVE 事件类（模块级 + model_rebuild）
 
 不依赖启动脚本 / PYTHONPATH。
 """
@@ -60,7 +60,6 @@ def force_group_members_intent() -> bool:
     if intents_cls is None:
         return False
 
-    # 1) 包装 to_int：无论字段是否存在，都 OR bit24
     if not getattr(intents_cls.to_int, "__xiuxian_group_members_forced__", False):
         original = intents_cls.to_int
 
@@ -82,7 +81,6 @@ def force_group_members_intent() -> bool:
         to_int.__xiuxian_group_members_forced__ = True  # type: ignore[attr-defined]
         intents_cls.to_int = to_int  # type: ignore[method-assign]
 
-    # 2) 字段默认 True（若存在）
     fields = getattr(intents_cls, "model_fields", None) or getattr(intents_cls, "__fields__", {})
     if "group_members" in fields:
         try:
@@ -90,7 +88,6 @@ def force_group_members_intent() -> bool:
         except Exception:
             pass
 
-    # 3) 已构造的 BotInfo
     try:
         from nonebot import get_driver
 
@@ -115,27 +112,63 @@ def _ensure_event_type_member(event_type_cls: type[Enum], name: str, value: str)
     if name in event_type_cls.__members__:
         return event_type_cls[name]
     try:
-        # Python 3.11 Enum: 用 functional extension 不安全；直接构造成员对象
         member = object.__new__(event_type_cls)
         member._name_ = name
         member._value_ = value
-        # str Enum 需要同步 str 值
         if issubclass(event_type_cls, str):
             str.__init__(member, value)
         event_type_cls._value2member_map_[value] = member  # type: ignore[attr-defined]
         event_type_cls._member_map_[name] = member  # type: ignore[attr-defined]
         if name not in event_type_cls._member_names_:  # type: ignore[attr-defined]
             event_type_cls._member_names_.append(name)  # type: ignore[attr-defined]
-        # bypass Enum.__setattr__
         type.__setattr__(event_type_cls, name, member)
         return member
     except Exception:
-        # 兜底：用 value 字符串本身作为 type 标记
         return value
 
 
+def _model_rebuild(cls: type) -> None:
+    rebuild = getattr(cls, "model_rebuild", None)
+    if callable(rebuild):
+        try:
+            rebuild(force=True)
+        except TypeError:
+            rebuild()
+        except Exception:
+            pass
+
+
+def _is_usable_event_model(cls: Any) -> bool:
+    if cls is None or not isinstance(cls, type):
+        return False
+    # 动态局部类 / 未 rebuild 的 pydantic model 会在 TypeAdapter 时报 class-not-fully-defined
+    name = getattr(cls, "__qualname__", "") or ""
+    if "<locals>" in name:
+        return False
+    sample = {
+        "timestamp": datetime.now(),
+        "group_openid": "G",
+        "member_openid": "U",
+        "event_id": "GROUP_MEMBER_ADD:x",
+    }
+    try:
+        from nonebot.compat import type_validate_python
+
+        type_validate_python(cls, sample)
+        return True
+    except Exception:
+        try:
+            _model_rebuild(cls)
+            from nonebot.compat import type_validate_python
+
+            type_validate_python(cls, sample)
+            return True
+        except Exception:
+            return False
+
+
 def force_group_member_events() -> bool:
-    """给已加载的 pip adapter 补注册成员进退群事件。"""
+    """给已加载的 pip adapter 补注册成员进退群事件（模块级类 + rebuild）。"""
     try:
         from nonebot.adapters.qq import event as qq_event
     except Exception:
@@ -145,8 +178,10 @@ def force_group_member_events() -> bool:
     if not isinstance(event_classes, dict):
         return False
 
-    # 已有则跳过
-    if "GROUP_MEMBER_ADD" in event_classes and "GROUP_MEMBER_REMOVE" in event_classes:
+    # 已有且可用则跳过
+    if _is_usable_event_model(event_classes.get("GROUP_MEMBER_ADD")) and _is_usable_event_model(
+        event_classes.get("GROUP_MEMBER_REMOVE")
+    ):
         return True
 
     EventType = getattr(qq_event, "EventType", None)
@@ -157,6 +192,7 @@ def force_group_member_events() -> bool:
     try:
         from nonebot.compat import override
     except Exception:  # pragma: no cover
+
         def override(func):  # type: ignore
             return func
 
@@ -165,9 +201,12 @@ def force_group_member_events() -> bool:
         EventType, "GROUP_MEMBER_REMOVE", "GROUP_MEMBER_REMOVE"
     )
 
-    # 复用已有基类或新建
+    # 优先复用 vendor 已有模块级类
     GroupMemberEvent = getattr(qq_event, "GroupMemberEvent", None)
-    if GroupMemberEvent is None:
+    GroupMemberAddEvent = getattr(qq_event, "GroupMemberAddEvent", None)
+    GroupMemberRemoveEvent = getattr(qq_event, "GroupMemberRemoveEvent", None)
+
+    if GroupMemberEvent is None or "<locals>" in getattr(GroupMemberEvent, "__qualname__", ""):
 
         class GroupMemberEvent(NoticeEvent):  # type: ignore[no-redef,valid-type,misc]
             timestamp: datetime
@@ -182,25 +221,38 @@ def force_group_member_events() -> bool:
             def get_session_id(self) -> str:
                 return f"group_{self.group_openid}_{self.member_openid}"
 
+        GroupMemberEvent.__module__ = qq_event.__name__
+        GroupMemberEvent.__qualname__ = "GroupMemberEvent"
         qq_event.GroupMemberEvent = GroupMemberEvent  # type: ignore[attr-defined]
+        _model_rebuild(GroupMemberEvent)
 
-    if "GROUP_MEMBER_ADD" not in event_classes:
+    if GroupMemberAddEvent is None or not _is_usable_event_model(GroupMemberAddEvent):
 
         class GroupMemberAddEvent(GroupMemberEvent):  # type: ignore[valid-type,misc]
             __type__ = add_type
 
-        event_classes["GROUP_MEMBER_ADD"] = GroupMemberAddEvent
+        GroupMemberAddEvent.__module__ = qq_event.__name__
+        GroupMemberAddEvent.__qualname__ = "GroupMemberAddEvent"
         qq_event.GroupMemberAddEvent = GroupMemberAddEvent  # type: ignore[attr-defined]
+        _model_rebuild(GroupMemberAddEvent)
 
-    if "GROUP_MEMBER_REMOVE" not in event_classes:
+    if GroupMemberRemoveEvent is None or not _is_usable_event_model(GroupMemberRemoveEvent):
 
         class GroupMemberRemoveEvent(GroupMemberEvent):  # type: ignore[valid-type,misc]
             __type__ = remove_type
 
-        event_classes["GROUP_MEMBER_REMOVE"] = GroupMemberRemoveEvent
+        GroupMemberRemoveEvent.__module__ = qq_event.__name__
+        GroupMemberRemoveEvent.__qualname__ = "GroupMemberRemoveEvent"
         qq_event.GroupMemberRemoveEvent = GroupMemberRemoveEvent  # type: ignore[attr-defined]
+        _model_rebuild(GroupMemberRemoveEvent)
 
-    return True
+    event_classes["GROUP_MEMBER_ADD"] = qq_event.GroupMemberAddEvent
+    event_classes["GROUP_MEMBER_REMOVE"] = qq_event.GroupMemberRemoveEvent
+
+    # 最终可用性检查
+    return _is_usable_event_model(event_classes["GROUP_MEMBER_ADD"]) and _is_usable_event_model(
+        event_classes["GROUP_MEMBER_REMOVE"]
+    )
 
 
 def force_builtin_qq_adapter() -> dict[str, Any]:
