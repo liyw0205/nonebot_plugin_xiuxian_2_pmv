@@ -687,18 +687,23 @@ def save_config_values(new_values):
                     except (ValueError, TypeError):
                         formatted_value = "0.0"
                 
-                # --- 5. 字符串/选择类型 (最关键：处理 URL、路径和密码) ---
+                # --- 5. 字符串/选择类型 (最关键：处理 URL、路径、密码、多行文案) ---
                 else:
-                    # 确保是字符串并去除首尾空格
-                    val_str = str(new_value).strip()
-                    # 避免重复包裹：如果用户输入的字符串本身带了引号，先去掉
-                    if (val_str.startswith('"') and val_str.endswith('"')) or \
-                       (val_str.startswith("'") and val_str.endswith("'")):
-                        val_str = val_str[1:-1]
-                    
-                    # 统一使用双引号包裹，这样即使字符串里有单引号（如密码）也不会崩
-                    formatted_value = f'"{val_str}"'
-                
+                    # 确保是字符串并去除首尾空格（保留内部换行）
+                    if isinstance(new_value, str):
+                        val_str = new_value
+                        # 去掉首尾成对引号，但不要 strip 掉有意义的中间空白
+                        if len(val_str) >= 2 and (
+                            (val_str.startswith('"') and val_str.endswith('"'))
+                            or (val_str.startswith("'") and val_str.endswith("'"))
+                        ):
+                            val_str = val_str[1:-1]
+                    else:
+                        val_str = str(new_value)
+                    # 必须用 repr 生成合法 Python 字符串字面量：
+                    # 会正确转义 \n \r \t \" 等，避免版本更新同步配置后真换行导致 SyntaxError
+                    formatted_value = repr(val_str)
+
                 # --- 6. 执行正则替换 ---
                 # 匹配模式：捕获 self.变量名 = 这一部分，然后替换掉后面直到行尾的内容
                 # 能够处理 self.xxx=yyy, self.xxx = yyy, self.xxx   =   yyy 等各种写法
@@ -708,7 +713,7 @@ def save_config_values(new_values):
                     # \1 代表保留第一个捕获组 (即 self.变量名 = )
                         content = re.sub(
                             pattern,
-                            lambda m: f"{m.group(1)}{formatted_value}",
+                            lambda m, fv=formatted_value: f"{m.group(1)}{fv}",
                             content
                         )
                 else:

@@ -1295,7 +1295,7 @@ class UpdateManager:
                         formatted_value = "True" if str(new_value).lower() in ('true', '1', 'yes') else "False"
 
                     elif field_type == "select":
-                        formatted_value = f'"{new_value}"'
+                        formatted_value = repr(str(new_value))
 
                     elif field_type == "int":
                         try:
@@ -1310,19 +1310,23 @@ class UpdateManager:
                             formatted_value = "0.0"
 
                     else:
-                        if not (isinstance(new_value, str) and (
-                            (new_value.startswith('"') and new_value.endswith('"')) or
-                            (new_value.startswith("'") and new_value.endswith("'"))
-                        )):
-                            formatted_value = f'"{new_value}"'
+                        # 字符串：必须 repr，转义真换行，避免同步配置后 SyntaxError
+                        if isinstance(new_value, str):
+                            val_str = new_value
+                            if len(val_str) >= 2 and (
+                                (val_str.startswith('"') and val_str.endswith('"'))
+                                or (val_str.startswith("'") and val_str.endswith("'"))
+                            ):
+                                val_str = val_str[1:-1]
                         else:
-                            formatted_value = new_value
+                            val_str = str(new_value)
+                        formatted_value = repr(val_str)
 
                     pattern = rf"(self\.{re.escape(field_name)}\s*=\s*).+"
                     if re.search(pattern, content):
                         content = re.sub(
                             pattern,
-                            lambda m: f"{m.group(1)}{formatted_value}",
+                            lambda m, fv=formatted_value: f"{m.group(1)}{fv}",
                             content
                         )
 
