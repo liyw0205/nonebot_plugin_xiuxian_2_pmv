@@ -587,6 +587,7 @@
     display: flex;
     gap: 8px;
     justify-content: space-between;
+    align-items: center;
 }
 
 .session-title {
@@ -595,6 +596,35 @@
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+    cursor: context-menu;
+}
+
+.session-badges {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    flex-shrink: 0;
+    margin-right: 4px;
+}
+
+.session-badge-full {
+    font-size: 0.62rem;
+    line-height: 1;
+    padding: 2px 5px;
+    border-radius: 4px;
+    background: #e8f0ff;
+    color: #2b6cb0;
+    border: 1px solid #b6d0f5;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+[data-theme='dark'] .session-badge-full {
+    background: rgba(66, 153, 225, 0.18);
+    color: #90cdf4;
+    border-color: rgba(66, 153, 225, 0.35);
 }
 
 .session-time {
@@ -4451,6 +4481,92 @@ function sortSessionsByLatest(rows) {
     });
 }
 
+// 群会话长按/右键备注（手机 long-press 与桌面右键）
+const _sessionLongPress = { timer: null, idx: -1, moved: false };
+
+function clearSessionLongPress() {
+    if (_sessionLongPress.timer) {
+        clearTimeout(_sessionLongPress.timer);
+        _sessionLongPress.timer = null;
+    }
+    _sessionLongPress.idx = -1;
+    _sessionLongPress.moved = false;
+}
+
+function onSessionContextMenu(event, idx) {
+    event.preventDefault();
+    event.stopPropagation();
+    promptGroupRemark(idx);
+    return false;
+}
+
+async function promptGroupRemark(idx) {
+    const s = sessionsCache[idx];
+    if (!s) return;
+    if (!(s.scene === 'group' || s.scene === 'channel_group')) {
+        alert('仅群会话支持备注');
+        return;
+    }
+    const current = s.group_remark || '';
+    const next = window.prompt(
+        `设置群备注（留空清除）\n群ID：${s.target_id}`,
+        current
+    );
+    if (next === null) return; // cancel
+    try {
+        const res = await fetch('/api/messages/group_remark', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ group_id: s.target_id, remark: next })
+        });
+        const data = await res.json();
+        if (!data.success) {
+            alert(data.error || data.message || '备注失败');
+            return;
+        }
+        await loadSessions(true);
+        if (currentSession && currentSession.target_id === s.target_id) {
+            const updated = sessionsCache.find(x => x.target_id === s.target_id && x.scene === s.scene);
+            if (updated) {
+                currentSession.title = updated.title;
+                currentSession.group_remark = updated.group_remark || '';
+                currentSession.raw_title = updated.raw_title || updated.title;
+                document.getElementById('chatTitle').innerText = currentSession.title || '未知会话';
+            }
+        }
+    } catch (e) {
+        alert('备注请求失败：' + e);
+    }
+}
+
+// touch long-press for mobile
+(function bindSessionLongPress() {
+    const list = document.getElementById('sessionList');
+    if (!list || list.__remarkBound) return;
+    list.__remarkBound = true;
+    list.addEventListener('touchstart', (e) => {
+        const item = e.target.closest('.session-item');
+        if (!item) return;
+        const idx = Number(item.dataset.sessionIdx);
+        if (Number.isNaN(idx)) return;
+        clearSessionLongPress();
+        _sessionLongPress.idx = idx;
+        _sessionLongPress.moved = false;
+        _sessionLongPress.timer = setTimeout(() => {
+            if (!_sessionLongPress.moved && _sessionLongPress.idx >= 0) {
+                promptGroupRemark(_sessionLongPress.idx);
+            }
+            clearSessionLongPress();
+        }, 550);
+    }, { passive: true });
+    list.addEventListener('touchmove', () => {
+        _sessionLongPress.moved = true;
+        clearSessionLongPress();
+    }, { passive: true });
+    list.addEventListener('touchend', clearSessionLongPress, { passive: true });
+    list.addEventListener('touchcancel', clearSessionLongPress, { passive: true });
+})();
+
 function renderSessionsFromCache(silent = false) {
     const list = document.getElementById('sessionList');
     const newKeys = sessionsCache.map(getSessionRenderKey);
@@ -4474,16 +4590,27 @@ function renderSessionsFromCache(silent = false) {
             currentSession.adapter === s.adapter;
 
         const title = s.title || s.target_id || '未知会话';
+        const isGroup = s.scene === 'group' || s.scene === 'channel_group';
+        const fullBadge = (isGroup && s.is_full_message)
+            ? `<span class="session-badge-full" title="全量消息群">全量</span>`
+            : '';
+        const remarkHint = s.group_remark
+            ? ` title="备注：${escapeHtml(s.group_remark)}\n原名：${escapeHtml(s.raw_title || s.target_id || '')}"`
+            : ` title="${escapeHtml(s.target_id || title)}"`;
         const sessionAvatar = isHttpUrl(s.avatar)
             ? renderAvatarImage(s.avatar)
             : escapeHtml(s.avatar_text || getInitial(title));
 
         return `
-            <div class="session-item ${active ? 'active' : ''}" onclick="selectSession(${idx})">
+            <div class="session-item ${active ? 'active' : ''}"
+                 data-session-idx="${idx}"
+                 onclick="selectSession(${idx})"
+                 oncontextmenu="return onSessionContextMenu(event, ${idx})">
                 <div class="session-avatar">${sessionAvatar}</div>
                 <div class="session-info">
                     <div class="session-title-row">
-                        <div class="session-title">${escapeHtml(title)}</div>
+                        <div class="session-title"${remarkHint}>${escapeHtml(title)}</div>
+                        <div class="session-badges">${fullBadge}</div>
                         <div class="session-time">${escapeHtml(shortTime(s.last_time))}</div>
                     </div>
                     <div class="session-meta">${escapeHtml(s.last_preview || s.target_id || '')}</div>
@@ -4588,7 +4715,10 @@ async function selectSession(index) {
         target_id: s.target_id,
         title: s.title || s.target_id,
         avatar_text: s.avatar_text || getInitial(s.title || s.target_id),
-        avatar: s.avatar || ''
+        avatar: s.avatar || '',
+        is_full_message: !!s.is_full_message,
+        group_remark: s.group_remark || '',
+        raw_title: s.raw_title || s.title || s.target_id || ''
     };
 
     selectedReplyMessageId = '';

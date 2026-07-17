@@ -53,19 +53,9 @@ class XiuConfig:
         # 默认回复是否请求外部随机图片；高并发环境建议关闭
         self.group_welcome = True
         # 是否开启进群欢迎（全局默认开；本群可单独关闭）
-        self.group_welcome_msg = (
-            "欢迎道友入群！\n"
-            "> 发送：\n"
-            "【我要修仙】踏入修仙界\n"
-            "【修仙帮助】查看玩法\n"
-            "【娱乐帮助】查看娱乐功能。"
-        )
+        self.group_welcome_msg = "欢迎道友入群！\n> 发送：\n【我要修仙】踏入修仙界\n【修仙帮助】查看玩法\n【娱乐帮助】查看娱乐功能。"
         # 成员进群欢迎文案
-        self.group_bot_join_msg = (
-            "必死之境机逢仙缘，修仙之路波澜壮阔！\n"
-            "先发【我要修仙】入门，不会玩就【修仙帮助】/【娱乐帮助】。\n"
-            "成员欢迎可【关闭进群欢迎】关掉。"
-        )
+        self.group_bot_join_msg = "必死之境机逢仙缘，修仙之路波澜壮阔！\n> 发送：\n【我要修仙】踏入修仙界\n【修仙帮助】查看玩法\n【娱乐帮助】查看娱乐功能。"
         # bot 被拉进群时的入驻提示（与成员欢迎区分）
 
         self.xiuxian_user_command_rate_window = 60
@@ -386,6 +376,20 @@ class JsonConfig:
             out.append(text)
         return out
 
+    @staticmethod
+    def _as_str_dict(value) -> dict:
+        if not isinstance(value, dict):
+            return {}
+        out: dict[str, str] = {}
+        for k, v in value.items():
+            key = str(k or "").strip()
+            if not key:
+                continue
+            text = str(v or "").strip()
+            if text:
+                out[key] = text
+        return out
+
     @classmethod
     def _normalize_data(cls, data):
         if not isinstance(data, dict):
@@ -397,6 +401,7 @@ class JsonConfig:
         data["full_message_groups"] = cls._as_str_list(
             data.get("full_message_groups", [])
         )
+        data["group_remarks"] = cls._as_str_dict(data.get("group_remarks", {}))
         if "private" not in data:
             data["private"] = True
         if "root_selection" not in data:
@@ -410,6 +415,7 @@ class JsonConfig:
         cloned = dict(data)
         for key in cls._LIST_KEYS:
             cloned[key] = list(data.get(key, []))
+        cloned["group_remarks"] = dict(data.get("group_remarks", {}) or {})
         return cloned
 
     def create_default_config(self):
@@ -419,6 +425,7 @@ class JsonConfig:
                 "group": [],  # 群聊禁用修仙列表（默认全开）
                 "welcome_disabled_groups": [],  # 关闭进群欢迎的群（默认全开）
                 "full_message_groups": [],  # 全量消息群（自动/手动标记）
+                "group_remarks": {},  # 群备注 {group_id: 备注名}
                 "private": True,  # 私聊功能开关
                 "root_selection": True,  # 自动选择灵根开关
                 "sect_name": True,  # 自动宗名开关
@@ -550,6 +557,41 @@ class JsonConfig:
             return False
         self.write_data(11, gid)
         return True
+
+    def unmark_full_message_group(self, group_id) -> bool:
+        """取消全量群标记；未标记返回 False"""
+        gid = str(group_id or "").strip()
+        if not gid or not self.is_full_message_group(gid):
+            return False
+        self.write_data(12, gid)
+        return True
+
+    def get_group_remark(self, group_id) -> str:
+        gid = str(group_id or "").strip()
+        if not gid:
+            return ""
+        return str((self.read_data().get("group_remarks") or {}).get(gid) or "").strip()
+
+    def set_group_remark(self, group_id, remark: str) -> tuple[bool, str]:
+        gid = str(group_id or "").strip()
+        if not gid:
+            return False, "缺少群ID"
+        json_data = self.read_data()
+        remarks = dict(json_data.get("group_remarks") or {})
+        text = str(remark or "").strip()
+        if text:
+            remarks[gid] = text[:32]
+            msg = f"已备注：{remarks[gid]}"
+        else:
+            if gid in remarks:
+                remarks.pop(gid, None)
+            msg = "已清除备注"
+        json_data["group_remarks"] = self._as_str_dict(remarks)
+        self._persist(json_data)
+        return True, msg
+
+    def get_group_remarks(self) -> dict:
+        return dict(self.read_data().get("group_remarks") or {})
 
     def is_auto_root_selection_enabled(self):
         """检查自动选择灵根功能是否启用"""

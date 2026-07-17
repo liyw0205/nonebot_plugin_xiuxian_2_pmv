@@ -38,6 +38,7 @@ from .core import (
 )
 from ..broadcast_manager import format_broadcast_status, start_broadcast
 from ..messaging import SendRequest, delivery_service
+from ..xiuxian_config import JsonConfig
 from ..xiuxian_utils import message_db as message_db_config
 from ..xiuxian_utils.http_proxy import http_client
 
@@ -115,6 +116,16 @@ def _prepare_message_rows(rows: list[dict], conn=None) -> list[dict]:
 def _prepare_session_rows(rows: list[dict], conn=None) -> list[dict]:
     rows = fill_session_display_profiles(rows)
 
+    full_groups: set[str] = set()
+    remarks: dict[str, str] = {}
+    try:
+        conf = JsonConfig()
+        full_groups = set(conf.read_data().get("full_message_groups", []) or [])
+        remarks = conf.get_group_remarks()
+    except Exception:
+        full_groups = set()
+        remarks = {}
+
     for r in rows:
         # 修复私聊标题显示成 Bot 的问题
         if r.get("scene") in ("private", "channel_private"):
@@ -124,6 +135,16 @@ def _prepare_session_rows(rows: list[dict], conn=None) -> list[dict]:
                 if conn is not None:
                     human_name = get_latest_human_name_by_user_id(conn, str(r.get("target_id") or ""))
                 r["title"] = human_name or str(r.get("target_id") or "未知会话")
+
+        target_id = str(r.get("target_id") or "").strip()
+        is_group_scene = r.get("scene") in ("group", "channel_group")
+        r["is_full_message"] = bool(is_group_scene and target_id and target_id in full_groups)
+        remark = remarks.get(target_id, "") if is_group_scene else ""
+        r["group_remark"] = remark
+        if is_group_scene and remark:
+            # 显示备注，原始 title 保留
+            r["raw_title"] = r.get("title") or target_id
+            r["title"] = remark
 
         preview_source = {
             "scene": r.get("scene"),
@@ -146,6 +167,27 @@ def messages_page():
     if 'admin_id' not in session:
         return redirect(url_for('login'))
     return render_template('messages.html')
+
+
+@app.route('/api/messages/group_remark', methods=['POST'])
+def api_messages_group_remark():
+    """群备注：长按/右键会话标题时设置，解决长 openid 显示难看。"""
+    if 'admin_id' not in session:
+        return jsonify({"success": False, "error": "未登录"})
+    try:
+        data = request.get_json(silent=True) or {}
+        group_id = str(data.get("group_id") or data.get("target_id") or "").strip()
+        remark = str(data.get("remark") or "").strip()
+        ok, msg = JsonConfig().set_group_remark(group_id, remark)
+        return jsonify({
+            "success": bool(ok),
+            "message": msg,
+            "group_id": group_id,
+            "remark": JsonConfig().get_group_remark(group_id) if ok else remark,
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": f"设置群备注失败: {e}"})
+
 
 @app.route('/api/messages/config', methods=['GET'])
 def api_messages_config():

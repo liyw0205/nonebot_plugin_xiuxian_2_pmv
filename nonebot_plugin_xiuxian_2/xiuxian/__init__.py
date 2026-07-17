@@ -565,7 +565,7 @@ async def deduplicate_qq_event(bot, event):
 
 @event_preprocessor
 async def track_qq_lifecycle_event(bot, event):
-    """只记录生命周期状态，不据此标记全量群。
+    """记录生命周期状态；bot 退群时取消全量群标记。
 
     全量群标记仅由 GROUP_MESSAGE_CREATE 触发，避免申请全量后取消仍被误标。
     """
@@ -576,6 +576,16 @@ async def track_qq_lifecycle_event(bot, event):
             event.xiuxian_lifecycle_result = result
         except (AttributeError, TypeError):
             pass
+        # bot 被移出群：取消全量标记（与 group_welcome 双保险）
+        try:
+            if result.context.action == "bot_leave_group" and result.context.group_id:
+                from .xiuxian_config import JsonConfig
+
+                gid = str(result.context.group_id).strip()
+                if JsonConfig().unmark_full_message_group(gid):
+                    logger.info(f"[全量群] bot退群取消标记 group={gid}")
+        except Exception as e:
+            logger.debug(f"[全量群] bot退群取消标记失败: {e}")
 
 
 @event_preprocessor

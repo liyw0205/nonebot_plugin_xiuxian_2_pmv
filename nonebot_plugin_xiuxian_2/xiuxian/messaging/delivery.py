@@ -233,6 +233,10 @@ class MessageDeliveryService:
         source_message_id = str(
             getattr(event, "message_id", "") or getattr(event, "id", "") or ""
         )
+        # lifecycle notice（入群/退群）需要 event_id 走被动消息，否则主动发送 40034105
+        event_id = getattr(event, "event_id", None) or None
+        if event_id and "event_id" not in kwargs:
+            kwargs["event_id"] = str(event_id)
         reference_id = get_message_reference_id(event) if include_reference else None
         if scene in {"group", "channel_group"}:
             request = SendRequest(

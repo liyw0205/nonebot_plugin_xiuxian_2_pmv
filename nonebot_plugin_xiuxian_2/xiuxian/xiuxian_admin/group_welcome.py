@@ -1,8 +1,9 @@
 """进群欢迎：成员欢迎 / bot入驻 分开。
 
-发送直接复用 handle_send（与其它指令一致）：
-- markdown_status=True：模板/原生 MD、蓝字、按钮
-- markdown_status=False：纯文本（由 handle_send 内部处理）
+Markdown 开关与其它指令一致（复用 handle_send 语义）：
+- markdown_status=True：原生 MD 蓝字/按钮（lifecycle 必须带 event_id 被动发）
+- markdown_status=False：纯文本
+bot 退群：若该群是全量群则取消标记。
 """
 
 from __future__ import annotations
@@ -12,11 +13,12 @@ from nonebot.log import logger
 from nonebot.matcher import Matcher
 from nonebot.permission import SUPERUSER
 
-from ..adapter_compat import Bot, GroupMessageEvent, PrivateMessageEvent
+from ..adapter_compat import Bot, GroupMessageEvent, MessageSegment, PrivateMessageEvent
 from ..on_compat import on_command
 from ..qq_compat.lifecycle import apply_lifecycle_event, is_lifecycle_event
 from ..xiuxian_config import JsonConfig, XiuConfig
 from ..xiuxian_utils.lay_out import Cooldown, assign_bot
+from ..xiuxian_utils.message_markdown import strip_md_command_links
 from ..xiuxian_utils.utils import handle_send
 
 
@@ -60,6 +62,11 @@ def _is_bot_join(event) -> bool:
     return "GROUP_ADD_ROBOT" in name or "BOT_JOIN" in name
 
 
+def _is_bot_leave(event) -> bool:
+    name = _event_type_name(event)
+    return "GROUP_DEL_ROBOT" in name or "BOT_LEAVE" in name
+
+
 def _member_welcome_text() -> str:
     return (XiuConfig().group_welcome_msg or "").strip() or "欢迎道友入群！"
 
@@ -70,50 +77,39 @@ def _bot_join_text() -> str:
         return msg
     return (
         "必死之境机逢仙缘，修仙之路波澜壮阔！\n"
-        "先发【我要修仙】入门，不会玩就【修仙帮助】/【娱乐帮助】。\n"
-        "成员欢迎可【关闭进群欢迎】关掉。"
+        "> 发送：\n"
+        "【我要修仙】踏入修仙界\n"
+        "【修仙帮助】查看玩法\n"
+        "【娱乐帮助】查看娱乐功能。"
     )
 
 
-async def _send_group_notice(bot: Bot, event, group_id: str, msg: str, *, kind: str) -> None:
-    """直接复用 handle_send，不另写 MD/纯文本分支。"""
-    if not msg or not group_id:
-        return
-    try:
-        bot, _ = await assign_bot(bot=bot, event=event)
-    except Exception:
-        pass
+def _welcome_buttons() -> list[list[tuple[str, str]]]:
+    return [
+        [("我要修仙", "我要修仙"), ("修仙帮助", "修仙帮助"), ("娱乐帮助", "娱乐帮助")],
+        [("关闭欢迎", "关闭进群欢迎")],
+    ]
 
-    # 与其它指令同一套：开 MD 出蓝字/按钮，关 MD 发纯文本
-    # lifecycle notice 没有“可 @ 的原消息发送者”，at_msg=False
-    try:
-        await handle_send(
-            bot,
-            event,
-            msg,
-            md_type="修仙",
-            k1="我要修仙",
-            v1="我要修仙",
-            k2="修仙帮助",
-            v2="修仙帮助",
-            k3="娱乐帮助",
-            v3="娱乐帮助",
-            k4="关闭欢迎",
-            v4="关闭进群欢迎",
-            at_msg=False,
-        )
-        logger.info(f"[{kind}] 已发送 group={group_id} via=handle_send")
-        return
-    except Exception as e:
-        logger.warning(f"[{kind}] handle_send 失败 group={group_id}: {e}")
 
-    # lifecycle 极端兜底：bot.send 纯文本
+def _welcome_md_text(msg: str) -> str:
+    body = (msg or " ").replace("\n", "\r")
+    links = (
+        "[我要修仙](mqqapi://aio/inlinecmd?command=我要修仙&enter=false&reply=false)"
+        " | [修仙帮助](mqqapi://aio/inlinecmd?command=修仙帮助&enter=false&reply=false)"
+        " | [娱乐帮助](mqqapi://aio/inlinecmd?command=娱乐帮助&enter=false&reply=false)"
+        " | [关闭欢迎](mqqapi://aio/inlinecmd?command=关闭进群欢迎&enter=false&reply=false)"
+    )
+    return f"{body}\r\r---\r\r{links}"
+
+
+async def _send_lifecycle_message(bot: Bot, event, group_id: str, message, *, kind: str) -> bool:
+    """lifecycle 发送：优先 bot.send(event, ...)，自动带 event_id。"""
     try:
         send = getattr(bot, "send", None)
         if callable(send):
-            await send(event, msg)
+            await send(event, message)
             logger.info(f"[{kind}] 已发送 group={group_id} via=bot.send")
-            return
+            return True
     except Exception as e:
         logger.warning(f"[{kind}] bot.send 失败 group={group_id}: {e}")
 
@@ -121,11 +117,70 @@ async def _send_group_notice(bot: Bot, event, group_id: str, msg: str, *, kind: 
         send_to_group = getattr(bot, "send_to_group", None)
         if callable(send_to_group):
             event_id = getattr(event, "event_id", None) or getattr(event, "id", None)
-            kwargs = {"group_openid": group_id, "message": msg}
+            kwargs = {"group_openid": group_id, "message": message}
             if event_id:
-                kwargs["event_id"] = event_id
+                kwargs["event_id"] = str(event_id)
             await send_to_group(**kwargs)
             logger.info(f"[{kind}] 已发送 group={group_id} via=send_to_group")
+            return True
+    except Exception as e:
+        logger.warning(f"[{kind}] send_to_group 失败 group={group_id}: {e}")
+    return False
+
+
+async def _send_group_notice(bot: Bot, event, group_id: str, msg: str, *, kind: str) -> None:
+    if not msg or not group_id:
+        return
+    try:
+        bot, _ = await assign_bot(bot=bot, event=event)
+    except Exception:
+        pass
+
+    cfg = XiuConfig()
+    md_on = bool(getattr(cfg, "markdown_status", False))
+    plain = strip_md_command_links(msg)
+
+    # 开 Markdown：lifecycle 必须用 event_id 被动发 MD，不能走主动群发 handle_send 默认路径
+    if md_on:
+        try:
+            md_body = msg.replace("\n", "\r")
+            if bool(getattr(cfg, "markdown_button_status", False)):
+                message = MessageSegment.markdown_keyboard(bot, md_body, _welcome_buttons())
+            else:
+                message = MessageSegment.markdown(bot, _welcome_md_text(msg))
+            if await _send_lifecycle_message(bot, event, group_id, message, kind=f"{kind}/md"):
+                return
+        except Exception as e:
+            logger.warning(f"[{kind}] 构造/发送 MD 失败 group={group_id}: {e}")
+
+        # 再尝试统一 handle_send（现已透传 event_id）
+        try:
+            await handle_send(
+                bot,
+                event,
+                msg,
+                md_type="修仙",
+                k1="我要修仙",
+                v1="我要修仙",
+                k2="修仙帮助",
+                v2="修仙帮助",
+                k3="娱乐帮助",
+                v3="娱乐帮助",
+                k4="关闭欢迎",
+                v4="关闭进群欢迎",
+                at_msg=False,
+            )
+            logger.info(f"[{kind}] 已发送 group={group_id} via=handle_send(md)")
+            return
+        except Exception as e:
+            logger.warning(f"[{kind}] handle_send(md) 失败 group={group_id}: {e}")
+
+    # 关 Markdown / 失败：纯文本（清理语法）
+    if await _send_lifecycle_message(bot, event, group_id, plain, kind=f"{kind}/plain"):
+        return
+    try:
+        await handle_send(bot, event, plain, at_msg=False)
+        logger.info(f"[{kind}] 已发送 group={group_id} via=handle_send(plain)")
     except Exception as e:
         logger.warning(f"[{kind}] 发送失败 group={group_id}: {e}")
 
@@ -148,10 +203,21 @@ async def handle_group_lifecycle(bot: Bot, event, matcher: Matcher):
             gid = result.context.group_id or group_id
         elif _is_bot_join(event):
             action = "bot_join_group"
+        elif _is_bot_leave(event):
+            action = "bot_leave_group"
         elif _is_member_join(event):
             action = "member_join_group"
 
-        if not gid or not conf.is_group_welcome_enabled(gid):
+        if not gid:
+            return
+
+        # bot 被移出群：取消全量标记
+        if action == "bot_leave_group":
+            if conf.unmark_full_message_group(gid):
+                logger.info(f"[全量群] bot退群取消标记 group={gid}")
+            return
+
+        if not conf.is_group_welcome_enabled(gid):
             return
 
         if action == "bot_join_group":

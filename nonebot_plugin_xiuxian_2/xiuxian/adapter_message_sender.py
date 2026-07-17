@@ -123,14 +123,24 @@ async def send_group_message(bot: Any, *, group_id: Any, message: Any, **kwargs)
         msg_ref_id = _pop_reference_id(kwargs)
         msg_seq = kwargs.pop("msg_seq", random.randint(1, 900000))
         if source_message_id:
-            kwargs.setdefault("msg_id", source_message_id)
+            # 普通消息回复用 msg_id；lifecycle 事件 id 形如 GROUP_ADD_ROBOT:xxx，应走 event_id
+            eid = str(source_message_id)
+            if ":" in eid and eid.split(":", 1)[0].isupper():
+                kwargs.setdefault("event_id", eid)
+            else:
+                kwargs.setdefault("msg_id", eid)
+        # 显式 event_id 优先
+        event_id = kwargs.pop("event_id", None)
+        call_kwargs = dict(kwargs)
+        if event_id:
+            call_kwargs["event_id"] = str(event_id)
         result = await _call_qq_send(
             bot.send_to_group,
             group_openid=str(group_id),
             message=message,
             msg_seq=int(msg_seq),
             msg_ref_id=msg_ref_id,
-            **kwargs,
+            **call_kwargs,
         )
         _record_send(
             bot,
