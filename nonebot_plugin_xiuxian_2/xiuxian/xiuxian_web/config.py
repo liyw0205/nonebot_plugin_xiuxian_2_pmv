@@ -107,8 +107,14 @@ CONFIG_EDITABLE_FIELDS = {
         "category": "消息设置"
     },
     "group_welcome_msg": {
-        "name": "进群欢迎文案",
-        "description": "成员进群时发送的欢迎内容",
+        "name": "成员进群欢迎文案",
+        "description": "有新人入群时发送（需 QQ intent.group_members=true）",
+        "type": "str",
+        "category": "消息设置"
+    },
+    "group_bot_join_msg": {
+        "name": "Bot入群提示文案",
+        "description": "机器人被拉进群时发送，与成员欢迎分开",
         "type": "str",
         "category": "消息设置"
     },

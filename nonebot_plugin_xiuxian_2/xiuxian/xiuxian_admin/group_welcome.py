@@ -1,4 +1,4 @@
-"""进群欢迎 + 全量群标记（仅 GROUP_MESSAGE_CREATE）。"""
+"""进群欢迎：成员欢迎 / bot入驻 分开；全量群标记不在此处理。"""
 
 from __future__ import annotations
 
@@ -55,32 +55,39 @@ def _is_bot_join(event) -> bool:
     return "GROUP_ADD_ROBOT" in name or "BOT_JOIN" in name
 
 
-def _welcome_text() -> str:
+def _member_welcome_text() -> str:
     return (XiuConfig().group_welcome_msg or "").strip() or "欢迎道友入群！"
 
 
-async def _send_welcome(bot: Bot, event, group_id: str) -> None:
-    conf = JsonConfig()
-    if not conf.is_group_welcome_enabled(group_id):
+def _bot_join_text() -> str:
+    msg = (getattr(XiuConfig(), "group_bot_join_msg", None) or "").strip()
+    if msg:
+        return msg
+    # 未配置时也不复用成员欢迎文案，避免“同一段话”
+    return (
+        "修仙助手已入驻本群。\n"
+        "发送【我要修仙】创建角色，【修仙帮助】查看玩法，【娱乐帮助】查看娱乐功能。"
+    )
+
+
+async def _send_group_notice(bot: Bot, event, group_id: str, msg: str, *, kind: str) -> None:
+    if not msg or not group_id:
         return
-    msg = _welcome_text()
     try:
         bot, _ = await assign_bot(bot=bot, event=event)
     except Exception:
         pass
 
-    # 生命周期 notice 事件（GROUP_ADD_ROBOT / GROUP_MEMBER_ADD）：
-    # 适配器 bot.send(event, message) 会走 send_to_group(event_id=...)
+    # lifecycle notice：优先 bot.send（带 event_id）
     try:
         send = getattr(bot, "send", None)
         if callable(send):
             await send(event, msg)
-            logger.info(f"[进群欢迎] 已发送 group={group_id} via=bot.send")
+            logger.info(f"[{kind}] 已发送 group={group_id} via=bot.send")
             return
     except Exception as e:
-        logger.warning(f"[进群欢迎] bot.send 失败 group={group_id}: {e}")
+        logger.warning(f"[{kind}] bot.send 失败 group={group_id}: {e}")
 
-    # 兜底：直接 send_to_group
     try:
         send_to_group = getattr(bot, "send_to_group", None)
         if callable(send_to_group):
@@ -89,12 +96,11 @@ async def _send_welcome(bot: Bot, event, group_id: str) -> None:
             if event_id:
                 kwargs["event_id"] = event_id
             await send_to_group(**kwargs)
-            logger.info(f"[进群欢迎] 已发送 group={group_id} via=send_to_group")
+            logger.info(f"[{kind}] 已发送 group={group_id} via=send_to_group")
             return
     except Exception as e:
-        logger.warning(f"[进群欢迎] send_to_group 失败 group={group_id}: {e}")
+        logger.warning(f"[{kind}] send_to_group 失败 group={group_id}: {e}")
 
-    # 最后兜底 handle_send（消息类事件）
     try:
         await handle_send(
             bot,
@@ -110,9 +116,9 @@ async def _send_welcome(bot: Bot, event, group_id: str) -> None:
             k4="娱乐帮助",
             v4="娱乐帮助",
         )
-        logger.info(f"[进群欢迎] 已发送 group={group_id} via=handle_send")
+        logger.info(f"[{kind}] 已发送 group={group_id} via=handle_send")
     except Exception as e:
-        logger.warning(f"[进群欢迎] 发送失败 group={group_id}: {e}")
+        logger.warning(f"[{kind}] 发送失败 group={group_id}: {e}")
 
 
 lifecycle_notice = on_notice(priority=5, block=False)
@@ -125,33 +131,32 @@ async def handle_group_lifecycle(bot: Bot, event, matcher: Matcher):
     event_name = _event_type_name(event)
 
     try:
+        action = ""
+        gid = group_id
         if is_lifecycle_event(event):
             result = apply_lifecycle_event(bot, event)
             action = result.context.action
             gid = result.context.group_id or group_id
-            # bot 被拉进群：发欢迎（不是全量标记）
-            if action == "bot_join_group" and gid and conf.is_group_welcome_enabled(gid):
-                logger.info(f"[进群欢迎] bot入群 group={gid} event={event_name}")
-                await _send_welcome(bot, event, gid)
-                await matcher.finish()
-            # 成员入群
-            if action == "member_join_group" and gid and conf.is_group_welcome_enabled(gid):
-                logger.info(f"[进群欢迎] 成员入群 group={gid} event={event_name}")
-                await _send_welcome(bot, event, gid)
-                await matcher.finish()
-            # 注意：不再用 group_receive 标记全量群
-        else:
-            # 非 lifecycle 包装时的直接判断
-            if _is_bot_join(event) and group_id and conf.is_group_welcome_enabled(group_id):
-                logger.info(f"[进群欢迎] bot入群(raw) group={group_id} event={event_name}")
-                await _send_welcome(bot, event, group_id)
-                await matcher.finish()
-            if _is_member_join(event) and group_id and conf.is_group_welcome_enabled(group_id):
-                logger.info(f"[进群欢迎] 成员入群(raw) group={group_id} event={event_name}")
-                await _send_welcome(bot, event, group_id)
-                await matcher.finish()
+        elif _is_bot_join(event):
+            action = "bot_join_group"
+        elif _is_member_join(event):
+            action = "member_join_group"
+
+        if not gid or not conf.is_group_welcome_enabled(gid):
+            return
+
+        # bot 入群：单独文案（入驻提示）
+        if action == "bot_join_group":
+            logger.info(f"[Bot入驻] group={gid} event={event_name}")
+            await _send_group_notice(bot, event, gid, _bot_join_text(), kind="Bot入驻")
+            await matcher.finish()
+
+        # 成员入群：欢迎文案（需要 intent.group_members）
+        if action == "member_join_group":
+            logger.info(f"[成员欢迎] group={gid} event={event_name}")
+            await _send_group_notice(bot, event, gid, _member_welcome_text(), kind="成员欢迎")
+            await matcher.finish()
     except Exception as e:
-        # finish 会抛 FinishedException，不能吞
         from nonebot.exception import FinishedException
 
         if isinstance(e, FinishedException):
