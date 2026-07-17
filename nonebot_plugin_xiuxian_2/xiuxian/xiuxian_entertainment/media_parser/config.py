@@ -16,9 +16,14 @@ _PLATFORMS = (
 )
 
 
+def media_parser_cache_dir():
+    """视频解析缓存：放 data/cache 下，自动备份会跳过 cache 目录。"""
+    return (get_paths().cache / "media_parser").resolve()
+
+
 def default_raw_config() -> dict:
     parsers_out = {k: _DEFAULT_OUTPUT for k in _PLATFORMS}
-    cache_dir = str((get_paths().data / "media_parser_cache").resolve())
+    cache_dir = str(media_parser_cache_dir())
     return {
         "trigger": {
             "auto_parse": True,
@@ -34,6 +39,10 @@ def default_raw_config() -> dict:
         "download": {
             "cache_dir": cache_dir,
             "max_video_size_mb": 500,
+            # 清理：按修改时间保留天数；0 表示不按天清
+            "cache_keep_days": 3,
+            # 总大小上限（MB），超限从最旧文件删起；0 表示不限
+            "cache_max_total_mb": 2048,
         },
         "proxy": {"address": ""},
         "bilibili_enhanced": {"use_cookie": False, "cookie": "", "max_quality": "1080P"},

@@ -274,6 +274,23 @@ async def daily_clean_expired_items():
     await _run_job("清理过期礼包/补偿/兑换码", clean_all_expired)
 
 
+@scheduler.scheduled_job(
+    "cron",
+    hour=3,
+    minute=20,
+    second=0,
+    id="cleanup_media_parser_cache_job",
+    misfire_grace_time=600,
+    coalesce=True,
+    max_instances=1,
+)
+async def cleanup_media_parser_cache_job():
+    """清理视频解析缓存（cache/media_parser + 旧 media_parser_cache）"""
+    from ..xiuxian_entertainment.media_parser.cleanup import cleanup_media_parser_cache
+
+    await _run_job("清理媒体解析缓存", cleanup_media_parser_cache)
+
+
 # =========================
 # 每周任务：拆开并延后，避免 0:01 拥堵
 # =========================

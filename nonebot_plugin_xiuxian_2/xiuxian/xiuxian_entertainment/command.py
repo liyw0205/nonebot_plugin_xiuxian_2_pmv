@@ -388,10 +388,21 @@ async def fun_media_send_parse_result(
 
                     return _Pth()
 
-        cache = get_paths().data / "media_parser_cache" / "videos"
+        # 放 cache 下，自动备份跳过
+        try:
+            from .media_parser.config import media_parser_cache_dir
+            cache = media_parser_cache_dir() / "videos"
+        except Exception:
+            base = getattr(get_paths(), "cache", None) or (get_paths().data / "cache")
+            cache = Path(base) / "media_parser" / "videos"
         cache.mkdir(parents=True, exist_ok=True)
         name = hashlib.sha1(url.encode("utf-8")).hexdigest()[:20] + ".mp4"
         out = cache / name
+        # 兼容旧目录命中（只读）
+        if not out.is_file():
+            legacy = get_paths().data / "media_parser_cache" / "videos" / name
+            if legacy.is_file() and 1024 < legacy.stat().st_size <= max_bytes:
+                return legacy
         if out.is_file() and 1024 < out.stat().st_size <= max_bytes:
             return out
         # 缓存过大则删掉重下/换档

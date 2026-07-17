@@ -350,7 +350,11 @@ def render_media_card(
     if out_path is None:
         from ....paths import get_paths
 
-        out_dir = get_paths().data / "media_parser_cache" / "cards"
+        try:
+            from .config import media_parser_cache_dir
+            out_dir = media_parser_cache_dir() / "cards"
+        except Exception:
+            out_dir = get_paths().cache / "media_parser" / "cards"
         out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / f"card_{abs(hash((platform, title, cover_url, time_str))) % (10**12)}.png"
     else:

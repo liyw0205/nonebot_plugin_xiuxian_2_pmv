@@ -1049,7 +1049,18 @@ class UpdateManager:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_path = backup_dir / f"backup_{timestamp}_{self.current_version}.zip"
 
-            skip_dirs = {"backups", "config_backups", "db_backup", "cache", "boss_img", "font", "卡图", "__pycache__"}
+            # cache / media_parser_cache 均为可重建缓存，不进自动备份
+            skip_dirs = {
+                "backups",
+                "config_backups",
+                "db_backup",
+                "cache",
+                "media_parser_cache",
+                "boss_img",
+                "font",
+                "卡图",
+                "__pycache__",
+            }
 
             with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 data_dir = get_paths().data

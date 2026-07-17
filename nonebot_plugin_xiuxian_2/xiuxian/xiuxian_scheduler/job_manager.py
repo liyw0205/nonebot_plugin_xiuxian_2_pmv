@@ -73,6 +73,7 @@ _JOB_TITLES: dict[str, str] = {
     "daily_reset_two_exp": "双修次数重置",
     "daily_reset_impart_pk": "传承对决重置",
     "daily_clean_expired_items": "清理过期物品",
+    "cleanup_media_parser_cache_job": "清理媒体解析缓存",
     "weekly_reduce_impart_lv": "传承等级周衰减",
     "weekly_reset_tower_floors": "通天塔周重置",
     "daily_add_impart_lv": "传承等级日增长",
