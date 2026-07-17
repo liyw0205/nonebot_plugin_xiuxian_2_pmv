@@ -14,23 +14,23 @@ Xiu_Plugin = get_paths().package_root
 
 class XiuConfig:
     def __init__(self):        
-        self.bot_uin = 0
+        self.bot_uin = 3889476343
         # 官方 Bot，对应的 UIN
-        self.bot_uid = ""
+        self.bot_uid = "u_zoFIsPTTKADQzjjgEyP2Nw"
         # 官方 Bot，对应的 UID
 
-        self.qqq = 144795954 
+        self.qqq = 144795954
         # 官群设置
-        self.put_bot = []
+        self.put_bot = ["102569432"]
         # ["123456"]
         # 接收消息qq,主qq，框架将只处理此qq的消息
         # 设置这个屏蔽群聊/私聊才能生效
-        self.shield_group = []
+        self.shield_group = ["01DEF55E88575D870F0FBA68AD1D0D72", "560074519"]
         # ["123456"]
         # 屏蔽的群聊
-        self.response_group = False
+        self.response_group = True
         # 反转屏蔽的群聊，仅响应这些群的消息
-        self.shield_private = False
+        self.shield_private = True
         # 屏蔽私聊
         self.main_bo = []
         # 负责发送消息的qq
