@@ -21,9 +21,10 @@ class UserRepository:
     def get_by_id(self, user_id: str):
         from .numeric_bind import normalize_user_row
 
+        # 若历史脏数据出现重复 user_id，固定取最早一行（id 最小），避免行为抖动
         return normalize_user_row(
             self._read_query(
-                "SELECT * FROM user_xiuxian WHERE user_id=%s",
+                "SELECT * FROM user_xiuxian WHERE user_id=%s ORDER BY id ASC LIMIT 1",
                 (user_id,),
                 one=True,
                 dict_row=True,
@@ -35,7 +36,7 @@ class UserRepository:
 
         return normalize_user_row(
             self._read_query(
-                "SELECT * FROM user_xiuxian WHERE user_name=%s",
+                "SELECT * FROM user_xiuxian WHERE user_name=%s ORDER BY id ASC LIMIT 1",
                 (user_name,),
                 one=True,
                 dict_row=True,
@@ -48,7 +49,7 @@ class UserRepository:
         with self._connection() as conn:
             cur = conn.cursor()
             cur.execute(
-                "SELECT * FROM user_xiuxian WHERE user_id=%s",
+                "SELECT * FROM user_xiuxian WHERE user_id=%s ORDER BY id ASC LIMIT 1",
                 (user_id,),
             )
             result = cur.fetchone()

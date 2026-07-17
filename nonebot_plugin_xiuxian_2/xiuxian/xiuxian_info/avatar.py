@@ -27,7 +27,9 @@ async def avatar_switch_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     """
     bot, _ = await assign_bot(bot=bot, event=event)
 
-    main_id = str(event.user_id)
+    # 始终用事件真实 openid 作为本号键；不要走 check_user 的 active_id 映射
+    # （否则切到未注册化身后会误判“未入修仙”，无法再切换）
+    main_id = str(event.get_user_id())
     arg_text = args.extract_plain_text().strip()
 
     if arg_text in ["本体", "回来", "返回", "切回"]:
@@ -40,8 +42,9 @@ async def avatar_switch_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         )
         await avatar_switch_cmd.finish()
 
-    is_user, user_info, msg = check_user(str(event.user_id))
-    if not is_user:
+    # 只校验本号是否已注册，不校验当前 active 化身是否已建档
+    main_info = sql_message.get_user_info_with_id(main_id)
+    if not main_info:
         await handle_send(bot, event, "请先使用【我要修仙】进入修仙世界后再开启身外化身！\n切换回来：身外化身 本体")
         await avatar_switch_cmd.finish()
 
@@ -49,10 +52,16 @@ async def avatar_switch_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessage
 
     if role == "avatar":
         avatar_id = info.get("avatar_id")
+        avatar_registered = bool(sql_message.get_user_info_with_id(str(avatar_id)))
+        extra = (
+            "\n（化身已建档，指令将作用于化身）"
+            if avatar_registered
+            else "\n（化身尚未建档：请先对本状态执行【我要修仙】创建化身角色；\n切回本号：身外化身 本体）"
+        )
         await handle_send(
             bot,
             event,
-            f"✨ 身外化身已启用！\n已从【本号】切换至【化身】\n化身ID：{avatar_id}\n（后续修仙指令将作用于化身）"
+            f"✨ 身外化身已启用！\n已从【本号】切换至【化身】\n化身ID：{avatar_id}{extra}"
         )
     else:
         await handle_send(

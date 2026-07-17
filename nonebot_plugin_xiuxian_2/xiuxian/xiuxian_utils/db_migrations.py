@@ -80,6 +80,71 @@ def _ensure_core_indexes(conn):
     ):
         _create_index(conn, index_name, table_name, columns)
 
+    # user_id 唯一：防止身外化身/伪装/并发注册写出重复 openid 行
+    if conn.table_exists("user_xiuxian"):
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_user_xiuxian_user_id_unique
+            ON user_xiuxian (user_id)
+            """
+        )
+
+
+def _migration_20260717_0001_dedupe_user_xiuxian(conn):
+    """
+    拆散 user_xiuxian 中重复的 user_id 行，再依赖唯一索引防复发。
+
+    策略：同一 user_id 保留 id 最小（最早）的一行；
+    其余行改写为 `{user_id}__dup{id}`，保留角色数据便于人工合并。
+    身外化身本身使用独立 avatar_id，不会产生同 openid 双行；
+    重复行通常来自：并发注册、ID 迁移碰撞、或脏写入。
+    """
+    if not conn.table_exists("user_xiuxian"):
+        return
+
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT user_id, COUNT(*) AS c
+        FROM user_xiuxian
+        GROUP BY user_id
+        HAVING COUNT(*) > 1
+        """
+    )
+    dups = cur.fetchall() or []
+    for user_id, _count in dups:
+        uid = str(user_id)
+        cur.execute(
+            "SELECT id FROM user_xiuxian WHERE user_id=%s ORDER BY id ASC",
+            (uid,),
+        )
+        ids = [int(row[0]) for row in (cur.fetchall() or [])]
+        if len(ids) <= 1:
+            continue
+        keep_id = ids[0]
+        for rid in ids[1:]:
+            new_uid = f"{uid}__dup{rid}"
+            # 避免二次冲突
+            n = 0
+            candidate = new_uid
+            while True:
+                cur.execute(
+                    "SELECT 1 FROM user_xiuxian WHERE user_id=%s LIMIT 1",
+                    (candidate,),
+                )
+                if cur.fetchone() is None:
+                    break
+                n += 1
+                candidate = f"{new_uid}_{n}"
+            cur.execute(
+                "UPDATE user_xiuxian SET user_id=%s WHERE id=%s",
+                (candidate, rid),
+            )
+            logger.warning(
+                f"[xiuxian-db] 拆散重复 user_id：保留 id={keep_id} 的 {uid}，"
+                f"将 id={rid} 改写为 {candidate}"
+            )
+
 
 def _migration_20260707_0001_runtime_marker(conn):
     """建立迁移基线；实际热点索引由 _ensure_core_indexes 幂等维护。"""
@@ -88,6 +153,7 @@ def _migration_20260707_0001_runtime_marker(conn):
 
 CORE_MIGRATIONS: list[tuple[str, Migration]] = [
     ("20260707_0001_runtime_marker", _migration_20260707_0001_runtime_marker),
+    ("20260717_0001_dedupe_user_xiuxian", _migration_20260717_0001_dedupe_user_xiuxian),
 ]
 
 

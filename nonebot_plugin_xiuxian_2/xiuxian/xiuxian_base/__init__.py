@@ -700,6 +700,22 @@ async def run_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         # 防御式处理，避免导入异常影响注册
         pass
 
+    # 再查一次目标 ID：避免 check_user 读到重复行/缓存竞态时重复建档
+    if sql_message.get_user_info_with_id(user_id):
+        await handle_send(
+            bot,
+            event,
+            "您已踏入修仙世界，输入【我的修仙信息】查看数据吧！",
+            md_type="修仙",
+            k1="存档",
+            v1="我的修仙信息",
+            k2="帮助",
+            v2="修仙帮助",
+            k3="签到",
+            v3="修仙签到",
+        )
+        await run_xiuxian.finish()
+
     root, root_type = XiuxianJsonDate().linggen_get()
     rate = sql_message.get_root_rate(root_type, user_id)
     power = 100 * float(rate)
