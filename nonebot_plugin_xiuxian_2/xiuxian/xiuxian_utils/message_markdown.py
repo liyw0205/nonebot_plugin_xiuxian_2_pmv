@@ -82,6 +82,67 @@ def strip_md_command_links(msg: str) -> str:
     return "\n".join(lines).strip() or " "
 
 
+_BRACKET_LINE_RE = re.compile(
+    r"^(?P<indent>[ \t]*)(?P<title>【[^】\r\n]+】)(?P<rest>\s*\S.*)$"
+)
+
+
+def enhance_markdown_bracket_lines(msg: str) -> str:
+    """Markdown 展示优化：【标题】后的说明改成引用行，字体更小。
+
+    例：
+      【我要修仙】踏入修仙界
+    变为：
+      【我要修仙】
+      > 踏入修仙界
+
+    已是引用、代码块、仅标题无说明的行不处理。
+    """
+    text = str(msg or "")
+    if "【" not in text:
+        return text
+
+    # 保留原换行风格：纯 \\r / 混合时统一按行处理，输出用 \\r 适配 QQ MD
+    use_cr = "\r" in text and "\n" not in text.replace("\r\n", "")
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    out: list[str] = []
+    in_code = False
+    for raw in normalized.split("\n"):
+        stripped = raw.strip()
+        if stripped.startswith("```"):
+            in_code = not in_code
+            out.append(raw)
+            continue
+        if in_code:
+            out.append(raw)
+            continue
+
+        m = _BRACKET_LINE_RE.match(raw)
+        if not m:
+            out.append(raw)
+            continue
+
+        indent = m.group("indent") or ""
+        title = m.group("title")
+        rest = (m.group("rest") or "").strip()
+        if not rest or rest.startswith(">"):
+            out.append(raw)
+            continue
+        # 标题后已是命令链接等复杂语法时，不拆行以免破坏 []()
+        if "mqqapi://aio/inlinecmd" in rest or "](" in rest:
+            out.append(raw)
+            continue
+
+        out.append(f"{indent}{title}")
+        out.append(f"{indent}> {rest}")
+
+    joiner = "\r" if use_cr else "\n"
+    # 若原文含 \\r（MD 路径常见），优先输出 \\r
+    if "\r" in text:
+        joiner = "\r"
+    return joiner.join(out)
+
+
 _EXTRA_HELP_COMMANDS = {
     "灵庄帮助", "灵庄存灵石", "灵庄取灵石", "灵庄升级会员", "灵庄信息", "灵庄结算",
     "悬赏令帮助", "悬赏令查看", "悬赏令刷新", "悬赏令确认刷新", "悬赏令接取",
@@ -271,4 +332,5 @@ def build_help_native_markdown(
                 button_links.append(build_md_command_link(label, command))
         if button_links:
             md_text = f"{md_text.rstrip()}\n\n---\n" + " | ".join(button_links)
-    return md_text
+    # 帮助里【指令】说明 也统一成引用小字
+    return enhance_markdown_bracket_lines(md_text)
