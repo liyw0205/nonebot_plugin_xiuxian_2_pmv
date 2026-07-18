@@ -1169,16 +1169,19 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             # 检查是否可结算
             rift_info = read_rift_data(user_id)
             user_cd_message = sql_message.get_user_cd(user_id)
-            work_time = datetime.strptime(
-                user_cd_message['create_time'], "%Y-%m-%d %H:%M:%S.%f"
+            from ..xiuxian_utils.cd_time import elapsed_minutes_from_cd_time
+
+            # create_time 可能无微秒（%H:%M:%S），不能写死 .%f
+            exp_time = elapsed_minutes_from_cd_time(
+                user_cd_message.get("create_time") if user_cd_message else None,
+                on_error=0,
             )
-            exp_time = (datetime.now() - work_time).seconds // 60
-            time2 = rift_info["time"]
+            time2 = int(rift_info.get("time") or 0)
             
             if exp_time >= time2:
                 rift_status = "可结算"
             else:
-                rift_status = f"探索{rift_info['name']} {time2 - exp_time}分后"
+                rift_status = f"探索{rift_info['name']} {max(0, time2 - exp_time)}分后"
         elif user_participated:
             rift_status = "已探索"
         else:

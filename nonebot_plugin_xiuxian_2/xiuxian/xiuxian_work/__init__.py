@@ -789,13 +789,19 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             msg = "没有这样的悬赏编号！"
             await handle_send(bot, event, msg)
             await do_work.finish()
+
+        remaining = int(sql_message.get_work_num(user_id) or 0)
+        if remaining <= 0:
+            msg = "今日悬赏次数已用尽，请明日再来！"
+            await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="帮助", v2="悬赏令帮助")
+            await do_work.finish()
             
         task_name, task_data = tasks[work_num - 1]
         started_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         result = work_claim_service.claim(
             operation_id,
             user_id,
-            sql_message.get_work_num(user_id),
+            remaining,
             work_data,
             work_num,
             started_at,
@@ -808,6 +814,12 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 "该接取请求已经处理，无需重复提交。"
             )
             await send_work_message(bot, event, msg, md_type="悬赏令", k1="结算", v1="悬赏令结算", k2="终止", v2="悬赏令终止", k3="帮助", v3="悬赏令帮助")
+            await do_work.finish()
+        if result.status == "count_insufficient":
+            await handle_send(bot, event, "今日悬赏次数已用尽，请明日再来！", md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="帮助", v2="悬赏令帮助")
+            await do_work.finish()
+        if result.status == "invalid_task":
+            await handle_send(bot, event, "没有这样的悬赏编号！")
             await do_work.finish()
         if result.status in {"state_changed", "user_missing"}:
             await handle_send(bot, event, "悬赏状态或可用次数已变化，请重新查看后再试。")

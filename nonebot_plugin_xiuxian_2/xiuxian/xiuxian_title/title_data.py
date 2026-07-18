@@ -429,7 +429,10 @@ def find_unlockable_titles(user_id: str) -> List[dict]:
         if not condition:
             continue
         if check_condition_for_user(user_id, condition):
-            newly_unlocked.append(title_data)
+            # title_data 来自 JSON value，id 在 key 上；补齐 id 供解锁事务使用
+            entry = dict(title_data)
+            entry["id"] = str(title_id)
+            newly_unlocked.append(entry)
             unlocked_ids.add(str(title_id))
 
     return newly_unlocked

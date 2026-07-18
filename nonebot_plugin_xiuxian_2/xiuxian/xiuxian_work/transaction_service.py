@@ -81,8 +81,13 @@ class WorkClaimService:
                 if name not in {n for n, _ in ordered}:
                     ordered.append((name, data))
             tasks = ordered
-        if not operation_id or expected_count <= 0 or task_index < 1 or task_index > len(tasks):
-            raise ValueError("valid operation, available count and task index are required")
+        if not operation_id:
+            raise ValueError("operation_id is required")
+        # 次数用尽 / 编号越界：返回状态，不要抛异常把 Matcher 打成 ERROR
+        if expected_count <= 0:
+            return WorkClaimResult("count_insufficient")
+        if task_index < 1 or task_index > len(tasks):
+            return WorkClaimResult("invalid_task")
         task_name, task_data = tasks[task_index - 1]
         snapshot = {
             "tasks": offer["tasks"],
