@@ -1,9 +1,11 @@
 """进群欢迎：成员欢迎 / bot入驻 分开。
 
-Markdown 开关与其它指令一致（复用 handle_send 语义）：
-- markdown_status=True：原生 MD 蓝字/按钮（lifecycle 必须带 event_id 被动发）
+Markdown 开关与其它指令一致：
+- markdown_status=True：原生 MD 蓝字/按钮（lifecycle 用 event_id 被动发）
 - markdown_status=False：纯文本
-bot 退群：若该群是全量群则取消标记。
+
+注意：notice 事件不要先 bot.send（installed adapter 会 Event cannot be replied to!），
+直接 send_to_group(event_id=...)。
 """
 
 from __future__ import annotations
@@ -37,6 +39,14 @@ def _event_type_name(event) -> str:
 
 def _extract_group_id(event) -> str:
     for key in ("group_openid", "group_id", "groupId"):
+        value = getattr(event, key, None)
+        if value:
+            return str(value)
+    return ""
+
+
+def _extract_event_id(event) -> str:
+    for key in ("event_id", "id"):
         value = getattr(event, key, None)
         if value:
             return str(value)
@@ -103,7 +113,23 @@ def _welcome_md_text(msg: str) -> str:
 
 
 async def _send_lifecycle_message(bot: Bot, event, group_id: str, message, *, kind: str) -> bool:
-    """lifecycle 发送：优先 bot.send(event, ...)，自动带 event_id。"""
+    """lifecycle 发送：优先 send_to_group(event_id)，避免 bot.send 对 notice 报 cannot reply。"""
+    event_id = _extract_event_id(event)
+
+    # 1) 直接群发 + event_id（被动）—— 成员进群/bot 入群的正确路径
+    try:
+        send_to_group = getattr(bot, "send_to_group", None)
+        if callable(send_to_group):
+            kwargs = {"group_openid": group_id, "message": message}
+            if event_id:
+                kwargs["event_id"] = event_id
+            await send_to_group(**kwargs)
+            logger.info(f"[{kind}] 已发送 group={group_id} via=send_to_group event_id={bool(event_id)}")
+            return True
+    except Exception as e:
+        logger.warning(f"[{kind}] send_to_group 失败 group={group_id}: {e}")
+
+    # 2) vendor bot.send 可能支持 GroupMemberAddEvent；仅作兜底，失败降为 debug 避免刷警告
     try:
         send = getattr(bot, "send", None)
         if callable(send):
@@ -111,20 +137,9 @@ async def _send_lifecycle_message(bot: Bot, event, group_id: str, message, *, ki
             logger.info(f"[{kind}] 已发送 group={group_id} via=bot.send")
             return True
     except Exception as e:
-        logger.warning(f"[{kind}] bot.send 失败 group={group_id}: {e}")
+        # installed adapter 常见：Event cannot be replied to!
+        logger.debug(f"[{kind}] bot.send 不可用 group={group_id}: {e}")
 
-    try:
-        send_to_group = getattr(bot, "send_to_group", None)
-        if callable(send_to_group):
-            event_id = getattr(event, "event_id", None) or getattr(event, "id", None)
-            kwargs = {"group_openid": group_id, "message": message}
-            if event_id:
-                kwargs["event_id"] = str(event_id)
-            await send_to_group(**kwargs)
-            logger.info(f"[{kind}] 已发送 group={group_id} via=send_to_group")
-            return True
-    except Exception as e:
-        logger.warning(f"[{kind}] send_to_group 失败 group={group_id}: {e}")
     return False
 
 
@@ -140,7 +155,6 @@ async def _send_group_notice(bot: Bot, event, group_id: str, msg: str, *, kind: 
     md_on = bool(getattr(cfg, "markdown_status", False))
     plain = strip_md_command_links(msg)
 
-    # 开 Markdown：lifecycle 必须用 event_id 被动发 MD，不能走主动群发 handle_send 默认路径
     if md_on:
         try:
             md_body = msg.replace("\n", "\r")
@@ -153,7 +167,7 @@ async def _send_group_notice(bot: Bot, event, group_id: str, msg: str, *, kind: 
         except Exception as e:
             logger.warning(f"[{kind}] 构造/发送 MD 失败 group={group_id}: {e}")
 
-        # 再尝试统一 handle_send（现已透传 event_id）
+        # handle_send 对 lifecycle 可能变主动发；仅在上面失败时尝试一次
         try:
             await handle_send(
                 bot,
@@ -175,7 +189,6 @@ async def _send_group_notice(bot: Bot, event, group_id: str, msg: str, *, kind: 
         except Exception as e:
             logger.warning(f"[{kind}] handle_send(md) 失败 group={group_id}: {e}")
 
-    # 关 Markdown / 失败：纯文本（清理语法）
     if await _send_lifecycle_message(bot, event, group_id, plain, kind=f"{kind}/plain"):
         return
     try:
@@ -211,7 +224,6 @@ async def handle_group_lifecycle(bot: Bot, event, matcher: Matcher):
         if not gid:
             return
 
-        # bot 被移出群：取消全量标记
         if action == "bot_leave_group":
             if conf.unmark_full_message_group(gid):
                 logger.info(f"[全量群] bot退群取消标记 group={gid}")
