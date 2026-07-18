@@ -349,7 +349,7 @@ class MixelixirHarvestLevelUpgradeResult:
         return self.status in {"applied", "duplicate"}
 
 class MixelixirHarvestLevelUpgradeService:
-    """Atomically charge stones and upgrade the herb harvest level."""
+    """Atomically spend alchemy exp and upgrade the herb harvest level."""
 
     _LEVEL_FIELD = "收取等级"
     _EXPERIENCE_FIELD = "炼丹经验"
@@ -390,6 +390,11 @@ class MixelixirHarvestLevelUpgradeService:
         next_level,
         cost,
     ) -> MixelixirHarvestLevelUpgradeResult:
+        """Upgrade harvest level by spending alchemy experience.
+
+        ``cost`` is alchemy-exp cost (not stone). ``expected_stone`` remains a
+        concurrency snapshot of wallet stone but is not charged.
+        """
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         expected_level, expected_experience, expected_stone, next_level, cost = map(
             int, (expected_level, expected_experience, expected_stone, next_level, cost)
@@ -406,8 +411,8 @@ class MixelixirHarvestLevelUpgradeService:
             [user_id, next_level, cost], ensure_ascii=True, separators=(",", ":"),
         )
 
-        def result(status, *, stone=expected_stone, level=expected_level):
-            return MixelixirHarvestLevelUpgradeResult(status, 0, stone, level, expected_experience)
+        def result(status, *, stone=expected_stone, level=expected_level, experience=expected_experience):
+            return MixelixirHarvestLevelUpgradeResult(status, 0, stone, level, experience)
 
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False
@@ -471,33 +476,40 @@ class MixelixirHarvestLevelUpgradeService:
                 ):
                     conn.rollback()
                     return result("state_changed", stone=current_stone)
-                if current_stone < cost:
+                if expected_experience < cost:
                     conn.rollback()
-                    return result("stone_insufficient", stone=current_stone)
+                    return result(
+                        "experience_insufficient",
+                        stone=current_stone,
+                        experience=expected_experience,
+                    )
 
-                charged = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND stone=%s AND stone>=%s",
-                    (cost, user_id, expected_stone, cost),
-                )
+                remaining_experience = expected_experience - cost
                 upgraded = conn.execute(
-                    f"UPDATE player_data.mix_elixir_info SET {quoted_level}=%s "
+                    f"UPDATE player_data.mix_elixir_info "
+                    f"SET {quoted_level}=%s,{quoted_experience}=%s "
                     f"WHERE user_id=%s AND CAST({quoted_level} AS INTEGER)=%s "
                     f"AND CAST({quoted_experience} AS INTEGER)=%s",
-                    (str(next_level), user_id, expected_level, expected_experience),
+                    (
+                        str(next_level),
+                        str(remaining_experience),
+                        user_id,
+                        expected_level,
+                        expected_experience,
+                    ),
                 )
-                if charged.rowcount != 1 or upgraded.rowcount != 1:
+                if upgraded.rowcount != 1:
                     conn.rollback()
                     return result("state_changed", stone=current_stone)
 
-                wallet_stone = expected_stone - cost
                 conn.execute(
                     "INSERT INTO mixelixir_harvest_level_upgrade_operations "
                     "(operation_id,payload,cost,wallet_stone,level,experience) VALUES (%s,%s,%s,%s,%s,%s)",
-                    (operation_id, payload, cost, wallet_stone, next_level, expected_experience),
+                    (operation_id, payload, cost, current_stone, next_level, remaining_experience),
                 )
                 conn.commit()
                 return MixelixirHarvestLevelUpgradeResult(
-                    "applied", cost, wallet_stone, next_level, expected_experience
+                    "applied", cost, current_stone, next_level, remaining_experience
                 )
             except Exception:
                 conn.rollback()
@@ -519,7 +531,7 @@ class MixelixirFireControlUpgradeResult:
         return self.status in {"applied", "duplicate"}
 
 class MixelixirFireControlUpgradeService:
-    """Atomically charge stones and upgrade the alchemy fire-control level."""
+    """Atomically spend alchemy exp and upgrade the alchemy fire-control level."""
 
     _LEVEL_FIELD = "丹药控火"
     _EXPERIENCE_FIELD = "炼丹经验"
@@ -560,6 +572,11 @@ class MixelixirFireControlUpgradeService:
         next_level,
         cost,
     ) -> MixelixirFireControlUpgradeResult:
+        """Upgrade fire-control by spending alchemy experience.
+
+        ``cost`` is alchemy-exp cost (not stone). ``expected_stone`` remains a
+        concurrency snapshot of wallet stone but is not charged.
+        """
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         expected_level, expected_experience, expected_stone, next_level, cost = map(
             int, (expected_level, expected_experience, expected_stone, next_level, cost)
@@ -576,8 +593,8 @@ class MixelixirFireControlUpgradeService:
             [user_id, next_level, cost], ensure_ascii=True, separators=(",", ":"),
         )
 
-        def result(status, *, stone=expected_stone, level=expected_level):
-            return MixelixirFireControlUpgradeResult(status, 0, stone, level, expected_experience)
+        def result(status, *, stone=expected_stone, level=expected_level, experience=expected_experience):
+            return MixelixirFireControlUpgradeResult(status, 0, stone, level, experience)
 
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False
@@ -641,33 +658,40 @@ class MixelixirFireControlUpgradeService:
                 ):
                     conn.rollback()
                     return result("state_changed", stone=current_stone)
-                if current_stone < cost:
+                if expected_experience < cost:
                     conn.rollback()
-                    return result("stone_insufficient", stone=current_stone)
+                    return result(
+                        "experience_insufficient",
+                        stone=current_stone,
+                        experience=expected_experience,
+                    )
 
-                charged = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND stone=%s AND stone>=%s",
-                    (cost, user_id, expected_stone, cost),
-                )
+                remaining_experience = expected_experience - cost
                 upgraded = conn.execute(
-                    f"UPDATE player_data.mix_elixir_info SET {quoted_level}=%s "
+                    f"UPDATE player_data.mix_elixir_info "
+                    f"SET {quoted_level}=%s,{quoted_experience}=%s "
                     f"WHERE user_id=%s AND CAST({quoted_level} AS INTEGER)=%s "
                     f"AND CAST({quoted_experience} AS INTEGER)=%s",
-                    (str(next_level), user_id, expected_level, expected_experience),
+                    (
+                        str(next_level),
+                        str(remaining_experience),
+                        user_id,
+                        expected_level,
+                        expected_experience,
+                    ),
                 )
-                if charged.rowcount != 1 or upgraded.rowcount != 1:
+                if upgraded.rowcount != 1:
                     conn.rollback()
                     return result("state_changed", stone=current_stone)
 
-                wallet_stone = expected_stone - cost
                 conn.execute(
                     "INSERT INTO mixelixir_fire_control_upgrade_operations "
                     "(operation_id,payload,cost,wallet_stone,level,experience) VALUES (%s,%s,%s,%s,%s,%s)",
-                    (operation_id, payload, cost, wallet_stone, next_level, expected_experience),
+                    (operation_id, payload, cost, current_stone, next_level, remaining_experience),
                 )
                 conn.commit()
                 return MixelixirFireControlUpgradeResult(
-                    "applied", cost, wallet_stone, next_level, expected_experience
+                    "applied", cost, current_stone, next_level, remaining_experience
                 )
             except Exception:
                 conn.rollback()

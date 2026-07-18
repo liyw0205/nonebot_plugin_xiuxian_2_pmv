@@ -79,7 +79,7 @@ __mix_elixir_help__ = f"""
 
 @mix_elixir_sqdj_up.handle(parameterless=[Cooldown(cd_time=0)])
 async def mix_elixir_sqdj_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """收取等级升级"""
+    """收取等级升级（消耗炼丹经验）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -93,12 +93,13 @@ async def mix_elixir_sqdj_up_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     SQDJCONFIG = MIXELIXIRCONFIG['收取等级']
     mix_elixir_info = get_player_info(user_id, "mix_elixir_info")
     now_level = mix_elixir_info['收取等级']
+    now_exp = int(mix_elixir_info['炼丹经验'] or 0)
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"mixelixir-harvest-level:{event_id}:{user_id}" if event_id else f"mixelixir-harvest-level:{user_id}:{time.time_ns()}"
     # 先回放：成功后等级达上限会挡住同事件幂等。
     prior = mixelixir_harvest_level_upgrade_service.get_result(operation_id)
     if prior is not None and prior.succeeded:
-        msg = f"道友消耗灵石{prior.cost}枚，收取等级目前为：{prior.level}级，可以使灵田收获的药材增加{prior.level}个！\n该升级请求已经处理，无需重复提交。"
+        msg = f"道友消耗炼丹经验{prior.cost}点，收取等级目前为：{prior.level}级，可以使灵田收获的药材增加{prior.level}个！\n该升级请求已经处理，无需重复提交。"
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir_sqdj_up.finish()
     if now_level >= len(SQDJCONFIG):
@@ -106,35 +107,39 @@ async def mix_elixir_sqdj_up_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir_sqdj_up.finish()
     next_level_cost = SQDJCONFIG[str(now_level + 1)]['level_up_cost']
-    if int(user_info['stone']) < next_level_cost:
-        msg = f"下一个收取等级需要灵石{next_level_cost}枚，道友当前灵石不足。"
+    if now_exp < next_level_cost:
+        msg = f"下一个收取等级需要炼丹经验{next_level_cost}点，道友当前炼丹经验不足（现有{now_exp}点）。"
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir_sqdj_up.finish()
     upgrade = mixelixir_harvest_level_upgrade_service.upgrade(
         operation_id,
         user_id,
         now_level,
-        mix_elixir_info['炼丹经验'],
+        now_exp,
         user_info['stone'],
         now_level + 1,
         next_level_cost,
     )
     if upgrade.status == "duplicate":
-        msg = f"道友消耗灵石{upgrade.cost}枚，收取等级目前为：{upgrade.level}级，可以使灵田收获的药材增加{upgrade.level}个！\n该升级请求已经处理，无需重复提交。"
+        msg = f"道友消耗炼丹经验{upgrade.cost}点，收取等级目前为：{upgrade.level}级，可以使灵田收获的药材增加{upgrade.level}个！\n该升级请求已经处理，无需重复提交。"
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir_sqdj_up.finish()
-    if not upgrade.succeeded:
-        msg = "灵石或炼丹状态已变化，本次收取等级升级未结算，请重新查看后再试。"
+    if upgrade.status == "experience_insufficient":
+        msg = f"下一个收取等级需要炼丹经验{next_level_cost}点，道友当前炼丹经验不足。"
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级收取等级", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir_sqdj_up.finish()
-    msg = f"道友消耗灵石{upgrade.cost}枚，收取等级目前为：{upgrade.level}级，可以使灵田收获的药材增加{upgrade.level}个！"
+    if not upgrade.succeeded:
+        msg = "炼丹状态已变化，本次收取等级升级未结算，请重新查看后再试。"
+        await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级收取等级", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
+        await mix_elixir_sqdj_up.finish()
+    msg = f"道友消耗炼丹经验{upgrade.cost}点，收取等级目前为：{upgrade.level}级，可以使灵田收获的药材增加{upgrade.level}个！\n剩余炼丹经验：{upgrade.experience}点"
     await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
     await mix_elixir_sqdj_up.finish()
 
 
 @mix_elixir_dykh_up.handle(parameterless=[Cooldown(cd_time=0)])
 async def mix_elixir_dykh_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """丹药控火升级"""
+    """丹药控火升级（消耗炼丹经验）"""
     from .transaction_service import MixelixirFireControlUpgradeService
 
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -146,12 +151,13 @@ async def mix_elixir_dykh_up_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     DYKHCONFIG = MIXELIXIRCONFIG['丹药控火']
     mix_elixir_info = get_player_info(user_id, "mix_elixir_info")
     now_level = mix_elixir_info['丹药控火']
+    now_exp = int(mix_elixir_info['炼丹经验'] or 0)
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"mixelixir-fire-control:{event_id}:{user_id}" if event_id else f"mixelixir-fire-control:{user_id}:{time.time_ns()}"
     upgrade_service = MixelixirFireControlUpgradeService(get_paths().game_db, get_paths().player_db)
     prior = upgrade_service.get_result(operation_id)
     if prior is not None and prior.succeeded:
-        msg = f"道友消耗灵石{prior.cost}枚，丹药控火等级目前为：{prior.level}级，可以使炼丹收获的丹药增加{prior.level}个！\n该升级请求已经处理，无需重复提交。"
+        msg = f"道友消耗炼丹经验{prior.cost}点，丹药控火等级目前为：{prior.level}级，可以使炼丹收获的丹药增加{prior.level}个！\n该升级请求已经处理，无需重复提交。"
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir_dykh_up.finish()
     if now_level >= len(DYKHCONFIG):
@@ -159,28 +165,32 @@ async def mix_elixir_dykh_up_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir_dykh_up.finish()
     next_level_cost = DYKHCONFIG[str(now_level + 1)]['level_up_cost']
-    if int(user_info['stone']) < next_level_cost:
-        msg = f"下一个丹药控火等级需要灵石{next_level_cost}枚，道友当前灵石不足。"
+    if now_exp < next_level_cost:
+        msg = f"下一个丹药控火等级需要炼丹经验{next_level_cost}点，道友当前炼丹经验不足（现有{now_exp}点）。"
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir_dykh_up.finish()
     upgrade = upgrade_service.upgrade(
         operation_id,
         user_id,
         now_level,
-        mix_elixir_info['炼丹经验'],
+        now_exp,
         user_info['stone'],
         now_level + 1,
         next_level_cost,
     )
     if upgrade.status == "duplicate":
-        msg = f"道友消耗灵石{upgrade.cost}枚，丹药控火等级目前为：{upgrade.level}级，可以使炼丹收获的丹药增加{upgrade.level}个！\n该升级请求已经处理，无需重复提交。"
+        msg = f"道友消耗炼丹经验{upgrade.cost}点，丹药控火等级目前为：{upgrade.level}级，可以使炼丹收获的丹药增加{upgrade.level}个！\n该升级请求已经处理，无需重复提交。"
+        await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
+        await mix_elixir_dykh_up.finish()
+    if upgrade.status == "experience_insufficient":
+        msg = f"下一个丹药控火等级需要炼丹经验{next_level_cost}点，道友当前炼丹经验不足。"
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir_dykh_up.finish()
     if not upgrade.succeeded:
-        msg = "灵石或炼丹状态已变化，本次丹药控火升级未结算，请重新查看后再试。"
+        msg = "炼丹状态已变化，本次丹药控火升级未结算，请重新查看后再试。"
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir_dykh_up.finish()
-    msg = f"道友消耗灵石{upgrade.cost}枚，丹药控火等级目前为：{upgrade.level}级，可以使炼丹收获的丹药增加{upgrade.level}个！"
+    msg = f"道友消耗炼丹经验{upgrade.cost}点，丹药控火等级目前为：{upgrade.level}级，可以使炼丹收获的丹药增加{upgrade.level}个！\n剩余炼丹经验：{upgrade.experience}点"
     await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
     await mix_elixir_dykh_up.finish()
 

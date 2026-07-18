@@ -45,33 +45,33 @@ class MixelixirFireControlUpgradeTests(unittest.TestCase):
             ).fetchone()
         return stone, int(mix[0]), int(mix[1])
 
-    def upgrade(self, operation_id="upgrade", level=0, experience=900, stone=5000, next_level=1, cost=1000):
+    def upgrade(self, operation_id="upgrade", level=0, experience=900, stone=5000, next_level=1, cost=100):
         return self.service.upgrade(operation_id, "user", level, experience, stone, next_level, cost)
 
-    def test_success_charges_stones_and_upgrades_without_spending_experience(self) -> None:
+    def test_success_spends_experience_and_keeps_stones(self) -> None:
         result = self.upgrade()
-        self.assertEqual((result.status, result.cost, result.wallet_stone, result.level), ("applied", 1000, 4000, 1))
-        self.assertEqual(self.state(), (4000, 1, 900))
+        self.assertEqual((result.status, result.cost, result.wallet_stone, result.level, result.experience), ("applied", 100, 5000, 1, 800))
+        self.assertEqual(self.state(), (5000, 1, 800))
 
     def test_duplicate_replays_result_and_conflicting_payload_is_rejected(self) -> None:
         first = self.upgrade("repeat")
         duplicate = self.upgrade("repeat")
-        conflict = self.upgrade("repeat", cost=1001)
+        conflict = self.upgrade("repeat", cost=101)
         self.assertEqual((first.status, duplicate.status, conflict.status), ("applied", "duplicate", "state_changed"))
-        self.assertEqual((duplicate.cost, duplicate.wallet_stone, duplicate.level), (1000, 4000, 1))
-        self.assertEqual(self.state(), (4000, 1, 900))
+        self.assertEqual((duplicate.cost, duplicate.wallet_stone, duplicate.level, duplicate.experience), (100, 5000, 1, 800))
+        self.assertEqual(self.state(), (5000, 1, 800))
 
     def test_changed_mix_or_wallet_snapshot_changes_nothing(self) -> None:
         self.assertEqual(self.upgrade("mix-conflict", experience=901).status, "state_changed")
         self.assertEqual(self.upgrade("wallet-conflict", stone=4999).status, "state_changed")
         self.assertEqual(self.state(), (5000, 0, 900))
 
-    def test_insufficient_stones_changes_nothing(self) -> None:
-        result = self.upgrade("short", cost=5001)
-        self.assertEqual(result.status, "stone_insufficient")
+    def test_insufficient_experience_changes_nothing(self) -> None:
+        result = self.upgrade("short", cost=901)
+        self.assertEqual(result.status, "experience_insufficient")
         self.assertEqual(self.state(), (5000, 0, 900))
 
-    def test_operation_write_failure_rolls_back_charge_and_level(self) -> None:
+    def test_operation_write_failure_rolls_back_level_and_experience(self) -> None:
         with db_backend.transaction(self.game) as conn:
             conn.execute(
                 "CREATE TABLE mixelixir_fire_control_upgrade_operations ("
