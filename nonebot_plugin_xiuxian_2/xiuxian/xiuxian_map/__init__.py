@@ -2050,10 +2050,14 @@ def _get_explore_status(uid: str):
     else:
         from .explore_schema import _blank_snapshot
 
-        # 优先 settlement；reward_plan 仅作遗留兼容。字面量 "None" 视为空。
+        # 优先 settlement；reward_plan 仅作遗留兼容。
+        # 但 reward_plan 是奖励表 list，不能当结算快照 dict 用。
         snapshot = _blank_snapshot(d.get("settlement"))
         if not snapshot:
-            snapshot = _blank_snapshot(d.get("reward_plan"))
+            legacy = _blank_snapshot(d.get("reward_plan"))
+            # 仅接受看起来像 JSON object 的遗留数据
+            if legacy.startswith("{") and legacy.endswith("}"):
+                snapshot = legacy
         d["settlement"] = snapshot
         # 清掉脏 reward_plan，避免下次再次污染
         if _blank_snapshot(d.get("reward_plan")) != str(d.get("reward_plan") or "").strip() or str(
@@ -2274,12 +2278,19 @@ async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             st["settlement"] = ""
         else:
             try:
-                snapshot = json.loads(cleaned)
+                parsed = json.loads(cleaned)
             except (TypeError, ValueError):
-                # 脏数据：清空后按当前探索重算，而不是卡死
+                parsed = None
+            # 合法快照必须是 dict 且含 daily/items 等字段。
+            # 遗留 reward_plan 是 list（[[pool,min,max,chance],...]），会被误当 settlement 写入。
+            required = {"daily", "decay", "event_lines", "items", "node_name", "rewards", "rounds", "settle_min", "stone"}
+            if isinstance(parsed, dict) and required.issubset(parsed.keys()):
+                snapshot = parsed
+            else:
                 logger.warning(
-                    "探索结算快照损坏，已清空重算 user_id={} raw={!r}",
+                    "探索结算快照格式无效，已清空重算 user_id={} type={} raw={!r}",
                     uid,
+                    type(parsed).__name__ if parsed is not None else "invalid",
                     str(raw_snapshot)[:120],
                 )
                 snapshot = None
