@@ -77,6 +77,29 @@ def _is_bot_leave(event) -> bool:
     return "GROUP_DEL_ROBOT" in name or "BOT_LEAVE" in name
 
 
+def _is_group_allowed_for_bot(bot: Bot, group_id: str) -> bool:
+    """与全局 response_group/shield_group 白名单一致。
+
+    response_group=True：仅响应 shield_group 列表中的群（白名单）。
+    response_group=False：屏蔽 shield_group 列表中的群（黑名单）。
+    put_bot 为空时不做 bot 过滤（兼容未配置）。
+    """
+    gid = str(group_id or "").strip()
+    if not gid:
+        return False
+
+    cfg = XiuConfig()
+    put_bot = [str(x) for x in (getattr(cfg, "put_bot", None) or [])]
+    if put_bot and str(getattr(bot, "self_id", "") or "") not in put_bot:
+        return False
+
+    shield = {str(x) for x in (getattr(cfg, "shield_group", None) or [])}
+    response_group = bool(getattr(cfg, "response_group", False))
+    if response_group:
+        return gid in shield
+    return gid not in shield
+
+
 def _member_welcome_text() -> str:
     return (XiuConfig().group_welcome_msg or "").strip() or "欢迎道友入群！"
 
@@ -224,9 +247,15 @@ async def handle_group_lifecycle(bot: Bot, event, matcher: Matcher):
         if not gid:
             return
 
+        # bot 退群：全量取消标记不受欢迎开关/白名单影响
         if action == "bot_leave_group":
             if conf.unmark_full_message_group(gid):
                 logger.info(f"[全量群] bot退群取消标记 group={gid}")
+            return
+
+        # 仅响应群 / 屏蔽群：欢迎也必须遵守，否则白名单外群仍会欢迎
+        if not _is_group_allowed_for_bot(bot, gid):
+            logger.debug(f"[进群欢迎] 非响应群，已忽略 group={gid} action={action}")
             return
 
         if not conf.is_group_welcome_enabled(gid):
