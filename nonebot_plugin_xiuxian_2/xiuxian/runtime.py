@@ -76,6 +76,12 @@ def _install_dependencies() -> None:
     ensure_plugin_dependencies()
 
 
+def _warmup_help_commands() -> int:
+    from .xiuxian_utils.message_markdown import warmup_help_command_cache
+
+    return int(warmup_help_command_cache() or 0)
+
+
 @driver.on_startup
 async def initialize_xiuxian_runtime() -> None:
     """Run filesystem, dependency and database maintenance after imports finish."""
@@ -128,6 +134,13 @@ async def initialize_xiuxian_runtime() -> None:
     await background_jobs.start()
     await critical_jobs.start()
     await submit_background_job(media_resolver.cleanup)
+
+    # 预热帮助命令缓存：首次「xx帮助」否则会扫全仓库 AST 很慢
+    try:
+        n = await asyncio.to_thread(_warmup_help_commands)
+        logger.info(f"帮助命令缓存预热完成：{n} 条")
+    except Exception as exc:
+        logger.warning(f"帮助命令缓存预热失败：{exc}")
 
 
 @driver.on_shutdown

@@ -85,25 +85,41 @@ def strip_md_command_links(msg: str) -> str:
 _BRACKET_LINE_RE = re.compile(
     r"^(?P<indent>[ \t]*)(?P<title>【[^】\r\n]+】)(?P<rest>\s*\S.*)$"
 )
+# 帮助常见：悬赏令查看 - 浏览... / • 我的宗门 - 查看...
+_HELP_CMD_DESC_RE = re.compile(
+    r"^(?P<indent>[ \t]*)"
+    r"(?P<bullet>(?:[-*•→·]|\d+[.、)]|[一二三四五六七八九十]+[.、])\s+)?"
+    r"(?P<label>[^：:\-\r\n【】]{1,40}?)"
+    r"(?P<sep>\s*[-—–]\s+|：|:)\s*"
+    r"(?P<desc>\S.*)$"
+)
+# 句中：请发送【直接突破】来突破 / 输入【我的修仙信息】查看
+_INLINE_SEND_CMD_RE = re.compile(
+    r"(?P<prefix>请?发送|请?输入|请使用|可发送|可输入)"
+    r"(?P<title>【[^】\r\n]{1,24}】)"
+    r"(?P<rest>[^【\r\n]{0,40})$"
+)
 
 
-def enhance_markdown_bracket_lines(msg: str) -> str:
-    """Markdown 展示优化：【标题】后的说明改成引用行，字体更小。
+def _md_joiner(text: str) -> str:
+    if "\r" in text:
+        return "\r"
+    return "\n"
 
-    例：
-      【我要修仙】踏入修仙界
-    变为：
-      【我要修仙】
-      > 踏入修仙界
 
-    已是引用、代码块、仅标题无说明的行不处理。
+def enhance_markdown_display(msg: str) -> str:
+    """Markdown 展示优化（按真实帮助/欢迎文案覆盖）：
+
+    1) 【标题】说明  →  【标题】 + > 说明
+    2) 命令 - 说明 / 命令：说明（含项目符号）→ 命令 + > 说明
+    3) 请发送【命令】后续说明 → 前缀 + 【命令】 + > 后续
+
+    关闭 MD 时由 strip_md_command_links 清理 `>`。
     """
     text = str(msg or "")
-    if "【" not in text:
+    if not text:
         return text
 
-    # 保留原换行风格：纯 \\r / 混合时统一按行处理，输出用 \\r 适配 QQ MD
-    use_cr = "\r" in text and "\n" not in text.replace("\r\n", "")
     normalized = text.replace("\r\n", "\n").replace("\r", "\n")
     out: list[str] = []
     in_code = False
@@ -113,34 +129,86 @@ def enhance_markdown_bracket_lines(msg: str) -> str:
             in_code = not in_code
             out.append(raw)
             continue
-        if in_code:
+        if in_code or not stripped:
+            out.append(raw)
+            continue
+        # 已是引用/分隔/纯标题行，保持
+        if stripped.startswith(">") or stripped in {"---", "***", "---"}:
             out.append(raw)
             continue
 
+        # 1) 行首【标题】后有说明
         m = _BRACKET_LINE_RE.match(raw)
-        if not m:
+        if m:
+            indent = m.group("indent") or ""
+            title = m.group("title")
+            rest = (m.group("rest") or "").strip()
+            if rest and not rest.startswith(">") and "mqqapi://aio/inlinecmd" not in rest and "](" not in rest:
+                out.append(f"{indent}{title}")
+                out.append(f"{indent}> {rest}")
+                continue
             out.append(raw)
             continue
 
-        indent = m.group("indent") or ""
-        title = m.group("title")
-        rest = (m.group("rest") or "").strip()
-        if not rest or rest.startswith(">"):
-            out.append(raw)
-            continue
-        # 标题后已是命令链接等复杂语法时，不拆行以免破坏 []()
-        if "mqqapi://aio/inlinecmd" in rest or "](" in rest:
-            out.append(raw)
-            continue
+        # 2) 帮助条目：命令 - 说明 / 命令：说明
+        # 排除纯规则数值（如 初始积分：1000分、胜利：+20积分）里“说明”太短且像属性
+        m = _HELP_CMD_DESC_RE.match(raw)
+        if m:
+            label = (m.group("label") or "").strip()
+            desc = (m.group("desc") or "").strip()
+            bullet = m.group("bullet") or ""
+            indent = m.group("indent") or ""
+            # 跳过：链接、已是引用、标签过短、描述过短
+            if (
+                label
+                and desc
+                and not desc.startswith(">")
+                and "mqqapi://aio/inlinecmd" not in raw
+                and "](" not in raw
+                and len(label) >= 2
+                and len(desc) >= 2
+            ):
+                # 数值/比例类短描述不拆（积分、次数、百分比、纯数字）
+                if not re.fullmatch(r"[+\-−]?\d+.*|.*[%％分次级层].*|无|有|是|否", desc):
+                    # 标签像命令/功能名时才拆（含中文且不是纯标点）
+                    if re.search(r"[\u4e00-\u9fffA-Za-z]", label):
+                        out.append(f"{indent}{bullet}{label}".rstrip())
+                        out.append(f"{indent}> {desc}")
+                        continue
 
-        out.append(f"{indent}{title}")
-        out.append(f"{indent}> {rest}")
+        # 3) 句中 请发送/输入/使用【命令】后续说明
+        m = _INLINE_SEND_CMD_RE.search(raw)
+        if m and "mqqapi://aio/inlinecmd" not in raw and "](" not in raw:
+            prefix = m.group("prefix")
+            title = m.group("title")
+            rest = (m.group("rest") or "").strip(" ，,。！!；;：:")
+            # 只处理 rest 还有有效说明的
+            if rest and not rest.startswith(">"):
+                # 保留行首缩进与前缀前文本
+                start = m.start()
+                head = raw[:start].rstrip()
+                indent = re.match(r"^[ \t]*", raw).group(0) if re.match(r"^[ \t]*", raw) else ""
+                lines = []
+                if head:
+                    lines.append(head)
+                lines.append(f"{indent}{prefix}{title}")
+                lines.append(f"{indent}> {rest}")
+                out.extend(lines)
+                continue
 
-    joiner = "\r" if use_cr else "\n"
-    # 若原文含 \\r（MD 路径常见），优先输出 \\r
-    if "\r" in text:
-        joiner = "\r"
-    return joiner.join(out)
+        out.append(raw)
+
+    return _md_joiner(text).join(out)
+
+
+# 兼容旧名
+enhance_markdown_bracket_lines = enhance_markdown_display
+
+
+def warmup_help_command_cache() -> int:
+    """启动预热：扫描命令表，避免首次帮助极慢。"""
+    commands = _get_known_help_commands()
+    return len(commands)
 
 
 _EXTRA_HELP_COMMANDS = {
@@ -332,5 +400,5 @@ def build_help_native_markdown(
                 button_links.append(build_md_command_link(label, command))
         if button_links:
             md_text = f"{md_text.rstrip()}\n\n---\n" + " | ".join(button_links)
-    # 帮助里【指令】说明 也统一成引用小字
-    return enhance_markdown_bracket_lines(md_text)
+    # 帮助条目统一展示优化
+    return enhance_markdown_display(md_text)

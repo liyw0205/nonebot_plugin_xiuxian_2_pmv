@@ -42,6 +42,8 @@ from .message_markdown import (
     escape_markdown_text,
     strip_md_command_links,
     enhance_markdown_bracket_lines,
+    enhance_markdown_display,
+    warmup_help_command_cache,
     _const_str,
     _collect_str_constants,
     _get_known_help_commands,
@@ -809,8 +811,8 @@ def optimize_md(msg: Union[Message, str, List[Union[Message, str]]]) -> Union[st
         m_text = m_text.replace('\n', '\r')
         m_text = m_text.replace('[', '')
         m_text = m_text.replace(']', '')
-        # 【标题】说明 → 【标题】\r> 说明（引用更小字）
-        m_text = enhance_markdown_bracket_lines(m_text)
+        # 【标题】说明 / 命令 - 说明 等 → 引用小字
+        m_text = enhance_markdown_display(m_text)
         
         return m_text
 
@@ -1554,8 +1556,8 @@ async def handle_send_native_markdown(
         return
 
     md_text = str(msg) if msg else " "
-    # 原生 MD 不走 optimize_md，这里单独做【】后引用优化
-    md_text = enhance_markdown_bracket_lines(md_text)
+    # 原生 MD 不走 optimize_md，这里单独做展示优化
+    md_text = enhance_markdown_display(md_text)
     md_text = md_text.replace("\n", "\r")
 
     scene = get_chat_scene(event)
