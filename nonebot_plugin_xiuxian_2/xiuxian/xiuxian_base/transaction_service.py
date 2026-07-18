@@ -2944,6 +2944,7 @@ class OrdinaryTribulationService:
                 state = conn.execute(
                     "SELECT current_rate FROM user_tribulation WHERE user_id=%s", (user_id,)
                 ).fetchone()
+                # 无渡劫状态行时，与 get_user_tribulation_info 默认值一致（base=30）
                 actual_rate = int(state[0]) if state else 30
                 if user is None or str(user[0]) != expected_level or int(user[1] or 0) != expected_exp or actual_rate != expected_rate:
                     conn.rollback()
@@ -2969,10 +2970,21 @@ class OrdinaryTribulationService:
                     )
                     conn.execute("DELETE FROM user_tribulation WHERE user_id=%s", (user_id,))
                 else:
-                    changed = conn.execute(
-                        "UPDATE user_tribulation SET current_rate=%s,last_time=%s WHERE user_id=%s AND current_rate=%s",
-                        (new_rate, occurred_at, user_id, expected_rate),
-                    )
+                    # 失败：必须能写入/更新渡劫状态。无行时 INSERT，有行时 UPDATE。
+                    # 旧逻辑只 UPDATE，首次渡劫失败（无 user_tribulation 行）会 rowcount=0 → 误报 state_changed
+                    if state is None:
+                        changed = conn.execute(
+                            "INSERT INTO user_tribulation "
+                            "(user_id, current_rate, heart_devil_count, last_time, next_level) "
+                            "VALUES (%s, %s, 0, %s, %s)",
+                            (user_id, new_rate, occurred_at, target_level),
+                        )
+                    else:
+                        changed = conn.execute(
+                            "UPDATE user_tribulation SET current_rate=%s,last_time=%s,next_level=%s "
+                            "WHERE user_id=%s AND current_rate=%s",
+                            (new_rate, occurred_at, target_level, user_id, expected_rate),
+                        )
                 if changed.rowcount != 1:
                     conn.rollback()
                     return OrdinaryTribulationResult(
