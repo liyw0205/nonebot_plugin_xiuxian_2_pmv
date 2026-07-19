@@ -1148,7 +1148,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg, md_type="背包", k1="宠物", v1="我的宠物", k2="宠物背包", v2="宠物背包", k3="帮助", v3="宠物帮助")
         return
     if not hatched.succeeded:
-        await handle_send(bot, event, "砸蛋状态已变化，请重新查询灵石和宠物背包后再试。")
+        status_msg = {
+            "stone_missing": f"砸蛋{count}次需要{number_to(total_cost)}灵石，道友当前灵石不足。",
+            "inventory_full": "宠物背包容量不足，请先放生或整理后再砸蛋。",
+            "user_missing": "角色不存在，无法砸蛋。",
+            "state_changed": "砸蛋状态已变化，请重新查询灵石和宠物背包后再试。",
+        }.get(hatched.status, "砸蛋失败，请稍后重试。")
+        await handle_send(bot, event, status_msg)
         return
     success_cost = total_cost
     error_msg = ""

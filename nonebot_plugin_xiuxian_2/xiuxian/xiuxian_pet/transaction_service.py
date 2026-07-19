@@ -284,6 +284,53 @@ class PetHatchService:
         return json.dumps([str(user_id), int(cost), int(count)], ensure_ascii=True, separators=(",", ":"))
 
     @staticmethod
+    def _as_int_like(value, default: int = 0) -> int:
+        try:
+            if value is None or value == "":
+                return default
+            return int(float(value))
+        except Exception:
+            return default
+
+    @staticmethod
+    def _normalize_travel_snapshot(value):
+        """统一 travel 快照：dict / JSON 字符串 / 空值，避免误报 state_changed。"""
+        if value is None:
+            return None
+        if isinstance(value, dict):
+            if not value:
+                return None
+            return json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        text = str(value).strip()
+        if not text or text in {"null", "None", "none"}:
+            return None
+        try:
+            obj = json.loads(text)
+        except Exception:
+            return text
+        if obj is None:
+            return None
+        if isinstance(obj, dict):
+            if not obj:
+                return None
+            return json.dumps(obj, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        return text
+
+    @staticmethod
+    def _normalize_hatch_meta(meta) -> list:
+        if meta is None:
+            return ["", 0, 0, None]
+        items = list(meta)
+        while len(items) < 4:
+            items.append(None)
+        return [
+            str(items[0] or ""),
+            PetHatchService._as_int_like(items[1], 0),
+            PetHatchService._as_int_like(items[2], 0),
+            PetHatchService._normalize_travel_snapshot(items[3]),
+        ]
+
+    @staticmethod
     def _result_from_row(status: str, payload: str, result_json: str | None) -> PetHatchResult:
         cost = 0
         count = 0
@@ -380,7 +427,9 @@ class PetHatchService:
                 if user is None:
                     conn.rollback()
                     return PetHatchResult("user_missing")
-                if int(user[0]) != expected_stone:
+                # stone 历史可能是 TEXT/REAL，统一再比
+                actual_stone = self._as_int_like(user[0], 0)
+                if actual_stone != expected_stone:
                     conn.rollback()
                     return PetHatchResult("state_changed")
                 if expected_stone < cost:
@@ -391,8 +440,10 @@ class PetHatchService:
                     "FROM player_data.player_pet WHERE user_id=%s",
                     (user_id,),
                 ).fetchone()
-                current_meta = None if meta is None else [meta[0] or "", int(meta[1] or 0), int(meta[2] or 0), meta[3]]
-                if current_meta != list(expected_meta):
+                # 无宠物档案时按空 meta 处理，并在后面 INSERT
+                current_meta = self._normalize_hatch_meta(None if meta is None else meta)
+                expected_norm = self._normalize_hatch_meta(expected_meta)
+                if current_meta != expected_norm:
                     conn.rollback()
                     return PetHatchResult("state_changed")
                 owned = int(
@@ -425,14 +476,30 @@ class PetHatchService:
                             now,
                         ),
                     )
-                conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND stone=%s",
+                stone_updated = conn.execute(
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
+                    "WHERE user_id=%s AND CAST(COALESCE(stone,0) AS INTEGER)=%s",
                     (cost, user_id, expected_stone),
                 )
-                conn.execute(
-                    "UPDATE player_data.player_pet SET active_uid=%s,egg_pity_count=%s,egg_pity_no_mythic_count=%s WHERE user_id=%s",
-                    (*updated_meta, user_id),
-                )
+                if getattr(stone_updated, "rowcount", 1) == 0:
+                    conn.rollback()
+                    return PetHatchResult("state_changed")
+                if meta is None:
+                    conn.execute(
+                        "INSERT INTO player_data.player_pet("
+                        "user_id,active_uid,egg_pity_count,egg_pity_no_mythic_count,travel) "
+                        "VALUES (%s,%s,%s,%s,NULL)",
+                        (user_id, *updated_meta),
+                    )
+                else:
+                    meta_updated = conn.execute(
+                        "UPDATE player_data.player_pet SET active_uid=%s,egg_pity_count=%s,"
+                        "egg_pity_no_mythic_count=%s WHERE user_id=%s",
+                        (*updated_meta, user_id),
+                    )
+                    if getattr(meta_updated, "rowcount", 1) == 0:
+                        conn.rollback()
+                        return PetHatchResult("state_changed")
                 conn.execute(
                     "INSERT INTO pet_hatch_operations(operation_id,payload,result_json) VALUES (%s,%s,%s)",
                     (operation_id, payload, result_json),

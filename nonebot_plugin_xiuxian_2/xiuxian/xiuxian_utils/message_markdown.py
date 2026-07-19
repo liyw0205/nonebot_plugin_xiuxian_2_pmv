@@ -85,120 +85,15 @@ def strip_md_command_links(msg: str) -> str:
 _BRACKET_LINE_RE = re.compile(
     r"^(?P<indent>[ \t]*)(?P<title>【[^】\r\n]+】)(?P<rest>\s*\S.*)$"
 )
-# 帮助常见：悬赏令查看 - 浏览... / • 我的宗门 - 查看...
-_HELP_CMD_DESC_RE = re.compile(
-    r"^(?P<indent>[ \t]*)"
-    r"(?P<bullet>(?:[-*•→·]|\d+[.、)]|[一二三四五六七八九十]+[.、])\s+)?"
-    r"(?P<label>[^：:\-\r\n【】]{1,40}?)"
-    r"(?P<sep>\s*[-—–]\s+|：|:)\s*"
-    r"(?P<desc>\S.*)$"
-)
-# 句中：请发送【直接突破】来突破 / 输入【我的修仙信息】查看
-_INLINE_SEND_CMD_RE = re.compile(
-    r"(?P<prefix>请?发送|请?输入|请使用|可发送|可输入)"
-    r"(?P<title>【[^】\r\n]{1,24}】)"
-    r"(?P<rest>[^【\r\n]{0,40})$"
-)
-
-
-def _md_joiner(text: str) -> str:
-    if "\r" in text:
-        return "\r"
-    return "\n"
 
 
 def enhance_markdown_display(msg: str) -> str:
-    """Markdown 展示优化（按真实帮助/欢迎文案覆盖）：
+    """不再自动插入 `>`。
 
-    1) 【标题】说明  →  【标题】 + > 说明
-    2) 命令 - 说明 / 命令：说明（含项目符号）→ 命令 + > 说明
-    3) 请发送【命令】后续说明 → 前缀 + 【命令】 + > 后续
-
-    关闭 MD 时由 strip_md_command_links 清理 `>`。
+    QQ MD 引用字号会让消息忽大忽小；是否使用 `>` 由业务文案自行编写
+    （如欢迎里的 `> 发送：`）。关 MD 时仍由 strip_md_command_links 清理引用符。
     """
-    text = str(msg or "")
-    if not text:
-        return text
-
-    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
-    out: list[str] = []
-    in_code = False
-    for raw in normalized.split("\n"):
-        stripped = raw.strip()
-        if stripped.startswith("```"):
-            in_code = not in_code
-            out.append(raw)
-            continue
-        if in_code or not stripped:
-            out.append(raw)
-            continue
-        # 已是引用/分隔/纯标题行，保持
-        if stripped.startswith(">") or stripped in {"---", "***", "---"}:
-            out.append(raw)
-            continue
-
-        # 1) 行首【标题】后有说明
-        m = _BRACKET_LINE_RE.match(raw)
-        if m:
-            indent = m.group("indent") or ""
-            title = m.group("title")
-            rest = (m.group("rest") or "").strip()
-            if rest and not rest.startswith(">") and "mqqapi://aio/inlinecmd" not in rest and "](" not in rest:
-                out.append(f"{indent}{title}")
-                out.append(f"{indent}> {rest}")
-                continue
-            out.append(raw)
-            continue
-
-        # 2) 帮助条目：命令 - 说明 / 命令：说明
-        # 排除纯规则数值（如 初始积分：1000分、胜利：+20积分）里“说明”太短且像属性
-        m = _HELP_CMD_DESC_RE.match(raw)
-        if m:
-            label = (m.group("label") or "").strip()
-            desc = (m.group("desc") or "").strip()
-            bullet = m.group("bullet") or ""
-            indent = m.group("indent") or ""
-            # 跳过：链接、已是引用、标签过短、描述过短
-            if (
-                label
-                and desc
-                and not desc.startswith(">")
-                and "mqqapi://aio/inlinecmd" not in raw
-                and "](" not in raw
-                and len(label) >= 2
-                and len(desc) >= 2
-            ):
-                # 数值/比例类短描述不拆（积分、次数、百分比、纯数字）
-                if not re.fullmatch(r"[+\-−]?\d+.*|.*[%％分次级层].*|无|有|是|否", desc):
-                    # 标签像命令/功能名时才拆（含中文且不是纯标点）
-                    if re.search(r"[\u4e00-\u9fffA-Za-z]", label):
-                        out.append(f"{indent}{bullet}{label}".rstrip())
-                        out.append(f"{indent}> {desc}")
-                        continue
-
-        # 3) 句中 请发送/输入/使用【命令】后续说明
-        m = _INLINE_SEND_CMD_RE.search(raw)
-        if m and "mqqapi://aio/inlinecmd" not in raw and "](" not in raw:
-            prefix = m.group("prefix")
-            title = m.group("title")
-            rest = (m.group("rest") or "").strip(" ，,。！!；;：:")
-            # 只处理 rest 还有有效说明的
-            if rest and not rest.startswith(">"):
-                # 保留行首缩进与前缀前文本
-                start = m.start()
-                head = raw[:start].rstrip()
-                indent = re.match(r"^[ \t]*", raw).group(0) if re.match(r"^[ \t]*", raw) else ""
-                lines = []
-                if head:
-                    lines.append(head)
-                lines.append(f"{indent}{prefix}{title}")
-                lines.append(f"{indent}> {rest}")
-                out.extend(lines)
-                continue
-
-        out.append(raw)
-
-    return _md_joiner(text).join(out)
+    return str(msg or "")
 
 
 # 兼容旧名
