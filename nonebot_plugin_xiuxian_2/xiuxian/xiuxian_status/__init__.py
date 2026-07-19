@@ -363,17 +363,25 @@ async def handle_status(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 插件帮助
 
 版本管理
-- 更新日志：获取版本日志
-- 版本查询：获取最近发布的版本
-- 检测更新：检测是否需要更新
-- 版本更新 版本号/latest：指定版本或最新版本
+- 更新日志
+> 获取版本日志
+- 版本查询
+> 获取最近发布的版本
+- 检测更新
+> 检测是否需要更新
+- 版本更新 版本号/latest
+> 指定版本或最新版本
 
 状态查询
-- bot信息：获取机器人和修仙数据
-- 系统信息：获取系统信息
-- ping测试：测试网络延迟
+- bot信息
+> 获取机器人和修仙数据
+- 系统信息
+> 获取系统信息
+- ping测试
+> 测试网络延迟
 
-GitHub：liyw0205/nonebot_plugin_xiuxian_2_pmv
+GitHub
+> liyw0205/nonebot_plugin_xiuxian_2_pmv
 """.strip()
     await send_help_message(
         bot,

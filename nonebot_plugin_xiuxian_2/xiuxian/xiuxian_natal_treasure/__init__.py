@@ -613,16 +613,20 @@ async def natal_help_handler(bot: Bot, event: GroupMessageEvent | PrivateMessage
 
 ---
 
-1.  **管理操作**：本命法宝操作帮助
+1.  **管理操作**
+> 本命法宝操作帮助
     > 觉醒、重塑、铭刻、遗忘道纹、养成、升阶
 
-2.  **道纹详情**：本命法宝道纹帮助
+2.  **道纹详情**
+> 本命法宝道纹帮助
     > 查看所有道纹的具体效果说明
 
-3.  **战斗机制**：本命法宝战斗帮助
+3.  **战斗机制**
+> 本命法宝战斗帮助
     > 了解法宝效果在战斗中如何触发和作用
 
-4.  **查看信息**：我的本命法宝
+4.  **查看信息**
+> 我的本命法宝
     > 查看你的法宝当前状态
 
 """
@@ -742,32 +746,56 @@ async def natal_effects_help_handler(bot: Bot, event: GroupMessageEvent | Privat
 
 共有{len(NatalEffectType)}种道纹效果。
 
-• **{EFFECT_NAME_MAP[NatalEffectType.BLEED]}**：每回合对敌方造成最大生命值百分比的持续伤害。
-• **{EFFECT_NAME_MAP[NatalEffectType.ARMOR_BREAK]}**：降低敌方防御，提升自身穿甲。
-• **{EFFECT_NAME_MAP[NatalEffectType.EVASION]}**：提升自身闪避率。
-• **{EFFECT_NAME_MAP[NatalEffectType.SHIELD]}**：开局获得护盾，周期性刷新。
-• **{EFFECT_NAME_MAP[NatalEffectType.SHIELD_BREAK]}**：攻击有护盾的敌人时，无视其{round(shield_break_base_value, 2)}%护盾并额外造成{round(SHIELD_BREAK_BONUS_DAMAGE * 100, 2)}%伤害。
-• **{EFFECT_NAME_MAP[NatalEffectType.REFLECT_DAMAGE]}**：被攻击时反还部分伤害给攻击者。
-• **{EFFECT_NAME_MAP[NatalEffectType.TRUE_DAMAGE]}**：攻击时额外造成真实伤害，无视减伤和护盾。
-• **{EFFECT_NAME_MAP[NatalEffectType.CRIT_RESIST]}**：减少被暴击时受到的伤害。
-• **{EFFECT_NAME_MAP[NatalEffectType.FATE]}**：生命值低于0时有低概率恢复满血，每场战斗上限{FATE_REVIVE_COUNT_LIMIT}次。
-• **{EFFECT_NAME_MAP[NatalEffectType.IMMORTAL]}**：生命值低于0时有{round(IMMORTAL_REVIVE_CHANCE * 100, 2)}%概率恢复部分血量，每场战斗上限{IMMORTAL_REVIVE_COUNT_LIMIT}次。
-• **{EFFECT_NAME_MAP[NatalEffectType.DEATH_STRIKE]}**：攻击方拥有此效果时，目标的天命效果被禁止。且当目标血量低于{death_strike_base_value:.0f}%时，对其造成致命打击直接斩杀。
-• **{EFFECT_NAME_MAP[NatalEffectType.INVINCIBLE]}**：周期性获得无敌效果，可免疫下次所受到的所有伤害，存储上限{INVINCIBLE_COUNT_LIMIT}次。首次获得概率{round(invincible_first_base_chance, 2)}%，后续获得概率{round(invincible_sub_base_chance, 2)}%，法宝总等级每提升1级，获得概率增加{round(invincible_growth_per_level, 2)}%。
-• **{EFFECT_NAME_MAP[NatalEffectType.TWIN_STRIKE]}**：普通攻击时有{round(twin_strike_base_chance_single, 2)}%概率触发连击，再造成一次额外{round(twin_strike_damage_multiplier, 2)}%伤害的攻击。道纹等级每提升1级，触发概率增加{round(twin_strike_effect_growth, 2)}%。
-• **{EFFECT_NAME_MAP[NatalEffectType.SLEEP]}**：攻击时有{round(sleep_chance_base, 2)}%概率使目标睡眠{sleep_duration}回合。
-• **{EFFECT_NAME_MAP[NatalEffectType.PETRIFY]}**：攻击时有{round(petrify_chance_base, 2)}%概率使目标石化{petrify_duration}回合。
-• **{EFFECT_NAME_MAP[NatalEffectType.STUN]}**：攻击时有{round(stun_chance_base, 2)}%概率使目标眩晕{stun_duration}回合。
-• **{EFFECT_NAME_MAP[NatalEffectType.FATIGUE]}**：攻击时有{round(fatigue_chance_base, 2)}%概率使目标疲劳{fatigue_duration}回合，攻击力降低{round(fatigue_atk_reduction, 2)}%。
-• **{EFFECT_NAME_MAP[NatalEffectType.SILENCE]}**：攻击时有{round(silence_chance_base, 2)}%概率使目标沉默{silence_duration}回合。
-• **{EFFECT_NAME_MAP[NatalEffectType.CHARGE]}**：本回合不攻击，下回合攻击力额外提升{round(charge_bonus_base + charge_effect_bonus_base, 2)}%（基础{round(charge_bonus_base, 2)}% + 道纹等级提升）。
-• **{EFFECT_NAME_MAP[NatalEffectType.DIVINE_POWER]}**：攻击力额外提升{round(divine_power_bonus_base, 2)}%。
-• **{EFFECT_NAME_MAP[NatalEffectType.SPEED]}**：战斗中提升{round(speed_bonus_base, 2)}%速度，道纹等级越高提升越高。
-• **{EFFECT_NAME_MAP[NatalEffectType.NIRVANA]}**：阵亡时有队友在场，进入涅槃状态{nirvana_duration}回合后满血复活，并使友方全体获得最大生命{round(nirvana_shield_base, 2)}%护盾，仅{nirvana_revive_limit}次。涅槃期间免疫所有伤害，但若所有队友阵亡则复活失败。
-• **{EFFECT_NAME_MAP[NatalEffectType.SOUL_RETURN]}**：阵亡时有队友在场，进入灵体状态{soul_return_duration}回合后回复最大生命{round(soul_return_hp_base, 2)}%复活，期间可正常攻击且免疫所有伤害，仅{soul_return_revive_limit}次。魂返期间只可进行普通攻击，且若所有队友阵亡则复活失败。
-• **{EFFECT_NAME_MAP[NatalEffectType.SOUL_SUMMON]}**：攻击时有{round(soul_summon_chance_base, 2)}%概率让已死亡的队友进入魂返状态，仅队友战斗触发，每个队友仅可触发{SOUL_SUMMON_LIMIT}次。
-• **{EFFECT_NAME_MAP[NatalEffectType.ENLIGHTENMENT]}**：攻击时有{round(enlightenment_chance_base, 2)}%概率让已死亡的队友回复{round(enlightenment_revive_hp, 2)}%生命值复活，仅队友战斗触发，每个队友仅可触发{ENLIGHTENMENT_LIMIT}次。
-
+• **{EFFECT_NAME_MAP[NatalEffectType.BLEED]}**
+> 每回合对敌方造成最大生命值百分比的持续伤害。
+• **{EFFECT_NAME_MAP[NatalEffectType.ARMOR_BREAK]}**
+> 降低敌方防御，提升自身穿甲。
+• **{EFFECT_NAME_MAP[NatalEffectType.EVASION]}**
+> 提升自身闪避率。
+• **{EFFECT_NAME_MAP[NatalEffectType.SHIELD]}**
+> 开局获得护盾，周期性刷新。
+• **{EFFECT_NAME_MAP[NatalEffectType.SHIELD_BREAK]}**
+> 攻击有护盾的敌人时，无视其{round(shield_break_base_value, 2)}%护盾并额外造成{round(SHIELD_BREAK_BONUS_DAMAGE * 100, 2)}%伤害。
+• **{EFFECT_NAME_MAP[NatalEffectType.REFLECT_DAMAGE]}**
+> 被攻击时反还部分伤害给攻击者。
+• **{EFFECT_NAME_MAP[NatalEffectType.TRUE_DAMAGE]}**
+> 攻击时额外造成真实伤害，无视减伤和护盾。
+• **{EFFECT_NAME_MAP[NatalEffectType.CRIT_RESIST]}**
+> 减少被暴击时受到的伤害。
+• **{EFFECT_NAME_MAP[NatalEffectType.FATE]}**
+> 生命值低于0时有低概率恢复满血，每场战斗上限{FATE_REVIVE_COUNT_LIMIT}次。
+• **{EFFECT_NAME_MAP[NatalEffectType.IMMORTAL]}**
+> 生命值低于0时有{round(IMMORTAL_REVIVE_CHANCE * 100, 2)}%概率恢复部分血量，每场战斗上限{IMMORTAL_REVIVE_COUNT_LIMIT}次。
+• **{EFFECT_NAME_MAP[NatalEffectType.DEATH_STRIKE]}**
+> 攻击方拥有此效果时，目标的天命效果被禁止。且当目标血量低于{death_strike_base_value:.0f}%时，对其造成致命打击直接斩杀。
+• **{EFFECT_NAME_MAP[NatalEffectType.INVINCIBLE]}**
+> 周期性获得无敌效果，可免疫下次所受到的所有伤害，存储上限{INVINCIBLE_COUNT_LIMIT}次。首次获得概率{round(invincible_first_base_chance, 2)}%，后续获得概率{round(invincible_sub_base_chance, 2)}%，法宝总等级每提升1级，获得概率增加{round(invincible_growth_per_level, 2)}%。
+• **{EFFECT_NAME_MAP[NatalEffectType.TWIN_STRIKE]}**
+> 普通攻击时有{round(twin_strike_base_chance_single, 2)}%概率触发连击，再造成一次额外{round(twin_strike_damage_multiplier, 2)}%伤害的攻击。道纹等级每提升1级，触发概率增加{round(twin_strike_effect_growth, 2)}%。
+• **{EFFECT_NAME_MAP[NatalEffectType.SLEEP]}**
+> 攻击时有{round(sleep_chance_base, 2)}%概率使目标睡眠{sleep_duration}回合。
+• **{EFFECT_NAME_MAP[NatalEffectType.PETRIFY]}**
+> 攻击时有{round(petrify_chance_base, 2)}%概率使目标石化{petrify_duration}回合。
+• **{EFFECT_NAME_MAP[NatalEffectType.STUN]}**
+> 攻击时有{round(stun_chance_base, 2)}%概率使目标眩晕{stun_duration}回合。
+• **{EFFECT_NAME_MAP[NatalEffectType.FATIGUE]}**
+> 攻击时有{round(fatigue_chance_base, 2)}%概率使目标疲劳{fatigue_duration}回合，攻击力降低{round(fatigue_atk_reduction, 2)}%。
+• **{EFFECT_NAME_MAP[NatalEffectType.SILENCE]}**
+> 攻击时有{round(silence_chance_base, 2)}%概率使目标沉默{silence_duration}回合。
+• **{EFFECT_NAME_MAP[NatalEffectType.CHARGE]}**
+> 本回合不攻击，下回合攻击力额外提升{round(charge_bonus_base + charge_effect_bonus_base, 2)}%（基础{round(charge_bonus_base, 2)}% + 道纹等级提升）。
+• **{EFFECT_NAME_MAP[NatalEffectType.DIVINE_POWER]}**
+> 攻击力额外提升{round(divine_power_bonus_base, 2)}%。
+• **{EFFECT_NAME_MAP[NatalEffectType.SPEED]}**
+> 战斗中提升{round(speed_bonus_base, 2)}%速度，道纹等级越高提升越高。
+• **{EFFECT_NAME_MAP[NatalEffectType.NIRVANA]}**
+> 阵亡时有队友在场，进入涅槃状态{nirvana_duration}回合后满血复活，并使友方全体获得最大生命{round(nirvana_shield_base, 2)}%护盾，仅{nirvana_revive_limit}次。涅槃期间免疫所有伤害，但若所有队友阵亡则复活失败。
+• **{EFFECT_NAME_MAP[NatalEffectType.SOUL_RETURN]}**
+> 阵亡时有队友在场，进入灵体状态{soul_return_duration}回合后回复最大生命{round(soul_return_hp_base, 2)}%复活，期间可正常攻击且免疫所有伤害，仅{soul_return_revive_limit}次。魂返期间只可进行普通攻击，且若所有队友阵亡则复活失败。
+• **{EFFECT_NAME_MAP[NatalEffectType.SOUL_SUMMON]}**
+> 攻击时有{round(soul_summon_chance_base, 2)}%概率让已死亡的队友进入魂返状态，仅队友战斗触发，每个队友仅可触发{SOUL_SUMMON_LIMIT}次。
+• **{EFFECT_NAME_MAP[NatalEffectType.ENLIGHTENMENT]}**
+> 攻击时有{round(enlightenment_chance_base, 2)}%概率让已死亡的队友回复{round(enlightenment_revive_hp, 2)}%生命值复活，仅队友战斗触发，每个队友仅可触发{ENLIGHTENMENT_LIMIT}次。
 """
     await send_help_message(
         bot, event, msg,
