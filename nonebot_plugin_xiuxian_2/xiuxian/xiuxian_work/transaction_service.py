@@ -21,7 +21,10 @@ class WorkClaimResult:
         return self.status in {"applied", "duplicate"}
 
 class WorkClaimService:
-    """Atomically claim one work offer and persist its immutable snapshot."""
+    """Atomically claim one work offer and persist its immutable snapshot.
+
+    work_num 是「刷新次数」，只在刷新时消耗；接取不扣次数。
+    """
 
     def __init__(self, database: str | Path, lock: RLock | None = None) -> None:
         self._database = Path(database)
@@ -83,9 +86,10 @@ class WorkClaimService:
             tasks = ordered
         if not operation_id:
             raise ValueError("operation_id is required")
-        # 次数用尽 / 编号越界：返回状态，不要抛异常把 Matcher 打成 ERROR
-        if expected_count <= 0:
-            return WorkClaimResult("count_insufficient")
+        # 编号越界：返回状态，不要抛异常把 Matcher 打成 ERROR
+        # expected_count 仅作并发快照（刷新次数），接取不消耗
+        if expected_count < 0:
+            return WorkClaimResult("state_changed")
         if task_index < 1 or task_index > len(tasks):
             return WorkClaimResult("invalid_task")
         task_name, task_data = tasks[task_index - 1]
@@ -135,21 +139,21 @@ class WorkClaimService:
                 if user is None or work is None:
                     conn.rollback()
                     return WorkClaimResult("user_missing")
+                # 并发校验：刷新次数快照 + 当前空闲(type=0)
                 if int(user[0]) != expected_count or int(work[0]) != 0:
                     conn.rollback()
                     return WorkClaimResult("state_changed")
 
-                remaining = expected_count - 1
-                # 同一 user_id 若有重复行，更新多行也算成功
-                conn.execute(
-                    "UPDATE user_xiuxian SET work_num=%s WHERE user_id=%s "
-                    "AND CAST(COALESCE(work_num,0) AS INTEGER)=%s",
-                    (remaining, user_id, expected_count),
-                )
-                conn.execute(
-                    "UPDATE user_cd SET type=2,create_time=%s,scheduled_time=%s WHERE user_id=%s AND COALESCE(type,0)=0",
+                # 接取不扣 work_num（刷新次数）
+                remaining = expected_count
+                updated = conn.execute(
+                    "UPDATE user_cd SET type=2,create_time=%s,scheduled_time=%s "
+                    "WHERE user_id=%s AND COALESCE(type,0)=0",
                     (started_at, task_name, user_id),
                 )
+                if getattr(updated, "rowcount", 1) == 0:
+                    conn.rollback()
+                    return WorkClaimResult("state_changed")
                 conn.execute(
                     "INSERT INTO work_active_snapshots(user_id,snapshot,updated_at) VALUES(%s,%s,%s) "
                     "ON CONFLICT(user_id) DO UPDATE SET snapshot=EXCLUDED.snapshot,updated_at=EXCLUDED.updated_at",

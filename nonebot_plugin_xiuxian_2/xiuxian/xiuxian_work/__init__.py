@@ -790,11 +790,8 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await handle_send(bot, event, msg)
             await do_work.finish()
 
+        # work_num 是刷新次数：接取不消耗；0 也可以接已刷新出来的悬赏
         remaining = int(sql_message.get_work_num(user_id) or 0)
-        if remaining <= 0:
-            msg = "今日悬赏次数已用尽，请明日再来！"
-            await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="帮助", v2="悬赏令帮助")
-            await do_work.finish()
             
         task_name, task_data = tasks[work_num - 1]
         started_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -814,9 +811,6 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 "该接取请求已经处理，无需重复提交。"
             )
             await send_work_message(bot, event, msg, md_type="悬赏令", k1="结算", v1="悬赏令结算", k2="终止", v2="悬赏令终止", k3="帮助", v3="悬赏令帮助")
-            await do_work.finish()
-        if result.status == "count_insufficient":
-            await handle_send(bot, event, "今日悬赏次数已用尽，请明日再来！", md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="帮助", v2="悬赏令帮助")
             await do_work.finish()
         if result.status == "invalid_task":
             await handle_send(bot, event, "没有这样的悬赏编号！")
