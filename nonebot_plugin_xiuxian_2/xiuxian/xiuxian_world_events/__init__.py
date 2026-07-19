@@ -134,13 +134,17 @@ __world_event_help__ = f"""
 **世界事件帮助**
 ---
 **魔修入侵**
-- 开启时间：每日 {EVENT_START_HOUR}:00 至 {EVENT_END_HOUR}:00
-- 讨伐魔修：按自身境界挑战对应境界魔修
-- 领取魔修奖励：入侵结束或对应境界魔修被击退后按贡献领取奖励
+- 开启时间
+> 每日 {EVENT_START_HOUR}:00 至 {EVENT_END_HOUR}:00
+- 讨伐魔修
+> 按自身境界挑战对应境界魔修
+- 领取魔修奖励
+> 入侵结束或对应境界魔修被击退后按贡献领取奖励
 - 每期最多讨伐{DEMON_ATTACK_LIMIT}次，每期领取一次
 - 当前境界魔修被击退或入侵结束后可领取奖励
 - 每小时30分刷新已击退的魔修，已记录贡献会保留到本期领奖
-- 第{DEMON_CHIEF_WAVE}波为魔修首领，气血x{DEMON_CHIEF_HP_MULTIPLIER}、攻击x{DEMON_CHIEF_ATK_MULTIPLIER}、贡献结算x{DEMON_CHIEF_REWARD_MULTIPLIER:g}
+- 第{DEMON_CHIEF_WAVE}波为魔修首领，气血x{DEMON_CHIEF_HP_MULTIPLIER}、攻击x{DEMON_CHIEF_ATK_MULTIPLIER}、贡献结算x{DEMON_CHIEF_REWARD_MULTIPLIER
+> g}
 - 奖励按本期累计贡献结算，领取后不能继续讨伐
 
 **天降灵脉**
@@ -148,7 +152,8 @@ __world_event_help__ = f"""
 - 每次持续{SPIRIT_VEIN_MIN_DURATION}-{SPIRIT_VEIN_MAX_DURATION}分钟
 - 持续期间修炼、出关、虚神界出关获得修为+{int(SPIRIT_VEIN_EXP_BONUS_RATE * 100)}%
 - 持续期间炼体结算获得炼体气血+{int(SPIRIT_VEIN_TIANTI_BONUS_RATE * 100)}%
-- 天降灵脉：查看当前灵脉状态
+- 天降灵脉
+> 查看当前灵脉状态
 
 **规则**
 > 每个境界会生成独立魔修。

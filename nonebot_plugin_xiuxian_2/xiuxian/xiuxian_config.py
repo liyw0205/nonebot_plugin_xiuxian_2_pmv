@@ -53,9 +53,9 @@ class XiuConfig:
         # 默认回复是否请求外部随机图片；高并发环境建议关闭
         self.group_welcome = True
         # 是否开启进群欢迎（全局默认开；本群可单独关闭）
-        self.group_welcome_msg = "欢迎道友入群！\n> 发送：\n【我要修仙】踏入修仙界\n【修仙帮助】查看玩法\n【娱乐帮助】查看娱乐功能。"
+        self.group_welcome_msg = "欢迎道友入群！\n> 发送：\n【我要修仙】\n> 踏入修仙界\n【修仙帮助】\n> 查看玩法\n【娱乐帮助】\n> 查看娱乐功能。"
         # 成员进群欢迎文案
-        self.group_bot_join_msg = "必死之境机逢仙缘，修仙之路波澜壮阔！\n> 发送：\n【我要修仙】踏入修仙界\n【修仙帮助】查看玩法\n【娱乐帮助】查看娱乐功能。"
+        self.group_bot_join_msg = "必死之境机逢仙缘，修仙之路波澜壮阔！\n> 发送：\n【我要修仙】\n> 踏入修仙界\n【修仙帮助】\n> 查看玩法\n【娱乐帮助】\n> 查看娱乐功能。"
         # bot 被拉进群时的入驻提示（与成员欢迎区分）
 
         self.xiuxian_user_command_rate_window = 60

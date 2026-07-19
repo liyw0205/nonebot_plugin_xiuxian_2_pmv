@@ -66,7 +66,8 @@ __FUN_HELP__ = """**娱乐帮助**
 - 摸鱼日报
 - 随机猫猫 / 猫猫说 / 猫猫帮助
 - 随机二次元 / 随机猫娘 / 抱抱 / 贴贴 / 摸摸
-- 番剧（Bangumi）：今日番剧 / 番剧周表（别名：每日番剧、番剧日历、每周番剧、番剧总表）
+- 番剧（Bangumi）
+- 今日番剧 / 番剧周表（别名：每日番剧、番剧日历、每周番剧、番剧总表）
 - 番剧盲盒 / 随机番剧
 - 宝可梦盲盒 / 宝可梦图鉴
 - 热榜图片
@@ -82,8 +83,10 @@ __FUN_HELP__ = """**娱乐帮助**
 
 **其他**
 - Steam喜加一
-- NewAPI：newapi帮助 / newapi绑定 / newapi查看 / newapi签到 / newapi签到历史 / newapi自动签到 / newapi信息 / newapi删除
-- WebDAV：webdav帮助 / webdav查看 / webdav列表 / webdav信息 / webdav链接 / webdav文件；绑定和删除仅管理员可用
+- NewAPI
+> newapi帮助 / newapi绑定 / newapi查看 / newapi签到 / newapi签到历史 / newapi自动签到 / newapi信息 / newapi删除
+- WebDAV
+> webdav帮助 / webdav查看 / webdav列表 / webdav信息 / webdav链接 / webdav文件；绑定和删除仅管理员可用
 - 链接解析（视频解析 / 解析链接）
 - 发含分享链接的消息可自动解析
 

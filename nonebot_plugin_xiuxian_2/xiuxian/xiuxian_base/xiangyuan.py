@@ -444,9 +444,12 @@ __xiangyuan_notes__ = f"""
 【仙缘系统】✨
 ════════════
 🌟 核心功能
-→ 赠送仙缘：发送"送仙缘 内容 人数"
-→ 领取仙缘：发送"抢仙缘"
-→ 查看仙缘：发送"仙缘列表"
+→ 赠送仙缘
+> 发送"送仙缘 内容 人数"
+→ 领取仙缘
+> 发送"抢仙缘"
+→ 查看仙缘
+> 发送"仙缘列表"
 
 🌟 使用示例
 1. 仅赠送灵石:
@@ -461,9 +464,12 @@ __xiangyuan_notes__ = f"""
 🌟 规则说明
 1. 每日限送{XIANGYUAN_SEND_LIMIT}次仙缘
 2. 每日限抢{XIANGYUAN_RECEIVE_LIMIT}次仙缘
-3. 灵石范围：{number_to(XIANGYUAN_MIN_STONE)} - {number_to(XIANGYUAN_MAX_STONE)}
-4. 人数范围：{XIANGYUAN_MIN_RECEIVERS} - {XIANGYUAN_MAX_RECEIVERS}人
-5. 物品限制：仅限【装备/技能/药材】，品阶不可为【无上】，必须为非绑定物品
+3. 灵石范围
+> {number_to(XIANGYUAN_MIN_STONE)} - {number_to(XIANGYUAN_MAX_STONE)}
+4. 人数范围
+> {XIANGYUAN_MIN_RECEIVERS} - {XIANGYUAN_MAX_RECEIVERS}人
+5. 物品限制
+> 仅限【装备/技能/药材】，品阶不可为【无上】，必须为非绑定物品
 6. 最后一位领取者获得剩余全部灵石
 
 🌟 温馨提示

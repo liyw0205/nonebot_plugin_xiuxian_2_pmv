@@ -38,8 +38,10 @@ available_fusion = on_command('查看可合成物品', aliases={"查看合成"},
 fusion_help_text = f"""
 **合成帮助**
 ---
-- 合成 物品名 [数量]：合成一个或批量合成指定物品。
-- 查看可合成物品 [物品名可选]：查看当前可合成物品及相关信息。
+- 合成 物品名 [数量]
+> 合成一个或批量合成指定物品。
+- 查看可合成物品 [物品名可选]
+> 查看当前可合成物品及相关信息。
 """.strip()
 
 @fusion_help.handle(parameterless=[Cooldown(cd_time=0)])
