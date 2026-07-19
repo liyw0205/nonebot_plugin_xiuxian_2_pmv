@@ -143,8 +143,7 @@ __world_event_help__ = f"""
 - 每期最多讨伐{DEMON_ATTACK_LIMIT}次，每期领取一次
 - 当前境界魔修被击退或入侵结束后可领取奖励
 - 每小时30分刷新已击退的魔修，已记录贡献会保留到本期领奖
-- 第{DEMON_CHIEF_WAVE}波为魔修首领，气血x{DEMON_CHIEF_HP_MULTIPLIER}、攻击x{DEMON_CHIEF_ATK_MULTIPLIER}、贡献结算x{DEMON_CHIEF_REWARD_MULTIPLIER
-> g}
+- 第{DEMON_CHIEF_WAVE}波为魔修首领，气血x{DEMON_CHIEF_HP_MULTIPLIER}、攻击x{DEMON_CHIEF_ATK_MULTIPLIER}、贡献结算x{DEMON_CHIEF_REWARD_MULTIPLIER:g}
 - 奖励按本期累计贡献结算，领取后不能继续讨伐
 
 **天降灵脉**
