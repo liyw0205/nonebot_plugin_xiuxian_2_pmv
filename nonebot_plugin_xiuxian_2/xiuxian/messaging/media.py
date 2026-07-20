@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, BinaryIO, Literal
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 
@@ -20,6 +20,15 @@ from ..infrastructure import runtime_metrics
 
 MediaType = Literal["image", "audio", "video", "file"]
 MediaSource = str | Path | bytes | bytearray | memoryview | BinaryIO
+
+# 网易云 outer/url 等会 302 到 CDN；部分源站会校验 UA
+_DEFAULT_DOWNLOAD_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Linux; Android 13; Mobile) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+    ),
+    "Accept": "*/*",
+}
 
 
 @dataclass(frozen=True)
@@ -128,20 +137,56 @@ class MediaResolver:
         raise RuntimeError("媒体下载重试流程异常结束")
 
     async def _download_once(self, url: str) -> tuple[bytes, str, str | None]:
+        """下载远程媒体；手动跟随重定向并对每一跳做公网校验（防 SSRF）。
+
+        网易云 ``music.163.com/song/media/outer/url`` 常返回 302 到 CDN。
+        旧逻辑 ``follow_redirects=False`` 会直接抛 RedirectResponse / 302。
+        """
+        max_redirects = 8
+        current = str(url).strip()
+        headers = dict(_DEFAULT_DOWNLOAD_HEADERS)
+        # 网易 outer 链接带 Referer 更稳
+        host = (urlparse(current).hostname or "").lower()
+        if host.endswith("music.163.com") or host.endswith("126.net"):
+            headers["Referer"] = "https://music.163.com/"
+
         async with httpx.AsyncClient(follow_redirects=False, timeout=self.timeout) as client:
-            async with client.stream("GET", url) as response:
-                response.raise_for_status()
-                length = int(response.headers.get("content-length", 0) or 0)
-                if length > self.max_bytes:
-                    raise ValueError(f"远程媒体超过大小限制: {length} > {self.max_bytes}")
-                content = bytearray()
-                async for chunk in response.aiter_bytes():
-                    content.extend(chunk)
-                    if len(content) > self.max_bytes:
-                        raise ValueError("远程媒体下载过程中超过大小限制")
-                path_name = Path(urlparse(url).path).name or "media.bin"
-                content_type = response.headers.get("content-type", "").split(";", 1)[0] or None
-                return bytes(content), path_name, content_type
+            for hop in range(max_redirects + 1):
+                await self._validate_public_url(current)
+                async with client.stream("GET", current, headers=headers) as response:
+                    # 显式处理 3xx：校验 Location 后再跳，避免 httpx 自动跟到内网
+                    if response.status_code in {301, 302, 303, 307, 308}:
+                        location = (response.headers.get("location") or "").strip()
+                        if not location:
+                            raise ValueError(f"媒体重定向缺少 Location: {current}")
+                        nxt = urljoin(current, location)
+                        if hop >= max_redirects:
+                            raise ValueError(f"媒体重定向次数过多: {url}")
+                        runtime_metrics.increment("media.download.redirect")
+                        current = nxt
+                        # 更新 CDN 域 Referer
+                        nhost = (urlparse(current).hostname or "").lower()
+                        if nhost.endswith("music.163.com") or nhost.endswith("126.net"):
+                            headers["Referer"] = "https://music.163.com/"
+                        continue
+
+                    response.raise_for_status()
+                    length = int(response.headers.get("content-length", 0) or 0)
+                    if length > self.max_bytes:
+                        raise ValueError(f"远程媒体超过大小限制: {length} > {self.max_bytes}")
+                    content = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        content.extend(chunk)
+                        if len(content) > self.max_bytes:
+                            raise ValueError("远程媒体下载过程中超过大小限制")
+                    path_name = Path(urlparse(current).path).name or "media.bin"
+                    # 去掉查询串伪扩展名：id=xxx.mp3 路径可能无 .mp3
+                    if "." not in path_name and "mp3" in (response.headers.get("content-type") or "").lower():
+                        path_name = "audio.mp3"
+                    content_type = response.headers.get("content-type", "").split(";", 1)[0] or None
+                    return bytes(content), path_name, content_type
+
+        raise RuntimeError("媒体下载重定向流程异常结束")
 
     async def _validate_public_url(self, url: str) -> None:
         parsed = urlparse(url)
