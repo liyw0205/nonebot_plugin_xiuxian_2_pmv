@@ -998,8 +998,11 @@ class InfiltrateFailureService:
                     'WHERE user_id=%s',
                     (day, intrude_count, consume_guard, target_id),
                 )
+                # REAL floor-sub: high-realm overflow TEXT/REAL stone.
                 stone_update = conn.execute(
-                    "UPDATE user_xiuxian SET stone=MAX(stone-%s,0) WHERE user_id=%s",
+                    "UPDATE user_xiuxian SET "
+                    "stone=MAX(CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL), 0) "
+                    "WHERE user_id=%s",
                     (loss, visitor_id),
                 )
                 if visitor_update.rowcount != 1 or target_update.rowcount != 1 or stone_update.rowcount != 1:

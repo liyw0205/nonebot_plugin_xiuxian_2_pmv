@@ -211,8 +211,9 @@ class PuppetOperationService:
 
                 deducted = conn.execute(
                     """
-                    UPDATE user_xiuxian SET stone=CAST(stone AS INTEGER)-%s
-                    WHERE user_id=%s AND CAST(COALESCE(stone, 0) AS INTEGER) >= %s
+                    UPDATE user_xiuxian
+                    SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL)
+                    WHERE user_id=%s AND CAST(COALESCE(stone,0) AS REAL)>=CAST(%s AS REAL)
                     """,
                     (stone_cost, user_id, stone_cost),
                 )

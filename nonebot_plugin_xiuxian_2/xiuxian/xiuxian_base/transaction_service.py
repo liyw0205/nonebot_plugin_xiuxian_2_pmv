@@ -101,7 +101,8 @@ class SignInService:
                 stone = int(self._randint(stone_lower, stone_upper))
                 # 重复 user_id 会更新多行：rowcount>=1 即成功，避免误报「贪心」
                 updated = conn.execute(
-                    "UPDATE user_xiuxian SET is_sign=1, stone=CAST(COALESCE(stone,0) AS INTEGER)+%s "
+                    "UPDATE user_xiuxian SET is_sign=1, "
+                    "stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) "
                     "WHERE user_id=%s AND CAST(COALESCE(is_sign,0) AS INTEGER)=0",
                     (stone, user_id),
                 )
@@ -2792,9 +2793,11 @@ class BreakthroughService:
                     )
 
                 if outcome == "failure":
+                    # REAL floor-sub: high-realm overflow TEXT/REAL exp.
                     conn.execute(
-                        "UPDATE user_xiuxian SET exp=MAX(exp-%s, 0), hp=%s, mp=%s, "
-                        "level_up_rate=%s, level_up_cd=%s WHERE user_id=%s",
+                        "UPDATE user_xiuxian SET "
+                        "exp=MAX(CAST(COALESCE(exp,0) AS REAL)-CAST(%s AS REAL), 0), "
+                        "hp=%s, mp=%s, level_up_rate=%s, level_up_cd=%s WHERE user_id=%s",
                         (
                             int(exp_loss),
                             int(new_hp),

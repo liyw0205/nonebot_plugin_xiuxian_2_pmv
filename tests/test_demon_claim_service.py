@@ -31,3 +31,20 @@ class DemonClaimServiceTests(unittest.TestCase):
         with db_backend.transaction(self.g) as c: c.execute('CREATE TABLE demon_claim_operations (operation_id TEXT PRIMARY KEY,payload TEXT,created_at TIMESTAMP)'); c.execute("CREATE TRIGGER fail BEFORE INSERT ON demon_claim_operations BEGIN SELECT RAISE(ABORT,'x'); END")
         with self.assertRaises(db_backend.IntegrityError): self.claim('x')
         self.assertEqual(self.state(),((10,20),0,{}))
+
+    def test_high_realm_exp_not_clamped_by_integer_cast(self):
+        # Regression: CAST(exp AS INTEGER) on REAL >2**63-1 clamped to max int then +reward
+        # wiped 无敌 from ~5654京 to ~978京 after 领取魔修奖励 (2026-07-17).
+        base = 5.654041500655189e+19
+        reward = 565404150065519040
+        with db_backend.transaction(self.g) as c:
+            c.execute("UPDATE user_xiuxian SET exp=%s, stone=%s WHERE user_id=%s", (base, 10, "u"))
+        r = self.claim("high", stone=1_000_000, exp=reward, items=[])
+        self.assertEqual(r.status, "applied")
+        with db_backend.connection(self.g) as c:
+            exp, stone = c.execute("SELECT exp, stone FROM user_xiuxian WHERE user_id=%s", ("u",)).fetchone()
+        self.assertGreater(float(exp), 5.6e19)
+        self.assertLess(abs(float(exp) - (base + reward)) / (base + reward), 1e-12)
+        self.assertEqual(int(stone), 10 + 1_000_000)
+        # INTEGER cast path would have produced ~ max_int + reward ≈ 9.79e18
+        self.assertGreater(float(exp), float(2**63 - 1) + reward)

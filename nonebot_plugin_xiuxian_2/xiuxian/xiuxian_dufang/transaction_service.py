@@ -101,8 +101,8 @@ class DufangBetService:
                     "shared_profit INTEGER, shared_loss INTEGER, received_profit INTEGER, received_loss INTEGER, last_update TEXT)"
                 )
                 charged = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS INTEGER)-%s "
-                    "WHERE user_id=%s AND CAST(COALESCE(stone,0) AS INTEGER)>=%s",
+                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
+                    "WHERE user_id=%s AND CAST(COALESCE(stone,0) AS REAL)>=CAST(%s AS REAL)",
                     (cost, user_id, cost),
                 )
                 if charged.rowcount != 1:

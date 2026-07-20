@@ -857,7 +857,7 @@ class DemonClaimService:
             ).fetchone()
             if old is None:
                 return None
-            return DemonClaimResult("duplicate", int(old[0]), int(old[1]))
+            return DemonClaimResult("duplicate", as_int_like(old[0]), as_int_like(old[1]))
 
     def claim(
         self,
@@ -872,14 +872,17 @@ class DemonClaimService:
         max_goods_num,
     ):
         operation_id, event_key, event_id, user_id = map(str, (operation_id, event_key, event_id, user_id))
-        stone, exp, max_goods_num = int(stone), int(exp), int(max_goods_num)
+        # as_int_like: high-realm reward may exceed SQLite INTEGER; number_count for bind.
+        stone = max(0, as_int_like(stone))
+        exp = max(0, as_int_like(exp))
+        max_goods_num = int(max_goods_num)
         claimed = dict(expected_claimed)
         rewards = tuple(
             (int(x["id"]), str(x["name"]), str(x["type"]), int(x["amount"]))
             for x in items
             if int(x.get("amount", 0)) > 0
         )
-        if not operation_id or min(stone, exp, max_goods_num) < 0:
+        if not operation_id or max_goods_num < 0:
             raise ValueError("valid claim and rewards are required")
         # Request identity only; claimed map / reward amounts are concurrency/outcome.
         payload = json.dumps(
@@ -887,6 +890,8 @@ class DemonClaimService:
             ensure_ascii=True,
             separators=(",", ":"),
         )
+        stone_bind = number_count(stone)
+        exp_bind = number_count(exp)
 
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             attached = False
@@ -904,7 +909,7 @@ class DemonClaimService:
                     conn.rollback()
                     if str(old[0]) != payload:
                         return DemonClaimResult("state_changed")
-                    return DemonClaimResult("duplicate", int(old[1]), int(old[2]))
+                    return DemonClaimResult("duplicate", as_int_like(old[1]), as_int_like(old[2]))
                 if conn.execute("SELECT 1 FROM user_xiuxian WHERE user_id=%s", (user_id,)).fetchone() is None:
                     conn.rollback()
                     return DemonClaimResult("user_missing")
@@ -939,10 +944,14 @@ class DemonClaimService:
                     "UPDATE player_data.world_event_state SET claimed=%s WHERE user_id=%s",
                     (json.dumps(current, ensure_ascii=False), event_key),
                 )
+                # REAL cast: CAST(... AS INTEGER) clamps >2**63-1 to max int then +reward
+                # wipes high-realm exp (e.g. 5654京 → 978京 for 无敌 after 领取魔修奖励).
                 conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS INTEGER)+%s, "
-                    "exp=CAST(COALESCE(exp,0) AS INTEGER)+%s WHERE user_id=%s",
-                    (stone, exp, user_id),
+                    "UPDATE user_xiuxian SET "
+                    "stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL), "
+                    "exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL) "
+                    "WHERE user_id=%s",
+                    (stone_bind, exp_bind, user_id),
                 )
                 now = datetime.now()
                 for item_id, name, item_type, amount in rewards:
@@ -958,7 +967,7 @@ class DemonClaimService:
                 conn.execute(
                     "INSERT INTO demon_claim_operations(operation_id,payload,stone,exp) "
                     "VALUES (%s,%s,%s,%s)",
-                    (operation_id, payload, stone, exp),
+                    (operation_id, payload, stone_bind, exp_bind),
                 )
                 conn.commit()
                 return DemonClaimResult("applied", stone, exp)
