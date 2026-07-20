@@ -146,9 +146,17 @@ def _adapt_param(value: Any) -> Any:
     try:
         from .numeric_bind import bind_sqlite_param
     except ImportError:  # file-loaded tests / bare module
-        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.numeric_bind import (  # type: ignore
-            bind_sqlite_param,
-        )
+        # 直接按文件加载时没有包上下文，不能假定顶层包名。
+        import importlib.util
+        from pathlib import Path
+
+        module_path = Path(__file__).with_name("numeric_bind.py")
+        spec = importlib.util.spec_from_file_location("_xiuxian_numeric_bind", module_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"无法加载数值绑定模块: {module_path}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        bind_sqlite_param = module.bind_sqlite_param
 
     return bind_sqlite_param(value)
 

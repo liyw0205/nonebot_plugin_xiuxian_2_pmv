@@ -373,20 +373,17 @@ async def fun_media_send_parse_result(
         """带 Referer 下载到缓存，返回本地路径。超过 max_bytes 抛错供降档。"""
         import hashlib
 
-        # 相对导入优先；绝对包名在部分运行路径下会 No module named nonebot_plugin_xiuxian_2
+        # 插件部署在 src.plugins 命名空间下，相对导入才能同时兼容源码与部署路径。
         try:
             from ...paths import get_paths
         except Exception:
-            try:
-                from nonebot_plugin_xiuxian_2.paths import get_paths  # type: ignore
-            except Exception:
-                from pathlib import Path as _P
+            from pathlib import Path as _P
 
-                def get_paths():  # type: ignore
-                    class _Pth:
-                        data = _P("/root/xiu2/data/xiuxian")
+            def get_paths():  # type: ignore
+                class _Pth:
+                    data = _P("data/xiuxian")
 
-                    return _Pth()
+                return _Pth()
 
         # 放 cache 下，自动备份跳过
         try:

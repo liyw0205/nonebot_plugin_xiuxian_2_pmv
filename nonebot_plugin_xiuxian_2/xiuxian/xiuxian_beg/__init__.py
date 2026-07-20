@@ -86,8 +86,8 @@ async def beg_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     )
     await beg_help.finish()
 
-@beg_stone.handle(parameterless=[Cooldown(cd_time=0)])
-async def beg_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+@beg_stone.handle(parameterless=[Data(cd_time=0)])
+async def beg_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:

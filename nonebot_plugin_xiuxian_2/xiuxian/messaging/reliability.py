@@ -45,6 +45,23 @@ def is_passive_reply_limit(exc: BaseException) -> bool:
     )
 
 
+def is_bot_not_group_member(exc: BaseException) -> bool:
+    """QQ 官方：机器人不在目标群，主动/被动群发均会失败（code=11293）。"""
+    # DeliveryError may wrap ActionFailed; walk cause chain without forward-ref.
+    cur: BaseException | None = exc
+    seen = 0
+    while cur is not None and seen < 4:
+        code = _exception_code(cur)
+        text = str(cur)
+        if code == 11293 or "11293" in text or "机器人非群成员" in text or (
+            "非群成员" in text and "机器人" in text
+        ):
+            return True
+        cur = cur.__cause__ or getattr(cur, "cause", None)
+        seen += 1
+    return False
+
+
 def classify_delivery_error(exc: BaseException) -> tuple[DeliveryErrorKind, bool]:
     name = exc.__class__.__name__.lower()
     code = _exception_code(exc)
@@ -52,6 +69,9 @@ def classify_delivery_error(exc: BaseException) -> tuple[DeliveryErrorKind, bool
     if is_passive_reply_limit(exc):
         # 同一 msg_id 再发也不会好，勿重试
         return "rate_limited", False
+    if is_bot_not_group_member(exc):
+        # 已退群/未入群：重试无意义，上层应吞掉勿打 Matcher ERROR
+        return "unauthorized", False
     if "ratelimit" in name or code == 429 or "rate limit" in text or "频率" in text:
         return "rate_limited", True
     if "network" in name or isinstance(exc, (ConnectionError, TimeoutError)):
@@ -100,6 +120,7 @@ __all__ = [
     "DeliveryErrorKind",
     "MessageSequenceStrategy",
     "classify_delivery_error",
+    "is_bot_not_group_member",
     "is_msg_seq_conflict",
     "is_passive_reply_limit",
 ]

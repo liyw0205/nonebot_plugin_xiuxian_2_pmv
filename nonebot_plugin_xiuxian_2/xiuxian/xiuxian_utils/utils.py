@@ -30,6 +30,7 @@ from ..adapter_compat import (
     MessageSegment,
 )
 from ..messaging import delivery_service
+from ..messaging.reliability import is_bot_not_group_member
 from nonebot.params import Depends
 from PIL import Image, ImageDraw, ImageFont
 from wcwidth import wcwidth
@@ -1018,25 +1019,35 @@ def _should_reference_reply(bot, event) -> bool:
     return get_chat_scene(event) in ("group", "private")
 
 async def _send_event_message(bot, event, message, **kwargs):
-    if _should_reference_reply(bot, event):
-        try:
-            return await delivery_service.reply(
-                bot,
-                event,
-                message,
-                include_reference=True,
-                **kwargs,
-            )
-        except Exception as e:
-            logger.warning(f"引用回复发送失败，降级普通发送: {e}")
+    try:
+        if _should_reference_reply(bot, event):
+            try:
+                return await delivery_service.reply(
+                    bot,
+                    event,
+                    message,
+                    include_reference=True,
+                    **kwargs,
+                )
+            except Exception as e:
+                if is_bot_not_group_member(e):
+                    logger.warning(f"消息发送跳过：机器人非群成员: {e}")
+                    return None
+                logger.warning(f"引用回复发送失败，降级普通发送: {e}")
 
-    return await delivery_service.reply(
-        bot,
-        event,
-        message,
-        include_reference=False,
-        **kwargs,
-    )
+        return await delivery_service.reply(
+            bot,
+            event,
+            message,
+            include_reference=False,
+            **kwargs,
+        )
+    except Exception as e:
+        # 11293：bot 不在群，重试/抛 Matcher ERROR 无意义
+        if is_bot_not_group_member(e):
+            logger.warning(f"消息发送跳过：机器人非群成员: {e}")
+            return None
+        raise
 
 def _has_button_id(button_id) -> bool:
     return bool(str(button_id or "").strip())

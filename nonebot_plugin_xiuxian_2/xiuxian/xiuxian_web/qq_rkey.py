@@ -148,12 +148,7 @@ def learn_rkey_from_message_db(limit: int = 80) -> str:
     try:
         from .core import get_message_db_connection
     except Exception:
-        try:
-            from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_web.core import (  # type: ignore
-                get_message_db_connection,
-            )
-        except Exception:
-            return existing
+        return existing
 
     try:
         conn = get_message_db_connection()
