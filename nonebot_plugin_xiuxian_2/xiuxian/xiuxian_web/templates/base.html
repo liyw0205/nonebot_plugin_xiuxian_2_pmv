@@ -2,11 +2,13 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>{% block title %}修仙管理面板{% endblock %}</title>
     <meta name="xiuxian-csrf-token" content="{{ csrf_token() }}">
+    <meta name="theme-color" content="#1f2d3b">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='components/ui.css') }}">
     <script>
         (function() {
             try {
@@ -91,7 +93,7 @@
 
         <div class="app-main">
             <header class="app-header">
-                <button class="menu-toggle icon-button" id="menuToggle" type="button" aria-label="打开导航">
+                <button class="menu-toggle icon-button" id="menuToggle" type="button" aria-label="打开导航" aria-controls="mainNav" aria-expanded="false">
                     <i class="fas fa-bars"></i>
                 </button>
                 <div class="topbar-title">
@@ -187,6 +189,15 @@
         function closeSidebar() {
             if (mainNav) mainNav.classList.remove('active');
             if (sidebarBackdrop) sidebarBackdrop.hidden = true;
+            document.body.classList.remove('sidebar-open');
+            if (menuToggle) menuToggle.setAttribute('aria-expanded', 'false');
+        }
+
+        function openSidebar() {
+            if (mainNav) mainNav.classList.add('active');
+            if (sidebarBackdrop) sidebarBackdrop.hidden = false;
+            document.body.classList.add('sidebar-open');
+            if (menuToggle) menuToggle.setAttribute('aria-expanded', 'true');
         }
 
         function cleanupCurrentPage() {
@@ -409,7 +420,9 @@
             finishProgress,
             invalidatePageCache,
             loadPage: loadCachedPage,
-            loadFreshPage
+            loadFreshPage,
+            closeSidebar,
+            openSidebar
         };
 
         if (themeToggle) {
@@ -421,15 +434,15 @@
 
         if (menuToggle && mainNav) {
             menuToggle.addEventListener('click', () => {
-                const isOpen = mainNav.classList.toggle('active');
-                if (sidebarBackdrop) sidebarBackdrop.hidden = !isOpen;
+                const isOpen = !mainNav.classList.contains('active');
+                if (isOpen) openSidebar();
+                else closeSidebar();
             });
         }
 
         if (sidebarBackdrop && mainNav) {
             sidebarBackdrop.addEventListener('click', () => {
-                mainNav.classList.remove('active');
-                sidebarBackdrop.hidden = true;
+                closeSidebar();
             });
         }
 
@@ -537,5 +550,7 @@
             if (event.persisted) return;
         });
     </script>
+    <script src="{{ url_for('static', filename='components/ui.js') }}" defer></script>
+    {% block page_scripts %}{% endblock %}
 </body>
 </html>

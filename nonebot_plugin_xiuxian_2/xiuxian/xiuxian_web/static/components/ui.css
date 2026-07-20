@@ -1,0 +1,375 @@
+/* Shared responsive UI components — no backend coupling.
+ * Breakpoints: sm 640 / md 768 / lg 900 / xl 1280 (align with shell).
+ */
+
+:root {
+    --ui-bp-sm: 640px;
+    --ui-bp-md: 768px;
+    --ui-bp-lg: 900px;
+    --ui-bp-xl: 1280px;
+    --ui-touch-min: 44px;
+    --ui-safe-top: env(safe-area-inset-top, 0px);
+    --ui-safe-right: env(safe-area-inset-right, 0px);
+    --ui-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --ui-safe-left: env(safe-area-inset-left, 0px);
+}
+
+/* ---- Shell / safe area ---- */
+body.app-shell {
+    padding-left: var(--ui-safe-left);
+    padding-right: var(--ui-safe-right);
+}
+
+.app-header {
+    padding-top: max(0px, var(--ui-safe-top));
+}
+
+.app-sidebar {
+    padding-bottom: max(14px, var(--ui-safe-bottom));
+}
+
+body.sidebar-open {
+    overflow: hidden;
+}
+
+body.sidebar-open .app-sidebar {
+    /* ensure drawer above content on mobile */
+    z-index: 130;
+}
+
+/* Touch-friendly chrome */
+.menu-toggle,
+.icon-button,
+.theme-toggle,
+.icon-btn {
+    min-width: var(--ui-touch-min);
+    min-height: var(--ui-touch-min);
+}
+
+.btn {
+    min-height: 40px;
+}
+
+@media (max-width: 900px) {
+    .btn {
+        min-height: var(--ui-touch-min);
+    }
+
+    .hero-actions .btn,
+    .form-actions .btn,
+    .page-footer-actions .btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .hero-actions,
+    .form-actions {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+
+    /* iOS: avoid auto-zoom on focus */
+    input,
+    select,
+    textarea {
+        font-size: 16px !important;
+    }
+}
+
+/* ---- Page toolbar ---- */
+.ui-page-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 12px;
+    margin-bottom: 12px;
+}
+
+.ui-page-toolbar .ui-toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+@media (max-width: 640px) {
+    .ui-page-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .ui-page-toolbar .ui-toolbar-actions {
+        width: 100%;
+    }
+
+    .ui-page-toolbar .ui-toolbar-actions .btn {
+        flex: 1 1 auto;
+    }
+}
+
+/* ---- Collapsible filters ---- */
+.ui-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 12px;
+    align-items: flex-end;
+}
+
+.ui-filter-bar .ui-filter-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 12px;
+    flex: 1 1 auto;
+    align-items: flex-end;
+}
+
+.ui-filter-toggle {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .ui-filter-bar[data-collapsible="true"] .ui-filter-toggle {
+        display: inline-flex;
+        width: 100%;
+        justify-content: center;
+    }
+
+    .ui-filter-bar[data-collapsible="true"]:not(.is-open) .ui-filter-fields {
+        display: none;
+    }
+
+    .ui-filter-bar[data-collapsible="true"].is-open .ui-filter-fields {
+        display: flex;
+        width: 100%;
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .ui-filter-bar[data-collapsible="true"].is-open .ui-filter-fields > * {
+        width: 100%;
+    }
+}
+
+/* search-form used by table_view — treat as filter bar on mobile */
+@media (max-width: 768px) {
+    .search-form {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+
+    .search-form select,
+    .search-form input,
+    .search-form .btn {
+        width: 100%;
+    }
+
+    .field-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* ---- Responsive data table → cards ---- */
+.table-scroll {
+    -webkit-overflow-scrolling: touch;
+}
+
+.ui-table-cards {
+    display: none;
+    gap: 10px;
+}
+
+.ui-table-card {
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-base, 8px);
+    background: var(--bg-secondary);
+    padding: 12px 14px;
+    box-shadow: 0 6px 18px var(--shadow-color);
+}
+
+.ui-table-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.ui-table-card-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    word-break: break-word;
+}
+
+.ui-table-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.ui-table-card-actions .btn {
+    min-height: 36px;
+}
+
+.ui-table-card-rows {
+    display: grid;
+    gap: 6px;
+}
+
+.ui-table-card-row {
+    display: grid;
+    grid-template-columns: minmax(88px, 34%) 1fr;
+    gap: 8px;
+    font-size: 0.92rem;
+    line-height: 1.35;
+}
+
+.ui-table-card-key {
+    color: var(--text-secondary);
+    word-break: break-all;
+}
+
+.ui-table-card-val {
+    color: var(--text-primary);
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 768px) {
+    /* Hide wide native table when cards are generated */
+    .table-scroll.ui-has-cards > table {
+        display: none;
+    }
+
+    .table-scroll.ui-has-cards .ui-table-cards {
+        display: grid;
+    }
+
+    .table-scroll {
+        max-height: none;
+        overflow: visible;
+    }
+
+    .pagination {
+        flex-wrap: wrap;
+        gap: 6px;
+        justify-content: center;
+    }
+
+    .pagination a,
+    .pagination span {
+        min-width: 36px;
+        min-height: 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+}
+
+/* Tablet: keep table but allow horizontal scroll with sticky first col hint */
+@media (min-width: 769px) and (max-width: 1180px) {
+    .table-scroll {
+        overflow-x: auto;
+    }
+
+    .table-scroll table {
+        min-width: 640px;
+    }
+}
+
+/* ---- Bottom action sheet (shared) ---- */
+.ui-action-sheet {
+    position: fixed;
+    inset: 0;
+    z-index: 2400;
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+    background: rgba(8, 13, 22, 0.48);
+    padding: 12px;
+    padding-bottom: max(12px, var(--ui-safe-bottom));
+}
+
+.ui-action-sheet.is-open {
+    display: flex;
+}
+
+.ui-action-sheet-panel {
+    width: min(480px, 100%);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 16px 16px 12px 12px;
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.28);
+    padding: 8px;
+    display: grid;
+    gap: 6px;
+}
+
+.ui-action-sheet-title {
+    padding: 10px 12px 6px;
+    color: var(--text-secondary);
+    font-size: 0.86rem;
+    text-align: center;
+}
+
+.ui-action-sheet-btn {
+    appearance: none;
+    border: 0;
+    background: color-mix(in srgb, var(--bg-primary) 55%, var(--bg-secondary));
+    color: var(--text-primary);
+    min-height: var(--ui-touch-min);
+    border-radius: 10px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 1rem;
+    cursor: pointer;
+}
+
+.ui-action-sheet-btn:active {
+    transform: scale(0.99);
+}
+
+.ui-action-sheet-btn.is-danger {
+    color: var(--danger-color);
+}
+
+.ui-action-sheet-btn.is-cancel {
+    margin-top: 4px;
+    background: transparent;
+    border: 1px solid var(--border-color);
+}
+
+/* ---- Messages shell helpers (enhance existing qq-*) ---- */
+@media (max-width: 768px) {
+    .qq-page,
+    .qq-window {
+        min-height: calc(100dvh - 58px - var(--ui-safe-top));
+    }
+
+    .qq-shell {
+        min-height: calc(100dvh - 120px - var(--ui-safe-top) - var(--ui-safe-bottom));
+    }
+
+    .qq-composer {
+        padding-bottom: max(8px, var(--ui-safe-bottom));
+    }
+
+    .mobile-back {
+        min-width: var(--ui-touch-min);
+        min-height: var(--ui-touch-min);
+    }
+}
+
+/* ---- Density / reduced motion already handled in style.css ---- */
+@media (prefers-reduced-motion: reduce) {
+    .app-sidebar {
+        transition: none !important;
+    }
+}
