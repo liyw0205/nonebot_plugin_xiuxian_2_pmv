@@ -21,21 +21,21 @@ async def trade_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     help_sections = {
         "仙肆": """
-**仙肆帮助（全服交易）**
+**仙肆（全服坊市）**
 ---
-**查看与购买**
+**寻宝与购入**
 - 仙肆查看 [类型] [页码]
-> 查看全服仙肆
+> 浏览全服坊市货架
   支持类型
   > 技能|装备|丹药|药材
 - 仙肆购买 编号 [数量]
-> 购买物品
+> 购入指定货品
 - 仙肆快速购买 物品
 > 自动匹配最低价，可快速购买5种物品
 
-**上架与管理**
+**挂售与打理**
 - 仙肆上架 物品 金额 [数量]
-> 上架物品
+> 将囊中之物挂入仙肆
   最低金额60万灵石，手续费10-30%
 - 仙肆快速上架 物品 [金额]
 > 快速上架10个物品
@@ -50,39 +50,39 @@ async def trade_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 > 查看自己上架的物品
 """.strip(),
         "鬼市": """
-**鬼市帮助**
+**鬼市**
 ---
 - 鬼市存灵石 数量
-> 存入灵石到鬼市账户
+> 将灵石暂存鬼市
 - 鬼市取灵石 数量
-> 取出灵石（收取动态暂存费）
+> 取回灵石（或收暂存之费）
 - 鬼市信息
-> 查看鬼市账户和交易信息
+> 查阅鬼市账户与买卖
 - 鬼市求购 物品 价格 [数量]
-> 发布求购订单
+> 张贴求购之帖
 - 鬼市摆摊 物品 价格 [数量]
-> 摆摊出售物品
+> 设摊售物
 - 鬼市收摊
-> 收摊并退还物品
+> 收摊，货归囊中
 """.strip(),
         "拍卖": f"""
-**拍卖帮助**
+**拍卖行**
 ---
-**查看**
+**观拍**
 - 拍卖查看 [ID]
-> 查看拍卖品
+> 翻阅拍卖珍品
   无参数查看当前拍卖列表；加ID查看指定拍卖品详情
 
-**竞拍**
+**举牌**
 - 拍卖竞拍 ID 价格
-> 参与竞拍
+> 举价争宝
   每次加价不得少于{number_to(auction_config.get_auction_rules()['min_bid_increment'])}灵石
   示例
   > 拍卖竞拍 123456 5000000
 
-**上架**
+**送拍**
 - 拍卖上架 物品名 底价
-> 提交拍卖品
+> 将宝物送入拍卖
   最低底价
   > {number_to(auction_config.get_auction_rules()['min_price'])}灵石
   每人最多上架{auction_config.get_auction_rules()['max_user_items']}件（仅限非拍卖期间）
@@ -91,29 +91,29 @@ async def trade_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 - 我的拍卖
 > 查看已上架物品（等待拍卖）
 
-**状态**
+**场次**
 - 拍卖活动
 > 查看当前拍卖活动规则和限时交易状态
 - 拍卖信息
 > 查看开启时间、当前状态等信息
 
-**规则**
+**规矩**
 > 自动拍卖时间：每日{auction_config.get_auction_schedule()['start_hour']}点{auction_config.get_auction_schedule()['start_minute']}分
 > 持续时间：{auction_config.get_auction_schedule()['duration_hours']}小时
 > 手续费：{int(auction_config.get_auction_rules()['fee_rate'] * 100)}%
 """.strip(),
         "交易": """
-**交易系统总览**
+**交易总览**
 ---
-**分类帮助**
+**分门指引**
 - 仙肆帮助
-> 全服交易市场
+> 全服坊市
 - 鬼市帮助
-> 黑市功能
+> 鬼市暗坊
 - 拍卖帮助
-> 拍卖行功能
+> 拍卖珍品
 
-**系统规则**
+**规矩**
 > 仙肆手续费：500万以下10%，500-1000万15%，1000-2000万20%，2000万以上30%。
 """.strip(),
     }

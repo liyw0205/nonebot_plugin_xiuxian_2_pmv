@@ -131,34 +131,34 @@ claim_demon_reward = on_command("领取魔修奖励", priority=6, block=True)
 
 
 __world_event_help__ = f"""
-**世界事件帮助**
+**天地异象**
 ---
 **魔修入侵**
-- 开启时间
+- 开启时辰
 > 每日 {EVENT_START_HOUR}:00 至 {EVENT_END_HOUR}:00
 - 讨伐魔修
-> 按自身境界挑战对应境界魔修
+> 依自身境界，对阵同境魔修
 - 领取魔修奖励
-> 入侵结束或对应境界魔修被击退后按贡献领取奖励
-- 每期最多讨伐{DEMON_ATTACK_LIMIT}次，每期领取一次
-- 当前境界魔修被击退或入侵结束后可领取奖励
-- 每小时30分刷新已击退的魔修，已记录贡献会保留到本期领奖
-- 第{DEMON_CHIEF_WAVE}波为魔修首领，气血x{DEMON_CHIEF_HP_MULTIPLIER}、攻击x{DEMON_CHIEF_ATK_MULTIPLIER}、贡献结算x{DEMON_CHIEF_REWARD_MULTIPLIER:g}
-- 奖励按本期累计贡献结算，领取后不能继续讨伐
+> 入侵落幕或本境魔修溃退时，按贡献领赏
+- 每期最多讨伐 {DEMON_ATTACK_LIMIT} 次，领赏一次
+- 本境魔修溃退或入侵结束后可领赏
+- 每小时 30 分刷新已溃魔修；已记贡献保留至本期领赏
+- 第 {DEMON_CHIEF_WAVE} 波为魔修首领：气血 x{DEMON_CHIEF_HP_MULTIPLIER}、攻击 x{DEMON_CHIEF_ATK_MULTIPLIER}、贡献 x{DEMON_CHIEF_REWARD_MULTIPLIER:g}
+- 赏赐按本期累计贡献结算；领后不可再讨伐
 
 **天降灵脉**
-- 每小时30分有{int(SPIRIT_VEIN_TRIGGER_CHANCE * 100)}%概率开启
-- 每次持续{SPIRIT_VEIN_MIN_DURATION}-{SPIRIT_VEIN_MAX_DURATION}分钟
-- 持续期间修炼、出关、虚神界出关获得修为+{int(SPIRIT_VEIN_EXP_BONUS_RATE * 100)}%
-- 持续期间炼体结算获得炼体气血+{int(SPIRIT_VEIN_TIANTI_BONUS_RATE * 100)}%
+- 每小时 30 分有 {int(SPIRIT_VEIN_TRIGGER_CHANCE * 100)}% 机缘降临
+- 持续 {SPIRIT_VEIN_MIN_DURATION}-{SPIRIT_VEIN_MAX_DURATION} 分钟
+- 其间闭关、出关、虚神界出关所得修为 +{int(SPIRIT_VEIN_EXP_BONUS_RATE * 100)}%
+- 其间炼体结算所得炼体气血 +{int(SPIRIT_VEIN_TIANTI_BONUS_RATE * 100)}%
 - 天降灵脉
-> 查看当前灵脉状态
+> 查看灵脉是否仍在
 
-**规则**
-> 每个境界会生成独立魔修。
-> 战斗血条只用于对战，真实 BOSS 血条为战斗血条的 {BOSS_REAL_HP_MULTIPLIER} 倍。
-> 伤害按真实削减血量记录贡献。
-> 天降灵脉持续期间再次触发时会自动跳过，不刷新持续时间。
+**规矩**
+> 每一境界各生一尊魔修。
+> 战中血条仅为对战示意，真身气血为战条的 {BOSS_REAL_HP_MULTIPLIER} 倍。
+> 贡献按真实削减气血累计。
+> 灵脉存续时再触发则跳过，不重计时。
 """.strip()
 
 

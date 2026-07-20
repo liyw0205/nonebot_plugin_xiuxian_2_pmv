@@ -35,13 +35,13 @@ force_fusion = on_command('强行合成', priority=15, block=True)
 fusion_help = on_command("合成帮助", priority=15, block=True)
 available_fusion = on_command('查看可合成物品', aliases={"查看合成"}, priority=24, block=True)
 
-fusion_help_text = f"""
-**合成帮助**
+fusion_help_text = """
+**器物合成**
 ---
 - 合成 物品名 [数量]
-> 合成一个或批量合成指定物品。
+> 炼合指定之物，可批量
 - 查看可合成物品 [物品名可选]
-> 查看当前可合成物品及相关信息。
+> 查阅可合名录与所需
 """.strip()
 
 @fusion_help.handle(parameterless=[Cooldown(cd_time=0)])
