@@ -640,16 +640,30 @@ def _parse_dt_flexible(s: str):
 
 def _strip_ansi_for_parse(line: str):
     """
-    去掉 ANSI 控制符，便于做时间/级别解析。
-    同时兼容“丢了ESC，只剩[31m”这种情况。
+    去掉 ANSI 控制符，便于做时间/级别解析与面板展示。
+    兼容：
+    - 标准 ESC 序列：\\x1b[31m / \\033[1;31m
+    - 丢了 ESC 只剩 [31m / [1;31m（xiu2 日志常见）
     """
     if not line:
         return ""
-    # 标准 ANSI: \x1b[31m
-    line = re.sub(r'\x1b\[[0-9;]*m', '', line)
-    # 残缺 ANSI: [31m / [1;31m
-    line = re.sub(r'\[[0-9;]*m', '', line)
-    return line
+    text = str(line)
+    # OSC / 其它 ESC 序列（尽量清掉）
+    text = re.sub(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?", "", text)
+    # CSI 完整序列：ESC[ ... 字母
+    text = re.sub(r"\x1b\[[0-9;?]*[ -/]*[@-~]", "", text)
+    # 裸 ESC
+    text = re.sub(r"\x1b.", "", text)
+    # 残缺 CSI（无 ESC）：[31m / [1;31m
+    text = re.sub(r"\[[0-9;]*m", "", text)
+    # 偶发字面量 \\x1b[31m
+    text = re.sub(r"\\x1b\[[0-9;]*m", "", text, flags=re.I)
+    return text
+
+
+def _display_log_text(line: str) -> str:
+    """面板展示用：去色后的纯文本，避免前端 CDN/ansi_up 失败时露出 [31m。"""
+    return _strip_ansi_for_parse(line)
 
 
 def _parse_level(line: str):
@@ -752,7 +766,8 @@ def api_logs_read():
                 matched.append({
                     "time": t.strftime("%Y-%m-%d %H:%M:%S") if t else "",
                     "level": lv,
-                    "text": raw  # 保留原始行，前端可用 ansi_up 上色
+                    # 返回去色文本：前端即便 ansi_up 挂了也不会露出 [31m 原始码
+                    "text": _display_log_text(raw),
                 })
 
         total = len(matched)
@@ -862,8 +877,8 @@ def api_logs_tail():
             if ignore_unknown and lv == "UNKNOWN":
                 continue
 
-            # 忽略关键字（命中任意一个就忽略）
-            if ignore_keywords and any(k in raw for k in ignore_keywords):
+            # 忽略关键字（命中任意一个就忽略）——用去色文本匹配
+            if ignore_keywords and any(k in clean_for_match for k in ignore_keywords):
                 continue
 
             # 时间过滤
@@ -876,7 +891,7 @@ def api_logs_tail():
             lines.append({
                 "time": t.strftime("%Y-%m-%d %H:%M:%S") if t else "",
                 "level": lv,
-                "text": raw
+                "text": _display_log_text(raw),
             })
 
         return jsonify({

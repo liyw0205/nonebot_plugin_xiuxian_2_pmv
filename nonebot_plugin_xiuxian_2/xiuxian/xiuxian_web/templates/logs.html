@@ -1256,14 +1256,37 @@ async function loadLogUserMessages(page = 1) {
 }
 
 function normalizeAnsi(s) {
-    return String(s).replace(/(^|[^\x1b])\[(\d{1,3}(?:;\d{1,3})*)m/g, (m, p1, p2) => {
+    // 残缺码 [31m -> ESC[31m，便于 ansi_up 上色
+    return String(s ?? '').replace(/(^|[^\x1b])\[(\d{1,3}(?:;\d{1,3})*)m/g, (m, p1, p2) => {
         return p1 + '\x1b[' + p2 + 'm';
     });
 }
 
+function stripAnsi(s) {
+    let t = String(s ?? '');
+    t = t.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?/g, '');
+    t = t.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '');
+    t = t.replace(/\x1b./g, '');
+    t = t.replace(/\[[0-9;]*m/g, '');
+    t = t.replace(/\\x1b\[[0-9;]*m/gi, '');
+    return t;
+}
+
 function ansiToHtmlSafe(text) {
-    const fixed = normalizeAnsi(text || '');
-    return ansiUp ? ansiUp.ansi_to_html(fixed) : escapeHtml(fixed);
+    const raw = String(text ?? '');
+    // 后端已去色时直接转义；若仍含控制码再尝试上色/剥离
+    const hasAnsi = /\x1b\[|\[[0-9;]*m|\\x1b\[/i.test(raw);
+    if (!hasAnsi) {
+        return escapeHtml(raw);
+    }
+    if (ansiUp) {
+        try {
+            return ansiUp.ansi_to_html(normalizeAnsi(raw));
+        } catch (e) {
+            // fall through
+        }
+    }
+    return escapeHtml(stripAnsi(raw));
 }
 
 function levelClass(level) {
