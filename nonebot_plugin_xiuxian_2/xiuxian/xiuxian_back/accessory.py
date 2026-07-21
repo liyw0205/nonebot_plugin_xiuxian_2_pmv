@@ -76,23 +76,23 @@ quick_equip_accessory = on_command("快速装备饰品", priority=10, block=True
 @accessory_help.handle(parameterless=[Cooldown(cd_time=3)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = """
-**饰品**
+**饰品帮助**
 
 ---
 
-**根基**
+**基础操作**
 > 饰品基础帮助
     > 查看、背包、详情、装备、卸下
 
-**淬炼**
+**成长强化**
 > 饰品成长帮助
     > 洗练、升阶、材料规则
 
-**整理**
+**整理预设**
 > 饰品整理帮助
     > 分解、快速分解、预设、快速装备
 
-**查阅**
+**查看信息**
 > 我的饰品 / 饰品背包
     > 套装图鉴、收集进度、已激活效果
 """.strip()
@@ -109,40 +109,40 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 @accessory_basic_help.handle(parameterless=[Cooldown(cd_time=3)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = """
-**饰品根基**
+**饰品基础帮助**
 
 ---
 
-**已佩**
-   口令
+**查看已装备饰品**
+   发送
    > 我的饰品
 
-**囊匣**
-   口令
+**查看饰品背包**
+   发送
    > 饰品背包 [页码]
    例如
    > 饰品背包 2
 
-**细览**
-   口令
+**查看单件饰品详情**
+   发送
    > 查看饰品 饰品UID
    例如
    > 查看饰品 acc_1730000000000_1234
 
 **套装图鉴**
-   口令
+   发送
    > 饰品图鉴 [套装名]
    例如
    > 饰品图鉴 烈阳
 
-**佩戴**
-   口令
+**装备饰品**
+   发送
    > 装备饰品 饰品UID
    例如
    > 装备饰品 acc_1730000000000_1234
 
-**卸下**
-   口令
+**卸下饰品**
+   发送
    > 卸下饰品 部位
    可用部位
    > 手镯 / 戒指 / 手环 / 项链
@@ -160,12 +160,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 @accessory_growth_help.handle(parameterless=[Cooldown(cd_time=3)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = """
-**饰品淬炼**
+**饰品成长帮助**
 
 ---
 
-**洗练**
-   口令
+**洗练饰品**
+   发送
    > 饰品洗练 饰品UID
    - 消耗【洗练石】随品阶增加
    - 一至三阶饰品2条词条，四至五阶饰品3条词条
@@ -176,17 +176,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
    > 词条值固定上限，仅词条类型变化
 
 **锁定 / 解锁词条**
-   口令
+   发送
    > 饰品锁定 饰品UID 词条序号
    例如
    > 饰品锁定 acc_1730000000000_1234 1 2
-   口令
+   发送
    > 饰品解锁 饰品UID 词条序号
-   口令
+   发送
    > 饰品解锁 饰品UID 全部
 
 **饰品升阶**
-   口令
+   发送
    > 饰品升阶 部位 材料UID1 [材料UID2 ...]
    例如
    > 饰品升阶 项链 UID1 UID2
@@ -219,7 +219,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 @accessory_manage_help.handle(parameterless=[Cooldown(cd_time=3)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = """
-**饰品整理**
+**饰品整理帮助**
 
 ---
 
@@ -240,14 +240,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
    - 当“类型=全部”或“品阶=全部”时，自动忽略4/5阶
 
 **饰品预设**
-   口令
+   发送
    > 饰品预设 1/2/3
    - 保存当前已装备饰品到对应预设位
    - 若原有记录存在，则自动覆盖
    - 直接发送【饰品预设】可查看所有预设
 
 **快速装备饰品**
-   口令
+   发送
    > 快速装备饰品 1/2/3
    - 一键装备对应预设中的饰品
    - 若预设中某个UID已不存在，会自动清理该失效记录

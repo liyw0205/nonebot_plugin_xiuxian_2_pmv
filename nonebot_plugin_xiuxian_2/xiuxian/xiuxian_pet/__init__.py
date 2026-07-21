@@ -458,27 +458,27 @@ def _build_pet_bag_plain_text(
 @pet_help.handle(parameterless=[Cooldown(cd_time=3)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = f"""
-**灵宠**
+**宠物帮助**
 
 ---
 
-**入门**
+**入门获取**
 > 宠物入门帮助
     > 砸蛋、宠物蛋、查看宠物、切换出战
 
-**成长**
+**成长技能**
 > 宠物成长帮助
     > 喂食、融合突破、启明、技能替换
 
-**囊匣**
+**背包放生**
 > 宠物背包帮助
     > 宠物背包、放生、一键放生、经验返还
 
-**游历**
+**游历派遣**
 > 宠物游历帮助
     > 派遣出战宠物外出，返回后领取材料、灵髓或宠物资源
 
-**查阅**
+**查看信息**
 > 我的宠物 / 宠物背包
 
 """.strip()
@@ -501,7 +501,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 @pet_intro_help.handle(parameterless=[Cooldown(cd_time=3)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = f"""
-**灵宠入门**
+**宠物入门帮助**
 
 ---
 
@@ -553,7 +553,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 @pet_growth_help.handle(parameterless=[Cooldown(cd_time=3)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = """
-**灵宠成长**
+**宠物成长帮助**
 
 ---
 
@@ -623,7 +623,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 @pet_bag_help.handle(parameterless=[Cooldown(cd_time=3)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = """
-**灵宠囊匣**
+**宠物背包帮助**
 
 ---
 
@@ -672,7 +672,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 @pet_travel_help.handle(parameterless=[Cooldown(cd_time=3)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     msg = f"""
-**灵宠游历**
+**宠物游历帮助**
 
 ---
 

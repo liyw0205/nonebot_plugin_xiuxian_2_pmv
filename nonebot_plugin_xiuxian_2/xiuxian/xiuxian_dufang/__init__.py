@@ -161,17 +161,20 @@ unseal_message = on_command("鉴石信息", priority=10, block=True)
 @unseal_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def unseal_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     help_msg = """
-**鉴石问机**
+**鉴石帮助**
 ---
 **指令**
 - 鉴石
-> 耗灵石启封尘封之物
-- 鉴石共享开启 / 鉴石共享关闭
-> 开则结果可波及同开共享的道友
+> 消耗灵石鉴定物品
+- 鉴石共享开启
+> 开启鉴石结果共享
+- 鉴石共享关闭
+> 关闭鉴石结果共享
 - 鉴石信息
 > 查看鉴石统计
 
-> 底耗 100 万灵石；可再投灵石增耗，至多不超过当前灵石一成。
+> 基础消耗100万灵石；可追加灵石，最多不超过当前灵石的10%。
+> 共享开启后，你的结果可能影响其他已开共享的道友。
 """
     await send_help_message(bot, event, help_msg, k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
 

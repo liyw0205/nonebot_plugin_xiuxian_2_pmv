@@ -37,23 +37,25 @@ novice_gift_claim_service = NoviceGiftClaimService(get_paths().game_db)
 beg_daily_reward_service = BegDailyRewardService(get_paths().game_db)
 
 __beg_help__ = f"""
-**仙途奇缘**
+**仙途奇缘帮助**
 ---
-**缘起**
-> 初入修真界的道友可借此得些机缘。
+**介绍**
+> 为初入修真界的道友提供额外机缘。
 
 **仙途奇缘**
 - 仙途奇缘
-> 日领一次随机灵石
+> 每日领取一次随机灵石
 - 限制
-> 修为不过 {XiuConfig().beg_max_level}；创角不过 {XiuConfig().beg_max_days} 日；未入宗门且无特殊灵根
+> 修为不超过{XiuConfig().beg_max_level}
+> 角色创建不超过{XiuConfig().beg_max_days}天
+> 未加入宗门或拥有特殊灵根
 
 **新手礼包**
 - 新手礼包
-> 灵石、功法、装备等起步资粮，限领一次（创角 24 时辰内）
+> 灵石、功法、装备等基础资源，限领一次（创建角色24小时内）
 
-> 仙途漫长，此不过起点之助。
-> 时辰：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+> 这些是起点助力，真正机缘还需自行探索。
+> 当前时间：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 """.strip()
 
 
