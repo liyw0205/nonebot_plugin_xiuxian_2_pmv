@@ -909,53 +909,97 @@ boss增伤：{boss_damage_bonus:.2f}%
     await mind_state.finish()
 
 @my_exp.handle(parameterless=[Cooldown(cd_time=10)])
-async def my_exp_(bot: Bot, event: GroupMessageEvent):
-    """我的修为
-    """
+async def my_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """我的修为（群聊/私聊；高境界修为走 as_int_like 避免科学计数/超大数炸）"""
+    from ..xiuxian_utils.numeric_bind import as_int_like
+
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await my_exp.finish()
 
-    user_id = user_info['user_id']
-    user_msg = sql_message.get_user_info_with_id(user_id)  # 用户信息
-    user_buff_data = UserBuffDate(user_id)
-    level_name = user_msg['level']  # 用户境界
-    leveluprate = int(user_msg['level_up_rate'])  # 用户失败次数加成
-    main_buff_data = user_buff_data.get_user_main_buff_data()  # 获取功法buff
-    main_buff_number_buff = main_buff_data['number'] if main_buff_data is not None else 0
-    main_buff_rate_buff = main_buff_data['ratebuff'] if main_buff_data is not None else 0
-    main_buff_clo_exp = main_buff_data['clo_exp'] if main_buff_data is not None else 0
-    level_rate = sql_message.get_root_rate(user_info['root_type'], user_id)  # 灵根倍率
-    realm_rate = jsondata.level_data()[user_info['level']]["spend"]  # 境界倍率
-    user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5
-    list_all = len(OtherSet().level) - 1
-    now_index = OtherSet().level.index(user_info['level'])
-    user_exp = user_info['exp']
-    exp_efficiency = level_rate * realm_rate * (1 + main_buff_rate_buff) * (1 + main_buff_clo_exp) * (1 + user_blessed_spot_data)
-    exp_per_min = int(XiuConfig().closing_exp * exp_efficiency)
+    try:
+        user_id = user_info['user_id']
+        user_msg = sql_message.get_user_info_with_id(user_id) or user_info
+        user_buff_data = UserBuffDate(user_id)
+        level_name = user_msg.get('level') or user_info.get('level') or '未知'
+        leveluprate = as_int_like(user_msg.get('level_up_rate', 0))
+        main_buff_data = user_buff_data.get_user_main_buff_data()
+        main_buff_number_buff = main_buff_data['number'] if main_buff_data is not None else 0
+        main_buff_rate_buff = main_buff_data['ratebuff'] if main_buff_data is not None else 0
+        main_buff_clo_exp = main_buff_data['clo_exp'] if main_buff_data is not None else 0
+        level_rate = sql_message.get_root_rate(user_info['root_type'], user_id)
+        realm_rate = jsondata.level_data()[user_info['level']]["spend"]
+        blessed = 0.0
+        try:
+            blessed = float(UserBuffDate(user_id).BuffInfo.get('blessed_spot') or 0) * 0.5
+        except Exception:
+            blessed = 0.0
+        levels = OtherSet().level
+        list_all = len(levels) - 1
+        try:
+            now_index = levels.index(user_info['level'])
+        except ValueError:
+            now_index = 0
+        user_exp = as_int_like(user_info.get('exp', 0))
+        exp_efficiency = (
+            float(level_rate)
+            * float(realm_rate)
+            * (1 + float(main_buff_rate_buff or 0))
+            * (1 + float(main_buff_clo_exp or 0))
+            * (1 + blessed)
+        )
+        exp_per_min = as_int_like(XiuConfig().closing_exp * exp_efficiency)
 
-    if list_all == now_index:
-        need_exp = user_exp
-        exp_meg = f"位面至高"
-    else:
-        is_updata_level = OtherSet().level[now_index + 1]
-        need_exp = sql_message.get_level_power(is_updata_level)
-        get_exp = need_exp - user_exp
-        if get_exp > 0:
-            exp_meg = f"还需{number_to(get_exp)}修为可突破！"
+        if list_all == now_index:
+            need_exp = user_exp
+            exp_meg = "位面至高"
         else:
-            exp_meg = f"可突破！"
+            is_updata_level = levels[now_index + 1]
+            need_exp = as_int_like(sql_message.get_level_power(is_updata_level))
+            get_exp = need_exp - user_exp
+            if get_exp > 0:
+                exp_meg = f"还需{number_to(get_exp)}修为可突破！"
+            else:
+                exp_meg = "可突破！"
 
-    msg = f"境界：{level_name}\n"
-    msg += f"修为：{number_to(user_exp)} (上限{number_to(need_exp * 1.5)})\n"
-    msg += f"状态：{exp_meg}\n"
-    msg += f"概率：下一次突破成功概率为{jsondata.level_rate_data()[level_name] + leveluprate + main_buff_number_buff}%\n"
-    msg += f"效率：{int(exp_efficiency * 100)}%\n"
-    msg += f"每分钟修为：{number_to(exp_per_min)}"
+        try:
+            base_rate = int(jsondata.level_rate_data()[level_name])
+        except Exception:
+            base_rate = 0
+        next_rate = base_rate + leveluprate + as_int_like(main_buff_number_buff)
 
-    await handle_send(bot, event, msg, md_type="buff", k1="突破", v1="突破", k2="存档", v2="我的修仙信息", k3="状态", v3="我的状态")
+        # 上限展示：need*1.5 对超大 int 安全；用 as_int_like 避免 float 精度坑
+        cap_exp = as_int_like(need_exp * 3 // 2) if need_exp else 0
+
+        msg = (
+            f"**我的修为**\n"
+            f"---\n"
+            f"境界\n"
+            f"> {level_name}\n"
+            f"修为\n"
+            f"> {number_to(user_exp)}（上限{number_to(cap_exp)}）\n"
+            f"状态\n"
+            f"> {exp_meg}\n"
+            f"概率\n"
+            f"> 下一次突破成功概率为{next_rate}%\n"
+            f"效率\n"
+            f"> {int(exp_efficiency * 100)}%\n"
+            f"每分钟修为\n"
+            f"> {number_to(exp_per_min)}"
+        )
+    except Exception:
+        logger.exception("我的修为查询失败 user_id={}", user_info.get("user_id"))
+        msg = "修为信息读取失败，请稍后重试。"
+
+    await handle_send(
+        bot, event, msg,
+        md_type="buff",
+        k1="突破", v1="突破",
+        k2="存档", v2="我的修仙信息",
+        k3="状态", v3="我的状态",
+    )
     await my_exp.finish()
 
 @buffinfo.handle(parameterless=[Cooldown(cd_time=0)])

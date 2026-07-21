@@ -21,10 +21,16 @@ Rules:
 
 from __future__ import annotations
 
+import re
+from decimal import Decimal, InvalidOperation
 from typing import Any, Iterable
 
 SQLITE_MAX_INT = 2**63 - 1  # 9_223_372_036_854_775_807
 SQLITE_MIN_INT = -(2**63)  # -9_223_372_036_854_775_808
+
+_NUM_LIKE_RE = re.compile(
+    r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$"
+)
 
 # Columns that historically exceed SQLite INTEGER after high-realm play.
 # Write path is covered globally by bind_sqlite_param; this set is for READ
@@ -89,19 +95,42 @@ _COMBAT_NUM_FIELDS = OVERFLOW_NUM_FIELDS
 def number_count(num: Any):
     """
     数据库安全处理：
-    如果数值超过 SQLite INTEGER 限制，返回科学计数法字符串。
+    若数值超过 SQLite INTEGER 限制，返回纯数字 TEXT（避免 float/{:.2e} 丢精度）。
     否则返回 int。
 
     适用于修为 / 灵石 / 贡献 / 积分 / 战力等任意大整数计数器。
+    读路径 as_int_like / format_plain_number 兼容历史科学计数法 TEXT。
     """
     try:
-        val = float(num)
-    except (TypeError, ValueError) as exc:
+        if isinstance(num, bool):
+            return int(num)
+        if isinstance(num, int):
+            val_int = num
+        elif isinstance(num, float):
+            val_int = int(num)
+        else:
+            text = str(num).strip()
+            if not text:
+                raise ValueError("输入必须是数字")
+            if re.fullmatch(r"[+-]?\d+", text):
+                val_int = int(text)
+            else:
+                # scientific / decimal text
+                try:
+                    dec = Decimal(text)
+                except (InvalidOperation, ValueError) as exc:
+                    raise ValueError("输入必须是数字") from exc
+                if dec == dec.to_integral_value():
+                    val_int = int(dec)
+                else:
+                    # non-integer rates shouldn't go through number_count often
+                    val_int = int(dec)
+    except (TypeError, ValueError, OverflowError, InvalidOperation) as exc:
         raise ValueError("输入必须是数字") from exc
 
-    if val > SQLITE_MAX_INT or val < SQLITE_MIN_INT:
-        return "{:.2e}".format(val)
-    return int(val)
+    if val_int > SQLITE_MAX_INT or val_int < SQLITE_MIN_INT:
+        return str(val_int)
+    return val_int
 
 
 def sql_num(value: Any):
@@ -111,7 +140,7 @@ def sql_num(value: Any):
 
 def sql_num_nonneg(value: Any):
     out = number_count(value)
-    if float(out) < 0:
+    if as_int_like(out) < 0:
         raise ValueError("numeric field must be non-negative")
     return out
 
@@ -120,7 +149,7 @@ def bind_sqlite_param(value: Any) -> Any:
     """
     Param adapter for SQLite drivers.
 
-    Only rewrites out-of-range *ints* to scientific TEXT.
+    Oversized ints → plain-digit TEXT (not scientific float).
     Leaves floats/rates/strings untouched (unlike ``number_count`` which
     coerces every number through ``int`` when in range).
 
@@ -129,7 +158,7 @@ def bind_sqlite_param(value: Any) -> Any:
     if isinstance(value, bool):
         return int(value)
     if isinstance(value, int) and (value > SQLITE_MAX_INT or value < SQLITE_MIN_INT):
-        return "{:.2e}".format(float(value))
+        return str(value)
     return value
 
 
@@ -148,10 +177,76 @@ def as_int_like(value: Any, default: int = 0) -> int:
         if not text:
             return default
         if any(ch in text for ch in (".", "e", "E")):
-            return int(float(text))
+            # Prefer Decimal for scientific TEXT so huge realm values stay usable.
+            try:
+                return int(Decimal(text))
+            except (InvalidOperation, ValueError, OverflowError):
+                return int(float(text))
         return int(text)
     except (TypeError, ValueError, OverflowError):
         return default
+
+
+def format_plain_number(value: Any) -> str:
+    """Web/UI display: scientific TEXT/float/int → plain decimal digits (no e+).
+
+    Non-numeric strings are returned unchanged. Empty/None → \"\".
+    """
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return str(int(value))
+    if isinstance(value, int):
+        return str(value)
+    text = str(value).strip()
+    if not text:
+        return ""
+    # already plain integer digits
+    if re.fullmatch(r"[+-]?\d+", text):
+        return text if not text.startswith("+") else text[1:] or "0"
+    if not _NUM_LIKE_RE.fullmatch(text):
+        return text
+    try:
+        dec = Decimal(text)
+    except (InvalidOperation, ValueError):
+        return text
+    # integer-like → no fractional part
+    if dec == dec.to_integral_value():
+        # format(..., 'f') avoids scientific notation for huge magnitudes
+        return format(dec.to_integral_value(), "f").split(".", 1)[0]
+    s = format(dec, "f")
+    if "." in s:
+        s = s.rstrip("0").rstrip(".")
+    return s or "0"
+
+
+def parse_web_number(value: Any) -> Any:
+    """Parse Web form input: plain digits or scientific notation → int / number_count.
+
+    Empty → None. Non-numeric text is returned as stripped str (for text columns).
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return number_count(value)
+    if isinstance(value, float):
+        return number_count(int(value)) if value == int(value) else value
+    text = str(value).strip()
+    if not text:
+        return None
+    if re.fullmatch(r"[+-]?\d+", text):
+        return number_count(int(text))
+    if _NUM_LIKE_RE.fullmatch(text):
+        try:
+            dec = Decimal(text)
+            if dec == dec.to_integral_value():
+                return number_count(int(dec))
+            return float(dec)
+        except (InvalidOperation, ValueError, OverflowError):
+            return text
+    return text
 
 
 def _coerce_field(value: Any) -> Any:

@@ -1175,8 +1175,18 @@ def get_table_data(db_path, table_name, page=1, per_page=10, search_field=None, 
         # 计算总页数
         total_pages = (total + per_page - 1) // per_page
 
-        # 提取实际数据（排除 total_count 列）
-        data = [dict(row) for row in rows]
+        # 提取实际数据（排除 total_count 列）；大数科学计数法转纯数字展示
+        from ..xiuxian_utils.numeric_bind import format_plain_number
+
+        data = []
+        for row in rows:
+            item = dict(row)
+            item.pop("total_count", None)
+            for key, value in list(item.items()):
+                if value is None:
+                    continue
+                item[key] = format_plain_number(value)
+            data.append(item)
 
         return {
             "data": data,

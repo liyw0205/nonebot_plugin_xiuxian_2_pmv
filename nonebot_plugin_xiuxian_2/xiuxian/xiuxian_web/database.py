@@ -20,6 +20,7 @@ from .core import (
     sql_like_text,
     url_for,
 )
+from ..xiuxian_utils.numeric_bind import format_plain_number, parse_web_number
 
 def _maybe_migrate_pet_storage():
     try:
@@ -192,7 +193,8 @@ def row_edit(table_name, row_id):
                     if value == '':
                         update_data[field] = None
                     else:
-                        update_data[field] = value
+                        # 支持纯数字 / 科学计数法；超大整数走 number_count 绑定
+                        update_data[field] = parse_web_number(value)
             
             if update_data:
                 set_clause = ", ".join([f"{sql_ident(field)} = %s" for field in update_data.keys()])
@@ -235,7 +237,8 @@ def row_edit(table_name, row_id):
         if value is None:
             display_data[key] = ''
         else:
-            display_data[key] = value
+            # 大数科学计数法（如 5.71e+19）转纯数字展示，便于编辑
+            display_data[key] = format_plain_number(value)
     
     # 传递主键字段名给模板（用于导出功能）
     if is_composite_key:
@@ -317,6 +320,11 @@ def batch_edit(table_name):
         conn.close()
     except Exception as e:
         return jsonify({"success": False, "error": f"检查表失败：{str(e)}"})
+
+    # 批量数值支持纯数字 / 科学计数法
+    parsed_value = parse_web_number(value)
+    if parsed_value is None:
+        return jsonify({"success": False, "error": "修改值不能为空"})
     
     try:
         table_sql = sql_ident(table_name)
@@ -324,13 +332,13 @@ def batch_edit(table_name):
         # 构建更新语句
         if operation == "set":
             sql = f"UPDATE {table_sql} SET {batch_field_sql} = %s"
-            params = [value]
+            params = [parsed_value]
         elif operation == "add":
             sql = f"UPDATE {table_sql} SET {batch_field_sql} = {batch_field_sql} + %s"
-            params = [value]
+            params = [parsed_value]
         elif operation == "subtract":
             sql = f"UPDATE {table_sql} SET {batch_field_sql} = {batch_field_sql} - %s"
-            params = [value]
+            params = [parsed_value]
         else:
             return jsonify({"success": False, "error": "无效的操作类型"})
         
