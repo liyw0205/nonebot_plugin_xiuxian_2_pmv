@@ -83,7 +83,7 @@ season_rank = on_command("赛季榜", aliases={"赛季排行榜", "赛季排行"
 my_season_rank = on_command("我的赛季", aliases={"我的赛季榜", "个人赛季"}, priority=7, block=True)
 remaname = on_command("修仙改名", priority=5, block=True)
 root_rename = on_command("灵根改名", priority=5, block=True)
-give_stone = on_command("送灵石", permission=GROUP, priority=6, block=True)
+give_stone = on_command("送灵石", priority=6, block=True)
 steal_stone = on_command("偷灵石", aliases={"飞龙探云手"}, permission=GROUP, priority=6, block=True)
 rob_stone = on_command("抢灵石", aliases={"抢劫"}, permission=GROUP, priority=6, block=True)
 user_stamina = on_command('我的体力', aliases={'体力'}, priority=5, block=True)
@@ -1180,8 +1180,8 @@ async def user_stamina_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
 
 @give_stone.handle(parameterless=[Cooldown(cd_time=0)])
-async def give_stone_(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
-    """送灵石"""
+async def give_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """送灵石（群聊/私聊；私聊用道号定位对方，群聊也可用@）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -1211,7 +1211,8 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comman
         await handle_send(bot, event, msg)
         await give_stone.finish()
 
-    give_qq = get_at_user_id(args)
+    # 群聊可@；私聊无@时走道号
+    give_qq = get_at_user_id(args) if isinstance(event, GroupMessageEvent) else None
     give_user = (
         sql_message.get_user_info_with_id(give_qq)
         if give_qq else sql_message.get_user_info_with_name(nick_name)
