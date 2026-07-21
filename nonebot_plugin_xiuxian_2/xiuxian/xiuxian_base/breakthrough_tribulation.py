@@ -988,11 +988,11 @@ async def level_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     main_rate_buff = UserBuffDate(user_id).get_user_main_buff_data()#功法突破概率提升，别忘了还有渡厄突破
     number = main_rate_buff['number'] if main_rate_buff is not None else 0
     if pause_flag:
-        msg = f"道友背包中备有丹药：{elixir_name}，效果：{elixir_desc}，突破已经准备就绪\n请发送【渡厄突破】或【直接突破】来选择是否使用丹药突破！\n本次突破概率为：{level_rate + user_leveluprate + number}% "
+        msg = f"**突破准备就绪**\n---\n丹药\n> {elixir_name}（{elixir_desc}）\n操作\n> 请发送【渡厄突破】或【直接突破】\n本次突破概率\n> {level_rate + user_leveluprate + number}%"
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up.finish()
     else:
-        msg = f"道友背包中暂无【渡厄丹】，突破已经准备就绪\n请发送【直接突破】来突破！请注意，本次突破失败将会损失部分修为！\n本次突破概率为：{level_rate + user_leveluprate + number}% "
+        msg = f"**突破准备就绪**\n---\n丹药\n> 暂无【渡厄丹】\n操作\n> 请发送【直接突破】（失败将损失部分修为）\n本次突破概率\n> {level_rate + user_leveluprate + number}%"
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up.finish()
 

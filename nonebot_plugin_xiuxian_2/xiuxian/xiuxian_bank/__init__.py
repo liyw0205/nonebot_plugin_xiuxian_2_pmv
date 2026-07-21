@@ -160,7 +160,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         if deposit.status == "user_missing":
             await handle_send(bot, event, "未找到修仙数据，本次存款未结算。", md_type="我要修仙")
             await bank.finish()
-        msg = f"道友本次结息时间为：{timedeff}小时，获得灵石：{deposit.interest}枚!\n道友存入灵石{deposit.deposited}枚，当前所拥有灵石{deposit.wallet_stone}枚，灵庄存有灵石{deposit.saved_stone}枚"
+        msg = f"**灵庄存入**\n---\n结息时间\n> {timedeff}小时\n获得灵石\n> {deposit.interest}枚\n本次存入\n> {deposit.deposited}枚\n当前灵石\n> {deposit.wallet_stone}枚\n灵庄存款\n> {deposit.saved_stone}枚"
         await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
         await bank.finish()
 
@@ -210,7 +210,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         if withdrawal.status == "user_missing":
             await handle_send(bot, event, "未找到修仙数据，本次取款未结算。", md_type="我要修仙")
             await bank.finish()
-        msg = f"道友本次结息时间为：{timedeff}小时，获得灵石：{withdrawal.interest}枚!\n取出灵石{withdrawal.withdrawn}枚，当前所拥有灵石{withdrawal.wallet_stone}枚，灵庄存有灵石{withdrawal.saved_stone}枚!"
+        msg = f"**灵庄取出**\n---\n结息时间\n> {timedeff}小时\n获得灵石\n> {withdrawal.interest}枚\n本次取出\n> {withdrawal.withdrawn}枚\n当前灵石\n> {withdrawal.wallet_stone}枚\n灵庄存款\n> {withdrawal.saved_stone}枚"
         await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
         await bank.finish()
 
@@ -277,7 +277,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         operation_id = f"bank-interest:{event_id}:{user_id}" if event_id else f"bank-interest:{user_id}:{time.time_ns()}"
         prior = bank_interest_service.get_result(operation_id)
         if prior is not None and prior.succeeded:
-            msg = f"道友本次结息时间为：已处理，获得灵石：{prior.interest}枚！\n该结息请求已经处理，无需重复提交。"
+            msg = f"**灵庄结息**\n---\n获得灵石\n> {prior.interest}枚\n该结息请求已经处理，无需重复提交。"
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
 
@@ -294,7 +294,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             bankinfo['savetime'],
         )
         if settlement.status == "duplicate":
-            msg = f"道友本次结息时间为：{timedeff}小时，获得灵石：{settlement.interest}枚！\n该结息请求已经处理，无需重复提交。"
+            msg = f"**灵庄结息**\n---\n结息时间\n> {timedeff}小时\n获得灵石\n> {settlement.interest}枚\n该结息请求已经处理，无需重复提交。"
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
         if settlement.status == "state_changed":

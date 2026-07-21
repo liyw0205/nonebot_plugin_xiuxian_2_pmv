@@ -1524,7 +1524,7 @@ async def upatkpractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             else:
                 await handle_send(bot, event, "个人或宗门资产状态已经变化，请刷新后重试。")
             await upatkpractice.finish()
-        msg = f"升级成功！\n道友当前攻击修炼等级：{useratkpractice + level_up_count}\n消耗灵石：{number_to(total_stone_cost)}枚\n消耗宗门资材{number_to(total_materials_cost)}"
+        msg = f"升级成功！\n道友当前攻击修炼等级\n> {useratkpractice + level_up_count}\n消耗灵石\n> {number_to(total_stone_cost)}枚\n消耗宗门资材\n> {number_to(total_materials_cost)}"
         await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级攻击修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
         await upatkpractice.finish()
     else:
@@ -1611,7 +1611,7 @@ async def uphppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             else:
                 await handle_send(bot, event, "个人或宗门资产状态已经变化，请刷新后重试。")
             await uphppractice.finish()
-        msg = f"升级成功！\n道友当前元血修炼等级：{userhppractice + level_up_count}\n消耗灵石：{number_to(total_stone_cost)}枚\n消耗宗门资材{number_to(total_materials_cost)}"
+        msg = f"升级成功！\n道友当前元血修炼等级\n> {userhppractice + level_up_count}\n消耗灵石\n> {number_to(total_stone_cost)}枚\n消耗宗门资材\n> {number_to(total_materials_cost)}"
         await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级元血修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
         await uphppractice.finish()
     else:
@@ -1698,7 +1698,7 @@ async def upmppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             else:
                 await handle_send(bot, event, "个人或宗门资产状态已经变化，请刷新后重试。")
             await upmppractice.finish()
-        msg = f"升级成功！\n道友当前灵海修炼等级：{usermppractice + level_up_count}\n消耗灵石：{number_to(total_stone_cost)}枚\n消耗宗门资材{number_to(total_materials_cost)}"
+        msg = f"升级成功！\n道友当前灵海修炼等级\n> {usermppractice + level_up_count}\n消耗灵石\n> {number_to(total_stone_cost)}枚\n消耗宗门资材\n> {number_to(total_materials_cost)}"
         await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级灵海修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
         await upmppractice.finish()
     else:
@@ -2873,20 +2873,34 @@ async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         )
 
         msg = f"""
-{user_name}所在宗门
-宗门名讳：{sect_info['sect_name']}
-宗门编号：{sect_id}
-宗   主：{sql_message.get_user_info_with_id(sect_info['sect_owner'])['user_name'] if sect_info['sect_owner'] else "暂无"}
-道友职位：{jsondata.sect_config_data()[f"{sect_position}"]["title"]}
-宗门状态：{join_status}{closed_status}
-宗门人数：{current_members}/{max_members}
-宗门建设度：{number_to(sect_info['sect_scale'])}
-炼体堂：{fairyland_text}
-宗门排名：{top_idx_list.index(sect_id) + 1 if sect_id in top_idx_list else "未上榜"}
-宗门拥有资材：{number_to(sect_info['sect_materials'])}
-宗门贡献度：{number_to(user_info['sect_contribution'])}
-宗门战力：{number_to(sect_power)}
-宗门丹房：{elixir_room_name}
+**{user_name}所在宗门**
+---
+宗门名讳
+> {sect_info['sect_name']}
+宗门编号
+> {sect_id}
+宗主
+> {sql_message.get_user_info_with_id(sect_info['sect_owner'])['user_name'] if sect_info['sect_owner'] else "暂无"}
+道友职位
+> {jsondata.sect_config_data()[f"{sect_position}"]["title"]}
+宗门状态
+> {join_status}{closed_status}
+宗门人数
+> {current_members}/{max_members}
+宗门建设度
+> {number_to(sect_info['sect_scale'])}
+炼体堂
+> {fairyland_text}
+宗门排名
+> {top_idx_list.index(sect_id) + 1 if sect_id in top_idx_list else "未上榜"}
+宗门拥有资材
+> {number_to(sect_info['sect_materials'])}
+宗门贡献度
+> {number_to(user_info['sect_contribution'])}
+宗门战力
+> {number_to(sect_power)}
+宗门丹房
+> {elixir_room_name}
 """
         if sect_position == owner_position:
             msg += f"\n宗门储备：{number_to(sect_info['sect_used_stone'])}枚灵石"
@@ -3059,7 +3073,7 @@ async def sect_close_mountain_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     
     if sect_position == owner_position:
         # 再次确认
-        msg = "确定要封闭山门吗？封闭后：\n1. 自动关闭宗门加入\n2. 你将退位为长老\n3. 宗门将处于无主状态\n4. 长老们可以继承宗主之位\n\n请确认后再次发送【确认封闭山门】"
+        msg = "**确认封闭山门**\n---\n封闭后将：\n> 1. 自动关闭宗门加入\n> 2. 你将退位为长老\n> 3. 宗门将处于无主状态\n> 4. 长老们可以继承宗主之位\n\n请确认后再次发送【确认封闭山门】"
         await handle_send(bot, event, msg, md_type="宗门", k1="确定", v1="确认封闭山门", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_close_mountain.finish()
     else:
@@ -3183,7 +3197,7 @@ async def sect_disband_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     if sect_position == owner_position:
         # 再次确认
-        msg = "确定要解散宗门吗？解散后：\n1. 所有成员将被踢出\n2. 宗门将被删除\n3. 所有宗门资源将消失\n\n请确认后再次发送【确认解散宗门】"
+        msg = "**确认解散宗门**\n---\n解散后将：\n> 1. 所有成员将被踢出\n> 2. 宗门将被删除\n> 3. 所有宗门资源将消失\n\n请确认后再次发送【确认解散宗门】"
         await handle_send(bot, event, msg, md_type="宗门", k1="确定", v1="确认解散宗门", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_disband.finish()
     else:

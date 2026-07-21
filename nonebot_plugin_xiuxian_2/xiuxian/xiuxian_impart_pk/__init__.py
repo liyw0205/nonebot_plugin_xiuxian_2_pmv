@@ -317,7 +317,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         operation_id = f"impart-battle:{event_id}:{user_id}" if event_id else f"impart-battle:{user_id}:{time.time_ns()}"
         prior_battle = impart_battle_batch_service.get_result(operation_id)
         if prior_battle is not None and prior_battle.succeeded:
-            msg = f"【对决结束】（重放）\n剩余对决次数：{prior_battle.challenger_pk_num}\n该对决请求已经处理，无需重复提交。"
+            msg = f"**对决结束**（重放）\n---\n剩余对决次数\n> {prior_battle.challenger_pk_num}\n该对决请求已经处理，无需重复提交。"
             await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="祈愿", v3="传承祈愿")
             await impart_pk_now.finish()
         while current_loss_count < max_loss_count and user_data["pk_num"] > 0:
@@ -357,7 +357,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             player_1_stones,
         )
         if settlement.status == "duplicate":
-            msg = f"【对决结束】（重放）\n剩余对决次数：{settlement.challenger_pk_num}\n该对决请求已经处理，无需重复提交。"
+            msg = f"**对决结束**（重放）\n---\n剩余对决次数\n> {settlement.challenger_pk_num}\n该对决请求已经处理，无需重复提交。"
             await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="祈愿", v3="传承祈愿")
             await impart_pk_now.finish()
         if not settlement.succeeded:
@@ -492,7 +492,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         player_2_stones,
     )
     if settlement.status == "duplicate":
-        msg = f"【对决结束】（重放）\n剩余对决次数：{settlement.challenger_pk_num}\n该对决请求已经处理，无需重复提交。"
+        msg = f"**对决结束**（重放）\n---\n剩余对决次数\n> {settlement.challenger_pk_num}\n该对决请求已经处理，无需重复提交。"
         await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="祈愿", v3="传承祈愿")
         await impart_pk_now.finish()
     if not settlement.succeeded:

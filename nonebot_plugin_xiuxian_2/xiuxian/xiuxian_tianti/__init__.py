@@ -238,9 +238,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         if result.get("status") == "ok":
             await handle_send(
                 bot, event,
-                f"炼体结算完成，间隔{result.get('mins', 0)}分钟。\n"
-                f"本次获得炼体气血：{number_to(result.get('real_gain', 0))}\n"
-                f"当前炼体气血：{number_to(result.get('new_hp', 0))}\n"
+                f"**炼体结算**\n"
+                f"---\n"
+                f"间隔\n"
+                f"> {result.get('mins', 0)}分钟\n"
+                f"本次获得炼体气血\n"
+                f"> {number_to(result.get('real_gain', 0))}\n"
+                f"当前炼体气血\n"
+                f"> {number_to(result.get('new_hp', 0))}\n"
                 f"该结算请求已经处理，无需重复提交。"
             )
             return
@@ -254,9 +259,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         if result.get("status") == "ok":
             await handle_send(
                 bot, event,
-                f"炼体结算完成，间隔{result.get('mins', 0)}分钟。\n"
-                f"本次获得炼体气血：{number_to(result.get('real_gain', 0))}\n"
-                f"当前炼体气血：{number_to(result.get('new_hp', 0))}\n"
+                f"**炼体结算**\n"
+                f"---\n"
+                f"间隔\n"
+                f"> {result.get('mins', 0)}分钟\n"
+                f"本次获得炼体气血\n"
+                f"> {number_to(result.get('real_gain', 0))}\n"
+                f"当前炼体气血\n"
+                f"> {number_to(result.get('new_hp', 0))}\n"
                 f"该结算请求已经处理，无需重复提交。"
             )
             return
@@ -284,9 +294,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     await handle_send(
         bot, event,
-        f"炼体结算完成，间隔{result['mins']}分钟。\n"
-        f"本次获得炼体气血：{number_to(result['real_gain'])}\n"
-        f"当前炼体气血：{number_to(result['new_hp'])}"
+        f"**炼体结算**\n"
+        f"---\n"
+        f"间隔\n"
+        f"> {result['mins']}分钟\n"
+        f"本次获得炼体气血\n"
+        f"> {number_to(result['real_gain'])}\n"
+        f"当前炼体气血\n"
+        f"> {number_to(result['new_hp'])}"
         f"{bath_msg}"
         f"{_format_sect_fairyland_msg(result)}"
         f"{_format_spirit_vein_msg(result)}"

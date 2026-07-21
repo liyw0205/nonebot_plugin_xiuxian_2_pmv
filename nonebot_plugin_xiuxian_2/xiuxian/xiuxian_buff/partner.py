@@ -1208,15 +1208,22 @@ async def my_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bound_days = (datetime.now() - datetime.strptime(bind_time, '%Y-%m-%d %H:%M:%S')).days
     affection_level = get_affection_level(affection)
     partner_user_info = sql_message.get_user_info_with_id(partner_user_id)
-    msg = f"""【我的道侣】
-道侣：{partner_info['user_name']}
-境界：{partner_user_info['level']}
-修为：{number_to(partner_user_info['exp'])}
+    msg = f"""**我的道侣**
+---
+道侣
+> {partner_info['user_name']}
+境界
+> {partner_user_info['level']}
+修为
+> {number_to(partner_user_info['exp'])}
 
-结契信息：
-- 绑定时间：{bind_time}
-- 相伴天数：{bound_days}天
-- 亲密度：{affection}（{affection_level}）"""
+**结契信息**
+- 绑定时间
+> {bind_time}
+- 相伴天数
+> {bound_days}天
+- 亲密度
+> {affection}（{affection_level}）"""
     await handle_send(bot, event, msg)
     await my_partner.finish()
 
@@ -2031,18 +2038,26 @@ async def my_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, c
         await handle_send(bot, event, msg, md_type="buff", k1="师徒", v1="我的师徒", k2="传功", v2="师徒传功", k3="师父", v3="我的师父", k4="保护", v4="拜师保护 状态")
         await my_mentor.finish()
 
-    msg = f"""【我的师徒】
-师父：{mentor_line}
+    msg = f"""**我的师徒**
+---
+师父
+> {mentor_line}
 
-徒弟（{len(apprentice_lines)}/{MENTOR_MAX_APPRENTICES}）：
-{apprentice_msg}
+徒弟（{len(apprentice_lines)}/{MENTOR_MAX_APPRENTICES}）
+> {apprentice_msg}
 
-拜师保护：{mentor_protect_status}
-待处理拜师申请：{pending_count}条
-今日剩余传功次数：{remain}/{mentor_transmission_limit}
-累计收徒：{safe_int(stats_data.get("收徒次数"))}，培养出师：{safe_int(stats_data.get("培养出师徒弟"))}
-累计传功：{safe_int(stats_data.get("师徒传功次数"))}，接受传功：{safe_int(stats_data.get("接受传功次数"))}
-冷却状态：{cd_msg}"""
+拜师保护
+> {mentor_protect_status}
+待处理拜师申请
+> {pending_count}条
+今日剩余传功次数
+> {remain}/{mentor_transmission_limit}
+累计收徒 / 培养出师
+> {safe_int(stats_data.get("收徒次数"))} / {safe_int(stats_data.get("培养出师徒弟"))}
+累计传功 / 接受传功
+> {safe_int(stats_data.get("师徒传功次数"))} / {safe_int(stats_data.get("接受传功次数"))}
+冷却状态
+> {cd_msg}"""
 
     await handle_send(bot, event, msg, md_type="buff", k1="拜师", v1="拜师", k2="传功", v2="师徒传功", k3="记录", v3="师徒记录", k4="保护", v4="拜师保护 状态")
     await my_mentor.finish()

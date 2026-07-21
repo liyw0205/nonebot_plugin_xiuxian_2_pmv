@@ -436,23 +436,34 @@ async def arena_myinfo_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     win_rate = (arena_data['total_wins'] / total_battles * 100) if total_battles > 0 else 0
     
     msg = f"""
-⚔️  【竞技场信息】⚔️
+**竞技场信息**
+---
+道号
+> {user_info['user_name']}
+当前积分
+> {arena_data['score']}
+当前段位
+> {arena_data['rank']}
+今日挑战
+> {challenge_remaining}/{challenge_cap}次
+今日购买
+> {daily_buys}/{arena_limit.daily_buy_limit}次（{number_to(ARENA_CHALLENGE_BUY_COST)}灵石/次）
 
-道号：{user_info['user_name']}
-当前积分：{arena_data['score']}
-当前段位：{arena_data['rank']}
-今日挑战：{challenge_remaining}/{challenge_cap}次
-今日购买：{daily_buys}/{arena_limit.daily_buy_limit}次（{number_to(ARENA_CHALLENGE_BUY_COST)}灵石/次）
+**战斗统计**
+总战斗
+> {total_battles}次
+胜利
+> {arena_data['total_wins']}次
+失败
+> {arena_data['total_losses']}次
+胜率
+> {win_rate:.1f}%
 
-战斗统计：
-总战斗：{total_battles}次
-胜利：{arena_data['total_wins']}次
-失败：{arena_data['total_losses']}次
-胜率：{win_rate:.1f}%
-
-连胜记录：
-当前连胜：{arena_data['win_streak']}次
-最高连胜：{arena_data['max_win_streak']}次
+**连胜记录**
+当前连胜
+> {arena_data['win_streak']}次
+最高连胜
+> {arena_data['max_win_streak']}次
 """
     await handle_send(bot, event, msg)
     await arena_myinfo.finish()
@@ -633,18 +644,26 @@ async def arena_honor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     user_ranking = arena_limit.get_user_ranking(user_id)
     
     msg = f"""
-🎖️ 【我的荣誉信息】
+**我的荣誉**
+---
+道号
+> {user_info['user_name']}
+当前段位
+> {arena_data['rank']}
+当前排名
+> 第{user_ranking}名
+当前荣誉值
+> {arena_data['honor_points']}点
+累计获得荣誉值
+> {arena_data['total_honor_earned']}点
 
-道号：{user_info['user_name']}
-当前段位：{arena_data['rank']}
-当前排名：第{user_ranking}名
-当前荣誉值：{arena_data['honor_points']}点
-累计获得荣誉值：{arena_data['total_honor_earned']}点
-
-明日预计奖励：
-基础奖励：{base_honor}点（{arena_data['rank']}段位）
-排名奖励：{ranking_bonus}点（第{user_ranking}名）
-总计：{tomorrow_honor}点
+**明日预计奖励**
+基础奖励
+> {base_honor}点（{arena_data['rank']}段位）
+排名奖励
+> {ranking_bonus}点（第{user_ranking}名）
+总计
+> {tomorrow_honor}点
 """
     await handle_send(bot, event, msg)
     await arena_honor.finish()

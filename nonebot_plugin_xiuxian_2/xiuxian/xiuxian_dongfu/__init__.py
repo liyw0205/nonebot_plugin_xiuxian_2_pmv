@@ -1375,7 +1375,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             await handle_send(bot, event, "潜入状态已变化，请稍后重试。")
             return
         guard_msg = "\n目标洞府巡山护府尚有余威。" if guarded else ""
-        await handle_send(bot, event, f"❌ 你潜入【{tname}】洞府时触发阵法警示，被当场逼退！\n对方阵法等级：{array_lv}\n损失灵石：{number_to(loss_stone)}\n今日剩余{mode_name}次数：{result.infiltrate_left}\n该洞府今日剩余可被潜入次数：{result.intrude_left}{guard_msg}")
+        await handle_send(bot, event, f"❌ **潜入失败**\n---\n你潜入【{tname}】洞府时触发阵法警示，被当场逼退！\n对方阵法等级\n> {array_lv}\n损失灵石\n> {number_to(loss_stone)}\n今日剩余{mode_name}次数\n> {result.infiltrate_left}\n该洞府今日剩余可被潜入次数\n> {result.intrude_left}{guard_msg}")
         return
     stealth_penalty = 0.6 if detected else 1.0
     reward_rows = []

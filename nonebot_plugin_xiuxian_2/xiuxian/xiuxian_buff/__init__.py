@@ -995,20 +995,22 @@ async def buffinfo_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     secbuffdata = UserBuffDate(user_id).get_user_sec_buff_data()
     secbuffmsg = get_sec_msg(secbuffdata) if get_sec_msg(secbuffdata) != '无' else ''
     msg = f"""
+**我的功法**
+---
 主功法：{mainbuffdata["name"] if mainbuffdata != None else '无'}
-{mainbuffmsg}
+> {mainbuffmsg}
 
 辅修功法：{subbuffdata["name"] if subbuffdata != None else '无'}
-{subbuffmsg}
+> {subbuffmsg}
 
 神通：{secbuffdata["name"] if secbuffdata != None else '无'}
-{secbuffmsg}
+> {secbuffmsg}
 
 身法：{effect1buffdata["name"] if effect1buffdata != None else '无'}
-{effect1buffmsg}
+> {effect1buffmsg}
 
 瞳术：{effect2buffdata["name"] if effect2buffdata != None else '无'}
-{effect2buffmsg}
+> {effect2buffmsg}
 """
 
     await handle_send(bot, event, msg, md_type="buff", k1="修为", v1="我的修为", k2="存档", v2="我的修仙信息", k3="状态", v3="我的状态")
@@ -1254,21 +1256,34 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         dungeon_msg = "未开启"
 
     msg = f"""
-═══  日常中心  ══════
-修仙签到：{sign_msg}
-灵田状态：{lingtian_msg}
-秘境状态：{rift_status}
-宗门任务：{sect_task_msg}
-宗门丹药：{sect_elixir_msg}
-悬赏令：{work_msg}
-讨伐次数：{battle_msg}
-双修次数：{remaining_two_exp}/{max_two_exp}
-虚神界对决：{pk_msg}
-虚神界探索：{impart_msg}
-历练状态：{training_msg}
-幻境寻心：{illusion_msg}
-副本状态：{dungeon_msg}
-════════════
+**日常中心**
+---
+修仙签到
+> {sign_msg}
+灵田状态
+> {lingtian_msg}
+秘境状态
+> {rift_status}
+宗门任务
+> {sect_task_msg}
+宗门丹药
+> {sect_elixir_msg}
+悬赏令
+> {work_msg}
+讨伐次数
+> {battle_msg}
+双修次数
+> {remaining_two_exp}/{max_two_exp}
+虚神界对决
+> {pk_msg}
+虚神界探索
+> {impart_msg}
+历练状态
+> {training_msg}
+幻境寻心
+> {illusion_msg}
+副本状态
+> {dungeon_msg}
 """
     await handle_send(bot, event, msg)
     await daily_info.finish()

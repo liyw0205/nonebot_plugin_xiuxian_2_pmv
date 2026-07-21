@@ -578,7 +578,7 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         # previous random vs explicit unknown; use generic
         msg = f"道友的道号更新成啦~\n该改名请求已经处理，无需重复提交。"
         if prior.new_name:
-            msg = f"道号：{prior.new_name}\n道友的道号更新成啦~\n该改名请求已经处理，无需重复提交。"
+            msg = f"**修仙改名**\n---\n道号\n> {prior.new_name}\n道友的道号更新成啦~\n该改名请求已经处理，无需重复提交。"
         await handle_send(bot, event, msg, md_type="修仙", k1="改名", v1="修仙改名", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
         await remaname.finish()
     
@@ -790,7 +790,7 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         lottery_result = await handle_lottery(
             user_info, _lottery_operation_id(sign_operation_id)
         )
-        msg = f"签到成功，获取{prior.stone}块灵石!\n\n{lottery_result}\n该签到请求已经处理，无需重复提交。"
+        msg = f"**修仙签到**\n---\n签到成功，获取{prior.stone}块灵石!\n\n{lottery_result}\n该签到请求已经处理，无需重复提交。"
         await handle_send(bot, event, msg, md_type="修仙", k1="修仙签到", v1="修仙签到", k2="鸿运", v2="鸿运", k3="帮助", v3="修仙帮助")
         await sign_in.finish()
     sign_result = sign_in_service.sign(
@@ -803,7 +803,7 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         lottery_result = await handle_lottery(
             user_info, _lottery_operation_id(sign_operation_id)
         )
-        msg = f"签到成功，获取{sign_result.stone}块灵石!\n\n{lottery_result}\n该签到请求已经处理，无需重复提交。"
+        msg = f"**修仙签到**\n---\n签到成功，获取{sign_result.stone}块灵石!\n\n{lottery_result}\n该签到请求已经处理，无需重复提交。"
         await handle_send(bot, event, msg, md_type="修仙", k1="修仙签到", v1="修仙签到", k2="鸿运", v2="鸿运", k3="帮助", v3="修仙帮助")
         await sign_in.finish()
     if not sign_result.succeeded:
@@ -816,7 +816,7 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     )
     
     # 3. 组合签到结果和抽奖结果
-    msg = f"{result}\n\n{lottery_result}"
+    msg = f"**修仙签到**\n---\n{result}\n\n{lottery_result}"
     
     if sign_result.applied:
         log_message(user_id, msg)
@@ -833,20 +833,20 @@ async def hongyun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     business_date = datetime.now().date().isoformat()
     snapshot = lottery_settlement_service.get_snapshot(business_date)
-    msg = "【鸿运当头】\n"
-    msg += f"当前奖池累计：{number_to(snapshot.pool)}灵石\n"
-    msg += f"本期参与人数：{snapshot.participants}位道友\n\n"
+    msg = "**鸿运当头**\n---\n"
+    msg += f"当前奖池累计\n> {number_to(snapshot.pool)}灵石\n"
+    msg += f"本期参与人数\n> {snapshot.participants}位道友\n\n"
     
     last_winner = snapshot.last_winner
     if last_winner:
-        msg += "上期中奖记录\n"
-        msg += f"中奖道友：{last_winner.user_name}\n"
-        msg += f"中奖时间：{last_winner.won_at}\n"
-        msg += f"中奖金额：{number_to(last_winner.amount)}灵石\n"
+        msg += "**上期中奖记录**\n"
+        msg += f"中奖道友\n> {last_winner.user_name}\n"
+        msg += f"中奖时间\n> {last_winner.won_at}\n"
+        msg += f"中奖金额\n> {number_to(last_winner.amount)}灵石\n"
     else:
         msg += "暂无历史中奖记录，道友快来签到吧！\n"
     
-    msg += "\n※ 每次签到自动存入100万灵石到奖池，中奖号码将独享全部奖池！"
+    msg += "\n> 每次签到自动存入100万灵石到奖池，中奖号码将独享全部奖池！"
     
     await handle_send(bot, event, msg, md_type="修仙", k1="修仙签到", v1="修仙签到", k2="鸿运", v2="鸿运", k3="帮助", v3="修仙帮助")
     await hongyun.finish()

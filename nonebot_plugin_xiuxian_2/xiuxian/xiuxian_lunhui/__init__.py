@@ -184,7 +184,7 @@ async def lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if list_level_all.index(level) >= list_level_all.index(lunhui_level):
         await confirm_lunhui_invite(bot, event, user_id, root_level, lunhui_level2, msg)
     else:
-        msg = f"道友境界未达要求\n当前进入：{lunhui_level2}\n最低境界为：{lunhui_level}"
+        msg = f"**境界不足**\n---\n当前进入\n> {lunhui_level2}\n最低境界\n> {lunhui_level}"
         await handle_send(bot, event, msg, md_type="轮回", k1="修为", v1="我的修为", k2="存档", v2="我的修仙信息", k3="帮助", v3="轮回帮助")
     await lunhui.finish()
 

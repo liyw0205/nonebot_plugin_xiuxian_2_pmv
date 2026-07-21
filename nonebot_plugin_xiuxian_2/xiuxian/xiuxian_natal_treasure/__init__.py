@@ -298,7 +298,7 @@ async def natal_upgrade_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
     # 先回放：成功后等级/经验满会挡住同事件幂等。
     prior = natal_training_service.get_result(operation_id)
     if prior is not None and prior.succeeded:
-        final_msg = f"成功养成法宝，消耗灵石：{number_to(prior.stone_cost)}\n法宝经验 +{prior.exp_added}，当前经验 {prior.exp}/{prior.max_exp}。\n该养成请求已经处理，无需重复提交。"
+        final_msg = f"**本命法宝养成**\n---\n消耗灵石\n> {number_to(prior.stone_cost)}\n法宝经验\n> +{prior.exp_added}（当前 {prior.exp}/{prior.max_exp}）\n该养成请求已经处理，无需重复提交。"
         await handle_send(bot, event, final_msg,
                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="升阶", v3="本命法宝升阶")
         return
@@ -358,7 +358,7 @@ async def natal_upgrade_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
                           md_type="法宝", k1="养成", v1="养成本命法宝", k2="法宝", v2="我的本命法宝", k3="灵石", v3="灵石")
         return
     if training.status == "duplicate":
-        final_msg = f"成功养成法宝，消耗灵石：{number_to(training.stone_cost)}\n法宝经验 +{training.exp_added}，当前经验 {training.exp}/{training.max_exp}。\n该养成请求已经处理，无需重复提交。"
+        final_msg = f"**本命法宝养成**\n---\n消耗灵石\n> {number_to(training.stone_cost)}\n法宝经验\n> +{training.exp_added}（当前 {training.exp}/{training.max_exp}）\n该养成请求已经处理，无需重复提交。"
         await handle_send(bot, event, final_msg,
                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="升阶", v3="本命法宝升阶")
         return
@@ -370,7 +370,7 @@ async def natal_upgrade_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
         upgrade_msg = f"本命法宝等级提升至 {training.level}！"
     else:
         upgrade_msg = f"法宝经验 +{training.exp_added}，当前经验 {training.exp}/{training.max_exp}。"
-    final_msg = f"成功养成法宝，消耗灵石：{number_to(training.stone_cost)}\n{upgrade_msg}"
+    final_msg = f"**本命法宝养成**\n---\n消耗灵石\n> {number_to(training.stone_cost)}\n{upgrade_msg}"
     await handle_send(bot, event, final_msg,
                       md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="升阶", v3="本命法宝升阶")
 

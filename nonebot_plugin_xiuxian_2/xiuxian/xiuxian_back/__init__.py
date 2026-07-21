@@ -1809,11 +1809,11 @@ async def chakan_wupin_(
             msg = f"ID：{item_id}\n{desc}"
         elif item_type == "特殊物品":
             if item_info['type'] == "聚灵旗":
-                msg = f"名字：{name}\n效果：{item_info['desc']}\n修炼速度：{item_info['修炼速度'] * 100}%\n药材速度：{item_info['药材速度'] * 100}%\n"
+                msg = f"名字\n> {name}\n效果\n> {item_info['desc']}\n修炼速度\n> {item_info['修炼速度'] * 100}%\n药材速度\n> {item_info['药材速度'] * 100}%\n"
             elif item_info['type'] == "炼丹炉":
-                msg = f"名字：{name}\n效果：{item_info['desc']}\n"
+                msg = f"名字\n> {name}\n效果\n> {item_info['desc']}\n"
             else:  # 特殊道具
-                msg = f"名字：{name}\n效果：{item_info.get('desc', '十分神秘的东西，谁也不知道它的作用')}\n"
+                msg = f"名字\n> {name}\n效果\n> {item_info.get('desc', '十分神秘的东西，谁也不知道它的作用')}\n"
         elif item_type == "神物":
             rank = item_info.get('境界', '')
             desc = item_info.get('desc', '')
@@ -1822,7 +1822,7 @@ async def chakan_wupin_(
                 effect = f"炼体结算时间{minutes}分钟"
             else:
                 effect = f"增加{number_to(item_info.get('buff', 0))}修为"
-            msg = f"※名字:{name}\n效果：{desc}\n境界：{rank}\n{effect}\n"
+            msg = f"※名字\n> {name}\n效果\n> {desc}\n境界\n> {rank}\n{effect}\n"
         else:  # 丹药、合成丹药
             rank = item_info.get('境界', '')
             desc = item_info.get('desc', '')

@@ -499,7 +499,8 @@ async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     new_cards_msg = f"新卡片({total_new_cards}张)：{', '.join(new_cards) if new_cards else '无'}"
     duplicate_cards_msg = f"重复卡片({total_duplicates}张)：{', '.join(duplicate_cards_info) if duplicate_cards_info else '无'}{more_duplicates_msg}"
     
-    final_msg = f"""结果如下：
+    final_msg = f"""**祈愿结果**
+---
 {new_cards_msg}
 {duplicate_cards_msg}
 """
@@ -661,19 +662,31 @@ async def impart_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         return
 
     msg = f"""
-道友的传承总属性
-攻击提升:{int(impart_data_draw["impart_atk_per"] * 100)}%
-气血提升:{int(impart_data_draw["impart_hp_per"] * 100)}%
-真元提升:{int(impart_data_draw["impart_mp_per"] * 100)}%
-会心提升：{int(impart_data_draw["impart_know_per"] * 100)}%
-会心伤害提升：{int(impart_data_draw["impart_burst_per"] * 100)}%
-闭关经验提升：{int(impart_data_draw["impart_exp_up"] * 100)}%
-炼丹收获数量提升：{impart_data_draw["impart_mix_per"]}颗
-灵田收取数量提升：{impart_data_draw["impart_reap_per"]}颗
-每日双修次数提升：{impart_data_draw["impart_two_exp"]}次
-boss战攻击提升:{int(impart_data_draw["boss_atk"] * 100)}%
+**传承总属性**
+---
+攻击提升
+> {int(impart_data_draw["impart_atk_per"] * 100)}%
+气血提升
+> {int(impart_data_draw["impart_hp_per"] * 100)}%
+真元提升
+> {int(impart_data_draw["impart_mp_per"] * 100)}%
+会心提升
+> {int(impart_data_draw["impart_know_per"] * 100)}%
+会心伤害提升
+> {int(impart_data_draw["impart_burst_per"] * 100)}%
+闭关经验提升
+> {int(impart_data_draw["impart_exp_up"] * 100)}%
+炼丹收获数量提升
+> {impart_data_draw["impart_mix_per"]}颗
+灵田收取数量提升
+> {impart_data_draw["impart_reap_per"]}颗
+每日双修次数提升
+> {impart_data_draw["impart_two_exp"]}次
+boss战攻击提升
+> {int(impart_data_draw["boss_atk"] * 100)}%
 
-思恋结晶：{impart_data_draw["stone_num"]}颗"""
+思恋结晶
+> {impart_data_draw["stone_num"]}颗"""
     await handle_send(bot, event, msg, md_type="传承", k1="祈愿", v1="传承祈愿", k2="背包", v2="传承背包", k3="帮助", v3="传承帮助")
 
 @impart_img.handle(parameterless=[Cooldown(cd_time=0)])
