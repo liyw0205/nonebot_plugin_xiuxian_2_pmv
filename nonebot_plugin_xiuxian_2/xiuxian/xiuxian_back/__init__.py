@@ -373,8 +373,13 @@ async def check_item_effect_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     item_msg = get_item_msg(goods_id, user_info['user_id'])
     if goods_id == 15053 or input_str == "补偿": # 某些特定物品可能不需要显示效果
         await check_item_effect.finish()
-    # 构造返回消息
-    msg = f"\nID：{goods_id}\n{item_msg}"
+    # 构造返回消息：> 放在 ID 下，后续整段缩小（多行每行带 >）
+    detail = str(item_msg or "").replace("\r\n", "\n").replace("\r", "\n").strip("\n")
+    if detail:
+        quoted = "\n".join(f"> {line}" if line.strip() else ">" for line in detail.split("\n"))
+        msg = f"ID：{goods_id}\n{quoted}"
+    else:
+        msg = f"ID：{goods_id}"
     await handle_send(bot, event, msg, md_type="背包", k1="效果", v1="查看效果", k2="物品", v2="查看修仙界物品", k3="帮助", v3="修仙帮助")
     await check_item_effect.finish()
     
