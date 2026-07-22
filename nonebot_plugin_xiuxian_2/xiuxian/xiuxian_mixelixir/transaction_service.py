@@ -710,7 +710,12 @@ class MixelixirRefineCostResult:
         return self.status in {"applied", "duplicate"}
 
 class MixelixirRefineCostService:
-    """Consume a saved recipe snapshot and create one claimable refining task."""
+    """Consume materials for one claimable refining task.
+
+    Supports:
+    - saved recipe path (from 「炼丹」生成快照)
+    - custom path (player submits 配方 text freely; no prior save required)
+    """
 
     def __init__(self, database: str | Path, lock: RLock | None = None) -> None:
         self._database = Path(database)
@@ -743,13 +748,28 @@ class MixelixirRefineCostService:
         reward_quantity,
         expected_mix_state,
         updated_mix_state,
+        *,
+        materials: dict | None = None,
+        furnace_id: int | None = None,
+        reward_id: int | None = None,
+        reward_name: str | None = None,
     ) -> MixelixirRefineCostResult:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
-        recipe_set_id, recipe_key = str(recipe_set_id), str(recipe_key)
+        recipe_set_id, recipe_key = str(recipe_set_id or "custom"), str(recipe_key)
         expected_daily_count, reward_quantity = int(expected_daily_count), int(reward_quantity)
         expected_mix_state, updated_mix_state = dict(expected_mix_state), dict(updated_mix_state)
-        if not operation_id or not recipe_set_id or not recipe_key or expected_daily_count < 0 or reward_quantity <= 0:
-            raise ValueError("valid operation, saved recipe and reward snapshot are required")
+        custom_materials = None
+        if materials is not None:
+            custom_materials = {int(k): int(v) for k, v in dict(materials).items() if int(v) > 0}
+        custom_mode = custom_materials is not None
+        if custom_mode:
+            if not custom_materials or furnace_id is None or reward_id is None or not reward_name:
+                raise ValueError("custom refine requires materials, furnace and reward")
+            furnace_id = int(furnace_id)
+            reward_id = int(reward_id)
+            reward_name = str(reward_name)
+        if not operation_id or not recipe_key or expected_daily_count < 0 or reward_quantity <= 0:
+            raise ValueError("valid operation, recipe key and reward snapshot are required")
         task_id = operation_id
         # Request identity only — daily/mix/reward snapshots are concurrency/outcome.
         payload = json.dumps(
@@ -793,55 +813,86 @@ class MixelixirRefineCostService:
                     conn.rollback()
                     return MixelixirRefineCostResult("limit_reached", "")
 
-                recipe_row = conn.execute(
-                    "SELECT daily_count,materials_json,furnaces_json,recipes_json FROM mixelixir_recipe_sets "
-                    "WHERE user_id=%s AND recipe_set_id=%s",
-                    (user_id, recipe_set_id),
-                ).fetchone()
-                if recipe_row is None or int(recipe_row[0]) != expected_daily_count:
-                    conn.rollback()
-                    return MixelixirRefineCostResult("state_changed", "")
-                recipes = json.loads(str(recipe_row[3]))
-                recipe = next((item for item in recipes if str(item.get("recipe_key", "")) == recipe_key), None)
-                if recipe is None:
-                    conn.rollback()
-                    return MixelixirRefineCostResult("recipe_missing", "")
-
-                material_snapshot = {int(row[0]): int(row[2]) for row in json.loads(str(recipe_row[1]))}
-                materials: dict[int, int] = {}
-                for material in recipe["materials"]:
-                    item_id, quantity = int(material["id"]), int(material["quantity"])
-                    materials[item_id] = materials.get(item_id, 0) + quantity
-                for item_id, quantity in materials.items():
-                    row = conn.execute(
-                        "SELECT COALESCE(goods_num,0),goods_name,goods_type FROM back WHERE user_id=%s AND goods_id=%s",
-                        (user_id, item_id),
+                if custom_mode:
+                    materials = dict(custom_materials)
+                    for item_id, quantity in materials.items():
+                        row = conn.execute(
+                            "SELECT COALESCE(goods_num,0),goods_type FROM back WHERE user_id=%s AND goods_id=%s",
+                            (user_id, item_id),
+                        ).fetchone()
+                        if row is None or int(row[0]) < quantity or str(row[1]) != "药材":
+                            conn.rollback()
+                            return MixelixirRefineCostResult("item_insufficient", "")
+                    furnace_row = conn.execute(
+                        "SELECT goods_name,COALESCE(goods_num,0),goods_type FROM back WHERE user_id=%s AND goods_id=%s",
+                        (user_id, furnace_id),
                     ).fetchone()
-                    if row is None or int(row[0]) < quantity:
+                    if furnace_row is None or int(furnace_row[1]) < 1 or str(furnace_row[2]) != "炼丹炉":
                         conn.rollback()
-                        return MixelixirRefineCostResult("item_insufficient", "")
-                    if int(row[0]) != material_snapshot.get(item_id) or str(row[2]) != "药材":
+                        return MixelixirRefineCostResult("state_changed", "")
+                    # 自定义配方：按当前库存扣减（>=），不依赖「炼丹」预生成快照
+                    for item_id, quantity in materials.items():
+                        changed = conn.execute(
+                            "UPDATE back SET goods_num=goods_num-%s WHERE user_id=%s AND goods_id=%s AND goods_num>=%s",
+                            (quantity, user_id, item_id, quantity),
+                        )
+                        if changed.rowcount != 1:
+                            conn.rollback()
+                            return MixelixirRefineCostResult("state_changed", "")
+                else:
+                    recipe_row = conn.execute(
+                        "SELECT daily_count,materials_json,furnaces_json,recipes_json FROM mixelixir_recipe_sets "
+                        "WHERE user_id=%s AND recipe_set_id=%s",
+                        (user_id, recipe_set_id),
+                    ).fetchone()
+                    if recipe_row is None or int(recipe_row[0]) != expected_daily_count:
+                        conn.rollback()
+                        return MixelixirRefineCostResult("state_changed", "")
+                    recipes = json.loads(str(recipe_row[3]))
+                    recipe = next((item for item in recipes if str(item.get("recipe_key", "")) == recipe_key), None)
+                    if recipe is None:
+                        conn.rollback()
+                        return MixelixirRefineCostResult("recipe_missing", "")
+
+                    material_snapshot = {int(row[0]): int(row[2]) for row in json.loads(str(recipe_row[1]))}
+                    materials = {}
+                    for material in recipe["materials"]:
+                        item_id, quantity = int(material["id"]), int(material["quantity"])
+                        materials[item_id] = materials.get(item_id, 0) + quantity
+                    for item_id, quantity in materials.items():
+                        row = conn.execute(
+                            "SELECT COALESCE(goods_num,0),goods_name,goods_type FROM back WHERE user_id=%s AND goods_id=%s",
+                            (user_id, item_id),
+                        ).fetchone()
+                        if row is None or int(row[0]) < quantity:
+                            conn.rollback()
+                            return MixelixirRefineCostResult("item_insufficient", "")
+                        if int(row[0]) != material_snapshot.get(item_id) or str(row[2]) != "药材":
+                            conn.rollback()
+                            return MixelixirRefineCostResult("state_changed", "")
+
+                    furnace = dict(recipe["furnace"])
+                    furnace_id = int(furnace["id"])
+                    reward_id = int(recipe["reward_id"])
+                    reward_name = str(recipe["reward_name"])
+                    furnace_snapshot = {int(row[0]): (str(row[1]), int(row[2])) for row in json.loads(str(recipe_row[2]))}
+                    furnace_row = conn.execute(
+                        "SELECT goods_name,COALESCE(goods_num,0),goods_type FROM back WHERE user_id=%s AND goods_id=%s",
+                        (user_id, furnace_id),
+                    ).fetchone()
+                    if furnace_row is None or furnace_snapshot.get(furnace_id) != (str(furnace_row[0]), int(furnace_row[1])) or str(furnace_row[2]) != "炼丹炉":
                         conn.rollback()
                         return MixelixirRefineCostResult("state_changed", "")
 
-                furnace = dict(recipe["furnace"])
-                furnace_snapshot = {int(row[0]): (str(row[1]), int(row[2])) for row in json.loads(str(recipe_row[2]))}
-                furnace_row = conn.execute(
-                    "SELECT goods_name,COALESCE(goods_num,0),goods_type FROM back WHERE user_id=%s AND goods_id=%s",
-                    (user_id, int(furnace["id"])),
-                ).fetchone()
-                if furnace_row is None or furnace_snapshot.get(int(furnace["id"])) != (str(furnace_row[0]), int(furnace_row[1])) or str(furnace_row[2]) != "炼丹炉":
-                    conn.rollback()
-                    return MixelixirRefineCostResult("state_changed", "")
+                    for item_id, quantity in materials.items():
+                        changed = conn.execute(
+                            "UPDATE back SET goods_num=goods_num-%s WHERE user_id=%s AND goods_id=%s AND goods_num=%s",
+                            (quantity, user_id, item_id, material_snapshot[item_id]),
+                        )
+                        if changed.rowcount != 1:
+                            conn.rollback()
+                            return MixelixirRefineCostResult("state_changed", "")
 
-                for item_id, quantity in materials.items():
-                    changed = conn.execute(
-                        "UPDATE back SET goods_num=goods_num-%s WHERE user_id=%s AND goods_id=%s AND goods_num=%s",
-                        (quantity, user_id, item_id, material_snapshot[item_id]),
-                    )
-                    if changed.rowcount != 1:
-                        conn.rollback()
-                        return MixelixirRefineCostResult("state_changed", "")
                 changed = conn.execute(
                     "UPDATE user_xiuxian SET mixelixir_num=mixelixir_num+1 WHERE user_id=%s AND COALESCE(mixelixir_num,0)=%s",
                     (user_id, expected_daily_count),
@@ -861,8 +912,8 @@ class MixelixirRefineCostService:
                         recipe_key,
                         "ready",
                         json.dumps(sorted(materials.items())),
-                        int(recipe["reward_id"]),
-                        str(recipe["reward_name"]),
+                        int(reward_id),
+                        str(reward_name),
                         reward_quantity,
                         json.dumps(expected_mix_state, ensure_ascii=False, sort_keys=True),
                         json.dumps(updated_mix_state, ensure_ascii=False, sort_keys=True),
@@ -901,17 +952,64 @@ class MixelixirRefineRewardService:
 
     @staticmethod
     def _state_value(field: str, value) -> str:
+        """归一化后写入/比对。炼丹记录必须语义相等，不能裸 str 比 JSON 键序。"""
         if field == "炼丹记录":
-            return json.dumps(value, ensure_ascii=False, sort_keys=True)
-        return str(value)
+            raw = value
+            if raw is None or raw == "" or raw == "0":
+                raw = {}
+            if isinstance(raw, str):
+                try:
+                    raw = json.loads(raw)
+                except Exception:
+                    raw = {}
+            if not isinstance(raw, dict):
+                raw = {}
+            # 统一子项结构，避免 num 的 int/str 与键序差异导致误判 state_changed
+            normalized: dict[str, dict] = {}
+            for key, item in raw.items():
+                k = str(key)
+                if isinstance(item, dict):
+                    name = str(item.get("name", "") or "")
+                    try:
+                        num = int(item.get("num", 0) or 0)
+                    except Exception:
+                        num = 0
+                    normalized[k] = {"name": name, "num": num}
+                else:
+                    normalized[k] = {"name": str(item), "num": 0}
+            return json.dumps(normalized, ensure_ascii=False, sort_keys=True)
+        # 控火/经验：统一成整数文本，兼容 NUMERIC/TEXT
+        if value is None or value == "":
+            return "0"
+        try:
+            return str(int(value))
+        except Exception:
+            try:
+                return str(int(float(str(value))))
+            except Exception:
+                return str(value)
 
-    def latest_ready_task(self, user_id) -> str | None:
+    @classmethod
+    def _state_tuple(cls, fields, values) -> tuple[str, ...]:
+        return tuple(cls._state_value(field, value) for field, value in zip(fields, values))
+
+    def latest_ready_task(self, user_id, recipe_key: str | None = None) -> str | None:
+        """取用户最近一条 ready 炼丹任务；可按 recipe_key 过滤（补领已扣材任务）。"""
+        user_id = str(user_id)
+        recipe_key = str(recipe_key or "").strip() or None
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
-            row = conn.execute(
-                "SELECT task_id FROM mixelixir_refine_tasks WHERE user_id=%s AND status=%s "
-                "ORDER BY created_at DESC,task_id DESC LIMIT 1",
-                (str(user_id), "ready"),
-            ).fetchone()
+            if recipe_key:
+                row = conn.execute(
+                    "SELECT task_id FROM mixelixir_refine_tasks WHERE user_id=%s AND status=%s AND recipe_key=%s "
+                    "ORDER BY created_at DESC,task_id DESC LIMIT 1",
+                    (user_id, "ready", recipe_key),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT task_id FROM mixelixir_refine_tasks WHERE user_id=%s AND status=%s "
+                    "ORDER BY created_at DESC,task_id DESC LIMIT 1",
+                    (user_id, "ready"),
+                ).fetchone()
         return None if row is None else str(row[0])
 
     def get_result(self, operation_id: str) -> MixelixirRefineRewardResult | None:
@@ -997,8 +1095,10 @@ class MixelixirRefineRewardService:
                 current = conn.execute(
                     f"SELECT {quoted} FROM player_data.mix_elixir_info WHERE user_id=%s", (user_id,)
                 ).fetchone()
-                if current is None or tuple(str(value) for value in current) != tuple(
-                    self._state_value(field, expected[field]) for field in self._MIX_FIELDS
+                # 旧逻辑用 str(db值) vs sort_keys JSON，炼丹记录键序不同会误判 state_changed
+                # （材料已扣、丹药未发）。改为语义归一化比对。
+                if current is None or self._state_tuple(self._MIX_FIELDS, current) != self._state_tuple(
+                    self._MIX_FIELDS, (expected[field] for field in self._MIX_FIELDS)
                 ):
                     conn.rollback()
                     return MixelixirRefineRewardResult("state_changed")
