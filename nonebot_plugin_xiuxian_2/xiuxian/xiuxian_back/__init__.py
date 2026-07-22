@@ -346,6 +346,14 @@ def get_alchemy_reserved_num(back_item):
     return max(0, int(back_item.get("state", 0) or 0))
 
 
+def _md_quote_block(text: str) -> str:
+    """多行文本每行加 >，用于主标题后整段缩小。"""
+    detail = str(text or "").replace("\r\n", "\n").replace("\r", "\n").strip("\n")
+    if not detail:
+        return ""
+    return "\n".join(f"> {line}" if line.strip() else ">" for line in detail.split("\n"))
+
+
 @check_item_effect.handle(parameterless=[Cooldown(cd_time=0)])
 async def check_item_effect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看物品效果，支持物品名或ID"""
@@ -374,12 +382,8 @@ async def check_item_effect_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     if goods_id == 15053 or input_str == "补偿": # 某些特定物品可能不需要显示效果
         await check_item_effect.finish()
     # 构造返回消息：> 放在 ID 下，后续整段缩小（多行每行带 >）
-    detail = str(item_msg or "").replace("\r\n", "\n").replace("\r", "\n").strip("\n")
-    if detail:
-        quoted = "\n".join(f"> {line}" if line.strip() else ">" for line in detail.split("\n"))
-        msg = f"ID：{goods_id}\n{quoted}"
-    else:
-        msg = f"ID：{goods_id}"
+    quoted = _md_quote_block(item_msg)
+    msg = f"ID：{goods_id}\n{quoted}" if quoted else f"ID：{goods_id}"
     await handle_send(bot, event, msg, md_type="背包", k1="效果", v1="查看效果", k2="物品", v2="查看修仙界物品", k3="帮助", v3="修仙帮助")
     await check_item_effect.finish()
     
@@ -1810,15 +1814,24 @@ async def chakan_wupin_(
     for item_id, item_info in item_data.items():
         name = item_info['name']
         if item_type in ["功法", "辅修功法", "神通", "身法", "瞳术", "法器", "防具", "饰品"]:
-            desc = get_item_msg(item_id) # 获取详细描述
+            desc = get_item_msg(item_id)  # 获取详细描述
+            # 列表走 send_msg_handler 代码框：> 不会当 MD 缩小，勿整段加 >
             msg = f"ID：{item_id}\n{desc}"
         elif item_type == "特殊物品":
             if item_info['type'] == "聚灵旗":
-                msg = f"名字\n> {name}\n效果\n> {item_info['desc']}\n修炼速度\n> {item_info['修炼速度'] * 100}%\n药材速度\n> {item_info['药材速度'] * 100}%\n"
+                msg = (
+                    f"名字：{name}\n"
+                    f"效果：{item_info['desc']}\n"
+                    f"修炼速度：{item_info['修炼速度'] * 100}%\n"
+                    f"药材速度：{item_info['药材速度'] * 100}%\n"
+                )
             elif item_info['type'] == "炼丹炉":
-                msg = f"名字\n> {name}\n效果\n> {item_info['desc']}\n"
+                msg = f"名字：{name}\n效果：{item_info['desc']}\n"
             else:  # 特殊道具
-                msg = f"名字\n> {name}\n效果\n> {item_info.get('desc', '十分神秘的东西，谁也不知道它的作用')}\n"
+                msg = (
+                    f"名字：{name}\n"
+                    f"效果：{item_info.get('desc', '十分神秘的东西，谁也不知道它的作用')}\n"
+                )
         elif item_type == "神物":
             rank = item_info.get('境界', '')
             desc = item_info.get('desc', '')
@@ -1827,11 +1840,11 @@ async def chakan_wupin_(
                 effect = f"炼体结算时间{minutes}分钟"
             else:
                 effect = f"增加{number_to(item_info.get('buff', 0))}修为"
-            msg = f"※名字\n> {name}\n效果\n> {desc}\n境界\n> {rank}\n{effect}\n"
+            msg = f"ID：{item_id}\n名字：{name}\n效果：{desc}\n境界：{rank}\n{effect}\n"
         else:  # 丹药、合成丹药
             rank = item_info.get('境界', '')
             desc = item_info.get('desc', '')
-            msg = f"※{rank}丹药:{name}，效果：{desc}\n"
+            msg = f"ID：{item_id}\n{rank}丹药：{name}\n效果：{desc}\n"
         msg_list.append(msg)
     
     # 分页处理
