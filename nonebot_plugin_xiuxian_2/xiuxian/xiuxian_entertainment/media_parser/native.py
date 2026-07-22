@@ -44,6 +44,7 @@ _PLATFORM_HOSTS: list[tuple[str, str]] = [
     ("twitter.com", "twitter"),
     ("x.com", "twitter"),
     ("tiktok.com", "tiktok"),
+    ("tiktokv.com", "tiktok"),
     ("youtu.be", "youtube"),
     ("youtube.com", "youtube"),
     ("goofish.com", "xianyu"),
@@ -1899,10 +1900,40 @@ def parse_youtube(url: str) -> dict[str, Any]:
 
 
 def parse_tiktok(url: str) -> dict[str, Any]:
-    """TikTok：优先 yt-dlp，再 OG。"""
+    """TikTok：优先 yt-dlp，再 OG / 页面 playAddr。
+
+    兼容 app-va.tiktokv.com / snssdk 跳转链：从路径抽 aweme id 归一成 www.tiktok.com 视频页。
+    """
     meta = _base_meta("tiktok", url)
     use_proxy = _use_proxy_for("tiktok", url) or bool(get_custom_proxy_url())
-    final = expand_url(url, use_proxy=use_proxy, platform="tiktok")
+
+    # 跳转链/深链里常夹着 aweme id：.../aweme/detail/7631... 或 video/7631...
+    aweme_id = None
+    m = re.search(r"(?:aweme/detail|video|photo)/(\d{10,})", url) or re.search(
+        r"[?&](?:item_id|aweme_id|id)=(\d{10,})", url
+    )
+    if m:
+        aweme_id = m.group(1)
+    # 也从 URL 解码后的 query 再扫一次
+    if not aweme_id:
+        try:
+            from urllib.parse import unquote
+
+            decoded = unquote(url)
+            m = re.search(r"(?:aweme/detail|video|photo)/(\d{10,})", decoded)
+            if m:
+                aweme_id = m.group(1)
+        except Exception:
+            pass
+
+    seed = url
+    if aweme_id and ("tiktokv.com" in (urlparse(url).hostname or "").lower() or "snssdk" in url.lower()):
+        seed = f"https://www.tiktok.com/@/video/{aweme_id}"
+
+    final = expand_url(seed, use_proxy=use_proxy, platform="tiktok")
+    # expand 失败仍可用归一后的 seed
+    if aweme_id and ("tiktok.com" not in (urlparse(final).hostname or "").lower()):
+        final = f"https://www.tiktok.com/@/video/{aweme_id}"
     meta["url"] = final
     info = _ytdlp_extract(final, use_proxy=use_proxy)
     if info:
@@ -1915,7 +1946,57 @@ def parse_tiktok(url: str) -> dict[str, Any]:
     page = _parse_html_og("tiktok", final, use_proxy=use_proxy)
     if page.get("video_urls") or page.get("image_urls"):
         return page
-    meta["error"] = meta.get("error") or page.get("error") or "TikTok 未解析到媒体"
+
+    # yt-dlp 常 403；OG 也常无 og:video。直接从 HTML 抽 playAddr/downloadAddr
+    try:
+        _, html = _get_text(
+            final,
+            headers={
+                "User-Agent": _MOBILE_UA,
+                "Referer": "https://www.tiktok.com/",
+                "Accept": "text/html,application/xhtml+xml",
+            },
+            timeout=25 if use_proxy else 20,
+            use_proxy=bool(use_proxy),
+        )
+
+        def _dec(s: str) -> str:
+            try:
+                return (
+                    s.encode("utf-8")
+                    .decode("unicode_escape", errors="ignore")
+                    .replace("\\/", "/")
+                    .replace("\\u002F", "/")
+                )
+            except Exception:
+                return s.replace("\\/", "/")
+
+        vids: list[str] = []
+        imgs: list[str] = []
+        for key in ("playAddr", "downloadAddr", "play_addr", "download_addr"):
+            for mm in re.finditer(rf'"{key}"\s*:\s*"((?:\\.|[^"\\])*)"', html):
+                u = _dec(mm.group(1)).strip()
+                if u.startswith("http"):
+                    vids.append(u)
+        for key in ("cover", "originCover", "dynamicCover"):
+            for mm in re.finditer(rf'"{key}"\s*:\s*"((?:\\.|[^"\\])*)"', html):
+                u = _dec(mm.group(1)).strip()
+                if u.startswith("http"):
+                    imgs.append(u)
+        title = _meta_content(html, "og:title") or ""
+        if not title:
+            mm = re.search(r'"desc"\s*:\s*"((?:\\.|[^"\\])*)"', html)
+            if mm:
+                title = _dec(mm.group(1))
+        meta["title"] = (title or meta.get("title") or "")[:200]
+        meta["video_urls"] = list(dict.fromkeys(vids))[:3]
+        meta["image_urls"] = list(dict.fromkeys(imgs))[:6]
+        if meta["video_urls"] or meta["image_urls"]:
+            meta["error"] = None
+            return meta
+        meta["error"] = meta.get("error") or page.get("error") or "TikTok 未解析到媒体"
+    except Exception as e:
+        meta["error"] = meta.get("error") or f"TikTok 页面抽取失败：{e}"
     return meta
 
 

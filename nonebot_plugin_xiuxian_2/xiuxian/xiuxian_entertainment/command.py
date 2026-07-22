@@ -247,8 +247,8 @@ def fun_media_should_skip_duplicate_event(
     return False
 
 
-def _guess_image_size_from_url(url: str) -> tuple[int, int]:
-    """从 CDN URL 路径猜宽高（如抖音 :1106:932:），猜不到用 1080x1080。"""
+def _guess_image_size_from_url(url: str) -> tuple[int, int] | None:
+    """从 CDN URL 路径猜宽高（如抖音 :1106:932:）；猜不到返回 None。"""
     s = str(url or "")
     m = re.search(r":(\d{2,5}):(\d{2,5}):", s)
     if m:
@@ -266,18 +266,201 @@ def _guess_image_size_from_url(url: str) -> tuple[int, int]:
                 return w, h
         except Exception:
             pass
-    return 1080, 1080
+    # bilibili / 部分 CDN: ..._1080x1440.jpg 或 @1080w_1440h
+    m = re.search(r"(?:_|@|/)(\d{2,5})[xX×](\d{2,5})(?:\.|_|\?|$)", s)
+    if m:
+        try:
+            w, h = int(m.group(1)), int(m.group(2))
+            if 16 <= w <= 10000 and 16 <= h <= 10000:
+                return w, h
+        except Exception:
+            pass
+    m = re.search(r"(\d{2,5})w[_-](\d{2,5})h", s, re.I)
+    if m:
+        try:
+            w, h = int(m.group(1)), int(m.group(2))
+            if 16 <= w <= 10000 and 16 <= h <= 10000:
+                return w, h
+        except Exception:
+            pass
+    return None
 
 
-def _format_qq_md_image(url: str, width: int = 1080, height: int = 1080) -> str:
+def _image_size_from_bytes(data: bytes) -> tuple[int, int] | None:
+    """从图片头解析宽高（PNG/GIF/JPEG/WEBP）；失败返回 None。"""
+    if not data or len(data) < 24:
+        return None
+    try:
+        import struct
+
+        # PNG
+        if data[:8] == b"\x89PNG\r\n\x1a\n" and len(data) >= 24:
+            w, h = struct.unpack(">II", data[16:24])
+            if w > 0 and h > 0:
+                return int(w), int(h)
+        # GIF
+        if data[:6] in (b"GIF87a", b"GIF89a") and len(data) >= 10:
+            w, h = struct.unpack("<HH", data[6:10])
+            if w > 0 and h > 0:
+                return int(w), int(h)
+        # JPEG
+        if data[:2] == b"\xff\xd8":
+            i = 2
+            n = len(data)
+            while i + 9 < n:
+                if data[i] != 0xFF:
+                    i += 1
+                    continue
+                marker = data[i + 1]
+                i += 2
+                if marker in (0xD8, 0xD9) or marker == 0x01 or 0xD0 <= marker <= 0xD7:
+                    continue
+                if i + 2 > n:
+                    break
+                seglen = struct.unpack(">H", data[i : i + 2])[0]
+                if seglen < 2:
+                    break
+                if marker in (0xC0, 0xC1, 0xC2) and i + 7 <= n:
+                    h, w = struct.unpack(">HH", data[i + 3 : i + 7])
+                    if w > 0 and h > 0:
+                        return int(w), int(h)
+                i += seglen
+        # WEBP
+        if data[:4] == b"RIFF" and len(data) >= 30 and data[8:12] == b"WEBP":
+            chunk = data[12:16]
+            if chunk == b"VP8X" and len(data) >= 30:
+                w = 1 + int.from_bytes(data[24:27], "little")
+                h = 1 + int.from_bytes(data[27:30], "little")
+                if w > 0 and h > 0:
+                    return w, h
+            if (
+                chunk == b"VP8 "
+                and len(data) >= 30
+                and data[23] == 0x9D
+                and data[24:27] == b"\x01\x2a"
+            ):
+                w, h = struct.unpack("<HH", data[26:30])
+                w &= 0x3FFF
+                h &= 0x3FFF
+                if w > 0 and h > 0:
+                    return w, h
+            if chunk == b"VP8L" and len(data) >= 25 and data[20] == 0x2F:
+                b0, b1, b2, b3 = data[21:25]
+                w = 1 + (((b1 & 0x3F) << 8) | b0)
+                h = 1 + (((b3 & 0xF) << 10) | (b2 << 2) | ((b1 & 0xC0) >> 6))
+                if w > 0 and h > 0:
+                    return w, h
+    except Exception:
+        pass
+    # PIL 兜底（项目已依赖）
+    try:
+        from io import BytesIO
+        from PIL import Image
+
+        with Image.open(BytesIO(data)) as im:
+            w, h = im.size
+            if w > 0 and h > 0:
+                return int(w), int(h)
+    except Exception:
+        pass
+    return None
+
+
+def _normalize_md_display_size(
+    width: int,
+    height: int,
+    *,
+    max_w: int = 1080,
+    max_h: int = 1920,
+) -> tuple[int, int]:
+    """按真实比例缩放展示尺寸，避免固定 1080x1080 方图难看。"""
+    try:
+        w = int(width)
+        h = int(height)
+    except Exception:
+        return 720, 720
+    if w < 16 or h < 16:
+        return 720, 720
+    # 过大则等比缩小到聊天友好尺寸
+    scale = min(float(max_w) / w, float(max_h) / h, 1.0)
+    nw = max(1, int(round(w * scale)))
+    nh = max(1, int(round(h * scale)))
+    return nw, nh
+
+
+def _probe_image_size(url: str) -> tuple[int, int]:
+    """识别图片真实宽高：URL 线索 → 下载探测 → 默认比例。"""
+    guessed = _guess_image_size_from_url(url)
+    if guessed:
+        return _normalize_md_display_size(*guessed)
+
+    s = str(url or "").strip()
+    if not s.lower().startswith(("http://", "https://")):
+        return 720, 960
+
+    try:
+        from urllib.parse import urlparse
+
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) "
+                "AppleWebKit/605.1.15 Mobile/15E148"
+            ),
+            "Accept": "image/avif,image/webp,image/*,*/*;q=0.8",
+        }
+        host = (urlparse(s).hostname or "").lower()
+        if host:
+            headers["Referer"] = f"https://{host}/"
+        # 部分国内 CDN 需要平台 Referer
+        if "douyin" in host or "byteimg" in host or "snssdk" in host:
+            headers["Referer"] = "https://www.douyin.com/"
+        elif "yximgs" in host or "kuaishou" in host or "kwimgs" in host:
+            headers["Referer"] = "https://www.kuaishou.com/"
+        elif "hdslb" in host or "bilibili" in host:
+            headers["Referer"] = "https://www.bilibili.com/"
+
+        resp = http_client.request(
+            "GET",
+            s,
+            timeout=12,
+            headers=headers,
+            check_status=False,
+            use_config_proxy=False,
+            stream=True,
+        )
+        if int(getattr(resp, "status_code", 0) or 0) >= 400:
+            return 720, 960
+        data = bytearray()
+        # 头信息通常够用；过大则截断
+        for chunk in resp.iter_content(32 * 1024):
+            if not chunk:
+                continue
+            data.extend(chunk)
+            if len(data) >= 512 * 1024:
+                break
+            # 已能解析尺寸则提前停
+            if len(data) >= 64 * 1024:
+                sized = _image_size_from_bytes(bytes(data))
+                if sized:
+                    return _normalize_md_display_size(*sized)
+        sized = _image_size_from_bytes(bytes(data))
+        if sized:
+            return _normalize_md_display_size(*sized)
+    except Exception as e:
+        logger.debug(f"图片尺寸探测失败 {s[:80]}: {e}")
+    # 竖图默认比方图更自然
+    return 720, 960
+
+
+def _format_qq_md_image(url: str, width: int = 720, height: int = 960) -> str:
     """QQ 原生 Markdown 图片语法：直接使用已有 http(s) 直链。
 
     示例：``![img #1080px #1004px](https://...)``
-    不上传、不换图床；解析结果本身已有 CDN 链接。
+    宽高应尽量贴近真实比例；不上传、不换图床。
     """
     u = str(url or "").strip().replace(" ", "%20").replace("(", "%28").replace(")", "%29")
-    w = max(1, int(width or 1080))
-    h = max(1, int(height or 1080))
+    w = max(1, int(width or 720))
+    h = max(1, int(height or 960))
     return f"![img #{w}px #{h}px]({u})"
 
 
@@ -592,18 +775,25 @@ async def fun_media_send_parse_result(
                     raise
         return False
 
-    def _build_gallery_md(urls: list[str], caption: str = "") -> str:
-        """QQ 原生 MD 图集：直接用已有 CDN 直链 + ![img #Wpx #Hpx](url)。不上传图床。"""
+    def _build_gallery_md(
+        urls: list[str],
+        caption: str = "",
+        sizes: list[tuple[int, int]] | None = None,
+    ) -> str:
+        """QQ 原生 MD 图集：CDN 直链 + 识别后的真实比例尺寸。"""
         lines: list[str] = []
         if caption:
             lines.append(caption.replace("\r", "\n"))
             lines.append("")
-        # 最多 18 张，含第一张；与卡片封面可重复出现，避免“后面没发/首图被去掉”
-        for u in urls[:18]:
+        # 最多 18 张，含第一张；与卡片封面可重复出现
+        for idx, u in enumerate(urls[:18]):
             url = str(u or "").strip()
             if not url.lower().startswith(("http://", "https://")):
                 continue
-            w, h = _guess_image_size_from_url(url)
+            if sizes and idx < len(sizes) and sizes[idx]:
+                w, h = sizes[idx]
+            else:
+                w, h = _probe_image_size(url)
             lines.append(_format_qq_md_image(url, w, h))
         return "\n".join(lines)
 
@@ -614,6 +804,22 @@ async def fun_media_send_parse_result(
             if s.lower().startswith(("http://", "https://")):
                 out.append(s)
         return out
+
+    async def _probe_gallery_sizes(urls: list[str]) -> list[tuple[int, int]]:
+        """并发探测图集尺寸，避免固定 px。"""
+        if not urls:
+            return []
+        sem = asyncio.Semaphore(4)
+
+        async def _one(u: str) -> tuple[int, int]:
+            async with sem:
+                try:
+                    return await run_blocking_io(_probe_image_size, u, timeout=15)
+                except Exception as e:
+                    logger.debug(f"图集尺寸探测超时/失败 {str(u)[:60]}: {e}")
+                    return 720, 960
+
+        return list(await asyncio.gather(*[_one(u) for u in urls[:18]]))
 
     try:
         await _send_card_with_info()
@@ -664,8 +870,11 @@ async def fun_media_send_parse_result(
         gallery_http = _gallery_http_urls(gallery)[:18]
         md_sent = False
         if md_on and gallery_http:
+            sizes = await _probe_gallery_sizes(gallery_http)
             md_body = _build_gallery_md(
-                gallery_http, caption="" if has_card else body
+                gallery_http,
+                caption="" if has_card else body,
+                sizes=sizes,
             )
             if "![img" in md_body and "](http" in md_body:
                 try:
