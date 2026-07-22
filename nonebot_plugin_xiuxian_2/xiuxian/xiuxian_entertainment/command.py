@@ -247,6 +247,40 @@ def fun_media_should_skip_duplicate_event(
     return False
 
 
+def _guess_image_size_from_url(url: str) -> tuple[int, int]:
+    """从 CDN URL 路径猜宽高（如抖音 :1106:932:），猜不到用 1080x1080。"""
+    s = str(url or "")
+    m = re.search(r":(\d{2,5}):(\d{2,5}):", s)
+    if m:
+        try:
+            w, h = int(m.group(1)), int(m.group(2))
+            if 16 <= w <= 10000 and 16 <= h <= 10000:
+                return w, h
+        except Exception:
+            pass
+    m = re.search(r"[?&](?:w|width)=(\d{2,5}).*?[?&](?:h|height)=(\d{2,5})", s, re.I)
+    if m:
+        try:
+            w, h = int(m.group(1)), int(m.group(2))
+            if 16 <= w <= 10000 and 16 <= h <= 10000:
+                return w, h
+        except Exception:
+            pass
+    return 1080, 1080
+
+
+def _format_qq_md_image(url: str, width: int = 1080, height: int = 1080) -> str:
+    """QQ 原生 Markdown 图片语法：直接使用已有 http(s) 直链。
+
+    示例：``![img #1080px #1004px](https://...)``
+    不上传、不换图床；解析结果本身已有 CDN 链接。
+    """
+    u = str(url or "").strip().replace(" ", "%20").replace("(", "%28").replace(")", "%29")
+    w = max(1, int(width or 1080))
+    h = max(1, int(height or 1080))
+    return f"![img #{w}px #{h}px]({u})"
+
+
 async def fun_media_send_parse_result(
     bot: Bot,
     event: GroupMessageEvent | PrivateMessageEvent,
@@ -258,16 +292,24 @@ async def fun_media_send_parse_result(
     1. 卡片 + 解析文案：图文接口一次发出（信息不会丢）
     2. 有视频：再发 1 条高清视频
        - B 站 CDN 需 Referer，QQ 直链常 850026，改为本地下载后 file_video
-    3. 图集且开启 markdown：用原生 MD 图片链一次发出，避免多图被动超限
+    3. 图集且开启 markdown：直接用已有 CDN 直链拼
+       ``![img #Wpx #Hpx](url)`` 一次发多图（不上传图床）
+       卡片仅把首图当封面；图集发送仍含第一张，不得 gallery[1:]
     """
     if fun_media_should_skip_duplicate_event(event):
         logger.debug(f"娱乐媒体解析：跳过重复消息 {_fun_media_event_dedupe_key(event)}")
         return
 
     texts, images, videos, cards = await run_parse_and_build_messages(source_text)
-    images = sort_media_urls_by_quality(
-        dedupe_media_urls_preserve_order(images), kind="image"
-    )
+    # 图片按「资源对象」去重后再按画质排序，避免同图多 CDN/多清晰度重复发
+    try:
+        from .media_parser.native import dedupe_media_urls_by_object
+        images = dedupe_media_urls_by_object(images, kind="image")
+    except Exception:
+        images = dedupe_media_urls_preserve_order(images)
+    # 保持解析顺序为主：卡片首图与图集第一张一致；仅对象去重，不再按画质重排打乱
+    # （画质优选已在各平台解析时做过）
+    images = list(images)
     videos = sort_media_urls_by_quality(
         dedupe_media_urls_preserve_order(videos), kind="video"
     )
@@ -551,13 +593,27 @@ async def fun_media_send_parse_result(
         return False
 
     def _build_gallery_md(urls: list[str], caption: str = "") -> str:
+        """QQ 原生 MD 图集：直接用已有 CDN 直链 + ![img #Wpx #Hpx](url)。不上传图床。"""
         lines: list[str] = []
         if caption:
             lines.append(caption.replace("\r", "\n"))
             lines.append("")
-        for i, u in enumerate(urls[:9], 1):
-            lines.append(f"![图{i}]({u})")
+        # 最多 18 张，含第一张；与卡片封面可重复出现，避免“后面没发/首图被去掉”
+        for u in urls[:18]:
+            url = str(u or "").strip()
+            if not url.lower().startswith(("http://", "https://")):
+                continue
+            w, h = _guess_image_size_from_url(url)
+            lines.append(_format_qq_md_image(url, w, h))
         return "\n".join(lines)
+
+    def _gallery_http_urls(urls: list[str]) -> list[str]:
+        out: list[str] = []
+        for u in urls:
+            s = str(u or "").strip()
+            if s.lower().startswith(("http://", "https://")):
+                out.append(s)
+        return out
 
     try:
         await _send_card_with_info()
@@ -603,30 +659,44 @@ async def fun_media_send_parse_result(
         if not gallery:
             return
 
-        if md_on and len(gallery) >= 1:
-            md_body = _build_gallery_md(gallery, caption="" if has_card else body)
-            try:
-                await handle_send(
-                    bot,
-                    event,
-                    md_body,
-                    native_markdown=True,
-                    fallback_msg=body or "【媒体解析】图集",
-                    k1="娱乐帮助",
-                    v1="娱乐帮助",
-                    k2="链接解析",
-                    v2="链接解析",
-                )
-                return
-            except Exception as e:
-                logger.warning(f"图集 Markdown 发送失败，降级逐张: {e}")
-                if _is_passive_limit_error(e):
-                    return
+        # 卡片只占用首图作封面；图集列表必须保留第一张，禁止 gallery[1:]
+        # MD 必须真发出去（保留 []）；失败则逐张普通发图，禁止剥括号纯文本
+        gallery_http = _gallery_http_urls(gallery)[:18]
+        md_sent = False
+        if md_on and gallery_http:
+            md_body = _build_gallery_md(
+                gallery_http, caption="" if has_card else body
+            )
+            if "![img" in md_body and "](http" in md_body:
+                try:
+                    ok = await handle_send(
+                        bot,
+                        event,
+                        md_body,
+                        native_markdown=True,
+                        # 失败不要剥 [] 当成功；交给下面逐张发图
+                        allow_plain_fallback=False,
+                        fallback_msg=md_body,
+                        k1="娱乐帮助",
+                        v1="娱乐帮助",
+                        k2="链接解析",
+                        v2="链接解析",
+                    )
+                    md_sent = bool(ok)
+                except Exception as e:
+                    logger.warning(f"图集 Markdown 发送失败，改逐张发图: {e}")
+                    if _is_passive_limit_error(e):
+                        return
+                    md_sent = False
 
-        for img in gallery[:9]:
+        if md_sent:
+            return
+
+        # 无 MD / MD 失败：逐张普通发图（含第一张，不因卡片而跳过）
+        for img in gallery[:18]:
             try:
                 await _safe_send_media(
-                    img, media_type="图片", label=f"发送解析图片 {img[:80]}"
+                    img, media_type="图片", label=f"发送解析图片 {str(img)[:80]}"
                 )
             except Exception as e:
                 if _is_passive_limit_error(e):

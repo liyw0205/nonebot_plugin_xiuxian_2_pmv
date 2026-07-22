@@ -53,10 +53,19 @@ def escape_markdown_text(value: Any) -> str:
 
 
 def strip_md_command_links(msg: str) -> str:
-    """原生 Markdown 不可用时，将常见展示语法降级为纯文本。"""
+    """原生 Markdown 不可用时，将常见展示语法降级为纯文本。
+
+    图片语法 ``![图1](https://...)`` 降级为「图1 + URL」，避免只剩 alt 文本。
+    """
     text = str(msg or " ")
     text = text.replace("\r", "\n")
-    text = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", text)
+    # 图片：保留 alt 与直链，便于无 MD 时仍可点开
+    def _img_fallback(m: re.Match) -> str:
+        alt = (m.group(1) or "").strip() or "图片"
+        url = (m.group(2) or "").strip()
+        return f"{alt}\n{url}" if url else alt
+
+    text = re.sub(r"!\[([^\]]*)\]\(([^)]+)\)", _img_fallback, text)
     text = re.sub(r"\[([^\]]+)\]\(mqqapi://aio/inlinecmd\?[^)]+\)", r"\1", text)
     text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
 

@@ -1142,11 +1142,16 @@ async def handle_send(
     fallback_msg: str = None,
     keyboard_rows: list[list[tuple[str, str]]] | None = None,
     at_msg: bool = True,
+    allow_plain_fallback: bool = True,
 ):
     """统一消息入口：
     1) 优先MD体系
     2) MD失败自动降级普通消息
     3) 频道只走MD模板，不走原生MD
+
+    allow_plain_fallback:
+      - True（默认）：原生 MD 失败时剥语法降级纯文本
+      - False：原生 MD 失败抛错/返回 False，不剥 []（图集请用 False）
     """
     if _is_onebot_v11_bot(bot):
         markdown_status = False
@@ -1156,7 +1161,7 @@ async def handle_send(
     # 强制原生 Markdown：保留 []()、图片等原生语法，不走模板和 optimize_md。
     if native_markdown:
         if markdown_status and _allow_native_markdown(event):
-            await handle_send_native_markdown(
+            return await handle_send_native_markdown(
                 bot,
                 event,
                 msg,
@@ -1164,10 +1169,12 @@ async def handle_send(
                 fallback_msg=fallback_msg,
                 keyboard_rows=keyboard_rows,
                 at_msg=at_msg,
+                allow_plain_fallback=allow_plain_fallback,
             )
-            return
-        await handle_send2(bot, event, fallback_msg if fallback_msg is not None else msg)
-        return
+        if allow_plain_fallback:
+            await handle_send2(bot, event, fallback_msg if fallback_msg is not None else msg)
+            return False
+        raise RuntimeError("原生 Markdown 不可用（开关关闭或非群/私聊场景）")
 
     # 开启MD体系
     if markdown_status:
@@ -1373,6 +1380,7 @@ async def _send_markdown_or_keyboard(
     rows: list[list[tuple[str, str]]] | None = None,
     fallback_md_text: str | None = None,
     log_prefix: str = "Markdown按钮",
+    allow_plain_fallback: bool = True,
 ):
     rows = [] if _has_button_id(button_id) else (rows or [])
     fallback = fallback_md_text if fallback_md_text is not None else md_text
@@ -1383,6 +1391,7 @@ async def _send_markdown_or_keyboard(
         fallback_text=strip_md_command_links(fallback or " "),
         keyboard_rows=rows,
         button_id=str(button_id or ""),
+        allow_plain_fallback=allow_plain_fallback,
     )
 
 async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, title=None, page=None, page_param=None, title_param=None, msg_param=None, button_id=None, at_msg=True):
@@ -1554,17 +1563,23 @@ async def handle_send_native_markdown(
     fallback_msg: str = None,
     keyboard_rows: list[list[tuple[str, str]]] | None = None,
     at_msg: bool = True,
-):
+    allow_plain_fallback: bool = True,
+) -> bool:
     """
     发送原生 Markdown。
 
     与 handle_send_markdown 不同，这里不会调用 optimize_md，
     避免破坏 [文本](链接)、图片等原生 Markdown 语法。
+
+    返回 True 表示原生 MD 段已成功发出；False 表示已/将降级。
+    allow_plain_fallback=False 时失败抛错，不剥 [] 发纯文本。
     """
     raw_plain = strip_md_command_links(fallback_msg if fallback_msg is not None else (msg or " "))
     if not _allow_native_markdown(event):
-        await handle_send2(bot, event, raw_plain)
-        return
+        if allow_plain_fallback:
+            await handle_send2(bot, event, raw_plain)
+            return False
+        raise RuntimeError("当前场景不允许原生 Markdown")
 
     md_text = str(msg) if msg else " "
     # 原生 MD 不走 optimize_md，这里单独做展示优化
@@ -1605,10 +1620,15 @@ async def handle_send_native_markdown(
             rows=rows,
             fallback_md_text=fallback_md_text,
             log_prefix="原生Markdown按钮",
+            allow_plain_fallback=allow_plain_fallback,
         )
+        return True
     except Exception as e:
-        logger.warning(f"原生 Markdown 发送失败，降级普通消息: {e}")
+        logger.warning(f"原生 Markdown 发送失败: {e}")
+        if not allow_plain_fallback:
+            raise
         await handle_send2(bot, event, raw_plain)
+        return False
 
 
 async def send_help_message(

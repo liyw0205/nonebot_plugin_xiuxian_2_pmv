@@ -140,6 +140,12 @@ class PostC2CFilesReturn(BaseModel):
     file_uuid: str | None = None
     file_info: str | None = None
     ttl: int | None = None
+    url: str | None = None
+    file_url: str | None = None
+    download_url: str | None = None
+    image_url: str | None = None
+
+    model_config = {"extra": "allow"}
 
 
 class UploadPartItem(BaseModel):
@@ -164,6 +170,12 @@ class PostGroupFilesReturn(BaseModel):
     file_uuid: str | None = None
     file_info: str | None = None
     ttl: int | None = None
+    url: str | None = None
+    file_url: str | None = None
+    download_url: str | None = None
+    image_url: str | None = None
+
+    model_config = {"extra": "allow"}
 
 
 class PostGroupFilesPrepareReturn(BaseModel):

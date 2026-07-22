@@ -82,7 +82,7 @@ class XiuConfig:
         # 过载提示全局发送频率上限
 
         #markdown模板
-        self.markdown_status = False
+        self.markdown_status = True
         # 是否开启模板
         self.markdown_id = ""
         self.markdown_id2 = ""

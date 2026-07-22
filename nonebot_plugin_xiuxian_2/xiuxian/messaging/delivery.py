@@ -273,11 +273,18 @@ class MessageDeliveryService:
         fallback_text: str,
         keyboard_rows: list[list[tuple[str, str]]] | None = None,
         button_id: str = "",
+        allow_plain_fallback: bool = True,
         **kwargs: Any,
     ) -> SendResult:
-        """按 Bot 能力发送 Markdown/keyboard，并保证纯文本降级。"""
+        """按 Bot 能力发送 Markdown/keyboard。
+
+        allow_plain_fallback=False 时：MD 发送失败直接抛错，不剥 [] 降级纯文本。
+        图集等依赖「MD 真发出去」的路径应传 False，避免变成无括号纯文本。
+        """
         capabilities = self._capabilities.get(bot)
         if not is_qq_bot(bot) or not capabilities.markdown:
+            if not allow_plain_fallback:
+                raise RuntimeError("当前 Bot 不支持 Markdown 或非 QQ Bot")
             return await self.reply(
                 bot,
                 event,
@@ -305,7 +312,15 @@ class MessageDeliveryService:
                 include_reference=False,
                 **kwargs,
             )
-        except Exception:
+        except Exception as e:
+            try:
+                from nonebot.log import logger
+
+                logger.warning(f"reply_enhanced Markdown 失败: {e}")
+            except Exception:
+                pass
+            if not allow_plain_fallback:
+                raise
             return await self.reply(
                 bot,
                 event,
