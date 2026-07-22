@@ -50,8 +50,8 @@ _PLATFORM_HOSTS: list[tuple[str, str]] = [
     ("instagram.com", "instagram"),
 ]
 
-# 这些平台在配置了 custom_proxy 时走代理（国内平台保持直连）
-_PROXY_PLATFORMS = frozenset({"twitter", "tiktok", "instagram", "youtube"})
+# 仅海外站在开启 custom_proxy 时走代理；国内站一律直连
+_PROXY_PLATFORMS = frozenset({"twitter", "tiktok", "youtube"})
 
 _MOBILE_UA = (
     "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) "
@@ -119,6 +119,7 @@ def _http_get(
     headers: dict | None = None,
     timeout: int = 20,
     use_proxy: bool = False,
+    allow_redirects: bool = True,
 ):
     hdrs = {
         "User-Agent": _MOBILE_UA,
@@ -132,7 +133,7 @@ def _http_get(
         url,
         headers=hdrs,
         timeout=timeout,
-        allow_redirects=True,
+        allow_redirects=allow_redirects,
         check_status=False,
         # 默认不用全局代理；X/Twitter 等按需打开
         use_config_proxy=bool(use_proxy),
@@ -160,10 +161,33 @@ def expand_url(
     use_proxy: bool | None = None,
     platform: str | None = None,
 ) -> str:
-    """跟随短链，失败则返回原 URL。"""
+    """跟随短链，失败则返回原 URL。
+
+    小红书 xhslink：只取 302 Location，不自动跟到 www（部分机房 www 不可达会卡死）。
+    """
     if use_proxy is None:
         use_proxy = _use_proxy_for(platform, url)
     try:
+        host = (urlparse(url).hostname or "").lower()
+        # xhslink 短链：禁止自动跳 www，避免 Network unreachable 拖满超时
+        if "xhslink.com" in host:
+            resp = _http_get(
+                url,
+                headers={"User-Agent": _MOBILE_UA, "Accept": "*/*"},
+                timeout=min(int(timeout), 10),
+                use_proxy=bool(use_proxy),
+                allow_redirects=False,
+            )
+            loc = ""
+            try:
+                loc = str((getattr(resp, "headers", {}) or {}).get("Location") or "")
+            except Exception:
+                loc = ""
+            if loc.startswith("http"):
+                return loc
+            final = str(getattr(resp, "url", "") or "")
+            return final or url
+
         resp = _http_get(
             url,
             headers={"User-Agent": _MOBILE_UA, "Accept": "*/*"},
@@ -329,20 +353,78 @@ def media_quality_score(url: str, *, kind: str = "video") -> int:
         # 更长 URL 常带更完整鉴权/更高档，弱加权
         score += min(len(url) // 80, 5)
     else:
-        # 图片：大图/原图优先
+        # 图片：大图/原图优先；抖音图集无水印 > 水印；更高分辨率参数优先
         if any(x in low for x in ("original", "origin", "large", "orj1080", "orj960", "1080", "raw", "urldefault")):
             score += 60
-        if any(x in low for x in ("orj480", "mw690", "thumbnail", "thumb", "small", "avatar", "face")):
+        if any(x in low for x in ("orj480", "mw690", "thumbnail", "thumb", "small", "avatar", "face", "resize-walign")):
             score -= 30
+        if "water" in low or "watermark" in low:
+            score -= 40
+        # 路径里 :宽:高:q80 这类尺寸
+        m = re.search(r":(\d{3,4}):(\d{3,4}):", low)
+        if m:
+            try:
+                score += min(int(m.group(1)) * int(m.group(2)) // 50000, 40)
+            except Exception:
+                pass
         if any(x in low for x in (".png", ".jpg", ".jpeg", ".webp")):
             score += 5
+        if low.endswith(".webp") or ".webp?" in low:
+            score += 2
         score += min(len(url) // 100, 5)
     return score
 
 
+def _media_object_key(url: str) -> str:
+    """同一资源在多 CDN/多清晰度下的稳定键。
+
+    抖音图集常见：同 object id 有 p3/p5/p11 多域名 + webp/jpeg + 水印/无水印。
+    去 query 后取 path 中 object 段（~ 模板前）作为主键。
+    """
+    if not isinstance(url, str) or not url.startswith("http"):
+        return ""
+    try:
+        path = urlparse(url).path or ""
+    except Exception:
+        return url
+    # /tos-.../OBJECT~tplv-... 或 /.../OBJECT.webp
+    name = path.rsplit("/", 1)[-1]
+    if "~" in name:
+        name = name.split("~", 1)[0]
+    # 去掉纯扩展名
+    name = re.sub(r"\.(?:jpg|jpeg|png|webp|gif|bmp)$", "", name, flags=re.I)
+    return name or path
+
+
+def dedupe_media_urls_by_object(urls: list[str], *, kind: str = "image") -> list[str]:
+    """按资源对象去重：每个 object 只保留质量最高的一条 URL。"""
+    best: dict[str, str] = {}
+    order: list[str] = []
+    for u in urls:
+        if not isinstance(u, str) or not u.startswith("http"):
+            continue
+        key = _media_object_key(u)
+        if not key:
+            key = u
+        if key not in best:
+            best[key] = u
+            order.append(key)
+            continue
+        old = best[key]
+        if media_quality_score(u, kind=kind) > media_quality_score(old, kind=kind):
+            best[key] = u
+        elif media_quality_score(u, kind=kind) == media_quality_score(old, kind=kind) and len(u) > len(old):
+            best[key] = u
+    return [best[k] for k in order]
+
+
 def sort_media_urls_by_quality(urls: list[str], *, kind: str = "video") -> list[str]:
-    """去重后按质量分从高到低排序。"""
-    uniq = list(dict.fromkeys(u for u in urls if isinstance(u, str) and u.startswith("http")))
+    """对象级去重后按质量分从高到低排序。"""
+    # 视频仍按完整 URL 去重即可；图片按 object 去重避免同图多档重复发
+    if kind == "image":
+        uniq = dedupe_media_urls_by_object(urls, kind="image")
+    else:
+        uniq = list(dict.fromkeys(u for u in urls if isinstance(u, str) and u.startswith("http")))
     return sorted(uniq, key=lambda u: (-media_quality_score(u, kind=kind), -len(u)))
 
 
@@ -915,13 +997,21 @@ def parse_douyin(url: str) -> dict[str, Any]:
         except Exception as e:
             logger.debug(f"抖音 ttwid 注册失败: {e}")
 
-    # 2) share 页抽 _ROUTER_DATA
-    share_urls = []
+    # 2) share 页抽 _ROUTER_DATA（图集优先 note 页，视频优先 video 页）
+    share_urls: list[str] = []
+    is_note_share = bool(re.search(r"/share/note/|/note/\d+", cur or "")) or (
+        "type=note" in (cur or "").lower()
+    )
     if aweme_id:
-        share_urls.append(f"https://www.iesdouyin.com/share/video/{aweme_id}/")
-        share_urls.append(f"https://www.iesdouyin.com/share/note/{aweme_id}/")
-        share_urls.append(f"https://m.douyin.com/share/video/{aweme_id}/")
-    if cur not in share_urls:
+        note_u = f"https://www.iesdouyin.com/share/note/{aweme_id}/"
+        video_u = f"https://www.iesdouyin.com/share/video/{aweme_id}/"
+        m_note_u = f"https://m.douyin.com/share/note/{aweme_id}/"
+        m_video_u = f"https://m.douyin.com/share/video/{aweme_id}/"
+        if is_note_share:
+            share_urls.extend([note_u, m_note_u, video_u, m_video_u])
+        else:
+            share_urls.extend([video_u, note_u, m_video_u, m_note_u])
+    if cur and cur not in share_urls:
         share_urls.insert(0, cur)
 
     for share in share_urls:
@@ -1008,57 +1098,103 @@ def parse_douyin(url: str) -> dict[str, Any]:
                         if ul:
                             meta["avatar_url"] = ul[0]
                             break
+
+            # 图集 aweme_type=2/68 等：优先 images，勿把配乐 play 链当视频
+            aweme_type = item.get("aweme_type")
+            try:
+                aweme_type_i = int(aweme_type) if aweme_type is not None else None
+            except (TypeError, ValueError):
+                aweme_type_i = None
+            is_atlas = aweme_type_i in {2, 42, 68} or bool(item.get("images"))
+
+            images: list[str] = []
+            for im in item.get("images") or item.get("image_list") or []:
+                if isinstance(im, dict):
+                    for key in ("url_list", "download_url_list"):
+                        for x in im.get(key) or []:
+                            if isinstance(x, str) and x.startswith("http"):
+                                images.append(x)
+                    for nest in ("display_image", "owner_watermark_image", "thumbnail", "download_addr"):
+                        node = im.get(nest) or {}
+                        if isinstance(node, dict):
+                            for x in node.get("url_list") or []:
+                                if isinstance(x, str) and x.startswith("http"):
+                                    images.append(x)
+                elif isinstance(im, str) and im.startswith("http"):
+                    images.append(im)
+
             video = item.get("video") or {}
             play = video.get("play_addr") or video.get("play_addr_h264") or {}
             urls = list(play.get("url_list") or []) if isinstance(play, dict) else []
-            # play token -> snssdk play endpoint
+            # play token -> snssdk play endpoint（仅非图集）
             uri = play.get("uri") if isinstance(play, dict) else None
-            if not uri and urls:
-                for u in urls:
-                    qs = parse_qs(urlparse(u).query)
-                    if qs.get("video_id"):
-                        uri = qs["video_id"][0]
-                        break
-            if uri:
-                for ratio in ("1080p", "720p", "540p", "360p"):
-                    play_u = (
-                        f"https://aweme.snssdk.com/aweme/v1/play/"
-                        f"?video_id={uri}&ratio={ratio}"
-                    )
-                    try:
-                        pr = http_client.request(
-                            "GET",
-                            play_u,
-                            headers={
-                                "User-Agent": _MOBILE_UA,
-                                "Referer": share,
-                                "Range": "bytes=0-1",
-                            },
-                            timeout=12,
-                            allow_redirects=True,
-                            check_status=False,
-                            use_config_proxy=False,
+            if not is_atlas:
+                if not uri and urls:
+                    for u in urls:
+                        qs = parse_qs(urlparse(u).query)
+                        if qs.get("video_id"):
+                            uri = qs["video_id"][0]
+                            break
+                if uri and not str(uri).startswith("http"):
+                    for ratio in ("1080p", "720p", "540p", "360p"):
+                        play_u = (
+                            f"https://aweme.snssdk.com/aweme/v1/play/"
+                            f"?video_id={uri}&ratio={ratio}&line=0"
                         )
-                        if int(getattr(pr, "status_code", 0) or 0) < 400:
-                            final_u = str(getattr(pr, "url", "") or play_u)
-                            if final_u.startswith("http"):
-                                urls.insert(0, final_u)
-                                break
-                    except Exception:
-                        continue
+                        try:
+                            pr = http_client.request(
+                                "GET",
+                                play_u,
+                                headers={
+                                    "User-Agent": _MOBILE_UA,
+                                    "Referer": share,
+                                    "Range": "bytes=0-1",
+                                },
+                                timeout=12,
+                                allow_redirects=True,
+                                check_status=False,
+                                use_config_proxy=False,
+                            )
+                            if int(getattr(pr, "status_code", 0) or 0) < 400:
+                                final_u = str(getattr(pr, "url", "") or play_u)
+                                if final_u.startswith("http"):
+                                    urls.insert(0, final_u)
+                                    break
+                        except Exception:
+                            continue
             clean = []
             for u in urls:
-                if isinstance(u, str) and u.startswith("http"):
-                    clean.append(u.replace("playwm", "play"))
-            cover = video.get("cover") or video.get("origin_cover") or {}
-            images = list(cover.get("url_list") or []) if isinstance(cover, dict) else []
-            for im in item.get("images") or []:
-                if isinstance(im, dict):
+                if not (isinstance(u, str) and u.startswith("http")):
+                    continue
+                low = u.lower()
+                # 图集配乐 / 非视频链过滤
+                if is_atlas and (".mp3" in low or "ies-music" in low or "music" in low):
+                    continue
+                clean.append(u.replace("playwm", "play"))
+
+            # 封面仅作无图时的兜底，图集以 images 为准
+            if not images:
+                cover = video.get("cover") or video.get("origin_cover") or {}
+                if isinstance(cover, dict):
                     images.extend(
-                        [x for x in (im.get("url_list") or []) if isinstance(x, str)]
+                        [x for x in (cover.get("url_list") or []) if isinstance(x, str)]
                     )
-            meta["video_urls"] = list(dict.fromkeys(clean))[:3]
-            meta["image_urls"] = list(dict.fromkeys(images))[:6]
+
+            # 去头像/表情噪声；同图多 CDN/多清晰度/水印只留 1 条
+            filtered_imgs = []
+            for u in images:
+                if not isinstance(u, str) or not u.startswith("http"):
+                    continue
+                low = u.lower()
+                if any(x in low for x in ("avatar", "aweme-avatar", "emotion", "emoji")):
+                    continue
+                filtered_imgs.append(u)
+
+            meta["video_urls"] = [] if is_atlas else list(dict.fromkeys(clean))[:3]
+            # 先按对象去重再截断：图集最多 18 张「内容图」
+            deduped = dedupe_media_urls_by_object(filtered_imgs, kind="image")
+            img_cap = 18 if is_atlas else 6
+            meta["image_urls"] = deduped[:img_cap]
             if meta["video_urls"] or meta["image_urls"]:
                 meta["error"] = None
                 return meta
@@ -1268,68 +1404,69 @@ def parse_kuaishou(url: str) -> dict[str, Any]:
 
 
 def parse_xiaohongshu(url: str) -> dict[str, Any]:
-    """小红书：参考上游，从 __INITIAL_STATE__ 抽 noteDetailMap / noteData。
+    """小红书：从页面 __INITIAL_STATE__ 抽 noteDetailMap / noteData。
 
-    国内直连常不可达时，若配置了 custom_proxy 则走代理重试。
+    国内直连：不走 custom_proxy（代理仅给国外站）。
+    注意：部分机房对 www.xiaohongshu.com 不可达；短链只取 Location，页面请求超时压短，
+    避免整条解析卡满 60s。图集/视频同一套页面解析，差异主要在 note 结构字段。
     """
     meta = _base_meta("xiaohongshu", url)
-    # 小红书在部分机房直连不通，有代理时优先代理
-    use_proxy = bool(get_custom_proxy_url())
-    final = expand_url(url, use_proxy=use_proxy, platform="xiaohongshu")
+    # 国内站：强制直连
+    use_proxy = False
+    final = expand_url(url, use_proxy=False, platform="xiaohongshu")
     meta["url"] = final
 
     m = re.search(r"/(?:explore|discovery/item)/([0-9a-zA-Z]+)", final) or re.search(
         r"/(?:explore|discovery/item)/([0-9a-zA-Z]+)", url
     )
     note_id = m.group(1) if m else None
+    # 保留 xsec_token 等 query（无 token 时 note 数据常为空）
+    q = urlparse(final if "xsec_token=" in final else url).query
+    q_suffix = f"?{q}" if q else ""
     pages: list[str] = []
     if note_id:
-        # 保留 query（含 xsec_token 时更稳）
         if "xiaohongshu.com" in final and note_id in final:
             pages.append(final)
-        pages.append(f"https://www.xiaohongshu.com/explore/{note_id}")
-        pages.append(f"https://www.xiaohongshu.com/discovery/item/{note_id}")
+        # 优先 discovery/item（分享链常见），再 explore
+        pages.append(f"https://www.xiaohongshu.com/discovery/item/{note_id}{q_suffix}")
+        pages.append(f"https://www.xiaohongshu.com/explore/{note_id}{q_suffix}")
     else:
         pages.append(final)
+    pages = list(dict.fromkeys(pages))
 
     state = None
     for page in pages:
-        for proxy_flag in ((True, False) if use_proxy else (False,)):
-            try:
-                _, html = _get_text(
-                    page,
-                    headers={
-                        "User-Agent": _DESKTOP_UA if not proxy_flag else _MOBILE_UA,
-                        "Referer": "https://www.xiaohongshu.com/",
-                        "Accept": "text/html,application/xhtml+xml",
-                    },
-                    timeout=20,
-                    use_proxy=proxy_flag,
-                )
-            except Exception as e:
-                logger.debug(f"小红书页面失败 proxy={proxy_flag} {page}: {e}")
-                continue
-            state = _extract_json_object_after(html, "window.__INITIAL_STATE__")
-            if isinstance(state, dict):
-                # 兼容 undefined 已被 json 解析失败的情况：再做一次文本替换
-                meta["url"] = page
-                break
-            # 有时 JSON 含 undefined，手动修
-            try:
-                idx = html.find("window.__INITIAL_STATE__")
-                if idx >= 0:
-                    raw = _extract_json_object_after(
-                        html.replace("undefined", "null"), "window.__INITIAL_STATE__"
-                    )
-                    if isinstance(raw, dict):
-                        state = raw
-                        meta["url"] = page
-                        break
-            except Exception:
-                pass
+        try:
+            _, html = _get_text(
+                page,
+                headers={
+                    "User-Agent": _DESKTOP_UA,
+                    "Referer": "https://www.xiaohongshu.com/",
+                    "Accept": "text/html,application/xhtml+xml",
+                },
+                # www 不可达时快速失败，避免拖死整次解析
+                timeout=8,
+                use_proxy=False,
+            )
+        except Exception as e:
+            logger.debug(f"小红书页面失败 {page}: {e}")
+            continue
+        state = _extract_json_object_after(html, "window.__INITIAL_STATE__")
         if isinstance(state, dict):
+            meta["url"] = page
             break
-
+        try:
+            idx = html.find("window.__INITIAL_STATE__")
+            if idx >= 0:
+                raw = _extract_json_object_after(
+                    html.replace("undefined", "null"), "window.__INITIAL_STATE__"
+                )
+                if isinstance(raw, dict):
+                    state = raw
+                    meta["url"] = page
+                    break
+        except Exception:
+            pass
     note: dict[str, Any] | None = None
     if isinstance(state, dict):
         # PC explore: note.noteDetailMap[id].note
@@ -1428,13 +1565,15 @@ def parse_xiaohongshu(url: str) -> dict[str, Any]:
             meta["error"] = "小红书拿到标题但无媒体（可能需 xsec_token/登录）"
             return meta
 
-    # 回退 OG（代理）
-    page = _parse_html_og("xiaohongshu", final, use_proxy=use_proxy)
+    # 回退 OG
+    page = _parse_html_og("xiaohongshu", final, use_proxy=False)
     if page.get("video_urls") or page.get("image_urls"):
         return page
-    meta["error"] = page.get("error") or "小红书未解析到媒体（直连失败或页面无 note 数据）"
-    if not use_proxy:
-        meta["error"] = "小红书建议配置 custom_proxy；" + str(meta["error"])
+    # 本机若 www 不可达，短链虽能展开也会失败；给出可定位原因
+    err = page.get("error") or "小红书未解析到媒体（页面无 note 数据或 www 不可达）"
+    if "www.xiaohongshu.com" in (final or url or ""):
+        err = "本机无法访问 www.xiaohongshu.com（Network unreachable），图集/视频页面均拉不到；" + str(err)
+    meta["error"] = err
     return meta
 
 

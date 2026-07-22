@@ -8,4 +8,5 @@ from .native import parse_text_native
 
 
 async def run_native_parse(text: str) -> list[dict[str, Any]]:
-    return await run_blocking_io(parse_text_native, text, timeout=60)
+    # 小红书等需代理平台：单页超时已压短；总超时略放宽避免误杀
+    return await run_blocking_io(parse_text_native, text, timeout=90)
