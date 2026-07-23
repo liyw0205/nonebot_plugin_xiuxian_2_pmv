@@ -152,27 +152,72 @@ ws://127.0.0.1:8080/onebot/v11/ws
 > 当前版本使用本地 SQLite 数据库，无需单独安装数据库服务。
 
 <details>
-<summary>🐳 Docker 安装（推荐容器部署）</summary>
+<summary>🐳 Docker 一键安装</summary>
 
-预构建镜像发布在文件仓库 Release：
+预构建镜像在文件仓库 Release（单文件）：  
+https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/tag/docker-d0a3379
 
-- Release：https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/tag/docker-d0a3379
 - 镜像标签：`xiuxian2:d0a3379` / `xiuxian2:latest`
 - 架构：`amd64`
-- 因上传体积限制，镜像为分片文件，需先合并再 `docker load`
+- 资产：`xiuxian2-docker-d0a3379-amd64.tar.gz`
 
-**1. 下载并合并镜像包：**
+**安装：**
 
 ```bash
-mkdir -p ~/xiuxian2-docker && cd ~/xiuxian2-docker
-# 下载 part00 ~ part04 与说明（可浏览器下载，或用 gh/curl）
-# 合并：
-cat xiuxian2-docker-d0a3379-amd64.tar.gz.part* > xiuxian2-docker-d0a3379-amd64.tar.gz
+# 默认目录 ~/xiuxian2-docker
+curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_docker.sh | bash
+
+# 自定义目录
+curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_docker.sh | bash -s -- install /root/xiuxian2-docker
+```
+
+**更新镜像：**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_docker.sh | bash -s -- update
+```
+
+**管理：**
+
+```bash
+# 进入安装目录后，或任意路径指定目录
+bash /path/to/install_docker.sh start
+bash /path/to/install_docker.sh stop
+bash /path/to/install_docker.sh status
+bash /path/to/install_docker.sh logs
+```
+
+安装后请编辑 `config/.env.dev` 中的 `SUPERUSERS`。  
+NapCat / OneBot 连接：
+
+```text
+ws://宿主机IP:8080/onebot/v11/ws
+```
+
+</details>
+
+<details>
+<summary>🐳 Docker 手动安装</summary>
+
+**1. 安装 Docker（Debian/Ubuntu 示例）：**
+
+```bash
+sudo apt-get update
+sudo apt-get install -y docker.io
+sudo systemctl enable --now docker
+```
+
+**2. 下载并导入镜像（单文件）：**
+
+从 Release 下载 `xiuxian2-docker-d0a3379-amd64.tar.gz`：  
+https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/tag/docker-d0a3379
+
+```bash
 docker load -i xiuxian2-docker-d0a3379-amd64.tar.gz
 docker images | grep xiuxian2
 ```
 
-**2. 准备配置与数据目录：**
+**3. 准备配置与数据目录：**
 
 ```bash
 mkdir -p config data logs
@@ -191,7 +236,7 @@ PORT = 8080
 EOF
 ```
 
-**3. 启动：**
+**4. 启动：**
 
 ```bash
 docker run -d --name xiuxian2 --restart unless-stopped \
@@ -203,7 +248,7 @@ docker run -d --name xiuxian2 --restart unless-stopped \
   xiuxian2:latest
 ```
 
-**4. 连接 NapCat / OneBot：**
+**5. 连接 NapCat / OneBot：**
 
 ```text
 ws://宿主机IP:8080/onebot/v11/ws
