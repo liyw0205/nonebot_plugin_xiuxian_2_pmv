@@ -154,12 +154,12 @@ ws://127.0.0.1:8080/onebot/v11/ws
 <details>
 <summary>🐳 Docker 一键安装</summary>
 
-预构建镜像在文件仓库 Release（单文件）：  
+预构建镜像在文件仓库 Release（**分片**）：  
 https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/tag/docker-d0a3379
 
 - 镜像标签：`xiuxian2:d0a3379` / `xiuxian2:latest`
 - 架构：`amd64`
-- 资产：`xiuxian2-docker-d0a3379-amd64.tar.gz`
+- 资产：`xiuxian2-docker-d0a3379-amd64.tar.gz.part00` ~ `part04`（脚本会自动合并）
 
 **安装：**
 
@@ -180,7 +180,6 @@ curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_p
 **管理：**
 
 ```bash
-# 进入安装目录后，或任意路径指定目录
 bash /path/to/install_docker.sh start
 bash /path/to/install_docker.sh stop
 bash /path/to/install_docker.sh status
@@ -207,12 +206,14 @@ sudo apt-get install -y docker.io
 sudo systemctl enable --now docker
 ```
 
-**2. 下载并导入镜像（单文件）：**
+**2. 下载分片并合并导入：**
 
-从 Release 下载 `xiuxian2-docker-d0a3379-amd64.tar.gz`：  
+从 Release 下载 `part00` ~ `part04`：  
 https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/tag/docker-d0a3379
 
 ```bash
+# 放到同一目录后合并
+cat xiuxian2-docker-d0a3379-amd64.tar.gz.part* > xiuxian2-docker-d0a3379-amd64.tar.gz
 docker load -i xiuxian2-docker-d0a3379-amd64.tar.gz
 docker images | grep xiuxian2
 ```
