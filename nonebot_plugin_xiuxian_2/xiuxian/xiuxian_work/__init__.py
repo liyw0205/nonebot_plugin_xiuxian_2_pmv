@@ -230,18 +230,18 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     prior = work_settlement_service.get_result(operation_id)
     if prior is not None and prior.succeeded:
         success_msg = {
-            "big": "悬赏大成功！",
-            "ok": "悬赏完成！",
-            "half": "悬赏勉强完成",
-        }.get(prior.success_kind, "悬赏完成！")
+            "big": "🎉 悬赏大成功！",
+            "ok": "✅ 悬赏完成！",
+            "half": "⚠️ 悬赏勉强完成",
+        }.get(prior.success_kind, "✅ 悬赏完成！")
         msg = (
-            f"{success_msg}\n"
-            f"悬赏名称：{prior.scheduled_time or work_data.get('scheduled_time', '')}\n"
-            f"获得修为：{number_to(prior.exp)}"
+            f"**悬赏结算**\n---\n{success_msg}\n"
+            f"悬赏名称\n> {prior.scheduled_time or work_data.get('scheduled_time', '')}\n"
+            f"获得修为\n> {number_to(prior.exp)}"
         )
         if prior.item_awarded and prior.item_msg:
-            msg += f"\n额外奖励：{prior.item_msg}！"
-        msg += "\n该结算请求已经处理，无需重复提交。"
+            msg += f"\n额外奖励\n> {prior.item_msg}！"
+        msg += "\n✅ 该结算请求已经处理，无需重复提交。"
         await handle_send(bot, event, msg, md_type="悬赏令", k1="刷新", v1="悬赏令刷新", k2="数据", v2="统计数据", k3="帮助", v3="悬赏令帮助")
         return msg
 
@@ -260,15 +260,15 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 
     if big_suc:
         gain_exp = int(give_exp * random.uniform(1.5, 2.5))
-        success_msg = "悬赏大成功！"
+        success_msg = "🎉 悬赏大成功！"
         success_kind = "big"
     elif s_o_f:
         gain_exp = give_exp
-        success_msg = "悬赏完成！"
+        success_msg = "✅ 悬赏完成！"
         success_kind = "ok"
     else:
         gain_exp = give_exp // 2
-        success_msg = "悬赏勉强完成"
+        success_msg = "⚠️ 悬赏勉强完成"
         success_kind = "half"
 
     result = work_settlement_service.settle(
@@ -284,37 +284,37 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     )
     if result.status == "duplicate":
         success_msg = {
-            "big": "悬赏大成功！",
-            "ok": "悬赏完成！",
-            "half": "悬赏勉强完成",
+            "big": "🎉 悬赏大成功！",
+            "ok": "✅ 悬赏完成！",
+            "half": "⚠️ 悬赏勉强完成",
         }.get(result.success_kind, success_msg)
         msg = (
-            f"{success_msg}\n"
-            f"悬赏名称：{result.scheduled_time or work_data['scheduled_time']}\n"
-            f"获得修为：{number_to(result.exp)}"
+            f"**悬赏结算**\n---\n{success_msg}\n"
+            f"悬赏名称\n> {result.scheduled_time or work_data['scheduled_time']}\n"
+            f"获得修为\n> {number_to(result.exp)}"
         )
         if result.item_awarded:
-            msg += f"\n额外奖励：{result.item_msg or item_msg}！"
-        msg += "\n该结算请求已经处理，无需重复提交。"
+            msg += f"\n额外奖励\n> {result.item_msg or item_msg}！"
+        msg += "\n✅ 该结算请求已经处理，无需重复提交。"
         await handle_send(bot, event, msg, md_type="悬赏令", k1="刷新", v1="悬赏令刷新", k2="数据", v2="统计数据", k3="帮助", v3="悬赏令帮助")
         return msg
     if result.status == "inventory_full":
-        msg = "背包物品已达上限，悬赏奖励尚未结算。"
-        await handle_send(bot, event, msg)
+        msg = "**悬赏结算**\n---\n❌ 背包物品已达上限，悬赏奖励尚未结算。"
+        await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="背包", v2="我的背包", k3="帮助", v3="悬赏令帮助")
         return msg
     if result.status in {"state_changed", "user_missing"}:
-        msg = "悬赏令状态已变化，请重新查看后再试。"
-        await handle_send(bot, event, msg)
+        msg = "**悬赏结算**\n---\n⚠️ 悬赏令状态已变化，请重新查看后再试。"
+        await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="刷新", v2="悬赏令刷新", k3="帮助", v3="悬赏令帮助")
         return msg
 
     delete_work_file(user_id)
     msg = (
-        f"{success_msg}\n"
-        f"悬赏名称：{work_data['scheduled_time']}\n"
-        f"获得修为：{number_to(result.exp)}"
+        f"**悬赏结算**\n---\n{success_msg}\n"
+        f"悬赏名称\n> {work_data['scheduled_time']}\n"
+        f"获得修为\n> {number_to(result.exp)}"
     )
     if result.item_awarded:
-        msg += f"\n额外奖励：{item_msg}！"
+        msg += f"\n额外奖励\n> {item_msg}！"
     if result.status == "applied":
         log_message(user_id, msg)
         update_statistics_value(user_id, "悬赏令结算次数")

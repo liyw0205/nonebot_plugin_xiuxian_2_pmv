@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import re
 from decimal import Decimal, InvalidOperation
+import json
 from typing import Any, Iterable
 
 SQLITE_MAX_INT = 2**63 - 1  # 9_223_372_036_854_775_807
@@ -305,3 +306,96 @@ def normalize_sect_row(row: Any) -> Any:
             "stone",
         ),
     )
+
+
+def _semantic_leaf(value: Any) -> Any:
+    """Normalize a single leaf for payload/state equality (int/str num, plain digits)."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if value == int(value):
+            try:
+                return int(value)
+            except (OverflowError, ValueError):
+                return as_int_like(value)
+        return value
+    text = str(value).strip()
+    if not text:
+        return ""
+    if re.fullmatch(r"[+-]?\d+", text):
+        try:
+            return int(text)
+        except (TypeError, ValueError, OverflowError):
+            return text
+    if _NUM_LIKE_RE.fullmatch(text):
+        try:
+            dec = Decimal(text)
+            if dec == dec.to_integral_value():
+                return int(dec)
+            return float(dec)
+        except (InvalidOperation, ValueError, OverflowError):
+            return text
+    return text
+
+
+def semantic_normalize(value: Any) -> Any:
+    """Deep-normalize JSON-like values for semantic equality (not string equality).
+
+    - dict keys sorted via dumps later; values recurse
+    - list/tuple recurse in order
+    - numeric strings / ints / float-integers unify to int when safe
+    - empty / \"0\" for missing mix-elixir style records handled by callers
+    """
+    if isinstance(value, dict):
+        return {str(k): semantic_normalize(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [semantic_normalize(v) for v in value]
+    return _semantic_leaf(value)
+
+
+def semantic_dumps(value: Any, *, ensure_ascii: bool = True) -> str:
+    """Canonical JSON string for operation payload / state snapshots."""
+    return json.dumps(
+        semantic_normalize(value),
+        ensure_ascii=ensure_ascii,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+
+
+def semantic_equal(left: Any, right: Any) -> bool:
+    """True if two values are equal after semantic_normalize.
+
+    Accepts raw objects or JSON strings (auto-parsed when possible).
+    """
+
+    def _coerce(v: Any) -> Any:
+        if isinstance(v, (bytes, bytearray)):
+            v = v.decode("utf-8", errors="replace")
+        if isinstance(v, str):
+            text = v.strip()
+            if not text:
+                return ""
+            if text[0] in "{[":
+                try:
+                    return json.loads(text)
+                except Exception:
+                    return text
+            return text
+        return v
+
+    return semantic_normalize(_coerce(left)) == semantic_normalize(_coerce(right))
+
+
+def operation_payload_matches(stored: Any, expected: Any) -> bool:
+    """Compare operation table payload column with newly built payload.
+
+    Prefer this over ``str(previous[0]) == payload`` to avoid false
+    ``state_changed`` when key order or int/str digits differ.
+    """
+    return semantic_equal(stored, expected)

@@ -196,28 +196,28 @@ def record_heart_devil_result(user_id, success, rate, devil_name=None, item_used
 def _ordinary_tribulation_message(result, share_msg=""):
     if result.successful:
         return (
-            f"⚡⚡⚡渡劫成功⚡⚡⚡️\n"
+            f"**渡劫结果**\n---\n✅ 渡劫成功\n"
             f"历经九九雷劫，道友终成{result.target_level}！\n"
-            f"当前境界：{result.target_level}{share_msg}"
+            f"当前境界\n> {result.target_level}{share_msg}"
         )
     if result.item_used:
         return (
-            "渡劫失败！\n"
-            "雷劫之下，道心受损！\n"
-            f"幸得天命丹护体，下次渡劫成功率提升至：{result.rate}%"
+            f"**渡劫结果**\n---\n❌ 渡劫失败\n"
+            f"雷劫之下，道心受损！\n"
+            f"幸得天命丹护体，下次渡劫成功率\n> {result.rate}%"
         )
     return (
-        "渡劫失败！\n"
-        "雷劫之下，道心受损！\n"
-        f"下次渡劫成功率提升至：{result.rate}%"
+        f"**渡劫结果**\n---\n❌ 渡劫失败\n"
+        f"雷劫之下，道心受损！\n"
+        f"下次渡劫成功率\n> {result.rate}%"
     )
 
 
 def _destiny_tribulation_message(result, share_msg=""):
     return (
-        "✨天命所归，渡劫成功✨\n"
+        f"**渡劫结果**\n---\n✅ 天命所归，渡劫成功\n"
         f"道友轻松突破至{result.target_level}！\n"
-        f"当前境界：{result.target_level}{share_msg}"
+        f"当前境界\n> {result.target_level}{share_msg}"
     )
 
 
@@ -225,9 +225,10 @@ def _heart_devil_tribulation_message(result):
     if result.message:
         return result.message
     outcome = "成功" if result.successful else "失败"
+    em = "✅" if result.successful else "❌"
     devil = f"，心魔：{result.devil_name}" if result.devil_name else ""
     item = "，消耗天命丹1个" if result.item_used else ""
-    return f"心魔劫{outcome}{devil}，当前渡劫成功率{result.rate}%{item}"
+    return f"**渡劫结果**\n---\n{em} 心魔劫{outcome}{devil}，当前渡劫成功率{result.rate}%{item}"
 
 @tribulation_info.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -1066,9 +1067,9 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             leveluprate + update_rate,
         )
         if not result.applied:
-            await handle_send(bot, event, "本次突破已经处理或角色状态已经变化，请刷新后重试。")
+            await handle_send(bot, event, "⚠️ 本次突破已经处理或角色状态已经变化，请刷新后重试。", md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_zj.finish()
-        msg = f"道友突破失败,境界受损,修为减少{number_to(now_exp)}，下次突破成功率增加{update_rate}%，道友不要放弃！"
+        msg = f"**突破结果**\n---\n❌ 突破失败\n境界受损，修为减少\n> {number_to(now_exp)}\n下次突破成功率增加\n> {update_rate}%\n道友不要放弃！"
         record_level_up_result(user_id, "直接突破", success=False, fail_count=1, exp_loss=now_exp)
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_zj.finish()
@@ -1093,7 +1094,7 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             await handle_send(bot, event, "本次突破已经处理或角色状态已经变化，请刷新后重试。")
             await level_up_zj.finish()
         share_msg = trigger_breakthrough_relation_rewards(user_id, le[0])
-        msg = f"恭喜道友突破{le[0]}成功！{share_msg}"
+        msg = f"**突破结果**\n---\n✅ 恭喜道友突破{le[0]}成功！{share_msg}"
         record_level_up_result(user_id, "直接突破", success=True, target_level=le[0])
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_zj.finish()

@@ -953,6 +953,8 @@ class MixelixirRefineRewardService:
     @staticmethod
     def _state_value(field: str, value) -> str:
         """归一化后写入/比对。炼丹记录必须语义相等，不能裸 str 比 JSON 键序。"""
+        from ..xiuxian_utils.numeric_bind import semantic_dumps, semantic_normalize
+
         if field == "炼丹记录":
             raw = value
             if raw is None or raw == "" or raw == "0":
@@ -977,7 +979,7 @@ class MixelixirRefineRewardService:
                     normalized[k] = {"name": name, "num": num}
                 else:
                     normalized[k] = {"name": str(item), "num": 0}
-            return json.dumps(normalized, ensure_ascii=False, sort_keys=True)
+            return semantic_dumps(normalized, ensure_ascii=False)
         # 控火/经验：统一成整数文本，兼容 NUMERIC/TEXT
         if value is None or value == "":
             return "0"

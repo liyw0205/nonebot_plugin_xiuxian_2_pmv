@@ -7,6 +7,7 @@ from pathlib import Path
 from threading import RLock
 from datetime import date, datetime
 from ..xiuxian_utils import db_backend
+from ..xiuxian_utils.numeric_bind import operation_payload_matches
 from datetime import datetime
 
 TRAINING_FIELDS = (
@@ -366,7 +367,7 @@ class TrainingCompletionService:
                 previous = conn.execute("SELECT payload FROM training_completion_operations WHERE operation_id=%s", (operation_id,)).fetchone()
                 if previous:
                     conn.rollback()
-                    return TrainingCompletionResult("duplicate" if str(previous[0]) == payload else "state_changed")
+                    return TrainingCompletionResult("duplicate" if operation_payload_matches(previous[0], payload) else "state_changed")
                 if conn.execute("SELECT 1 FROM user_xiuxian WHERE user_id=%s", (user_id,)).fetchone() is None:
                     conn.rollback()
                     return TrainingCompletionResult("user_missing")
@@ -456,7 +457,7 @@ class TrainingPurchaseService:
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    if str(previous[0]) != payload:
+                    if not operation_payload_matches(previous[0], payload):
                         return result("state_changed")
                     return TrainingPurchaseResult("duplicate", *(int(value) for value in previous[1:]))
                 if conn.execute("SELECT 1 FROM user_xiuxian WHERE user_id=%s", (user_id,)).fetchone() is None:

@@ -7,6 +7,7 @@ from pathlib import Path
 from threading import RLock
 import hashlib
 from ..xiuxian_utils import db_backend
+from ..xiuxian_utils.numeric_bind import operation_payload_matches
 from datetime import datetime
 
 def _canonical(value) -> str:
@@ -228,7 +229,7 @@ class RiftEntryService:
                 ).fetchone()
                 if previous is not None:
                     current = self._read_world(conn, rift_key)
-                    if str(previous[0]) != payload:
+                    if not operation_payload_matches(previous[0], payload):
                         status = "state_changed"
                     elif current is None or current.generation_id != str(previous[1]):
                         status = "superseded"
@@ -331,7 +332,7 @@ class RiftEntryService:
                     (operation_id,),
                 ).fetchone()
                 if previous is not None:
-                    if str(previous[0]) != payload:
+                    if not operation_payload_matches(previous[0], payload):
                         conn.rollback()
                         return RiftEntryResult("state_changed")
                     world = self._read_world(conn, rift_key)
@@ -608,7 +609,7 @@ class RiftTerminationService:
                 if previous is not None:
                     conn.rollback()
                     return RiftTerminationResult(
-                        "duplicate" if str(previous[0]) == payload else "state_changed",
+                        "duplicate" if operation_payload_matches(previous[0], payload) else "state_changed",
                         str(rift_data.get("name", "")),
                     )
                 entry = conn.execute(

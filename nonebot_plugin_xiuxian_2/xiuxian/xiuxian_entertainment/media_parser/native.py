@@ -1164,12 +1164,14 @@ def parse_douyin(url: str) -> dict[str, Any]:
                         except Exception:
                             continue
             clean = []
+            audio_from_urls: list[str] = []
             for u in urls:
                 if not (isinstance(u, str) and u.startswith("http")):
                     continue
                 low = u.lower()
-                # 图集配乐 / 非视频链过滤
-                if is_atlas and (".mp3" in low or "ies-music" in low or "music" in low):
+                # 图集配乐：从视频候选中拆到 audio_urls，不混进 video_urls
+                if is_atlas and (".mp3" in low or "ies-music" in low or "music" in low or ".m4a" in low):
+                    audio_from_urls.append(u.replace("playwm", "play"))
                     continue
                 clean.append(u.replace("playwm", "play"))
 
@@ -1196,6 +1198,19 @@ def parse_douyin(url: str) -> dict[str, Any]:
             deduped = dedupe_media_urls_by_object(filtered_imgs, kind="image")
             img_cap = 18 if is_atlas else 6
             meta["image_urls"] = deduped[:img_cap]
+            # music 字段 + 从 url 拆出的配乐
+            music = item.get("music") if isinstance(item, dict) else None
+            if isinstance(music, dict):
+                for mk in ("play_url", "play_url_lowbr", "playUrl"):
+                    pu = music.get(mk) or {}
+                    if isinstance(pu, dict):
+                        for au in pu.get("url_list") or []:
+                            if isinstance(au, str) and au.startswith("http"):
+                                audio_from_urls.append(au)
+                    elif isinstance(pu, str) and pu.startswith("http"):
+                        audio_from_urls.append(pu)
+            if audio_from_urls:
+                meta["audio_urls"] = list(dict.fromkeys(audio_from_urls))[:2]
             if meta["video_urls"] or meta["image_urls"]:
                 meta["error"] = None
                 return meta
@@ -1282,6 +1297,70 @@ def _kuaishou_cdn_urls(items: Any) -> list[str]:
         elif isinstance(it, str) and it.startswith("http"):
             out.append(it)
     return out
+
+
+def _kuaishou_audio_urls(photo: dict[str, Any]) -> list[str]:
+    """图集/作品配乐：audioUrls / musicCdnList / soundTrack（接口有字段但原先未抽取）。"""
+    out: list[str] = []
+
+    def _add(u: Any) -> None:
+        if not (isinstance(u, str) and u.startswith("http")):
+            return
+        low = u.lower()
+        if any(x in low for x in (".jpg", ".png", ".webp", ".jpeg", ".gif", ".mp4", ".m3u8")):
+            return
+        # 仅收音频特征 / ost 配乐
+        if not any(x in low for x in (".m4a", ".mp3", ".aac", "/ost/", "audio", "music", "sound")):
+            return
+        out.append(u)
+
+    for key in ("audioUrls", "audio_urls", "musicUrls", "music_urls", "musicCdnList", "music_cdn_list"):
+        for u in _kuaishou_cdn_urls(photo.get(key)):
+            _add(u)
+
+    st = photo.get("soundTrack") or photo.get("soundtrack") or photo.get("music")
+    if isinstance(st, dict):
+        for key in ("audioUrls", "audio_urls", "url", "musicUrl", "music_url"):
+            val = st.get(key)
+            if isinstance(val, list):
+                for u in _kuaishou_cdn_urls(val):
+                    _add(u)
+            else:
+                _add(val)
+        for u in _kuaishou_cdn_urls(st.get("audioUrls") or st.get("urlList") or st.get("urls")):
+            _add(u)
+    elif isinstance(st, list):
+        for u in _kuaishou_cdn_urls(st):
+            _add(u)
+    elif isinstance(st, str):
+        _add(st)
+
+    # 浅层扫常见 m4a
+    def dig(o: Any, depth: int = 0) -> None:
+        if depth > 4 or len(out) >= 4:
+            return
+        if isinstance(o, dict):
+            for k, v in o.items():
+                kl = str(k).lower()
+                if "audio" in kl or "music" in kl or "sound" in kl:
+                    if isinstance(v, str):
+                        _add(v)
+                    elif isinstance(v, list):
+                        for u in _kuaishou_cdn_urls(v):
+                            _add(u)
+                    elif isinstance(v, dict):
+                        dig(v, depth + 1)
+                elif depth < 2:
+                    dig(v, depth + 1)
+        elif isinstance(o, list) and depth < 2:
+            for v in o[:20]:
+                dig(v, depth + 1)
+
+    dig(photo)
+    # 优先 m4a/mp3
+    out = list(dict.fromkeys(out))
+    out.sort(key=lambda u: (0 if any(x in u.lower() for x in (".m4a", ".mp3", ".aac")) else 1, u))
+    return out[:2]
 
 
 def _kuaishou_atlas_urls(photo: dict[str, Any]) -> list[str]:
@@ -1393,12 +1472,19 @@ def parse_kuaishou(url: str) -> dict[str, Any]:
         meta["video_urls"] = videos[:5]
         meta["image_urls"] = (covers[:1] if covers else [])
 
+    # 配乐独立轨（图集尤其需要；视频通常已混音，仍记录字段供上层选择）
+    audios = _kuaishou_audio_urls(photo)
+    if audios:
+        meta["audio_urls"] = audios
+
     if not meta["video_urls"] and not meta["image_urls"]:
         fallback = _parse_html_og("kuaishou", final)
         if fallback.get("video_urls") or fallback.get("image_urls"):
             fallback["source_url"] = url
             fallback.setdefault("avatar_url", meta.get("avatar_url"))
             fallback.setdefault("timestamp", meta.get("timestamp"))
+            if audios and not fallback.get("audio_urls"):
+                fallback["audio_urls"] = audios
             return fallback
         meta["error"] = "快手未解析到可发送媒体（可能风控/登录）"
     return meta

@@ -13,6 +13,7 @@ from typing import Iterable, Mapping
 import json
 
 from ..xiuxian_utils import db_backend
+from ..xiuxian_utils.numeric_bind import operation_payload_matches
 
 @dataclass(frozen=True)
 class TaskRewardClaimResult:
@@ -273,7 +274,7 @@ class TaskRewardClaimService:
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    if str(previous[0]) != payload:
+                    if not operation_payload_matches(previous[0], payload):
                         return TaskRewardClaimResult("operation_conflict")
                     return TaskRewardClaimResult(
                         "duplicate", tuple(json.loads(str(previous[1])))

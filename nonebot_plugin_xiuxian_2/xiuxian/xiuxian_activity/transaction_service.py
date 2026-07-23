@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from threading import RLock
 from ..xiuxian_utils import db_backend
+from ..xiuxian_utils.numeric_bind import operation_payload_matches
 from datetime import datetime
 from typing import Callable, Mapping
 import hashlib
@@ -137,7 +138,7 @@ class ActivityBossSettlementService:
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    if str(previous[0]) != payload:
+                    if not operation_payload_matches(previous[0], payload):
                         return ActivityBossSettlementResult("operation_conflict")
                     return ActivityBossSettlementResult(
                         "duplicate", int(previous[1]), int(previous[2]), int(previous[3]),
@@ -383,7 +384,7 @@ class ActivitySignSettlementService:
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    if str(previous[0]) != payload:
+                    if not operation_payload_matches(previous[0], payload):
                         return ActivitySignSettlementResult("operation_conflict")
                     return ActivitySignSettlementResult(
                         "duplicate", int(previous[1]), int(previous[2])
@@ -589,7 +590,7 @@ class ActivityTaskClaimService:
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    if str(previous[0]) != payload:
+                    if not operation_payload_matches(previous[0], payload):
                         return ActivityTaskClaimResult("operation_conflict")
                     return ActivityTaskClaimResult("duplicate", tuple(tuple(row) for row in json.loads(previous[1])))
                 if conn.execute("SELECT 1 FROM game_data.user_xiuxian WHERE user_id=%s", (user_id,)).fetchone() is None:
@@ -792,7 +793,7 @@ class ActivityPassClaimService:
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    if str(previous[0]) != payload:
+                    if not operation_payload_matches(previous[0], payload):
                         return ActivityPassClaimResult("operation_conflict")
                     return ActivityPassClaimResult(
                         "duplicate",
@@ -949,7 +950,7 @@ class ActivityPointShopPurchaseService:
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    if str(previous[0]) != payload:
+                    if not operation_payload_matches(previous[0], payload):
                         return ActivityPointShopPurchaseResult("operation_conflict")
                     return ActivityPointShopPurchaseResult("duplicate", *(int(value) for value in previous[1:]))
 
@@ -1133,7 +1134,7 @@ class ActivityCollectExchangeService:
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    if str(previous[0]) != payload:
+                    if not operation_payload_matches(previous[0], payload):
                         return ActivityCollectExchangeResult("operation_conflict")
                     previous_result = json.loads(previous[1])
                     return ActivityCollectExchangeResult(
@@ -1627,7 +1628,7 @@ class BossRewardClaimService:
                 previous = conn.execute("SELECT payload,result_json FROM activity_boss_reward_claim_operations WHERE operation_id=%s", (operation_id,)).fetchone()
                 if previous:
                     conn.rollback()
-                    if str(previous[0]) != payload:
+                    if not operation_payload_matches(previous[0], payload):
                         return BossRewardClaimResult("operation_conflict")
                     data = json.loads(str(previous[1]))
                     return BossRewardClaimResult("duplicate", tuple(data["names"]), int(data["rank"]))
@@ -1684,7 +1685,7 @@ class BossRewardClaimService:
                 previous = conn.execute("SELECT payload,result_json FROM activity_boss_reward_claim_operations WHERE operation_id=%s", (operation_id,)).fetchone()
                 if previous:
                     conn.rollback()
-                    if str(previous[0]) != payload:
+                    if not operation_payload_matches(previous[0], payload):
                         return BossRewardClaimResult("operation_conflict", rank=rank)
                     data = json.loads(str(previous[1]))
                     return BossRewardClaimResult("duplicate", tuple(data["names"]), int(data["rank"]))

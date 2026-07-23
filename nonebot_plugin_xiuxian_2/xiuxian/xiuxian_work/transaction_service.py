@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from threading import RLock
 from ..xiuxian_utils import db_backend
+from ..xiuxian_utils.numeric_bind import operation_payload_matches
 from datetime import datetime
 from datetime import date, datetime
 
@@ -125,7 +126,7 @@ class WorkClaimService:
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    if str(previous[0]) != payload:
+                    if not operation_payload_matches(previous[0], payload):
                         return WorkClaimResult("operation_conflict")
                     return WorkClaimResult("duplicate", str(previous[1]), str(previous[2]), int(previous[3]))
 
@@ -273,7 +274,7 @@ class WorkSettlementService:
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    if str(previous[0]) != payload:
+                    if not operation_payload_matches(previous[0], payload):
                         return WorkSettlementResult("state_changed", 0, False)
                     return self._from_row("duplicate", int(previous[1]), bool(previous[2]), previous[3])
 
@@ -411,7 +412,7 @@ class WorkItemUseService:
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    if str(previous[0]) != payload:
+                    if not operation_payload_matches(previous[0], payload):
                         return WorkItemUseResult("operation_conflict")
                     return WorkItemUseResult(
                         "duplicate", str(previous[1]), int(previous[2]), json.loads(str(previous[3]))
@@ -568,7 +569,7 @@ class WorkRefreshSettlementService:
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    if str(previous[0]) != payload:
+                    if not operation_payload_matches(previous[0], payload):
                         return WorkRefreshResult("operation_conflict")
                     return WorkRefreshResult("duplicate", int(previous[1]), json.loads(str(previous[2])))
 
@@ -705,7 +706,7 @@ class WorkAbortCleanupService:
                 ).fetchone()
                 if previous is not None:
                     conn.rollback()
-                    if str(previous[0]) != payload:
+                    if not operation_payload_matches(previous[0], payload):
                         return WorkAbortCleanupResult("operation_conflict")
                     return WorkAbortCleanupResult("duplicate", int(previous[1]), int(previous[2]))
 
