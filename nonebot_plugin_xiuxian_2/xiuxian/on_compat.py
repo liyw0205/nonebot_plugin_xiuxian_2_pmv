@@ -4,6 +4,7 @@ from collections import defaultdict
 from collections.abc import Iterator, Mapping
 from contextvars import ContextVar
 import importlib
+import inspect
 import re
 import sys
 from typing import TYPE_CHECKING
@@ -42,6 +43,14 @@ if TYPE_CHECKING:
 CommandValue = str | tuple[str, ...]
 CommandInput = CommandValue | list[CommandValue] | set[CommandValue]
 TextValue = str | tuple[str, ...]
+
+# 旧版 nonebot 的 on_command/on_message 不接受 force_whitespace；新版才有。
+_ON_COMMAND_SUPPORTS_FORCE_WHITESPACE = (
+    "force_whitespace" in inspect.signature(_nb_on_command).parameters
+)
+_ON_MESSAGE_SUPPORTS_FORCE_WHITESPACE = (
+    "force_whitespace" in inspect.signature(_nb_on_message).parameters
+)
 
 _CURRENT_EVENT: ContextVar[object | None] = ContextVar(
     "xiuxian_on_compat_event",
@@ -598,6 +607,8 @@ def on(*args, _depth: int = 0, **kwargs):
 
 def on_message(*args, _depth: int = 0, **kwargs):
     install_on_compat()
+    if not _ON_MESSAGE_SUPPORTS_FORCE_WHITESPACE:
+        kwargs.pop("force_whitespace", None)
     matcher = _nb_on_message(*args, _depth=_depth + 1, **kwargs)
     return _register_route(matcher, _RouteMeta(generic=True))
 
@@ -612,14 +623,16 @@ def on_command(
 ):
     install_on_compat()
     primary, alias_values, commands = _split_commands(cmd, aliases)
-    matcher = _nb_on_command(
-        primary,
-        rule=rule,
-        aliases=alias_values,
-        force_whitespace=force_whitespace,
-        _depth=_depth + 1,
+    call_kwargs = {
+        "rule": rule,
+        "aliases": alias_values,
+        "_depth": _depth + 1,
         **kwargs,
-    )
+    }
+    # 仅新版 nonebot 支持 force_whitespace；旧版传了会炸整包 import
+    if _ON_COMMAND_SUPPORTS_FORCE_WHITESPACE:
+        call_kwargs["force_whitespace"] = force_whitespace
+    matcher = _nb_on_command(primary, **call_kwargs)
     return _register_route(
         matcher,
         _RouteMeta(commands=commands),
