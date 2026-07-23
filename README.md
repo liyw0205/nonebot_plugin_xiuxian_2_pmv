@@ -152,6 +152,76 @@ ws://127.0.0.1:8080/onebot/v11/ws
 > 当前版本使用本地 SQLite 数据库，无需单独安装数据库服务。
 
 <details>
+<summary>🐳 Docker 安装（推荐容器部署）</summary>
+
+预构建镜像发布在文件仓库 Release：
+
+- Release：https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/tag/docker-d0a3379
+- 镜像标签：`xiuxian2:d0a3379` / `xiuxian2:latest`
+- 架构：`amd64`
+- 因上传体积限制，镜像为分片文件，需先合并再 `docker load`
+
+**1. 下载并合并镜像包：**
+
+```bash
+mkdir -p ~/xiuxian2-docker && cd ~/xiuxian2-docker
+# 下载 part00 ~ part04 与说明（可浏览器下载，或用 gh/curl）
+# 合并：
+cat xiuxian2-docker-d0a3379-amd64.tar.gz.part* > xiuxian2-docker-d0a3379-amd64.tar.gz
+docker load -i xiuxian2-docker-d0a3379-amd64.tar.gz
+docker images | grep xiuxian2
+```
+
+**2. 准备配置与数据目录：**
+
+```bash
+mkdir -p config data logs
+cat > config/.env <<'EOF'
+ENVIRONMENT=dev
+DRIVER=~fastapi+~httpx+~websockets+~aiohttp
+EOF
+cat > config/.env.dev <<'EOF'
+LOG_LEVEL=INFO
+SUPERUSERS = ["你的QQ号"]
+COMMAND_START = [""]
+NICKNAME = ["修仙"]
+DEBUG = false
+HOST = 0.0.0.0
+PORT = 8080
+EOF
+```
+
+**3. 启动：**
+
+```bash
+docker run -d --name xiuxian2 --restart unless-stopped \
+  -p 8080:8080 \
+  -v "$PWD/data:/app/data" \
+  -v "$PWD/logs:/app/logs" \
+  -v "$PWD/config/.env:/app/.env:ro" \
+  -v "$PWD/config/.env.dev:/app/.env.dev:ro" \
+  xiuxian2:latest
+```
+
+**4. 连接 NapCat / OneBot：**
+
+```text
+ws://宿主机IP:8080/onebot/v11/ws
+```
+
+**本地构建（可选）：**
+
+```bash
+git clone https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv.git
+cd nonebot_plugin_xiuxian_2_pmv
+docker build -f docker/Dockerfile -t xiuxian2:latest .
+```
+
+更多说明见仓库内 `docker/README.md`。
+
+</details>
+
+<details>
 <summary>🐧 Linux 一键安装</summary>
 
 **安装：**

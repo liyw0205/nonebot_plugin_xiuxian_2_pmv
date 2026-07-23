@@ -1,0 +1,26 @@
+[project]
+name = "xiuxian2-docker"
+version = "0.1.0"
+description = "nonebot_plugin_xiuxian_2_pmv docker runtime"
+requires-python = ">=3.10, <4.0"
+dependencies = [
+    "nonebot2[fastapi,httpx,websockets,aiohttp]",
+    "nonebot-adapter-onebot",
+    "nonebot-adapter-qq",
+    "nonebot_plugin_apscheduler",
+]
+
+[tool.nonebot]
+plugin_dirs = ["src/plugins"]
+builtin_plugins = []
+
+[tool.nonebot.adapters]
+nonebot-adapter-onebot = [
+    { name = "OneBot V11", module_name = "nonebot.adapters.onebot.v11" },
+]
+nonebot-adapter-qq = [
+    { name = "QQ", module_name = "nonebot.adapters.qq" },
+]
+
+[tool.nonebot.plugins]
+"@local" = []

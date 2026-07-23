@@ -1,0 +1,14 @@
+services:
+  xiuxian2:
+    image: xiuxian2:latest
+    container_name: xiuxian2
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config/.env:/app/.env:ro
+      - ./config/.env.dev:/app/.env.dev:ro
+    environment:
+      - TZ=Asia/Shanghai
