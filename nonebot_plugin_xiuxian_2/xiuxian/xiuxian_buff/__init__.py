@@ -769,11 +769,11 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await mind_state.finish()
 
     status_map = {
-        "on": "开启",
-        "off": "关闭",
-        "refusal": "拒绝"
+        "on": "🔓 开启",
+        "off": "🔒 关闭",
+        "refusal": "🚫 拒绝"
     }
-    current_status_display = status_map.get(current_status, "关闭")
+    current_status_display = status_map.get(current_status, "🔒 关闭")
 
     level_rate = sql_message.get_root_rate(user_info['root_type'], user_id)
     realm_rate = jsondata.level_data()[user_info['level']]["spend"]
@@ -862,15 +862,15 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     list_all = len(OtherSet().level) - 1
     now_index = OtherSet().level.index(user_info['level'])
     if list_all == now_index:
-        exp_meg = "位面至高"
+        exp_meg = "👑 位面至高"
     else:
         is_updata_level = OtherSet().level[now_index + 1]
         need_exp = sql_message.get_level_power(is_updata_level)
         get_exp = need_exp - user_info['exp']
         if get_exp > 0:
-            exp_meg = f"还需{number_to(get_exp)}修为可突破！"
+            exp_meg = f"⏳ 还需{number_to(get_exp)}修为可突破！"
         else:
-            exp_meg = "可突破！"
+            exp_meg = "❗ 可突破！"
 
     accessory_msg = "无"
     if accessory_lines:
@@ -881,28 +881,50 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         set_bonus_msg = "；".join(set_bonus_lines)
 
     msg = f"""
-道号：{player_data['道号']}
-气血：{number_to(player_data['气血'])}/{number_to(max_hp)} ({((player_data['气血'] / max_hp) * 100):.2f}%)
-真元：{number_to(player_data['真元'])}/{number_to(max_mp)} ({((player_data['真元'] / max_mp) * 100):.2f}%)
-攻击：{number_to(user_attack)}
+**我的状态**
+---
+道号
+> {player_data['道号']}
+气血
+> {number_to(player_data['气血'])}/{number_to(max_hp)} ({((player_data['气血'] / max_hp) * 100):.2f}%)
+真元
+> {number_to(player_data['真元'])}/{number_to(max_mp)} ({((player_data['真元'] / max_mp) * 100):.2f}%)
+攻击
+> {number_to(user_attack)}
 
-突破状态：{exp_meg} (概率：{jsondata.level_rate_data()[user_info['level']] + leveluprate + main_buff_number}%)
+突破状态
+> {exp_meg}
+突破概率
+> {jsondata.level_rate_data()[user_info['level']] + leveluprate + main_buff_number}%
 
-攻击修炼：{user_info['atkpractice']}级 (提升攻击力{user_info['atkpractice'] * 4}%)
-元血修炼：{user_info['hppractice']}级 (提升气血{user_info['hppractice'] * 5}%)
-灵海修炼：{user_info['mppractice']}级 (提升真元{user_info['mppractice'] * 5}%)
+攻击修炼
+> {user_info['atkpractice']}级（+{user_info['atkpractice'] * 4}%）
+元血修炼
+> {user_info['hppractice']}级（+{user_info['hppractice'] * 5}%）
+灵海修炼
+> {user_info['mppractice']}级（+{user_info['mppractice'] * 5}%）
 
-修炼效率：{int(((level_rate * realm_rate) * (1 + main_buff_rate_buff) * (1 + user_blessed_spot_data)) * 100)}%
-会心率：{total_crit_rate:.2f}%
-会心伤害：{crit_damage:.2f}%
-减伤率：{user_js:.2f}%
-抗暴率：{crit_resist:.2f}%
-减会伤：{crit_damage_reduction:.2f}%
-护甲穿透：{armor_penetration:.2f}%
-速度：{panel_speed}
-boss增伤：{boss_damage_bonus:.2f}%
+修炼效率
+> {int(((level_rate * realm_rate) * (1 + main_buff_rate_buff) * (1 + user_blessed_spot_data)) * 100)}%
+会心率
+> {total_crit_rate:.2f}%
+会心伤害
+> {crit_damage:.2f}%
+减伤率
+> {user_js:.2f}%
+抗暴率
+> {crit_resist:.2f}%
+减会伤
+> {crit_damage_reduction:.2f}%
+护甲穿透
+> {armor_penetration:.2f}%
+速度
+> {panel_speed}
+boss增伤
+> {boss_damage_bonus:.2f}%
 
-双修保护状态：{current_status_display}
+双修保护
+> {current_status_display}
 """.strip()
 
     await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="修为", v3="我的修为")
@@ -954,15 +976,15 @@ async def my_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
         if list_all == now_index:
             need_exp = user_exp
-            exp_meg = "位面至高"
+            exp_meg = "👑 位面至高"
         else:
             is_updata_level = levels[now_index + 1]
             need_exp = as_int_like(sql_message.get_level_power(is_updata_level))
             get_exp = need_exp - user_exp
             if get_exp > 0:
-                exp_meg = f"还需{number_to(get_exp)}修为可突破！"
+                exp_meg = f"⏳ 还需{number_to(get_exp)}修为可突破！"
             else:
-                exp_meg = "可突破！"
+                exp_meg = "❗ 可突破！"
 
         try:
             base_rate = int(jsondata.level_rate_data()[level_name])
@@ -1091,9 +1113,9 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 1. 获取签到状态信息
     sign_status = user_info['is_sign']
     if sign_status == 1:
-        sign_msg = "今日已签到"
+        sign_msg = "✅ 今日已签到"
     else:
-        sign_msg = "今日未签到"
+        sign_msg = "❗ 今日未签到"
     
     # 2. 获取双修次数信息
     limt = two_exp_cd.find_user(user_id)
@@ -1103,6 +1125,10 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     main_two = main_two_data['two_buff'] if main_two_data is not None else 0
     max_two_exp = two_exp_limit + impart_two_exp + main_two
     remaining_two_exp = max(max_two_exp - limt, 0)
+    if remaining_two_exp <= 0:
+        two_exp_msg = f"✅ 已用尽 0/{max_two_exp}"
+    else:
+        two_exp_msg = f"❗ {remaining_two_exp}/{max_two_exp}"
     
     # 3. 获取灵田收取时间信息
     mix_elixir_info = get_player_info(user_id, "mix_elixir_info")
@@ -1112,17 +1138,16 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         now_time = datetime.now()
         
         if now_time >= next_collect_time:
-            lingtian_msg = "已成熟"
+            lingtian_msg = "🌱 已成熟"
         else:
             time_left = next_collect_time - now_time
             hours_left = time_left.seconds // 3600
             minutes_left = (time_left.seconds % 3600) // 60
-            lingtian_msg = f"{hours_left}时{minutes_left}分后"
+            lingtian_msg = f"⏳ {hours_left}时{minutes_left}分后"
     else:
-        lingtian_msg = "未开启"
+        lingtian_msg = "⬜ 未开启"
     
     # 4. 获取宗门任务信息
-    sect_task_msg = "未加入宗门"
     if user_info['sect_id']:
         user_now_num = int(user_info['sect_task'])
         max_task_num = get_config()["每日宗门任务次上限"]
@@ -1131,19 +1156,21 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         # 检查是否有未完成的任务
         if isUserTask(user_id):
             task_name = userstask[user_id]['任务名称']
-            sect_task_msg = f"进行中({task_name}) {remaining_task}/{max_task_num}"
+            sect_task_msg = f"🔄 进行中({task_name}) {remaining_task}/{max_task_num}"
+        elif remaining_task <= 0:
+            sect_task_msg = f"✅ 已完成 0/{max_task_num}"
         else:
-            sect_task_msg = f"可接取 {remaining_task}/{max_task_num}"
+            sect_task_msg = f"❗ 可接取 {remaining_task}/{max_task_num}"
     else:
-        sect_task_msg = "未加入宗门"
+        sect_task_msg = "⬜ 未加入宗门"
     
     # 5. 获取悬赏令次数信息
     work_nums = sql_message.get_work_num(user_id)
     max_work_nums = count
     if work_nums <= 0:
-        work_msg = f"已完成"
+        work_msg = "✅ 已完成"
     else:
-        work_msg = f"{work_nums}/{max_work_nums}"
+        work_msg = f"❗ {work_nums}/{max_work_nums}"
     
     # 6. 获取虚神界对决次数信息
     impart_pk_data = impart_pk.find_user_data(user_id)
@@ -1151,56 +1178,53 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if impart_pk_data:
         pk_num = impart_pk_data["pk_num"]
         if pk_num == 0:
-            pk_msg = f"已完成"
+            pk_msg = "✅ 已完成"
         else:
-            pk_msg = f"{pk_num}/{max_pk_num}"
+            pk_msg = f"❗ {pk_num}/{max_pk_num}"
     else:
-        pk_msg = f"{max_pk_num}/{max_pk_num}"
+        pk_msg = f"❗ {max_pk_num}/{max_pk_num}"
     
     # 7. 获取虚神界探索次数信息
     max_impart_num = 10
     if impart_pk_data:
         impart_num = impart_pk_data["impart_num"]
         if impart_num == 0:
-            impart_msg = f"已完成"
+            impart_msg = "✅ 已完成"
         else:
-            impart_msg = f"{impart_num}/{max_impart_num}"
+            impart_msg = f"❗ {impart_num}/{max_impart_num}"
     else:
-        impart_msg = f"{max_impart_num}/{max_impart_num}"
+        impart_msg = f"❗ {max_impart_num}/{max_impart_num}"
     
     # 8. 获取宗门丹药信息
     sect_id = user_info['sect_id']
-    sect_elixir_msg = "未加入宗门"
     if sect_id:
         sect_info = sql_message.get_sect_info(sect_id)
         if sect_info and int(sect_info['elixir_room_level']) > 0:
             # 检查用户是否已领取今日丹药
             user_elixir_get = user_info.get('sect_elixir_get', 0)
             if user_elixir_get == 1:
-                sect_elixir_msg = "已领取"
+                sect_elixir_msg = "✅ 已领取"
             else:
                 # 检查贡献度是否足够
                 if int(user_info['sect_contribution']) >= get_config()['宗门丹房参数']['领取贡献度要求']:
-                    sect_elixir_msg = "可领取"
+                    sect_elixir_msg = "❗ 可领取"
                 else:
-                    sect_elixir_msg = f"贡献不足(需{get_config()['宗门丹房参数']['领取贡献度要求']})"
+                    sect_elixir_msg = f"❌ 贡献不足(需{get_config()['宗门丹房参数']['领取贡献度要求']})"
         else:
-            sect_elixir_msg = "无丹房"
+            sect_elixir_msg = "⬜ 无丹房"
     else:
-        sect_elixir_msg = "未加入宗门"
+        sect_elixir_msg = "⬜ 未加入宗门"
 
     # 9. 获取讨伐次数信息
     today_battle_count = boss_limit.get_battle_count(user_id)
     max_battle_count = 30
     battle_count = max_battle_count - today_battle_count
     if battle_count == 0:
-        battle_msg = f"已完成"
+        battle_msg = "✅ 已完成"
     else:
-        battle_msg = f"{battle_count}/{max_battle_count}"
+        battle_msg = f"❗ {battle_count}/{max_battle_count}"
 
     # 10. 获取秘境状态信息
-    rift_status = "无秘境"
-    
     # 检查当前是否有秘境
     try:
         group_rift_data = group_rift[GLOBAL_RIFT_KEY]
@@ -1230,11 +1254,11 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             time2 = int(rift_info.get("time") or 0)
             
             if exp_time >= time2:
-                rift_status = "可结算"
+                rift_status = "❗ 可结算"
             else:
-                rift_status = f"探索{rift_info['name']} {max(0, time2 - exp_time)}分后"
+                rift_status = f"⏳ 探索{rift_info['name']} {max(0, time2 - exp_time)}分后"
         elif user_participated:
-            rift_status = "已探索"
+            rift_status = "✅ 已探索"
         else:
             # 检查用户是否符合进入条件
             user_rank = convert_rank(user_info["level"])[0]
@@ -1243,11 +1267,11 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             if user_rank > required_rank:
                 rank_name_list = convert_rank(user_info["level"])[1]
                 required_rank_name = rank_name_list[len(rank_name_list) - required_rank - 1]
-                rift_status = f"境界不足(需{required_rank_name})"
+                rift_status = f"❌ 境界不足(需{required_rank_name})"
             else:
-                rift_status = "可探索"
+                rift_status = "❗ 可探索"
     else:
-        rift_status = "无秘境"
+        rift_status = "⬜ 无秘境"
 
     # 11. 获取历练状态信息
     training_info = training_limit.get_user_training_info(user_id)
@@ -1260,26 +1284,26 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         if in_same_hour:
             next_time = (last_time + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
             wait_minutes = (next_time - now).seconds // 60
-            training_msg = f"已历练({wait_minutes}分后)"
+            training_msg = f"⏳ 已历练({wait_minutes}分后)"
         else:
-            training_msg = "可历练"
+            training_msg = "❗ 可历练"
     else:
-        training_msg = "可历练"
+        training_msg = "❗ 可历练"
     
     # 12. 获取幻境寻心状态信息
     illusion_info = IllusionData.get_or_create_user_illusion_info(user_id)
     
     if illusion_info["today_choice"] is not None:
-        illusion_msg = "已参与"
+        illusion_msg = "✅ 已参与"
     else:
         # 检查是否需要重置(每天8点)
         if IllusionData._check_reset(illusion_info.get("last_participate")):
-            illusion_msg = "可参与"
+            illusion_msg = "❗ 可参与"
         else:
-            illusion_msg = "可参与"
+            illusion_msg = "❗ 可参与"
     
     # 13. 获取副本状态信息（新增）
-    dungeon_msg = "未开始"
+    dungeon_msg = "⬜ 未开始"
     try:
         # 获取玩家副本状态
         player_dungeon_data = dungeon_manager.get_player_status(user_id)
@@ -1290,14 +1314,14 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             total_layers = player_dungeon_data.get("total_layers", 0)
             
             if dungeon_status == "completed":
-                dungeon_msg = f"已完成({current_layer}/{total_layers})"
+                dungeon_msg = f"✅ 已完成({current_layer}/{total_layers})"
             elif dungeon_status == "exploring":
-                dungeon_msg = f"进行中({current_layer}/{total_layers})"
+                dungeon_msg = f"🔄 进行中({current_layer}/{total_layers})"
             else:
-                dungeon_msg = "可挑战"
+                dungeon_msg = "❗ 可挑战"
     except Exception as e:
         # 如果副本功能未启用或出现错误，显示默认状态
-        dungeon_msg = "未开启"
+        dungeon_msg = "⬜ 未开启"
 
     msg = f"""
 **日常中心**
@@ -1317,7 +1341,7 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 讨伐次数
 > {battle_msg}
 双修次数
-> {remaining_two_exp}/{max_two_exp}
+> {two_exp_msg}
 虚神界对决
 > {pk_msg}
 虚神界探索
@@ -1329,7 +1353,7 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 副本状态
 > {dungeon_msg}
 """
-    await handle_send(bot, event, msg)
+    await handle_send(bot, event, msg, md_type="修仙", k1="签到", v1="修仙签到", k2="背包", v2="我的背包", k3="帮助", v3="修仙帮助")
     await daily_info.finish()
 
 

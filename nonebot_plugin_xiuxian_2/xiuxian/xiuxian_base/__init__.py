@@ -790,7 +790,7 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         lottery_result = await handle_lottery(
             user_info, _lottery_operation_id(sign_operation_id)
         )
-        msg = f"**修仙签到**\n---\n签到成功，获取{prior.stone}块灵石!\n\n{lottery_result}\n该签到请求已经处理，无需重复提交。"
+        msg = f"**修仙签到**\n---\n✅ 签到成功，获取{prior.stone}块灵石!\n\n{lottery_result}\n该签到请求已经处理，无需重复提交。"
         await handle_send(bot, event, msg, md_type="修仙", k1="修仙签到", v1="修仙签到", k2="鸿运", v2="鸿运", k3="帮助", v3="修仙帮助")
         await sign_in.finish()
     sign_result = sign_in_service.sign(
@@ -803,13 +803,13 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         lottery_result = await handle_lottery(
             user_info, _lottery_operation_id(sign_operation_id)
         )
-        msg = f"**修仙签到**\n---\n签到成功，获取{sign_result.stone}块灵石!\n\n{lottery_result}\n该签到请求已经处理，无需重复提交。"
+        msg = f"**修仙签到**\n---\n✅ 签到成功，获取{sign_result.stone}块灵石!\n\n{lottery_result}\n该签到请求已经处理，无需重复提交。"
         await handle_send(bot, event, msg, md_type="修仙", k1="修仙签到", v1="修仙签到", k2="鸿运", v2="鸿运", k3="帮助", v3="修仙帮助")
         await sign_in.finish()
     if not sign_result.succeeded:
-        await handle_send(bot, event, "贪心的人是不会有好运的！")
+        await handle_send(bot, event, "❌ 贪心的人是不会有好运的！")
         await sign_in.finish()
-    result = f"签到成功，获取{sign_result.stone}块灵石!"
+    result = f"✅ 签到成功，获取{sign_result.stone}块灵石!"
 
     lottery_result = await handle_lottery(
         user_info, _lottery_operation_id(sign_operation_id)
