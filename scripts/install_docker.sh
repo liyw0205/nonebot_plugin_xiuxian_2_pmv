@@ -27,7 +27,7 @@ HOST_PORT="${XIUXIAN_DOCKER_PORT:-8080}"
 PART_FROM="${XIUXIAN_DOCKER_PART_FROM:-0}"
 PART_TO="${XIUXIAN_DOCKER_PART_TO:-4}"
 
-ui() { local c=$1; shift; case $c in red) echo -e "${RED}$*${NC}";; green) echo -e "${GREEN}$*${NC}";; yellow) echo -e "${YELLOW}$*${NC}";; blue) echo -e "${BLUE}$*${NC}";; *) echo "$*";; esac; }
+ui() { local c=$1; shift; case $c in red) echo -e "${RED}$*${NC}" >&2;; green) echo -e "${GREEN}$*${NC}" >&2;; yellow) echo -e "${YELLOW}$*${NC}" >&2;; blue) echo -e "${BLUE}$*${NC}" >&2;; *) echo "$*" >&2;; esac; }
 ok() { ui green "✓ $*"; }
 fail() { ui red "✗ $*"; exit 1; }
 info() { ui blue "→ $*"; }
@@ -224,7 +224,9 @@ cmd_install() {
   ensure_docker
   need_cmd docker
   write_default_config "$dir"
-  tar="$(download_parts_and_merge "$dir")"
+  # 进度信息走 stderr；stdout 只返回 tar 路径
+  tar="$(download_parts_and_merge "$dir" | tail -n 1)"
+  [[ -f "$tar" ]] || fail "合并镜像包不存在: $tar"
   load_image "$tar"
   start_container "$dir"
   ok "安装完成"
@@ -237,7 +239,8 @@ cmd_update() {
   # 强制重新下载分片
   rm -f "$dir/$MERGED_NAME"
   rm -rf "$dir/parts"
-  tar="$(download_parts_and_merge "$dir")"
+  tar="$(download_parts_and_merge "$dir" | tail -n 1)"
+  [[ -f "$tar" ]] || fail "合并镜像包不存在: $tar"
   load_image "$tar"
   if container_exists; then
     info "重建容器以使用新镜像"
