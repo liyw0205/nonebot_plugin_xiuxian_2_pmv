@@ -2,7 +2,9 @@ try:
     import ujson as json
 except ImportError:
     import json
+import copy
 import threading
+import time
 
 from nonebot.log import logger
 from ...paths import get_paths
@@ -37,6 +39,8 @@ class PlayerDataManager:
             self.lock = self._conn_lock
             self._ensured_tables = set()
             self._ensured_fields = set()
+            # 排行榜/同节点类全表读缓存：(key) -> (expire_mono, value)
+            self._field_list_cache: dict = {}
             logger.opt(colors=True).info(f"<green>player数据库已连接！</green>")
 
     def _get_cursor(self):
@@ -120,6 +124,7 @@ class PlayerDataManager:
                     (str(user_id), value)
                 )
             self._commit_write()
+            self._invalidate_field_list_cache(table_name, field)
 
     def get_fields(self, user_id, table_name):
         """通过user_id查看一个表这个主键的全部字段"""
@@ -181,13 +186,23 @@ class PlayerDataManager:
                 return val
             return None
 
-    def get_all_field_data(self, table_name, field):
+    def get_all_field_data(self, table_name, field, *, cache_ttl: float = 45.0):
+        """全表字段列表（排行榜等）。默认 45s 缓存；写路径会失效。"""
         self._ensure_table_exists(table_name)
         self._ensure_field_exists(table_name, field)
+        cache_key = ("get_all_field_data", str(table_name), str(field))
+        ttl = max(0.0, float(cache_ttl or 0))
+        if ttl > 0:
+            with self._conn_lock:
+                hit = self._field_list_cache.get(cache_key)
+                if hit and hit[0] > time.monotonic():
+                    return copy.deepcopy(hit[1])
 
         with self._conn_lock:
             cursor = self._get_cursor()
-            cursor.execute(f"SELECT user_id, {self._quote_ident(field)} FROM {self._quote_ident(table_name)}")
+            cursor.execute(
+                f"SELECT user_id, {self._quote_ident(field)} FROM {self._quote_ident(table_name)}"
+            )
             result = cursor.fetchall()
 
             processed_results = []
@@ -199,7 +214,29 @@ class PlayerDataManager:
                         processed_results.append((user_id_str, val))
                 else:
                     processed_results.append((user_id_str, val))
+            if ttl > 0:
+                self._field_list_cache[cache_key] = (
+                    time.monotonic() + ttl,
+                    copy.deepcopy(processed_results),
+                )
             return processed_results
+
+    def _invalidate_field_list_cache(self, table_name=None, field=None) -> None:
+        with self._conn_lock:
+            if table_name is None:
+                self._field_list_cache.clear()
+                return
+            t = str(table_name)
+            for key in list(self._field_list_cache.keys()):
+                if not isinstance(key, tuple) or len(key) < 2:
+                    continue
+                kind = key[0]
+                if kind == "get_all_field_data" and key[1] == t:
+                    if field is None or (len(key) > 2 and key[2] == str(field)):
+                        self._field_list_cache.pop(key, None)
+                elif kind == "list_users_by_fields" and key[1] == t:
+                    # 同表位置类查询整体失效
+                    self._field_list_cache.pop(key, None)
 
     def update_all_records(self, table_name, field, value, data_type='TEXT'):
         """
@@ -226,6 +263,7 @@ class PlayerDataManager:
                 (value,)
             )
             self._commit_write()
+            self._invalidate_field_list_cache(table_name, field)
 
     def get_all_records(self, table_name) -> list[dict]:
         """
@@ -263,6 +301,65 @@ class PlayerDataManager:
             cursor = self._get_cursor()
             cursor.execute(f"DELETE FROM {self._quote_ident(table_name)} WHERE user_id=%s", (str(user_id),))
             self._commit_write()
+            self._invalidate_field_list_cache(table_name)
+
+    def list_users_by_fields(
+        self,
+        table_name: str,
+        equals: dict,
+        *,
+        cache_ttl: float = 20.0,
+        exclude_user_id: str | None = None,
+    ) -> list[str]:
+        """按表字段等值筛选 user_id（地图同节点/洞府候选），带短缓存。"""
+        if not equals:
+            return []
+        self._ensure_table_exists(table_name)
+        for field in equals:
+            self._ensure_field_exists(table_name, field)
+        # 规范 key 顺序，保证缓存命中
+        items = sorted((str(k), equals[k]) for k in equals)
+        cache_key = (
+            "list_users_by_fields",
+            str(table_name),
+            tuple((k, str(v) if v is not None else "") for k, v in items),
+            str(exclude_user_id or ""),
+        )
+        ttl = max(0.0, float(cache_ttl or 0))
+        if ttl > 0:
+            with self._conn_lock:
+                hit = self._field_list_cache.get(cache_key)
+                if hit and hit[0] > time.monotonic():
+                    return list(hit[1])
+
+        clauses = []
+        params = []
+        for k, v in items:
+            clauses.append(f"{self._quote_ident(k)}=%s")
+            # JSON/数字字段在库中多为 TEXT
+            if isinstance(v, (dict, list)):
+                params.append(json.dumps(v, ensure_ascii=False))
+            else:
+                params.append(str(v) if v is not None else "")
+        if exclude_user_id:
+            clauses.append("user_id<>%s")
+            params.append(str(exclude_user_id))
+        sql = (
+            f"SELECT user_id FROM {self._quote_ident(table_name)} "
+            f"WHERE {' AND '.join(clauses)}"
+        )
+        with self._conn_lock:
+            cursor = self._get_cursor()
+            try:
+                cursor.execute(sql, tuple(params))
+                rows = cursor.fetchall() or []
+            except Exception as e:
+                logger.warning(f"list_users_by_fields 失败 table={table_name}: {e}")
+                return []
+            out = [str(r[0]) for r in rows if r and r[0] is not None]
+            if ttl > 0:
+                self._field_list_cache[cache_key] = (time.monotonic() + ttl, list(out))
+            return out
 
     # ===== 通用文档接口（JSON字段友好） =====
     def _json_load_if_possible(self, val):

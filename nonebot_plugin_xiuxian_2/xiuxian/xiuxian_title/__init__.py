@@ -432,23 +432,55 @@ async def title_grant_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 
     # 全服
     if target and target.lower() == "all":
-        all_users = sql_message.get_all_user_id()
-        success_count = 0
-        repeat_or_fail = 0
-        for uid in all_users:
-            try:
-                unlocked = get_user_unlocked_titles(str(uid))
-                result = title_transaction_service.grant(
-                    _title_operation_id(event, f"grant-{title_id}", str(uid)), uid, unlocked, title_id
-                )
-                if result.status in {"applied", "duplicate"}:
-                    success_count += 1
-                else:
-                    repeat_or_fail += 1
-            except Exception:
-                repeat_or_fail += 1
+        all_users = sql_message.get_all_user_id() or []
+        if not all_users:
+            await handle_send(bot, event, "当前没有可赠送的用户")
+            return
+        users = [str(u) for u in all_users]
+        title_id_local = title_id
+        title_name_local = title_name
 
-        await handle_send(bot, event, f"全服赠送称号【{title_name}】完成：成功{success_count}，重复/失败{repeat_or_fail}")
+        def _work():
+            success_count = 0
+            repeat_or_fail = 0
+            for uid in users:
+                try:
+                    unlocked = get_user_unlocked_titles(str(uid))
+                    result = title_transaction_service.grant(
+                        _title_operation_id(event, f"grant-{title_id_local}", str(uid)),
+                        uid,
+                        unlocked,
+                        title_id_local,
+                    )
+                    if result.status in {"applied", "duplicate"}:
+                        success_count += 1
+                    else:
+                        repeat_or_fail += 1
+                except Exception:
+                    repeat_or_fail += 1
+            return success_count, repeat_or_fail
+
+        def _done(pair):
+            success_count, repeat_or_fail = pair
+            return (
+                f"全服赠送称号【{title_name_local}】完成："
+                f"成功{success_count}，重复/失败{repeat_or_fail}"
+            )
+
+        from ..xiuxian_utils.bg_jobs import spawn_admin_job
+
+        await spawn_admin_job(
+            bot,
+            event,
+            job_key=f"title-grant-all:{title_id}",
+            start_msg=(
+                f"🔄 全服赠送称号【{title_name}】已在后台开始"
+                f"（共 {len(users)} 人），完成后另行通知。"
+            ),
+            work=_work,
+            done_msg=_done,
+            fail_prefix="全服赠送称号失败",
+        )
         return
 
     # 单人目标解析

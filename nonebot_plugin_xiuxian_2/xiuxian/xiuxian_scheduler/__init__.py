@@ -43,13 +43,23 @@ async def apply_scheduler_overrides_on_startup():
 # =========================
 async def _run_job(job_name: str, func, *args, **kwargs):
     """
-    安全执行单个定时任务，避免某个任务异常影响其它任务日志判断
+    安全执行单个定时任务。
+
+    同步重任务丢到线程池，避免堵死事件循环导致群指令卡顿。
     """
+    import asyncio
+    import inspect
+
     try:
         logger.opt(colors=True).info(f"<cyan>[定时任务开始]</cyan> <green>{job_name}</green>")
-        result = func(*args, **kwargs)
-        if hasattr(result, "__await__"):
-            result = await result
+        if inspect.iscoroutinefunction(func):
+            result = await func(*args, **kwargs)
+        elif inspect.iscoroutine(func):
+            result = await func
+        else:
+            result = await asyncio.to_thread(func, *args, **kwargs)
+            if hasattr(result, "__await__"):
+                result = await result
         if result is False or getattr(result, "succeeded", True) is False:
             status = getattr(result, "status", "failed")
             raise RuntimeError(f"任务返回失败状态：{status}")

@@ -51,6 +51,7 @@ from ..xiuxian_utils.utils import (
     generate_command, _impersonating_users, send_help_message,
     parse_page_arg, paginate_text_blocks, build_pagination_buttons
 )
+from ..xiuxian_utils.bg_jobs import spawn_admin_job, run_chunked_until_done
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_back import ACCESSORY_BAG_LIMIT, create_accessory_instance
 from .admin_helpers import (
@@ -468,26 +469,37 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         operation_id = admin_impart_stone_batch_adjustment_service.find_running(
             operator_id, amount
         ) or _admin_operation_id(event, "impart-stone-adjust-all", "all")
-        while True:
-            result = admin_impart_stone_batch_adjustment_service.adjust(
-                operation_id,
-                operator_id,
-                all_users,
-                amount,
+        action = "增加" if amount > 0 else "扣除"
+        users = list(all_users)
+
+        def _work():
+            return run_chunked_until_done(
+                lambda: admin_impart_stone_batch_adjustment_service.adjust(
+                    operation_id, operator_id, users, amount
+                )
             )
-            if result.status != "applied" or result.completed >= result.total:
-                break
-        if result.status == "operation_conflict":
-            msg = "本次全服思恋结晶调整与已记录计划冲突"
-        else:
-            action = "增加" if amount > 0 else "扣除"
-            msg = (
+
+        def _done(result):
+            if result.status == "operation_conflict":
+                return "本次全服思恋结晶调整与已记录计划冲突"
+            return (
                 f"全服思恋结晶{action}完成！已处理 "
                 f"{result.completed}/{result.total} 名玩家，"
                 f"实际影响 {result.affected_users} 名，"
                 f"累计{action} {number_to(abs(result.applied_delta))} 枚，"
                 f"跳过 {result.skipped_users} 名"
             )
+
+        await spawn_admin_job(
+            bot,
+            event,
+            job_key=f"impart-stone-all:{operator_id}:{amount}",
+            start_msg=f"🔄 全服思恋结晶{action}已在后台开始（共 {len(users)} 人），完成后另行通知。",
+            work=_work,
+            done_msg=_done,
+            fail_prefix="全服思恋结晶调整失败",
+        )
+        return
     else:
         if amount == 0:
             await handle_send(bot, event, "单人思恋结晶调整数量不能为 0")
@@ -827,8 +839,9 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
             await handle_send(bot, event, "当前没有可发放的用户。")
             await cz.finish()
 
+        users = list(all_users)
+        operator_id = str(get_user_id(event) or "unknown")
         if is_accessory:
-            operator_id = str(get_user_id(event) or "unknown")
             operation_id = admin_accessory_batch_adjustment_service.find_running(
                 "grant",
                 operator_id,
@@ -838,55 +851,83 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
                 quantity,
                 ACCESSORY_BAG_LIMIT,
             ) or _admin_operation_id(event, "accessory-grant-all", str(goods_id))
-            while True:
-                result = admin_accessory_batch_adjustment_service.grant(
-                    operation_id,
-                    operator_id,
-                    all_users,
-                    goods_id,
-                    item_info["name"],
-                    quality,
-                    quantity,
-                    ACCESSORY_BAG_LIMIT,
-                    lambda _user_id: create_accessory_instance(goods_id, quality),
+
+            def _work():
+                return run_chunked_until_done(
+                    lambda: admin_accessory_batch_adjustment_service.grant(
+                        operation_id,
+                        operator_id,
+                        users,
+                        goods_id,
+                        item_info["name"],
+                        quality,
+                        quantity,
+                        ACCESSORY_BAG_LIMIT,
+                        lambda _user_id: create_accessory_instance(goods_id, quality),
+                    )
                 )
-                if result.status != "applied" or result.completed >= result.total:
-                    break
-            if result.status == "operation_conflict":
-                msg = "本次全服饰品发放与已记录计划冲突"
-            else:
-                msg = (
+
+            def _done(result):
+                if result.status == "operation_conflict":
+                    return "本次全服饰品发放与已记录计划冲突"
+                return (
                     f"全服饰品发放完成！已处理 {result.completed}/{result.total} 名玩家，"
                     f"实际向 {result.affected_users} 名玩家发放 "
                     f"{item_info['name']} {result.affected_quantity} 件（{quality}阶），"
                     f"跳过 {result.skipped_users} 名"
                 )
+
+            await spawn_admin_job(
+                bot,
+                event,
+                job_key=f"accessory-grant-all:{goods_id}:{quality}:{quantity}",
+                start_msg=(
+                    f"🔄 全服饰品【{item_info['name']}】发放已在后台开始"
+                    f"（共 {len(users)} 人），完成后另行通知。"
+                ),
+                work=_work,
+                done_msg=_done,
+                fail_prefix="全服饰品发放失败",
+            )
         else:
             operation_id = _admin_operation_id(event, "item-add-all", str(goods_id))
-            operator_id = str(get_user_id(event) or "unknown")
-            while True:
-                result = admin_item_batch_grant_service.grant(
-                    operation_id,
-                    operator_id,
-                    all_users,
-                    goods_id,
-                    item_info["name"],
-                    goods_type,
-                    quantity,
-                    int(XiuConfig().max_goods_num),
+
+            def _work():
+                return run_chunked_until_done(
+                    lambda: admin_item_batch_grant_service.grant(
+                        operation_id,
+                        operator_id,
+                        users,
+                        goods_id,
+                        item_info["name"],
+                        goods_type,
+                        quantity,
+                        int(XiuConfig().max_goods_num),
+                    )
                 )
-                if result.status != "applied" or result.completed >= result.total:
-                    break
-            if result.status == "operation_conflict":
-                msg = "本次全服物品发放与已记录事件冲突"
-            else:
-                msg = (
+
+            def _done(result):
+                if result.status == "operation_conflict":
+                    return "本次全服物品发放与已记录事件冲突"
+                return (
                     f"全服发放完成！已处理 {result.completed}/{result.total} 名玩家，"
                     f"实际向 {result.granted_users} 名玩家发放 {item_info['name']} x{quantity}，"
                     f"累计入包 {result.added} 件"
                 )
 
-        await handle_send(bot, event, msg)
+            await spawn_admin_job(
+                bot,
+                event,
+                job_key=f"item-grant-all:{goods_id}:{quantity}",
+                start_msg=(
+                    f"🔄 全服物品【{item_info['name']}】发放已在后台开始"
+                    f"（共 {len(users)} 人），完成后另行通知。"
+                ),
+                work=_work,
+                done_msg=_done,
+                fail_prefix="全服物品发放失败",
+            )
+
         await cz.finish()
 
     # ===== 指定玩家发放 =====
@@ -1073,26 +1114,43 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
                 quantity,
                 0,
             ) or _admin_operation_id(event, "accessory-destroy-all", str(goods_id))
-            while True:
-                result = admin_accessory_batch_adjustment_service.destroy(
-                    operation_id,
-                    operator_id,
-                    all_users,
-                    goods_id,
-                    item_info["name"],
-                    quantity,
+            users = list(all_users)
+
+            def _work():
+                return run_chunked_until_done(
+                    lambda: admin_accessory_batch_adjustment_service.destroy(
+                        operation_id,
+                        operator_id,
+                        users,
+                        goods_id,
+                        item_info["name"],
+                        quantity,
+                    )
                 )
-                if result.status != "applied" or result.completed >= result.total:
-                    break
-            if result.status == "operation_conflict":
-                msg = "本次全服饰品扣除与已记录计划冲突"
-            else:
-                msg = (
+
+            def _done(result):
+                if result.status == "operation_conflict":
+                    return "本次全服饰品扣除与已记录计划冲突"
+                return (
                     f"全服饰品扣除完成！已处理 {result.completed}/{result.total} 名玩家，"
                     f"共影响 {result.affected_users} 名玩家，累计扣除"
                     f"【{item_info['name']}】{result.affected_quantity} 件，"
                     f"跳过 {result.skipped_users} 名（仅背包，已装备未扣除）"
                 )
+
+            await spawn_admin_job(
+                bot,
+                event,
+                job_key=f"accessory-destroy-all:{goods_id}:{quantity}",
+                start_msg=(
+                    f"🔄 全服饰品【{item_info['name']}】扣除已在后台开始"
+                    f"（共 {len(users)} 人），完成后另行通知。"
+                ),
+                work=_work,
+                done_msg=_done,
+                fail_prefix="全服饰品扣除失败",
+            )
+            await hmll.finish()
         else:
             success_user_count = 0
             total_removed = 0
@@ -1284,28 +1342,38 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         operation_id = running_operation or _admin_operation_id(
             event, "player-status-reset-all", "all"
         )
-        try:
-            while True:
-                result = admin_player_status_batch_reset_service.reset(
+        users = tuple(all_users or ())
+
+        def _work():
+            return run_chunked_until_done(
+                lambda: admin_player_status_batch_reset_service.reset(
                     operation_id,
                     operator_id,
-                    all_users or (),
+                    users,
                     max_stamina,
                 )
-                if result.status != "applied" or result.completed >= result.total:
-                    break
-        except Exception as e:
-            logger.opt(exception=e).error(f"全服重置状态失败 op={operation_id}")
-            await handle_send(bot, event, f"全服重置状态失败：{e}")
-            await restate.finish()
-        if result.status == "operation_conflict":
-            msg = "本次全服状态重置与已记录计划冲突"
-        else:
-            msg = (
+            )
+
+        def _done(result):
+            if result.status == "operation_conflict":
+                return "本次全服状态重置与已记录计划冲突"
+            return (
                 f"所有用户信息重置完成！已处理 {result.completed}/{result.total} 名玩家，"
                 f"成功重置 {result.reset_users} 名，跳过 {result.skipped_users} 名"
             )
-        await handle_send(bot, event, msg)
+
+        await spawn_admin_job(
+            bot,
+            event,
+            job_key=f"player-status-reset-all:{operator_id}",
+            start_msg=(
+                f"🔄 全服重置状态已在后台开始（共 {len(users)} 人），"
+                f"完成后另行通知；期间其他指令可正常使用。"
+            ),
+            work=_work,
+            done_msg=_done,
+            fail_prefix="全服重置状态失败",
+        )
         await restate.finish()
     nick_name = plain_args[0] if plain_args else ""
     if nick_name and not give_qq:
@@ -1564,19 +1632,29 @@ async def training_reset_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
     operation_id = _admin_operation_id(event, "training-reset", "all")
     operator_id = str(get_user_id(event) or "unknown")
-    while True:
-        result = training_reset_limits(operation_id, operator_id)
-        if result.status != "applied" or result.completed >= result.total:
-            break
-        await asyncio.sleep(0)
-    if result.status == "operation_conflict":
-        msg = "本次历练重置与已记录事件冲突"
-    else:
-        msg = (
+
+    def _work():
+        return run_chunked_until_done(
+            lambda: training_reset_limits(operation_id, operator_id)
+        )
+
+    def _done(result):
+        if result.status == "operation_conflict":
+            return "本次历练重置与已记录事件冲突"
+        return (
             f"用户历练状态重置完成：已处理 {result.completed}/{result.total} 名玩家，"
             f"重置 {result.changed} 名，跳过 {result.skipped} 名"
         )
-    await handle_send(bot, event, msg)
+
+    await spawn_admin_job(
+        bot,
+        event,
+        job_key=f"training-reset-all:{operator_id}",
+        start_msg="🔄 全服历练重置已在后台开始，完成后另行通知。",
+        work=_work,
+        done_msg=_done,
+        fail_prefix="全服历练重置失败",
+    )
     await training_reset.finish()
 
 @tower_reset.handle(parameterless=[Cooldown(cd_time=0)])

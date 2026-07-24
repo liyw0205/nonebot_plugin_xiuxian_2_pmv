@@ -501,17 +501,16 @@ def _get_same_node_users(uid: str):
     if not all([realm, heaven, node_id]):
         return []
 
-    all_user_ids = sql_message.get_all_user_id() or []
+    uids = player_data_manager.list_users_by_fields(
+        MAP_TABLE,
+        {"realm": realm, "heaven": heaven, "node_id": node_id},
+        cache_ttl=20,
+    )
     result = []
-    for x in all_user_ids:
-        x = str(x)
-        st = player_data_manager.get_fields(x, MAP_TABLE)
-        if not st:
-            continue
-        if st.get("realm") == realm and st.get("heaven") == heaven and st.get("node_id") == node_id:
-            ui = sql_message.get_user_info_with_id(x)
-            if ui:
-                result.append(ui)
+    for x in uids:
+        ui = sql_message.get_user_info_with_id(x)
+        if ui:
+            result.append(ui)
     return result
 
 
@@ -581,12 +580,16 @@ def _can_intrude(target_uid: str):
 
 
 def _get_random_dongfu_target(my_uid: str):
-    all_user_ids = sql_message.get_all_user_id() or []
+    # 仅扫已建洞府用户（SQL 等值 + 短缓存），避免全服 user_id 循环
+    candidate_ids = player_data_manager.list_users_by_fields(
+        DONGFU_TABLE,
+        {"built": 1},
+        cache_ttl=30,
+        exclude_user_id=str(my_uid),
+    )
     candidates = []
-    for uid in all_user_ids:
+    for uid in candidate_ids:
         uid = str(uid)
-        if uid == str(my_uid):
-            continue
         d = player_data_manager.get_fields(uid, DONGFU_TABLE) or {}
         if _to_int(d.get("built")) != 1:
             continue

@@ -689,16 +689,16 @@ def _parse_map_query(map_data, text: str):
 
 
 def _get_all_in_same_node(realm, heaven, node_id):
-    all_user_ids = sql_message.get_all_user_id() or []
+    uids = player_data_manager.list_users_by_fields(
+        MAP_TABLE,
+        {"realm": realm, "heaven": heaven, "node_id": node_id},
+        cache_ttl=20,
+    )
     res = []
-    for uid in all_user_ids:
-        st = player_data_manager.get_fields(str(uid), MAP_TABLE)
-        if not st:
-            continue
-        if st.get("realm") == realm and st.get("heaven") == heaven and st.get("node_id") == node_id:
-            ui = sql_message.get_user_info_with_id(uid)
-            if ui:
-                res.append(ui)
+    for uid in uids:
+        ui = sql_message.get_user_info_with_id(uid)
+        if ui:
+            res.append(ui)
     return res
 
 

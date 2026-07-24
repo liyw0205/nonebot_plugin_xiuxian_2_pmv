@@ -1776,8 +1776,13 @@ class XiuxianDateManage:
         return result if result else None
 
     def get_all_user_id(self):
-        """获取全部用户id"""
-        result = self._read_query("SELECT user_id FROM user_xiuxian")
+        """获取全部用户id（短缓存，供地图/洞府等同节点查询复用）。"""
+        # 30s：全服 ID 列表变化不频繁；管理写路径会 _clear_read_cache
+        result = self._read_query(
+            "SELECT user_id FROM user_xiuxian",
+            cache_key=("get_all_user_id",),
+            cache_ttl=30,
+        )
         if result:
             return [row[0] for row in result]
         return None
