@@ -37,6 +37,9 @@ from ..messaging import MediaInput, delivery_service
 from ..xiuxian_utils.http_proxy import http_client
 from ..xiuxian_utils.lay_out import Cooldown
 
+# 娱乐子模块历史写法 parameterless=[Data(...)]，与 Cooldown 同义
+Data = Cooldown
+
 from .media_parser.config import get_fun_media_parser_config
 from .media_parser.service import extract_links, run_parse_and_build_messages, dedupe_media_urls_preserve_order
 from .media_parser.native import MEDIA_MAX_BYTES, sort_media_urls_by_quality
