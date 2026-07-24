@@ -212,14 +212,24 @@ def build_song_list_page_text(
     end = start + page_size
     page_songs = songs[start:end]
 
-    lines = [f"【搜索结果】{platform_name}（第 {page}/{total_pages} 页）", ""]
+    lines = [f"**搜索结果 · {escape_markdown_text(platform_name)}**", f"> 第 {page}/{total_pages} 页", ""]
+    if not markdown:
+        lines = [f"【搜索结果】{platform_name}（第 {page}/{total_pages} 页）", ""]
+
     for i, song in enumerate(page_songs, start=1):
         global_index = start + i
         song_name = _clean_song_field(song.get("name"), "未知歌曲")
         artists = _clean_song_field(song.get("artists"), "未知歌手")
         if markdown:
             song_link = build_md_command_link(song_name, f"选歌 {global_index}")
-            line_text = f"{global_index}. {song_link} - {escape_markdown_text(artists)}"
+            cover = _md_cover_thumb(song.get("cover_url"), size=30)
+            # 图集同款：![img #30px #30px](url)|歌名
+            if cover:
+                line_text = (
+                    f"{global_index}. {cover}|{song_link} - {escape_markdown_text(artists)}"
+                )
+            else:
+                line_text = f"{global_index}. {song_link} - {escape_markdown_text(artists)}"
         else:
             line_text = f"{global_index}. {song_name} - {artists}"
         lines.append(line_text)
@@ -234,6 +244,20 @@ def build_song_list_page_text(
         lines.append("操作：发送【选歌 序号】进行选择。")
         lines.append("翻页：点歌上一页 / 点歌下一页 / 点歌翻页 第N页")
     return "\n".join(lines), total_pages
+
+
+def _md_cover_thumb(cover_url: Any, size: int = 30) -> str:
+    """QQ 原生 MD 小封面：![img #Npx #Npx](https://...)"""
+    url = str(cover_url or "").strip()
+    if not url.startswith("http"):
+        return ""
+    # 官方 MD 更稳的是 https
+    if url.startswith("http://"):
+        url = "https://" + url[len("http://") :]
+    # 去掉可能破坏 MD 的空白
+    url = url.replace(" ", "%20")
+    n = max(16, min(int(size or 30), 128))
+    return f"![img #{n}px #{n}px]({url})"
 
 
 def _clean_song_field(value: Any, default: str) -> str:
