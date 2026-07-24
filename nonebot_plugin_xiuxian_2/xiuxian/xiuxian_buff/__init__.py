@@ -1079,7 +1079,7 @@ async def buffinfo_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 > {effect2buffmsg}
 """
 
-    await handle_send(bot, event, msg, md_type="buff", k1="修为", v1="我的修为", k2="存档", v2="我的修仙信息", k3="状态", v3="我的状态")
+    await handle_send(bot, event, msg, md_type="buff", k1="日常", v1="日常", k2="修为", v2="我的修为", k3="背包", v3="我的背包", k4="帮助", v4="修仙帮助")
     await buffinfo.finish()
 
 
@@ -1353,7 +1353,20 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 副本状态
 > {dungeon_msg}
 """
-    await handle_send(bot, event, msg, md_type="修仙", k1="签到", v1="修仙签到", k2="背包", v2="我的背包", k3="帮助", v3="修仙帮助")
+    from ..xiuxian_utils.status_card import daily_action_buttons, is_can_do_line, nav_kwargs
+
+    flags = {
+        "sign": is_can_do_line(sign_msg),
+        "work": is_can_do_line(work_msg),
+        "field": is_can_do_line(lingtian_msg),
+        "sect_task": is_can_do_line(sect_task_msg),
+        "sect_elixir": is_can_do_line(sect_elixir_msg),
+        "rift": is_can_do_line(rift_status),
+        "training": is_can_do_line(training_msg),
+        "dual": is_can_do_line(two_exp_msg),
+    }
+    btns = daily_action_buttons(flags)
+    await handle_send(bot, event, msg, **nav_kwargs(md_type="修仙", buttons=btns))
     await daily_info.finish()
 
 

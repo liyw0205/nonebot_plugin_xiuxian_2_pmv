@@ -511,7 +511,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             remaining = tribulation_cd - cd
             hours = remaining // 3600
             minutes = (remaining % 3600) // 60
-            msg = f"渡劫冷却中，还需{hours}小时{minutes}分钟！"
+            msg = f"**渡劫**\n---\n⏳ 冷却中，还需{hours}小时{minutes}分钟"
             await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
             await start_tribulation.finish()
 
@@ -592,7 +592,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         if cd < tribulation_cd:
             hours = (tribulation_cd - cd) // 3600
             minutes = ((tribulation_cd - cd) % 3600) // 60
-            msg = f"渡劫冷却中，还需{hours}小时{minutes}分钟！"
+            msg = f"**渡劫**\n---\n⏳ 冷却中，还需{hours}小时{minutes}分钟"
             await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
             await destiny_tribulation.finish()
                 
@@ -765,7 +765,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         if cd < tribulation_cd:
             hours = (tribulation_cd - cd) // 3600
             minutes = ((tribulation_cd - cd) % 3600) // 60
-            msg = f"渡劫冷却中，还需{hours}小时{minutes}分钟！"
+            msg = f"**渡劫**\n---\n⏳ 冷却中，还需{hours}小时{minutes}分钟"
             await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
             await heart_devil_tribulation.finish()
         
@@ -958,7 +958,7 @@ async def level_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         cd = OtherSet().date_diff(time_now, level_cd)  # 获取second
         if cd < XiuConfig().level_up_cd * 60:
             # 如果cd小于配置的cd，返回等待时间
-            msg = f"目前无法突破，还需要{XiuConfig().level_up_cd - (cd // 60)}分钟"
+            msg = f"**突破**\n---\n⏳ 冷却中，还需{XiuConfig().level_up_cd - (cd // 60)}分钟"
             sql_message.update_user_stamina(user_id, 12, 1)
             await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up.finish()
@@ -1017,7 +1017,7 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         cd = OtherSet().date_diff(time_now, level_cd)  # 获取second
         if cd < XiuConfig().level_up_cd * 60:
             # 如果cd小于配置的cd，返回等待时间
-            msg = f"目前无法突破，还需要{XiuConfig().level_up_cd - (cd // 60)}分钟"
+            msg = f"**突破**\n---\n⏳ 冷却中，还需{XiuConfig().level_up_cd - (cd // 60)}分钟"
             sql_message.update_user_stamina(user_id, 6, 1)
             await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_zj.finish()
@@ -1125,7 +1125,7 @@ async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMes
         time_now = datetime.now()
         cd = OtherSet().date_diff(time_now, level_cd)
         if cd < XiuConfig().level_up_cd * 60:
-            msg = f"目前无法突破，还需要{XiuConfig().level_up_cd - (cd // 60)}分钟"
+            msg = f"**突破**\n---\n⏳ 冷却中，还需{XiuConfig().level_up_cd - (cd // 60)}分钟"
             sql_message.update_user_stamina(user_id, 6, 1)
             await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_lx.finish()
@@ -1248,7 +1248,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         cd = OtherSet().date_diff(time_now, level_cd)  # 获取second
         if cd < XiuConfig().level_up_cd * 60:
             # 如果cd小于配置的cd，返回等待时间
-            msg = f"目前无法突破，还需要{XiuConfig().level_up_cd - (cd // 60)}分钟"
+            msg = f"**突破**\n---\n⏳ 冷却中，还需{XiuConfig().level_up_cd - (cd // 60)}分钟"
             sql_message.update_user_stamina(user_id, 4, 1)
             await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_drjd.finish()
@@ -1371,7 +1371,7 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         cd = OtherSet().date_diff(time_now, level_cd)  # 获取second
         if cd < XiuConfig().level_up_cd * 60:
             # 如果cd小于配置的cd，返回等待时间
-            msg = f"目前无法突破，还需要{XiuConfig().level_up_cd - (cd // 60)}分钟"
+            msg = f"**突破**\n---\n⏳ 冷却中，还需{XiuConfig().level_up_cd - (cd // 60)}分钟"
             sql_message.update_user_stamina(user_id, 8, 1)
             await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_dr.finish()
@@ -1490,7 +1490,7 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
         time_now = datetime.now()
         cd = OtherSet().date_diff(time_now, level_cd)
         if cd < XiuConfig().level_up_cd * 60:
-            msg = f"目前无法突破，还需要{XiuConfig().level_up_cd - (cd // 60)}分钟"
+            msg = f"**突破**\n---\n⏳ 冷却中，还需{XiuConfig().level_up_cd - (cd // 60)}分钟"
             sql_message.update_user_stamina(user_id, 15, 1)
             await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_dr_lx.finish()
@@ -1637,7 +1637,7 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
         time_now = datetime.now()
         cd = OtherSet().date_diff(time_now, level_cd)
         if cd < XiuConfig().level_up_cd * 60:
-            msg = f"目前无法突破，还需要{XiuConfig().level_up_cd - (cd // 60)}分钟"
+            msg = f"**突破**\n---\n⏳ 冷却中，还需{XiuConfig().level_up_cd - (cd // 60)}分钟"
             sql_message.update_user_stamina(user_id, 15, 1)
             await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_drjd_lx.finish()

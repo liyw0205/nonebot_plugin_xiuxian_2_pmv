@@ -198,8 +198,13 @@ async def novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 先回放：成功后 is_novice=1 会走“已领取”前置语义，挡住同事件幂等。
     prior = novice_gift_claim_service.get_result(operation_id)
     if prior is not None and prior.succeeded:
-        msg = f"道友的新手礼包已发放（灵石 {prior.stone}）。\n该礼包请求已经处理，无需重复提交。"
-        await handle_send(bot, event, msg)
+        msg = (
+            f"**新手礼包**\n---\n✅ 已发放\n"
+            f"灵石\n> {prior.stone}\n"
+            f"该礼包请求已经处理，无需重复提交。\n"
+            f"建议：修仙签到 → 日常 → 悬赏令查看"
+        )
+        await handle_send(bot, event, msg, md_type="修仙", k1="签到", v1="修仙签到", k2="日常", v2="日常", k3="悬赏", v3="悬赏令查看", k4="帮助", v4="修仙帮助")
         await novice.finish()
 
     goods_info = items.get_data_by_item_id("18052")
@@ -245,18 +250,40 @@ async def novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         XiuConfig().beg_max_days, stone, rewards, XiuConfig().max_goods_num,
     )
     if result.status == "duplicate":
-        msg = f"道友的新手礼包已发放（灵石 {result.stone}）。\n该礼包请求已经处理，无需重复提交。"
+        msg = (
+            f"**新手礼包**\n---\n✅ 已发放\n"
+            f"灵石\n> {result.stone}\n"
+            f"该礼包请求已经处理，无需重复提交。\n"
+            f"建议：修仙签到 → 日常 → 悬赏令查看"
+        )
     elif result.succeeded:
-        msg = f"道友的新手礼包:\n" + "".join(msg_parts)
+        msg = (
+            f"**新手礼包**\n---\n✅ 领取成功\n"
+            + "".join(msg_parts)
+            + "建议下一步：修仙签到 → 日常 → 悬赏令查看"
+        )
     elif result.status == "already_claimed":
-        msg = "您已经领取过新手礼包了！"
+        msg = "**新手礼包**\n---\n✅ 您已经领取过新手礼包了！"
     elif result.status == "expired":
-        msg = f"新手礼包仅限创建角色{XiuConfig().beg_max_days}天内领取！"
+        msg = f"**新手礼包**\n---\n❌ 仅限创建角色{XiuConfig().beg_max_days}天内领取！"
     elif result.status == "inventory_full":
-        msg = "背包空间不足，无法领取新手礼包！"
+        msg = "**新手礼包**\n---\n❌ 背包空间不足，无法领取新手礼包！"
     elif result.status in {"state_changed", "operation_conflict"}:
-        msg = "角色状态已变化，请重新尝试领取！"
+        msg = "**新手礼包**\n---\n⚠️ 角色状态已变化，请重新尝试领取！"
     else:
-        msg = "未找到角色信息，无法领取新手礼包！"
-    await handle_send(bot, event, msg)
+        msg = "**新手礼包**\n---\n❌ 未找到角色信息，无法领取新手礼包！"
+    await handle_send(
+        bot,
+        event,
+        msg,
+        md_type="修仙",
+        k1="签到",
+        v1="修仙签到",
+        k2="日常",
+        v2="日常",
+        k3="悬赏",
+        v3="悬赏令查看",
+        k4="帮助",
+        v4="修仙帮助",
+    )
     await novice.finish()

@@ -139,10 +139,16 @@ async def mix_elixir_sqdj_up_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级收取等级", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir_sqdj_up.finish()
     if not upgrade.succeeded:
-        msg = "炼丹状态已变化，本次收取等级升级未结算，请重新查看后再试。"
+        msg = "**炼丹**\n---\n⚠️ 炼丹状态已变化，本次收取等级升级未结算，请重新查看后再试。"
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级收取等级", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir_sqdj_up.finish()
-    msg = f"道友消耗炼丹经验{upgrade.cost}点，收取等级目前为：{upgrade.level}级，可以使灵田收获的药材增加{upgrade.level}个！\n剩余炼丹经验：{upgrade.experience}点"
+    msg = (
+        f"**炼丹**\n---\n✅ 收取等级升级成功\n"
+        f"消耗经验\n> {upgrade.cost}\n"
+        f"当前等级\n> {upgrade.level}\n"
+        f"灵田额外药材\n> +{upgrade.level}\n"
+        f"剩余炼丹经验\n> {upgrade.experience}"
+    )
     await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
     await mix_elixir_sqdj_up.finish()
 
@@ -630,10 +636,11 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                 )
                 if claimed.succeeded:
                     msg = (
-                        f"恭喜道友成功炼成丹药：{claimed.reward_name}{claimed.reward_quantity}枚\n"
+                        f"**炼丹结果**\n---\n✅ 补领成功\n"
+                        f"丹药\n> {claimed.reward_name} ×{claimed.reward_quantity}\n"
                         f"已补领此前扣材未发的丹药。"
                     )
-                    await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
+                    await handle_send(bot, event, msg, md_type="炼丹", k1="继续", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包", k4="日常", v4="日常")
                     await mix_make.finish()
 
             elixir_config = {

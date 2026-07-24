@@ -2003,6 +2003,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
 
             get_exp = int(user_info['exp'] * userstask[user_id]['任务内容']['give'])
             msg = ""
+            exp_cap_note = ""
 
             if user_info['sect_position'] is None:
                 max_exp_limit = 4
@@ -2018,7 +2019,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             max_exp_next = int((int(OtherSet().set_closing_type(user_info['level'])) * XiuConfig().closing_exp_upper_limit))  # 获取下个境界需要的修为 * 1.5为闭关上限
             if int(get_exp + user_info['exp']) > max_exp_next:
                 get_exp = 1
-                msg = "修为已近当前境界上限，本次所得修为收束为1点！\n"
+                exp_cap_note = "⚠️ 修为已近当前境界上限，本次所得修为收束为1点！\n"
             sect_stone = int(userstask[user_id]['任务内容']['sect'])
             task_operation_id = _sect_operation_id(
                 event, "task_complete", user_id
@@ -2036,11 +2037,19 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 userstask[user_id]["任务内容"],
             )
             if not settlement.applied:
-                msg = "宗门任务状态或角色资产已发生变化，请重新确认后再完成任务。"
-                await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
+                msg = "**宗门任务**\n---\n⚠️ 宗门任务状态或角色资产已发生变化，请重新确认后再完成任务。"
+                await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取", k4="日常", v4="日常")
                 await sect_task_complete.finish()
             task_type_value = userstask[user_id]['任务内容']['type']
-            msg += f"道友大战一番，气血减少：{number_to(costhp)}，获得修为：{number_to(get_exp)}，所在宗门建设度增加：{number_to(sect_stone)}，资材增加：{number_to(sect_stone * 10)}, 宗门贡献度增加：{int(sect_stone)}"
+            msg = (
+                f"**宗门任务**\n---\n✅ 任务完成\n"
+                f"{exp_cap_note}"
+                f"气血减少\n> {number_to(costhp)}\n"
+                f"获得修为\n> {number_to(get_exp)}\n"
+                f"宗门建设度\n> +{number_to(sect_stone)}\n"
+                f"资材\n> +{number_to(sect_stone * 10)}\n"
+                f"贡献度\n> +{int(sect_stone)}"
+            )
             userstask[user_id] = {}
             if settlement.status == "settled":
                 update_statistics_value(user_id, "宗门任务")
@@ -2057,7 +2066,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                         "detail": {"task_type": task_type_value, "hp_cost": costhp},
                     },
                 )
-            await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
+            await handle_send(bot, event, msg, md_type="宗门", k1="接取", v1="宗门任务接取", k2="完成", v2="宗门任务完成", k3="信息", v3="我的宗门", k4="日常", v4="日常")
             await sect_task_complete.finish()
 
         elif userstask[user_id]['任务内容']['type'] == 2:  # type=1：需要扣气血，type=2：需要扣灵石
@@ -2071,6 +2080,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 await sect_task_complete.finish()
 
             get_exp = int(user_info['exp'] * userstask[user_id]['任务内容']['give'])
+            exp_cap_note = ""
 
             if user_info['sect_position'] is None:
                 max_exp_limit = 4
@@ -2086,7 +2096,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             max_exp_next = int((int(OtherSet().set_closing_type(user_info['level'])) * XiuConfig().closing_exp_upper_limit))  # 获取下个境界需要的修为 * 1.5为闭关上限
             if int(get_exp + user_info['exp']) > max_exp_next:
                 get_exp = 1
-                msg = "修为已近当前境界上限，本次所得修为收束为1点！\n"
+                exp_cap_note = "⚠️ 修为已近当前境界上限，本次所得修为收束为1点！\n"
             sect_stone = int(userstask[user_id]['任务内容']['sect'])
             task_operation_id = _sect_operation_id(
                 event, "task_complete", user_id
@@ -2104,11 +2114,19 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 userstask[user_id]["任务内容"],
             )
             if not settlement.applied:
-                msg = "宗门任务状态或角色资产已发生变化，请重新确认后再完成任务。"
-                await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
+                msg = "**宗门任务**\n---\n⚠️ 宗门任务状态或角色资产已发生变化，请重新确认后再完成任务。"
+                await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取", k4="日常", v4="日常")
                 await sect_task_complete.finish()
             task_type_value = userstask[user_id]['任务内容']['type']
-            msg = f"道友为了完成任务购买宝物消耗灵石：{number_to(costls)}枚，获得修为：{number_to(get_exp)}，所在宗门建设度增加：{number_to(sect_stone)}，资材增加：{number_to(sect_stone * 10)}, 宗门贡献度增加：{int(sect_stone)}"
+            msg = (
+                f"**宗门任务**\n---\n✅ 任务完成\n"
+                f"{exp_cap_note}"
+                f"消耗灵石\n> {number_to(costls)}\n"
+                f"获得修为\n> {number_to(get_exp)}\n"
+                f"宗门建设度\n> +{number_to(sect_stone)}\n"
+                f"资材\n> +{number_to(sect_stone * 10)}\n"
+                f"贡献度\n> +{int(sect_stone)}"
+            )
             userstask[user_id] = {}
             if settlement.status == "settled":
                 update_statistics_value(user_id, "宗门任务")
@@ -2125,7 +2143,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                         "detail": {"task_type": task_type_value, "stone_cost": int(costls)},
                     },
                 )
-            await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
+            await handle_send(bot, event, msg, md_type="宗门", k1="接取", v1="宗门任务接取", k2="完成", v2="宗门任务完成", k3="信息", v3="我的宗门", k4="日常", v4="日常")
             await sect_task_complete.finish()
     else:
         msg = f"道友尚未加入宗门，请加入宗门后再完成任务，但你申请出门的机会我已经用小本本记下来了！"

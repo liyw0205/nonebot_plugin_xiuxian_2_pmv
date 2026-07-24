@@ -36,3 +36,11 @@
 ## handle_send 按钮
 
 业务回文尽量带 `md_type` 与 `k1/v1`（及 k2/v2…），避免空按钮。
+
+推荐用 `status_card.nav_kwargs("work")` / `daily_action_buttons` 生成情境导航，避免各处复制粘贴。
+
+## 结果卡
+
+`status_card.result_card(title, kind=..., summary=..., pairs=...)`  
+冷却：`cooldown_msg` / 文案前缀 `⏳`  
+媒体失败：`media_fail_hint`（不塞修仙按钮）

@@ -37,6 +37,8 @@ def last_init_error() -> str | None:
 
 
 def _format_meta_line(meta: dict[str, Any]) -> str:
+    from ...xiuxian_utils.status_card import media_fail_hint
+
     platform = meta.get("platform") or meta.get("parser_name") or "未知"
     title = (meta.get("title") or "").strip()
     author = (meta.get("author") or "").strip()
@@ -48,8 +50,7 @@ def _format_meta_line(meta: dict[str, Any]) -> str:
     lines: list[str] = [f"【媒体解析】{platform}"]
     err = meta.get("error")
     if err:
-        lines.append("状态：解析失败")
-        lines.append(f"原因：{err}")
+        lines.append(media_fail_hint(str(err), platform=str(platform)))
         if display_url:
             lines.append(f"原始链接：{display_url}")
         return "\n".join(lines)
@@ -62,8 +63,9 @@ def _format_meta_line(meta: dict[str, Any]) -> str:
         lines.append(f"简介：{d}")
     if display_url:
         lines.append(f"原始链接：{display_url}")
-    if not meta.get("video_urls") and not meta.get("image_urls"):
-        lines.append("提示：未提取到可发送媒体，可尝试打开原始链接")
+    if not meta.get("video_urls") and not meta.get("image_urls") and not meta.get("audio_urls"):
+        lines.append(media_fail_hint("未提取到可发送媒体", platform=str(platform)))
+        lines.append("可尝试打开原始链接")
     if len(lines) == 1:
         lines.append("提示：无标题信息")
     return "\n".join(lines)
