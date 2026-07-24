@@ -1284,15 +1284,20 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         operation_id = running_operation or _admin_operation_id(
             event, "player-status-reset-all", "all"
         )
-        while True:
-            result = admin_player_status_batch_reset_service.reset(
-                operation_id,
-                operator_id,
-                all_users or (),
-                max_stamina,
-            )
-            if result.status != "applied" or result.completed >= result.total:
-                break
+        try:
+            while True:
+                result = admin_player_status_batch_reset_service.reset(
+                    operation_id,
+                    operator_id,
+                    all_users or (),
+                    max_stamina,
+                )
+                if result.status != "applied" or result.completed >= result.total:
+                    break
+        except Exception as e:
+            logger.opt(exception=e).error(f"全服重置状态失败 op={operation_id}")
+            await handle_send(bot, event, f"全服重置状态失败：{e}")
+            await restate.finish()
         if result.status == "operation_conflict":
             msg = "本次全服状态重置与已记录计划冲突"
         else:
@@ -1322,6 +1327,7 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 expected_state,
                 XiuConfig().max_stamina,
                 target_name=nick_name or str(give_qq),
+                force=True,
             )
         except Exception as e:
             logger.opt(exception=e).error(f"重置状态失败 user={give_qq}")

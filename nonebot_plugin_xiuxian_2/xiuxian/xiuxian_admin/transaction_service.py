@@ -2533,6 +2533,7 @@ class AdminPlayerStatusResetService:
         max_stamina,
         *,
         target_name="",
+        force: bool = False,
     ) -> AdminPlayerStatusResetResult:
         operation_id = str(operation_id).strip()
         operator_id = str(operator_id).strip()
@@ -2551,7 +2552,7 @@ class AdminPlayerStatusResetService:
                 raise ValueError("complete status snapshot is required")
 
         payload = json.dumps(
-            [operator_id, user_id, max_stamina],
+            [operator_id, user_id, max_stamina, 1 if force else 0],
             ensure_ascii=True,
             separators=(",", ":"),
         )
@@ -2583,7 +2584,11 @@ class AdminPlayerStatusResetService:
                     conn.rollback()
                     return AdminPlayerStatusResetResult("user_missing")
                 actual_state = self._state(row)
-                if normalized_expected is not None and actual_state != normalized_expected:
+                if (
+                    not force
+                    and normalized_expected is not None
+                    and actual_state != normalized_expected
+                ):
                     conn.rollback()
                     return AdminPlayerStatusResetResult(
                         "state_changed", actual_state, actual_state
@@ -2597,34 +2602,24 @@ class AdminPlayerStatusResetService:
                     exp // 10,
                     max_stamina,
                 )
-                # CAST AS REAL：避免超大 int 绑 INTEGER 溢出；WHERE 用 REAL 比绝对值，
-                # 避免 float 读出与 int 快照在 TEXT/INTEGER 等号上对不上。
+                # 管理端强制重算：仅按 user_id 更新。
+                # 旧逻辑多字段 CAST REAL CAS 在超大 REAL/科学计数上易 rowcount=0 → 假 state_changed。
                 changed = conn.execute(
                     "UPDATE user_xiuxian SET "
                     "hp=CAST(%s AS REAL),mp=CAST(%s AS REAL),"
                     "atk=CAST(%s AS REAL),user_stamina=%s "
-                    "WHERE user_id=%s "
-                    "AND CAST(COALESCE(exp,0) AS REAL)=CAST(%s AS REAL) "
-                    "AND CAST(COALESCE(hp,0) AS REAL)=CAST(%s AS REAL) "
-                    "AND CAST(COALESCE(mp,0) AS REAL)=CAST(%s AS REAL) "
-                    "AND CAST(COALESCE(atk,0) AS REAL)=CAST(%s AS REAL) "
-                    "AND COALESCE(user_stamina,0)=%s",
+                    "WHERE user_id=%s",
                     (
                         number_count(final_state[1]),
                         number_count(final_state[2]),
                         number_count(final_state[3]),
                         int(final_state[4]),
                         user_id,
-                        number_count(actual_state[0]),
-                        number_count(actual_state[1]),
-                        number_count(actual_state[2]),
-                        number_count(actual_state[3]),
-                        int(actual_state[4]),
                     ),
                 )
                 if changed.rowcount != 1:
                     conn.rollback()
-                    return AdminPlayerStatusResetResult("state_changed")
+                    return AdminPlayerStatusResetResult("state_changed", actual_state, actual_state)
 
                 conn.execute(
                     "INSERT INTO admin_player_status_reset_operations("
@@ -2891,8 +2886,10 @@ class AdminPlayerStatusBatchResetService:
 
         for user_id in pending:
             result = None
-            for _ in range(3):
+            for attempt in range(4):
                 expected_state = self._reset_service.snapshot(user_id)
+                # 批处理第 3 次起强制写，避免 REAL 大数 CAS / 并发抖动整批崩掉
+                force = attempt >= 2
                 result = self._reset_service.reset(
                     f"admin-player-status-reset-batch:{operation_id}:{user_id}",
                     request["operator_id"],
@@ -2900,17 +2897,24 @@ class AdminPlayerStatusBatchResetService:
                     expected_state,
                     request["max_stamina"],
                     target_name="all",
+                    force=force,
                 )
                 if result.status != "state_changed":
                     break
+            if result is None:
+                continue
             if result.status == "operation_conflict":
-                raise RuntimeError(
-                    f"player status batch child operation conflict: {user_id}"
+                # 子操作冲突：记跳过，不中断全服
+                self._record(
+                    operation_id,
+                    user_id,
+                    AdminPlayerStatusResetResult("operation_conflict"),
                 )
+                continue
             if result.status == "state_changed":
-                raise RuntimeError(
-                    f"player status remained unstable during batch reset: {user_id}"
-                )
+                # 仍抖动则记跳过，管理员可单独对用户再重置
+                self._record(operation_id, user_id, result)
+                continue
             self._record(operation_id, user_id, result)
 
         with self._lock, closing(db_backend.connect(self._database)) as conn:
