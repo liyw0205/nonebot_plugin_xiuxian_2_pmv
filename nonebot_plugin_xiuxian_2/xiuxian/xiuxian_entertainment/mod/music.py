@@ -7,6 +7,7 @@ from .music_utils import (
     set_music_session,
     get_music_session,
     clear_music_session,
+    touch_music_session,
     build_song_list_page_text,
     send_song_rich,
     get_platform_display_name,
@@ -294,7 +295,8 @@ async def music_select_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await music_select_cmd.finish()
 
     selected_song = songs[index - 1]
-    clear_music_session(user_id)
+    # 选歌后保留列表 120s（配置 select_timeout），仅刷新过期；重搜/超时才清理
+    touch_music_session(user_id)
 
     ok, tip = await send_song_rich(bot, event, selected_song)
     if not ok:

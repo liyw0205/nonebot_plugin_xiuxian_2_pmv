@@ -15,9 +15,9 @@ from ...xiuxian_utils.utils import build_md_command_link, escape_markdown_text
 # 配置
 # =========================
 DEFAULT_CONFIG = {
-    "default_platform": "netease",     # 默认平台
+    "default_platform": "netease",     # 默认平台：点歌 / 网易点歌
     "song_limit": 30,                  # 搜索返回数量
-    "select_timeout": 45,              # 选歌超时秒数
+    "select_timeout": 120,             # 选歌列表保留秒数（重搜/超时才清）
     "api_base": "https://music.txqq.pro/",
     "page_size": 10,                    # 每页显示数量（翻页用）
 }
@@ -98,6 +98,18 @@ def get_music_session(user_id: str) -> Optional[dict]:
     return data
 
 
+def touch_music_session(user_id: str, timeout_sec: int | None = None) -> Optional[dict]:
+    """选歌后刷新过期时间，不清理列表。"""
+    clean_expired_music_session()
+    data = MUSIC_SELECT_CACHE.get(str(user_id))
+    if not data:
+        return None
+    cfg = load_music_config()
+    ttl = int(timeout_sec if timeout_sec is not None else cfg.get("select_timeout", 120))
+    data["expire_at"] = int(time.time()) + max(1, ttl)
+    return data
+
+
 def clear_music_session(user_id: str):
     MUSIC_SELECT_CACHE.pop(str(user_id), None)
 
@@ -106,7 +118,8 @@ def clear_music_session(user_id: str):
 # 搜索
 # =========================
 PLATFORM_ALIAS = {
-    "qq": ["qq点歌", "点歌", "qq音乐"],
+    # 裸「点歌」走配置 default_platform（网易），不在这里绑死 QQ
+    "qq": ["qq点歌", "qq音乐"],
     "netease": ["网易点歌", "网易云点歌", "网易云音乐"],
     "kugou": ["酷狗点歌", "酷狗音乐"],
     "kuwo": ["酷我点歌", "酷我音乐"],
@@ -122,8 +135,11 @@ PLATFORM_ALIAS = {
 }
 
 
-def detect_platform_from_cmd(cmd: str, fallback: str = "qq") -> str:
+def detect_platform_from_cmd(cmd: str, fallback: str = "netease") -> str:
     cmd_lower = cmd.strip().lower()
+    # 纯「点歌」→ 配置默认（网易）
+    if cmd_lower in {"点歌", "音乐", "music"}:
+        return fallback
     for platform, words in PLATFORM_ALIAS.items():
         for word in words:
             if word.lower() == cmd_lower:
@@ -182,13 +198,26 @@ def search_music(keyword: str, platform: Optional[str] = None, limit: Optional[i
 
     songs = []
     for s in items[:limit]:
+        cover = s.get("pic") or s.get("cover") or s.get("cover_url") or ""
+        if isinstance(cover, str) and cover.startswith("http://"):
+            cover = "https://" + cover[len("http://"):]
+        audio = s.get("url") or s.get("link_audio") or s.get("audio") or ""
+        page_link = s.get("link") or s.get("page") or ""
         songs.append({
             "id": str(s.get("songid") or s.get("id") or ""),
             "name": s.get("title") or s.get("name") or "未知歌曲",
             "artists": s.get("author") or s.get("artists") or "未知歌手",
-            "audio_url": s.get("url") or s.get("link"),
-            "cover_url": s.get("pic"),
-            "lyrics": s.get("lrc", ""),
+            "audio_url": audio,
+            "cover_url": cover,
+            "page_url": page_link,
+            "platform": s.get("type") or platform,
+            "lyrics": s.get("lrc", "") or "",
+            # 保留原始字段，便于后续卡片扩展
+            "raw": {
+                k: s.get(k)
+                for k in ("type", "songid", "title", "author", "pic", "url", "link")
+                if k in s
+            },
         })
     return songs
 
@@ -266,23 +295,43 @@ def _clean_song_field(value: Any, default: str) -> str:
     return text or default
 
 
-def build_song_plain_text(song_name: str, artists: str) -> str:
-    return f"【点歌】\n歌名：{song_name}\n歌手：{artists}"
+def build_song_plain_text(song_name: str, artists: str, *, platform: str = "", song_id: str = "") -> str:
+    lines = ["【点歌】", f"歌名：{song_name}", f"歌手：{artists}"]
+    if platform:
+        lines.append(f"来源：{platform}")
+    if song_id:
+        lines.append(f"ID：{song_id}")
+    return "\n".join(lines)
 
 
-def build_song_markdown_text(song_name: str, artists: str) -> str:
+def build_song_markdown_text(
+    song_name: str,
+    artists: str,
+    *,
+    cover_url: str = "",
+    platform: str = "",
+    song_id: str = "",
+    page_url: str = "",
+) -> str:
+    """选歌结果卡片：大封面 + 信息（图集同款 MD 图语法）。"""
     retry_link = build_md_command_link("再搜此歌", f"点歌 {song_name}")
     help_link = build_md_command_link("点歌帮助", "点歌帮助")
-    return "\n".join(
-        [
-            "**点歌**",
-            "",
-            f"> **歌名**：{escape_markdown_text(song_name)}",
-            f"> **歌手**：{escape_markdown_text(artists)}",
-            "",
-            f"{retry_link} / {help_link}",
-        ]
-    )
+    lines = ["**点歌**", ""]
+    cover = _md_cover_thumb(cover_url, size=120) if cover_url else ""
+    if cover:
+        lines.append(cover)
+        lines.append("")
+    lines.append(f"> **歌名**：{escape_markdown_text(song_name)}")
+    lines.append(f"> **歌手**：{escape_markdown_text(artists)}")
+    if platform:
+        lines.append(f"> **来源**：{escape_markdown_text(platform)}")
+    if song_id:
+        lines.append(f"> **ID**：`{escape_markdown_text(song_id)}`")
+    if page_url and str(page_url).startswith("http"):
+        lines.append(f"> [歌曲页]({page_url})")
+    lines.append("")
+    lines.append(f"{retry_link} / {help_link}")
+    return "\n".join(lines)
 
 
 # =========================
@@ -291,8 +340,8 @@ def build_song_markdown_text(song_name: str, artists: str) -> str:
 async def send_song_rich(bot: Bot, event, song: dict) -> tuple[bool, str]:
     """
     发送顺序：
-    1) 有封面时优先普通图文混合，保证封面和文本在同一条消息
-    2) 无封面时原生MD文字（若开启，频道会自动降级普通文本）
+    1) 开启 MD：封面卡片（大图+信息）
+    2) 有封面：图文混合
     3) 普通文本
     每条文本后补发音频（若有）
     """
@@ -302,12 +351,50 @@ async def send_song_rich(bot: Bot, event, song: dict) -> tuple[bool, str]:
     config = XiuConfig()
     song_name = _clean_song_field(song.get("name"), "未知歌曲")
     artists = _clean_song_field(song.get("artists"), "未知歌手")
-    cover_url = song.get("cover_url")
-    audio_url = song.get("audio_url")
+    cover_url = song.get("cover_url") or ""
+    audio_url = song.get("audio_url") or ""
+    page_url = song.get("page_url") or ""
+    platform = get_platform_display_name(str(song.get("platform") or ""))
+    song_id = _clean_song_field(song.get("id"), "")
 
-    text_msg = build_song_plain_text(song_name, artists)
+    text_msg = build_song_plain_text(
+        song_name, artists, platform=platform, song_id=song_id
+    )
+    md_msg = build_song_markdown_text(
+        song_name,
+        artists,
+        cover_url=str(cover_url or ""),
+        platform=platform,
+        song_id=song_id,
+        page_url=str(page_url or ""),
+    )
 
-    # ===== 1) 封面 + 文本同条发送 =====
+    # ===== 1) 原生 MD 卡片（封面图 + 字段）=====
+    if config.markdown_status:
+        try:
+            await handle_send(
+                bot,
+                event,
+                md_msg,
+                native_markdown=True,
+                fallback_msg=text_msg,
+                keyboard_rows=[
+                    [("再搜此歌", f"点歌 {song_name}"), ("点歌帮助", "点歌帮助")]
+                ],
+                at_msg=False,
+            )
+            if audio_url:
+                try:
+                    await handle_audio_send(bot, event, audio_url)
+                    return True, "发送成功"
+                except Exception as e:
+                    logger.warning(f"点歌音频发送失败：{e}")
+                    return False, f"【{song_name} - {artists}】音频发送失败：{e}"
+            return False, f"【{song_name} - {artists}】无可用音频链接"
+        except Exception as e:
+            logger.warning(f"点歌 Markdown 卡片发送失败，准备降级：{e}")
+
+    # ===== 2) 封面 + 文本同条发送 =====
     if cover_url:
         try:
             await handle_pic_msg_send(bot, event, cover_url, text_msg)
@@ -323,33 +410,6 @@ async def send_song_rich(bot: Bot, event, song: dict) -> tuple[bool, str]:
 
         except Exception as e:
             logger.warning(f"点歌图文发送失败，准备降级文本：{e}")
-
-    # ===== 2) 无封面或图文失败时，Markdown文字 =====
-    if config.markdown_status:
-        try:
-            await handle_send(
-                bot,
-                event,
-                build_song_markdown_text(song_name, artists),
-                native_markdown=True,
-                fallback_msg=text_msg,
-                keyboard_rows=[
-                    [("再搜此歌", f"点歌 {song_name}"), ("点歌帮助", "点歌帮助")]
-                ],
-                at_msg=False,
-            )
-
-            if audio_url:
-                try:
-                    await handle_audio_send(bot, event, audio_url)
-                    return True, "发送成功"
-                except Exception as e:
-                    logger.warning(f"点歌音频发送失败：{e}")
-                    return False, f"【{song_name} - {artists}】音频发送失败：{e}"
-            return False, f"【{song_name} - {artists}】无可用音频链接"
-
-        except Exception as e:
-            logger.warning(f"点歌 Markdown发送失败：{e}")
 
     # ===== 3) 普通文本 =====
     try:
