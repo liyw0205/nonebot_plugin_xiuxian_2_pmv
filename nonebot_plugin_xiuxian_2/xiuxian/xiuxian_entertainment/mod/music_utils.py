@@ -295,12 +295,46 @@ def _clean_song_field(value: Any, default: str) -> str:
     return text or default
 
 
-def build_song_plain_text(song_name: str, artists: str, *, platform: str = "", song_id: str = "") -> str:
+def _lyrics_preview_lines(lyrics: Any, limit: int = 10) -> list[str]:
+    """LRC 去时间轴，取前 N 行有效歌词。"""
+    import re
+
+    text = str(lyrics or "").replace("\r\n", "\n").replace("\r", "\n")
+    if not text.strip():
+        return []
+    # [00:12.34] / [00:12.345] / [mm:ss]
+    ts_re = re.compile(r"^\[(?:\d{1,2}:)+\d{1,2}(?:\.\d{1,3})?\]\s*")
+    out: list[str] = []
+    for raw in text.split("\n"):
+        line = ts_re.sub("", raw).strip()
+        if not line:
+            continue
+        # 跳过空标签残留
+        if line in {"作词", "作曲", "编曲"}:
+            continue
+        out.append(line)
+        if len(out) >= max(1, int(limit)):
+            break
+    return out
+
+
+def build_song_plain_text(
+    song_name: str,
+    artists: str,
+    *,
+    platform: str = "",
+    song_id: str = "",
+    lyrics: str = "",
+) -> str:
     lines = ["【点歌】", f"歌名：{song_name}", f"歌手：{artists}"]
     if platform:
         lines.append(f"来源：{platform}")
     if song_id:
         lines.append(f"ID：{song_id}")
+    preview = _lyrics_preview_lines(lyrics, 10)
+    if preview:
+        lines.append("歌词：")
+        lines.extend(preview)
     return "\n".join(lines)
 
 
@@ -312,8 +346,9 @@ def build_song_markdown_text(
     platform: str = "",
     song_id: str = "",
     page_url: str = "",
+    lyrics: str = "",
 ) -> str:
-    """选歌结果卡片：大封面 + 信息（图集同款 MD 图语法）。"""
+    """选歌结果卡片：大封面 + 信息；有歌词则代码框放前 10 行（去时间轴）。"""
     retry_link = build_md_command_link("再搜此歌", f"点歌 {song_name}")
     help_link = build_md_command_link("点歌帮助", "点歌帮助")
     lines = ["**点歌**", ""]
@@ -329,6 +364,12 @@ def build_song_markdown_text(
         lines.append(f"> **ID**：`{escape_markdown_text(song_id)}`")
     if page_url and str(page_url).startswith("http"):
         lines.append(f"> [歌曲页]({page_url})")
+    preview = _lyrics_preview_lines(lyrics, 10)
+    if preview:
+        lines.append("")
+        lines.append("```")
+        lines.extend(preview)
+        lines.append("```")
     lines.append("")
     lines.append(f"{retry_link} / {help_link}")
     return "\n".join(lines)
@@ -356,9 +397,10 @@ async def send_song_rich(bot: Bot, event, song: dict) -> tuple[bool, str]:
     page_url = song.get("page_url") or ""
     platform = get_platform_display_name(str(song.get("platform") or ""))
     song_id = _clean_song_field(song.get("id"), "")
+    lyrics = str(song.get("lyrics") or "")
 
     text_msg = build_song_plain_text(
-        song_name, artists, platform=platform, song_id=song_id
+        song_name, artists, platform=platform, song_id=song_id, lyrics=lyrics
     )
     md_msg = build_song_markdown_text(
         song_name,
@@ -367,6 +409,7 @@ async def send_song_rich(bot: Bot, event, song: dict) -> tuple[bool, str]:
         platform=platform,
         song_id=song_id,
         page_url=str(page_url or ""),
+        lyrics=lyrics,
     )
 
     # ===== 1) 原生 MD 卡片（封面图 + 字段）=====
