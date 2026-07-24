@@ -2325,7 +2325,9 @@ async def mentor_transmission_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await handle_send(bot, event, "徒弟今日可接受传功次数已用尽。", **buttons)
         await mentor_transmission.finish()
 
-    apprentice_exp = int(apprentice_info["exp"])
+    from ..xiuxian_utils.numeric_bind import as_int_like, percent_exp_reward
+
+    apprentice_exp = as_int_like(apprentice_info["exp"])
     max_exp_limit = int(OtherSet().set_closing_type(apprentice_info["level"])) * XiuConfig().closing_exp_upper_limit
     remaining_exp = int(max_exp_limit - apprentice_exp)
     if remaining_exp <= 0:
@@ -2333,7 +2335,11 @@ async def mentor_transmission_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await mentor_transmission.finish()
 
     effect_ratio = min(gap, MENTOR_MAX_EFFECT_GAP) / MENTOR_MAX_EFFECT_GAP
-    once_cap = max(1, int(apprentice_exp * 0.01))
+    # 1% 基础 cap，再乘境界差效果，并套双修同款 rank 压制
+    once_cap = max(
+        1,
+        percent_exp_reward(apprentice_exp, 0.01, apprentice_info["level"]),
+    )
     give_exp = max(1, int(once_cap * effect_ratio))
     give_exp = min(give_exp, once_cap, remaining_exp)
 

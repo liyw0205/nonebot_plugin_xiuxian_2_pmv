@@ -30,6 +30,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
 )
 from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
+from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from .transaction_service import DemonAttackSettlementService
 from .transaction_service import DemonClaimService
 from .transaction_service import DemonEventLifecycleService
@@ -1444,7 +1445,12 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         if not (reward_pending or no_reward_event or no_contribution or already_claimed):
             contribution = _reward_contribution(raw_contribution)
             stone_reward = min(int(DEMON_STONE_REWARD_CAP * contribution), DEMON_STONE_REWARD_CAP)
-            exp_reward = int(max(_to_int(user_info.get("exp"), 0), 1) * DEMON_EXP_REWARD_CAP_RATE * contribution)
+            # 最高约 5%×贡献，再按境界 rank 压制（与双修/塔一致）
+            exp_reward = percent_exp_reward(
+                max(_to_int(user_info.get("exp"), 0), 1),
+                DEMON_EXP_REWARD_CAP_RATE * contribution,
+                user_info.get("level"),
+            )
             talisman_reward = _demon_talisman_reward_count(contribution)
             random_reward = None
             if random.random() <= contribution:

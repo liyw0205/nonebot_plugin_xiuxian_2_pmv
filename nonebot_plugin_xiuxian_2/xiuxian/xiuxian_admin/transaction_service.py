@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from threading import RLock
 from ..xiuxian_utils import db_backend
+from ..xiuxian_utils.numeric_bind import as_int_like, number_count
 from datetime import datetime
 from typing import Callable
 
@@ -2508,7 +2509,8 @@ class AdminPlayerStatusResetService:
 
     @staticmethod
     def _state(row) -> tuple[int, int, int, int, int]:
-        return tuple(int(value or 0) for value in row)
+        # 高境界 exp/hp 可能是 REAL 科学计数或超大整数，不能裸 int 绑 INTEGER
+        return tuple(as_int_like(value, 0) for value in row)
 
     def snapshot(self, user_id) -> tuple[int, int, int, int, int] | None:
         user_id = str(user_id).strip()
@@ -2544,7 +2546,7 @@ class AdminPlayerStatusResetService:
         if expected_state is None:
             normalized_expected = None
         else:
-            normalized_expected = tuple(int(value or 0) for value in expected_state)
+            normalized_expected = tuple(as_int_like(value, 0) for value in expected_state)
             if len(normalized_expected) != 5:
                 raise ValueError("complete status snapshot is required")
 
@@ -2581,7 +2583,7 @@ class AdminPlayerStatusResetService:
                     conn.rollback()
                     return AdminPlayerStatusResetResult("user_missing")
                 actual_state = self._state(row)
-                if actual_state != normalized_expected:
+                if normalized_expected is not None and actual_state != normalized_expected:
                     conn.rollback()
                     return AdminPlayerStatusResetResult(
                         "state_changed", actual_state, actual_state
@@ -2595,18 +2597,29 @@ class AdminPlayerStatusResetService:
                     exp // 10,
                     max_stamina,
                 )
+                # CAST AS REAL：避免超大 int 绑 INTEGER 溢出；WHERE 用 REAL 比绝对值，
+                # 避免 float 读出与 int 快照在 TEXT/INTEGER 等号上对不上。
                 changed = conn.execute(
-                    "UPDATE user_xiuxian SET hp=%s,mp=%s,atk=%s,user_stamina=%s "
-                    "WHERE user_id=%s AND COALESCE(exp,0)=%s AND COALESCE(hp,0)=%s "
-                    "AND COALESCE(mp,0)=%s AND COALESCE(atk,0)=%s "
+                    "UPDATE user_xiuxian SET "
+                    "hp=CAST(%s AS REAL),mp=CAST(%s AS REAL),"
+                    "atk=CAST(%s AS REAL),user_stamina=%s "
+                    "WHERE user_id=%s "
+                    "AND CAST(COALESCE(exp,0) AS REAL)=CAST(%s AS REAL) "
+                    "AND CAST(COALESCE(hp,0) AS REAL)=CAST(%s AS REAL) "
+                    "AND CAST(COALESCE(mp,0) AS REAL)=CAST(%s AS REAL) "
+                    "AND CAST(COALESCE(atk,0) AS REAL)=CAST(%s AS REAL) "
                     "AND COALESCE(user_stamina,0)=%s",
                     (
-                        final_state[1],
-                        final_state[2],
-                        final_state[3],
-                        final_state[4],
+                        number_count(final_state[1]),
+                        number_count(final_state[2]),
+                        number_count(final_state[3]),
+                        int(final_state[4]),
                         user_id,
-                        *actual_state,
+                        number_count(actual_state[0]),
+                        number_count(actual_state[1]),
+                        number_count(actual_state[2]),
+                        number_count(actual_state[3]),
+                        int(actual_state[4]),
                     ),
                 )
                 if changed.rowcount != 1:
@@ -2620,8 +2633,16 @@ class AdminPlayerStatusResetService:
                     (
                         operation_id,
                         payload,
-                        json.dumps(actual_state, separators=(",", ":")),
-                        json.dumps(final_state, separators=(",", ":")),
+                        json.dumps(
+                            [number_count(x) if i < 4 else x for i, x in enumerate(actual_state)],
+                            separators=(",", ":"),
+                            ensure_ascii=True,
+                        ),
+                        json.dumps(
+                            [number_count(x) if i < 4 else x for i, x in enumerate(final_state)],
+                            separators=(",", ":"),
+                            ensure_ascii=True,
+                        ),
                     ),
                 )
                 conn.commit()

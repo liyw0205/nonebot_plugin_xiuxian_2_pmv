@@ -10,6 +10,7 @@ from ..xiuxian_utils.utils import (
 )
 from ..xiuxian_config import convert_rank, base_rank
 from ..xiuxian_utils.item_json import Items
+from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from .tower_data import tower_data
 from .tower_limit import tower_limit
 from .transaction_service import TowerSettlementService
@@ -168,7 +169,11 @@ class TowerBattle:
                 
                 item, item_msg = self._select_random_item(user_info["level"], reward_rng)
                 user_rank = max(convert_rank(user_info['level'])[0] // 3, 1)
-                exp_reward = int(user_info["exp"] * self.config["修为奖励"]["每10层"] * min(0.1 * user_rank, 1))
+                exp_reward = percent_exp_reward(
+                    user_info["exp"],
+                    self.config["修为奖励"]["每10层"],
+                    user_rank,
+                )
                 total_exp += exp_reward
                 if item:
                     reward_items.append(item)
@@ -184,7 +189,11 @@ class TowerBattle:
                 
                 item, item_msg = self._select_random_item(user_info["level"], reward_rng)
                 user_rank = max(convert_rank(user_info['level'])[0] // 3, 1)
-                exp_reward = int(user_info["exp"] * self.config["修为奖励"]["每10层"] * 2 * min(0.1 * user_rank, 1))
+                exp_reward = percent_exp_reward(
+                    user_info["exp"],
+                    self.config["修为奖励"]["每10层"] * 2,
+                    user_rank,
+                )
                 total_exp += exp_reward
                 if item:
                     reward_items.append(item)
@@ -302,7 +311,12 @@ class TowerBattle:
                     total_stone += extra_stone
                     
                     item, item_msg = self._select_random_item(user_info["level"], reward_rng)
-                    exp_reward = int(user_info["exp"] * self.config["修为奖励"]["每10层"])
+                    user_rank = max(convert_rank(user_info["level"])[0] // 3, 1)
+                    exp_reward = percent_exp_reward(
+                        user_info["exp"],
+                        self.config["修为奖励"]["每10层"],
+                        user_rank,
+                    )
                     total_exp += exp_reward
                     if item:
                         reward_items.append(item)
@@ -316,7 +330,12 @@ class TowerBattle:
                     total_stone += extra_stone
                     
                     item, item_msg = self._select_random_item(user_info["level"], reward_rng)
-                    exp_reward = int(user_info["exp"] * self.config["修为奖励"]["每10层"] * 2)
+                    user_rank = max(convert_rank(user_info["level"])[0] // 3, 1)
+                    exp_reward = percent_exp_reward(
+                        user_info["exp"],
+                        self.config["修为奖励"]["每10层"] * 2,
+                        user_rank,
+                    )
                     total_exp += exp_reward
                     if item:
                         reward_items.append(item)

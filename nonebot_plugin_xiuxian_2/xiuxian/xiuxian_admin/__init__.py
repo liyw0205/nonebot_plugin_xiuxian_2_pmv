@@ -1268,7 +1268,10 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
     """重置用户状态"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     give_qq = get_at_user_id(args)
-    if not args:
+    plain_text = (args.extract_plain_text() if args is not None else "") or ""
+    plain_args = plain_text.split()
+    # 无纯文本判空：QQ 官方 AT 事件可能带 mention 段，bool(args) 为真却无道号
+    if not plain_args and not give_qq:
         all_users = sql_message.get_all_user_id()
         operator_id = str(get_user_id(event) or "unknown")
         max_stamina = XiuConfig().max_stamina
@@ -1299,9 +1302,8 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             )
         await handle_send(bot, event, msg)
         await restate.finish()
-    plain_args = args.extract_plain_text().split()
     nick_name = plain_args[0] if plain_args else ""
-    if nick_name:
+    if nick_name and not give_qq:
         give_message = sql_message.get_user_info_with_name(nick_name)
         if give_message:
             give_qq = give_message['user_id']
@@ -1309,22 +1311,32 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             give_qq = None
     if give_qq:
         expected_state = admin_player_status_reset_service.snapshot(give_qq)
-        result = admin_player_status_reset_service.reset(
-            _admin_operation_id(event, "player-status-reset", str(give_qq)),
-            str(get_user_id(event) or "unknown"),
-            give_qq,
-            expected_state,
-            XiuConfig().max_stamina,
-            target_name=nick_name or str(give_qq),
-        )
+        if expected_state is None:
+            await handle_send(bot, event, "目标玩家已不存在")
+            await restate.finish()
+        try:
+            result = admin_player_status_reset_service.reset(
+                _admin_operation_id(event, "player-status-reset", str(give_qq)),
+                str(get_user_id(event) or "unknown"),
+                give_qq,
+                expected_state,
+                XiuConfig().max_stamina,
+                target_name=nick_name or str(give_qq),
+            )
+        except Exception as e:
+            logger.opt(exception=e).error(f"重置状态失败 user={give_qq}")
+            await handle_send(bot, event, f"重置状态失败：{e}")
+            await restate.finish()
         if result.status == "state_changed":
             msg = "玩家状态已变化，请重新执行指令"
         elif result.status == "operation_conflict":
             msg = "本次管理员状态重置与已记录事件冲突"
         elif result.status == "user_missing":
             msg = "目标玩家已不存在"
-        else:
+        elif result.succeeded:
             msg = f"{give_qq}用户信息重置成功！"
+        else:
+            msg = f"重置状态失败：{result.status}"
         await handle_send(bot, event, msg)
         await restate.finish()
     else:

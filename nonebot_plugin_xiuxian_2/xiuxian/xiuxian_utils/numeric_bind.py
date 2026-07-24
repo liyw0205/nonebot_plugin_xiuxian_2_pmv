@@ -146,6 +146,51 @@ def sql_num_nonneg(value: Any):
     return out
 
 
+def rank_suppress_factor(level_or_rank: Any, *, divide_by_three: bool = False) -> float:
+    """双修同款境界压制：min(0.1 * rank_slot, 1)。
+
+    - 传入境界名：用 convert_rank(level)[0]
+    - 传入 int：视为已算好的 rank 值
+    - divide_by_three=True：与 BOSS/历练完成轮等「rank//3」口径一致
+    """
+    try:
+        if isinstance(level_or_rank, (int, float)) and not isinstance(level_or_rank, bool):
+            rank_val = int(level_or_rank)
+        else:
+            from ..xiuxian_config import convert_rank
+
+            rank_val = int(convert_rank(str(level_or_rank or ""))[0])
+    except Exception:
+        rank_val = 1
+    if divide_by_three:
+        rank_val = max(rank_val // 3, 1)
+    else:
+        rank_val = max(rank_val, 1)
+    return float(min(0.1 * rank_val, 1.0))
+
+
+def percent_exp_reward(
+    current_exp: Any,
+    percent: float,
+    level_or_rank: Any = None,
+    *,
+    divide_by_three: bool = False,
+    apply_rank_suppress: bool = True,
+) -> int:
+    """当前修为 × 百分比，可选境界压制。返回非负 int（可超 SQLite INTEGER）。"""
+    exp = max(0, as_int_like(current_exp, 0))
+    try:
+        rate = float(percent or 0.0)
+    except (TypeError, ValueError):
+        rate = 0.0
+    if exp <= 0 or rate <= 0:
+        return 0
+    factor = 1.0
+    if apply_rank_suppress and level_or_rank is not None:
+        factor = rank_suppress_factor(level_or_rank, divide_by_three=divide_by_three)
+    return int(exp * rate * factor)
+
+
 def bind_sqlite_param(value: Any) -> Any:
     """
     Param adapter for SQLite drivers.
