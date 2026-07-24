@@ -295,25 +295,24 @@ def _clean_song_field(value: Any, default: str) -> str:
     return text or default
 
 
-def _lyrics_preview_lines(lyrics: Any, limit: int = 10) -> list[str]:
-    """LRC 去时间轴，取前 N 行有效歌词。"""
+def _lyrics_preview_lines(lyrics: Any, limit: int | None = None) -> list[str]:
+    """LRC 去时间轴；默认全文，每行独立。limit 仅兼容旧调用。"""
     import re
 
     text = str(lyrics or "").replace("\r\n", "\n").replace("\r", "\n")
     if not text.strip():
         return []
-    # [00:12.34] / [00:12.345] / [mm:ss]
-    ts_re = re.compile(r"^\[(?:\d{1,2}:)+\d{1,2}(?:\.\d{1,3})?\]\s*")
+    # [00:12.34] / [00:12.345] / [mm:ss]；同一行可能叠多个时间戳
+    ts_re = re.compile(r"\[(?:\d{1,2}:)+\d{1,2}(?:\.\d{1,3})?\]\s*")
     out: list[str] = []
     for raw in text.split("\n"):
         line = ts_re.sub("", raw).strip()
         if not line:
             continue
-        # 跳过空标签残留
         if line in {"作词", "作曲", "编曲"}:
             continue
         out.append(line)
-        if len(out) >= max(1, int(limit)):
+        if limit is not None and len(out) >= max(1, int(limit)):
             break
     return out
 
@@ -331,9 +330,10 @@ def build_song_plain_text(
         lines.append(f"来源：{platform}")
     if song_id:
         lines.append(f"ID：{song_id}")
-    preview = _lyrics_preview_lines(lyrics, 10)
+    preview = _lyrics_preview_lines(lyrics)
     if preview:
         lines.append("歌词：")
+        # 每行歌词后强制单独成行（join 用 \n）
         lines.extend(preview)
     return "\n".join(lines)
 
@@ -348,7 +348,7 @@ def build_song_markdown_text(
     page_url: str = "",
     lyrics: str = "",
 ) -> str:
-    """选歌结果卡片：大封面 + 信息；有歌词则代码框放前 10 行（去时间轴）。"""
+    """选歌结果卡片：大封面 + 信息；有歌词则代码框放全文（去时间轴，一行一行）。"""
     retry_link = build_md_command_link("再搜此歌", f"点歌 {song_name}")
     help_link = build_md_command_link("点歌帮助", "点歌帮助")
     lines = ["**点歌**", ""]
@@ -364,9 +364,10 @@ def build_song_markdown_text(
         lines.append(f"> **ID**：`{escape_markdown_text(song_id)}`")
     if page_url and str(page_url).startswith("http"):
         lines.append(f"> [歌曲页]({page_url})")
-    preview = _lyrics_preview_lines(lyrics, 10)
+    preview = _lyrics_preview_lines(lyrics)
     if preview:
         lines.append("")
+        # 代码框内用真实换行，避免挤成一行
         lines.append("```")
         lines.extend(preview)
         lines.append("```")
