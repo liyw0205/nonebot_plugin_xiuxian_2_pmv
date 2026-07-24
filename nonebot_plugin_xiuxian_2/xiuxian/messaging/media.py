@@ -117,8 +117,18 @@ class MediaResolver:
         )
 
     async def build_segment(self, bot: Any, media: MediaInput):
-        value = (await self.resolve(media)).content
+        resolved = await self.resolve(media)
+        value = resolved.content
         builder = getattr(MessageSegment, media.media_type)
+        # QQ 官方适配器：大文件走分片上传需要 file_name；无文件名会退回 base64 直传，易 50015014
+        try:
+            import inspect
+
+            sig = inspect.signature(builder)
+            if "filename" in sig.parameters:
+                return builder(bot, value, filename=resolved.filename)
+        except (TypeError, ValueError):
+            pass
         return builder(bot, value)
 
     async def cleanup(self) -> int:

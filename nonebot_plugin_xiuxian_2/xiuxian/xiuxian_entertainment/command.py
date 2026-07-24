@@ -1084,11 +1084,31 @@ async def get_media_url_api(api_url: str, params: dict | None = None, timeout: i
 
 async def handle_audio_send(bot: Bot, event, audio_url: str):
     """
-    发送音频消息，失败时抛出异常给上层处理
+    发送音频消息，失败时抛出异常给上层处理。
+
+    网易 outer 链下载后体积常 3~8MB；QQ 群上传偶发 50015014「系统繁忙」，做短重试。
     """
     if not audio_url:
         return
-    await send_entertainment_media(bot, event, audio_url, media_type="音频")
+    last_err: BaseException | None = None
+    for attempt in range(3):
+        try:
+            await send_entertainment_media(bot, event, audio_url, media_type="音频")
+            return
+        except Exception as e:
+            last_err = e
+            msg = str(e)
+            busy = (
+                "50015014" in msg
+                or "系统繁忙" in msg
+                or "ActionFailed: 500" in msg
+            )
+            if not busy or attempt >= 2:
+                raise
+            logger.warning(f"音频发送繁忙，重试 {attempt + 1}/3：{e}")
+            await asyncio.sleep(0.8 * (attempt + 1))
+    if last_err is not None:
+        raise last_err
 
 
 async def send_entertainment_image_result(

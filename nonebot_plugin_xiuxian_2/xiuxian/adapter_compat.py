@@ -829,11 +829,14 @@ class CompatMessageSegment:
         raise RuntimeError("当前环境未安装可用适配器，无法构造 image 消息段")
 
     @staticmethod
-    def audio(bot: Any, file: Any):
+    def audio(bot: Any, file: Any, filename: str | None = None):
+        name = CompatMessageSegment._guess_audio_name(file, filename)
         if CompatMessageSegment._is_qq_bot(bot):
             if CompatMessageSegment._is_url(file):
                 return QQMessageSegment.audio(file)  # type: ignore[union-attr]
-            return QQMessageSegment.file_audio(CompatMessageSegment._to_bytes(file))  # type: ignore[union-attr]
+            return QQMessageSegment.file_audio(  # type: ignore[union-attr]
+                CompatMessageSegment._to_bytes(file), file_name=name
+            )
 
         if CompatMessageSegment._is_ob11_bot(bot):
             return OB11MessageSegment.record(file)  # type: ignore[union-attr]
@@ -843,8 +846,25 @@ class CompatMessageSegment:
         if HAS_QQ and QQMessageSegment is not None:
             if CompatMessageSegment._is_url(file):
                 return QQMessageSegment.audio(file)
-            return QQMessageSegment.file_audio(CompatMessageSegment._to_bytes(file))
+            return QQMessageSegment.file_audio(
+                CompatMessageSegment._to_bytes(file), file_name=name
+            )
         raise RuntimeError("当前环境未安装可用适配器，无法构造 audio 消息段")
+
+    @staticmethod
+    def _guess_audio_name(file: Any, filename: str | None = None) -> str:
+        name = (filename or "").strip()
+        if not name and isinstance(file, (str, Path)):
+            try:
+                name = Path(str(file)).name
+            except Exception:
+                name = ""
+        if not name or name in {"media.bin", "default", "file"}:
+            name = "audio.mp3"
+        # 保证有扩展名，官方分片上传按扩展名识别
+        if "." not in Path(name).name:
+            name = f"{name}.mp3"
+        return Path(name).name
 
     @staticmethod
     def video(bot: Any, file: Any):

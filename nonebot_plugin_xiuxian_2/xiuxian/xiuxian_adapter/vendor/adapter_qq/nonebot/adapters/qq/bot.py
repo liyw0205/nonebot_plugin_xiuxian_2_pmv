@@ -472,12 +472,16 @@ class Bot(BaseBot):
 
         if file_segment is not None:
             kwargs["file_data"] = data = file_segment.data["content"]
-            if isinstance(data, bytes) and len(data) > 10 * 1024 * 1024:
-                kwargs["file_name"] = (
-                    DEFAULT_FILENAME
-                    if (file_name := file_segment.data["file_name"]) is None
-                    else file_name
-                )
+            # 官方推荐：>约 10MB 走分片上传。实践中 4~10MB 音频用 base64 直传常 50015014，
+            # 统一对「有文件名的本地附件」走分片（含 .mp3 点歌）。
+            if isinstance(data, bytes) and len(data) > 256 * 1024:
+                name = file_segment.data.get("file_name")
+                if not name:
+                    # 按 file_type 给默认扩展名
+                    ft = kwargs.get("file_type")
+                    suffix = {1: ".jpg", 2: ".mp4", 3: ".mp3", 4: ".bin"}.get(ft, ".bin")
+                    name = f"{DEFAULT_FILENAME}{suffix}"
+                kwargs["file_name"] = name
         return kwargs
 
     async def send_to_dms(
