@@ -203,7 +203,7 @@ async def mix_elixir_dykh_up_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir_dykh_up.finish()
     if not upgrade.succeeded:
-        msg = "丹药控火升级未结算：材料不足，或控火等级刚被改动，请重新查看后再试。"
+        msg = "丹药控火升级未结算：控火数据刚被其他操作改动。"
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir_dykh_up.finish()
     msg = f"道友消耗炼丹经验{upgrade.cost}点，丹药控火等级目前为：{upgrade.level}级，可以使炼丹收获的丹药增加{upgrade.level}个！\n剩余炼丹经验：{upgrade.experience}点"
@@ -296,7 +296,7 @@ async def yaocai_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 await send_msg_handler(bot, event, '灵田收取', bot.self_id, l_msg)
                 await yaocai_get.finish()
             if harvest.status in {"state_changed", "user_missing"}:
-                msg = "药材未发放：灵田尚未成熟，或收取进度刚被改动，请重新查看后再试。"
+                msg = "药材未发放：灵田收取数据刚被其他操作改动。"
                 await handle_send(bot, event, msg, md_type="炼丹", k1="收取", v1="灵田收取", k2="查看", v2="洞天福地查看", k3="帮助", v3="洞天福地帮助")
                 await yaocai_get.finish()
             msg = "".join(

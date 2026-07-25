@@ -1259,7 +1259,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         if not result.succeeded:
             message = (
                 "体力不足，无法移动。" if result.status == "stamina_insufficient"
-                else "移动未结算：位置或体力刚被其他操作改动，请重试。" if result.status == "state_changed"
+                else "移动未结算：数据刚被其他操作改动。" if result.status == "state_changed"
                 else f"无法移动（{result.status}）。"
             )
             await handle_send(bot, event, message)
@@ -1294,7 +1294,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         if not result.succeeded:
             message = (
                 "体力不足，无法移动。" if result.status == "stamina_insufficient"
-                else "移动未结算：位置或体力刚被其他操作改动，请重试。" if result.status == "state_changed"
+                else "移动未结算：数据刚被其他操作改动。" if result.status == "state_changed"
                 else f"无法移动（{result.status}）。"
             )
             await handle_send(bot, event, message)
@@ -1333,7 +1333,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         if not result.succeeded:
             message = (
                 "体力不足，无法移动。" if result.status == "stamina_insufficient"
-                else "移动未结算：位置或体力刚被其他操作改动，请重试。" if result.status == "state_changed"
+                else "移动未结算：数据刚被其他操作改动。" if result.status == "state_changed"
                 else f"无法移动（{result.status}）。"
             )
             await handle_send(bot, event, message)
@@ -1914,7 +1914,7 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
                     return
                 snapshot, raw_snapshot = current.task, current.snapshot
             else:
-                await handle_send(bot, event, "节点战斗未结算：战斗进度或体力刚被改动，请重试。")
+                await handle_send(bot, event, "节点战斗未结算：战斗数据刚被其他操作改动。")
                 return
         else:
             position = get_player_current_position(uid)
@@ -1973,7 +1973,7 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
                     return
                 snapshot, raw_snapshot = current.task, current.snapshot
             elif not started.succeeded or started.task is None:
-                await handle_send(bot, event, "节点战斗未结算：战斗进度或体力刚被改动，请重试。")
+                await handle_send(bot, event, "节点战斗未结算：战斗数据刚被其他操作改动。")
                 return
             else:
                 snapshot, raw_snapshot = started.task, started.snapshot
@@ -2047,7 +2047,7 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await handle_send(bot, event, "背包物品已达上限，节点战斗结算尚未领取。")
         return
     if result.status in {"limit_reached", "state_changed", "user_missing"}:
-        await handle_send(bot, event, "节点战斗未结算：战斗进度或体力刚被改动，请重试。")
+        await handle_send(bot, event, "节点战斗未结算：战斗数据刚被其他操作改动。")
         return
 
     decay_tip = f"\n当前收益系数：{int(snapshot['decay'] * 100)}%" if snapshot["decay"] < 1 else ""

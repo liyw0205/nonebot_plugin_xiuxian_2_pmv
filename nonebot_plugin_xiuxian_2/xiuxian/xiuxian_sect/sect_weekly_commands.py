@@ -248,7 +248,7 @@ async def sect_weekly_claim_(
             f"{name}：{reward_text}" for name, reward_text in result.rewards
         )
     else:
-        msg = status_messages.get(result.status, "宗门周常奖励领取失败，请稍后重试。")
+        msg = status_messages.get(result.status, f"宗门周常奖励领取失败（{result.status}）。")
     await handle_send(
         bot,
         event,

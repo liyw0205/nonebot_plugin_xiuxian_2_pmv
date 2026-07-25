@@ -125,7 +125,7 @@ async def resetting_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await handle_send(bot, event, msg)
             await resetting.finish()
         if not result.succeeded:
-            await handle_send(bot, event, "自废修为未执行：修为不足，或角色数据刚被改动，请重新查看后再试。")
+            await handle_send(bot, event, "自废修为未执行：角色数据刚被其他操作改动。")
             await resetting.finish()
         msg = f"{user_name}现在是一介凡人了！！"
         if result.status == "applied":
@@ -558,7 +558,7 @@ def retrieve_reincarnation_skill(user_id, skill_type, operation_id=None):
         skill_name = items.get_data_by_item_id(result.skill_id).get('name', '未知技能') if result.skill_id else '未知技能'
         return True, f"成功回忆前世中的技能：{skill_name}\n该回忆请求已经处理，无需重复提交。"
     if not result.succeeded:
-        return False, "印记操作未结算：印记不足或数据刚被改动，请重试"
+        return False, "印记操作未结算：印记数据刚被其他操作改动"
     
     skill_name = items.get_data_by_item_id(skill_id).get('name', '未知技能')
     return True, f"成功回忆前世中的技能：{skill_name}"

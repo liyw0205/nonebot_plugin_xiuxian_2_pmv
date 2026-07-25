@@ -1163,7 +1163,7 @@ async def unbind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, "你与道侣的绑定时间不足7天，暂时不能解除关系。", md_type="buff")
         await unbind_partner.finish()
     if not result.succeeded:
-        await handle_send(bot, event, "道侣操作未执行：双方已无道侣关系，或关系刚被解除，请重新查看。", md_type="buff")
+        await handle_send(bot, event, "道侣操作未执行：道侣关系数据刚被改动。", md_type="buff")
         await unbind_partner.finish()
     msg = "你已与道侣断绝关系。"
     await handle_send(bot, event, msg, md_type="buff", k1="绑定", v1="绑定道侣", k2="解除", v2="断绝关系", k3="道侣", v3="我的道侣")
@@ -2223,7 +2223,7 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             apprentice_title_ids=[MENTOR_TITLE_IDS["graduate"]], mentor_title_ids=mentor_titles,
         )
         if not settlement.succeeded:
-            await handle_send(bot, event, "出师未结算：不满足出师条件，或师徒数据刚被改动，请重试。", **buttons)
+            await handle_send(bot, event, "出师未结算：师徒数据刚被其他操作改动。", **buttons)
             await unbind_mentor.finish()
         reward_lines = [
             f"徒弟获得灵石{number_to(settlement.apprentice_stone)}",
@@ -2253,7 +2253,7 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         apprentice_desc=f"离开师父{mentor_name}门下",
     )
     if not settlement.succeeded:
-        await handle_send(bot, event, "离师未执行：当前已无师门，或师徒关系已变更。", **buttons)
+        await handle_send(bot, event, "离师未执行：师徒关系数据刚被改动。", **buttons)
         await unbind_mentor.finish()
     if settlement.status == "applied":
         log_message(user_id, f"[师徒] 离开师父{mentor_name}门下")

@@ -492,7 +492,7 @@ async def auto_handle_inactive_sect_owners():
                         logger.info(f"宗门【{sect_name}】继承完成：新宗主：{new_owner['user_name']}")
                     else:
                         logger.info(
-                            f"宗门【{sect_name}】继承跳过（{result.status}：条件不满足或数据已变）"
+                            f"宗门【{sect_name}】继承跳过（{result.status}）"
                         )
                     continue
                     
@@ -559,7 +559,7 @@ async def auto_handle_inactive_sect_owners():
                     logger.info(f"宗门【{sect_name}】处理完成：原宗主 {user_info['user_name']} 已降为长老")
                 else:
                     logger.info(
-                        f"宗门【{sect_name}】封闭跳过（{result.status}：非宗主或数据已变）"
+                        f"宗门【{sect_name}】封闭跳过（{result.status}）"
                     )
                 
             except Exception as e:
@@ -988,7 +988,7 @@ async def sect_elixir_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
                     "inventory_full": "背包已满，无法领取丹药。",
                     "state_changed": "俸禄/福利领取时数据被改动，未结算，请重试。",
                 }
-                await handle_send(bot, event, failure_messages.get(result.status, "领取失败，请稍后重试。"))
+                await handle_send(bot, event, failure_messages.get(result.status, f"领取失败（{result.status}）。"))
                 await sect_elixir_get.finish()
             await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await sect_elixir_get.finish()
@@ -1721,7 +1721,7 @@ async def sect_task_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         if isUserTask(user_id):
             refreshed_task = refresh_user_sect_task(user_id, sect_id, _sect_operation_id(event, "task_refresh", user_id), sect_membership_service)
             if refreshed_task is None:
-                await handle_send(bot, event, "宗门任务刷新未执行：任务进度或刷新次数刚被改动，请重新【宗门任务】查看后再试。")
+                await handle_send(bot, event, "宗门任务刷新未执行：任务数据刚被其他操作改动。")
                 await sect_task_refresh.finish()
             if userstask[user_id]['任务内容']['type'] == 1:
                 task_type = "⚔️"
@@ -2261,7 +2261,7 @@ async def sect_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             await handle_send(bot, event, msg, md_type="宗门", k1="改名", v1="宗门改名", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await sect_rename.finish()
         if not result.applied:
-            await handle_send(bot, event, "改名未完成：宗主权限或宗门数据已变，请刷新宗门信息后重试。")
+            await handle_send(bot, event, "改名未完成：宗门数据刚被其他操作改动。")
             await sect_rename.finish()
 
         if result.status == "renamed":
@@ -2327,7 +2327,13 @@ async def create_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             owner_position,
         )
         if not creation.applied:
-            msg = "宗门名称已存在，或道友当前状态无法创建宗门，请重新尝试。"
+            msg = {
+                "name_exists": "宗门名称已存在，请更换名称。",
+                "stone_insufficient": "灵石不足，无法创建宗门。",
+                "already_member": "道友已有宗门，无法另立门户。",
+                "state_changed": "创建未结算：数据刚被其他操作改动。",
+                "user_missing": "创建失败：未找到角色数据。",
+            }.get(creation.status, f"创建失败（{creation.status}）。")
             await handle_send(bot, event, msg, md_type="宗门", k1="创建", v1="创建宗门", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await create_sect.finish()
 
@@ -2838,8 +2844,12 @@ async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         msg = f"宗门【{target_sect_name}】已关闭加入，无法加入！"
     elif result.status == "sect_full":
         msg = f"该宗门人数已满（{result.member_count}/{result.member_limit}），无法加入！"
+    elif result.status == "state_changed":
+        msg = "加入未结算：数据刚被其他操作改动。"
+    elif result.status == "user_missing":
+        msg = "加入失败：未找到角色数据。"
     else:
-        msg = "加入失败：宗门加入条件数据刚被改动，请稍后重试。"
+        msg = f"加入失败（{result.status}）。"
     await handle_send(bot, event, msg, md_type="宗门", k1="宗门", v1="我的宗门", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
     await join_sect.finish()
 
@@ -3028,7 +3038,7 @@ async def sect_close_join_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     elif result.status == "not_owner":
         msg = "只有宗主可以关闭宗门加入！"
     else:
-        msg = "关闭加入失败：非当前宗主，或宗门数据刚被改动。"
+        msg = f"关闭加入失败（{result.status}）。"
     
     await handle_send(bot, event, msg)
     await sect_close_join.finish()
@@ -3066,7 +3076,7 @@ async def sect_open_join_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     elif result.status == "not_owner":
         msg = "只有宗主可以开放宗门加入！"
     else:
-        msg = "开放加入失败：非当前宗主，或宗门数据刚被改动。"
+        msg = f"开放加入失败（{result.status}）。"
     
     await handle_send(bot, event, msg)
     await sect_open_join.finish()
@@ -3131,7 +3141,7 @@ async def sect_close_mountain2_confirm(bot: Bot, event: GroupMessageEvent | Priv
         elif result.status == "already_closed":
             msg = "宗门已经处于封闭状态。"
         else:
-            msg = "封闭山门失败：仅当前宗主可操作，或宗主身份已变。"
+            msg = f"封闭山门失败（{result.status}）。"
     else:
         msg = "只有宗主可以封闭山门！"
     
@@ -3190,7 +3200,7 @@ async def sect_inherit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     elif result.status == "ineligible":
         msg = "只有副宗主、长老、大师兄、大师姐可以继承宗主之位！"
     else:
-        msg = "继承失败：宗门或宗主数据已变。"
+        msg = f"继承失败（{result.status}）。"
     await handle_send(bot, event, msg)
     await sect_inherit.finish()
 
@@ -3415,7 +3425,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(
             bot,
             event,
-            failure_messages.get(result.status, "兑换失败，请稍后重试。"),
+            failure_messages.get(result.status, f"兑换失败（{result.status}）。"),
             md_type="宗门",
             k1="兑换",
             v1="宗门兑换",

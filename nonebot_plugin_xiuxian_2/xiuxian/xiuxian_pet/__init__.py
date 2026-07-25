@@ -887,7 +887,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, "领取未结算：游历奖励数据刚被改动，请重新查询。")
         return
     if claim_result.status == "pet_missing":
-        await handle_send(bot, event, "领取失败：出游宠物已变更或数据刚被改动，奖励尚未入账，请重试。")
+        await handle_send(bot, event, "领取失败：游历数据刚被其他操作改动，奖励尚未入账。")
         return
     if claim_result.status == "user_missing":
         await handle_send(bot, event, "未找到道友数据，宠物游历奖励领取失败。")
@@ -1194,7 +1194,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             "inventory_full": "宠物背包容量不足，请先放生或整理后再砸蛋。",
             "user_missing": "角色不存在，无法砸蛋。",
             "state_changed": "砸蛋未结算：数据刚被改动，请重试。",
-        }.get(hatched.status, "砸蛋失败，请稍后重试。")
+        }.get(hatched.status, f"砸蛋失败（{hatched.status}）。")
         await handle_send(bot, event, status_msg)
         return
     success_cost = total_cost
@@ -1299,7 +1299,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         messages = {
             "pet_missing": "未找到该宠物UID。",
             "pet_traveling": "游历中的宠物无法出战。",
-            "state_changed": "宠物操作未结算：宠物不存在或数据刚被改动，请重试。",
+            "state_changed": "宠物操作未结算：宠物数据刚被其他操作改动。",
             "operation_conflict": "本次出战请求与已处理记录冲突，请重新操作。",
         }
         result_msg = messages.get(result.status, "宠物出战切换失败，请重试。")
@@ -1350,7 +1350,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "背包物品已达上限，宠物未放生。")
         return
     if not release_result.succeeded:
-        await handle_send(bot, event, "宠物操作未结算：目标宠物已不存在或数据刚被改动，请重新查看背包。")
+        await handle_send(bot, event, "宠物操作未结算：宠物数据刚被其他操作改动。")
         return
     refund_msg = _format_pet_release_refund([pet], refund_item, release_result.refund)
 
@@ -1405,7 +1405,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "背包物品已达上限，宠物未放生。")
         return
     if not release_result.succeeded:
-        await handle_send(bot, event, "宠物操作未结算：目标宠物已不存在或数据刚被改动，请重新查看背包。")
+        await handle_send(bot, event, "宠物操作未结算：宠物数据刚被其他操作改动。")
         return
     refund_msg = _format_pet_release_refund(pets, refund_item, release_result.refund)
     lines = [

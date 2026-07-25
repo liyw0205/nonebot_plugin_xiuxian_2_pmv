@@ -1038,7 +1038,7 @@ def claim_point_shop_item(user_id: str, query: str, operation_id: str | None = N
     if result.status == "inventory_full":
         return False, "背包中该奖励物品已达持有上限"
     if result.status in {"operation_conflict", "state_changed", "user_missing"}:
-        return False, "兑换未结算：数据刚被其他操作改动，请重新尝试"
+        return False, "兑换未结算：数据刚被其他操作改动"
 
     reward_msg = [
         f"获得灵石 {number_to(reward['quantity'])} 枚"
@@ -2231,7 +2231,7 @@ def set_enabled(
         if result.status == "state_changed":
             return "活动配置已变化，请重新执行操作"
         if not result.succeeded:
-            return "活动配置保存失败，请稍后重试"
+            return "活动配置保存失败：写入冲突"
         return result.result_text
 
     if not target_text:

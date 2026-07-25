@@ -217,7 +217,7 @@ class TowerBattle:
                 )
                 return True, msg
             if not settlement.succeeded:
-                return False, "通天塔奖励结算失败，请稍后重试。"
+                return False, f"通天塔奖励结算失败（{settlement.status}）。"
             update_statistics_value(user_id, "通天塔通关层数")
             update_statistics_value(user_id, "通天塔最高层", value=max(tower_info["max_floor"], boss_info["floor"]))
             
@@ -240,7 +240,7 @@ class TowerBattle:
                     "该挑战请求已经处理，无需重复提交。"
                 )
             if not settlement.succeeded:
-                return False, "通天塔挑战结算失败，请稍后重试。"
+                return False, f"通天塔挑战结算失败（{settlement.status}）。"
             msg = f"道友不敌{boss_info['name']}，止步通天塔第{boss_info['floor'] - 1}层！"
             return False, msg
 
@@ -365,7 +365,7 @@ class TowerBattle:
                 )
                 return True, msg
             if not settlement.succeeded:
-                return False, "通天塔奖励结算失败，请稍后重试。"
+                return False, f"通天塔奖励结算失败（{settlement.status}）。"
             update_statistics_value(user_id, "通天塔通关层数", increment=len(success_floors))
             update_statistics_value(user_id, "通天塔最高层", value=max(tower_info["max_floor"], max_success))
         

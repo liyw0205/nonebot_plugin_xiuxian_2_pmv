@@ -162,7 +162,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
         if deposit.status == "state_changed":
-            msg = "灵庄操作失败：账户灵石或存款刚被其他操作改动，本次未结算，请重新【灵庄】查看后再试。"
+            msg = "灵庄操作失败：账户数据刚被其他操作改动，本次未结算。"
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
         if deposit.status == "user_missing":
@@ -216,7 +216,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
         if withdrawal.status == "state_changed":
-            msg = "灵庄操作失败：账户灵石或存款刚被其他操作改动，本次未结算，请重新【灵庄】查看后再试。"
+            msg = "灵庄操作失败：账户数据刚被其他操作改动，本次未结算。"
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
         if withdrawal.status == "user_missing":

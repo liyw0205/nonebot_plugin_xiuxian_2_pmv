@@ -365,7 +365,7 @@ async def boss_delete_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     elif result.status == "invalid_target":
         msg = "请输入正确的世界Boss编号!"
     else:
-        msg = "世界Boss场次已变化，请重新查看列表后操作。"
+        msg = f"天罚未执行（{result.status}）：请重新【世界Boss】查看列表。"
     await handle_send(bot, event, msg)
     await boss_delete.finish()
 
@@ -388,7 +388,7 @@ async def boss_delete_all_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     elif result.status == "empty":
         msg = "尚未生成世界Boss,请等待世界boss刷新!"
     else:
-        msg = "世界Boss场次已变化，请重新查看列表后操作。"
+        msg = f"天罚未执行（{result.status}）：请重新【世界Boss】查看列表。"
     await handle_send(bot, event, msg)
     await boss_delete_all.finish()
 

@@ -124,7 +124,7 @@ async def natal_awaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
             failure_reasons = {
                 "treasure_missing": "法宝数据结构尚未准备完成",
                 "already_awakened": "本命法宝已经觉醒",
-                "state_changed": "本命法宝操作未结算：法宝不存在或数据刚被改动",
+                "state_changed": "本命法宝操作未结算：法宝数据刚被其他操作改动",
             }
             reason = failure_reasons.get(awakened.status, "觉醒事务未能完成")
             await handle_send(

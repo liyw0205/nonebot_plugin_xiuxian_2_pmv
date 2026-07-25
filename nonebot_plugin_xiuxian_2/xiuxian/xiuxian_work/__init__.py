@@ -308,7 +308,7 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="刷新", v2="悬赏令刷新", k3="帮助", v3="悬赏令帮助")
         return msg
     if result.status == "state_changed":
-        msg = "**悬赏结算**\n---\n⚠️ 悬赏结算失败：任务或背包数据刚被其他操作改动，请重新【悬赏令】查看后再试。"
+        msg = "**悬赏结算**\n---\n⚠️ 悬赏结算失败：数据刚被其他操作改动。"
         await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="刷新", v2="悬赏令刷新", k3="帮助", v3="悬赏令帮助")
         return msg
 
@@ -930,7 +930,7 @@ async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMes
         0, level=user_info['level'], exp=user_info['exp'], user_id=user_id, persist=False
     )
     if not work_data:
-        msg = "悬赏令数据异常，请重新尝试！"
+        msg = "悬赏令数据异常：任务记录损坏或不存在。"
         await handle_send(bot, event, msg, md_type="悬赏令", k1="接取", v1="悬赏令接取", k2="刷新", v2="悬赏令确认刷新", k3="帮助", v3="悬赏令帮助")
         return
     

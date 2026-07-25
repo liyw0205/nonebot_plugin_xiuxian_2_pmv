@@ -177,8 +177,10 @@ async def beg_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         msg = f"道友已跻身于{level}层次的修行之人，可徜徉于四海八荒，自寻机缘与造化矣。"
     elif result.status == "expired":
         msg = "道友已经过了新手期,不能再来此寻求机缘了。"
-    elif result.status in {"state_changed", "operation_conflict"}:
-        msg = "领取未结算：今日已领，或角色数据刚被改动，请重新尝试。"
+    elif result.status == "operation_conflict":
+        msg = "领取失败：请求冲突，请勿重复点击。"
+    elif result.status == "state_changed":
+        msg = "领取未结算：角色数据刚被其他操作改动。"
     else:
         msg = "未找到角色信息，无法领取仙途奇缘！"
     await handle_send(bot, event, msg)
@@ -268,8 +270,10 @@ async def novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         msg = f"**新手礼包**\n---\n❌ 仅限创建角色{XiuConfig().beg_max_days}天内领取！"
     elif result.status == "inventory_full":
         msg = "**新手礼包**\n---\n❌ 背包空间不足，无法领取新手礼包！"
-    elif result.status in {"state_changed", "operation_conflict"}:
-        msg = "**新手礼包**\n---\n⚠️ 领取未结算：已领取过，或角色数据刚被改动，请重新尝试。"
+    elif result.status == "operation_conflict":
+        msg = "**新手礼包**\n---\n⚠️ 领取失败：请求冲突，请勿重复点击。"
+    elif result.status == "state_changed":
+        msg = "**新手礼包**\n---\n⚠️ 领取未结算：角色数据刚被其他操作改动。"
     else:
         msg = "**新手礼包**\n---\n❌ 未找到角色信息，无法领取新手礼包！"
     await handle_send(

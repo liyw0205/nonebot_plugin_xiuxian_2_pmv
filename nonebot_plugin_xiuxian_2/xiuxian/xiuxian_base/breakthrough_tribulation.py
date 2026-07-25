@@ -531,7 +531,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         occurred_at=occurred_at, power=power, consume_destiny_pill=item_used,
     )
     if not settlement.succeeded:
-        await handle_send(bot, event, "渡劫未结算：劫难进度已结束，或角色数据刚被改动，请重新查看。")
+        await handle_send(bot, event, "渡劫未结算：角色数据刚被其他操作改动。")
         await start_tribulation.finish()
 
     share_msg = ""
@@ -787,7 +787,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             message=msg,
         )
         if not settlement.succeeded:
-            await handle_send(bot, event, "心魔劫未结算：进度已结束，或角色数据刚被改动，请重新查看。")
+            await handle_send(bot, event, "心魔劫未结算：角色数据刚被其他操作改动。")
             await heart_devil_tribulation.finish()
         if settlement.status == "applied":
             refresh_achievement_titles(user_id)

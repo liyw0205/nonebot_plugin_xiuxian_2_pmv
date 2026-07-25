@@ -670,7 +670,7 @@ def claim_boss_milestone_reward(
     if result.succeeded:
         return True, "已领取：" + "、".join(result.names)
     messages = {"not_unlocked": "全服进度奖励尚未解锁", "already_claimed": "没有可领取的全服进度奖励（可能已领过）", "inventory_full": "背包空间不足，奖励未领取", "user_missing": "角色不存在", "operation_conflict": "领取请求冲突，请重新发送"}
-    return False, messages.get(result.status, "领取失败，请稍后重试")
+    return False, messages.get(result.status, f"领取失败（{result.status}）")
 
 
 def claim_boss_rank_reward(
@@ -705,7 +705,7 @@ def claim_boss_rank_reward(
     if result.status == "not_eligible":
         return False, f"你的排名为第{result.rank}名，不在奖励档位内"
     messages = {"already_claimed": "该档排行奖励已领取", "inventory_full": "背包空间不足，奖励未领取", "user_missing": "角色不存在", "operation_conflict": "领取请求冲突，请重新发送"}
-    return False, messages.get(result.status, "领取失败，请稍后重试")
+    return False, messages.get(result.status, f"领取失败（{result.status}）")
 
 
 def claim_boss_rewards(user_id: str, query: str = "") -> tuple[bool, str]:

@@ -332,7 +332,7 @@ async def blessed_spot_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         elif result.succeeded:
             msg = f"道友的洞天福地成功改名为：{result.name}"
         else:
-            msg = "洞天操作未结算：洞天等级或相关道具刚被改动，请重新查看后再试。"
+            msg = "洞天操作未结算：洞天数据刚被其他操作改动。"
     await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
     await blessed_spot_rename.finish()
 

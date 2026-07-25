@@ -114,7 +114,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         result = make_choice(user_id, operation_id)
     except Exception:
         logger.exception("历练事件事务失败 user_id={}", user_id)
-        result = "历练事件结算失败，请稍后重试。"
+        result = "历练事件结算失败：结算过程异常，请稍后再试。"
     
     msg = f"{result}"
     await handle_send(bot, event, msg, md_type="历练", k1="开始历练", v1="开始历练", k2="历练状态", v2="历练状态", k3="商店", v3="历练商店")
@@ -284,7 +284,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         )
     except Exception:
         logger.exception("历练兑换事务失败 user_id={} item_id={}", user_id, shop_id)
-        await handle_send(bot, event, "历练兑换失败，请稍后重试。", md_type="历练")
+        await handle_send(bot, event, "历练兑换失败：结算过程异常。", md_type="历练")
         await training_buy.finish()
     if purchase_result.status == "points_insufficient":
         await handle_send(bot, event, "兑换失败：成就点不足。", md_type="历练")
@@ -477,7 +477,7 @@ def make_choice(user_id, operation_id):
         stone_delta, exp_delta, hp_delta, event_items, XiuConfig().max_goods_num,
     )
     if not settlement.succeeded:
-        return "历练事件结算失败，请稍后重试。"
+        return "历练事件结算失败：结算过程异常，请稍后再试。"
     if settlement.status == "duplicate":
         return settlement.message
 
