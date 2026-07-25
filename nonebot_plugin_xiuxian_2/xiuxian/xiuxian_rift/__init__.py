@@ -863,7 +863,12 @@ async def break_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await handle_send(bot, event, "秘境终止失败：请求未生效。")
             await break_rift.finish()
         if not result.succeeded:
-            await handle_send(bot, event, "操作未结算：秘境已结束或不存在。")
+            msg = {
+                "not_active": "终止失败：当前没有进行中的秘境。",
+                "state_changed": "终止未结算：秘境数据刚被其他操作改动。",
+                "duplicate": "该终止请求已处理。",
+            }.get(result.status, f"终止失败（{result.status}）。")
+            await handle_send(bot, event, msg)
             await break_rift.finish()
         msg = f"已终止{rift_info['name']}秘境的探索！"
         await handle_send(bot, event, msg)

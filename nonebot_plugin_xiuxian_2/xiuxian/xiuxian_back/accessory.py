@@ -39,10 +39,10 @@ def _acc_fail_msg(result, *, action: str = "饰品操作") -> str:
         "inventory_full": "背包已满，无法放入。",
         "user_missing": "未找到修仙数据。",
         "duplicate": "该请求已处理，无需重复提交。",
-        "state_changed": f"{action}时数据刚被改动，未结算，请重新查看后再试。",
+        "state_changed": f"{action}时数据刚被改动，未结算。",
         "operation_conflict": "请求冲突，请稍后再试。",
     }
-    return mapping.get(status, f"{action}未结算（{status}），请重新查看后再试。")
+    return mapping.get(status, f"{action}未结算（{status}）。")
 
 
 def _accessory_operation_id(event, action, user_id, target):
@@ -1255,7 +1255,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             messages = {
                 "accessory_missing": f"{part}当前未装备饰品，无法升阶",
                 "max_quality": "该饰品已达最高五阶，无法继续升阶",
-                "material_missing": "升阶材料已变化，请重新查看饰品背包",
+                "material_missing": "升阶材料不足",
                 "material_mismatch": "升阶材料不再满足同阶同款要求",
                 "invalid_plan": "升阶结果校验失败，本次未消耗材料",
             }
@@ -1398,7 +1398,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             await handle_send(
                 bot,
                 event,
-                messages.get(equip_result.status, "快速装备饰品失败，请稍后重试"),
+                messages.get(equip_result.status, f"快速装备饰品失败（{equip_result.status}）"),
             )
             return
 

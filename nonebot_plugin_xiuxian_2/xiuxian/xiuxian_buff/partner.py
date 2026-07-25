@@ -1932,7 +1932,11 @@ async def reject_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                     **buttons,
                 )
             else:
-                await handle_send(bot, event, "拒绝未执行：该拜师申请已处理或不存在。", **buttons)
+                if replayed.status == "state_changed":
+                    msg = "拒绝未执行：该拜师申请当前不可拒绝。"
+                else:
+                    msg = f"拒绝未执行（{replayed.status}）。"
+                await handle_send(bot, event, msg, **buttons)
             await reject_mentor.finish()
 
     pending_invites = _get_pending_mentor_invites(mentor_id)
@@ -1964,7 +1968,11 @@ async def reject_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         operation_id=operation_id,
     )
     if not rejected.succeeded:
-        await handle_send(bot, event, "拒绝未执行：该拜师申请已处理或不存在。", **buttons)
+        if rejected.status == "state_changed":
+            msg = "拒绝未执行：该拜师申请当前不可拒绝。"
+        else:
+            msg = f"拒绝未执行（{rejected.status}）。"
+        await handle_send(bot, event, msg, **buttons)
         await reject_mentor.finish()
 
     await handle_send(bot, event, f"你拒绝了{apprentice_name}的拜师申请。", **buttons)

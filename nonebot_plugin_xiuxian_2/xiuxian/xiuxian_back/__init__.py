@@ -2431,7 +2431,7 @@ async def check_user_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(
             bot,
             event,
-            messages.get(result.status, "背包检测任务执行失败，请稍后重试"),
+            messages.get(result.status, f"背包检测任务执行失败（{result.status}）"),
         )
         await check_user_back.finish()
 

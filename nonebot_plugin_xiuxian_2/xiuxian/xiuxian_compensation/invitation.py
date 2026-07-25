@@ -162,7 +162,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     success = add_invitation_record(inviter_id, user_id)
 
     if not success:
-        await handle_send(bot, event, "邀请记录添加失败，可能已经绑定过")
+        await handle_send(bot, event, "邀请记录添加失败：该邀请关系已绑定。")
         return
 
     await handle_send(

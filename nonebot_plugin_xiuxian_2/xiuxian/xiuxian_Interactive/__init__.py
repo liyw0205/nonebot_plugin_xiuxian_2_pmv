@@ -964,7 +964,7 @@ async def handle_give_exp(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     elif result.status in {"applied", "duplicate", "already_claimed"}:
         message = random.choice(REFUSE_EXP_MESSAGES)
     elif result.status in {"state_changed", "operation_conflict"}:
-        message = "互动未结算：角色数据刚被其他操作改动，请重新尝试。"
+        message = "互动未结算：角色数据刚被其他操作改动。"
     else:
         message = "未找到角色信息，无法发放修为。"
     await handle_send(bot, event, message)
@@ -991,7 +991,7 @@ async def handle_give_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     elif result.status in {"applied", "duplicate", "already_claimed"}:
         message = random.choice(REFUSE_STONE_MESSAGES)
     elif result.status in {"state_changed", "operation_conflict"}:
-        message = "互动未结算：角色数据刚被其他操作改动，请重新尝试。"
+        message = "互动未结算：角色数据刚被其他操作改动。"
     else:
         message = "未找到角色信息，无法发放灵石。"
     await handle_send(bot, event, message)
@@ -1022,7 +1022,7 @@ async def handle_good_morning(bot: Bot, event: GroupMessageEvent | PrivateMessag
         datetime.now(),
     )
     if result.status == "operation_conflict":
-        await handle_send(bot, event, "本次早安事件与已记录结果冲突，请重新尝试。")
+        await handle_send(bot, event, "本次早安事件与已记录结果冲突。")
         return
     if result.status == "user_missing":
         await handle_send(bot, event, "未找到角色信息，无法记录早安。")
@@ -1051,7 +1051,7 @@ async def handle_good_night(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         datetime.now(),
     )
     if result.status == "operation_conflict":
-        await handle_send(bot, event, "本次晚安事件与已记录结果冲突，请重新尝试。")
+        await handle_send(bot, event, "本次晚安事件与已记录结果冲突。")
         return
     if result.status == "user_missing":
         await handle_send(bot, event, "未找到角色信息，无法记录晚安。")
@@ -1170,7 +1170,7 @@ async def handle_fortune_command(bot: Bot, event: GroupMessageEvent | PrivateMes
         generate_fortune,
     )
     if result.status == "operation_conflict":
-        await handle_send(bot, event, "本次运势事件与已记录结果冲突，请重新尝试。")
+        await handle_send(bot, event, "本次运势事件与已记录结果冲突。")
         return
     if result.status == "user_missing":
         await handle_send(bot, event, "未找到角色信息，无法生成运势。")

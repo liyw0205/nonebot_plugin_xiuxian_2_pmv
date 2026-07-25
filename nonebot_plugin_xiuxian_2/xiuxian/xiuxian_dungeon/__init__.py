@@ -126,7 +126,7 @@ def _team_mutation_message(action: str, result: TeamMutationResult) -> str:
             "user_missing": "未找到道友数据，创建队伍失败！",
             "user_has_team": "你已经在一个队伍中了，请先退出当前队伍！",
             "session_active": "副本探索会话进行中，无法创建队伍！",
-            "state_changed": "队伍数据刚被其他操作改动，请重试。",
+            "state_changed": "队伍数据刚被其他操作改动。",
         }
         if result.status == "cooldown_active":
             return f"你当前处于组队冷却中，剩余：{format_seconds(result.cooldown_seconds)}，不可创建队伍。"
@@ -144,7 +144,7 @@ def _team_mutation_message(action: str, result: TeamMutationResult) -> str:
             "user_has_team": f"{target_name}已有队伍！",
             "invite_pending": "对方已有待处理的组队邀请，请稍后再试！",
             "session_active": "副本探索会话进行中，无法变更队伍！",
-            "state_changed": "队伍数据刚被其他操作改动，请重试。",
+            "state_changed": "队伍数据刚被其他操作改动。",
         }
         if result.status == "cooldown_active":
             return f"{target_name}当前处于组队冷却中（剩余{format_seconds(result.cooldown_seconds)}），不可被邀请。"
@@ -188,9 +188,9 @@ def _team_mutation_message(action: str, result: TeamMutationResult) -> str:
             "self_target": build_transfer_team_self_message(),
             "target_not_member": build_transfer_team_not_member_message(),
             "session_active": "副本探索会话进行中，无法变更队伍！",
-            "state_changed": "队伍数据刚被其他操作改动，请重试。",
-        }.get(result.status, "转移队长失败！")
-    return "队伍操作失败！"
+            "state_changed": "队伍数据刚被其他操作改动。",
+        }.get(result.status, f"转移队长失败（{result.status}）。")
+    return f"队伍操作失败（未知操作）。"
 
 
 def _team_exit_message(action: str, result: TeamExitResult) -> str:
@@ -202,8 +202,8 @@ def _team_exit_message(action: str, result: TeamExitResult) -> str:
             "target_not_member": "该成员不在你的队伍中！",
             "self_target": "不能踢出自己！",
             "session_active": "副本探索会话进行中，无法变更队伍！",
-            "state_changed": "队伍数据刚被其他操作改动，请重试。",
-        }.get(result.status, "队伍操作失败！")
+            "state_changed": "队伍数据刚被其他操作改动。",
+        }.get(result.status, f"队伍操作失败（{result.status}）。")
     if action == "leave":
         if result.disbanded:
             return f"你已离开队伍【{result.team_name}】，队伍已解散。\n你进入了{TEAM_JOIN_CD_HOURS}小时组队冷却。"

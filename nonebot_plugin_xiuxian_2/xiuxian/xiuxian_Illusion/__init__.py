@@ -250,8 +250,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if choice_result.status == "inventory_full":
         await handle_send(bot, event, "背包物品已达上限，本次选择尚未提交。")
         await illusion_choice.finish()
-    if choice_result.status in {"state_changed", "user_missing"}:
-        await handle_send(bot, event, "幻境寻心结算状态异常，请重新尝试。")
+    if choice_result.status == "user_missing":
+        await handle_send(bot, event, "幻境寻心失败：未找到角色数据。")
+        await illusion_choice.finish()
+    if choice_result.status == "state_changed":
+        await handle_send(bot, event, "幻境寻心未结算：数据刚被其他操作改动。")
         await illusion_choice.finish()
 
     choice_count = choice_result.choice_count

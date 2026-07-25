@@ -196,7 +196,7 @@ async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     previous = arena_challenge_settlement_service.get_result(operation_id, user_id)
     if previous is not None:
         if not previous.succeeded:
-            await handle_send(bot, event, "竞技场挑战请求冲突，请重新操作。")
+            await handle_send(bot, event, "竞技场挑战请求冲突。")
             await arena_challenge.finish()
         await handle_send(bot, event, _arena_challenge_result_message(previous))
         await arena_challenge.finish()
@@ -269,7 +269,7 @@ async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         elif settlement.status == "stamina_insufficient":
             message = "体力不足，无法发起竞技场挑战。"
         else:
-            message = "挑战未结算：战斗数据刚被其他操作改动，请重新操作。"
+            message = "挑战未结算：战斗数据刚被其他操作改动。"
         await handle_send(bot, event, message)
         await arena_challenge.finish()
     if use_cached_target:
@@ -617,10 +617,10 @@ async def arena_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await handle_send(bot, event, "兑换失败：未找到角色数据。")
         await arena_buy.finish()
     if purchase_result.status == "state_changed":
-        await handle_send(bot, event, "兑换未结算：数据刚被其他操作改动，请重新兑换。")
+        await handle_send(bot, event, "兑换未结算：数据刚被其他操作改动。")
         await arena_buy.finish()
     if not purchase_result.succeeded:
-        await handle_send(bot, event, f"兑换未结算（{purchase_result.status}），请重新兑换。")
+        await handle_send(bot, event, f"兑换未结算（{purchase_result.status}）。")
         await arena_buy.finish()
 
     msg = (
@@ -748,7 +748,7 @@ async def arena_buy_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessa
             f"当前灵石：{number_to(int(user_info.get('stone', 0)))}",
         )
         await arena_buy_challenge.finish()
-    await handle_send(bot, event, "购买未结算：数据刚被其他操作改动，请重新操作。")
+    await handle_send(bot, event, "购买未结算：数据刚被其他操作改动。")
     await arena_buy_challenge.finish()
 
 def check_rank_requirement(current_rank, required_rank):
