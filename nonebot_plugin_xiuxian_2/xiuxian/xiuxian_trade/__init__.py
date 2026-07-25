@@ -1455,7 +1455,13 @@ async def guishi_deposit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_deposit.finish()
     if not result.succeeded:
-        msg = "鬼市账户状态已经变化，请稍后重试！"
+        status_msg = {
+            "user_missing": "未找到修仙数据，存入未结算。",
+            "stone_insufficient": "灵石不足，存入失败。",
+            "state_changed": "存入时灵石或鬼市账户被其他操作改动，未结算，请重试。",
+            "operation_conflict": "请求冲突，请稍后再试。",
+        }.get(result.status, f"鬼市存入未结算（{result.status}），请重试。")
+        msg = status_msg
         await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_deposit.finish()
     
@@ -1510,7 +1516,13 @@ async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_withdraw.finish()
     if not result.succeeded:
-        msg = "鬼市账户状态已经变化，请稍后重试！"
+        status_msg = {
+            "user_missing": "未找到修仙数据，取出未结算。",
+            "stored_insufficient": "鬼市账户余额不足。",
+            "state_changed": "取出时账户数据被其他操作改动，未结算，请重试。",
+            "operation_conflict": "请求冲突，请稍后再试。",
+        }.get(result.status, f"鬼市取出未结算（{result.status}），请重试。")
+        msg = status_msg
         await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_withdraw.finish()
 
@@ -1897,7 +1909,7 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_take_item.finish()
     if not result.succeeded:
-        msg = "鬼市暂存区状态已经变化，请稍后重试！"
+        msg = {"item_insufficient":"物品数量不足，暂存未结算。","inventory_full":"背包已满，无法取回。","state_changed":"暂存区或背包刚被改动，未结算，请重试。","user_missing":"未找到修仙数据。"}.get(result.status, f"鬼市暂存未结算（{result.status}），请重试。")
         await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_take_item.finish()
 
@@ -2509,7 +2521,15 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_add.finish()
     if not result.succeeded:
-        msg = "拍卖等待区状态已经变化，请稍后重试！"
+        msg = {
+            "limit_reached": f"每人最多上架{auction_rules['max_user_items']}件到拍卖等待区。",
+            "stock_insufficient": f"可交易的 {item_name} 数量不足，上架失败。",
+            "already_queued": f"{item_name} 已在拍卖等待区。",
+            "item_insufficient": f"可交易的 {item_name} 数量不足，上架失败。",
+            "user_missing": "未找到修仙数据，上架未结算。",
+            "state_changed": "上架时背包或等待区被改动，未结算，请重试。",
+            "operation_conflict": "请求冲突，请稍后再试。",
+        }.get(result.status, f"拍卖上架未结算（{result.status}），请重试。")
         await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_add.finish()
     
@@ -2595,7 +2615,13 @@ async def auction_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_remove.finish()
     if not result.succeeded:
-        msg = "拍卖等待区状态已经变化，请稍后重试！"
+        msg = {
+            "queue_missing": "该物品已不在拍卖等待区。",
+            "inventory_full": "背包中该物品已达上限，无法下架。",
+            "user_missing": "未找到修仙数据，下架未结算。",
+            "state_changed": "下架时等待区或背包被改动，未结算，请重试。",
+            "operation_conflict": "请求冲突，请稍后再试。",
+        }.get(result.status, f"拍卖下架未结算（{result.status}），请重试。")
         await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_remove.finish()
     

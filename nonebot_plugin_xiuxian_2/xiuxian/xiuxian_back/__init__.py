@@ -109,6 +109,27 @@ added_ranks = added_ranks()
 confirm_use_cache = {}
 
 
+
+def _back_op_fail_msg(result, *, action: str = "操作") -> str:
+    status = getattr(result, "status", None) or "unknown"
+    mapping = {
+        "item_insufficient": f"物品数量不足，{action}未结算，请刷新背包。",
+        "item_missing": f"物品不存在或已消失，{action}未结算。",
+        "user_missing": f"未找到修仙数据，{action}未结算。",
+        "inventory_full": f"背包已满，{action}未结算。",
+        "duplicate": f"该请求已处理，无需重复提交。",
+        "state_changed": f"{action}时背包或角色数据被其他操作改动，未结算，请刷新后重试。",
+        "operation_conflict": "请求冲突（重复点击），请稍后再试。",
+        "not_bound": "该物品未绑定，无法解绑。",
+        "already_equipped": "已处于穿戴状态。",
+        "not_equipped": "未处于穿戴状态。",
+        "already_learned": "已学会该技能。",
+        "accessory_missing": "饰品不存在或已消失。",
+        "accessory_full": "饰品栏已满。",
+    }
+    return mapping.get(status, f"{action}未结算（{status}），请刷新后重试。")
+
+
 def _equipment_operation_id(event, action, goods_id):
     event_id = str(
         getattr(event, "message_id", "") or getattr(event, "id", "") or ""
@@ -778,7 +799,7 @@ async def no_use_zb_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
             msg = (
                 f"成功卸载装备{arg}！"
                 if result.succeeded
-                else "装备状态发生变化，请刷新背包后重试！"
+                else _back_op_fail_msg(result, action="装备")
             )
             await handle_send(bot, event, msg, md_type="背包", k1="卸装", v1="卸装", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
             await no_use_zb.finish()
@@ -983,7 +1004,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 await use.finish()
                 return
             if not result.succeeded:
-                msg = "礼包数量、奖励容量、灵石余额或角色状态已经变化，请刷新背包后重试！"
+                msg = _back_op_fail_msg(result, action="开启礼包")
                 await handle_send(bot, event, msg, md_type="背包", k1="背包", v1="我的背包")
                 await use.finish()
                 return
@@ -1073,7 +1094,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 await use.finish()
                 return
             if not result.succeeded:
-                msg = "礼包数量、灵石余额或角色状态已经变化，请刷新背包后重试！"
+                msg = _back_op_fail_msg(result, action="开启礼包")
                 await handle_send(bot, event, msg, md_type="背包", k1="背包", v1="我的背包")
                 await use.finish()
                 return
@@ -1115,7 +1136,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
             elif result.succeeded:
                 msg = f"成功装备 {item_name}！"
             else:
-                msg = "装备状态发生变化，请刷新背包后重试！"
+                msg = _back_op_fail_msg(result, action="装备")
 
     elif goods_type == "技能":
         goods_num = sql_message.goods_num(user_info['user_id'], goods_id)
@@ -1186,7 +1207,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                     sect_fairyland_level=_get_user_sect_fairyland_level(user_info_full),
                 )
                 if not reward.succeeded:
-                    msg = "神物数量或炼体状态已经变化，请刷新背包后重试！"
+                    msg = _back_op_fail_msg(result, action="使用神物")
                     await handle_send(bot, event, msg, md_type="背包", k1="背包", v1="我的背包")
                     await use.finish()
                     return
@@ -1229,7 +1250,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 msg = (
                     f"道友成功使用神物：{goods_info['name']} {num} 个，修为增加 {number_to(exp)}！"
                     if result.succeeded
-                    else "神物数量或角色状态已经变化，请刷新背包后重试！"
+                    else _back_op_fail_msg(result, action="使用神物")
                 )
 
     elif goods_type == "聚灵旗":
@@ -1288,7 +1309,7 @@ async def confirm_use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     elif result.succeeded:
         msg = f"恭喜道友成功学会{s_type}：{name}！"
     else:
-        msg = "技能书数量或角色技能状态已经变化，请刷新背包后重试！"
+        msg = _back_op_fail_msg(result, action="学习技能")
     await handle_send(bot, event, msg, md_type="背包", k1="背包", v1="我的背包")
     del confirm_use_cache[str(user_id)]
     await confirm_use.finish()
@@ -1459,7 +1480,7 @@ async def use_pet_egg_item(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         bag_limit=PET_BAG_LIMIT,
     )
     if not result.succeeded:
-        await handle_send(bot, event, "宠物蛋数量或宠物背包状态已变化，请刷新后重试。")
+        await handle_send(bot, event, _back_op_fail_msg(result, action="使用宠物蛋"))
         return
 
     lines = []
@@ -1578,7 +1599,7 @@ async def use_unbind_charm(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     elif result.status == "not_bound":
         msg = f"{target_item_name} 没有绑定数量，无需解绑！"
     else:
-        msg = "解绑符数量或物品绑定状态已经变化，请刷新背包后重试！"
+        msg = _back_op_fail_msg(result, action="解绑")
     
     await handle_send(bot, event, msg)
 
@@ -1616,7 +1637,7 @@ async def use_spirit_stone_bag(bot: Bot, event: GroupMessageEvent | PrivateMessa
         rewards=rolled_rewards,
     )
     if not reward.succeeded:
-        await handle_send(bot, event, "灵石福袋数量或角色状态已发生变化，请重新查看背包。")
+        await handle_send(bot, event, _back_op_fail_msg(result, action="使用灵石福袋"))
         return
 
     results = [
@@ -1655,7 +1676,7 @@ async def use_tianji_stone_trigger(bot: Bot, event: GroupMessageEvent | PrivateM
         rewards=rolled_rewards,
     )
     if not reward.succeeded:
-        await handle_send(bot, event, "天机灵石引数量或角色状态已发生变化，请重新查看背包。")
+        await handle_send(bot, event, _back_op_fail_msg(result, action="使用天机灵石引"))
         return
 
     results = []
@@ -1737,7 +1758,7 @@ async def use_three_cultivation_pill(bot: Bot, event: GroupMessageEvent | Privat
         power_multiplier=float(level_rate) * float(realm_rate),
     )
     if not result.succeeded:
-        await handle_send(bot, event, "三转玄丹数量或角色状态已经变化，请刷新背包后重试！")
+        await handle_send(bot, event, _back_op_fail_msg(result, action="使用三转玄丹"))
         return
 
     recovery_msg = ""

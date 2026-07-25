@@ -70,6 +70,20 @@ YAOCAI_RANK_ORDER = [
 ]
 
 
+
+def _item_use_fail_msg(result, *, kind: str = "丹药") -> str:
+    """将背包/丹药使用失败 status 转成可读原因。"""
+    status = getattr(result, "status", None) or "unknown"
+    mapping = {
+        "item_insufficient": f"{kind}数量不足，请刷新背包后重试。",
+        "user_missing": "未找到修仙数据，本次未结算。",
+        "duplicate": f"该{kind}使用请求已处理，无需重复提交。",
+        "state_changed": f"扣减{kind}或写入效果时数据被其他操作改动，本次未结算，请刷新背包后重试。",
+        "operation_conflict": "请求冲突（重复点击），请稍后再试。",
+    }
+    return mapping.get(status, f"{kind}使用未结算（{status}），请刷新背包后重试。")
+
+
 def get_required_rank_name(item_info: dict, user_info: dict = None):
     """
     统一计算物品需求境界（可选考虑轮回减境界）
@@ -869,7 +883,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
                 f"道友成功使用丹药：{goods_name}{result.quantity}颗，"
                 f"下一次突破的成功概率提高{result.rate_gain}%!"
                 if result.succeeded
-                else "丹药数量或角色状态已经变化，请刷新背包后重试！"
+                else _item_use_fail_msg(result, kind="丹药")
             )
 
     elif goods_info['buff_type'] == "level_up_big":  # 增加大境界突破概率的丹药
@@ -893,7 +907,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
                     goods_info['buff'] * num,
                 )
                 if not result.succeeded:
-                    msg = "丹药数量或角色状态已经变化，请刷新背包后重试！"
+                    msg = _item_use_fail_msg(result, kind="丹药")
 
     elif goods_info['buff_type'] == "hp":  # 回复状态的丹药
         if user_info['root'] == "凡人":
@@ -926,7 +940,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
                 msg = (
                     f"道友成功使用丹药：{goods_name}{result.quantity}颗，经过境界转化状态恢复了{int(buff * 100 * result.quantity)}%!"
                     if result.succeeded
-                    else "丹药数量或角色状态已经变化，请刷新背包后重试！"
+                else _item_use_fail_msg(result, kind="丹药")
                 )
         else:
             if goods_rank < user_rank:  # 使用限制
@@ -961,7 +975,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
                     msg = (
                         f"道友成功使用丹药：{goods_name}{result.quantity}颗，经过境界转化状态恢复了{int(buff * 100 * result.quantity)}%!"
                         if result.succeeded
-                        else "丹药数量或角色状态已经变化，请刷新背包后重试！"
+                else _item_use_fail_msg(result, kind="丹药")
                     )
 
     elif goods_info['buff_type'] == "stamina":  # 回复体力的丹药
@@ -989,7 +1003,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
                 f"道友成功使用丹药：{goods_name}{result.quantity}颗，"
                 f"体力恢复{result.stamina_after - result.stamina_before}点，当前体力{result.stamina_after}/{max_stamina}！"
                 if result.succeeded
-                else "丹药数量或角色状态已经变化，请刷新背包后重试！"
+                else _item_use_fail_msg(result, kind="丹药")
             )
 
     elif goods_info['buff_type'] == "all":  # 回满状态的丹药
@@ -1009,7 +1023,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
                 msg = (
                     f"道友成功使用丹药：{goods_name}{result.quantity}颗,状态已全部恢复!"
                     if result.succeeded
-                    else "丹药数量或角色状态已经变化，请刷新背包后重试！"
+                else _item_use_fail_msg(result, kind="丹药")
                 )
         else:
             if goods_rank < user_rank:  # 使用限制
@@ -1030,7 +1044,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
                     msg = (
                         f"道友成功使用丹药：{goods_name}{result.quantity}颗,状态已全部恢复!"
                         if result.succeeded
-                        else "丹药数量或角色状态已经变化，请刷新背包后重试！"
+                else _item_use_fail_msg(result, kind="丹药")
                     )
 
     elif goods_info['buff_type'] == "atk_buff":  # 永久加攻击buff的丹药
@@ -1043,7 +1057,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
             msg = (
                 f"道友成功使用丹药：{goods_name}{result.quantity}颗，攻击力永久增加{result.atk_gain}点！"
                 if result.succeeded
-                else "丹药数量或角色状态已经变化，请刷新背包后重试！"
+                else _item_use_fail_msg(result, kind="丹药")
             )
         else:
             if goods_rank < user_rank:  # 使用限制
@@ -1057,7 +1071,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
                 msg = (
                     f"道友成功使用丹药：{goods_name}{result.quantity}颗，攻击力永久增加{result.atk_gain}点！"
                     if result.succeeded
-                    else "丹药数量或角色状态已经变化，请刷新背包后重试！"
+                else _item_use_fail_msg(result, kind="丹药")
                 )
 
     elif goods_info['buff_type'] == "exp_up":  # 加固定经验值的丹药
@@ -1082,7 +1096,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
             msg = (
                 f"道友成功使用丹药：{goods_name}{result.quantity}颗,修为增加{result.exp_gain}点！"
                 if result.succeeded
-                else "丹药数量或角色状态已经变化，请刷新背包后重试！"
+                else _item_use_fail_msg(result, kind="丹药")
             )
     else:
         msg = f"该类型的丹药目前暂时不支持使用！"
@@ -1110,7 +1124,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
         return "聚灵旗和福地聚灵旗等级相同，无需使用"
     if result.status == "blessed_spot_missing":
         return "道友还未拥有洞天福地，无法使用该物品"
-    return "聚灵旗或洞天状态已变化，请刷新背包后重试"
+    return _item_use_fail_msg(result, kind="聚灵旗")
 
 PATH = Path(__file__).parent
 FILEPATH = PATH / 'shop.json'

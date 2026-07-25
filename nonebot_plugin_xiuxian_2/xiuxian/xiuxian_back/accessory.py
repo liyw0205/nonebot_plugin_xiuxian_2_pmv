@@ -29,6 +29,22 @@ accessory_transaction_service = AccessoryTransactionService(
 )
 
 
+
+def _acc_fail_msg(result, *, action: str = "饰品操作") -> str:
+    status = getattr(result, "status", None) or "unknown"
+    mapping = {
+        "item_insufficient": f"材料不足，{action}未结算。",
+        "accessory_missing": f"饰品不存在或已消失，{action}未结算。",
+        "accessory_full": "饰品栏已满。",
+        "inventory_full": "背包已满，无法放入。",
+        "user_missing": "未找到修仙数据。",
+        "duplicate": "该请求已处理，无需重复提交。",
+        "state_changed": f"{action}时饰品/材料数据被改动，未结算，请重新查看后再试。",
+        "operation_conflict": "请求冲突，请稍后再试。",
+    }
+    return mapping.get(status, f"{action}未结算（{status}），请重新查看后再试。")
+
+
 def _accessory_operation_id(event, action, user_id, target):
     event_id = str(
         getattr(event, "message_id", "") or getattr(event, "id", "") or ""
@@ -805,7 +821,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
                             deepcopy(target), new_locked,
                         )
                         if not result.succeeded or result.accessory is None:
-                            result_msg = "锁定失败：饰品状态已变化，请重新查看后再试"
+                            result_msg = _acc_fail_msg(result, action="锁定")
                         else:
                             updated = result.accessory
                             result_msg = (
@@ -873,7 +889,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
                         deepcopy(target), new_locked,
                     )
                     if not result.succeeded or result.accessory is None:
-                        result_msg = "解锁失败：饰品状态已变化，请重新查看后再试"
+                        result_msg = _acc_fail_msg(result, action="解锁")
                     else:
                         updated = result.accessory
                         q = max(1, min(5, int(updated.get("quality", 1))))
@@ -986,7 +1002,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if result.status == "item_insufficient":
         text = f"洗练失败：{WASH_STONE_NAME}不足"
     elif result.status in {"accessory_missing", "state_changed"}:
-        text = "洗练失败：饰品或材料状态已变化，请重新查看后再试"
+        text = _acc_fail_msg(result, action="洗练")
     elif not result.succeeded or result.accessory is None:
         text = "洗练失败"
     else:
@@ -1053,7 +1069,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, f"分解失败：{WASH_STONE_NAME}已达背包上限")
         return
     if not result.succeeded or result.accessory is None:
-        await handle_send(bot, event, "分解失败：饰品状态已变化，请重新查看后再试")
+        await handle_send(bot, event, _acc_fail_msg(result, action="分解"))
         return
 
     decomposed = result.accessory
@@ -1143,7 +1159,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, f"快速分解失败：{WASH_STONE_NAME}已达背包上限")
         return
     if not result.succeeded:
-        await handle_send(bot, event, "快速分解失败：饰品状态已变化，请重新查看后再试")
+        await handle_send(bot, event, _acc_fail_msg(result, action="快速分解"))
         return
 
     await handle_send(
@@ -1246,7 +1262,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             await handle_send(
                 bot,
                 event,
-                messages.get(result.status, "饰品状态已变化，请重新查看后再试"),
+                messages.get(result.status, _acc_fail_msg(result, action="饰品操作")),
             )
             return
 
@@ -1318,7 +1334,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         )
         if not save_result.succeeded:
             await handle_send(
-                bot, event, "饰品装备或预设状态已变化，请重新查看后再保存"
+                bot, event, _acc_fail_msg(result, action="保存预设")
             )
             return
 
@@ -1377,7 +1393,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         if not equip_result.succeeded:
             messages = {
                 "preset_empty": f"饰品预设{preset_idx}为空，无法快速装备。",
-                "state_changed": "饰品装备、背包或预设状态已变化，请重新查看后再试",
+                "state_changed": _acc_fail_msg(result, action="切换预设"),
             }
             await handle_send(
                 bot,

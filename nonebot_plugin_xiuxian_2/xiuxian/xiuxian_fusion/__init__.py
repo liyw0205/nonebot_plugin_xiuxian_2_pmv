@@ -290,9 +290,14 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
                 "stone_insufficient": "灵石不足，本次合成未结算。",
                 "item_insufficient": "材料不足（绑定物品不可用于合成），本次合成未结算。",
                 "user_missing": "未找到修仙数据，本次合成未结算。",
-                "state_changed": "合成所需的灵石或材料状态已经变化，本次合成未结算。",
+                "inventory_full": "成品将超过背包上限，本次合成未结算。",
+                "state_changed": "扣费或扣材时背包/灵石被其他操作改动，本次合成未结算，请重新【合成】。",
+                "operation_conflict": "合成请求冲突（重复点击），请稍后再试。",
             }
-            return False, status_messages.get(result.status, "合成状态已经变化，本次合成未结算。")
+            return False, status_messages.get(
+                result.status,
+                f"合成未结算（{result.status}），请重新【合成】。",
+            )
         if result.successful:
             item_type = equipment.get('type', '物品')
             return True, f"道友成功合成了{item_type}: {equipment['name']}！！"
@@ -324,11 +329,16 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
     if not result.succeeded:
         status_messages = {
             "stone_insufficient": "灵石不足，批量合成未结算。",
-            "item_insufficient": "材料不足，批量合成未结算。",
+            "item_insufficient": "材料不足（绑定物品不可用于合成），批量合成未结算。",
             "inventory_full": "成品数量将超过背包上限，批量合成未结算。",
             "user_missing": "未找到修仙数据，批量合成未结算。",
+            "state_changed": "扣费或扣材时背包/灵石被其他操作改动，批量合成未结算，请重新【合成】。",
+            "operation_conflict": "合成请求冲突（重复点击），请稍后再试。",
         }
-        return False, status_messages.get(result.status, "合成状态已经变化，批量合成未结算。")
+        return False, status_messages.get(
+            result.status,
+            f"批量合成未结算（{result.status}），请重新【合成】。",
+        )
     consumed_failures = result.failed_count - result.protected_count
     return result.successful_count > 0, (
         f"批量合成完成：共 {quantity} 次，成功 {result.successful_count} 次，"
