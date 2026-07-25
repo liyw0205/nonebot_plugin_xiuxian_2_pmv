@@ -419,49 +419,43 @@ async def place_auction_bid(bot: Bot, user_id: str, user_name: str, auction_id: 
     _, sql_message, _, auction_repository, _ = _auction_dependencies()
     auction_current_status = get_auction_status()
     if not auction_current_status["active"]:
-        return False, "拍卖当前未开启！"
+        return False, "拍卖尚未开启。"
 
-    item = auction_repository.get_current_auction(auction_id) # 获取单个拍卖品详情
+    item = auction_repository.get_current_auction(auction_id)
     if not item:
-        return False, "无效的拍卖品ID！"
+        return False, "未找到该拍品，编号有误或已结拍。"
 
     auction_rules = auction_config.get_auction_rules()
-    ABSOLUTE_MIN_INCREMENT = auction_rules["min_bid_increment"]  # 绝对最低加价金额
-    min_increment_percent = auction_rules["min_increment_percent"] # 最低加价百分比
+    ABSOLUTE_MIN_INCREMENT = auction_rules["min_bid_increment"]
+    min_increment_percent = auction_rules["min_increment_percent"]
 
-    # 检查是否是首次出价
     if not item["bids"]:
-        # 首次出价必须 >= 起拍价
         if bid_price < item["start_price"]:
             return False, (
-                f"首次出价不得低于起拍价！\n"
-                f"起拍价: {number_to(item['start_price'])}灵石\n"
-                f"你的出价: {number_to(bid_price)}灵石"
+                f"首次出价不得低于起拍价。\n"
+                f"起拍价：{number_to(item['start_price'])}灵石\n"
+                f"本次出价：{number_to(bid_price)}灵石"
             )
     else:
-        # 非首次出价，需要满足最低加价规则
         required_min_increment = max(
             int(item["current_price"] * min_increment_percent),
             ABSOLUTE_MIN_INCREMENT
         )
         required_min_bid = item["current_price"] + required_min_increment
-
         if bid_price < required_min_bid:
             return False, (
-                f"每次加价不得少于当前价格的 {int(min_increment_percent*100)}% 或 {number_to(ABSOLUTE_MIN_INCREMENT)}灵石！\n"
-                f"当前最高价: {number_to(item['current_price'])}灵石\n"
-                f"最低出价: {number_to(required_min_bid)}灵石\n"
-                f"你的出价: {number_to(bid_price)}灵石"
+                f"加价不足。\n"
+                f"当前价：{number_to(item['current_price'])}灵石\n"
+                f"最低出价：{number_to(required_min_bid)}灵石\n"
+                f"（加价不少于现价的{int(min_increment_percent*100)}%，或{number_to(ABSOLUTE_MIN_INCREMENT)}灵石）"
             )
 
-    # 不能自己竞拍自己的物品
     if item["seller_id"] == user_id:
-        return False, "不能竞拍自己上架的物品！"
+        return False, "不可竞拍自身上架之物。"
 
-    # 获取用户当前灵石
     user_info = sql_message.get_user_info_with_id(user_id)
     if not user_info:
-        return False, "用户信息获取失败！"
+        return False, "未能读取道友修仙信息，请稍后再试。"
 
     user_id = str(user_id)
     old_current_price = int(item["current_price"])
@@ -475,10 +469,14 @@ async def place_auction_bid(bot: Bot, user_id: str, user_name: str, auction_id: 
 
     debit_amount = bid_price - old_bids.get(user_id, 0)
     if debit_amount <= 0:
-        return False, "出价必须高于当前已锁定出价！"
+        return False, "出价须高于道友当前已锁定之价。"
 
     if user_info['stone'] < debit_amount:
-        return False, f"灵石不足！当前拥有 {number_to(user_info['stone'])} 灵石，需要补足 {number_to(debit_amount)} 灵石"
+        return False, (
+            f"灵石不足。\n"
+            f"当前灵石：{number_to(user_info['stone'])}\n"
+            f"尚需补足：{number_to(debit_amount)}"
+        )
 
     trace_id = f"trade:auction:{auction_id}"
     operation_id = f"auction-bid:{auction_id}:{user_id}:{bid_price}:{old_current_price}"
@@ -487,17 +485,17 @@ async def place_auction_bid(bot: Bot, user_id: str, user_name: str, auction_id: 
         old_current_price, old_bids, time.time(),
     )
     if bid_result.status == "stone_insufficient":
-        return False, "灵石不足，竞拍失败！"
+        return False, "灵石不足，竞拍未成立。"
     if bid_result.status == "bid_too_low":
-        return False, "出价已被超过或未高于当前价，请【拍卖查看】最新价后再出。"
+        return False, "出价已低于当前价，请先【拍卖查看】确认后再出。"
     if bid_result.status == "state_changed":
-        return False, "竞拍未成功：拍品价格或出价记录刚被他人更新，请【拍卖查看】后重出。"
+        return False, "拍品价格已更新，请重新查看后再出价。"
     if bid_result.status == "auction_missing":
-        return False, "该拍品已结束或不存在，请重新【拍卖查看】。"
+        return False, "该拍品已结拍或不存在。"
     if bid_result.status == "self_bid":
-        return False, "不能竞拍自己上架的拍品！"
+        return False, "不可竞拍自身上架之物。"
     if not bid_result.succeeded:
-        return False, f"竞拍失败（{bid_result.status}），请重新【拍卖查看】后再试。"
+        return False, "竞拍未成立，请刷新列表后重试。"
     record_trade_event(
         user_id,
         "拍卖竞拍",
@@ -505,22 +503,20 @@ async def place_auction_bid(bot: Bot, user_id: str, user_name: str, auction_id: 
         {"拍卖出价次数": 1, "拍卖出价灵石": bid_price}
     )
 
-    # 构造返回消息
     msg_list = [
         f"【竞拍成功】",
-        f"物品: {item['name']}",
-        f"出价: {number_to(bid_price)}灵石",
-        f"当前最高价: {number_to(bid_price)}灵石"
+        f"拍品：{item['name']}",
+        f"出价：{number_to(bid_price)}灵石",
+        f"当前价：{number_to(bid_price)}灵石",
     ]
 
     if prev_winner_id and prev_winner_id != user_id:
         prev_winner_info = sql_message.get_user_info_with_id(prev_winner_id)
         prev_winner_name = prev_winner_info["user_name"] if prev_winner_info else str(prev_winner_id)
-        msg_list.append(f"已退还 {prev_winner_name} 的 {number_to(prev_price)} 灵石")
+        msg_list.append(f"已退还{prev_winner_name}锁定灵石{number_to(prev_price)}")
 
-    # 计算下次最低加价
     next_min_increment = max(int(bid_price * min_increment_percent), ABSOLUTE_MIN_INCREMENT)
-    msg_list.append(f"\n下次最低加价: {number_to(next_min_increment)}灵石")
+    msg_list.append(f"下次最低加价：{number_to(next_min_increment)}灵石")
 
     return True, "\n".join(msg_list)
 
