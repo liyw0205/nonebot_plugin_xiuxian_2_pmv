@@ -361,7 +361,15 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="祈愿", v3="传承祈愿")
             await impart_pk_now.finish()
         if not settlement.succeeded:
-            await handle_send(bot, event, "对决未成立：邀请已失效，或对决数据刚被改动，请重新发起。")
+            if settlement.status == "state_changed":
+                msg = "对决未结算：对决数据刚被其他操作改动。"
+            elif settlement.status == "operation_conflict":
+                msg = "对决失败：请求冲突。"
+            elif settlement.status == "user_missing":
+                msg = "对决失败：未找到角色数据。"
+            else:
+                msg = f"对决未结算（{settlement.status}）。"
+            await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="祈愿", v3="传承祈愿")
             await impart_pk_now.finish()
 
         msg = f"【对决结束】\n"
@@ -496,7 +504,15 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="祈愿", v3="传承祈愿")
         await impart_pk_now.finish()
     if not settlement.succeeded:
-        await handle_send(bot, event, "对决未结算：双方投影/战力数据刚被改动，请重新发起。")
+        if settlement.status == "state_changed":
+            msg = "对决未结算：对决数据刚被其他操作改动。"
+        elif settlement.status == "operation_conflict":
+            msg = "对决失败：请求冲突。"
+        elif settlement.status == "user_missing":
+            msg = "对决失败：未找到角色数据。"
+        else:
+            msg = f"对决未结算（{settlement.status}）。"
+        await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="祈愿", v3="传承祈愿")
         await impart_pk_now.finish()
 
     msg = f"【对决结束】\n"

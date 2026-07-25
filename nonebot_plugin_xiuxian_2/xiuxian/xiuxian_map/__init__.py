@@ -1910,7 +1910,7 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
             elif replayed.status == "already_running" and replayed.task:
                 current = map_combat_lifecycle_service.get_pending(uid)
                 if current is None or current.task is None:
-                    await handle_send(bot, event, "节点战斗未开始：任务已过期或不存在，请重新接取。")
+                    await handle_send(bot, event, "节点战斗未开始：当前没有可继续的战斗任务。")
                     return
                 snapshot, raw_snapshot = current.task, current.snapshot
             else:
@@ -1969,7 +1969,7 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
             if started.status == "already_running":
                 current = map_combat_lifecycle_service.get_pending(uid)
                 if current is None or current.task is None:
-                    await handle_send(bot, event, "节点战斗未开始：任务已过期或不存在，请重新接取。")
+                    await handle_send(bot, event, "节点战斗未开始：当前没有可继续的战斗任务。")
                     return
                 snapshot, raw_snapshot = current.task, current.snapshot
             elif not started.succeeded or started.task is None:
