@@ -492,7 +492,7 @@ async def auto_handle_inactive_sect_owners():
                         logger.info(f"宗门【{sect_name}】继承完成：新宗主：{new_owner['user_name']}")
                     else:
                         logger.info(
-                            f"宗门【{sect_name}】继承状态已变化，跳过：{result.status}"
+                            f"宗门【{sect_name}】继承跳过（{result.status}：条件不满足或数据已变）"
                         )
                     continue
                     
@@ -559,7 +559,7 @@ async def auto_handle_inactive_sect_owners():
                     logger.info(f"宗门【{sect_name}】处理完成：原宗主 {user_info['user_name']} 已降为长老")
                 else:
                     logger.info(
-                        f"宗门【{sect_name}】状态已变化，跳过封闭：{result.status}"
+                        f"宗门【{sect_name}】封闭跳过（{result.status}：非宗主或数据已变）"
                     )
                 
             except Exception as e:

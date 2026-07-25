@@ -1995,7 +1995,7 @@ class DungeonPurchaseService:
     _REJECTION_RESPONSES = {
         "stone_insufficient": "灵石不足，无法兑换。",
         "inventory_full": "背包中该物品数量已达上限。",
-        "state_changed": "兑换状态已变化，请稍后重试。",
+        "state_changed": "兑换未结算：积分/库存不足，或数据刚被改动，请重试。",
         "user_missing": "未找到道友数据，兑换失败。",
     }
 
@@ -2728,7 +2728,7 @@ class DungeonExploreOperationService:
                         conn,
                         operation_id,
                         "state_changed",
-                        {"battle_messages": [], "message": "副本状态已变化，请重新发起探索。"},
+                        {"battle_messages": [], "message": "探索未开始：副本已关闭、次数不足，或进度刚被改动，请重新发起。"},
                         int(expected_status.get("current_layer", 0)),
                         str(expected_status.get("dungeon_status", "")),
                     )
@@ -2748,7 +2748,7 @@ class DungeonExploreOperationService:
                         conn,
                         operation_id,
                         "state_changed",
-                        {"battle_messages": [], "message": "副本状态已变化，请重新发起探索。"},
+                        {"battle_messages": [], "message": "探索未开始：副本已关闭、次数不足，或进度刚被改动，请重新发起。"},
                         int(expected_status.get("current_layer", 0)),
                         str(expected_status.get("dungeon_status", "")),
                     )
@@ -2773,7 +2773,7 @@ class DungeonExploreOperationService:
                         conn,
                         operation_id,
                         "team_changed",
-                        {"battle_messages": [], "message": "队伍状态已变化，请重新发起探索。"},
+                        {"battle_messages": [], "message": "探索未开始：队伍已解散或成员变动，请重新组队发起。"},
                         int(expected_status.get("current_layer", 0)),
                         str(expected_status.get("dungeon_status", "")),
                     )
@@ -2836,7 +2836,7 @@ class DungeonExploreOperationService:
                             conn,
                             operation_id,
                             "state_changed",
-                            {"battle_messages": [], "message": "队伍成员状态已变化，请重新发起探索。"},
+                            {"battle_messages": [], "message": "探索未开始：有成员离队、掉线或状态不符，请重新确认后再发起。"},
                             int(expected_status.get("current_layer", 0)),
                             str(expected_status.get("dungeon_status", "")),
                         )
@@ -2875,7 +2875,7 @@ class DungeonExploreOperationService:
                                 conn,
                                 operation_id,
                                 "state_changed",
-                                {"battle_messages": [], "message": "背包状态已变化，请重新发起探索。"},
+                                {"battle_messages": [], "message": "探索未开始：背包空间不足或道具数据刚被改动，请整理后再发起。"},
                                 int(expected_status.get("current_layer", 0)),
                                 str(expected_status.get("dungeon_status", "")),
                             )

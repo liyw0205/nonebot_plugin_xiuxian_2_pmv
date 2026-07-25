@@ -628,7 +628,7 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         if result.status == "duplicate":
             msg += "\n该改名请求已经处理，无需重复提交。"
     else:
-        msg = "道号或资产状态已经变化，请稍后重试！"
+        msg = "改名未结算：道号已被占用，或改名卡/灵石不足，请稍后重试。"
     await handle_send(bot, event, msg, md_type="修仙", k1="改名", v1="修仙改名", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
     await remaname.finish()
 
@@ -667,7 +667,7 @@ async def root_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     elif result.succeeded:
         msg = f"灵根已改名为：{result.new_name}"
     else:
-        msg = "灵根名或改名卡状态已经变化，请稍后重试！"
+        msg = "灵根改名未结算：改名卡不足，或名称冲突/数据刚被改动。"
     await handle_send(bot, event, msg, md_type="修仙", k1="改名", v1="灵根改名", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
     await root_rename.finish()
 
@@ -1274,7 +1274,7 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             f"收取手续费{number_to(result.fee_amount)}枚"
         )
     else:
-        msg = "双方灵石状态已经变化，请稍后重试！"
+        msg = "转账未结算：双方灵石刚被其他操作改动，请稍后重试。"
     await handle_send(bot, event, msg)
     await give_stone.finish()
 
@@ -1363,7 +1363,7 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
     elif settlement.status == "user_missing":
         msg = "对方未踏入修仙界，不要对杂修出手！"
     elif not settlement.succeeded:
-        msg = "双方灵石或体力状态已经变化，本次偷窃未结算。"
+        msg = "偷窃未结算：目标灵石不足，或双方体力/灵石刚被改动。"
     else:
         msg, victim_msg = _stone_theft_messages(
             settlement, user_info['user_name'], steal_user['user_name']
@@ -1480,7 +1480,7 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
     elif settlement.status == "user_missing":
         msg = "对方未踏入修仙界，不可抢劫！"
     elif not settlement.succeeded:
-        msg = "双方战斗、灵石或体力状态已经变化，本次抢劫未结算。"
+        msg = "抢劫未结算：双方气血/体力/灵石刚被改动，请重试。"
     else:
         await send_msg_handler(bot, event, '决斗场', bot.self_id, settlement.battle_messages)
         msg, victim_msg = _stone_robbery_messages(settlement, user_mes['user_name'])

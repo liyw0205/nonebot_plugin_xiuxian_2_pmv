@@ -531,7 +531,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         occurred_at=occurred_at, power=power, consume_destiny_pill=item_used,
     )
     if not settlement.succeeded:
-        await handle_send(bot, event, "渡劫状态已经变化，请重新查看后再试！")
+        await handle_send(bot, event, "渡劫未结算：劫难进度已结束，或角色数据刚被改动，请重新查看。")
         await start_tribulation.finish()
 
     share_msg = ""
@@ -787,7 +787,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             message=msg,
         )
         if not settlement.succeeded:
-            await handle_send(bot, event, "心魔劫状态已经变化，请重新查看后再试！")
+            await handle_send(bot, event, "心魔劫未结算：进度已结束，或角色数据刚被改动，请重新查看。")
             await heart_devil_tribulation.finish()
         if settlement.status == "applied":
             refresh_achievement_titles(user_id)
@@ -1067,7 +1067,7 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             leveluprate + update_rate,
         )
         if not result.applied:
-            await handle_send(bot, event, "⚠️ 本次突破已经处理或角色状态已经变化，请刷新后重试。", md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
+            await handle_send(bot, event, "⚠️ 突破未重复结算：本次请求已处理，或修为/境界刚被改动，请刷新后重试。", md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_zj.finish()
         msg = f"**突破结果**\n---\n❌ 突破失败\n境界受损，修为减少\n> {number_to(now_exp)}\n下次突破成功率增加\n> {update_rate}%\n道友不要放弃！"
         record_level_up_result(user_id, "直接突破", success=False, fail_count=1, exp_loss=now_exp)
@@ -1091,7 +1091,7 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             level_spend,
         )
         if not result.applied:
-            await handle_send(bot, event, "本次突破已经处理或角色状态已经变化，请刷新后重试。")
+            await handle_send(bot, event, "突破未重复结算：本次请求已处理，或修为/境界刚被改动，请刷新后重试。")
             await level_up_zj.finish()
         share_msg = trigger_breakthrough_relation_rewards(user_id, le[0])
         msg = f"**突破结果**\n---\n✅ 恭喜道友突破{le[0]}成功！{share_msg}"
@@ -1216,7 +1216,7 @@ async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMes
         level_spend=level_spend,
     )
     if not result.applied:
-        await handle_send(bot, event, "本次连续突破已经处理或角色状态已经变化，请刷新后重试。")
+        await handle_send(bot, event, "连续突破未重复结算：请求已处理，或修为/境界刚被改动，请刷新后重试。")
         await level_up_lx.finish()
     if success:
         share_msg = trigger_breakthrough_relation_rewards(user_id, final_level)
