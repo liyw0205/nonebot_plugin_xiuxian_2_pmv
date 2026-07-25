@@ -346,7 +346,7 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         )
         if not created.succeeded:
             if created.status == "protection_changed":
-                msg = "对方的双修保护状态已经变化，请重新发起。"
+                msg = "对方已开启或变更双修保护，本次未发起，请重新确认后再请。"
             else:
                 msg = "双方已有待处理的双修邀请，请稍后再试！"
             await handle_send(
@@ -556,7 +556,7 @@ async def direct_two_exp(
         # 必须传 k1/v1，否则 md 模板按钮会显示 None
         await handle_send(
             bot, event,
-            "双修状态发生变化，本次未结算，请重新发起。",
+            "双修未结算：双方关系、令牌或次数刚被改动，请重新发起。",
             md_type="buff",
             k1="双修", v1="双修",
             k2="次数", v2="我的双修次数",
@@ -878,7 +878,7 @@ async def two_exp_protect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         current_status,
     )
     if not changed.succeeded:
-        await handle_send(bot, event, "**双修保护**\n---\n⚠️ 状态已经变化，请重新设置。", md_type="buff", k1="开启", v1="双修保护 开启", k2="关闭", v2="双修保护 关闭", k3="拒绝", v3="双修保护 拒绝", k4="状态", v4="双修保护 状态")
+        await handle_send(bot, event, "**双修保护**\n---\n⚠️ 设置未生效：保护开关刚被改动，请重新设置。", md_type="buff", k1="开启", v1="双修保护 开启", k2="关闭", v2="双修保护 关闭", k3="拒绝", v3="双修保护 拒绝", k4="状态", v4="双修保护 状态")
         await two_exp_protect.finish()
     await handle_send(bot, event, msg, md_type="buff", k1="开启", v1="双修保护 开启", k2="关闭", v2="双修保护 关闭", k3="拒绝", v3="双修保护 拒绝", k4="状态", v4="双修保护 状态")
     await two_exp_protect.finish()
@@ -924,7 +924,7 @@ async def mentor_protect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             current_status,
         )
         if not changed.succeeded:
-            await handle_send(bot, event, "拜师保护状态已经变化，请重新设置。", **buttons)
+            await handle_send(bot, event, "拜师保护设置未生效：开关刚被改动，请重新设置。", **buttons)
             await mentor_protect.finish()
         if changed.rejected_apprentice_ids:
             pending_names = _format_mentor_applicant_ids(
@@ -992,7 +992,7 @@ async def use_two_exp_token(bot, event, item_id, num):
     elif result.status == "limit_full":
         msg = "当前剩余双修次数已满！"
     else:
-        msg = "双修令牌或次数状态已变化，请刷新背包后重试！"
+        msg = "双修未结算：令牌数量不足，或今日次数已用尽/刚被改动，请刷新背包后重试。"
     
     await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="我的修为", v2="我的修为", k3="次数", v3="我的双修次数")
 
@@ -1113,7 +1113,7 @@ async def agree_bind_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         expected_invitee_partner=invitee_partner, expected_inviter_partner=inviter_partner,
     )
     if not result.succeeded:
-        await handle_send(bot, event, "道侣邀请或双方关系状态已变化，请重新发起邀请。", md_type="buff")
+        await handle_send(bot, event, "道侣邀请未成立：邀请已过期，或一方已有道侣/已拒，请重新发起。", md_type="buff")
         await agree_bind.finish()
     if result.status == "applied" and str(user_id) in partner_invite_cache:
         del partner_invite_cache[str(user_id)]
@@ -1163,7 +1163,7 @@ async def unbind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, "你与道侣的绑定时间不足7天，暂时不能解除关系。", md_type="buff")
         await unbind_partner.finish()
     if not result.succeeded:
-        await handle_send(bot, event, "道侣关系状态已变化，请重新查看后再试。", md_type="buff")
+        await handle_send(bot, event, "道侣操作未执行：双方已无道侣关系，或关系刚被解除，请重新查看。", md_type="buff")
         await unbind_partner.finish()
     msg = "你已与道侣断绝关系。"
     await handle_send(bot, event, msg, md_type="buff", k1="绑定", v1="绑定道侣", k2="解除", v2="断绝关系", k3="道侣", v3="我的道侣")
@@ -1686,7 +1686,7 @@ def _mentor_application_result_message(result, requested_mentor_id):
         )
     mentor_info = sql_message.get_user_real_info(requested_mentor_id)
     mentor_name = mentor_info["user_name"] if mentor_info else str(requested_mentor_id)
-    return f"向{mentor_name}发起拜师申请时状态发生变化，请稍后重试。"
+    return f"向{mentor_name}拜师未成功：申请冲突、对方已满徒，或双方数据刚被改动，请稍后重试。"
 
 
 @apply_mentor.handle(parameterless=[Cooldown(cd_time=0)])
@@ -1889,7 +1889,7 @@ async def agree_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         apprentice_desc=f"拜{user_info['user_name']}为师",
     )
     if not result.succeeded:
-        await handle_send(bot, event, "拜师邀请或双方状态已变化，请重新申请。", **buttons)
+        await handle_send(bot, event, "拜师未成立：申请已过期/已处理，或一方已有师徒关系，请重新申请。", **buttons)
         await agree_mentor.finish()
     await _send_mentor_bind_success(
         bot, event, mentor_id, user_info, apprentice_id, apprentice_info, result
@@ -1932,7 +1932,7 @@ async def reject_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                     **buttons,
                 )
             else:
-                await handle_send(bot, event, "拜师申请状态已经变化，未执行拒绝。", **buttons)
+                await handle_send(bot, event, "拒绝未执行：该拜师申请已处理或不存在。", **buttons)
             await reject_mentor.finish()
 
     pending_invites = _get_pending_mentor_invites(mentor_id)
@@ -1964,7 +1964,7 @@ async def reject_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         operation_id=operation_id,
     )
     if not rejected.succeeded:
-        await handle_send(bot, event, "拜师申请状态已经变化，未执行拒绝。", **buttons)
+        await handle_send(bot, event, "拒绝未执行：该拜师申请已处理或不存在。", **buttons)
         await reject_mentor.finish()
 
     await handle_send(bot, event, f"你拒绝了{apprentice_name}的拜师申请。", **buttons)
@@ -2182,7 +2182,7 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             apprentice_desc=f"被师父{mentor_name}逐出师门",
         )
         if not settlement.succeeded:
-            await handle_send(bot, event, "师徒关系状态已变化，本次逐出未执行。", **buttons)
+            await handle_send(bot, event, "逐出未执行：对方已非门下弟子，或师徒关系已解除。", **buttons)
             await unbind_mentor.finish()
         if settlement.status == "applied":
             log_message(user_id, f"[师徒] 将{target_name}逐出师门")
@@ -2223,7 +2223,7 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             apprentice_title_ids=[MENTOR_TITLE_IDS["graduate"]], mentor_title_ids=mentor_titles,
         )
         if not settlement.succeeded:
-            await handle_send(bot, event, "师徒状态发生变化，本次出师未结算，请重试。", **buttons)
+            await handle_send(bot, event, "出师未结算：不满足出师条件，或师徒数据刚被改动，请重试。", **buttons)
             await unbind_mentor.finish()
         reward_lines = [
             f"徒弟获得灵石{number_to(settlement.apprentice_stone)}",
@@ -2253,7 +2253,7 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         apprentice_desc=f"离开师父{mentor_name}门下",
     )
     if not settlement.succeeded:
-        await handle_send(bot, event, "师徒关系状态已变化，本次离师未执行。", **buttons)
+        await handle_send(bot, event, "离师未执行：当前已无师门，或师徒关系已变更。", **buttons)
         await unbind_mentor.finish()
     if settlement.status == "applied":
         log_message(user_id, f"[师徒] 离开师父{mentor_name}门下")
@@ -2360,7 +2360,7 @@ async def mentor_transmission_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         apprentice_desc=f"师父{mentor_info['user_name']}传功，获得修为{number_to(give_exp)}",
     )
     if not settlement.succeeded:
-        await handle_send(bot, event, "师徒状态发生变化，本次传功未结算，请重试。", **buttons)
+        await handle_send(bot, event, "传功未结算：修为不足、非师徒，或双方数据刚被改动，请重试。", **buttons)
         await mentor_transmission.finish()
     if settlement.status == "applied":
         mentor_exp_cd.add_user(mentor_id)

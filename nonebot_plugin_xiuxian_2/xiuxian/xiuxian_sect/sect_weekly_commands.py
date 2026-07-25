@@ -235,7 +235,7 @@ async def sect_weekly_claim_(
         XiuConfig().max_goods_num,
     )
     status_messages = {
-        "not_completed": "宗门周常目标尚未完成或状态已变化。",
+        "not_completed": "宗门周常目标尚未完成，无法领取。",
         "already_claimed": "宗门周常奖励已经领取。",
         "inventory_full": "背包物品已达上限，宗门周常奖励尚未领取。",
         "sect_changed": "宗门归属已变化，宗门周常奖励尚未领取。",
