@@ -549,7 +549,7 @@ def _try_start_auto_spirit_vein() -> tuple[dict, str]:
     if result.action == "auto_miss":
         return state, "天降灵脉触发检查完成，本次未开启。"
     if result.status != "applied":
-        return state, "天降灵脉状态已变化，本次自动触发未执行。"
+        return state, "灵脉自动触发未执行：本期已开启/已结束，或状态冲突。"
     return state, f"天降灵脉已自动开启，持续至{state.get('ends_at')}。"
 
 
@@ -1146,7 +1146,7 @@ async def start_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMess
             "玩家发送【讨伐魔修】会自动挑战自身境界魔修。"
         )
     else:
-        msg = "魔修入侵状态已变化，未能开启本期入侵。"
+        msg = "魔修入侵未开启：本期已存在，或开启条件/状态冲突。"
     await handle_send(bot, event, msg, md_type="世界事件", k1="状态", v1="魔修入侵状态")
     await start_demon_invasion.finish()
 
@@ -1169,7 +1169,7 @@ async def start_spirit_vein_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     elif result.status == "already_active":
         msg = f"天降灵脉仍在持续，结束时间保持为：{state.get('ends_at')}"
     else:
-        msg = "天降灵脉状态已变化，本次未能开启。"
+        msg = "天降灵脉未开启：本期已存在，或开启条件/状态冲突。"
     await handle_send(bot, event, msg, md_type="世界事件", k1="状态", v1="天降灵脉状态")
     await start_spirit_vein.finish()
 
@@ -1524,7 +1524,7 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, "背包物品已达上限，本期奖励尚未领取。")
         await claim_demon_reward.finish()
     if claim_result.status in {"state_changed", "user_missing"}:
-        await handle_send(bot, event, "魔修入侵领奖状态已变化，请重新尝试。")
+        await handle_send(bot, event, "领奖未结算：未达领奖条件、已领取，或进度刚被改动，请重试。")
         await claim_demon_reward.finish()
 
     update_statistics_value(user_id, "魔修入侵领奖")

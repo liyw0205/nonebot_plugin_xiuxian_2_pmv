@@ -440,7 +440,7 @@ def fight_cooperative_boss(user_id: str, query: str = "", operation_id: str | No
     if result.status == "boss_defeated":
         return False, "首领已被全服击破"
     if result.status in {"state_changed", "operation_conflict"}:
-        return False, "首领状态已变化，请重试"
+        return False, "讨伐未结算：首领已刷新/已击杀，或血量数据刚被改动，请重试"
     if not result.succeeded:
         return False, "活动首领讨伐失败，请重试"
 
@@ -524,7 +524,7 @@ def use_item_on_boss(user_id: str, query: str, operation_id: str | None = None) 
     if result.status == "boss_defeated":
         return False, "首领已被击退"
     if result.status in {"state_changed", "operation_conflict"}:
-        return False, "首领或库存状态已变化，请重试"
+        return False, "领奖/掉落未结算：首领进度或背包库存刚被改动，请重试"
     if not result.succeeded:
         return False, "活动首领讨伐失败，请重试"
 

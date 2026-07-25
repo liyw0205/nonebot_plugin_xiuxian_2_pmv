@@ -139,7 +139,7 @@ async def mix_elixir_sqdj_up_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级收取等级", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir_sqdj_up.finish()
     if not upgrade.succeeded:
-        msg = "**炼丹**\n---\n⚠️ 炼丹状态已变化，本次收取等级升级未结算，请重新查看后再试。"
+        msg = "**炼丹**\n---\n⚠️ 收取等级升级未结算：经验/等级刚被改动，请重新查看后再试。"
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级收取等级", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir_sqdj_up.finish()
     msg = (
@@ -203,7 +203,7 @@ async def mix_elixir_dykh_up_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir_dykh_up.finish()
     if not upgrade.succeeded:
-        msg = "炼丹状态已变化，本次丹药控火升级未结算，请重新查看后再试。"
+        msg = "丹药控火升级未结算：材料不足，或控火等级刚被改动，请重新查看后再试。"
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir_dykh_up.finish()
     msg = f"道友消耗炼丹经验{upgrade.cost}点，丹药控火等级目前为：{upgrade.level}级，可以使炼丹收获的丹药增加{upgrade.level}个！\n剩余炼丹经验：{upgrade.experience}点"
@@ -296,7 +296,7 @@ async def yaocai_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 await send_msg_handler(bot, event, '灵田收取', bot.self_id, l_msg)
                 await yaocai_get.finish()
             if harvest.status in {"state_changed", "user_missing"}:
-                msg = "灵田状态已变化，本次未发放药材，请重新查看后再试。"
+                msg = "药材未发放：灵田尚未成熟，或收取进度刚被改动，请重新查看后再试。"
                 await handle_send(bot, event, msg, md_type="炼丹", k1="收取", v1="灵田收取", k2="查看", v2="洞天福地查看", k3="帮助", v3="洞天福地帮助")
                 await yaocai_get.finish()
             msg = "".join(
@@ -497,7 +497,7 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             saved_recipes,
         )
         if not saved.succeeded:
-            await handle_send(bot, event, "背包或炼丹次数状态已变化，请重新生成丹方。")
+            await handle_send(bot, event, "丹方生成失败：炼丹次数不足，或背包/次数刚被改动，请重新生成。")
             await mix_elixir.finish()
         if not dan_name:
             title = "炼丹配方"
@@ -740,14 +740,14 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                         if claimed.status == "inventory_full":
                             msg = "丹药背包已满，材料已扣但丹药未发。请先清理背包，再提交同一配方补领。"
                         else:
-                            msg = "药材、丹炉或炼丹状态已变化，本次未消耗药材。若此前已扣材，请稍后再提同一配方补领。"
+                            msg = "炼丹未结算：药材/丹炉不足或数据冲突，本次未扣材。若此前已扣材，请稍后再提同一配方补领。"
                     else:
                         if started.status == "item_insufficient":
                             msg = "药材数量不足，本次未消耗药材。"
                         elif started.status == "limit_reached":
                             msg = "道友今日炼丹已达上限，请明日再来！"
                         else:
-                            msg = "药材、丹炉或炼丹状态已变化，本次未消耗药材，请检查背包后重试。"
+                            msg = "炼丹未结算：药材不足、丹炉不可用，或数据刚被改动，本次未扣材，请检查背包后重试。"
                     await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="药材", v3="药材背包")
                     await mix_make.finish()
 
@@ -763,7 +763,7 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                     if claimed.status == "inventory_full":
                         msg = "丹药背包已满，材料消耗记录已保留。请清理背包后，重新提交同一配方领取。"
                     else:
-                        msg = "丹药领取状态已变化，材料消耗记录已保留，请重新提交同一配方领取。"
+                        msg = "丹药尚未入账：领取冲突，材料消耗记录已保留，请重新提交同一配方领取。"
                     await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
                     await mix_make.finish()
                 msg = f"恭喜道友成功炼成丹药：{claimed.reward_name}{claimed.reward_quantity}枚"

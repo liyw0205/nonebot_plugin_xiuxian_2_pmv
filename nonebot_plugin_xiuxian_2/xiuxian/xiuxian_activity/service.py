@@ -508,7 +508,7 @@ def claim_collect_phrase(user_id: str, query: str, operation_id: str | None = No
     if not result.succeeded:
         if result.status == "tokens_insufficient":
             return False, "字牌不足，还缺：" + "、".join(f"{char}x{count}" for char, count in result.missing)
-        return False, {"limit_reached":"该词组已达到兑换次数上限","inventory_full":"背包空间不足，奖励未领取","user_missing":"角色不存在","operation_conflict":"兑换请求冲突，请重新发送"}.get(result.status,"兑换状态已变化，请重试")
+        return False, {"limit_reached":"该词组已达到兑换次数上限","inventory_full":"背包空间不足，奖励未领取","user_missing":"角色不存在","operation_conflict":"兑换请求冲突，请重新发送"}.get(result.status,"兑换未结算：次数/材料不足，或数据刚被改动，请重试")
     reward_text = "，".join(result.rewards)
     if reward_text:
         return True, f"{activity['name']}兑换成功：{phrase['name']}\n{reward_text}"
@@ -769,7 +769,7 @@ def claim_activity_tasks(user_id: str, query: str = "", operation_id: str | None
         messages = {
             "inventory_full": "背包空间不足，奖励未领取",
             "user_missing": "角色不存在",
-            "state_changed": "任务状态已变化，请重新查询",
+            "state_changed": "任务未结算：进度已完成/已领奖，或数据刚被改动，请重新查询",
             "operation_conflict": "领取请求冲突，请重新发送",
         }
         return False, messages.get(result.status, "当前没有可领取的活动任务奖励")
@@ -917,7 +917,7 @@ def claim_activity_pass_rewards(user_id: str, query: str = "", operation_id: str
         balance["level"], reward_jobs, XiuConfig().max_goods_num,
     )
     if not result.succeeded:
-        return False, {"inventory_full":"背包空间不足，奖励未领取","user_missing":"角色不存在","state_changed":"战令状态已变化，请重新查询","operation_conflict":"领取请求冲突，请重新发送"}.get(result.status,"活动战令奖励已领取")
+        return False, {"inventory_full":"背包空间不足，奖励未领取","user_missing":"角色不存在","state_changed":"战令领奖未结算：等级不足、已领取，或数据刚被改动，请重新查询","operation_conflict":"领取请求冲突，请重新发送"}.get(result.status,"活动战令奖励已领取")
     lines = ["活动战令奖励领取成功："]
     for level, name, reward_text in result.rewards:
         lines.append(f"- Lv.{level} {name}：{reward_text or '暂无奖励'}")
@@ -1038,7 +1038,7 @@ def claim_point_shop_item(user_id: str, query: str, operation_id: str | None = N
     if result.status == "inventory_full":
         return False, "背包中该奖励物品已达持有上限"
     if result.status in {"operation_conflict", "state_changed", "user_missing"}:
-        return False, "兑换状态已变化，请重新尝试"
+        return False, "兑换未结算：次数/材料不足，或数据刚被改动，请重新尝试"
 
     reward_msg = [
         f"获得灵石 {number_to(reward['quantity'])} 枚"
@@ -1744,7 +1744,7 @@ def claim_sign(user_id: str, operation_id: str | None = None) -> tuple[bool, str
         ]
         return True, "\n".join(lines)
     if not result.succeeded:
-        return False, {"already_signed":"今日已经领取过活动签到","inventory_full":"背包空间不足，奖励未领取","user_missing":"角色不存在","state_changed":"签到状态已变化，请重试","operation_conflict":"签到请求冲突，请重新发送"}.get(result.status,"活动签到失败")
+        return False, {"already_signed":"今日已经领取过活动签到","inventory_full":"背包空间不足，奖励未领取","user_missing":"角色不存在","state_changed":"签到未结算：今日已签，或奖励发放冲突，请重试","operation_conflict":"签到请求冲突，请重新发送"}.get(result.status,"活动签到失败")
     daily_msg, milestone_msg = [], []
     sign_days = result.sign_days
 

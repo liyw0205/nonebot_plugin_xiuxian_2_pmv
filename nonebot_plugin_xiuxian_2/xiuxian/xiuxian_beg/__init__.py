@@ -178,7 +178,7 @@ async def beg_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     elif result.status == "expired":
         msg = "道友已经过了新手期,不能再来此寻求机缘了。"
     elif result.status in {"state_changed", "operation_conflict"}:
-        msg = "角色状态已变化，请重新尝试领取！"
+        msg = "领取未结算：今日已领，或角色数据刚被改动，请重新尝试。"
     else:
         msg = "未找到角色信息，无法领取仙途奇缘！"
     await handle_send(bot, event, msg)
@@ -269,7 +269,7 @@ async def novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     elif result.status == "inventory_full":
         msg = "**新手礼包**\n---\n❌ 背包空间不足，无法领取新手礼包！"
     elif result.status in {"state_changed", "operation_conflict"}:
-        msg = "**新手礼包**\n---\n⚠️ 角色状态已变化，请重新尝试领取！"
+        msg = "**新手礼包**\n---\n⚠️ 领取未结算：已领取过，或角色数据刚被改动，请重新尝试。"
     else:
         msg = "**新手礼包**\n---\n❌ 未找到角色信息，无法领取新手礼包！"
     await handle_send(

@@ -269,7 +269,7 @@ async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         elif settlement.status == "stamina_insufficient":
             message = "体力不足，无法发起竞技场挑战。"
         else:
-            message = "竞技场挑战状态已变化，请重新操作。"
+            message = "挑战未结算：挑战次数不足、对手已变，或战斗数据刚被改动，请重新操作。"
         await handle_send(bot, event, message)
         await arena_challenge.finish()
     if use_cached_target:
@@ -605,7 +605,7 @@ async def arena_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await handle_send(bot, event, msg)
         await arena_buy.finish()
     if purchase_result.status == "honor_insufficient":
-        await handle_send(bot, event, "荣誉值状态已变化，当前荣誉值不足！")
+        await handle_send(bot, event, "兑换失败：荣誉值不足。")
         await arena_buy.finish()
     if purchase_result.status == "limit_reached":
         await handle_send(bot, event, f"{item_info['name']}已到限购无法再购买！")
@@ -614,10 +614,10 @@ async def arena_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await handle_send(bot, event, f"{item_info['name']}持有数量已达上限！")
         await arena_buy.finish()
     if purchase_result.status in {"state_changed", "user_missing"}:
-        await handle_send(bot, event, "竞技场兑换状态已变化，请重新兑换！")
+        await handle_send(bot, event, "兑换未结算：荣誉值不足、库存不足，或数据刚被改动，请重新兑换。")
         await arena_buy.finish()
     if not purchase_result.succeeded:
-        await handle_send(bot, event, "竞技场兑换状态已变化，请重新兑换！")
+        await handle_send(bot, event, "兑换未结算：荣誉值不足、库存不足，或数据刚被改动，请重新兑换。")
         await arena_buy.finish()
 
     msg = (
@@ -745,7 +745,7 @@ async def arena_buy_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessa
             f"当前灵石：{number_to(int(user_info.get('stone', 0)))}",
         )
         await arena_buy_challenge.finish()
-    await handle_send(bot, event, "竞技场购买状态已变化，请重新操作。")
+    await handle_send(bot, event, "购买未结算：灵石/荣誉不足，或商品库存刚被改动，请重新操作。")
     await arena_buy_challenge.finish()
 
 def check_rank_requirement(current_rank, required_rank):
@@ -915,5 +915,5 @@ async def use_arena_challenge_ticket(bot: Bot, event: GroupMessageEvent | Privat
     elif result.status == "item_missing":
         message = "背包中没有可用的竞技场挑战券。"
     else:
-        message = "竞技场挑战券使用状态已变化，请重新操作。"
+        message = "挑战券使用未结算：券数量不足，或次数数据刚被改动，请重新操作。"
     await handle_send(bot, event, message, md_type="竞技场")

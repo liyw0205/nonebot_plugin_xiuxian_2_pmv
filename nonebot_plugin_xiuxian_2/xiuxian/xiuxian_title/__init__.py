@@ -225,7 +225,7 @@ async def title_equip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         "duplicate": f"成功装备称号【{title_data.get('name', title_id)}】！\n该装备请求已经处理，无需重复提交。",
         "already_equipped": f"称号【{title_data.get('name', title_id)}】已在装备中。",
         "title_locked": "你还未解锁该称号！",
-        "state_changed": "称号状态已变化，请重新查看后再试。",
+        "state_changed": "称号操作未结算：未拥有该称号，或穿戴数据刚被改动，请重新查看。",
         "operation_conflict": "本次称号请求与已处理记录冲突，请重新操作。",
     }
     result_msg = messages.get(result.status, "装备称号失败，请重试。")
@@ -261,7 +261,7 @@ async def title_unequip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         "applied": f"成功卸下称号【{title_data.get('name', equipped)}】！",
         "duplicate": f"成功卸下称号【{title_data.get('name', result.title_id)}】！\n该卸下请求已经处理，无需重复提交。",
         "not_equipped": "你当前没有装备任何称号！",
-        "state_changed": "称号状态已变化，请重新查看后再试。",
+        "state_changed": "称号操作未结算：未拥有该称号，或穿戴数据刚被改动，请重新查看。",
         "operation_conflict": "本次称号请求与已处理记录冲突，请重新操作。",
     }
     result_msg = messages.get(result.status, "卸下称号失败，请重试。")
@@ -510,7 +510,7 @@ async def title_grant_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     else:
         messages = {
             "already_unlocked": f"用户已拥有称号【{title_name}】",
-            "state_changed": "用户称号状态已变化，请重试",
+            "state_changed": "称号发放/回收未结算：用户数据刚被改动，请重试",
             "operation_conflict": "本次赠送请求与已处理记录冲突",
         }
         await handle_send(bot, event, f"赠送失败：{messages.get(result.status, '请重试')}")

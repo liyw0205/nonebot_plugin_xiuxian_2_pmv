@@ -806,7 +806,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await battle.finish()
     if not settlement.succeeded:
         battle_flag[GLOBAL_BOSS_KEY] = False
-        await handle_send(bot, event, "世界BOSS状态已变化，本次未扣除体力，请重新讨伐！")
+        await handle_send(bot, event, "讨伐未结算：BOSS已刷新/已击杀，本次未扣体力，请重新讨伐。")
         await battle.finish()
     group_boss[GLOBAL_BOSS_KEY] = settled_bosses
 
@@ -1399,7 +1399,7 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             await handle_send(bot, event, msg, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")
             await boss_integral_use.finish()
         if purchase_result.status == "integral_insufficient":
-            await handle_send(bot, event, "世界积分状态已变化，当前积分不足！")
+            await handle_send(bot, event, "兑换失败：世界积分不足。")
             await boss_integral_use.finish()
         if purchase_result.status == "limit_reached":
             await handle_send(bot, event, f"{item_info['name']}已到限购无法再购买！")
@@ -1408,13 +1408,13 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             await handle_send(bot, event, f"{item_info['name']}持有数量已达上限！")
             await boss_integral_use.finish()
         if purchase_result.status == "state_changed":
-            await handle_send(bot, event, "世界BOSS兑换状态已变化，请重新兑换！")
+            await handle_send(bot, event, "兑换未结算：积分不足、库存不足，或数据刚被改动，请重新兑换。")
             await boss_integral_use.finish()
         if purchase_result.status == "user_missing":
             await handle_send(bot, event, "未找到道友数据，世界BOSS兑换失败！")
             await boss_integral_use.finish()
         if purchase_result.status != "applied":
-            await handle_send(bot, event, "世界BOSS兑换状态已变化，请重新兑换！")
+            await handle_send(bot, event, "兑换未结算：积分不足、库存不足，或数据刚被改动，请重新兑换。")
             await boss_integral_use.finish()
         msg = f"道友成功兑换获得：{item_info['name']}{purchase_result.quantity}个"
         await handle_send(bot, event, msg, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")

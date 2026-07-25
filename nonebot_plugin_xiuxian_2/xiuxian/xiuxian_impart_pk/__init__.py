@@ -172,7 +172,7 @@ async def impart_pk_project_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     elif result.status == "capacity_full":
         msg = "虚神界人数已满，道友现在无法加入！"
     else:
-        msg = "投影状态已变化，请稍后重试！"
+        msg = "投影操作未结算：投影不存在或数据刚被改动，请稍后重试。"
     await handle_send(bot, event, msg, md_type="虚神界", k1="投影", v1="投影虚神界", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
     await impart_pk_project.finish()
 
@@ -361,7 +361,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="祈愿", v3="传承祈愿")
             await impart_pk_now.finish()
         if not settlement.succeeded:
-            await handle_send(bot, event, "对决状态已变化，请重新发起虚神界对决！")
+            await handle_send(bot, event, "对决未成立：邀请已失效，或对决数据刚被改动，请重新发起。")
             await impart_pk_now.finish()
 
         msg = f"【对决结束】\n"
@@ -496,7 +496,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="祈愿", v3="传承祈愿")
         await impart_pk_now.finish()
     if not settlement.succeeded:
-        await handle_send(bot, event, "对决双方状态已变化，请重新发起虚神界对决！")
+        await handle_send(bot, event, "对决未结算：双方投影/战力数据刚被改动，请重新发起。")
         await impart_pk_now.finish()
 
     msg = f"【对决结束】\n"
@@ -630,7 +630,7 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="虚神界", k1="修炼", v1="虚神界修炼", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_exp.finish()
     if not result.succeeded:
-        msg = "累计时间不足，修炼失败!" if result.status == "time_insufficient" else "虚神界状态已变化，请重新尝试。"
+        msg = "累计时间不足，修炼失败!" if result.status == "time_insufficient" else "修炼未结算：虚神界时间不足，或进度刚被改动，请重新尝试。"
         await handle_send(bot, event, msg, md_type="虚神界", k1="修炼", v1="虚神界修炼", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_exp.finish()
     
@@ -858,7 +858,7 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, msg, md_type="虚神界", k1="探索", v1="虚神界探索", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_go.finish()
     if not result.succeeded:
-        msg = "虚神界时间不足，探索失败。" if result.status == "time_insufficient" else "虚神界状态已变化，请重新探索。"
+        msg = "虚神界时间不足，探索失败。" if result.status == "time_insufficient" else "探索未结算：虚神界时间不足，或探索进度刚被改动，请重新探索。"
         await handle_send(bot, event, msg, md_type="虚神界", k1="探索", v1="虚神界探索", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_go.finish()
     
@@ -1040,7 +1040,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
         await handle_send(bot, event, msg, md_type="虚神界", k1="闭关", v1="虚神界闭关", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_out_closing.finish()
     if not settlement.succeeded:
-        await handle_send(bot, event, "闭关状态已变化，请重新尝试出关！")
+        await handle_send(bot, event, "出关未结算：当前未在闭关，或闭关数据刚被改动，请重新尝试。")
         await impart_pk_out_closing.finish()
 
     # 构造返回消息
