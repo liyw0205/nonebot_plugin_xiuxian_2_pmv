@@ -164,32 +164,48 @@ class FusionService:
                         conn.rollback()
                         return FusionResult("state_changed", successful, False)
                 else:
-                    if int(user[0]) < stone_cost:
+                    # 0 灵石配方（如追捕令）不扣灵石；负灵石也不应拦零成本合成
+                    current_stone = float(user[0] or 0)
+                    if stone_cost > 0 and current_stone < stone_cost:
                         conn.rollback()
                         return FusionResult("stone_insufficient", successful, False)
                     columns = set(conn.column_names("back"))
+                    has_bind = "bind_num" in columns
                     for item_id, quantity in materials.items():
                         row = conn.execute(
-                            "SELECT COALESCE(goods_num, 0)" +
-                            (", COALESCE(bind_num, 0)" if "bind_num" in columns else "") +
-                            " FROM back WHERE user_id=%s AND goods_id=%s", (user_id, item_id),
+                            "SELECT COALESCE(goods_num, 0)"
+                            + (", COALESCE(bind_num, 0)" if has_bind else "")
+                            + " FROM back WHERE user_id=%s AND goods_id=%s",
+                            (user_id, item_id),
                         ).fetchone()
-                        available = 0 if row is None else int(row[0]) - (int(row[1]) if len(row) > 1 else 0)
+                        available = 0 if row is None else int(row[0]) - (int(row[1]) if has_bind and len(row) > 1 else 0)
                         if available - max(0, reserved.get(item_id, 0)) < quantity:
                             conn.rollback()
                             return FusionResult("item_insufficient", successful, False)
-                    charged = conn.execute(
-                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND stone>=%s",
-                        (stone_cost, user_id, stone_cost),
-                    )
-                    if charged.rowcount != 1:
-                        conn.rollback()
-                        return FusionResult("state_changed", successful, False)
-                    for item_id, quantity in materials.items():
-                        consumed = conn.execute(
-                            "UPDATE back SET goods_num=goods_num-%s WHERE user_id=%s AND goods_id=%s",
-                            (quantity, user_id, item_id),
+                    if stone_cost > 0:
+                        charged = conn.execute(
+                            "UPDATE user_xiuxian "
+                            "SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
+                            "WHERE user_id=%s AND CAST(COALESCE(stone,0) AS REAL)>=CAST(%s AS REAL)",
+                            (stone_cost, user_id, stone_cost),
                         )
+                        if charged.rowcount != 1:
+                            conn.rollback()
+                            return FusionResult("state_changed", successful, False)
+                    for item_id, quantity in materials.items():
+                        if has_bind:
+                            consumed = conn.execute(
+                                "UPDATE back SET goods_num=goods_num-%s "
+                                "WHERE user_id=%s AND goods_id=%s "
+                                "AND CAST(COALESCE(goods_num,0) AS REAL)-CAST(COALESCE(bind_num,0) AS REAL)>=%s",
+                                (quantity, user_id, item_id, quantity),
+                            )
+                        else:
+                            consumed = conn.execute(
+                                "UPDATE back SET goods_num=goods_num-%s "
+                                "WHERE user_id=%s AND goods_id=%s AND goods_num>=%s",
+                                (quantity, user_id, item_id, quantity),
+                            )
                         if consumed.rowcount != 1:
                             conn.rollback()
                             return FusionResult("state_changed", successful, False)
@@ -302,17 +318,21 @@ class FusionService:
                     item_id: quantity * charged_attempts for item_id, quantity in materials.items()
                 }
 
-                if int(user[0]) < total_stone:
+                current_stone = float(user[0] or 0)
+                # 0 灵石总成本不校验/不扣费（负灵石也可合成追捕令这类配方）
+                if total_stone > 0 and current_stone < total_stone:
                     conn.rollback()
                     return FusionBatchResult("stone_insufficient", 0, 0, 0)
                 columns = set(conn.column_names("back"))
+                has_bind = "bind_num" in columns
                 for item_id, quantity in total_materials.items():
                     row = conn.execute(
-                        "SELECT COALESCE(goods_num, 0)" +
-                        (", COALESCE(bind_num, 0)" if "bind_num" in columns else "") +
-                        " FROM back WHERE user_id=%s AND goods_id=%s", (user_id, item_id),
+                        "SELECT COALESCE(goods_num, 0)"
+                        + (", COALESCE(bind_num, 0)" if has_bind else "")
+                        + " FROM back WHERE user_id=%s AND goods_id=%s",
+                        (user_id, item_id),
                     ).fetchone()
-                    available = 0 if row is None else int(row[0]) - (int(row[1]) if len(row) > 1 else 0)
+                    available = 0 if row is None else int(row[0]) - (int(row[1]) if has_bind and len(row) > 1 else 0)
                     if available - reserved.get(item_id, 0) < quantity:
                         conn.rollback()
                         return FusionBatchResult("item_insufficient", 0, 0, 0)
@@ -327,19 +347,30 @@ class FusionService:
                     conn.rollback()
                     return FusionBatchResult("inventory_full", 0, 0, 0)
 
-                if total_stone:
+                if total_stone > 0:
                     charged = conn.execute(
-                        "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) WHERE user_id=%s AND stone>=%s",
+                        "UPDATE user_xiuxian "
+                        "SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
+                        "WHERE user_id=%s AND CAST(COALESCE(stone,0) AS REAL)>=CAST(%s AS REAL)",
                         (total_stone, user_id, total_stone),
                     )
                     if charged.rowcount != 1:
                         conn.rollback()
                         return FusionBatchResult("state_changed", 0, 0, 0)
                 for item_id, quantity in total_materials.items():
-                    consumed = conn.execute(
-                        "UPDATE back SET goods_num=goods_num-%s WHERE user_id=%s AND goods_id=%s",
-                        (quantity, user_id, item_id),
-                    )
+                    if has_bind:
+                        consumed = conn.execute(
+                            "UPDATE back SET goods_num=goods_num-%s "
+                            "WHERE user_id=%s AND goods_id=%s "
+                            "AND CAST(COALESCE(goods_num,0) AS REAL)-CAST(COALESCE(bind_num,0) AS REAL)>=%s",
+                            (quantity, user_id, item_id, quantity),
+                        )
+                    else:
+                        consumed = conn.execute(
+                            "UPDATE back SET goods_num=goods_num-%s "
+                            "WHERE user_id=%s AND goods_id=%s AND goods_num>=%s",
+                            (quantity, user_id, item_id, quantity),
+                        )
                     if consumed.rowcount != 1:
                         conn.rollback()
                         return FusionBatchResult("state_changed", 0, 0, 0)

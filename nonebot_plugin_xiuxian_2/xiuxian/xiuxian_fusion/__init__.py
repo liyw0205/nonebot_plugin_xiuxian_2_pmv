@@ -195,9 +195,9 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
     if user_info['exp'] < int(fusion_info.get('need_exp', 0)):
         return False, f"道友的修为不足，合成 {equipment['name']} 需要修为 {int(fusion_info.get('need_exp', 0))}！"
     
-    # 检查灵石
+    # 检查灵石（0 成本配方不校验，避免负灵石玩家被误拦）
     total_stone = int(fusion_info.get('need_stone', 0)) * quantity
-    if quantity == 1 and user_info['stone'] < total_stone:
+    if total_stone > 0 and user_info['stone'] < total_stone:
         return False, f"道友的灵石不足，合成 {quantity} 个 {equipment['name']} 最多需要 {number_to(total_stone)} 枚灵石呢！"
     
     # 检查材料
@@ -226,7 +226,7 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
         if total_amount < amount_needed:
             missing_items.append((item_id, amount_needed - total_amount))
     
-    if missing_items and quantity == 1:
+    if missing_items:
         missing_names = []
         for item_id, amount_needed in missing_items:
             material_info = items.get_data_by_item_id(int(item_id))
@@ -286,7 +286,13 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
                 return False, "合成失败！幸好使用了福缘石，材料没有损失。\n该合成请求已经处理，无需重复提交。"
             return False, "合成失败！材料已消耗。\n该合成请求已经处理，无需重复提交。"
         if not result.succeeded:
-            return False, "合成所需的灵石或材料状态已经变化，本次合成未结算。"
+            status_messages = {
+                "stone_insufficient": "灵石不足，本次合成未结算。",
+                "item_insufficient": "材料不足（绑定物品不可用于合成），本次合成未结算。",
+                "user_missing": "未找到修仙数据，本次合成未结算。",
+                "state_changed": "合成所需的灵石或材料状态已经变化，本次合成未结算。",
+            }
+            return False, status_messages.get(result.status, "合成状态已经变化，本次合成未结算。")
         if result.successful:
             item_type = equipment.get('type', '物品')
             return True, f"道友成功合成了{item_type}: {equipment['name']}！！"
