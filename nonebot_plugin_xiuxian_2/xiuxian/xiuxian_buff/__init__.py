@@ -710,7 +710,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             user_id, create_time, exp, stone_cost, new_hp, new_mp, new_atk, new_power,
         )
     except Exception:
-        await handle_send(bot, event, "出关结算失败，请稍后重试。")
+        await handle_send(bot, event, "出关结算失败：结算过程异常。")
         await out_closing.finish()
     if not result.succeeded:
         await handle_send(bot, event, "闭关状态或资源已变化，请重新查看后再试。")
@@ -1013,7 +1013,7 @@ async def my_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         )
     except Exception:
         logger.exception("我的修为查询失败 user_id={}", user_info.get("user_id"))
-        msg = "修为信息读取失败，请稍后重试。"
+        msg = "修为信息读取失败：查询过程异常。"
 
     await handle_send(
         bot, event, msg,

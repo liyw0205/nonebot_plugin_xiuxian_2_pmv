@@ -1003,7 +1003,7 @@ async def handle_dungeon_purchase(bot: Bot, event: GroupMessageEvent | PrivateMe
         )
     except Exception:
         logger.exception("读取副本商店兑换 operation 失败")
-        await handle_send(bot, event, "副本兑换失败，请稍后重试。")
+        await handle_send(bot, event, "副本兑换失败：处理过程异常。")
         await dungeon_purchase.finish()
     if replay is not None:
         await handle_send(bot, event, replay.response or "兑换失败。")
@@ -1029,7 +1029,7 @@ async def handle_dungeon_purchase(bot: Bot, event: GroupMessageEvent | PrivateMe
         await handle_send(bot, event, result.response or "兑换失败。")
     except Exception:
         logger.exception("副本商店兑换事务失败")
-        await handle_send(bot, event, "副本兑换失败，请稍后重试。")
+        await handle_send(bot, event, "副本兑换失败：处理过程异常。")
     await dungeon_purchase.finish()
 
 
@@ -1088,7 +1088,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         replay = dungeon_explore_operation_service.replay(operation_id, user_id)
     except Exception:
         logger.exception("读取副本探索 operation 失败")
-        await handle_send(bot, event, "副本探索结算失败，请稍后重试。")
+        await handle_send(bot, event, "副本探索结算失败：处理过程异常。")
         await explore_dungeon.finish()
 
     if replay.status == "operation_conflict":
@@ -1104,12 +1104,12 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
             )
         except Exception:
             logger.exception("恢复副本探索 operation 失败")
-            await handle_send(bot, event, "副本探索结算失败，请稍后重试。")
+            await handle_send(bot, event, "副本探索结算失败：处理过程异常。")
             await explore_dungeon.finish()
         if resumed.phase == "completed":
             await _send_explore_response(bot, event, resumed.response or {})
         else:
-            await handle_send(bot, event, "副本结算任务恢复失败，请稍后重试。")
+            await handle_send(bot, event, "副本结算任务恢复失败：结算未完成。")
         await explore_dungeon.finish()
 
     async def reject(result_status: str, message: str, status=None) -> None:
@@ -1128,7 +1128,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
             await _send_explore_response(bot, event, stored.response or response)
         except Exception:
             logger.exception("持久化副本探索拒绝响应失败")
-            await handle_send(bot, event, "副本探索校验失败，请稍后重试。")
+            await handle_send(bot, event, "副本探索校验失败：处理过程异常。")
 
     player_status = dungeon_manager.get_player_status(user_id)
     if player_status["dungeon_status"] == "completed":
@@ -1419,7 +1419,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
             )
     except Exception:
         logger.exception("副本探索事务结算失败")
-        await handle_send(bot, event, "副本探索结算失败，请稍后重试。")
+        await handle_send(bot, event, "副本探索结算失败：处理过程异常。")
         await explore_dungeon.finish()
 
     if prepared.status == "operation_conflict":
@@ -1429,7 +1429,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         await _send_explore_response(bot, event, prepared.response or {})
         await explore_dungeon.finish()
     if settled is None or settled.phase != "completed":
-        await handle_send(bot, event, "副本探索结算失败，请稍后重试。")
+        await handle_send(bot, event, "副本探索结算失败：处理过程异常。")
         await explore_dungeon.finish()
     await _send_explore_response(bot, event, settled.response or response)
     await explore_dungeon.finish()

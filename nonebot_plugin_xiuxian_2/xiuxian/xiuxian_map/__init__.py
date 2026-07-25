@@ -2254,7 +2254,7 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         )
     except Exception:
         logger.exception("地图探索发起事务失败 user_id={}", uid)
-        await handle_send(bot, event, "探索发起失败，请稍后重试。")
+        await handle_send(bot, event, "探索发起失败：处理过程异常。")
         return
     if result.status == "already_running":
         await handle_send(bot, event, "你已有进行中的探索，请先【探索结算】。")
@@ -2383,7 +2383,7 @@ async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         )
     except Exception:
         logger.exception("地图探索结算事务失败 user_id={}", uid)
-        await handle_send(bot, event, "探索结算失败，请稍后重试。")
+        await handle_send(bot, event, "探索结算失败：处理过程异常。")
         return
     if result.status == "inventory_full":
         await handle_send(bot, event, "背包物品已达上限，探索奖励尚未领取。")

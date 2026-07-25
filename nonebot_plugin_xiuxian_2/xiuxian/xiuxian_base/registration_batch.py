@@ -68,7 +68,7 @@ class RegistrationBatcher:
             results = {}
         for request_id, _request, future in batch:
             if not future.done():
-                future.set_result(results.get(request_id, (False, "注册失败，请稍后重试。")))
+                future.set_result(results.get(request_id, (False, "注册失败：批处理未返回结果。")))
             self._queue.task_done()
 
 
