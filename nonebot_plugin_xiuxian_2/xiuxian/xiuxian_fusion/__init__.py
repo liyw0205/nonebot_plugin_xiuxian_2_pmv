@@ -200,7 +200,7 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
     if total_stone > 0 and user_info['stone'] < total_stone:
         return False, f"道友的灵石不足，合成 {quantity} 个 {equipment['name']} 最多需要 {number_to(total_stone)} 枚灵石呢！"
     
-    # 检查材料
+    # 检查材料（合成可用绑定；装备已穿戴的1件不可用）
     needed_items = fusion_info.get('need_item', {})
     missing_items = []
     for item_id, amount_per_attempt in needed_items.items():
@@ -208,20 +208,12 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
         total_amount = 0
         for back in back_msg:
             if back['goods_id'] == int(item_id):
-                # 对于装备类型，检查是否已被使用
                 if back['goods_type'] == "装备":
                     is_equipped = check_equipment_use_msg(user_id, back['goods_id'])
-                    if is_equipped:
-                        # 如果装备已被使用
-                        available_num = back['goods_num'] - back['bind_num'] - 1
-                    else:
-                        # 如果未装备
-                        available_num = back['goods_num'] - back['bind_num']
+                    available_num = back['goods_num'] - (1 if is_equipped else 0)
                 else:
-                    # 非装备物品，正常计算
-                    available_num = back['goods_num'] - back['bind_num']
-                
-                total_amount += max(0, available_num)  # 确保不为负数
+                    available_num = back['goods_num']
+                total_amount += max(0, available_num)
         
         if total_amount < amount_needed:
             missing_items.append((item_id, amount_needed - total_amount))
@@ -231,24 +223,15 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
         for item_id, amount_needed in missing_items:
             material_info = items.get_data_by_item_id(int(item_id))
             if material_info:
-                # 计算实际缺少的数量（所需数量 - 已有数量）
                 actual_missing = amount_needed
                 for back in back_msg:
                     if back['goods_id'] == int(item_id):
-                        # 对于装备类型，检查是否已被使用
                         if back['goods_type'] == "装备":
                             is_equipped = check_equipment_use_msg(user_id, back['goods_id'])
-                            if is_equipped:
-                                # 如果装备已被使用，可用数量减少1
-                                available_num = back['goods_num'] - 1
-                            else:
-                                # 如果未装备
-                                available_num = back['goods_num']
+                            available_num = back['goods_num'] - (1 if is_equipped else 0)
                         else:
-                            # 非装备物品，正常计算
                             available_num = back['goods_num']
-                        
-                        actual_missing = max(0, amount_needed - available_num)  # 计算实际缺少的数量
+                        actual_missing = max(0, amount_needed - available_num)
                         break
                 
                 if actual_missing > 0:
@@ -288,7 +271,7 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
         if not result.succeeded:
             status_messages = {
                 "stone_insufficient": "灵石不足，本次合成未结算。",
-                "item_insufficient": "材料不足（绑定物品不可用于合成），本次合成未结算。",
+                "item_insufficient": "材料不足，本次合成未结算。",
                 "user_missing": "未找到修仙数据，本次合成未结算。",
                 "inventory_full": "成品将超过背包上限，本次合成未结算。",
                 "state_changed": "合成扣费扣材时数据刚被其他操作改动，本次未结算，请重新【合成】。",
@@ -329,7 +312,7 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
     if not result.succeeded:
         status_messages = {
             "stone_insufficient": "灵石不足，批量合成未结算。",
-            "item_insufficient": "材料不足（绑定物品不可用于合成），批量合成未结算。",
+            "item_insufficient": "材料不足，批量合成未结算。",
             "inventory_full": "成品数量将超过背包上限，批量合成未结算。",
             "user_missing": "未找到修仙数据，批量合成未结算。",
             "state_changed": "批量合成扣费扣材时数据刚被其他操作改动，本次未结算，请重新【合成】。",

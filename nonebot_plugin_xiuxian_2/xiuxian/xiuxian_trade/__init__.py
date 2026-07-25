@@ -1742,7 +1742,7 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         return
     
     # 检查用户背包中可交易的物品数量
-    goods_num = sql_message.goods_num(str(user_info['user_id']), goods_id, num_type='trade')
+    goods_num = sql_message.goods_num(str(user_info['user_id']), goods_id)
     if goods_num <= 0:
         msg = f"背包中没有足够的 {item_name} 用于交易！"
         await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
@@ -1780,7 +1780,7 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_baitan.finish()
     if result.status == "stock_insufficient":
-        msg = f"可交易的 {item_name} 数量不足，摆摊失败！"
+        msg = f"背包中 {item_name} 数量不足，摆摊失败！"
         await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_baitan.finish()
     if not result.created:

@@ -1637,8 +1637,7 @@ class TradeRepository:
                         bind_num=LEAST(COALESCE(bind_num, 0), goods_num-%s),
                         update_time=%s
                     WHERE user_id=%s AND goods_id=%s
-                      AND COALESCE(goods_num, 0)-COALESCE(bind_num, 0)
-                          -COALESCE(state, 0) >= %s
+                      AND COALESCE(goods_num, 0)-COALESCE(state, 0) >= %s
                     """,
                     (quantity, quantity, now, user_id, item_id, quantity),
                 ).rowcount

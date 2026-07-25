@@ -173,13 +173,13 @@ class FusionService:
                     has_bind = "bind_num" in columns
                     for item_id, quantity in materials.items():
                         row = conn.execute(
-                            "SELECT COALESCE(goods_num, 0)"
-                            + (", COALESCE(bind_num, 0)" if has_bind else "")
-                            + " FROM back WHERE user_id=%s AND goods_id=%s",
+                            "SELECT COALESCE(goods_num, 0) FROM back WHERE user_id=%s AND goods_id=%s",
                             (user_id, item_id),
                         ).fetchone()
-                        available = 0 if row is None else int(row[0]) - (int(row[1]) if has_bind and len(row) > 1 else 0)
-                        if available - max(0, reserved.get(item_id, 0)) < quantity:
+                        total = 0 if row is None else int(row[0] or 0)
+                        # 合成可用绑定材料；仅预留已装备件数（reserved）
+                        reserve = max(0, int(reserved.get(item_id, 0)))
+                        if total - reserve < quantity:
                             conn.rollback()
                             return FusionResult("item_insufficient", successful, False)
                     if stone_cost > 0:
@@ -193,18 +193,22 @@ class FusionService:
                             conn.rollback()
                             return FusionResult("state_changed", successful, False)
                     for item_id, quantity in materials.items():
+                        reserve = max(0, int(reserved.get(item_id, 0)))
                         if has_bind:
+                            # 允许消耗绑定材料；扣完后 bind_num 不超过剩余 goods_num
                             consumed = conn.execute(
-                                "UPDATE back SET goods_num=goods_num-%s "
+                                "UPDATE back SET goods_num=goods_num-%s, "
+                                "bind_num=LEAST(COALESCE(bind_num,0), goods_num-%s) "
                                 "WHERE user_id=%s AND goods_id=%s "
-                                "AND CAST(COALESCE(goods_num,0) AS REAL)-CAST(COALESCE(bind_num,0) AS REAL)>=%s",
-                                (quantity, user_id, item_id, quantity),
+                                "AND CAST(COALESCE(goods_num,0) AS REAL)-%s>=%s",
+                                (quantity, quantity, user_id, item_id, reserve, quantity),
                             )
                         else:
                             consumed = conn.execute(
                                 "UPDATE back SET goods_num=goods_num-%s "
-                                "WHERE user_id=%s AND goods_id=%s AND goods_num>=%s",
-                                (quantity, user_id, item_id, quantity),
+                                "WHERE user_id=%s AND goods_id=%s "
+                                "AND CAST(COALESCE(goods_num,0) AS REAL)-%s>=%s",
+                                (quantity, user_id, item_id, reserve, quantity),
                             )
                         if consumed.rowcount != 1:
                             conn.rollback()
@@ -327,13 +331,13 @@ class FusionService:
                 has_bind = "bind_num" in columns
                 for item_id, quantity in total_materials.items():
                     row = conn.execute(
-                        "SELECT COALESCE(goods_num, 0)"
-                        + (", COALESCE(bind_num, 0)" if has_bind else "")
-                        + " FROM back WHERE user_id=%s AND goods_id=%s",
+                        "SELECT COALESCE(goods_num, 0) FROM back WHERE user_id=%s AND goods_id=%s",
                         (user_id, item_id),
                     ).fetchone()
-                    available = 0 if row is None else int(row[0]) - (int(row[1]) if has_bind and len(row) > 1 else 0)
-                    if available - reserved.get(item_id, 0) < quantity:
+                    total = 0 if row is None else int(row[0] or 0)
+                    # 合成可用绑定材料；仅预留已装备件数
+                    reserve = max(0, int(reserved.get(item_id, 0)))
+                    if total - reserve < quantity:
                         conn.rollback()
                         return FusionBatchResult("item_insufficient", 0, 0, 0)
 
@@ -358,18 +362,21 @@ class FusionService:
                         conn.rollback()
                         return FusionBatchResult("state_changed", 0, 0, 0)
                 for item_id, quantity in total_materials.items():
+                    reserve = max(0, int(reserved.get(item_id, 0)))
                     if has_bind:
                         consumed = conn.execute(
-                            "UPDATE back SET goods_num=goods_num-%s "
+                            "UPDATE back SET goods_num=goods_num-%s, "
+                            "bind_num=LEAST(COALESCE(bind_num,0), goods_num-%s) "
                             "WHERE user_id=%s AND goods_id=%s "
-                            "AND CAST(COALESCE(goods_num,0) AS REAL)-CAST(COALESCE(bind_num,0) AS REAL)>=%s",
-                            (quantity, user_id, item_id, quantity),
+                            "AND CAST(COALESCE(goods_num,0) AS REAL)-%s>=%s",
+                            (quantity, quantity, user_id, item_id, reserve, quantity),
                         )
                     else:
                         consumed = conn.execute(
                             "UPDATE back SET goods_num=goods_num-%s "
-                            "WHERE user_id=%s AND goods_id=%s AND goods_num>=%s",
-                            (quantity, user_id, item_id, quantity),
+                            "WHERE user_id=%s AND goods_id=%s "
+                            "AND CAST(COALESCE(goods_num,0) AS REAL)-%s>=%s",
+                            (quantity, user_id, item_id, reserve, quantity),
                         )
                     if consumed.rowcount != 1:
                         conn.rollback()
