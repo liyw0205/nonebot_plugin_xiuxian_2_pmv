@@ -118,7 +118,7 @@ def _back_op_fail_msg(result, *, action: str = "操作") -> str:
         "user_missing": f"未找到修仙数据，{action}未结算。",
         "inventory_full": f"背包已满，{action}未结算。",
         "duplicate": f"该请求已处理，无需重复提交。",
-        "state_changed": f"{action}时背包或角色数据被其他操作改动，未结算，请刷新后重试。",
+        "state_changed": f"{action}时数据刚被改动，未结算，请刷新后重试。",
         "operation_conflict": "请求冲突（重复点击），请稍后再试。",
         "not_bound": "该物品未绑定，无法解绑。",
         "already_equipped": "已处于穿戴状态。",

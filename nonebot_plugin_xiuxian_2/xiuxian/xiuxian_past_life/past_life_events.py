@@ -497,7 +497,7 @@ class PastLifeEngine:
             )
             if not settlement.succeeded:
                 return {
-                    "message": "前尘事件未结算：进度已推进/已领取，或数据刚被改动，请重新查看。",
+                    "message": "前尘事件未结算：进度数据刚被改动，请重新查看。",
                     "is_end": False,
                     "ending": None,
                     "operation_status": settlement.status,
@@ -548,7 +548,7 @@ class PastLifeEngine:
             )
             if not settlement.succeeded:
                 return {
-                    "message": "前尘事件未结算：进度已推进/已领取，或数据刚被改动，请重新查看。",
+                    "message": "前尘事件未结算：进度数据刚被改动，请重新查看。",
                     "is_end": False,
                     "ending": None,
                     "operation_status": settlement.status,
@@ -582,7 +582,7 @@ class PastLifeEngine:
             )
             if not settlement.succeeded:
                 return {
-                    "message": "前尘事件未结算：进度已推进/已领取，或数据刚被改动，请重新查看。",
+                    "message": "前尘事件未结算：进度数据刚被改动，请重新查看。",
                     "is_end": False,
                     "ending": None,
                     "operation_status": settlement.status,

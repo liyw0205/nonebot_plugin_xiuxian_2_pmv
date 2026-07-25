@@ -39,7 +39,7 @@ def _acc_fail_msg(result, *, action: str = "饰品操作") -> str:
         "inventory_full": "背包已满，无法放入。",
         "user_missing": "未找到修仙数据。",
         "duplicate": "该请求已处理，无需重复提交。",
-        "state_changed": f"{action}时饰品/材料数据被改动，未结算，请重新查看后再试。",
+        "state_changed": f"{action}时数据刚被改动，未结算，请重新查看后再试。",
         "operation_conflict": "请求冲突，请稍后再试。",
     }
     return mapping.get(status, f"{action}未结算（{status}），请重新查看后再试。")

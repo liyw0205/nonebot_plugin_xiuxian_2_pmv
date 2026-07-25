@@ -294,7 +294,7 @@ async def ling_tian_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             if result.succeeded:
                 msg = f"道友成功消耗灵石：{result.stone_cost}，灵田数量+1,目前数量:{result.current_level}"
             else:
-                msg = "灵田升级/操作未结算：灵石不足，或灵田等级刚被改动，请重新查看后再试。"
+                msg = "灵田操作未结算：灵田数据刚被改动，请重新查看后再试。"
     await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
     await ling_tian_up.finish()
 
@@ -424,7 +424,7 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
     elif settlement.status == "stamina_insufficient":
         msg = "你没有足够的体力，请等待体力恢复后再试！"
     else:
-        msg = "切磋未结算：双方气血/位置或战斗数据刚被改动，请重新发起。"
+        msg = "切磋未结算：双方战斗数据刚被改动，请重新发起。"
     await handle_send(bot, event, msg, md_type="buff", k1="切磋", v1="切磋", k2="状态", v2="我的状态", k3="修为", v3="我的修为")
     await qc.finish()
 
@@ -599,7 +599,7 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     elif result.status == "exp_capped":
         msg = "当前修为已到达上限，无法继续灵石修炼！"
     elif not result.succeeded:
-        msg = "突破/修炼结算失败：修为或灵石刚被其他操作改动，请重新尝试。"
+        msg = "修炼结算失败：数据刚被改动，请重新尝试。"
     else:
         capped = result.exp_gain >= user_get_exp_max
         prefix = "修炼结束，本次修炼到达上限" if capped else "修炼结束"

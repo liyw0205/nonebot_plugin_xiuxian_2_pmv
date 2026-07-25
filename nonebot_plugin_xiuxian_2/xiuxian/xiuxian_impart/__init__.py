@@ -396,7 +396,7 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         )
         return
     if not result.succeeded:
-        await handle_send(bot, event, "抽卡未结算：抽卡次数/道具不足，或数据刚被改动，请重试。")
+        await handle_send(bot, event, "抽卡未结算：抽卡数据刚被改动，请重试。")
         return
     await re_impart_data(user_id)
     impart_data_draw = await impart_check(user_id)
@@ -465,7 +465,7 @@ async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, "祈愿石数量不足，未进行祈愿。")
         return
     if not result.succeeded:
-        await handle_send(bot, event, "祈愿未结算：道具不足，或祈愿进度刚被改动，请重新查看背包。")
+        await handle_send(bot, event, "祈愿未结算：祈愿数据刚被改动，请重新查看背包。")
         return
 
     drawn_cards = list(result.cards)
@@ -548,7 +548,7 @@ async def use_love_sand(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, final_msg)
         return
     if not result.succeeded:
-        await handle_send(bot, event, "操作未结算：道具不足，或传承数据刚被改动，请刷新后重试。")
+        await handle_send(bot, event, "操作未结算：传承数据刚被改动，请刷新后重试。")
         return
     log_message(user_id, f"[思恋流沙] 使用{quantity}个，获得思恋结晶{result.gained}颗")
     final_msg = f"获得思恋结晶 {result.gained} 颗\n当前思恋结晶：{result.stone_num}颗"
@@ -749,7 +749,7 @@ async def impart_compose_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         return
     cards = impart_data_json.data_person_list(user_id) or {}
     result = card_compose_service.compose(operation_id, user_id, source_card, target_card, cards.get(source_card, 0), cards.get(target_card, 0), 5, impart_data_json.data_all_())
-    messages = {"same_card": "合成材料卡与目标卡不能相同！", "card_missing": "重复卡不足5张，无法合成！", "state_changed": "卡牌操作未结算：数量不足或数据刚被改动，请重新操作。"}
+    messages = {"same_card": "合成材料卡与目标卡不能相同！", "card_missing": "重复卡不足5张，无法合成！", "state_changed": "卡牌操作未结算：卡牌数据刚被改动，请重新操作。"}
     if result.status == "duplicate":
         await handle_send(
             bot, event,
@@ -796,7 +796,7 @@ async def impart_disassemble_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, "未找到传承数据！")
         return
     result = card_disassemble_service.disassemble(operation_id, user_id, card_name, quantity, cards.get(card_name, 0), impart_state["stone_num"], 2, impart_data_json.data_all_())
-    messages = {"card_missing": "卡牌不足；分解后必须至少保留1张！", "state_changed": "卡牌操作未结算：数量不足或数据刚被改动，请重新操作。", "user_missing": "未找到传承数据！"}
+    messages = {"card_missing": "卡牌不足；分解后必须至少保留1张！", "state_changed": "卡牌操作未结算：卡牌数据刚被改动，请重新操作。", "user_missing": "未找到传承数据！"}
     if result.status == "duplicate":
         await handle_send(
             bot, event,

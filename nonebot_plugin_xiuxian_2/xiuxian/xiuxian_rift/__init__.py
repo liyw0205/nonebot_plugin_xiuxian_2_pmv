@@ -546,7 +546,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             if entry.status == "stamina_missing":
                 await handle_send(bot, event, "你没有足够的体力，请等待体力恢复后再试！")
                 await explore_rift.finish()
-            await handle_send(bot, event, "进入失败：秘境已关闭/名额已满，或进入数据刚被改动，请稍后重试。")
+            await handle_send(bot, event, "进入失败：秘境进入数据刚被改动，请稍后重试。")
             await explore_rift.finish()
         _sync_entry_projection(user_id, entry)
         msg = _entry_success_message(entry.rift_data)
@@ -621,7 +621,7 @@ async def use_rift_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
             if entry.status == "ticket_missing":
                 await handle_send(bot, event, "秘藏令数量不足，请重新查看背包。")
                 return
-            await handle_send(bot, event, "开启失败：秘藏令不足，或秘境已存在/数据刚被改动，请稍后重试。")
+            await handle_send(bot, event, "开启失败：秘境数据刚被改动，请稍后重试。")
             return
         _sync_entry_projection(user_id, entry)
         msg = _entry_success_message(entry.rift_data, bypass_position=True)
@@ -939,7 +939,7 @@ async def use_rift_key(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             event,
             messages.get(
                 result.status,
-                "使用失败：秘境钥匙不足，或秘境数据刚被改动，请稍后重试。",
+                "使用失败：秘境钥匙数据刚被改动，请稍后重试。",
             ),
         )
         return
@@ -1028,7 +1028,7 @@ async def use_rift_boss(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             event,
             messages.get(
                 settlement.status,
-                "使用失败：斩妖令不足，或秘境进度刚被改动，请稍后重试。",
+                "使用失败：斩妖令数据刚被改动，请稍后重试。",
             ),
         )
         return
@@ -1071,7 +1071,7 @@ async def _use_rift_speedup(
             "item_missing": "加速券数量不足，请重新查看背包。",
             "not_active": "当前没有可加速的秘境探索。",
         }
-        await handle_send(bot, event, messages.get(result.status, "加速失败：加速券不足，或秘境已结束/数据刚被改动，请稍后重试。"))
+        await handle_send(bot, event, messages.get(result.status, "加速失败：秘境数据刚被改动，请稍后重试。"))
         return
 
     # The database is authoritative; keep the legacy file as a post-commit projection.

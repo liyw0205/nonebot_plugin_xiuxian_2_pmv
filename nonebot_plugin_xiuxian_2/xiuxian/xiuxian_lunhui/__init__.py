@@ -361,7 +361,7 @@ async def confirm_lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg, md_type="轮回", k1="修为", v1="我的修为", k2="存档", v2="我的修仙信息", k3="印记", v3="轮回印记")
         await confirm_lunhui.finish()
     if not result.succeeded:
-        await handle_send(bot, event, "轮回未执行：确认已过期，或条件不满足/数据刚被改动，请重新发起。", md_type="轮回")
+        await handle_send(bot, event, "轮回未执行：确认数据刚被改动，请重新发起。", md_type="轮回")
         await confirm_lunhui.finish()
 
     msg = f"{original_msg}！\n轮回馈赠：{ROOT_RENAME_CARD_NAME} x1"

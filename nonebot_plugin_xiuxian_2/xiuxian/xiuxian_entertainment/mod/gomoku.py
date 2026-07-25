@@ -133,16 +133,17 @@ class GomokuRoomManager:
         self.save_room(room_id)
         return game
 
-    def join_room(self, room_id: str, user_id: str, user_name: str) -> bool:
+    def join_room(self, room_id: str, user_id: str, user_name: str):
+        """返回 (ok, reason)。reason 仅失败时有值。"""
         game = self.rooms.get(room_id)
         if not game:
-            return False
+            return False, "房间不存在"
         if self.get_user_room(user_id):
-            return False
+            return False, "你已在其它棋局中"
         if game.status != "waiting":
-            return False
+            return False, "房间已开始"
         if game.player_white is not None:
-            return False
+            return False, "房间已满"
 
         game.player_white = user_id
         game.player_names[user_id] = user_name
@@ -150,7 +151,7 @@ class GomokuRoomManager:
         game.current_player = game.player_black
         game.last_move_time = now_text()
         self.save_room(room_id)
-        return True
+        return True, ""
 
     def get_room(self, room_id: str):
         return self.rooms.get(room_id)
@@ -539,9 +540,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "你已在其它棋局中，请先退出或认输后再加入。")
         return
 
-    ok = room_manager.join_room(room_id, user_id, user_name)
+    ok, reason = room_manager.join_room(room_id, user_id, user_name)
     if not ok:
-        await handle_send(bot, event, "加入五子棋失败：房间不存在、已开始或已满。")
+        await handle_send(bot, event, f"加入五子棋失败：{reason}。")
         return
 
     user_room_status[user_id] = room_id

@@ -497,7 +497,7 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             saved_recipes,
         )
         if not saved.succeeded:
-            await handle_send(bot, event, "丹方生成失败：炼丹次数不足，或背包/次数刚被改动，请重新生成。")
+            await handle_send(bot, event, "丹方生成失败：炼丹次数数据刚被改动，请重新生成。")
             await mix_elixir.finish()
         if not dan_name:
             title = "炼丹配方"
@@ -740,14 +740,14 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                         if claimed.status == "inventory_full":
                             msg = "丹药背包已满，材料已扣但丹药未发。请先清理背包，再提交同一配方补领。"
                         else:
-                            msg = "炼丹未结算：药材/丹炉不足或数据冲突，本次未扣材。若此前已扣材，请稍后再提同一配方补领。"
+                            msg = "炼丹未结算：炼丹数据冲突，本次未扣材。若此前已扣材，请稍后再提同一配方补领。"
                     else:
                         if started.status == "item_insufficient":
                             msg = "药材数量不足，本次未消耗药材。"
                         elif started.status == "limit_reached":
                             msg = "道友今日炼丹已达上限，请明日再来！"
                         else:
-                            msg = "炼丹未结算：药材不足、丹炉不可用，或数据刚被改动，本次未扣材，请检查背包后重试。"
+                            msg = "炼丹未结算：炼丹数据刚被改动，本次未扣材，请检查背包后重试。"
                     await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="药材", v3="药材背包")
                     await mix_make.finish()
 

@@ -95,14 +95,14 @@ class HalfTenGame:
 
     def add_player(self, user_id: str, user_name: str):
         if user_id in self.players:
-            return False
+            return False, "你已在房间中"
         if self.status != "waiting":
-            return False
+            return False, "房间已结算"
         if len(self.players) >= MAX_PLAYERS:
-            return False
+            return False, "房间已满"
         self.players.append(user_id)
         self.player_names[user_id] = user_name
-        return True
+        return True, ""
 
     def remove_player(self, user_id: str):
         if user_id not in self.players:
@@ -208,13 +208,13 @@ class HalfTenRoomManager:
     def join_room(self, room_id: str, user_id: str, user_name: str):
         g = self.rooms.get(room_id)
         if not g:
-            return False
+            return False, "房间不存在"
         if self.get_user_room(user_id):
-            return False
-        ok = g.add_player(user_id, user_name)
+            return False, "你已在其它十点半房间中"
+        ok, reason = g.add_player(user_id, user_name)
         if ok:
             self.save_room(room_id)
-        return ok
+        return ok, reason
 
     def get_room(self, room_id: str):
         return self.rooms.get(room_id)
@@ -431,9 +431,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "你已在其它十点半房间中，请先退出后再加入。")
         return
 
-    ok = half_manager.join_room(room_id, user_id, user_name)
+    ok, reason = half_manager.join_room(room_id, user_id, user_name)
     if not ok:
-        await handle_send(bot, event, "加入十点半失败：房间不存在、已结算或已满。")
+        await handle_send(bot, event, f"加入十点半失败：{reason}。")
         return
 
     user_half_status[user_id] = room_id

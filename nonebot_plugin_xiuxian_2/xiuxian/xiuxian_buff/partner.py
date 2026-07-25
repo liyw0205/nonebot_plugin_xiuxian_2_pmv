@@ -556,7 +556,7 @@ async def direct_two_exp(
         # 必须传 k1/v1，否则 md 模板按钮会显示 None
         await handle_send(
             bot, event,
-            "双修未结算：双方关系、令牌或次数刚被改动，请重新发起。",
+            "双修未结算：双修数据刚被改动，请重新发起。",
             md_type="buff",
             k1="双修", v1="双修",
             k2="次数", v2="我的双修次数",
@@ -992,7 +992,7 @@ async def use_two_exp_token(bot, event, item_id, num):
     elif result.status == "limit_full":
         msg = "当前剩余双修次数已满！"
     else:
-        msg = "双修未结算：令牌数量不足，或今日次数已用尽/刚被改动，请刷新背包后重试。"
+        msg = "双修未结算：数据刚被改动，请刷新背包后重试。"
     
     await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="我的修为", v2="我的修为", k3="次数", v3="我的双修次数")
 
@@ -1113,7 +1113,7 @@ async def agree_bind_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         expected_invitee_partner=invitee_partner, expected_inviter_partner=inviter_partner,
     )
     if not result.succeeded:
-        await handle_send(bot, event, "道侣邀请未成立：邀请已过期，或一方已有道侣/已拒，请重新发起。", md_type="buff")
+        await handle_send(bot, event, "道侣邀请未成立：邀请数据刚被改动，请重新发起。", md_type="buff")
         await agree_bind.finish()
     if result.status == "applied" and str(user_id) in partner_invite_cache:
         del partner_invite_cache[str(user_id)]
@@ -1686,7 +1686,7 @@ def _mentor_application_result_message(result, requested_mentor_id):
         )
     mentor_info = sql_message.get_user_real_info(requested_mentor_id)
     mentor_name = mentor_info["user_name"] if mentor_info else str(requested_mentor_id)
-    return f"向{mentor_name}拜师未成功：申请冲突、对方已满徒，或双方数据刚被改动，请稍后重试。"
+    return f"向{mentor_name}拜师未成功：双方数据刚被改动，请稍后重试。"
 
 
 @apply_mentor.handle(parameterless=[Cooldown(cd_time=0)])
@@ -1889,7 +1889,7 @@ async def agree_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         apprentice_desc=f"拜{user_info['user_name']}为师",
     )
     if not result.succeeded:
-        await handle_send(bot, event, "拜师未成立：申请已过期/已处理，或一方已有师徒关系，请重新申请。", **buttons)
+        await handle_send(bot, event, "拜师未成立：申请数据刚被改动，请重新申请。", **buttons)
         await agree_mentor.finish()
     await _send_mentor_bind_success(
         bot, event, mentor_id, user_info, apprentice_id, apprentice_info, result
@@ -2360,7 +2360,7 @@ async def mentor_transmission_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         apprentice_desc=f"师父{mentor_info['user_name']}传功，获得修为{number_to(give_exp)}",
     )
     if not settlement.succeeded:
-        await handle_send(bot, event, "传功未结算：修为不足、非师徒，或双方数据刚被改动，请重试。", **buttons)
+        await handle_send(bot, event, "传功未结算：数据刚被改动，请重试。", **buttons)
         await mentor_transmission.finish()
     if settlement.status == "applied":
         mentor_exp_cd.add_user(mentor_id)

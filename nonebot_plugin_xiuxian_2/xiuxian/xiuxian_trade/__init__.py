@@ -320,7 +320,7 @@ def buy_xianshi_item_safely(
         "stone_insufficient": f"灵石不足！需要 {number_to(result.total_cost)} 灵石",
         "stamina_insufficient": "体力不足！快速购买需要10点体力",
         "inventory_full": f"背包中的 {item_to_buy['name']} 已达到数量上限！",
-        "state_changed": "购买未完成：库存/灵石/背包刚被他人或你同时操作改动，请重新【仙肆查看】后再买。",
+        "state_changed": "购买未完成：数据刚被改动，请重新【仙肆查看】后再买。",
         "operation_conflict": "购买请求冲突（重复点击或并发），请稍后再试。",
     }
     if not result.succeeded:

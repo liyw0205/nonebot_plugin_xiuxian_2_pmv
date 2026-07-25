@@ -272,7 +272,7 @@ async def give_xiangyuan_(bot: Bot, event: GroupMessageEvent, args: Message = Co
         await handle_send(bot, event, "可交易物品数量已发生变化，请重新输入！")
         await give_xiangyuan.finish()
     if not result.succeeded:
-        await handle_send(bot, event, "仙缘创建未结算：灵石不足，或创建次数/进度刚被改动，请重新操作。")
+        await handle_send(bot, event, "仙缘创建未结算：抽奖数据刚被改动，请重新操作。")
         await give_xiangyuan.finish()
     xiangyuan_id = result.gift_id
     

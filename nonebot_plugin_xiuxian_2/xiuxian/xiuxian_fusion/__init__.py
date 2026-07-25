@@ -291,7 +291,7 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
                 "item_insufficient": "材料不足（绑定物品不可用于合成），本次合成未结算。",
                 "user_missing": "未找到修仙数据，本次合成未结算。",
                 "inventory_full": "成品将超过背包上限，本次合成未结算。",
-                "state_changed": "扣费或扣材时背包/灵石被其他操作改动，本次合成未结算，请重新【合成】。",
+                "state_changed": "合成扣费扣材时数据刚被其他操作改动，本次未结算，请重新【合成】。",
                 "operation_conflict": "合成请求冲突（重复点击），请稍后再试。",
             }
             return False, status_messages.get(
@@ -332,7 +332,7 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
             "item_insufficient": "材料不足（绑定物品不可用于合成），批量合成未结算。",
             "inventory_full": "成品数量将超过背包上限，批量合成未结算。",
             "user_missing": "未找到修仙数据，批量合成未结算。",
-            "state_changed": "扣费或扣材时背包/灵石被其他操作改动，批量合成未结算，请重新【合成】。",
+            "state_changed": "批量合成扣费扣材时数据刚被其他操作改动，本次未结算，请重新【合成】。",
             "operation_conflict": "合成请求冲突（重复点击），请稍后再试。",
         }
         return False, status_messages.get(

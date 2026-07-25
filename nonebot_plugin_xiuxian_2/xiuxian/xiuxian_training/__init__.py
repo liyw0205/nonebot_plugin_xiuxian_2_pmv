@@ -296,7 +296,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, f"{item_info['name']}持有数量已达上限！", md_type="历练")
         await training_buy.finish()
     if purchase_result.status in {"state_changed", "user_missing"}:
-        await handle_send(bot, event, "兑换未结算：成就点不足、库存不足，或数据刚被改动，请重新兑换。", md_type="历练")
+        await handle_send(bot, event, "兑换未结算：数据刚被其他操作改动，请重新兑换。", md_type="历练")
         await training_buy.finish()
     
     msg = f"成功兑换{item_info['name']}×{quantity}，消耗{total_cost}成就点！"
