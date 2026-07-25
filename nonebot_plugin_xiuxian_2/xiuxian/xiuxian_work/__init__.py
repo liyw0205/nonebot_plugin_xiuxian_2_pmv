@@ -304,7 +304,7 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="背包", v2="我的背包", k3="帮助", v3="悬赏令帮助")
         return msg
     if result.status in {"state_changed", "user_missing"}:
-        msg = "**悬赏结算**\n---\n⚠️ 悬赏令状态已变化，请重新查看后再试。"
+        msg = "**悬赏结算**\n---\n⚠️ 悬赏结算失败：任务进度或背包刚被改动（可能重复结算/同时用令），请重新【悬赏令】查看后再试。"
         await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="刷新", v2="悬赏令刷新", k3="帮助", v3="悬赏令帮助")
         return msg
 
@@ -738,7 +738,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 work_data,
             )
             if not result.succeeded:
-                await handle_send(bot, event, result_card("悬赏令", kind="warn", summary="悬赏状态已变化，请重新查看后再试。"), **nav_kwargs("work", md_type="悬赏令"))
+                await handle_send(bot, event, result_card("悬赏令", kind="warn", summary="悬赏操作失败：任务/道具数据刚被改动（并发或重复点击），请重新【悬赏令】查看后再试。"), **nav_kwargs("work", md_type="悬赏令"))
                 await do_work.finish()
             msg = "未接取的悬赏令已终止！"
         else:
@@ -847,7 +847,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             readf(user_id),
         )
         if not result.succeeded:
-            await handle_send(bot, event, result_card("悬赏令", kind="warn", summary="悬赏状态已变化，请重新查看后再试。"), **nav_kwargs("work", md_type="悬赏令"))
+            await handle_send(bot, event, result_card("悬赏令", kind="warn", summary="悬赏操作失败：任务/道具数据刚被改动（并发或重复点击），请重新【悬赏令】查看后再试。"), **nav_kwargs("work", md_type="悬赏令"))
             await do_work.finish()
         delete_work_file(user_id, delete_snapshot=False)
         msg = "已重置悬赏令"
@@ -888,7 +888,7 @@ async def use_work_order(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             await handle_send(bot, event, result_card("悬赏令", kind="fail", summary="背包中的悬赏令数量不足。"), **nav_kwargs("work", md_type="悬赏令", extra=[("背包","我的背包")]))
             return
         if result.status in {"state_changed", "user_missing", "operation_conflict"}:
-            await handle_send(bot, event, result_card("悬赏令", kind="warn", summary="悬赏或道具状态已变化，请重新查看后再试。"), **nav_kwargs("work", md_type="悬赏令"))
+            await handle_send(bot, event, result_card("悬赏令", kind="warn", summary="悬赏/道具操作失败：背包道具或悬赏数据刚被改动，请重新查看后再试。"), **nav_kwargs("work", md_type="悬赏令"))
             return
         await handle_send(bot, event, result_card("悬赏令", kind="ok", summary="悬赏令燃起灵光，当前悬赏立即进入结算。"), **nav_kwargs(md_type="悬赏令", buttons=[("结算","悬赏令结算"),("查看","悬赏令查看"),("帮助","悬赏令帮助")]))
         _, current_work = get_user_work_status(user_id)
@@ -951,7 +951,7 @@ async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMes
         await handle_send(bot, event, result_card("悬赏令", kind="fail", summary="背包中的追捕令数量不足。"), **nav_kwargs("work", md_type="悬赏令", extra=[("背包","我的背包")]))
         return
     if result.status in {"state_changed", "user_missing", "operation_conflict"}:
-        await handle_send(bot, event, result_card("悬赏令", kind="warn", summary="悬赏或道具状态已变化，请重新查看后再试。"), **nav_kwargs("work", md_type="悬赏令"))
+        await handle_send(bot, event, result_card("悬赏令", kind="warn", summary="悬赏/道具操作失败：背包道具或悬赏数据刚被改动，请重新查看后再试。"), **nav_kwargs("work", md_type="悬赏令"))
         return
     work_data = dict(result.result_snapshot["offer"])
     savef(user_id, work_data)

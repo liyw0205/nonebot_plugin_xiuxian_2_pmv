@@ -488,10 +488,16 @@ async def place_auction_bid(bot: Bot, user_id: str, user_name: str, auction_id: 
     )
     if bid_result.status == "stone_insufficient":
         return False, "灵石不足，竞拍失败！"
-    if bid_result.status in {"state_changed", "bid_too_low"}:
-        return False, "当前拍卖价格已变化，请重新出价！"
+    if bid_result.status == "bid_too_low":
+        return False, "出价已被超过或未高于当前价，请【拍卖查看】最新价后再出。"
+    if bid_result.status == "state_changed":
+        return False, "竞拍未成功：拍品价格或出价记录刚被他人更新，请【拍卖查看】后重出。"
+    if bid_result.status == "auction_missing":
+        return False, "该拍品已结束或不存在，请重新【拍卖查看】。"
+    if bid_result.status == "self_bid":
+        return False, "不能竞拍自己上架的拍品！"
     if not bid_result.succeeded:
-        return False, "竞拍状态发生变化，请重新查看拍卖！"
+        return False, f"竞拍失败（{bid_result.status}），请重新【拍卖查看】后再试。"
     record_trade_event(
         user_id,
         "拍卖竞拍",

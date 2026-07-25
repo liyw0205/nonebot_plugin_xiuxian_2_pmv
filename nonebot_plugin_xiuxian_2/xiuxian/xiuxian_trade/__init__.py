@@ -320,7 +320,8 @@ def buy_xianshi_item_safely(
         "stone_insufficient": f"灵石不足！需要 {number_to(result.total_cost)} 灵石",
         "stamina_insufficient": "体力不足！快速购买需要10点体力",
         "inventory_full": f"背包中的 {item_to_buy['name']} 已达到数量上限！",
-        "state_changed": "购买请求状态已变化，请重新查看仙肆！",
+        "state_changed": "购买未完成：库存/灵石/背包刚被他人或你同时操作改动，请重新【仙肆查看】后再买。",
+        "operation_conflict": "购买请求冲突（重复点击或并发），请稍后再试。",
     }
     if not result.succeeded:
         return False, messages[result.status], None
@@ -1408,7 +1409,7 @@ async def xian_shop_remove_by_admin_(bot: Bot, event: GroupMessageEvent | Privat
         await handle_send(bot, event, "用户背包空间不足，无法下架并退还物品！")
         await xian_shop_remove_by_admin.finish()
     if result.status == "listing_missing":
-        await handle_send(bot, event, f"仙肆ID为 {xianshi_id} 的物品状态已变化！")
+        await handle_send(bot, event, f"仙肆ID {xianshi_id} 的挂单已不存在（可能已被买走或下架）。")
         await xian_shop_remove_by_admin.finish()
     if not result.succeeded:
         raise RuntimeError(f"unexpected xianshi removal status: {result.status}")
@@ -2197,7 +2198,7 @@ async def clear_expired_baitan_orders_job():
 
 @auction_view.handle(parameterless=[Cooldown(cd_time=0)])
 async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """查看拍卖品列表或详情"""
+    """查看拍卖品列表或详情（列表渲染对齐仙肆查看：物品名/ID 可点）。"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     arg_str = args.extract_plain_text().strip()
     
@@ -2207,33 +2208,68 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         item = xianshi_repository.get_current_auction(auction_id) # 从当前拍卖中查找
         
         if item: # 如果在当前拍卖中找到
-            # 构造详情消息
-            msg_list = [
-                f"【拍卖品详情】",
-                f"编号: {item['id']}",
-                f"物品: {item['name']}",
-                f"起拍价: {number_to(item['start_price'])}灵石",
-                f"当前价: {number_to(item['current_price'])}灵石"
-            ]
-            
-            if item["bids"]:
-                # 获取所有出价记录并按时间降序排序
-                bid_records = []
-                for bidder_id_str, bid_price in item["bids"].items():
-                    bid_time = item["bid_times"].get(bidder_id_str, 0)
-                    bid_records.append({"bidder_id": bidder_id_str, "price": bid_price, "time": bid_time})
-                
-                bid_records.sort(key=lambda x: x["time"], reverse=True)
-                recent_bids = bid_records[:5] # 只显示最近的5条出价
-                
-                msg_list.append("\n☆------竞拍记录(最近5条)------☆")
-                for i, bid in enumerate(recent_bids):
-                    bidder_info = sql_message.get_user_info_with_id(bid["bidder_id"])
-                    bidder_name = bidder_info["user_name"] if bidder_info else str(bid["bidder_id"])
-                    time_str = datetime.fromtimestamp(bid["time"]).strftime("%H:%M:%S") if bid["time"] else ""
-                    msg_list.append(f"{i+1}. {bidder_name}: {number_to(bid['price'])}灵石 ({time_str})")
-            
-            await handle_send(bot, event, "\n".join(msg_list), md_type="拍卖", k1="查看", v1="拍卖查看", k2="竞拍", v2="拍卖竞拍", k3="帮助", v3="拍卖帮助")
+            name = str(item.get("name") or "未知")
+            price_str = number_to(item["current_price"])
+            start_str = number_to(item["start_price"])
+            if XiuConfig().markdown_status:
+                name_cmd = quote(f"查看效果 {name}")
+                name_md = f"[{name}](mqqapi://aio/inlinecmd?command={name_cmd}&enter=false&reply=false)"
+                bid_cmd = quote(f"拍卖竞拍 {auction_id} ")
+                bid_md = f"[去竞拍](mqqapi://aio/inlinecmd?command={bid_cmd}&enter=false&reply=false)"
+                lines = [
+                    "**拍卖品详情**",
+                    "",
+                    f"> **编号**：`{auction_id}`",
+                    f"> **物品**：{name_md}",
+                    f"> **起拍价**：{start_str}灵石",
+                    f"> **当前价**：{price_str}灵石",
+                ]
+                if item.get("bids"):
+                    bid_records = []
+                    for bidder_id_str, bid_price in item["bids"].items():
+                        bid_time = item.get("bid_times", {}).get(bidder_id_str, 0)
+                        bid_records.append({"bidder_id": bidder_id_str, "price": bid_price, "time": bid_time})
+                    bid_records.sort(key=lambda x: x["time"], reverse=True)
+                    lines.append("")
+                    lines.append("**最近出价**")
+                    for i, bid in enumerate(bid_records[:5]):
+                        bidder_info = sql_message.get_user_info_with_id(bid["bidder_id"])
+                        bidder_name = bidder_info["user_name"] if bidder_info else str(bid["bidder_id"])
+                        time_str = datetime.fromtimestamp(bid["time"]).strftime("%H:%M:%S") if bid["time"] else ""
+                        lines.append(f"> {i+1}. {bidder_name}：{number_to(bid['price'])}灵石（{time_str}）")
+                lines.append("")
+                lines.append(f"{bid_md} / [返回列表](mqqapi://aio/inlinecmd?command={quote('拍卖查看')}&enter=false&reply=false)")
+                fallback = "\n".join([
+                    "【拍卖品详情】",
+                    f"编号: {auction_id}",
+                    f"物品: {name}",
+                    f"起拍价: {start_str}灵石",
+                    f"当前价: {price_str}灵石",
+                    f"竞拍：拍卖竞拍 {auction_id} 出价",
+                ])
+                await handle_send(bot, event, "\r".join(lines), native_markdown=True, fallback_msg=fallback)
+            else:
+                msg_list = [
+                    f"【拍卖品详情】",
+                    f"编号: {item['id']}",
+                    f"物品: {item['name']}",
+                    f"起拍价: {start_str}灵石",
+                    f"当前价: {price_str}灵石",
+                ]
+                if item["bids"]:
+                    bid_records = []
+                    for bidder_id_str, bid_price in item["bids"].items():
+                        bid_time = item["bid_times"].get(bidder_id_str, 0)
+                        bid_records.append({"bidder_id": bidder_id_str, "price": bid_price, "time": bid_time})
+                    bid_records.sort(key=lambda x: x["time"], reverse=True)
+                    recent_bids = bid_records[:5]
+                    msg_list.append("\n☆------竞拍记录(最近5条)------☆")
+                    for i, bid in enumerate(recent_bids):
+                        bidder_info = sql_message.get_user_info_with_id(bid["bidder_id"])
+                        bidder_name = bidder_info["user_name"] if bidder_info else str(bid["bidder_id"])
+                        time_str = datetime.fromtimestamp(bid["time"]).strftime("%H:%M:%S") if bid["time"] else ""
+                        msg_list.append(f"{i+1}. {bidder_name}: {number_to(bid['price'])}灵石 ({time_str})")
+                await handle_send(bot, event, "\n".join(msg_list), md_type="拍卖", k1="查看", v1="拍卖查看", k2="竞拍", v2=f"拍卖竞拍 {auction_id}", k3="帮助", v3="拍卖帮助")
             await auction_view.finish()
         
         else: # 如果在当前拍卖中没找到，尝试从历史记录中查找
@@ -2266,7 +2302,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                 await handle_send(bot, event, "\n".join(msg_list), md_type="拍卖", k1="查看", v1="拍卖查看", k2="竞拍", v2="拍卖竞拍", k3="帮助", v3="拍卖帮助")
                 await auction_view.finish()
         
-        await handle_send(bot, event, "未找到该拍卖品！", md_type="拍卖", k1="查看", v1="拍卖查看", k2="竞拍", v2="拍卖竞拍", k3="帮助", v3="拍卖帮助")
+        await handle_send(bot, event, "未找到该拍卖品！可能已成交下架或编号错误，请重新【拍卖查看】。", md_type="拍卖", k1="查看", v1="拍卖查看", k2="竞拍", v2="拍卖竞拍", k3="帮助", v3="拍卖帮助")
         await auction_view.finish()
     
     # 如果没有指定ID，查看当前活跃拍卖品列表
@@ -2283,6 +2319,47 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     # 按照当前价格从高到低排序，显示最多20个
     current_auctions_list.sort(key=lambda x: x["current_price"], reverse=True)
     display_items = current_auctions_list[:20]
+
+    # 状态行
+    if auction_current_status["active"]:
+        if auction_current_status["start_time"] and auction_current_status["end_time"]:
+            start_time_str = auction_current_status["start_time"].strftime("%H:%M")
+            end_time_str = auction_current_status["end_time"].strftime("%H:%M")
+            status_line = f"进行中，预计 {end_time_str} 结束（开始 {start_time_str}）"
+        else:
+            status_line = "进行中"
+    else:
+        status_line = "当前未开启"
+
+    if XiuConfig().markdown_status:
+        lines = ["**拍卖物品列表**", f"> 状态：{status_line}", ""]
+        fallback_lines = ["【拍卖物品列表】", f"状态：{status_line}", ""]
+        for item in display_items:
+            aid = str(item.get("id", ""))
+            name = str(item.get("name") or "未知")
+            price_str = number_to(item["current_price"])
+            # 对齐仙肆：物品名点查看效果；编号点详情；另给竞拍入口
+            name_cmd = quote(f"查看效果 {name}")
+            name_md = f"[{name}](mqqapi://aio/inlinecmd?command={name_cmd}&enter=false&reply=false)"
+            id_cmd = quote(f"拍卖查看 {aid}")
+            id_md = f"[ID:{aid}](mqqapi://aio/inlinecmd?command={id_cmd}&enter=false&reply=false)"
+            bid_cmd = quote(f"拍卖竞拍 {aid} ")
+            bid_md = f"[竞拍](mqqapi://aio/inlinecmd?command={bid_cmd}&enter=false&reply=false)"
+            lines.append(f"> - {name_md} {price_str}灵石 {id_md} {bid_md}")
+            lines.append("\r")
+            fallback_lines.append(f"- {name} {price_str}灵石\n  ID:{aid}")
+        lines.append("")
+        lines.append("点物品名看效果；点 ID 看详情；点竞拍直接出价。")
+        fallback_lines.append("")
+        fallback_lines.append("输入【拍卖查看 ID】查看详情；【拍卖竞拍 ID 出价】竞拍")
+        await handle_send(
+            bot,
+            event,
+            "\r".join(lines),
+            native_markdown=True,
+            fallback_msg="\n".join(fallback_lines),
+        )
+        await auction_view.finish()
     
     title = f"【拍卖物品列表】"
     msg_list = []
@@ -2293,16 +2370,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             f"当前价: {number_to(item['current_price'])}灵石"
         )
     
-    if auction_current_status["active"]:
-        if auction_current_status["start_time"] and auction_current_status["end_time"]:
-            start_time_str = auction_current_status["start_time"].strftime("%H:%M")
-            end_time_str = auction_current_status["end_time"].strftime("%H:%M")
-            msg_list.append(f"\n拍卖进行中，预计 {end_time_str} 结束 (开始于 {start_time_str})")
-        else:
-            msg_list.append("\n拍卖进行中，但时间信息不完整。")
-    else:
-        msg_list.append("\n拍卖当前未开启。")
-    
+    msg_list.append(f"\n{status_line}")
     msg_list.append("\n输入【拍卖查看 ID】查看详情")
     start_time_display = auction_current_status["start_time"].strftime("%H:%M") if auction_current_status["start_time"] else "N/A"
     end_time_display = auction_current_status["end_time"].strftime("%H:%M") if auction_current_status["end_time"] else "N/A"
