@@ -151,7 +151,7 @@ def search_music(keyword: str, platform: Optional[str] = None, limit: Optional[i
     cfg = load_music_config()
     api_base = cfg["api_base"]
     platform = platform or cfg["default_platform"]
-    limit = limit or cfg["song_limit"]
+    limit = max(1, int(limit or cfg["song_limit"]))
 
     headers = {
         "User-Agent": (
@@ -165,39 +165,72 @@ def search_music(keyword: str, platform: Optional[str] = None, limit: Optional[i
         "Referer": "https://music.txqq.pro",
     }
 
-    resp = http_client.request(
-        "POST",
-        api_base,
-        data={
-            "input": keyword,
-            "filter": "name",
-            "type": platform,
-            "page": 1,
-        },
-        headers=headers,
-        timeout=15
-    )
-    text = (resp.text or "").strip()
-    if not text:
-        raise ValueError("接口返回为空")
+    # music.txqq.pro 每页固定约 10 条，n/limit 参数无效；按 song_limit 翻页聚合
+    per_page_guess = 10
+    max_pages = max(1, (limit + per_page_guess - 1) // per_page_guess)
+    raw_items: list[dict] = []
+    seen_ids: set[str] = set()
 
-    try:
-        result = resp.json()
-    except Exception:
+    for page in range(1, max_pages + 1):
+        resp = http_client.request(
+            "POST",
+            api_base,
+            data={
+                "input": keyword,
+                "filter": "name",
+                "type": platform,
+                "page": page,
+            },
+            headers=headers,
+            timeout=15,
+        )
+        text = (resp.text or "").strip()
+        if not text:
+            if page == 1:
+                raise ValueError("接口返回为空")
+            break
+
         try:
-            result = json.loads(text)
+            result = resp.json()
         except Exception:
-            raise ValueError(f"接口返回非JSON：{text[:200]}")
+            try:
+                result = json.loads(text)
+            except Exception:
+                if page == 1:
+                    raise ValueError(f"接口返回非JSON：{text[:200]}")
+                break
 
-    if not isinstance(result, dict):
-        raise ValueError("接口返回格式错误")
+        if not isinstance(result, dict):
+            if page == 1:
+                raise ValueError("接口返回格式错误")
+            break
 
-    items = result.get("data") or result.get("songs") or []
-    if not isinstance(items, list):
-        raise ValueError("接口未返回歌曲列表")
+        items = result.get("data") or result.get("songs") or []
+        if not isinstance(items, list) or not items:
+            break
+
+        new_count = 0
+        for s in items:
+            if not isinstance(s, dict):
+                continue
+            sid = str(s.get("songid") or s.get("id") or "")
+            if sid and sid in seen_ids:
+                continue
+            if sid:
+                seen_ids.add(sid)
+            raw_items.append(s)
+            new_count += 1
+            if len(raw_items) >= limit:
+                break
+
+        if len(raw_items) >= limit:
+            break
+        # 本页全是重复或不足一页，停止翻页
+        if new_count == 0 or len(items) < per_page_guess:
+            break
 
     songs = []
-    for s in items[:limit]:
+    for s in raw_items[:limit]:
         cover = s.get("pic") or s.get("cover") or s.get("cover_url") or ""
         if isinstance(cover, str) and cover.startswith("http://"):
             cover = "https://" + cover[len("http://"):]
@@ -212,7 +245,6 @@ def search_music(keyword: str, platform: Optional[str] = None, limit: Optional[i
             "page_url": page_link,
             "platform": s.get("type") or platform,
             "lyrics": s.get("lrc", "") or "",
-            # 保留原始字段，便于后续卡片扩展
             "raw": {
                 k: s.get(k)
                 for k in ("type", "songid", "title", "author", "pic", "url", "link")
