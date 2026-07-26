@@ -1,11 +1,11 @@
 # 修仙2 Docker
 
 预构建镜像（文件仓库 Release，**分片**）：  
-https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/tag/docker-348352f
+https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/tag/docker-latest
 
-- 镜像标签：`xiuxian2:348352f` / `xiuxian2:latest`（amd64）
-- 资产：`xiuxian2-docker-348352f-amd64.tar.gz.part00` ~ `part05`
-- 合并后：`xiuxian2-docker-348352f-amd64.tar.gz`
+- 镜像标签：`xiuxian2:latest`（amd64）
+- 资产：`xiuxian2-docker-latest-amd64.tar.gz.part00` ~ `part05`
+- 合并后：`xiuxian2-docker-latest-amd64.tar.gz`
 
 > 教程与脚本以主仓库为准：  
 > https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv
@@ -34,8 +34,8 @@ bash scripts/install_docker.sh start|stop|status|logs
 
 ```bash
 # 1) 下载 part00~part05 到同一目录后合并
-cat xiuxian2-docker-348352f-amd64.tar.gz.part* > xiuxian2-docker-348352f-amd64.tar.gz
-docker load -i xiuxian2-docker-348352f-amd64.tar.gz
+cat xiuxian2-docker-latest-amd64.tar.gz.part* > xiuxian2-docker-latest-amd64.tar.gz
+docker load -i xiuxian2-docker-latest-amd64.tar.gz
 
 # 2) 配置
 mkdir -p config data logs

@@ -11,9 +11,9 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC
 
 FILE_REPO_OWNER="liyw0205"
 FILE_REPO_NAME="nonebot_plugin_xiuxian_2_pmv_file"
-RELEASE_TAG="${XIUXIAN_DOCKER_RELEASE_TAG:-docker-348352f}"
-# 分片前缀：xiuxian2-docker-348352f-amd64.tar.gz.part00 ... part05
-ASSET_PREFIX="${XIUXIAN_DOCKER_ASSET_PREFIX:-xiuxian2-docker-348352f-amd64.tar.gz}"
+RELEASE_TAG="${XIUXIAN_DOCKER_RELEASE_TAG:-docker-latest}"
+# 固定资产名：每次发布覆盖 docker-latest Release 的 part00 ... part05
+ASSET_PREFIX="${XIUXIAN_DOCKER_ASSET_PREFIX:-xiuxian2-docker-latest-amd64.tar.gz}"
 # 兼容旧变量：若设置了完整单文件名，则取其主名作为前缀
 if [[ -n "${XIUXIAN_DOCKER_ASSET:-}" ]]; then
   ASSET_PREFIX="${XIUXIAN_DOCKER_ASSET%.part*}"
@@ -154,8 +154,8 @@ load_image() {
   info "docker load 导入镜像"
   docker load -i "$tar"
   if ! docker image inspect "$IMAGE_TAG" >/dev/null 2>&1; then
-    if docker image inspect "xiuxian2:348352f" >/dev/null 2>&1; then
-      docker tag xiuxian2:348352f "$IMAGE_TAG"
+    if docker image inspect "xiuxian2:latest" >/dev/null 2>&1; then
+      docker tag xiuxian2:latest "$IMAGE_TAG"
     else
       fail "导入后未找到镜像 $IMAGE_TAG"
     fi
@@ -264,8 +264,8 @@ usage() {
   help            帮助
 
 环境变量:
-  XIUXIAN_DOCKER_RELEASE_TAG   Release 标签（默认 docker-348352f）
-  XIUXIAN_DOCKER_ASSET_PREFIX  分片前缀（默认 xiuxian2-docker-348352f-amd64.tar.gz）
+  XIUXIAN_DOCKER_RELEASE_TAG   Release 标签（默认 docker-latest）
+  XIUXIAN_DOCKER_ASSET_PREFIX  分片前缀（默认 xiuxian2-docker-latest-amd64.tar.gz）
   XIUXIAN_DOCKER_PART_FROM     起始分片号（默认 0）
   XIUXIAN_DOCKER_PART_TO       结束分片号（默认 5）
   XIUXIAN_DOCKER_IMAGE         镜像标签（默认 xiuxian2:latest）
