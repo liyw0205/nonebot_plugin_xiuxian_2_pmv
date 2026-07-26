@@ -4203,8 +4203,15 @@ def get_user_accessory_data(user_id: str | int) -> dict:
             "bag": []
         }
 
-    equipped = data.get("equipped") or {"手镯": None, "戒指": None, "手环": None, "项链": None}
-    bag = data.get("bag") or []
+    equipped = data.get("equipped")
+    if not isinstance(equipped, dict):
+        equipped = {"手镯": None, "戒指": None, "手环": None, "项链": None}
+    for slot in ("手镯", "戒指", "手环", "项链"):
+        if slot not in equipped:
+            equipped[slot] = None
+    bag = data.get("bag")
+    if not isinstance(bag, list):
+        bag = []
     return {"equipped": equipped, "bag": bag}
 
 def final_user_data(user_data, columns):

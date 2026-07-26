@@ -91,7 +91,11 @@ SET_BONUS = {
     },
 }
 
-def quality_to_cn(q: int) -> str:
+def quality_to_cn(q) -> str:
+    try:
+        q = int(q)
+    except (TypeError, ValueError):
+        q = 1
     return {
         1: "一阶",
         2: "二阶",
@@ -764,7 +768,11 @@ def _build_accessory_sections_for_md(user_id: str):
         return []
 
     bag = data.get("bag", [])
+    if not isinstance(bag, list):
+        bag = []
     equipped = data.get("equipped", {})
+    if not isinstance(equipped, dict):
+        equipped = {}
 
     set_order = ["烈阳", "玄渊", "天衡", "星痕", "龙魄", "踏风", "其他"]
     buckets = {k: [] for k in set_order}
@@ -772,32 +780,42 @@ def _build_accessory_sections_for_md(user_id: str):
     equipped_rows = []
     for s in SLOTS:
         it = equipped.get(s)
-        if not it:
+        if not it or not isinstance(it, dict):
             continue
+        try:
+            quality = int(it.get("quality", 1) or 1)
+        except (TypeError, ValueError):
+            quality = 1
         row = {
             "name": it.get("name", "未知饰品"),
             "count": 1,
             "bind": 0,
             "goods_type": "饰品",
-            "uid": it.get("uid", ""),
-            "quality": int(it.get("quality", 1)),
-            "part": it.get("part", s),
-            "set_type": it.get("set_type", "其他"),
+            "uid": str(it.get("uid", "") or ""),
+            "quality": quality,
+            "part": it.get("part", s) or s,
+            "set_type": it.get("set_type", "其他") or "其他",
             "is_equipped": True
         }
         equipped_rows.append(row)
 
     bag_rows = []
     for x in bag:
+        if not isinstance(x, dict):
+            continue
+        try:
+            quality = int(x.get("quality", 1) or 1)
+        except (TypeError, ValueError):
+            quality = 1
         row = {
             "name": x.get("name", "未知饰品"),
             "count": 1,
             "bind": 0,
             "goods_type": "饰品",
-            "uid": x.get("uid", ""),
-            "quality": int(x.get("quality", 1)),
-            "part": x.get("part", ""),
-            "set_type": x.get("set_type", "其他"),
+            "uid": str(x.get("uid", "") or ""),
+            "quality": quality,
+            "part": x.get("part", "") or "",
+            "set_type": x.get("set_type", "其他") or "其他",
             "is_equipped": False
         }
         bag_rows.append(row)
@@ -805,7 +823,7 @@ def _build_accessory_sections_for_md(user_id: str):
     all_rows = equipped_rows + bag_rows
 
     for row in all_rows:
-        st = row.get("set_type", "其他")
+        st = row.get("set_type", "其他") or "其他"
         if st not in buckets:
             st = "其他"
         buckets[st].append(row)
@@ -820,9 +838,9 @@ def _build_accessory_sections_for_md(user_id: str):
             rows,
             key=lambda r: (
                 0 if r.get("is_equipped") else 1,
-                -r.get("quality", 1),
-                r.get("part", ""),
-                r.get("name", "")
+                -int(r.get("quality", 1) or 1),
+                str(r.get("part", "") or ""),
+                str(r.get("name", "") or "")
             )
         )
         sections.append((f"{st}套装", rows))

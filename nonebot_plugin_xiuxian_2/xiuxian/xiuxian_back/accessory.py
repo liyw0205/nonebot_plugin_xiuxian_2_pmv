@@ -12,7 +12,6 @@ from ..adapter_compat import (
     PrivateMessageEvent,
     MessageSegment,
 )
-from ..messaging.delivery import delivery_service
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, send_help_message
@@ -387,29 +386,25 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     user_id = str(user_info["user_id"])
 
     try:
-        current_page = int(args.extract_plain_text().strip())
+        current_page = int(args.extract_plain_text().strip() or "1")
     except ValueError:
         current_page = 1
 
     data = _get_data(user_id)
-    bag = data.get("bag", [])
-    if not bag:
+    sections = _build_accessory_sections_for_md(user_id)
+    # 背包展示含已装备；仅 bag 为空但身上有饰品时仍应展示
+    if not sections:
         await handle_send(bot, event, "饰品背包为空")
         return
     capacity_text = f"容量：{get_accessory_total_count(data)}/{ACCESSORY_BAG_LIMIT}"
+    title_name = f"{user_info.get('user_name', '道友')}的饰品背包"
 
     if XiuConfig().markdown_status:
-        sections = _build_accessory_sections_for_md(user_id)
-        if not sections:
-            await handle_send(bot, event, "饰品背包为空")
-            return
-
         page_sections, current_page, total_pages = _paginate_sections(
             sections, current_page, per_page=15
         )
-
         md_text = _build_accessory_md_text(
-            title=f"{user_info.get('user_name', '道友')}的饰品背包",
+            title=title_name,
             sections=page_sections,
             current_page=current_page,
             total_pages=total_pages,
@@ -417,35 +412,35 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             capacity_text=capacity_text,
         )
         fallback_text = _build_accessory_plain_text(
-            title=f"{user_info.get('user_name', '道友')}的饰品背包",
+            title=title_name,
             sections=page_sections,
             current_page=current_page,
             total_pages=total_pages,
             next_cmd=f"饰品背包 {current_page + 1}",
             capacity_text=capacity_text,
         )
-
-        try:
-            await delivery_service.reply(bot, event, MessageSegment.markdown(bot, md_text))
-        except Exception:
-            await handle_send(bot, event, fallback_text)
+        # 与「我的背包」一致：走 handle_send 原生 MD + 回落，避免裸 MessageSegment.markdown 异常吞没
+        await handle_send(
+            bot, event, md_text,
+            native_markdown=True,
+            fallback_msg=fallback_text,
+        )
         return
 
-    sections = _build_accessory_sections_for_md(user_id)
     flat_rows = []
     for sec_title, rows in sections:
         for r in rows:
             flat_rows.append((sec_title, r))
 
     per_page = 15
-    total_pages = (len(flat_rows) + per_page - 1) // per_page
+    total_pages = max(1, (len(flat_rows) + per_page - 1) // per_page)
     current_page = max(1, min(current_page, total_pages))
 
     start = (current_page - 1) * per_page
     end = start + per_page
     page_flat = flat_rows[start:end]
 
-    title = [f"【{user_info.get('user_name', '道友')}的饰品背包】"]
+    title = [f"【{title_name}】"]
     lines = [capacity_text]
     last_sec = None
     for sec_title, r in page_flat:
