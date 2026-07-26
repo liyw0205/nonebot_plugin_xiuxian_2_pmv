@@ -155,11 +155,11 @@ ws://127.0.0.1:8080/onebot/v11/ws
 <summary>🐳 Docker 一键安装</summary>
 
 预构建镜像在文件仓库 Release（**分片**）：  
-https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/tag/docker-d0a3379
+https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/tag/docker-348352f
 
-- 镜像标签：`xiuxian2:d0a3379` / `xiuxian2:latest`
+- 镜像标签：`xiuxian2:348352f` / `xiuxian2:latest`
 - 架构：`amd64`
-- 资产：`xiuxian2-docker-d0a3379-amd64.tar.gz.part00` ~ `part04`（脚本会自动合并）
+- 资产：`xiuxian2-docker-348352f-amd64.tar.gz.part00` ~ `part05`（脚本会自动合并）
 
 **安装：**
 
@@ -208,13 +208,13 @@ sudo systemctl enable --now docker
 
 **2. 下载分片并合并导入：**
 
-从 Release 下载 `part00` ~ `part04`：  
-https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/tag/docker-d0a3379
+从 Release 下载 `part00` ~ `part05`：  
+https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/tag/docker-348352f
 
 ```bash
 # 放到同一目录后合并
-cat xiuxian2-docker-d0a3379-amd64.tar.gz.part* > xiuxian2-docker-d0a3379-amd64.tar.gz
-docker load -i xiuxian2-docker-d0a3379-amd64.tar.gz
+cat xiuxian2-docker-348352f-amd64.tar.gz.part* > xiuxian2-docker-348352f-amd64.tar.gz
+docker load -i xiuxian2-docker-348352f-amd64.tar.gz
 docker images | grep xiuxian2
 ```
 
