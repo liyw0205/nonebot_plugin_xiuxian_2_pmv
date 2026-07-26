@@ -17,7 +17,18 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, send_help_message
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager, XiuxianDateManage, calc_accessory_effects
 from ..xiuxian_utils.lay_out import Cooldown
-from .accessory_helpers import *
+from .accessory_helpers import *  # noqa: F403
+# 显式导入公开 API，避免 helpers.__all__ 漏导出导致 NameError
+from .accessory_helpers import (  # noqa: F401
+    ACCESSORY_BAG_LIMIT,
+    get_accessory_total_count,
+    get_accessory_count,
+    get_accessory_remaining_capacity,
+    can_add_accessories,
+    add_accessory_to_bag,
+    create_accessory_instance,
+    quality_to_cn,
+)
 from .transaction_service import AccessoryTransactionService
 
 items = Items()

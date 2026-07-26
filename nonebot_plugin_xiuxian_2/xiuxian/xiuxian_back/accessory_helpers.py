@@ -938,5 +938,15 @@ def _build_accessory_plain_text(
 
 __all__ = [
     name for name in globals()
-    if name.isupper() or name == "quality_to_cn" or (name.startswith("_") and not name.startswith("__"))
+    if (
+        name.isupper()
+        or name == "quality_to_cn"
+        or name.startswith("get_accessory_")
+        or name in {
+            "can_add_accessories",
+            "add_accessory_to_bag",
+            "create_accessory_instance",
+        }
+        or (name.startswith("_") and not name.startswith("__"))
+    )
 ]
