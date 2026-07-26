@@ -942,6 +942,7 @@ __all__ = [
         name.isupper()
         or name == "quality_to_cn"
         or name.startswith("get_accessory_")
+        or name.startswith("roll_affixes")
         or name in {
             "can_add_accessories",
             "add_accessory_to_bag",
