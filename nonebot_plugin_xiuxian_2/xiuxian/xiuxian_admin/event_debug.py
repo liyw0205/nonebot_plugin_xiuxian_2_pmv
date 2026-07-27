@@ -1,6 +1,8 @@
-"""超管调试：消息信息 / 取链接。
+"""超管调试：消息信息 / 取链接 / 取raw / 取reply。
 
 取链接不依赖固定字段名：把触发 event 摊成文本后正则抽链。
+取raw：返回消息信息同款原始 Event JSON。
+取reply：返回 raw 中的 reply 段。
 """
 
 from __future__ import annotations
@@ -27,6 +29,8 @@ from ..xiuxian_utils.utils import handle_send, send_msg_handler
 
 parse_event_cmd = on_command("消息信息", permission=SUPERUSER, priority=100, block=True)
 fetch_link_cmd = on_command("取链接", aliases={"提取链接", "获取链接"}, permission=SUPERUSER, priority=100, block=True)
+fetch_raw_cmd = on_command("取raw", aliases={"取RAW", "取Raw", "原始json", "原始JSON"}, permission=SUPERUSER, priority=100, block=True)
+fetch_reply_cmd = on_command("取reply", aliases={"取REPLY", "取Reply", "取引用", "原始reply"}, permission=SUPERUSER, priority=100, block=True)
 
 # 宽松：兼容 https:// 与 https:\/\/
 _LOOSE_URL_RE = re.compile(
@@ -515,4 +519,58 @@ async def fetch_link_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await _send_blocks(bot, event, "获取成功", body, code_lang="text", escape_body_urls=False)
     except Exception as e:
         logger.error(f"取链接失败: {e}")
+        await _send_blocks(bot, event, "获取失败", str(e))
+
+
+def _extract_reply_raw_payload(event) -> Any:
+    """从消息信息同款 raw 中取出 reply 段；没有 reply 字段则尽量拼出引用体。"""
+    data = _event_to_dict(event)
+    if isinstance(data, dict):
+        if "reply" in data and data.get("reply") is not None:
+            return data.get("reply")
+        parsed = data.get("__parsed_reply__")
+        if parsed is not None:
+            return parsed
+    reply_obj = getattr(event, "reply", None)
+    if reply_obj is not None:
+        for dumper in (
+            lambda: model_dump(reply_obj),
+            lambda: reply_obj.dict() if hasattr(reply_obj, "dict") else None,
+            lambda: reply_obj.model_dump() if hasattr(reply_obj, "model_dump") else None,
+        ):
+            try:
+                dumped = dumper()
+                if dumped is not None:
+                    return dumped
+            except Exception:
+                pass
+        return _safe_str(reply_obj)
+    return None
+
+
+@fetch_raw_cmd.handle(parameterless=[Cooldown(cd_time=0.5)])
+async def fetch_raw_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """超管：只返回消息信息里的原始 Event JSON。"""
+    bot, _ = await assign_bot(bot=bot, event=event)
+    try:
+        raw_json = _truncate(_pretty_json(_event_to_dict(event)))
+        await _send_blocks(bot, event, "原始JSON", raw_json, code_lang="json", escape_body_urls=False)
+    except Exception as e:
+        logger.error(f"取raw失败: {e}")
+        await _send_blocks(bot, event, "获取失败", str(e))
+
+
+@fetch_reply_cmd.handle(parameterless=[Cooldown(cd_time=0.5)])
+async def fetch_reply_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    """超管：返回 raw 中的 reply 段。"""
+    bot, _ = await assign_bot(bot=bot, event=event)
+    try:
+        payload = _extract_reply_raw_payload(event)
+        if payload is None:
+            await _send_blocks(bot, event, "获取失败", "当前消息 raw 中没有 reply（请先引用一条消息）")
+            return
+        body = _truncate(_pretty_json(payload))
+        await _send_blocks(bot, event, "原始reply", body, code_lang="json", escape_body_urls=False)
+    except Exception as e:
+        logger.error(f"取reply失败: {e}")
         await _send_blocks(bot, event, "获取失败", str(e))

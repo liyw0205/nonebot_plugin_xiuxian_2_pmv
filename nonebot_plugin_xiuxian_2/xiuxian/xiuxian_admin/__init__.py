@@ -1996,6 +1996,10 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 > 查看当前/引用消息事件信息
 → 取链接
 > 引用一条消息，提取图片/附件链接
+→ 取raw
+> 仅返回消息信息同款原始 Event JSON
+→ 取reply
+> 返回 raw 中的 reply 段（需引用）
 → dm [Markdown内容]
 > 直接发送原生Markdown
 → md模板 [模板参数]
