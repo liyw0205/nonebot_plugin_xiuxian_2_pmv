@@ -317,12 +317,18 @@
             <div id="stickerPanel" class="media-panel sticker-panel hidden" role="dialog" aria-label="表情包" onclick="event.stopPropagation()">
                 <div class="media-panel-head">
                     <strong>表情包</strong>
-                    <button type="button" class="media-panel-close" onclick="closeStickerPanel()" title="关闭">
-                        <i class="fas fa-times"></i>
-                    </button>
+                    <div class="sticker-head-actions">
+                        <button type="button" class="media-panel-close" onclick="refreshStickerCatalog()" title="手动拉取表情包列表">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                        <button type="button" class="media-panel-close" onclick="closeStickerPanel()" title="关闭">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
                 </div>
                 <div id="stickerTabs" class="sticker-tabs"></div>
                 <div id="stickerStatus" class="sticker-status">加载中...</div>
+                <div id="stickerPackDetail" class="sticker-pack-detail hidden"></div>
                 <div id="stickerGrid" class="sticker-grid"></div>
             </div>
         </section>
@@ -1586,6 +1592,45 @@
 
 .sticker-status.error {
     color: var(--danger-color);
+}
+
+.sticker-head-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.sticker-pack-detail {
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 8px;
+}
+
+.sticker-pack-detail.hidden {
+    display: none;
+}
+
+.sticker-pack-detail h4 {
+    margin: 0 0 6px;
+    font-size: 0.95rem;
+}
+
+.sticker-pack-detail p {
+    margin: 0 0 12px;
+    color: var(--text-secondary);
+    font-size: 0.84rem;
+}
+
+.sticker-pack-detail .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.sticker-tab:not(.installed)::after {
+    content: ' ↓';
+    opacity: 0.7;
 }
 
 .sticker-grid {
@@ -6172,24 +6217,42 @@ function renderStickerTabs() {
     }
     tabs.innerHTML = packs.map(p => {
         const active = p.id === stickerActivePackId ? ' active' : '';
+        const installed = p.installed ? ' installed' : '';
         const count = p.count != null ? ` (${p.count})` : '';
-        return `<button type="button" class="sticker-tab${active}" data-pack-id="${p.id}" onclick="selectStickerPack('${p.id}')">${p.name || p.id}${count}</button>`;
+        return `<button type="button" class="sticker-tab${active}${installed}" data-pack-id="${p.id}" onclick="selectStickerPack('${p.id}')">${escapeHtml(p.name || p.id)}${count}</button>`;
     }).join('');
 }
 
 function renderStickerGrid() {
     const grid = document.getElementById('stickerGrid');
-    if (!grid) return;
+    const detail = document.getElementById('stickerPackDetail');
+    if (!grid || !detail) return;
     const packs = (stickerCatalog && stickerCatalog.packs) || [];
     const pack = packs.find(p => p.id === stickerActivePackId);
-    if (!pack || !Array.isArray(pack.items) || !pack.items.length) {
+    if (!pack) {
         grid.innerHTML = '';
+        detail.classList.add('hidden');
         return;
     }
-    grid.innerHTML = pack.items.map(item => {
+    if (!pack.installed) {
+        grid.innerHTML = '';
+        detail.classList.remove('hidden');
+        detail.innerHTML = `
+            <h4>${escapeHtml(pack.name || pack.id)}</h4>
+            <p>共 ${Number(pack.remote_count || pack.count || 0)} 个表情，尚未下载到本机。</p>
+            <button type="button" class="btn btn-primary btn-sm" onclick="downloadStickerPack('${pack.id}')">
+                <i class="fas fa-download"></i> 下载表情包
+            </button>
+        `;
+        return;
+    }
+    detail.classList.add('hidden');
+    detail.innerHTML = '';
+    const items = Array.isArray(pack.items) ? pack.items : [];
+    grid.innerHTML = items.map(item => {
         const token = item.token || `${pack.id}/${item.id}`;
         const url = item.url || '';
-        return `<button type="button" class="sticker-item" title="${token}" onclick="sendSticker('${token}')"><img src="${url}" alt="${token}" loading="lazy"></button>`;
+        return `<button type="button" class="sticker-item" title="${escapeHtml(token)}" onclick="sendSticker('${token}')"><img src="${url}" alt="${escapeHtml(token)}" loading="lazy"></button>`;
     }).join('');
 }
 
@@ -6197,6 +6260,7 @@ function selectStickerPack(packId) {
     stickerActivePackId = packId;
     renderStickerTabs();
     renderStickerGrid();
+    setStickerStatus('', false);
 }
 
 function formatStickerBytes(value) {
@@ -6230,19 +6294,20 @@ async function pollStickerInstall(jobId) {
     }
 }
 
-async function ensureStickersInstalled(force) {
+async function downloadStickerPack(packId, force = false) {
     if (stickerLoading) return stickerCatalog;
     stickerLoading = true;
-    setStickerStatus(force ? '正在准备更新表情包 · 0%' : '正在准备下载表情包 · 0%', false);
+    const pack = ((stickerCatalog && stickerCatalog.packs) || []).find(p => p.id === packId);
+    setStickerStatus(`正在准备下载 ${pack ? pack.name : packId} · 0%`, false);
     try {
         const res = await fetch('/api/messages/stickers/install', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ force: !!force })
+            body: JSON.stringify({ pack_id: packId, force: !!force })
         });
         const data = await res.json();
         if (!data.success) {
-            setStickerStatus(data.error || '安装失败', true);
+            setStickerStatus(data.error || '下载失败', true);
             return null;
         }
         let catalog = data.catalog || null;
@@ -6254,54 +6319,46 @@ async function ensureStickersInstalled(force) {
             catalog = await catalogRes.json();
         }
         if (!catalog || !catalog.success) {
-            setStickerStatus((catalog && catalog.error) || '安装完成但目录加载失败', true);
+            setStickerStatus((catalog && catalog.error) || '下载完成但目录加载失败', true);
             return null;
         }
-        stickerCatalog = catalog;
-        setStickerStatus(`已安装 ${(catalog.packs || []).length} 套表情包 · 100%`, false);
+        // 安装任务返回的是本地 catalog；重新取合并目录，保留未下载套装。
+        const mergedRes = await fetch('/api/messages/stickers');
+        const merged = await mergedRes.json();
+        stickerCatalog = merged.success ? merged : catalog;
+        stickerActivePackId = packId;
+        setStickerStatus(`${pack ? pack.name : packId} 下载完成 · 100%`, false);
         renderStickerTabs();
         renderStickerGrid();
-        return catalog;
+        return stickerCatalog;
     } catch (e) {
-        setStickerStatus('安装异常：' + e, true);
+        setStickerStatus('下载异常：' + e, true);
         return null;
     } finally {
         stickerLoading = false;
     }
 }
 
-async function loadStickerCatalog() {
-    setStickerStatus('加载表情包...', false);
+async function loadStickerCatalog(refresh = false) {
+    setStickerStatus(refresh ? '正在手动拉取表情包列表...' : '正在加载表情包列表...', false);
     try {
-        const res = await fetch('/api/messages/stickers');
+        const res = await fetch(`/api/messages/stickers${refresh ? '?refresh=1' : ''}`);
         const data = await res.json();
         if (!data.success) {
             setStickerStatus(data.error || '加载失败', true);
             return;
         }
-        if (!data.installed) {
-            stickerCatalog = data;
-            renderStickerTabs();
-            renderStickerGrid();
-            setStickerStatus('首次使用需下载表情包', false);
-            await ensureStickersInstalled(false);
-            return;
-        }
-        if (data.update_available) {
-            stickerCatalog = data;
-            renderStickerTabs();
-            renderStickerGrid();
-            setStickerStatus(`发现表情包更新 v${data.version || 0} → v${data.remote_version || ''}`, false);
-            await ensureStickersInstalled(true);
-            return;
-        }
         stickerCatalog = data;
-        setStickerStatus('', false);
         renderStickerTabs();
         renderStickerGrid();
+        setStickerStatus(refresh ? '表情包列表已更新' : '', false);
     } catch (e) {
         setStickerStatus('加载异常：' + e, true);
     }
+}
+
+async function refreshStickerCatalog() {
+    await loadStickerCatalog(true);
 }
 
 async function openStickerPanel() {
@@ -6316,8 +6373,8 @@ async function openStickerPanel() {
         overlay.setAttribute('aria-hidden', 'false');
     }
     if (chatPane) chatPane.classList.add('sticker-panel-open');
-    if (!stickerCatalog || !stickerCatalog.installed) {
-        await loadStickerCatalog();
+    if (!stickerCatalog) {
+        await loadStickerCatalog(false);
     } else {
         renderStickerTabs();
         renderStickerGrid();

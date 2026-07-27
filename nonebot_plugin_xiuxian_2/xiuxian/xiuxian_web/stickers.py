@@ -48,6 +48,10 @@ def local_manifest_path() -> Path:
     return stickers_root() / "manifest.json"
 
 
+def remote_catalog_cache_path() -> Path:
+    return stickers_root() / "remote-manifest.json"
+
+
 def remote_manifest_url() -> str:
     return (
         f"https://github.com/{FILE_REPO_OWNER}/{FILE_REPO_NAME}"
@@ -130,6 +134,31 @@ def load_local_manifest() -> dict[str, Any] | None:
         return data if isinstance(data, dict) else None
     except Exception:
         return None
+
+
+def load_remote_catalog_cache() -> dict[str, Any] | None:
+    path = remote_catalog_cache_path()
+    if not path.exists():
+        return None
+    try:
+        data = _load_json(path)
+        return data if isinstance(data, dict) and isinstance(data.get("packs"), list) else None
+    except Exception:
+        return None
+
+
+def fetch_remote_catalog(force: bool = False) -> dict[str, Any]:
+    cached = load_remote_catalog_cache()
+    if cached is not None and not force:
+        return cached
+    remote = json.loads(_download_bytes(remote_manifest_url(), timeout=20).decode("utf-8"))
+    if not isinstance(remote, dict) or not isinstance(remote.get("packs"), list):
+        raise RuntimeError("远端 manifest 无效")
+    remote_catalog_cache_path().write_text(
+        json.dumps(remote, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return remote
 
 
 def is_installed() -> bool:
@@ -231,6 +260,7 @@ def get_install_job(job_id: str) -> dict[str, Any] | None:
 
 
 def install_stickers(
+    pack_id: str,
     force: bool = False,
     progress: Callable[..., None] | None = None,
 ) -> dict[str, Any]:
@@ -238,108 +268,105 @@ def install_stickers(
         if progress:
             progress(**state)
 
-    if is_installed() and not force:
-        report(stage="complete", percent=100, message="表情包已安装")
+    selected_id = _safe_pack_id(pack_id)
+    if not selected_id:
+        raise RuntimeError("无效表情包 ID")
+
+    report(stage="manifest", percent=2, message="正在读取表情包清单")
+    remote = fetch_remote_catalog(force=False)
+    selected = next(
+        (
+            p
+            for p in remote.get("packs") or []
+            if isinstance(p, dict) and _safe_pack_id(str(p.get("id") or "")) == selected_id
+        ),
+        None,
+    )
+    if selected is None:
+        raise RuntimeError("表情包不在远端清单中")
+
+    local = load_local_manifest() or {"version": 0, "packs": []}
+    installed_by_id = {
+        str(p.get("id") or ""): p
+        for p in local.get("packs") or []
+        if isinstance(p, dict)
+    }
+    pack_dir = stickers_packs_dir() / selected_id
+    if selected_id in installed_by_id and (pack_dir / "pack.json").exists() and not force:
+        report(stage="complete", percent=100, message="表情包已下载")
         return build_catalog()
 
-    report(stage="manifest", percent=2, message="正在获取表情包清单")
-    remote = json.loads(_download_bytes(remote_manifest_url()).decode("utf-8"))
-    if not isinstance(remote, dict) or not isinstance(remote.get("packs"), list):
-        raise RuntimeError("远端 manifest 无效")
+    zip_name = str(selected.get("zip") or "").strip()
+    expect_sha = str(selected.get("sha256") or "").strip().lower()
+    if not zip_name or "/" in zip_name or "\\" in zip_name:
+        raise RuntimeError("远端表情包文件名无效")
+    pack_name = str(selected.get("name") or selected_id)
 
-    installed_packs = []
-    valid_packs = [p for p in remote["packs"] if isinstance(p, dict)]
-    total_packs = len(valid_packs)
-    for pack_index, p in enumerate(valid_packs, start=1):
-        pack_id = _safe_pack_id(str(p.get("id") or ""))
-        zip_name = str(p.get("zip") or "").strip()
-        expect_sha = str(p.get("sha256") or "").strip().lower()
-        if not pack_id or not zip_name or "/" in zip_name or "\\" in zip_name:
-            continue
-
-        pack_name = str(p.get("name") or pack_id)
-
-        def on_download(downloaded: int, total: int) -> None:
-            part = (downloaded / total) if total else 0.0
-            percent = min(92, int(5 + ((pack_index - 1 + part) / max(total_packs, 1)) * 82))
-            report(
-                stage="download",
-                percent=percent,
-                message=f"正在下载 {pack_name}（{pack_index}/{total_packs}）",
-                pack_id=pack_id,
-                pack_name=pack_name,
-                pack_index=pack_index,
-                pack_total=total_packs,
-                downloaded=downloaded,
-                total=total,
-            )
-
+    def on_download(downloaded: int, total: int) -> None:
+        percent = min(86, int(5 + ((downloaded / total) if total else 0) * 81))
         report(
             stage="download",
-            percent=int(5 + ((pack_index - 1) / max(total_packs, 1)) * 82),
-            message=f"正在下载 {pack_name}（{pack_index}/{total_packs}）",
-            pack_id=pack_id,
+            percent=percent,
+            message=f"正在下载 {pack_name}",
+            pack_id=selected_id,
             pack_name=pack_name,
-            pack_index=pack_index,
-            pack_total=total_packs,
-            downloaded=0,
-            total=0,
-        )
-        data = _download_bytes(remote_asset_url(zip_name), progress=on_download)
-        report(
-            stage="verify",
-            percent=min(94, int(8 + (pack_index / max(total_packs, 1)) * 82)),
-            message=f"正在校验 {pack_name}",
-        )
-        got = _sha256_bytes(data)
-        if expect_sha and got != expect_sha:
-            raise RuntimeError(f"{zip_name} sha256 不匹配")
-        cache_path = stickers_cache_dir() / zip_name
-        cache_path.write_bytes(data)
-        report(
-            stage="extract",
-            percent=min(96, int(10 + (pack_index / max(total_packs, 1)) * 82)),
-            message=f"正在安装 {pack_name}",
-        )
-        meta = _extract_pack_zip(cache_path, pack_id)
-        installed_packs.append(
-            {
-                "id": pack_id,
-                "name": str(p.get("name") or meta.get("name") or pack_id),
-                "zip": zip_name,
-                "sha256": got,
-                "count": int(meta.get("count") or 0),
-                "format": "webp",
-                "cover": meta.get("cover"),
-            }
+            downloaded=downloaded,
+            total=total,
         )
 
-    if not installed_packs:
-        raise RuntimeError("未安装任何表情包")
-
+    report(
+        stage="download",
+        percent=5,
+        message=f"正在下载 {pack_name}",
+        pack_id=selected_id,
+        pack_name=pack_name,
+        downloaded=0,
+        total=0,
+    )
+    data = _download_bytes(remote_asset_url(zip_name), progress=on_download)
+    report(stage="verify", percent=90, message=f"正在校验 {pack_name}")
+    got = _sha256_bytes(data)
+    if expect_sha and got != expect_sha:
+        raise RuntimeError(f"{zip_name} sha256 不匹配")
+    cache_path = stickers_cache_dir() / zip_name
+    cache_path.write_bytes(data)
+    report(stage="extract", percent=95, message=f"正在安装 {pack_name}")
+    meta = _extract_pack_zip(cache_path, selected_id)
+    installed_by_id[selected_id] = {
+        "id": selected_id,
+        "name": pack_name,
+        "zip": zip_name,
+        "sha256": got,
+        "count": int(meta.get("count") or 0),
+        "format": "webp",
+        "cover": meta.get("cover"),
+    }
     local = {
         "version": int(remote.get("version") or 1),
         "updated_at": remote.get("updated_at"),
-        "packs": installed_packs,
+        "packs": list(installed_by_id.values()),
     }
     local_manifest_path().write_text(json.dumps(local, ensure_ascii=False, indent=2), encoding="utf-8")
     catalog = build_catalog()
-    report(stage="complete", percent=100, message=f"已安装 {len(installed_packs)} 套表情包")
+    report(stage="complete", percent=100, message=f"{pack_name} 下载完成")
     return catalog
 
 
-def _run_install_job(job_id: str, force: bool) -> None:
+def _run_install_job(job_id: str, pack_id: str, force: bool) -> None:
     try:
         catalog = install_stickers(
+            pack_id=pack_id,
             force=force,
             progress=lambda **state: _set_install_job(job_id, **state),
         )
+        pack = next((p for p in catalog.get("packs") or [] if p.get("id") == pack_id), {})
         _set_install_job(
             job_id,
             status="complete",
             stage="complete",
             percent=100,
-            message=f"已安装 {len(catalog.get('packs') or [])} 套表情包",
+            message=f"{pack.get('name') or pack_id} 下载完成",
+            pack_id=pack_id,
             catalog=catalog,
         )
     except Exception as e:  # noqa: BLE001
@@ -353,10 +380,13 @@ def _run_install_job(job_id: str, force: bool) -> None:
         )
 
 
-def start_install_job(force: bool = False) -> dict[str, Any]:
+def start_install_job(pack_id: str, force: bool = False) -> dict[str, Any]:
+    selected_id = _safe_pack_id(pack_id)
+    if not selected_id:
+        raise RuntimeError("无效表情包 ID")
     with _INSTALL_JOBS_LOCK:
         for job in _INSTALL_JOBS.values():
-            if job.get("status") == "running":
+            if job.get("status") == "running" and job.get("pack_id") == selected_id:
                 return dict(job)
         job_id = uuid.uuid4().hex
         job = {
@@ -366,9 +396,14 @@ def start_install_job(force: bool = False) -> dict[str, Any]:
             "stage": "queued",
             "percent": 0,
             "message": "准备下载表情包",
+            "pack_id": selected_id,
         }
         _INSTALL_JOBS[job_id] = job
-    threading.Thread(target=_run_install_job, args=(job_id, force), daemon=True).start()
+    threading.Thread(
+        target=_run_install_job,
+        args=(job_id, selected_id, force),
+        daemon=True,
+    ).start()
     return dict(job)
 
 
@@ -468,56 +503,53 @@ def resolve_sticker_path(token: str) -> Path | None:
     return path
 
 
+def build_merged_catalog(remote: dict[str, Any]) -> dict[str, Any]:
+    local_catalog = build_catalog()
+    installed = {p["id"]: p for p in local_catalog.get("packs") or []}
+    packs_out = []
+    for remote_pack in remote.get("packs") or []:
+        if not isinstance(remote_pack, dict):
+            continue
+        pack_id = _safe_pack_id(str(remote_pack.get("id") or ""))
+        if not pack_id:
+            continue
+        local_pack = installed.get(pack_id)
+        if local_pack:
+            pack = dict(local_pack)
+            pack["installed"] = True
+            pack["remote_count"] = int(remote_pack.get("count") or pack.get("count") or 0)
+        else:
+            pack = {
+                "id": pack_id,
+                "name": str(remote_pack.get("name") or pack_id),
+                "count": int(remote_pack.get("count") or 0),
+                "remote_count": int(remote_pack.get("count") or 0),
+                "installed": False,
+                "cover_url": "",
+                "items": [],
+            }
+        packs_out.append(pack)
+    return {
+        "success": True,
+        "installed": bool(installed),
+        "version": int(local_catalog.get("version") or 0),
+        "remote_version": int(remote.get("version") or 0),
+        "updated_at": remote.get("updated_at"),
+        "packs": packs_out,
+    }
+
+
 @app.route("/api/messages/stickers", methods=["GET"])
 def api_messages_stickers():
     denied = _require_admin()
     if denied:
         return denied
     try:
-        if not is_installed():
-            # 未安装时返回远端摘要（若失败则空列表）
-            packs = []
-            remote_version = 0
-            try:
-                remote = json.loads(_download_bytes(remote_manifest_url(), timeout=20).decode("utf-8"))
-                remote_version = int(remote.get("version") or 0)
-                for p in remote.get("packs") or []:
-                    if not isinstance(p, dict):
-                        continue
-                    pid = _safe_pack_id(str(p.get("id") or ""))
-                    if not pid:
-                        continue
-                    packs.append(
-                        {
-                            "id": pid,
-                            "name": str(p.get("name") or pid),
-                            "count": int(p.get("count") or 0),
-                        }
-                    )
-            except Exception as e:  # noqa: BLE001
-                logger.warning(f"stickers remote preview failed: {e}")
-            return jsonify(
-                {
-                    "success": True,
-                    "installed": False,
-                    "version": 0,
-                    "remote_version": remote_version,
-                    "packs": packs,
-                }
-            )
-
-        catalog = build_catalog()
-        try:
-            remote = json.loads(_download_bytes(remote_manifest_url(), timeout=20).decode("utf-8"))
-            remote_version = int(remote.get("version") or 0)
-            catalog["remote_version"] = remote_version
-            catalog["update_available"] = remote_version > int(catalog.get("version") or 0)
-        except Exception as e:  # noqa: BLE001
-            logger.warning(f"stickers remote version check failed: {e}")
-            catalog["update_available"] = False
-        return jsonify(catalog)
+        refresh = str(request.args.get("refresh") or "").lower() in ("1", "true", "yes", "on")
+        remote = fetch_remote_catalog(force=refresh)
+        return jsonify(build_merged_catalog(remote))
     except Exception as e:  # noqa: BLE001
-        return jsonify({"success": False, "error": f"获取表情包失败: {e}"})
+        return jsonify({"success": False, "error": f"获取表情包目录失败: {e}"})
 
 
 @app.route("/api/messages/stickers/install", methods=["POST"])
@@ -527,13 +559,16 @@ def api_messages_stickers_install():
         return denied
     try:
         data = request.get_json(silent=True) or {}
+        pack_id = _safe_pack_id(str(data.get("pack_id") or request.args.get("pack_id") or ""))
+        if not pack_id:
+            return jsonify({"success": False, "error": "未指定表情包"}), 400
         force = str(data.get("force") or request.args.get("force") or "").lower() in (
             "1",
             "true",
             "yes",
             "on",
         )
-        job = start_install_job(force=force)
+        job = start_install_job(pack_id=pack_id, force=force)
         return jsonify(job), 202 if job.get("status") == "running" else 200
     except Exception as e:  # noqa: BLE001
         logger.exception("stickers install failed")
