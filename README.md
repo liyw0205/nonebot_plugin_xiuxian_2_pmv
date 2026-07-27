@@ -154,12 +154,14 @@ ws://127.0.0.1:8080/onebot/v11/ws
 <details>
 <summary>🐳 Docker 一键安装</summary>
 
-预构建镜像在文件仓库 Release（**分片**）：  
+预构建资产在文件仓库 Release（**base 分片 + plugin 单包**）：  
 https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/tag/docker-latest
 
-- 镜像标签：`xiuxian2:latest`
-- 架构：`amd64`
-- 资产：`xiuxian2-docker-latest-amd64.tar.gz.part00` ~ `part05`（脚本会自动合并）
+- 镜像标签：`xiuxian2:latest` / `xiuxian2-base:latest`（amd64）
+- `manifest.json`：md5 清单
+- base：`xiuxian2-base-amd64.tar.gz.part00` ~ `partN`
+- plugin：`xiuxian2-plugin-latest.tar.gz`（日常更新通常只下这个）
+- 插件挂载到容器，**Web 面板更新可直接写插件目录**
 
 **安装：**
 
@@ -171,10 +173,15 @@ curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_p
 curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_docker.sh | bash -s -- install /root/xiuxian2-docker
 ```
 
-**更新镜像：**
+**更新：**
 
 ```bash
+# smart：base 未变则只更新 plugin
 curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_docker.sh | bash -s -- update
+
+# 仅插件 / 强制整包
+bash install_docker.sh update --plugin
+bash install_docker.sh update --full
 ```
 
 **管理：**
@@ -206,16 +213,19 @@ sudo apt-get install -y docker.io
 sudo systemctl enable --now docker
 ```
 
-**2. 下载分片并合并导入：**
+**2. 下载 base 分片 + plugin 并导入：**
 
-从 Release 下载 `part00` ~ `part05`：  
 https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/tag/docker-latest
 
 ```bash
-# 放到同一目录后合并
-cat xiuxian2-docker-latest-amd64.tar.gz.part* > xiuxian2-docker-latest-amd64.tar.gz
-docker load -i xiuxian2-docker-latest-amd64.tar.gz
-docker images | grep xiuxian2
+# base
+cat xiuxian2-base-amd64.tar.gz.part* > xiuxian2-base-amd64.tar.gz
+md5sum -c xiuxian2-base-amd64.tar.gz.md5
+docker load -i xiuxian2-base-amd64.tar.gz
+
+# plugin
+mkdir -p plugin
+tar -xzf xiuxian2-plugin-latest.tar.gz -C plugin
 ```
 
 **3. 准备配置与数据目录：**
@@ -246,6 +256,7 @@ docker run -d --name xiuxian2 --restart unless-stopped \
   -v "$PWD/logs:/app/logs" \
   -v "$PWD/config/.env:/app/.env:ro" \
   -v "$PWD/config/.env.dev:/app/.env.dev:ro" \
+  -v "$PWD/plugin/nonebot_plugin_xiuxian_2:/app/src/plugins/nonebot_plugin_xiuxian_2" \
   xiuxian2:latest
 ```
 
@@ -260,7 +271,10 @@ ws://宿主机IP:8080/onebot/v11/ws
 ```bash
 git clone https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv.git
 cd nonebot_plugin_xiuxian_2_pmv
-docker build -f docker/Dockerfile -t xiuxian2:latest .
+# 底座
+docker build -f docker/Dockerfile.base -t xiuxian2-base:latest -t xiuxian2:latest .
+# 或产出 base 分片 + plugin 包
+bash scripts/build_docker_release.sh /tmp/xiuxian2-docker-split-release
 ```
 
 更多说明见仓库内 `docker/README.md`。

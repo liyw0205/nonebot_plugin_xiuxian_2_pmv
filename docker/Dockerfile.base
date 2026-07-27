@@ -1,0 +1,68 @@
+# 修仙2 底座镜像：Debian + Python + 依赖 + 运行骨架（不含插件源码）
+# 插件由 install 脚本挂载到 /app/src/plugins/nonebot_plugin_xiuxian_2
+FROM debian:bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+    PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn \
+    TZ=Asia/Shanghai \
+    PATH="/opt/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    XIUXIAN_HOME=/app
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        git \
+        python3 \
+        python3-pip \
+        python3-venv \
+        tzdata \
+        build-essential \
+        libjpeg62-turbo-dev \
+        zlib1g-dev \
+        libffi-dev \
+        libssl-dev \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python3 -m venv /opt/venv \
+    && /opt/venv/bin/pip install -U pip setuptools wheel
+
+RUN /opt/venv/bin/pip install \
+      "nb-cli" \
+      "nonebot2[fastapi,httpx,websockets,aiohttp]" \
+      "nonebot-adapter-onebot" \
+      "nonebot-adapter-qq" \
+      "nonebot_plugin_apscheduler"
+
+COPY requirements.txt /tmp/requirements.txt
+RUN /opt/venv/bin/pip install -r /tmp/requirements.txt \
+    && rm -f /tmp/requirements.txt
+
+# 最小 bot 骨架；插件目录运行时挂载
+COPY docker/bot.py /app/bot.py
+COPY docker/pyproject.toml /app/pyproject.toml
+COPY docker/env.example /app/.env
+COPY docker/env.dev.example /app/.env.dev
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh \
+    && mkdir -p /app/data /app/logs /app/src/plugins/nonebot_plugin_xiuxian_2 \
+    && printf '%s\n' \
+        '# placeholder: mount plugin at runtime' \
+        > /app/src/plugins/nonebot_plugin_xiuxian_2/.docker_plugin_placeholder
+
+VOLUME ["/app/data", "/app/logs"]
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD curl -fsS http://127.0.0.1:8080/ || exit 1
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["nb", "run"]
