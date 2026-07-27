@@ -7,7 +7,7 @@ import importlib
 import inspect
 import re
 import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from nonebot import get_driver
 from nonebot.internal.matcher.provider import MatcherProvider
@@ -606,11 +606,122 @@ def rebuild_on_compat_index() -> None:
         provider.rebuild()
 
 
+def _segment_is_text(segment: Any) -> bool:
+    try:
+        return bool(segment.is_text())
+    except Exception:
+        return getattr(segment, "type", "") in ("text", "plain")
+
+
+def _segment_text(segment: Any) -> str:
+    try:
+        data = getattr(segment, "data", None)
+        if isinstance(data, dict) and "text" in data:
+            return str(data.get("text") or "")
+    except Exception:
+        pass
+    return str(segment)
+
+
+def _segment_is_leading_noise(segment: Any) -> bool:
+    """艾特/空文本等前缀，不参与指令 Trie 匹配。"""
+    typ = str(getattr(segment, "type", "") or "")
+    if typ.startswith("mention"):
+        return True
+    if typ in ("at", "reply"):
+        return True
+    if _segment_is_text(segment):
+        return not _segment_text(segment).strip()
+    return False
+
+
+def _normalize_leading_at_for_command(event: "Event") -> None:
+    """把指令文本挪到 message 开头，让 nonebot TrieRule/CommandRule 能命中。
+
+    QQ 官方艾特常见：
+    Text('') + MentionUser(bot) + Text(' 取链接')
+    TrieRule 只看 message[0]，空 Text 会导致 Command 永远匹配失败。
+    仅去掉开头的空文本/艾特/引用，不改后续参数段。
+    """
+    try:
+        if event.get_type() != "message":
+            return
+    except Exception:
+        return
+
+    try:
+        message = event.get_message()
+    except Exception:
+        return
+    if not message:
+        return
+
+    # 已是非空文本开头则无需处理
+    try:
+        first = message[0]
+        if _segment_is_text(first) and _segment_text(first).strip():
+            return
+    except Exception:
+        return
+
+    drop = 0
+    for segment in message:
+        if _segment_is_leading_noise(segment):
+            drop += 1
+            continue
+        break
+    if drop <= 0:
+        return
+
+    try:
+        new_msg = message.__class__(list(message)[drop:])
+    except Exception:
+        try:
+            new_msg = message.__class__()
+            for segment in list(message)[drop:]:
+                new_msg.append(segment)
+        except Exception:
+            return
+    if not new_msg:
+        return
+
+    # 去掉指令前残留空白
+    try:
+        if _segment_is_text(new_msg[0]):
+            text = _segment_text(new_msg[0]).lstrip()
+            if isinstance(getattr(new_msg[0], "data", None), dict):
+                new_msg[0].data["text"] = text
+    except Exception:
+        pass
+
+    try:
+        event.message = new_msg
+    except Exception:
+        try:
+            object.__setattr__(event, "message", new_msg)
+        except Exception:
+            return
+
+    # 清掉 on_compat 路由缓存，避免用旧 message 结果
+    try:
+        if hasattr(event, "_xiuxian_on_compat_route"):
+            delattr(event, "_xiuxian_on_compat_route")
+    except Exception:
+        try:
+            setattr(event, "_xiuxian_on_compat_route", None)
+        except Exception:
+            pass
+
+
 def _wrap_handle_event(handle_event):
     if getattr(handle_event, "_xiuxian_on_compat_wrapped", False):
         return handle_event
 
     async def wrapped(bot, event):
+        try:
+            _normalize_leading_at_for_command(event)
+        except Exception:
+            pass
         token = _CURRENT_EVENT.set(event)
         try:
             return await handle_event(bot, event)

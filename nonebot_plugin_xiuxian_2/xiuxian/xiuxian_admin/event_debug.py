@@ -84,24 +84,23 @@ def _extract_plain_from_message(msg: Any) -> str:
     return _safe_str(msg)
 
 
-def _walk_collect_urls(obj: Any, out: list[str], seen: set[str]) -> None:
-    if obj is None:
+def _walk_collect_urls(obj: Any, out: list[str], seen: set[str], _depth: int = 0) -> None:
+    if obj is None or _depth > 8:
         return
     if isinstance(obj, str):
         text = _unescape_slashes(obj)
         for m in _MD_URL_RE.finditer(text):
-            u = unquote(m.group(1).strip().rstrip(").,;，。；"))
+            u = unquote(m.group(1).strip().rstrip(").,;，。；'\""))
             if u and u not in seen:
                 seen.add(u)
                 out.append(u)
         for m in _URL_RE.finditer(text):
-            u = unquote(m.group(0).strip().rstrip(").,;，。；"))
+            u = unquote(m.group(0).strip().rstrip(").,;，。；'\""))
             if u and u not in seen:
                 seen.add(u)
                 out.append(u)
         return
     if isinstance(obj, dict):
-        # 常见媒体字段优先
         for key in (
             "url",
             "file_url",
@@ -129,32 +128,63 @@ def _walk_collect_urls(obj: Any, out: list[str], seen: set[str]) -> None:
             "jumpUrl",
             "rich_media",
             "richMedia",
+            "attachments",
+            "msg_elements",
+            "reply",
         ):
             if key in obj:
-                _walk_collect_urls(obj.get(key), out, seen)
+                _walk_collect_urls(obj.get(key), out, seen, _depth + 1)
         for v in obj.values():
-            _walk_collect_urls(v, out, seen)
+            _walk_collect_urls(v, out, seen, _depth + 1)
         return
     if isinstance(obj, (list, tuple, set)):
         for item in obj:
-            _walk_collect_urls(item, out, seen)
+            _walk_collect_urls(item, out, seen, _depth + 1)
         return
-    # segment-like
-    try:
-        data = getattr(obj, "data", None)
-        if data is not None:
-            _walk_collect_urls(data, out, seen)
-        typ = getattr(obj, "type", None)
-        if typ is not None:
-            _walk_collect_urls(getattr(obj, "url", None), out, seen)
-    except Exception:
-        pass
+
+    # pydantic BaseModel / QQ Attachment：直接取 url 等字段
+    for attr in (
+        "url",
+        "file_url",
+        "fileUrl",
+        "image_url",
+        "src",
+        "href",
+        "content",
+        "attachments",
+        "msg_elements",
+        "reply",
+        "message",
+        "data",
+    ):
+        try:
+            if hasattr(obj, attr):
+                value = getattr(obj, attr, None)
+                if value is not None:
+                    _walk_collect_urls(value, out, seen, _depth + 1)
+        except Exception:
+            pass
+
+    # model_dump / dict() 比 __dict__ 更可靠（pydantic v2）
+    for dumper in (
+        lambda: obj.model_dump() if hasattr(obj, "model_dump") else None,
+        lambda: obj.dict() if hasattr(obj, "dict") else None,
+    ):
+        try:
+            dumped = dumper()
+            if isinstance(dumped, dict):
+                _walk_collect_urls(dumped, out, seen, _depth + 1)
+                return
+        except Exception:
+            pass
+
     try:
         if hasattr(obj, "__dict__"):
             _walk_collect_urls(
                 {k: v for k, v in obj.__dict__.items() if not str(k).startswith("_")},
                 out,
                 seen,
+                _depth + 1,
             )
     except Exception:
         pass
@@ -456,7 +486,7 @@ async def parse_event_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 
 
 def _reply_link_sources(event) -> list[Any]:
-    """取链接优先引用消息，同时兜底整 event 原始结构。"""
+    """取链接只扫触发 event 本身的引用体/附件，不读 message.db。"""
     sources: list[Any] = []
     reply = getattr(event, "reply", None)
     if reply is not None:
@@ -467,18 +497,25 @@ def _reply_link_sources(event) -> list[Any]:
                 getattr(reply, "attachments", None),
                 getattr(reply, "content", None),
                 getattr(reply, "raw_message", None),
+                getattr(reply, "msg_elements", None),
             ]
         )
+        # 直接展开 attachments 单项，确保 pydantic Attachment.url 被扫到
+        try:
+            atts = getattr(reply, "attachments", None) or []
+            for att in atts:
+                sources.append(att)
+                sources.append(getattr(att, "url", None))
+        except Exception:
+            pass
+
     info = _extract_reply_info(event)
     if info:
         sources.append(info)
 
-    # QQ 官方常见：引用体不在 event.reply，而在 raw model / attachments / message_scene
-    try:
-        sources.append(_event_to_dict(event))
-    except Exception:
-        pass
+    # QQ 群引用图常见落点：msg_elements[*].attachments[*].url
     for attr in (
+        "msg_elements",
         "attachments",
         "message_scene",
         "message_reference",
@@ -486,6 +523,7 @@ def _reply_link_sources(event) -> list[Any]:
         "raw_message",
         "original_message",
         "message",
+        "reply",
     ):
         try:
             value = getattr(event, attr, None)
@@ -493,6 +531,12 @@ def _reply_link_sources(event) -> list[Any]:
                 sources.append(value)
         except Exception:
             pass
+
+    # 完整 event dump（含 reply/msg_elements 结构化字段）
+    try:
+        sources.append(_event_to_dict(event))
+    except Exception:
+        pass
     return sources
 
 
