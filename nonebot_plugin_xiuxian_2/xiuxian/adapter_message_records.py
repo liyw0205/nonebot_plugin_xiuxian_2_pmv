@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -89,7 +90,19 @@ def extract_text_from_message_obj(message: Any) -> str:
                     if text:
                         parts.append(str(text))
 
-                elif seg_type in ("image", "audio", "record", "voice", "video", "file", "attachment"):
+                elif seg_type in (
+                    "image",
+                    "audio",
+                    "record",
+                    "voice",
+                    "video",
+                    "file",
+                    "attachment",
+                    "file_image",
+                    "file_audio",
+                    "file_video",
+                    "file_file",
+                ):
                     url = (
                         data.get("url")
                         or data.get("file")
@@ -99,8 +112,23 @@ def extract_text_from_message_obj(message: Any) -> str:
                     )
 
                     media_type = seg_type
-                    if seg_type in ("record", "voice"):
+                    if seg_type in ("record", "voice", "file_audio"):
                         media_type = "audio"
+                    elif seg_type == "file_image":
+                        media_type = "image"
+                    elif seg_type == "file_video":
+                        media_type = "video"
+                    elif seg_type == "file_file":
+                        media_type = "file"
+
+                    # QQ 本地图片段只存 bytes，字符串是占位符。
+                    # 用内容 MD5 生成 QQ 可访问图片 URL，避免 Web 历史显示
+                    # <local_attachment[file_image]>，也不暴露服务器文件路径。
+                    if not url and seg_type == "file_image":
+                        content = data.get("content")
+                        if isinstance(content, (bytes, bytearray)) and content:
+                            md5_hex = hashlib.md5(bytes(content)).hexdigest().upper()
+                            url = f"https://gchat.qpic.cn/qmeetpic/0/0-0-{md5_hex}/0"
 
                     seg_str = str(seg)
                     m = None

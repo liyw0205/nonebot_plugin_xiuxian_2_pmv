@@ -106,6 +106,7 @@ WEB_ENDPOINT_PERMISSIONS = {
     "api_messages_session_pin": WebPermission.MESSAGE,
     "api_messages_stickers": WebPermission.READ,
     "api_messages_stickers_install": WebPermission.MESSAGE,
+    "api_messages_stickers_install_status": WebPermission.READ,
     "api_messages_stickers_file": WebPermission.READ,
     "update": WebPermission.UPDATE,
     "check_update": WebPermission.UPDATE,

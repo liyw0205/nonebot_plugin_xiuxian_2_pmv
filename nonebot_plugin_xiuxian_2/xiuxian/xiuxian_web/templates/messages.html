@@ -6199,10 +6199,41 @@ function selectStickerPack(packId) {
     renderStickerGrid();
 }
 
+function formatStickerBytes(value) {
+    const bytes = Number(value || 0);
+    if (!bytes) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function renderStickerInstallProgress(job) {
+    const percent = Math.max(0, Math.min(100, Number(job.percent || 0)));
+    let detail = job.message || '正在安装表情包';
+    if (job.downloaded) {
+        const downloaded = formatStickerBytes(job.downloaded);
+        const total = formatStickerBytes(job.total);
+        detail += total ? ` · ${downloaded}/${total}` : ` · ${downloaded}`;
+    }
+    setStickerStatus(`${detail} · ${percent}%`, false);
+}
+
+async function pollStickerInstall(jobId) {
+    while (true) {
+        await new Promise(resolve => setTimeout(resolve, 350));
+        const res = await fetch(`/api/messages/stickers/install/${encodeURIComponent(jobId)}`);
+        const job = await res.json();
+        if (!job.success) throw new Error(job.error || '获取安装进度失败');
+        renderStickerInstallProgress(job);
+        if (job.status === 'error') throw new Error(job.error || job.message || '安装失败');
+        if (job.status === 'complete') return job.catalog;
+    }
+}
+
 async function ensureStickersInstalled(force) {
     if (stickerLoading) return stickerCatalog;
     stickerLoading = true;
-    setStickerStatus(force ? '正在更新表情包...' : '正在下载表情包...', false);
+    setStickerStatus(force ? '正在准备更新表情包 · 0%' : '正在准备下载表情包 · 0%', false);
     try {
         const res = await fetch('/api/messages/stickers/install', {
             method: 'POST',
@@ -6214,11 +6245,23 @@ async function ensureStickersInstalled(force) {
             setStickerStatus(data.error || '安装失败', true);
             return null;
         }
-        stickerCatalog = data;
-        setStickerStatus(`已安装 ${ (data.packs || []).length } 套表情包`, false);
+        let catalog = data.catalog || null;
+        if (data.status === 'running' && data.job_id) {
+            catalog = await pollStickerInstall(data.job_id);
+        }
+        if (!catalog) {
+            const catalogRes = await fetch('/api/messages/stickers');
+            catalog = await catalogRes.json();
+        }
+        if (!catalog || !catalog.success) {
+            setStickerStatus((catalog && catalog.error) || '安装完成但目录加载失败', true);
+            return null;
+        }
+        stickerCatalog = catalog;
+        setStickerStatus(`已安装 ${(catalog.packs || []).length} 套表情包 · 100%`, false);
         renderStickerTabs();
         renderStickerGrid();
-        return data;
+        return catalog;
     } catch (e) {
         setStickerStatus('安装异常：' + e, true);
         return null;
