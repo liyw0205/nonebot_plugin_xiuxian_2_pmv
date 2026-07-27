@@ -196,6 +196,10 @@
                             <span>媒体</span>
                             <span id="mediaCountBadgeCollapsed" class="media-count-badge media-count-badge--inline hidden">0</span>
                         </button>
+                        <button id="stickerOpenBtn" class="composer-mini-btn media-label-btn" type="button" onclick="openStickerPanel()" title="表情包">
+                            <i class="fas fa-smile"></i>
+                            <span>表情</span>
+                        </button>
                         <button id="mediaToggleBtn" class="composer-mini-btn media-plus-btn" type="button" onclick="openMediaPanel()" title="更多">
                             <i class="fas fa-plus"></i>
                         </button>
@@ -233,6 +237,9 @@
                             <button id="mediaOpenBtnExpanded" class="btn btn-secondary btn-sm composer-media-btn" type="button" onclick="openMediaPanel()" title="媒体">
                                 <i class="fas fa-paperclip"></i> 媒体
                                 <span id="mediaCountBadgeExpanded" class="media-count-badge media-count-badge--btn hidden">0</span>
+                            </button>
+                            <button id="stickerOpenBtnExpanded" class="btn btn-secondary btn-sm composer-media-btn" type="button" onclick="openStickerPanel()" title="表情包">
+                                <i class="fas fa-smile"></i> 表情
                             </button>
                         </div>
 
@@ -305,6 +312,19 @@
                 <i class="fas fa-paperclip"></i>
                 <span id="mediaCountBadgeFab" class="media-count-badge hidden">0</span>
             </button>
+
+            <div id="stickerOverlay" class="media-overlay hidden" aria-hidden="true" onclick="closeStickerPanel()"></div>
+            <div id="stickerPanel" class="media-panel sticker-panel hidden" role="dialog" aria-label="表情包" onclick="event.stopPropagation()">
+                <div class="media-panel-head">
+                    <strong>表情包</strong>
+                    <button type="button" class="media-panel-close" onclick="closeStickerPanel()" title="关闭">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div id="stickerTabs" class="sticker-tabs"></div>
+                <div id="stickerStatus" class="sticker-status">加载中...</div>
+                <div id="stickerGrid" class="sticker-grid"></div>
+            </div>
         </section>
         </div>
     </div>
@@ -1522,6 +1542,90 @@
     display: block;
 }
 
+.sticker-panel {
+    max-width: min(420px, 92vw);
+    max-height: min(70vh, 560px);
+    overflow: hidden;
+    display: none;
+    flex-direction: column;
+}
+
+.sticker-panel:not(.hidden) {
+    display: flex;
+}
+
+.sticker-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.sticker-tab {
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+
+.sticker-tab.active {
+    background: color-mix(in srgb, var(--accent-color) 18%, var(--bg-primary));
+    color: var(--text-primary);
+    border-color: color-mix(in srgb, var(--accent-color) 45%, var(--border-color));
+}
+
+.sticker-status {
+    min-height: 20px;
+    margin-bottom: 8px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.sticker-status.error {
+    color: var(--danger-color);
+}
+
+.sticker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+    gap: 8px;
+    overflow: auto;
+    max-height: min(52vh, 420px);
+    padding-right: 2px;
+}
+
+.sticker-item {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--bg-secondary);
+    padding: 4px;
+    cursor: pointer;
+    aspect-ratio: 1 / 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sticker-item:hover {
+    border-color: color-mix(in srgb, var(--accent-color) 50%, var(--border-color));
+}
+
+.sticker-item img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+.sticker-item:disabled,
+.sticker-item.sending {
+    opacity: 0.55;
+    cursor: wait;
+}
+
 .media-panel-head {
     display: flex;
     align-items: center;
@@ -1581,7 +1685,8 @@
     right: -2px;
 }
 
-.qq-chat-pane.media-panel-open .media-panel {
+.qq-chat-pane.media-panel-open .media-panel,
+.qq-chat-pane.sticker-panel-open .sticker-panel {
     position: absolute;
     left: 50%;
     top: 50%;
@@ -1589,8 +1694,7 @@
     bottom: auto;
     transform: translate(-50%, -50%);
     z-index: 50;
-    width: min(92vw, 400px);
-    max-height: min(72vh, 480px);
+    width: min(420px, 92%);
     overflow-y: auto;
     margin-top: 0;
 }
@@ -6009,7 +6113,7 @@ function updateSendHint() {
     hint.innerText = `发送到：${currentSession.title}（${adapter}${activeText}）`;
 }
 
-async function postOutboundMessage(adapter, content, mediaType, mediaUrl, mediaFile) {
+async function postOutboundMessage(adapter, content, mediaType, mediaUrl, mediaFile, stickerToken) {
     const fd = new FormData();
     fd.append('adapter', adapter);
     fd.append('scene', currentSession.scene);
@@ -6019,6 +6123,7 @@ async function postOutboundMessage(adapter, content, mediaType, mediaUrl, mediaF
     fd.append('active_send', activeSend ? '1' : '0');
     fd.append('media_type', mediaType || '');
     fd.append('media_url', mediaUrl || '');
+    fd.append('sticker', stickerToken || '');
     fd.append('reply_message_id', selectedReplyMessageId || '');
     fd.append('quote_message_id', selectedQuoteMessageId || '');
     fd.append('quote_reference_id', selectedQuoteReferenceId || '');
@@ -6028,6 +6133,182 @@ async function postOutboundMessage(adapter, content, mediaType, mediaUrl, mediaF
 
     const res = await fetch('/api/messages/send', { method: 'POST', body: fd });
     return res.json();
+}
+
+let stickerCatalog = null;
+let stickerActivePackId = '';
+let stickerLoading = false;
+let stickerSending = false;
+
+function setStickerStatus(text, isError) {
+    const el = document.getElementById('stickerStatus');
+    if (!el) return;
+    el.textContent = text || '';
+    el.classList.toggle('error', !!isError);
+}
+
+function closeStickerPanel() {
+    const panel = document.getElementById('stickerPanel');
+    const overlay = document.getElementById('stickerOverlay');
+    const chatPane = document.getElementById('chatPane');
+    if (panel) panel.classList.add('hidden');
+    if (overlay) {
+        overlay.classList.add('hidden');
+        overlay.setAttribute('aria-hidden', 'true');
+    }
+    if (chatPane) chatPane.classList.remove('sticker-panel-open');
+}
+
+function renderStickerTabs() {
+    const tabs = document.getElementById('stickerTabs');
+    if (!tabs) return;
+    const packs = (stickerCatalog && stickerCatalog.packs) || [];
+    if (!packs.length) {
+        tabs.innerHTML = '';
+        return;
+    }
+    if (!stickerActivePackId || !packs.some(p => p.id === stickerActivePackId)) {
+        stickerActivePackId = packs[0].id;
+    }
+    tabs.innerHTML = packs.map(p => {
+        const active = p.id === stickerActivePackId ? ' active' : '';
+        const count = p.count != null ? ` (${p.count})` : '';
+        return `<button type="button" class="sticker-tab${active}" data-pack-id="${p.id}" onclick="selectStickerPack('${p.id}')">${p.name || p.id}${count}</button>`;
+    }).join('');
+}
+
+function renderStickerGrid() {
+    const grid = document.getElementById('stickerGrid');
+    if (!grid) return;
+    const packs = (stickerCatalog && stickerCatalog.packs) || [];
+    const pack = packs.find(p => p.id === stickerActivePackId);
+    if (!pack || !Array.isArray(pack.items) || !pack.items.length) {
+        grid.innerHTML = '';
+        return;
+    }
+    grid.innerHTML = pack.items.map(item => {
+        const token = item.token || `${pack.id}/${item.id}`;
+        const url = item.url || '';
+        return `<button type="button" class="sticker-item" title="${token}" onclick="sendSticker('${token}')"><img src="${url}" alt="${token}" loading="lazy"></button>`;
+    }).join('');
+}
+
+function selectStickerPack(packId) {
+    stickerActivePackId = packId;
+    renderStickerTabs();
+    renderStickerGrid();
+}
+
+async function ensureStickersInstalled(force) {
+    if (stickerLoading) return stickerCatalog;
+    stickerLoading = true;
+    setStickerStatus(force ? '正在更新表情包...' : '正在下载表情包...', false);
+    try {
+        const res = await fetch('/api/messages/stickers/install', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ force: !!force })
+        });
+        const data = await res.json();
+        if (!data.success) {
+            setStickerStatus(data.error || '安装失败', true);
+            return null;
+        }
+        stickerCatalog = data;
+        setStickerStatus(`已安装 ${ (data.packs || []).length } 套表情包`, false);
+        renderStickerTabs();
+        renderStickerGrid();
+        return data;
+    } catch (e) {
+        setStickerStatus('安装异常：' + e, true);
+        return null;
+    } finally {
+        stickerLoading = false;
+    }
+}
+
+async function loadStickerCatalog() {
+    setStickerStatus('加载表情包...', false);
+    try {
+        const res = await fetch('/api/messages/stickers');
+        const data = await res.json();
+        if (!data.success) {
+            setStickerStatus(data.error || '加载失败', true);
+            return;
+        }
+        if (!data.installed) {
+            stickerCatalog = data;
+            renderStickerTabs();
+            renderStickerGrid();
+            setStickerStatus('首次使用需下载表情包', false);
+            await ensureStickersInstalled(false);
+            return;
+        }
+        stickerCatalog = data;
+        setStickerStatus('', false);
+        renderStickerTabs();
+        renderStickerGrid();
+    } catch (e) {
+        setStickerStatus('加载异常：' + e, true);
+    }
+}
+
+async function openStickerPanel() {
+    // 避免与媒体面板叠层
+    try { if (typeof setMediaPanelOpen === 'function') setMediaPanelOpen(false, { hideFab: false }); } catch (e) {}
+    const panel = document.getElementById('stickerPanel');
+    const overlay = document.getElementById('stickerOverlay');
+    const chatPane = document.getElementById('chatPane');
+    if (panel) panel.classList.remove('hidden');
+    if (overlay) {
+        overlay.classList.remove('hidden');
+        overlay.setAttribute('aria-hidden', 'false');
+    }
+    if (chatPane) chatPane.classList.add('sticker-panel-open');
+    if (!stickerCatalog || !stickerCatalog.installed) {
+        await loadStickerCatalog();
+    } else {
+        renderStickerTabs();
+        renderStickerGrid();
+        setStickerStatus('', false);
+    }
+}
+
+async function sendSticker(token) {
+    if (!currentSession) {
+        alert('请先选择会话');
+        return;
+    }
+    const adapter = currentSession.adapter || (document.getElementById('adapterSelect') || {}).value;
+    if (!adapter) {
+        alert('无法确定适配器，请选择明确会话或顶部适配器');
+        return;
+    }
+    if (stickerSending) return;
+    stickerSending = true;
+    setStickerStatus(`发送中：${token}`, false);
+    try {
+        const data = await postOutboundMessage(adapter, '', '', '', null, token);
+        if (!data.success) {
+            setStickerStatus(data.error || '发送失败', true);
+            return;
+        }
+        setStickerStatus('已发送', false);
+        closeStickerPanel();
+        try {
+            const previousLastRowId = currentLastRowId;
+            if (previousLastRowId > 0 && typeof loadMessagesSince === 'function') {
+                await loadMessagesSince();
+            }
+            if ((!previousLastRowId || currentLastRowId === previousLastRowId) && typeof loadMessages === 'function') {
+                await loadMessages(true, false);
+            }
+        } catch (e) {}
+    } catch (e) {
+        setStickerStatus('发送异常：' + e, true);
+    } finally {
+        stickerSending = false;
+    }
 }
 
 async function sendMessage() {

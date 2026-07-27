@@ -41,6 +41,7 @@ from ..messaging import SendRequest, delivery_service
 from ..xiuxian_config import JsonConfig
 from ..xiuxian_utils import message_db as message_db_config
 from ..xiuxian_utils.http_proxy import http_client
+from .stickers import resolve_sticker_path
 
 
 def _parse_message_config_int(data, key: str, minimum: int, maximum: int) -> int:
@@ -877,6 +878,7 @@ def api_messages_send():
         send_mode = str(data.get("send_mode", "plain") or "plain").strip()
         media_type = str(data.get("media_type", "") or "").strip()
         media_url = str(data.get("media_url", "") or "").strip()
+        sticker_token = str(data.get("sticker", "") or data.get("sticker_token", "") or "").strip()
         reply_message_id = str(data.get("reply_message_id", "") or "").strip()
         quote_message_id = str(data.get("quote_message_id", "") or "").strip()
         quote_reference_id = str(data.get("quote_reference_id", "") or "").strip()
@@ -913,7 +915,7 @@ def api_messages_send():
         if not target_id:
             return jsonify({"success": False, "error": "缺少 target_id"})
 
-        if not content and not media_url and not upload_file:
+        if not content and not media_url and not upload_file and not sticker_token:
             return jsonify({"success": False, "error": "消息不能为空"})
 
         bot = get_bot_by_adapter(adapter)
@@ -926,7 +928,16 @@ def api_messages_send():
         media_input = None
         saved_file_path = None
 
-        if media_url:
+        if sticker_token:
+            sticker_path = resolve_sticker_path(sticker_token)
+            if sticker_path is None:
+                return jsonify({"success": False, "error": "表情包不存在或未安装"})
+            media_type = "image"
+            media_input = sticker_path
+            # 贴纸单独发送：忽略正文，避免混发失败
+            content = ""
+            send_mode = "plain"
+        elif media_url:
             media_input = media_url
         elif upload_file:
             saved_file_path = save_uploaded_media(upload_file)
