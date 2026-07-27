@@ -1,4 +1,7 @@
-"""超管调试：消息信息 / 取链接。"""
+"""超管调试：消息信息 / 取链接。
+
+取链接不依赖固定字段名：把触发 event 摊成文本后正则抽链。
+"""
 
 from __future__ import annotations
 
@@ -25,8 +28,11 @@ from ..xiuxian_utils.utils import handle_send, send_msg_handler
 parse_event_cmd = on_command("消息信息", permission=SUPERUSER, priority=100, block=True)
 fetch_link_cmd = on_command("取链接", aliases={"提取链接", "获取链接"}, permission=SUPERUSER, priority=100, block=True)
 
-_URL_RE = re.compile(r"https?://[^\s\"'<>\\]]+", re.I)
-_MD_URL_RE = re.compile(r"\[[^\]]*\]\((https?://[^)\s]+)\)", re.I)
+# 宽松：兼容 https:// 与 https:\/\/
+_LOOSE_URL_RE = re.compile(
+    r"""(?i)https?:\\?/\\?/[^\s"'<>\\\]\)\}\,，。；]*"""
+)
+_MD_URL_RE = re.compile(r"\[[^\]]*\]\((https?:\\?/\\?/[^)\s]+)\)", re.I)
 
 
 def _safe_str(obj: Any) -> str:
@@ -42,7 +48,11 @@ def _safe_str(obj: Any) -> str:
 def _unescape_slashes(text: str) -> str:
     if not isinstance(text, str):
         text = _safe_str(text)
-    return text.replace("\\/", "/")
+    prev = None
+    while prev != text:
+        prev = text
+        text = text.replace("\\/", "/")
+    return text
 
 
 def _truncate(text: str, limit: int = 10000) -> str:
@@ -84,117 +94,117 @@ def _extract_plain_from_message(msg: Any) -> str:
     return _safe_str(msg)
 
 
-def _walk_collect_urls(obj: Any, out: list[str], seen: set[str], _depth: int = 0) -> None:
-    if obj is None or _depth > 8:
-        return
+def _object_to_search_text(obj: Any, *, _depth: int = 0, _seen: set[int] | None = None) -> str:
+    """任意对象摊成可正则抽链的文本，不依赖固定字段路径。"""
+    if obj is None or _depth > 12:
+        return ""
+    if _seen is None:
+        _seen = set()
+
     if isinstance(obj, str):
-        text = _unescape_slashes(obj)
-        for m in _MD_URL_RE.finditer(text):
-            u = unquote(m.group(1).strip().rstrip(").,;，。；'\""))
-            if u and u not in seen:
-                seen.add(u)
-                out.append(u)
-        for m in _URL_RE.finditer(text):
-            u = unquote(m.group(0).strip().rstrip(").,;，。；'\""))
-            if u and u not in seen:
-                seen.add(u)
-                out.append(u)
-        return
-    if isinstance(obj, dict):
-        for key in (
-            "url",
-            "file_url",
-            "fileUrl",
-            "image_url",
-            "imageUrl",
-            "src",
-            "href",
-            "content",
-            "file",
-            "path",
-            "proxy_url",
-            "thumbnail",
-            "thumb",
-            "resource_url",
-            "resourceUrl",
-            "download_url",
-            "downloadUrl",
-            "pic_url",
-            "picUrl",
-            "image",
-            "audio_url",
-            "video_url",
-            "jump_url",
-            "jumpUrl",
-            "rich_media",
-            "richMedia",
-            "attachments",
-            "msg_elements",
-            "reply",
-        ):
-            if key in obj:
-                _walk_collect_urls(obj.get(key), out, seen, _depth + 1)
-        for v in obj.values():
-            _walk_collect_urls(v, out, seen, _depth + 1)
-        return
-    if isinstance(obj, (list, tuple, set)):
-        for item in obj:
-            _walk_collect_urls(item, out, seen, _depth + 1)
-        return
-
-    # pydantic BaseModel / QQ Attachment：直接取 url 等字段
-    for attr in (
-        "url",
-        "file_url",
-        "fileUrl",
-        "image_url",
-        "src",
-        "href",
-        "content",
-        "attachments",
-        "msg_elements",
-        "reply",
-        "message",
-        "data",
-    ):
+        return _unescape_slashes(obj)
+    if isinstance(obj, (bytes, bytearray)):
         try:
-            if hasattr(obj, attr):
-                value = getattr(obj, attr, None)
-                if value is not None:
-                    _walk_collect_urls(value, out, seen, _depth + 1)
+            return _unescape_slashes(obj.decode("utf-8", "ignore"))
         except Exception:
-            pass
+            return ""
+    if isinstance(obj, (int, float, bool)):
+        return ""
 
-    # model_dump / dict() 比 __dict__ 更可靠（pydantic v2）
+    try:
+        oid = id(obj)
+        if oid in _seen:
+            return ""
+        if not isinstance(obj, (str, bytes, int, float, bool, dict, list, tuple, set)):
+            _seen.add(oid)
+    except Exception:
+        pass
+
+    chunks: list[str] = []
+
     for dumper in (
         lambda: obj.model_dump() if hasattr(obj, "model_dump") else None,
         lambda: obj.dict() if hasattr(obj, "dict") else None,
     ):
         try:
             dumped = dumper()
-            if isinstance(dumped, dict):
-                _walk_collect_urls(dumped, out, seen, _depth + 1)
-                return
+        except Exception:
+            dumped = None
+        if isinstance(dumped, dict):
+            try:
+                chunks.append(json.dumps(dumped, ensure_ascii=False, default=str))
+            except Exception:
+                chunks.append(_safe_str(dumped))
+            for v in dumped.values():
+                chunks.append(_object_to_search_text(v, _depth=_depth + 1, _seen=_seen))
+            break
+        if isinstance(dumped, (list, tuple)):
+            for v in dumped:
+                chunks.append(_object_to_search_text(v, _depth=_depth + 1, _seen=_seen))
+            break
+
+    if isinstance(obj, dict):
+        try:
+            chunks.append(json.dumps(obj, ensure_ascii=False, default=str))
+        except Exception:
+            pass
+        for v in obj.values():
+            chunks.append(_object_to_search_text(v, _depth=_depth + 1, _seen=_seen))
+    elif isinstance(obj, (list, tuple, set)):
+        for v in obj:
+            chunks.append(_object_to_search_text(v, _depth=_depth + 1, _seen=_seen))
+    else:
+        # 不假设字段名：盲扫属性 + str/repr（Attachment 链接常只出现在 str）
+        try:
+            for name in dir(obj):
+                if name.startswith("_"):
+                    continue
+                try:
+                    value = getattr(obj, name, None)
+                except Exception:
+                    continue
+                if callable(value):
+                    continue
+                if isinstance(value, (str, bytes, dict, list, tuple, set)) or hasattr(value, "model_dump") or hasattr(value, "url"):
+                    chunks.append(_object_to_search_text(value, _depth=_depth + 1, _seen=_seen))
+        except Exception:
+            pass
+        chunks.append(_safe_str(obj))
+        try:
+            chunks.append(repr(obj))
         except Exception:
             pass
 
-    try:
-        if hasattr(obj, "__dict__"):
-            _walk_collect_urls(
-                {k: v for k, v in obj.__dict__.items() if not str(k).startswith("_")},
-                out,
-                seen,
-                _depth + 1,
-            )
-    except Exception:
-        pass
+    return _unescape_slashes("\n".join(c for c in chunks if c))
+
+
+def _normalize_url(raw: str) -> str:
+    u = _unescape_slashes(unquote((raw or "").strip()))
+    u = u.rstrip("\\").rstrip(").,;，。；'\"")
+    return u
+
+
+def _collect_urls_from_text(text: str, out: list[str], seen: set[str]) -> None:
+    if not text:
+        return
+    text = _unescape_slashes(text)
+    for m in _MD_URL_RE.finditer(text):
+        u = _normalize_url(m.group(1))
+        if u and u not in seen and u.lower().startswith(("http://", "https://")):
+            seen.add(u)
+            out.append(u)
+    for m in _LOOSE_URL_RE.finditer(text):
+        u = _normalize_url(m.group(0))
+        if u and u not in seen and u.lower().startswith(("http://", "https://")):
+            seen.add(u)
+            out.append(u)
 
 
 def _extract_urls_from_any(*objs: Any) -> list[str]:
     out: list[str] = []
     seen: set[str] = set()
     for obj in objs:
-        _walk_collect_urls(obj, out, seen)
+        _collect_urls_from_text(_object_to_search_text(obj), out, seen)
     return out
 
 
@@ -252,7 +262,6 @@ def _extract_reply_info(event) -> dict | None:
     except Exception:
         pass
 
-    # QQ 群：message_scene.ext.ref_msg_idx
     try:
         message_scene = getattr(event, "message_scene", None)
         if message_scene:
@@ -264,6 +273,10 @@ def _extract_reply_info(event) -> dict | None:
                     if isinstance(item, dict) and item.get("key") == "ref_msg_idx":
                         info["source"] = "message_scene.ext.ref_msg_idx"
                         info["ref_msg_idx"] = item.get("value")
+                        return info
+                    if isinstance(item, str) and "ref_msg_idx=" in item:
+                        info["source"] = "message_scene.ext.ref_msg_idx"
+                        info["ref_msg_idx"] = item.split("ref_msg_idx=", 1)[-1]
                         return info
     except Exception:
         pass
@@ -318,7 +331,6 @@ def _sanitize_md(text: str, *, escape_urls: bool = True) -> str:
         text = _safe_str(text)
     text = text.replace("\n", "\r")
     text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1", text)
-    # QQ 原生 MD 对裸链较敏感；标题/普通正文可转义，代码框原始 JSON 不要转义，方便复制
     if escape_urls:
         text = re.sub(r"(?i)\b(https?|mqqapi)://", lambda m: f"{m.group(1)}:\\/\\/", text)
     return text.replace("```", "'''")
@@ -326,7 +338,6 @@ def _sanitize_md(text: str, *, escape_urls: bool = True) -> str:
 
 def _pretty_json(data: Any) -> str:
     try:
-        # ensure_ascii=False 保留中文；不要额外把 / 写成 \/
         return _unescape_slashes(json.dumps(data, ensure_ascii=False, indent=2, default=str))
     except Exception:
         return _unescape_slashes(_safe_str(data))
@@ -399,13 +410,8 @@ def _build_event_info_blocks(event) -> tuple[str, str]:
     if reply_info:
         lines.append(f"引用信息：{_pretty_json(reply_info)}")
 
-    # 当前消息链接摘要
-    urls = _extract_urls_from_any(
-        getattr(event, "message", None),
-        getattr(event, "attachments", None),
-        getattr(event, "content", None),
-        reply_info,
-    )
+    # 摘要：直接对整 event 抽链
+    urls = _extract_urls_from_any(event)
     if urls:
         lines.append(f"链接数：{len(urls)}")
         for i, u in enumerate(urls[:5], 1):
@@ -427,7 +433,7 @@ async def _send_blocks(
 ) -> None:
     cfg = XiuConfig()
     safe_title = _sanitize_md(title, escape_urls=True)
-    # 代码框内容默认不转义 URL，避免 https:// 变成 https:\/\/
+    # 代码框默认不转义 URL
     safe_body = _sanitize_md(body, escape_urls=escape_body_urls)
 
     if cfg.markdown_status:
@@ -464,11 +470,10 @@ async def parse_event_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         basic_text, raw_json = _build_event_info_blocks(event)
         cfg = XiuConfig()
         if cfg.markdown_status and cfg.markdown_id:
-            await _send_blocks(bot, event, basic_text, raw_json, code_lang="json")
+            await _send_blocks(bot, event, basic_text, raw_json, code_lang="json", escape_body_urls=False)
             return
         if cfg.markdown_status:
             safe_basic = _sanitize_md(basic_text, escape_urls=True)
-            # 原始 JSON 代码框不转义 URL
             safe_raw = _sanitize_md(raw_json, escape_urls=False)
             md = (
                 f"**消息基本信息**\r```text\r{safe_basic}\r```\r"
@@ -485,75 +490,22 @@ async def parse_event_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, f"解析event失败：{e}")
 
 
-def _reply_link_sources(event) -> list[Any]:
-    """取链接只扫触发 event 本身的引用体/附件，不读 message.db。"""
-    sources: list[Any] = []
-    reply = getattr(event, "reply", None)
-    if reply is not None:
-        sources.extend(
-            [
-                reply,
-                getattr(reply, "message", None),
-                getattr(reply, "attachments", None),
-                getattr(reply, "content", None),
-                getattr(reply, "raw_message", None),
-                getattr(reply, "msg_elements", None),
-            ]
-        )
-        # 直接展开 attachments 单项，确保 pydantic Attachment.url 被扫到
-        try:
-            atts = getattr(reply, "attachments", None) or []
-            for att in atts:
-                sources.append(att)
-                sources.append(getattr(att, "url", None))
-        except Exception:
-            pass
-
-    info = _extract_reply_info(event)
-    if info:
-        sources.append(info)
-
-    # QQ 群引用图常见落点：msg_elements[*].attachments[*].url
-    for attr in (
-        "msg_elements",
-        "attachments",
-        "message_scene",
-        "message_reference",
-        "content",
-        "raw_message",
-        "original_message",
-        "message",
-        "reply",
-    ):
-        try:
-            value = getattr(event, attr, None)
-            if value is not None:
-                sources.append(value)
-        except Exception:
-            pass
-
-    # 完整 event dump（含 reply/msg_elements 结构化字段）
-    try:
-        sources.append(_event_to_dict(event))
-    except Exception:
-        pass
-    return sources
-
-
 @fetch_link_cmd.handle(parameterless=[Cooldown(cd_time=0.5)])
 async def fetch_link_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
-    """超管：引用一条消息，提取其中图片/附件链接。"""
+    """超管：引用一条消息，从触发 event 文本化结果中提取链接。"""
     bot, _ = await assign_bot(bot=bot, event=event)
     try:
         reply_info = _extract_reply_info(event)
         has_reply = bool(reply_info) or getattr(event, "reply", None) is not None
         if not has_reply:
-            await _send_blocks(bot, event, "获取失败", "请先引用一条消息后再发送【取链接】")
-            return
-
-        urls = _extract_urls_from_any(*_reply_link_sources(event))
-        # 去掉当前指令本身不会有的噪音：过滤掉极短/非 http 的
-        urls = [u for u in urls if isinstance(u, str) and u.lower().startswith(("http://", "https://"))]
+            # 无引用时也允许从当前 event 抽（兼容某些平台把引用内容嵌在当前消息里）
+            urls = _extract_urls_from_any(event)
+            if not urls:
+                await _send_blocks(bot, event, "获取失败", "请先引用一条消息后再发送【取链接】")
+                return
+        else:
+            # 只看触发 event：整对象文本化 + 正则，不读 message.db，不赌字段名
+            urls = _extract_urls_from_any(event)
 
         if not urls:
             await _send_blocks(bot, event, "获取失败", "未在引用消息中找到可用链接")
