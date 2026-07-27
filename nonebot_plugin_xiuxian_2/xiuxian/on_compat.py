@@ -373,6 +373,12 @@ def _get_plain_text(event: "Event") -> str:
 
 
 def _get_first_text(event: "Event") -> str:
+    """取消息中第一个非空文本段。
+
+    QQ 艾特场景常见结构：
+    Text('') + MentionUser(...) + Text(' 取链接')
+    旧逻辑只看 message[0]，空 Text 会直接判定无指令，落到 empty_fallback。
+    """
     try:
         message = event.get_message()
     except Exception:
@@ -381,15 +387,23 @@ def _get_first_text(event: "Event") -> str:
     if not message:
         return ""
 
-    segment = message[0]
-    try:
-        if not segment.is_text():
-            return ""
-    except Exception:
-        if getattr(segment, "type", "") != "text":
-            return ""
+    for segment in message:
+        try:
+            is_text = segment.is_text()
+        except Exception:
+            is_text = getattr(segment, "type", "") in ("text", "plain")
+        if not is_text:
+            # 跳过 mention/reply/image 等，继续找真正指令文本
+            continue
+        text = str(segment).lstrip()
+        if text:
+            return text
+    return ""
 
-    return str(segment).lstrip()
+
+def _normalize_route_text(text: str) -> str:
+    """归一化路由用纯文本：去首尾空白，去掉开头多余空白。"""
+    return (text or "").strip()
 
 
 def _get_command(event: "Event") -> tuple[str, ...] | None:
@@ -400,6 +414,9 @@ def _get_command(event: "Event") -> tuple[str, ...] | None:
         return None
 
     text = _get_first_text(event)
+    if not text:
+        # 兜底：整段纯文本（已去空白）再试一次，兼容艾特后指令
+        text = _normalize_route_text(_get_plain_text(event))
     if not text:
         return None
 
@@ -424,7 +441,8 @@ def _route_event(event: "Event") -> tuple[tuple[str, ...] | None, str] | None:
     if cached is not None:
         return cached
 
-    route = (_get_command(event), _get_plain_text(event))
+    plain = _normalize_route_text(_get_plain_text(event))
+    route = (_get_command(event), plain)
     try:
         setattr(event, "_xiuxian_on_compat_route", route)
     except Exception:

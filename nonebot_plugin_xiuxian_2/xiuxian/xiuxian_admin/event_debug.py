@@ -116,6 +116,19 @@ def _walk_collect_urls(obj: Any, out: list[str], seen: set[str]) -> None:
             "proxy_url",
             "thumbnail",
             "thumb",
+            "resource_url",
+            "resourceUrl",
+            "download_url",
+            "downloadUrl",
+            "pic_url",
+            "picUrl",
+            "image",
+            "audio_url",
+            "video_url",
+            "jump_url",
+            "jumpUrl",
+            "rich_media",
+            "richMedia",
         ):
             if key in obj:
                 _walk_collect_urls(obj.get(key), out, seen)
@@ -270,20 +283,23 @@ def _event_to_dict(event) -> dict:
     return data
 
 
-def _pretty_json(data: Any) -> str:
-    try:
-        return _unescape_slashes(json.dumps(data, ensure_ascii=False, indent=2, default=str))
-    except Exception:
-        return _unescape_slashes(_safe_str(data))
-
-
-def _sanitize_md(text: str) -> str:
+def _sanitize_md(text: str, *, escape_urls: bool = True) -> str:
     if not isinstance(text, str):
         text = _safe_str(text)
     text = text.replace("\n", "\r")
     text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1", text)
-    text = re.sub(r"(?i)\b(https?|mqqapi)://", lambda m: f"{m.group(1)}:\\/\\/", text)
+    # QQ 原生 MD 对裸链较敏感；标题/普通正文可转义，代码框原始 JSON 不要转义，方便复制
+    if escape_urls:
+        text = re.sub(r"(?i)\b(https?|mqqapi)://", lambda m: f"{m.group(1)}:\\/\\/", text)
     return text.replace("```", "'''")
+
+
+def _pretty_json(data: Any) -> str:
+    try:
+        # ensure_ascii=False 保留中文；不要额外把 / 写成 \/
+        return _unescape_slashes(json.dumps(data, ensure_ascii=False, indent=2, default=str))
+    except Exception:
+        return _unescape_slashes(_safe_str(data))
 
 
 def _build_event_info_blocks(event) -> tuple[str, str]:
@@ -377,10 +393,12 @@ async def _send_blocks(
     body: str,
     *,
     code_lang: str = "text",
+    escape_body_urls: bool = False,
 ) -> None:
     cfg = XiuConfig()
-    safe_title = _sanitize_md(title)
-    safe_body = _sanitize_md(body)
+    safe_title = _sanitize_md(title, escape_urls=True)
+    # 代码框内容默认不转义 URL，避免 https:// 变成 https:\/\/
+    safe_body = _sanitize_md(body, escape_urls=escape_body_urls)
 
     if cfg.markdown_status:
         if cfg.markdown_id:
@@ -419,8 +437,9 @@ async def parse_event_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
             await _send_blocks(bot, event, basic_text, raw_json, code_lang="json")
             return
         if cfg.markdown_status:
-            safe_basic = _sanitize_md(basic_text)
-            safe_raw = _sanitize_md(raw_json)
+            safe_basic = _sanitize_md(basic_text, escape_urls=True)
+            # 原始 JSON 代码框不转义 URL
+            safe_raw = _sanitize_md(raw_json, escape_urls=False)
             md = (
                 f"**消息基本信息**\r```text\r{safe_basic}\r```\r"
                 f"**原始数据 (Event JSON)**\r```json\r{safe_raw}\r```"
@@ -437,7 +456,7 @@ async def parse_event_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 
 
 def _reply_link_sources(event) -> list[Any]:
-    """取链接只看被引用消息。"""
+    """取链接优先引用消息，同时兜底整 event 原始结构。"""
     sources: list[Any] = []
     reply = getattr(event, "reply", None)
     if reply is not None:
@@ -450,10 +469,30 @@ def _reply_link_sources(event) -> list[Any]:
                 getattr(reply, "raw_message", None),
             ]
         )
-    # 有时引用内容嵌在 event 的 attachments/message 以外字段
     info = _extract_reply_info(event)
     if info:
         sources.append(info)
+
+    # QQ 官方常见：引用体不在 event.reply，而在 raw model / attachments / message_scene
+    try:
+        sources.append(_event_to_dict(event))
+    except Exception:
+        pass
+    for attr in (
+        "attachments",
+        "message_scene",
+        "message_reference",
+        "content",
+        "raw_message",
+        "original_message",
+        "message",
+    ):
+        try:
+            value = getattr(event, attr, None)
+            if value is not None:
+                sources.append(value)
+        except Exception:
+            pass
     return sources
 
 
@@ -463,21 +502,21 @@ async def fetch_link_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     bot, _ = await assign_bot(bot=bot, event=event)
     try:
         reply_info = _extract_reply_info(event)
-        if not reply_info and getattr(event, "reply", None) is None:
+        has_reply = bool(reply_info) or getattr(event, "reply", None) is not None
+        if not has_reply:
             await _send_blocks(bot, event, "获取失败", "请先引用一条消息后再发送【取链接】")
             return
 
         urls = _extract_urls_from_any(*_reply_link_sources(event))
-        # 再兜底：整 event 里找，但优先 reply 相关
-        if not urls:
-            urls = _extract_urls_from_any(_event_to_dict(event).get("__parsed_reply__"))
+        # 去掉当前指令本身不会有的噪音：过滤掉极短/非 http 的
+        urls = [u for u in urls if isinstance(u, str) and u.lower().startswith(("http://", "https://"))]
 
         if not urls:
             await _send_blocks(bot, event, "获取失败", "未在引用消息中找到可用链接")
             return
 
         body = "\n".join(urls)
-        await _send_blocks(bot, event, "获取成功", body, code_lang="text")
+        await _send_blocks(bot, event, "获取成功", body, code_lang="text", escape_body_urls=False)
     except Exception as e:
         logger.error(f"取链接失败: {e}")
         await _send_blocks(bot, event, "获取失败", str(e))
