@@ -10,7 +10,7 @@ from typing import Any
 
 from nonebot.log import logger
 
-from .paths import get_paths
+from ..paths import get_paths
 from .xiuxian_utils.json_store import load_json_file, save_json_file
 
 BLACKHOUSE_FILE = get_paths().data / "blackhouse.json"
