@@ -477,8 +477,10 @@ def api_messages_stickers():
         if not is_installed():
             # 未安装时返回远端摘要（若失败则空列表）
             packs = []
+            remote_version = 0
             try:
                 remote = json.loads(_download_bytes(remote_manifest_url(), timeout=20).decode("utf-8"))
+                remote_version = int(remote.get("version") or 0)
                 for p in remote.get("packs") or []:
                     if not isinstance(p, dict):
                         continue
@@ -499,10 +501,21 @@ def api_messages_stickers():
                     "success": True,
                     "installed": False,
                     "version": 0,
+                    "remote_version": remote_version,
                     "packs": packs,
                 }
             )
-        return jsonify(build_catalog())
+
+        catalog = build_catalog()
+        try:
+            remote = json.loads(_download_bytes(remote_manifest_url(), timeout=20).decode("utf-8"))
+            remote_version = int(remote.get("version") or 0)
+            catalog["remote_version"] = remote_version
+            catalog["update_available"] = remote_version > int(catalog.get("version") or 0)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"stickers remote version check failed: {e}")
+            catalog["update_available"] = False
+        return jsonify(catalog)
     except Exception as e:  # noqa: BLE001
         return jsonify({"success": False, "error": f"获取表情包失败: {e}"})
 

@@ -6287,6 +6287,14 @@ async function loadStickerCatalog() {
             await ensureStickersInstalled(false);
             return;
         }
+        if (data.update_available) {
+            stickerCatalog = data;
+            renderStickerTabs();
+            renderStickerGrid();
+            setStickerStatus(`发现表情包更新 v${data.version || 0} → v${data.remote_version || ''}`, false);
+            await ensureStickersInstalled(true);
+            return;
+        }
         stickerCatalog = data;
         setStickerStatus('', false);
         renderStickerTabs();
