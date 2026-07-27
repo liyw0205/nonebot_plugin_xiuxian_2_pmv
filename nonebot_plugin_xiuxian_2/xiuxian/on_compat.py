@@ -26,6 +26,7 @@ from nonebot.plugin.on import (
 )
 from nonebot.rule import TrieRule
 
+from .blackhouse import is_user_blackhoused, load_blackhouse_memory, bootstrap_from_user_xiuxian
 from .command_disable import (
     disabled_command_keys_for_route,
     is_command_disabled,
@@ -319,6 +320,45 @@ def _filter_disabled_matchers(
     return [matcher for matcher in candidates if matcher not in blocked]
 
 
+def _event_user_id(event: "Event") -> str:
+    try:
+        uid = event.get_user_id()
+        if uid:
+            return str(uid)
+    except Exception:
+        pass
+    for attr in ("user_id", "user_openid", "author_id"):
+        value = getattr(event, attr, None)
+        if value:
+            return str(value)
+    return ""
+
+
+def _filter_blackhoused_matchers(
+    candidates: list[type["Matcher"]],
+    event: "Event",
+) -> list[type["Matcher"]]:
+    """小黑屋全局封禁：拦截所有 routed matcher，管理模块指令除外。"""
+    uid = _event_user_id(event)
+    if not uid or not is_user_blackhoused(uid):
+        return candidates
+
+    kept: list[type["Matcher"]] = []
+    blocked_any = False
+    for matcher in candidates:
+        if _matcher_exempt_command_disable(matcher):
+            kept.append(matcher)
+            continue
+        # 仅拦截已纳入 on_compat 路由的指令；未路由 matcher 保持原行为
+        if matcher in _MATCHER_ROUTES:
+            blocked_any = True
+            continue
+        kept.append(matcher)
+    if blocked_any:
+        logger.info("[修仙 小黑屋] 用户 {} 指令已全局封禁", uid)
+    return kept
+
+
 def _get_plain_text(event: "Event") -> str:
     try:
         return str(event.get_plaintext())
@@ -442,6 +482,7 @@ class XiuxianOnCompatProvider(MatcherProvider):
                 if matcher not in routed or matcher in selected
             ]
         filtered = _filter_disabled_matchers(filtered, selected, command, text)
+        filtered = _filter_blackhoused_matchers(filtered, event)  # type: ignore[arg-type]
         return _FilteredMatcherList(matcher_list, filtered)
 
     def __setitem__(self, priority: int, matcher_list: list[type["Matcher"]]) -> None:
@@ -538,6 +579,8 @@ class XiuxianOnCompatProvider(MatcherProvider):
 
 def rebuild_on_compat_index() -> None:
     load_command_disable_memory()
+    load_blackhouse_memory()
+    bootstrap_from_user_xiuxian()
     rebuild_alias_index(_collect_alias_to_primary_map())
     sync_command_registry(_collect_registered_command_registry())
     provider = getattr(matchers, "provider", None)

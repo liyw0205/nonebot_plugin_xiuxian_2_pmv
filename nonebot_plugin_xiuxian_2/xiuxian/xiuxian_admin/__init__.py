@@ -37,6 +37,7 @@ from ..broadcast_manager import (
     clear_broadcast,
 )
 
+from ..blackhouse import ban_user as global_ban_user, unban_user as global_unban_user, list_blackhoused_users
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_base import clear_all_xiangyuan
@@ -1692,118 +1693,93 @@ async def items_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 @blackhouse.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
-    
-    plain_text = args.extract_plain_text().strip()
 
+    plain_text = args.extract_plain_text().strip()
     target_user_id = None
     target_name = None
 
-    # 1. 优先找艾特
     at_qq = get_at_user_id(args)
-
     if at_qq:
-        target_user_id = at_qq
+        target_user_id = str(at_qq)
         user = sql_message.get_user_info_with_id(target_user_id)
         if user:
-            target_name = user['user_name']
-    # 2. 没有艾特就用道号（参数里的最后一个词）
+            target_name = user.get("user_name") or target_user_id
+        else:
+            target_name = target_user_id
     elif plain_text:
-        dao_name = plain_text.split()[-1]          # 防止前面有其他参数
+        tokens = plain_text.split()
+        dao_name = tokens[-1]
         user = sql_message.get_user_info_with_name(dao_name)
         if user:
-            target_user_id = user['user_id']
-            target_name = user['user_name']
+            target_user_id = str(user["user_id"])
+            target_name = user.get("user_name") or target_user_id
+        elif re.fullmatch(r"[A-Za-z0-9_\-]{4,64}", dao_name):
+            # 允许直接封禁未注册 openid/QQ，作为全局娱乐封禁
+            target_user_id = dao_name
+            target_name = dao_name
 
     if not target_user_id:
-        await handle_send(bot, event, "未找到目标用户！请正确艾特或输入道号。")
+        await handle_send(bot, event, "未找到目标用户！请正确艾特、输入道号，或直接输入用户ID。")
         return
 
-    target_user = sql_message.get_user_info_with_id(target_user_id)
-    if not target_user:
-        await handle_send(bot, event, "该用户尚未踏入修仙界！")
-        return
-
-    result = admin_blackhouse_status_service.set_banned(
-        _admin_operation_id(event, "blackhouse-ban", str(target_user_id)),
-        str(get_user_id(event) or "unknown"),
-        target_user_id,
-        admin_blackhouse_status_service.snapshot(target_user_id),
-        True,
-    )
-    if result.status == "state_changed":
-        await handle_send(bot, event, "封禁操作未生效：玩家封禁状态刚被改动，请重新执行。")
-    elif result.status == "operation_conflict":
-        await handle_send(bot, event, "本次封禁操作与已记录事件冲突")
-    elif result.status == "user_missing":
-        await handle_send(bot, event, "该用户尚未踏入修仙界！")
-    elif result.status == "unchanged":
-        await handle_send(bot, event, f"道友 {target_user['user_name']} 已在小黑屋中。")
+    status = global_ban_user(str(target_user_id), name=str(target_name or target_user_id))
+    if status == "unchanged":
+        await handle_send(bot, event, f"{target_name} 已在小黑屋中。")
     else:
-        await handle_send(bot, event, f"道友 {target_user['user_name']} 已被关入小黑屋！")
+        await handle_send(bot, event, f"{target_name} 已被关入小黑屋（全局封禁，含娱乐指令）！")
 
 
 @unblackhouse.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
-    
-    plain_text = args.extract_plain_text().strip()
 
+    plain_text = args.extract_plain_text().strip()
     target_user_id = None
+    target_name = None
 
     at_qq = get_at_user_id(args)
-
     if at_qq:
-        target_user_id = at_qq
+        target_user_id = str(at_qq)
+        user = sql_message.get_user_info_with_id(target_user_id)
+        target_name = (user.get("user_name") if user else None) or target_user_id
     elif plain_text:
-        dao_name = plain_text.split()[-1]
+        tokens = plain_text.split()
+        dao_name = tokens[-1]
         user = sql_message.get_user_info_with_name(dao_name)
         if user:
-            target_user_id = user['user_id']
+            target_user_id = str(user["user_id"])
+            target_name = user.get("user_name") or target_user_id
+        elif re.fullmatch(r"[A-Za-z0-9_\-]{4,64}", dao_name):
+            target_user_id = dao_name
+            target_name = dao_name
 
     if not target_user_id:
-        await handle_send(bot, event, "未找到目标用户！请正确艾特或输入道号。")
+        await handle_send(bot, event, "未找到目标用户！请正确艾特、输入道号，或直接输入用户ID。")
         return
 
-    target_user = sql_message.get_user_info_with_id(target_user_id)
-    if not target_user:
-        await handle_send(bot, event, "该用户尚未踏入修仙界！")
-        return
-
-    result = admin_blackhouse_status_service.set_banned(
-        _admin_operation_id(event, "blackhouse-unban", str(target_user_id)),
-        str(get_user_id(event) or "unknown"),
-        target_user_id,
-        admin_blackhouse_status_service.snapshot(target_user_id),
-        False,
-    )
-    if result.status == "state_changed":
-        await handle_send(bot, event, "封禁操作未生效：玩家封禁状态刚被改动，请重新执行。")
-    elif result.status == "operation_conflict":
-        await handle_send(bot, event, "本次解封操作与已记录事件冲突")
-    elif result.status == "user_missing":
-        await handle_send(bot, event, "该用户尚未踏入修仙界！")
-    elif result.status == "unchanged":
-        await handle_send(bot, event, f"道友 {target_user['user_name']} 当前未被封禁。")
+    status = global_unban_user(str(target_user_id))
+    if status == "unchanged":
+        await handle_send(bot, event, f"{target_name} 当前未被封禁。")
     else:
-        await handle_send(bot, event, f"道友 {target_user['user_name']} 已从小黑屋释放，恢复自由！")
+        await handle_send(bot, event, f"{target_name} 已从小黑屋释放，恢复自由！")
+
 
 @view_blackhouse.handle(parameterless=[Cooldown(cd_time=0)])
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
-    
-    cur = sql_message.conn.cursor()
-    cur.execute("SELECT user_id, user_name FROM user_xiuxian WHERE is_ban=1")
-    banned_users = cur.fetchall()
-    
+
+    banned_users = list_blackhoused_users()
     if not banned_users:
         await handle_send(bot, event, "当前小黑屋空空如也～")
         return
-    
+
     msg = "【小黑屋在押人员】\n"
-    for uid, name in banned_users:
-        msg += f"· {name} (ID: {uid})\n"
-    
-    await handle_send(bot, event, msg)
+    for row in banned_users:
+        name = row.get("name") or row.get("user_id")
+        uid = row.get("user_id")
+        msg += f"- {name}（{uid}）\n"
+    await handle_send(bot, event, msg.rstrip())
+
 
 @super_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -1943,11 +1919,11 @@ async def super_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 
 **用户管控**
 → 小黑屋 [目标]
-> 封禁指定修仙用户
+> 全局封禁（含娱乐；可艾特/道号/用户ID，无需先注册修仙）
 → 解除小黑屋 [目标]
-> 解除封禁
+> 解除全局封禁
 → 查看小黑屋 / 小黑屋列表
-> 查看封禁名单
+> 查看全局封禁名单
 → 用户伪装 [目标]
 > 伪装成指定用户
 → 用户伪装 取消

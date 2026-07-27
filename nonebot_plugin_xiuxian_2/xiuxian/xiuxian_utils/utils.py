@@ -244,9 +244,11 @@ def check_user(event_or_user_id: Union[GroupMessageEvent, PrivateMessageEvent, s
 
     isUser = True
 
-    # 检查是否被关小黑屋
-    if user_info.get('is_ban', 0) == 1:
-        msg = "道友已被关入小黑屋，期间无法使用任何修仙指令！\n请等待管理员处理或联系管理员申诉。"
+    # 检查是否被关小黑屋（全局名单优先，兼容旧 is_ban）
+    from ..blackhouse import is_user_blackhoused
+
+    if is_user_blackhoused(user_id_to_check) or is_user_blackhoused(original_user_id) or user_info.get('is_ban', 0) == 1:
+        msg = "道友已被关入小黑屋，期间无法使用任何指令（含娱乐）！\n请等待管理员处理或联系管理员申诉。"
         return False, user_info, msg
 
     # 确保后续逻辑使用当前生效ID（本号/化身/伪装）
