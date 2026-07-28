@@ -204,8 +204,7 @@ QQ 普通群和 C2C 的 `msg_seq` 默认由投递门面按 Bot、场景和目标
 
 `delivery_service.reply_enhanced()` 统一执行 Markdown/keyboard capability 检测。
 Markdown 不可用时直接发送纯文本；keyboard 不可用时移除键盘并保留 Markdown；
-构造或投递增强消息失败时再次降级纯文本。旧直接发送路径及删除条件记录在
-`docs/message_delivery_migration.md`。
+构造或投递增强消息失败时再次降级纯文本。普通业务发送必须进入投递门面；直接 Adapter 调用仅保留在投递后端、兼容层、合并转发、撤回和 interaction ACK 等明确的平台专有实现中。
 
 QQ `INTERACTION_CREATE` 已接入全局事件生命周期：事件进入时启动 ACK 超时兜底，
 Matcher 异常或事件处理完成时立即确认。`InteractionAcknowledger` 按 interaction ID
@@ -339,7 +338,7 @@ from .adapter_message_actions import delete_message_compat, schedule_delete_mess
 
 `adapter_compat.py` 解决“事件语义、消息段和事件上下文发送跨适配器统一”的问题；`on_compat.py` 解决“本项目大量空前缀 `on_command` matcher 的路由压力”的问题。
 
-当前项目约有 500 个 `on_command` matcher，且默认配置示例使用：
+当前项目存在大量（当前源码不少于 600 个）`on_command` matcher，且默认配置示例使用：
 
 ```dotenv
 COMMAND_START = [""]

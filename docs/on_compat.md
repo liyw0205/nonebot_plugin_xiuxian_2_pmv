@@ -6,7 +6,7 @@
 
 ## 为什么需要
 
-本项目约有 500 个 `on_command` matcher，并且 README 推荐配置里允许空命令前缀：
+本项目存在大量（当前源码不少于 600 个）`on_command` matcher，并且默认配置示例使用空命令前缀：
 
 ```dotenv
 COMMAND_START = [""]
@@ -28,6 +28,8 @@ COMMAND_START = [""]
 - 无法安全提取字面前缀的 `on_regex` 会作为通用 matcher 保留。
 - 带明确 `^字面量` 前缀的 `on_regex` 会进入前缀索引，例如 `^灵庄...`、`^悬赏令...`。
 - 非修仙模块的 matcher 不进入本兼容层索引，仍按 NoneBot 原流程处理。
+- QQ 艾特事件会在事件入口去掉前导空文本、机器人 Mention 和引用段，使 `TrieRule` 能看到真实命令。
+- 全局小黑屋用户会在 routed matcher 阶段被过滤；管理模块保留解禁入口。
 
 如果需要临时关闭兼容路由，可在 NoneBot 配置中设置：
 

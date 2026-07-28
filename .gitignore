@@ -17,8 +17,15 @@ data/xiuxian/activity/*.db
 data/xiuxian/activity/*.db-*
 data/xiuxian/activity/activity_config.json
 data/xiuxian/config.json
+data/xiuxian/cache/
+data/xiuxian/media_parser_cache/
 nonebot_plugin_xiuxian_2/xiuxian/xiuxian_base/lottery_pool.json
 nonebot_plugin_xiuxian_2/xiuxian/xiuxian_buff/*_cd.json
 nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation_data/**/*.json
 nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/*.json
 nonebot_plugin_xiuxian_2/xiuxian/xiuxian_rift/rift_info.json
+
+# 本地开发/Agent 资料，禁止提交。
+.hermes/
+LOCAL_ARCHITECTURE_REVIEW.md
+docs/development_goals/

@@ -32,19 +32,21 @@ curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_p
 
 ```bash
 # smart：对比 manifest md5，base 不变则只下 plugin
-bash install_docker.sh update
+curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_docker.sh | bash -s -- update
 
 # 仅插件
-bash install_docker.sh update --plugin
+curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_docker.sh | bash -s -- update --plugin
 
 # 强制 base + plugin
-bash install_docker.sh update --full
+curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_docker.sh | bash -s -- update --full
 ```
 
 ## 管理
 
 ```bash
-bash install_docker.sh start|stop|status|logs
+curl -fsSLo install_docker.sh https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_docker.sh
+chmod +x install_docker.sh
+./install_docker.sh start|stop|status|logs
 ```
 
 ## 运行环境变量

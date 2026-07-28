@@ -31,7 +31,7 @@
 
 - 公共 helper：`xiuxian_utils/status_card.py`（`prefix_status` / `md_title_card` / `md_kv_lines`）
 - 投递门面：`messaging/delivery.py`（`allow_plain_fallback` 等媒体策略）
-- 迁移清单：`docs/message_delivery_migration.md`
+- 平台专有发送只允许存在于适配器后端、合并转发、撤回和 interaction ACK 等明确边界
 
 ## handle_send 按钮
 

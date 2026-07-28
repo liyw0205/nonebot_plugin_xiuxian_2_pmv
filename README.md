@@ -1,906 +1,184 @@
-# 🎉 修仙2.2 魔改版
+# 修仙 2 魔改版
 
-> ✨ 一款适用于 QQ 群的修仙文字游戏插件
+适用于 QQ 群的修仙文字游戏插件，兼容 OneBot V11 与 QQ 官方适配器，并包含 Web 管理、娱乐、媒体解析、定时任务等扩展功能。
 
-由于大量魔改，已经不再是一个纯粹的修仙机器人，还包含一些非修仙的娱乐功能。  
-设定持续征集中，有好的想法欢迎推送~
+当前使用本地 SQLite 数据库，不需要部署 MySQL。
 
----
+## 能力概览
 
-## 📚 详细文档
+- 修仙玩法：修炼、突破、宗门、秘境、悬赏、宠物、拍卖、炼丹等
+- 双适配器：OneBot V11 / QQ 官方机器人
+- Web 管理：配置、数据库、消息、定时任务、备份、日志和更新
+- 娱乐功能：链接解析、点歌、番剧、WebDAV、NewAPI、小游戏等
+- 多平台部署：Linux、Docker、Windows、Termux
 
-| 文档 | 说明 |
-|:-----|:-----|
-| [🧾 物品 ID 速查表](docs/items.md) | 所有物品类型、ID 范围、品阶总览 |
-| [🔮 物品系统详解](docs/buff.md) | 功法 / 神通 / 装备 / 丹药 / 药材等完整说明 |
-| [🎬 链接解析（流媒体）](docs/media_parser.md) | B 站 / 抖音 / 快手 / 微博 / 小红书等解析与发送说明 |
-| [🖥️ Web 管理面板](docs/web_panel.md) | 面板访问、定时任务页、安全开关（默认 `127.0.0.1:5888`） |
-| [🎮 常用玩法说明](docs/gameplay_notes.md) | 悬赏令 / 探索 / 秘藏令 / 双修等高频说明 |
-| [🔌 跨适配器兼容层](docs/adapter_compat.md) | OneBot v11 + QQ 适配器、消息记录、撤回与主动发送 |
-| [🚦 Matcher 路由兼容层](docs/on_compat.md) | 空前缀命令环境下的 matcher 索引与路由 |
-| [🛡️ 数据层与 Web 面板治理](docs/database_web_governance.md) | SQLite 统一入口、迁移约定、Web 路径约束 |
+## 快速安装
 
-插件内模块索引：[nonebot_plugin_xiuxian_2/xiuxian/README.md](nonebot_plugin_xiuxian_2/xiuxian/README.md)
-
----
-
-## 📌 支持平台
-
-| 平台 | 状态 |
-|:-----|:----:|
-| 野生机器人（NapCat） | ✅ |
-| 官方机器人（Gensokyo / NoneBot QQ） | ✅ |
-
----
-
-## ⚙️ 配置
-
-<details>
-<summary>📝 env 相关配置</summary>
-
-在 `.env.dev` 文件中设置超管与机器人昵称：
-
-```dotenv
-LOG_LEVEL=INFO       # 日志等级，INFO 即可
-SUPERUSERS = [""]    # 野生 bot 填自己 QQ（非机器人 QQ）；官方 bot 填用户 id
-COMMAND_START = [""] # 指令前缀，默认空
-NICKNAME = [""]      # 机器人昵称
-
-DEBUG = False
-HOST = 127.0.0.1
-PORT = 8080          # 反代端口，按需修改
-
-# 数据库使用本地 SQLite 文件，无需额外配置
-```
-
-在 `.env.dev` 文件中添加 QQ 官方机器人配置（公域群机器人，测试通过）：
-
-- 自动转发频道消息为群消息
-- 自动转发频道私聊消息为私聊
-
-```dotenv
-QQ_BOTS='
-[
-  {
-    "id": "xxx",
-    "token": "xxx",
-    "secret": "xxx",
-    "intent": {
-      "c2c_group_at_messages": true,
-      "direct_message": true
-    },
-    "use_websocket": true
-  }
-]
-'
-```
-
-env 文件基础配置：
-
-```dotenv
-ENVIRONMENT=dev
-DRIVER=~fastapi+~websockets+~httpx  # 反代 + http 正向调试
-```
-
-</details>
-
-<details>
-<summary>🧙 修仙2 插件配置</summary>
-
-在 `xiuxian_config.py` 中配置各项选项。
-
-官方 bot 仅测试过 [Gensokyo](https://github.com/Hoshinonyaruko/Gensokyo)，野生机器人推荐使用：
-[NapCat](https://github.com/NapNeko/NapCatQQ) /
-[LLOneBot](https://github.com/LLOneBot/LLOneBot) /
-[Lagrange](https://github.com/LagrangeDev/Lagrange.Core)
-
-#### 常用配置项
-
-```python
-self.merge_forward_send = False   # 消息转发类型：True=合并转发，False=长图发送，建议长图
-self.img_compression_limit = 80   # 图片压缩率：0=不压缩，最高 100
-self.img_type = "webp"            # 图片类型：webp 或 jpeg（图片不显示请用 jpeg）
-self.img_send_type = "io"         # 图片发送类型：默认 io，官方 bot 建议 base64
-self.put_bot = []                 # 接收消息 QQ（主 QQ），不配置默认第一个链接的 QQ
-self.main_bo = []                 # 负责发送消息的 QQ（使用 range_bot 时需填写）
-self.shield_group = []            # 屏蔽的群聊（填群号）
-self.layout_bot_dict = {}         # QQ 负责的群聊映射 {群号: bot}
-self.reference_reply = False      # QQ官方普通群/C2C通用发送是否使用引用回复
-```
-
-#### layout_bot_dict 示例
-
-```python
-self.layout_bot_dict = {
-    "111": "xxx",            # QQ xxx 单独负责 111 群
-    "222": ["yyy", "zzz"]    # QQ yyy 和 zzz 共同负责 222 群
-}
-# 值为字符串 → 一对一；值为列表 → 多对一
-```
-
-#### 参数说明
-
-| 参数 | 默认值 | 说明 |
-|:-----|:------:|:-----|
-| `put_bot` | `[]` | 接收消息 QQ（主 QQ），不配置则默认第一个链接的 QQ |
-| `main_bo` | `[]` | 负责发送消息的 QQ，使用 `range_bot` 时需填写 |
-| `shield_group` | `[]` | 屏蔽的群聊，参数为群号 |
-| `layout_bot_dict` | `{}` | QQ 负责的群聊映射，格式 `{群号: bot}`，bot 为字符串或列表 |
-| `reference_reply` | `False` | QQ 官方普通群/C2C 通用发送接口是否优先使用引用回复 |
-| `web_status` | `True` | 是否启动 **Web 修仙管理面板**（Flask，与 NoneBot 的 `HOST`/`PORT` 独立） |
-| `web_host` | `127.0.0.1` | 管理面板监听地址；需要远程访问时可显式改为 `0.0.0.0` 并配置认证、HTTPS 与防火墙 |
-| `web_port` | `5888` | 管理面板端口，默认 `http://127.0.0.1:5888` |
-| `custom_proxy_enabled` | `False` | 是否启用自定义代理（境外流媒体 / Bangumi 等） |
-| `custom_proxy` | `""` | 代理地址（如 `socks5h://user:pass@host:port`） |
-
-也可在 **Web 面板 → 配置管理** 中在线修改上述项（保存后需重启 NoneBot 生效）。
-
-</details>
-
-#### WebSocket 客户端 URL
-
-```
-ws://127.0.0.1:8080/onebot/v11/ws
-```
-
----
-
-## 💿 安装
-
-> ⭐ 新手请优先使用一键安装脚本
->
-> 当前版本使用本地 SQLite 数据库，无需单独安装数据库服务。
-
-<details>
-<summary>🐳 Docker 一键安装</summary>
-
-预构建资产在文件仓库 Release（**base 分片 + plugin 单包**）：  
-https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/tag/docker-latest
-
-- 镜像标签：`xiuxian2:latest` / `xiuxian2-base:latest`（amd64）
-- `manifest.json`：md5 清单
-- base：`xiuxian2-base-amd64.tar.gz.part00` ~ `partN`
-- plugin：`xiuxian2-plugin-latest.tar.gz`（日常更新通常只下这个）
-- 插件挂载到容器，**Web 面板更新可直接写插件目录**
-
-**安装：**
+### Linux
 
 ```bash
-# 默认目录 ~/xiuxian2-docker
+curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install.sh | bash
+```
+
+### Docker
+
+```bash
 curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_docker.sh | bash
-
-# 自定义目录
-curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_docker.sh | bash -s -- install /root/xiuxian2-docker
 ```
 
-**更新：**
+Docker 发布采用 base 分片 + plugin 单包；日常更新通常只下载 plugin：
 
 ```bash
-# smart：base 未变则只更新 plugin
-curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_docker.sh | bash -s -- update
+curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_docker.sh \
+  | bash -s -- update
 
-# 仅插件 / 强制整包
-bash install_docker.sh update --plugin
-bash install_docker.sh update --full
+curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_docker.sh \
+  | bash -s -- update --plugin
+
+curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_docker.sh \
+  | bash -s -- update --full
 ```
 
-**管理：**
+### Termux
 
 ```bash
-bash /path/to/install_docker.sh start
-bash /path/to/install_docker.sh stop
-bash /path/to/install_docker.sh status
-bash /path/to/install_docker.sh logs
+curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_termux.sh | bash
 ```
 
-安装后请编辑 `config/.env.dev` 中的 `SUPERUSERS`。  
-NapCat / OneBot 连接：
+Windows 可下载并运行：
 
 ```text
-ws://宿主机IP:8080/onebot/v11/ws
+https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install.bat
 ```
 
-</details>
+完整安装、更新和 NapCat 连接说明见 [安装文档](docs/installation.md)。
 
-<details>
-<summary>🐳 Docker 手动安装</summary>
+## 最小配置
 
-**1. 安装 Docker（Debian/Ubuntu 示例）：**
+在 NoneBot 项目的 `.env.dev` 中配置：
 
-```bash
-sudo apt-get update
-sudo apt-get install -y docker.io
-sudo systemctl enable --now docker
-```
-
-**2. 下载 base 分片 + plugin 并导入：**
-
-https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv_file/releases/tag/docker-latest
-
-```bash
-# base
-cat xiuxian2-base-amd64.tar.gz.part* > xiuxian2-base-amd64.tar.gz
-md5sum -c xiuxian2-base-amd64.tar.gz.md5
-docker load -i xiuxian2-base-amd64.tar.gz
-
-# plugin
-mkdir -p plugin
-tar -xzf xiuxian2-plugin-latest.tar.gz -C plugin
-```
-
-**3. 准备配置与数据目录：**
-
-```bash
-mkdir -p config data logs
-cat > config/.env <<'EOF'
-ENVIRONMENT=dev
-DRIVER=~fastapi+~httpx+~websockets+~aiohttp
-EOF
-cat > config/.env.dev <<'EOF'
+```dotenv
 LOG_LEVEL=INFO
-SUPERUSERS = ["你的QQ号"]
+SUPERUSERS = ["管理员ID"]
 COMMAND_START = [""]
 NICKNAME = ["修仙"]
 DEBUG = false
-HOST = 0.0.0.0
-PORT = 8080
-EOF
-```
-
-**4. 启动：**
-
-```bash
-docker run -d --name xiuxian2 --restart unless-stopped \
-  -p 8080:8080 \
-  -v "$PWD/data:/app/data" \
-  -v "$PWD/logs:/app/logs" \
-  -v "$PWD/config/.env:/app/.env:ro" \
-  -v "$PWD/config/.env.dev:/app/.env.dev:ro" \
-  -v "$PWD/plugin/nonebot_plugin_xiuxian_2:/app/src/plugins/nonebot_plugin_xiuxian_2" \
-  xiuxian2:latest
-```
-
-**5. 连接 NapCat / OneBot：**
-
-```text
-ws://宿主机IP:8080/onebot/v11/ws
-```
-
-**本地构建（可选）：**
-
-```bash
-git clone https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv.git
-cd nonebot_plugin_xiuxian_2_pmv
-# 底座
-docker build -f docker/Dockerfile.base -t xiuxian2-base:latest -t xiuxian2:latest .
-# 或产出 base 分片 + plugin 包
-bash scripts/build_docker_release.sh /tmp/xiuxian2-docker-split-release
-```
-
-更多说明见仓库内 `docker/README.md`。
-
-</details>
-
-<details>
-<summary>🐧 Linux 一键安装</summary>
-
-**安装：**
-
-```bash
-# 默认目录
-curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install.sh | bash
-
-# 自定义目录（如 /root/xiuxian）
-curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install.sh | bash -s -- install /root/xiuxian
-```
-
-**更新：**
-
-```bash
-# 默认目录
-curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install.sh | bash -s -- update
-
-# 自定义目录
-curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install.sh | bash -s -- update /root/xiuxian
-```
-
-**xiu2 命令：**
-
-```
-用法: xiu2 [start|stop|status|update-deps|format [log_file]]
-  start              - 启动 xiu2（默认，无需参数）
-  status             - 查看 xiu2 状态
-  stop               - 停止 xiu2
-  update-deps        - 更新 Python 依赖
-  format [log_file]  - 格式化日志文件（默认: /root/xiu2.log）
-```
-
-</details>
-
-<details>
-<summary>📱 Termux 一键安装</summary>
-
-`install_termux.sh` 面向安卓 Termux 原生环境，不使用 `/root`、`/bin`、`/etc`，默认安装到 `$HOME/xiu2`，虚拟环境为 `$HOME/myenv`，管理命令写入 `$PREFIX/bin/xiu2`。
-
-**安装：**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_termux.sh | bash
-```
-
-**自定义目录：**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_termux.sh | bash -s -- install "$HOME/xiuxian"
-```
-
-**更新：**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_termux.sh | bash -s -- update
-```
-
-**单独更新依赖：**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_termux.sh | bash -s -- update-deps
-```
-
-**xiu2 命令：**
-
-```
-用法: xiu2 [start|stop|status|update|update-deps|format [log_file]]
-  start              - 后台启动 xiu2（默认，无需参数）
-  status             - 进入 screen 查看运行日志
-  stop               - 停止 xiu2
-  update             - 更新项目文件
-  update-deps        - 更新 Python 依赖
-  format [log_file]  - 格式化日志文件
-```
-
-安装完成后建议执行一次：
-
-```bash
-termux-wake-lock
-```
-
-如果 `termux-wake-lock` 执行失败，可安装 Termux:API 应用后重试；不使用也不影响安装，只影响后台保活。
-
-NapCat 如果也运行在原生 Termux，请在 NapCat WebUI 中把 WebSocket 客户端 URL 填为：
-
-```
-ws://127.0.0.1:8080/onebot/v11/ws
-```
-
-</details>
-
-<details>
-<summary>🪟 Windows 一键安装</summary>
-
-[📥 点我下载 install.bat](https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install.bat)
-
-下载后双击运行即可。
-
-</details>
-
-<details>
-<summary>🐧 Linux 手动安装（Debian）</summary>
-
-**1. 安装依赖：**
-
-```bash
-apt update && apt upgrade -y && \
-apt install screen curl wget git python3 python3-pip python3-venv -y
-```
-
-**2. 安装 NapCat：**
-
-```bash
-curl -o napcat.sh https://nclatest.znin.net/NapNeko/NapCat-Installer/main/script/install.sh && sudo bash napcat.sh
-```
-
-**3. 安装 nb-cli：**
-
-```bash
-cd ~
-python3 -m venv myenv
-source ~/myenv/bin/activate
-pip install nb-cli==1.5.0
-```
-
-**4. 克隆项目：**
-
-```bash
-git clone --depth=1 -b main https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv.git
-```
-
-**5. 使用 nb 创建项目：**
-
-```bash
-source ~/myenv/bin/activate
-nb
-```
-
-按提示选择：
-
-| 步骤 | 选择 |
-|:-----|:-----|
-| 项目类型 | `Create a NoneBot project` |
-| 模板 | `simple` |
-| 项目名 | `xiu2` |
-| 适配器 | `OneBot V11` + `QQ` |
-| 驱动器 | `FastAPI` + `HTTPX` + `websockets` + `AIOHTTP` |
-| 插件位置 | `In a "src" folder` |
-| 安装依赖 | `Y` |
-| 创建虚拟环境 | `n` |
-| 默认插件 | `echo` |
-
-**6. 移动项目文件：**
-
-```bash
-mv ~/nonebot_plugin_xiuxian_2_pmv/nonebot_plugin_xiuxian_2 ~/xiu2/src/plugins
-mv ~/nonebot_plugin_xiuxian_2_pmv/data ~/xiu2
-mv ~/nonebot_plugin_xiuxian_2_pmv/requirements.txt ~/xiu2
-```
-
-**7. 安装修仙2依赖：**
-
-```bash
-cd ~/xiu2
-pip install -r requirements.txt
-```
-
-**8. 写入配置：**
-
-```bash
-cat > ~/xiu2/.env.dev << 'EOF'
-LOG_LEVEL=INFO
-SUPERUSERS = [""]
-COMMAND_START = [""]
-NICKNAME = [""]
-DEBUG = False
 HOST = 127.0.0.1
 PORT = 8080
-EOF
 ```
 
-**9. 启动：**
+- `HOST` / `PORT` 是 NoneBot 与 OneBot WebSocket 端口。
+- 修仙 Web 管理面板默认监听 `0.0.0.0:5888`，由 `xiuxian_config.py` / Web 配置页管理。
+- 插件环境变量、QQ 官方机器人配置、配置优先级和高级 NoneBot 字段见 [配置文档](docs/configuration.md)。
 
-```bash
-source ~/myenv/bin/activate
-cd ~/xiu2
-nb run
-```
+NapCat 的 WebSocket 客户端默认连接：
 
-📺 [B站安装教程](https://m.bilibili.com/video/BV1ZuesekEYy)
-
-</details>
-
-<details>
-<summary>🪟 Windows 手动安装</summary>
-
-**1. 安装 Python：**
-
-[下载 Python 3.11.0](https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe)
-
-**2. 安装 NapCat：**
-
-[NapCat 安装指南](https://napneko.github.io/guide/napcat)
-
-**3. 安装 nb-cli：**
-
-在 C/D 盘根目录新建文件夹并打开 cmd：
-
-```cmd
-mkdir C:\nb
-cd C:\nb
-python -m venv myenv
-call myenv\Scripts\activate
-pip install nb-cli==1.5.0
-```
-
-**4. 下载项目：**
-
-[下载最新 project.tar.gz](https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/releases/latest)
-
-**5. 使用 nb 创建项目：**
-
-```cmd
-nb
-```
-
-按提示选择（同 Linux 手动安装第 5 步）。
-
-**6. 解压并移动文件：**
-
-| 文件 | 目标位置 |
-|:-----|:---------|
-| `nonebot_plugin_xiuxian_2` | `xiu2\src\plugins` |
-| `data` | `xiu2` |
-| `requirements.txt` | `xiu2` |
-
-**7. 安装修仙2依赖：**
-
-```cmd
-cd xiu2
-pip install -r requirements.txt
-```
-
-> 如果失败，可以删除 `psutil` 后重新安装。
-
-**8. 写入配置：**
-
-```cmd
-(
-echo LOG_LEVEL=INFO
-echo SUPERUSERS = [""]
-echo COMMAND_START = [""]
-echo NICKNAME = [""]
-echo DEBUG = False
-echo HOST = 127.0.0.1
-echo PORT = 8080
-) > xiu2\.env.dev
-```
-
-**9. 启动：**
-
-在 `C:\nb` 下新建 `.bat` 文件：
-
-```bat
-call myenv\Scripts\activate
-cd xiu2
-nb run
-```
-
-双击运行即可。
-
-📺 [B站安装教程](https://m.bilibili.com/video/BV1ZuesekEYy)
-
-</details>
-
-<details>
-<summary>📱 安卓安装（Termux）</summary>
-
-**1. 安装 Termux：**
-
-- [ZeroTermux](https://github.com/hanxinhao000/ZeroTermux/releases)
-- [Termux](https://github.com/termux/termux-app/releases)
-
-### 原生 Termux 一键安装
-
-如果你不使用 proot 容器，直接在 Termux 原生环境安装修仙2，执行：
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_termux.sh | bash
-```
-
-安装完成后使用：
-
-```bash
-xiu2 start
-xiu2 status
-xiu2 stop
-```
-
-### proot 容器安装
-
-如果你使用 NapCat Termux 安装脚本创建的容器，先安装 NapCat：
-
-```bash
-curl -o napcat.termux.sh https://nclatest.znin.net/NapNeko/NapCat-Installer/main/script/install.termux.sh && bash napcat.termux.sh
-```
-
-**3. 进入容器：**
-
-```bash
-proot-distro login napcat
-```
-
-> ⚠️ 之后每次启动都要先执行 `proot-distro login napcat` 进入容器。
-
-进入容器后使用 Linux 一键安装 / 手动安装步骤，不要使用 `install_termux.sh`。`install_termux.sh` 只用于 Termux 原生环境。
-
-📺 [B站安装教程](https://m.bilibili.com/video/BV1ZuesekEYy)
-
-</details>
-
----
-
-## 📡 连接 QQ（Linux）
-
-<details>
-<summary>🔗 NapCat</summary>
-
-**启动 QQ：**
-
-```bash
-screen -dmS napcat bash -c 'xvfb-run -a /root/Napcat/opt/QQ/qq --no-sandbox'
-```
-
-**进入 / 退出 / 关闭：**
-
-```bash
-screen -r napcat    # 进入
-# Ctrl + A + D      # 退出
-screen -S napcat -X quit  # 关闭
-```
-
-**NapCat WebUI：**
-
-```
-http://IP:6099
-```
-
-查看默认 Token：
-
-```bash
-cat /root/Napcat/opt/QQ/resources/app/app_launcher/napcat/config/webui.json
-```
-
-**配置 WebSocket 连接：**
-
-1. 进入 WebUI → 登录 QQ
-2. 网络配置 → 新建 → **WebSocket 客户端**
-3. 勾选【启用】，名称随意
-4. URL 填写：
-
-```
+```text
 ws://127.0.0.1:8080/onebot/v11/ws
 ```
 
-5. 保存
+## Web 管理面板
 
-</details>
+默认地址：
 
-<details>
-<summary>🎮 修仙2</summary>
-
-**原生 Termux：**
-
-```bash
-xiu2 start   # 后台启动
-xiu2 status  # 进入 screen 查看日志
-xiu2 stop    # 停止
+```text
+http://服务器地址:5888/
 ```
 
-**proot 容器先进入容器：**
+使用 `SUPERUSERS` 中任一 ID 登录。公网开放前请配置 HTTPS、防火墙和 Host 白名单。
 
-```bash
-proot-distro login napcat
-```
+主要页面包括：
 
-容器内启动 / 进入 / 退出 / 关闭：
-
-```bash
-# 后台启动
-screen -dmS xiu2 bash -c 'source ~/myenv/bin/activate && cd ~/xiu2 && nb run'
-
-# 进入
-screen -r xiu2
-
-# 退出：Ctrl + A + D
-
-# 关闭
-screen -S xiu2 -X quit
-```
-
-</details>
-
----
-
-## 🖥️ Web 修仙管理面板
-
-插件内置 **修仙管理面板**（后台 Web），与 QQ 游戏共用同一套 `data/xiuxian/` 数据，适合超管在浏览器里运维。
-
-**完整说明（含定时任务页）→ [docs/web_panel.md](docs/web_panel.md)**
-
-### 访问与登录
-
-| 项目 | 说明 |
+| 功能 | 路径 |
 |:-----|:-----|
-| 开关 | `xiuxian_config.py` 中 `web_status = True`（默认开启） |
-| 地址 | `http://127.0.0.1:5888`（可通过 `web_host` / `web_port` 修改） |
-| 登录 | 打开 `/login`，填写 `.env` 中 **`SUPERUSERS` 任一 ID**（无需单独面板密码） |
-| 日志 | 启动成功会输出：`修仙管理面板已启动：<host>:<port>` |
+| 首页 | `/` |
+| 配置管理 | `/config` |
+| 消息面板 | `/messages` |
+| 数据库 | `/database` |
+| 定时任务 | `/scheduler` |
+| 备份管理 | `/backups` |
+| 日志 | `/logs` |
+| 更新 | `/update` |
 
-> NoneBot 反代端口（如 `.env` 的 `PORT=8080`）用于 OneBot WebSocket；**管理面板端口默认 5888**，两者不要混用。需要远程访问时可将 `web_host` 显式改为 `0.0.0.0`，并配合 HTTPS 与防火墙。
+详见 [Web 管理面板](docs/web_panel.md)。
 
-`SUPERUSERS` 为空时，Web 面板不要求登录（仅适合本机调试）。
+## 使用入口
 
-### 定时任务（摘要）
+```text
+修仙帮助
+修仙手册
+娱乐帮助
+小游戏帮助
+```
 
-路径 **`/scheduler`**：中文任务名、常用周期一键改计划（每小时 / 每天 / 每周等）、启用禁用、手动运行。详见 [web_panel.md](docs/web_panel.md#定时任务页)。
+高频玩法见 [常用玩法说明](docs/gameplay_notes.md)，娱乐扩展见 [娱乐功能](docs/entertainment.md)。
 
-### 功能一览
+## 文档
 
-| 模块 | 路径 | 能力简述 |
-|:-----|:-----|:---------|
-| 首页 | `/` | 在线 Bot、玩家/宗门统计、CPU/内存等监控 |
-| 数据库 | `/database` | 浏览/编辑 SQLite 表、批量改数 |
-| 指令中心 | `/commands` | 在 Web 端执行修仙管理类指令 |
-| 活动管理 | `/activity` | 活动配置、模板、玩法数据调整 |
-| 发放中心 | `/reward-center` | 奖励发放记录维护 |
-| 配置管理 | `/config` | 可视化改 `xiuxian_config`（含 **网络代理**） |
-| **定时任务** | `/scheduler` | 启停 / 改计划 / 立即运行 |
-| 消息面板 | `/messages` | 会话列表、发消息/群发、Markdown 预览、撤回等 |
-| 经济流水 | `/economy_logs` | 灵石等经济日志查询与导出 |
-| 日志查看 | `/logs` | 运行日志、按用户查消息 |
-| 备份管理 | `/backups` | 本地/云端备份与恢复（含配置、数据库） |
-| 检测更新 | `/update` | 检查 GitHub Release、一键更新（带备份） |
-| Web 终端 | `/terminal` | 浏览器内简易终端（高权限，慎用） |
+### 部署与运维
 
-关闭面板：将 `web_status` 设为 `False` 后重启 NoneBot。
+| 文档 | 说明 |
+|:-----|:-----|
+| [安装、更新与 QQ 连接](docs/installation.md) | Linux / Docker / Windows / Termux / NapCat |
+| [配置与环境变量](docs/configuration.md) | NoneBot、插件配置、环境变量与优先级 |
+| [Docker](docker/README.md) | base + plugin 发布结构、安装和更新 |
+| [Web 管理面板](docs/web_panel.md) | 页面、权限、安全和定时任务 |
+| [链接解析](docs/media_parser.md) | 支持平台、发送策略、代理与排错 |
 
----
+### 玩法与数据
 
-## 🗄️ SQLite 数据库
+| 文档 | 说明 |
+|:-----|:-----|
+| [常用玩法](docs/gameplay_notes.md) | 高频玩法与服主注意事项 |
+| [娱乐功能](docs/entertainment.md) | 趣味接口、WebDAV、番剧、NewAPI |
+| [物品 ID](docs/items.md) | 类型、ID 范围和品阶 |
+| [物品系统](docs/buff.md) | 功法、神通、装备、丹药和材料 |
 
-当前版本使用本地 SQLite 数据库文件，默认位于 `data/xiuxian/`：
+### 贡献与架构
 
-- `xiuxian.db`
-- `xiuxian_impart.db`
-- `player.db`
-- `trade.db`
-- `message.db` 会在运行期自动创建，用于消息记录。
+| 文档 | 说明 |
+|:-----|:-----|
+| [开发与交付](CONTRIBUTING.md) | 测试、提交边界和发布要求 |
+| [插件模块索引](nonebot_plugin_xiuxian_2/xiuxian/README.md) | 目录职责 |
+| [跨适配器兼容层](docs/adapter_compat.md) | 消息段、事件和发送门面 |
+| [Matcher 路由兼容层](docs/on_compat.md) | 路由机制和注册约束 |
+| [消息通道约定](docs/message_channel.md) | 文案与发送通道 |
+| [数据与 Web 治理](docs/database_web_governance.md) | SQLite、迁移和 Web 安全 |
 
-**Web 修仙管理面板 → 备份管理** 会直接打包上述库；恢复时可按库选择覆盖。详见上一节。
+## 数据目录
 
-新增数据库访问代码请优先走 `xiuxian_utils/db_backend.py`，需要结构变更时放入 `xiuxian_utils/db_migrations.py` 并保持幂等。详细约定见 [数据层与 Web 面板治理](docs/database_web_governance.md)。
+运行数据默认位于：
 
----
+```text
+data/xiuxian/
+```
 
-## ⚙️ 环境变量
+包括 SQLite 数据库、消息记录、缓存、备份和运行期 JSON。数据库、缓存、日志、备份、Bot token、secret、用户 ID 和群 ID 均不得提交到 Git。
 
-插件只保留适合部署、密钥和底层性能调优的环境变量。游戏行为、Web 监听、适配器来源及消息保留策略请使用 `xiuxian_config.py` 或 Web 配置页，避免 `.env` 意外覆盖持久配置。
+## 依赖与更新
 
-### 支持的插件环境变量
-
-| 环境变量 | 默认值 | 用途 | 修改后 |
-|:---------|:-------|:-----|:-------|
-| `XIUXIAN_DATA_DIR` | `./data/xiuxian` | 修仙数据库、缓存和持久文件目录；Docker/自定义目录部署使用 | 重启 |
-| `XIUXIAN_WEB_SECRET_KEY` | 自动生成并保存 | Web 会话签名密钥；多实例应设置为相同的高强度随机值 | 重启并重新登录 |
-| `XIUXIAN_PROJECT_DIR` | 自动探测 | Web 日志页的项目/日志根目录 | 重启 |
-| `XIUXIAN_PIP_INDEX` | 清华 PyPI 镜像 | 启动依赖自检使用的 pip 源 | 下次依赖安装 |
-| `XIUXIAN_SKIP_AUTO_PIP` | 空/关闭 | 设为 `1`、`true` 或 `yes` 时跳过自动 pip 安装 | 重启 |
-| `XIUXIAN_FAST_DB_POOL_SIZE` | `64` | SQLite 快速连接池上限，最小 `1` | 重启 |
-| `XIUXIAN_READ_CACHE_TTL` | `2` | 高频数据库读取缓存秒数，`0` 关闭 | 重启 |
-| `XIUXIAN_STAMINA_RECOVERY_BATCH_SIZE` | `1000` | 体力恢复任务单批处理人数，最小 `1` | 重启 |
-| `XIUXIAN_MESSAGE_DB_QUEUE_MAXSIZE` | `100000` | 消息记录异步写入队列容量，最小 `1000` | 重启 |
-| `XIUXIAN_MESSAGE_DB_BATCH_SIZE` | `200` | 消息记录单次批写数量，最小 `1` | 重启 |
-
-`PREFIX` 是 Termux 提供的系统变量，仅用于识别 Termux，不需要手动配置。
-
-### 不再接受环境变量覆盖
-
-以下配置统一由 `xiuxian_config.py` / Web 配置页管理：
-
-| 配置 | 设置位置 |
-|:-----|:---------|
-| `web_status`、`web_host`、`web_port` | Web 设置 |
-| `adapter_source`（`vendor` / `installed` / `auto`） | 运行设置 |
-| 消息库最大大小、群聊/私聊保留天数 | Web 消息设置 |
-
-旧变量 `XIUXIAN_WEB_HOST`、`XIUXIAN_WEB_PORT`、`XIUXIAN_WEB_STATUS`、`XIUXIAN_ADAPTER_SOURCE`、`XIUXIAN_MESSAGE_DB_MAX_SIZE_MB`、`XIUXIAN_MESSAGE_GROUP_KEEP_DAYS`、`XIUXIAN_MESSAGE_PRIVATE_KEEP_DAYS` 不再生效，应从 `.env` 中删除。
-
-NoneBot 自身的 `SUPERUSERS`、`NICKNAME`、`COMMAND_START`、`QQ_BOTS`、`HOST`、`PORT` 等仍按 NoneBot 文档配置，不属于插件环境变量。
-
----
-
-## 📦 启动依赖自检
-
-首次加载插件时，会按项目根目录 `requirements.txt` 检测缺失的 Python 包，并对 **当前运行 NoneBot 的解释器** 执行 `python -m pip install`（与 `nb run` / 虚拟环境一致）。完整环境变量清单见上一节。
-
-**Termux 原生环境**会与一键脚本一致，跳过已由 `pkg` 提供的 `numpy` / `Pillow` / `psutil` 等。若自动安装失败，请手动：
+启动时会按根目录 `requirements.txt` 检查缺失依赖。手动更新：
 
 ```bash
-source ~/myenv/bin/activate   # 或你的 venv
+source ~/myenv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-Linux 一键安装里的 `xiu2 update-deps`、Termux 的 `xiu2 update-deps` / `install_termux.sh update-deps` 用于 **整包更新依赖**；日常小版本升级通常靠启动自检即可。
-
----
-
-## 🎮 使用
-
-| 指令 | 说明 |
-|:-----|:-----|
-| `修仙帮助` | 查看功能列表 |
-| `修仙手册` | 查看管理员指令 |
-| `娱乐帮助` | 娱乐模块总览（别名：`娱乐菜单` / `娱乐功能`）；番剧、点歌、NewAPI、链接解析、小游戏等，支持 `娱乐帮助 页码` 翻页 |
-| `小游戏帮助` | 五子棋 / 扫雷 / 十点半 / 猜数字 / 猜数谜等 |
-| `链接解析 <链接>` | 解析 B 站 / 抖音 / 快手等分享链（详见下节） |
-
-高频玩法补充说明：[docs/gameplay_notes.md](docs/gameplay_notes.md)
-
-### 娱乐 · 链接解析
-
-把抖音 / B 站 / 快手 / 微博 / 小红书等分享链接发给机器人，或使用：
+一键安装用户也可执行：
 
 ```text
-链接解析 https://b23.tv/xxxxx
+xiu2 update-deps
 ```
 
-别名：`视频解析` / `解析视频` / `解析链接` / `流媒体解析`。
+## 鸣谢
 
-- 发送**信息卡片 + 视频/图集**；优先最高画质，超过约 20MB 自动降档  
-- 境外平台（X / TikTok / IG / YouTube）建议在配置或 Web「网络代理」中开启 `custom_proxy`  
-- 完整平台列表与排错：[docs/media_parser.md](docs/media_parser.md)
+- [NoneBot2](https://github.com/nonebot/nonebot2)
+- [nonebot/adapter-qq](https://github.com/nonebot/adapter-qq)
+- [nonebot_plugin_xiuxian](https://github.com/s52047qwas/nonebot_plugin_xiuxian)
+- [nonebot_plugin_xiuxian_2](https://github.com/QingMuCat/nonebot_plugin_xiuxian_2)
+- [nonebot_plugin_xiuxian_2_pmv](https://github.com/MyXiaoNan/nonebot_plugin_xiuxian_2_pmv)
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp)
 
-### 娱乐 · 趣味接口
+## 许可证
 
-| 指令 | 别名示例 | 说明 |
-|:-----|:---------|:-----|
-| `答案之书 [问题]` | `答案书`、`问答案之书` | 随机给出一句答案 |
-| `摸鱼日报` | `摸鱼日历`、`今日摸鱼` | 发送当天摸鱼日报图，失败时降级为文本 |
-| `随机猫猫` | `随机猫图`、`猫猫` | 随机发送猫图 |
-| `猫猫说 <文字>` | `猫说`、`猫猫说话` | 生成带文字的猫图 |
-| `随机二次元` | `随机猫娘`、`随机老婆`、`随机狐娘`、`随机老公` | 随机 SFW 二次元图片 |
-| `抱抱` / `贴贴` / `摸摸` | `拍头`、`亲亲`、`戳戳`、`击掌`、`挥手` | 随机动漫互动 GIF |
-| `宝可梦盲盒` | `随机宝可梦`、`今日宝可梦` | 随机抽取宝可梦并展示图鉴信息 |
-| `宝可梦图鉴 <名称/编号>` | `宝可梦`、`精灵图鉴` | 查询宝可梦图鉴；支持少量中文名、英文名和编号 |
-| `番剧盲盒` | `随机番剧`、`动漫盲盒` | 随机抽取番剧并展示封面、评分和简介 |
-
-### 娱乐 · WebDAV
-
-绑定/删除仅管理员可用，普通用户可查看目录和获取文件链接。
-
-| 指令 | 别名示例 | 说明 |
-|:-----|:---------|:-----|
-| `webdav帮助` | `网盘帮助` | 查看 WebDAV 用法和兼容说明 |
-| `webdav绑定 备注#https://站点/dav#用户名#密码` | `网盘绑定` | 管理员绑定 WebDAV 账号并验证可用性 |
-| `webdav查看` | `网盘查看` | 查看绑定列表 |
-| `webdav列表 [序号] [路径]` | `网盘列表` | 列出 WebDAV 目录，默认第 1 个绑定和根目录；目录可点击进入，文件可点击获取链接 |
-| `webdav信息 [序号] <路径>` | `网盘信息` | 查看文件或目录信息 |
-| `webdav链接 [序号] <路径>` | `网盘链接` | 优先获取文件下载地址，失败时返回 WebDAV 地址 |
-| `webdav文件 [序号] <路径>` | `网盘文件` | 获取指定文件的下载地址 |
-| `webdav删除 序号\|全部` | `webdav解绑`、`网盘删除` | 管理员删除绑定 |
-
-### 娱乐 · 番剧（Bangumi）
-
-属 **娱乐模块** 子功能，指令触发、无定时推送。数据来自 Bangumi 放送日历；访问不畅时在 `xiuxian_config` 或 **Web 面板 → 配置管理 → 网络代理** 开启自定义代理（需 `PySocks`）。
-
-| 指令 | 别名示例 | 说明 |
-|:-----|:---------|:-----|
-| `今日番剧` | `每日番剧`、`番剧日历` | 当日放送列表 |
-| `番剧周表` | `每周番剧`、`番剧总表` | 一周番剧表（可 `番剧周表 页码` 翻页） |
-
-### 娱乐 · NewAPI
-
-按 QQ 隔离绑定多个 NewAPI 站点账号（Token 或 Cookie），支持签到与用户信息查询。
-
-| 指令 | 别名示例 | 说明 |
-|:-----|:---------|:-----|
-| `newapi帮助` | `newapi`、`NewAPI帮助` | 绑定与签到说明 |
-| `newapi绑定` | — | `newapi绑定 站点用户ID#令牌#接口`；Cookie：`newapi绑定 cookie 站点用户ID#session#接口`（字段用 `#` 分隔） |
-| `newapi查看` | `newapi列表`、`newapi绑定列表` | 本 QQ 已绑定账号（序号、是否自动签到） |
-| `newapi签到` | — | 默认全部账号；可 `newapi签到 1` / `1,3` / `2-4`（记入历史，最多 3 条） |
-| `newapi签到历史` | `newapi签到记录` | 最近签到记录 |
-| `newapi自动签到` | — | `newapi自动签到 序号` 切换开/关；开启后每日 **12:30** 自动签到 |
-| `newapi信息` | — | 拉取站点用户信息，序号规则同签到 |
-| `newapi删除` | `newapi解绑` | 须写序号（如 `1`、`1,3`）或 `全部` |
-
-绑定数据：`xiuxian_entertainment/mod/data/newapi_bindings/<QQ>.json`；签到历史：`.../newapi_checkin_history/<QQ>.json`。
-
-🌐 体验群：[144795954](https://qun.qq.com/universal-share/share?ac=1&authKey=JcaNbcnyFbgcjfffkakYujFwpYFJewe2mSFUtSNWi1mA6qap%2FHBQNsCl0D9olm4I&busi_data=eyJncm91cENvZGUiOiIxNDQ3OTU5NTQiLCJ0b2tlbiI6ImZKYXpKOVM3Z0pwek80ZlUzLzhzbWN1Y1daY0JIQy9BYXZFUlZGd1lGREJQUXJXWERLNlJCcFNjSjVGc3JZVWsiLCJ1aW4iOiIyNjUwMTE1MzE3In0%3D&data=5w52a2CkyEIX_t_INqS29fA4Sxl8eozGazmL-EIUo6ehG7ESdNgxtDnVmgXoLlLfaVeZ2SbPMW-1SJ4I9o7IeQ&svctype=4&tempid=h5_group_info)
-
-> ⚠️ 使用官方机器人请记得修改对应配置。
-
----
-
-## 🙏 特别感谢
-
-| 项目 | 说明 |
-|:-----|:-----|
-| [NoneBot2](https://github.com/nonebot/nonebot2) | 本插件基于的开发框架 |
-| [nonebot/adapter-qq](https://github.com/nonebot/adapter-qq) | QQ 官方适配器（本仓库 vendor 含兼容补丁） |
-| [nonebot_plugin_xiuxian](https://github.com/s52047qwas/nonebot_plugin_xiuxian) | 原版修仙 |
-| [nonebot_plugin_xiuxian_2](https://github.com/QingMuCat/nonebot_plugin_xiuxian_2) | 原版修仙2 |
-| [nonebot_plugin_xiuxian_2_pmv](https://github.com/MyXiaoNan/nonebot_plugin_xiuxian_2_pmv) | 修仙2魔改版 |
-| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | YouTube 等境外站点提链 |
-
----
-
-## 📄 许可证
-
-本项目基于 [MIT](https://choosealicense.com/licenses/mit/) 许可证开源，无 CC 限制。
+本项目采用 [MIT License](https://choosealicense.com/licenses/mit/)。

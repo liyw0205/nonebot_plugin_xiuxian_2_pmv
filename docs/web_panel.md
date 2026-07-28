@@ -1,13 +1,13 @@
 # Web 修仙管理面板
 
-浏览器运维入口，与 QQ 游戏共用 `data/xiuxian/` 数据。默认仅本机访问。
+浏览器运维入口，与 QQ 游戏共用 `data/xiuxian/` 数据。默认监听所有网络接口；是否允许公网访问由防火墙、反向代理和面板安全配置共同决定。
 
 ## 访问
 
 | 项目 | 说明 |
 |:-----|:-----|
 | 开关 | `xiuxian_config.py` → `web_status = True`（默认开） |
-| 地址 | `http://127.0.0.1:5888`（`web_host` / `web_port` 可改） |
+| 地址 | `http://服务器地址:5888`（默认 `web_host = "0.0.0.0"`、`web_port = 5888`） |
 | 登录 | 打开 `/login`，填写 `.env` 里 **`SUPERUSERS` 中任一 ID** |
 | 认证关闭 | `SUPERUSERS` 为空时面板不要求登录（仅适合本机调试） |
 
@@ -15,9 +15,9 @@
 
 远程访问时请：
 
-1. 将 `web_host` 显式改为 `0.0.0.0` 或反代到面板端口  
-2. 使用 HTTPS 与防火墙限制来源  
-3. 保持 CSRF 等安全开关开启  
+1. 使用 HTTPS 反向代理或限制只允许可信内网访问
+2. 使用防火墙限制来源和端口
+3. 保持 CSRF、认证与 Host 白名单等安全开关开启
 
 会话密钥：`XIUXIAN_WEB_SECRET_KEY` 环境变量优先，否则配置项，未配置时写入 `data/xiuxian/web_secret_key`。
 
@@ -37,8 +37,8 @@
 | 经济流水 | `/economy_logs` | 灵石等日志 |
 | 日志 | `/logs` | 运行日志 |
 | 备份 | `/backups` | 本地/云端备份恢复 |
-| 更新 | `/update` | GitHub Release 更新（默认可关） |
-| 终端 | `/terminal` | 浏览器终端（默认可关，高风险） |
+| 更新 | `/update` | GitHub Release 检查与更新（管理员权限） |
+| 终端 | `/terminal` | 浏览器终端（管理员权限并需二次确认，高风险） |
 
 关闭面板：`web_status = False` 后重启 NoneBot。
 
@@ -77,19 +77,19 @@
 
 计划覆盖持久化在数据目录 `scheduler_overrides.json`（运行期文件，勿当源码提交）。
 
-## 安全开关（摘要）
+## 安全控制
 
-可在配置文件或 Web 配置页调整（默认偏安全）：
+可在配置文件或 Web 配置页调整：
 
 | 配置 | 默认 | 说明 |
 |:-----|:----:|:-----|
-| `web_require_csrf` | 开 | 写请求 CSRF |
-| `web_allowed_hosts` | 空 | Host 白名单 |
-| `web_session_cookie_secure` | 关 | HTTPS 时建议开 |
-| `web_enable_terminal` | 关 | 终端 |
-| `web_enable_update` | 关 | 在线更新 |
-| `web_enable_database_write` | 视配置 | 库表/指令/活动写入 |
-| `web_enable_backup_restore` | 视配置 | 备份恢复 |
-| `web_enable_message_send` | 视配置 | 主动发消息 |
+| `web_require_csrf` | 开 | 写请求必须携带 CSRF Token |
+| `web_allowed_hosts` | 空 | Host 白名单；空表示不限制 |
+| `web_session_cookie_secure` | 关 | HTTPS 反向代理场景建议开启 |
+| `web_session_lifetime_minutes` | `720` | 登录会话有效期（分钟） |
+
+每个 Flask 端点必须在 `xiuxian_web/access.py` 声明权限类别。数据库写入、消息发送、备份恢复、更新、定时任务和终端分别使用独立权限类别；当前管理员登录后可访问对应类别。终端还需要二次确认，未声明端点一律拒绝。
+
+本机上传接口仅允许本地请求免登录；其它页面和 API 依赖 `SUPERUSERS` 管理员会话。`SUPERUSERS` 为空会关闭面板认证，只适合受控本机调试环境。
 
 更细的数据层与路径约定见 [database_web_governance.md](database_web_governance.md)。
