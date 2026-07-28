@@ -18,7 +18,7 @@ PORT = 8080
 
 `HOST` / `PORT` 是 NoneBot 与 OneBot WebSocket 端口，不是修仙 Web 管理面板端口。
 
-QQ 官方机器人使用 NoneBot 的 `QQ_BOTS` 配置。Web 面板 `/config` 同时提供二维码和“快捷绑定”：快捷按钮在用户点击事件中打开 QQ 官方 connect 页面并申请跳转 QQ；QQ 返回 `status=2` 后面板立即确认完成、停止轮询并原子写入配置。面板会将 `QQ_BOTS` 替换为本次扫码机器人，固定 `use_websocket=true`，并自动补全 `c2c_group_at_messages`、`direct_message` 事件订阅，避免配置为空导致 READY 后收不到群聊艾特或私聊事件。原 `.env.dev` 会备份，凭据不会显示在页面或日志中。完成后面板按安装方式询问自动或人工重启。凭据只能写在本地配置中，禁止提交到 Git：
+QQ 官方机器人使用 NoneBot 的 `QQ_BOTS` 配置。Web 面板 `/config` 同时提供二维码和“快捷绑定”：快捷按钮在用户点击事件中打开 QQ 官方 connect 页面并申请跳转 QQ；QQ 返回 `status=2` 后面板立即确认完成、停止轮询并原子写入配置。面板会将 `QQ_BOTS` 替换为本次扫码机器人，固定 `use_websocket=true`，并自动补全 `c2c_group_at_messages`、`direct_message` 事件订阅，避免配置为空导致 READY 后收不到群聊艾特或私聊事件。原 `.env.dev` 会备份，凭据不会显示在页面或日志中。完成后显示常驻“立即重启”按钮，由管理员主动点击；不依赖浏览器弹窗。凭据只能写在本地配置中，禁止提交到 Git：
 
 ```dotenv
 QQ_BOTS='

@@ -126,6 +126,27 @@ def test_task_store_expires_without_exposing_key(monkeypatch):
     assert store.public_status("task-1", "waiting") == {"status": "expired"}
 
 
+def test_config_page_uses_persistent_restart_button():
+    template = (
+        Path(__file__).parents[1]
+        / "nonebot_plugin_xiuxian_2"
+        / "xiuxian"
+        / "xiuxian_web"
+        / "templates"
+        / "config.html"
+    ).read_text(encoding="utf-8")
+
+    assert 'id="qqBindRestart"' in template
+    assert "restartQqBindBot()" in template
+    assert "qqBindRestart').hidden = false" in template
+    assert "body: JSON.stringify({ confirm: true })" in template
+    assert "confirm(`绑定已完成" not in template
+    restart_function = template.split("async function restartQqBindBot()", 1)[1].split(
+        "async function pollQqBind()", 1
+    )[0]
+    assert "alert(" not in restart_function
+
+
 def test_task_store_keeps_completed_result_without_secret():
     store = BindTaskStore(ttl=10)
     store.add("task-2", "private-key")

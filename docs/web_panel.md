@@ -29,7 +29,7 @@
 - Secret 不会返回到浏览器、写入日志或保存到插件数据目录。
 - 原 `.env.dev` 会备份为 `.env.dev.bak`。
 - 同 AppID 重新绑定时保留它原有的 `intent` 等扩展字段；不同 AppID 会替换原机器人列表。
-- 完成后面板会询问是否重启。Linux/Termux 一键安装和存在可验证 `manage.sh restart` 的部署可自动重启；Docker、Windows、普通裸 `nb run` 只显示人工命令，不会结束无法自动拉起的宿主进程。
+- 完成后面板常驻显示“立即重启”按钮，由管理员主动点击确认。Linux/Termux 一键安装和存在可验证 `manage.sh restart` 的部署可自动重启；Docker、Windows、普通裸 `nb run` 只显示人工命令，不会结束无法自动拉起的宿主进程。
 
 
 | 模块 | 路径 | 说明 |

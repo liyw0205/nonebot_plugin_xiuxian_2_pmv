@@ -16,6 +16,9 @@
                 <button type="button" id="qqBindQuick" class="btn btn-secondary" onclick="startQqBind(true)">
                     <i class="fas fa-external-link-alt"></i> 快捷绑定
                 </button>
+                <button type="button" id="qqBindRestart" class="btn btn-success" onclick="restartQqBindBot()" hidden>
+                    <i class="fas fa-redo"></i> 立即重启
+                </button>
             </div>
             <div id="qqBindStatus" class="qq-bind-status"></div>
         </div>
@@ -305,6 +308,7 @@ async function startQqBind(quick = false) {
     const quickWindow = quick ? window.open('about:blank', '_blank') : null;
     button.disabled = true;
     quickButton.disabled = true;
+    document.getElementById('qqBindRestart').hidden = true;
     if (qqBindTimer) clearTimeout(qqBindTimer);
     setQqBindStatus('正在创建绑定任务...', '#2563eb');
     try {
@@ -333,16 +337,18 @@ async function startQqBind(quick = false) {
     }
 }
 
-async function offerQqBindRestart() {
+async function restartQqBindBot() {
+    const restartButton = document.getElementById('qqBindRestart');
+    restartButton.disabled = true;
     try {
         const response = await fetch('/api/config/qq-bind/restart-capability');
         const capability = await response.json();
-        if (!response.ok || !capability.success) return;
+        if (!response.ok || !capability.success) throw new Error(capability.error || '无法检测重启方式');
         if (!capability.automatic) {
-            alert(`绑定已完成。${capability.message || '请手动重启 NoneBot。'}`);
+            setQqBindStatus(`绑定已完成。${capability.message || '请手动重启 NoneBot。'}`, '#b45309');
+            restartButton.disabled = false;
             return;
         }
-        if (!confirm(`绑定已完成。${capability.message || ''}\n\n是否立即重启？`)) return;
         const restartResponse = await fetch('/api/config/qq-bind/restart', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -350,9 +356,11 @@ async function offerQqBindRestart() {
         });
         const result = await restartResponse.json();
         if (!restartResponse.ok || !result.success) throw new Error(result.error || '提交重启失败');
+        restartButton.hidden = true;
         setQqBindStatus(result.message || '正在重启，请稍后刷新页面。', '#15803d');
     } catch (error) {
-        alert(error.message || String(error));
+        restartButton.disabled = false;
+        setQqBindStatus(error.message || String(error), '#dc2626');
     }
 }
 
@@ -372,7 +380,7 @@ async function pollQqBind() {
             document.getElementById('qqBindStart').disabled = false;
             document.getElementById('qqBindQuick').disabled = false;
             setQqBindStatus(data.message || `机器人 ${data.appid} 已绑定，重启后生效。`, '#15803d');
-            await offerQqBindRestart();
+            document.getElementById('qqBindRestart').hidden = false;
             return;
         }
         if (data.status === 'expired') {
