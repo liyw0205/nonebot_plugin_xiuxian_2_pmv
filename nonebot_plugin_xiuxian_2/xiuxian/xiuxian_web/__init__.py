@@ -37,6 +37,7 @@ from . import activity as _activity_routes  # noqa: F401,E402
 from . import reward_center as _reward_center_routes  # noqa: F401,E402
 from . import command_registry_web as _command_registry_routes  # noqa: F401,E402
 from . import scheduler as _scheduler_routes  # noqa: F401,E402
+from . import qq_bind_routes as _qq_bind_routes  # noqa: F401,E402
 
 
 _server: BaseWSGIServer | None = None

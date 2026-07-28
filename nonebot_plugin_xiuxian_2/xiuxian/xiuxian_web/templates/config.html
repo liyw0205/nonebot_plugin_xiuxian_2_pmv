@@ -4,6 +4,21 @@
 <div class="card">
     <h2>修仙配置管理</h2>
     <p>修改修仙插件的基本配置，修改后需要重启生效</p>
+
+    <section class="qq-bind-panel">
+        <div class="qq-bind-copy">
+            <h3><i class="fas fa-qrcode"></i> QQ 官方机器人扫码绑定</h3>
+            <p>使用 QQ 扫码授权后，面板会把 AppID/Secret 写入当前项目的 <code>.env.dev</code>，并启用 WebSocket。Secret 不会显示在页面或日志中。</p>
+            <button type="button" id="qqBindStart" class="btn btn-primary" onclick="startQqBind()">
+                <i class="fas fa-qrcode"></i> 开始扫码绑定
+            </button>
+            <div id="qqBindStatus" class="qq-bind-status"></div>
+        </div>
+        <div id="qqBindQrWrap" class="qq-bind-qr" hidden>
+            <img id="qqBindQr" alt="QQ 扫码绑定二维码" width="220" height="220">
+            <small>请使用 QQ 扫码并确认授权，二维码约 10 分钟后失效。</small>
+        </div>
+    </section>
     
     <!-- 标签导航 -->
     <div class="tab-nav">
@@ -233,6 +248,25 @@
 </div>
 
 <style>
+.qq-bind-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 240px;
+    gap: 1.25rem;
+    align-items: center;
+    margin: 1.25rem 0;
+    padding: 1.25rem;
+    border: 1px solid var(--border-color, #ddd);
+    border-radius: 8px;
+    background: var(--surface-muted, #f7f8fa);
+}
+.qq-bind-copy h3 { margin-top: 0; }
+.qq-bind-status { margin-top: 0.75rem; min-height: 1.5rem; }
+.qq-bind-qr { text-align: center; }
+.qq-bind-qr img { display: block; width: 220px; height: 220px; margin: 0 auto 0.5rem; background: #fff; }
+.qq-bind-qr small { display: block; }
+@media (max-width: 720px) {
+    .qq-bind-panel { grid-template-columns: 1fr; }
+}
 /* 恢复弹窗里的小型tab，和主tab区分 */
 #restoreModal .tab-nav {
     margin-bottom: 10px;
@@ -246,6 +280,67 @@
 
 <script>
 let currentConfigRestoreTab = 'local';
+let qqBindTaskId = '';
+let qqBindTimer = null;
+
+function setQqBindStatus(message, color = 'inherit') {
+    const status = document.getElementById('qqBindStatus');
+    status.textContent = message;
+    status.style.color = color;
+}
+
+async function startQqBind() {
+    const button = document.getElementById('qqBindStart');
+    button.disabled = true;
+    if (qqBindTimer) clearTimeout(qqBindTimer);
+    setQqBindStatus('正在创建绑定任务...', '#2563eb');
+    try {
+        const response = await fetch('/api/config/qq-bind/start', { method: 'POST' });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || '创建绑定任务失败');
+        qqBindTaskId = data.task_id;
+        const image = document.getElementById('qqBindQr');
+        image.src = `${data.qr_url}?t=${Date.now()}`;
+        document.getElementById('qqBindQrWrap').hidden = false;
+        setQqBindStatus('等待 QQ 扫码确认...', '#2563eb');
+        qqBindTimer = setTimeout(pollQqBind, 1500);
+    } catch (error) {
+        button.disabled = false;
+        setQqBindStatus(error.message || String(error), '#dc2626');
+    }
+}
+
+async function pollQqBind() {
+    if (!qqBindTaskId) return;
+    try {
+        const response = await fetch('/api/config/qq-bind/poll', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ task_id: qqBindTaskId })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || '查询绑定状态失败');
+        if (data.status === 'completed') {
+            qqBindTaskId = '';
+            document.getElementById('qqBindQrWrap').hidden = true;
+            document.getElementById('qqBindStart').disabled = false;
+            setQqBindStatus(data.message || `机器人 ${data.appid} 已绑定，重启后生效。`, '#15803d');
+            return;
+        }
+        if (data.status === 'expired') {
+            qqBindTaskId = '';
+            document.getElementById('qqBindQrWrap').hidden = true;
+            document.getElementById('qqBindStart').disabled = false;
+            setQqBindStatus('二维码已失效，请重新开始。', '#b45309');
+            return;
+        }
+        qqBindTimer = setTimeout(pollQqBind, 2000);
+    } catch (error) {
+        qqBindTaskId = '';
+        document.getElementById('qqBindStart').disabled = false;
+        setQqBindStatus(error.message || String(error), '#dc2626');
+    }
+}
 
 // 标签切换功能
 document.querySelectorAll('.tab-link').forEach(tab => {

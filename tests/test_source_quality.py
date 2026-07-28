@@ -276,10 +276,19 @@ class SourceQualityTests(unittest.TestCase):
     def test_web_defaults_are_local_and_have_no_feature_gates(self) -> None:
         config_path = SOURCE_ROOT / "xiuxian" / "xiuxian_config.py"
         source = config_path.read_text(encoding="utf-8")
-        self.assertIn('self.web_host = "127.0.0.1"', source)
+        self.assertNotIn("self.web_host", source)
+        self.assertNotIn("self.web_port", source)
         self.assertNotIn("self.web_enable_database_write", source)
         self.assertNotIn("self.web_enable_backup_restore", source)
         self.assertNotIn("self.web_enable_message_send", source)
+
+        web_core = SOURCE_ROOT / "xiuxian" / "xiuxian_web" / "core.py"
+        core_source = web_core.read_text(encoding="utf-8")
+        self.assertIn('os.environ.setdefault("XIUXIAN_WEB_PORT", "5888")', core_source)
+        self.assertIn('if not 1 <= PORT <= 65535:', core_source)
+        self.assertIn('getattr(get_driver().config, "host", "127.0.0.1")', core_source)
+        self.assertNotIn("WEB_CONFIG.web_host", core_source)
+        self.assertNotIn("WEB_CONFIG.web_port", core_source)
 
         web_entrypoint = SOURCE_ROOT / "xiuxian" / "xiuxian_web" / "__init__.py"
         entrypoint_source = web_entrypoint.read_text(encoding="utf-8")

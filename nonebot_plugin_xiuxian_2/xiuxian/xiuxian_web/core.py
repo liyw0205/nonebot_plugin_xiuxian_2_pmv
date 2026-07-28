@@ -381,8 +381,18 @@ PLAYER_DB = get_paths().player_db
 TRADE_DB = get_paths().trade_db
 ACTIVITY_DB = get_paths().data / "activity" / "activity.db"
 ADMIN_IDS = get_driver().config.superusers
-PORT = WEB_CONFIG.web_port
-HOST = WEB_CONFIG.web_host
+
+# 管理面板监听：host 复用 NoneBot HOST，端口通过环境变量 XIUXIAN_WEB_PORT 配置；缺失时补入默认值 5888。
+_raw_port = os.environ.setdefault("XIUXIAN_WEB_PORT", "5888").strip()
+try:
+    PORT = int(_raw_port)
+except ValueError as exc:
+    raise SystemExit(
+        f"XIUXIAN_WEB_PORT 必须是有效端口号，当前值：{_raw_port!r}"
+    ) from exc
+if not 1 <= PORT <= 65535:
+    raise SystemExit(f"XIUXIAN_WEB_PORT 必须在 1 到 65535 之间，当前值：{PORT}")
+HOST = str(getattr(get_driver().config, "host", "127.0.0.1"))
 
 WEB_UPLOAD_CACHE = get_paths().cache / "web_uploads"
 

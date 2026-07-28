@@ -68,7 +68,7 @@ PORT = 8080
 ```
 
 - `HOST` / `PORT` 是 NoneBot 与 OneBot WebSocket 端口。
-- 修仙 Web 管理面板默认监听 `0.0.0.0:5888`，由 `xiuxian_config.py` / Web 配置页管理。
+- 修仙 Web 管理面板复用 NoneBot `HOST`，端口由 `XIUXIAN_WEB_PORT` 控制；缺失时启动自动补入默认 `5888`。
 - 插件环境变量、QQ 官方机器人配置、配置优先级和高级 NoneBot 字段见 [配置文档](docs/configuration.md)。
 
 NapCat 的 WebSocket 客户端默认连接：

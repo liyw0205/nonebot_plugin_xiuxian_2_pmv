@@ -18,7 +18,7 @@ PORT = 8080
 
 `HOST` / `PORT` 是 NoneBot 与 OneBot WebSocket 端口，不是修仙 Web 管理面板端口。
 
-QQ 官方机器人使用 NoneBot 的 `QQ_BOTS` 配置。凭据只能写在本地配置中，禁止提交到 Git：
+QQ 官方机器人使用 NoneBot 的 `QQ_BOTS` 配置。也可以在 Web 面板的 `/config` 点击“QQ 官方机器人扫码绑定”：用 QQ 扫码确认后，面板仅将 AppID/Secret 写入当前项目 `.env.dev`，并固定 `use_websocket=true`；凭据不会显示在页面或日志中，重启后生效。凭据只能写在本地配置中，禁止提交到 Git：
 
 ```dotenv
 QQ_BOTS='
@@ -80,8 +80,6 @@ nonebot_plugin_xiuxian_2/xiuxian/xiuxian_config.py
 | 配置 | 默认值 | 说明 |
 |:-----|:------:|:-----|
 | `web_status` | `True` | 是否启动 Web 管理面板 |
-| `web_host` | `0.0.0.0` | Web 面板监听地址 |
-| `web_port` | `5888` | Web 面板端口 |
 | `adapter_source` | `vendor` | `vendor` / `installed` / `auto` |
 | `reference_reply` | `False` | QQ 官方普通群/C2C 是否优先引用回复 |
 | `shield_group` | `[]` | 屏蔽群列表 |
@@ -98,7 +96,7 @@ self.layout_bot_dict = {
 }
 ```
 
-Web 开关、监听地址、适配器来源和消息保留策略不接受环境变量覆盖，统一由插件/Web 配置管理。
+管理面板 host 复用 NoneBot `HOST`，端口由 `XIUXIAN_WEB_PORT` 环境变量控制，缺失时进程内自动补入默认 `5888`。该默认值不会改写用户维护的 `.env` 文件。
 
 ## 插件环境变量
 
@@ -107,6 +105,7 @@ Web 开关、监听地址、适配器来源和消息保留策略不接受环境�
 | 环境变量 | 默认值 | 用途 | 修改后 |
 |:---------|:-------|:-----|:-------|
 | `XIUXIAN_DATA_DIR` | `./data/xiuxian` | 数据库、缓存和持久文件目录 | 重启 |
+| `XIUXIAN_WEB_PORT` | `5888` | Web 管理面板端口（host 复用 NoneBot `HOST`；缺失时启动自动补入默认值） | 重启 |
 | `XIUXIAN_WEB_SECRET_KEY` | 自动生成并保存 | Web 会话签名密钥 | 重启并重新登录 |
 | `XIUXIAN_PROJECT_DIR` | 自动探测 | Web 日志页项目根目录 | 重启 |
 | `XIUXIAN_PIP_INDEX` | 清华 PyPI 镜像 | 自动依赖安装的 pip 源 | 下次安装 |
@@ -123,7 +122,6 @@ Web 开关、监听地址、适配器来源和消息保留策略不接受环境�
 
 ```text
 XIUXIAN_WEB_HOST
-XIUXIAN_WEB_PORT
 XIUXIAN_WEB_STATUS
 XIUXIAN_ADAPTER_SOURCE
 XIUXIAN_MESSAGE_DB_MAX_SIZE_MB

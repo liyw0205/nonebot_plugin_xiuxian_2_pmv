@@ -220,18 +220,6 @@ CONFIG_EDITABLE_FIELDS = {
         "type": "str",
         "category": "运行设置"
     },
-    "web_port": {
-        "name": "管理面板端口",
-        "description": "修仙管理面板端口号",
-        "type": "int",
-        "category": "Web设置"
-    },
-    "web_host": {
-        "name": "管理面板IP",
-        "description": "修仙管理面板IP地址",
-        "type": "str",
-        "category": "Web设置"
-    },
     "web_secret_key": {
         "name": "Web会话密钥",
         "description": "Flask 会话密钥；留空时使用 data/xiuxian/web_secret_key 或自动生成",
