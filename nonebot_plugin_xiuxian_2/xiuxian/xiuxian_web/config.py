@@ -214,6 +214,12 @@ CONFIG_EDITABLE_FIELDS = {
         "type": "bool",
         "category": "消息设置"
     },
+    "adapter_source": {
+        "name": "适配器来源",
+        "description": "vendor 使用插件内置适配器；installed 使用运行环境版本；auto 自动选择",
+        "type": "str",
+        "category": "运行设置"
+    },
     "web_port": {
         "name": "管理面板端口",
         "description": "修仙管理面板端口号",

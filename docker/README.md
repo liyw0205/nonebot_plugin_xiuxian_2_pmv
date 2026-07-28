@@ -47,6 +47,17 @@ bash install_docker.sh update --full
 bash install_docker.sh start|stop|status|logs
 ```
 
+## 运行环境变量
+
+安装器会生成两个不同用途的配置文件：
+
+- `config/.env.dev`：NoneBot 自身配置，例如 `SUPERUSERS`、`QQ_BOTS`、`HOST`、`PORT`。
+- `config/runtime.env`：传给容器进程的插件环境变量，由 `docker run --env-file` 加载。
+
+`runtime.env` 默认只启用 `XIUXIAN_PROJECT_DIR=/app`，其余变量按需取消注释。支持的插件变量、默认值和重启要求见主仓库 README 的“环境变量”章节。
+
+Web 监听、适配器来源和消息保留策略不放在 `runtime.env`，请在插件 Web 配置页管理。
+
 ## 本地构建发布物
 
 ```bash
@@ -76,6 +87,7 @@ docker run -d --name xiuxian2 --restart unless-stopped \
   -v "$PWD/config/.env:/app/.env:ro" \
   -v "$PWD/config/.env.dev:/app/.env.dev:ro" \
   -v "$PWD/plugin/nonebot_plugin_xiuxian_2:/app/src/plugins/nonebot_plugin_xiuxian_2" \
+  --env-file "$PWD/config/runtime.env" \
   xiuxian2:latest
 ```
 

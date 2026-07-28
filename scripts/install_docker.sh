@@ -362,6 +362,22 @@ PORT = 8080
 EOF
     ok "已生成 config/.env.dev（请修改 SUPERUSERS）"
   fi
+  if [[ ! -f "$dir/config/runtime.env" ]]; then
+    cat >"$dir/config/runtime.env" <<'EOF'
+# 插件运行环境变量（按需取消注释）。完整说明见主仓库 README「环境变量」。
+XIUXIAN_PROJECT_DIR=/app
+# XIUXIAN_DATA_DIR=/app/data/xiuxian
+# XIUXIAN_WEB_SECRET_KEY=请替换为高强度随机值
+# XIUXIAN_FAST_DB_POOL_SIZE=64
+# XIUXIAN_READ_CACHE_TTL=2
+# XIUXIAN_STAMINA_RECOVERY_BATCH_SIZE=1000
+# XIUXIAN_MESSAGE_DB_QUEUE_MAXSIZE=100000
+# XIUXIAN_MESSAGE_DB_BATCH_SIZE=200
+# XIUXIAN_PIP_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
+# XIUXIAN_SKIP_AUTO_PIP=1
+EOF
+    ok "已生成 config/runtime.env"
+  fi
 }
 
 container_running() { docker ps --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; }
@@ -389,6 +405,7 @@ start_container() {
       -v "$dir/config/.env:/app/.env:ro" \
       -v "$dir/config/.env.dev:/app/.env.dev:ro" \
       -v "$plugin_path:/app/src/plugins/nonebot_plugin_xiuxian_2" \
+      --env-file "$dir/config/runtime.env" \
       -e TZ=Asia/Shanghai \
       "$IMAGE_TAG" >/dev/null
   fi
@@ -597,7 +614,8 @@ usage() {
 目录结构:
   DIR/parts/     base 分片缓存
   DIR/plugin/    插件目录（挂载进容器，Web 更新写这里）
-  DIR/config/ data/ logs/
+  DIR/config/     NoneBot .env/.env.dev + 插件 runtime.env
+  DIR/data/ logs/
   DIR/manifest.json  DIR/state.json
 
 Release: https://github.com/${FILE_REPO_OWNER}/${FILE_REPO_NAME}/releases/tag/${RELEASE_TAG}

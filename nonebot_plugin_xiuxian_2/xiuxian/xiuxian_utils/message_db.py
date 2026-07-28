@@ -165,15 +165,14 @@ _message_db_last_drop_log_ts = 0.0
 _message_db_dropped_jobs = 0
 _MESSAGE_DB_BATCH_SIZE = _env_int("XIUXIAN_MESSAGE_DB_BATCH_SIZE", 200, 1)
 
-message_db_max_size_mb = _env_int("XIUXIAN_MESSAGE_DB_MAX_SIZE_MB", 1000, 0)
-# 消息记录最大大小 MB。达到或超过该值时，按最早日期清理聊天记录。
-# 设置为 0 时关闭消息记录写入。
+message_db_max_size_mb = 1000
+# 消息记录最大大小 MB。由 Web 消息设置持久化；0 表示关闭消息记录写入。
 
-message_group_keep_days = _env_int("XIUXIAN_MESSAGE_GROUP_KEEP_DAYS", 0, 0)
-# 群聊消息最大保留天数，0 表示不启用。
+message_group_keep_days = 0
+# 群聊消息最大保留天数。由 Web 消息设置持久化；0 表示不启用。
 
-message_private_keep_days = _env_int("XIUXIAN_MESSAGE_PRIVATE_KEEP_DAYS", 0, 0)
-# 私聊消息最大保留天数，0 表示不启用。
+message_private_keep_days = 0
+# 私聊消息最大保留天数。由 Web 消息设置持久化；0 表示不启用。
 
 
 def _int_config(value: Any, default: int, minimum: int, maximum: int) -> int:

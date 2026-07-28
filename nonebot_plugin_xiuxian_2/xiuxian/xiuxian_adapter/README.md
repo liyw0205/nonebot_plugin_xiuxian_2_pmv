@@ -9,8 +9,7 @@ The upstream packages keep their canonical module names under `nonebot.adapters.
 `xiuxian_adapter.configure_adapter_paths()` selects the runtime source while
 keeping upstream canonical imports under `nonebot.adapters.*`.
 
-Configure `xiuxian_adapter_source` in NoneBot or `XIUXIAN_ADAPTER_SOURCE` in the
-environment:
+Configure `adapter_source` in `xiuxian_config.py` or the Web configuration page:
 
 - `vendor` (default): prefer bundled sources for local modification.
 - `installed`: use only adapters installed in the active Python environment.

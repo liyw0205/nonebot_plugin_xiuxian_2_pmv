@@ -451,16 +451,9 @@ def _get_log_roots() -> list[Path]:
     roots: list[Path] = []
     seen: set[str] = set()
 
-    for env_name in (
-        "XIUXIAN_LOG_DIR",
-        "XIUXIAN_PROJECT_DIR",
-        "XIUXIAN_BOT_DIR",
-        "XIUXIAN_ROOT",
-        "PROJECT_DIR",
-    ):
-        env_value = os.environ.get(env_name)
-        if env_value:
-            _add_log_root(roots, seen, env_value)
+    project_dir = os.environ.get("XIUXIAN_PROJECT_DIR")
+    if project_dir:
+        _add_log_root(roots, seen, project_dir)
 
     cwd = Path().resolve()
     _add_log_root(roots, seen, cwd)

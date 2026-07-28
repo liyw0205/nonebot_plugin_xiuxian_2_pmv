@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from importlib.machinery import PathFinder
 from pathlib import Path
@@ -8,7 +7,6 @@ from typing import Literal
 
 
 AdapterSource = Literal["vendor", "installed", "auto"]
-ADAPTER_SOURCE_ENV = "XIUXIAN_ADAPTER_SOURCE"
 VENDOR_ROOT = Path(__file__).resolve().parent / "vendor"
 
 _ADAPTER_PATHS = {
@@ -34,15 +32,13 @@ def normalize_adapter_source(value: object) -> AdapterSource:
 
 
 def get_requested_adapter_source() -> AdapterSource:
-    configured = os.getenv(ADAPTER_SOURCE_ENV)
-    if configured is None:
-        try:
-            from nonebot import get_driver
+    # 适配器来源属于插件行为配置，不接受进程环境变量覆盖。
+    try:
+        from ..xiuxian_config import XiuConfig
 
-            configured = getattr(get_driver().config, "xiuxian_adapter_source", None)
-        except Exception:
-            configured = None
-    # None / 空串 -> vendor
+        configured = getattr(XiuConfig(), "adapter_source", None)
+    except Exception:
+        configured = None
     if configured is None or str(configured).strip() == "":
         return "vendor"
     return normalize_adapter_source(configured)

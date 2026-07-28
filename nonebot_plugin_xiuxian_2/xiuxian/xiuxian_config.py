@@ -101,6 +101,9 @@ class XiuConfig:
         self.channel_id = ""
         # 频道图床ID 
 
+        self.adapter_source = "vendor"
+        # 适配器来源：vendor / installed / auto
+
         self.web_status = True
         # 修仙管理面板是否开启
         self.web_port = 5888

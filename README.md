@@ -749,14 +749,46 @@ screen -S xiu2 -X quit
 
 ---
 
+## ⚙️ 环境变量
+
+插件只保留适合部署、密钥和底层性能调优的环境变量。游戏行为、Web 监听、适配器来源及消息保留策略请使用 `xiuxian_config.py` 或 Web 配置页，避免 `.env` 意外覆盖持久配置。
+
+### 支持的插件环境变量
+
+| 环境变量 | 默认值 | 用途 | 修改后 |
+|:---------|:-------|:-----|:-------|
+| `XIUXIAN_DATA_DIR` | `./data/xiuxian` | 修仙数据库、缓存和持久文件目录；Docker/自定义目录部署使用 | 重启 |
+| `XIUXIAN_WEB_SECRET_KEY` | 自动生成并保存 | Web 会话签名密钥；多实例应设置为相同的高强度随机值 | 重启并重新登录 |
+| `XIUXIAN_PROJECT_DIR` | 自动探测 | Web 日志页的项目/日志根目录 | 重启 |
+| `XIUXIAN_PIP_INDEX` | 清华 PyPI 镜像 | 启动依赖自检使用的 pip 源 | 下次依赖安装 |
+| `XIUXIAN_SKIP_AUTO_PIP` | 空/关闭 | 设为 `1`、`true` 或 `yes` 时跳过自动 pip 安装 | 重启 |
+| `XIUXIAN_FAST_DB_POOL_SIZE` | `64` | SQLite 快速连接池上限，最小 `1` | 重启 |
+| `XIUXIAN_READ_CACHE_TTL` | `2` | 高频数据库读取缓存秒数，`0` 关闭 | 重启 |
+| `XIUXIAN_STAMINA_RECOVERY_BATCH_SIZE` | `1000` | 体力恢复任务单批处理人数，最小 `1` | 重启 |
+| `XIUXIAN_MESSAGE_DB_QUEUE_MAXSIZE` | `100000` | 消息记录异步写入队列容量，最小 `1000` | 重启 |
+| `XIUXIAN_MESSAGE_DB_BATCH_SIZE` | `200` | 消息记录单次批写数量，最小 `1` | 重启 |
+
+`PREFIX` 是 Termux 提供的系统变量，仅用于识别 Termux，不需要手动配置。
+
+### 不再接受环境变量覆盖
+
+以下配置统一由 `xiuxian_config.py` / Web 配置页管理：
+
+| 配置 | 设置位置 |
+|:-----|:---------|
+| `web_status`、`web_host`、`web_port` | Web 设置 |
+| `adapter_source`（`vendor` / `installed` / `auto`） | 运行设置 |
+| 消息库最大大小、群聊/私聊保留天数 | Web 消息设置 |
+
+旧变量 `XIUXIAN_WEB_HOST`、`XIUXIAN_WEB_PORT`、`XIUXIAN_WEB_STATUS`、`XIUXIAN_ADAPTER_SOURCE`、`XIUXIAN_MESSAGE_DB_MAX_SIZE_MB`、`XIUXIAN_MESSAGE_GROUP_KEEP_DAYS`、`XIUXIAN_MESSAGE_PRIVATE_KEEP_DAYS` 不再生效，应从 `.env` 中删除。
+
+NoneBot 自身的 `SUPERUSERS`、`NICKNAME`、`COMMAND_START`、`QQ_BOTS`、`HOST`、`PORT` 等仍按 NoneBot 文档配置，不属于插件环境变量。
+
+---
+
 ## 📦 启动依赖自检
 
-首次加载插件时，会按项目根目录 `requirements.txt` 检测缺失的 Python 包，并对 **当前运行 NoneBot 的解释器** 执行 `python -m pip install`（与 `nb run` / 虚拟环境一致）。
-
-| 环境变量 | 说明 |
-|:---------|:-----|
-| `XIUXIAN_SKIP_AUTO_PIP=1` | 关闭启动时自动 pip |
-| `XIUXIAN_PIP_INDEX=<url>` | 自定义 PyPI 源（默认清华镜像） |
+首次加载插件时，会按项目根目录 `requirements.txt` 检测缺失的 Python 包，并对 **当前运行 NoneBot 的解释器** 执行 `python -m pip install`（与 `nb run` / 虚拟环境一致）。完整环境变量清单见上一节。
 
 **Termux 原生环境**会与一键脚本一致，跳过已由 `pkg` 提供的 `numpy` / `Pillow` / `psutil` 等。若自动安装失败，请手动：
 

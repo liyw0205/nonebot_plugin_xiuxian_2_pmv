@@ -44,7 +44,7 @@ _server_thread: threading.Thread | None = None
 
 
 def _web_enabled() -> bool:
-    value = getattr(get_driver().config, "xiuxian_web_status", XiuConfig().web_status)
+    value = XiuConfig().web_status
     if isinstance(value, str):
         return value.strip().lower() in {"1", "true", "yes", "on"}
     return bool(value)
@@ -55,8 +55,8 @@ def start_web_server() -> None:
     if _server is not None or not _web_enabled():
         return
     initialize_web_storage()
-    host = str(getattr(get_driver().config, "xiuxian_web_host", HOST))
-    port = int(getattr(get_driver().config, "xiuxian_web_port", PORT))
+    host = str(HOST)
+    port = int(PORT)
     server = make_server(host, port, app, threaded=True)
     thread = threading.Thread(
         target=server.serve_forever,
