@@ -111,6 +111,8 @@ class MessageDeliveryService:
             kwargs.setdefault("source_message_id", request.source_message_id)
         if request.revoke_after:
             kwargs.setdefault("revoke_after", request.revoke_after)
+        if request.record_message is not None:
+            kwargs.setdefault("record_message", request.record_message)
 
         try:
             if request.scene in {"group", "private"}:
@@ -140,6 +142,7 @@ class MessageDeliveryService:
     ) -> SendResult:
         kwargs = dict(kwargs)
         source_message_id = str(kwargs.pop("source_message_id", "") or "")
+        record_message = kwargs.pop("record_message", None)
         kwargs.pop("message_reference_id", None)
         kwargs.pop("msg_seq", None)
         if source_message_id:
@@ -159,7 +162,7 @@ class MessageDeliveryService:
         result = SendResult.from_raw(raw)
         record_kwargs = {
             "scene": request.scene,
-            "message": request.message,
+            "message": record_message if record_message is not None else request.message,
             "message_id": result.message_id or "",
             "source_message_id": source_message_id,
             "raw_result": raw,

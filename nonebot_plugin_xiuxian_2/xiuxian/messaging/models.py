@@ -39,6 +39,7 @@ class SendRequest:
     source_message_id: str | None = None
     revoke_after: int | float = 0
     audit_timeout: float = 0
+    record_message: Any | None = None
 
 
 __all__ = ["DeliveryScene", "DeliveryStatus", "SendRequest", "SendResult"]

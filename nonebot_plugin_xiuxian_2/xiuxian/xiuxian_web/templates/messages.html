@@ -4300,8 +4300,31 @@ function renderPlainWithAttachments(text, mentionMap = {}) {
     return `<div class="msg-attachment-wrap">${html}</div>`;
 }
 
+function renderPlainWithLocalStickers(text, mentionMap = {}) {
+    const re = /<sticker\[([a-z0-9][a-z0-9_-]{0,31})\/([A-Za-z0-9._-]+)\]>/g;
+    let html = '';
+    let lastIndex = 0;
+    let match;
+    while ((match = re.exec(String(text || ''))) !== null) {
+        const before = String(text || '').slice(lastIndex, match.index);
+        if (before) html += `<div class="msg-raw">${renderTextWithMentions(before, mentionMap)}</div>`;
+        const packId = encodeURIComponent(match[1]);
+        const stem = match[2].toLowerCase().endsWith('.webp') ? match[2] : `${match[2]}.webp`;
+        const url = `/api/messages/stickers/file/${packId}/${encodeURIComponent(stem)}`;
+        html += `<div class="msg-media msg-image"><img src="${url}" alt="表情包" loading="lazy"></div>`;
+        lastIndex = re.lastIndex;
+    }
+    const rest = String(text || '').slice(lastIndex);
+    if (rest) html += `<div class="msg-raw">${renderTextWithMentions(rest, mentionMap)}</div>`;
+    return `<div class="msg-attachment-wrap">${html}</div>`;
+}
+
 function renderMessageContent(text, mentionMap = {}) {
     text = stripQQFaceMarkup(normalizeAttachmentRepr(String(text || '')));
+
+    if (/<sticker\[[a-z0-9][a-z0-9_-]{0,31}\/[A-Za-z0-9._-]+\]>/.test(text)) {
+        return renderPlainWithLocalStickers(text, mentionMap);
+    }
 
     /**
      * 只要包含附件标记，就统一走附件渲染。

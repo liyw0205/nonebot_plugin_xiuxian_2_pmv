@@ -105,7 +105,7 @@ class XiuConfig:
         # 修仙管理面板是否开启
         self.web_port = 5888
         # 修仙管理面板端口
-        self.web_host = "127.0.0.1"
+        self.web_host = "0.0.0.0"
         # 修仙管理面板IP
         self.web_secret_key = ""
         # Flask 会话密钥；留空时自动生成到 data/xiuxian/web_secret_key，也可用 XIUXIAN_WEB_SECRET_KEY 环境变量覆盖

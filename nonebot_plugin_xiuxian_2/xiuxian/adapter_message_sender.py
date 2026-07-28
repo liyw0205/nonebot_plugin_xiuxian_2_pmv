@@ -94,6 +94,7 @@ def _record_send(
 async def send_group_message(bot: Any, *, group_id: Any, message: Any, **kwargs):
     """主动发送群消息，按适配器调用实际接口。"""
     revoke_time = _pop_revoke_time(kwargs)
+    record_message = kwargs.pop("record_message", None)
     source_message_id = str(kwargs.pop("source_message_id", "") or "")
 
     if _is_ob11_bot(bot):
@@ -111,7 +112,7 @@ async def send_group_message(bot: Any, *, group_id: Any, message: Any, **kwargs)
             _record_send(
                 bot,
                 scene="group",
-                message=message,
+                message=record_message if record_message is not None else message,
                 result=result,
                 group_id=str(group_id or ""),
                 source_message_id=source_message_id,
@@ -145,7 +146,7 @@ async def send_group_message(bot: Any, *, group_id: Any, message: Any, **kwargs)
         _record_send(
             bot,
             scene="group",
-            message=message,
+            message=record_message if record_message is not None else message,
             result=result,
             group_id=str(group_id or ""),
             source_message_id=source_message_id,
@@ -163,7 +164,7 @@ async def send_group_message(bot: Any, *, group_id: Any, message: Any, **kwargs)
         _record_send(
             bot,
             scene="group",
-            message=message,
+            message=record_message if record_message is not None else message,
             result=result,
             group_id=str(group_id or ""),
             source_message_id=source_message_id,
@@ -177,6 +178,7 @@ async def send_group_message(bot: Any, *, group_id: Any, message: Any, **kwargs)
 async def send_private_message(bot: Any, *, user_id: Any, message: Any, **kwargs):
     """主动发送私聊消息，按适配器调用实际接口。"""
     revoke_time = _pop_revoke_time(kwargs)
+    record_message = kwargs.pop("record_message", None)
     source_message_id = str(kwargs.pop("source_message_id", "") or "")
 
     if _is_ob11_bot(bot):
@@ -194,7 +196,7 @@ async def send_private_message(bot: Any, *, user_id: Any, message: Any, **kwargs
             _record_send(
                 bot,
                 scene="private",
-                message=message,
+                message=record_message if record_message is not None else message,
                 result=result,
                 user_id=str(user_id or ""),
                 source_message_id=source_message_id,
@@ -218,7 +220,7 @@ async def send_private_message(bot: Any, *, user_id: Any, message: Any, **kwargs
         _record_send(
             bot,
             scene="private",
-            message=message,
+            message=record_message if record_message is not None else message,
             result=result,
             user_id=str(user_id or ""),
             source_message_id=source_message_id,
@@ -236,7 +238,7 @@ async def send_private_message(bot: Any, *, user_id: Any, message: Any, **kwargs
         _record_send(
             bot,
             scene="private",
-            message=message,
+            message=record_message if record_message is not None else message,
             result=result,
             user_id=str(user_id or ""),
             source_message_id=source_message_id,

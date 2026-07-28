@@ -1177,6 +1177,7 @@ def api_messages_send():
                                 qq_message_obj,
                                 reference_id=message_reference_id or None,
                                 source_message_id=source_message_id or None,
+                                record_message=f"<sticker[{sticker_token}]>" if sticker_token else None,
                             ),
                         )
                     )
@@ -1254,6 +1255,7 @@ def api_messages_send():
                                 qq_message_obj,
                                 reference_id=message_reference_id or None,
                                 source_message_id=source_message_id,
+                                record_message=f"<sticker[{sticker_token}]>" if sticker_token else None,
                             ),
                         )
                     )
