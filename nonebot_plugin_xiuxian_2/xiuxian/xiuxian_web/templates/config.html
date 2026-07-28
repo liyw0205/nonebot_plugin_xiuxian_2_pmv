@@ -8,7 +8,7 @@
     <section class="qq-bind-panel">
         <div class="qq-bind-copy">
             <h3><i class="fas fa-qrcode"></i> QQ 官方机器人扫码绑定</h3>
-            <p>使用 QQ 扫码授权后，面板会把 AppID/Secret 写入当前项目的 <code>.env.dev</code>，并启用 WebSocket。Secret 不会显示在页面或日志中。</p>
+            <p>使用 QQ 扫码授权后，面板会将当前项目 <code>.env.dev</code> 的 <code>QQ_BOTS</code> 替换为本次机器人，并启用 WebSocket。原配置会备份，Secret 不会显示在页面或日志中。</p>
             <button type="button" id="qqBindStart" class="btn btn-primary" onclick="startQqBind()">
                 <i class="fas fa-qrcode"></i> 开始扫码绑定
             </button>

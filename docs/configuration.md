@@ -18,7 +18,7 @@ PORT = 8080
 
 `HOST` / `PORT` 是 NoneBot 与 OneBot WebSocket 端口，不是修仙 Web 管理面板端口。
 
-QQ 官方机器人使用 NoneBot 的 `QQ_BOTS` 配置。也可以在 Web 面板的 `/config` 点击“QQ 官方机器人扫码绑定”：用 QQ 扫码确认后，面板仅将 AppID/Secret 写入当前项目 `.env.dev`，并固定 `use_websocket=true`；凭据不会显示在页面或日志中，重启后生效。凭据只能写在本地配置中，禁止提交到 Git：
+QQ 官方机器人使用 NoneBot 的 `QQ_BOTS` 配置。也可以在 Web 面板的 `/config` 点击“QQ 官方机器人扫码绑定”：用 QQ 扫码确认后，面板会将 `QQ_BOTS` 替换为本次扫码机器人并固定 `use_websocket=true`，避免多个 AppID 同时启动却只有实际入群 Bot 收到事件。原 `.env.dev` 会备份，凭据不会显示在页面或日志中，重启后生效。凭据只能写在本地配置中，禁止提交到 Git：
 
 ```dotenv
 QQ_BOTS='

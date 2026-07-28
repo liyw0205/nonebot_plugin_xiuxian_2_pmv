@@ -23,12 +23,13 @@
 
 ## QQ 官方机器人扫码绑定
 
-在管理面板 `/config` 的“QQ 官方机器人扫码绑定”区域点击开始。二维码由本机服务生成，使用 QQ 扫码并确认授权后，AppID/Secret 会合并写入当前项目 `.env.dev` 的 `QQ_BOTS`，并启用 `use_websocket=true`。
+在管理面板 `/config` 的“QQ 官方机器人扫码绑定”区域点击开始。二维码由本机服务生成，使用 QQ 扫码并确认授权后，当前项目 `.env.dev` 的 `QQ_BOTS` 会被替换为本次 AppID/Secret，并启用 `use_websocket=true`。
 
 - 绑定任务仅保存在进程内，10 分钟过期。
 - Secret 不会返回到浏览器、写入日志或保存到插件数据目录。
-- 已有同 AppID 条目会更新凭据并保留其 `intent` 等配置；新 AppID 新增为 WebSocket 机器人。
-- 完成后必须重启 NoneBot，适配器才会建立 QQ Gateway WebSocket 连接。
+- 原 `.env.dev` 会备份为 `.env.dev.bak`。
+- 同 AppID 重新绑定时保留它原有的 `intent` 等扩展字段；不同 AppID 会替换原机器人列表。
+- 完成后必须重启 NoneBot，适配器才会仅为本次扫码机器人建立 QQ Gateway WebSocket 连接。
 
 
 | 模块 | 路径 | 说明 |
@@ -39,7 +40,7 @@
 | 指令开关 | `/command-registry` 等 | 按模块批量启停命令（若已启用） |
 | 活动 | `/activity` | 活动与模板 |
 | 发放中心 | `/reward-center` | 奖励发放记录 |
-| 配置 | `/config` | 可视化改配置、QQ 官方机器人扫码绑定（写入本地 `.env.dev`，重启后 WebSocket 连接） |
+| 配置 | `/config` | 可视化改配置、QQ 官方机器人扫码绑定（替换本地 `QQ_BOTS`，重启后仅连接本次机器人） |
 | **定时任务** | `/scheduler` | 查看 / 启停 / 改计划 / 手动运行（见下） |
 | 消息 | `/messages` | 会话、发送、撤回 |
 | 经济流水 | `/economy_logs` | 灵石等日志 |

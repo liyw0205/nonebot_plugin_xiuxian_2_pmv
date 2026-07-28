@@ -120,7 +120,7 @@ def qq_bind_poll():
         )
     try:
         secret = decrypt_bind_secret(encrypted, entry[1])
-        created = merge_qq_bots_env(_env_file(), appid, secret)
+        replaced = merge_qq_bots_env(_env_file(), appid, secret)
     except Exception as exc:
         return jsonify(
             {
@@ -134,7 +134,7 @@ def qq_bind_poll():
             "success": True,
             "status": "completed",
             "appid": appid,
-            "created": created,
-            "message": "QQ 官方机器人已写入 .env.dev，重启后将通过 WebSocket 连接。",
+            "replaced": replaced,
+            "message": "QQ_BOTS 已替换为本次扫码机器人，重启后将仅通过该机器人建立 WebSocket 连接。",
         }
     )

@@ -107,24 +107,21 @@ def merge_qq_bots_env(env_file: Path, appid: str, secret: str) -> bool:
     env_file = Path(env_file)
     text = env_file.read_text(encoding="utf-8") if env_file.exists() else ""
     bots, match = _parse_qq_bots(text)
-    created = True
-    for bot in bots:
-        if str(bot.get("id") or "").strip() != appid:
-            continue
-        bot["token"] = secret
-        bot["secret"] = secret
-        bot["use_websocket"] = True
-        created = False
-        break
-    if created:
-        bots.append(
-            {
-                "id": appid,
-                "token": secret,
-                "secret": secret,
-                "use_websocket": True,
-            }
-        )
+    selected = next(
+        (
+            dict(bot)
+            for bot in bots
+            if str(bot.get("id") or "").strip() == appid
+        ),
+        None,
+    )
+    replaced = bool(bots)
+    bot = selected or {"id": appid}
+    bot["id"] = appid
+    bot["token"] = secret
+    bot["secret"] = secret
+    bot["use_websocket"] = True
+    bots = [bot]
 
     assignment = "QQ_BOTS='\n" + json.dumps(bots, ensure_ascii=False, indent=2) + "\n'"
     if match is None:
@@ -147,7 +144,7 @@ def merge_qq_bots_env(env_file: Path, appid: str, secret: str) -> bool:
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
-    return created
+    return replaced
 
 
 async def create_bind_task(key_b64: str) -> dict[str, Any]:

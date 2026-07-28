@@ -38,12 +38,19 @@ def test_merge_qq_bots_env_preserves_existing_config(tmp_path: Path):
     env_file = tmp_path / ".env.dev"
     existing = [
         {
+            "id": "old-bot",
+            "token": "retired-token",
+            "secret": "retired-secret",
+            "intent": {"at_messages": True},
+            "use_websocket": True,
+        },
+        {
             "id": "10001",
             "token": "old-token",
             "secret": "old-secret",
             "intent": {"direct_message": True},
             "use_websocket": False,
-        }
+        },
     ]
     env_file.write_text(
         "HOST=0.0.0.0\nPORT=8080\nQQ_BOTS='\n"
@@ -52,9 +59,9 @@ def test_merge_qq_bots_env_preserves_existing_config(tmp_path: Path):
         encoding="utf-8",
     )
 
-    created = merge_qq_bots_env(env_file, "10001", "new-secret")
+    replaced = merge_qq_bots_env(env_file, "10001", "new-secret")
 
-    assert created is False
+    assert replaced is True
     text = env_file.read_text(encoding="utf-8")
     assert "HOST=0.0.0.0" in text
     assert "NICKNAME=[\"修仙\"]" in text
@@ -75,9 +82,9 @@ def test_merge_qq_bots_env_adds_websocket_bot(tmp_path: Path):
     env_file = tmp_path / ".env.dev"
     env_file.write_text("HOST=127.0.0.1\n", encoding="utf-8")
 
-    created = merge_qq_bots_env(env_file, "20002", "bound-secret")
+    replaced = merge_qq_bots_env(env_file, "20002", "bound-secret")
 
-    assert created is True
+    assert replaced is False
     text = env_file.read_text(encoding="utf-8")
     payload = text.split("QQ_BOTS='\n", 1)[1].split("\n'", 1)[0]
     assert json.loads(payload) == [
