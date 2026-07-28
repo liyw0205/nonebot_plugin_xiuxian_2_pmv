@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # 构建 base 分片 + plugin 单包 + manifest（输出到目录，不自动上传）
 # 用法:
-#   bash scripts/build_docker_release.sh [OUT_DIR]
+#   XIUXIAN_DOCKER_REQUIRES_BASE_BUMP=true bash scripts/build_docker_release.sh [OUT_DIR]
+# 当 requirements.txt 变更时必须设置 true，manifest 会要求 full 更新。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -11,6 +12,12 @@ BASE_IMAGE_TAG="${XIUXIAN_DOCKER_BASE_TAG:-xiuxian2-base:latest}"
 RUNTIME_IMAGE_TAG="${XIUXIAN_DOCKER_IMAGE:-xiuxian2:latest}"
 PLUGIN_NAME="xiuxian2-plugin-latest.tar.gz"
 BASE_NAME="xiuxian2-base-amd64.tar.gz"
+REQUIRES_BASE_BUMP="${XIUXIAN_DOCKER_REQUIRES_BASE_BUMP:-false}"
+case "${REQUIRES_BASE_BUMP,,}" in
+  1|true|yes|on) REQUIRES_BASE_BUMP=True ;;
+  0|false|no|off) REQUIRES_BASE_BUMP=False ;;
+  *) echo "XIUXIAN_DOCKER_REQUIRES_BASE_BUMP must be true/false" >&2; exit 2 ;;
+esac
 
 cd "$ROOT"
 SHA="$(git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)"
@@ -120,7 +127,7 @@ manifest={
     "sha256": "$PLUGIN_SHA256",
     "size": int("$PLUGIN_SIZE"),
     "install_path": "/app/src/plugins/nonebot_plugin_xiuxian_2",
-    "requires_base_bump": False,
+    "requires_base_bump": $REQUIRES_BASE_BUMP,
   },
   "compat": {
     "min_base_requirements_md5": "$REQ_HASH",
