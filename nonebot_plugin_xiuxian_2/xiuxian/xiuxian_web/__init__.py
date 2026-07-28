@@ -8,7 +8,6 @@ from werkzeug.serving import BaseWSGIServer, make_server
 from .core import (
     HOST,
     PORT,
-    XiuConfig,
     app,
     initialize_web_storage,
 )
@@ -22,6 +21,8 @@ from .config import (  # noqa: F401
     get_root_rate,
     save_config_values,
 )
+
+from .web_runtime import web_enabled_from_env
 
 # Import route modules so their @app.route decorators register on the shared app.
 from . import pages as _pages_routes  # noqa: F401,E402
@@ -45,10 +46,7 @@ _server_thread: threading.Thread | None = None
 
 
 def _web_enabled() -> bool:
-    value = XiuConfig().web_status
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "on"}
-    return bool(value)
+    return web_enabled_from_env()
 
 
 def start_web_server() -> None:

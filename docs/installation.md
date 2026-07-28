@@ -87,6 +87,14 @@ xiu2 update-deps
 xiu2 format [log_file]
 ```
 
+Linux 与 Termux 的插件环境变量保存在项目根 `runtime.env`，Docker 保存在 `config/runtime.env`。例如关闭 Web 面板：
+
+```dotenv
+XIUXIAN_WEB_STATUS=false
+```
+
+保存后执行 `xiu2 restart`；Docker 执行安装脚本的 `stop` / `start` 或更新命令重建容器。Windows 请设置系统环境变量 `XIUXIAN_WEB_STATUS=false` 后重新运行“启动修仙.bat”。
+
 ## Termux 原生安装
 
 ```bash

@@ -40,6 +40,14 @@ class InstallerScriptTests(unittest.TestCase):
             source = (SCRIPTS / name).read_text(encoding="utf-8")
             self.assertNotIn("nb run --reload", source)
 
+    def test_managed_start_commands_load_plugin_runtime_env(self) -> None:
+        for name in ("install.sh", "install_termux.sh"):
+            source = (SCRIPTS / name).read_text(encoding="utf-8")
+            self.assertIn('runtime.env', source)
+            self.assertIn('XIUXIAN_WEB_STATUS=true', source)
+            self.assertIn('source "$DIR/runtime.env"', source)
+            self.assertIn('set -a', source)
+
     def test_git_archive_layout_is_extracted_without_losing_top_directory(self) -> None:
         for name in ("install.sh", "install_termux.sh"):
             with self.subTest(installer=name), tempfile.TemporaryDirectory() as temp:

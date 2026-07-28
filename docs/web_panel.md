@@ -6,7 +6,7 @@
 
 | 项目 | 说明 |
 |:-----|:-----|
-| 开关 | `xiuxian_config.py` → `web_status = True`（默认开） |
+| 开关 | 环境变量 `XIUXIAN_WEB_STATUS`，默认 `true`；设 `false` / `0` / `no` / `off` 后重启可关闭 |
 | 地址 | `http://服务器地址:5888`（host 复用 NoneBot `HOST`，端口由 `XIUXIAN_WEB_PORT` 环境变量控制，默认 5888） |
 | 登录 | 打开 `/login`，填写 `.env` 里 **`SUPERUSERS` 中任一 ID** |
 | 认证关闭 | `SUPERUSERS` 为空时面板不要求登录（仅适合本机调试） |
@@ -49,7 +49,7 @@
 | 更新 | `/update` | GitHub Release 检查与更新（管理员权限） |
 | 终端 | `/terminal` | 浏览器终端（管理员权限并需二次确认，高风险） |
 
-关闭面板：`web_status = False` 后重启 NoneBot。
+关闭面板：Linux/Termux 编辑项目根 `runtime.env`，Docker 编辑 `config/runtime.env`，设置 `XIUXIAN_WEB_STATUS=false` 后重启。Windows 设置同名系统环境变量后重新运行启动脚本。
 
 ## 定时任务页
 

@@ -104,9 +104,6 @@ class XiuConfig:
         self.adapter_source = "vendor"
         # 适配器来源：vendor / installed / auto
 
-        self.web_status = True
-        # 修仙管理面板是否开启
-
         self.web_secret_key = ""
         # Flask 会话密钥；留空时自动生成到 data/xiuxian/web_secret_key，也可用 XIUXIAN_WEB_SECRET_KEY 环境变量覆盖
         self.web_require_csrf = True

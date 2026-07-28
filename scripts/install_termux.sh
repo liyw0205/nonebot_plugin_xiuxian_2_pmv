@@ -628,13 +628,24 @@ DEBUG = False
 HOST = 0.0.0.0
 PORT = $PORT
 EOF
-    show_status "生成 NoneBot2 配置文件 (.env, .env.dev)" "success"
+    if [[ ! -f "$DIR/runtime.env" ]]; then
+        cat > "$DIR/runtime.env" <<'EOF'
+XIUXIAN_WEB_STATUS=true
+XIUXIAN_WEB_PORT=5888
+EOF
+    fi
+    show_status "生成 NoneBot2 配置文件和插件运行环境文件" "success"
 }
 
 write_command_scripts() {
     cat > "$START_PATH" <<EOF
 #!$TERMUX_PREFIX/bin/bash
 export TZ=Asia/Shanghai
+if [[ -f "$DIR/runtime.env" ]]; then
+    set -a
+    source "$DIR/runtime.env"
+    set +a
+fi
 source "$VENV_PATH/bin/activate"
 cd "$DIR" || exit 1
 exec nb run

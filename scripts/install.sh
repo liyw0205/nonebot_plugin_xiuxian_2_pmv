@@ -1032,6 +1032,11 @@ if [[ "$ACTION" == "install" ]]; then
     cat <<EOF > "/bin/${PROJECT_NAME}_start"
 #!/bin/bash
 export TZ=Asia/Shanghai
+if [ -f "$DIR/runtime.env" ]; then
+    set -a
+    source "$DIR/runtime.env"
+    set +a
+fi
 
 # 启动时自动确保 logrotate + cron 存在
 if [ ! -d "$DIR/logs" ]; then
@@ -1105,7 +1110,13 @@ DEBUG = False
 HOST = 0.0.0.0
 PORT = $PORT
 EOF
-    show_status "生成 NoneBot2 配置文件 (.env, .env.dev)" "success"
+    if [ ! -f "$DIR/runtime.env" ]; then
+        cat <<'EOF' > "$DIR/runtime.env"
+XIUXIAN_WEB_STATUS=true
+XIUXIAN_WEB_PORT=5888
+EOF
+    fi
+    show_status "生成 NoneBot2 配置文件和插件运行环境文件" "success"
 
     # 创建管理脚本
     cat <<EOF > "/bin/$PROJECT_NAME"

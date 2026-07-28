@@ -366,6 +366,7 @@ EOF
     cat >"$dir/config/runtime.env" <<'EOF'
 # 插件运行环境变量（按需取消注释）。完整说明见主仓库 README「环境变量」。
 XIUXIAN_PROJECT_DIR=/app
+XIUXIAN_WEB_STATUS=true
 XIUXIAN_WEB_PORT=5888
 # XIUXIAN_DATA_DIR=/app/data/xiuxian
 # XIUXIAN_WEB_SECRET_KEY=请替换为高强度随机值

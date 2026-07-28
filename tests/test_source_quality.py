@@ -278,6 +278,7 @@ class SourceQualityTests(unittest.TestCase):
         source = config_path.read_text(encoding="utf-8")
         self.assertNotIn("self.web_host", source)
         self.assertNotIn("self.web_port", source)
+        self.assertNotIn("self.web_status", source)
         self.assertNotIn("self.web_enable_database_write", source)
         self.assertNotIn("self.web_enable_backup_restore", source)
         self.assertNotIn("self.web_enable_message_send", source)
@@ -294,6 +295,11 @@ class SourceQualityTests(unittest.TestCase):
         entrypoint_source = web_entrypoint.read_text(encoding="utf-8")
         self.assertNotIn("web_auth_is_configured", entrypoint_source)
         self.assertIn("initialize_web_storage()", entrypoint_source)
+        self.assertIn("web_enabled_from_env()", entrypoint_source)
+
+        runtime_path = SOURCE_ROOT / "xiuxian" / "xiuxian_web" / "web_runtime.py"
+        runtime_source = runtime_path.read_text(encoding="utf-8")
+        self.assertIn('os.environ.setdefault("XIUXIAN_WEB_STATUS", "true")', runtime_source)
 
     def test_web_modules_do_not_use_core_star_imports(self) -> None:
         web_root = SOURCE_ROOT / "xiuxian" / "xiuxian_web"

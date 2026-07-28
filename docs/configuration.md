@@ -79,7 +79,6 @@ nonebot_plugin_xiuxian_2/xiuxian/xiuxian_config.py
 
 | 配置 | 默认值 | 说明 |
 |:-----|:------:|:-----|
-| `web_status` | `True` | 是否启动 Web 管理面板 |
 | `adapter_source` | `vendor` | `vendor` / `installed` / `auto` |
 | `reference_reply` | `False` | QQ 官方普通群/C2C 是否优先引用回复 |
 | `shield_group` | `[]` | 屏蔽群列表 |
@@ -96,7 +95,7 @@ self.layout_bot_dict = {
 }
 ```
 
-管理面板 host 复用 NoneBot `HOST`，端口由 `XIUXIAN_WEB_PORT` 环境变量控制，缺失时进程内自动补入默认 `5888`。该默认值不会改写用户维护的 `.env` 文件。
+管理面板开关由 `XIUXIAN_WEB_STATUS` 控制，缺失时进程内自动补入 `true`（默认开启）；可设为 `false`、`0`、`no` 或 `off` 关闭。host 复用 NoneBot `HOST`，端口由 `XIUXIAN_WEB_PORT` 控制，缺失时进程内自动补入默认 `5888`。这些默认值不会改写用户维护的 `.env` 文件。
 
 ## 插件环境变量
 
@@ -105,6 +104,7 @@ self.layout_bot_dict = {
 | 环境变量 | 默认值 | 用途 | 修改后 |
 |:---------|:-------|:-----|:-------|
 | `XIUXIAN_DATA_DIR` | `./data/xiuxian` | 数据库、缓存和持久文件目录 | 重启 |
+| `XIUXIAN_WEB_STATUS` | `true` | Web 管理面板开关；`false` / `0` / `no` / `off` 关闭 | 重启 |
 | `XIUXIAN_WEB_PORT` | `5888` | Web 管理面板端口（host 复用 NoneBot `HOST`；缺失时启动自动补入默认值） | 重启 |
 | `XIUXIAN_WEB_SECRET_KEY` | 自动生成并保存 | Web 会话签名密钥 | 重启并重新登录 |
 | `XIUXIAN_PROJECT_DIR` | 自动探测 | Web 日志页项目根目录 | 重启 |
@@ -122,7 +122,6 @@ self.layout_bot_dict = {
 
 ```text
 XIUXIAN_WEB_HOST
-XIUXIAN_WEB_STATUS
 XIUXIAN_ADAPTER_SOURCE
 XIUXIAN_MESSAGE_DB_MAX_SIZE_MB
 XIUXIAN_MESSAGE_GROUP_KEEP_DAYS
