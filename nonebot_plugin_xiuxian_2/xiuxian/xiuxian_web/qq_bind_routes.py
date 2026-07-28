@@ -17,6 +17,8 @@ from .qq_bind import (
     qr_png_bytes,
 )
 
+from .qq_restart import detect_restart, schedule_restart
+
 _tasks = BindTaskStore(ttl=600)
 
 
@@ -63,6 +65,7 @@ def qq_bind_start():
             "task_id": task_id,
             "status": "waiting",
             "qr_url": f"/api/config/qq-bind/qr/{task_id}",
+            "connect_url": bind_page_url(task_id),
         }
     )
 
@@ -86,6 +89,9 @@ def qq_bind_poll():
         return denied
     payload = request.get_json(silent=True) or {}
     task_id = str(payload.get("task_id") or "")
+    completed = _tasks.completed(task_id)
+    if completed is not None:
+        return jsonify(completed)
     entry = _tasks.get(task_id)
     if not task_id or entry is None:
         return jsonify({"success": True, "status": "expired"})
@@ -129,12 +135,57 @@ def qq_bind_poll():
                 "error": f"写入 QQ_BOTS 失败：{exc}",
             }
         ), 500
+    response = {
+        "success": True,
+        "status": "completed",
+        "appid": appid,
+        "replaced": replaced,
+        "message": "QQ 已确认绑定，配置已安全落盘。重启后将仅通过该机器人建立 WebSocket 连接。",
+    }
+    _tasks.complete(task_id, response)
+    return jsonify(response)
+
+
+@app.route("/api/config/qq-bind/restart-capability")
+def qq_bind_restart_capability():
+    denied = _require_admin()
+    if denied:
+        return denied
+    capability = detect_restart(Path.cwd())
     return jsonify(
         {
             "success": True,
-            "status": "completed",
-            "appid": appid,
-            "replaced": replaced,
-            "message": "QQ_BOTS 已替换为本次扫码机器人，重启后将仅通过该机器人建立 WebSocket 连接。",
+            "automatic": bool(capability.get("automatic")),
+            "mode": capability.get("mode"),
+            "message": capability.get("message"),
+        }
+    )
+
+
+@app.route("/api/config/qq-bind/restart", methods=["POST"])
+def qq_bind_restart():
+    denied = _require_admin()
+    if denied:
+        return denied
+    payload = request.get_json(silent=True) or {}
+    if payload.get("confirm") is not True:
+        return jsonify({"success": False, "error": "需要明确确认重启"}), 400
+    capability = detect_restart(Path.cwd())
+    if not capability.get("automatic"):
+        return jsonify(
+            {
+                "success": False,
+                "automatic": False,
+                "mode": capability.get("mode"),
+                "error": capability.get("message"),
+            }
+        ), 409
+    if not schedule_restart(capability):
+        return jsonify({"success": False, "error": "无法提交重启任务"}), 500
+    return jsonify(
+        {
+            "success": True,
+            "scheduled": True,
+            "message": "重启任务已提交，页面连接将暂时中断。",
         }
     )

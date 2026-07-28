@@ -72,7 +72,10 @@ def test_merge_qq_bots_env_preserves_existing_config(tmp_path: Path):
             "id": "10001",
             "token": "new-secret",
             "secret": "new-secret",
-            "intent": {"direct_message": True},
+            "intent": {
+                "direct_message": True,
+                "c2c_group_at_messages": True,
+            },
             "use_websocket": True,
         }
     ]
@@ -92,6 +95,10 @@ def test_merge_qq_bots_env_adds_websocket_bot(tmp_path: Path):
             "id": "20002",
             "token": "bound-secret",
             "secret": "bound-secret",
+            "intent": {
+                "c2c_group_at_messages": True,
+                "direct_message": True,
+            },
             "use_websocket": True,
         }
     ]
@@ -117,3 +124,20 @@ def test_task_store_expires_without_exposing_key(monkeypatch):
     now[0] = 1011.0
     assert store.get("task-1") is None
     assert store.public_status("task-1", "waiting") == {"status": "expired"}
+
+
+def test_task_store_keeps_completed_result_without_secret():
+    store = BindTaskStore(ttl=10)
+    store.add("task-2", "private-key")
+    result = {
+        "success": True,
+        "status": "completed",
+        "appid": "123456",
+        "message": "绑定完成",
+    }
+
+    store.complete("task-2", result)
+
+    assert store.get("task-2") is None
+    assert store.completed("task-2") == result
+    assert "private-key" not in repr(store.completed("task-2"))

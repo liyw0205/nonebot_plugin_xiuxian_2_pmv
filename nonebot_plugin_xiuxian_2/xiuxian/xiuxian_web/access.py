@@ -77,6 +77,8 @@ WEB_ENDPOINT_PERMISSIONS = {
     "qq_bind_start": WebPermission.DATABASE_WRITE,
     "qq_bind_qr": WebPermission.READ,
     "qq_bind_poll": WebPermission.DATABASE_WRITE,
+    "qq_bind_restart_capability": WebPermission.READ,
+    "qq_bind_restart": WebPermission.UPDATE,
     "database": WebPermission.READ,
     "table_view": WebPermission.READ,
     "row_edit": {"GET": WebPermission.READ, "POST": WebPermission.DATABASE_WRITE},

@@ -40,6 +40,7 @@ class BindTaskStore:
     def __init__(self, ttl: int = 600):
         self.ttl = max(1, int(ttl))
         self._tasks: dict[str, tuple[float, str]] = {}
+        self._completed: dict[str, tuple[float, dict[str, Any]]] = {}
         self._lock = threading.Lock()
 
     def _prune(self) -> None:
@@ -47,6 +48,9 @@ class BindTaskStore:
         for task_id, (created, _) in list(self._tasks.items()):
             if created < cutoff:
                 self._tasks.pop(task_id, None)
+        for task_id, (created, _) in list(self._completed.items()):
+            if created < cutoff:
+                self._completed.pop(task_id, None)
 
     def add(self, task_id: str, key: str) -> None:
         with self._lock:
@@ -62,6 +66,23 @@ class BindTaskStore:
         with self._lock:
             self._prune()
             return self._tasks.pop(str(task_id), None)
+
+    def complete(self, task_id: str, result: dict[str, Any]) -> None:
+        public = {
+            key: value
+            for key, value in result.items()
+            if key in {"success", "status", "appid", "replaced", "message"}
+        }
+        with self._lock:
+            self._prune()
+            self._tasks.pop(str(task_id), None)
+            self._completed[str(task_id)] = (time.time(), public)
+
+    def completed(self, task_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            self._prune()
+            entry = self._completed.get(str(task_id))
+            return dict(entry[1]) if entry else None
 
     def public_status(self, task_id: str, status: str) -> dict[str, str]:
         if self.get(task_id) is None:
@@ -120,6 +141,16 @@ def merge_qq_bots_env(env_file: Path, appid: str, secret: str) -> bool:
     bot["id"] = appid
     bot["token"] = secret
     bot["secret"] = secret
+    intent = bot.get("intent")
+    if not isinstance(intent, dict):
+        intent = {}
+    intent.update(
+        {
+            "c2c_group_at_messages": True,
+            "direct_message": True,
+        }
+    )
+    bot["intent"] = intent
     bot["use_websocket"] = True
     bots = [bot]
 

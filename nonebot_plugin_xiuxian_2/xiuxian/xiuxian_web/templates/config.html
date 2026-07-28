@@ -8,10 +8,15 @@
     <section class="qq-bind-panel">
         <div class="qq-bind-copy">
             <h3><i class="fas fa-qrcode"></i> QQ 官方机器人扫码绑定</h3>
-            <p>使用 QQ 扫码授权后，面板会将当前项目 <code>.env.dev</code> 的 <code>QQ_BOTS</code> 替换为本次机器人，并启用 WebSocket。原配置会备份，Secret 不会显示在页面或日志中。</p>
-            <button type="button" id="qqBindStart" class="btn btn-primary" onclick="startQqBind()">
-                <i class="fas fa-qrcode"></i> 开始扫码绑定
-            </button>
+            <p>使用 QQ 扫码授权后，面板会将当前项目 <code>.env.dev</code> 的 <code>QQ_BOTS</code> 替换为本次机器人，启用 WebSocket，并自动补全群聊艾特与私聊事件订阅。原配置会备份，Secret 不会显示在页面或日志中。</p>
+            <div class="qq-bind-actions">
+                <button type="button" id="qqBindStart" class="btn btn-primary" onclick="startQqBind(false)">
+                    <i class="fas fa-qrcode"></i> 开始扫码绑定
+                </button>
+                <button type="button" id="qqBindQuick" class="btn btn-secondary" onclick="startQqBind(true)">
+                    <i class="fas fa-external-link-alt"></i> 快捷绑定
+                </button>
+            </div>
             <div id="qqBindStatus" class="qq-bind-status"></div>
         </div>
         <div id="qqBindQrWrap" class="qq-bind-qr" hidden>
@@ -248,6 +253,11 @@
 </div>
 
 <style>
+.qq-bind-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
 .qq-bind-panel {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 240px;
@@ -289,9 +299,12 @@ function setQqBindStatus(message, color = 'inherit') {
     status.style.color = color;
 }
 
-async function startQqBind() {
+async function startQqBind(quick = false) {
     const button = document.getElementById('qqBindStart');
+    const quickButton = document.getElementById('qqBindQuick');
+    const quickWindow = quick ? window.open('about:blank', '_blank') : null;
     button.disabled = true;
+    quickButton.disabled = true;
     if (qqBindTimer) clearTimeout(qqBindTimer);
     setQqBindStatus('正在创建绑定任务...', '#2563eb');
     try {
@@ -302,11 +315,44 @@ async function startQqBind() {
         const image = document.getElementById('qqBindQr');
         image.src = `${data.qr_url}?t=${Date.now()}`;
         document.getElementById('qqBindQrWrap').hidden = false;
-        setQqBindStatus('等待 QQ 扫码确认...', '#2563eb');
+        if (quick) {
+            if (quickWindow) {
+                quickWindow.opener = null;
+                quickWindow.location.href = data.connect_url;
+            } else {
+                window.location.href = data.connect_url;
+            }
+        }
+        setQqBindStatus(quick ? '已申请打开 QQ，请在 QQ 中确认绑定...' : '等待 QQ 扫码确认...', '#2563eb');
         qqBindTimer = setTimeout(pollQqBind, 1500);
     } catch (error) {
+        if (quickWindow) quickWindow.close();
         button.disabled = false;
+        quickButton.disabled = false;
         setQqBindStatus(error.message || String(error), '#dc2626');
+    }
+}
+
+async function offerQqBindRestart() {
+    try {
+        const response = await fetch('/api/config/qq-bind/restart-capability');
+        const capability = await response.json();
+        if (!response.ok || !capability.success) return;
+        if (!capability.automatic) {
+            alert(`绑定已完成。${capability.message || '请手动重启 NoneBot。'}`);
+            return;
+        }
+        if (!confirm(`绑定已完成。${capability.message || ''}\n\n是否立即重启？`)) return;
+        const restartResponse = await fetch('/api/config/qq-bind/restart', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ confirm: true })
+        });
+        const result = await restartResponse.json();
+        if (!restartResponse.ok || !result.success) throw new Error(result.error || '提交重启失败');
+        setQqBindStatus(result.message || '正在重启，请稍后刷新页面。', '#15803d');
+    } catch (error) {
+        alert(error.message || String(error));
     }
 }
 
@@ -324,13 +370,16 @@ async function pollQqBind() {
             qqBindTaskId = '';
             document.getElementById('qqBindQrWrap').hidden = true;
             document.getElementById('qqBindStart').disabled = false;
+            document.getElementById('qqBindQuick').disabled = false;
             setQqBindStatus(data.message || `机器人 ${data.appid} 已绑定，重启后生效。`, '#15803d');
+            await offerQqBindRestart();
             return;
         }
         if (data.status === 'expired') {
             qqBindTaskId = '';
             document.getElementById('qqBindQrWrap').hidden = true;
             document.getElementById('qqBindStart').disabled = false;
+            document.getElementById('qqBindQuick').disabled = false;
             setQqBindStatus('二维码已失效，请重新开始。', '#b45309');
             return;
         }
@@ -338,6 +387,7 @@ async function pollQqBind() {
     } catch (error) {
         qqBindTaskId = '';
         document.getElementById('qqBindStart').disabled = false;
+        document.getElementById('qqBindQuick').disabled = false;
         setQqBindStatus(error.message || String(error), '#dc2626');
     }
 }

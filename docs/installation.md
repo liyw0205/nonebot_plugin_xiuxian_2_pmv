@@ -81,6 +81,7 @@ curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_p
 ```text
 xiu2 start
 xiu2 stop
+xiu2 restart
 xiu2 status
 xiu2 update-deps
 xiu2 format [log_file]

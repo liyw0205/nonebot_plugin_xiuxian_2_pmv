@@ -23,13 +23,13 @@
 
 ## QQ 官方机器人扫码绑定
 
-在管理面板 `/config` 的“QQ 官方机器人扫码绑定”区域点击开始。二维码由本机服务生成，使用 QQ 扫码并确认授权后，当前项目 `.env.dev` 的 `QQ_BOTS` 会被替换为本次 AppID/Secret，并启用 `use_websocket=true`。
+在管理面板 `/config` 可选择“开始扫码绑定”展示本机二维码，或点击旁边的“快捷绑定”由浏览器打开 QQ 官方 connect 页面并申请跳转 QQ。QQ 返回 `status=2` 即协议确认完成；面板会立即停止轮询、缓存完成状态并原子写入配置，避免重复查询又显示未完成。当前项目 `.env.dev` 的 `QQ_BOTS` 会被替换为本次 AppID/Secret，启用 `use_websocket=true`，并自动设置 `c2c_group_at_messages=true`、`direct_message=true`。
 
-- 绑定任务仅保存在进程内，10 分钟过期。
+- 绑定任务与完成状态仅保存在进程内，10 分钟过期。
 - Secret 不会返回到浏览器、写入日志或保存到插件数据目录。
 - 原 `.env.dev` 会备份为 `.env.dev.bak`。
 - 同 AppID 重新绑定时保留它原有的 `intent` 等扩展字段；不同 AppID 会替换原机器人列表。
-- 完成后必须重启 NoneBot，适配器才会仅为本次扫码机器人建立 QQ Gateway WebSocket 连接。
+- 完成后面板会询问是否重启。Linux/Termux 一键安装和存在可验证 `manage.sh restart` 的部署可自动重启；Docker、Windows、普通裸 `nb run` 只显示人工命令，不会结束无法自动拉起的宿主进程。
 
 
 | 模块 | 路径 | 说明 |

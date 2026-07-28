@@ -1171,6 +1171,11 @@ CRON_EOF
             echo "$PROJECT_NAME 未在运行"
         fi
         ;;
+    restart)
+        "\$0" stop || true
+        sleep 1
+        "\$0" start
+        ;;
     status)
         if screen -list | grep -q "\b$PROJECT_NAME\b"; then
             screen -U -r "$PROJECT_NAME"
@@ -1244,7 +1249,7 @@ PY
         fi
         ;;
     *)
-        echo "用法: $PROJECT_NAME [start|stop|status|update-deps|format [log_file]]"
+        echo "用法: $PROJECT_NAME [start|stop|restart|status|update-deps|format [log_file]]"
         ;;
 esac
 EOF
