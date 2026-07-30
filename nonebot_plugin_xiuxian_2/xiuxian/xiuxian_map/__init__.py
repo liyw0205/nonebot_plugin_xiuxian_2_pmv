@@ -94,9 +94,9 @@ def _map_operation_id(event, action: str, *identifiers) -> str:
 # 每日限制配置
 # =========================================
 DAILY_LIMIT_CONFIG = {
-    "gather": 30,
-    "combat": 7,
-    "explore": 5,
+    "gather": 10,
+    "combat": 4,
+    "explore": 3,
 }
 
 # 收益衰减配置（按当日总资源行为次数）

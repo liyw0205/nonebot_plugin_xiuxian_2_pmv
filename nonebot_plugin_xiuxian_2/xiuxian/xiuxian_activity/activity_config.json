@@ -113,8 +113,8 @@
     {
       "key": "weekly_work",
       "name": "悬赏达人",
-      "description": "本周结算悬赏令 25 次",
-      "target": 25,
+      "description": "本周结算悬赏令 15 次",
+      "target": 15,
       "events": [
         "work"
       ],
@@ -123,8 +123,8 @@
     {
       "key": "weekly_dungeon_clear",
       "name": "组队试炼",
-      "description": "本周完成副本 10 次",
-      "target": 10,
+      "description": "本周完成副本 5 次",
+      "target": 5,
       "events": [
         "dungeon_clear"
       ],
