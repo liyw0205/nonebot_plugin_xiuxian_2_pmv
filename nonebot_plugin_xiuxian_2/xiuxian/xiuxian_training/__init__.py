@@ -22,6 +22,7 @@ from .transaction_service import TrainingPurchaseService
 from .transaction_service import TrainingResetService
 from ...paths import get_paths
 from ..xiuxian_config import XiuConfig, convert_rank
+from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import number_to
 
@@ -426,10 +427,13 @@ def make_choice(user_id, operation_id):
         user_rank = convert_rank(user_info["level"])[0]
 
         # 完成奖励
-        exp_reward = int(user_info["exp"] * 0.01)  # 1%修为
+        # L3: 完成轮 1% 锚到 gap（再 rank//3 压制）
+        exp_reward = percent_exp_reward(
+            user_info["exp"], 0.01, user_info["level"],
+            divide_by_three=True, anchor="gap",
+        )
         stone_reward = random.randint(5000000, 10000000)  # 500万-1000万灵石
         points_reward = 1000  # 1000成就点
-        exp_reward = int(exp_reward * min(0.1 * max(user_rank // 3, 1), 1))
         training_info["points"] += points_reward
         
         # 添加随机物品奖励

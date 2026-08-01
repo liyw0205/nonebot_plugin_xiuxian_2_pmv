@@ -22,6 +22,7 @@ from ..xiuxian_utils.utils import (
 )
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.item_json import Items
+from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from ..xiuxian_config import convert_rank, base_rank, XiuConfig
 from ...paths import get_paths
 from .choice_service import IllusionChoiceService
@@ -213,8 +214,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     exp_reward = 0
     item_reward = None
     if selected_reward_type == 'exp':  # 修为奖励
-        user_rank = max(convert_rank(user_info['level'])[0] // 3, 1)
-        exp_reward = int(user_info["exp"] * 0.01 * min(0.1 * user_rank, 1))
+        exp_reward = percent_exp_reward(
+            user_info["exp"], 0.01, user_info["level"],
+            divide_by_three=True, anchor="gap",
+        )
     elif selected_reward_type == 'stone':  # 灵石奖励
         stone_reward = int(random.randint(1000000, 10000000) * (1 + min(choice_count * 0.1, 2.0)))
     elif selected_reward_type == 'item':  # 物品奖励

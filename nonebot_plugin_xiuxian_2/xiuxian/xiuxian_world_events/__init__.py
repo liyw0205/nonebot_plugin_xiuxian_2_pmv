@@ -1450,6 +1450,7 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 max(_to_int(user_info.get("exp"), 0), 1),
                 DEMON_EXP_REWARD_CAP_RATE * contribution,
                 user_info.get("level"),
+                anchor="gap",
             )
             talisman_reward = _demon_talisman_reward_count(contribution)
             random_reward = None

@@ -5,6 +5,7 @@ from ..xiuxian_utils.utils import number_to
 from ..xiuxian_config import convert_rank, base_rank
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.data_source import jsondata
+from ..xiuxian_utils.numeric_bind import percent_exp_reward
 
 sql_message = XiuxianDateManage()
 items = Items()
@@ -425,8 +426,10 @@ class TrainingEvents:
         elif reward_type == "exp":
             locals_dict = {"base_percent": reward_data["base_percent"], "random": random}
             percent = eval(calc_rule, {}, locals_dict)
-            user_rank = max(convert_rank(user_info['level'])[0] // 3, 1)
-            exp = int(user_info["exp"] * percent * min(0.1 * user_rank, 1))
+            exp = percent_exp_reward(
+                user_info["exp"], percent, user_info["level"],
+                divide_by_three=True, anchor="gap",
+            )
             return {
                 "message": desc_template.format(number_to(exp)),
                 "type": "exp",
@@ -567,8 +570,10 @@ class TrainingEvents:
             elif punish_type == "exp":
                 locals_dict = {"base_percent": punish_data["base_percent"], "random": random}
                 percent = eval(calc_rule, {}, locals_dict)
-                user_rank = convert_rank(user_info['level'])[0]
-                exp = int(user_info["exp"] * percent * min(0.1 * user_rank, 1))
+                exp = percent_exp_reward(
+                    user_info["exp"], percent, user_info["level"],
+                    anchor="gap",
+                )
                 level = user_info['level'][:3] + '初期'
                 max_exp = int(jsondata.level_data()[level]["power"] * XiuConfig().closing_exp_upper_limit)
                 exp = min(exp, max_exp)

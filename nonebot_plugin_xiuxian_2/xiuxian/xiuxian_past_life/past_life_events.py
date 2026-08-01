@@ -19,6 +19,7 @@ from ...paths import get_paths
 from .transaction_service import PastLifeChoiceService
 from .transaction_service import PastLifeFinalSettlementService
 from .transaction_service import PastLifeStartService
+from ..xiuxian_utils.numeric_bind import percent_exp_reward
 
 sql_message = XiuxianDateManage()
 items = Items()
@@ -631,9 +632,14 @@ class PastLifeEngine:
         if not user_info:
             raise ValueError("past life user missing")
 
-        # 修为奖励
-        user_rank = max(convert_rank(user_info["level"])[0] // 3, 1)
-        exp_base = int(user_info["exp"] * reward["exp_rate"] * min(0.1 * user_rank, 1))
+        # 修为奖励（L3 gap 锚 + rank//3 压制）
+        exp_base = percent_exp_reward(
+            user_info["exp"],
+            reward["exp_rate"],
+            user_info.get("level"),
+            divide_by_three=True,
+            anchor="gap",
+        )
         exp_amount = int(exp_base * reward_rate)
         if reward_rate >= 1:
             exp_amount = max(exp_amount, 10000)

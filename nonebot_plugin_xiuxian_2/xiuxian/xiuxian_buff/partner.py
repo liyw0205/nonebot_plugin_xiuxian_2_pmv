@@ -2346,7 +2346,7 @@ async def mentor_transmission_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     # 1% 基础 cap，再乘境界差效果，并套双修同款 rank 压制
     once_cap = max(
         1,
-        percent_exp_reward(apprentice_exp, 0.01, apprentice_info["level"]),
+        percent_exp_reward(apprentice_exp, 0.01, apprentice_info["level"], anchor="gap"),
     )
     give_exp = max(1, int(once_cap * effect_ratio))
     give_exp = min(give_exp, once_cap, remaining_exp)

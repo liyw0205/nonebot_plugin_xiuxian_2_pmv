@@ -169,6 +169,52 @@ def rank_suppress_factor(level_or_rank: Any, *, divide_by_three: bool = False) -
     return float(min(0.1 * rank_val, 1.0))
 
 
+def _level_power_table() -> dict:
+    """境界 power 表。可被单测 patch；运行时走 jsondata.level_data()。"""
+    from .data_source import jsondata
+
+    return jsondata.level_data()
+
+
+def stage_power_gap(level_name: Any) -> int:
+    """当前境界 power → 下一境界 power 的 gap（非负）。未知境界返回 0。"""
+    try:
+        name = str(level_name or "").strip()
+        if not name:
+            return 0
+        levels = _level_power_table()
+        if not isinstance(levels, dict) or name not in levels:
+            return 0
+        keys = list(levels.keys())
+        i = keys.index(name)
+        cur = as_int_like(levels[name].get("power"), 0)
+        if i + 1 >= len(keys):
+            return max(0, cur)
+        nxt = as_int_like(levels[keys[i + 1]].get("power"), 0)
+        return max(0, nxt - cur)
+    except Exception:
+        return 0
+
+
+def stage_next_power(level_name: Any) -> int:
+    """下一境界 power；无下一境则返回当前 power。"""
+    try:
+        name = str(level_name or "").strip()
+        if not name:
+            return 0
+        levels = _level_power_table()
+        if not isinstance(levels, dict) or name not in levels:
+            return 0
+        keys = list(levels.keys())
+        i = keys.index(name)
+        cur = as_int_like(levels[name].get("power"), 0)
+        if i + 1 >= len(keys):
+            return max(0, cur)
+        return max(0, as_int_like(levels[keys[i + 1]].get("power"), 0))
+    except Exception:
+        return 0
+
+
 def percent_exp_reward(
     current_exp: Any,
     percent: float,
@@ -176,19 +222,56 @@ def percent_exp_reward(
     *,
     divide_by_three: bool = False,
     apply_rank_suppress: bool = True,
+    anchor: str = "current",
+    once_cap: Any = None,
 ) -> int:
-    """当前修为 × 百分比，可选境界压制。返回非负 int（可超 SQLite INTEGER）。"""
-    exp = max(0, as_int_like(current_exp, 0))
+    """百分比修为奖励。返回非负 int（可超 SQLite INTEGER）。
+
+    anchor:
+      - ``current``（默认）：current_exp × % × rank_suppress（旧行为）
+      - ``gap``：本境→下境 power gap × % × rank_suppress（L3 进度预算）
+      - ``next_power``：下一境 power × % × rank_suppress
+
+    once_cap: 可选单次上限（与 anchor 结果取 min）；None 表示不封顶。
+    gap/next_power 需要境界名字符串；若只有 rank int 则回退 current。
+    """
     try:
         rate = float(percent or 0.0)
     except (TypeError, ValueError):
         rate = 0.0
-    if exp <= 0 or rate <= 0:
+    if rate <= 0:
         return 0
+
+    mode = str(anchor or "current").strip().lower()
+    base = 0
+    if mode in ("gap", "next_power") and level_or_rank is not None and not (
+        isinstance(level_or_rank, (int, float)) and not isinstance(level_or_rank, bool)
+    ):
+        if mode == "gap":
+            base = stage_power_gap(level_or_rank)
+        else:
+            base = stage_next_power(level_or_rank)
+        # gap 未知时回退 current，避免 0 奖静默
+        if base <= 0:
+            base = max(0, as_int_like(current_exp, 0))
+    else:
+        base = max(0, as_int_like(current_exp, 0))
+
+    if base <= 0:
+        return 0
+
     factor = 1.0
     if apply_rank_suppress and level_or_rank is not None:
         factor = rank_suppress_factor(level_or_rank, divide_by_three=divide_by_three)
-    return int(exp * rate * factor)
+    reward = int(base * rate * factor)
+    if once_cap is not None:
+        try:
+            cap = as_int_like(once_cap, 0)
+            if cap > 0:
+                reward = min(reward, cap)
+        except Exception:
+            pass
+    return max(0, reward)
 
 
 def bind_sqlite_param(value: Any) -> Any:

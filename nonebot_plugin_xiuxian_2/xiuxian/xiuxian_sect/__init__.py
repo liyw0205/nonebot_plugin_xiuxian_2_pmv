@@ -78,6 +78,7 @@ from .transaction_service import SectOwnerInheritService
 from .transaction_service import SectShopPurchaseService
 from .transaction_service import SectElixirClaimService
 from .transaction_service import SectOpenJoinService
+from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from .transaction_service import SectCloseJoinService
 from .transaction_service import SectMemberJoinService
 from .transaction_service import SectMainBuffLearnService
@@ -2001,7 +2002,13 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
                 await sect_task_complete.finish()
 
-            get_exp = int(user_info['exp'] * userstask[user_id]['任务内容']['give'])
+            get_exp = percent_exp_reward(
+                user_info['exp'],
+                userstask[user_id]['任务内容']['give'],
+                user_info['level'],
+                apply_rank_suppress=False,
+                anchor='gap',
+            )
             msg = ""
             exp_cap_note = ""
 
@@ -2079,7 +2086,13 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
                 await sect_task_complete.finish()
 
-            get_exp = int(user_info['exp'] * userstask[user_id]['任务内容']['give'])
+            get_exp = percent_exp_reward(
+                user_info['exp'],
+                userstask[user_id]['任务内容']['give'],
+                user_info['level'],
+                apply_rank_suppress=False,
+                anchor='gap',
+            )
             exp_cap_note = ""
 
             if user_info['sect_position'] is None:
