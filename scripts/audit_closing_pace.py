@@ -102,6 +102,19 @@ def per_min_normal(
     )
 
 
+def _xu_growth():
+    """Load card_bonus by file path (avoid package __init__ requiring NoneBot)."""
+    import importlib.util
+
+    path = PKG / "xiuxian_impart" / "card_bonus.py"
+    spec = importlib.util.spec_from_file_location("_audit_xu_card_bonus", path)
+    if spec is None or spec.loader is None:
+        raise SystemExit(f"cannot load {path}")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.effective_xu_impart_exp_up, mod.xu_impart_lv_bonus
+
+
 def per_min_xu(
     closing_exp: float,
     root: float,
@@ -112,7 +125,18 @@ def per_min_xu(
     impart_lv: int,
     blessed: float = 0.0,
     double: bool = True,
+    *,
+    use_growth_curve: bool = True,
 ) -> float:
+    """虚神界 per_min。默认走 L2 凹函数卡 + lv*0.03（与 impart_pk 一致）。"""
+    up = float(impart_exp_up or 0.0)
+    lv = int(impart_lv or 0)
+    if use_growth_curve:
+        eff_up_fn, lv_fn = _xu_growth()
+        up = float(eff_up_fn(up))
+        lv_bonus = float(lv_fn(lv))
+    else:
+        lv_bonus = lv * 0.1
     base = (
         closing_exp
         * root
@@ -120,10 +144,10 @@ def per_min_xu(
         * (1.0 + ratebuff)
         * (1.0 + clo_exp)
         * (1.0 + blessed * 0.5 / 1.5)
-        * (1.0 + impart_exp_up)
+        * (1.0 + up)
     )
     if double:
-        return base * (1.0 + impart_lv * 0.1)
+        return base * (1.0 + lv_bonus)
     return base
 
 
