@@ -207,6 +207,31 @@ def main() -> int:
         per_min_normal(closing_exp, root, spend, zizai[0], zizai[1], 0),
     )
 
+    # L5 命运软顶对照（八九闭关；root 用命运阶梯+软顶）
+    try:
+        import importlib.util
+        import json as _json
+
+        npath = PKG / "xiuxian_utils" / "numeric_bind.py"
+        spec = importlib.util.spec_from_file_location("_audit_fate_nb", npath)
+        fmod = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(fmod)
+        root_json = _json.loads((_find_data_dir() / "灵根.json").read_text(encoding="utf-8"))
+        eternal = float(root_json["永恒道果"]["type_speeds"])
+        step = float(root_json["命运道果"]["type_speeds"])
+        for lv in (0, 1, 5, 10, 20, 50):
+            fr = fmod.compute_fate_root_rate(lv, eternal, step)
+            fr_raw = fmod.compute_fate_root_rate(lv, eternal, step, soft_cap_ratio=None)
+            add(
+                f"普通 八九 命运lv{lv}",
+                per_min_normal(closing_exp, fr, spend, bajiu[0], bajiu[1], 0),
+                {"fate_rate": fr, "fate_rate_uncapped": fr_raw},
+            )
+    except Exception as exc:  # pragma: no cover - audit best-effort
+        add(f"命运审计跳过:{exc}", 0.0)
+
+
     for up, lv, tag in [
         (0.0, 0, "无卡 lv0"),
         (1.5, 0, "半卡1.5 lv0"),

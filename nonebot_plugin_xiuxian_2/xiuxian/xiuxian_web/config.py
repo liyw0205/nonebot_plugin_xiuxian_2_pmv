@@ -726,33 +726,21 @@ def inject_navigation():
     )
 
 def get_root_rate(root_type, user_id):
-    """获取灵根倍率（完整版本，参考原版实现）"""
-    # 获取灵根数据
+    """获取灵根倍率（与 XiuxianDateManage.get_root_rate / compute_fate_root_rate 一致）"""
+    from ..xiuxian_utils.numeric_bind import compute_fate_root_rate
+
     root_data = jsondata.root_data()
-    
-    # 特殊处理命运道果
     if root_type == '命运道果':
-        # 获取用户信息
         user_info = get_user_by_id(user_id)
         if not user_info:
             return 1.0
-            
         root_level = user_info.get('root_level', 0)
-        
-        # 获取永恒道果和命运道果的倍率
         eternal_rate = root_data['永恒道果']['type_speeds']
-        fate_rate = root_data['命运道果']['type_speeds']
-        
-        decay_steps = int(root_level) // 5
-        fate_bonus = max(0.5, fate_rate - decay_steps * 0.3)
-        return eternal_rate + (root_level * fate_bonus)
-    else:
-        # 普通灵根，直接从数据中获取倍率
-        if root_type in root_data:
-            return root_data[root_type]['type_speeds']
-        else:
-            # 如果找不到对应的灵根类型，返回默认值
-            return 1.0
+        fate_step = root_data['命运道果']['type_speeds']
+        return compute_fate_root_rate(root_level, eternal_rate, fate_step)
+    if root_type in root_data:
+        return root_data[root_type]['type_speeds']
+    return 1.0
 
 def get_command_icon(command_name):
     """获取命令对应的图标"""

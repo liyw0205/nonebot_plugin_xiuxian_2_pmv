@@ -7,6 +7,7 @@ from ..xiuxian_utils.player_fight import Boss_fight
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig, convert_rank, base_rank
 from ..xiuxian_utils.data_source import jsondata
+from ..xiuxian_utils.numeric_bind import percent_exp_reward
 
 sql_message = XiuxianDateManage()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
@@ -229,7 +230,13 @@ async def get_boss_battle_info(user_info, rift_rank, bot_id, persist=True):
         msg = random.choice(success_info['desc']).format(boss_info['name'])
         level = user_info['level'][:3] + '初期'
         max_exp = int(jsondata.level_data()[level]["power"] * XiuConfig().closing_exp_upper_limit * 0.1)
-        give_exp = int(random.choice(success_info["give"]["exp"]) * user_info['exp'])
+        give_exp = percent_exp_reward(
+            user_info['exp'],
+            float(random.choice(success_info["give"]["exp"])),
+            user_info.get('level'),
+            apply_rank_suppress=False,
+            anchor="gap",
+        )
         give_exp = min(give_exp, max_exp)
         give_stone = (rift_rank + user_rank) * success_info["give"]["stone"]
         outcome["delta"].update({"exp": give_exp, "stone": give_stone})
@@ -252,7 +259,13 @@ def get_dxsj_info(rift_type, user_info):
     cost_type = get_dict_type_rate(battle_data[rift_type]['cost'])
     value = random.choice(battle_data[rift_type]['cost'][cost_type]['value'])
     if cost_type == "exp":
-        exp = int(user_info['exp'] * value)
+        exp = percent_exp_reward(
+            user_info['exp'],
+            float(value),
+            user_info.get('level'),
+            apply_rank_suppress=False,
+            anchor="gap",
+        )
         nowhp = user_info['hp'] - (exp / 2) if (user_info['hp'] - (exp / 2)) > 0 else 1
         nowmp = user_info['mp'] - exp if (user_info['mp'] - exp) > 0 else 1
         outcome["delta"] = {

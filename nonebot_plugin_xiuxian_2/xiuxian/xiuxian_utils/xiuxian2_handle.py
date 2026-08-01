@@ -1237,36 +1237,16 @@ class XiuxianDateManage:
             return f"逆天之行，重获新生，新的灵根为：{lg}，类型为：{type}"
 
     def get_root_rate(self, name, user_id):
-        """获取灵根倍率"""
+        """获取灵根倍率（命运道果走 numeric_bind 阶梯+软顶，与 Web 一致）"""
+        from .numeric_bind import compute_fate_root_rate
+
         data = jsondata.root_data()
         if name == '命运道果':
-            # 基础加成（永恒道果的7.0）
             base_rate = data['永恒道果']['type_speeds']
-            # 命运道果的基础增量系数（2.0）
-            current_step_bonus = data[name]['type_speeds']
-            
+            fate_step = data[name]['type_speeds']
             user_info = self.get_user_info_with_id(user_id)
-            root_level = int((user_info or {}).get('root_level', 0))
-            
-            total_bonus = 0.0
-            remaining_levels = root_level
-            
-            # 阶梯式计算循环
-            while remaining_levels > 0:
-                # 每个阶段计算5级
-                levels_in_this_step = min(remaining_levels, 5)
-                total_bonus += levels_in_this_step * current_step_bonus
-                remaining_levels -= levels_in_this_step
-                
-                # 进入下一阶段，系数减少0.3，最低0.5
-                current_step_bonus = round(max(0.5, current_step_bonus - 0.3), 2)
-                
-                # 如果系数已经到0.5了，剩下的等级可以直接批量计算，跳出循环
-                if current_step_bonus <= 0.5:
-                    total_bonus += remaining_levels * 0.5
-                    break
-            
-            return base_rate + total_bonus
+            root_level = int((user_info or {}).get('root_level', 0) or 0)
+            return compute_fate_root_rate(root_level, base_rate, fate_step)
         else:
             return data[name]['type_speeds']
 

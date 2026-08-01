@@ -146,6 +146,70 @@ def sql_num_nonneg(value: Any):
     return out
 
 
+# 命运道果：阶梯衰减 + 相对永恒软顶（L5；非结算硬限速）
+# 帮助文案旧述「每5次降30%最低50%」对应阶梯；软顶防无限次把闭关乘区抬飞
+FATE_ROOT_SOFT_CAP_RATIO = 1.5  # ≤ 永恒 × 1.5
+FATE_ROOT_MIN_STEP = 0.5
+FATE_ROOT_STEP_LEVELS = 5
+FATE_ROOT_STEP_DECAY = 0.3
+
+
+def compute_fate_root_rate(
+    root_level: Any,
+    eternal_rate: Any,
+    fate_step: Any,
+    *,
+    soft_cap_ratio: Any = FATE_ROOT_SOFT_CAP_RATIO,
+    min_step: float = FATE_ROOT_MIN_STEP,
+    step_levels: int = FATE_ROOT_STEP_LEVELS,
+    step_decay: float = FATE_ROOT_STEP_DECAY,
+) -> float:
+    """命运道果倍率：base(永恒) + 阶梯 bonus，可选 soft cap。
+
+    与 ``XiuxianDateManage.get_root_rate`` / Web 面板共用，避免双端公式漂移。
+    soft_cap_ratio=None 时仅算阶梯（审计用）。
+    """
+    try:
+        base = float(eternal_rate or 0.0)
+    except (TypeError, ValueError):
+        base = 0.0
+    try:
+        step = float(fate_step or 0.0)
+    except (TypeError, ValueError):
+        step = 0.0
+    try:
+        lv = int(root_level or 0)
+    except (TypeError, ValueError):
+        lv = 0
+    lv = max(0, lv)
+
+    total_bonus = 0.0
+    remaining = lv
+    current = step
+    levels_per = max(1, int(step_levels or 5))
+    floor_step = float(min_step if min_step is not None else 0.5)
+    decay = float(step_decay if step_decay is not None else 0.3)
+
+    while remaining > 0:
+        n = min(remaining, levels_per)
+        total_bonus += n * current
+        remaining -= n
+        current = round(max(floor_step, current - decay), 2)
+        if current <= floor_step:
+            total_bonus += remaining * floor_step
+            break
+
+    rate = base + total_bonus
+    if soft_cap_ratio is not None:
+        try:
+            ratio = float(soft_cap_ratio)
+        except (TypeError, ValueError):
+            ratio = float(FATE_ROOT_SOFT_CAP_RATIO)
+        if ratio > 0 and base > 0:
+            rate = min(rate, base * ratio)
+    return float(rate)
+
+
 def rank_suppress_factor(level_or_rank: Any, *, divide_by_three: bool = False) -> float:
     """双修同款境界压制：min(0.1 * rank_slot, 1)。
 

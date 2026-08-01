@@ -2424,6 +2424,8 @@ async def partner_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     await partner_rank.finish()
 
 def trigger_partner_exp_share(user_id, new_level):
+    from ..xiuxian_utils.numeric_bind import percent_exp_reward
+
     user_id = str(user_id)
     partner_data = load_partner(user_id)
     if partner_data and partner_data.get('partner_id'):
@@ -2436,8 +2438,11 @@ def trigger_partner_exp_share(user_id, new_level):
         partner_exp = int(partner_info['exp'])
         partner_name = partner_info['user_name']
     
-        # 计算可赠送的修为量：突破者当前修为的1%
-        give_exp = int(self_exp * 0.01)
+        # 计算可赠送的修为量：突破者 gap 的 1%（L3 锚），上限仍为道侣当前修为 10%
+        give_exp = percent_exp_reward(
+            self_exp, 0.01, user_info.get("level"),
+            apply_rank_suppress=False, anchor="gap",
+        )
     
         # 上限：不得超过道侣当前修为的10%
         max_give = int(partner_exp * 0.10)
