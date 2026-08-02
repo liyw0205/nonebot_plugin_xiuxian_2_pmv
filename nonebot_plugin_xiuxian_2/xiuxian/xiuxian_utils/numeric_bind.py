@@ -240,8 +240,29 @@ def _level_power_table() -> dict:
     return jsondata.level_data()
 
 
+# 百分比 gap 锚：相邻境正常；表上「一跳到顶」过大时相对上一境 gap 软顶。
+# 末境无下一境：禁止 gap=full power（至高 1e29 会把 1% 奖打飞），沿用上一境有效 gap。
+GAP_JUMP_SOFT_MULT = 8
+
+
+def _raw_adjacent_gap(levels: dict, keys: list, index: int) -> int:
+    """keys[index] → keys[index+1] 的 raw power 差；无下一境返回 0。"""
+    if index < 0 or index + 1 >= len(keys):
+        return 0
+    cur = as_int_like(levels[keys[index]].get("power"), 0)
+    nxt = as_int_like(levels[keys[index + 1]].get("power"), 0)
+    return max(0, nxt - cur)
+
+
 def stage_power_gap(level_name: Any) -> int:
-    """当前境界 power → 下一境界 power 的 gap（非负）。未知境界返回 0。"""
+    """当前境界 → 下一境界的 **有效** gap（供百分比锚）。
+
+    - 正常相邻：raw gap
+    - raw 相对「上一境 raw gap」超过 ``GAP_JUMP_SOFT_MULT`` 倍：软顶为 prev_raw × mult
+      （永恒圆满→至高 这类表断层，避免日常按 1e29 进度发奖）
+    - 已是最后一境：不用 full power；沿用上一境的 **有效** gap
+    - 仅一境/未知：0
+    """
     try:
         name = str(level_name or "").strip()
         if not name:
@@ -251,17 +272,33 @@ def stage_power_gap(level_name: Any) -> int:
             return 0
         keys = list(levels.keys())
         i = keys.index(name)
-        cur = as_int_like(levels[name].get("power"), 0)
+        mult = max(1, int(GAP_JUMP_SOFT_MULT))
+
         if i + 1 >= len(keys):
-            return max(0, cur)
-        nxt = as_int_like(levels[keys[i + 1]].get("power"), 0)
-        return max(0, nxt - cur)
+            # 末境：沿用上一境有效 gap（已含断层 soft cap）
+            if i <= 0:
+                return 0
+            return stage_power_gap(keys[i - 1])
+
+        raw = _raw_adjacent_gap(levels, keys, i)
+        if raw <= 0:
+            return 0
+        if i <= 0:
+            return raw
+        prev_raw = _raw_adjacent_gap(levels, keys, i - 1)
+        if prev_raw > 0 and raw > prev_raw * mult:
+            return int(prev_raw * mult)
+        return raw
     except Exception:
         return 0
 
 
 def stage_next_power(level_name: Any) -> int:
-    """下一境界 power；无下一境则返回当前 power。"""
+    """下一境界 power；无下一境则返回当前 power。
+
+    注意：``anchor=next_power`` 仍用表值。超大顶境百分比请优先 ``anchor=gap``
+   （gap 已对断层/末境做有效进度）。
+    """
     try:
         name = str(level_name or "").strip()
         if not name:

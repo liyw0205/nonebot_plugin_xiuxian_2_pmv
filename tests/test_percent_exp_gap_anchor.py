@@ -96,3 +96,56 @@ def test_percent_exp_once_cap():
             once_cap=100,
         )
     assert got == 100
+
+
+def test_stage_power_gap_caps_huge_jump_vs_prev_gap():
+    """永恒→至高 类断层：raw gap 远大于上一境 gap 时 soft cap。"""
+    nb = _import_numeric_bind()
+    levels = {
+        "永恒境中期": {"power": 1000, "spend": 1},
+        "永恒境圆满": {"power": 2000, "spend": 1},  # prev gap = 1000
+        "至高": {"power": 10**20, "spend": 1},  # raw gap from 圆满 = ~1e20
+    }
+    with mock.patch.object(nb, "_level_power_table", lambda: levels):
+        raw_would = 10**20 - 2000
+        prev_gap = 1000
+        got = nb.stage_power_gap("永恒境圆满")
+    assert got < raw_would
+    assert got == prev_gap * nb.GAP_JUMP_SOFT_MULT
+    # 正常相邻 gap 不砍
+    with mock.patch.object(nb, "_level_power_table", lambda: levels):
+        assert nb.stage_power_gap("永恒境中期") == 1000
+
+
+def test_stage_power_gap_final_realm_not_full_power():
+    """至高无下一境：禁止 gap=full power；沿用上一境有效（已 cap）gap。"""
+    nb = _import_numeric_bind()
+    levels = {
+        "永恒境中期": {"power": 1000, "spend": 1},
+        "永恒境圆满": {"power": 2000, "spend": 1},
+        "至高": {"power": 10**20, "spend": 1},
+    }
+    with mock.patch.object(nb, "_level_power_table", lambda: levels):
+        final_gap = nb.stage_power_gap("至高")
+        prev_eff = nb.stage_power_gap("永恒境圆满")
+    assert final_gap == prev_eff
+    assert final_gap != 10**20
+    assert final_gap == 1000 * nb.GAP_JUMP_SOFT_MULT
+
+
+def test_percent_exp_gap_final_realm_uses_capped_gap():
+    nb = _import_numeric_bind()
+    levels = {
+        "永恒境中期": {"power": 1000, "spend": 1},
+        "永恒境圆满": {"power": 2000, "spend": 1},
+        "至高": {"power": 10**20, "spend": 1},
+    }
+    with mock.patch.object(nb, "_level_power_table", lambda: levels):
+        got = nb.percent_exp_reward(
+            10**30,
+            0.01,
+            "至高",
+            anchor="gap",
+            apply_rank_suppress=False,
+        )
+    assert got == int(1000 * nb.GAP_JUMP_SOFT_MULT * 0.01)
