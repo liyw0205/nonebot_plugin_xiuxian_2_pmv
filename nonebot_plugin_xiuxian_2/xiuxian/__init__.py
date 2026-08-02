@@ -490,6 +490,80 @@ def _is_other_bot_at_message(bot, event):
     return False
 
 
+def _is_blank_text_segment(segment) -> bool:
+    if getattr(segment, "type", "") != "text":
+        return False
+    text = _safe_str((getattr(segment, "data", {}) or {}).get("text"))
+    return not text.replace("\xa0", " ").strip()
+
+
+def _mention_segment_user_id(segment) -> str:
+    data = getattr(segment, "data", {}) or {}
+    if not isinstance(data, dict):
+        return ""
+    for key in ("user_id", "id", "qq", "member_openid", "openid", "user_openid"):
+        value = data.get(key)
+        if value:
+            return _safe_str(value)
+    return ""
+
+
+def _is_human_user_mention(segment, bot, event) -> bool:
+    """群内艾特「真人用户」（非本机器人、非其他机器人）。"""
+    seg_type = getattr(segment, "type", "")
+    if seg_type not in ("group_mention_user", "mention_user", "at"):
+        return False
+    if _is_self_mention_segment(segment, bot, event):
+        return False
+    if _is_other_bot_mention(segment):
+        return False
+
+    data = getattr(segment, "data", {}) or {}
+    if isinstance(data, dict):
+        if bool(data.get("bot") or data.get("is_bot")) and not bool(data.get("is_you")):
+            return False
+        if bool(data.get("is_you")):
+            return False
+
+    # group_mention_user 可能只有 is_you/bot 标记；有 user id 或明确非 bot 即视为用户
+    if seg_type == "group_mention_user":
+        return not bool((data or {}).get("bot")) and not bool((data or {}).get("is_you"))
+    return bool(_mention_segment_user_id(segment))
+
+
+def _is_leading_other_user_at_without_self(bot, event) -> bool:
+    """全量群消息：以「@其他用户」开头且全程未 @ 本机器人 → 闲聊/对他人说话，忽略指令。
+
+    放行示例：
+    - 双修 @用户 / @BOT 双修@用户 / @用户 双修@BOT（含对本机器人的艾特）
+    忽略示例：
+    - @用户 早不买… / @用户 双修（仅艾特他人、未艾特本机器人）
+    """
+    if not _is_qq_group_message_create(event):
+        return False
+
+    try:
+        message = event.get_message()
+    except Exception:
+        return False
+    if not message:
+        return False
+
+    # 消息任意位置艾特了本机器人 → 视为对本机器人下指令（可带目标用户）
+    if _has_self_mention(bot, event, message):
+        return False
+    if bool(getattr(event, "to_me", False)):
+        return False
+
+    idx = 0
+    while idx < len(message) and _is_blank_text_segment(message[idx]):
+        idx += 1
+    if idx >= len(message):
+        return False
+
+    return _is_human_user_mention(message[idx], bot, event)
+
+
 def _strip_left_blank_text(message):
     while message and getattr(message[0], "type", "") == "text":
         text = _safe_str((getattr(message[0], "data", {}) or {}).get("text"))
@@ -643,6 +717,8 @@ async def do_something(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 
     if _is_other_bot_at_message(bot, event):
         raise IgnoredException("消息艾特了其他机器人,已忽略")
+    if _is_leading_other_user_at_without_self(bot, event):
+        raise IgnoredException("消息以艾特其他用户开头且未艾特本机器人,已忽略")
 
     qq_group_at_removed = _normalize_qq_group_at_message(bot, event)
     await _check_command_ingress_rate_limit(bot, event)
@@ -651,6 +727,8 @@ async def do_something(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 
     if _is_other_bot_at_message(bot, event):
         raise IgnoredException("消息艾特了其他机器人,已忽略")
+    if _is_leading_other_user_at_without_self(bot, event):
+        raise IgnoredException("消息以艾特其他用户开头且未艾特本机器人,已忽略")
 
     qq_group_at_removed = _normalize_qq_group_at_message(bot, event) or qq_group_at_removed
     if qq_group_at_removed:
