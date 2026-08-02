@@ -8,6 +8,10 @@ import os
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
 player_data_manager = PlayerDataManager()
 
+# 世界 BOSS 每日讨伐上限（讨伐校验 / 积分信息 / 日常 共用）
+DAILY_BATTLE_COUNT = 30
+
+
 class BossLimit:
     def __init__(self):
         self.default_data = {

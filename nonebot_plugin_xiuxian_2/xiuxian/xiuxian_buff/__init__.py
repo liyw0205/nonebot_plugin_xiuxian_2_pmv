@@ -38,7 +38,7 @@ from ..xiuxian_work import count
 from ..xiuxian_impart_pk.impart_pk_uitls import impart_pk_check
 from ..xiuxian_impart_pk.xu_world import xu_world
 from ..xiuxian_impart_pk.impart_pk import impart_pk
-from ..xiuxian_boss.boss_limit import boss_limit
+from ..xiuxian_boss.boss_limit import boss_limit, DAILY_BATTLE_COUNT
 from ..xiuxian_sect import isUserTask, userstask
 from ..xiuxian_sect.sectconfig import get_config
 from ..xiuxian_rift import GLOBAL_RIFT_KEY, group_rift
@@ -1217,7 +1217,7 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     # 9. 获取讨伐次数信息
     today_battle_count = boss_limit.get_battle_count(user_id)
-    max_battle_count = 30
+    max_battle_count = DAILY_BATTLE_COUNT
     battle_count = max_battle_count - today_battle_count
     if battle_count == 0:
         battle_msg = "✅ 已完成"
