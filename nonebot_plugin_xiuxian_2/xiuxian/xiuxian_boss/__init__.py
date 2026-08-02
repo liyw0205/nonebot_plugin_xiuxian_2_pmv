@@ -424,7 +424,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
 
     # 检查每日讨伐次数限制
     today_battle_count = boss_limit.get_battle_count(user_id)
-    battle_count = 8
+    battle_count = 30
     if today_battle_count >= battle_count:
         msg = f"今日讨伐次数已达上限（{battle_count}次），请明日再来！"
         await handle_send(bot, event, msg)
@@ -1305,7 +1305,7 @@ async def boss_integral_info_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     # 设置每日上限
     integral_limit = 12000
     stone_limit = 300000000
-    battle_count = 8
+    battle_count = 30
     
     # 构建消息
     msg = (

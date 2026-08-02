@@ -45,7 +45,7 @@ work_abort_cleanup_service = WorkAbortCleanupService(get_paths().game_db)
 work_daily_refresh_reset_service = WorkDailyRefreshResetService(get_paths().game_db)
 sql_message = XiuxianDateManage()  # sql类
 items = Items()
-count = 3  # 每日刷新次数（节奏：日轻周累；周有效约 日×7×0.71）
+count = 5  # 每日刷新次数
 WORK_EXPIRE_MINUTES = 30  # 悬赏令过期时间(分钟)
 
 def format_reward_item(item_id: int) -> str:

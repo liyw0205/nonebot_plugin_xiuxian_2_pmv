@@ -164,8 +164,8 @@ class XiuConfig:
         # 境界列表，别动
         self.level_up_cd = 0
         # 突破CD(分钟)
-        self.closing_exp = 270
-        # 闭关每分钟获取的修为（参考：永恒+八九@祭道普通闭关约 40 天/小境界）
+        self.closing_exp = 100
+        # 闭关每分钟获取的修为
         self.closing_exp_upper_limit = 1.5
         # 闭关获取修为上限（例如：1.5 下个境界的修为数*1.5）
         self.mentor_transmission_limit = 5
