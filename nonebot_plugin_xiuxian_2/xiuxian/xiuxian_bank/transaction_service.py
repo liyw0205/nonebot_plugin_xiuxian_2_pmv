@@ -430,18 +430,29 @@ class BankUpgradeService:
                     "SELECT 1 FROM player_data.sqlite_master WHERE type='table' AND name=%s", ("bankinfo",)
                 ).fetchone()
                 if table is None:
-                    conn.rollback()
-                    return result("state_changed", wallet_stone=int(user[0]))
+                    conn.execute(
+                        "CREATE TABLE player_data.bankinfo (user_id TEXT PRIMARY KEY, savestone INTEGER, savetime TEXT, banklevel TEXT)"
+                    )
                 columns = {
                     str(column[1]) for column in conn.execute("PRAGMA player_data.table_info(bankinfo)").fetchall()
                 }
-                if "banklevel" not in columns:
-                    conn.rollback()
-                    return result("state_changed", wallet_stone=int(user[0]))
+                for field, data_type in (("savestone", "INTEGER"), ("savetime", "TEXT"), ("banklevel", "TEXT")):
+                    if field not in columns:
+                        conn.execute(
+                            f"ALTER TABLE player_data.bankinfo ADD COLUMN {db_backend.quote_ident(field)} {data_type}"
+                        )
                 account = conn.execute(
                     "SELECT banklevel FROM player_data.bankinfo WHERE user_id=%s", (user_id,)
                 ).fetchone()
-                if account is None or str(account[0]) != expected_level:
+                # 信息页对无档案用户展示默认 L1；结息/升级此前直接 state_changed。
+                # 与存款一致：无行则按 expected 建档后再乐观锁推进。
+                if account is None:
+                    conn.execute(
+                        "INSERT INTO player_data.bankinfo (user_id, savestone, savetime, banklevel) VALUES (%s, %s, %s, %s)",
+                        (user_id, 0, "", expected_level),
+                    )
+                    account = (expected_level,)
+                if str(account[0]) != expected_level:
                     conn.rollback()
                     return result("state_changed", wallet_stone=int(user[0]))
 
@@ -569,19 +580,28 @@ class BankInterestService:
                     "SELECT 1 FROM player_data.sqlite_master WHERE type='table' AND name=%s", ("bankinfo",)
                 ).fetchone()
                 if table is None:
-                    conn.rollback()
-                    return result("state_changed", wallet_stone=int(user[0]))
+                    conn.execute(
+                        "CREATE TABLE player_data.bankinfo (user_id TEXT PRIMARY KEY, savestone INTEGER, savetime TEXT, banklevel TEXT)"
+                    )
                 columns = {
                     str(column[1]) for column in conn.execute("PRAGMA player_data.table_info(bankinfo)").fetchall()
                 }
-                if not {"savestone", "savetime", "banklevel"}.issubset(columns):
-                    conn.rollback()
-                    return result("state_changed", wallet_stone=int(user[0]))
+                for field, data_type in (("savestone", "INTEGER"), ("savetime", "TEXT"), ("banklevel", "TEXT")):
+                    if field not in columns:
+                        conn.execute(
+                            f"ALTER TABLE player_data.bankinfo ADD COLUMN {db_backend.quote_ident(field)} {data_type}"
+                        )
                 account = conn.execute(
                     "SELECT COALESCE(savestone, 0), savetime, banklevel FROM player_data.bankinfo WHERE user_id=%s",
                     (user_id,),
                 ).fetchone()
-                if account is None or (int(account[0]), str(account[1]), str(account[2])) != (
+                if account is None:
+                    conn.execute(
+                        "INSERT INTO player_data.bankinfo (user_id, savestone, savetime, banklevel) VALUES (%s, %s, %s, %s)",
+                        (user_id, expected_saved_stone, expected_saved_at, bank_level),
+                    )
+                    account = (expected_saved_stone, expected_saved_at, bank_level)
+                if (int(account[0]), str(account[1] or ""), str(account[2])) != (
                     expected_saved_stone, expected_saved_at, bank_level
                 ):
                     conn.rollback()
@@ -593,7 +613,7 @@ class BankInterestService:
                 )
                 updated = conn.execute(
                     "UPDATE player_data.bankinfo SET savetime=%s WHERE user_id=%s "
-                    "AND COALESCE(savestone, 0)=%s AND savetime=%s AND banklevel=%s",
+                    "AND COALESCE(savestone, 0)=%s AND COALESCE(savetime, '')=%s AND banklevel=%s",
                     (settled_at, user_id, expected_saved_stone, expected_saved_at, bank_level),
                 )
                 if credited.rowcount != 1 or updated.rowcount != 1:

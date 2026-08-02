@@ -81,6 +81,14 @@ class BankUpgradeServiceTests(unittest.TestCase):
             self.upgrade("rollback")
         self.assertEqual(self.state(), (1000, "1"))
 
+    def test_missing_bankinfo_row_is_created_and_upgraded(self) -> None:
+        """信息页对无档案用户展示默认 L1；升级应建档而非 state_changed。"""
+        with db_backend.transaction(self.player_database) as conn:
+            conn.execute("DELETE FROM bankinfo WHERE user_id=%s", ("user",))
+        result = self.upgrade("bootstrap")
+        self.assertEqual((result.status, result.wallet_stone, result.bank_level), ("applied", 700, "2"))
+        self.assertEqual(self.state(), (700, "2"))
+
 
 if __name__ == "__main__":
     unittest.main()

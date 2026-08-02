@@ -81,6 +81,18 @@ class BankInterestServiceTests(unittest.TestCase):
             self.settle("rollback")
         self.assertEqual(self.state(), (1000, (500, "old", "1")))
 
+    def test_missing_bankinfo_row_is_created_and_settled(self) -> None:
+        """无 bankinfo 行时信息页用内存默认；结息应建档写 savetime，而非假 state_changed。"""
+        with db_backend.transaction(self.player_database) as conn:
+            conn.execute("DELETE FROM bankinfo WHERE user_id=%s", ("user",))
+        result = self.service.settle("bootstrap", "user", 0, "old", "1", 0, "new")
+        self.assertEqual((result.status, result.interest, result.wallet_stone), ("applied", 0, 1000))
+        with db_backend.connection(self.player_database) as conn:
+            row = conn.execute(
+                "SELECT savestone, savetime, banklevel FROM bankinfo WHERE user_id=%s", ("user",)
+            ).fetchone()
+        self.assertEqual((int(row[0]), str(row[1]), str(row[2])), (0, "new", "1"))
+
 
 if __name__ == "__main__":
     unittest.main()
