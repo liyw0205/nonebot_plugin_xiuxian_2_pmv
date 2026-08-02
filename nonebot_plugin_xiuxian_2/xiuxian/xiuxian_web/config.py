@@ -587,6 +587,12 @@ CONFIG_EDITABLE_FIELDS = {
         "type": "int",
         "category": "云备份设置"
     },
+    "local_backup_keep_days": {
+        "name": "本地备份保留天数",
+        "description": "本地 backups 下数据库/插件/配置备份超过该天数在下次备份时清理。0 表示不自动删，默认 10",
+        "type": "int",
+        "category": "云备份设置"
+    },
     "custom_proxy_enabled": {
         "name": "启用自定义代理",
         "description": "开启后，番剧等需代理的 HTTP 请求经下方地址转发",

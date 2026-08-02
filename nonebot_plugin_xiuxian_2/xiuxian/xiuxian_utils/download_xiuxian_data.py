@@ -1111,6 +1111,15 @@ class UpdateManager:
             except Exception as e:
                 logger.warning(f"云备份执行异常: {e}")
 
+            try:
+                self.clean_old_backups(
+                    backup_dir,
+                    patterns=("backup_*.zip",),
+                    keep_days=self._local_backup_keep_days(),
+                )
+            except Exception as e:
+                logger.warning(f"插件本地旧备份清理异常: {e}")
+
             return True, backup_path
         except Exception as e:
             logger.error(f"备份失败: {e}")
@@ -1162,6 +1171,15 @@ class UpdateManager:
                         logger.warning(f"配置云备份失败: {up_msg}")
             except Exception as e:
                 logger.warning(f"配置云备份执行异常: {e}")
+
+            try:
+                self.clean_old_backups(
+                    backup_dir,
+                    patterns=("config_backup_*.json",),
+                    keep_days=self._local_backup_keep_days(),
+                )
+            except Exception as e:
+                logger.warning(f"配置本地旧备份清理异常: {e}")
 
             return True, backup_path
         except Exception as e:
@@ -1776,28 +1794,89 @@ class UpdateManager:
             except Exception as e:
                 logger.warning(f"[DB云备份] 执行异常: {e}")
 
-            self.clean_old_backups(backup_dir, keep_days=10)
+            self.clean_old_backups(
+                backup_dir,
+                patterns=("db_backup_*.zip",),
+                keep_days=self._local_backup_keep_days(),
+            )
             return True, f"数据库备份完成: {zip_name}，已备份: {', '.join(added)}"
         except Exception as e:
             return False, f"数据库备份失败: {e}"
 
-    def clean_old_backups(self, backup_dir, keep_days=10):
-        """清理本地旧备份"""
+    @staticmethod
+    def _local_backup_keep_days(default: int = 10) -> int:
+        """本地备份保留天数：XiuConfig.local_backup_keep_days；0=不清理。"""
+        try:
+            raw = getattr(XiuConfig(), "local_backup_keep_days", default)
+            days = int(raw)
+        except Exception:
+            days = int(default)
+        return max(0, days)
+
+    @staticmethod
+    def _backup_file_timestamp(path: Path) -> datetime | None:
+        """从备份文件名解析时间；失败则回退 mtime。"""
+        stem = path.stem
+        # db_backup_YYYYMMDD_HHMMSS / backup_YYYYMMDD_HHMMSS_ver / config_backup_YYYYMMDD_HHMMSS
+        for pat in (
+            r"(?P<ts>\d{8}_\d{6})",
+        ):
+            m = re.search(pat, stem)
+            if m:
+                try:
+                    return datetime.strptime(m.group("ts"), "%Y%m%d_%H%M%S")
+                except Exception:
+                    pass
+        try:
+            return datetime.fromtimestamp(path.stat().st_mtime)
+        except Exception:
+            return None
+
+    def clean_old_backups(
+        self,
+        backup_dir,
+        keep_days: int | None = None,
+        patterns: tuple[str, ...] | list[str] | str | None = None,
+    ):
+        """清理本地旧备份。
+
+        - keep_days: None 用配置 local_backup_keep_days；0 表示跳过
+        - patterns: 文件 glob，默认 *.zip（兼容旧调用）
+        """
         try:
             backup_dir = Path(backup_dir)
+            if not backup_dir.exists():
+                return True, "备份目录不存在，跳过清理"
+            if keep_days is None:
+                keep_days = self._local_backup_keep_days()
+            keep_days = int(keep_days)
+            if keep_days <= 0:
+                return True, "本地保留天数<=0，跳过清理"
+
+            if patterns is None:
+                patterns = ("*.zip",)
+            elif isinstance(patterns, str):
+                patterns = (patterns,)
+
             now = datetime.now()
-            for f in backup_dir.glob("*.zip"):
-                parts = f.stem.split('_')
-                if len(parts) >= 4:
-                    try:
-                        ts = f"{parts[-2]}_{parts[-1]}"
-                        t = datetime.strptime(ts, "%Y%m%d_%H%M%S")
-                        if (now - t).days > keep_days:
-                            f.unlink()
-                            logger.info(f"[DB备份] 清理旧文件: {f.name}")
-                    except Exception:
+            deleted = 0
+            seen: set[Path] = set()
+            for pattern in patterns:
+                for f in backup_dir.glob(pattern):
+                    if not f.is_file() or f in seen:
                         continue
-            return True, "本地旧备份清理完成"
+                    seen.add(f)
+                    t = self._backup_file_timestamp(f)
+                    if t is None:
+                        continue
+                    if (now - t).days > keep_days:
+                        try:
+                            f.unlink()
+                            deleted += 1
+                            logger.info(f"[本地备份] 清理旧文件: {f.name}")
+                        except Exception as e:
+                            logger.warning(f"[本地备份] 删除失败 {f.name}: {e}")
+            return True, f"本地旧备份清理完成：删除{deleted}个（>{keep_days}天）"
         except Exception as e:
             return False, f"清理旧备份失败: {e}"
 

@@ -126,6 +126,8 @@ class XiuConfig:
         # 在 target_subdir 下再套一层子目录
         self.webdav_delete_days = 0
         # 删除云端多少天前备份；0或空表示不删
+        self.local_backup_keep_days = 10
+        # 本地 backups 下库/插件/配置自动清理天数；0 表示不自动删
 
         self.custom_proxy_enabled = False
         self.custom_proxy = ""
