@@ -1237,7 +1237,7 @@ class XiuxianDateManage:
             return f"逆天之行，重获新生，新的灵根为：{lg}，类型为：{type}"
 
     def get_root_rate(self, name, user_id):
-        """获取灵根倍率（命运道果走 numeric_bind 阶梯+软顶，与 Web 一致）"""
+        """获取灵根倍率（命运道果走 numeric_bind 阶梯累加，与 Web 一致）"""
         from .numeric_bind import compute_fate_root_rate
 
         data = jsondata.root_data()
