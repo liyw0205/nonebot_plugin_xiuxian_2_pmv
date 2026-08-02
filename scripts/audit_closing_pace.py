@@ -128,7 +128,7 @@ def per_min_xu(
     *,
     use_growth_curve: bool = True,
 ) -> float:
-    """虚神界 per_min。默认走 L2 凹函数卡 + lv*0.03（与 impart_pk 一致）。"""
+    """虚神界 per_min。默认走 L2 凹函数卡 + lv*XU_IMPART_LV_RATE（与 impart_pk 一致）。"""
     up = float(impart_exp_up or 0.0)
     lv = int(impart_lv or 0)
     if use_growth_curve:

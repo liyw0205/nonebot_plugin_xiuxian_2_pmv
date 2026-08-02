@@ -14,7 +14,7 @@ BONUS_FIELDS = (
 # 目标：closing_exp 抬高后，满卡+活跃 lv 相对普通闭关仍有优势，但不至理论数天破境
 XU_EXP_UP_SOFT_MAX = 1.0
 XU_EXP_UP_TAU = 1.2
-XU_IMPART_LV_RATE = 0.03
+XU_IMPART_LV_RATE = 0.05
 XU_IMPART_LV_MAX = 30
 
 
@@ -59,7 +59,7 @@ def effective_xu_impart_exp_up(raw_exp_up: Any) -> float:
 
 
 def xu_impart_lv_bonus(impart_lv: Any) -> float:
-    """Level contribution to 虚神界 double/修炼: was lv*0.1, now lv*0.03."""
+    """Level contribution to 虚神界 double/修炼: lv * XU_IMPART_LV_RATE (default 5%/级)."""
     try:
         lv = int(impart_lv or 0)
     except (TypeError, ValueError):

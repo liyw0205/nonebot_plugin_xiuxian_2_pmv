@@ -66,7 +66,7 @@ def test_xu_impart_lv_bonus_rate_and_clamp():
     cb = _load_card_bonus()
     assert cb.xu_impart_lv_bonus(0) == 0.0
     assert cb.xu_impart_lv_bonus(10) == pytest.approx(10 * cb.XU_IMPART_LV_RATE)
-    assert cb.XU_IMPART_LV_RATE == pytest.approx(0.03)
+    assert cb.XU_IMPART_LV_RATE == pytest.approx(0.05)
     assert cb.xu_impart_lv_bonus(10) < 10 * 0.1
     assert cb.xu_impart_lv_bonus(cb.XU_IMPART_LV_MAX + 50) == pytest.approx(
         cb.XU_IMPART_LV_MAX * cb.XU_IMPART_LV_RATE
