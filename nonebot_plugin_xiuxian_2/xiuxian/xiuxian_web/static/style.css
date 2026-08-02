@@ -4036,6 +4036,33 @@ div[style*="overflow-x: auto"] {
         0 28px 90px var(--glass-shadow-deep);
 }
 
+[data-theme='dark'] .login-card {
+    background: var(--surface-glass-strong, var(--bg-secondary));
+    border: 1px solid var(--border-color, rgba(255,255,255,.12));
+    color: var(--text-primary);
+}
+
+[data-theme='dark'] .login-brand .page-title,
+[data-theme='dark'] .login-brand .page-subtitle {
+    color: var(--text-primary);
+}
+
+[data-theme='dark'] .login-brand .page-subtitle {
+    color: var(--text-secondary);
+}
+
+.config-type-hint,
+.config-desc {
+    color: var(--text-secondary, #666);
+    font-style: italic;
+}
+
+.config-desc {
+    display: block;
+    margin-top: 5px;
+    font-style: normal;
+}
+
 .top-progress {
     height: 3px;
     background: linear-gradient(90deg, var(--success-color), var(--info-color), var(--accent-color));

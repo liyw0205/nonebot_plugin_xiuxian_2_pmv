@@ -47,7 +47,7 @@
                 <div class="form-group">
                     <label for="{{ config.field_name }}" title="{{ config.description }}">
                         {{ config.name }}
-                        <small style="color: #666; font-style: italic;">({{ config.type }})</small>
+                        <small class="config-type-hint">({{ config.type }})</small>
                     </label>
                     
                     {% if config.type == 'bool' %}
@@ -82,7 +82,7 @@
                            value="{{ config.value }}">
                     {% endif %}
                     
-                    <small style="color: #666; display: block; margin-top: 5px;">{{ config.description }}</small>
+                    <small class="config-desc">{{ config.description }}</small>
                 </div>
                 {% endfor %}
             </form>
@@ -271,12 +271,42 @@
     border: 1px solid var(--border-color, #ddd);
     border-radius: 8px;
     background: var(--surface-muted, #f7f8fa);
+    color: var(--text-primary, inherit);
 }
-.qq-bind-copy h3 { margin-top: 0; }
+.qq-bind-copy h3 {
+    margin-top: 0;
+    color: var(--text-primary, inherit);
+}
+.qq-bind-copy p,
+.qq-bind-qr small {
+    color: var(--text-secondary, #666);
+}
 .qq-bind-status { margin-top: 0.75rem; min-height: 1.5rem; }
 .qq-bind-qr { text-align: center; }
-.qq-bind-qr img { display: block; width: 220px; height: 220px; margin: 0 auto 0.5rem; background: #fff; }
+.qq-bind-qr img {
+    display: block;
+    width: 220px;
+    height: 220px;
+    margin: 0 auto 0.5rem;
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid var(--border-color, #ddd);
+    box-shadow: 0 8px 24px var(--shadow-color, rgba(0,0,0,.12));
+}
 .qq-bind-qr small { display: block; }
+[data-theme='dark'] .qq-bind-panel {
+    background: color-mix(in srgb, var(--bg-secondary, #1a2332) 88%, transparent);
+    border-color: var(--border-color, rgba(255,255,255,.12));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+}
+[data-theme='dark'] .qq-bind-qr img {
+    background: #fff; /* 二维码需白底保证扫码对比度 */
+    border-color: rgba(255,255,255,.16);
+}
+.config-form .form-group label small,
+.config-form .form-group > small {
+    color: var(--text-secondary, #666) !important;
+}
 @media (max-width: 720px) {
     .qq-bind-panel { grid-template-columns: 1fr; }
 }

@@ -324,6 +324,96 @@ CONFIG_EDITABLE_FIELDS = {
         "type": "float",
         "category": "修炼设置"
     },
+    "mentor_transmission_limit": {
+        "name": "师徒传功日限",
+        "description": "师徒传功每日次数（按用户总次数）",
+        "type": "int",
+        "category": "师徒设置"
+    },
+    "mentor_max_apprentices": {
+        "name": "收徒上限",
+        "description": "师父最多可收徒弟数量",
+        "type": "int",
+        "category": "师徒设置"
+    },
+    "mentor_cooldown_days": {
+        "name": "师父收徒冷却",
+        "description": "师父逐出徒弟后的收徒冷却天数",
+        "type": "int",
+        "category": "师徒设置"
+    },
+    "mentor_apprentice_cooldown_days": {
+        "name": "徒弟拜师冷却",
+        "description": "徒弟离开师门后的拜师冷却天数",
+        "type": "int",
+        "category": "师徒设置"
+    },
+    "mentor_max_effect_gap": {
+        "name": "传功最大境界差",
+        "description": "师徒传功达到最大效果需要的境界差",
+        "type": "int",
+        "category": "师徒设置"
+    },
+    "mentor_new_bind_transmission_wait_hours": {
+        "name": "新拜师传功等待",
+        "description": "新拜师后多少小时内不可传功",
+        "type": "int",
+        "category": "师徒设置"
+    },
+    "mentor_same_pair_rebind_cooldown_days": {
+        "name": "同对再拜冷却",
+        "description": "与同一师父解除后再次拜同一人的冷却天数",
+        "type": "int",
+        "category": "师徒设置"
+    },
+    "mentor_graduate_pair_rebind_cooldown_days": {
+        "name": "出师后再拜冷却",
+        "description": "出师后再次拜同一师父的冷却天数",
+        "type": "int",
+        "category": "师徒设置"
+    },
+    "mentor_graduate_apprentice_stone_reward": {
+        "name": "出师徒弟灵石",
+        "description": "徒弟正常出师获得的灵石",
+        "type": "int",
+        "category": "师徒设置"
+    },
+    "mentor_graduate_mentor_stone_reward": {
+        "name": "出师师父灵石",
+        "description": "师父培养徒弟出师获得的灵石",
+        "type": "int",
+        "category": "师徒设置"
+    },
+    "mentor_history_limit": {
+        "name": "师徒记录条数",
+        "description": "师徒记录保留条数",
+        "type": "int",
+        "category": "师徒设置"
+    },
+    "mentor_breakthrough_reward_base_rate": {
+        "name": "突破返修基础比例",
+        "description": "徒弟突破时师父返修基础比例",
+        "type": "float",
+        "category": "师徒设置"
+    },
+    "mentor_breakthrough_reward_min_rate": {
+        "name": "突破返修最低比例",
+        "description": "徒弟低境界突破时师父返修最低比例",
+        "type": "float",
+        "category": "师徒设置"
+    },
+    "mentor_breakthrough_reward_max_rate": {
+        "name": "突破返修最高比例",
+        "description": "徒弟高境界突破时师父返修最高比例",
+        "type": "float",
+        "category": "师徒设置"
+    },
+    "banned_unseal_ids": {
+        "name": "禁解封用户",
+        "description": "禁止解封的用户 ID 列表",
+        "type": "list[str]",
+        "category": "基础设置"
+    },
     "level_punishment_floor": {
         "name": "突破失败惩罚下限",
         "description": "突破失败扣除修为惩罚下限（百分比）",
@@ -609,8 +699,10 @@ CONFIG_EDITABLE_FIELDS = {
 
 # 排除数据库相关的配置字段
 EXCLUDED_CONFIG_FIELDS = [
-    'sql_table', 'sql_user_xiuxian', 'sql_user_cd', 'sql_sects', 
-    'sql_buff', 'sql_back', 'level', 'version'
+    'sql_table', 'sql_user_xiuxian', 'sql_user_cd', 'sql_sects',
+    'sql_buff', 'sql_back', 'level', 'version',
+    # 内部/复杂结构：不进面板编辑与配置备份字段表
+    'config_jsonpath', '_cache_mtime_ns', 'layout_bot_dict', 'qqq',
 ]
 
 def get_config_values():
