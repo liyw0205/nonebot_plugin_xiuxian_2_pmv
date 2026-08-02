@@ -1454,10 +1454,24 @@ async def guishi_deposit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         msg = "灵石不足，存入失败！"
         await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_deposit.finish()
+    if result.status == "stored_cap_exceeded":
+        room = max(0, GuishiStoneService.STORED_CAP - int(result.stored_balance or 0))
+        msg = (
+            f"鬼市账户最多可存{number_to(GuishiStoneService.STORED_CAP)}灵石；"
+            f"当前已存{number_to(result.stored_balance)}，本次最多还可存{number_to(room)}。"
+        )
+        await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
+        await guishi_deposit.finish()
+    if result.status == "amount_capped":
+        msg = f"单次存入不可超过{number_to(GuishiStoneService.OP_AMOUNT_CAP)}灵石。"
+        await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
+        await guishi_deposit.finish()
     if not result.succeeded:
         status_msg = {
             "user_missing": "未找到修仙数据，存入未结算。",
             "stone_insufficient": "灵石不足，存入失败。",
+            "stored_cap_exceeded": "鬼市账户已达存储上限。",
+            "amount_capped": "单次存入数量过大。",
             "state_changed": "存入时灵石或鬼市账户被其他操作改动，未结算，请重试。",
             "operation_conflict": "请求冲突，请稍后再试。",
         }.get(result.status, f"鬼市存入未结算（{result.status}），请重试。")
@@ -1515,10 +1529,15 @@ async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         msg = f"鬼市账户余额不足！当前余额 {number_to(result.stored_balance)} 灵石"
         await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_withdraw.finish()
+    if result.status == "amount_capped":
+        msg = f"单次取出不可超过{number_to(GuishiStoneService.OP_AMOUNT_CAP)}灵石。"
+        await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
+        await guishi_withdraw.finish()
     if not result.succeeded:
         status_msg = {
             "user_missing": "未找到修仙数据，取出未结算。",
             "stored_insufficient": "鬼市账户余额不足。",
+            "amount_capped": "单次取出数量过大。",
             "state_changed": "取出时账户数据被其他操作改动，未结算，请重试。",
             "operation_conflict": "请求冲突，请稍后再试。",
         }.get(result.status, f"鬼市取出未结算（{result.status}），请重试。")

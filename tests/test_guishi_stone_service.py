@@ -114,6 +114,38 @@ class GuishiStoneServiceTests(unittest.TestCase):
                 self.service.deposit("deposit-invalid", "user", amount)
         self.assertEqual(self.balances(), (1000, 0))
 
+    def test_amount_and_stored_hard_caps(self) -> None:
+        # 单次超顶
+        big = self.service.deposit("deposit-op-cap", "user", GuishiStoneService.OP_AMOUNT_CAP + 1)
+        self.assertEqual(big.status, "amount_capped")
+        self.assertEqual(self.balances(), (1000, 0))
+
+        # 存到顶后再存拒绝
+        self.service.deposit("deposit-fill", "user", 1000)
+        with db_backend.transaction(self.trade_database) as conn:
+            conn.execute(
+                "UPDATE guishi_info SET stored_stone=%s WHERE user_id=%s",
+                (GuishiStoneService.STORED_CAP, "user"),
+            )
+        with db_backend.transaction(self.game_database) as conn:
+            conn.execute("UPDATE user_xiuxian SET stone=%s WHERE user_id=%s", (500, "user"))
+        over = self.service.deposit("deposit-over-cap", "user", 1)
+        self.assertEqual(over.status, "stored_cap_exceeded")
+        player, stored = self.balances()
+        self.assertEqual(player, 500)
+        self.assertEqual(stored, GuishiStoneService.STORED_CAP)
+
+        # 历史脏余额读取时钳顶
+        with db_backend.transaction(self.trade_database) as conn:
+            conn.execute(
+                "UPDATE guishi_info SET stored_stone=%s WHERE user_id=%s",
+                (GuishiStoneService.STORED_CAP * 3, "user"),
+            )
+        wd = self.service.withdraw("withdraw-dirty-cap", "user", 100)
+        self.assertEqual(wd.status, "completed")
+        _, stored2 = self.balances()
+        self.assertEqual(stored2, GuishiStoneService.STORED_CAP - 100)
+
 
 if __name__ == "__main__":
     unittest.main()

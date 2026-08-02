@@ -71,6 +71,10 @@ class GuishiStoneResult:
 class GuishiStoneService:
     """Move stones between a player and the Guishi account atomically."""
 
+    # 防异常堆量：账户余额与单次存取硬顶（手续费/周末规则不变）
+    STORED_CAP = 1_000_000_000
+    OP_AMOUNT_CAP = 1_000_000_000
+
     def __init__(
         self,
         game_database: str | Path,
@@ -139,6 +143,10 @@ class GuishiStoneService:
             raise ValueError("unsupported operation_type")
         if amount <= 0:
             raise ValueError("amount must be positive")
+        if amount > self.OP_AMOUNT_CAP:
+            return GuishiStoneResult(
+                "amount_capped", operation_type, user_id, amount
+            )
 
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
             conn.execute("ATTACH DATABASE %s AS guishi_trade", (str(self._trade_database),))
@@ -172,8 +180,26 @@ class GuishiStoneService:
                     (user_id,),
                 ).fetchone()
                 stored_balance = int(stored[0]) if stored is not None else 0
+                # 历史脏余额：先钳到硬顶再运算，避免继续按天文数计费/提取
+                if stored_balance > self.STORED_CAP:
+                    stored_balance = self.STORED_CAP
+                    conn.execute(
+                        "INSERT INTO guishi_trade.guishi_info (user_id, stored_stone, items) "
+                        "VALUES (%s, %s, '{}') "
+                        "ON CONFLICT (user_id) DO UPDATE SET stored_stone=EXCLUDED.stored_stone",
+                        (user_id, stored_balance),
+                    )
 
                 if operation_type == "deposit":
+                    if stored_balance + amount > self.STORED_CAP:
+                        conn.rollback()
+                        return GuishiStoneResult(
+                            "stored_cap_exceeded",
+                            operation_type,
+                            user_id,
+                            amount,
+                            stored_balance=stored_balance,
+                        )
                     charged = conn.execute(
                         "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(%s AS REAL) "
                         "WHERE user_id=%s AND COALESCE(stone, 0)>=%s",
