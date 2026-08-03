@@ -232,6 +232,20 @@ def _demon_talisman_reward_count(contribution: float) -> int:
     return min(max(count, 0), DEMON_TALISMAN_REWARD_CAP)
 
 
+def _is_wushang_reward_item(item: dict) -> bool:
+    """无上品：技能加载后 level 为「无上」；装备 rank 可能为「无上」或极高数值品阶。"""
+    if not isinstance(item, dict):
+        return False
+    if str(item.get("level") or "") == "无上":
+        return True
+    if str(item.get("rank") or "") == "无上":
+        return True
+    # 与灵签宝箓「rank==5 极品」同档：装备数值 rank 5 视为顶级
+    if item.get("item_type") in ("法器", "防具") and _to_int(item.get("rank"), -1) == 5:
+        return True
+    return False
+
+
 def _is_demon_random_reward_item(item: dict, contribution: float) -> bool:
     item_type = item.get("item_type")
     if item_type == "特殊物品":
@@ -257,6 +271,27 @@ def _get_demon_random_reward_pool(contribution: float) -> list[tuple[int, dict]]
         except (TypeError, ValueError):
             continue
     return pool
+
+
+def _pick_demon_random_reward(contribution: float):
+    """从魔修随机池抽一件。
+
+    无上技能/装备对齐灵签宝箓：先可进池，命中后仅 1% 保留，否则改抽非无上。
+    （灵签：item_rank==5 时 random.randint(1,100)!=100 则降档）
+    """
+    reward_pool = _get_demon_random_reward_pool(contribution)
+    if not reward_pool:
+        return None
+    pick = random.choice(reward_pool)
+    item = pick[1] if isinstance(pick, tuple) and len(pick) > 1 else None
+    if item is not None and _is_wushang_reward_item(item):
+        # 1% 保留无上；99% 降为非无上池（堵不如疏，仍可极低概率出顶级）
+        if random.randint(1, 100) != 100:
+            normal_pool = [row for row in reward_pool if not _is_wushang_reward_item(row[1])]
+            if normal_pool:
+                return random.choice(normal_pool)
+            return None
+    return pick
 
 
 def _load_state(event_key: str = EVENT_KEY) -> dict:
@@ -1455,9 +1490,7 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             talisman_reward = _demon_talisman_reward_count(contribution)
             random_reward = None
             if random.random() <= contribution:
-                reward_pool = _get_demon_random_reward_pool(contribution)
-                if reward_pool:
-                    random_reward = random.choice(reward_pool)
+                random_reward = _pick_demon_random_reward(contribution)
 
             expected_claimed = dict(claimed)
             claim_event_id = str(state.get("event_id", ""))
