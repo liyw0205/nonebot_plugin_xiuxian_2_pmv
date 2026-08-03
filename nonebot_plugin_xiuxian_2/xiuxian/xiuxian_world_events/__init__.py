@@ -233,14 +233,14 @@ def _demon_talisman_reward_count(contribution: float) -> int:
 
 
 def _is_wushang_reward_item(item: dict) -> bool:
-    """无上品：技能加载后 level 为「无上」；装备 rank 可能为「无上」或极高数值品阶。"""
+    """无上品技能/装备（技能加载后 level 常为「无上」）。"""
     if not isinstance(item, dict):
         return False
     if str(item.get("level") or "") == "无上":
         return True
     if str(item.get("rank") or "") == "无上":
         return True
-    # 与灵签宝箓「rank==5 极品」同档：装备数值 rank 5 视为顶级
+    # 装备数值 rank 5：顶级档
     if item.get("item_type") in ("法器", "防具") and _to_int(item.get("rank"), -1) == 5:
         return True
     return False
@@ -276,8 +276,7 @@ def _get_demon_random_reward_pool(contribution: float) -> list[tuple[int, dict]]
 def _pick_demon_random_reward(contribution: float):
     """从魔修随机池抽一件。
 
-    无上技能/装备对齐灵签宝箓：先可进池，命中后仅 1% 保留，否则改抽非无上。
-    （灵签：item_rank==5 时 random.randint(1,100)!=100 则降档）
+    抽中无上技能/装备时仅 1% 保留，否则改抽非无上。
     """
     reward_pool = _get_demon_random_reward_pool(contribution)
     if not reward_pool:
@@ -285,7 +284,7 @@ def _pick_demon_random_reward(contribution: float):
     pick = random.choice(reward_pool)
     item = pick[1] if isinstance(pick, tuple) and len(pick) > 1 else None
     if item is not None and _is_wushang_reward_item(item):
-        # 1% 保留无上；99% 降为非无上池（堵不如疏，仍可极低概率出顶级）
+        # 1% 保留无上，否则降为非无上
         if random.randint(1, 100) != 100:
             normal_pool = [row for row in reward_pool if not _is_wushang_reward_item(row[1])]
             if normal_pool:
