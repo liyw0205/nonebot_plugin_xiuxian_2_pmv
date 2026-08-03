@@ -86,15 +86,16 @@ class DemonWushangPickTests(unittest.TestCase):
         data = __import__("json").loads(path.read_text(encoding="utf-8"))
         self.assertEqual(str(data["15355"]["level"]), "1")
         self.assertEqual(data["15355"]["rank"], "无上")
-        # 仅四门顶级进合成
         for sid in ("15355", "15356", "9933", "9934"):
             self.assertIn("fusion", data[sid], sid)
             need = data[sid]["fusion"]["need_item"]
-            # 材料应含其它无上功法 id（五位无上段或 153xx）
             has_wushang_mat = any(
                 mid in data and str(data[mid].get("rank")) == "无上" for mid in need
             )
             self.assertTrue(has_wushang_mat, sid)
+            # 神物（化道/神圣/蕴灵）应明显高于旧档 2～3
+            for mid in ("20002", "20003", "20004"):
+                self.assertGreaterEqual(int(need.get(mid, 0)), 8, f"{sid}:{mid}")
         self.assertNotIn("fusion", data["9937"])
         self.assertNotIn("fusion", data["15357"])
         shentong = __import__("json").loads(
