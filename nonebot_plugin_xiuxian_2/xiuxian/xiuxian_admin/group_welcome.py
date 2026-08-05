@@ -13,9 +13,14 @@ from __future__ import annotations
 from nonebot import on_notice
 from nonebot.log import logger
 from nonebot.matcher import Matcher
-from nonebot.permission import SUPERUSER
 
-from ..adapter_compat import Bot, GroupMessageEvent, MessageSegment, PrivateMessageEvent
+from ..adapter_compat import (
+    Bot,
+    GroupMessageEvent,
+    MessageSegment,
+    PrivateMessageEvent,
+    is_group_admin_or_owner,
+)
 from ..on_compat import on_command
 from ..qq_compat.lifecycle import apply_lifecycle_event, is_lifecycle_event
 from ..xiuxian_config import JsonConfig, XiuConfig
@@ -279,20 +284,30 @@ async def handle_group_lifecycle(bot: Bot, event, matcher: Matcher):
 
 
 # ---------- 开关指令 ----------
+# 超管 / 群主 / 管理员 均可本群开关（权限在 handle 内判定，兼容 QQ member_role）
 welcome_enable_cmd = on_command(
     "开启进群欢迎",
     aliases={"启用进群欢迎", "打开进群欢迎"},
-    permission=SUPERUSER,
     priority=5,
     block=True,
 )
 welcome_disable_cmd = on_command(
     "关闭进群欢迎",
     aliases={"禁用进群欢迎", "关掉进群欢迎"},
-    permission=SUPERUSER,
     priority=5,
     block=True,
 )
+
+
+def _can_toggle_welcome(bot: Bot, event) -> bool:
+    try:
+        uid = str(event.get_user_id())
+    except Exception:
+        uid = str(getattr(event, "user_id", "") or "")
+    superusers = set(getattr(getattr(bot, "config", None), "superusers", None) or ())
+    if uid and uid in superusers:
+        return True
+    return is_group_admin_or_owner(event)
 
 
 @welcome_enable_cmd.handle(parameterless=[Cooldown(cd_time=0)])
@@ -300,6 +315,9 @@ async def welcome_enable_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     bot, _ = await assign_bot(bot=bot, event=event)
     if isinstance(event, PrivateMessageEvent):
         await handle_send(bot, event, "请在群内使用：开启进群欢迎")
+        await welcome_enable_cmd.finish()
+    if not _can_toggle_welcome(bot, event):
+        await handle_send(bot, event, "仅群主、管理员或超管可开关本群进群欢迎")
         await welcome_enable_cmd.finish()
     group_id = str(getattr(event, "group_id", "") or getattr(event, "group_openid", "") or "")
     ok, msg = JsonConfig().set_group_welcome(group_id, enabled=True)
@@ -321,6 +339,9 @@ async def welcome_disable_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     bot, _ = await assign_bot(bot=bot, event=event)
     if isinstance(event, PrivateMessageEvent):
         await handle_send(bot, event, "请在群内使用：关闭进群欢迎")
+        await welcome_disable_cmd.finish()
+    if not _can_toggle_welcome(bot, event):
+        await handle_send(bot, event, "仅群主、管理员或超管可开关本群进群欢迎")
         await welcome_disable_cmd.finish()
     group_id = str(getattr(event, "group_id", "") or getattr(event, "group_openid", "") or "")
     ok, msg = JsonConfig().set_group_welcome(group_id, enabled=False)

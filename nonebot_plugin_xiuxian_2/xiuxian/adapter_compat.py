@@ -1133,8 +1133,15 @@ def get_chat_scene(event: BaseEvent) -> str:
     return "unknown"
 
 
+_SEQ_CACHE_MAX_SIZE = 4096
 _group_seq_cache: dict[str, int] = {}
 _c2c_seq_cache: dict[str, int] = {}
+
+
+def _store_seq(cache: dict[str, int], key: str, value: int) -> None:
+    if key not in cache and len(cache) >= _SEQ_CACHE_MAX_SIZE:
+        cache.pop(next(iter(cache)))
+    cache[key] = value
 
 
 def _next_group_seq(group_openid: str) -> int:
@@ -1149,7 +1156,7 @@ def _next_group_seq(group_openid: str) -> int:
     if current > 1_000_000:
         current = random.randint(1, 10000)
 
-    _group_seq_cache[group_openid] = current
+    _store_seq(_group_seq_cache, group_openid, current)
     return current
 
 
@@ -1165,7 +1172,7 @@ def _next_c2c_seq(user_openid: str) -> int:
     if current > 1_000_000:
         current = random.randint(1, 10000)
 
-    _c2c_seq_cache[user_openid] = current
+    _store_seq(_c2c_seq_cache, user_openid, current)
     return current
 
 
@@ -1593,8 +1600,77 @@ def _build_compat_sender(
         user_id=str(user_id) if user_id is not None else None,
         nickname=nickname,
         card=card,
-        role=role,
+        role=_normalize_group_role(role),
     )
+
+
+def _normalize_group_role(role: Any) -> str:
+    """归一化群身份：owner / admin / member。"""
+    text = str(role or "").strip().lower()
+    if text in {"owner", "群主", "1"}:
+        return "owner"
+    if text in {"admin", "administrator", "管理员", "2"}:
+        return "admin"
+    if text in {"member", "成员", "0"}:
+        return "member"
+    # QQ 频道 roles 数字串可能混在列表里，这里只处理单值
+    if text == "4":
+        return "owner"
+    if text in {"2", "5"}:
+        return "admin"
+    return "member"
+
+
+def _extract_event_member_role(event: BaseEvent) -> str:
+    """从事件里取群主/管理员身份（QQ 官方 author.member_role / OneBot sender.role）。"""
+    # 优先 QQ 官方 author.member_role（兼容层曾写死 member，不能只信 sender）
+    author = getattr(event, "author", None)
+    if author is not None:
+        for key in ("member_role", "role"):
+            role = getattr(author, key, None)
+            if role not in (None, ""):
+                return _normalize_group_role(role)
+        if isinstance(author, dict):
+            for key in ("member_role", "role"):
+                role = author.get(key)
+                if role not in (None, ""):
+                    return _normalize_group_role(role)
+
+    # OneBot / 已补丁 sender.role
+    sender = getattr(event, "sender", None)
+    if sender is not None:
+        role = getattr(sender, "role", None)
+        if role not in (None, ""):
+            return _normalize_group_role(role)
+        if isinstance(sender, dict):
+            role = sender.get("role")
+            if role not in (None, ""):
+                return _normalize_group_role(role)
+
+    # 频道 member.roles（4 群主 / 2 管理 / 5 子频道管理）
+    member = getattr(event, "member", None)
+    roles = getattr(member, "roles", None) if member is not None else None
+    if roles is None and isinstance(member, dict):
+        roles = member.get("roles")
+    if roles:
+        role_set = {str(x) for x in roles}
+        if "4" in role_set:
+            return "owner"
+        if "2" in role_set or "5" in role_set:
+            return "admin"
+
+    return "member"
+
+
+def is_group_admin_or_owner(event: Any) -> bool:
+    """群主或管理员（含 SUPERUSER 场景由调用方另判）。"""
+    role = _extract_event_member_role(event) if event is not None else "member"
+    # 若尚未 patch，尽量现取
+    if role == "member":
+        sender = getattr(event, "sender", None)
+        if sender is not None:
+            role = _normalize_group_role(getattr(sender, "role", None))
+    return role in {"owner", "admin"}
 
 
 def _patch_qq_reference_fields(event: BaseEvent) -> None:
@@ -1987,7 +2063,7 @@ def patch_event_inplace(
                 user_id=sender_id,
                 nickname=sender_name,
                 card=sender_name,
-                role="member",
+                role=_extract_event_member_role(event),
             ),
         )
         _patch_qq_reference_fields(event)
@@ -2016,7 +2092,7 @@ def patch_event_inplace(
                 user_id=uid,
                 nickname=sender_name,
                 card=sender_name,
-                role="member",
+                role=_extract_event_member_role(event),
             ),
         )
 
@@ -2040,7 +2116,7 @@ def patch_event_inplace(
                 user_id=sender_id,
                 nickname=sender_name,
                 card=sender_name,
-                role="member",
+                role=_extract_event_member_role(event),
             ),
         )
 
@@ -2609,7 +2685,10 @@ __all__ = [
     "get_message_reference_id",
     "build_reference_reply",
     "send_reference_reply",
-    "patch_bot_inplace",
-    "patch_event_inplace",
+    "patch_bot_exists",
+    "patch_event_exists",
     "patch_context",
+    "is_group_admin_or_owner",
+    "_extract_event_member_role",
+    "_normalize_group_role",
 ]
