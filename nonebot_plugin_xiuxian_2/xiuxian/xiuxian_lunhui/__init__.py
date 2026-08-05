@@ -488,36 +488,47 @@ def can_retrieve_skill(user_id, skill_type):
     
     # 获取轮回前的境界
     old_level = memory.get("memory_level")
-    if not old_level:
-        return False, "轮回记忆数据异常", None
-    
+    if old_level in (None, "", 0, "0"):
+        return False, "轮回记忆境界异常，无法取回", None
+    old_level = str(old_level).strip()
+
     # 获取境界数值（数字越大境界越低）
     old_rank_score, rank_list = convert_rank(old_level)
     if old_rank_score is None:
-        return False, "轮回前境界数据异常", None
+        return False, f"轮回前境界数据异常（{old_level}）", None
 
-    # 计算取回偏移量：基础9级 + 轮回等级加成（上限9级）
-    root_level = user_info.get('root_level', 0)
-    total_offset = 9 + min(root_level, 9)
-    
-    # 计算要求境界数值（数值越大，要求境界越低）
+    # 取回门槛：在印记境界基础上放宽若干小境界（轮回等级越高越宽松，上限+9）
+    # 例：印记破虚圆满、轮回等级0 → 约需耀日圆满
+    root_level = 0
+    try:
+        root_level = int(user_info.get("root_level", 0) or 0)
+    except (TypeError, ValueError):
+        root_level = 0
+    total_offset = 9 + min(max(root_level, 0), 9)
+
     required_rank_score = old_rank_score + total_offset
-    
+
     # 确保不超出境界表范围（最低只能到江湖好手）
     max_score = convert_rank("江湖好手")[0]
     required_rank_score = min(required_rank_score, max_score)
-    
+
     # 获取对应的境界名称用于提示
     target_idx = len(rank_list) - required_rank_score - 1
     target_idx = max(0, min(target_idx, len(rank_list) - 1))
     min_level_name = rank_list[target_idx]
-    
+
     # 当前境界数值
-    current_rank_score, _ = convert_rank(user_info['level'])
-    
-    # 判断当前境界是否达到要求
+    current_rank_score, _ = convert_rank(user_info["level"])
+    if current_rank_score is None:
+        return False, "当前境界数据异常", min_level_name
+
+    # 判断当前境界是否达到要求（score 越小境界越高）
     if current_rank_score > required_rank_score:
-        return False, f"境界不足，需要达到【{min_level_name}】才能取回该记忆", min_level_name
+        return (
+            False,
+            f"境界不足，需要达到【{min_level_name}】才能取回该记忆（印记境界：{old_level}）",
+            min_level_name,
+        )
     
     # 记忆中是否有该技能
     skill_id = memory.get(skill_type, 0)

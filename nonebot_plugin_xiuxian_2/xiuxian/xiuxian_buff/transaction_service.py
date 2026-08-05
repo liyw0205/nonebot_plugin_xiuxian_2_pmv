@@ -1161,7 +1161,33 @@ class MentorBindService:
                 apprentice_parent = conn.execute(
                     "SELECT mentor_id FROM player_data.mentor WHERE user_id=%s", (apprentice_id,)
                 ).fetchone()
-                if apprentice_parent is not None and apprentice_parent[0] not in (None, ""):
+                apprentice_has_mentor = (
+                    apprentice_parent is not None and apprentice_parent[0] not in (None, "")
+                )
+                if apprentice_has_mentor:
+                    # 已是本师徒关系：幂等成功（避免「数据已改却提示未成立」）
+                    if str(apprentice_parent[0]) == mentor_id:
+                        existing_bind = conn.execute(
+                            "SELECT bind_time FROM player_data.mentor WHERE user_id=%s",
+                            (apprentice_id,),
+                        ).fetchone()
+                        existing_time = (
+                            str(existing_bind[0])
+                            if existing_bind is not None and existing_bind[0] not in (None, "")
+                            else bind_time
+                        )
+                        if application is not None and str(application[0]) == "pending":
+                            conn.execute(
+                                "UPDATE player_data.mentor_applications SET status='accepted',resolved_at=%s "
+                                "WHERE invite_id=%s AND status='pending'",
+                                (check_time.timestamp(), invite_id),
+                            )
+                        conn.execute(
+                            "INSERT INTO mentor_bind_operations (operation_id,payload,bind_time) VALUES (%s,%s,%s)",
+                            (operation_id, payload, existing_time),
+                        )
+                        conn.commit()
+                        return MentorBindResult("duplicate", existing_time)
                     conn.rollback()
                     return MentorBindResult("already_bound", bind_time)
                 if mentor_parent is not None and str(mentor_parent[0]) == apprentice_id:

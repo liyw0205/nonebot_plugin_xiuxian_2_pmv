@@ -1888,12 +1888,22 @@ async def agree_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         mentor_desc=f"收{apprentice_info['user_name']}为徒",
         apprentice_desc=f"拜{user_info['user_name']}为师",
     )
-    if not result.succeeded:
-        await handle_send(bot, event, "拜师未成立：申请数据刚被改动，请重新申请。", **buttons)
+    if result.succeeded:
+        await _send_mentor_bind_success(
+            bot, event, mentor_id, user_info, apprentice_id, apprentice_info, result
+        )
         await agree_mentor.finish()
-    await _send_mentor_bind_success(
-        bot, event, mentor_id, user_info, apprentice_id, apprentice_info, result
-    )
+
+    # 分状态提示，避免一律「申请数据刚被改动」
+    fail_msg = {
+        "invitation_changed": "拜师未成立：申请已过期、已处理或不存在，请让对方重新拜师。",
+        "state_changed": "拜师未成立：双方境界刚变动，请重新申请后再同意。",
+        "already_bound": "拜师未成立：对方已有师父。",
+        "cooldown_active": "拜师未成立：师徒冷却中。",
+        "capacity_reached": "拜师未成立：你的收徒名额已满。",
+        "operation_conflict": "拜师未成立：该确认事件已用于其他操作。",
+    }.get(result.status, "拜师未成立：请稍后重试或让对方重新申请。")
+    await handle_send(bot, event, fail_msg, **buttons)
     await agree_mentor.finish()
 
 
