@@ -1557,7 +1557,7 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, "背包物品已达上限，本期奖励尚未领取。")
         await claim_demon_reward.finish()
     if claim_result.status in {"state_changed", "user_missing"}:
-        await handle_send(bot, event, "领奖未结算：领奖数据刚被改动，请重试。")
+        await handle_send(bot, event, "领奖未完成：贡献或领奖状态已更新，请重新领取。")
         await claim_demon_reward.finish()
 
     update_statistics_value(user_id, "魔修入侵领奖")

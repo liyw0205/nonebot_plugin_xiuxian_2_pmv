@@ -126,7 +126,7 @@ async def resetting_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await handle_send(bot, event, msg)
             await resetting.finish()
         if not result.succeeded:
-            await handle_send(bot, event, "自废修为未执行：角色数据刚被其他操作改动。")
+            await handle_send(bot, event, "自废修为未执行：角色状态已更新，请重新发起。")
             await resetting.finish()
         msg = f"{user_name}现在是一介凡人了！！"
         if result.status == "applied":
@@ -362,7 +362,7 @@ async def confirm_lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg, md_type="轮回", k1="修为", v1="我的修为", k2="存档", v2="我的修仙信息", k3="印记", v3="轮回印记")
         await confirm_lunhui.finish()
     if not result.succeeded:
-        await handle_send(bot, event, "轮回未执行：确认数据刚被改动，请重新发起。", md_type="轮回")
+        await handle_send(bot, event, "轮回未执行：确认状态已更新，请重新进入轮回后再确认。", md_type="轮回")
         await confirm_lunhui.finish()
 
     msg = f"{original_msg}！\n轮回馈赠：{ROOT_RENAME_CARD_NAME} x1"
@@ -570,7 +570,7 @@ def retrieve_reincarnation_skill(user_id, skill_type, operation_id=None):
         skill_name = items.get_data_by_item_id(result.skill_id).get('name', '未知技能') if result.skill_id else '未知技能'
         return True, f"成功回忆前世中的技能：{skill_name}\n该回忆请求已经处理，无需重复提交。"
     if not result.succeeded:
-        return False, "印记操作未结算：印记数据刚被其他操作改动"
+        return False, "回忆前世未完成：印记状态已更新，请重新回忆"
     
     skill_name = items.get_data_by_item_id(skill_id).get('name', '未知技能')
     return True, f"成功回忆前世中的技能：{skill_name}"

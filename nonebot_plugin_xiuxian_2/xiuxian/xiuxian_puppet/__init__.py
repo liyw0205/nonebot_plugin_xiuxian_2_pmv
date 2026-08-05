@@ -119,7 +119,7 @@ def _puppet_operation_message(result: PuppetOperation) -> str:
             "道友的灵石不足！"
         )
     if result.status in {"player_info_missing", "puppet_level_changed"}:
-        return "傀儡操作未结算：傀儡数据刚被其他操作改动。"
+        return "傀儡操作未完成：傀儡状态已更新，请重新操作。"
     if result.status == "user_missing":
         return "未找到道友信息，请重新开始修仙后再试！"
     if result.status == "invalid_puppet_level":

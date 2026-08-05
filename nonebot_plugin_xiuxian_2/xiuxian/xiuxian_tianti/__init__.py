@@ -351,7 +351,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "已达当前炼体境界上限，无法继续灵石炼体。")
         return
     if result.status in {"stone_insufficient", "stone_changed"}:
-        await handle_send(bot, event, "你的灵石不足或余额已经变化。")
+        await handle_send(bot, event, "灵石不足或余额已更新，请重新查看后再炼体。")
         return
     if not result.succeeded:
         raise RuntimeError(f"unexpected tianti stone training status: {result.status}")
@@ -494,7 +494,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             f"{item['name']}需要{item['amount']}份，现有{item['have']}份"
             for item in result.insufficient
         )
-        await handle_send(bot, event, "药材不足或库存已经变化。" + (f"\n{detail}" if detail else ""))
+        await handle_send(bot, event, "药材不足或库存已更新，请重新查看后再炼体。" + (f"\n{detail}" if detail else ""))
         return
     if not result.succeeded:
         raise RuntimeError(f"unexpected medicine bath status: {result.status}")

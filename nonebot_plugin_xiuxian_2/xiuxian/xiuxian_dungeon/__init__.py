@@ -126,7 +126,7 @@ def _team_mutation_message(action: str, result: TeamMutationResult) -> str:
             "user_missing": "未找到道友数据，创建队伍失败！",
             "user_has_team": "你已经在一个队伍中了，请先退出当前队伍！",
             "session_active": "副本探索会话进行中，无法创建队伍！",
-            "state_changed": "队伍数据刚被其他操作改动。",
+            "state_changed": "队伍当前状态已更新。",
         }
         if result.status == "cooldown_active":
             return f"你当前处于组队冷却中，剩余：{format_seconds(result.cooldown_seconds)}，不可创建队伍。"
@@ -144,7 +144,7 @@ def _team_mutation_message(action: str, result: TeamMutationResult) -> str:
             "user_has_team": f"{target_name}已有队伍！",
             "invite_pending": "对方已有待处理的组队邀请，请稍后再试！",
             "session_active": "副本探索会话进行中，无法变更队伍！",
-            "state_changed": "队伍数据刚被其他操作改动。",
+            "state_changed": "队伍当前状态已更新。",
         }
         if result.status == "cooldown_active":
             return f"{target_name}当前处于组队冷却中（剩余{format_seconds(result.cooldown_seconds)}），不可被邀请。"
@@ -168,7 +168,7 @@ def _team_mutation_message(action: str, result: TeamMutationResult) -> str:
             "user_has_team": "你已经在一个队伍中了，无法接受邀请！",
             "team_full": "该队伍已满员！",
             "session_active": "副本探索会话进行中，无法变更队伍！",
-            "state_changed": "加入失败：数据刚被改动。",
+            "state_changed": "加入失败：当前状态已更新。",
         }
         if result.status == "cooldown_active":
             return "你当前处于组队冷却中，无法加入队伍！"
@@ -188,7 +188,7 @@ def _team_mutation_message(action: str, result: TeamMutationResult) -> str:
             "self_target": build_transfer_team_self_message(),
             "target_not_member": build_transfer_team_not_member_message(),
             "session_active": "副本探索会话进行中，无法变更队伍！",
-            "state_changed": "队伍数据刚被其他操作改动。",
+            "state_changed": "队伍当前状态已更新。",
         }.get(result.status, f"转移队长失败（{result.status}）。")
     return f"队伍操作失败（未知操作）。"
 
@@ -202,7 +202,7 @@ def _team_exit_message(action: str, result: TeamExitResult) -> str:
             "target_not_member": "该成员不在你的队伍中！",
             "self_target": "不能踢出自己！",
             "session_active": "副本探索会话进行中，无法变更队伍！",
-            "state_changed": "队伍数据刚被其他操作改动。",
+            "state_changed": "队伍当前状态已更新。",
         }.get(result.status, f"队伍操作失败（{result.status}）。")
     if action == "leave":
         if result.disbanded:
@@ -1058,7 +1058,7 @@ async def handle_dungeon_exit(bot: Bot, event: GroupMessageEvent | PrivateMessag
     elif result.status == "completed":
         await handle_send(bot, event, "今日副本已完成，无需退出。")
     elif result.status == "state_changed":
-        await handle_send(bot, event, "副本操作未结算：副本进度数据刚被改动，请重试。")
+        await handle_send(bot, event, "副本操作未结算：副本进度当前状态已更新，请重新发起。")
     else:
         await handle_send(bot, event, "已退出当前副本，进度将保留。")
     await dungeon_exit.finish()
@@ -1143,7 +1143,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         str(player_status.get("dungeon_id", "")) != str(dungeon.get("dungeon_id", player_status.get("dungeon_id", "")))
         or str(player_status.get("last_reset_date", "")) != str(dungeon.get("date", ""))
     ):
-        await reject("state_changed", "副本操作未结算：副本进度数据刚被改动，请重试。", player_status)
+        await reject("state_changed", "副本操作未结算：副本进度当前状态已更新，请重新发起。", player_status)
         await explore_dungeon.finish()
 
     current_layer = int(player_status["current_layer"])

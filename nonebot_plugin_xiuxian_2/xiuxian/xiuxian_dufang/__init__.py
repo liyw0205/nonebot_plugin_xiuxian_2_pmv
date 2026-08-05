@@ -441,7 +441,7 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await handle_send(bot, event, "本次鉴石请求已受理，请勿重复提交。", md_type="鉴石")
         return
     if not bet.succeeded:
-        await handle_send(bot, event, "鉴石未结算：下注数据刚被其他操作改动。", md_type="鉴石")
+        await handle_send(bot, event, "鉴石未结算：下注当前状态已更新。", md_type="鉴石")
         return
     current_stone = bet.wallet_stone
 

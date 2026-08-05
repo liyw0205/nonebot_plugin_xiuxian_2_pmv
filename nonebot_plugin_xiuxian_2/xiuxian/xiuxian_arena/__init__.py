@@ -269,7 +269,7 @@ async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         elif settlement.status == "stamina_insufficient":
             message = "体力不足，无法发起竞技场挑战。"
         else:
-            message = "挑战未结算：战斗数据刚被其他操作改动。"
+            message = "挑战未结算：战斗当前状态已更新。"
         await handle_send(bot, event, message)
         await arena_challenge.finish()
     if use_cached_target:
@@ -617,7 +617,7 @@ async def arena_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await handle_send(bot, event, "兑换失败：未找到角色数据。")
         await arena_buy.finish()
     if purchase_result.status == "state_changed":
-        await handle_send(bot, event, "兑换未结算：数据刚被其他操作改动。")
+        await handle_send(bot, event, "兑换未完成：活动进度已更新，请重新兑换。")
         await arena_buy.finish()
     if not purchase_result.succeeded:
         await handle_send(bot, event, f"兑换未结算（{purchase_result.status}）。")
@@ -748,7 +748,7 @@ async def arena_buy_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessa
             f"当前灵石：{number_to(int(user_info.get('stone', 0)))}",
         )
         await arena_buy_challenge.finish()
-    await handle_send(bot, event, "购买未结算：数据刚被其他操作改动。")
+    await handle_send(bot, event, "购买未结算：当前状态已更新。")
     await arena_buy_challenge.finish()
 
 def check_rank_requirement(current_rank, required_rank):
@@ -918,5 +918,5 @@ async def use_arena_challenge_ticket(bot: Bot, event: GroupMessageEvent | Privat
     elif result.status == "item_missing":
         message = "背包中没有可用的竞技场挑战券。"
     else:
-        message = "挑战券使用未结算：次数数据刚被改动，请重新操作。"
+        message = "挑战券使用未结算：次数当前状态已更新，请重新操作。"
     await handle_send(bot, event, message, md_type="竞技场")

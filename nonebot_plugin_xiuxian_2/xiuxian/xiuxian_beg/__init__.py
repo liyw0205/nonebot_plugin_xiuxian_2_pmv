@@ -180,7 +180,7 @@ async def beg_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     elif result.status == "operation_conflict":
         msg = "领取失败：请求冲突，请勿重复点击。"
     elif result.status == "state_changed":
-        msg = "领取未结算：角色数据刚被其他操作改动。"
+        msg = "领取未结算：角色当前状态已更新。"
     else:
         msg = "未找到角色信息，无法领取仙途奇缘！"
     await handle_send(bot, event, msg)
@@ -273,7 +273,7 @@ async def novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     elif result.status == "operation_conflict":
         msg = "**新手礼包**\n---\n⚠️ 领取失败：请求冲突，请勿重复点击。"
     elif result.status == "state_changed":
-        msg = "**新手礼包**\n---\n⚠️ 领取未结算：角色数据刚被其他操作改动。"
+        msg = "**新手礼包**\n---\n⚠️ 领取未结算：角色当前状态已更新。"
     else:
         msg = "**新手礼包**\n---\n❌ 未找到角色信息，无法领取新手礼包！"
     await handle_send(

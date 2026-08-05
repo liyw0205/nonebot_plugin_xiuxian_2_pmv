@@ -384,7 +384,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, f"{item_info['name']}持有数量已达上限！")
         await tower_buy.finish()
     if purchase_result.status == "state_changed":
-        await handle_send(bot, event, "兑换未结算：数据刚被其他操作改动，请重新兑换。")
+        await handle_send(bot, event, "兑换未完成：活动进度已更新，请重新兑换，请重新兑换。")
         await tower_buy.finish()
     if purchase_result.status == "user_missing":
         await handle_send(bot, event, "未找到道友数据，通天塔兑换失败！")

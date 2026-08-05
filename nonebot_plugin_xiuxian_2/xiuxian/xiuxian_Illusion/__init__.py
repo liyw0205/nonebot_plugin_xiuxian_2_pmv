@@ -257,7 +257,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "幻境寻心失败：未找到角色数据。")
         await illusion_choice.finish()
     if choice_result.status == "state_changed":
-        await handle_send(bot, event, "幻境寻心未结算：数据刚被其他操作改动。")
+        await handle_send(bot, event, "幻境寻心未结算：当前状态已更新。")
         await illusion_choice.finish()
 
     choice_count = choice_result.choice_count

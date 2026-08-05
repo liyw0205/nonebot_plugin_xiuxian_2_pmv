@@ -735,7 +735,7 @@ async def sect_fairyland_upgrade_(bot: Bot, event: GroupMessageEvent | PrivateMe
         if result.status == "duplicate":
             await handle_send(bot, event, "本次炼体堂升级已经完成，请刷新宗门信息。")
         else:
-            await handle_send(bot, event, "宗门建设未结算：宗门数据刚被改动，请刷新宗门信息后重试。")
+            await handle_send(bot, event, "宗门建设未完成：宗门资财或建设进度已更新，请先查看宗门信息。")
         await sect_fairyland_upgrade.finish()
     safe_log_economy_change(
         user_id=user_info["user_id"],
@@ -880,7 +880,7 @@ async def sect_elixir_room_make_(bot: Bot, event: GroupMessageEvent | PrivateMes
                     if result.status == "duplicate":
                         await handle_send(bot, event, "本次宗门丹房升级已经完成，请刷新宗门信息。")
                     else:
-                        await handle_send(bot, event, "宗门建设未结算：宗门数据刚被改动，请刷新宗门信息后重试。")
+                        await handle_send(bot, event, "宗门建设未完成：宗门资财或建设进度已更新，请先查看宗门信息。")
                     await sect_elixir_room_make.finish()
                 safe_log_economy_change(
                     user_id=user_info["user_id"],
@@ -1155,7 +1155,7 @@ async def sect_mainbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessa
                     elif result.status == "materials_insufficient":
                         msg = f"本次学习需要消耗{number_to(materialscost)}宗门资材，不满足条件！"
                     else:
-                        msg = "宗门归属、职位、功法目录或资材已经变化，请刷新后重试。"
+                        msg = "学习宗门功法未完成：宗门身份或功法目录已更新，请刷新后重试。"
                     await handle_send(bot, event, msg, md_type="宗门", k1="学习", v1="宗门功法学习", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                     await sect_mainbuff_learn.finish()
                 mainbuff, mainbuffmsg = get_main_info_msg(str(mainbuffid))
@@ -1242,7 +1242,7 @@ async def sect_mainbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessage
                     if result.status == "duplicate":
                         await handle_send(bot, event, "本次宗门功法搜寻已经完成，请刷新宗门信息。")
                     else:
-                        await handle_send(bot, event, "宗门资产、权限或功法列表已经变化，请刷新后重试。")
+                        await handle_send(bot, event, "学习宗门功法未完成：宗门资财或权限已更新，请刷新后重试。")
                     await sect_mainbuff_get.finish()
 
                 # 构建结果消息
@@ -1339,7 +1339,7 @@ async def sect_secbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                     if result.status == "duplicate":
                         await handle_send(bot, event, "本次宗门神通搜寻已经完成，请刷新宗门信息。")
                     else:
-                        await handle_send(bot, event, "宗门资产、权限或神通列表已经变化，请刷新后重试。")
+                        await handle_send(bot, event, "学习宗门神通未完成：宗门资财或权限已更新，请刷新后重试。")
                     await sect_secbuff_get.finish()
 
                 # 构建结果消息
@@ -1429,7 +1429,7 @@ async def sect_secbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                     elif result.status == "materials_insufficient":
                         msg = f"本次学习需要消耗{number_to(materialscost)}宗门资材，不满足条件！"
                     else:
-                        msg = "宗门归属、职位、神通目录或资材已经变化，请刷新后重试。"
+                        msg = "学习宗门神通未完成：宗门身份或神通目录已更新，请刷新后重试。"
                     await handle_send(bot, event, msg, md_type="宗门", k1="学习", v1="宗门神通学习", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                     await sect_secbuff_learn.finish()
                 secmsg = get_sec_msg(secbuff)
@@ -1523,7 +1523,7 @@ async def upatkpractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             if result.status == "duplicate":
                 await handle_send(bot, event, "本次攻击修炼升级已经完成，请刷新状态。")
             else:
-                await handle_send(bot, event, "任务结算未完成：资产数据刚被改动，请刷新后重试。")
+                await handle_send(bot, event, "宗门任务结算未完成：资财已更新，请刷新宗门任务后再领。")
             await upatkpractice.finish()
         msg = f"升级成功！\n道友当前攻击修炼等级\n> {useratkpractice + level_up_count}\n消耗灵石\n> {number_to(total_stone_cost)}枚\n消耗宗门资材\n> {number_to(total_materials_cost)}"
         await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级攻击修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
@@ -1610,7 +1610,7 @@ async def uphppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             if result.status == "duplicate":
                 await handle_send(bot, event, "本次元血修炼升级已经完成，请刷新状态。")
             else:
-                await handle_send(bot, event, "任务结算未完成：资产数据刚被改动，请刷新后重试。")
+                await handle_send(bot, event, "宗门任务结算未完成：资财已更新，请刷新宗门任务后再领。")
             await uphppractice.finish()
         msg = f"升级成功！\n道友当前元血修炼等级\n> {userhppractice + level_up_count}\n消耗灵石\n> {number_to(total_stone_cost)}枚\n消耗宗门资材\n> {number_to(total_materials_cost)}"
         await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级元血修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
@@ -1697,7 +1697,7 @@ async def upmppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             if result.status == "duplicate":
                 await handle_send(bot, event, "本次灵海修炼升级已经完成，请刷新状态。")
             else:
-                await handle_send(bot, event, "任务结算未完成：资产数据刚被改动，请刷新后重试。")
+                await handle_send(bot, event, "宗门任务结算未完成：资财已更新，请刷新宗门任务后再领。")
             await upmppractice.finish()
         msg = f"升级成功！\n道友当前灵海修炼等级\n> {usermppractice + level_up_count}\n消耗灵石\n> {number_to(total_stone_cost)}枚\n消耗宗门资材\n> {number_to(total_materials_cost)}"
         await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级灵海修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
@@ -1722,7 +1722,7 @@ async def sect_task_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         if isUserTask(user_id):
             refreshed_task = refresh_user_sect_task(user_id, sect_id, _sect_operation_id(event, "task_refresh", user_id), sect_membership_service)
             if refreshed_task is None:
-                await handle_send(bot, event, "宗门任务刷新未执行：任务数据刚被其他操作改动。")
+                await handle_send(bot, event, "宗门任务刷新未完成：任务列表已更新，请重新查看宗门任务。")
                 await sect_task_refresh.finish()
             if userstask[user_id]['任务内容']['type'] == 1:
                 task_type = "⚔️"
@@ -2274,7 +2274,7 @@ async def sect_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             await handle_send(bot, event, msg, md_type="宗门", k1="改名", v1="宗门改名", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await sect_rename.finish()
         if not result.applied:
-            await handle_send(bot, event, "改名未完成：宗门数据刚被其他操作改动。")
+            await handle_send(bot, event, "宗门改名未完成：宗门信息已更新，请重新发起改名。")
             await sect_rename.finish()
 
         if result.status == "renamed":
@@ -2344,7 +2344,7 @@ async def create_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                 "name_exists": "宗门名称已存在，请更换名称。",
                 "stone_insufficient": "灵石不足，无法创建宗门。",
                 "already_member": "道友已有宗门，无法另立门户。",
-                "state_changed": "创建未结算：数据刚被其他操作改动。",
+                "state_changed": "创建未结算：当前状态已更新。",
                 "user_missing": "创建失败：未找到角色数据。",
             }.get(creation.status, f"创建失败（{creation.status}）。")
             await handle_send(bot, event, msg, md_type="宗门", k1="创建", v1="创建宗门", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
@@ -2416,7 +2416,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_S
                 stone_cost,
             )
             if not refresh.applied:
-                msg = "刷新宗门名称失败：数据刚被改动。"
+                msg = "刷新宗门名称未完成：候选名称已更新，请重新刷新。"
                 await handle_send(bot, event, msg, md_type="宗门", k1="创建", v1="创建宗门", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
                 await create_sect.finish()
             # 生成新名称
@@ -2463,7 +2463,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_S
         await handle_send(bot, event, msg, md_type="宗门", k1="创建", v1="创建宗门", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await create_sect.finish()
     if not creation.applied:
-        msg = "创建失败：数据刚被改动。"
+        msg = "创建未完成：宗门状态已更新，请重新创建。"
         await handle_send(bot, event, msg, md_type="宗门", k1="创建", v1="创建宗门", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await create_sect.finish()
     
@@ -2621,7 +2621,7 @@ async def sect_donate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             await handle_send(bot, event, msg, md_type="宗门", k1="捐献", v1="宗门捐献", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await sect_donate.finish()
         if donation.status in {"sect_changed", "sect_missing", "user_changed"}:
-            msg = "捐献未结算：数据刚被改动，请重新确认后再捐。"
+            msg = "捐献未完成：灵石或宗门资财已更新，请重新确认后再捐。"
             await handle_send(bot, event, msg, md_type="宗门", k1="捐献", v1="宗门捐献", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await sect_donate.finish()
         if not donation.applied:
@@ -2858,7 +2858,7 @@ async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     elif result.status == "sect_full":
         msg = f"该宗门人数已满（{result.member_count}/{result.member_limit}），无法加入！"
     elif result.status == "state_changed":
-        msg = "加入未结算：数据刚被其他操作改动。"
+        msg = "加入宗门未完成：宗门成员状态已更新，请重新加入。"
     elif result.status == "user_missing":
         msg = "加入失败：未找到角色数据。"
     else:

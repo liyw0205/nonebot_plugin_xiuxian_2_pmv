@@ -124,7 +124,7 @@ async def natal_awaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
             failure_reasons = {
                 "treasure_missing": "法宝数据结构尚未准备完成",
                 "already_awakened": "本命法宝已经觉醒",
-                "state_changed": "本命法宝操作未结算：法宝数据刚被其他操作改动",
+                "state_changed": "本命法宝操作未结算：法宝当前状态已更新",
             }
             reason = failure_reasons.get(awakened.status, "觉醒事务未能完成")
             await handle_send(
@@ -215,7 +215,7 @@ async def natal_reawaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMes
             "treasure_missing": "尚未觉醒本命法宝或法宝数据不完整",
             "item_insufficient": "神秘经书数量不足",
             "inventory_full": "神秘经书已达到背包上限",
-            "state_changed": "强化/洗练未结算：法宝数据刚被改动",
+            "state_changed": "强化/洗练未结算：法宝当前状态已更新",
         }
         reason = failure_reasons.get(reawakened.status, "重塑事务未能完成")
         await handle_send(
@@ -363,7 +363,7 @@ async def natal_upgrade_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="升阶", v3="本命法宝升阶")
         return
     if not training.succeeded:
-        await handle_send(bot, event, "养成未结算：数据刚被改动。")
+        await handle_send(bot, event, "法宝养成未完成：法宝状态已更新，请重新养成。")
         return
     nt._natal_data_cache = None
     if training.level > current_level:
@@ -431,7 +431,7 @@ async def natal_effect_upgrade_handler(bot: Bot, event: GroupMessageEvent | Priv
         await handle_send(bot, event, msg,
                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="升阶", v3="本命法宝升阶")
     else:
-        reason = "所有效果已达最高等级" if upgrade.status == "all_maxed" else "强化未结算：法宝数据刚被改动"
+        reason = "所有效果已达最高等级" if upgrade.status == "all_maxed" else "法宝强化未完成：法宝状态已更新"
         await handle_send(bot, event, f"效果升阶失败：{reason}。",
                           md_type="法宝", k1="升阶", v1="本命法宝升阶", k2="法宝", v2="我的本命法宝", k3="帮助", v3="本命法宝帮助")
 
@@ -520,7 +520,7 @@ async def natal_engrave_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
             "slots_full": "效果槽位已满",
             "effect_exhausted": "没有可供铭刻的新道纹",
             "item_insufficient": "神秘经书数量不足",
-            "state_changed": "强化/洗练未结算：法宝数据刚被改动",
+            "state_changed": "强化/洗练未结算：法宝当前状态已更新",
         }
         reason = failure_reasons.get(engraving.status, "铭刻事务未能完成")
         await handle_send(bot, event, f"铭刻道纹失败：{reason}。",
@@ -595,7 +595,7 @@ async def natal_forget_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
             "last_effect": "本命法宝至少需要保留一个道纹",
             "item_insufficient": "神秘经书数量不足",
             "inventory_full": "神秘经书已达到背包上限",
-            "state_changed": "强化/洗练未结算：法宝数据刚被改动",
+            "state_changed": "强化/洗练未结算：法宝当前状态已更新",
         }
         reason = failure_reasons.get(forgotten.status, "遗忘事务未能完成")
         await handle_send(bot, event, f"遗忘道纹失败：{reason}。",

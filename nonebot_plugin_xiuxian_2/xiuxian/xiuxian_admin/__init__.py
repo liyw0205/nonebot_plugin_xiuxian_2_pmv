@@ -515,7 +515,7 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             target_name=target_name,
         )
         if result.status == "state_changed":
-            msg = "调整未结算：思恋结晶数量刚被改动，请重新执行。"
+            msg = "调整未完成：思恋结晶数量已更新，请重新执行。"
         elif result.status == "operation_conflict":
             msg = "本次管理员传承操作与已记录事件冲突"
         elif result.status == "user_missing":
@@ -674,7 +674,7 @@ async def zaohua_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         float(sql_message.get_root_rate(target_user["root_type"], target_qq)),
     )
     if result.status == "state_changed":
-        msg = "调整未结算：玩家多项属性刚被改动，请重新执行。"
+        msg = "调整未完成：玩家属性已更新，请重新执行。"
     elif result.status == "operation_conflict":
         msg = "本次管理员境界操作与已记录事件冲突"
     elif result.status == "user_missing":
@@ -766,7 +766,7 @@ async def gmm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         new_root_rate,
     )
     if result.status == "state_changed":
-        msg = "调整未结算：玩家多项属性刚被改动，请重新执行。"
+        msg = "调整未完成：玩家属性已更新，请重新执行。"
     elif result.status == "operation_conflict":
         msg = "本次管理员灵根操作与已记录事件冲突"
     elif result.status == "user_missing":
@@ -953,7 +953,7 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
             if result.status == "inventory_full":
                 msg = f"{target} 的饰品背包容量不足！"
             elif result.status == "state_changed":
-                msg = "调整未结算：玩家饰品数据刚被改动，请重新执行。"
+                msg = "调整未结算：玩家饰品当前状态已更新，请重新执行。"
             elif result.status == "operation_conflict":
                 msg = "本次管理员饰品操作与已记录事件冲突"
             elif result.status == "user_missing":
@@ -984,7 +984,7 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
             if result.status == "inventory_full":
                 msg = f"{target} 的 {item_info['name']} 已达到背包容量上限！"
             elif result.status == "state_changed":
-                msg = "调整未结算：玩家背包数量刚被改动，请重新执行。"
+                msg = "调整未完成：玩家背包数量已更新，请重新执行。"
             elif result.status == "operation_conflict":
                 msg = "本次管理员操作与已记录事件冲突"
             elif result.status == "user_missing":
@@ -1016,7 +1016,7 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
         if result.status == "inventory_full":
             msg = "您的饰品背包容量不足！"
         elif result.status == "state_changed":
-            msg = "操作未结算：您的饰品数据刚被改动，请重新执行。"
+            msg = "操作未结算：您的饰品当前状态已更新，请重新执行。"
         elif result.status == "operation_conflict":
             msg = "本次管理员饰品操作与已记录事件冲突"
         elif result.status == "user_missing":
@@ -1047,7 +1047,7 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
         if result.status == "inventory_full":
             msg = f"您的 {item_info['name']} 已达到背包容量上限！"
         elif result.status == "state_changed":
-            msg = "操作未结算：您的背包数量刚被改动，请重新执行。"
+            msg = "操作未完成：背包数量已更新，请重新执行。"
         elif result.status == "operation_conflict":
             msg = "本次管理员操作与已记录事件冲突"
         elif result.status == "user_missing":
@@ -1203,7 +1203,7 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
                 target,
             )
             if result.status == "state_changed":
-                msg = "调整未结算：玩家饰品数据刚被改动，请重新执行。"
+                msg = "调整未结算：玩家饰品当前状态已更新，请重新执行。"
             elif result.status == "operation_conflict":
                 msg = "本次管理员饰品操作与已记录事件冲突"
             elif result.status == "user_missing":
@@ -1239,7 +1239,7 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
                 target_name=target,
             )
             if result.status == "state_changed":
-                msg = "调整未结算：玩家背包数量刚被改动，请重新执行。"
+                msg = "调整未完成：玩家背包数量已更新，请重新执行。"
             elif result.status == "operation_conflict":
                 msg = "本次管理员操作与已记录事件冲突"
             elif result.status == "user_missing":
@@ -1271,7 +1271,7 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             "self",
         )
         if result.status == "state_changed":
-            msg = "操作未结算：您的饰品数据刚被改动，请重新执行。"
+            msg = "操作未结算：您的饰品当前状态已更新，请重新执行。"
         elif result.status == "operation_conflict":
             msg = "本次管理员饰品操作与已记录事件冲突"
         elif result.status == "user_missing":
@@ -1307,7 +1307,7 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             target_name="self",
         )
         if result.status == "state_changed":
-            msg = "操作未结算：您的背包数量刚被改动，请重新执行。"
+            msg = "操作未完成：背包数量已更新，请重新执行。"
         elif result.status == "operation_conflict":
             msg = "本次管理员操作与已记录事件冲突"
         elif result.status == "user_missing":
@@ -1403,7 +1403,7 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await handle_send(bot, event, f"重置状态失败：{e}")
             await restate.finish()
         if result.status == "state_changed":
-            msg = "操作未结算：玩家数据刚被其他操作改动，请重新执行。"
+            msg = "操作未结算：玩家当前状态已更新，请重新执行。"
         elif result.status == "operation_conflict":
             msg = "本次管理员状态重置与已记录事件冲突"
         elif result.status == "user_missing":

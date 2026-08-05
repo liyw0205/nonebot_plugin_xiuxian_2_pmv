@@ -788,7 +788,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         f"pet-travel-start:{event_id or time.time_ns()}:{user_id}", user_id, pet["uid"], data.get("travel"), travel
     )
     if not started.succeeded:
-        await handle_send(bot, event, "游历操作未结算：游历数据刚被改动，请重新查询。")
+        await handle_send(bot, event, "游历未完成：游历进度已更新，请重新查询游历。")
         return
     result_msg = "派遣成功。"
 
@@ -884,10 +884,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, "背包物品已达上限，宠物游历奖励尚未领取。")
         return
     if claim_result.status == "state_changed":
-        await handle_send(bot, event, "领取未结算：游历奖励数据刚被改动，请重新查询。")
+        await handle_send(bot, event, "游历领奖未完成：奖励状态已更新，请重新领取。")
         return
     if claim_result.status == "pet_missing":
-        await handle_send(bot, event, "领取失败：游历数据刚被其他操作改动，奖励尚未入账。")
+        await handle_send(bot, event, "游历领奖未入账：游历状态已更新，请重新领取。")
         return
     if claim_result.status == "user_missing":
         await handle_send(bot, event, "未找到道友数据，宠物游历奖励领取失败。")
@@ -1193,7 +1193,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             "stone_missing": f"砸蛋{count}次需要{number_to(total_cost)}灵石，道友当前灵石不足。",
             "inventory_full": "宠物背包容量不足，请先放生或整理后再砸蛋。",
             "user_missing": "角色不存在，无法砸蛋。",
-            "state_changed": "砸蛋未结算：数据刚被改动，请重试。",
+            "state_changed": "砸蛋未结算：当前状态已更新，请重新发起。",
         }.get(hatched.status, f"砸蛋失败（{hatched.status}）。")
         await handle_send(bot, event, status_msg)
         return
@@ -1299,7 +1299,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         messages = {
             "pet_missing": "未找到该宠物UID。",
             "pet_traveling": "游历中的宠物无法出战。",
-            "state_changed": "宠物操作未结算：宠物数据刚被其他操作改动。",
+            "state_changed": "宠物操作未完成：宠物状态已更新，请重新操作。",
             "operation_conflict": "本次出战请求与已处理记录冲突，请重新操作。",
         }
         result_msg = messages.get(result.status, "宠物出战切换失败，请重试。")
@@ -1350,7 +1350,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "背包物品已达上限，宠物未放生。")
         return
     if not release_result.succeeded:
-        await handle_send(bot, event, "宠物操作未结算：宠物数据刚被其他操作改动。")
+        await handle_send(bot, event, "宠物操作未完成：宠物状态已更新，请重新操作。")
         return
     refund_msg = _format_pet_release_refund([pet], refund_item, release_result.refund)
 
@@ -1405,7 +1405,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "背包物品已达上限，宠物未放生。")
         return
     if not release_result.succeeded:
-        await handle_send(bot, event, "宠物操作未结算：宠物数据刚被其他操作改动。")
+        await handle_send(bot, event, "宠物操作未完成：宠物状态已更新，请重新操作。")
         return
     refund_msg = _format_pet_release_refund(pets, refund_item, release_result.refund)
     lines = [
@@ -1517,7 +1517,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, f"材料不足：当前仅有{have}个{item_info.get('name', item_name)}。")
         return
     if not result.succeeded:
-        messages = {"state_changed": "操作未结算：数据刚被改动，请重试。"}
+        messages = {"state_changed": "操作未完成：当前状态已更新，请重新发起。"}
         await handle_send(bot, event, messages.get(result.status, "喂食结算失败，请重试。"))
         return
     pet = get_pet_doc(user_id).get("active")
@@ -1604,7 +1604,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             skill_offer,
         )
         if not result.succeeded:
-            result_msg = "融合失败：宠物数据刚被改动，请重试。"
+            result_msg = "宠物融合未完成：宠物状态已更新，请重新融合。"
             pet = None
             skill_offer = None
     has_skill_offer = False
@@ -1667,7 +1667,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if not result.succeeded:
         messages = {
             "item_missing": "背包中没有启明石，无法重置宠物技能。",
-            "state_changed": "启明失败：数据刚被改动，请重试。",
+            "state_changed": "启明失败：当前状态已更新，请重新发起。",
         }
         await handle_send(bot, event, messages.get(result.status, "启明结算失败，请重试。"))
         return

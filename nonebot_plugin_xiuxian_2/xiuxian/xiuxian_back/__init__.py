@@ -118,7 +118,7 @@ def _back_op_fail_msg(result, *, action: str = "操作") -> str:
         "user_missing": f"未找到修仙数据，{action}未结算。",
         "inventory_full": f"背包已满，{action}未结算。",
         "duplicate": f"该请求已处理，无需重复提交。",
-        "state_changed": f"{action}时数据刚被改动，未结算，请刷新后重试。",
+        "state_changed": f"{action}时当前状态已更新，未结算，请刷新后重试。",
         "operation_conflict": "请求冲突（重复点击），请稍后再试。",
         "not_bound": "该物品未绑定，无法解绑。",
         "already_equipped": "已处于穿戴状态。",
@@ -1533,7 +1533,7 @@ async def use_lottery_talisman(bot: Bot, event: GroupMessageEvent | PrivateMessa
         max_goods_num=XiuConfig().max_goods_num,
     )
     if not result.succeeded:
-        await handle_send(bot, event, "灵签宝箓数量已经变化，请刷新背包后重试！")
+        await handle_send(bot, event, "灵签宝箓数量已更新，请刷新背包后再使用。")
         return
 
     obtained_items = {}

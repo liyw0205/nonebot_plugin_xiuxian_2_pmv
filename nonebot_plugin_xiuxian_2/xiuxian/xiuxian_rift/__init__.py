@@ -546,7 +546,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             if entry.status == "stamina_missing":
                 await handle_send(bot, event, "你没有足够的体力，请等待体力恢复后再试！")
                 await explore_rift.finish()
-            await handle_send(bot, event, "进入失败：秘境数据刚被其他操作改动。")
+            await handle_send(bot, event, "进入秘境未完成：秘境状态已更新，请重新进入。")
             await explore_rift.finish()
         _sync_entry_projection(user_id, entry)
         msg = _entry_success_message(entry.rift_data)
@@ -621,7 +621,7 @@ async def use_rift_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
             if entry.status == "ticket_missing":
                 await handle_send(bot, event, "秘藏令数量不足，请重新查看背包。")
                 return
-            await handle_send(bot, event, "开启失败：秘境数据刚被其他操作改动。")
+            await handle_send(bot, event, "开启秘境未完成：秘境状态已更新，请重新开启。")
             return
         _sync_entry_projection(user_id, entry)
         msg = _entry_success_message(entry.rift_data, bypass_position=True)
@@ -788,7 +788,7 @@ async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                     event,
                     messages.get(
                         result.status,
-                        "结算未完成：秘境未到结算时间，或结算已被处理，请重新查询。",
+                        "秘境结算未完成：未到结算时间或已结算，请重新查询秘境。",
                     ),
                 )
                 await complete_rift.finish()
@@ -865,7 +865,7 @@ async def break_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         if not result.succeeded:
             msg = {
                 "not_active": "终止失败：当前没有进行中的秘境。",
-                "state_changed": "终止未结算：秘境数据刚被其他操作改动。",
+                "state_changed": "终止未结算：秘境当前状态已更新。",
                 "duplicate": "该终止请求已处理。",
             }.get(result.status, f"终止失败（{result.status}）。")
             await handle_send(bot, event, msg)
@@ -944,7 +944,7 @@ async def use_rift_key(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             event,
             messages.get(
                 result.status,
-                "使用失败：秘境钥匙数据刚被其他操作改动。",
+                "使用秘境钥匙未完成：钥匙或秘境状态已更新，请重新查看背包。",
             ),
         )
         return
@@ -1033,7 +1033,7 @@ async def use_rift_boss(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             event,
             messages.get(
                 settlement.status,
-                "使用失败：斩妖令数据刚被其他操作改动。",
+                "使用斩妖令未完成：斩妖令或秘境状态已更新，请重新查看背包。",
             ),
         )
         return

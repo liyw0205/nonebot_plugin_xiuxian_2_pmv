@@ -1018,7 +1018,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, f"建设洞府需要{number_to(DONGFU_COST)}灵石，你当前灵石不足。")
         return
     if not result.succeeded:
-        await handle_send(bot, event, "建设洞府未结算：数据刚被改动，请重试。")
+        await handle_send(bot, event, "建设洞府未完成：洞府状态已更新，请重新建设。")
         return
 
     await handle_send(bot, event, f"洞府建设成功！\n位置：{realm}·{heaven}·{node['name']}\n消耗灵石：{number_to(DONGFU_COST)}")
@@ -1259,7 +1259,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         if not result.succeeded:
             message = (
                 "体力不足，无法移动。" if result.status == "stamina_insufficient"
-                else "移动未结算：数据刚被其他操作改动。" if result.status == "state_changed"
+                else "移动未完成：所在节点已更新，请重新移动。" if result.status == "state_changed"
                 else f"无法移动（{result.status}）。"
             )
             await handle_send(bot, event, message)
@@ -1294,7 +1294,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         if not result.succeeded:
             message = (
                 "体力不足，无法移动。" if result.status == "stamina_insufficient"
-                else "移动未结算：数据刚被其他操作改动。" if result.status == "state_changed"
+                else "移动未完成：所在节点已更新，请重新移动。" if result.status == "state_changed"
                 else f"无法移动（{result.status}）。"
             )
             await handle_send(bot, event, message)
@@ -1333,7 +1333,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         if not result.succeeded:
             message = (
                 "体力不足，无法移动。" if result.status == "stamina_insufficient"
-                else "移动未结算：数据刚被其他操作改动。" if result.status == "state_changed"
+                else "移动未完成：所在节点已更新，请重新移动。" if result.status == "state_changed"
                 else f"无法移动（{result.status}）。"
             )
             await handle_send(bot, event, message)
@@ -1412,7 +1412,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         uid, target["user_id"], st, my_win,
     )
     if not result.succeeded:
-        message = "对方已离开当前节点，论道未结算。" if result.status == "position_changed" else "论道未结算：双方位置/体力刚被改动，请重新发起。"
+        message = "对方已离开当前节点，论道未结算。" if result.status == "position_changed" else "论道未完成：双方位置或体力已更新，请重新发起。"
         await handle_send(bot, event, message)
         return
 
@@ -1540,7 +1540,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "背包物品已达上限，购买未完成。")
         return
     if result.status in {"state_changed", "user_missing"}:
-        await handle_send(bot, event, "操作未结算：灵石账户刚被其他操作改动，请重试。")
+        await handle_send(bot, event, "操作未完成：灵石数额已更新，请重新发起。")
         return
     await handle_send(bot, event, f"购买成功：{seed['name']} x{result.quantity}，花费{number_to(result.cost)}灵石。")
 
@@ -1566,7 +1566,7 @@ def _interactive_start_message(result, action_type: str) -> str:
         return f"体力不足！当前仅剩 {result.stamina}。"
     if result.status == "operation_conflict":
         return "该事件已用于其他资源行动。"
-    return "资源行动未结算：数据刚被改动，请重试。"
+    return "资源行动未完成：节点资源状态已更新，请重新行动。"
 
 
 async def _interactive_ready_notice(bot, event, uid: str, action: dict):
@@ -1793,7 +1793,7 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
             uid, st["action_id"], settlement
         )
         if not planned.succeeded or planned.action is None:
-            await handle_send(bot, event, "资源行动未结算：数据刚被改动，请重试。")
+            await handle_send(bot, event, "资源行动未完成：节点资源状态已更新，请重新行动。")
             return
         st = planned.action
         settlement = st["settlement"]
@@ -1818,7 +1818,7 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
         await handle_send(bot, event, "背包物品已达上限，资源奖励尚未领取。")
         return
     if result.status in {"limit_reached", "state_changed", "user_missing"}:
-        await handle_send(bot, event, "资源行动未结算：数据刚被改动，请重试。")
+        await handle_send(bot, event, "资源行动未完成：节点资源状态已更新，请重新行动。")
         return
 
     decay_tip = f"\n当前收益系数：{int(settlement['decay'] * 100)}%" if settlement["decay"] < 1 else ""
@@ -1914,7 +1914,7 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
                     return
                 snapshot, raw_snapshot = current.task, current.snapshot
             else:
-                await handle_send(bot, event, "节点战斗未结算：战斗数据刚被其他操作改动。")
+                await handle_send(bot, event, "节点战斗未结算：战斗当前状态已更新。")
                 return
         else:
             position = get_player_current_position(uid)
@@ -1973,7 +1973,7 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
                     return
                 snapshot, raw_snapshot = current.task, current.snapshot
             elif not started.succeeded or started.task is None:
-                await handle_send(bot, event, "节点战斗未结算：战斗数据刚被其他操作改动。")
+                await handle_send(bot, event, "节点战斗未结算：战斗当前状态已更新。")
                 return
             else:
                 snapshot, raw_snapshot = started.task, started.snapshot
@@ -2047,7 +2047,7 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await handle_send(bot, event, "背包物品已达上限，节点战斗结算尚未领取。")
         return
     if result.status in {"limit_reached", "state_changed", "user_missing"}:
-        await handle_send(bot, event, "节点战斗未结算：战斗数据刚被其他操作改动。")
+        await handle_send(bot, event, "节点战斗未结算：战斗当前状态已更新。")
         return
 
     decay_tip = f"\n当前收益系数：{int(snapshot['decay'] * 100)}%" if snapshot["decay"] < 1 else ""
@@ -2266,7 +2266,7 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, f"今日探索发起次数已达上限（{DAILY_LIMIT_CONFIG['explore']}次），请明日再来。")
         return
     if not result.succeeded:
-        await handle_send(bot, event, "探索未结算：探索数据刚被改动，请重试。")
+        await handle_send(bot, event, "探索未结算：探索当前状态已更新，请重新发起。")
         return
 
     await handle_send(
@@ -2389,7 +2389,7 @@ async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, "背包物品已达上限，探索奖励尚未领取。")
         return
     if result.status in {"limit_reached", "state_changed", "user_missing"}:
-        await handle_send(bot, event, "探索未结算：探索数据刚被改动，请重试。")
+        await handle_send(bot, event, "探索未结算：探索当前状态已更新，请重新发起。")
         return
 
     decay_tip = f"\n当前收益系数：{int(snapshot['decay'] * 100)}%" if snapshot["decay"] < 1 else ""
@@ -2581,7 +2581,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, "背包物品已达上限，委托奖励尚未领取。")
         return
     if result.status in {"not_completed", "already_claimed", "state_changed", "user_missing"}:
-        await handle_send(bot, event, "委托未结算：委托数据刚被改动，请重试。")
+        await handle_send(bot, event, "委托未结算：委托当前状态已更新，请重新发起。")
         return
 
     if result.status == "applied":

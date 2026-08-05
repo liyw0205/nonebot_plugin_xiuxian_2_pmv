@@ -755,7 +755,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, f"你没有【{seed_name}】，请先去种子商店购买。")
         return
     if result.status in {"plot_occupied", "state_changed", "dongfu_missing"}:
-        await handle_send(bot, event, "灵田操作未结算：灵田数据刚被改动，请重新尝试。")
+        await handle_send(bot, event, "灵田操作未结算：灵田当前状态已更新，请重新尝试。")
         return
     d = _get_dongfu(uid)
 
@@ -894,7 +894,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "背包物品已达上限，洞府收获尚未领取。")
         return
     if result.status in {"not_mature", "state_changed", "user_missing", "dongfu_missing"}:
-        await handle_send(bot, event, "种植未结算：种植数据刚被改动，请重新尝试。")
+        await handle_send(bot, event, "种植未结算：种植当前状态已更新，请重新尝试。")
         return
 
     reward_map = {
@@ -1090,7 +1090,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "你没有【五色灵壤】。可通过地图采集/探索获得。")
         return
     if result.status in {"fertilizer_full", "plot_empty", "state_changed", "dongfu_missing"}:
-        await handle_send(bot, event, "灵田操作未结算：灵田数据刚被改动，请重新尝试。")
+        await handle_send(bot, event, "灵田操作未结算：灵田当前状态已更新，请重新尝试。")
         return
     d = _get_dongfu(uid)
     await handle_send(bot, event, f"已对{slot_no}号灵田施肥，当前肥力+{fertilizer + 1}。\n{_format_plant_slots(d)}")
@@ -1157,7 +1157,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "你没有【灵息露】。可通过地图钓鱼/探索获得。")
         return
     if result.status in {"plot_empty", "already_mature", "state_changed", "dongfu_missing"}:
-        await handle_send(bot, event, "灵田操作未结算：灵田数据刚被改动，请重新尝试。")
+        await handle_send(bot, event, "灵田操作未结算：灵田当前状态已更新，请重新尝试。")
         return
     d = _get_dongfu(uid)
     await handle_send(bot, event, f"已使用【灵息露】催熟{slot_no}号灵田，成熟时间缩短{accelerate_minutes}分钟。\n{_format_plant_slots(d)}")
@@ -1240,7 +1240,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     result = dongfu_visit_reward_service.reward(f"dongfu-visit:{uid}:{event_message_id or time.time_ns()}", uid, tid, gain)
     if not result.succeeded:
-        await handle_send(bot, event, "洞府操作未结算：洞府数据刚被改动，请稍后重试。")
+        await handle_send(bot, event, "洞府操作未结算：洞府当前状态已更新，请稍后重试。")
         return
     await handle_send(bot, event, f"你拜访了【{tname}】的洞府（{td.get('node_name')}），获得灵石{number_to(gain)}。")
 
@@ -1375,7 +1375,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             _get_infiltrate_count_field(is_random_mode), _get_infiltrate_limit(is_random_mode), INFILTRATE_DAILY_LIMIT, loss_stone, guarded,
         )
         if not result.succeeded:
-            await handle_send(bot, event, "潜入未结算：潜入进度数据刚被改动，请稍后重试。")
+            await handle_send(bot, event, "潜入未结算：潜入进度当前状态已更新，请稍后重试。")
             return
         guard_msg = "\n目标洞府巡山护府尚有余威。" if guarded else ""
         await handle_send(bot, event, f"❌ **潜入失败**\n---\n你潜入【{tname}】洞府时触发阵法警示，被当场逼退！\n对方阵法等级\n> {array_lv}\n损失灵石\n> {number_to(loss_stone)}\n今日剩余{mode_name}次数\n> {result.infiltrate_left}\n该洞府今日剩余可被潜入次数\n> {result.intrude_left}{guard_msg}")
@@ -1426,7 +1426,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "背包空间不足，潜入所得无法结算。")
         return
     if not result.succeeded:
-        await handle_send(bot, event, "潜入未结算：潜入进度数据刚被改动，请稍后重试。")
+        await handle_send(bot, event, "潜入未结算：潜入进度当前状态已更新，请稍后重试。")
         return
     rewards = reward_messages
     infiltrate_left, left = result.infiltrate_left, result.intrude_left

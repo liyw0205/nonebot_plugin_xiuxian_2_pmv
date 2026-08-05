@@ -196,7 +196,7 @@ async def blessed_spot_creat_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
         await blessed_spot_creat.finish()
     if not result.succeeded:
-        msg = "洞天福地状态或灵石数量已变化，请重新查看后再试。"
+        msg = "洞天福地操作未完成：灵石或洞天状态已更新，请重新查看。"
         await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
         await blessed_spot_creat.finish()
     msg = "恭喜道友拥有了自己的洞天福地，请收集聚灵旗来提升洞天福地的等级吧~\n"
@@ -294,7 +294,7 @@ async def ling_tian_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             if result.succeeded:
                 msg = f"道友成功消耗灵石：{result.stone_cost}，灵田数量+1,目前数量:{result.current_level}"
             else:
-                msg = "灵田操作未结算：灵田数据刚被改动，请重新查看后再试。"
+                msg = "灵田操作未完成：灵田状态已更新，请重新查看灵田。"
     await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
     await ling_tian_up.finish()
 
@@ -332,7 +332,7 @@ async def blessed_spot_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         elif result.succeeded:
             msg = f"道友的洞天福地成功改名为：{result.name}"
         else:
-            msg = "洞天操作未结算：洞天数据刚被其他操作改动。"
+            msg = "洞天操作未结算：洞天当前状态已更新。"
     await handle_send(bot, event, msg, md_type="buff", k1="查看", v1="洞天福地查看", k2="购买", v2="洞天福地购买", k3="开垦", v3="灵田开垦")
     await blessed_spot_rename.finish()
 
@@ -424,7 +424,7 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
     elif settlement.status == "stamina_insufficient":
         msg = "你没有足够的体力，请等待体力恢复后再试！"
     else:
-        msg = "切磋未结算：双方战斗数据刚被改动，请重新发起。"
+        msg = "切磋未结算：双方战斗当前状态已更新，请重新发起。"
     await handle_send(bot, event, msg, md_type="buff", k1="切磋", v1="切磋", k2="状态", v2="我的状态", k3="修为", v3="我的修为")
     await qc.finish()
 
@@ -508,7 +508,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 exp_cap=max_exp, power_multiplier=level_rate * realm_rate,
             )
             if start_result.status not in {"started", "duplicate"}:
-                await handle_send(bot, event, "修炼操作未结算：闭关/出关状态刚被改动，请重新尝试。")
+                await handle_send(bot, event, "修炼操作未完成：闭关或出关状态已更新，请重新操作。")
                 await up_exp.finish()
             msg = f"开始挖矿⛏️！【{user_info['user_name']}开始挖矿】\n挥起玄铁镐砸向发光岩壁\n碎石里蹦出带灵气的矿石\n预计时间：60秒"
             await handle_send(bot, event, msg)
@@ -529,7 +529,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 exp_cap=max_exp, power_multiplier=level_rate * realm_rate,
             )
             if start_result.status not in {"started", "duplicate"}:
-                await handle_send(bot, event, "修炼操作未结算：闭关/出关状态刚被改动，请重新尝试。")
+                await handle_send(bot, event, "修炼操作未完成：闭关或出关状态已更新，请重新操作。")
                 await up_exp.finish()
             msg = f"【{user_info['user_name']}开始修炼】\n盘膝而坐，五心朝天，闭目凝神，渐入空明之境...\n周身灵气如涓涓细流汇聚，在经脉中缓缓流转\n丹田内真元涌动，与天地灵气相互呼应\n渐入佳境，物我两忘，进入深度修炼状态\n预计修炼时间：60秒"
         await handle_send(bot, event, msg)
@@ -599,7 +599,7 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     elif result.status == "exp_capped":
         msg = "当前修为已到达上限，无法继续灵石修炼！"
     elif not result.succeeded:
-        msg = "修炼结算失败：数据刚被改动，请重新尝试。"
+        msg = "修炼结算失败：当前状态已更新，请重新尝试。"
     else:
         capped = result.exp_gain >= user_get_exp_max
         prefix = "修炼结束，本次修炼到达上限" if capped else "修炼结束"
@@ -713,7 +713,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await handle_send(bot, event, "出关结算失败：结算过程异常。")
         await out_closing.finish()
     if not result.succeeded:
-        await handle_send(bot, event, "闭关状态或资源已变化，请重新查看后再试。")
+        await handle_send(bot, event, "闭关操作未完成：闭关状态或资源已更新，请重新查看。")
         await out_closing.finish()
 
     hp_msg = ",气血已回满！" if new_hp >= int(new_exp / 2) else f",回复气血：{number_to(hp_gain)}"

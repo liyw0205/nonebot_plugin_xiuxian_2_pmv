@@ -964,7 +964,7 @@ async def handle_give_exp(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     elif result.status in {"applied", "duplicate", "already_claimed"}:
         message = random.choice(REFUSE_EXP_MESSAGES)
     elif result.status in {"state_changed", "operation_conflict"}:
-        message = "互动未结算：角色数据刚被其他操作改动。"
+        message = "互动未结算：角色当前状态已更新。"
     else:
         message = "未找到角色信息，无法发放修为。"
     await handle_send(bot, event, message)
@@ -991,7 +991,7 @@ async def handle_give_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     elif result.status in {"applied", "duplicate", "already_claimed"}:
         message = random.choice(REFUSE_STONE_MESSAGES)
     elif result.status in {"state_changed", "operation_conflict"}:
-        message = "互动未结算：角色数据刚被其他操作改动。"
+        message = "互动未结算：角色当前状态已更新。"
     else:
         message = "未找到角色信息，无法发放灵石。"
     await handle_send(bot, event, message)

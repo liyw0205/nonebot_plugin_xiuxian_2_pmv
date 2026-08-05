@@ -78,7 +78,7 @@ def _item_use_fail_msg(result, *, kind: str = "丹药") -> str:
         "item_insufficient": f"{kind}数量不足，请刷新背包后重试。",
         "user_missing": "未找到修仙数据，本次未结算。",
         "duplicate": f"该{kind}使用请求已处理，无需重复提交。",
-        "state_changed": f"使用{kind}时数据刚被改动，本次未结算，请刷新背包后重试。",
+        "state_changed": f"使用{kind}时当前状态已更新，本次未结算，请刷新背包后重试。",
         "operation_conflict": "请求冲突（重复点击），请稍后再试。",
     }
     return mapping.get(status, f"{kind}使用未结算（{status}），请刷新背包后重试。")

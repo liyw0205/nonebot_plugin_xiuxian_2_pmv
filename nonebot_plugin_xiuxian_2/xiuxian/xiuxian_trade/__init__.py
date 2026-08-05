@@ -320,7 +320,7 @@ def buy_xianshi_item_safely(
         "stone_insufficient": f"灵石不足！需要 {number_to(result.total_cost)} 灵石",
         "stamina_insufficient": "体力不足！快速购买需要10点体力",
         "inventory_full": f"背包中的 {item_to_buy['name']} 已达到数量上限！",
-        "state_changed": "购买未完成：数据刚被改动，请重新【仙肆查看】后再买。",
+        "state_changed": "购买未完成：当前状态已更新，请重新【仙肆查看】后再买。",
         "operation_conflict": "购买请求冲突（重复点击或并发），请稍后再试。",
     }
     if not result.succeeded:
@@ -1928,7 +1928,7 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_take_item.finish()
     if not result.succeeded:
-        msg = {"item_insufficient":"物品数量不足，暂存未结算。","inventory_full":"背包已满，无法取回。","state_changed":"暂存未结算：数据刚被其他操作改动。","user_missing":"未找到修仙数据。"}.get(result.status, f"鬼市暂存未结算（{result.status}），请重试。")
+        msg = {"item_insufficient":"物品数量不足，暂存未结算。","inventory_full":"背包已满，无法取回。","state_changed":"鬼市暂存未完成：背包或暂存状态已更新。","user_missing":"未找到修仙数据。"}.get(result.status, f"鬼市暂存未结算（{result.status}），请重试。")
         await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_take_item.finish()
 
