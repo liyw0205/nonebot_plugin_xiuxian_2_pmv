@@ -2,12 +2,12 @@ name: Build and Release
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
     inputs:
       tag_name:
-        description: Optional release tag
+        description: Optional release tag (used as release version)
         required: false
         type: string
 
@@ -20,18 +20,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Select release tag
         id: tag
         env:
           REQUESTED_TAG: ${{ inputs.tag_name }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
         run: |
           if [ -n "$REQUESTED_TAG" ]; then
             tag_name="$REQUESTED_TAG"
           else
-            tag_name="v$(TZ=Asia/Shanghai date +%Y%m%d%H%M%S)"
+            tag_name="$GITHUB_REF_NAME"
           fi
           echo "tag_name=$tag_name" >> "$GITHUB_OUTPUT"
 
