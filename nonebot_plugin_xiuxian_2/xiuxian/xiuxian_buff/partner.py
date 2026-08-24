@@ -2320,7 +2320,7 @@ async def mentor_transmission_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await mentor_transmission.finish()
 
     gap = get_realm_gap(mentor_info["level"], apprentice_info["level"])
-    if gap <= 0:
+    if gap >= 0:
         await handle_send(bot, event, "徒弟境界已与你相同或在你之上，无法继续传功。", **buttons)
         await mentor_transmission.finish()
 
