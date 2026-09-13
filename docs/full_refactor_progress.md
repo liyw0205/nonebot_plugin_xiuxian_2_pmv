@@ -315,6 +315,8 @@
 
 2026-09-14 tianti migration routing correction：live 验证发现 maintenance CLI 原先只对 game_db 运行完整 migration catalog，导致 `tianti_training.003` 被错误记录到 game_db、player_db 未建 `tianti_info`。现已统一 CLI/startup 分库过滤：game_db 排除 player-only `.003`，player_db 执行 `title.001` 与 `.003`；既有 game_db migration 历史不篡改，纠正动作只在 player_db 补 schema。rollback 使用部署前 backup，不执行玩家数据回填。
 
+2026-09-14 tianti migration routing correction live safety：提交 `6435932` 部署后 backup `/srv/old/data/backups/20260913T230023Z`；dry-run 真实返回 game_db `[]`、player_db `[tianti_training.003]`，apply 仅写入 player_db。reconcile clean，readiness 全绿；recovery smoke 恢复后 game_db migrations=60、player_db migrations=2、`tianti_info` 存在，`operations=0/outbox_events=0/dead_events=0`。未执行 tianti 用户训练写入，未篡改 game_db 已有迁移历史。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。
