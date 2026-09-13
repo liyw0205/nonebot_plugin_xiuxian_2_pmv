@@ -321,6 +321,8 @@
 
 2026-09-14 tianti profile path correction：首次 live 预检发现 profile 实际位于部署源码 `/srv/src/data/xiuxian/炼体/炼体境界.json`，而 repository 初版错误查找 `/srv/old/data/炼体/炼体境界.json`；当次未执行用户训练，backup `/srv/old/data/backups/20260913T231537Z`、migration dry-run 全库 pending 为空、reconcile clean。现将默认根修正为 `player_db` 同级 `xiuxian/`，并在下一次 live 预检验证真实 profile load；失败回滚使用上述 backup。
 
+2026-09-14 tianti profile path correction live safety：提交 `6e2410a` 部署后 backup `/srv/old/data/backups/20260913T232004Z`、migration dry-run 全库 pending 为空、reconcile clean；使用 `/srv/venv/bin/python` 真实加载 profile，90 个等级、首级 `淬体境一重`、cap=18000。readiness 全绿；recovery smoke 恢复后 game_db migrations=60、player_db migrations=2、`tianti_info` 存在，reconcile clean。一次使用容器系统 `python3` 的 profile 查询因缺少 venv 依赖失败，未改变数据，后用部署 venv 重试成功。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。
