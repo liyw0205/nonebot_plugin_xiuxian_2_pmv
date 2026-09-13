@@ -41,6 +41,20 @@ class LegacySignInEffects(SignInEffects):
             row = uow.query_one("SELECT user_name FROM user_xiuxian WHERE user_id = ? LIMIT 1", (str(user_id),))
         return str(row["user_name"] if row else user_id)
 
+    def _claim_non_lottery_effects(self, operation_id: str) -> bool:
+        """Persist the once-only claim before invoking legacy side effects."""
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            uow.execute(
+                "CREATE TABLE IF NOT EXISTS sign_in_effect_operations ("
+                "operation_id TEXT PRIMARY KEY, created_at TEXT NOT NULL)"
+            )
+            cursor = uow.execute(
+                "INSERT INTO sign_in_effect_operations(operation_id, created_at) "
+                "VALUES (?, ?) ON CONFLICT(operation_id) DO NOTHING",
+                (operation_id, self.clock.now().isoformat()),
+            )
+            return cursor.rowcount == 1
+
     def on_signed(self, *, user_id: str, operation_id: str, stone: int, replayed: bool) -> str | None:
         now = self.clock.now() if hasattr(self.clock, "now") else self.clock()
         business_date = now.date().isoformat() if isinstance(now, datetime) else str(now)[:10]
@@ -65,7 +79,7 @@ class LegacySignInEffects(SignInEffects):
                 message = f"🎉恭喜道友获得{prize_names[settled.prize_tier]}！\n中奖号码：{settled.lottery_number}\n获得奖池的{settled.prize}灵石！🎉"
             else:
                 message = "本次签到未中奖，奖池继续累积~"
-        if replayed:
+        if replayed or not self._claim_non_lottery_effects(operation_id):
             return message + "\n该签到请求已经处理，无需重复提交。"
         if self.statistics is not None:
             self.statistics(str(user_id), "修仙签到")

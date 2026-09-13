@@ -69,6 +69,21 @@ class LegacySignInEffectsTests(unittest.TestCase):
             self.assertEqual(statistics.call_count, 1)
             self.assertEqual(task_progress.call_count, 1)
 
+    def test_effects_ledger_blocks_duplicate_direct_replay(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "sign.db"
+            with DatabaseUnitOfWork(database) as uow:
+                uow.execute("CREATE TABLE user_xiuxian (user_id TEXT, user_name TEXT, is_sign INTEGER, stone INTEGER)")
+                uow.execute("INSERT INTO user_xiuxian VALUES (?, ?, ?, ?)", ("u1", "甲", 0, 0))
+            lottery = Mock()
+            statistics = Mock()
+            effects = LegacySignInEffects(database, lottery_service=lottery, clock=FixedClock(), statistics=statistics)
+
+            effects.on_signed(user_id="u1", operation_id="same", stone=10, replayed=False)
+            effects.on_signed(user_id="u1", operation_id="same", stone=10, replayed=False)
+
+            self.assertEqual(statistics.call_count, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

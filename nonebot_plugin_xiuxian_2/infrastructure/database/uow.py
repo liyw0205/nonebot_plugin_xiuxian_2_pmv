@@ -51,6 +51,10 @@ class DatabaseUnitOfWork:
             raise RuntimeError("unit of work is not active")
         return self.connection
 
+    def commit(self) -> None:
+        """Commit before invoking an external post-transaction effect."""
+        self._conn().commit()
+
     def execute(self, sql: str, params: Any = ()) -> sqlite3.Cursor:
         return self._conn().execute(sql, params)
 

@@ -87,12 +87,7 @@ class SignInApplication:
                         previous = existing.outcome()
                         if previous is not None:
                             replayed = previous.replay()
-                            self.effects.on_signed(
-                                user_id=request.user_id,
-                                operation_id=request.operation_id,
-                                stone=int((replayed.data or {}).get("sign_in", {}).get("stone", 0)),
-                                replayed=True,
-                            )
+                            uow.commit()
                             return self._apply_effects(replayed, user_id=request.user_id, operation_id=request.operation_id, stone=int((replayed.data or {}).get("sign_in", {}).get("stone", 0)), replayed=True)
                         raise ConflictError("操作正在处理中")
                     legacy_operation = self.repository.operation(uow, request.operation_id)
@@ -107,13 +102,8 @@ class SignInApplication:
                             audit_category="sign_in",
                         )
                         self.ledger.finish(uow, outcome)
+                        uow.commit()
                         replayed = outcome.replay()
-                        self.effects.on_signed(
-                            user_id=request.user_id,
-                            operation_id=request.operation_id,
-                            stone=legacy_operation.stone,
-                            replayed=True,
-                        )
                         return self._apply_effects(replayed, user_id=request.user_id, operation_id=request.operation_id, stone=legacy_operation.stone, replayed=True)
                     before = self.repository.user_snapshot(uow, request.user_id)
                     states = self.repository.user_sign_states(uow, request.user_id)
@@ -170,6 +160,7 @@ class SignInApplication:
                         occurred_at=now,
                     )
                     self.ledger.finish(uow, outcome)
+                    uow.commit()
                     return self._apply_effects(outcome, user_id=request.user_id, operation_id=request.operation_id, stone=stone, replayed=False)
             except DomainError:
                 raise
