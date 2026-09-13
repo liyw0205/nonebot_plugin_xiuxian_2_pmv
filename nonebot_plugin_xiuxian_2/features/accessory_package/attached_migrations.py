@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timezone
+from typing import Any
 
 from ...infrastructure.database.attached_uow import AttachedDatabaseUnitOfWork
 
@@ -21,9 +22,10 @@ def ensure_attached_ledger(uow: AttachedDatabaseUnitOfWork) -> None:
     )
 
 
-def apply_attached_player_accessory(uow: AttachedDatabaseUnitOfWork) -> bool:
+def apply_attached_player_accessory(uow: AttachedDatabaseUnitOfWork, *, clock: Any | None = None) -> bool:
     """Apply the attached schema exactly once and record durable history."""
     ensure_attached_ledger(uow)
+    applied_at = (clock.now() if clock is not None else datetime.now(timezone.utc)).isoformat()
     checksum = _checksum()
     row = uow.query_one(
         "SELECT name, checksum FROM player_data.attached_schema_migrations WHERE version = ?",
@@ -44,7 +46,7 @@ def apply_attached_player_accessory(uow: AttachedDatabaseUnitOfWork) -> bool:
         uow.execute("ALTER TABLE player_data.player_accessory ADD COLUMN bag TEXT")
     uow.execute(
         "INSERT INTO player_data.attached_schema_migrations(version,name,checksum,applied_at) VALUES (?, ?, ?, ?)",
-        (ATTACHED_SCHEMA_VERSION, ATTACHED_SCHEMA_NAME, checksum, datetime.now(timezone.utc).isoformat()),
+        (ATTACHED_SCHEMA_VERSION, ATTACHED_SCHEMA_NAME, checksum, applied_at),
     )
     return True
 

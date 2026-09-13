@@ -4,12 +4,17 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from datetime import datetime, timezone
 
 from nonebot_plugin_xiuxian_2.features.accessory_package.attached_migrations import apply_attached_player_accessory
 from nonebot_plugin_xiuxian_2.infrastructure.database.attached_uow import AttachedDatabaseUnitOfWork
 
 
 class AttachedAccessoryMigrationTests(unittest.TestCase):
+    class Clock:
+        def now(self) -> datetime:
+            return datetime(2026, 9, 13, tzinfo=timezone.utc)
+
     def test_migration_is_durable_and_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -17,12 +22,23 @@ class AttachedAccessoryMigrationTests(unittest.TestCase):
             player = root / "player.db"
             sqlite3.connect(player).close()
             with AttachedDatabaseUnitOfWork(game, attachments={"player_data": player}, immediate=True) as uow:
-                self.assertTrue(apply_attached_player_accessory(uow))
+                self.assertTrue(apply_attached_player_accessory(uow, clock=self.Clock()))
             with AttachedDatabaseUnitOfWork(game, attachments={"player_data": player}, immediate=True) as uow:
                 self.assertFalse(apply_attached_player_accessory(uow))
             connection = sqlite3.connect(player)
             self.assertEqual(connection.execute("select count(*) from attached_schema_migrations").fetchone()[0], 1)
             self.assertEqual(connection.execute("select count(*) from player_accessory").fetchone()[0], 0)
+
+    def test_migration_uses_injected_clock(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            game = root / "game.db"
+            player = root / "player.db"
+            sqlite3.connect(player).close()
+            with AttachedDatabaseUnitOfWork(game, attachments={"player_data": player}, immediate=True) as uow:
+                apply_attached_player_accessory(uow, clock=self.Clock())
+            applied_at = sqlite3.connect(player).execute("select applied_at from attached_schema_migrations").fetchone()[0]
+            self.assertTrue(applied_at.startswith("2026-09-13T00:00:00+00:00"))
 
     def test_migration_rolls_back_schema_and_ledger_together(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
