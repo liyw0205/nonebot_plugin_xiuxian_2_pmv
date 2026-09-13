@@ -56,6 +56,7 @@ from .transaction_service import CultivationItemService
 from .transaction_service import EquipmentService
 from .transaction_service import LotteryReward, LotteryTalismanService
 from .package_reward_service import PackageReward, PackageRewardService
+from ...features.package_reward.resolver import PackageRewardResolver
 from .accessory_package_service import AccessoryPackageService
 from .transaction_service import AlchemyService
 from .transaction_service import SkillLearningService
@@ -867,37 +868,8 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         all_msgs = []
 
         def _collect_package_rewards():
-            rewards = []
-            errors = []
-            if int(goods_info.get("roll", 0) or 0) == 1:
-                roll_pool = goods_info.get("roll_pool", [])
-                if not isinstance(roll_pool, list) or not roll_pool:
-                    errors.append(f"【失败】{package_name}：roll_pool为空或配置错误")
-                else:
-                    rewards.append(random.choice(roll_pool))
-                return rewards, errors
-
-            i = 1
-            while True:
-                buff_key = f"buff_{i}"
-                name_key = f"name_{i}"
-                type_key = f"type_{i}"
-                amount_key = f"amount_{i}"
-                quality_key = f"quality_{i}"
-
-                if name_key not in goods_info:
-                    break
-
-                rewards.append({
-                    "buff": goods_info.get(buff_key, None),
-                    "name": goods_info.get(name_key),
-                    "type": goods_info.get(type_key, None),
-                    "amount": goods_info.get(amount_key, 1),
-                    "quality": goods_info.get(quality_key, 1)
-                })
-                i += 1
-
-            return rewards, errors
+            resolved = PackageRewardResolver(random).resolve_once(goods_info)
+            return [reward.to_dict() for reward in resolved.rewards], list(resolved.errors)
 
         package_rewards = []
         accessory_need = 0
