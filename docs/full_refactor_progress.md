@@ -81,7 +81,7 @@
 
 2026-09-13 真实入口切换：旧 `xiuxian_base/__init__.py` 的 `送灵石` matcher 默认改为 `__legacy_stone_gift_disabled__`，只有显式 `XIUXIAN_STONE_GIFT_LEGACY_HANDLER=true` 才恢复旧入口；新 `adapters/nonebot/commands.py` matcher 和 Web `/api/v1/stone-gift` 均调用 `StoneGiftApplication`。提交 `700b63d` 已推送并以归档部署到 `/srv/src`，针对真实 `/srv/old/data` 的 migration dry-run 为 `pending=[]`、reconcile clean、live health 全绿。该改动保留可回滚开关，不删除旧 service；因此这是“默认执行路径已切换、旧实现待删除”的切片状态，不是全面重构完成。
 
-2026-09-13 sign-in 入口审计：旧 `sign_in` matcher 默认规则为 `__legacy_sign_in_disabled__`，新 adapter 规则为 `修仙签到/签到`；旧 handler 的签到后抽奖、统计和任务进度仍是真实旧逻辑，尚未宣称完成。完整 NoneBot 导入探针记录了 `/签到`、`/修仙签到` 与新 matcher 的重复 prefix 警告，列入后续全局注册去重工作，不以测试通过掩盖。
+2026-09-13 sign-in 入口审计：旧 `sign_in` matcher 默认规则为 `__legacy_sign_in_disabled__`，新 adapter 规则为 `修仙签到/签到`；旧 handler 的签到后抽奖、统计和任务进度仍是真实旧逻辑，尚未宣称完成。完整 NoneBot 导入探针记录了 `/签到`、`/修仙签到` 与新 matcher 的重复 prefix 警告，列入后续全局注册去重工作，不以测试通过掩盖。现有 `on_compat` 已声明迁移命令抑制，但重复警告仍需用完整 driver 注册快照定位，不能据此宣称去重完成。
 
 ## 6. 下一步
 
