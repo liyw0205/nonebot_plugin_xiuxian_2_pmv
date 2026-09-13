@@ -283,6 +283,8 @@
 
 2026-09-14 lottery legacy lazy loading live safety：提交 `7415ab2` 部署后 backup `/srv/old/data/backups/20260913T211111Z`、migration dry-run `pending=[]`、reconcile clean、readiness 全绿；recovery smoke 覆盖 58 个迁移、五库 restore、reconcile clean，恢复后 `pool_amount=0`、`economy_log` 行数为 0。live 无 lottery 用户写入，未触发 fallback service。
 
+2026-09-14 lottery runtime Clock：新增 sign-in Clock context provider；composition root 在 jobs/lifecycle 阶段注入 `context.clock`，shutdown 时 reset；旧 `hongyun` 与 `handle_lottery` 使用 `sign_in_clock()`，新 lottery application 继续接收显式 `occurred_at`。该切片移除 lottery 旧入口对系统时间的默认依赖；相关 18 个测试、compileall、architecture、source-quality 通过。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。

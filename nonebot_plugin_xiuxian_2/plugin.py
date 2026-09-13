@@ -621,7 +621,9 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
 
     async def ensure_jobs() -> None:
         from .compatibility.scheduler import activate_scheduler_bridge
+        from .features.sign_in.clock import set_sign_in_clock
 
+        context.services["sign_in_clock_token"] = set_sign_in_clock(context.clock)
         activate_scheduler_bridge()
         # Legacy APScheduler keeps its decorators for the compatibility
         # release, but registration is activated here rather than during
@@ -650,8 +652,13 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         phase_state["jobs"] = True
 
     async def shutdown_jobs() -> None:
+        from .features.sign_in.clock import reset_sign_in_clock
+
         if context.legacy_startup:
             await run_legacy_shutdown()
+        token = (context.services or {}).pop("sign_in_clock_token", None)
+        if token is not None:
+            reset_sign_in_clock(token)
         phase_state["jobs"] = False
 
     def ensure_web() -> None:

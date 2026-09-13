@@ -851,7 +851,10 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 async def hongyun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看中奖记录和当前奖池"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    business_date = datetime.now().date().isoformat()
+    from ...features.sign_in.clock import sign_in_clock
+
+    occurred_at = sign_in_clock().now()
+    business_date = occurred_at.date().isoformat()
     from ...infrastructure.database import DatabaseUnitOfWork
     from ...features.sign_in.lottery_application import LotteryApplication
     from ...features.sign_in.lottery_repository import LotteryRepository
@@ -884,7 +887,9 @@ async def handle_lottery(user_info: dict, operation_id: str):
     """处理鸿运抽奖逻辑"""
     user_id = user_info['user_id']
     user_name = user_info['user_name']
-    occurred_at = datetime.now()
+    from ...features.sign_in.clock import sign_in_clock
+
+    occurred_at = sign_in_clock().now()
     from ...infrastructure.database import DatabaseUnitOfWork
     from ...features.sign_in.lottery_application import LotteryApplication
     from ...features.sign_in.lottery_repository import LotteryRepository
