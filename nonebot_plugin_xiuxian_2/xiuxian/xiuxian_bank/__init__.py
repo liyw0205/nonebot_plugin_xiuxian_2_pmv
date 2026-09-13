@@ -116,7 +116,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         operation_id = f"bank-deposit:{event_id}:{user_id}" if event_id else f"bank-deposit:{user_id}:{time.time_ns()}"
         from ...features.bank.account_info_application import BankAccountInfoApplication
         from ...features.bank.account_application import BankDepositApplication
-        from ...infrastructure.clock import SystemClock
+        from ...features.bank.clock import bank_clock
 
         migrated_account = BankAccountInfoApplication(get_paths().game_db).get_info(user_id=user_id)
         if migrated_account.get("status") == "ok":
@@ -127,7 +127,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
                 interest=0,
                 limit=int(BANKLEVEL[migrated_account["bank_level"]]["savemax"]),
                 bank_level=migrated_account["bank_level"],
-                settled_at=SystemClock().now().isoformat(),
+                settled_at=bank_clock().now().isoformat(),
             )
             messages = {
                 "applied": f"新灵庄存款成功：存入 {result['deposited']} 枚，当前存款 {result['saved_stone']} 枚。",
@@ -211,7 +211,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         operation_id = f"bank-withdrawal:{event_id}:{user_id}" if event_id else f"bank-withdrawal:{user_id}:{time.time_ns()}"
         from ...features.bank.account_info_application import BankAccountInfoApplication
         from ...features.bank.account_withdrawal_application import BankWithdrawalApplication
-        from ...infrastructure.clock import SystemClock
+        from ...features.bank.clock import bank_clock
 
         migrated_account = BankAccountInfoApplication(get_paths().game_db).get_info(user_id=user_id)
         if migrated_account.get("status") == "ok":
@@ -221,7 +221,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
                 amount=num,
                 interest=0,
                 bank_level=migrated_account["bank_level"],
-                settled_at=SystemClock().now().isoformat(),
+                settled_at=bank_clock().now().isoformat(),
             )
             messages = {
                 "applied": f"新灵庄取款成功：取出 {result['withdrawn']} 枚，当前存款 {result['saved_stone']} 枚。",
@@ -290,7 +290,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         operation_id = f"bank-upgrade:{event_id}:{user_id}" if event_id else f"bank-upgrade:{user_id}:{time.time_ns()}"
         from ...features.bank.account_info_application import BankAccountInfoApplication
         from ...features.bank.account_upgrade_application import BankUpgradeApplication
-        from ...infrastructure.clock import SystemClock
+        from ...features.bank.clock import bank_clock
 
         migrated_account = BankAccountInfoApplication(get_paths().game_db).get_info(user_id=user_id)
         if migrated_account.get("status") == "ok":
@@ -306,7 +306,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
                 expected_level=userlevel,
                 next_level=next_level,
                 cost=stonecost,
-                settled_at=SystemClock().now().isoformat(),
+                settled_at=bank_clock().now().isoformat(),
             )
             messages = {
                 "applied": f"道友成功升级灵庄会员等级，消耗灵石{result['cost']}枚，当前为：{BANKLEVEL[result['bank_level']]['level']}，灵庄可存有灵石上限{BANKLEVEL[result['bank_level']]['savemax']}枚",
@@ -416,11 +416,11 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         from ...features.bank.account_info_application import BankAccountInfoApplication
         from ...features.bank.account_interest_application import BankInterestApplication
         from ...features.bank.interest_rules import calculate_interest
-        from ...infrastructure.clock import SystemClock
+        from ...features.bank.clock import bank_clock
 
         migrated_account = BankAccountInfoApplication(get_paths().game_db).get_info(user_id=user_id)
         if migrated_account.get("status") == "ok":
-            now = SystemClock().now()
+            now = bank_clock().now()
             level = str(migrated_account["bank_level"])
             interest, hours = calculate_interest(
                 saved_stone=int(migrated_account["saved_stone"]),

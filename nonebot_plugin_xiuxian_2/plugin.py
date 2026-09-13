@@ -775,6 +775,8 @@ def install_driver_hooks(driver: Any) -> tuple[Any, Any]:
             context.message_gateway = NoneBotMessageGateway(delivery_service)
         state, readiness, context, lifecycle = await startup(context)
         holder.update(context=context, lifecycle=lifecycle, readiness=readiness)
+        from .features.bank.clock import set_bank_clock
+        holder["bank_clock_token"] = set_bank_clock(context.clock)
         if context.services.get("bank_first_use") is not None:
             register_bank_first_use_matcher(
                 driver,
@@ -791,6 +793,10 @@ def install_driver_hooks(driver: Any) -> tuple[Any, Any]:
         if lifecycle is not None:
             await shutdown(lifecycle)
             holder["lifecycle"] = None
+        token = holder.pop("bank_clock_token", None)
+        if token is not None:
+            from .features.bank.clock import reset_bank_clock
+            reset_bank_clock(token)
 
     driver.on_startup(on_startup)
     driver.on_shutdown(on_shutdown)
