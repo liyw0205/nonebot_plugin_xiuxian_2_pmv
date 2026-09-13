@@ -44,4 +44,31 @@ def create_first_use_blueprint(*, application: Any, permission) -> Blueprint:
     return router
 
 
-__all__ = ["create_first_use_blueprint"]
+def create_upgrade_blueprint(*, application: Any, permission) -> Blueprint:
+    router = Blueprint("bank_first_use_upgrade", __name__)
+
+    @router.post("/api/v1/bank/v2/upgrade")
+    @guard("user", permission, write=True)
+    def upgrade():
+        payload = request.get_json(silent=True) or {}
+        if not isinstance(payload, dict):
+            return api_error("validation_error", "请求体必须是 JSON 对象", status=400)
+        operation_id = str(request.headers.get("Idempotency-Key") or payload.get("operation_id") or "")
+        try:
+            outcome = application.upgrade(
+                operation_id=operation_id,
+                user_id=str(payload.get("user_id", "")),
+                expected_level=str(payload.get("expected_level", "")),
+                next_level=str(payload.get("next_level", "")),
+                cost=int(str(payload.get("cost"))),
+                settled_at=str(payload.get("settled_at", "")),
+            )
+        except (TypeError, ValueError) as exc:
+            return api_error("validation_error", str(exc), status=400)
+        status = 200 if outcome.get("status") in {"applied", "duplicate"} else 409
+        return api_success(outcome, status=status)
+
+    return router
+
+
+__all__ = ["create_first_use_blueprint", "create_upgrade_blueprint"]

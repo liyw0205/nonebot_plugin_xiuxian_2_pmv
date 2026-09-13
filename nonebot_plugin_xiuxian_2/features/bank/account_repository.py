@@ -5,6 +5,7 @@ from typing import Any
 from ...infrastructure.database import DatabaseUnitOfWork
 from .rules import BankDepositDecision
 from .withdrawal_rules import BankWithdrawalDecision
+from .upgrade_rules import BankUpgradeDecision
 
 
 class BankAccountRepository:
@@ -31,6 +32,24 @@ class BankAccountRepository:
         uow.execute("UPDATE user_xiuxian SET stone=? WHERE user_id=?", (decision.wallet_after, user_id))
         uow.execute("UPDATE bank_accounts SET saved_stone=?, bank_level=?, updated_at=? WHERE user_id=?", (decision.saved_after, bank_level, settled_at, user_id))
         uow.execute("INSERT INTO bank_account_operations(operation_id,user_id,payload,deposited,interest,wallet_after,saved_after,created_at) VALUES (?,?,?,?,?,?,?,?)", (operation_id, user_id, payload, -amount, decision.interest, decision.wallet_after, decision.saved_after, settled_at))
+
+    def save_upgrade(self, uow: DatabaseUnitOfWork, *, operation_id: str, user_id: str, payload: str, amount: int, expected_level: str, decision: BankUpgradeDecision, settled_at: str) -> None:
+        changed = uow.execute(
+            "UPDATE user_xiuxian SET stone=? WHERE user_id=? AND stone>=?",
+            (decision.wallet_after, user_id, amount),
+        )
+        if changed.rowcount != 1:
+            raise RuntimeError("wallet state changed during bank upgrade")
+        upgraded = uow.execute(
+            "UPDATE bank_accounts SET bank_level=?, updated_at=? WHERE user_id=? AND bank_level=?",
+            (decision.bank_level, settled_at, user_id, expected_level),
+        )
+        if upgraded.rowcount != 1:
+            raise RuntimeError("bank account state changed during bank upgrade")
+        uow.execute(
+            "INSERT INTO bank_account_operations(operation_id,user_id,payload,deposited,interest,wallet_after,saved_after,created_at) VALUES (?,?,?,?,?,?,?,?)",
+            (operation_id, user_id, payload, 0, 0, decision.wallet_after, 0, settled_at),
+        )
 
 
 __all__ = ["BankAccountRepository"]
