@@ -265,6 +265,36 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
     elif mode == '升级会员':  # 升级会员逻辑
         event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
         operation_id = f"bank-upgrade:{event_id}:{user_id}" if event_id else f"bank-upgrade:{user_id}:{time.time_ns()}"
+        from ...features.bank.account_info_application import BankAccountInfoApplication
+        from ...features.bank.account_upgrade_application import BankUpgradeApplication
+        from ...infrastructure.clock import SystemClock
+
+        migrated_account = BankAccountInfoApplication(get_paths().game_db).get_info(user_id=user_id)
+        if migrated_account.get("status") == "ok":
+            userlevel = str(migrated_account["bank_level"])
+            if userlevel == str(len(BANKLEVEL)):
+                await handle_send(bot, event, "道友已经是本灵庄最大的会员啦！", md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
+                await bank.finish()
+            next_level = f"{int(userlevel) + 1}"
+            stonecost = BANKLEVEL[userlevel]["levelup"]
+            result = BankUpgradeApplication(get_paths().game_db).upgrade(
+                operation_id=operation_id,
+                user_id=user_id,
+                expected_level=userlevel,
+                next_level=next_level,
+                cost=stonecost,
+                settled_at=SystemClock().now().isoformat(),
+            )
+            messages = {
+                "applied": f"道友成功升级灵庄会员等级，消耗灵石{result['cost']}枚，当前为：{BANKLEVEL[result['bank_level']]['level']}，灵庄可存有灵石上限{BANKLEVEL[result['bank_level']]['savemax']}枚",
+                "duplicate": "该升级请求已经处理，无需重复提交。",
+                "stone_insufficient": "灵石不足，会员升级未结算。",
+                "state_changed": "灵庄会员升级失败：账户当前状态已更新。",
+                "operation_conflict": "请求冲突，会员升级未结算。",
+                "user_missing": "未找到修仙数据。",
+            }
+            await handle_send(bot, event, messages.get(str(result.get("status")), "会员升级未结算。"), md_type="灵庄", k1="升级", v1="灵庄升级会员", k2="信息", v2="灵庄信息", k3="帮助", v3="灵庄帮助")
+            await bank.finish()
         prior = bank_upgrade_service.get_result(operation_id)
         if prior is not None and prior.succeeded:
             msg = (
