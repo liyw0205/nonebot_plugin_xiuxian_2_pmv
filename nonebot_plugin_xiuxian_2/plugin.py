@@ -68,7 +68,7 @@ from .features.admin_asset.migrations import apply_admin_asset
 from .features.tianti_settlement.manifest import FEATURE as TIANTI_SETTLEMENT_FEATURE
 from .features.tianti_settlement.migrations import apply_tianti_settlement
 from .features.tianti_training.manifest import FEATURE as TIANTI_TRAINING_FEATURE
-from .features.tianti_training.migrations import apply_tianti_training, apply_tianti_training_operations
+from .features.tianti_training.migrations import apply_tianti_player_info, apply_tianti_training, apply_tianti_training_operations
 from .features.tower.manifest import FEATURE as TOWER_FEATURE
 from .features.tower.migrations import apply_tower
 from .features.sect_fairyland.manifest import FEATURE as SECT_FAIRYLAND_FEATURE
@@ -143,6 +143,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("tianti_settlement.001", "tianti_settlement_feature_migrations", apply_tianti_settlement),
         Migration("tianti_training.001", "tianti_training_feature_migrations", apply_tianti_training),
         Migration("tianti_training.002", "tianti_stone_training_operations", apply_tianti_training_operations),
+        Migration("tianti_training.003", "tianti_player_info", apply_tianti_player_info),
         Migration("title.001", "title_feature_migrations", apply_title),
         Migration("tower.001", "tower_feature_migrations", apply_tower),
         Migration("trade.001", "trade_feature_migrations", apply_trade),
@@ -331,7 +332,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                     runner = migration_runner
                 elif spec.key == "player_db":
                     runner = MigrationRunner(
-                        tuple(migration for migration in migration_runner.migrations if migration.version == "title.001"),
+                        tuple(migration for migration in migration_runner.migrations if migration.version in {"title.001", "tianti_training.003"}),
                         clock=context.clock,
                     )
                 else:

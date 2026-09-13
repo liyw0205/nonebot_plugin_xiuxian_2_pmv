@@ -1,6 +1,19 @@
 from ...infrastructure.database import DatabaseUnitOfWork
 
 
+def apply_tianti_player_info(uow: DatabaseUnitOfWork) -> None:
+    uow.execute("CREATE TABLE IF NOT EXISTS tianti_info (user_id TEXT PRIMARY KEY)")
+    fields = (
+        "tianti_level", "tianti_hp", "last_settle_time", "medicine_last_time",
+        "medicine_end_time", "medicine_effect", "medicine_name", "opened_qiaoxue",
+        "opened_qiaoxue_detail", "qiaoxue_stage_opened",
+    )
+    columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(tianti_info)")}
+    for field in fields:
+        if field not in columns:
+            uow.execute(f'ALTER TABLE tianti_info ADD COLUMN "{field}" TEXT')
+
+
 def apply_tianti_training(uow: DatabaseUnitOfWork) -> None:
     uow.execute("CREATE TABLE IF NOT EXISTS tianti_training_feature_migrations (version TEXT PRIMARY KEY)")
     uow.execute(
@@ -18,4 +31,4 @@ def apply_tianti_training_operations(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_tianti_training", "apply_tianti_training_operations"]
+__all__ = ["apply_tianti_player_info", "apply_tianti_training", "apply_tianti_training_operations"]
