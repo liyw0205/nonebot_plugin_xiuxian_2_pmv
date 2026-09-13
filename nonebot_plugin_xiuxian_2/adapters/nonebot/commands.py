@@ -153,6 +153,58 @@ def _build_stone(context: CommandContext, application: Any, args: Any) -> ReplyP
     return plan
 
 
+def _build_bank_first_use(context: CommandContext, application: Any, args: Any, *, limit: int) -> ReplyPlan:
+    from ...features.bank.commands import parse_first_use_deposit
+    from ...infrastructure.clock import SystemClock
+
+    command = parse_first_use_deposit(
+        user_id=context.user_id,
+        text=_plain_text(args),
+        operation_id=_message_id(context.raw_event, context.user_id, "bank-deposit-v2"),
+        clock=getattr(application, "clock", None) or SystemClock(),
+        limit=limit,
+    )
+    result = application.deposit(**command.__dict__)
+    messages = {
+        "applied": f"灵庄新存款成功：存入 {result['deposited']} 枚，当前存款 {result['saved_stone']} 枚。",
+        "duplicate": "该新存款请求已经处理，无需重复提交。",
+        "stone_insufficient": "灵石不足，新存款未结算。",
+        "limit_exceeded": "超过灵庄存储上限，新存款未结算。",
+        "operation_conflict": "请求冲突，新存款未结算。",
+        "user_missing": "未找到修仙数据。",
+    }
+    return ReplyPlan(messages.get(str(result.get("status")), "新存款未结算。"), reference=True)
+
+
+def register_bank_first_use_matcher(driver: Any, holder: dict[str, Any], *, limit: int) -> Any:
+    """Opt-in matcher for the new bank deposit path; legacy matcher is untouched."""
+    marker = "_xiuxian_bank_first_use_matcher"
+    existing = getattr(driver, marker, None)
+    if existing is not None:
+        return existing
+    from nonebot import on_command
+    from nonebot.params import CommandArg
+
+    matcher = on_command("灵庄新存灵石", priority=1, block=True)
+
+    @matcher.handle()
+    async def _bank_first_use_handler(bot: Bot, event: Event, args: Message = CommandArg()):
+        context = context_from_event(event, bot=bot)
+        try:
+            runtime = _runtime(holder)
+            plan = _build_bank_first_use(context, runtime.services["bank_first_use"], args, limit=limit)
+        except DomainError as exc:
+            plan = ReplyPlan(exc.message, reference=True)
+        except (KeyError, RuntimeError, TypeError, ValueError) as exc:
+            plan = ReplyPlan(str(exc), reference=True)
+        except Exception:
+            plan = ReplyPlan("当前服务暂不可用，请稍后重试。", reference=True)
+        return await _send(holder, event, bot, plan)
+
+    setattr(driver, marker, matcher)
+    return matcher
+
+
 def register_migrated_matchers(driver: Any, holder: dict[str, Any]) -> tuple[type[Any], ...]:
     """Register migrated matchers once and return their matcher classes."""
 
@@ -200,4 +252,4 @@ def register_migrated_matchers(driver: Any, holder: dict[str, Any]) -> tuple[typ
     return result
 
 
-__all__ = ["register_migrated_matchers"]
+__all__ = ["register_bank_first_use_matcher", "register_migrated_matchers"]

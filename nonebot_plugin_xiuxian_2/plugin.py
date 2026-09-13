@@ -744,7 +744,7 @@ def install_driver_hooks(driver: Any) -> tuple[Any, Any]:
 
     # Matchers are wired once, before startup, but resolve applications only
     # after the lifecycle has assembled repositories and migrations.
-    from .adapters.nonebot import register_migrated_matchers
+    from .adapters.nonebot import register_migrated_matchers, register_bank_first_use_matcher
 
     register_migrated_matchers(driver, holder)
 
@@ -758,6 +758,12 @@ def install_driver_hooks(driver: Any) -> tuple[Any, Any]:
             context.message_gateway = NoneBotMessageGateway(delivery_service)
         state, readiness, context, lifecycle = await startup(context)
         holder.update(context=context, lifecycle=lifecycle, readiness=readiness)
+        if context.services.get("bank_first_use") is not None:
+            register_bank_first_use_matcher(
+                driver,
+                holder,
+                limit=int(context.settings.get("bank_first_use_limit", 1000000000)),
+            )
         if state.phase is LifecyclePhase.NOT_READY:
             raise RuntimeError(state.error or "xiuxian runtime is not ready")
 
