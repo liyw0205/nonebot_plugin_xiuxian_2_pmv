@@ -8,6 +8,7 @@ rules or SQL.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from .bootstrap import FeatureRegistry, Lifecycle, LifecyclePhase, Readiness, RuntimeContext, build_runtime_context
@@ -391,22 +392,32 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         if context.legacy_startup:
             # Keep historical lottery/statistics/task behavior at the adapter
             # boundary while the side effects are migrated independently.
-            from .compatibility.sign_in_effects import LegacySignInEffects
-            from .xiuxian.xiuxian_base.transaction_service import LotterySettlementService
-            from .xiuxian.xiuxian_tasks.task_data import record_task_progress
-            from .xiuxian.xiuxian_utils.utils import log_message, update_statistics_value
+            try:
+                from nonebot import get_driver
 
-            sign_in_effects = LegacySignInEffects(
-                context.database.path("game_db"),
-                lottery_service=LotterySettlementService(
+                get_driver()
+            except ValueError:
+                # CLI/serve maintenance contexts do not own a NoneBot driver.
+                # Do not import legacy adapters there; the real driver process
+                # wires them after plugin loading.
+                sign_in_effects = None
+            else:
+                from .compatibility.sign_in_effects import LegacySignInEffects
+                from .xiuxian.xiuxian_base.transaction_service import LotterySettlementService
+                from .xiuxian.xiuxian_tasks.task_data import record_task_progress
+                from .xiuxian.xiuxian_utils.utils import log_message, update_statistics_value
+
+                sign_in_effects = LegacySignInEffects(
                     context.database.path("game_db"),
-                    Path(__file__).parent / "xiuxian" / "xiuxian_base" / "lottery_pool.json",
-                ),
-                clock=context.clock,
-                task_progress=record_task_progress,
-                statistics=update_statistics_value,
-                logger=log_message,
-            )
+                    lottery_service=LotterySettlementService(
+                        context.database.path("game_db"),
+                        Path(__file__).parent / "xiuxian" / "xiuxian_base" / "lottery_pool.json",
+                    ),
+                    clock=context.clock,
+                    task_progress=record_task_progress,
+                    statistics=update_statistics_value,
+                    logger=log_message,
+                )
         context.services = {
             "daily_fortune": DailyFortuneApplication(str(context.database.path("game_db")), clock=context.clock, random_source=context.random),
             "illusion": IllusionApplication(str(context.database.path("game_db")), clock=context.clock),
