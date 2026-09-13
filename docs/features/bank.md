@@ -8,6 +8,7 @@
 - `POST /api/v1/bank/withdraw`
 - `POST /api/v1/bank/upgrade`
 - `POST /api/v1/bank/interest`
+- `POST /api/v1/bank/v2/deposit`（仅注入 `bank_first_use` service 时启用）
 
 写接口需要 `user` 权限、CSRF 和幂等键；旧 `灵庄` 命令继续由兼容入口负责消息排版。
 

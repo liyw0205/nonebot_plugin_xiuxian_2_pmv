@@ -40,6 +40,7 @@ from .api import api_error, api_success
 from .auth import csrf_token
 from .auth import HostPolicy
 from .blueprints.package_reward import create_blueprint as package_reward_blueprint
+from .blueprints.bank_first_use import create_first_use_blueprint as bank_first_use_blueprint
 
 
 def create_app(
@@ -273,6 +274,9 @@ def create_app(
             str(context.database.path("game_db")), str(context.database.path("player_db"))
         )
         app.register_blueprint(bank_blueprint(bank, permission=has_permission))
+        first_use_bank = (context.services or {}).get("bank_first_use")
+        if first_use_bank is not None:
+            app.register_blueprint(bank_first_use_blueprint(application=first_use_bank, permission=has_permission))
     if any(feature.key == "activity_reward" for feature in registry.features):
         from ...features.activity_reward.application import ActivityRewardApplication
 
