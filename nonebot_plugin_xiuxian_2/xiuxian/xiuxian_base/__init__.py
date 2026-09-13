@@ -4,7 +4,7 @@ import asyncio
 import time
 import os
 from datetime import datetime
-from pathlib import Path
+
 from nonebot.typing import T_State
 from ...paths import get_paths
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
@@ -43,7 +43,7 @@ from ..xiuxian_utils.season_rank_service import (
 )
 from ..xiuxian_tasks.task_data import record_task_progress
 from .stone_limit import stone_limit
-from .transaction_service import LotterySettlementService
+
 from ...compatibility.sign_in import SignInService
 from .transaction_service import PlayerRenameService
 from ...compatibility.stone_gift import StoneGiftService
@@ -56,10 +56,7 @@ from .xiangyuan import clear_all_xiangyuan, reset_xiangyuan_daily  # noqa: F401
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
 sign_in_service = SignInService(get_paths().game_db)
-lottery_settlement_service = LotterySettlementService(
-    get_paths().game_db,
-    Path(__file__).with_name("lottery_pool.json"),
-)
+
 player_rename_service = PlayerRenameService(get_paths().game_db)
 stone_gift_service = StoneGiftService(get_paths().game_db)
 stone_contest_service = StoneContestService(get_paths().game_db)
@@ -72,6 +69,13 @@ xiuxian_impart = XIUXIAN_IMPART_BUFF()
 PLAYERSDATA = get_paths().players
 qqq = XiuConfig().qqq
 tribulation_cd2 = int(XiuConfig().tribulation_cd * 60)
+
+
+def _legacy_lottery_service():
+    """Load the legacy lottery service only for an unmigrated installation."""
+    from .transaction_service import LotterySettlementService
+
+    return LotterySettlementService(get_paths().game_db)
 gfqq = on_command("官群", aliases={"交流群"}, priority=8, block=True)
 run_xiuxian = on_command("我要修仙", aliases={"开始修仙"}, priority=8, block=True)
 restart = on_command("重入仙途", priority=7, block=True)
@@ -857,7 +861,7 @@ async def hongyun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if migrated_lottery:
         snapshot = LotteryApplication(str(get_paths().game_db)).snapshot(business_date)
     else:
-        snapshot = lottery_settlement_service.get_snapshot(business_date)
+        snapshot = _legacy_lottery_service().get_snapshot(business_date)
     msg = "**鸿运当头**\n---\n"
     msg += f"当前奖池累计\n> {number_to(snapshot.pool)}灵石\n"
     msg += f"本期参与人数\n> {snapshot.participants}位道友\n\n"
@@ -896,7 +900,7 @@ async def handle_lottery(user_info: dict, operation_id: str):
             occurred_at=occurred_at,
         )
     else:
-        settled = lottery_settlement_service.settle(
+        settled = _legacy_lottery_service().settle(
             operation_id,
             user_id,
             user_name,

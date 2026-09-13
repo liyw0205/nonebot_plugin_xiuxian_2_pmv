@@ -251,7 +251,8 @@ class LotterySettlementServiceTests(unittest.TestCase):
 
         self.assertIn("_lottery_operation_id(sign_operation_id)", sign_handler)
         self.assertIn("sign_result.succeeded", sign_handler)
-        self.assertIn("lottery_settlement_service.settle(", lottery_handler)
+        self.assertIn("_legacy_lottery_service().settle(", lottery_handler)
+        self.assertNotIn("lottery_settlement_service =", source)
         self.assertNotIn("random.randint", lottery_handler)
         self.assertNotIn("update_ls", lottery_handler)
         self.assertNotIn("lottery_pool", sign_handler + lottery_handler)
