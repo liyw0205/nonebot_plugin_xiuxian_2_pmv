@@ -25,12 +25,14 @@ class LotteryApplication:
             raise TypeError("clock must return datetime")
         return value
 
-    def settle(self, *, operation_id: str, user_id: str, user_name: str, business_date: str | date, deposit: int = 1_000_000) -> LotterySettlement:
+    def settle(self, *, operation_id: str, user_id: str, user_name: str, business_date: str | date, deposit: int = 1_000_000, occurred_at: datetime | None = None) -> LotterySettlement:
         operation_id = str(operation_id).strip()
         user_id = str(user_id).strip()
         if not operation_id or not user_id or int(deposit) <= 0:
             raise ValueError("operation_id, user_id and positive deposit are required")
-        occurred_at = self._now()
+        occurred_at = self._now() if occurred_at is None else occurred_at
+        if not isinstance(occurred_at, datetime):
+            raise TypeError("occurred_at must be datetime")
         day = business_date.date().isoformat() if isinstance(business_date, datetime) else business_date.isoformat() if isinstance(business_date, date) else str(business_date)
         deposit = int(deposit)
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
