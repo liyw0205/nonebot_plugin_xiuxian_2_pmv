@@ -98,6 +98,27 @@ class BreakthroughRequest:
 
 
 @dataclass(frozen=True)
+class BreakthroughDecision:
+    status: str
+    old_level: str = ""
+    new_level: str = ""
+    hp_cost: int = 0
+    new_hp: int = 0
+
+
+def decide_breakthrough(*, old_level: str, next_level: str | None, cultivation_rank: int, required_rank: int, old_hp: int, required_hp: int, roll_success: bool) -> BreakthroughDecision:
+    old_hp = max(0, int(old_hp))
+    if not next_level:
+        return BreakthroughDecision("max_level", old_level, old_level, new_hp=old_hp)
+    if int(cultivation_rank) > int(required_rank):
+        return BreakthroughDecision("cultivation_insufficient", old_level, old_level, new_hp=old_hp)
+    if old_hp < int(required_hp):
+        return BreakthroughDecision("hp_insufficient", old_level, old_level, new_hp=old_hp)
+    hp_cost = max(1, int(old_hp * 0.05))
+    return BreakthroughDecision("completed", old_level, next_level if roll_success else old_level, hp_cost, max(0, old_hp - hp_cost))
+
+
+@dataclass(frozen=True)
 class QiaoxueRequest:
     operation_id: str
     user_id: str
@@ -121,11 +142,13 @@ def normalize_plan(value: Sequence[Mapping[str, Any]]) -> tuple[dict[str, Any], 
 
 
 __all__ = [
+    "BreakthroughDecision",
     "BreakthroughRequest",
     "MedicineBathRequest",
     "QiaoxueRequest",
     "StoneTrainingRequest",
     "StoneTrainingDecision",
+    "decide_breakthrough",
     "decide_stone_training",
     "normalize_plan",
 ]

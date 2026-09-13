@@ -18,7 +18,7 @@ from .tianti_data import (
     get_tianti_level_index,
 )
 from .tianti_data import TiantiDataManager, get_qiaoxue_pool, get_tianti_level_data
-from ...features.tianti_training.domain import decide_stone_training
+from ...features.tianti_training.domain import decide_breakthrough, decide_stone_training
 from datetime import datetime, timedelta
 
 def get_tianti_cap(data: dict) -> int:
@@ -546,26 +546,23 @@ class TiantiBreakthroughService:
                 data = self._manager._clean_user_data(dict(zip(fields, row)) if row else {})
                 old_level = str(data["tianti_level"])
                 next_level = get_next_tianti_level_name(old_level)
-                if not next_level:
-                    conn.rollback()
-                    return self._result("max_level", user_id)
-                next_config = get_tianti_level_data(next_level)
-                required_rank = get_tianti_level_index(
-                    next_config["min_xx_level"], is_xiuxian=True
-                )
-                if cultivation_rank > required_rank:
-                    conn.rollback()
-                    return self._result("cultivation_insufficient", user_id)
 
-                required_hp = int(next_config["need_hp"])
                 old_hp = int(data["tianti_hp"])
-                if old_hp < required_hp:
+                next_config = get_tianti_level_data(next_level) if next_level else {}
+                required_rank=int(get_tianti_level_index(next_config["min_xx_level"], is_xiuxian=True) or 0) if next_config else 0
+                decision = decide_breakthrough(
+                    old_level=old_level, next_level=next_level,
+                    cultivation_rank=cultivation_rank, required_rank=required_rank,
+                    old_hp=old_hp, required_hp=int(next_config.get("need_hp", 0)),
+                    roll_success=roll_success,
+                )
+                if decision.status != "completed":
                     conn.rollback()
-                    return self._result("hp_insufficient", user_id)
+                    return self._result(decision.status, user_id)
 
-                hp_cost = max(1, int(old_hp * 0.05))
-                new_hp = max(0, old_hp - hp_cost)
-                new_level = next_level if roll_success else old_level
+                hp_cost = decision.hp_cost
+                new_hp = decision.new_hp
+                new_level = decision.new_level
                 data["tianti_hp"] = new_hp
                 data["tianti_level"] = new_level
                 values = [
