@@ -155,6 +155,8 @@
 
 2026-09-13 attached namespace audit live verification：提交 `4129224` 部署后运行只读 audit，真实输出 `tables=[]`、`accessory_rows=0`、`migration.applied=false`、`read_only=true`；backup `/srv/old/data/backups/20260913T095422Z`、migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 54 个迁移、五库 restore，reconcile clean，恢复后 audit 仍为未迁移且只读。该证据确认 live 当前没有可迁移 accessory 行，也确认审计工具不会隐式创建 schema；不能据此宣称 accessory migration 完成。
 
+2026-09-13 attached audit machine-output fix：`scripts/audit_attached_accessory.py` 的 feature import 诊断已重定向到 stderr，stdout 现在保证为单一 JSON 文档；临时空数据库 audit 通过 `json.loads(stdout)` 紧验证，read_only/tables/accessory_rows 状态保持不变，compileall、architecture、diff 通过。该改动只提高证据可消费性，不改变 live 数据或迁移状态。
+
 2026-09-13 attached migration ledger live verification：提交 `0e64366` 部署后，真实 `/srv/old/data/player.db` 只读确认 `attached_schema_migrations=0`、`player_accessory=0`，证明 ledger scaffold 未在启动时隐式执行；backup `/srv/old/data/backups/20260913T094512Z`、migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 54 个迁移、五库 restore，reconcile clean，恢复后 readiness 全绿。该证据只证明 ledger 部署不改 live namespace；真实 migration 仍需明确的运维窗口、备份、namespace 对账和回滚演练。
 
 2026-09-13 stone-gift 旧实现隔离：提交 `826ff4e` 将约 7,156 bytes、约 188 行的 `StoneGiftService` 从 `xiuxian_base/transaction_service.py` 删除，完整回滚实现移动到 `compatibility/legacy_stone_gift.py`；compatibility facade 和旧对照测试已改为显式引用该模块。真实 live 验证使用 `/srv/old/data`：备份 `/srv/old/data/backups/20260913T064308Z` 成功，migration dry-run `pending=[]`，reconcile clean，启动后的 readiness 全绿；随后停止实例执行 `recovery_smoke.py --evidence`，覆盖 53 个迁移和五库 restore，reconcile clean，恢复后实例 readiness 仍全绿。该切片的旧实现已不再位于大 transaction service，但 compatibility-only 回滚代码仍保留，不能把它等同于全仓兼容层删除。
