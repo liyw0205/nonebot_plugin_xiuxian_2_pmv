@@ -52,16 +52,38 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"state": state.phase.value, "error": state.error, **report}, ensure_ascii=False))
         return 0 if report["ready"] else 1
     if args.command == "migrate":
-        with DatabaseUnitOfWork(context.database.path("game_db")) as uow:
-            runner = MigrationRunner(build_migrations(), clock=context.clock)
-            if args.dry_run:
-                pending = runner.preview(uow)
-                print(json.dumps({"dry_run": True, "pending": pending}, ensure_ascii=False))
-                return 0
-            OperationLedger(clock=context.clock).ensure_schema(uow)
-            OutboxStore(clock=context.clock).ensure_schema(uow)
-            applied = runner.apply(uow)
-        print(json.dumps({"dry_run": False, "applied": applied}, ensure_ascii=False))
+        migrations = build_migrations()
+        game_migrations = tuple(
+            migration for migration in migrations
+            if migration.version != "tianti_training.003"
+        )
+        applied: dict[str, list[str]] = {}
+        pending: dict[str, list[str]] = {}
+        for spec in context.database.specs():
+            if spec.key == "game_db":
+                selected = game_migrations
+            elif spec.key == "player_db":
+                selected = tuple(
+                    migration for migration in migrations
+                    if migration.version in {"title.001", "tianti_training.003"}
+                )
+            else:
+                selected = ()
+            with DatabaseUnitOfWork(spec.path) as uow:
+                runner = MigrationRunner(selected, clock=context.clock)
+                if args.dry_run:
+                    pending[spec.key] = runner.preview(uow)
+                else:
+                    changed = runner.apply(uow)
+                    if changed:
+                        applied[spec.key] = changed
+                    if spec.key == "game_db":
+                        OperationLedger(clock=context.clock).ensure_schema(uow)
+                        OutboxStore(clock=context.clock).ensure_schema(uow)
+        if args.dry_run:
+            print(json.dumps({"dry_run": True, "pending": pending}, ensure_ascii=False))
+        else:
+            print(json.dumps({"dry_run": False, "applied": applied}, ensure_ascii=False))
         return 0
     if args.command == "backup":
         directory = BackupService(context.database, extra_files={"config": context.paths.config_file}, clock=context.clock).create(context.paths.backups)

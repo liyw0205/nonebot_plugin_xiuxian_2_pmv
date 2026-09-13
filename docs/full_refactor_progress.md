@@ -313,6 +313,8 @@
 
 2026-09-14 tianti player schema migration：新增 `tianti_training.003`，由 player_db 专属 migration runner 创建/补齐 `tianti_info` 字段；game_db 继续由 `tianti_training.002` 管理 stone-training operation 表。repository 保留 `IF NOT EXISTS`/兼容补列以支持旧安装，但默认启动先完成 schema。旧 `TiantiDataManager` JSON 投影仍是下一步边界；rollback 使用本次 backup，不执行数据回填。
 
+2026-09-14 tianti migration routing correction：live 验证发现 maintenance CLI 原先只对 game_db 运行完整 migration catalog，导致 `tianti_training.003` 被错误记录到 game_db、player_db 未建 `tianti_info`。现已统一 CLI/startup 分库过滤：game_db 排除 player-only `.003`，player_db 执行 `title.001` 与 `.003`；既有 game_db migration 历史不篡改，纠正动作只在 player_db 补 schema。rollback 使用部署前 backup，不执行玩家数据回填。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。

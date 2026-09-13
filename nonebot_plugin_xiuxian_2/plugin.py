@@ -307,6 +307,10 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
 
     migration_runner = MigrationRunner(build_migrations(), clock=context.clock)
     context.migrations = migration_runner
+    game_migrations = tuple(
+        migration for migration in migration_runner.migrations
+        if migration.version != "tianti_training.003"
+    )
 
     def ensure_filesystem() -> None:
         context.paths.data.mkdir(parents=True, exist_ok=True)
@@ -329,7 +333,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         for spec in context.database.specs():
             with DatabaseUnitOfWork(spec.path) as uow:
                 if spec.key == "game_db":
-                    runner = migration_runner
+                    runner = MigrationRunner(game_migrations, clock=context.clock)
                 elif spec.key == "player_db":
                     runner = MigrationRunner(
                         tuple(migration for migration in migration_runner.migrations if migration.version in {"title.001", "tianti_training.003"}),
