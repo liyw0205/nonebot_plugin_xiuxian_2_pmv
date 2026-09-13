@@ -6,7 +6,10 @@ import unittest
 from pathlib import Path
 from datetime import datetime, timezone
 
-from nonebot_plugin_xiuxian_2.features.accessory_package.attached_migrations import apply_attached_player_accessory
+from nonebot_plugin_xiuxian_2.features.accessory_package.attached_migrations import (
+    ATTACHED_SCHEMA_VERSION,
+    apply_attached_player_accessory,
+)
 from nonebot_plugin_xiuxian_2.infrastructure.database.attached_uow import AttachedDatabaseUnitOfWork
 
 
@@ -53,6 +56,26 @@ class AttachedAccessoryMigrationTests(unittest.TestCase):
             connection = sqlite3.connect(player)
             self.assertEqual(connection.execute("select count(*) from sqlite_master where name='attached_schema_migrations'").fetchone()[0], 0)
             self.assertEqual(connection.execute("select count(*) from sqlite_master where name='player_accessory'").fetchone()[0], 0)
+
+    def test_checksum_drift_is_rejected_before_schema_write(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            game = root / "game.db"
+            player = root / "player.db"
+            sqlite3.connect(player).close()
+            with AttachedDatabaseUnitOfWork(game, attachments={"player_data": player}, immediate=True) as uow:
+                uow.execute(
+                    "CREATE TABLE player_data.attached_schema_migrations "
+                    "(version TEXT PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)"
+                )
+                uow.execute(
+                    "INSERT INTO player_data.attached_schema_migrations VALUES (?, ?, ?, ?)",
+                    (ATTACHED_SCHEMA_VERSION, "player_accessory", "stale", "2026-09-13T00:00:00+00:00"),
+                )
+            with self.assertRaisesRegex(ValueError, "checksum changed"):
+                with AttachedDatabaseUnitOfWork(game, attachments={"player_data": player}, immediate=True) as uow:
+                    apply_attached_player_accessory(uow, clock=self.Clock())
+            self.assertEqual(sqlite3.connect(player).execute("select count(*) from sqlite_master where name='player_accessory'").fetchone()[0], 0)
 
 
 if __name__ == "__main__":
