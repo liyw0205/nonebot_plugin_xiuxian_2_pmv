@@ -16,7 +16,7 @@ from .domain import (
     StoneTrainingRequest,
     normalize_plan,
 )
-from .repository import LegacyTiantiTrainingRepository, TiantiTrainingRepository
+from .repository import LegacyTiantiTrainingRepository, StoneTrainingSqlRepository, TiantiTrainingRepository
 
 
 def _result_data(raw: Any) -> dict[str, Any]:
@@ -105,6 +105,9 @@ class TiantiTrainingApplication:
     def _repository(self) -> TiantiTrainingRepository:
         return self.repository or LegacyTiantiTrainingRepository(self.game_database, self.player_database)
 
+    def _stone_repository(self) -> StoneTrainingSqlRepository | TiantiTrainingRepository:
+        return self.repository or StoneTrainingSqlRepository(self.game_database, self.player_database)
+
     def train(self, *, operation_id: str, user_id: str, requested_stone: int) -> OperationOutcome[dict[str, Any]]:
         try:
             request = StoneTrainingRequest(str(operation_id).strip(), str(user_id).strip(), int(requested_stone))
@@ -117,7 +120,7 @@ class TiantiTrainingApplication:
             action="tianti.train",
             payload=request.payload(),
             ledger_database=self.game_database,
-            call=lambda: self._repository().train(request.operation_id, request.user_id, request.requested_stone),
+            call=lambda: self._stone_repository().train(request.operation_id, request.user_id, request.requested_stone),
             success_statuses={"trained", "duplicate"},
             messages={
                 "at_cap": "已达当前炼体境界上限，无法继续灵石炼体。",

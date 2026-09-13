@@ -15,6 +15,7 @@ class DatabaseUnitOfWork:
         self.timeout = timeout
         self.immediate = bool(immediate)
         self.connection: sqlite3.Connection | None = None
+        self._attached_schemas: set[str] = set()
 
     def __enter__(self) -> "DatabaseUnitOfWork":
         self.database.parent.mkdir(parents=True, exist_ok=True)
@@ -42,6 +43,9 @@ class DatabaseUnitOfWork:
             else:
                 self.connection.rollback()
         finally:
+            for schema in tuple(self._attached_schemas):
+                self.connection.execute(f'DETACH DATABASE "{schema}"')
+            self._attached_schemas.clear()
             self.connection.close()
             self.connection = None
         return None
@@ -67,6 +71,17 @@ class DatabaseUnitOfWork:
 
     def query_all(self, sql: str, params: Any = ()) -> list[Mapping[str, Any]]:
         return [dict(row) for row in self.execute(sql, params).fetchall()]
+
+    def attach_database(self, database: str | Path, schema: str) -> None:
+        """Attach a catalogued secondary database to this transaction."""
+        safe_schema = "".join(char if char.isalnum() or char == "_" else "_" for char in schema)
+        self.execute(f'ATTACH DATABASE ? AS "{safe_schema}"', (str(database),))
+        self._attached_schemas.add(safe_schema)
+
+    def detach_database(self, schema: str) -> None:
+        safe_schema = "".join(char if char.isalnum() or char == "_" else "_" for char in schema)
+        self.execute(f'DETACH DATABASE "{safe_schema}"')
+        self._attached_schemas.discard(safe_schema)
 
     @contextmanager
     def savepoint(self, name: str = "nested") -> Iterator[None]:
