@@ -2,6 +2,7 @@ import re
 import random
 import asyncio
 import time
+import os
 from datetime import datetime
 from pathlib import Path
 from nonebot.typing import T_State
@@ -83,7 +84,14 @@ season_rank = on_command("赛季榜", aliases={"赛季排行榜", "赛季排行"
 my_season_rank = on_command("我的赛季", aliases={"我的赛季榜", "个人赛季"}, priority=7, block=True)
 remaname = on_command("修仙改名", priority=5, block=True)
 root_rename = on_command("灵根改名", priority=5, block=True)
-give_stone = on_command("送灵石", priority=6, block=True)
+_legacy_stone_gift_enabled = os.environ.get("XIUXIAN_STONE_GIFT_LEGACY_HANDLER", "false").strip().lower() in {
+    "1", "true", "yes", "on"
+}
+give_stone = on_command(
+    "送灵石" if _legacy_stone_gift_enabled else "__legacy_stone_gift_disabled__",
+    priority=6,
+    block=True,
+)
 steal_stone = on_command("偷灵石", aliases={"飞龙探云手"}, permission=GROUP, priority=6, block=True)
 rob_stone = on_command("抢灵石", aliases={"抢劫"}, permission=GROUP, priority=6, block=True)
 user_stamina = on_command('我的体力', aliases={'体力'}, priority=5, block=True)

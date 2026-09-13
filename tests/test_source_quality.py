@@ -1265,18 +1265,16 @@ class SourceQualityTests(unittest.TestCase):
     def test_stone_gift_uses_transactional_service(self) -> None:
         base_root = SOURCE_ROOT / "xiuxian" / "xiuxian_base"
         command_source = (base_root / "__init__.py").read_text(encoding="utf-8")
-        service_source = (base_root / "stone_gift_service.py").read_text(
-            encoding="utf-8"
-        )
-        start = command_source.index("async def give_stone_(")
-        end = command_source.index("@steal_stone.handle", start)
-        command = command_source[start:end]
+        adapter_source = (
+            SOURCE_ROOT / "adapters/nonebot/commands.py"
+        ).resolve().read_text(encoding="utf-8")
 
-        self.assertIn("stone_gift_service.transfer(", command)
-        self.assertIn("stone_gift_service.get_operation(", command)
-        self.assertNotIn("sql_message.update_ls(", command)
-        self.assertIn("BEGIN IMMEDIATE", service_source)
-        self.assertIn("stone_gift_operations", service_source)
+        self.assertIn("XIUXIAN_STONE_GIFT_LEGACY_HANDLER", command_source)
+        self.assertIn('"送灵石" if _legacy_stone_gift_enabled', command_source)
+        self.assertIn("application.read_limits(", adapter_source)
+        self.assertIn("application.reply(", adapter_source)
+        self.assertNotIn("stone_gift_service.transfer(", adapter_source)
+        self.assertNotIn("transaction_service", adapter_source)
 
     def test_stone_theft_uses_transactional_transfer_service(self) -> None:
         base_root = SOURCE_ROOT / "xiuxian" / "xiuxian_base"
