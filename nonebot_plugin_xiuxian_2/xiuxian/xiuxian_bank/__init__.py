@@ -297,6 +297,25 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         await bank.finish()
 
     elif mode == '信息':  # 查询灵庄信息
+        from ...features.bank.account_info_application import BankAccountInfoApplication
+
+        new_info = BankAccountInfoApplication(get_paths().game_db).get_info(user_id=user_id)
+        if new_info.get("status") == "ok":
+            msg = f'''**灵庄信息**
+---
+已存
+> {new_info['saved_stone']}灵石
+存入时间
+> {new_info['updated_at']}
+会员等级
+> {BANKLEVEL[new_info['bank_level']]['level']}
+当前灵石
+> {new_info['wallet_stone']}
+存储上限
+> {BANKLEVEL[new_info['bank_level']]['savemax']}枚
+'''
+            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="结算", v3="灵庄结算")
+            await bank.finish()
         msg = f'''**灵庄信息**
 ---
 已存
