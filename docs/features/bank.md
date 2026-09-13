@@ -40,7 +40,7 @@ application 先登记 operation ledger，再调用跨库仓储；异常标记失
 
 ## 配置项
 
-`bank_enabled` / `XIUXIAN_BANK_ENABLED` 控制灰度；默认开启。
+`bank_enabled` / `XIUXIAN_BANK_ENABLED` 控制旧灵庄切片灰度；`bank_first_use_enabled` / `XIUXIAN_BANK_FIRST_USE_ENABLED` 控制新首次存款 Web/application 注入，默认关闭。新 v2 route 只有显式注入 service 时注册，旧路径保持可回滚。
 
 ## 适配器差异
 

@@ -590,6 +590,10 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             "map": MapApplication(str(context.database.path("game_db")), str(context.database.path("player_db"))),
             "rift": RiftApplication(str(context.database.path("game_db")), str(context.database.path("player_db"))),
         })
+        if context.settings is not None and context.settings.get("bank_first_use_enabled", False):
+            from .features.bank.account_application import BankDepositApplication
+
+            context.services["bank_first_use"] = BankDepositApplication(str(context.database.path("game_db")))
         for feature_key, application_type in LEGACY_MIGRATED_APPLICATIONS.items():
             context.services[feature_key] = application_type(str(context.database.path("game_db")))
         context.reconcile_handlers = {
