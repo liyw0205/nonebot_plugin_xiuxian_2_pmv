@@ -255,6 +255,8 @@
 
 2026-09-14 sign-in lottery runtime contract live safety：提交 `758cc04` 部署后 backup `/srv/old/data/backups/20260913T193857Z`、migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 56 个迁移、五库 restore、reconcile clean。恢复后只读确认 `sign_in_task_events`、`sign_in_task_projection` 存在；`lottery_pool_state` 不存在，故 live 仍保留 lottery legacy fallback，未伪造 lottery schema 或业务回执。
 
+2026-09-14 lottery schema ownership slice：新增 `lottery.001` migration，并扩充 `LotteryRepository.ensure_schema` 创建 `lottery_pool_state`、settlement、participants、winner history、legacy migration ledger；仓库和 live 均确认不存在 `lottery_pool.json`，因此 migration 只建立空权威 schema，不回填或伪造历史 pool/participant/winner。`LotteryApplication` 在 schema 存在时接管默认 sign-in lottery，旧 `LotterySettlementService` 仅保留显式 fallback/rollback。lottery/application/legacy/wiring 16 个测试、57 个 migration 单调性检查、compileall、architecture、source-quality 通过；尚未完成真实新 lottery 奖池灰度行为对照。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。

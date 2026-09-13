@@ -19,6 +19,8 @@ class LotteryRepository:
         uow.execute("CREATE TABLE IF NOT EXISTS lottery_pool_state(state_id INTEGER PRIMARY KEY,pool_amount INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL)")
         uow.execute("CREATE TABLE IF NOT EXISTS lottery_settlement_operations(operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,user_name TEXT NOT NULL,business_date TEXT NOT NULL,deposit_amount INTEGER NOT NULL,lottery_number INTEGER NOT NULL,prize_tier TEXT NOT NULL,prize_amount INTEGER NOT NULL,pool_before INTEGER NOT NULL,pool_after INTEGER NOT NULL,participant_count INTEGER NOT NULL,wallet_stone INTEGER NOT NULL,created_at TEXT NOT NULL)")
         uow.execute("CREATE TABLE IF NOT EXISTS lottery_participants(business_date TEXT NOT NULL,user_id TEXT NOT NULL,operation_id TEXT NOT NULL UNIQUE,participated_at TEXT NOT NULL,PRIMARY KEY(business_date,user_id))")
+        uow.execute("CREATE TABLE IF NOT EXISTS lottery_winner_history(id INTEGER PRIMARY KEY AUTOINCREMENT,operation_id TEXT NOT NULL UNIQUE,user_id TEXT NOT NULL,user_name TEXT NOT NULL,prize_tier TEXT NOT NULL,lottery_number INTEGER NOT NULL,prize_amount INTEGER NOT NULL,won_at TEXT NOT NULL)")
+        uow.execute("CREATE TABLE IF NOT EXISTS lottery_legacy_migrations(migration_key TEXT PRIMARY KEY,source_path TEXT NOT NULL,payload TEXT NOT NULL,migrated_at TEXT NOT NULL)")
         uow.execute("INSERT INTO lottery_pool_state(state_id,pool_amount,updated_at) VALUES(1,0,'') ON CONFLICT(state_id) DO NOTHING")
 
     @staticmethod

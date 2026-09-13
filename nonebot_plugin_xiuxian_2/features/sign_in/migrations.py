@@ -21,4 +21,10 @@ def apply_sign_in_tasks(uow: DatabaseUnitOfWork) -> None:
     SignInTaskRepository.ensure_schema(uow)
 
 
-__all__ = ["apply_sign_in", "apply_sign_in_statistics", "apply_sign_in_tasks"]
+def apply_lottery(uow: DatabaseUnitOfWork) -> None:
+    from .lottery_repository import LotteryRepository
+
+    LotteryRepository.ensure_schema(uow)
+
+
+__all__ = ["apply_lottery", "apply_sign_in", "apply_sign_in_statistics", "apply_sign_in_tasks"]
