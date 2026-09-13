@@ -249,6 +249,8 @@
 
 2026-09-14 sign-in task projection slice：新增 game-db `sign_in_task_events` 与 `sign_in_task_projection`，实现签到 daily 1 次和 weekly 6 次的持久化进度、operation_id 去重及完成提示；新增 `sign_in.003` migration，默认 `SignInApplicationEffects` 改用 `ApplicationSignInTaskEffects`，不再导入旧 `record_task_progress`。task/wiring/effects/statistics/lottery 相关 11 个测试、compileall、architecture、source-quality 通过。该 slice 只覆盖签到任务，不覆盖其它旧任务定义或奖励领取，lottery fallback 仍可能存在。
 
+2026-09-14 sign-in task projection live safety：提交 `247afec` 后真实预检 backup `/srv/old/data/backups/20260913T192136Z`、dry-run 仅 `sign_in.003`、reconcile clean；`sign_in.003` 实际应用成功，readiness 全绿。recovery smoke 覆盖 56 个迁移、五库 restore、reconcile clean；恢复后只读确认 `sign_in_task_events` 与 `sign_in_task_projection` 均存在，bank audit 仍为空且未写入业务数据。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。
