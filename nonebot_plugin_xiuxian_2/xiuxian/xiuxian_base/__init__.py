@@ -865,20 +865,9 @@ async def hongyun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         snapshot = LotteryApplication(str(get_paths().game_db)).snapshot(business_date)
     else:
         snapshot = _legacy_lottery_service().get_snapshot(business_date)
-    msg = "**鸿运当头**\n---\n"
-    msg += f"当前奖池累计\n> {number_to(snapshot.pool)}灵石\n"
-    msg += f"本期参与人数\n> {snapshot.participants}位道友\n\n"
-    
-    last_winner = snapshot.last_winner
-    if last_winner:
-        msg += "**上期中奖记录**\n"
-        msg += f"中奖道友\n> {last_winner.user_name}\n"
-        msg += f"中奖时间\n> {last_winner.won_at}\n"
-        msg += f"中奖金额\n> {number_to(last_winner.amount)}灵石\n"
-    else:
-        msg += "暂无历史中奖记录，道友快来签到吧！\n"
-    
-    msg += "\n> 每次签到自动存入100万灵石到奖池，中奖号码将独享全部奖池！"
+    from ...features.sign_in.commands import format_lottery_snapshot
+
+    msg = format_lottery_snapshot(snapshot, number_to)
     
     await handle_send(bot, event, msg, md_type="修仙", k1="修仙签到", v1="修仙签到", k2="鸿运", v2="鸿运", k3="帮助", v3="修仙帮助")
     await hongyun.finish()
