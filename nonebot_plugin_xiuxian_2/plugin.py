@@ -387,6 +387,26 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         lower = int(settings.get("sign_in_lower_limit", 100000)) if settings is not None else 100000
         upper = int(settings.get("sign_in_upper_limit", 500000)) if settings is not None else 500000
         fee_rate = float(settings.get("stone_gift_fee_rate", 0.1)) if settings is not None else 0.1
+        sign_in_effects = None
+        if context.legacy_startup:
+            # Keep historical lottery/statistics/task behavior at the adapter
+            # boundary while the side effects are migrated independently.
+            from .compatibility.sign_in_effects import LegacySignInEffects
+            from .xiuxian.xiuxian_base.transaction_service import LotterySettlementService
+            from .xiuxian.xiuxian_tasks.task_data import record_task_progress
+            from .xiuxian.xiuxian_utils.utils import log_message, update_statistics_value
+
+            sign_in_effects = LegacySignInEffects(
+                context.database.path("game_db"),
+                lottery_service=LotterySettlementService(
+                    context.database.path("game_db"),
+                    Path(__file__).parent / "xiuxian" / "xiuxian_base" / "lottery_pool.json",
+                ),
+                clock=context.clock,
+                task_progress=record_task_progress,
+                statistics=update_statistics_value,
+                logger=log_message,
+            )
         context.services = {
             "daily_fortune": DailyFortuneApplication(str(context.database.path("game_db")), clock=context.clock, random_source=context.random),
             "illusion": IllusionApplication(str(context.database.path("game_db")), clock=context.clock),
@@ -399,6 +419,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 clock=context.clock,
                 lower_limit=lower,
                 upper_limit=upper,
+                effects=sign_in_effects,
             ),
             "stone_gift": StoneGiftApplication(
                 str(context.database.path("game_db")),
