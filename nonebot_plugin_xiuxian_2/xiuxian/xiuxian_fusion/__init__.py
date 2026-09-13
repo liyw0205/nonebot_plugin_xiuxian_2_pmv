@@ -1,4 +1,5 @@
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
+from types import SimpleNamespace
 from nonebot.params import CommandArg
 from ..on_compat import on_command
 from ..xiuxian_config import XiuConfig
@@ -19,6 +20,7 @@ from ..xiuxian_utils.utils import (
 )
 from ..xiuxian_back.back_util import check_equipment_use_msg
 from ...paths import get_paths
+from ...features.fusion.application import FusionApplication
 from .fusion_service import FusionService
 import random
 import time
@@ -26,6 +28,21 @@ import time
 items = Items()
 sql_message = XiuxianDateManage()
 fusion_service = FusionService(get_paths().game_db)
+fusion_application = FusionApplication(get_paths().game_db)
+
+
+def _run_fusion_action(action, operation_id, user_id, call, **payload):
+    outcome = fusion_application.execute_legacy_call(
+        operation_id=operation_id,
+        user_id=str(user_id),
+        action=action,
+        payload=payload,
+        call=call,
+    )
+    data = dict(outcome.data or {})
+    data.setdefault("status", outcome.status)
+    data["succeeded"] = outcome.ok
+    return SimpleNamespace(**data)
 
 # 合成必定成功ID列表
 FIXED_SUCCESS_IDS = [7084]
@@ -248,18 +265,15 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
         if item_info and item_info['goods_type'] == "装备" and check_equipment_use_msg(user_id, int(item_id)):
             reserved_items[int(item_id)] = 1
     if quantity == 1:
-        result = fusion_service.apply(
-            operation_id,
-            user_id,
-            int(fusion_info.get('need_stone', 0)),
-            needed_items,
-            equipment_id,
-            equipment['name'],
-            equipment['type'],
-            successful=outcomes[0],
-            protection_item_id=None if guaranteed else 20006,
-            reserved_items=reserved_items,
-            max_goods_num=XiuConfig().max_goods_num,
+        result = _run_fusion_action(
+            "apply", operation_id, user_id,
+            call=lambda: fusion_service.apply(
+                operation_id, user_id, int(fusion_info.get('need_stone', 0)), needed_items,
+                equipment_id, equipment['name'], equipment['type'], successful=outcomes[0],
+                protection_item_id=None if guaranteed else 20006,
+                reserved_items=reserved_items, max_goods_num=XiuConfig().max_goods_num,
+            ),
+            equipment_id=equipment_id, quantity=1,
         )
         if result.status == "duplicate":
             if result.successful:
@@ -288,19 +302,15 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
             return False, "合成失败！幸好使用了福缘石，材料没有损失。"
         return False, "合成失败！材料已消耗。"
 
-    result = fusion_service.apply_batch(
-        operation_id,
-        user_id,
-        int(fusion_info.get('need_stone', 0)),
-        needed_items,
-        equipment_id,
-        equipment['name'],
-        equipment['type'],
-        outcomes,
-        protection_item_id=None if guaranteed else 20006,
-        reserved_items=reserved_items,
-        max_goods_num=XiuConfig().max_goods_num,
-        target_limit=limit,
+    result = _run_fusion_action(
+        "apply_batch", operation_id, user_id,
+        call=lambda: fusion_service.apply_batch(
+            operation_id, user_id, int(fusion_info.get('need_stone', 0)), needed_items,
+            equipment_id, equipment['name'], equipment['type'], outcomes,
+            protection_item_id=None if guaranteed else 20006, reserved_items=reserved_items,
+            max_goods_num=XiuConfig().max_goods_num, target_limit=limit,
+        ),
+        equipment_id=equipment_id, quantity=quantity,
     )
     if result.status == "duplicate":
         consumed_failures = result.failed_count - result.protected_count

@@ -69,6 +69,18 @@ def _normalize_weekly_purchases(value, today=None) -> tuple[dict[str, int | str]
 
 def normalize_weekly_purchases(value, today=None) -> dict[str, int | str]:
     """Return a canonical purchase snapshot for the ISO week containing today."""
+    if today is None:
+        raw = value
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw) if raw else {}
+            except (TypeError, ValueError):
+                raw = {}
+        if isinstance(raw, dict):
+            try:
+                today = date.fromisoformat(str(raw.get("_last_reset", "")))
+            except (TypeError, ValueError):
+                pass
     return _normalize_weekly_purchases(value, today)[0]
 
 class TrainingStateService:
@@ -426,7 +438,9 @@ class TrainingPurchaseService:
         expected_points, max_goods_num = map(int, (expected_points, max_goods_num))
         item_name, item_type = str(item_name), str(item_type)
         bind_flag = 1 if int(bind_flag) == 1 else 0
-        today = today or date.today()
+        if today is None:
+            today = normalize_weekly_purchases(expected_weekly_purchases).get("_last_reset")
+        today = _as_date(today)
         weekly = normalize_weekly_purchases(expected_weekly_purchases, today)
         if not operation_id or quantity <= 0 or min(item_id, unit_cost, weekly_limit, expected_points, max_goods_num) < 0:
             raise ValueError("valid operation, item, quantity and purchase limits are required")

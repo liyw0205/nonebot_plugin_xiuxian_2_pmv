@@ -4,6 +4,7 @@
 """
 import asyncio
 import hashlib
+from types import SimpleNamespace
 from ..on_compat import on_command
 from nonebot.permission import SUPERUSER
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent, get_at_user_id
@@ -17,11 +18,31 @@ from .past_life_limit import past_life_limit
 from .past_life_events import past_life_engine
 from .transaction_service import PastLifeResetService
 from ...paths import get_paths
+from ...features.past_life.application import PastLifeApplication
 
 player_data_manager = PlayerDataManager()
 sql_message = XiuxianDateManage()
 _paths = get_paths()
 past_life_reset_service = PastLifeResetService(_paths.game_db, _paths.player_db)
+past_life_application = PastLifeApplication(_paths.game_db)
+
+
+class _LegacyResult(dict):
+    __getattr__ = dict.get
+
+
+def _run_past_life_action(action, operation_id, user_id, call, **payload):
+    outcome = past_life_application.execute_legacy_call(
+        operation_id=operation_id,
+        user_id=str(user_id),
+        action=action,
+        payload=payload,
+        call=call,
+    )
+    data = dict(outcome.data or {})
+    data.setdefault("status", outcome.status)
+    data["succeeded"] = outcome.ok
+    return _LegacyResult(data)
 
 PAST_LIFE_RESET_ALL_TOKENS = {"all", "全部", "全体", "所有"}
 PAST_LIFE_RESET_CLEAR_TOKENS = {"全清", "清空", "清空历史"}
@@ -105,8 +126,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     user_id = user_info["user_id"]
     legacy_text = args.extract_plain_text().strip()
     event_id = _stable_event_id(event)
-    result = past_life_engine.start_new_life(
-        user_id, f"past-life-start:{user_id}:{event_id}"
+    operation_id = f"past-life-start:{user_id}:{event_id}"
+    result = _run_past_life_action(
+        "start", operation_id, user_id,
+        call=lambda: past_life_engine.start_new_life(user_id, operation_id),
     )
     if legacy_text and result["status"] in {"applied", "duplicate"}:
         result["message"] = "投胎时资质已由命数定下，输入的分配不会生效。\n" + result["message"]
@@ -149,8 +172,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     # 处理选择
     event_id = _stable_event_id(event)
-    result = past_life_engine.process_choice(
-        user_id, choice_idx, f"past-life-choice:{user_id}:{event_id}"
+    operation_id = f"past-life-choice:{user_id}:{event_id}"
+    result = _run_past_life_action(
+        "choice", operation_id, user_id,
+        call=lambda: past_life_engine.process_choice(user_id, choice_idx, operation_id),
+        choice=choice_idx,
     )
 
     if result["is_end"] and result.get("operation_status") == "applied":
@@ -289,8 +315,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             if pending is not None
             else f"past-life-reset-all:{event_id}"
         )
-        result = pending or past_life_reset_service.create_all(
-            operation_id, clear_history
+        result = pending or _run_past_life_action(
+            "reset_all_create", operation_id, str(getattr(event, "user_id", "admin")),
+            call=lambda: past_life_reset_service.create_all(operation_id, clear_history),
+            clear_history=clear_history,
         )
         if not result.succeeded:
             await handle_send(
@@ -302,8 +330,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         operation_id = result.operation_id
         try:
             while not result.complete:
-                result = past_life_reset_service.run_batch(
-                    operation_id, batch_size=500
+                result = _run_past_life_action(
+                    f"reset_all_batch:{result.processed}",
+                    f"{operation_id}:batch:{result.processed}",
+                    str(getattr(event, "user_id", "admin")),
+                    call=lambda: past_life_reset_service.run_batch(operation_id, batch_size=500),
+                    batch_size=500,
                 )
                 await asyncio.sleep(0)
         except Exception:
@@ -340,10 +372,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "未找到目标用户（请@或输入正确道号）")
         return
 
-    result = past_life_reset_service.reset_one(
-        f"past-life-reset-one:{event_id}",
-        target_user["user_id"],
-        clear_history,
+    operation_id = f"past-life-reset-one:{event_id}"
+    result = _run_past_life_action(
+        "reset_one", operation_id, str(target_user["user_id"]),
+        call=lambda: past_life_reset_service.reset_one(
+            operation_id, target_user["user_id"], clear_history,
+        ),
+        clear_history=clear_history,
     )
     if not result.succeeded:
         await handle_send(bot, event, "前尘重置 operation 冲突，本次未修改状态。")

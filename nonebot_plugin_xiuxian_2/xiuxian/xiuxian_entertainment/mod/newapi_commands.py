@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import time
 from typing import Any, Literal
 
 from ..command import *
@@ -106,6 +107,12 @@ def _parse_bind_args(text: str) -> tuple[str | None, str | None, str | None, str
 
 def _qq(event: GroupMessageEvent | PrivateMessageEvent) -> str:
     return str(event.get_user_id())
+
+
+def _write_operation_id(event, action: str, target: str = "") -> str:
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    suffix = f":{target}" if target else ""
+    return f"entertainment:{action}:{event_id or time.time_ns()}:{_qq(event)}{suffix}"
 
 
 def _parse_delete_indices(text: str) -> list[int] | None:
@@ -267,6 +274,7 @@ async def newapi_bind_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         api_user_id=api_user_id,
         secret=secret,
         base_url=base_url,
+        operation_id=_write_operation_id(event, "newapi-bind", api_user_id),
     )
     await handle_send(bot, event, msg if ok else f"绑定失败：{msg}", **_NEWAPI_FUN_KW)
     await newapi_bind_cmd.finish()
@@ -349,7 +357,11 @@ async def newapi_del_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         )
         await newapi_del_cmd.finish()
 
-    ok, msg = delete_accounts(_qq(event), indices)
+    ok, msg = delete_accounts(
+        _qq(event),
+        indices,
+        operation_id=_write_operation_id(event, "newapi-delete", text or "all"),
+    )
     await handle_send(bot, event, msg if ok else f"删除失败：{msg}", **_NEWAPI_FUN_KW)
     await newapi_del_cmd.finish()
 
@@ -379,6 +391,11 @@ async def newapi_history_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
 @newapi_auto_cmd.handle(parameterless=[Cooldown(cd_time=2)])
 async def newapi_auto_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    ok, msg = toggle_auto_checkin(_qq(event), args.extract_plain_text())
+    text = args.extract_plain_text()
+    ok, msg = toggle_auto_checkin(
+        _qq(event),
+        text,
+        operation_id=_write_operation_id(event, "newapi-auto", text.strip()),
+    )
     await handle_send(bot, event, msg if ok else f"操作失败：{msg}", **_NEWAPI_FUN_KW)
     await newapi_auto_cmd.finish()

@@ -13,7 +13,10 @@ from pathlib import Path
 from typing import Any
 
 import aiohttp
-import qrcode
+try:
+    import qrcode
+except ImportError:  # optional until the QQ bind page is requested
+    qrcode = None
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 _BIND_CREATE_URL = "https://q.qq.com/lite/create_bind_task"
@@ -100,6 +103,8 @@ def decrypt_bind_secret(encrypted_b64: str, key_b64: str) -> str:
 
 
 def qr_png_bytes(content: str) -> bytes:
+    if qrcode is None:
+        raise RuntimeError("二维码能力不可用：请安装 requirements.txt 中的 qrcode")
     image = qrcode.make(str(content))
     output = io.BytesIO()
     image.save(output, format="PNG")

@@ -1,0 +1,1 @@
+"""Novice gifts feature tests."""

@@ -29,20 +29,32 @@ from ..xiuxian_config import convert_rank, XiuConfig, added_ranks
 from datetime import datetime
 from .mix_elixir_config import MIXELIXIRCONFIG
 from ...paths import get_paths
+from ...features.mixelixir.application import MixelixirApplication
+from ...features.mixelixir.repository import LegacyMixelixirRepository
 from .transaction_service import MixelixirHarvestService
 from .transaction_service import MixelixirHarvestLevelUpgradeService
 from .transaction_service import MixelixirRecipeService
 from .transaction_service import MixelixirRefineCostService
 from .transaction_service import MixelixirRefineRewardService
+from .transaction_service import MixelixirSettlementService
 
 sql_message = XiuxianDateManage()  # sql类
 mixelixir_harvest_service = MixelixirHarvestService(get_paths().game_db, get_paths().player_db)
+mixelixir_application = MixelixirApplication(
+    get_paths().game_db,
+    get_paths().player_db,
+    repository=LegacyMixelixirRepository(
+        get_paths().game_db,
+        get_paths().player_db,
+    ),
+)
 mixelixir_harvest_level_upgrade_service = MixelixirHarvestLevelUpgradeService(
     get_paths().game_db, get_paths().player_db
 )
 mixelixir_recipe_service = MixelixirRecipeService(get_paths().game_db)
 mixelixir_refine_cost_service = MixelixirRefineCostService(get_paths().game_db)
 mixelixir_refine_reward_service = MixelixirRefineRewardService(get_paths().game_db, get_paths().player_db)
+mixelixir_settlement_service = MixelixirSettlementService(get_paths().game_db)
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 items = Items()
 added_rank = added_ranks()
@@ -279,29 +291,33 @@ async def yaocai_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 for k, v in give_dict.items():
                     goods_info = items.get_data_by_item_id(k)
                     rewards.append((k, goods_info['name'], v))
-            harvest = mixelixir_harvest_service.harvest(
-                operation_id,
-                user_id,
-                last_time,
-                nowtime,
-                rewards,
+            # Legacy facade call: mixelixir_harvest_service.harvest(...)
+            harvest = mixelixir_application.harvest(
+                operation_id=operation_id,
+                user_id=user_id,
+                expected_last_time=last_time,
+                harvested_at=nowtime,
+                rewards=rewards,
                 max_goods_num=XiuConfig().max_goods_num,
             )
-            if harvest.status == "duplicate":
+            harvest_data = harvest.data or {}
+            harvest_status = str(harvest_data.get("status", harvest.status))
+            harvest_rewards = harvest_data.get("rewards", [])
+            if harvest_status == "duplicate" or harvest.replayed:
                 msg = "".join(
-                    f"道友成功收获药材：{reward.name} {reward.quantity} 个！\n"
-                    for reward in harvest.rewards
+                    f"道友成功收获药材：{reward.get('name', '')} {reward.get('quantity', 0)} 个！\n"
+                    for reward in harvest_rewards
                 ) + "该收取请求已经处理，无需重复提交。"
                 l_msg = [msg]
                 await send_msg_handler(bot, event, '灵田收取', bot.self_id, l_msg)
                 await yaocai_get.finish()
-            if harvest.status in {"state_changed", "user_missing"}:
+            if harvest_status in {"state_changed", "user_missing"}:
                 msg = "药材未发放：灵田状态已更新，请重新收取。"
                 await handle_send(bot, event, msg, md_type="炼丹", k1="收取", v1="灵田收取", k2="查看", v2="洞天福地查看", k3="帮助", v3="洞天福地帮助")
                 await yaocai_get.finish()
             msg = "".join(
-                f"道友成功收获药材：{reward.name} {reward.quantity} 个！\n"
-                for reward in harvest.rewards
+                f"道友成功收获药材：{reward.get('name', '')} {reward.get('quantity', 0)} 个！\n"
+                for reward in harvest_rewards
             )
             l_msg = [msg]
             await send_msg_handler(bot, event, '灵田收取', bot.self_id, l_msg)
@@ -714,6 +730,11 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                         await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
                         await mix_make.finish()
                 if not started.succeeded:
+                    # The unified settlement facade is the compatibility path
+                    # for callers that do not need the two-phase task UI:
+                    # mixelixir_settlement_service.settle(
+                    # statuses: "item_insufficient", "state_changed", "user_missing", "duplicate"
+                    # )
                     # 扣材失败时再尝试补领任意 ready（兼容旧任务）
                     ready_task_id = mixelixir_refine_reward_service.latest_ready_task(
                         user_id, recipe_key

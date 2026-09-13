@@ -76,15 +76,15 @@ def configure_adapter_paths(source: object = None) -> AdapterSelection:
         return AdapterSelection(requested=requested, effective={})
 
     vendor_paths = {str(path) for path in _ADAPTER_PATHS.values() if path.exists()}
+    installed = {
+        name: _installed_adapter_available(name)
+        for name in _ADAPTER_PATHS
+    }
     # 去掉旧 vendor 条目后重建：vendor 请求时一律放最前
     current = [path for path in map(str, adapter_path) if path not in vendor_paths]
     while len(adapter_path):
         adapter_path.pop()
 
-    installed = {
-        name: _installed_adapter_available(name)
-        for name in _ADAPTER_PATHS
-    }
     effective: dict[str, str] = {}
 
     if requested == "installed":
@@ -107,8 +107,7 @@ def configure_adapter_paths(source: object = None) -> AdapterSelection:
             ordered_vendor.append(path_text)
             effective[name] = "vendor"
         elif installed[name]:
-            # auto 且已安装：仍把 vendor 挂上作为 fallback，但标记 effective=installed
-            ordered_vendor.append(path_text)
+            # auto 且已安装：保留 site-packages 在前，确保实际导入来源与诊断一致。
             effective[name] = "installed"
         else:
             ordered_vendor.append(path_text)

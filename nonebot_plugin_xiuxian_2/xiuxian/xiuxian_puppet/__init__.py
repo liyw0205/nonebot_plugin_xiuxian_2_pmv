@@ -21,8 +21,9 @@ from .transaction_service import (
     PuppetHarvestReward,
     PuppetHarvestService,
     PuppetOperation,
-    PuppetOperationService,
 )
+from ...features.puppet.application import PuppetApplication
+from ...features.puppet.repository import LegacyPuppetRepository
 
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
@@ -32,9 +33,10 @@ puppet_harvest_service = PuppetHarvestService(
     get_paths().player_db,
     max_goods_num=XiuConfig().max_goods_num,
 )
-puppet_operation_service = PuppetOperationService(
+puppet_application = PuppetApplication(
     get_paths().game_db,
     get_paths().player_db,
+    repository=LegacyPuppetRepository(get_paths().game_db, get_paths().player_db),
 )
 
 # 引入定时任务
@@ -132,6 +134,19 @@ def _puppet_operation_message(result: PuppetOperation) -> str:
     return (
         f"恭喜道友成功将灵田傀儡升级到{result.current_level}级！"
         f"消耗灵石：{result.stone_cost}"
+    )
+
+
+def _legacy_operation(outcome) -> PuppetOperation:
+    """Project the application outcome back to the historical message DTO."""
+    data = outcome.data or {}
+    return PuppetOperation(
+        str(data.get("status", outcome.code or "failed")),
+        str(data.get("user_id", "")),
+        str(data.get("action", "")),
+        int(data.get("previous_level", 0) or 0),
+        int(data.get("current_level", 0) or 0),
+        int(data.get("stone_cost", 0) or 0),
     )
 
 
@@ -241,8 +256,10 @@ async def buy_puppet_handler(bot: Bot, event: GroupMessageEvent | PrivateMessage
     user_id = user_info['user_id']
     get_player_info(user_id, "mix_elixir_info")
     cost = 10000000
-    result = puppet_operation_service.purchase(
-        _puppet_operation_id(event, "purchase", user_id), user_id, cost
+    operation_id = _puppet_operation_id(event, "purchase", user_id)
+    # Legacy facade call: puppet_operation_service.purchase(...)
+    result = _legacy_operation(
+        puppet_application.purchase(operation_id=operation_id, user_id=user_id, stone_cost=cost)
     )
     msg = _puppet_operation_message(result)
     await handle_send(bot, event, msg)
@@ -261,11 +278,15 @@ async def upgrade_puppet_handler(bot: Bot, event: GroupMessageEvent | PrivateMes
 
     user_id = user_info['user_id']
     get_player_info(user_id, "mix_elixir_info")
-    result = puppet_operation_service.upgrade(
-        _puppet_operation_id(event, "upgrade", user_id),
-        user_id,
-        {level: config["upgrade_cost"] for level, config in PUPPET_CONFIG.items()},
-        max_level=max(PUPPET_CONFIG),
+    operation_id = _puppet_operation_id(event, "upgrade", user_id)
+    # Legacy facade call: puppet_operation_service.upgrade(...)
+    result = _legacy_operation(
+        puppet_application.upgrade(
+            operation_id=operation_id,
+            user_id=user_id,
+            upgrade_costs={level: config["upgrade_cost"] for level, config in PUPPET_CONFIG.items()},
+            max_level=max(PUPPET_CONFIG),
+        )
     )
     msg = _puppet_operation_message(result)
     await handle_send(bot, event, msg)

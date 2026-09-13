@@ -5,9 +5,11 @@ except ImportError:
 
 import random
 import time
+from types import SimpleNamespace
 from datetime import datetime, timedelta
 from pathlib import Path
 from ...paths import get_paths
+from ...features.dongfu.application import DongfuApplication
 from ..on_compat import on_command
 from nonebot.params import CommandArg
 
@@ -42,6 +44,21 @@ dongfu_fertilize_service = DongfuFertilizeService(get_paths().game_db, get_paths
 dongfu_infiltrate_failure_service = InfiltrateFailureService(get_paths().game_db, get_paths().player_db)
 dongfu_infiltrate_success_service = InfiltrateSuccessService(get_paths().game_db, get_paths().player_db)
 dongfu_harvest_settlement_service = DongfuHarvestSettlementService(get_paths().game_db, get_paths().player_db)
+dongfu_application = DongfuApplication(get_paths().game_db)
+
+
+def _run_dongfu_action(action, operation_id, user_id, call, **payload):
+    outcome = dongfu_application.execute_legacy_call(
+        operation_id=operation_id,
+        user_id=str(user_id),
+        action=action,
+        payload=payload,
+        call=call,
+    )
+    data = dict(outcome.data or {})
+    data.setdefault("status", outcome.status)
+    data["succeeded"] = outcome.ok
+    return SimpleNamespace(**data)
 
 MAP_TABLE = "map_status"
 DONGFU_TABLE = "dongfu_status"
@@ -744,8 +761,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     real_minutes = max(10, int(base_minutes / speed))
     plant_start = _fmt_dt(now)
     plant_finish = _fmt_dt(now + timedelta(minutes=real_minutes))
-    result = dongfu_plant_service.plant(
-        operation_id, uid, expected_slots, _to_int(slot.get("slot")), seed_id, seed_name, plant_start, plant_finish,
+    result = _run_dongfu_action(
+        "plant", operation_id, uid,
+        call=lambda: dongfu_plant_service.plant(
+            operation_id, uid, expected_slots, _to_int(slot.get("slot")), seed_id, seed_name, plant_start, plant_finish,
+        ),
+        expected_slots=expected_slots, slot_no=_to_int(slot.get("slot")), seed_id=seed_id,
+        seed_name=seed_name, plant_start=plant_start, plant_finish=plant_finish,
     )
     if result.status == "duplicate":
         d = _get_dongfu(uid)
@@ -874,14 +896,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     else:
         failed_slots = snapshot["failed_slots"]
 
-    result = dongfu_harvest_settlement_service.harvest(
-        operation_id,
-        uid,
-        snapshot["expected_slots"],
-        snapshot["slot_numbers"],
-        snapshot["items"],
-        XiuConfig().max_goods_num,
-        _fmt_dt(now),
+    result = _run_dongfu_action(
+        "harvest", operation_id, uid,
+        call=lambda: dongfu_harvest_settlement_service.harvest(
+            operation_id, uid, snapshot["expected_slots"], snapshot["slot_numbers"],
+            snapshot["items"], XiuConfig().max_goods_num, _fmt_dt(now),
+        ),
+        snapshot=snapshot, max_goods_num=XiuConfig().max_goods_num,
     )
     if result.status == "duplicate":
         lines = [f"洞府收获完成，共收获{len(snapshot['slot_numbers'])}块灵田："]
@@ -995,9 +1016,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     stone_gain = random.randint(50000, 150000)
     if geomancy.get("name"):
         stone_gain = int(stone_gain * 1.2)
-    result = dongfu_patrol_service.patrol(
-        operation_id, uid, _today_str(), DONGFU_PATROL_STAMINA,
-        DONGFU_PATROL_DAILY_LIMIT, stone_gain, reward, XiuConfig().max_goods_num,
+    result = _run_dongfu_action(
+        "patrol", operation_id, uid,
+        call=lambda: dongfu_patrol_service.patrol(
+            operation_id, uid, _today_str(), DONGFU_PATROL_STAMINA,
+            DONGFU_PATROL_DAILY_LIMIT, stone_gain, reward, XiuConfig().max_goods_num,
+        ),
+        business_date=_today_str(), stamina=DONGFU_PATROL_STAMINA,
+        daily_limit=DONGFU_PATROL_DAILY_LIMIT, stone_gain=stone_gain, reward=reward,
     )
     if result.status == "duplicate":
         await handle_send(
@@ -1079,8 +1105,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, f"{slot_no}号灵田肥力已满。")
         return
     expected_slots = json.dumps(_normalize_plant_slots(d), ensure_ascii=False)
-    result = dongfu_fertilize_service.fertilize(
-        operation_id, uid, expected_slots, slot_no, DONGFU_ITEM_FERTILIZER, DONGFU_FERTILIZER_MAX,
+    result = _run_dongfu_action(
+        "fertilize", operation_id, uid,
+        call=lambda: dongfu_fertilize_service.fertilize(
+            operation_id, uid, expected_slots, slot_no, DONGFU_ITEM_FERTILIZER, DONGFU_FERTILIZER_MAX,
+        ),
+        expected_slots=expected_slots, slot_no=slot_no,
+        fertilizer_id=DONGFU_ITEM_FERTILIZER, fertilizer_max=DONGFU_FERTILIZER_MAX,
     )
     if result.status == "duplicate":
         d = _get_dongfu(uid)
@@ -1146,8 +1177,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     accelerate_minutes = DONGFU_ACCELERATE_MINUTES + _to_int(geomancy.get("accelerate_bonus"))
     new_finish = max(now, finish - timedelta(minutes=accelerate_minutes))
     expected_slots = json.dumps(_normalize_plant_slots(d), ensure_ascii=False)
-    result = dongfu_accelerate_service.accelerate(
-        operation_id, uid, expected_slots, slot_no, DONGFU_ITEM_ACCELERATE, _fmt_dt(now), _fmt_dt(new_finish),
+    result = _run_dongfu_action(
+        "accelerate", operation_id, uid,
+        call=lambda: dongfu_accelerate_service.accelerate(
+            operation_id, uid, expected_slots, slot_no, DONGFU_ITEM_ACCELERATE, _fmt_dt(now), _fmt_dt(new_finish),
+        ),
+        expected_slots=expected_slots, slot_no=slot_no, accelerate_item=DONGFU_ITEM_ACCELERATE,
+        now=_fmt_dt(now), new_finish=_fmt_dt(new_finish),
     )
     if result.status == "duplicate":
         d = _get_dongfu(uid)
@@ -1182,13 +1218,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, f"洞府灵田已扩建至上限：{DONGFU_PLOT_MAX}块。")
         return
 
-    result = dongfu_expansion_service.expand(
-        _dongfu_expansion_operation_id(event, uid),
-        uid,
-        deed_id=DONGFU_ITEM_DEED,
-        base_plot_count=DONGFU_PLOT_COUNT,
-        max_plot_count=DONGFU_PLOT_MAX,
-        stone_cost_per_level=20000000,
+    operation_id = _dongfu_expansion_operation_id(event, uid)
+    result = _run_dongfu_action(
+        "expand", operation_id, uid,
+        call=lambda: dongfu_expansion_service.expand(
+            operation_id, uid, deed_id=DONGFU_ITEM_DEED,
+            base_plot_count=DONGFU_PLOT_COUNT, max_plot_count=DONGFU_PLOT_MAX,
+            stone_cost_per_level=20000000,
+        ),
+        deed_id=DONGFU_ITEM_DEED, base_plot_count=DONGFU_PLOT_COUNT,
+        max_plot_count=DONGFU_PLOT_MAX, stone_cost_per_level=20000000,
     )
     if result.status == "deed_insufficient":
         await handle_send(bot, event, f"扩建至{result.previous_count + 1}块灵田需要【洞府地契】x{result.deed_cost}。可通过地图探索获得。")
@@ -1238,7 +1277,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
     gain = random.randint(10000, 50000)
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    result = dongfu_visit_reward_service.reward(f"dongfu-visit:{uid}:{event_message_id or time.time_ns()}", uid, tid, gain)
+    operation_id = f"dongfu-visit:{uid}:{event_message_id or time.time_ns()}"
+    result = _run_dongfu_action(
+        "visit", operation_id, uid,
+        call=lambda: dongfu_visit_reward_service.reward(operation_id, uid, tid, gain),
+        target_user_id=tid, gain=gain,
+    )
     if not result.succeeded:
         await handle_send(bot, event, "洞府操作未结算：洞府当前状态已更新，请稍后重试。")
         return
@@ -1269,8 +1313,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     cost = int(3000000 * (lv + 1) * (1 - float(geomancy.get("array_discount", 0))))
     array_stone_need = max(0, next_lv - 3 - _to_int(geomancy.get("array_stone_reduce")))
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    result = dongfu_array_upgrade_service.upgrade(
-        f"dongfu-array:{uid}:{event_message_id or time.time_ns()}", uid, lv, next_lv, cost, DONGFU_ITEM_ARRAY_STONE, array_stone_need,
+    operation_id = f"dongfu-array:{uid}:{event_message_id or time.time_ns()}"
+    result = _run_dongfu_action(
+        "array_upgrade", operation_id, uid,
+        call=lambda: dongfu_array_upgrade_service.upgrade(
+            operation_id, uid, lv, next_lv, cost, DONGFU_ITEM_ARRAY_STONE, array_stone_need,
+        ),
+        current_level=lv, next_level=next_lv, cost=cost,
+        stone_id=DONGFU_ITEM_ARRAY_STONE, stone_need=array_stone_need,
     )
     if result.status == "stone_insufficient":
         await handle_send(bot, event, f"升级阵法需要{number_to(cost)}灵石。")
@@ -1370,9 +1420,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if detected and not success:
         loss_stone = random.randint(50000, 200000) * max(1, array_lv)
         event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-        result = dongfu_infiltrate_failure_service.settle(
-            f"dongfu-infiltrate-failure:{my_uid}:{event_message_id or time.time_ns()}", my_uid, target_uid, _today_str(),
-            _get_infiltrate_count_field(is_random_mode), _get_infiltrate_limit(is_random_mode), INFILTRATE_DAILY_LIMIT, loss_stone, guarded,
+        operation_id = f"dongfu-infiltrate-failure:{my_uid}:{event_message_id or time.time_ns()}"
+        result = _run_dongfu_action(
+            "infiltrate_failure", operation_id, my_uid,
+            call=lambda: dongfu_infiltrate_failure_service.settle(
+                operation_id, my_uid, target_uid, _today_str(),
+                _get_infiltrate_count_field(is_random_mode), _get_infiltrate_limit(is_random_mode),
+                INFILTRATE_DAILY_LIMIT, loss_stone, guarded,
+            ),
+            target_user_id=target_uid, business_date=_today_str(), loss_stone=loss_stone,
+            guarded=guarded,
         )
         if not result.succeeded:
             await handle_send(bot, event, "潜入未结算：潜入进度当前状态已更新，请稍后重试。")
@@ -1417,10 +1474,18 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         new_finish = _fmt_dt(finish + timedelta(minutes=added_minutes))
     expected_slots = json.dumps(_normalize_plant_slots(td), ensure_ascii=False)
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    result = dongfu_infiltrate_success_service.settle(
-        f"dongfu-infiltrate-success:{my_uid}:{event_message_id or time.time_ns()}", my_uid, target_uid, _today_str(),
-        _get_infiltrate_count_field(is_random_mode), _get_infiltrate_limit(is_random_mode), INFILTRATE_DAILY_LIMIT,
-        expected_slots, _to_int(target_slot.get("slot")), new_finish, reward_rows, stone_gain, guarded, XiuConfig().max_goods_num,
+    operation_id = f"dongfu-infiltrate-success:{my_uid}:{event_message_id or time.time_ns()}"
+    result = _run_dongfu_action(
+        "infiltrate_success", operation_id, my_uid,
+        call=lambda: dongfu_infiltrate_success_service.settle(
+            operation_id, my_uid, target_uid, _today_str(),
+            _get_infiltrate_count_field(is_random_mode), _get_infiltrate_limit(is_random_mode),
+            INFILTRATE_DAILY_LIMIT, expected_slots, _to_int(target_slot.get("slot")),
+            new_finish, reward_rows, stone_gain, guarded, XiuConfig().max_goods_num,
+        ),
+        target_user_id=target_uid, business_date=_today_str(), expected_slots=expected_slots,
+        slot_no=_to_int(target_slot.get("slot")), new_finish=new_finish,
+        rewards=reward_rows, stone_gain=stone_gain, guarded=guarded,
     )
     if result.status == "inventory_full":
         await handle_send(bot, event, "背包空间不足，潜入所得无法结算。")

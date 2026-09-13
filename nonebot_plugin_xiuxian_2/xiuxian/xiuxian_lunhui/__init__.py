@@ -30,6 +30,7 @@ from ..xiuxian_impart.impart_uitls import (
     update_user_impart_data
 )
 from ...paths import get_paths
+from ...features.lunhui.application import LunhuiApplication
 from .transaction_service import (
     CultivationResetService,
     LunhuiRecallService,
@@ -42,6 +43,24 @@ items = Items()
 lunhui_recall_service = LunhuiRecallService(get_paths().game_db, get_paths().player_db)
 lunhui_settlement_service = LunhuiSettlementService(get_paths().game_db, get_paths().player_db, get_paths().impart_db)
 cultivation_reset_service = CultivationResetService(get_paths().game_db)
+lunhui_application = LunhuiApplication(
+    get_paths().game_db,
+    get_paths().player_db,
+    get_paths().impart_db,
+)
+
+
+def _run_lunhui_action(action: str, operation_id: str, user_id: str, **payload):
+    outcome = lunhui_application.execute(
+        operation_id=operation_id,
+        user_id=str(user_id),
+        payload={"action": action, **payload},
+    )
+    data = dict(outcome.data or {})
+    data.setdefault("status", outcome.status)
+    data["succeeded"] = outcome.ok
+    from types import SimpleNamespace
+    return SimpleNamespace(**data)
 added_ranks = added_ranks()
 confirm_lunhui_cache = {}
 ROOT_RENAME_CARD_ID = 20025
@@ -120,7 +139,10 @@ async def resetting_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_name = user_msg['user_name']
     if user_msg['level'] in ['感气境初期', '感气境中期', '感气境圆满']:
         exp = user_msg['exp']
-        result = cultivation_reset_service.reset(operation_id, user_id, user_msg['level'], exp)
+        result = _run_lunhui_action(
+            "reset", operation_id, user_id,
+            expected_level=user_msg['level'], expected_exp=exp,
+        )
         if result.status == "duplicate":
             msg = f"{user_name}现在是一介凡人了！！\n该自废修为请求已经处理，无需重复提交。"
             await handle_send(bot, event, msg)
@@ -345,9 +367,10 @@ async def confirm_lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     }
     impart_exp_day = int(impart_data_draw.get("exp_day", 0) or 0) if impart_data_draw else 0
     impart_stone = int(impart_data_draw.get("stone_num", 0) or 0) if impart_data_draw else 0
-    result = lunhui_settlement_service.settle(
-        operation_id, user_id, user_msg["level"], root_level, user_msg["root_type"],
-        ROOT_RENAME_CARD_ID, ROOT_RENAME_CARD_NAME,
+    result = _run_lunhui_action(
+        "settle", operation_id, user_id,
+        expected_level=user_msg["level"], root_key=root_level, expected_root_type=user_msg["root_type"],
+        reward_id=ROOT_RENAME_CARD_ID, reward_name=ROOT_RENAME_CARD_NAME,
         expected_exp=user_msg["exp"], expected_stone=user_msg["stone"],
         expected_root_level=user_msg["root_level"], expected_buffs=expected_buffs,
         expected_impart_exp_day=impart_exp_day, expected_impart_stone=impart_stone,
@@ -565,7 +588,13 @@ def retrieve_reincarnation_skill(user_id, skill_type, operation_id=None):
     if skill_id == 0:
         return False, "记忆中没有该技能"
     
-    result = lunhui_recall_service.recall(operation_id or f"lunhui-recall:{user_id}:{skill_type}", user_id, skill_type, skill_id)
+    result = _run_lunhui_action(
+        "recall",
+        operation_id or f"lunhui-recall:{user_id}:{skill_type}",
+        user_id,
+        skill_type=skill_type,
+        expected_skill_id=skill_id,
+    )
     if result.status == "duplicate":
         skill_name = items.get_data_by_item_id(result.skill_id).get('name', '未知技能') if result.skill_id else '未知技能'
         return True, f"成功回忆前世中的技能：{skill_name}\n该回忆请求已经处理，无需重复提交。"

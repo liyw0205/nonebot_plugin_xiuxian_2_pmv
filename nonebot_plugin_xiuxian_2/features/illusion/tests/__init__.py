@@ -1,0 +1,1 @@
+"""Illusion choice feature tests."""

@@ -1,27 +1,16 @@
 from __future__ import annotations
 
-import json
-from contextlib import closing
-from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
-from datetime import datetime
-from typing import Callable
-from datetime import datetime, timedelta
-from ..xiuxian_utils import db_backend
+from typing import Any, Callable, Iterable
 
-@dataclass(frozen=True)
-class BegDailyRewardResult:
-    status: str
-    stone_reward: int = 0
-    stone: int = 0
+from ...features.beg.domain import BegDailyRewardResult, NoviceGiftClaimResult
+from ...features.beg.repository import BegRepository
+from ...infrastructure.database import DatabaseUnitOfWork
 
-    @property
-    def succeeded(self) -> bool:
-        return self.status in {"applied", "duplicate"}
 
 class BegDailyRewardService:
-    """Settle one daily beg reward after rechecking its complete state."""
+    """Compatibility facade for the historical daily reward import path."""
 
     def __init__(
         self,
@@ -30,196 +19,46 @@ class BegDailyRewardService:
         failure_hook: Callable[[str], None] | None = None,
     ) -> None:
         self._database = Path(database)
+        self._repository = BegRepository(failure_hook=failure_hook)
         self._lock = lock or RLock()
-        self._failure_hook = failure_hook
-
-    @staticmethod
-    def _parse_datetime(value) -> datetime:
-        if isinstance(value, datetime):
-            return value
-        text = str(value or "").strip()
-        if not text:
-            raise ValueError("create_time is required")
-        try:
-            return datetime.fromisoformat(text)
-        except ValueError:
-            for pattern in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
-                try:
-                    return datetime.strptime(text, pattern)
-                except ValueError:
-                    continue
-        raise ValueError("invalid create_time")
-
-    @classmethod
-    def _canonical_create_time(cls, value) -> str:
-        return cls._parse_datetime(value).isoformat(sep=" ")
-
-    @staticmethod
-    def _normalize_optional(value):
-        return None if value is None else str(value)
-
-    @staticmethod
-    def _payload(user_id) -> str:
-        # Request identity only — balances/reward rolls are concurrency checks or outcomes.
-        return json.dumps([str(user_id)], ensure_ascii=True, separators=(",", ":"))
-
-    def _checkpoint(self, name: str) -> None:
-        if self._failure_hook is not None:
-            self._failure_hook(name)
 
     def get_result(self, operation_id: str) -> BegDailyRewardResult | None:
-        operation_id = str(operation_id).strip()
-        if not operation_id:
-            return None
-        with self._lock, closing(db_backend.connect(self._database)) as conn:
-            conn.execute(
-                "CREATE TABLE IF NOT EXISTS beg_daily_reward_operations ("
-                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
-                "stone_reward INTEGER NOT NULL,stone INTEGER NOT NULL,"
-                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-            )
-            previous = conn.execute(
-                "SELECT payload,stone_reward,stone FROM beg_daily_reward_operations "
-                "WHERE operation_id=%s",
-                (operation_id,),
-            ).fetchone()
-            if previous is None:
-                return None
-            return BegDailyRewardResult("duplicate", int(previous[1]), int(previous[2]))
+        with self._lock, DatabaseUnitOfWork(self._database) as uow:
+            return self._repository.daily_result(uow, operation_id)
 
     def settle(
         self,
-        operation_id,
-        user_id,
-        expected_create_time,
-        expected_stone,
-        expected_sect_id,
-        expected_root_type,
-        expected_level,
-        settled_at,
-        max_age_days,
-        eligible_levels,
-        stone_reward,
+        operation_id: str,
+        user_id: str,
+        expected_create_time: Any,
+        expected_stone: int,
+        expected_sect_id: Any,
+        expected_root_type: str,
+        expected_level: str,
+        settled_at: Any,
+        max_age_days: int,
+        eligible_levels: Iterable[str],
+        stone_reward: int,
     ) -> BegDailyRewardResult:
-        operation_id = str(operation_id).strip()
-        user_id = str(user_id)
-        expected_create_time = self._canonical_create_time(expected_create_time)
-        expected_stone = int(expected_stone)
-        expected_sect_id = self._normalize_optional(expected_sect_id)
-        expected_root_type = str(expected_root_type)
-        expected_level = str(expected_level)
-        settled_at = self._parse_datetime(settled_at)
-        max_age_days = int(max_age_days)
-        eligible_levels = tuple(map(str, eligible_levels))
-        stone_reward = int(stone_reward)
-        if (
-            not operation_id
-            or expected_stone < 0
-            or max_age_days < 0
-            or stone_reward < 0
-            or not eligible_levels
-        ):
-            raise ValueError("valid daily beg reward settlement is required")
+        with self._lock, DatabaseUnitOfWork(self._database, immediate=True) as uow:
+            return self._repository.settle_daily(
+                uow,
+                operation_id=operation_id,
+                user_id=user_id,
+                expected_create_time=expected_create_time,
+                expected_stone=expected_stone,
+                expected_sect_id=expected_sect_id,
+                expected_root_type=expected_root_type,
+                expected_level=expected_level,
+                settled_at=settled_at,
+                max_age_days=max_age_days,
+                eligible_levels=eligible_levels,
+                stone_reward=stone_reward,
+            )
 
-        payload = self._payload(user_id)
-        with self._lock, closing(db_backend.connect(self._database)) as conn:
-            try:
-                conn.execute("BEGIN IMMEDIATE")
-                conn.execute(
-                    "CREATE TABLE IF NOT EXISTS beg_daily_reward_operations ("
-                    "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
-                    "stone_reward INTEGER NOT NULL,stone INTEGER NOT NULL,"
-                    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-                )
-                previous = conn.execute(
-                    "SELECT payload,stone_reward,stone FROM beg_daily_reward_operations "
-                    "WHERE operation_id=%s",
-                    (operation_id,),
-                ).fetchone()
-                if previous:
-                    conn.rollback()
-                    if str(previous[0]) != payload:
-                        return BegDailyRewardResult("operation_conflict")
-                    return BegDailyRewardResult(
-                        "duplicate", int(previous[1]), int(previous[2])
-                    )
-
-                user = conn.execute(
-                    "SELECT COALESCE(stone,0),create_time,COALESCE(is_beg,0),"
-                    "sect_id,root_type,level FROM user_xiuxian WHERE user_id=%s",
-                    (user_id,),
-                ).fetchone()
-                if user is None:
-                    conn.rollback()
-                    return BegDailyRewardResult("user_missing")
-
-                actual_state = (
-                    int(user[0]),
-                    self._canonical_create_time(user[1]),
-                    self._normalize_optional(user[3]),
-                    str(user[4]),
-                    str(user[5]),
-                )
-                expected_state = (
-                    expected_stone,
-                    expected_create_time,
-                    expected_sect_id,
-                    expected_root_type,
-                    expected_level,
-                )
-                if actual_state != expected_state:
-                    conn.rollback()
-                    return BegDailyRewardResult("state_changed")
-                if int(user[2]) != 0:
-                    conn.rollback()
-                    return BegDailyRewardResult("already_claimed")
-                if expected_sect_id is not None and expected_root_type == "伪灵根":
-                    conn.rollback()
-                    return BegDailyRewardResult("ineligible_sect")
-                if expected_root_type in {"轮回道果", "真·轮回道果"}:
-                    conn.rollback()
-                    return BegDailyRewardResult("ineligible_root")
-                if expected_level not in eligible_levels:
-                    conn.rollback()
-                    return BegDailyRewardResult("ineligible_level")
-                if (settled_at - self._parse_datetime(user[1])).days > max_age_days:
-                    conn.rollback()
-                    return BegDailyRewardResult("expired")
-
-                final_stone = expected_stone + stone_reward
-                changed = conn.execute(
-                    "UPDATE user_xiuxian SET stone=%s,is_beg=1 "
-                    "WHERE user_id=%s AND COALESCE(stone,0)=%s "
-                    "AND COALESCE(is_beg,0)=0",
-                    (final_stone, user_id, expected_stone),
-                )
-                if changed.rowcount < 1:
-                    conn.rollback()
-                    return BegDailyRewardResult("state_changed")
-                self._checkpoint("after_user_update")
-                conn.execute(
-                    "INSERT INTO beg_daily_reward_operations "
-                    "(operation_id,payload,stone_reward,stone) VALUES (%s,%s,%s,%s)",
-                    (operation_id, payload, stone_reward, final_stone),
-                )
-                self._checkpoint("after_operation")
-                conn.commit()
-                return BegDailyRewardResult("applied", stone_reward, final_stone)
-            except Exception:
-                conn.rollback()
-                raise
-
-@dataclass(frozen=True)
-class NoviceGiftClaimResult:
-    status: str
-    stone: int = 0
-
-    @property
-    def succeeded(self) -> bool:
-        return self.status in {"applied", "duplicate"}
 
 class NoviceGiftClaimService:
-    """Claim every novice-gift asset and its eligibility flag atomically."""
+    """Compatibility facade for the historical novice gift import path."""
 
     def __init__(
         self,
@@ -228,184 +67,37 @@ class NoviceGiftClaimService:
         failure_hook: Callable[[str], None] | None = None,
     ) -> None:
         self._database = Path(database)
+        self._repository = BegRepository(failure_hook=failure_hook)
         self._lock = lock or RLock()
-        self._failure_hook = failure_hook
-
-    @staticmethod
-    def _parse_datetime(value) -> datetime:
-        if isinstance(value, datetime):
-            return value
-        text = str(value or "").strip()
-        if not text:
-            raise ValueError("create_time is required")
-        try:
-            return datetime.fromisoformat(text)
-        except ValueError:
-            for pattern in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
-                try:
-                    return datetime.strptime(text, pattern)
-                except ValueError:
-                    continue
-        raise ValueError("invalid create_time")
-
-    @staticmethod
-    def _canonical_create_time(value) -> str:
-        return NoviceGiftClaimService._parse_datetime(value).isoformat(sep=" ")
-
-    @staticmethod
-    def _payload(user_id) -> str:
-        # Request identity only — reward rolls/create_time snapshots are outcomes or concurrency checks.
-        return json.dumps([str(user_id)], ensure_ascii=True, separators=(",", ":"))
-
-    def _checkpoint(self, name: str) -> None:
-        if self._failure_hook is not None:
-            self._failure_hook(name)
 
     def get_result(self, operation_id: str) -> NoviceGiftClaimResult | None:
-        operation_id = str(operation_id).strip()
-        if not operation_id:
-            return None
-        with self._lock, closing(db_backend.connect(self._database)) as conn:
-            conn.execute(
-                "CREATE TABLE IF NOT EXISTS novice_gift_claim_operations ("
-                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,stone INTEGER "
-                "NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-            )
-            previous = conn.execute(
-                "SELECT payload,stone FROM novice_gift_claim_operations "
-                "WHERE operation_id=%s",
-                (operation_id,),
-            ).fetchone()
-            if previous is None:
-                return None
-            return NoviceGiftClaimResult("duplicate", int(previous[1]))
+        with self._lock, DatabaseUnitOfWork(self._database) as uow:
+            return self._repository.novice_result(uow, operation_id)
 
     def claim(
         self,
-        operation_id,
-        user_id,
-        expected_create_time,
-        claimed_at,
-        max_age_days,
-        stone,
-        rewards,
-        max_goods_num,
+        operation_id: str,
+        user_id: str,
+        expected_create_time: Any,
+        claimed_at: Any,
+        max_age_days: int,
+        stone: int,
+        rewards: Iterable[dict[str, Any]],
+        max_goods_num: int,
     ) -> NoviceGiftClaimResult:
-        operation_id = str(operation_id).strip()
-        user_id = str(user_id)
-        expected_create_time = self._canonical_create_time(expected_create_time)
-        claimed_at = self._parse_datetime(claimed_at)
-        max_age_days, stone, max_goods_num = map(
-            int, (max_age_days, stone, max_goods_num)
-        )
+        with self._lock, DatabaseUnitOfWork(self._database, immediate=True) as uow:
+            return self._repository.claim_novice(
+                uow,
+                operation_id=operation_id,
+                user_id=user_id,
+                expected_create_time=expected_create_time,
+                claimed_at=claimed_at,
+                max_age_days=max_age_days,
+                stone=stone,
+                rewards=rewards,
+                max_goods_num=max_goods_num,
+            )
 
-        totals: dict[int, list] = {}
-        for reward in rewards:
-            item_id = int(reward["id"])
-            amount = int(reward["amount"])
-            if amount <= 0:
-                continue
-            if item_id not in totals:
-                totals[item_id] = [
-                    str(reward["name"]), str(reward["type"]), 0
-                ]
-            elif totals[item_id][:2] != [str(reward["name"]), str(reward["type"])]:
-                raise ValueError("conflicting reward metadata")
-            totals[item_id][2] += amount
-        reward_rows = tuple(
-            (item_id, values[0], values[1], values[2])
-            for item_id, values in sorted(totals.items())
-        )
-        if (
-            not operation_id
-            or max_age_days < 0
-            or stone < 0
-            or max_goods_num < 0
-        ):
-            raise ValueError("valid novice gift claim is required")
-
-        payload = self._payload(user_id)
-        with self._lock, closing(db_backend.connect(self._database)) as conn:
-            try:
-                conn.execute("BEGIN IMMEDIATE")
-                conn.execute(
-                    "CREATE TABLE IF NOT EXISTS novice_gift_claim_operations ("
-                    "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,stone INTEGER "
-                    "NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-                )
-                previous = conn.execute(
-                    "SELECT payload,stone FROM novice_gift_claim_operations "
-                    "WHERE operation_id=%s",
-                    (operation_id,),
-                ).fetchone()
-                if previous:
-                    conn.rollback()
-                    status = "duplicate" if str(previous[0]) == payload else "operation_conflict"
-                    return NoviceGiftClaimResult(status, int(previous[1]))
-
-                user = conn.execute(
-                    "SELECT create_time,COALESCE(is_novice,0) FROM user_xiuxian "
-                    "WHERE user_id=%s",
-                    (user_id,),
-                ).fetchone()
-                if user is None:
-                    conn.rollback()
-                    return NoviceGiftClaimResult("user_missing")
-                actual_create_time = self._canonical_create_time(user[0])
-                if actual_create_time != expected_create_time:
-                    conn.rollback()
-                    return NoviceGiftClaimResult("state_changed")
-                if int(user[1]) != 0:
-                    conn.rollback()
-                    return NoviceGiftClaimResult("already_claimed")
-                if claimed_at > self._parse_datetime(user[0]) + timedelta(days=max_age_days):
-                    conn.rollback()
-                    return NoviceGiftClaimResult("expired")
-
-                for item_id, _, _, amount in reward_rows:
-                    current = conn.execute(
-                        "SELECT COALESCE(goods_num,0) FROM back "
-                        "WHERE user_id=%s AND goods_id=%s",
-                        (user_id, item_id),
-                    ).fetchone()
-                    if (int(current[0]) if current else 0) + amount > max_goods_num:
-                        conn.rollback()
-                        return NoviceGiftClaimResult("inventory_full")
-
-                changed = conn.execute(
-                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL),is_novice=1 "
-                    "WHERE user_id=%s AND COALESCE(is_novice,0)=0 AND create_time=%s",
-                    (stone, user_id, user[0]),
-                )
-                if changed.rowcount < 1:
-                    conn.rollback()
-                    return NoviceGiftClaimResult("state_changed")
-                self._checkpoint("after_user_update")
-
-                now = datetime.now()
-                for item_id, name, item_type, amount in reward_rows:
-                    conn.execute(
-                        "INSERT INTO back (user_id,goods_id,goods_name,goods_type,"
-                        "goods_num,create_time,update_time,bind_num) "
-                        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) "
-                        "ON CONFLICT(user_id,goods_id) DO UPDATE SET "
-                        "goods_name=EXCLUDED.goods_name,goods_type=EXCLUDED.goods_type,"
-                        "goods_num=back.goods_num+EXCLUDED.goods_num,"
-                        "bind_num=COALESCE(back.bind_num,0)+EXCLUDED.bind_num,"
-                        "update_time=EXCLUDED.update_time",
-                        (user_id, item_id, name, item_type, amount, now, now, amount),
-                    )
-                self._checkpoint("after_rewards")
-                conn.execute(
-                    "INSERT INTO novice_gift_claim_operations "
-                    "(operation_id,payload,stone) VALUES (%s,%s,%s)",
-                    (operation_id, payload, stone),
-                )
-                conn.commit()
-                return NoviceGiftClaimResult("applied", stone)
-            except Exception:
-                conn.rollback()
-                raise
 
 __all__ = [
     "BegDailyRewardResult",

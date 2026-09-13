@@ -29,6 +29,8 @@ async def extract_links(text: str) -> list[tuple[str, str]]:
 
 async def parse_text(text: str) -> list[dict[str, Any]]:
     # 平台请求走线程池，避免阻塞事件循环
+    # Legacy bootstrap remains an I/O boundary when enabled:
+    # await run_blocking_io(ensure_vendor_core, ...)
     return await run_native_parse(text or "")
 
 

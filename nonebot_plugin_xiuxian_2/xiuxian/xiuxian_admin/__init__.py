@@ -6,9 +6,11 @@ import re
 import os
 import random
 import asyncio
+from types import SimpleNamespace
 from pathlib import Path
 from typing import Any, Dict, List
 from ...paths import get_paths
+from ...features.admin_asset.application import AdminAssetApplication
 from nonebot.typing import T_State
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
@@ -92,6 +94,7 @@ admin_level_change_service = AdminLevelChangeService(get_paths().game_db)
 admin_root_change_service = AdminRootChangeService(get_paths().game_db)
 admin_exp_adjustment_service = AdminExpAdjustmentService(get_paths().game_db)
 admin_stone_adjustment_service = AdminStoneAdjustmentService(get_paths().game_db)
+admin_asset_application = AdminAssetApplication(get_paths().game_db)
 admin_item_grant_service = AdminItemGrantService(get_paths().game_db)
 admin_item_destroy_service = AdminItemDestroyService(get_paths().game_db)
 admin_item_batch_grant_service = AdminItemBatchGrantService(get_paths().game_db)
@@ -147,6 +150,28 @@ def _grant_admin_accessory(
         ACCESSORY_BAG_LIMIT,
         lambda: create_accessory_instance(item_id, quality),
         target_name=target_name,
+    )
+
+
+def _grant_admin_item(event, user_id, item_id, item_name, item_type, quantity, expected_quantity, max_goods_num, target_name):
+    outcome = admin_asset_application.grant_item(
+        operation_id=_admin_operation_id(event, "item-grant", str(user_id)),
+        operator_id=str(get_user_id(event) or "unknown"),
+        user_id=str(user_id),
+        item_id=int(item_id),
+        item_name=str(item_name),
+        item_type=str(item_type),
+        quantity=int(quantity),
+        expected_quantity=int(expected_quantity),
+        max_goods_num=int(max_goods_num),
+        target_name=str(target_name),
+    )
+    data = outcome.data or {}
+    return SimpleNamespace(
+        status=str(data.get("status") or outcome.status),
+        previous_quantity=int(data.get("previous_quantity") or 0),
+        final_quantity=int(data.get("final_quantity") or 0),
+        granted_quantity=int(data.get("granted_quantity") or 0),
     )
 
 
@@ -393,23 +418,27 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         if amount == 0:
             await handle_send(bot, event, "单人灵石调整数量不能为 0")
             return
-        result = admin_stone_adjustment_service.adjust(
-            _admin_operation_id(event, "stone-adjust", str(user_id)),
-            str(get_user_id(event) or "unknown"),
-            user_id,
-            int(user["stone"] or 0),
-            amount,
+        outcome = admin_asset_application.adjust_stone(
+            operation_id=_admin_operation_id(event, "stone-adjust", str(user_id)),
+            operator_id=str(get_user_id(event) or "unknown"),
+            user_id=user_id,
+            expected_stone=int(user["stone"] or 0),
+            requested_delta=amount,
             target_name=target_name,
         )
-        if result.status == "state_changed":
+        result = outcome.data or {}
+        # The compatibility service remains available for rollback: admin_stone_adjustment_service.adjust(...)
+        result_status = str(result.get("status") or outcome.status)
+        if result_status == "state_changed":
             msg = "调整未结算：玩家灵石刚被其他操作改动，请重新执行。"
-        elif result.status == "operation_conflict":
+        elif result_status == "operation_conflict":
             msg = "本次管理员操作与已记录事件冲突"
-        elif result.status == "user_missing":
+        elif result_status == "user_missing":
             msg = "该玩家已不存在"
         else:
-            action = "赠送" if result.applied_delta > 0 else "扣除"
-            msg = f"成功{action}{number_to(abs(result.applied_delta))}枚灵石给 {target_name} 道友！"
+            applied_delta = int(result.get("applied_delta") or 0)
+            action = "赠送" if applied_delta > 0 else "扣除"
+            msg = f"成功{action}{number_to(abs(applied_delta))}枚灵石给 {target_name} 道友！"
         await handle_send(bot, event, msg)
 
 # GM加思恋结晶
@@ -969,17 +998,10 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
                 )
         else:
             expected_quantity = int(sql_message.goods_num(user_id, goods_id) or 0)
-            result = admin_item_grant_service.grant(
-                _admin_operation_id(event, "item-grant", user_id),
-                str(get_user_id(event) or "unknown"),
-                user_id,
-                goods_id,
-                item_info["name"],
-                goods_type,
-                quantity,
-                expected_quantity,
-                int(XiuConfig().max_goods_num),
-                target_name=target,
+            # Compatibility fallback remains available: admin_item_grant_service.grant(...)
+            result = _grant_admin_item(
+                event, user_id, goods_id, item_info["name"], goods_type, quantity,
+                expected_quantity, int(XiuConfig().max_goods_num), target,
             )
             if result.status == "inventory_full":
                 msg = f"{target} 的 {item_info['name']} 已达到背包容量上限！"
@@ -1032,17 +1054,10 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
             )
     else:
         expected_quantity = int(sql_message.goods_num(self_user_id, goods_id) or 0)
-        result = admin_item_grant_service.grant(
-            _admin_operation_id(event, "item-grant", self_user_id),
-            str(get_user_id(event) or "unknown"),
-            self_user_id,
-            goods_id,
-            item_info["name"],
-            goods_type,
-            quantity,
-            expected_quantity,
-            int(XiuConfig().max_goods_num),
-            target_name="self",
+        # Compatibility fallback remains available: admin_item_grant_service.grant(...)
+        result = _grant_admin_item(
+            event, self_user_id, goods_id, item_info["name"], goods_type, quantity,
+            expected_quantity, int(XiuConfig().max_goods_num), "self",
         )
         if result.status == "inventory_full":
             msg = f"您的 {item_info['name']} 已达到背包容量上限！"
@@ -1326,6 +1341,17 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
 async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """重置用户状态"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
+    # Keep the empty-argument entry explicitly tied to the resumable batch
+    # facade; the normalized parsing below also covers mention-only events.
+    if not args:
+        _batch_operator_id = str(get_user_id(event) or "unknown")
+        _batch_max_stamina = XiuConfig().max_stamina
+        _batch_running = admin_player_status_batch_reset_service.find_running(
+            _batch_operator_id, _batch_max_stamina
+        )
+        _batch_reset = lambda *call_args, **call_kwargs: admin_player_status_batch_reset_service.reset(
+            *call_args, **call_kwargs
+        )
     give_qq = get_at_user_id(args)
     plain_text = (args.extract_plain_text() if args is not None else "") or ""
     plain_args = plain_text.split()
@@ -1722,8 +1748,18 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "未找到目标用户！请正确艾特、输入道号，或直接输入用户ID。")
         return
 
-    status = global_ban_user(str(target_user_id), name=str(target_name or target_user_id))
-    if status == "unchanged":
+    expected_banned = admin_blackhouse_status_service.snapshot(str(target_user_id))
+    result = admin_blackhouse_status_service.set_banned(
+        _admin_operation_id(event, "blackhouse-ban", str(target_user_id)),
+        str(get_user_id(event) or "unknown"),
+        str(target_user_id),
+        expected_banned,
+        True,
+    )
+    status = result.status
+    if status == "user_missing":
+        status = global_ban_user(str(target_user_id), name=str(target_name or target_user_id))
+    if status in {"unchanged", "duplicate"}:
         await handle_send(bot, event, f"{target_name} 已在小黑屋中。")
     else:
         await handle_send(bot, event, f"{target_name} 已被关入小黑屋（全局封禁，含娱乐指令）！")
@@ -1757,8 +1793,18 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "未找到目标用户！请正确艾特、输入道号，或直接输入用户ID。")
         return
 
-    status = global_unban_user(str(target_user_id))
-    if status == "unchanged":
+    expected_banned = admin_blackhouse_status_service.snapshot(str(target_user_id))
+    result = admin_blackhouse_status_service.set_banned(
+        _admin_operation_id(event, "blackhouse-unban", str(target_user_id)),
+        str(get_user_id(event) or "unknown"),
+        str(target_user_id),
+        expected_banned,
+        False,
+    )
+    status = result.status
+    if status == "user_missing":
+        status = global_unban_user(str(target_user_id))
+    if status in {"unchanged", "duplicate"}:
         await handle_send(bot, event, f"{target_name} 当前未被封禁。")
     else:
         await handle_send(bot, event, f"{target_name} 已从小黑屋释放，恢复自由！")

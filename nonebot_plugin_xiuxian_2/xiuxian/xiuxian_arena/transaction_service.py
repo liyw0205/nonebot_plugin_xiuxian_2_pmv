@@ -87,6 +87,18 @@ def _normalize_weekly_purchases(value, today=None) -> tuple[dict[str, int | str]
     return weekly, changed
 
 def normalize_weekly_purchases(value, today=None) -> dict[str, int | str]:
+    if today is None:
+        raw = value
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw) if raw else {}
+            except (TypeError, ValueError):
+                raw = {}
+        if isinstance(raw, dict):
+            try:
+                today = date.fromisoformat(str(raw.get("_last_reset", "")))
+            except (TypeError, ValueError):
+                pass
     return _normalize_weekly_purchases(value, today)[0]
 
 def normalize_daily_purchase_state(bought, extra, last_buy_date, today=None) -> tuple[int, int, str]:
@@ -337,7 +349,9 @@ class ArenaPurchaseService:
         expected_honor, max_goods_num = map(int, (expected_honor, max_goods_num))
         item_name, item_type = str(item_name), str(item_type)
         bind_flag = 1 if int(bind_flag) == 1 else 0
-        today = today or date.today()
+        if today is None:
+            today = normalize_weekly_purchases(expected_weekly_purchases).get("_last_reset")
+        today = _as_date(today)
         weekly = normalize_weekly_purchases(expected_weekly_purchases, today)
         if not operation_id or quantity <= 0 or min(item_id, unit_cost, weekly_limit, expected_honor, max_goods_num) < 0:
             raise ValueError("valid operation, item, quantity and purchase limits are required")

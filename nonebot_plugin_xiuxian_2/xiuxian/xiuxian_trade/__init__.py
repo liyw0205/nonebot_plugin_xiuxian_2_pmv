@@ -64,6 +64,7 @@ from .transaction_service import GuishiStoneService
 from .transaction_service import AuctionQueueService
 from .transaction_service import AuctionSessionService
 from ...paths import get_paths
+from ...bootstrap.legacy import register_legacy_startup
 from urllib.parse import quote
 
 # 初始化全局组件
@@ -96,7 +97,7 @@ bind_auction_service_dependencies(
 )
 
 
-@DRIVER.on_startup
+@register_legacy_startup
 async def initialize_xianshi_repository():
     xianshi_repository.initialize(get_paths().trade_db)
 
@@ -2971,7 +2972,7 @@ async def _check_auction_end_job_impl():
         logger.info(f"拍卖进行中，距结束约 {remaining_minutes} 分钟。")
 
 
-@DRIVER.on_startup
+@register_legacy_startup
 async def recover_orphan_auction_on_startup():
     await run_auction_job(
         "startup_reconcile",

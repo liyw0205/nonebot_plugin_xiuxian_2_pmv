@@ -46,6 +46,15 @@ class XiuxianPaths:
         return self.data / "backups"
 
     @property
+    def config_file(self) -> Path:
+        """部署运行配置；它不是 Python 模块，也不应进入版本库。"""
+        return self.data / "config.json"
+
+    @property
+    def logs(self) -> Path:
+        return self.data / "logs"
+
+    @property
     def cache(self) -> Path:
         return self.data / "cache"
 

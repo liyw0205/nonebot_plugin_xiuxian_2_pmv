@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<section data-messages-page data-endpoint="{{ endpoint|default('/api/v1/messages') }}">
+  <h1>{{ title|default('消息') }}</h1>
+  <button type="button" data-action="refresh">刷新</button>
+  <p data-state-error role="alert"></p>
+  <ul data-message-rows></ul>
+</section>
+<script type="module" src="{{ url_for('static', filename='pages/messages.js') }}"></script>
+{% endblock %}

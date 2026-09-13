@@ -107,6 +107,8 @@ self.layout_bot_dict = {
 | `XIUXIAN_WEB_STATUS` | `true` | Web 管理面板开关；`false` / `0` / `no` / `off` 关闭 | 重启 |
 | `XIUXIAN_WEB_PORT` | `5888` | Web 管理面板端口（host 复用 NoneBot `HOST`；缺失时启动自动补入默认值） | 重启 |
 | `XIUXIAN_WEB_SECRET_KEY` | 自动生成并保存 | Web 会话签名密钥 | 重启并重新登录 |
+| `XIUXIAN_WEB_ALLOWED_HOSTS` | 空（仅允许本机 Host） | 新 Web factory 的 Host 白名单 JSON 列表，例如 `["panel.example.test"]` | 重启 |
+| `XIUXIAN_WEB_ADMIN_IDS` | 空（回退 `SUPERUSERS`） | 新 Web factory 允许登录的管理员 ID JSON 列表，例如 `["123"]` | 重启 |
 | `XIUXIAN_PROJECT_DIR` | 自动探测 | Web 日志页项目根目录 | 重启 |
 | `XIUXIAN_PIP_INDEX` | 清华 PyPI 镜像 | 自动依赖安装的 pip 源 | 下次安装 |
 | `XIUXIAN_SKIP_AUTO_PIP` | 空 | `1` / `true` / `yes` 时跳过自动 pip | 重启 |

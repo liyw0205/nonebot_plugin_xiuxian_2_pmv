@@ -30,6 +30,8 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import convert_rank, XiuConfig
 from pathlib import Path
 from ...paths import get_paths
+from ...features.work.application import WorkClaimApplication, WorkSettlementApplication
+from ...features.work.repository import LegacyWorkClaimRepository, LegacyWorkSettlementRepository
 from .transaction_service import WorkSettlementService
 from .transaction_service import WorkClaimService
 from .transaction_service import WorkItemUseService
@@ -39,6 +41,14 @@ from .transaction_service import WorkDailyRefreshResetService
 
 work_settlement_service = WorkSettlementService(get_paths().game_db)
 work_claim_service = WorkClaimService(get_paths().game_db)
+work_claim_application = WorkClaimApplication(
+    get_paths().game_db,
+    repository=LegacyWorkClaimRepository(get_paths().game_db),
+)
+work_settlement_application = WorkSettlementApplication(
+    get_paths().game_db,
+    repository=LegacyWorkSettlementRepository(get_paths().game_db),
+)
 work_item_use_service = WorkItemUseService(get_paths().game_db)
 work_refresh_service = WorkRefreshSettlementService(get_paths().game_db)
 work_abort_cleanup_service = WorkAbortCleanupService(get_paths().game_db)
@@ -272,42 +282,50 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         success_msg = "⚠️ 悬赏勉强完成"
         success_kind = "half"
 
-    result = work_settlement_service.settle(
-        operation_id,
-        user_id,
-        {"create_time": work_data["create_time"], "scheduled_time": work_data["scheduled_time"]},
-        gain_exp,
-        {"id": item_id, "name": item_info["name"], "type": item_info["type"]} if item_flag else None,
-        max_exp,
-        XiuConfig().max_goods_num,
+    # Legacy facade call: work_settlement_service.settle(...)
+    outcome = work_settlement_application.settle(
+        operation_id=operation_id,
+        user_id=user_id,
+        expected_work={"create_time": work_data["create_time"], "scheduled_time": work_data["scheduled_time"]},
+        exp_gain=gain_exp,
+        item={"id": item_id, "name": item_info["name"], "type": item_info["type"]} if item_flag else None,
+        max_exp=max_exp,
+        max_goods_num=XiuConfig().max_goods_num,
         success_kind=success_kind,
         item_msg=item_msg or "",
     )
-    if result.status == "duplicate":
+    result_data = outcome.data or {}
+    result_status = str(result_data.get("status", outcome.status))
+    result_exp = int(result_data.get("exp", 0) or 0)
+    result_item_awarded = bool(result_data.get("item_awarded", False))
+    result_success_kind = str(result_data.get("success_kind") or "")
+    result_item_msg = str(result_data.get("item_msg") or "")
+    result_scheduled_time = str(result_data.get("scheduled_time") or "")
+    if result_status == "duplicate" or outcome.replayed:
         success_msg = {
             "big": "🎉 悬赏大成功！",
             "ok": "✅ 悬赏完成！",
             "half": "⚠️ 悬赏勉强完成",
-        }.get(result.success_kind, success_msg)
+        }.get(result_success_kind, success_msg)
         msg = (
             f"**悬赏结算**\n---\n{success_msg}\n"
-            f"悬赏名称\n> {result.scheduled_time or work_data['scheduled_time']}\n"
-            f"获得修为\n> {number_to(result.exp)}"
+            f"悬赏名称\n> {result_scheduled_time or work_data['scheduled_time']}\n"
+            f"获得修为\n> {number_to(result_exp)}"
         )
-        if result.item_awarded:
-            msg += f"\n额外奖励\n> {result.item_msg or item_msg}！"
+        if result_item_awarded:
+            msg += f"\n额外奖励\n> {result_item_msg or item_msg}！"
         msg += "\n✅ 该结算请求已经处理，无需重复提交。"
         await handle_send(bot, event, msg, md_type="悬赏令", k1="刷新", v1="悬赏令刷新", k2="数据", v2="统计数据", k3="帮助", v3="悬赏令帮助")
         return msg
-    if result.status == "inventory_full":
+    if result_status == "inventory_full":
         msg = "**悬赏结算**\n---\n❌ 背包物品已达上限，悬赏奖励尚未结算。"
         await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="背包", v2="我的背包", k3="帮助", v3="悬赏令帮助")
         return msg
-    if result.status == "user_missing":
+    if result_status == "user_missing":
         msg = "**悬赏结算**\n---\n⚠️ 悬赏结算失败：未找到角色数据。"
         await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="刷新", v2="悬赏令刷新", k3="帮助", v3="悬赏令帮助")
         return msg
-    if result.status == "state_changed":
+    if result_status == "state_changed":
         msg = "**悬赏结算**\n---\n⚠️ 悬赏结算未完成：悬赏进度已更新，请重新查看悬赏。"
         await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="刷新", v2="悬赏令刷新", k3="帮助", v3="悬赏令帮助")
         return msg
@@ -316,11 +334,11 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     msg = (
         f"**悬赏结算**\n---\n{success_msg}\n"
         f"悬赏名称\n> {work_data['scheduled_time']}\n"
-        f"获得修为\n> {number_to(result.exp)}"
+        f"获得修为\n> {number_to(result_exp)}"
     )
-    if result.item_awarded:
+    if result_item_awarded:
         msg += f"\n额外奖励\n> {item_msg}！"
-    if result.status == "applied":
+    if result_status == "applied":
         log_message(user_id, msg)
         update_statistics_value(user_id, "悬赏令结算次数")
         record_task_progress(
@@ -773,7 +791,6 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             )
             await send_work_message(bot, event, msg, md_type="悬赏令", k1="结算", v1="悬赏令结算", k2="终止", v2="悬赏令终止", k3="帮助", v3="悬赏令帮助")
             await do_work.finish()
-
         is_type, msg = check_user_type(user_id, 0)
         if not is_type:
             await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="悬赏令帮助", v3="悬赏令帮助")
@@ -803,31 +820,39 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             
         task_name, task_data = tasks[work_num - 1]
         started_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        result = work_claim_service.claim(
-            operation_id,
-            user_id,
-            remaining,
-            work_data,
-            work_num,
-            started_at,
+        # Legacy facade call: work_claim_service.claim(...) remains documented;
+        # the application owns idempotency and the command write path.
+        outcome = work_claim_application.claim(
+            operation_id=operation_id,
+            user_id=user_id,
+            expected_count=remaining,
+            expected_offer=work_data,
+            task_index=work_num,
+            started_at=started_at,
         )
-        if result.status == "duplicate":
+        result_data = outcome.data or {}
+        result_status = str(result_data.get("status", "failed"))
+        result_task_name = str(result_data.get("task_name") or task_name)
+        if outcome.ok and (result_status == "duplicate" or outcome.replayed):
             msg = (
                 f"成功接取悬赏令！\n"
-                f"悬赏名称：{result.task_name or task_name}\n"
+                f"悬赏名称：{result_task_name}\n"
                 f"请努力完成悬赏！\n"
                 "该接取请求已经处理，无需重复提交。"
             )
             await send_work_message(bot, event, msg, md_type="悬赏令", k1="结算", v1="悬赏令结算", k2="终止", v2="悬赏令终止", k3="帮助", v3="悬赏令帮助")
             await do_work.finish()
-        if result.status == "invalid_task":
+        if result_status == "invalid_task":
             await handle_send(bot, event, result_card("悬赏令", kind="fail", summary="没有这样的悬赏编号！"), **nav_kwargs("work", md_type="悬赏令"))
             await do_work.finish()
-        if result.status in {"state_changed", "user_missing"}:
+        if result_status in {"state_changed", "user_missing"}:
             await handle_send(bot, event, result_card("悬赏令", kind="warn", summary="悬赏次数或列表已更新，请先发送【悬赏令】再操作。"), **nav_kwargs("work", md_type="悬赏令"))
             await do_work.finish()
-        if result.status == "operation_conflict":
+        if result_status == "operation_conflict":
             await handle_send(bot, event, result_card("悬赏令", kind="warn", summary="接取请求已失效，请重新接取悬赏。"), **nav_kwargs("work", md_type="悬赏令"))
+            await do_work.finish()
+        if not outcome.ok:
+            await handle_send(bot, event, outcome.message or "悬赏令接取未完成。")
             await do_work.finish()
 
         # JSON 文件仅保留为旧读取路径的投影，权威状态已由事务服务落库。
@@ -836,7 +861,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 
         msg = (
             f"成功接取悬赏令！\n"
-            f"悬赏名称：{result.task_name or task_name}\n"
+            f"悬赏名称：{result_task_name}\n"
             f"请努力完成悬赏！"
         )
         await send_work_message(bot, event, msg, md_type="悬赏令", k1="结算", v1="悬赏令结算", k2="终止", v2="悬赏令终止", k3="帮助", v3="悬赏令帮助")

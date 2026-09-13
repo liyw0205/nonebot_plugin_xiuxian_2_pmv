@@ -1,5 +1,7 @@
 import random
+import time
 from datetime import datetime
+from types import SimpleNamespace
 
 from ..on_compat import on_command
 from nonebot.params import CommandArg
@@ -8,6 +10,8 @@ from ..adapter_compat import Bot, GroupMessageEvent, Message, PrivateMessageEven
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import check_user, get_impersonating_target, handle_send
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
+from ...features.info.application import InfoApplication
+from ...paths import get_paths
 
 
 avatar_switch_cmd = on_command("身外化身", priority=5, block=True)
@@ -15,6 +19,30 @@ my_id_cmd = on_command("我的ID", aliases={"我的id", "myid", "id"}, priority=
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
+info_application = InfoApplication(get_paths().game_db)
+
+
+def _run_info_action(action: str, operation_id: str, user_id: str, call, **payload):
+    def invoke():
+        result = call()
+        return {"status": "applied"} if result is None else result
+
+    outcome = info_application.execute_legacy_call(
+        operation_id=str(operation_id),
+        user_id=str(user_id),
+        action=action,
+        payload=payload,
+        call=invoke,
+    )
+    data = dict(outcome.data or {})
+    data.setdefault("status", outcome.status)
+    data["succeeded"] = outcome.ok
+    return SimpleNamespace(**data)
+
+
+def _avatar_operation_id(event, action: str, user_id: str) -> str:
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    return f"info:{action}:{event_id or time.time_ns()}:{user_id}"
 
 
 @avatar_switch_cmd.handle(parameterless=[Cooldown(cd_time=0)])
@@ -31,10 +59,23 @@ async def avatar_switch_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     # （否则切到未注册化身后会误判“未入修仙”，无法再切换）
     main_id = str(event.get_user_id())
     arg_text = args.extract_plain_text().strip()
+    operation_id = _avatar_operation_id(event, "avatar-switch", main_id)
 
     if arg_text in ["本体", "回来", "返回", "切回"]:
-        init_avatar_if_needed(main_id)
-        player_data_manager.update_or_write_data(main_id, "avatar", "active_id", str(main_id))
+        init_avatar_if_needed(main_id, operation_id=operation_id)
+        result = _run_info_action(
+            "avatar_restore",
+            operation_id,
+            main_id,
+            lambda: (
+                player_data_manager.update_or_write_data(main_id, "avatar", "active_id", str(main_id)),
+                {"status": "applied", "active_id": str(main_id)},
+            )[1],
+            active_id=str(main_id),
+        )
+        if not result.succeeded:
+            await handle_send(bot, event, "切回本体失败，请稍后重试")
+            await avatar_switch_cmd.finish()
         await handle_send(
             bot,
             event,
@@ -48,7 +89,7 @@ async def avatar_switch_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await handle_send(bot, event, "请先使用【我要修仙】进入修仙世界后再开启身外化身！\n切换回来：身外化身 本体")
         await avatar_switch_cmd.finish()
 
-    role, info = toggle_avatar(main_id)
+    role, info = toggle_avatar(main_id, operation_id=operation_id)
 
     if role == "avatar":
         avatar_id = info.get("avatar_id")
@@ -132,7 +173,7 @@ def get_avatar_info(user_id: str) -> dict:
     return info if info else {}
 
 
-def init_avatar_if_needed(main_id: str) -> dict:
+def init_avatar_if_needed(main_id: str, *, operation_id: str | None = None) -> dict:
     """初始化化身信息（首次使用时创建）"""
     info = get_avatar_info(main_id)
     if info and info.get("avatar_id"):
@@ -141,17 +182,30 @@ def init_avatar_if_needed(main_id: str) -> dict:
     avatar_id = _generate_unique_avatar_id()
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    player_data_manager.update_or_write_data(main_id, "avatar", "main_id", str(main_id))
-    player_data_manager.update_or_write_data(main_id, "avatar", "avatar_id", str(avatar_id))
-    player_data_manager.update_or_write_data(main_id, "avatar", "active_id", str(main_id))
-    player_data_manager.update_or_write_data(main_id, "avatar", "create_time", now_str)
+    op = operation_id or f"info:avatar-init:{main_id}"
+    def persist_avatar():
+        player_data_manager.update_or_write_data(main_id, "avatar", "main_id", str(main_id))
+        player_data_manager.update_or_write_data(main_id, "avatar", "avatar_id", str(avatar_id))
+        player_data_manager.update_or_write_data(main_id, "avatar", "active_id", str(main_id))
+        player_data_manager.update_or_write_data(main_id, "avatar", "create_time", now_str)
+        return {"status": "applied", "avatar_id": str(avatar_id), "active_id": str(main_id)}
+
+    result = _run_info_action(
+        "avatar_init",
+        op,
+        str(main_id),
+        persist_avatar,
+        avatar_id=str(avatar_id),
+    )
+    if not result.succeeded:
+        return get_avatar_info(main_id)
 
     return get_avatar_info(main_id)
 
 
-def toggle_avatar(main_id: str) -> tuple[str, dict]:
+def toggle_avatar(main_id: str, *, operation_id: str | None = None) -> tuple[str, dict]:
     """切换本号/化身，返回(当前激活身份, info)"""
-    info = init_avatar_if_needed(main_id)
+    info = init_avatar_if_needed(main_id, operation_id=operation_id)
     main_id = str(info.get("main_id", main_id))
     avatar_id = str(info.get("avatar_id"))
     active_id = str(info.get("active_id", main_id))
@@ -163,9 +217,21 @@ def toggle_avatar(main_id: str) -> tuple[str, dict]:
         new_active = main_id
         role = "main"
 
-    player_data_manager.update_or_write_data(main_id, "avatar", "active_id", new_active)
-    info["active_id"] = new_active
-    return role, info
+    result = _run_info_action(
+        "avatar_toggle",
+        operation_id or f"info:avatar-toggle:{main_id}:{time.time_ns()}",
+        str(main_id),
+        lambda: (
+            player_data_manager.update_or_write_data(main_id, "avatar", "active_id", new_active),
+            {"status": "applied", "active_id": new_active},
+        )[1],
+    )
+    if not result.succeeded:
+        return "main" if active_id == main_id else "avatar", info
+    actual_active = str(getattr(result, "active_id", new_active))
+    info["active_id"] = actual_active
+    actual_role = "avatar" if actual_active == avatar_id else "main"
+    return actual_role, info
 
 
 __all__ = [

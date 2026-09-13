@@ -1,0 +1,5656 @@
+{
+  "commands": [
+    {
+      "aliases": [
+        "60秒读世界",
+        "每日60S"
+      ],
+      "feature": "entertainment",
+      "name": "60S读世界",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "ID交换",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "ID更新",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "喜加一"
+      ],
+      "feature": "entertainment",
+      "name": "Steam喜加一",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "status",
+      "name": "bot信息",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "dm",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "md模板",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "newapi信息",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "newapi解绑"
+      ],
+      "feature": "entertainment",
+      "name": "newapi删除",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "newapi"
+      ],
+      "feature": "entertainment",
+      "name": "newapi帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "newapi列表",
+        "newapi绑定列表"
+      ],
+      "feature": "entertainment",
+      "name": "newapi查看",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "newapi签到",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "newapi签到记录"
+      ],
+      "feature": "entertainment",
+      "name": "newapi签到历史",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "newapi绑定",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "newapi自动签到",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "status",
+      "name": "ping测试",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "网盘信息"
+      ],
+      "feature": "entertainment",
+      "name": "webdav信息",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "网盘列表"
+      ],
+      "feature": "entertainment",
+      "name": "webdav列表",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "webdav解绑",
+        "网盘删除",
+        "网盘解绑"
+      ],
+      "feature": "entertainment",
+      "name": "webdav删除",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "网盘帮助"
+      ],
+      "feature": "entertainment",
+      "name": "webdav帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "网盘文件"
+      ],
+      "feature": "entertainment",
+      "name": "webdav文件",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "网盘查看"
+      ],
+      "feature": "entertainment",
+      "name": "webdav查看",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "网盘绑定"
+      ],
+      "feature": "entertainment",
+      "name": "webdav绑定",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "网盘链接"
+      ],
+      "feature": "entertainment",
+      "name": "webdav链接",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "boss",
+      "name": "世界BOSS兑换",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "动漫互动帮助",
+        "随机二次元帮助"
+      ],
+      "feature": "entertainment",
+      "name": "二次元帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "interactive",
+      "name": "互动",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "五子棋帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "寄售",
+        "鬼市"
+      ],
+      "feature": "trade",
+      "name": "交易",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "吃什么",
+        "吃啥",
+        "推荐美食",
+        "美食推荐"
+      ],
+      "feature": "interactive",
+      "name": "今天吃什么",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "每日番剧",
+        "番剧日历"
+      ],
+      "feature": "entertainment",
+      "name": "今日番剧",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "今日老婆",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "今日超能力",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "卜卦",
+        "占卜",
+        "求签",
+        "算命",
+        "运势"
+      ],
+      "feature": "daily_fortune",
+      "name": "今日运势",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "beg",
+      "name": "仙途奇缘",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "beg",
+      "name": "仙途奇缘帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "relax",
+        "休憩",
+        "小憩",
+        "放松",
+        "歇会"
+      ],
+      "feature": "interactive",
+      "name": "休息",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "impart",
+      "name": "传承信息",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "impart",
+      "name": "传承分解",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "传承力量",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "传承卡片"
+      ],
+      "feature": "impart",
+      "name": "传承卡图",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "impart",
+      "name": "传承合成",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "impart",
+      "name": "传承帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "impart",
+      "name": "传承抽卡",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "impart",
+      "name": "传承祈愿",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "impart",
+      "name": "传承背包",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "hello",
+        "hi",
+        "你好呀",
+        "哈喽",
+        "嗨",
+        "道友你好"
+      ],
+      "feature": "interactive",
+      "name": "你好",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "howareyou",
+        "别来无恙",
+        "怎么样",
+        "最近怎么样",
+        "近来可好"
+      ],
+      "feature": "interactive",
+      "name": "你好吗",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "开启礼包"
+      ],
+      "feature": "package_reward",
+      "name": "使用礼包",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "开启饰品礼包"
+      ],
+      "feature": "accessory_package",
+      "name": "使用饰品礼包",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "修为调整",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "修仙管理"
+      ],
+      "feature": "admin",
+      "name": "修仙手册",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "签到"
+      ],
+      "feature": "sign_in",
+      "name": "修仙签到",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "修仙适配",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "突破"
+      ],
+      "feature": "base",
+      "name": "修炼",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "兑换",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "兑换码列表",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "兑换码帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "兑换码管理",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "全局广播",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "全量申请",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "activity",
+      "name": "关闭活动",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "关掉进群欢迎",
+        "禁用进群欢迎"
+      ],
+      "feature": "admin",
+      "name": "关闭进群欢迎",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "bye",
+        "goodbye",
+        "再会",
+        "后会有期",
+        "告辞",
+        "拜拜"
+      ],
+      "feature": "interactive",
+      "name": "再见",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "tianti_training",
+      "name": "冲窍",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "创造力量",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "删除兑换码",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "删除礼包",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "删除补偿",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "title",
+      "name": "刷新称号",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "前世回忆"
+      ],
+      "feature": "past_life",
+      "name": "前尘回忆",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "past_life",
+      "name": "前尘帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "前世今生"
+      ],
+      "feature": "past_life",
+      "name": "前尘往事",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "前世排行"
+      ],
+      "feature": "past_life",
+      "name": "前尘排行",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "前世选择"
+      ],
+      "feature": "past_life",
+      "name": "前尘选择",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "dungeon",
+      "name": "副本兑换",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "洞天福地查看",
+        "洞天福地购买"
+      ],
+      "feature": "buff",
+      "name": "功法",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "加入五子棋",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "加入十点半",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "sect",
+      "name": "加入宗门",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "fighting",
+        "冲鸭",
+        "加把劲",
+        "努力",
+        "鼓励"
+      ],
+      "feature": "interactive",
+      "name": "加油",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "impart",
+      "name": "加载传承数据",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "动漫互动",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "十点半信息",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "十点半帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "取消称号"
+      ],
+      "feature": "title",
+      "name": "卸下称号",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "历史上的今天",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "training",
+      "name": "历练兑换",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "training",
+      "name": "历练商店",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "training",
+      "name": "历练帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "training",
+      "name": "历练排行榜",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "training",
+      "name": "历练状态",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "training",
+      "name": "历练积分排行榜",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "原始JSON"
+      ],
+      "feature": "admin",
+      "name": "取raw",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "原始reply",
+        "取引用"
+      ],
+      "feature": "admin",
+      "name": "取reply",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "取消广播",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "提取链接",
+        "获取链接"
+      ],
+      "feature": "admin",
+      "name": "取链接",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "卡哇伊",
+        "可爱捏",
+        "好可爱",
+        "萌",
+        "萌萌哒"
+      ],
+      "feature": "interactive",
+      "name": "可爱",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "干饭",
+        "用膳",
+        "进食",
+        "饿了"
+      ],
+      "feature": "interactive",
+      "name": "吃饭",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "fusion",
+      "name": "合成",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "fusion",
+      "name": "合成帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "dufang",
+      "name": "同步鉴石",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "禁用修仙功能"
+      ],
+      "feature": "admin",
+      "name": "启用修仙功能",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "禁用私聊功能"
+      ],
+      "feature": "admin",
+      "name": "启用私聊功能",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "禁用自动宗名"
+      ],
+      "feature": "admin",
+      "name": "启用自动宗名",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "每周任务"
+      ],
+      "feature": "tasks",
+      "name": "周常任务",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "哈基米音乐",
+        "随机哈基米",
+        "随机哈基米音乐"
+      ],
+      "feature": "entertainment",
+      "name": "哈基米",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "取回记忆"
+      ],
+      "feature": "lunhui",
+      "name": "回忆前世",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "土味",
+        "情话",
+        "表白",
+        "说情话"
+      ],
+      "feature": "interactive",
+      "name": "土味情话",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "回家",
+        "探索"
+      ],
+      "feature": "map",
+      "name": "地图",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "今天天气",
+        "天气预报",
+        "天象",
+        "气象"
+      ],
+      "feature": "interactive",
+      "name": "天气",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "娱乐功能",
+        "娱乐菜单"
+      ],
+      "feature": "entertainment",
+      "name": "娱乐帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "study",
+        "修行",
+        "用功",
+        "练功"
+      ],
+      "feature": "interactive",
+      "name": "学习",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "sect",
+      "name": "学习宗门功法",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "sect",
+      "name": "宗门商店兑换",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "宗门炼体堂修行",
+        "宗门炼体堂领取",
+        "淬体修行",
+        "炼体堂修行"
+      ],
+      "feature": "sect_fairyland",
+      "name": "宗门淬体修行",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "宝可梦",
+        "查宝可梦",
+        "精灵图鉴"
+      ],
+      "feature": "entertainment",
+      "name": "宝可梦图鉴",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "宝可梦盲盒帮助"
+      ],
+      "feature": "entertainment",
+      "name": "宝可梦帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "今日宝可梦",
+        "随机宝可梦"
+      ],
+      "feature": "entertainment",
+      "name": "宝可梦盲盒",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "pet",
+      "name": "宠物喂食",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "pet",
+      "name": "宠物游历",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "小游戏菜单",
+        "游戏帮助",
+        "游戏菜单"
+      ],
+      "feature": "entertainment",
+      "name": "小游戏帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "小黑屋",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "work",
+        "上班",
+        "劳作",
+        "当值",
+        "打工"
+      ],
+      "feature": "interactive",
+      "name": "工作",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "illusion",
+      "name": "幻境寻心",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "广播指令",
+        "广播说明"
+      ],
+      "feature": "admin",
+      "name": "广播帮助",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "activity",
+      "name": "开启活动",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "关闭自动灵根"
+      ],
+      "feature": "admin",
+      "name": "开启自动灵根",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "启用进群欢迎",
+        "打开进群欢迎"
+      ],
+      "feature": "admin",
+      "name": "开启进群欢迎",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "开始五子棋",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "开始十点半",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "开始单人五子棋",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "历练开始"
+      ],
+      "feature": "training",
+      "name": "开始历练",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "开始扫雷",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "开始猜数字",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "开始猜数迷"
+      ],
+      "feature": "entertainment",
+      "name": "开始猜数谜",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "弱智吧"
+      ],
+      "feature": "entertainment",
+      "name": "弱智吧问答",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "fusion",
+      "name": "强行合成",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "illusion",
+      "name": "心境试炼",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "悬赏令接取",
+        "悬赏令结算"
+      ],
+      "feature": "work",
+      "name": "悬赏令",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "id",
+        "myid"
+      ],
+      "feature": "info",
+      "name": "我的ID",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "任务列表",
+        "修仙任务"
+      ],
+      "feature": "tasks",
+      "name": "我的任务",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "tianti",
+      "name": "我的体窍",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "修仙信息",
+        "存档",
+        "我的存档"
+      ],
+      "feature": "info",
+      "name": "我的修仙信息",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "修仙信息图片版",
+        "存档图片版",
+        "我的存档图片版"
+      ],
+      "feature": "info",
+      "name": "我的修仙信息图片版",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "成就列表",
+        "查看成就"
+      ],
+      "feature": "title",
+      "name": "我的成就",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "dongfu",
+      "name": "我的洞府",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "炼体状态"
+      ],
+      "feature": "tianti",
+      "name": "我的炼体",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "查看称号",
+        "称号列表"
+      ],
+      "feature": "title",
+      "name": "我的称号",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "我的邀请",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "扫雷信息",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "扫雷帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "impart_pk",
+      "name": "投影虚神界",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "past_life",
+      "name": "投胎",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "竞拍"
+      ],
+      "feature": "auction",
+      "name": "拍卖竞拍",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "dongfu",
+      "name": "拜访道友",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "指令列表",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "指令禁用",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "指令解禁",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "按钮测试",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "dungeon",
+      "name": "探索副本",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "虚神界探索"
+      ],
+      "feature": "impart_pk",
+      "name": "探索虚神界",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "status",
+      "name": "插件帮助",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "随机段子"
+      ],
+      "feature": "entertainment",
+      "name": "搞笑段子",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "今日摸鱼",
+        "摸鱼人日历",
+        "摸鱼日历"
+      ],
+      "feature": "entertainment",
+      "name": "摸鱼日报",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "新增兑换码",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "新增礼包",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "新增补偿",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "beg",
+      "name": "新手礼包",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "早",
+        "早上好",
+        "早啊",
+        "晨安",
+        "道友早"
+      ],
+      "feature": "interactive",
+      "name": "早安",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "什么时辰了",
+        "几点了",
+        "几点钟",
+        "当前时间",
+        "时辰",
+        "现在几点"
+      ],
+      "feature": "interactive",
+      "name": "时间",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "易名",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "安寝",
+        "晚安啦",
+        "睡了",
+        "睡觉",
+        "道友晚安"
+      ],
+      "feature": "interactive",
+      "name": "晚安",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "更新记录"
+      ],
+      "feature": "info",
+      "name": "更新日志",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "觉醒本命法宝",
+        "重塑本命法宝"
+      ],
+      "feature": "natal_treasure",
+      "name": "本命法宝",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "查看合成"
+      ],
+      "feature": "fusion",
+      "name": "查看可合成物品",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "小黑屋列表"
+      ],
+      "feature": "admin",
+      "name": "查看小黑屋",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "广播列表"
+      ],
+      "feature": "admin",
+      "name": "查看广播",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "标记",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "检测成就"
+      ],
+      "feature": "title",
+      "name": "检查成就",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "检测称号"
+      ],
+      "feature": "title",
+      "name": "检查称号",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "status",
+      "name": "检测更新",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "棋局信息",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "毁灭力量",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "60S图片"
+      ],
+      "feature": "entertainment",
+      "name": "每日60S图片",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "每日Bing图",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "今日任务"
+      ],
+      "feature": "tasks",
+      "name": "每日任务",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "dongfu",
+      "name": "洞府催熟",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "地脉查看"
+      ],
+      "feature": "dongfu",
+      "name": "洞府地脉",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "巡山护府"
+      ],
+      "feature": "dongfu",
+      "name": "洞府巡山",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "dongfu",
+      "name": "洞府布阵",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "dongfu",
+      "name": "洞府帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "dongfu",
+      "name": "洞府扩建",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "收获洞府"
+      ],
+      "feature": "dongfu",
+      "name": "洞府收获",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "dongfu",
+      "name": "洞府施肥",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "dongfu",
+      "name": "洞府种植",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "活动信息",
+        "活动日程",
+        "活动进度"
+      ],
+      "feature": "activity",
+      "name": "活动",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "活动日常",
+        "活动目标"
+      ],
+      "feature": "activity",
+      "name": "活动任务",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "领取活动任务"
+      ],
+      "feature": "activity",
+      "name": "活动任务领取",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "集字兑换"
+      ],
+      "feature": "activity",
+      "name": "活动兑换",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "积分商店"
+      ],
+      "feature": "activity",
+      "name": "活动商店",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "activity",
+      "name": "活动奖励",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "activity",
+      "name": "活动帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "活动活跃",
+        "活动通行证"
+      ],
+      "feature": "activity",
+      "name": "活动战令",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "领取活动战令",
+        "领取活动通行证"
+      ],
+      "feature": "activity",
+      "name": "活动战令领取",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "activity",
+      "name": "活动排行",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "activity",
+      "name": "活动玩法",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "积分活动"
+      ],
+      "feature": "activity",
+      "name": "活动积分",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "节日签到"
+      ],
+      "feature": "activity",
+      "name": "活动签到",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "activity",
+      "name": "活动管理",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "活动字牌",
+        "集字背包"
+      ],
+      "feature": "activity",
+      "name": "活动背包",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "使用烟花",
+        "使用爆竹",
+        "活动首领攻击"
+      ],
+      "feature": "activity",
+      "name": "活动讨伐",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "活动兑换商品",
+        "活动商城兑换"
+      ],
+      "feature": "activity",
+      "name": "活动购买",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "活动一键领取",
+        "活动领奖",
+        "领取活动奖励"
+      ],
+      "feature": "activity_reward",
+      "name": "活动领取",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "活动BOSS"
+      ],
+      "feature": "activity",
+      "name": "活动首领",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "活动BOSS排行",
+        "首领伤害榜"
+      ],
+      "feature": "activity",
+      "name": "活动首领排行",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "领取首领奖励",
+        "首领领奖"
+      ],
+      "feature": "activity",
+      "name": "活动首领领奖",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "消息信息",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "清空仙缘",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "清空兑换码",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "illusion",
+      "name": "清空幻境",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "清除广播"
+      ],
+      "feature": "admin",
+      "name": "清空广播",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "清空礼包",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "清空补偿",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "随机潜入",
+        "随机潜入洞府"
+      ],
+      "feature": "dongfu",
+      "name": "潜入洞府",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "灵庄升级会员",
+        "灵庄取灵石",
+        "灵庄存灵石",
+        "灵庄结算"
+      ],
+      "feature": "bank",
+      "name": "灵庄",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "灵田结算"
+      ],
+      "feature": "mixelixir",
+      "name": "灵田收取",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "tianti_training",
+      "name": "灵石炼体",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "5sing原创",
+        "5sing翻唱",
+        "QQ点歌",
+        "一听点歌",
+        "全民K歌",
+        "咪咕点歌",
+        "喜马点歌",
+        "百度点歌",
+        "网易云点歌",
+        "网易点歌",
+        "荔枝点歌",
+        "蜻蜓点歌",
+        "酷我点歌",
+        "酷狗点歌"
+      ],
+      "feature": "entertainment",
+      "name": "点歌",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "点歌说明",
+        "音乐帮助"
+      ],
+      "feature": "entertainment",
+      "name": "点歌帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "点歌上一页",
+        "点歌下一页"
+      ],
+      "feature": "entertainment",
+      "name": "点歌翻页",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "音乐配置"
+      ],
+      "feature": "entertainment",
+      "name": "点歌配置",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "tianti",
+      "name": "炼体境界",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "tianti",
+      "name": "炼体帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "tianti_training",
+      "name": "炼体突破",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "炼体收获"
+      ],
+      "feature": "tianti_settlement",
+      "name": "炼体结算",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "药浴"
+      ],
+      "feature": "tianti_training",
+      "name": "炼体药浴",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "微博热榜图片",
+        "百度热榜图片"
+      ],
+      "feature": "entertainment",
+      "name": "热榜图片",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "挑战通天塔",
+        "通天塔兑换"
+      ],
+      "feature": "tower",
+      "name": "爬塔",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "status",
+      "name": "版本更新",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "status",
+      "name": "版本查询",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "猜数字"
+      ],
+      "feature": "entertainment",
+      "name": "猜",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "猜数字信息",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "猜数字帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "猜数迷"
+      ],
+      "feature": "entertainment",
+      "name": "猜数谜",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "猜数迷帮助"
+      ],
+      "feature": "entertainment",
+      "name": "猜数谜帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "猫图帮助",
+        "猫猫说帮助"
+      ],
+      "feature": "entertainment",
+      "name": "猫猫帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "猫猫说话",
+        "猫说"
+      ],
+      "feature": "entertainment",
+      "name": "猫猫说",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "生成秘境",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "用户伪装",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "每周番剧",
+        "番剧总表"
+      ],
+      "feature": "entertainment",
+      "name": "番剧周表",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "动漫盲盒",
+        "随机动漫",
+        "随机番剧"
+      ],
+      "feature": "entertainment",
+      "name": "番剧盲盒",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "随机番剧帮助"
+      ],
+      "feature": "entertainment",
+      "name": "番剧盲盒帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "pet",
+      "name": "砸蛋",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "lunhui",
+      "name": "确认轮回",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "礼包列表",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "礼包帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "礼包管理",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "管理员灵石"
+      ],
+      "feature": "admin_asset",
+      "name": "神秘力量",
+      "permission": "admin"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "私聊广播",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "title",
+      "name": "称号帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "title",
+      "name": "称号详情",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "竞技场商店"
+      ],
+      "feature": "arena",
+      "name": "竞技场兑换",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "竞技场购买次数"
+      ],
+      "feature": "arena",
+      "name": "竞技场挑战",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "答案书",
+        "问答案之书",
+        "问答案书"
+      ],
+      "feature": "entertainment",
+      "name": "答案之书",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "status",
+      "name": "系统信息",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "结束扫雷",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "结束猜数字",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "结算十点半",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "施舍点修为",
+        "求点修为",
+        "赏点修为"
+      ],
+      "feature": "interactive",
+      "name": "给点修为",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "施舍点灵石",
+        "求点灵石",
+        "赏点灵石"
+      ],
+      "feature": "interactive",
+      "name": "给点灵石",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "群聊广播",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "翻开",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "KFC文案",
+        "疯狂星期四"
+      ],
+      "feature": "entertainment",
+      "name": "肯德基文案",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "使用物品",
+        "装备"
+      ],
+      "feature": "back",
+      "name": "背包",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "脑筋急转弯",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "lunhui",
+      "name": "自废修为",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "舔狗日记",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "艾特测试",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "战斗结算"
+      ],
+      "feature": "combat_settlement",
+      "name": "节点战斗结算",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "落子",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "impart_pk",
+      "name": "虚神界信息",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "impart_pk",
+      "name": "虚神界修炼",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "impart_pk",
+      "name": "虚神界出关",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "impart_pk",
+      "name": "虚神界列表",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "impart_pk",
+      "name": "虚神界对决",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "impart",
+      "name": "虚神界帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "impart_pk",
+      "name": "虚神界排行榜",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "impart_pk",
+      "name": "虚神界闭关",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "补偿列表",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "补偿帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "补偿管理",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [
+        "裂隙探索",
+        "进入裂隙"
+      ],
+      "feature": "rift",
+      "name": "裂隙",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "title",
+      "name": "装备称号",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "放出小黑屋",
+        "解禁"
+      ],
+      "feature": "admin",
+      "name": "解除小黑屋",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "认输",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "boss",
+      "name": "讨伐世界BOSS",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "幽默",
+        "来段搞笑的",
+        "段子",
+        "趣事"
+      ],
+      "feature": "interactive",
+      "name": "讲个段子",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "joke",
+        "搞笑",
+        "来点乐子",
+        "笑话",
+        "逗我笑"
+      ],
+      "feature": "interactive",
+      "name": "讲个笑话",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "thx",
+        "多谢",
+        "感恩",
+        "感谢",
+        "谢啦"
+      ],
+      "feature": "interactive",
+      "name": "谢谢",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "灵田傀儡升级"
+      ],
+      "feature": "puppet",
+      "name": "购买灵田傀儡",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "title",
+      "name": "赠送称号",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "info",
+      "name": "身外化身",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "转换QQID",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "轮回力量",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "lunhui",
+      "name": "轮回印记",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "轮回帮助"
+      ],
+      "feature": "lunhui",
+      "name": "轮回重修帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "lunhui",
+      "name": "进入无限轮回",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "开始轮回"
+      ],
+      "feature": "lunhui",
+      "name": "进入轮回",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "退出五子棋",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "退出十点半",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "stone_gift",
+      "name": "送灵石",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "播放歌曲",
+        "点歌选择"
+      ],
+      "feature": "entertainment",
+      "name": "选歌",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "造化力量",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "邀请人",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "邀请奖励列表",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "邀请奖励设置",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "邀请奖励领取",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "邀请帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "邀请码",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "邀请管理",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "重置世界BOSS",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "past_life",
+      "name": "重置前尘",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "重置历练",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "illusion",
+      "name": "重置幻境",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "重置悬赏令",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "重置新手礼包",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "重置状态",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "重置通天塔",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "admin",
+      "name": "重载items",
+      "permission": "superuser"
+    },
+    {
+      "aliases": [],
+      "feature": "dufang",
+      "name": "鉴石",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "dufang",
+      "name": "鉴石信息",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "dufang",
+      "name": "鉴石共享关闭",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "dufang",
+      "name": "鉴石共享开启",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "dufang",
+      "name": "鉴石帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "流媒体解析",
+        "视频解析",
+        "解析视频",
+        "解析链接"
+      ],
+      "feature": "entertainment",
+      "name": "链接解析",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "随机一言",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "二次元图",
+        "猫娘图",
+        "随机狐娘",
+        "随机猫娘",
+        "随机老公",
+        "随机老婆"
+      ],
+      "feature": "entertainment",
+      "name": "随机二次元",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "小姐姐",
+        "随机美女视频"
+      ],
+      "feature": "entertainment",
+      "name": "随机小姐姐",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "entertainment",
+      "name": "随机点歌",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "猫图",
+        "猫猫",
+        "随机猫图"
+      ],
+      "feature": "entertainment",
+      "name": "随机猫猫",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "御姐语音",
+        "怼人语音",
+        "绿茶语音",
+        "语音",
+        "随机御姐撒娇语音",
+        "随机绿茶语音"
+      ],
+      "feature": "entertainment",
+      "name": "随机语音",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "任务奖励",
+        "领取周常任务奖励",
+        "领取每日任务奖励"
+      ],
+      "feature": "tasks",
+      "name": "领取任务奖励",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "sect",
+      "name": "领取宗门炼体堂",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "pet",
+      "name": "领取宠物游历",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "领取礼包",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "compensation",
+      "name": "领取补偿",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "world_events",
+      "name": "领取魔修奖励",
+      "permission": "user"
+    }
+  ],
+  "database_files": [
+    "data/xiuxian/player.db",
+    "data/xiuxian/xiuxian.db",
+    "data/xiuxian/trade.db",
+    "data/xiuxian/xiuxian_impart.db",
+    "data/xiuxian/message.db"
+  ],
+  "database_tables": [
+    "__future__",
+    "a",
+    "accessory_package_operations",
+    "accessory_transaction_operations",
+    "activity",
+    "activity_boss_damage",
+    "activity_boss_fight_log",
+    "activity_boss_milestone",
+    "activity_boss_milestone_claim",
+    "activity_boss_rank_claim",
+    "activity_boss_reward_claim_operations",
+    "activity_boss_state",
+    "activity_claim_all_operations",
+    "activity_claim_all_steps",
+    "activity_collect_claim",
+    "activity_collect_drop_log",
+    "activity_collect_exchange_operations",
+    "activity_collect_inventory",
+    "activity_collect_pity_state",
+    "activity_config_operations",
+    "activity_config_state",
+    "activity_feature_migrations",
+    "activity_item_inventory",
+    "activity_pass_balance",
+    "activity_pass_claim_operations",
+    "activity_pass_event_log",
+    "activity_pass_reward_claim",
+    "activity_point_balance",
+    "activity_point_event_log",
+    "activity_point_purchase",
+    "activity_point_purchase_operations",
+    "activity_reward_feature_migrations",
+    "activity_sign_log",
+    "activity_sign_settlement_operations",
+    "activity_task_claim_log",
+    "activity_task_claim_operations",
+    "activity_task_progress",
+    "activity_user",
+    "admin_accessory_batch_operations",
+    "admin_accessory_batch_progress",
+    "admin_accessory_operations",
+    "admin_asset_feature_migrations",
+    "admin_blackhouse_status_operations",
+    "admin_exp_adjustment_operations",
+    "admin_feature_migrations",
+    "admin_impart_stone_batch_operations",
+    "admin_impart_stone_batch_progress",
+    "admin_impart_stone_operations",
+    "admin_item_batch_grant_operations",
+    "admin_item_batch_grant_progress",
+    "admin_item_destroy_operations",
+    "admin_item_grant_operations",
+    "admin_level_change_operations",
+    "admin_player_status_batch_reset_operations",
+    "admin_player_status_batch_reset_progress",
+    "admin_player_status_reset_operations",
+    "admin_root_change_operations",
+    "admin_stone_adjustment_operations",
+    "admin_training_reset_operations",
+    "admin_training_reset_targets",
+    "aiohttp",
+    "alchemy_operations",
+    "an",
+    "apprentice_leave_operations",
+    "apscheduler",
+    "arena",
+    "arena_battle_settlement_operations",
+    "arena_challenge_purchase_operations",
+    "arena_challenge_settlement_operations",
+    "arena_challenge_ticket_operations",
+    "arena_feature_migrations",
+    "arena_purchase_operations",
+    "arena_season_reward_operations",
+    "arena_state_operations",
+    "arena_weekly_rank_reduction_operations",
+    "arena_weekly_rank_reduction_targets",
+    "asdict",
+    "asyncio",
+    "auction_bid_operations",
+    "auction_current",
+    "auction_feature_migrations",
+    "auction_history",
+    "auction_player_upload",
+    "auction_queue_operations",
+    "auction_session_operations",
+    "auction_sessions",
+    "auction_settlement_operations",
+    "auction_trade",
+    "audit_exc",
+    "back",
+    "back_feature_migrations",
+    "backpack_repair_tasks",
+    "bank_deposit_operations",
+    "bank_feature_migrations",
+    "bank_interest_operations",
+    "bank_upgrade_operations",
+    "bank_withdrawal_operations",
+    "base64",
+    "base_feature_migrations",
+    "batch_pet_egg_use_operations",
+    "beg_daily_reward_operations",
+    "beg_feature_migrations",
+    "being",
+    "blessed_flag_replace_operations",
+    "blessed_spot_operations",
+    "boss",
+    "boss_feature_migrations",
+    "boss_purchase_operations",
+    "boss_reward_operations",
+    "breakthrough_rate_item_operations",
+    "buff_feature_migrations",
+    "buffinfo",
+    "character",
+    "closing_settlement_operations",
+    "collections",
+    "combat_settlement_feature_migrations",
+    "compensation_definition_operations",
+    "compensation_definition_revisions",
+    "compensation_definitions",
+    "compensation_feature_migrations",
+    "compensation_legacy_migrations",
+    "concurrent",
+    "contextlib",
+    "contextvars",
+    "continuous_breakthrough_operations",
+    "continuous_tribulation_operations",
+    "copy",
+    "cryptography",
+    "cultivation_item_operations",
+    "cultivation_reset_operations",
+    "curl_cffi",
+    "daily_fortune_claims",
+    "dao_record",
+    "dataclasses",
+    "datetime",
+    "decimal",
+    "demon_attack_settlement_operations",
+    "demon_claim_operations",
+    "demon_event_lifecycle_operations",
+    "demon_wave_refresh_operations",
+    "destiny_tribulation_operations",
+    "direct_breakthrough_operations",
+    "domain_outbox",
+    "dongfu_accelerate_operations",
+    "dongfu_array_upgrade_operations",
+    "dongfu_expansion_operations",
+    "dongfu_feature_migrations",
+    "dongfu_fertilize_operations",
+    "dongfu_harvest_operations",
+    "dongfu_infiltrate_failure_operations",
+    "dongfu_infiltrate_success_operations",
+    "dongfu_patrol_operations",
+    "dongfu_plant_operations",
+    "dongfu_status",
+    "dongfu_visit_reward_operations",
+    "drifting",
+    "dufang_bet_operations",
+    "dufang_bets",
+    "dufang_feature_migrations",
+    "dufang_payout_operations",
+    "dufang_share_operations",
+    "dufang_share_progress",
+    "dungeon_feature_migrations",
+    "dungeon_global_state",
+    "dungeon_purchase_operations",
+    "dungeon_reset_operations",
+    "dungeon_reward_operations",
+    "dungeon_session_operations",
+    "dungeon_team_exit_operations",
+    "dungeon_team_invites",
+    "dungeon_team_operations",
+    "e",
+    "each",
+    "early_inject",
+    "economy_log",
+    "economy_operations",
+    "email",
+    "entertainment_feature_migrations",
+    "enum",
+    "equipment_operations",
+    "eternal",
+    "exc",
+    "filtered",
+    "flask",
+    "fractions",
+    "functools",
+    "fusion_batch_operations",
+    "fusion_feature_migrations",
+    "fusion_operations",
+    "game_data",
+    "guishi_info",
+    "guishi_item",
+    "guishi_match_operations",
+    "guishi_order_create_operations",
+    "guishi_stone_operations",
+    "guishi_take_item_operations",
+    "guishi_trade",
+    "heart_devil_tribulation_operations",
+    "html",
+    "if",
+    "illusion_choice_operations",
+    "illusion_choice_stats",
+    "illusion_choices",
+    "illusion_feature_migrations",
+    "impart_battle_batch_operations",
+    "impart_card_compose_operations",
+    "impart_card_disassemble_operations",
+    "impart_cards",
+    "impart_closing_enter_operations",
+    "impart_closing_operations",
+    "impart_data",
+    "impart_draw_operations",
+    "impart_explore_operations",
+    "impart_feature_migrations",
+    "impart_pk_daily",
+    "impart_pk_feature_migrations",
+    "impart_pk_state",
+    "impart_prayer_operations",
+    "impart_project_join_operations",
+    "impart_project_members",
+    "impart_project_meta",
+    "impart_training_operations",
+    "importlib",
+    "info_feature_migrations",
+    "interactive_daily_fortune_operations",
+    "interactive_daily_fortunes",
+    "interactive_exp_daily_claims",
+    "interactive_exp_daily_reward_operations",
+    "interactive_feature_migrations",
+    "interactive_greeting_claims",
+    "interactive_greeting_operations",
+    "interactive_stone_daily_claims",
+    "interactive_stone_daily_reward_operations",
+    "invitation_reward_claims",
+    "invitation_reward_invites",
+    "invitation_reward_operations",
+    "io",
+    "is",
+    "keepers",
+    "last_error",
+    "latest",
+    "legacy_trade",
+    "level_data",
+    "longing",
+    "lottery_legacy_migrations",
+    "lottery_participants",
+    "lottery_pool_state",
+    "lottery_settlement_operations",
+    "lottery_talisman_operations",
+    "lottery_winner_history",
+    "love_sand_operations",
+    "lunhui_feature_migrations",
+    "lunhui_recall_operations",
+    "lunhui_settlement_operations",
+    "map_combat_settlement",
+    "map_combat_settlement_operations",
+    "map_combat_start_operations",
+    "map_cooldown",
+    "map_dao_battle_operations",
+    "map_dongfu_build_operations",
+    "map_explore_settlement_operations",
+    "map_explore_start_operations",
+    "map_feature_migrations",
+    "map_home_return_operations",
+    "map_interactive_actions",
+    "map_interactive_start_operations",
+    "map_interactive_terminal_operations",
+    "map_mission_claim_operations",
+    "map_movement_operations",
+    "map_resource_reward_operations",
+    "map_seed_purchase_operations",
+    "map_status",
+    "mentor",
+    "mentor_application_create_operations",
+    "mentor_application_resolution_operations",
+    "mentor_applications",
+    "mentor_bind_operations",
+    "mentor_breakthrough_reward_operations",
+    "mentor_expel_operations",
+    "mentor_graduation_operations",
+    "mentor_protection_operations",
+    "mentor_transmission_operations",
+    "message",
+    "messages",
+    "mixelixir_feature_migrations",
+    "mixelixir_fire_control_upgrade_operations",
+    "mixelixir_harvest_level_upgrade_operations",
+    "mixelixir_harvest_operations",
+    "mixelixir_recipe_save_operations",
+    "mixelixir_recipe_sets",
+    "mixelixir_refine_cost_operations",
+    "mixelixir_refine_reward_operations",
+    "mixelixir_refine_tasks",
+    "mixelixir_settlement_operations",
+    "natal_awaken_operations",
+    "natal_effect_upgrade_operations",
+    "natal_engraving_operations",
+    "natal_forget_operations",
+    "natal_reawaken_operations",
+    "natal_training_operations",
+    "natal_treasure",
+    "natal_treasure_feature_migrations",
+    "nonebot",
+    "normal_pvp_operations",
+    "normal_training_operations",
+    "normalized",
+    "novice_gift_claim_operations",
+    "number_count",
+    "operation_audit",
+    "operation_ledger",
+    "ordinary_tribulation_operations",
+    "overflow",
+    "package_reward_operations",
+    "page",
+    "partner_bind_operations",
+    "partner_breakthrough_operations",
+    "partner_cultivation_invites",
+    "partner_cultivation_operations",
+    "partner_protection_operations",
+    "partner_token_operations",
+    "partner_two_exp_usage",
+    "partner_unbind_operations",
+    "past_life_choice_operations",
+    "past_life_feature_migrations",
+    "past_life_final_operations",
+    "past_life_reset_operations",
+    "past_life_reset_targets",
+    "past_life_start_operations",
+    "pathlib",
+    "pending",
+    "permanent_atk_item_operations",
+    "pet_active_switch_operations",
+    "pet_feature_migrations",
+    "pet_feed_operations",
+    "pet_fusion_breakthrough_operations",
+    "pet_hatch_operations",
+    "pet_release_operations",
+    "pet_skill_replace_operations",
+    "pet_skill_reroll_operations",
+    "pet_travel_claim_operations",
+    "pet_travel_start_operations",
+    "pil",
+    "pill_fusion_operations",
+    "pkgutil",
+    "player_accessory",
+    "player_data",
+    "player_dungeon_status",
+    "player_pet",
+    "player_pet_item",
+    "player_rename_operations",
+    "ports",
+    "puppet_feature_migrations",
+    "puppet_harvest_operations",
+    "puppet_operations",
+    "pydantic",
+    "random",
+    "recovery_item_operations",
+    "reward_claim_counters",
+    "reward_claims",
+    "rift",
+    "rift_entries",
+    "rift_entry_counts",
+    "rift_entry_operations",
+    "rift_feature_migrations",
+    "rift_generation_operations",
+    "rift_settlement_operations",
+    "rift_speedup_operations",
+    "rift_termination_operations",
+    "rift_world_state",
+    "running",
+    "schema_migrations",
+    "season_rank",
+    "sect_buff_search_operations",
+    "sect_close_join_operations",
+    "sect_close_mountain_operations",
+    "sect_creation_operations",
+    "sect_daily_reset_operations",
+    "sect_disband_operations",
+    "sect_donation_operations",
+    "sect_elixir_claim_operations",
+    "sect_elixir_room_maintenance",
+    "sect_elixir_room_operations",
+    "sect_fairyland_claim_operations",
+    "sect_fairyland_feature_migrations",
+    "sect_fairyland_operations",
+    "sect_feature_migrations",
+    "sect_inactive_disband_operations",
+    "sect_mainbuff_learn_operations",
+    "sect_member_join_operations",
+    "sect_member_removal_operations",
+    "sect_name_refresh_operations",
+    "sect_open_join_operations",
+    "sect_operations",
+    "sect_owner_inherit_operations",
+    "sect_position_change_operations",
+    "sect_practice_operations",
+    "sect_rename_operations",
+    "sect_scheduled_material_grants",
+    "sect_secbuff_learn_operations",
+    "sect_shop_purchase_operations",
+    "sect_shop_weekly_purchases",
+    "sect_task_claim_operations",
+    "sect_task_settlement_operations",
+    "sect_task_state",
+    "sect_weekly_goal",
+    "sect_weekly_reward_operations",
+    "sects",
+    "service",
+    "set",
+    "sign_in_operations",
+    "simulator_feature_migrations",
+    "skill_learning_operations",
+    "spirit_vein_lifecycle_operations",
+    "sqlite_master",
+    "stable",
+    "starting",
+    "state",
+    "statistics",
+    "status_feature_migrations",
+    "stone_contest_operations",
+    "stone_gift_limits",
+    "stone_gift_operations",
+    "stone_item_reward_operations",
+    "stone_robbery_operations",
+    "stone_training_operations",
+    "stored",
+    "task_progress_event_operations",
+    "task_reward_claim_operations",
+    "tasks_feature_migrations",
+    "team_cd",
+    "teams",
+    "the",
+    "this",
+    "threading",
+    "three_cultivation_pill_operations",
+    "tianti",
+    "tianti_breakthrough_operations",
+    "tianti_feature_migrations",
+    "tianti_info",
+    "tianti_item_reward_operations",
+    "tianti_medicine_bath_operations",
+    "tianti_qiaoxue_operations",
+    "tianti_settlement_feature_migrations",
+    "tianti_settlement_operations",
+    "tianti_stone_training_operations",
+    "tianti_training_feature_migrations",
+    "time",
+    "title",
+    "title_feature_migrations",
+    "title_transaction_operations",
+    "tower",
+    "tower_feature_migrations",
+    "tower_purchase_operations",
+    "tower_settlement_operations",
+    "tower_state_operations",
+    "trade_feature_migrations",
+    "trade_migrations",
+    "training",
+    "training_completion_operations",
+    "training_event_operations",
+    "training_feature_migrations",
+    "training_purchase_operations",
+    "training_state_operations",
+    "tribulation_breakthrough_operations",
+    "tribulation_state_migration_operations",
+    "tv",
+    "types",
+    "typing",
+    "unbind_item_operations",
+    "urllib",
+    "user_cd",
+    "user_nicknames",
+    "user_tribulation",
+    "user_xiuxian",
+    "uuid",
+    "wall",
+    "wcwidth",
+    "web_audit",
+    "werkzeug",
+    "work_abort_cleanup_operations",
+    "work_active_snapshots",
+    "work_claim_operations",
+    "work_daily_refresh_reset_operations",
+    "work_daily_refresh_reset_targets",
+    "work_feature_migrations",
+    "work_item_use_operations",
+    "work_offer_snapshots",
+    "work_refresh_operations",
+    "work_settlement_operations",
+    "world_boss_battle_operations",
+    "world_boss_daily_limit_reset_operations",
+    "world_boss_daily_limit_reset_targets",
+    "world_boss_full_refresh_operations",
+    "world_boss_manual_spawn_operations",
+    "world_boss_punishment_operations",
+    "world_boss_state",
+    "world_event_state",
+    "world_events_feature_migrations",
+    "xiangyuan_claim_operations",
+    "xiangyuan_create_operations",
+    "xiangyuan_gift_items",
+    "xiangyuan_gifts",
+    "xiangyuan_groups",
+    "xiangyuan_receivers",
+    "xianshi_clear_operations",
+    "xianshi_item",
+    "xianshi_listing_operations",
+    "xianshi_name_removal_operations",
+    "xianshi_operations",
+    "xianshi_plan_listing_operations",
+    "xianshi_removal_operations",
+    "xianshi_stamina_operations",
+    "xiuxian_impart",
+    "xiuxian_tasks",
+    "xml"
+  ],
+  "features": [
+    "accessory_package",
+    "activity",
+    "activity_reward",
+    "admin",
+    "admin_asset",
+    "arena",
+    "auction",
+    "back",
+    "bank",
+    "base",
+    "beg",
+    "boss",
+    "buff",
+    "combat_settlement",
+    "compensation",
+    "daily_fortune",
+    "dongfu",
+    "dufang",
+    "dungeon",
+    "entertainment",
+    "fusion",
+    "illusion",
+    "impart",
+    "impart_pk",
+    "info",
+    "interactive",
+    "legacy_scheduler",
+    "lunhui",
+    "map",
+    "mixelixir",
+    "natal_treasure",
+    "package_reward",
+    "past_life",
+    "pet",
+    "puppet",
+    "rift",
+    "runtime_web",
+    "sect",
+    "sect_fairyland",
+    "sign_in",
+    "simulator",
+    "status",
+    "stone_gift",
+    "tasks",
+    "tianti",
+    "tianti_settlement",
+    "tianti_training",
+    "title",
+    "tower",
+    "trade",
+    "training",
+    "work",
+    "world_events",
+    "xiuxian_activity",
+    "xiuxian_admin",
+    "xiuxian_arena",
+    "xiuxian_back",
+    "xiuxian_bank",
+    "xiuxian_base",
+    "xiuxian_beg",
+    "xiuxian_boss",
+    "xiuxian_buff",
+    "xiuxian_compensation",
+    "xiuxian_dongfu",
+    "xiuxian_dufang",
+    "xiuxian_dungeon",
+    "xiuxian_entertainment",
+    "xiuxian_fusion",
+    "xiuxian_impart",
+    "xiuxian_impart_pk",
+    "xiuxian_info",
+    "xiuxian_lunhui",
+    "xiuxian_map",
+    "xiuxian_mixelixir",
+    "xiuxian_natal_treasure",
+    "xiuxian_past_life",
+    "xiuxian_pet",
+    "xiuxian_puppet",
+    "xiuxian_rift",
+    "xiuxian_sect",
+    "xiuxian_simulator",
+    "xiuxian_status",
+    "xiuxian_tasks",
+    "xiuxian_tianti",
+    "xiuxian_title",
+    "xiuxian_trade",
+    "xiuxian_training",
+    "xiuxian_work",
+    "xiuxian_world_events"
+  ],
+  "jobs": [
+    {
+      "feature": "auction",
+      "id": "auction.settle",
+      "owner": "gameplay",
+      "schedule": "on_demand"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "auto_guishi_transactions",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "auto_handle_inactive_sect_owners_job",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "auto_harvest",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "auto_start_auction",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "backup_database_files",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "check_auction_end",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "cleanup_media_parser_cache_job",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "clear_expired_baitan_orders",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "daily_add_impart_lv",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "daily_clean_expired_items",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "daily_dungeon_reset",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "daily_reset_arena",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "daily_reset_beg",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "daily_reset_boss_limits",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "daily_reset_day_num",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "daily_reset_illusion",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "daily_reset_impart_num",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "daily_reset_impart_pk",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "daily_reset_lottery",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "daily_reset_mixelixir_num",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "daily_reset_sect_task",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "daily_reset_sign",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "daily_reset_stone_limits",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "daily_reset_two_exp",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "daily_reset_work_refresh_num",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "daily_reset_xiangyuan",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "demon_invasion_refresh_schedule",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "demon_invasion_schedule",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "generate_all_bosses",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "newapi_auto_checkin_daily",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "recover_user_stamina",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "reset_data_by_time_job",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "reset_message_rate_limits",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "scheduled_rift_generation_job",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "sect_materials_grant",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "spirit_vein_schedule",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "weekly_reduce_arena_rank",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "weekly_reduce_impart_lv",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    },
+    {
+      "feature": "legacy_scheduler",
+      "id": "weekly_reset_tower_floors",
+      "owner": "compatibility",
+      "schedule": "legacy"
+    }
+  ],
+  "json_files": [
+    "data/xiuxian/activity/activity_config.json",
+    "data/xiuxian/boss掉落物/boss掉落物.json",
+    "data/xiuxian/config.json",
+    "data/xiuxian/work/暗杀.json",
+    "data/xiuxian/work/灵材.json",
+    "data/xiuxian/work/等级奖励稿.json",
+    "data/xiuxian/work/镇妖.json",
+    "data/xiuxian/丹药/丹药.json",
+    "data/xiuxian/丹药/炼丹丹药.json",
+    "data/xiuxian/丹药/炼丹炉.json",
+    "data/xiuxian/丹药/神物.json",
+    "data/xiuxian/丹药/药材.json",
+    "data/xiuxian/修炼物品/特殊物品.json",
+    "data/xiuxian/修炼物品/称号.json",
+    "data/xiuxian/修炼物品/聚灵旗.json",
+    "data/xiuxian/副本/副本.json",
+    "data/xiuxian/功法/boss神通.json",
+    "data/xiuxian/功法/主功法.json",
+    "data/xiuxian/功法/功法概率设置.json",
+    "data/xiuxian/功法/瞳术.json",
+    "data/xiuxian/功法/神通.json",
+    "data/xiuxian/功法/身法.json",
+    "data/xiuxian/功法/辅修功法.json",
+    "data/xiuxian/地图.json",
+    "data/xiuxian/境界.json",
+    "data/xiuxian/宗门玩法配置.json",
+    "data/xiuxian/宠物/宠物.json",
+    "data/xiuxian/宠物/宠物技能.json",
+    "data/xiuxian/灵根.json",
+    "data/xiuxian/炼体/炼体境界.json",
+    "data/xiuxian/炼体/炼体窍穴.json",
+    "data/xiuxian/礼包/丹药修炼礼包.json",
+    "data/xiuxian/礼包/功法神通礼包.json",
+    "data/xiuxian/礼包/基础礼包.json",
+    "data/xiuxian/礼包/神物材料礼包.json",
+    "data/xiuxian/礼包/秘境礼包.json",
+    "data/xiuxian/礼包/综合礼包.json",
+    "data/xiuxian/礼包/聚灵旗礼包.json",
+    "data/xiuxian/礼包/装备礼包.json",
+    "data/xiuxian/礼包/资源功能礼包.json",
+    "data/xiuxian/礼包/饰品套装礼包.json",
+    "data/xiuxian/礼包/饰品随机礼包.json",
+    "data/xiuxian/突破概率.json",
+    "data/xiuxian/装备/法器.json",
+    "data/xiuxian/装备/防具.json",
+    "data/xiuxian/装备/饰品.json",
+    "data/xiuxian/装备/饰品配置.json",
+    "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/activity_config.json",
+    "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/boss_info.json",
+    "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_buff/mentor_exp_cd.json",
+    "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_buff/two_exp_cd.json",
+    "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation_data/compensation/claimed_records.json",
+    "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation_data/compensation/compensation_records.json",
+    "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation_data/gift_package/claimed_gift_packages.json",
+    "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation_data/gift_package/gift_package_records.json",
+    "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation_data/invitation_data/invitation_claimed.json",
+    "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation_data/invitation_data/invitation_records.json",
+    "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation_data/invitation_data/invitation_rewards.json",
+    "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation_data/redeem_code/claimed_redeem_codes.json",
+    "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation_data/redeem_code/redeem_codes.json",
+    "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_entertainment/mod/data/music_config.json",
+    "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/impart_pk.json",
+    "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/x_world.json",
+    "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_rift/rift_info.json",
+    "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/按钮模板/修仙帮助.json",
+    "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/按钮模板/修炼.json"
+  ],
+  "legacy_jobs": [
+    "auto_guishi_transactions",
+    "auto_handle_inactive_sect_owners_job",
+    "auto_harvest",
+    "auto_start_auction",
+    "backup_database_files",
+    "check_auction_end",
+    "cleanup_media_parser_cache_job",
+    "clear_expired_baitan_orders",
+    "daily_add_impart_lv",
+    "daily_clean_expired_items",
+    "daily_dungeon_reset",
+    "daily_reset_arena",
+    "daily_reset_beg",
+    "daily_reset_boss_limits",
+    "daily_reset_day_num",
+    "daily_reset_illusion",
+    "daily_reset_impart_num",
+    "daily_reset_impart_pk",
+    "daily_reset_lottery",
+    "daily_reset_mixelixir_num",
+    "daily_reset_sect_task",
+    "daily_reset_sign",
+    "daily_reset_stone_limits",
+    "daily_reset_two_exp",
+    "daily_reset_work_refresh_num",
+    "daily_reset_xiangyuan",
+    "demon_invasion_refresh_schedule",
+    "demon_invasion_schedule",
+    "generate_all_bosses",
+    "newapi_auto_checkin_daily",
+    "recover_user_stamina",
+    "reset_data_by_time_job",
+    "reset_message_rate_limits",
+    "scheduled_rift_generation_job",
+    "sect_materials_grant",
+    "spirit_vein_schedule",
+    "weekly_reduce_arena_rank",
+    "weekly_reduce_impart_lv",
+    "weekly_reset_tower_floors"
+  ],
+  "legacy_routes": [
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py",
+      "function": "home",
+      "methods": [
+        "GET"
+      ],
+      "path": "/"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py",
+      "function": "activity_management",
+      "methods": [
+        "GET"
+      ],
+      "path": "/activity"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py",
+      "function": "api_activity_config",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "path": "/api/activity/config"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py",
+      "function": "api_activity_data",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/activity/data"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py",
+      "function": "api_activity_data_adjust",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/activity/data/adjust"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py",
+      "function": "api_activity_data_reset",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/activity/data/reset"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py",
+      "function": "api_activity_gameplay_template",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/activity/gameplay-template/<template_key>"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/activity.py",
+      "function": "api_activity_template",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/activity/template/<template_key>"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py",
+      "function": "api_command_registry_bulk_toggle",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/command_registry/bulk_toggle"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py",
+      "function": "api_command_registry_toggle",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/command_registry/toggle"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py",
+      "function": "qq_bind_poll",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/config/qq-bind/poll"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py",
+      "function": "qq_bind_qr",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/config/qq-bind/qr/<task_id>"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py",
+      "function": "qq_bind_restart",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/config/qq-bind/restart"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py",
+      "function": "qq_bind_restart_capability",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/config/qq-bind/restart-capability"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/qq_bind_routes.py",
+      "function": "qq_bind_start",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/config/qq-bind/start"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py",
+      "function": "api_dashboard_summary",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/dashboard/summary"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py",
+      "function": "api_logs_files",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/logs/files"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py",
+      "function": "api_logs_read",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/logs/read"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py",
+      "function": "api_logs_tail",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/logs/tail"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py",
+      "function": "api_logs_user_messages",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/logs/user_messages"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py",
+      "function": "api_logs_users",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/logs/users"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py",
+      "function": "api_messages_bots",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/messages/bots"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py",
+      "function": "api_messages_broadcast",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/messages/broadcast"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py",
+      "function": "api_messages_broadcast_status",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/messages/broadcast/status"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py",
+      "function": "api_messages_config",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/messages/config"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py",
+      "function": "api_messages_config_save",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/messages/config"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py",
+      "function": "api_messages_dates",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/messages/dates"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py",
+      "function": "api_messages_group_remark",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/messages/group_remark"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py",
+      "function": "api_messages_list",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/messages/list"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py",
+      "function": "api_messages_list_before",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/messages/list_before"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py",
+      "function": "api_messages_list_since",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/messages/list_since"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py",
+      "function": "api_messages_markdown_preview",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/messages/markdown_preview"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py",
+      "function": "api_messages_media_proxy",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/messages/media_proxy"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py",
+      "function": "api_messages_revoke",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/messages/revoke"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py",
+      "function": "api_messages_send",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/messages/send"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py",
+      "function": "api_messages_session_pin",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/messages/session_pin"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py",
+      "function": "api_messages_sessions",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/messages/sessions"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py",
+      "function": "api_messages_sessions_since",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/messages/sessions_since"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py",
+      "function": "api_messages_stickers",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/messages/stickers"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py",
+      "function": "api_messages_stickers_file",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/messages/stickers/file/<pack_id>/<path:filename>"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py",
+      "function": "api_messages_stickers_install",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/messages/stickers/install"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/stickers.py",
+      "function": "api_messages_stickers_install_status",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/messages/stickers/install/<job_id>"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py",
+      "function": "api_reward_records",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/reward-center/records"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py",
+      "function": "api_save_reward_record",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/reward-center/records"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py",
+      "function": "api_delete_reward_record",
+      "methods": [
+        "DELETE"
+      ],
+      "path": "/api/reward-center/records/<kind>/<record_id>"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py",
+      "function": "api_clear_reward_records",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/reward-center/records/<kind>/clear"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py",
+      "function": "api_scheduler_jobs",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/scheduler/jobs"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py",
+      "function": "api_scheduler_job_enabled",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/scheduler/jobs/<job_id>/enabled"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py",
+      "function": "api_scheduler_job_run",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/scheduler/jobs/<job_id>/run"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py",
+      "function": "api_scheduler_job_schedule",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/scheduler/jobs/<job_id>/schedule"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py",
+      "function": "api_scheduler_run",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/scheduler/runs/<run_id>"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "backup_config",
+      "methods": [
+        "POST"
+      ],
+      "path": "/backup_config"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "backups",
+      "methods": [
+        "GET"
+      ],
+      "path": "/backups"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "batch_delete_backups",
+      "methods": [
+        "POST"
+      ],
+      "path": "/batch_delete_backups"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "batch_delete_cloud_backups",
+      "methods": [
+        "POST"
+      ],
+      "path": "/batch_delete_cloud_backups"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "batch_delete_cloud_db_backups",
+      "methods": [
+        "POST"
+      ],
+      "path": "/batch_delete_cloud_db_backups"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "batch_delete_db_backups",
+      "methods": [
+        "POST"
+      ],
+      "path": "/batch_delete_db_backups"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/database.py",
+      "function": "batch_edit",
+      "methods": [
+        "POST"
+      ],
+      "path": "/batch_edit/<table_name>"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "batch_sync_cloud_backups",
+      "methods": [
+        "POST"
+      ],
+      "path": "/batch_sync_cloud_backups"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "batch_sync_cloud_db_backups",
+      "methods": [
+        "POST"
+      ],
+      "path": "/batch_sync_cloud_db_backups"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py",
+      "function": "check_update",
+      "methods": [
+        "GET"
+      ],
+      "path": "/check_update"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "cloud_backup_config",
+      "methods": [
+        "POST"
+      ],
+      "path": "/cloud_backup_config"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "cloud_restore_backup",
+      "methods": [
+        "POST"
+      ],
+      "path": "/cloud_restore_backup"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "cloud_restore_config_backup",
+      "methods": [
+        "POST"
+      ],
+      "path": "/cloud_restore_config_backup"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "cloud_restore_db_backup",
+      "methods": [
+        "POST"
+      ],
+      "path": "/cloud_restore_db_backup"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/command_registry_web.py",
+      "function": "command_registry",
+      "methods": [
+        "GET"
+      ],
+      "path": "/command_registry"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/commands.py",
+      "function": "commands",
+      "methods": [
+        "GET"
+      ],
+      "path": "/commands"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py",
+      "function": "config_management",
+      "methods": [
+        "GET"
+      ],
+      "path": "/config"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/database.py",
+      "function": "database",
+      "methods": [
+        "GET"
+      ],
+      "path": "/database"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "delete_backup",
+      "methods": [
+        "POST"
+      ],
+      "path": "/delete_backup"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "delete_config_backup",
+      "methods": [
+        "POST"
+      ],
+      "path": "/delete_config_backup"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py",
+      "function": "download_file",
+      "methods": [
+        "GET"
+      ],
+      "path": "/download/<path:filepath>"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "download_backup",
+      "methods": [
+        "GET"
+      ],
+      "path": "/download_backup/<filename>"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/economy_logs.py",
+      "function": "economy_logs",
+      "methods": [
+        "GET"
+      ],
+      "path": "/economy_logs"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/economy_logs.py",
+      "function": "economy_logs_export",
+      "methods": [
+        "GET"
+      ],
+      "path": "/economy_logs/export"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/commands.py",
+      "function": "execute_command",
+      "methods": [
+        "POST"
+      ],
+      "path": "/execute_command"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "export_config",
+      "methods": [
+        "POST"
+      ],
+      "path": "/export_config"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py",
+      "function": "favicon",
+      "methods": [
+        "GET"
+      ],
+      "path": "/favicon.ico"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py",
+      "function": "get_backups",
+      "methods": [
+        "GET"
+      ],
+      "path": "/get_backups"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "get_cloud_backups",
+      "methods": [
+        "GET"
+      ],
+      "path": "/get_cloud_backups"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "get_cloud_config_backups",
+      "methods": [
+        "GET"
+      ],
+      "path": "/get_cloud_config_backups"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "get_cloud_db_backups",
+      "methods": [
+        "GET"
+      ],
+      "path": "/get_cloud_db_backups"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "get_config_backups",
+      "methods": [
+        "GET"
+      ],
+      "path": "/get_config_backups"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "get_db_backups",
+      "methods": [
+        "GET"
+      ],
+      "path": "/get_db_backups"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py",
+      "function": "get_process_info",
+      "methods": [
+        "GET"
+      ],
+      "path": "/get_process_info"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py",
+      "function": "get_releases",
+      "methods": [
+        "GET"
+      ],
+      "path": "/get_releases"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py",
+      "function": "get_stats",
+      "methods": [
+        "GET"
+      ],
+      "path": "/get_stats"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py",
+      "function": "get_system_info_extended",
+      "methods": [
+        "GET"
+      ],
+      "path": "/get_system_info_extended"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "import_config",
+      "methods": [
+        "POST"
+      ],
+      "path": "/import_config"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py",
+      "function": "login",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "path": "/login"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py",
+      "function": "logout",
+      "methods": [
+        "GET"
+      ],
+      "path": "/logout"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/logs.py",
+      "function": "logs",
+      "methods": [
+        "GET"
+      ],
+      "path": "/logs"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "manual_backup",
+      "methods": [
+        "POST"
+      ],
+      "path": "/manual_backup"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "manual_db_backup",
+      "methods": [
+        "POST"
+      ],
+      "path": "/manual_db_backup"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/messages.py",
+      "function": "messages_page",
+      "methods": [
+        "GET"
+      ],
+      "path": "/messages"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py",
+      "function": "perform_update",
+      "methods": [
+        "POST"
+      ],
+      "path": "/perform_update"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "restore_backup",
+      "methods": [
+        "POST"
+      ],
+      "path": "/restore_backup"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "restore_config_backup",
+      "methods": [
+        "POST"
+      ],
+      "path": "/restore_config_backup"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "restore_db_backup",
+      "methods": [
+        "POST"
+      ],
+      "path": "/restore_db_backup"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/reward_center.py",
+      "function": "reward_center",
+      "methods": [
+        "GET"
+      ],
+      "path": "/reward-center"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py",
+      "function": "robots_txt",
+      "methods": [
+        "GET"
+      ],
+      "path": "/robots.txt"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/config.py",
+      "function": "save_config",
+      "methods": [
+        "POST"
+      ],
+      "path": "/save_config"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/scheduler.py",
+      "function": "scheduler_management",
+      "methods": [
+        "GET"
+      ],
+      "path": "/scheduler"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py",
+      "function": "search_users",
+      "methods": [
+        "GET"
+      ],
+      "path": "/search_users"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "sync_cloud_backup",
+      "methods": [
+        "POST"
+      ],
+      "path": "/sync_cloud_backup"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "sync_cloud_config_backup",
+      "methods": [
+        "POST"
+      ],
+      "path": "/sync_cloud_config_backup"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/backups.py",
+      "function": "sync_cloud_db_backup",
+      "methods": [
+        "POST"
+      ],
+      "path": "/sync_cloud_db_backup"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/database.py",
+      "function": "table_view",
+      "methods": [
+        "GET"
+      ],
+      "path": "/table/<table_name>"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/database.py",
+      "function": "row_edit",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "path": "/table/<table_name>/<row_id>"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py",
+      "function": "terminal",
+      "methods": [
+        "GET"
+      ],
+      "path": "/terminal"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py",
+      "function": "terminal_confirm",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "path": "/terminal/confirm"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py",
+      "function": "terminal_output",
+      "methods": [
+        "GET"
+      ],
+      "path": "/terminal/output"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py",
+      "function": "terminal_pwd",
+      "methods": [
+        "GET"
+      ],
+      "path": "/terminal/pwd"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py",
+      "function": "terminal_write",
+      "methods": [
+        "POST"
+      ],
+      "path": "/terminal/write"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/pages.py",
+      "function": "update",
+      "methods": [
+        "GET"
+      ],
+      "path": "/update"
+    },
+    {
+      "file": "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_web/system.py",
+      "function": "upload_api_image",
+      "methods": [
+        "POST"
+      ],
+      "path": "/upload_image"
+    }
+  ],
+  "routes": [
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/",
+      "permission": "public"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/activity",
+      "permission": "admin"
+    },
+    {
+      "feature": "accessory_package",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/accessory-package",
+      "permission": "user"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/v1/activity",
+      "permission": "admin"
+    },
+    {
+      "feature": "activity_reward",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/activity/rewards/claim",
+      "permission": "user"
+    },
+    {
+      "feature": "admin_asset",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/admin/assets/item",
+      "permission": "admin"
+    },
+    {
+      "feature": "admin_asset",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/admin/assets/stone",
+      "permission": "admin"
+    },
+    {
+      "feature": "arena",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/arena/challenge-purchase",
+      "permission": "user"
+    },
+    {
+      "feature": "arena",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/arena/purchase",
+      "permission": "user"
+    },
+    {
+      "feature": "arena",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/arena/settle",
+      "permission": "user"
+    },
+    {
+      "feature": "auction",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/auction/bids",
+      "permission": "user"
+    },
+    {
+      "feature": "auction",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/auction/settle",
+      "permission": "admin"
+    },
+    {
+      "feature": "back",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/back/alchemy",
+      "permission": "user"
+    },
+    {
+      "feature": "back",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/back/change_equipment",
+      "permission": "user"
+    },
+    {
+      "feature": "back",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/back/learn_skill",
+      "permission": "user"
+    },
+    {
+      "feature": "back",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/back/open_package",
+      "permission": "user"
+    },
+    {
+      "feature": "back",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/back/repair",
+      "permission": "user"
+    },
+    {
+      "feature": "back",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/back/unbind",
+      "permission": "user"
+    },
+    {
+      "feature": "back",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/back/use_item",
+      "permission": "user"
+    },
+    {
+      "feature": "back",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/back/use_pet_eggs",
+      "permission": "user"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/v1/backups",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/backups",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/backups/restore",
+      "permission": "admin"
+    },
+    {
+      "feature": "bank",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/bank/deposit",
+      "permission": "user"
+    },
+    {
+      "feature": "bank",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/bank/interest",
+      "permission": "user"
+    },
+    {
+      "feature": "bank",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/bank/upgrade",
+      "permission": "user"
+    },
+    {
+      "feature": "bank",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/bank/withdraw",
+      "permission": "user"
+    },
+    {
+      "feature": "base",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/base/breakthrough",
+      "permission": "user"
+    },
+    {
+      "feature": "base",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/base/rename",
+      "permission": "user"
+    },
+    {
+      "feature": "base",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/base/sign",
+      "permission": "user"
+    },
+    {
+      "feature": "base",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/base/stone_contest",
+      "permission": "user"
+    },
+    {
+      "feature": "base",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/base/stone_robbery",
+      "permission": "user"
+    },
+    {
+      "feature": "base",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/base/tribulation",
+      "permission": "user"
+    },
+    {
+      "feature": "boss",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/boss/purchase",
+      "permission": "user"
+    },
+    {
+      "feature": "boss",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/boss/settle",
+      "permission": "user"
+    },
+    {
+      "feature": "buff",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/buff/open",
+      "permission": "user"
+    },
+    {
+      "feature": "buff",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/buff/pvp_settle",
+      "permission": "user"
+    },
+    {
+      "feature": "buff",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/buff/rename",
+      "permission": "user"
+    },
+    {
+      "feature": "buff",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/buff/stone_training",
+      "permission": "user"
+    },
+    {
+      "feature": "buff",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/buff/training_complete",
+      "permission": "user"
+    },
+    {
+      "feature": "buff",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/buff/training_start",
+      "permission": "user"
+    },
+    {
+      "feature": "buff",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/buff/upgrade_field",
+      "permission": "user"
+    },
+    {
+      "feature": "combat_settlement",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/combat/settle",
+      "permission": "user"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/v1/config",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/config",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/v1/csrf",
+      "permission": "public"
+    },
+    {
+      "feature": "daily_fortune",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "path": "/api/v1/daily-fortune",
+      "permission": "user"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/v1/dashboard",
+      "permission": "public"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/v1/database",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/v1/database/<key>/tables",
+      "permission": "admin"
+    },
+    {
+      "feature": "dungeon",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/dungeon/explore/prepare",
+      "permission": "user"
+    },
+    {
+      "feature": "dungeon",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/dungeon/explore/replay",
+      "permission": "user"
+    },
+    {
+      "feature": "dungeon",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/dungeon/explore/settle",
+      "permission": "user"
+    },
+    {
+      "feature": "dungeon",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/dungeon/purchase",
+      "permission": "user"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/v1/logs",
+      "permission": "admin"
+    },
+    {
+      "feature": "map",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/map/build_dongfu",
+      "permission": "user"
+    },
+    {
+      "feature": "map",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/map/combat_settle",
+      "permission": "user"
+    },
+    {
+      "feature": "map",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/map/combat_start",
+      "permission": "user"
+    },
+    {
+      "feature": "map",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/map/explore_settle",
+      "permission": "user"
+    },
+    {
+      "feature": "map",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/map/explore_start",
+      "permission": "user"
+    },
+    {
+      "feature": "map",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/map/interactive_finish",
+      "permission": "user"
+    },
+    {
+      "feature": "map",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/map/interactive_start",
+      "permission": "user"
+    },
+    {
+      "feature": "map",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/map/mission_claim",
+      "permission": "user"
+    },
+    {
+      "feature": "map",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/map/move",
+      "permission": "user"
+    },
+    {
+      "feature": "map",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/map/purchase_seed",
+      "permission": "user"
+    },
+    {
+      "feature": "map",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/map/resource_reward",
+      "permission": "user"
+    },
+    {
+      "feature": "map",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/map/return_home",
+      "permission": "user"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/v1/messages",
+      "permission": "admin"
+    },
+    {
+      "feature": "mixelixir",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/mixelixir/harvest",
+      "permission": "user"
+    },
+    {
+      "feature": "mixelixir",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/mixelixir/settle",
+      "permission": "user"
+    },
+    {
+      "feature": "natal_treasure",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/natal-treasure/awaken",
+      "permission": "user"
+    },
+    {
+      "feature": "natal_treasure",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/natal-treasure/engrave",
+      "permission": "user"
+    },
+    {
+      "feature": "natal_treasure",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/natal-treasure/forget",
+      "permission": "user"
+    },
+    {
+      "feature": "natal_treasure",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/natal-treasure/reawaken",
+      "permission": "user"
+    },
+    {
+      "feature": "natal_treasure",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/natal-treasure/train",
+      "permission": "user"
+    },
+    {
+      "feature": "natal_treasure",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/natal-treasure/upgrade",
+      "permission": "user"
+    },
+    {
+      "feature": "pet",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/pet/feed",
+      "permission": "user"
+    },
+    {
+      "feature": "pet",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/pet/hatch",
+      "permission": "user"
+    },
+    {
+      "feature": "pet",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/pet/travel/claim",
+      "permission": "user"
+    },
+    {
+      "feature": "pet",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/pet/travel/start",
+      "permission": "user"
+    },
+    {
+      "feature": "puppet",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/puppet/purchase",
+      "permission": "user"
+    },
+    {
+      "feature": "puppet",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/puppet/upgrade",
+      "permission": "user"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/v1/reconcile",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/reconcile",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/v1/registry",
+      "permission": "public"
+    },
+    {
+      "feature": "rift",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/rift/enter",
+      "permission": "user"
+    },
+    {
+      "feature": "rift",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/rift/event_settle",
+      "permission": "user"
+    },
+    {
+      "feature": "rift",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/rift/generate",
+      "permission": "user"
+    },
+    {
+      "feature": "rift",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/rift/settle",
+      "permission": "user"
+    },
+    {
+      "feature": "rift",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/rift/speedup",
+      "permission": "user"
+    },
+    {
+      "feature": "rift",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/rift/terminate",
+      "permission": "user"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/v1/scheduler",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/scheduler/<job_id>/run",
+      "permission": "admin"
+    },
+    {
+      "feature": "sect",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/sect/elixir/claim",
+      "permission": "user"
+    },
+    {
+      "feature": "sect_fairyland",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/sect/fairyland/claim",
+      "permission": "user"
+    },
+    {
+      "feature": "sect",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/sect/join",
+      "permission": "user"
+    },
+    {
+      "feature": "sect",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/sect/learn-main",
+      "permission": "user"
+    },
+    {
+      "feature": "sect",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/sect/learn-secondary",
+      "permission": "user"
+    },
+    {
+      "feature": "sect",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/sect/purchase",
+      "permission": "user"
+    },
+    {
+      "feature": "sign_in",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/sign-in",
+      "permission": "user"
+    },
+    {
+      "feature": "stone_gift",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/stone-gift",
+      "permission": "user"
+    },
+    {
+      "feature": "tianti_training",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/tianti/bath",
+      "permission": "user"
+    },
+    {
+      "feature": "tianti_training",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/tianti/breakthrough",
+      "permission": "user"
+    },
+    {
+      "feature": "tianti_training",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/tianti/qiaoxue",
+      "permission": "user"
+    },
+    {
+      "feature": "tianti_settlement",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/tianti/settle",
+      "permission": "user"
+    },
+    {
+      "feature": "tianti_training",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/tianti/train",
+      "permission": "user"
+    },
+    {
+      "feature": "tower",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/tower/purchase",
+      "permission": "user"
+    },
+    {
+      "feature": "tower",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/tower/settle",
+      "permission": "user"
+    },
+    {
+      "feature": "trade",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/trade/deposit",
+      "permission": "user"
+    },
+    {
+      "feature": "trade",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/trade/dequeue",
+      "permission": "user"
+    },
+    {
+      "feature": "trade",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/trade/enqueue",
+      "permission": "user"
+    },
+    {
+      "feature": "trade",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/trade/purchase",
+      "permission": "user"
+    },
+    {
+      "feature": "trade",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/trade/session_finish",
+      "permission": "user"
+    },
+    {
+      "feature": "trade",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/trade/session_start",
+      "permission": "user"
+    },
+    {
+      "feature": "trade",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/trade/withdraw",
+      "permission": "user"
+    },
+    {
+      "feature": "work",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/work/claim",
+      "permission": "user"
+    },
+    {
+      "feature": "work",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/work/settle",
+      "permission": "user"
+    },
+    {
+      "feature": "world_events",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/world-events/demon/claim",
+      "permission": "user"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/backups",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/command_registry",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/commands",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/config",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/database",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/economy_logs",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/favicon.ico",
+      "permission": "public"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/health/live",
+      "permission": "public"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/health/ready",
+      "permission": "public"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "path": "/login",
+      "permission": "public"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/logout",
+      "permission": "public"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/logs",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/messages",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/pages/activity",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/pages/backups",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/pages/command_registry",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/pages/commands",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/pages/config",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/pages/database",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/pages/economy_logs",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/pages/logs",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/pages/reward_center",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/pages/scheduler",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/pages/update",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/reward-center",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/robots.txt",
+      "permission": "public"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/scheduler",
+      "permission": "admin"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/static/<path:filename>",
+      "permission": "public"
+    },
+    {
+      "feature": "runtime_web",
+      "methods": [
+        "GET"
+      ],
+      "path": "/update",
+      "permission": "admin"
+    }
+  ],
+  "schema": 1,
+  "source": "scripts/export_refactor_inventory.py"
+}

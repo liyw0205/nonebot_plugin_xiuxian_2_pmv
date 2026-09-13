@@ -22,12 +22,14 @@ sql_message = XiuxianDateManage()
 
 from .arena_limit import arena_limit
 from .arena_shop import arena_shop_data
-from .transaction_service import ArenaPurchaseService
-from .transaction_service import ArenaChallengePurchaseService
+from .transaction_service import ArenaPurchaseService, ArenaPurchaseResult
+from .transaction_service import ArenaChallengePurchaseService, ArenaChallengePurchaseResult
 from .transaction_service import ArenaChallengeTicketService
-from .transaction_service import ArenaChallengeSettlementService
+from .transaction_service import ArenaChallengeSettlementService, ArenaChallengeSettlementResult
 from .transaction_service import ArenaWeeklyRankReductionService
 from .transaction_service import ArenaSeasonRewardService
+from ...features.arena.application import ArenaApplication
+from ...features.arena.repository import LegacyArenaRepository
 
 arena_purchase_service = ArenaPurchaseService(get_paths().game_db, get_paths().player_db)
 arena_challenge_purchase_service = ArenaChallengePurchaseService(get_paths().game_db, get_paths().player_db)
@@ -35,6 +37,11 @@ arena_challenge_ticket_service = ArenaChallengeTicketService(get_paths().game_db
 arena_challenge_settlement_service = ArenaChallengeSettlementService(get_paths().game_db, get_paths().player_db)
 arena_weekly_rank_reduction_service = ArenaWeeklyRankReductionService(get_paths().player_db)
 arena_season_reward_service = ArenaSeasonRewardService(get_paths().game_db, get_paths().player_db)
+arena_application = ArenaApplication(
+    get_paths().game_db,
+    get_paths().player_db,
+    repository=LegacyArenaRepository(get_paths().game_db, get_paths().player_db),
+)
 
 arena_challenge = on_command("竞技场挑战", priority=10, block=True)
 arena_view = on_command("竞技场查看", priority=10, block=True)
@@ -92,6 +99,46 @@ def _arena_challenge_result_message(result):
     return (
         f"未找到有效对手，获得安慰积分{result.score_delta}点！\n"
         f"当前积分：{result.challenger_score} ({result.challenger_rank})"
+    )
+
+
+def _arena_purchase_result(outcome) -> ArenaPurchaseResult:
+    data = outcome.data or {}
+    return ArenaPurchaseResult(
+        str(data.get("status", outcome.code or "failed")),
+        int(data.get("quantity", 0) or 0),
+        int(data.get("cost", 0) or 0),
+        int(data.get("honor_points", 0) or 0),
+        int(data.get("purchased", 0) or 0),
+        int(data.get("inventory", 0) or 0),
+    )
+
+
+def _arena_challenge_purchase_result(outcome) -> ArenaChallengePurchaseResult:
+    data = outcome.data or {}
+    return ArenaChallengePurchaseResult(
+        str(data.get("status", outcome.code or "failed")),
+        int(data.get("amount", 0) or 0),
+        int(data.get("cost", 0) or 0),
+        int(data.get("stone", 0) or 0),
+        int(data.get("bought", 0) or 0),
+        int(data.get("extra", 0) or 0),
+    )
+
+
+def _arena_settlement_result(outcome) -> ArenaChallengeSettlementResult:
+    data = outcome.data or {}
+    return ArenaChallengeSettlementResult(
+        str(data.get("status", outcome.code or "failed")),
+        str(data.get("outcome", "")),
+        int(data.get("challenger_score", 0) or 0),
+        str(data.get("challenger_rank", "")),
+        None if data.get("opponent_score") is None else int(data.get("opponent_score")),
+        int(data.get("score_delta", 0) or 0),
+        int(data.get("used", 0) or 0),
+        int(data.get("remaining", 0) or 0),
+        int(data.get("stamina", 0) or 0),
+        str(data.get("challenged_at", "")),
     )
 
 __arena_help__ = """
@@ -255,13 +302,28 @@ async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
             opponent_id = None
             opponent_arena = None
 
-    settlement = arena_challenge_settlement_service.settle(
-        operation_id, user_id, opponent_id, outcome,
-        challenge_cap,
-        ARENA_CHALLENGE_STAMINA_COST, challenged_at,
-        challenger_arena, opponent_arena, challenger_player, opponent_player,
-        final_challenger[0], final_challenger[1], final_opponent[0], final_opponent[1],
-        arena_limit.win_points, arena_limit.lose_points, arena_limit.no_match_points,
+    # Legacy facade call: arena_challenge_settlement_service.settle(...)
+    settlement = _arena_settlement_result(
+        arena_application.settle(
+            operation_id=operation_id,
+            challenger_id=user_id,
+            opponent_id=opponent_id,
+            outcome=outcome,
+            challenge_cap=challenge_cap,
+            stamina_cost=ARENA_CHALLENGE_STAMINA_COST,
+            challenged_at=challenged_at,
+            expected_challenger_arena=challenger_arena,
+            expected_opponent_arena=opponent_arena,
+            expected_challenger_player=challenger_player,
+            expected_opponent_player=opponent_player,
+            final_challenger_hp=final_challenger[0],
+            final_challenger_mp=final_challenger[1],
+            final_opponent_hp=final_opponent[0],
+            final_opponent_mp=final_opponent[1],
+            win_points=arena_limit.win_points,
+            lose_points=arena_limit.lose_points,
+            no_match_points=arena_limit.no_match_points,
+        )
     )
     if not settlement.succeeded:
         if settlement.status == "limit_reached":
@@ -583,19 +645,22 @@ async def arena_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     if request_quantity <= 0:
         request_quantity = max(1, quantity)
 
-    purchase_result = arena_purchase_service.purchase(
-        operation_id,
-        user_id,
-        shop_id,
-        item_info["name"],
-        item_info["type"],
-        request_quantity,
-        item_data["cost"],
-        item_data["weekly_limit"],
-        arena_info["honor_points"],
-        arena_info["weekly_purchases"],
-        XiuConfig().max_goods_num,
-        1,
+    # Legacy facade call: arena_purchase_service.purchase(...)
+    purchase_result = _arena_purchase_result(
+        arena_application.purchase(
+            operation_id=operation_id,
+            user_id=user_id,
+            item_id=shop_id,
+            item_name=item_info["name"],
+            item_type=item_info["type"],
+            quantity=request_quantity,
+            unit_cost=item_data["cost"],
+            weekly_limit=item_data["weekly_limit"],
+            expected_honor=arena_info["honor_points"],
+            expected_weekly_purchases=arena_info["weekly_purchases"],
+            max_goods_num=XiuConfig().max_goods_num,
+            bind_flag=1,
+        )
     )
     if purchase_result.status == "duplicate":
         msg = (
@@ -699,16 +764,19 @@ async def arena_buy_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         else f"arena-challenge-purchase:{time.time_ns()}:{user_id}"
     )
     # 先走 operation：同一事件重放不能被“今日已买满”前置拦截。
-    result = arena_challenge_purchase_service.purchase(
-        operation_id,
-        user_id,
-        buy_amount,
-        ARENA_CHALLENGE_BUY_COST,
-        arena_limit.daily_buy_limit,
-        int(user_info.get("stone", 0)),
-        bought,
-        int(arena_info.get("daily_extra_challenges", 0)),
-        arena_info["last_buy_date"],
+    # Legacy facade call: arena_challenge_purchase_service.purchase(...)
+    result = _arena_challenge_purchase_result(
+        arena_application.purchase_challenges(
+            operation_id=operation_id,
+            user_id=user_id,
+            amount=buy_amount,
+            unit_cost=ARENA_CHALLENGE_BUY_COST,
+            daily_limit=arena_limit.daily_buy_limit,
+            expected_stone=int(user_info.get("stone", 0)),
+            expected_bought=bought,
+            expected_extra=int(arena_info.get("daily_extra_challenges", 0)),
+            expected_last_buy_date=arena_info["last_buy_date"],
+        )
     )
     if result.status == "duplicate" or result.succeeded:
         real_amount, new_bought, total_cap = (

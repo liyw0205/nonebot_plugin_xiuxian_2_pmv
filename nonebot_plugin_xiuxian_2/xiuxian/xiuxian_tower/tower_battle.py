@@ -14,12 +14,19 @@ from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from .tower_data import tower_data
 from .tower_limit import tower_limit
 from .transaction_service import TowerSettlementService
+from ...features.tower.application import TowerApplication
+from ...features.tower.repository import LegacyTowerRepository
 from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
 
 sql_message = XiuxianDateManage()
 items = Items()
 tower_settlement_service = TowerSettlementService(get_paths().game_db, get_paths().player_db)
+tower_application = TowerApplication(
+    get_paths().game_db,
+    get_paths().player_db,
+    repository=LegacyTowerRepository(get_paths().game_db, get_paths().player_db),
+)
 
 # BOSS配置数据
 TOWER_BOSS_CONFIG = {
@@ -205,21 +212,33 @@ class TowerBattle:
             # 更新积分
             total_score = int(total_score * (1 + sub_buff_integral_buff))
             total_stone = int(total_stone * (1 + sub_buff_stone_buff))
-            settlement = tower_settlement_service.settle(
-                operation_id, user_id, tower_info, boss_info["floor"], total_score, total_stone,
-                total_exp, reward_items, XiuConfig().max_goods_num,
+            # Legacy facade call: tower_settlement_service.settle(...)
+            settlement_outcome = tower_application.settle(
+                operation_id=operation_id,
+                user_id=user_id,
+                expected_tower=tower_info,
+                floor=boss_info["floor"],
+                score=total_score,
+                stone=total_stone,
+                exp=total_exp,
+                items=reward_items,
+                max_goods_num=XiuConfig().max_goods_num,
                 expected_player=expected_player, final_hp=final_hp, final_mp=final_mp,
                 stamina_cost=stamina_cost, challenge_succeeded=True,
             )
-            if settlement.status == "duplicate":
+            settlement_data = settlement_outcome.data or {}
+            settlement_status = str(settlement_data.get("status", "failed"))
+            settlement_score = int(settlement_data.get("score", 0) or 0)
+            settlement_stone = int(settlement_data.get("stone", 0) or 0)
+            if settlement_status == "duplicate":
                 msg = (
                     f"恭喜道友击败{boss_info['name']}，成功通关通天塔第{boss_info['floor']}层！\n"
-                    f"共获得积分：{settlement.score}点，灵石：{number_to(settlement.stone)}枚\n"
+                    f"共获得积分：{settlement_score}点，灵石：{number_to(settlement_stone)}枚\n"
                     "该挑战请求已经处理，无需重复提交。"
                 )
                 return True, msg
-            if not settlement.succeeded:
-                return False, f"通天塔奖励结算失败（{settlement.status}）。"
+            if not settlement_outcome.ok:
+                return False, f"通天塔奖励结算失败（{settlement_status}）。"
             update_statistics_value(user_id, "通天塔通关层数")
             update_statistics_value(user_id, "通天塔最高层", value=max(tower_info["max_floor"], boss_info["floor"]))
             
@@ -231,18 +250,29 @@ class TowerBattle:
             
             return True, msg
         else:
-            settlement = tower_settlement_service.settle(
-                operation_id, user_id, tower_info, boss_info["floor"], 0, 0, 0, [], XiuConfig().max_goods_num,
+            # Legacy facade call: tower_settlement_service.settle(...)
+            settlement_outcome = tower_application.settle(
+                operation_id=operation_id,
+                user_id=user_id,
+                expected_tower=tower_info,
+                floor=boss_info["floor"],
+                score=0,
+                stone=0,
+                exp=0,
+                items=[],
+                max_goods_num=XiuConfig().max_goods_num,
                 expected_player=expected_player, final_hp=final_hp, final_mp=final_mp,
                 stamina_cost=stamina_cost, challenge_succeeded=False,
             )
-            if settlement.status == "duplicate":
+            settlement_data = settlement_outcome.data or {}
+            settlement_status = str(settlement_data.get("status", "failed"))
+            if settlement_status == "duplicate":
                 return False, (
                     f"道友不敌{boss_info['name']}，止步通天塔第{boss_info['floor'] - 1}层！\n"
                     "该挑战请求已经处理，无需重复提交。"
                 )
-            if not settlement.succeeded:
-                return False, f"通天塔挑战结算失败（{settlement.status}）。"
+            if not settlement_outcome.ok:
+                return False, f"通天塔挑战结算失败（{settlement_status}）。"
             msg = f"道友不敌{boss_info['name']}，止步通天塔第{boss_info['floor'] - 1}层！"
             return False, msg
 
@@ -358,18 +388,30 @@ class TowerBattle:
             # 一次性更新所有数据
             total_score = int(total_score * (1 + sub_buff_integral_buff))
             total_stone = int(total_stone * (1 + sub_buff_stone_buff))
-            settlement = tower_settlement_service.settle(
-                operation_id, user_id, tower_info, max_success, total_score, total_stone,
-                total_exp, reward_items, XiuConfig().max_goods_num,
+            # Legacy facade call: tower_settlement_service.settle(...)
+            settlement_outcome = tower_application.settle(
+                operation_id=operation_id,
+                user_id=user_id,
+                expected_tower=tower_info,
+                floor=max_success,
+                score=total_score,
+                stone=total_stone,
+                exp=total_exp,
+                items=reward_items,
+                max_goods_num=XiuConfig().max_goods_num,
             )
-            if settlement.status == "duplicate":
+            settlement_data = settlement_outcome.data or {}
+            settlement_status = str(settlement_data.get("status", "failed"))
+            settlement_score = int(settlement_data.get("score", 0) or 0)
+            settlement_stone = int(settlement_data.get("stone", 0) or 0)
+            if settlement_status == "duplicate":
                 msg = (
-                    f"连续挑战完成，成功通关第{max_success}层！共获得积分：{settlement.score}点，"
-                    f"灵石：{number_to(settlement.stone)}枚\n该挑战请求已经处理，无需重复提交。"
+                    f"连续挑战完成，成功通关第{max_success}层！共获得积分：{settlement_score}点，"
+                    f"灵石：{number_to(settlement_stone)}枚\n该挑战请求已经处理，无需重复提交。"
                 )
                 return True, msg
-            if not settlement.succeeded:
-                return False, f"通天塔奖励结算失败（{settlement.status}）。"
+            if not settlement_outcome.ok:
+                return False, f"通天塔奖励结算失败（{settlement_status}）。"
             update_statistics_value(user_id, "通天塔通关层数", increment=len(success_floors))
             update_statistics_value(user_id, "通天塔最高层", value=max(tower_info["max_floor"], max_success))
         

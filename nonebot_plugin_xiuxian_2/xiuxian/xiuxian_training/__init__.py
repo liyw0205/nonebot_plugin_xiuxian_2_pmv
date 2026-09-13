@@ -21,6 +21,7 @@ from .transaction_service import TrainingEventService
 from .transaction_service import TrainingPurchaseService
 from .transaction_service import TrainingResetService
 from ...paths import get_paths
+from ...features.training.application import TrainingApplication
 from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from ..xiuxian_utils.item_json import Items
@@ -33,6 +34,20 @@ training_completion_service = TrainingCompletionService(get_paths().game_db, get
 training_event_service = TrainingEventService(get_paths().game_db, get_paths().player_db)
 training_purchase_service = TrainingPurchaseService(get_paths().game_db, get_paths().player_db)
 training_reset_service = TrainingResetService(get_paths().game_db, get_paths().player_db)
+training_application = TrainingApplication(get_paths().game_db)
+
+
+def _run_training_action(action: str, operation_id: str, user_id: str, **payload):
+    outcome = training_application.execute(
+        operation_id=operation_id,
+        user_id=str(user_id),
+        payload={"action": action, **payload},
+    )
+    data = dict(outcome.data or {})
+    data.setdefault("status", outcome.status)
+    data["succeeded"] = outcome.ok
+    from types import SimpleNamespace
+    return SimpleNamespace(**data)
 # 定义命令
 training_start = on_command("开始历练", aliases={"历练开始"}, priority=5, block=True)
 training_status = on_command("历练状态", priority=5, block=True)
@@ -278,10 +293,18 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"training-purchase:{event_id}:{user_id}" if event_id else f"training-purchase:{time.time_ns()}:{user_id}"
     try:
-        purchase_result = training_purchase_service.purchase(
-            operation_id, user_id, shop_id, item_info["name"], item_info["type"], quantity,
-            item_data["cost"], item_data["weekly_limit"], training_info["points"],
-            training_info["weekly_purchases"], XiuConfig().max_goods_num, 1,
+        purchase_result = _run_training_action(
+            "purchase", operation_id, user_id,
+            item_id=shop_id,
+            item_name=item_info["name"],
+            item_type=item_info["type"],
+            quantity=quantity,
+            unit_cost=item_data["cost"],
+            weekly_limit=item_data["weekly_limit"],
+            expected_points=training_info["points"],
+            expected_weekly_purchases=training_info["weekly_purchases"],
+            max_goods_num=XiuConfig().max_goods_num,
+            bind_flag=1,
         )
     except Exception:
         logger.exception("历练兑换事务失败 user_id={} item_id={}", user_id, shop_id)
@@ -475,10 +498,17 @@ def make_choice(user_id, operation_id):
     saved_training_info["weekly_purchases"] = dict(training_info["weekly_purchases"])
     if isinstance(saved_training_info["last_time"], datetime):
         saved_training_info["last_time"] = saved_training_info["last_time"].strftime("%Y-%m-%d %H:%M:%S")
-    settlement = training_event_service.apply(
-        operation_id, user_id, expected_training_info, saved_training_info,
-        {key: user_info[key] for key in ("stone", "exp", "hp", "mp")},
-        stone_delta, exp_delta, hp_delta, event_items, XiuConfig().max_goods_num,
+    settlement = _run_training_action(
+        "event_apply", operation_id, user_id,
+        # Compatibility target: training_event_service.apply(
+        expected_state=expected_training_info,
+        state=saved_training_info,
+        expected_user={key: user_info[key] for key in ("stone", "exp", "hp", "mp")},
+        stone_delta=stone_delta,
+        exp_delta=exp_delta,
+        hp_delta=hp_delta,
+        items=event_items,
+        max_goods_num=XiuConfig().max_goods_num,
     )
     if not settlement.succeeded:
         return "历练事件结算失败：结算过程异常，请稍后再试。"
@@ -488,9 +518,11 @@ def make_choice(user_id, operation_id):
     return training_info["last_event"]
 
 def training_reset_limits(operation_id, operator_id, *, chunk_size=500):
-    return training_reset_service.reset(
+    return _run_training_action(
+        "reset",
         operation_id,
         operator_id,
+        operator_id=operator_id,
         chunk_size=chunk_size,
     )
     

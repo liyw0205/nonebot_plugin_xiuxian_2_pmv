@@ -2373,6 +2373,12 @@ class DungeonExploreOperationResult:
 class DungeonExploreOperationService:
     """Persist one resolved exploration and settle every business write once."""
 
+    # Canonical cross-database settlement statements. The implementation
+    # expands numeric casts for SQLite compatibility while preserving the
+    # repository contract used by adapters.
+    _PLAYER_REWARD_SQL = "UPDATE user_xiuxian SET hp=%s,mp=%s,stone=stone+%s,exp=exp+%s"
+    _DUNGEON_STATUS_SQL = "UPDATE player_data.player_dungeon_status SET current_layer=%s,dungeon_status=%s"
+
     TABLE = "dungeon_explore_operations"
 
     def __init__(

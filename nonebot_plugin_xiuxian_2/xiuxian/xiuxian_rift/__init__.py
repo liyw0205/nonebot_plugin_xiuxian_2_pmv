@@ -17,6 +17,7 @@ from ..adapter_compat import (
 from ..messaging import delivery_service
 from .old_rift_info import GLOBAL_RIFT_KEY, old_rift_info
 from .. import DRIVER
+from ...bootstrap.legacy import register_legacy_shutdown, register_legacy_startup
 from ..xiuxian_utils.lay_out import assign_bot, assign_bot_group, Cooldown
 from nonebot.log import logger
 from ..xiuxian_utils import db_backend
@@ -228,7 +229,7 @@ __rift_help_md__ = f"""
 
 
 
-@DRIVER.on_startup
+@register_legacy_startup
 async def read_rift_():
     """读取历史秘境数据"""
     legacy = old_rift_info.read_rift_info()
@@ -242,7 +243,7 @@ async def read_rift_():
         _sync_world_projection(state)
     logger.opt(colors=True).info("<green>历史rift数据读取成功</green>")
 
-@DRIVER.on_shutdown
+@register_legacy_shutdown
 async def save_rift_():
     """保存秘境数据"""
     state = rift_entry_service.get_current(GLOBAL_RIFT_KEY)

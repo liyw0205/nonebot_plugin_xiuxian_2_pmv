@@ -19,6 +19,7 @@ from .common import (
     create_item_message,
 )
 from .transaction_service import InvitationRewardClaimService
+from .common import _run_compensation_action
 
 INVITATION_DATA_PATH = DATA_PATH / "invitation_data"
 INVITATION_REWARDS_FILE = INVITATION_DATA_PATH / "invitation_rewards.json"
@@ -159,7 +160,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "邀请人不存在")
         return
 
-    success = add_invitation_record(inviter_id, user_id)
+    operation_id = f"compensation:invitation_bind:{getattr(event, 'message_id', '') or getattr(event, 'id', '') or time.time_ns()}:{user_id}"
+    result = _run_compensation_action(
+        "invitation_bind",
+        operation_id,
+        user_id,
+        lambda: add_invitation_record(inviter_id, user_id),
+        database=getattr(invitation_reward_service, "_database", None),
+        inviter_id=inviter_id,
+        invited_id=user_id,
+    )
+    success = bool(result.succeeded)
 
     if not success:
         await handle_send(bot, event, "邀请记录添加失败：该邀请关系已绑定。")
@@ -287,14 +298,21 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     else:
         thresholds = sorted([int(x) for x in rewards.keys()])
 
-    result = invitation_reward_service.claim(
-        operation_id=operation_id,
-        user_id=user_id,
-        invited_user_ids=invited_user_ids,
-        rewards_by_threshold=rewards,
-        requested_thresholds=thresholds,
-        legacy_claimed_thresholds=load_claimed_records().get(user_id, []),
-        max_goods_num=XiuConfig().max_goods_num,
+    result = _run_compensation_action(
+        "invitation_reward_claim",
+        operation_id,
+        user_id,
+        lambda: invitation_reward_service.claim(
+            operation_id=operation_id,
+            user_id=user_id,
+            invited_user_ids=invited_user_ids,
+            rewards_by_threshold=rewards,
+            requested_thresholds=thresholds,
+            legacy_claimed_thresholds=load_claimed_records().get(user_id, []),
+            max_goods_num=XiuConfig().max_goods_num,
+        ),
+        database=getattr(invitation_reward_service, "_database", None),
+        thresholds=thresholds,
     )
     if result.status == "duplicate":
         claimed_msgs = [
@@ -354,7 +372,18 @@ async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
 
     rewards = load_invitation_rewards()
     rewards[str(threshold)] = reward_items
-    save_invitation_rewards(rewards)
+    operation_id = f"compensation:invitation_reward_set:{getattr(event, 'message_id', '') or getattr(event, 'id', '') or time.time_ns()}:{threshold}"
+    result = _run_compensation_action(
+        "invitation_reward_set",
+        operation_id,
+        str(event.get_user_id()),
+        lambda: save_invitation_rewards(rewards),
+        database=getattr(invitation_reward_service, "_database", None),
+        threshold=threshold,
+    )
+    if not result.succeeded:
+        await handle_send(bot, event, "邀请奖励设置失败，请稍后重试")
+        return
 
     await handle_send(
         bot,

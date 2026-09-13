@@ -1,6 +1,6 @@
 # Web 修仙管理面板
 
-浏览器运维入口，与 QQ 游戏共用 `data/xiuxian/` 数据。默认监听所有网络接口；是否允许公网访问由防火墙、反向代理和面板安全配置共同决定。
+浏览器运维入口，与 QQ 游戏共用 `data/xiuxian/` 数据。新 CLI 入口默认只监听 `127.0.0.1`；部署到远端时应由显式 host 配置、反向代理和防火墙共同决定公网暴露范围。
 
 ## 访问
 
@@ -8,8 +8,8 @@
 |:-----|:-----|
 | 开关 | 环境变量 `XIUXIAN_WEB_STATUS`，默认 `true`；设 `false` / `0` / `no` / `off` 后重启可关闭 |
 | 地址 | `http://服务器地址:5888`（host 复用 NoneBot `HOST`，端口由 `XIUXIAN_WEB_PORT` 环境变量控制，默认 5888） |
-| 登录 | 打开 `/login`，填写 `.env` 里 **`SUPERUSERS` 中任一 ID** |
-| 认证关闭 | `SUPERUSERS` 为空时面板不要求登录（仅适合本机调试） |
+| 登录 | 打开 `/login`，填写 `XIUXIAN_WEB_ADMIN_IDS` JSON 列表中的 ID；未配置时回退 `.env` 的 **`SUPERUSERS`** |
+| 管理员配置 | 新 Web factory 始终保留权限边界；未配置 `XIUXIAN_WEB_ADMIN_IDS` 时回退 `SUPERUSERS`，两者都为空则拒绝登录 |
 
 > NoneBot 的 `PORT`（如 8080）是 OneBot / 适配器端口；**管理面板默认 5888**，不要混用。
 
@@ -99,6 +99,6 @@
 
 每个 Flask 端点必须在 `xiuxian_web/access.py` 声明权限类别。数据库写入、消息发送、备份恢复、更新、定时任务和终端分别使用独立权限类别；当前管理员登录后可访问对应类别。终端还需要二次确认，未声明端点一律拒绝。
 
-本机上传接口仅允许本地请求免登录；其它页面和 API 依赖 `SUPERUSERS` 管理员会话。`SUPERUSERS` 为空会关闭面板认证，只适合受控本机调试环境。
+本机上传接口仅允许本地请求免登录；新 Web factory 的其它页面和 API 依赖管理员会话。`XIUXIAN_WEB_ADMIN_IDS` 为空时回退 `SUPERUSERS`，两者都为空则拒绝登录；兼容旧 Web 的本机免登录行为只在旧服务显式启用且仅适合受控调试环境。
 
 更细的数据层与路径约定见 [database_web_governance.md](database_web_governance.md)。

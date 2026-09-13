@@ -6,6 +6,8 @@ from ..adapter_compat import Bot, GroupMessageEvent, Message, MessageEvent, Priv
 from ..on_compat import on_command
 from ..xiuxian_utils.lay_out import Cooldown, assign_bot
 from ..xiuxian_utils.utils import check_user, handle_send, send_help_message
+from ...features.activity.application import ActivityApplication
+from ...paths import get_paths
 
 from .service import (
     build_activity_gameplay_text,
@@ -18,13 +20,6 @@ from .service import (
     build_activity_points_text,
     build_activity_shop_text,
     build_rank_text,
-    claim_activity_rewards,
-    claim_activity_pass_rewards,
-    claim_activity_tasks,
-    claim_collect_phrase,
-    claim_point_shop_item,
-    claim_sign,
-    set_enabled,
 )
 
 
@@ -52,6 +47,22 @@ activity_boss_claim_cmd = on_command("活动首领领奖", aliases={"领取首�
 
 activity_open_cmd = on_command("开启活动", permission=SUPERUSER, priority=5, block=True)
 activity_close_cmd = on_command("关闭活动", permission=SUPERUSER, priority=5, block=True)
+
+# Commands keep their historical presentation text, while every mutating
+# action crosses the feature application boundary and is recorded in the
+# operation ledger before the legacy service runs.
+activity_application = ActivityApplication(get_paths().game_db)
+
+
+def _run_activity_action(action: str, operation_id: str, user_id: str, **payload):
+    outcome = activity_application.execute(
+        operation_id=operation_id,
+        user_id=user_id,
+        payload={"action": action, **payload},
+    )
+    data = dict(outcome.data or {})
+    message = str(outcome.message or data.get("message") or data.get("response") or "")
+    return outcome.ok, message, data
 
 
 async def _ensure_user(event) -> tuple[bool, dict | None, str]:
@@ -134,9 +145,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     user_id = str(user_info["user_id"])
-    ok, text = claim_activity_rewards(
-        user_id,
+    ok, text, _ = _run_activity_action(
+        "claim_activity_rewards",
         _activity_operation_id(event, "claim-all", user_id),
+        user_id,
     )
     await handle_send(bot, event, text if ok else f"活动领取失败：{text}")
 
@@ -167,10 +179,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     user_id = str(user_info["user_id"])
-    ok, text = claim_activity_tasks(
-        user_id,
-        args.extract_plain_text(),
+    ok, text, _ = _run_activity_action(
+        "claim_activity_tasks",
         _activity_operation_id(event, "task-claim", user_id),
+        user_id,
+        query=args.extract_plain_text(),
     )
     await handle_send(bot, event, text if ok else f"活动任务领取失败：{text}")
 
@@ -196,10 +209,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     user_id = str(user_info["user_id"])
-    ok, text = claim_activity_pass_rewards(
-        user_id,
-        args.extract_plain_text(),
+    ok, text, _ = _run_activity_action(
+        "claim_activity_pass_rewards",
         _activity_operation_id(event, "pass-claim", user_id),
+        user_id,
+        query=args.extract_plain_text(),
     )
     await handle_send(bot, event, text if ok else f"活动战令领取失败：{text}")
 
@@ -226,7 +240,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     user_id = str(user_info["user_id"])
-    ok, text = claim_sign(user_id, _activity_operation_id(event, "sign", user_id))
+    ok, text, _ = _run_activity_action(
+        "claim_sign",
+        _activity_operation_id(event, "sign", user_id),
+        user_id,
+    )
     await handle_send(bot, event, text if ok else f"活动签到失败：{text}")
 
 
@@ -257,10 +275,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     user_id = str(user_info["user_id"])
-    ok, text = claim_collect_phrase(
-        user_id,
-        args.extract_plain_text(),
+    ok, text, _ = _run_activity_action(
+        "claim_collect_phrase",
         _activity_operation_id(event, "collect-exchange", user_id),
+        user_id,
+        query=args.extract_plain_text(),
     )
     await handle_send(bot, event, text if ok else f"活动兑换失败：{text}")
 
@@ -298,9 +317,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     user_id = str(user_info["user_id"])
-    ok, text = claim_point_shop_item(
-        user_id, args.extract_plain_text(),
+    ok, text, _ = _run_activity_action(
+        "claim_point_shop_item",
         _activity_operation_id(event, "point-shop", user_id),
+        user_id,
+        query=args.extract_plain_text(),
     )
     await handle_send(bot, event, text if ok else f"活动购买失败：{text}")
 
@@ -338,10 +359,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     uid = str(user_info["user_id"])
     operation_id = _activity_operation_id(event, "boss-item" if raw else "boss-coop", uid)
     if raw:
-        ok, text = use_item_on_boss(uid, raw, operation_id)
+        ok, text, _ = _run_activity_action(
+            "activity_boss.use_item_on_boss", operation_id, uid, query=raw,
+        )
         await handle_send(bot, event, text)
         return
-    ok, text = fight_cooperative_boss(uid, operation_id=operation_id)
+    ok, text, _ = _run_activity_action(
+        "activity_boss.fight_cooperative_boss", operation_id, uid,
+    )
     await handle_send(bot, event, text)
 
 
@@ -354,7 +379,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
     from .activity_boss import claim_boss_rewards
 
-    ok, text = claim_boss_rewards(str(user_info["user_id"]), args.extract_plain_text())
+    uid = str(user_info["user_id"])
+    ok, text, _ = _run_activity_action(
+        "activity_boss.claim_boss_rewards",
+        _activity_operation_id(event, "boss-claim", uid),
+        uid,
+        query=args.extract_plain_text(),
+    )
     await handle_send(bot, event, text if ok else text)
 
 
@@ -362,10 +393,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     await assign_bot(bot=bot, event=event)
     operator_id = str(event.get_user_id())
-    text = set_enabled(
-        True,
-        args.extract_plain_text(),
+    _, text, _ = _run_activity_action(
+        "set_enabled",
         operation_id=_activity_operation_id(event, "config-open", operator_id),
+        user_id=operator_id,
+        enabled=True,
+        target=args.extract_plain_text(),
         operator_id=operator_id,
     )
     await handle_send(bot, event, text)
@@ -375,10 +408,12 @@ async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
 async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
     await assign_bot(bot=bot, event=event)
     operator_id = str(event.get_user_id())
-    text = set_enabled(
-        False,
-        args.extract_plain_text(),
+    _, text, _ = _run_activity_action(
+        "set_enabled",
         operation_id=_activity_operation_id(event, "config-close", operator_id),
+        user_id=operator_id,
+        enabled=False,
+        target=args.extract_plain_text(),
         operator_id=operator_id,
     )
     await handle_send(bot, event, text)

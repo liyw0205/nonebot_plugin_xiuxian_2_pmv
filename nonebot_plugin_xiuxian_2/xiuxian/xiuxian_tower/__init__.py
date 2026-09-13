@@ -26,6 +26,8 @@ from .tower_battle import tower_battle
 from .tower_limit import tower_limit
 from .transaction_service import TowerPurchaseService, normalize_weekly_purchases
 from .transaction_service import TowerSettlementService
+from ...features.tower.application import TowerApplication
+from ...features.tower.repository import LegacyTowerRepository
 from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_title.title_data import check_and_unlock_titles
@@ -34,6 +36,11 @@ sql_message = XiuxianDateManage()
 items = Items()
 tower_purchase_service = TowerPurchaseService(get_paths().game_db, get_paths().player_db)
 tower_settlement_service = TowerSettlementService(get_paths().game_db, get_paths().player_db)
+tower_application = TowerApplication(
+    get_paths().game_db,
+    get_paths().player_db,
+    repository=LegacyTowerRepository(get_paths().game_db, get_paths().player_db),
+)
 
 # 定义命令
 tower_challenge = on_command("爬塔", aliases={"挑战通天塔", "通天塔挑战"}, priority=5, block=True)
@@ -351,49 +358,54 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         if event_id
         else f"tower-purchase:{time.time_ns()}:{user_id}"
     )
-    purchase_result = tower_purchase_service.purchase(
-        operation_id,
-        user_id,
-        item_id,
-        item_info["name"],
-        item_info["type"],
-        quantity,
-        item_data["cost"],
-        item_data["weekly_limit"],
-        tower_info["score"],
-        tower_info["weekly_purchases"],
-        XiuConfig().max_goods_num,
-        1,
+    # Legacy facade call: tower_purchase_service.purchase(...)
+    purchase_outcome = tower_application.purchase(
+        operation_id=operation_id,
+        user_id=user_id,
+        item_id=int(item_id),
+        item_name=item_info["name"],
+        item_type=item_info["type"],
+        quantity=quantity,
+        unit_cost=item_data["cost"],
+        weekly_limit=item_data["weekly_limit"],
+        expected_score=tower_info["score"],
+        expected_weekly_purchases=tower_info["weekly_purchases"],
+        max_goods_num=XiuConfig().max_goods_num,
+        bind_flag=1,
     )
-    if purchase_result.status == "duplicate":
+    purchase_data = purchase_outcome.data or {}
+    purchase_status = str(purchase_data.get("status", "failed"))
+    purchase_quantity = int(purchase_data.get("quantity", 0) or 0)
+    purchase_cost = int(purchase_data.get("cost", 0) or 0)
+    if purchase_status == "duplicate":
         msg = (
-            f"成功兑换{item_info['name']}×{purchase_result.quantity}，"
-            f"消耗{purchase_result.cost}积分！\n该兑换请求已经处理，无需重复提交。"
+            f"成功兑换{item_info['name']}×{purchase_quantity}，"
+            f"消耗{purchase_cost}积分！\n该兑换请求已经处理，无需重复提交。"
         )
         await handle_send(bot, event, msg, md_type="通天塔", k1="兑换", v1="通天塔兑换", k2="商店", v2="通天塔帮助", k3="信息", v3="通天塔信息")
         await tower_buy.finish()
-    if purchase_result.status == "score_insufficient":
+    if purchase_status == "score_insufficient":
         total_cost = item_data["cost"] * quantity
         msg = f"积分不足！需要{total_cost}点，当前拥有{tower_info['score']}点"
         await handle_send(bot, event, msg, md_type="通天塔", k1="兑换", v1="通天塔兑换", k2="商店", v2="通天塔帮助", k3="信息", v3="通天塔信息")
         await tower_buy.finish()
-    if purchase_result.status == "limit_reached":
+    if purchase_status == "limit_reached":
         await handle_send(bot, event, f"{item_info['name']}已到限购无法再购买！")
         await tower_buy.finish()
-    if purchase_result.status == "inventory_full":
+    if purchase_status == "inventory_full":
         await handle_send(bot, event, f"{item_info['name']}持有数量已达上限！")
         await tower_buy.finish()
-    if purchase_result.status == "state_changed":
+    if purchase_status == "state_changed":
         await handle_send(bot, event, "兑换未完成：活动进度已更新，请重新兑换，请重新兑换。")
         await tower_buy.finish()
-    if purchase_result.status == "user_missing":
+    if purchase_status == "user_missing":
         await handle_send(bot, event, "未找到道友数据，通天塔兑换失败！")
         await tower_buy.finish()
-    if not purchase_result.succeeded:
+    if not purchase_outcome.ok:
         await handle_send(bot, event, "通天塔兑换失败，请重试！")
         await tower_buy.finish()
 
-    msg = f"成功兑换{item_info['name']}×{purchase_result.quantity}，消耗{purchase_result.cost}积分！"
+    msg = f"成功兑换{item_info['name']}×{purchase_quantity}，消耗{purchase_cost}积分！"
     await handle_send(bot, event, msg, md_type="通天塔", k1="兑换", v1="通天塔兑换", k2="商店", v2="通天塔帮助", k3="信息", v3="通天塔信息")
     await tower_buy.finish()
 

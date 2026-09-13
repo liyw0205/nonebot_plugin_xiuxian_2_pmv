@@ -6,6 +6,10 @@ from ..on_compat import on_command
 from ..xiuxian_utils.lay_out import Cooldown, assign_bot
 from ..xiuxian_utils.utils import check_user, handle_send
 from .task_data import task_manager
+from ...features.tasks.application import TasksApplication
+from ...paths import get_paths
+
+tasks_application = TasksApplication(get_paths().game_db)
 
 
 task_info = on_command("我的任务", aliases={"修仙任务", "任务列表"}, priority=6, block=True)
@@ -125,7 +129,13 @@ async def claim_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             msg = "当前没有可领取的任务奖励。\n该领奖请求已经处理，无需重复提交。"
     else:
         try:
-            msg = task_manager.claim_rewards(operation_id, user_id, cycle)
+            # Compatibility target: task_manager.claim_rewards(operation_id, user_id, cycle)
+            outcome = tasks_application.execute(
+                operation_id=operation_id,
+                user_id=user_id,
+                payload={"action": "claim_rewards", "cycle": cycle},
+            )
+            msg = str(outcome.message or (outcome.data or {}).get("message") or "任务奖励领取失败：领取未完成。")
         except Exception:
             msg = "任务奖励领取失败：领取过程异常，请稍后再试。"
     await handle_send(

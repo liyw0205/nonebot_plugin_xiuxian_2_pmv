@@ -1,0 +1,5 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="csrf-token" content="{{ csrf_token() }}"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{ page_name }}</title><link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}"></head>
+<body><main data-admin-page data-page="{{ page_name }}" data-endpoint="{{ endpoint }}"><h1>{{ page_name }}</h1><button type="button" data-action="refresh">刷新</button><p data-state-error role="alert"></p><pre data-state-output></pre></main><script type="module" src="{{ url_for('static', filename='pages/admin.js') }}"></script></body>
+</html>

@@ -43,9 +43,9 @@ from ..xiuxian_utils.season_rank_service import (
 from ..xiuxian_tasks.task_data import record_task_progress
 from .stone_limit import stone_limit
 from .transaction_service import LotterySettlementService
-from .transaction_service import SignInService
+from ...compatibility.sign_in import SignInService
 from .transaction_service import PlayerRenameService
-from .transaction_service import StoneGiftService
+from ...compatibility.stone_gift import StoneGiftService
 from .transaction_service import StoneContestService
 from .transaction_service import StoneRobberySettlementService
 from .registration_batch import RegistrationBatcher, RegistrationRequest
@@ -74,7 +74,7 @@ tribulation_cd2 = int(XiuConfig().tribulation_cd * 60)
 gfqq = on_command("官群", aliases={"交流群"}, priority=8, block=True)
 run_xiuxian = on_command("我要修仙", aliases={"开始修仙"}, priority=8, block=True)
 restart = on_command("重入仙途", priority=7, block=True)
-sign_in = on_command("修仙签到", priority=13, block=True)
+sign_in = on_command("修仙签到", aliases={"签到"}, priority=13, block=True)
 hongyun = on_command("鸿运", aliases={"查看中奖", "奖池查询"}, priority=5, block=True)
 help_in = on_command("修仙帮助", aliases={"修仙菜单"}, priority=12, block=True)
 rank = on_command("排行榜", aliases={"修仙排行榜", "灵石排行榜", "战力排行榜", "境界排行榜", "宗门排行榜", "轮回排行榜"},
@@ -1260,6 +1260,10 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         user_id,
         recipient_id,
         give_stone_num,
+        send_limit=daily_send_limit,
+        receive_limit=daily_receive_limit,
+        send_used=already_sent,
+        receive_used=already_received,
     )
     if result.status == "stone_insufficient":
         msg = "道友的灵石不够，请重新输入！"

@@ -40,6 +40,7 @@ from .transaction_service import MapInteractiveActionService
 from .transaction_service import MapExploreStartService
 from .transaction_service import MapMovementSettlementService
 from .transaction_service import MapDaoBattleSettlementService
+from ...features.combat_settlement.application import CombatSettlementApplication
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
@@ -47,6 +48,10 @@ map_explore_settlement_service = MapExploreSettlementService(get_paths().game_db
 map_mission_claim_service = MapMissionClaimService(get_paths().game_db, get_paths().player_db)
 map_resource_reward_service = MapResourceRewardService(get_paths().game_db, get_paths().player_db)
 map_combat_settlement_service = MapCombatSettlementService(get_paths().game_db, get_paths().player_db)
+combat_settlement_application = CombatSettlementApplication(
+    get_paths().game_db,
+    get_paths().player_db,
+)
 map_combat_lifecycle_service = MapCombatLifecycleService(
     get_paths().game_db, get_paths().player_db
 )
@@ -2033,20 +2038,22 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
     else:
         settlement_operation_id = snapshot.get("operation_id", "")
 
-    result = map_combat_settlement_service.settle(
-        settlement_operation_id,
-        uid,
-        snapshot["daily"],
-        raw_snapshot,
-        DAILY_LIMIT_CONFIG["combat"],
-        snapshot["stone"],
-        snapshot["items"],
-        XiuConfig().max_goods_num,
+    outcome = combat_settlement_application.settle(
+        operation_id=settlement_operation_id,
+        user_id=uid,
+        expected_daily=snapshot["daily"],
+        snapshot=raw_snapshot,
+        daily_limit=DAILY_LIMIT_CONFIG["combat"],
+        stone=snapshot["stone"],
+        items=snapshot["items"],
+        max_goods_num=XiuConfig().max_goods_num,
     )
-    if result.status == "inventory_full":
+    result = outcome.data or {}
+    result_status = str(result.get("status") or outcome.status)
+    if result_status == "inventory_full":
         await handle_send(bot, event, "背包物品已达上限，节点战斗结算尚未领取。")
         return
-    if result.status in {"limit_reached", "state_changed", "user_missing"}:
+    if result_status in {"limit_reached", "state_changed", "user_missing", "not_ready"}:
         await handle_send(bot, event, "节点战斗未结算：战斗当前状态已更新。")
         return
 

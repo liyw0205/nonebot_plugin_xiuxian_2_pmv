@@ -46,8 +46,8 @@ from .transaction_service import (
     build_team_invite_private_message,
 )
 from .transaction_service import DungeonSessionService
-from .transaction_service import DungeonPurchaseService
-from .transaction_service import DungeonExploreOperationService
+from ...compatibility.dungeon import DungeonPurchaseService
+from ...compatibility.dungeon import DungeonExploreOperationService
 from .transaction_service import (
     DungeonTeamTransactionService,
     TeamExitResult,

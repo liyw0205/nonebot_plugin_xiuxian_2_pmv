@@ -31,11 +31,26 @@ from .title_data import (
     get_title_achievement_records, find_unlockable_titles
 )
 from ...paths import get_paths
+from ...features.title.application import TitleApplication
 from .title_transaction_service import TitleTransactionService
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
 title_transaction_service = TitleTransactionService(get_paths().player_db)
+title_application = TitleApplication(get_paths().player_db)
+
+
+def _run_title_action(action: str, operation_id: str, user_id: str, **payload):
+    outcome = title_application.execute(
+        operation_id=operation_id,
+        user_id=str(user_id),
+        payload={"action": action, **payload},
+    )
+    data = dict(outcome.data or {})
+    data.setdefault("status", outcome.status)
+    data["succeeded"] = outcome.ok
+    from types import SimpleNamespace
+    return SimpleNamespace(**data)
 
 
 def _title_operation_id(event, action: str, user_id: str) -> str:
@@ -49,8 +64,12 @@ def _unlock_titles_from_event(event, user_id: str):
     if not unlockable:
         return []
     title_ids = [str(title["id"]) for title in unlockable]
-    result = title_transaction_service.unlock_batch(
-        _title_operation_id(event, "unlock", str(user_id)), user_id, expected, title_ids
+    result = _run_title_action(
+        "unlock_batch",
+        _title_operation_id(event, "unlock", str(user_id)),
+        user_id,
+        expected_unlocked=expected,
+        title_ids=title_ids,
     )
     return unlockable if result.succeeded else []
 
@@ -217,8 +236,11 @@ async def title_equip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await title_equip_cmd.finish()
     unlocked = get_user_unlocked_titles(user_id)
     equipped = get_user_equipped_title(user_id) or ""
-    result = title_transaction_service.equip(
-        operation_id, user_id, unlocked, equipped, title_id
+    result = _run_title_action(
+        "equip", operation_id, user_id,
+        expected_unlocked=unlocked,
+        expected_equipped=equipped,
+        title_id=title_id,
     )
     messages = {
         "applied": f"成功装备称号【{title_data.get('name', title_id)}】！",
@@ -255,7 +277,9 @@ async def title_unequip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         )
         await title_unequip_cmd.finish()
     equipped = get_user_equipped_title(user_id) or ""
-    result = title_transaction_service.unequip(operation_id, user_id, equipped)
+    result = _run_title_action(
+        "unequip", operation_id, user_id, expected_equipped=equipped,
+    )
     title_data = get_title_by_id(equipped) or {}
     messages = {
         "applied": f"成功卸下称号【{title_data.get('name', equipped)}】！",
@@ -446,11 +470,12 @@ async def title_grant_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             for uid in users:
                 try:
                     unlocked = get_user_unlocked_titles(str(uid))
-                    result = title_transaction_service.grant(
+                    result = _run_title_action(
+                        "grant",
                         _title_operation_id(event, f"grant-{title_id_local}", str(uid)),
                         uid,
-                        unlocked,
-                        title_id_local,
+                        expected_unlocked=unlocked,
+                        title_id=title_id_local,
                     )
                     if result.status in {"applied", "duplicate"}:
                         success_count += 1
@@ -499,11 +524,12 @@ async def title_grant_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         return
 
     target_id = str(target_user["user_id"])
-    result = title_transaction_service.grant(
+    result = _run_title_action(
+        "grant",
         _title_operation_id(event, f"grant-{title_id}", target_id),
         target_id,
-        get_user_unlocked_titles(target_id),
-        title_id,
+        expected_unlocked=get_user_unlocked_titles(target_id),
+        title_id=title_id,
     )
     if result.status in {"applied", "duplicate"}:
         await handle_send(bot, event, f"成功给 {target_user['user_name']} 赠送称号【{title_name}】")

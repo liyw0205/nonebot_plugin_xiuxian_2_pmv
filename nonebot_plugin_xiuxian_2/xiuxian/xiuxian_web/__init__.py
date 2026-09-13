@@ -1,7 +1,6 @@
 import asyncio
 import threading
 
-from nonebot import get_driver
 from nonebot.log import logger
 from werkzeug.serving import BaseWSGIServer, make_server
 
@@ -23,6 +22,7 @@ from .config import (  # noqa: F401
 )
 
 from .web_runtime import web_enabled_from_env
+from ...bootstrap.legacy import register_legacy_shutdown, register_legacy_startup
 
 # Import route modules so their @app.route decorators register on the shared app.
 from . import pages as _pages_routes  # noqa: F401,E402
@@ -84,10 +84,7 @@ def stop_web_server() -> None:
     logger.info("修仙管理面板已停止")
 
 
-driver = get_driver()
-
-
-@driver.on_startup
+@register_legacy_startup
 async def start_web_server_on_startup() -> None:
     try:
         await asyncio.to_thread(start_web_server)
@@ -95,6 +92,6 @@ async def start_web_server_on_startup() -> None:
         logger.error(f"修仙管理面板启动失败：{exc}")
 
 
-@driver.on_shutdown
+@register_legacy_shutdown
 async def stop_web_server_on_shutdown() -> None:
     await asyncio.to_thread(stop_web_server)

@@ -2,6 +2,7 @@ import random
 import json
 import os
 import time
+from types import SimpleNamespace
 from pathlib import Path
 from datetime import datetime
 from ..on_compat import on_command
@@ -25,11 +26,28 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from ..xiuxian_config import convert_rank, base_rank, XiuConfig
 from ...paths import get_paths
+from ...features.illusion.application import IllusionApplication
 from .choice_service import IllusionChoiceService
 from .IllusionData import *
 sql_message = XiuxianDateManage()
 items = Items()
 illusion_choice_service = IllusionChoiceService(get_paths().game_db)
+illusion_application = IllusionApplication(get_paths().game_db)
+
+
+def _run_illusion_action(action, operation_id, user_id, call=None, **payload):
+    # The command adapter keeps the historical ``call`` argument for source
+    # compatibility, while the migrated application now owns the transaction.
+    del call
+    outcome = illusion_application.execute(
+        operation_id=operation_id,
+        user_id=str(user_id),
+        payload={"action": action, **payload},
+    )
+    data = dict(outcome.data or {})
+    data.setdefault("status", "duplicate" if outcome.replayed else outcome.status)
+    data["succeeded"] = outcome.ok
+    return SimpleNamespace(**data)
 
 # 定义命令
 illusion_start = on_command("幻境寻心", priority=5, block=True)
@@ -52,7 +70,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     user_id = user_info["user_id"]
     illusion_info = IllusionData.get_or_create_user_illusion_info(user_id)
-    stored_choice = illusion_choice_service.get_choice(user_id, illusion_choice_service.period_key())
+    stored_choice = illusion_application.get_choice(user_id, illusion_application.period_key())
     if stored_choice is not None:
         illusion_info["question_index"] = stored_choice["question_index"]
         illusion_info["today_choice"] = stored_choice["selected_option"]
@@ -114,7 +132,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"illusion-choice:{event_id}:{user_id}" if event_id else f"illusion-choice:{time.time_ns()}:{user_id}"
     # 先回放：成功后 today_choice 已写，前置“今日已参与”会挡住同事件重放；随机奖励不可重掷。
-    prior = illusion_choice_service.get_result(operation_id)
+    prior = illusion_application.get_result(operation_id)
     if prior is not None and prior.succeeded:
         q_index = prior.question_index
         question_data = DEFAULT_QUESTIONS[q_index] if 0 <= q_index < len(DEFAULT_QUESTIONS) else {"question": "幻境寻心", "explanations": []}
@@ -223,10 +241,23 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     elif selected_reward_type == 'item':  # 物品奖励
         item_reward = _select_random_item(user_info["level"])
 
-    period_key = illusion_choice_service.period_key()
-    choice_result = illusion_choice_service.choose(
-        operation_id, user_id, period_key, illusion_info["question_index"], choice_num - 1,
-        selected_option, stone_reward, exp_reward, item_reward, XiuConfig().max_goods_num,
+    period_key = illusion_application.period_key()
+    choice_result = _run_illusion_action(
+        "choose",
+        operation_id,
+        user_id,
+        call=lambda: illusion_choice_service.choose(
+            operation_id, user_id, period_key, illusion_info["question_index"], choice_num - 1,
+            selected_option, stone_reward, exp_reward, item_reward, XiuConfig().max_goods_num,
+        ),
+        period_key=period_key,
+        question_index=illusion_info["question_index"],
+        choice_index=choice_num - 1,
+        selected_option=selected_option,
+        stone=stone_reward,
+        exp=exp_reward,
+        item=item_reward,
+        max_goods_num=XiuConfig().max_goods_num,
     )
     if choice_result.status == "duplicate":
         if choice_result.exp > 0:

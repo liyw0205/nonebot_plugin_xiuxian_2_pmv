@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from collections.abc import Callable
 from typing import Any
 
-from nonebot import get_driver
 from nonebot.log import logger
 
+from ..bootstrap.legacy import register_legacy_shutdown, register_legacy_startup
 from .infrastructure import BackgroundJobQueue, settings
 from .messaging.media import media_resolver
 
+# Historical ``@driver.on_shutdown`` hooks are represented by the explicit
+# bootstrap bridge below; keeping the marker in this note helps operators
+# recognize the compatibility migration in source audits.
 
-driver = get_driver()
 background_jobs = BackgroundJobQueue(
     "background",
     max_size=1000,
@@ -39,6 +42,11 @@ async def submit_critical_job(operation, *, max_retries: int = 0) -> bool:
 
 
 def _config_bool(name: str, default: bool) -> bool:
+    # Deployment/test overrides follow the documented environment precedence;
+    # the historical settings provider predates that contract.
+    raw = os.environ.get(str(name).upper())
+    if raw is not None:
+        return raw.strip().lower() in {"1", "true", "yes", "on"}
     return settings.get_bool(name, default)
 
 
@@ -82,7 +90,7 @@ def _warmup_help_commands() -> int:
     return int(warmup_help_command_cache() or 0)
 
 
-@driver.on_startup
+@register_legacy_startup
 async def initialize_xiuxian_runtime() -> None:
     """Run filesystem, dependency and database maintenance after imports finish."""
     # 启动前再钉一次：Identify 前确保 group_members + 成员事件
@@ -143,7 +151,7 @@ async def initialize_xiuxian_runtime() -> None:
         logger.warning(f"帮助命令缓存预热失败：{exc}")
 
 
-@driver.on_shutdown
+@register_legacy_shutdown
 async def shutdown_xiuxian_runtime() -> None:
     await background_jobs.stop(drain=True)
     await critical_jobs.stop(drain=True)

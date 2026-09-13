@@ -1,7 +1,8 @@
 import asyncio
 
-from nonebot import get_driver, require
+from nonebot import require
 from nonebot.log import logger
+from ...bootstrap.legacy import register_legacy_startup
 
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage,
@@ -30,10 +31,9 @@ sql_message = XiuxianDateManage()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 job_manager = SchedulerJobManager(scheduler)
-driver = get_driver()
 
 
-@driver.on_startup
+@register_legacy_startup
 async def apply_scheduler_overrides_on_startup():
     job_manager.apply_persisted_overrides()
 

@@ -1,4 +1,5 @@
 from ..on_compat import on_command
+from types import SimpleNamespace
 from nonebot.params import CommandArg
 from ..adapter_compat import (
     Bot,
@@ -14,6 +15,7 @@ import time
 SQLITE_MAX_INT = 2**63 - 1
 from typing import Dict, List
 from ...paths import get_paths
+from ...features.impart_pk.application import ImpartPkApplication
 import time
 from ...paths import get_paths
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
@@ -78,6 +80,21 @@ impart_closing_enter_service = ImpartClosingEnterService(
     get_paths().game_db, get_paths().player_db
 )
 impart_project_join_service = ImpartProjectJoinService(get_paths().player_db)
+impart_pk_application = ImpartPkApplication(get_paths().game_db)
+
+
+def _run_impart_pk_action(action, operation_id, user_id, call, **payload):
+    outcome = impart_pk_application.execute_legacy_call(
+        operation_id=operation_id,
+        user_id=str(user_id),
+        action=action,
+        payload=payload,
+        call=call,
+    )
+    data = dict(outcome.data or {})
+    data.setdefault("status", outcome.status)
+    data["succeeded"] = outcome.ok
+    return SimpleNamespace(**data)
 xu_world.bind_service(impart_project_join_service)
 
 impart_pk_project = on_command("投影虚神界", priority=6, block=True)
@@ -154,11 +171,14 @@ async def impart_pk_project_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await impart_pk_project.finish()
     # 加入虚神界
     legacy_state = impart_pk.find_user_data(user_id)
-    result = impart_project_join_service.join(
-        _impart_operation_id(event, "project", user_id),
-        user_id,
+    operation_id = _impart_operation_id(event, "project", user_id)
+    result = _run_impart_pk_action(
+        "project_join", operation_id, user_id,
+        call=lambda: impart_project_join_service.join(
+            operation_id, user_id, legacy_pk_num=legacy_state["pk_num"],
+            legacy_members=xu_world.data.keys(),
+        ),
         legacy_pk_num=legacy_state["pk_num"],
-        legacy_members=xu_world.data.keys(),
     )
     if result.status in {"applied", "duplicate"}:
         msg = "加入虚神界成功！"
@@ -349,13 +369,14 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                     xu_world.del_xu_world(user_id)
                 break
 
-        settlement = impart_battle_batch_service.settle(
-            operation_id,
-            user_id,
-            expected_player_1_pk_num,
-            total_wins,
-            total_losses,
-            player_1_stones,
+        settlement = _run_impart_pk_action(
+            "battle_settle", operation_id, user_id,
+            call=lambda: impart_battle_batch_service.settle(
+                operation_id, user_id, expected_player_1_pk_num,
+                total_wins, total_losses, player_1_stones,
+            ),
+            expected_pk_num=expected_player_1_pk_num, wins=total_wins,
+            losses=total_losses, stones=player_1_stones,
         )
         if settlement.status == "duplicate":
             msg = f"**对决结束**（重放）\n---\n剩余对决次数\n> {settlement.challenger_pk_num}\n该对决请求已经处理，无需重复提交。"
@@ -487,18 +508,15 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"impart-battle:{event_id}:{player_1}:{player_2}" if event_id else f"impart-battle:{player_1}:{player_2}:{time.time_ns()}"
-    settlement = impart_battle_batch_service.settle(
-        operation_id,
-        player_1,
-        expected_player_1_pk_num,
-        player_1_wins,
-        player_2_wins,
-        player_1_stones,
-        player_2,
-        expected_player_2_pk_num,
-        player_2_wins,
-        player_1_wins,
-        player_2_stones,
+    settlement = _run_impart_pk_action(
+        "battle_settle_pair", operation_id, player_1,
+        call=lambda: impart_battle_batch_service.settle(
+            operation_id, player_1, expected_player_1_pk_num, player_1_wins,
+            player_2_wins, player_1_stones, player_2, expected_player_2_pk_num,
+            player_2_wins, player_1_wins, player_2_stones,
+        ),
+        opponent_id=player_2, expected_pk_num=expected_player_1_pk_num,
+        opponent_pk_num=expected_player_2_pk_num,
     )
     if settlement.status == "duplicate":
         msg = f"**对决结束**（重放）\n---\n剩余对决次数\n> {settlement.challenger_pk_num}\n该对决请求已经处理，无需重复提交。"
@@ -632,12 +650,17 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="虚神界", k1="修炼", v1="虚神界修炼", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_exp.finish()
 
-    result = impart_training_settlement_service.settle(
-        op_id, user_id,
-        expected_exp=current_exp, expected_exp_day=int(impart_data_draw['exp_day']),
-        expected_daily={key: user_data[key] for key in ("exp_used", "exp_count", "exp_load", "exp_gain")},
-        exp_cost=exp_cost_time, exp_gain=exp, exp_load_gain=actual_exp_load,
-        power=min(SQLITE_MAX_INT, int(round((current_exp + exp) * level_rate * realm_rate))), legacy_state=user_data,
+    result = _run_impart_pk_action(
+        "training_settle", op_id, user_id,
+        call=lambda: impart_training_settlement_service.settle(
+            op_id, user_id, expected_exp=current_exp,
+            expected_exp_day=int(impart_data_draw['exp_day']),
+            expected_daily={key: user_data[key] for key in ("exp_used", "exp_count", "exp_load", "exp_gain")},
+            exp_cost=exp_cost_time, exp_gain=exp, exp_load_gain=actual_exp_load,
+            power=min(SQLITE_MAX_INT, int(round((current_exp + exp) * level_rate * realm_rate))),
+            legacy_state=user_data,
+        ),
+        expected_exp=current_exp, exp_cost=exp_cost_time, exp_gain=exp,
     )
     if result.status == "duplicate":
         msg = (
@@ -868,12 +891,16 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         case "up_rate":
             impart_lv = min(impart_lv + impart_rate, 30)
 
-    result = impart_explore_settlement_service.settle(
-        op_id, user_id,
-        event_type=msg_type, expected_exp_day=int(impart_data_draw['exp_day']),
-        expected_impart_lv=int(impart_data_draw['impart_lv']),
-        expected_impart_num=int(user_data['impart_num']), time_cost=impart_time,
-        new_impart_lv=impart_lv, legacy_state=user_data,
+    result = _run_impart_pk_action(
+        "explore_settle", op_id, user_id,
+        call=lambda: impart_explore_settlement_service.settle(
+            op_id, user_id, event_type=msg_type,
+            expected_exp_day=int(impart_data_draw['exp_day']),
+            expected_impart_lv=int(impart_data_draw['impart_lv']),
+            expected_impart_num=int(user_data['impart_num']), time_cost=impart_time,
+            new_impart_lv=impart_lv, legacy_state=user_data,
+        ),
+        event_type=msg_type, time_cost=impart_time, new_level=impart_lv,
     )
     if result.status == "duplicate":
         msg = (
@@ -923,7 +950,11 @@ async def impart_pk_in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMess
         await handle_send(bot, event, msg, md_type="虚神界", k1="出关", v1="虚神界出关", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_in_closing.finish()
     started_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
-    result = impart_closing_enter_service.enter(op_id, user_id, started_at)
+    result = _run_impart_pk_action(
+        "closing_enter", op_id, user_id,
+        call=lambda: impart_closing_enter_service.enter(op_id, user_id, started_at),
+        started_at=started_at,
+    )
     if result.status == "ineligible":
         msg = "凡人无法虚神界闭关！"
         await handle_send(bot, event, msg)
@@ -1059,11 +1090,14 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
         user_id, int(use_exp / 10 * exp_time), int(use_exp / 5 * exp_time)
     )
     new_power = as_int_like(round((use_exp + total_exp) * level_rate * realm_rate))
-    settlement = impart_closing_settlement_service.settle(
-        operation_id, user_id, create_time_token, use_exp,
-        available_exp_day, total_exp, int(exp_day_cost), exp_time,
-        result_hp_mp[0], result_hp_mp[1], int(result_hp_mp[2] / 10),
-        new_power,
+    settlement = _run_impart_pk_action(
+        "closing_settle", operation_id, user_id,
+        call=lambda: impart_closing_settlement_service.settle(
+            operation_id, user_id, create_time_token, use_exp, available_exp_day,
+            total_exp, int(exp_day_cost), exp_time, result_hp_mp[0], result_hp_mp[1],
+            int(result_hp_mp[2] / 10), new_power,
+        ),
+        exp_gain=total_exp, exp_time=exp_time, new_power=new_power,
     )
     if settlement.status == "duplicate":
         msg = (

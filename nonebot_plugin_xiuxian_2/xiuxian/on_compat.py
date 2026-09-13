@@ -26,6 +26,7 @@ from nonebot.plugin.on import (
 )
 from nonebot.rule import TrieRule
 
+from ..bootstrap.legacy import register_legacy_startup
 from .blackhouse import is_user_blackhoused, load_blackhouse_memory, bootstrap_from_user_xiuxian
 from .command_disable import (
     disabled_command_keys_for_route,
@@ -61,6 +62,38 @@ _INSTALLED = False
 _MATCHER_ROUTES: dict[type["Matcher"], "_RouteMeta"] = {}
 _PRIMARY_COMMAND_NAMES: dict[type["Matcher"], str] = {}
 _COMMAND_SUBMODULES: dict[type["Matcher"], str] = {}
+
+# Commands whose runtime ownership has moved to the refactored adapter.  The
+# historical modules remain importable for compatibility facades, but their
+# decorators must not create a second live matcher during the release cycle.
+_MIGRATED_COMMANDS = frozenset(
+    {
+        "今日运势",
+        "占卜",
+        "卜卦",
+        "求签",
+        "运势",
+        "算命",
+        "修仙签到",
+        "签到",
+        "送灵石",
+    }
+)
+_MIGRATED_COMMAND_KEYS = frozenset(value.casefold() for value in _MIGRATED_COMMANDS)
+
+
+class _SuppressedLegacyMatcher:
+    """Decorator-compatible shell for a command owned by the new adapter."""
+
+    priority = 1
+    block = True
+
+    @classmethod
+    def handle(cls, parameterless=None):
+        def decorator(function):
+            return function
+
+        return decorator
 
 
 class _RouteMeta:
@@ -762,9 +795,7 @@ def install_on_compat() -> None:
         matchers.set_provider(XiuxianOnCompatProvider)
     _patch_handle_event()
 
-    driver = get_driver()
-
-    @driver.on_startup
+    @register_legacy_startup
     async def _refresh_on_compat_index():
         rebuild_on_compat_index()
 
@@ -795,6 +826,12 @@ def on_command(
 ):
     install_on_compat()
     primary, alias_values, commands = _split_commands(cmd, aliases)
+    if any(
+        str(part).strip().casefold() in _MIGRATED_COMMAND_KEYS
+        for command in commands
+        for part in command
+    ):
+        return _SuppressedLegacyMatcher
     call_kwargs = {
         "rule": rule,
         "aliases": alias_values,

@@ -19,6 +19,7 @@ from ..xiuxian_utils.utils import handle_send, number_to, send_help_message
 from ..xiuxian_utils.lay_out import Cooldown
 import subprocess
 import re
+from types import SimpleNamespace
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, TradeDataManager
 from ..xiuxian_utils.download_xiuxian_data import UpdateManager
 
@@ -64,6 +65,24 @@ update_manager = UpdateManager()
 sql_message = XiuxianDateManage()
 trade_manager = TradeDataManager()
 from ..xiuxian_utils.periods import format_duration_full
+from ...features.status.application import StatusApplication
+from ...paths import get_paths
+
+status_application = StatusApplication(get_paths().game_db)
+
+
+def _run_status_action(action: str, operation_id: str, user_id: str, call, **payload):
+    outcome = status_application.execute_legacy_call(
+        operation_id=str(operation_id),
+        user_id=str(user_id),
+        action=action,
+        payload=payload,
+        call=call,
+    )
+    data = dict(outcome.data or {})
+    data.setdefault("status", outcome.status)
+    data["succeeded"] = outcome.ok
+    return SimpleNamespace(**data)
 
 bot_info_cmd = on_command("bot信息", permission=SUPERUSER, priority=5, block=True)
 sys_info_cmd = on_command("系统信息", permission=SUPERUSER, priority=5, block=True)
@@ -472,9 +491,24 @@ async def handle_version_update(bot: Bot, event: GroupMessageEvent | PrivateMess
             return
 
     await handle_send(bot, event, f"更新版本 {release_tag}，开始更新...")
-    # 执行更新流程
-    success, result = await asyncio.to_thread(update_manager.perform_update_with_backup, release_tag)
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    user_id = str(event.get_user_id())
+    operation_id = f"status:version-update:{event_id or time.time_ns()}:{user_id}:{release_tag}"
+    # 执行更新流程，并把整个真实更新调用纳入操作账本。
+    outcome = await asyncio.to_thread(
+        _run_status_action,
+        "version_update",
+        operation_id,
+        user_id,
+        lambda: update_manager.perform_update_with_backup(release_tag),
+        release_tag=release_tag,
+    )
+    result = outcome.result if hasattr(outcome, "result") else None
+    if isinstance(result, (tuple, list)) and len(result) == 2:
+        success, detail = bool(result[0]), result[1]
+    else:
+        success, detail = bool(outcome.succeeded), result or getattr(outcome, "message", "")
     if success:
         await handle_send(bot, event, f"版本更新成功！当前版本：{update_manager.get_current_version()}")
     else:
-        await handle_send(bot, event, f"版本更新失败：{result}")
+        await handle_send(bot, event, f"版本更新失败：{detail}")

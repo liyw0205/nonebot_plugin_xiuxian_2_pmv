@@ -1,0 +1,49 @@
+# 宠物资产操作
+
+## 用户流程
+
+宠物游历派遣、游历领取、喂食和砸蛋四项资产动作通过 `PetApplication` 统一处理。旧命令通过兼容门面转发，保留原有结果对象和提示语。
+
+## 命令与别名
+
+- `宠物游历`、`灵宠游历`：派遣宠物。
+- `领取宠物游历`、`领取游历奖励`：领取游历奖励。
+- `宠物喂食`：消耗背包物品提升宠物经验。
+- `砸蛋`、`砸宠物蛋`：消耗灵石孵化宠物。
+
+## Web API
+
+- `POST /api/v1/pet/travel/start`
+- `POST /api/v1/pet/travel/claim`
+- `POST /api/v1/pet/feed`
+- `POST /api/v1/pet/hatch`
+
+所有接口权限为 `user`，写请求支持 `Idempotency-Key`，统一返回 `OperationOutcome`。
+
+## 数据模型与迁移
+
+`pet.001` 在 `game_db` 创建 `pet_feature_migrations`。宠物历史表和跨库操作表继续由兼容 repository 管理。
+
+## 事务与失败回滚
+
+application 先登记 operation ledger，再调用历史事务服务；重复请求只重放首次结果，宠物快照、背包和灵石不匹配时返回拒绝且不修改资产。
+
+## 配置项与回滚
+
+`pet_enabled`（`XIUXIAN_PET_ENABLED`）控制灰度。关闭后可以继续使用旧入口，待融合、放生和技能动作迁移完成、兼容命中归零后再删除门面。
+
+## 定时任务
+
+游历到期由兼容调度器处理，任务使用稳定 ID 和幂等领取操作。
+
+## 适配器差异
+
+application 不导入 NoneBot、Flask 或数据库驱动；旧命令和 Web blueprint 分别承担协议转换。
+
+## 测试与手工验收
+
+覆盖派遣、领取、喂食、孵化的成功、库存拒绝、异常回滚和重放，并执行 Web CSRF/权限测试。
+
+## 灰度开关、回滚和已知限制
+
+`XIUXIAN_PET_ENABLED` 关闭后回到旧兼容实现；融合、放生和技能动作仍未迁移。

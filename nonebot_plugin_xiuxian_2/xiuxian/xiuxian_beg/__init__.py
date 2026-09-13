@@ -1,5 +1,6 @@
 import random
 import time
+from types import SimpleNamespace
 from datetime import datetime
 from ...paths import get_paths
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
@@ -22,6 +23,7 @@ from .transaction_service import (
     BegDailyRewardService,
     NoviceGiftClaimService,
 )
+from ...features.beg.application import BegApplication
 from ..xiuxian_utils.utils import (
     check_user,Txt2Img,
     get_msg_pic,
@@ -35,6 +37,19 @@ cache_beg_help = {}
 sql_message = XiuxianDateManage()  # sql类
 novice_gift_claim_service = NoviceGiftClaimService(get_paths().game_db)
 beg_daily_reward_service = BegDailyRewardService(get_paths().game_db)
+beg_application = BegApplication(get_paths().game_db)
+
+
+def _run_beg_action(action: str, operation_id: str, user_id: str, **payload):
+    outcome = beg_application.execute(
+        operation_id=operation_id,
+        user_id=str(user_id),
+        payload={"action": action, **payload},
+    )
+    data = dict(outcome.data or {})
+    data.setdefault("status", outcome.status)
+    data["succeeded"] = outcome.ok
+    return SimpleNamespace(**data)
 
 __beg_help__ = f"""
 **仙途奇缘帮助**
@@ -130,7 +145,8 @@ async def beg_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         XiuConfig().beg_lingshi_upper_limit,
     )
     max_level_index = list_level_all.index(XiuConfig().beg_max_level)
-    result = beg_daily_reward_service.settle(
+    result = _run_beg_action(
+        "daily_settle",
         operation_id=operation_id,
         user_id=user_id,
         expected_create_time=user_info["create_time"],
@@ -247,9 +263,16 @@ async def novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         
         i += 1            
 
-    result = novice_gift_claim_service.claim(
-        operation_id, user_id, user_info["create_time"], datetime.now(),
-        XiuConfig().beg_max_days, stone, rewards, XiuConfig().max_goods_num,
+    result = _run_beg_action(
+        "novice_claim",
+        operation_id,
+        user_id,
+        expected_create_time=user_info["create_time"],
+        claimed_at=datetime.now(),
+        max_age_days=XiuConfig().beg_max_days,
+        stone=stone,
+        rewards=rewards,
+        max_goods_num=XiuConfig().max_goods_num,
     )
     if result.status == "duplicate":
         msg = (

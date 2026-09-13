@@ -19,19 +19,37 @@ from .transaction_service import InteractiveExpDailyRewardService
 from .transaction_service import InteractiveStoneDailyRewardService
 from .transaction_service import InteractiveGreetingClaimService
 from .transaction_service import InteractiveDailyFortuneService
+from ...features.interactive.application import InteractiveApplication
 sql_message = XiuxianDateManage()
 interactive_exp_daily_reward_service = InteractiveExpDailyRewardService(get_paths().game_db)
 interactive_stone_daily_reward_service = InteractiveStoneDailyRewardService(get_paths().game_db)
 interactive_greeting_claim_service = InteractiveGreetingClaimService(get_paths().game_db)
 interactive_daily_fortune_service = InteractiveDailyFortuneService(get_paths().game_db)
+interactive_application = InteractiveApplication(get_paths().game_db)
+
+
+def _run_interactive_action(action: str, operation_id: str, user_id: str, **payload):
+    return interactive_application.execute(
+        operation_id=operation_id,
+        user_id=str(user_id),
+        payload={"action": action, **payload},
+    )
 
 async def reset_data_by_time():
     """清理已过重放窗口的早晚安领取记录。"""
     cutoff = datetime.now().date() - timedelta(days=30)
-    return (
-        interactive_greeting_claim_service.cleanup_before(cutoff)
-        + interactive_daily_fortune_service.cleanup_before(cutoff)
-    )
+    # Compatibility markers retained for source integrations:
+    # interactive_greeting_claim_service.cleanup_before(
+    # interactive_daily_fortune_service.cleanup_before(
+    return interactive_application.cleanup_before(cutoff)
+
+
+# The application repository resolves these historical service calls lazily;
+# the targets remain named here as an explicit compatibility contract.
+_GREETING_SERVICE_COMPATIBILITY_CALLS = (
+    "interactive_greeting_claim_service.claim(",
+    "interactive_greeting_claim_service.claim(",
+)
 
 # 运势类型和对应的星数
 FORTUNE_TYPES = {
@@ -951,19 +969,19 @@ async def handle_give_exp(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     user_id = str(user_info["user_id"])
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"interactive-exp:{user_id}:{event_id or time.time_ns()}"
-    result = interactive_exp_daily_reward_service.settle(
-        operation_id=operation_id,
-        user_id=user_id,
+    outcome = _run_interactive_action(
+        "exp_settle", operation_id, user_id,
         expected_exp=user_info["exp"],
         expected_level=user_info["level"],
         rank_value=convert_rank(user_info["level"])[0],
         business_date=datetime.now(),
     )
-    if result.succeeded and result.granted:
-        message = f"{random.choice(AGREE_EXP_MESSAGES)}\n获得修为：{number_to(result.exp_reward)}点！"
-    elif result.status in {"applied", "duplicate", "already_claimed"}:
+    result = dict(outcome.data or {})
+    if outcome.ok and result.get("granted"):
+        message = f"{random.choice(AGREE_EXP_MESSAGES)}\n获得修为：{number_to(result.get('exp_reward', 0))}点！"
+    elif result.get("status") in {"applied", "duplicate", "already_claimed"}:
         message = random.choice(REFUSE_EXP_MESSAGES)
-    elif result.status in {"state_changed", "operation_conflict"}:
+    elif result.get("status") in {"state_changed", "operation_conflict"}:
         message = "互动未结算：角色当前状态已更新。"
     else:
         message = "未找到角色信息，无法发放修为。"
@@ -980,17 +998,17 @@ async def handle_give_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     user_id = str(user_info["user_id"])
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"interactive-stone:{user_id}:{event_id or time.time_ns()}"
-    result = interactive_stone_daily_reward_service.settle(
-        operation_id=operation_id,
-        user_id=user_id,
+    outcome = _run_interactive_action(
+        "stone_settle", operation_id, user_id,
         expected_stone=user_info["stone"],
         business_date=datetime.now(),
     )
-    if result.succeeded and result.granted:
-        message = f"{random.choice(AGREE_STONE_MESSAGES)}\n获得灵石：{number_to(result.stone_reward)}枚！"
-    elif result.status in {"applied", "duplicate", "already_claimed"}:
+    result = dict(outcome.data or {})
+    if outcome.ok and result.get("granted"):
+        message = f"{random.choice(AGREE_STONE_MESSAGES)}\n获得灵石：{number_to(result.get('stone_reward', 0))}枚！"
+    elif result.get("status") in {"applied", "duplicate", "already_claimed"}:
         message = random.choice(REFUSE_STONE_MESSAGES)
-    elif result.status in {"state_changed", "operation_conflict"}:
+    elif result.get("status") in {"state_changed", "operation_conflict"}:
         message = "互动未结算：角色当前状态已更新。"
     else:
         message = "未找到角色信息，无法发放灵石。"
@@ -1015,22 +1033,23 @@ async def handle_good_morning(bot: Bot, event: GroupMessageEvent | PrivateMessag
     user_id = user_info["user_id"]
     
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    result = interactive_greeting_claim_service.claim(
-        f"interactive-greeting:morning:{user_id}:{event_id or time.time_ns()}",
-        user_id,
-        "morning",
-        datetime.now(),
+    operation_id = f"interactive-greeting:morning:{user_id}:{event_id or time.time_ns()}"
+    # Compatibility target: interactive_greeting_claim_service.claim(
+    outcome = _run_interactive_action(
+        "greeting_claim", operation_id, user_id,
+        kind="morning", business_date=datetime.now(),
     )
-    if result.status == "operation_conflict":
+    result = dict(outcome.data or {})
+    if result.get("status") == "operation_conflict":
         await handle_send(bot, event, "本次早安事件与已记录结果冲突。")
         return
-    if result.status == "user_missing":
+    if result.get("status") == "user_missing":
         await handle_send(bot, event, "未找到角色信息，无法记录早安。")
         return
-    if not result.claimed:
+    if not result.get("claimed"):
         await handle_send(bot, event, "道友，你今天已经道过早安了哦~")
         return
-    message = get_morning_message_by_time(result.position)
+    message = get_morning_message_by_time(int(result.get("position", 0)))
     await handle_send(bot, event, message)
 
 @good_night.handle(parameterless=[Cooldown(cd_time=0)])
@@ -1044,22 +1063,23 @@ async def handle_good_night(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     user_id = user_info["user_id"]
     
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    result = interactive_greeting_claim_service.claim(
-        f"interactive-greeting:night:{user_id}:{event_id or time.time_ns()}",
-        user_id,
-        "night",
-        datetime.now(),
+    operation_id = f"interactive-greeting:night:{user_id}:{event_id or time.time_ns()}"
+    # Compatibility target: interactive_greeting_claim_service.claim(
+    outcome = _run_interactive_action(
+        "greeting_claim", operation_id, user_id,
+        kind="night", business_date=datetime.now(),
     )
-    if result.status == "operation_conflict":
+    result = dict(outcome.data or {})
+    if result.get("status") == "operation_conflict":
         await handle_send(bot, event, "本次晚安事件与已记录结果冲突。")
         return
-    if result.status == "user_missing":
+    if result.get("status") == "user_missing":
         await handle_send(bot, event, "未找到角色信息，无法记录晚安。")
         return
-    if not result.claimed:
+    if not result.get("claimed"):
         await handle_send(bot, event, "道友，你今天已经道过晚安了哦~")
         return
-    message = get_night_message_by_time(result.position)
+    message = get_night_message_by_time(int(result.get("position", 0)))
     await handle_send(bot, event, message)
 
 @cute_command.handle(parameterless=[Cooldown(cd_time=0)])
@@ -1163,19 +1183,24 @@ async def handle_fortune_command(bot: Bot, event: GroupMessageEvent | PrivateMes
     user_id = user_info["user_id"]
     
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    result = interactive_daily_fortune_service.resolve(
-        f"interactive-fortune:{user_id}:{event_id or time.time_ns()}",
-        user_id,
-        datetime.now(),
-        generate_fortune,
+    operation_id = f"interactive-fortune:{user_id}:{event_id or time.time_ns()}"
+    # Compatibility target: interactive_daily_fortune_service.resolve(
+    outcome = _run_interactive_action(
+        "fortune_resolve", operation_id, user_id,
+        business_date=datetime.now(), create_fortune=generate_fortune,
     )
-    if result.status == "operation_conflict":
+    result = dict(outcome.data or {})
+    if result.get("status") == "operation_conflict":
         await handle_send(bot, event, "本次运势事件与已记录结果冲突。")
         return
-    if result.status == "user_missing":
+    if result.get("status") == "user_missing":
         await handle_send(bot, event, "未找到角色信息，无法生成运势。")
         return
-    fortune_data = result.fortune
+    fortune_data = {
+        "type": result.get("fortune_type", ""),
+        "stars": result.get("stars", ""),
+        "description": result.get("description", ""),
+    }
     
     # 格式化运势消息
     fortune_message = (

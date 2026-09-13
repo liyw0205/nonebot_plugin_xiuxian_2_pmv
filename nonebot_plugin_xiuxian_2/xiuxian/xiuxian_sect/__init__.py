@@ -75,21 +75,27 @@ from .transaction_service import SectMembershipService
 from .transaction_service import FairylandClaimService
 from .transaction_service import SectCloseMountainService
 from .transaction_service import SectOwnerInheritService
-from .transaction_service import SectShopPurchaseService
-from .transaction_service import SectElixirClaimService
+from ...compatibility.sect import SectShopPurchaseService
+from ...compatibility.sect import SectElixirClaimService
 from .transaction_service import SectOpenJoinService
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from .transaction_service import SectCloseJoinService
-from .transaction_service import SectMemberJoinService
-from .transaction_service import SectMainBuffLearnService
-from .transaction_service import SectSecBuffLearnService
+from ...compatibility.sect import SectMemberJoinService
+from ...compatibility.sect import SectMainBuffLearnService
+from ...compatibility.sect import SectSecBuffLearnService
 from .transaction_service import SectDisbandService
 from .transaction_service import SectDailyResetMaintenanceService
+from ...features.sect_fairyland.application import SectFairylandApplication
+from ...features.sect_fairyland.repository import LegacySectFairylandRepository
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
 sect_membership_service = SectMembershipService(get_paths().game_db)
 fairyland_claim_service = FairylandClaimService(get_paths().player_db)
+sect_fairyland_application = SectFairylandApplication(
+    get_paths().player_db,
+    repository=LegacySectFairylandRepository(get_paths().player_db),
+)
 sect_close_mountain_service = SectCloseMountainService(get_paths().game_db)
 sect_owner_inherit_service = SectOwnerInheritService(get_paths().game_db)
 sect_shop_purchase_service = SectShopPurchaseService(get_paths().game_db)
@@ -791,33 +797,37 @@ async def sect_fairyland_claim_(bot: Bot, event: GroupMessageEvent | PrivateMess
     today = datetime.now().strftime("%Y-%m-%d")
     # 事件幂等优先：同 event 必须先走 operation，避免“今日已完成”前置拦截。
     operation_id = _sect_operation_id(event, "fairyland_claim", f"{user_info['user_id']}:{sect_id}:{today}")
-    claim = fairyland_claim_service.claim(
-        operation_id,
-        user_info["user_id"],
-        sect_id,
-        today,
-        level,
-        conf["minutes"],
+    # The legacy ``fairyland_claim_service.claim(...)`` facade remains for
+    # imports during migration; this command uses the application boundary.
+    outcome = sect_fairyland_application.claim(
+        operation_id=operation_id,
+        user_id=user_info["user_id"],
+        sect_id=sect_id,
+        day=today,
+        level=level,
+        minutes=conf["minutes"],
     )
-    if claim.status == "already_claimed":
+    result = dict(outcome.data or {})
+    status = str(result.get("status", outcome.status))
+    if status == "already_claimed":
         await handle_send(bot, event, "今日已经完成过宗门淬体修行。", md_type="宗门", k1="炼体堂", v1="宗门炼体堂", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_fairyland_claim.finish()
-    if claim.status == "duplicate":
-        result = claim.detail
+    if outcome.replayed or status == "duplicate":
+        detail = dict(result.get("detail") or {})
         msg = (
             f"宗门淬体修行完成！\n"
             f"炼体堂：{level}级【{conf['name']}】\n"
             f"获得炼体结算时间：{conf['minutes']}分钟\n"
-            f"宗门炼体堂加成：{float(result.get('sect_bonus', 0) or 0) * 100:.0f}%\n"
-            f"本次获得炼体气血：{number_to(result.get('real_gain', 0))}\n"
-            f"当前炼体气血：{number_to(result.get('new_hp', 0))}\n"
+            f"宗门炼体堂加成：{float(detail.get('sect_bonus', 0) or 0) * 100:.0f}%\n"
+            f"本次获得炼体气血：{number_to(detail.get('real_gain', 0))}\n"
+            f"当前炼体气血：{number_to(detail.get('new_hp', 0))}\n"
             f"该淬体请求已经处理，无需重复提交。"
         )
         await handle_send(bot, event, msg, md_type="宗门", k1="炼体堂", v1="宗门炼体堂", k2="炼体", v2="我的炼体", k3="宗门", v3="我的宗门")
         await sect_fairyland_claim.finish()
-    if not claim.succeeded:
-        raise RuntimeError(f"unexpected fairyland claim status: {claim.status}")
-    result = claim.detail
+    if not outcome.ok:
+        raise RuntimeError(f"unexpected fairyland claim status: {status}")
+    result = dict(result.get("detail") or {})
 
     msg = (
         f"宗门淬体修行完成！\n"

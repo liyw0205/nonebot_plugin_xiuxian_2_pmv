@@ -41,7 +41,7 @@ def ensure_explore_status_schema(conn, schema: str = "player_data") -> set[str]:
             'OR LOWER(TRIM(CAST("settlement" AS TEXT))) IN (\'none\',\'null\')) '
             'AND COALESCE(CAST("reward_plan" AS TEXT),\'\')<>\'\' '
             'AND LOWER(TRIM(CAST("reward_plan" AS TEXT))) NOT IN (\'none\',\'null\') '
-            'AND (CAST("reward_plan" AS TEXT) LIKE \'{%\' OR CAST("reward_plan" AS TEXT) LIKE \'[%\')'
+            'AND (TRIM(CAST("reward_plan" AS TEXT)) LIKE \'{%\' OR TRIM(CAST("reward_plan" AS TEXT)) LIKE \'[%\')'
         )
         conn.execute(
             'UPDATE player_data.map_explore_status SET "reward_plan"=\'\' '

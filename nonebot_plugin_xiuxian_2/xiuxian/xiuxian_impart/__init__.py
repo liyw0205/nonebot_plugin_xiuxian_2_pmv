@@ -1,6 +1,7 @@
 import os
 import random
 import time
+from types import SimpleNamespace
 from collections import Counter
 from ..on_compat import on_command
 from ..adapter_compat import (
@@ -14,6 +15,7 @@ from ..adapter_compat import (
 from nonebot.params import CommandArg
 
 from .. import NICKNAME
+from ...features.impart.application import ImpartApplication
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.lay_out import Cooldown, assign_bot
 from ..xiuxian_utils.utils import (
@@ -56,6 +58,21 @@ card_compose_service = CardComposeService(get_paths().impart_db)
 card_disassemble_service = CardDisassembleService(get_paths().impart_db)
 love_sand_service = LoveSandUseService(get_paths().game_db, get_paths().impart_db, get_paths().player_db)
 impart_prayer_service = ImpartPrayerSettlementService(get_paths().game_db, get_paths().impart_db)
+impart_application = ImpartApplication(get_paths().game_db)
+
+
+def _run_impart_action(action, operation_id, user_id, call, **payload):
+    outcome = impart_application.execute_legacy_call(
+        operation_id=operation_id,
+        user_id=str(user_id),
+        action=action,
+        payload=payload,
+        call=call,
+    )
+    data = dict(outcome.data or {})
+    data.setdefault("status", outcome.status)
+    data["succeeded"] = outcome.ok
+    return SimpleNamespace(**data)
 
 
 cache_help = {}
@@ -383,10 +400,13 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         more_duplicates_msg = f"\n(还有{total_duplicates - duplicate_display_limit}张重复卡未显示)"
 
     # 更新用户数据
-    result = impart_draw_service.draw(
-        operation_id, user_id, user_stone_num,
-        impart_data_draw["wish"], impart_data_draw["impart_num"], required_crystals,
-        current_wish, times, drawn_cards,
+    result = _run_impart_action(
+        "draw", operation_id, user_id,
+        call=lambda: impart_draw_service.draw(
+            operation_id, user_id, user_stone_num, impart_data_draw["wish"],
+            impart_data_draw["impart_num"], required_crystals, current_wish, times, drawn_cards,
+        ),
+        quantity=times, required_crystals=required_crystals,
     )
     if result.status == "duplicate":
         await handle_send(
@@ -453,13 +473,12 @@ async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         pass
     if result is None:
         drawn_cards = [random.choice(img_list) for _ in range(quantity)]
-        result = impart_prayer_service.settle(
-            operation_id,
-            user_id,
-            item_id,
-            quantity,
-            drawn_cards,
-            impart_data_json.data_all_(),
+        result = _run_impart_action(
+            "prayer_settle", operation_id, user_id,
+            call=lambda: impart_prayer_service.settle(
+                operation_id, user_id, item_id, quantity, drawn_cards, impart_data_json.data_all_(),
+            ),
+            item_id=item_id, quantity=quantity, cards=drawn_cards,
         )
     if result.status == "item_missing":
         await handle_send(bot, event, "祈愿石数量不足，未进行祈愿。")
@@ -748,7 +767,14 @@ async def impart_compose_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         )
         return
     cards = impart_data_json.data_person_list(user_id) or {}
-    result = card_compose_service.compose(operation_id, user_id, source_card, target_card, cards.get(source_card, 0), cards.get(target_card, 0), 5, impart_data_json.data_all_())
+    result = _run_impart_action(
+        "compose", operation_id, user_id,
+        call=lambda: card_compose_service.compose(
+            operation_id, user_id, source_card, target_card, cards.get(source_card, 0),
+            cards.get(target_card, 0), 5, impart_data_json.data_all_(),
+        ),
+        source_card=source_card, target_card=target_card, quantity=5,
+    )
     messages = {"same_card": "合成材料卡与目标卡不能相同！", "card_missing": "重复卡不足5张，无法合成！", "state_changed": "卡牌操作未结算：卡牌当前状态已更新，请重新操作。"}
     if result.status == "duplicate":
         await handle_send(
@@ -795,7 +821,14 @@ async def impart_disassemble_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     if impart_state is None:
         await handle_send(bot, event, "未找到传承数据！")
         return
-    result = card_disassemble_service.disassemble(operation_id, user_id, card_name, quantity, cards.get(card_name, 0), impart_state["stone_num"], 2, impart_data_json.data_all_())
+    result = _run_impart_action(
+        "disassemble", operation_id, user_id,
+        call=lambda: card_disassemble_service.disassemble(
+            operation_id, user_id, card_name, quantity, cards.get(card_name, 0),
+            impart_state["stone_num"], 2, impart_data_json.data_all_(),
+        ),
+        card_name=card_name, quantity=quantity,
+    )
     messages = {"card_missing": "卡牌不足；分解后必须至少保留1张！", "state_changed": "卡牌操作未结算：卡牌当前状态已更新，请重新操作。", "user_missing": "未找到传承数据！"}
     if result.status == "duplicate":
         await handle_send(

@@ -1167,30 +1167,8 @@ class AuctionSessionService:
                             return AuctionSessionFinishResult("participant_missing", operation_id, session_id)
                         winner_name = str(winner[0] or winner_id)
                         if self._inventory_full(conn, winner_id, item_id):
-                            # 背包满：流拍到系统暂存语义改为退回卖家/系统，不阻断整场结算
-                            status = "背包已满流拍"
-                            winner_id = final_price = winner_name = None
-                            fee = earnings = 0
-                            # 退还所有竞拍锁定灵石
-                            for bidder_id, locked in bids.items():
-                                if conn.execute(
-                                    "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)+CAST(%s AS REAL) WHERE user_id=%s",
-                                    (locked, bidder_id),
-                                ).rowcount != 1:
-                                    conn.rollback()
-                                    return AuctionSessionFinishResult("participant_missing", operation_id, session_id)
-                            if not is_system:
-                                if not conn.execute(
-                                    "SELECT 1 FROM user_xiuxian WHERE user_id=%s", (seller_id,)
-                                ).fetchone():
-                                    conn.rollback()
-                                    return AuctionSessionFinishResult("participant_missing", operation_id, session_id)
-                                if self._inventory_full(conn, seller_id, item_id):
-                                    # 卖家也满：物品进历史为流拍，不入包，避免整场卡死
-                                    status = "双方背包满流拍"
-                                else:
-                                    self._grant_item(conn, seller_id, item_id, name, item_type)
-                                    status = "买家背包满退回"
+                            conn.rollback()
+                            return AuctionSessionFinishResult("inventory_full", operation_id, session_id)
                         else:
                             self._grant_item(conn, winner_id, item_id, name, item_type)
                             fee = 0 if is_system else int(final_price * float(fee_rate))

@@ -5,6 +5,25 @@ from contextlib import AbstractContextManager
 from typing import Any
 
 
+def _numeric_bind():
+    """Load numeric helpers both as a package and in source-file tests."""
+    try:
+        from . import numeric_bind
+
+        return numeric_bind
+    except ImportError:
+        import importlib.util
+        from pathlib import Path
+
+        path = Path(__file__).with_name("numeric_bind.py")
+        spec = importlib.util.spec_from_file_location("_xiuxian_numeric_bind", path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"无法加载数值绑定模块: {path}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+
 class UserRepository:
     """Read access for the main user table."""
 
@@ -19,12 +38,12 @@ class UserRepository:
         self._build_real_user = build_real_user
 
     def get_by_id(self, user_id: str):
-        from .numeric_bind import normalize_user_row
+        normalize_user_row = _numeric_bind().normalize_user_row
 
         # 若历史脏数据出现重复 user_id，固定取最早一行（id 最小），避免行为抖动
         return normalize_user_row(
             self._read_query(
-                "SELECT * FROM user_xiuxian WHERE user_id=%s ORDER BY id ASC LIMIT 1",
+                "SELECT * FROM user_xiuxian WHERE user_id=%s ORDER BY rowid ASC LIMIT 1",
                 (user_id,),
                 one=True,
                 dict_row=True,
@@ -32,11 +51,11 @@ class UserRepository:
         )
 
     def get_by_name(self, user_name: str):
-        from .numeric_bind import normalize_user_row
+        normalize_user_row = _numeric_bind().normalize_user_row
 
         return normalize_user_row(
             self._read_query(
-                "SELECT * FROM user_xiuxian WHERE user_name=%s ORDER BY id ASC LIMIT 1",
+                "SELECT * FROM user_xiuxian WHERE user_name=%s ORDER BY rowid ASC LIMIT 1",
                 (user_name,),
                 one=True,
                 dict_row=True,
@@ -44,12 +63,12 @@ class UserRepository:
         )
 
     def get_with_attributes(self, user_id: str):
-        from .numeric_bind import normalize_user_row
+        normalize_user_row = _numeric_bind().normalize_user_row
 
         with self._connection() as conn:
             cur = conn.cursor()
             cur.execute(
-                "SELECT * FROM user_xiuxian WHERE user_id=%s ORDER BY id ASC LIMIT 1",
+                "SELECT * FROM user_xiuxian WHERE user_id=%s ORDER BY rowid ASC LIMIT 1",
                 (user_id,),
             )
             result = cur.fetchone()
@@ -72,7 +91,8 @@ class EconomyRepository:
         self._log_change = log_change
 
     def update_stones(self, user_id, amount, operation, log_context=None) -> None:
-        from .numeric_bind import as_int_like, number_count
+        numeric_bind = _numeric_bind()
+        as_int_like, number_count = numeric_bind.as_int_like, numeric_bind.number_count
 
         # amount may exceed SQLite INTEGER; bind layer also guards, but abs(int())
         # would OverflowError before execute.
@@ -133,7 +153,8 @@ class EconomyRepository:
             )
 
     def try_update_stones(self, user_id, amount, operation, log_context=None) -> bool:
-        from .numeric_bind import as_int_like, number_count
+        numeric_bind = _numeric_bind()
+        as_int_like, number_count = numeric_bind.as_int_like, numeric_bind.number_count
 
         amount = number_count(abs(as_int_like(amount)))
         amount_int = as_int_like(amount)
@@ -184,7 +205,8 @@ class EconomyRepository:
         amount: int,
     ) -> bool:
         """Atomically transfer stones; repeated operation IDs are no-ops."""
-        from .numeric_bind import as_int_like, number_count
+        numeric_bind = _numeric_bind()
+        as_int_like, number_count = numeric_bind.as_int_like, numeric_bind.number_count
 
         amount = number_count(abs(as_int_like(amount)))
         amount_int = as_int_like(amount)

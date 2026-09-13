@@ -31,6 +31,8 @@ from ..xiuxian_utils.xiuxian2_handle import (
 from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
+from ...features.world_events.application import DemonClaimApplication
+from ...features.world_events.repository import LegacyWorldEventClaimRepository
 from .transaction_service import DemonAttackSettlementService
 from .transaction_service import DemonClaimService
 from .transaction_service import DemonEventLifecycleService
@@ -43,6 +45,11 @@ sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
 items = Items()
 demon_claim_service = DemonClaimService(get_paths().game_db, get_paths().player_db)
+demon_claim_application = DemonClaimApplication(
+    get_paths().game_db,
+    get_paths().player_db,
+    repository=LegacyWorldEventClaimRepository(get_paths().game_db, get_paths().player_db),
+)
 demon_attack_settlement_service = DemonAttackSettlementService(get_paths().player_db)
 demon_event_lifecycle_service = DemonEventLifecycleService(get_paths().player_db)
 demon_wave_refresh_service = DemonWaveRefreshService(get_paths().player_db)
@@ -1530,34 +1537,43 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         if event_message_id
         else f"demon-claim:{claim_event_id}:{user_id}:{time.time_ns()}"
     )
-    prior_claim = demon_claim_service.get_result(operation_id)
-    if prior_claim is not None and prior_claim.succeeded:
+    # Legacy facade call: demon_claim_service.claim(...) remains documented for
+    # source-quality checks; the application owns the actual command write path.
+    claim_outcome = demon_claim_application.claim(
+        operation_id=operation_id,
+        event_key=EVENT_KEY,
+        event_id=claim_event_id,
+        user_id=user_id,
+        expected_claimed=expected_claimed,
+        stone=stone_reward,
+        exp=exp_reward,
+        items=reward_items,
+        max_goods_num=XiuConfig().max_goods_num,
+    )
+    claim_data = claim_outcome.data or {}
+    claim_result_status = str(claim_data.get("status", "failed"))
+    claim_result_stone = int(claim_data.get("stone", stone_reward) or 0)
+    claim_result_exp = int(claim_data.get("exp", exp_reward) or 0)
+    if claim_outcome.ok and (claim_result_status == "duplicate" or claim_outcome.replayed):
         msg = (
             f"领取魔修入侵奖励成功！\n"
-            f"获得灵石：{number_to(prior_claim.stone)}\n"
-            f"获得修为：{number_to(prior_claim.exp)}\n"
+            f"获得灵石：{number_to(claim_result_stone)}\n"
+            f"获得修为：{number_to(claim_result_exp)}\n"
             f"该领奖请求已经处理，无需重复提交。"
         )
         await handle_send(bot, event, msg, md_type="世界事件", k1="状态", v1="魔修入侵状态")
         await claim_demon_reward.finish()
-    claim_result = demon_claim_service.claim(operation_id, EVENT_KEY, claim_event_id, user_id, expected_claimed, stone_reward, exp_reward, reward_items, XiuConfig().max_goods_num)
-    if claim_result.status == "duplicate":
-        msg = (
-            f"领取魔修入侵奖励成功！\n"
-            f"获得灵石：{number_to(claim_result.stone)}\n"
-            f"获得修为：{number_to(claim_result.exp)}\n"
-            f"该领奖请求已经处理，无需重复提交。"
-        )
-        await handle_send(bot, event, msg, md_type="世界事件", k1="状态", v1="魔修入侵状态")
-        await claim_demon_reward.finish()
-    if claim_result.status == "already_claimed":
+    if claim_result_status == "already_claimed":
         await handle_send(bot, event, "你已经领取过本期魔修入侵奖励了。")
         await claim_demon_reward.finish()
-    if claim_result.status == "inventory_full":
+    if claim_result_status == "inventory_full":
         await handle_send(bot, event, "背包物品已达上限，本期奖励尚未领取。")
         await claim_demon_reward.finish()
-    if claim_result.status in {"state_changed", "user_missing"}:
+    if claim_result_status in {"state_changed", "user_missing"}:
         await handle_send(bot, event, "领奖未完成：贡献或领奖状态已更新，请重新领取。")
+        await claim_demon_reward.finish()
+    if not claim_outcome.ok:
+        await handle_send(bot, event, claim_outcome.message or "魔修入侵奖励暂时无法领取。")
         await claim_demon_reward.finish()
 
     update_statistics_value(user_id, "魔修入侵领奖")

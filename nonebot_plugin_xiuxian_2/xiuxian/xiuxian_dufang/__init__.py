@@ -2,6 +2,7 @@ import random
 import asyncio
 import json
 import time
+from types import SimpleNamespace
 from pathlib import Path
 from datetime import datetime
 from ..on_compat import on_command
@@ -21,6 +22,7 @@ from ..xiuxian_config import XiuConfig
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
 from ...paths import get_paths
+from ...features.dufang.application import DufangApplication
 from .transaction_service import (
     DufangBetService,
     DufangPayoutService,
@@ -32,6 +34,21 @@ player_data_manager = PlayerDataManager()
 dufang_bet_service = DufangBetService(get_paths().game_db, get_paths().player_db)
 dufang_payout_service = DufangPayoutService(get_paths().game_db, get_paths().player_db)
 dufang_share_service = DufangShareSettlementService(get_paths().game_db, get_paths().player_db)
+dufang_application = DufangApplication(get_paths().game_db)
+
+
+def _run_dufang_action(action, operation_id, user_id, call, **payload):
+    outcome = dufang_application.execute_legacy_call(
+        operation_id=operation_id,
+        user_id=str(user_id),
+        action=action,
+        payload=payload,
+        call=call,
+    )
+    data = dict(outcome.data or {})
+    data.setdefault("status", outcome.status)
+    data["succeeded"] = outcome.ok
+    return SimpleNamespace(**data)
 PLAYERSDATA = get_paths().players
 SHARING_DATA_PATH = Path(__file__).parent / "unseal_sharing.json"
 BANNED_UNSEAL_IDS = XiuConfig().banned_unseal_ids  # 禁止鉴石的群
@@ -270,16 +287,14 @@ async def handle_shared_event(
         return None, None
 
     settled_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    settlement = dufang_share_service.settle(
-        operation_id,
-        user_id,
-        event_type,
-        event_data["title"],
-        event_data["desc"],
-        effect_amount,
-        int(cost_bonus * 100),
-        recipients,
-        settled_at,
+    settlement = _run_dufang_action(
+        "share_settle", operation_id, user_id,
+        call=lambda: dufang_share_service.settle(
+            operation_id, user_id, event_type, event_data["title"], event_data["desc"],
+            effect_amount, int(cost_bonus * 100), recipients, settled_at,
+        ),
+        event_type=event_type, title=event_data["title"], effect_amount=effect_amount,
+        recipients=recipients, settled_at=settled_at,
     )
     if not settlement.succeeded:
         return None, None
@@ -415,7 +430,11 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await handle_send(bot, event, msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
         return
     placed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    bet = dufang_bet_service.place(operation_id, user_id, cost, placed_at)
+    bet = _run_dufang_action(
+        "bet", operation_id, user_id,
+        call=lambda: dufang_bet_service.place(operation_id, user_id, cost, placed_at),
+        cost=cost, placed_at=placed_at,
+    )
     if bet.status == "stone_insufficient":
         await handle_send(bot, event, "灵石余额已变化，本次鉴石未下注。", md_type="鉴石")
         return
@@ -482,9 +501,14 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         gain = 0
         requested_loss = int(cost * base_ratio)
         outcome = "loss"
-    payout = dufang_payout_service.settle(
-        payout_operation_id, operation_id, user_id, outcome, gain, requested_loss,
-        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    payout = _run_dufang_action(
+        "payout", payout_operation_id, user_id,
+        call=lambda: dufang_payout_service.settle(
+            payout_operation_id, operation_id, user_id, outcome, gain, requested_loss,
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        ),
+        parent_operation_id=operation_id, outcome=outcome, gain=gain,
+        requested_loss=requested_loss,
     )
     if not payout.succeeded:
         await handle_send(bot, event, "鉴石派彩未入账或已处理，请稍后查看灵石余额。", md_type="鉴石")

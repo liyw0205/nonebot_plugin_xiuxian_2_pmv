@@ -1,0 +1,93 @@
+from __future__ import annotations
+
+from dataclasses import asdict, is_dataclass
+from pathlib import Path
+from typing import Any, Mapping
+
+from ...core.errors import ConflictError, DomainError, ValidationError
+from ...core.result import OperationOutcome, ReplyPlan
+from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
+from ...infrastructure.observability import trace_context
+from .repository import LegacySectRepository, SectRepository
+
+
+def _data(raw: Any) -> dict[str, Any]:
+    if is_dataclass(raw):
+        return dict(asdict(raw))
+    if isinstance(raw, Mapping):
+        return dict(raw)
+    return dict(vars(raw))
+
+
+class SectApplication:
+    def __init__(self, database: str | Path, *, repository: SectRepository | None = None, ledger: OperationLedger | None = None) -> None:
+        self.database = str(database)
+        self.repository = repository
+        self.ledger = ledger or OperationLedger()
+
+    def _repository(self) -> SectRepository:
+        return self.repository or LegacySectRepository(self.database)
+
+    def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
+        with trace_context(operation_id=operation_id, user_scope=user_id):
+            try:
+                with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                    existing = self.ledger.begin(uow, operation_id, action, payload)
+                    if existing is not None:
+                        previous = existing.outcome()
+                        if previous is not None:
+                            return previous.replay()
+                        raise ConflictError("操作正在处理中")
+                raw = _data(call())
+                status = str(raw.get("status", "failed"))
+                data = {"status": status, **raw}
+                if status in {"applied", "joined", "learned", "duplicate"}:
+                    outcome = OperationOutcome.applied(operation_id, action, data=data, audit_category="sect")
+                else:
+                    outcome = OperationOutcome.rejected(operation_id, action, "宗门操作未完成。", code=status, data=data, audit_category="sect")
+                with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                    self.ledger.finish(uow, outcome)
+                return outcome
+            except DomainError:
+                raise
+            except Exception as exc:
+                self.ledger.record_failure(self.database, operation_id, action, payload, str(exc))
+                raise
+
+    def join(self, *, operation_id: str, user_id: str, sect_id: int, member_position: int = 12) -> OperationOutcome[dict[str, Any]]:
+        if not str(operation_id).strip() or not str(user_id).strip() or int(sect_id) <= 0:
+            raise ValidationError("operation_id, user_id and sect_id are required")
+        payload = {"user_id": str(user_id), "sect_id": int(sect_id), "member_position": int(member_position)}
+        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.join", payload=payload, call=lambda: self._repository().join(operation_id, user_id, sect_id, member_position=member_position))
+
+    def purchase(self, *, operation_id: str, user_id: str, **kwargs: Any) -> OperationOutcome[dict[str, Any]]:
+        if not str(operation_id).strip() or not str(user_id).strip():
+            raise ValidationError("operation_id and user_id are required")
+        payload = {"user_id": str(user_id), **kwargs}
+        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.purchase", payload=payload, call=lambda: self._repository().purchase(operation_id, user_id, **kwargs))
+
+    def learn_main(self, *, operation_id: str, user_id: str, **kwargs: Any) -> OperationOutcome[dict[str, Any]]:
+        return self._learn(operation_id=operation_id, user_id=user_id, action="sect.learn_main", method="learn_main", kwargs=kwargs)
+
+    def learn_secondary(self, *, operation_id: str, user_id: str, **kwargs: Any) -> OperationOutcome[dict[str, Any]]:
+        return self._learn(operation_id=operation_id, user_id=user_id, action="sect.learn_secondary", method="learn_secondary", kwargs=kwargs)
+
+    def _learn(self, *, operation_id: str, user_id: str, action: str, method: str, kwargs: Mapping[str, Any]) -> OperationOutcome[dict[str, Any]]:
+        if not str(operation_id).strip() or not str(user_id).strip():
+            raise ValidationError("operation_id and user_id are required")
+        payload = {"user_id": str(user_id), **dict(kwargs)}
+        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action=action, payload=payload, call=lambda: getattr(self._repository(), method)(operation_id, user_id, **dict(kwargs)))
+
+    def claim_elixir(self, *, operation_id: str, user_id: str, **kwargs: Any) -> OperationOutcome[dict[str, Any]]:
+        if not str(operation_id).strip() or not str(user_id).strip():
+            raise ValidationError("operation_id and user_id are required")
+        payload = {"user_id": str(user_id), **kwargs}
+        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.claim_elixir", payload=payload, call=lambda: self._repository().claim_elixir(operation_id, user_id, **kwargs))
+
+    def reply(self, **kwargs: Any) -> ReplyPlan:
+        action = str(kwargs.pop("action", "join"))
+        result = getattr(self, action)(**kwargs)
+        return ReplyPlan(result.data, reference=True)
+
+
+__all__ = ["SectApplication"]

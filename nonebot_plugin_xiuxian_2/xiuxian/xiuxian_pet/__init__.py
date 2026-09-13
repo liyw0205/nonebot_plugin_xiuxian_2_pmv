@@ -61,11 +61,11 @@ from ..xiuxian_utils.utils import (
 )
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ...paths import get_paths
-from .transaction_service import PetTravelClaimService
-from .transaction_service import PetFeedService
+from ...compatibility.pet import PetTravelClaimService
+from ...compatibility.pet import PetFeedService
 from .transaction_service import PetSkillReplaceService
-from .transaction_service import PetTravelStartService
-from .transaction_service import PetHatchService
+from ...compatibility.pet import PetTravelStartService
+from ...compatibility.pet import PetHatchService
 from .transaction_service import PetReleaseService
 from .transaction_service import PetFusionBreakthroughService
 from .transaction_service import PetSkillRerollService

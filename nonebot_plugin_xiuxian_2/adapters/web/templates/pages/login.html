@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>管理员登录</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f3f4f6; color: #111827; }
+    main { width: min(92vw, 26rem); padding: 1.5rem; background: white; border: 1px solid #d1d5db; border-radius: .5rem; box-sizing: border-box; }
+    h1 { margin-top: 0; font-size: 1.35rem; }
+    label { display: block; margin: 1rem 0 .35rem; font-weight: 600; }
+    input, button { width: 100%; box-sizing: border-box; padding: .7rem; font: inherit; }
+    button { margin-top: 1.2rem; cursor: pointer; }
+    [role="alert"] { color: #b91c1c; }
+    @media (prefers-color-scheme: dark) { body { background: #111827; color: #f9fafb; } main { background: #1f2937; border-color: #4b5563; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>管理员登录</h1>
+    {% if error %}<p role="alert">{{ error }}</p>{% endif %}
+    <form method="post" action="{{ url_for('pages.login') }}">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <label for="admin_id">管理员 ID</label>
+      <input id="admin_id" name="admin_id" required autocomplete="username">
+      <button type="submit">登录</button>
+    </form>
+  </main>
+</body>
+</html>

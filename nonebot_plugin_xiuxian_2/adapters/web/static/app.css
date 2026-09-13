@@ -1,0 +1,45 @@
+/* Minimal layout guards for the refactored admin pages.
+ *
+ * The JSON payload panel renders API responses with `white-space: pre`, so a
+ * long unbroken value (or a large dashboard document) used to widen the page
+ * past the viewport on phones.  These rules keep every page within the
+ * viewport without changing the visual design. */
+
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+}
+
+html,
+body {
+  margin: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+main {
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: 1rem;
+}
+
+/* Keep long JSON/tokens inside the viewport instead of stretching the page. */
+pre,
+code,
+[data-state-output] {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+img,
+svg,
+table,
+textarea,
+input,
+button,
+select {
+  max-width: 100%;
+}

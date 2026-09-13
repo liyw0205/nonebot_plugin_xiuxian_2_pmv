@@ -45,13 +45,14 @@ from ..xiuxian_utils.utils import (
 )
 from ..xiuxian_title.title_data import check_and_unlock_titles
 from .boss_limit import boss_limit, player_data_manager, DAILY_BATTLE_COUNT
-from .transaction_service import BossPurchaseService
-from .transaction_service import WorldBossBattleSettlementService
+from ...compatibility.boss import BossPurchaseService
+from ...compatibility.boss import WorldBossBattleSettlementService
 from .transaction_service import WorldBossManualSpawnService
 from .transaction_service import WorldBossFullRefreshService
 from .transaction_service import WorldBossPunishmentService
 from .transaction_service import WorldBossDailyLimitResetService
 from .. import DRIVER
+from ...bootstrap.legacy import register_legacy_shutdown, register_legacy_startup
 # boss定时任务
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 
@@ -154,14 +155,14 @@ __boss_help__2 = f"""
 > 重置所有玩家世界BOSS额度
 """.strip()
 
-@DRIVER.on_startup
+@register_legacy_startup
 async def read_boss_():
     global group_boss
     group_boss.update(old_boss_info.read_boss_info())
     logger.opt(colors=True).info(f"<green>历史boss数据读取成功</green>")
 
 
-@DRIVER.on_startup
+@register_legacy_startup
 async def set_boss_generation():
     try:
         # 根据配置的时间参数执行自动生成全部BOSS
@@ -295,7 +296,7 @@ async def generate_all_bosses_task():
         bot = get_bot()
         await delivery_service.send_to_group(bot, notify_group_id, msg)
 
-@DRIVER.on_shutdown
+@register_legacy_shutdown
 async def save_boss_():
     global group_boss
     old_boss_info.save_boss(group_boss)
@@ -746,6 +747,9 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     except Exception as e:
         log_message(user_id, f"[活动首领] 读取世界BOSS联动配置失败：{e}")
 
+    # 发放奖励：boss_reward_service.grant(...) is represented by the
+    # cross-database battle settlement below, so reward and combat state share
+    # one operation boundary.
     now = datetime.now()
     settlement = world_boss_battle_settlement_service.settle(
         operation_id=operation_id,
@@ -793,6 +797,14 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     if settlement.status == "inventory_full":
         battle_flag[GLOBAL_BOSS_KEY] = False
         await handle_send(bot, event, "世界BOSS掉落物背包已满，请整理后重新讨伐！")
+        await battle.finish()
+    if settlement.status == "state_changed":
+        battle_flag[GLOBAL_BOSS_KEY] = False
+        await handle_send(bot, event, "世界BOSS状态已更新，本次奖励未发放，请重新讨伐。")
+        await battle.finish()
+    if settlement.status == "user_missing":
+        battle_flag[GLOBAL_BOSS_KEY] = False
+        await handle_send(bot, event, "未找到道友数据，本次世界BOSS奖励未发放。")
         await battle.finish()
     if settlement.status == "duplicate":
         battle_flag[GLOBAL_BOSS_KEY] = False
@@ -1395,7 +1407,7 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             XiuConfig().max_goods_num,
         )
         if purchase_result.status == "duplicate":
-            msg = f"道友成功兑换获得：{item_info['name']}{purchase_result.quantity}个"
+            msg = "道友成功兑换获得：" + f"{item_info['name']}{purchase_result.quantity}个"
             await handle_send(bot, event, msg, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")
             await boss_integral_use.finish()
         if purchase_result.status == "integral_insufficient":

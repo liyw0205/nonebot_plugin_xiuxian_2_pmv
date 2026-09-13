@@ -1,0 +1,70 @@
+# Generated for the 2026-09-12 Termux baseline. Refresh with:
+#   python -m pip install -r requirements.txt pytest uvicorn
+#   python -m pip freeze > requirements.lock
+# The lock intentionally includes the test/CI toolchain (pytest, uvicorn and
+# their transitive dependencies) so a clean install can run
+# `python -m unittest discover -s tests` and the FastAPI driver without
+# reaching for unpinned packages.
+aiofiles==25.1.0
+aiohappyeyeballs==2.7.1
+aiohttp==3.13.5
+aiosignal==1.4.0
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.14.2
+APScheduler==3.11.2
+attrs==26.1.0
+blinker==1.9.0
+certifi==2026.7.22
+cffi==2.1.1
+charset-normalizer==3.5.1
+click==8.5.0
+cryptography==48.0.1
+curl_cffi==0.16.3
+exceptiongroup==1.3.1
+fastapi==0.139.0
+Flask==3.1.3
+frozenlist==1.8.0
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
+idna==3.19
+iniconfig==2.3.0
+itsdangerous==2.2.0
+Jinja2==3.1.6
+loguru==0.7.3
+Markdown==3.10.2
+MarkupSafe==3.0.3
+msgpack==1.2.1
+multidict==6.8.0
+nonebot-adapter-qq==1.7.1
+nonebot-plugin-apscheduler==0.5.0
+nonebot2==2.5.0
+numpy==2.4.4
+packaging==26.3
+pillow==12.2.0
+pluggy==1.6.0
+propcache==0.5.2
+psutil==7.2.2
+pycparser==3.0
+pydantic==2.13.4
+pydantic_core==2.46.4
+Pygments==2.21.0
+pygtrie==2.5.0
+PySocks==1.7.1
+pytest==9.1.1
+python-dotenv==1.2.3
+qrcode==8.2
+requests==2.33.1
+starlette==1.6.0
+typing-inspection==0.4.4
+typing_extensions==4.15.0
+tzlocal==5.4.4
+ujson==5.13.0
+urllib3==2.7.0
+uvicorn==0.52.4
+wcwidth==0.8.1
+Werkzeug==3.1.8
+wget==3.2
+yarl==1.24.2
+yt-dlp==2026.8.19

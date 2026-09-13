@@ -21,8 +21,8 @@ from . import db_backend
 from .data_source import jsondata
 from ..xiuxian_config import XiuConfig, convert_rank
 # from .. import DRIVER
-from nonebot import get_driver
 from .item_json import Items
+from ...bootstrap.legacy import register_legacy_shutdown
 from .xn_xiuxian_impart_config import config_impart
 from .player_data_manager import PlayerDataManager
 from .repositories import EconomyRepository, UserRepository
@@ -4542,13 +4542,12 @@ def number_count(num):
 
     return _number_count(num)
 
-driver = get_driver()
 sql_message = XiuxianDateManage()  # sql类
 items = Items()
 trade_manager = TradeDataManager()
 player_data_manager = PlayerDataManager()
 
-@driver.on_shutdown
+@register_legacy_shutdown
 async def close_db():
     # 统一调用单例关闭连接
     XiuxianDateManage().close()

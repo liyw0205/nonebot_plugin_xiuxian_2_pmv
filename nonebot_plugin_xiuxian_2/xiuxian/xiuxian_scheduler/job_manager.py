@@ -248,16 +248,22 @@ class SchedulerJobManager:
             return {
                 "type": "cron",
                 "fields": ordered or {field.name: str(field) for field in trigger.fields},
-                "summary": SchedulerJobManager._cron_summary(ordered or fields),
             }
         if isinstance(trigger, IntervalTrigger):
             seconds = max(int(trigger.interval.total_seconds()), 1)
             return {
                 "type": "interval",
                 "seconds": seconds,
-                "summary": SchedulerJobManager._interval_summary(seconds),
             }
-        return {"type": "readonly", "description": str(trigger), "summary": str(trigger)}
+        return {"type": "readonly", "description": str(trigger)}
+
+    @classmethod
+    def _trigger_summary(cls, trigger, serialized: dict[str, Any]) -> str:
+        if isinstance(trigger, CronTrigger):
+            return cls._cron_summary(serialized.get("fields", {}))
+        if isinstance(trigger, IntervalTrigger):
+            return cls._interval_summary(int(serialized.get("seconds", 0)))
+        return str(serialized.get("description", ""))
 
     @staticmethod
     def _interval_summary(seconds: int) -> str:
@@ -452,7 +458,7 @@ class SchedulerJobManager:
             "enabled": job.next_run_time is not None,
             "next_run_time": job.next_run_time.isoformat() if job.next_run_time else None,
             "trigger": trigger,
-            "schedule_text": trigger.get("summary") or trigger.get("description") or "",
+            "schedule_text": self._trigger_summary(job.trigger, trigger),
             "max_instances": int(job.max_instances),
             "coalesce": bool(job.coalesce),
         }
