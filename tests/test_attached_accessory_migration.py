@@ -10,23 +10,33 @@ from nonebot_plugin_xiuxian_2.infrastructure.database.attached_uow import Attach
 
 
 class AttachedAccessoryMigrationTests(unittest.TestCase):
-    def test_migration_targets_attached_namespace_and_rolls_back(self) -> None:
+    def test_migration_is_durable_and_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             game = root / "game.db"
             player = root / "player.db"
             sqlite3.connect(player).close()
             with AttachedDatabaseUnitOfWork(game, attachments={"player_data": player}, immediate=True) as uow:
-                apply_attached_player_accessory(uow)
-            self.assertEqual(
-                sqlite3.connect(player).execute("select count(*) from sqlite_master where type=? and name=?", ("table", "player_accessory")).fetchone()[0],
-                1,
-            )
+                self.assertTrue(apply_attached_player_accessory(uow))
+            with AttachedDatabaseUnitOfWork(game, attachments={"player_data": player}, immediate=True) as uow:
+                self.assertFalse(apply_attached_player_accessory(uow))
+            connection = sqlite3.connect(player)
+            self.assertEqual(connection.execute("select count(*) from attached_schema_migrations").fetchone()[0], 1)
+            self.assertEqual(connection.execute("select count(*) from player_accessory").fetchone()[0], 0)
+
+    def test_migration_rolls_back_schema_and_ledger_together(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            game = root / "game.db"
+            player = root / "player.db"
+            sqlite3.connect(player).close()
             with self.assertRaisesRegex(RuntimeError, "rollback"):
                 with AttachedDatabaseUnitOfWork(game, attachments={"player_data": player}, immediate=True) as uow:
-                    uow.execute("INSERT INTO player_data.player_accessory VALUES (?, ?, ?)", ("u1", "{}", "[]"))
+                    apply_attached_player_accessory(uow)
                     raise RuntimeError("rollback")
-            self.assertEqual(sqlite3.connect(player).execute("select count(*) from player_accessory").fetchone()[0], 0)
+            connection = sqlite3.connect(player)
+            self.assertEqual(connection.execute("select count(*) from sqlite_master where name='attached_schema_migrations'").fetchone()[0], 0)
+            self.assertEqual(connection.execute("select count(*) from sqlite_master where name='player_accessory'").fetchone()[0], 0)
 
 
 if __name__ == "__main__":
