@@ -204,6 +204,86 @@ def register_bank_first_use_matcher(driver: Any, holder: dict[str, Any], *, limi
     return matcher
 
 
+def register_bank_first_use_extended_matchers(driver: Any, holder: dict[str, Any]) -> tuple[Any, ...]:
+    """Register only the explicitly enabled bank operation matchers."""
+    marker = "_xiuxian_bank_first_use_extended_matchers"
+    existing = getattr(driver, marker, None)
+    if existing is not None:
+        return existing
+    from nonebot import on_command
+    from nonebot.params import CommandArg
+
+    context = holder.get("context")
+    services = getattr(context, "services", {}) if context is not None else {}
+    matchers: list[Any] = []
+
+    async def dispatch(bot: Bot, event: Event, args: Any, service: str, parser: Callable[..., Any], action: str) -> Any:
+        command_context = context_from_event(event, bot=bot)
+        try:
+            runtime = _runtime(holder)
+            values = parser(
+                user_id=command_context.user_id,
+                text=_plain_text(args),
+                operation_id=_message_id(command_context.raw_event, command_context.user_id, action),
+                clock=runtime.clock,
+            )
+            result = getattr(runtime.services[service], action)(**values)
+            labels = {
+                "applied": "操作成功。",
+                "duplicate": "该请求已经处理，无需重复提交。",
+                "user_missing": "未找到修仙数据。",
+                "saved_stone_insufficient": "灵庄存款不足。",
+                "stone_insufficient": "灵石不足。",
+                "state_changed": "账户状态已变化，请刷新后重试。",
+                "operation_conflict": "请求冲突，请勿重复提交不同内容。",
+            }
+            plan = ReplyPlan(labels.get(str(result.get("status")), "操作未结算。"), reference=True)
+        except (DomainError, KeyError, RuntimeError, TypeError, ValueError) as exc:
+            plan = ReplyPlan(str(exc), reference=True)
+        return await _send(holder, event, bot, plan)
+
+    if "bank_first_use_withdrawal" in services:
+        withdraw = on_command("灵庄新取灵石", priority=1, block=True)
+
+        @withdraw.handle()
+        async def _withdraw_handler(bot: Bot, event: Event, args: Message = CommandArg()):
+            from ...features.bank.commands import parse_first_use_deposit
+
+            def parse(**kwargs: Any) -> dict[str, Any]:
+                command = parse_first_use_deposit(limit=10**18, interest=0, bank_level="1", **kwargs)
+                return {"operation_id": command.operation_id, "user_id": command.user_id, "amount": command.amount, "interest": 0, "bank_level": "1", "settled_at": command.settled_at}
+
+            return await dispatch(bot, event, args, "bank_first_use_withdrawal", parse, "withdraw")
+
+        matchers.append(withdraw)
+
+    if "bank_first_use_upgrade" in services:
+        upgrade = on_command("灵庄新升级", priority=1, block=True)
+
+        @upgrade.handle()
+        async def _upgrade_handler(bot: Bot, event: Event, args: Message = CommandArg()):
+            from ...features.bank.commands import parse_first_use_upgrade
+
+            return await dispatch(bot, event, args, "bank_first_use_upgrade", parse_first_use_upgrade, "upgrade")
+
+        matchers.append(upgrade)
+
+    if "bank_first_use_interest" in services:
+        interest = on_command("灵庄新结息", priority=1, block=True)
+
+        @interest.handle()
+        async def _interest_handler(bot: Bot, event: Event, args: Message = CommandArg()):
+            from ...features.bank.commands import parse_first_use_interest
+
+            return await dispatch(bot, event, args, "bank_first_use_interest", parse_first_use_interest, "settle_interest")
+
+        matchers.append(interest)
+
+    result = tuple(matchers)
+    setattr(driver, marker, result)
+    return result
+
+
 def register_migrated_matchers(driver: Any, holder: dict[str, Any]) -> tuple[type[Any], ...]:
     """Register migrated matchers once and return their matcher classes."""
 
@@ -251,4 +331,4 @@ def register_migrated_matchers(driver: Any, holder: dict[str, Any]) -> tuple[typ
     return result
 
 
-__all__ = ["register_bank_first_use_matcher", "register_migrated_matchers"]
+__all__ = ["register_bank_first_use_extended_matchers", "register_bank_first_use_matcher", "register_migrated_matchers"]

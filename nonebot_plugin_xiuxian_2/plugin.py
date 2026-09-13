@@ -603,6 +603,10 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 from .features.bank.account_interest_application import BankInterestApplication
 
                 context.services["bank_first_use_interest"] = BankInterestApplication(str(context.database.path("game_db")))
+            if context.settings.get("bank_first_use_withdrawal_enabled", False):
+                from .features.bank.account_withdrawal_application import BankWithdrawalApplication
+
+                context.services["bank_first_use_withdrawal"] = BankWithdrawalApplication(str(context.database.path("game_db")))
         for feature_key, application_type in LEGACY_MIGRATED_APPLICATIONS.items():
             context.services[feature_key] = application_type(str(context.database.path("game_db")))
         context.reconcile_handlers = {
@@ -753,7 +757,7 @@ def install_driver_hooks(driver: Any) -> tuple[Any, Any]:
 
     # Matchers are wired once, before startup, but resolve applications only
     # after the lifecycle has assembled repositories and migrations.
-    from .adapters.nonebot import register_migrated_matchers, register_bank_first_use_matcher
+    from .adapters.nonebot import register_migrated_matchers, register_bank_first_use_extended_matchers, register_bank_first_use_matcher
 
     register_migrated_matchers(driver, holder)
 
@@ -773,6 +777,8 @@ def install_driver_hooks(driver: Any) -> tuple[Any, Any]:
                 holder,
                 limit=int(context.settings.get("bank_first_use_limit", 1000000000)),
             )
+        if any(key in context.services for key in ("bank_first_use_upgrade", "bank_first_use_interest", "bank_first_use_withdrawal")):
+            register_bank_first_use_extended_matchers(driver, holder)
         if state.phase is LifecyclePhase.NOT_READY:
             raise RuntimeError(state.error or "xiuxian runtime is not ready")
 
