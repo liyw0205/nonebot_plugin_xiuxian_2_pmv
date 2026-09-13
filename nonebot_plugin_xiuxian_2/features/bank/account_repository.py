@@ -28,13 +28,19 @@ class BankAccountRepository:
         return None if row is None else dict(row)
 
     def save_deposit(self, uow: DatabaseUnitOfWork, *, operation_id: str, user_id: str, payload: str, amount: int, decision: BankDepositDecision, bank_level: str, settled_at: str) -> None:
-        uow.execute("UPDATE user_xiuxian SET stone=? WHERE user_id=? AND stone>=?", (decision.wallet_after, user_id, amount))
+        changed = uow.execute("UPDATE user_xiuxian SET stone=? WHERE user_id=? AND stone>=?", (decision.wallet_after, user_id, amount))
+        if changed.rowcount != 1:
+            raise RuntimeError("wallet state changed during bank deposit")
         uow.execute("INSERT INTO bank_accounts(user_id,saved_stone,bank_level,updated_at) VALUES (?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET saved_stone=excluded.saved_stone, bank_level=excluded.bank_level, updated_at=excluded.updated_at", (user_id, decision.saved_after, bank_level, settled_at))
         uow.execute("INSERT INTO bank_account_operations(operation_id,user_id,payload,deposited,interest,wallet_after,saved_after,created_at) VALUES (?,?,?,?,?,?,?,?)", (operation_id, user_id, payload, amount, decision.interest, decision.wallet_after, decision.saved_after, settled_at))
 
     def save_withdrawal(self, uow: DatabaseUnitOfWork, *, operation_id: str, user_id: str, payload: str, amount: int, decision: BankWithdrawalDecision, bank_level: str, settled_at: str) -> None:
-        uow.execute("UPDATE user_xiuxian SET stone=? WHERE user_id=?", (decision.wallet_after, user_id))
-        uow.execute("UPDATE bank_accounts SET saved_stone=?, bank_level=?, updated_at=? WHERE user_id=?", (decision.saved_after, bank_level, settled_at, user_id))
+        changed = uow.execute("UPDATE user_xiuxian SET stone=? WHERE user_id=?", (decision.wallet_after, user_id))
+        if changed.rowcount != 1:
+            raise RuntimeError("wallet state changed during bank withdrawal")
+        updated = uow.execute("UPDATE bank_accounts SET saved_stone=?, bank_level=?, updated_at=? WHERE user_id=?", (decision.saved_after, bank_level, settled_at, user_id))
+        if updated.rowcount != 1:
+            raise RuntimeError("bank account state changed during bank withdrawal")
         uow.execute("INSERT INTO bank_account_operations(operation_id,user_id,payload,deposited,interest,wallet_after,saved_after,created_at) VALUES (?,?,?,?,?,?,?,?)", (operation_id, user_id, payload, -amount, decision.interest, decision.wallet_after, decision.saved_after, settled_at))
 
     def save_upgrade(self, uow: DatabaseUnitOfWork, *, operation_id: str, user_id: str, payload: str, amount: int, expected_level: str, decision: BankUpgradeDecision, settled_at: str) -> None:
