@@ -607,6 +607,10 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 from .features.bank.account_withdrawal_application import BankWithdrawalApplication
 
                 context.services["bank_first_use_withdrawal"] = BankWithdrawalApplication(str(context.database.path("game_db")))
+            if context.settings.get("bank_first_use_info_enabled", False):
+                from .features.bank.account_info_application import BankAccountInfoApplication
+
+                context.services["bank_first_use_info"] = BankAccountInfoApplication(str(context.database.path("game_db")))
         for feature_key, application_type in LEGACY_MIGRATED_APPLICATIONS.items():
             context.services[feature_key] = application_type(str(context.database.path("game_db")))
         context.reconcile_handlers = {

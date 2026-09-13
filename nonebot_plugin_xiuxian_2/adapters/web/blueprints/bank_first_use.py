@@ -94,4 +94,20 @@ def create_interest_blueprint(*, application: Any, permission) -> Blueprint:
     return router
 
 
-__all__ = ["create_first_use_blueprint", "create_interest_blueprint", "create_upgrade_blueprint"]
+def create_info_blueprint(*, application: Any, permission) -> Blueprint:
+    router = Blueprint("bank_first_use_info", __name__)
+
+    @router.get("/api/v1/bank/v2/info")
+    @guard("user", permission)
+    def info():
+        user_id = str(request.args.get("user_id", "")).strip()
+        try:
+            outcome = application.get_info(user_id=user_id)
+        except (TypeError, ValueError) as exc:
+            return api_error("validation_error", str(exc), status=400)
+        return api_success(outcome, status=200 if outcome.get("status") == "ok" else 404)
+
+    return router
+
+
+__all__ = ["create_first_use_blueprint", "create_info_blueprint", "create_interest_blueprint", "create_upgrade_blueprint"]

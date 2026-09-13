@@ -16,6 +16,9 @@ class BankAccountRepository:
 
     def account(self, uow: DatabaseUnitOfWork, user_id: str) -> dict[str, Any] | None:
         self.ensure_schema(uow)
+        return self.existing_account(uow, user_id)
+
+    def existing_account(self, uow: DatabaseUnitOfWork, user_id: str) -> dict[str, Any] | None:
         row = uow.query_one("SELECT user_id,saved_stone,bank_level,updated_at FROM bank_accounts WHERE user_id=?", (user_id,))
         return None if row is None else dict(row)
 
