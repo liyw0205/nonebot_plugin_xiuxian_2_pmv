@@ -189,6 +189,8 @@
 
 2026-09-13 bank first-use withdrawal slice：新增纯 `decide_withdraw`、`BankWithdrawalApplication` 和 repository attached to game-db `bank_accounts`/`bank_account_operations`；覆盖 saved balance、interest、wallet update、operation replay/conflict、insufficient balance and rollback in isolated SQLite. Bank deposit/withdrawal/command/Web/migration tests共 11 个通过，compileall、inventory、architecture、diff 通过。新 withdrawal 未接入旧 `灵庄` handler 或 live runtime，旧 withdrawal service 仍是真实路径，bank slice 未完成。
 
+2026-09-13 bank first-use withdrawal live safety：提交 `ec9d37b` 部署后未接入旧 `灵庄` handler，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据证明新 withdrawal 核心不会改变旧 runtime，旧 withdrawal service 仍为真实执行路径。
+
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。
 
 2026-09-13 bank first-use NoneBot boundary：新增 `register_bank_first_use_matcher`，只注册显式灰度命令 `灵庄新存灵石`，在 startup 完成且 `bank_first_use` service 注入后才安装；使用新 parser、Clock、operation_id 和 `BankDepositApplication`，旧 `灵庄` matcher 不变。新增 bank first-use command/application/Web/migration 聚焦测试共 7 个通过，compileall、inventory、architecture、diff 通过；默认灰度关闭，未把该 opt-in matcher 当作旧命令切换完成。
