@@ -50,6 +50,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
     adapter = (PACKAGE / "adapters" / "nonebot" / "commands.py").read_text(encoding="utf-8")
     web = (PACKAGE / "adapters" / "web" / "api.py").read_text(encoding="utf-8")
     legacy_transaction = (PACKAGE / "xiuxian" / "xiuxian_base" / "transaction_service.py").read_text(encoding="utf-8")
+    sign_effects = (PACKAGE / "features" / "sign_in" / "application_effects.py").read_text(encoding="utf-8")
+    plugin = (PACKAGE / "plugin.py").read_text(encoding="utf-8")
     return {
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,
@@ -63,6 +65,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "nonebot_application_path": "_build_sign" in adapter and "application.read_limits" in adapter,
             "web_application_path": "create_sign_in_blueprint" in web and "application.claim" in web,
             "old_service_removed": "class SignInService" not in legacy_transaction and (PACKAGE / "compatibility" / "legacy_sign_in.py").is_file(),
+            "effects_application_owned": "SignInApplicationEffects" in sign_effects and "SignInApplicationEffects(" in plugin,
+            "task_core_legacy": "SignInTaskEffects(record_task_progress)" in plugin,
+            "lottery_core_legacy_possible": "LotterySettlementService" in plugin,
             "status": "cutover_with_compatibility_rollback_side_effects_retained",
         },
     }
@@ -81,7 +86,7 @@ def main() -> int:
         "exit_blockers": [
             "legacy transaction services remain",
             "xiuxian2_handle remains in legacy execution paths",
-            "sign_in side effects are not yet application-owned"
+            "sign_in task/lottery side-effect cores remain legacy"
         ],
     }
     print(json.dumps(report, ensure_ascii=False, sort_keys=True, indent=None if args.json else 2))

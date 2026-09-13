@@ -9,8 +9,8 @@ from unittest.mock import patch
 import nonebot
 
 from nonebot_plugin_xiuxian_2.bootstrap import build_runtime_context
-from nonebot_plugin_xiuxian_2.compatibility.sign_in_effects import LegacySignInEffects
 from nonebot_plugin_xiuxian_2.features.sign_in.effects import NullSignInEffects
+from nonebot_plugin_xiuxian_2.features.sign_in.application_effects import SignInApplicationEffects
 from nonebot_plugin_xiuxian_2.plugin import build_lifecycle
 from tests.bootstrap import copy_static_data
 
@@ -23,7 +23,7 @@ class SignInEffectsWiringTests(unittest.TestCase):
         except ValueError:
             nonebot.init()
 
-    def test_legacy_runtime_wires_compatibility_effects(self) -> None:
+    def test_legacy_runtime_wires_feature_effects_with_legacy_lottery_port(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             data_dir = Path(directory) / "data"
             copy_static_data(Path(__file__).resolve().parents[1] / "data" / "xiuxian", data_dir)
@@ -31,7 +31,7 @@ class SignInEffectsWiringTests(unittest.TestCase):
             lifecycle, _, context = build_lifecycle(context)
             asyncio.run(lifecycle.start())
             try:
-                self.assertIsInstance(context.services["sign_in"].effects, LegacySignInEffects)
+                self.assertIsInstance(context.services["sign_in"].effects, SignInApplicationEffects)
             finally:
                 asyncio.run(lifecycle.shutdown())
 

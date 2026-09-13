@@ -406,14 +406,14 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 # wires them after plugin loading.
                 sign_in_effects = None
             else:
-                from .compatibility.sign_in_effects import LegacySignInEffects
+                from .features.sign_in.application_effects import SignInApplicationEffects
                 from .features.sign_in.statistics import SignInStatisticsRepository
                 from .features.sign_in.tasks import SignInTaskEffects
                 from .features.sign_in.lottery_application import LotteryApplication
                 from .features.sign_in.lottery_repository import LotteryRepository
                 from .xiuxian.xiuxian_base.transaction_service import LotterySettlementService
                 from .xiuxian.xiuxian_tasks.task_data import record_task_progress
-                from .xiuxian.xiuxian_utils.utils import log_message, update_statistics_value
+
 
                 legacy_lottery = os.environ.get("XIUXIAN_SIGN_IN_LEGACY_LOTTERY", "false").strip().lower() in {"1", "true", "yes", "on"}
                 if not legacy_lottery:
@@ -425,15 +425,12 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 ) if legacy_lottery else LotteryApplication(
                     str(context.database.path("game_db")), repository=LotteryRepository(), clock=context.clock, random_source=context.random,
                 )
-                sign_in_effects = LegacySignInEffects(
+                sign_in_effects = SignInApplicationEffects(
                     context.database.path("game_db"),
-                    lottery_service=lottery_service,
+                    lottery=lottery_service,
                     clock=context.clock,
-                    task_progress=record_task_progress,
-                    statistics=update_statistics_value,
-                    statistics_repository=SignInStatisticsRepository(str(context.database.path("game_db"))),
-                    task_effects=SignInTaskEffects(record_task_progress),
-                    logger=log_message,
+                    statistics=SignInStatisticsRepository(str(context.database.path("game_db"))),
+                    tasks=SignInTaskEffects(record_task_progress),
                 )
         context.services = {
             "daily_fortune": DailyFortuneApplication(str(context.database.path("game_db")), clock=context.clock, random_source=context.random),
