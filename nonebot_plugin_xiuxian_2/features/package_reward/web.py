@@ -1,10 +1,12 @@
-"""礼包开启没有独立 Web 页面；管理面板只展示 operation ledger。"""
+"""Transport-neutral declaration for the package reward Web boundary."""
 
 from typing import Any
 
 
 def blueprint(application: Any, *, permission=None):
-    return None
+    from ...adapters.web.blueprints.package_reward import create_blueprint
+
+    return create_blueprint(application=application, permission=permission)
 
 
 __all__ = ["blueprint"]

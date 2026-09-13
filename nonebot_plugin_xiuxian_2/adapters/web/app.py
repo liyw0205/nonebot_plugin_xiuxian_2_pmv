@@ -39,6 +39,7 @@ from ...features.rift.web import blueprint as rift_blueprint
 from .api import api_error, api_success
 from .auth import csrf_token
 from .auth import HostPolicy
+from .blueprints.package_reward import create_blueprint as package_reward_blueprint
 
 
 def create_app(
@@ -227,6 +228,13 @@ def create_app(
             str(context.database.path("game_db")), fee_rate=fee_rate, clock=context.clock
         )
         app.register_blueprint(stone_gift_blueprint(stone_gift, permission=has_permission, ids=context.ids))
+    if any(feature.key == "package_reward" for feature in registry.features):
+        from ...features.package_reward.application import PackageRewardApplication
+
+        package_reward = (context.services or {}).get("package_reward") or PackageRewardApplication(
+            str(context.database.path("game_db"))
+        )
+        app.register_blueprint(package_reward_blueprint(application=package_reward, permission=has_permission))
     if any(feature.key == "accessory_package" for feature in registry.features):
         from ...features.accessory_package.application import AccessoryPackageApplication
 
