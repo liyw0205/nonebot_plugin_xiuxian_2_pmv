@@ -21,8 +21,14 @@ class LotteryRepository:
         uow.execute("CREATE TABLE IF NOT EXISTS lottery_participants(business_date TEXT NOT NULL,user_id TEXT NOT NULL,operation_id TEXT NOT NULL UNIQUE,participated_at TEXT NOT NULL,PRIMARY KEY(business_date,user_id))")
         uow.execute("INSERT INTO lottery_pool_state(state_id,pool_amount,updated_at) VALUES(1,0,'') ON CONFLICT(state_id) DO NOTHING")
 
+    @staticmethod
+    def schema_exists(uow: DatabaseUnitOfWork) -> bool:
+        row = uow.query_one("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='lottery_pool_state'")
+        return row is not None
+
     def operation(self, uow: DatabaseUnitOfWork, operation_id: str) -> LotterySettlement | None:
-        self.ensure_schema(uow)
+        if not self.schema_exists(uow):
+            return None
         row = uow.query_one(f"SELECT {self.columns} FROM lottery_settlement_operations WHERE operation_id=?", (operation_id,))
         return self._result(row, "duplicate") if row else None
 

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from nonebot_plugin_xiuxian_2.features.sign_in.lottery_application import LotteryApplication
+from nonebot_plugin_xiuxian_2.features.sign_in.lottery_repository import LotteryRepository
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 
 
@@ -26,6 +27,7 @@ class LotteryApplicationTests(unittest.TestCase):
         with DatabaseUnitOfWork(self.database) as uow:
             uow.execute("CREATE TABLE user_xiuxian (user_id TEXT PRIMARY KEY, user_name TEXT, stone INTEGER)")
             uow.execute("INSERT INTO user_xiuxian VALUES (?, ?, ?)", ("u1", "甲", 100))
+            LotteryRepository.ensure_schema(uow)
         self.app = LotteryApplication(str(self.database), clock=Clock(), random_source=Random())
 
     def tearDown(self) -> None:
@@ -50,6 +52,12 @@ class LotteryApplicationTests(unittest.TestCase):
         second = self.app.settle(operation_id="lottery-2", user_id="u1", user_name="甲", business_date="2026-09-13", deposit=1000)
         self.assertEqual(first.status, "settled")
         self.assertEqual(second.status, "already_participated")
+
+    def test_missing_lottery_schema_is_not_silently_initialized(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            app = LotteryApplication(str(Path(directory) / "empty.db"), clock=Clock(), random_source=Random())
+            with self.assertRaisesRegex(RuntimeError, "schema migration"):
+                app.settle(operation_id="lottery-1", user_id="u1", user_name="甲", business_date="2026-09-13")
 
 
 if __name__ == "__main__":

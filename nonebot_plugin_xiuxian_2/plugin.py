@@ -414,6 +414,9 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 from .xiuxian.xiuxian_utils.utils import log_message, update_statistics_value
 
                 legacy_lottery = os.environ.get("XIUXIAN_SIGN_IN_LEGACY_LOTTERY", "false").strip().lower() in {"1", "true", "yes", "on"}
+                if not legacy_lottery:
+                    with DatabaseUnitOfWork(context.database.path("game_db")) as lottery_uow:
+                        legacy_lottery = not LotteryRepository.schema_exists(lottery_uow)
                 lottery_service = LotterySettlementService(
                     context.database.path("game_db"),
                     Path(__file__).parent / "xiuxian" / "xiuxian_base" / "lottery_pool.json",

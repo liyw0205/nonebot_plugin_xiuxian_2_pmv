@@ -34,6 +34,8 @@ class LotteryApplication:
         day = business_date.date().isoformat() if isinstance(business_date, datetime) else business_date.isoformat() if isinstance(business_date, date) else str(business_date)
         deposit = int(deposit)
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            if not self.repository.schema_exists(uow):
+                raise RuntimeError("lottery schema migration and legacy pool reconciliation are required")
             previous = self.repository.operation(uow, operation_id)
             if previous is not None:
                 if previous.user_id != user_id or previous.deposit != deposit:
