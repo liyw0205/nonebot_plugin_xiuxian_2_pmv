@@ -4,6 +4,7 @@ from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from .lottery import LotterySettlement
+from .lottery_snapshot import LotterySnapshot, LotteryWinner
 
 
 class LotteryRepository:
@@ -46,6 +47,13 @@ class LotteryRepository:
     def participant_count(self, uow: DatabaseUnitOfWork, business_date: str) -> int:
         row = uow.query_one("SELECT COUNT(*) AS count FROM lottery_participants WHERE business_date=?", (business_date,))
         return int(row["count"] if row else 0)
+
+    def snapshot(self, uow: DatabaseUnitOfWork, business_date: str) -> LotterySnapshot:
+        pool = self.pool(uow)
+        participants = self.participant_count(uow, business_date)
+        row = uow.query_one("SELECT user_id,user_name,won_at,prize_amount,lottery_number,prize_tier FROM lottery_winner_history ORDER BY id DESC LIMIT 1")
+        winner = None if row is None else LotteryWinner(str(row["user_id"]), str(row["user_name"]), str(row["won_at"]), int(row["prize_amount"]), int(row["lottery_number"]), str(row["prize_tier"]))
+        return LotterySnapshot(business_date, pool, participants, winner)
 
     def _result(self, row: Any, status: str) -> LotterySettlement:
         return LotterySettlement(status=status, operation_id=str(row["operation_id"]), user_id=str(row["user_id"]), user_name=str(row["user_name"]), business_date=str(row["business_date"]), lottery_number=int(row["lottery_number"]), prize_tier=str(row["prize_tier"]), prize=int(row["prize_amount"]), deposit=int(row["deposit_amount"]), pool_before=int(row["pool_before"]), pool_after=int(row["pool_after"]), participants=int(row["participant_count"]), wallet_stone=int(row["wallet_stone"]))

@@ -8,6 +8,7 @@ from ...infrastructure.database import DatabaseUnitOfWork
 from ...infrastructure.random_source import SystemRandom
 from .lottery import LotterySettlement, lottery_prize, lottery_tier
 from .lottery_repository import LotteryRepository
+from .lottery_snapshot import LotterySnapshot
 
 
 class LotteryApplication:
@@ -64,6 +65,13 @@ class LotteryApplication:
             result = LotterySettlement("settled", operation_id, user_id, str(user["user_name"]), day, number, tier, prize, deposit, before, after, participants, wallet)
             self.repository.insert(uow, result, occurred_at.strftime("%Y-%m-%d %H:%M:%S"))
             return result
+
+    def snapshot(self, business_date: str | date) -> LotterySnapshot:
+        day = business_date.isoformat() if isinstance(business_date, date) else str(business_date)
+        with DatabaseUnitOfWork(self.database) as uow:
+            if not self.repository.schema_exists(uow):
+                raise RuntimeError("lottery schema migration is required")
+            return self.repository.snapshot(uow, day)
 
 
 __all__ = ["LotteryApplication"]

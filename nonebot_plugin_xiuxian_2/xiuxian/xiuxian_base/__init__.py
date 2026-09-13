@@ -848,7 +848,16 @@ async def hongyun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看中奖记录和当前奖池"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     business_date = datetime.now().date().isoformat()
-    snapshot = lottery_settlement_service.get_snapshot(business_date)
+    from ...infrastructure.database import DatabaseUnitOfWork
+    from ...features.sign_in.lottery_application import LotteryApplication
+    from ...features.sign_in.lottery_repository import LotteryRepository
+
+    with DatabaseUnitOfWork(get_paths().game_db) as uow:
+        migrated_lottery = LotteryRepository.schema_exists(uow)
+    if migrated_lottery:
+        snapshot = LotteryApplication(str(get_paths().game_db)).snapshot(business_date)
+    else:
+        snapshot = lottery_settlement_service.get_snapshot(business_date)
     msg = "**鸿运当头**\n---\n"
     msg += f"当前奖池累计\n> {number_to(snapshot.pool)}灵石\n"
     msg += f"本期参与人数\n> {snapshot.participants}位道友\n\n"
