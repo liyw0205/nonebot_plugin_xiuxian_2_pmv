@@ -411,8 +411,41 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         await bank.finish()
 
     elif mode == '结算':
-        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "")).strip()
         operation_id = f"bank-interest:{event_id}:{user_id}" if event_id else f"bank-interest:{user_id}:{time.time_ns()}"
+        from ...features.bank.account_info_application import BankAccountInfoApplication
+        from ...features.bank.account_interest_application import BankInterestApplication
+        from ...features.bank.interest_rules import calculate_interest
+        from ...infrastructure.clock import SystemClock
+
+        migrated_account = BankAccountInfoApplication(get_paths().game_db).get_info(user_id=user_id)
+        if migrated_account.get("status") == "ok":
+            now = SystemClock().now()
+            level = str(migrated_account["bank_level"])
+            interest, hours = calculate_interest(
+                saved_stone=int(migrated_account["saved_stone"]),
+                saved_at=str(migrated_account["updated_at"]),
+                settled_at=now,
+                rate=float(BANKLEVEL[level]["interest"]),
+            )
+            result = BankInterestApplication(get_paths().game_db).settle_interest(
+                operation_id=operation_id,
+                user_id=user_id,
+                interest=interest,
+                bank_level=level,
+                settled_at=now.strftime("%Y-%m-%d %H:%M:%S"),
+            )
+            status = str(result.get("status"))
+            if status == "duplicate":
+                msg = "**灵庄结息**\n---\n✅ 结息成功\n该结息请求已经处理，无需重复提交。"
+            elif status == "applied":
+                msg = f"**灵庄结息**\n---\n✅ 结息成功\n结息时间\n> {hours}小时\n获得灵石\n> {result['interest']}枚"
+            elif status == "state_changed":
+                msg = "⚠️ 灵庄结息失败：账户当前状态已更新，本次未处理。"
+            else:
+                msg = "灵庄结息未完成。"
+            await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
+            await bank.finish()
         prior = bank_interest_service.get_result(operation_id)
         if prior is not None and prior.succeeded:
             msg = f"**灵庄结息**\n---\n✅ 结息成功\n获得灵石\n> {prior.interest}枚\n该结息请求已经处理，无需重复提交。"

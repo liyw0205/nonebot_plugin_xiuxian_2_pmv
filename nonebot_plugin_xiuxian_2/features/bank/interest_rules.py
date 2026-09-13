@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from dataclasses import dataclass
 
 
@@ -18,4 +20,16 @@ def decide_interest(*, wallet: int, interest: int, settled_at: str) -> BankInter
     return BankInterestDecision(wallet + interest, settled_at)
 
 
-__all__ = ["BankInterestDecision", "decide_interest"]
+def calculate_interest(*, saved_stone: int, saved_at: str, settled_at: datetime, rate: float) -> tuple[int, float]:
+    saved_stone = int(saved_stone)
+    rate = float(rate)
+    if saved_stone < 0 or rate < 0:
+        raise ValueError("bank interest values are invalid")
+    previous = datetime.strptime(str(saved_at), "%Y-%m-%d %H:%M:%S")
+    hours = round((settled_at - previous).total_seconds() / 3600, 2)
+    if hours < 0:
+        raise ValueError("settlement time precedes account time")
+    return int(saved_stone * hours * rate), hours
+
+
+__all__ = ["BankInterestDecision", "calculate_interest", "decide_interest"]
