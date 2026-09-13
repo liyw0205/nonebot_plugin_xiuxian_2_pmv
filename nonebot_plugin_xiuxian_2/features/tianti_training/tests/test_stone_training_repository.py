@@ -3,9 +3,9 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+import json
 
-from ..repository import StoneTrainingSqlRepository
+from ..repository import StoneTrainingSqlRepository, TiantiProfileReader
 
 
 class StoneTrainingSqlRepositoryTests(unittest.TestCase):
@@ -14,10 +14,15 @@ class StoneTrainingSqlRepositoryTests(unittest.TestCase):
         root = Path(self.temp_dir.name)
         self.game = root / "game.sqlite3"
         self.player = root / "player.sqlite3"
+        (root / "炼体").mkdir()
+        (root / "炼体" / "炼体境界.json").write_text(
+            json.dumps({"初境": {"rank": 1, "need_hp": 0}}, ensure_ascii=False), encoding="utf-8"
+        )
         import sqlite3
         with sqlite3.connect(self.game) as conn:
             conn.execute("CREATE TABLE user_xiuxian (user_id TEXT PRIMARY KEY, stone INTEGER NOT NULL)")
             conn.execute("INSERT INTO user_xiuxian VALUES ('user', 1000)")
+
         self.default = {
             "tianti_level": "初境", "tianti_hp": 10, "last_settle_time": None,
             "medicine_last_time": None, "medicine_end_time": None,
@@ -28,7 +33,11 @@ class StoneTrainingSqlRepositoryTests(unittest.TestCase):
             "_default": lambda _self: dict(self.default),
             "_clean_user_data": lambda _self, data: {**self.default, **data},
         })()
-        self.repository = StoneTrainingSqlRepository(self.game, self.player, data_manager=manager, cap_provider=lambda _data: 1000)
+        self.repository = StoneTrainingSqlRepository(
+            self.game, self.player, data_manager=manager,
+            cap_provider=lambda _data: 1000,
+            profile_reader=TiantiProfileReader(root),
+        )
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
@@ -44,6 +53,10 @@ class StoneTrainingSqlRepositoryTests(unittest.TestCase):
             return row[0] if row else None
 
     def test_success_and_replay_are_atomic(self):
+        import sqlite3
+        with sqlite3.connect(self.player) as conn:
+            conn.execute("CREATE TABLE tianti_info (user_id TEXT PRIMARY KEY, tianti_level TEXT, tianti_hp TEXT)")
+            conn.execute("INSERT INTO tianti_info VALUES ('user', '初境', '10')")
         first = self.call()
         second = self.call()
         self.assertEqual((first.status, first.stone_cost, first.hp_gain, first.new_hp), ("trained", 100, 10, 20))

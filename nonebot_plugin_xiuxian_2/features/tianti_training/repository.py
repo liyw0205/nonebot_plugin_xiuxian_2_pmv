@@ -10,6 +10,49 @@ from ...infrastructure.database import DatabaseUnitOfWork
 from .domain import decide_stone_training
 
 
+class TiantiProfileReader:
+    """Read the immutable tianti level profile without loading legacy modules."""
+
+    def __init__(self, data_directory: str | Path, *, closing_multiplier: float = 1.5) -> None:
+        self.path = Path(data_directory) / "炼体" / "炼体境界.json"
+        self.closing_multiplier = float(closing_multiplier)
+        self._levels: dict[str, dict[str, Any]] | None = None
+
+    def levels(self) -> dict[str, dict[str, Any]]:
+        if self._levels is None:
+            with self.path.open("r", encoding="utf-8") as stream:
+                loaded = json.load(stream)
+            if not isinstance(loaded, dict) or not loaded:
+                raise ValueError("炼体境界配置无效")
+            self._levels = {str(name): dict(value) for name, value in loaded.items() if isinstance(value, dict)}
+        return self._levels
+
+    def default_data(self) -> dict[str, Any]:
+        first = min(self.levels(), key=lambda name: int(self.levels()[name].get("rank", 0)))
+        return {
+            "tianti_level": first, "tianti_hp": 0, "last_settle_time": None,
+            "medicine_last_time": None, "medicine_end_time": None,
+            "medicine_effect": 0.0, "medicine_name": "", "opened_qiaoxue": [],
+            "opened_qiaoxue_detail": [], "qiaoxue_stage_opened": {},
+        }
+
+    def clean(self, row: Mapping[str, Any] | None) -> dict[str, Any]:
+        data = self.default_data()
+        for key in data:
+            if row and row.get(key) is not None:
+                data[key] = row[key]
+        data["tianti_level"] = data["tianti_level"] if data["tianti_level"] in self.levels() else self.default_data()["tianti_level"]
+        data["tianti_hp"] = max(0, int(data.get("tianti_hp", 0) or 0))
+        return data
+
+    def cap(self, data: Mapping[str, Any]) -> int:
+        current = self.levels()[str(data["tianti_level"])]
+        next_level = next((item for item in self.levels().values() if int(item.get("rank", 0)) == int(current.get("rank", 0)) + 1), None)
+        if next_level is None:
+            return 10**30
+        return int(int(next_level.get("need_hp", 0)) * self.closing_multiplier)
+
+
 @dataclass(frozen=True)
 class StoneTrainingPersistenceResult:
     status: str
@@ -44,28 +87,25 @@ class TiantiTrainingRepository(Protocol):
 class StoneTrainingSqlRepository:
     """Feature-owned stone training persistence on the catalogued databases."""
 
-    def __init__(self, game_database: str | Path, player_database: str | Path, *, data_manager: Any = None, cap_provider: Callable[[dict[str, Any]], int] | None = None) -> None:
+    def __init__(self, game_database: str | Path, player_database: str | Path, *, data_manager: Any = None, cap_provider: Callable[[dict[str, Any]], int] | None = None, profile_reader: TiantiProfileReader | None = None) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
         self._manager = data_manager
         self._cap_provider = cap_provider
+        self._profile_reader = profile_reader or TiantiProfileReader(Path(player_database).parent)
 
     def train(self, operation_id: str, user_id: str, requested_stone: int) -> Any:
         if self._manager is None:
-            from ...xiuxian.xiuxian_tianti.tianti_data import TiantiDataManager
-
-            self._manager = TiantiDataManager()
+            self._manager = self._profile_reader
 
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         requested_stone = int(requested_stone)
         if not operation_id or requested_stone <= 0:
             raise ValueError("operation_id and requested_stone must be positive")
         if self._cap_provider is None:
-            from ...xiuxian.xiuxian_tianti.transaction_service import get_tianti_cap
+            self._cap_provider = self._profile_reader.cap
 
-            self._cap_provider = get_tianti_cap
-
-        fields = tuple(self._manager._default().keys())
+        fields = tuple(self._profile_reader.default_data().keys())
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
             uow.execute("CREATE TABLE IF NOT EXISTS player_data.tianti_info (user_id TEXT PRIMARY KEY)")
@@ -85,7 +125,7 @@ class StoneTrainingSqlRepository:
             if int(user["stone"]) < requested_stone:
                 return StoneTrainingPersistenceResult("stone_insufficient", user_id, requested_stone, 0, 0, 0)
             row = uow.query_one("SELECT * FROM player_data.tianti_info WHERE user_id=?", (user_id,))
-            data = self._manager._clean_user_data(dict(row) if row else {})
+            data = self._profile_reader.clean(dict(row) if row else {})
             cap = self._cap_provider(data)
             decision = decide_stone_training(old_hp=int(data["tianti_hp"]), requested_stone=requested_stone, hp_cap=cap)
             if decision.status == "at_cap":
