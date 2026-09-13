@@ -4699,6 +4699,14 @@
       "methods": [
         "POST"
       ],
+      "path": "/api/v1/bank/v2/interest",
+      "permission": "user"
+    },
+    {
+      "feature": "bank",
+      "methods": [
+        "POST"
+      ],
       "path": "/api/v1/bank/v2/upgrade",
       "permission": "user"
     },

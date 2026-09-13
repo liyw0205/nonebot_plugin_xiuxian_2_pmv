@@ -40,7 +40,7 @@ from .api import api_error, api_success
 from .auth import csrf_token
 from .auth import HostPolicy
 from .blueprints.package_reward import create_blueprint as package_reward_blueprint
-from .blueprints.bank_first_use import create_first_use_blueprint as bank_first_use_blueprint, create_upgrade_blueprint as bank_upgrade_first_use_blueprint
+from .blueprints.bank_first_use import create_first_use_blueprint as bank_first_use_blueprint, create_interest_blueprint as bank_interest_first_use_blueprint, create_upgrade_blueprint as bank_upgrade_first_use_blueprint
 
 
 def create_app(
@@ -280,6 +280,9 @@ def create_app(
         first_use_upgrade = (context.services or {}).get("bank_first_use_upgrade")
         if first_use_upgrade is not None:
             app.register_blueprint(bank_upgrade_first_use_blueprint(application=first_use_upgrade, permission=has_permission))
+        first_use_interest = (context.services or {}).get("bank_first_use_interest")
+        if first_use_interest is not None:
+            app.register_blueprint(bank_interest_first_use_blueprint(application=first_use_interest, permission=has_permission))
     if any(feature.key == "activity_reward" for feature in registry.features):
         from ...features.activity_reward.application import ActivityRewardApplication
 

@@ -6,6 +6,7 @@ from ...infrastructure.database import DatabaseUnitOfWork
 from .rules import BankDepositDecision
 from .withdrawal_rules import BankWithdrawalDecision
 from .upgrade_rules import BankUpgradeDecision
+from .interest_rules import BankInterestDecision
 
 
 class BankAccountRepository:
@@ -49,6 +50,24 @@ class BankAccountRepository:
         uow.execute(
             "INSERT INTO bank_account_operations(operation_id,user_id,payload,deposited,interest,wallet_after,saved_after,created_at) VALUES (?,?,?,?,?,?,?,?)",
             (operation_id, user_id, payload, 0, 0, decision.wallet_after, 0, settled_at),
+        )
+
+    def save_interest(self, uow: DatabaseUnitOfWork, *, operation_id: str, user_id: str, payload: str, interest: int, decision: BankInterestDecision, bank_level: str, saved_stone: int, settled_at: str) -> None:
+        changed = uow.execute(
+            "UPDATE user_xiuxian SET stone=? WHERE user_id=?",
+            (decision.wallet_after, user_id),
+        )
+        if changed.rowcount != 1:
+            raise RuntimeError("wallet state changed during bank interest")
+        updated = uow.execute(
+            "UPDATE bank_accounts SET updated_at=?, bank_level=? WHERE user_id=?",
+            (settled_at, bank_level, user_id),
+        )
+        if updated.rowcount != 1:
+            raise RuntimeError("bank account state changed during bank interest")
+        uow.execute(
+            "INSERT INTO bank_account_operations(operation_id,user_id,payload,deposited,interest,wallet_after,saved_after,created_at) VALUES (?,?,?,?,?,?,?,?)",
+            (operation_id, user_id, payload, 0, interest, decision.wallet_after, saved_stone, settled_at),
         )
 
 
