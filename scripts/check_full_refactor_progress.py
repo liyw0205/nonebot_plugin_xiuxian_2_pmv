@@ -60,10 +60,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
         },
         "sign_in": {
             "default_legacy_handler_disabled": '"修仙签到" if _legacy_sign_in_enabled' in base,
-            "nonebot_application_path": "handle_sign_in" in adapter,
+            "nonebot_application_path": "_build_sign" in adapter and "application.read_limits" in adapter,
             "web_application_path": "create_sign_in_blueprint" in web and "application.claim" in web,
-            "old_service_removed": False,
-            "status": "cutover_with_rollback_old_service_and_side_effects_retained",
+            "old_service_removed": "class SignInService" not in legacy_transaction and (PACKAGE / "compatibility" / "legacy_sign_in.py").is_file(),
+            "status": "cutover_with_compatibility_rollback_side_effects_retained",
         },
     }
 
