@@ -63,10 +63,10 @@ class LegacySignInEffects(SignInEffects):
         now = self.clock.now() if hasattr(self.clock, "now") else self.clock()
         business_date = now.date().isoformat() if isinstance(now, datetime) else str(now)[:10]
         settled = self.lottery_service.settle(
-            f"lottery:{operation_id}",
-            str(user_id),
-            self._user_name(str(user_id)),
-            business_date,
+            operation_id=f"lottery:{operation_id}",
+            user_id=str(user_id),
+            user_name=self._user_name(str(user_id)),
+            business_date=business_date,
             occurred_at=now,
         )
         if settled.status == "operation_conflict":

@@ -9,6 +9,7 @@ rules or SQL.
 from __future__ import annotations
 
 from pathlib import Path
+import os
 from typing import Any
 
 from .bootstrap import FeatureRegistry, Lifecycle, LifecyclePhase, Readiness, RuntimeContext, build_runtime_context
@@ -406,16 +407,22 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 from .compatibility.sign_in_effects import LegacySignInEffects
                 from .features.sign_in.statistics import SignInStatisticsRepository
                 from .features.sign_in.tasks import SignInTaskEffects
+                from .features.sign_in.lottery_application import LotteryApplication
+                from .features.sign_in.lottery_repository import LotteryRepository
                 from .xiuxian.xiuxian_base.transaction_service import LotterySettlementService
                 from .xiuxian.xiuxian_tasks.task_data import record_task_progress
                 from .xiuxian.xiuxian_utils.utils import log_message, update_statistics_value
 
+                legacy_lottery = os.environ.get("XIUXIAN_SIGN_IN_LEGACY_LOTTERY", "false").strip().lower() in {"1", "true", "yes", "on"}
+                lottery_service = LotterySettlementService(
+                    context.database.path("game_db"),
+                    Path(__file__).parent / "xiuxian" / "xiuxian_base" / "lottery_pool.json",
+                ) if legacy_lottery else LotteryApplication(
+                    str(context.database.path("game_db")), repository=LotteryRepository(), clock=context.clock, random_source=context.random,
+                )
                 sign_in_effects = LegacySignInEffects(
                     context.database.path("game_db"),
-                    lottery_service=LotterySettlementService(
-                        context.database.path("game_db"),
-                        Path(__file__).parent / "xiuxian" / "xiuxian_base" / "lottery_pool.json",
-                    ),
+                    lottery_service=lottery_service,
                     clock=context.clock,
                     task_progress=record_task_progress,
                     statistics=update_statistics_value,
