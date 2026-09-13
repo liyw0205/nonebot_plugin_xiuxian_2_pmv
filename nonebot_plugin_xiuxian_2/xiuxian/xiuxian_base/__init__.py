@@ -876,32 +876,15 @@ async def handle_lottery(user_info: dict, operation_id: str):
     """处理鸿运抽奖逻辑"""
     user_id = user_info['user_id']
     user_name = user_info['user_name']
-    from ...features.sign_in.clock import sign_in_clock
+    from ...features.sign_in.commands import format_lottery_result, settle_lottery
 
-    occurred_at = sign_in_clock().now()
-    from ...infrastructure.database import DatabaseUnitOfWork
-    from ...features.sign_in.lottery_application import LotteryApplication
-    from ...features.sign_in.lottery_repository import LotteryRepository
-
-    with DatabaseUnitOfWork(get_paths().game_db) as uow:
-        migrated_lottery = LotteryRepository.schema_exists(uow)
-    if migrated_lottery:
-        settled = LotteryApplication(str(get_paths().game_db)).settle(
-            operation_id=operation_id,
-            user_id=user_id,
-            user_name=user_name,
-            business_date=occurred_at.date().isoformat(),
-            occurred_at=occurred_at,
-        )
-    else:
-        settled = _legacy_lottery_service().settle(
-            operation_id,
-            user_id,
-            user_name,
-            occurred_at.date().isoformat(),
-            occurred_at=occurred_at,
-        )
-    from ...features.sign_in.commands import format_lottery_result
+    settled = settle_lottery(
+        str(get_paths().game_db),
+        user_id=user_id,
+        user_name=user_name,
+        operation_id=operation_id,
+        legacy_settle=lambda *args, **kwargs: _legacy_lottery_service().settle(*args, **kwargs),
+    )
 
     return format_lottery_result(settled, number_to)
 

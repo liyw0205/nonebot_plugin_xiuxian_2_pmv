@@ -3,8 +3,12 @@ from __future__ import annotations
 from typing import Any
 
 from ...core.result import ReplyPlan
+from ...infrastructure.database import DatabaseUnitOfWork
 from .application import SignInApplication
+from .clock import sign_in_clock
 from .lottery_snapshot import LotterySnapshot
+from .lottery_application import LotteryApplication
+from .lottery_repository import LotteryRepository
 
 
 def handle_sign_in(application: SignInApplication, *, user_id: str, operation_id: str, lower_limit: int, upper_limit: int) -> ReplyPlan:
@@ -46,4 +50,33 @@ def format_lottery_result(result: Any, number_to: Any) -> str:
     return "本次签到未中奖，奖池继续累积~"
 
 
-__all__ = ["format_lottery_result", "format_lottery_snapshot", "handle_sign_in"]
+def settle_lottery(
+    database: str,
+    *,
+    user_id: str,
+    user_name: str,
+    operation_id: str,
+    legacy_settle: Any,
+) -> Any:
+    occurred_at = sign_in_clock().now()
+    business_date = occurred_at.date().isoformat()
+    with DatabaseUnitOfWork(database) as uow:
+        migrated = LotteryRepository.schema_exists(uow)
+    if migrated:
+        return LotteryApplication(database).settle(
+            operation_id=operation_id,
+            user_id=user_id,
+            user_name=user_name,
+            business_date=business_date,
+            occurred_at=occurred_at,
+        )
+    return legacy_settle(
+        operation_id,
+        user_id,
+        user_name,
+        business_date,
+        occurred_at=occurred_at,
+    )
+
+
+__all__ = ["format_lottery_result", "format_lottery_snapshot", "handle_sign_in", "settle_lottery"]
