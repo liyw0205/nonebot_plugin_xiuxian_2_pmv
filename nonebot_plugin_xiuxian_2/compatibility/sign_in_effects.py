@@ -41,24 +41,39 @@ class LegacySignInEffects(SignInEffects):
             row = uow.query_one("SELECT user_name FROM user_xiuxian WHERE user_id = ? LIMIT 1", (str(user_id),))
         return str(row["user_name"] if row else user_id)
 
-    def on_signed(self, *, user_id: str, operation_id: str, stone: int, replayed: bool) -> None:
+    def on_signed(self, *, user_id: str, operation_id: str, stone: int, replayed: bool) -> str | None:
         now = self.clock.now() if hasattr(self.clock, "now") else self.clock()
         business_date = now.date().isoformat() if isinstance(now, datetime) else str(now)[:10]
-        self.lottery_service.settle(
+        settled = self.lottery_service.settle(
             f"lottery:{operation_id}",
             str(user_id),
             self._user_name(str(user_id)),
             business_date,
             occurred_at=now,
         )
+        if settled.status == "operation_conflict":
+            return "鸿运结算记录冲突，请联系管理员处理。"
+        if settled.status == "user_missing":
+            return "未找到修仙存档，本次鸿运未结算。"
+        if settled.status == "already_participated" and not settled.lottery_number:
+            message = "本期鸿运已经参与，奖池继续累积~"
+        elif settled.prize_tier == "grand":
+            message = f"✨鸿运当头！恭喜道友获得特等奖！\n中奖号码：{settled.lottery_number}\n获得奖池中{settled.prize}灵石！🎉🎉🎉"
+        else:
+            prize_names = {"first": "一等奖", "second": "二等奖", "third": "三等奖"}
+            if settled.prize_tier in prize_names:
+                message = f"🎉恭喜道友获得{prize_names[settled.prize_tier]}！\n中奖号码：{settled.lottery_number}\n获得奖池的{settled.prize}灵石！🎉"
+            else:
+                message = "本次签到未中奖，奖池继续累积~"
         if replayed:
-            return
+            return message + "\n该签到请求已经处理，无需重复提交。"
         if self.statistics is not None:
             self.statistics(str(user_id), "修仙签到")
         if self.task_progress is not None:
             self.task_progress(str(user_id), "sign_in", operation_id=f"task-progress:{operation_id}")
         if self.logger is not None:
             self.logger(str(user_id), f"签到成功，获取{int(stone)}块灵石")
+        return message
 
 
 __all__ = ["LegacySignInEffects"]

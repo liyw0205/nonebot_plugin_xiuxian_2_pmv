@@ -13,14 +13,14 @@ class SignInEffects(Protocol):
         operation_id: str,
         stone: int,
         replayed: bool,
-    ) -> None:
-        """Apply idempotent lottery/statistics/task effects for one operation."""
+    ) -> str | None:
+        """Apply idempotent effects and return optional user-facing text."""
 
 
 class NullSignInEffects:
     """Default no-op until deployment wiring supplies the real adapters."""
 
-    def on_signed(self, *, user_id: str, operation_id: str, stone: int, replayed: bool) -> None:
+    def on_signed(self, *, user_id: str, operation_id: str, stone: int, replayed: bool) -> str | None:
         return None
 
 

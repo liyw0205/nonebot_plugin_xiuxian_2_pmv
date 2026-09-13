@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +46,15 @@ class SignInApplication:
             return value
         raise TypeError("clock.now() must return a datetime")
 
+    def _apply_effects(self, outcome: OperationOutcome[dict[str, Any]], *, user_id: str, operation_id: str, stone: int, replayed: bool) -> OperationOutcome[dict[str, Any]]:
+        try:
+            message = self.effects.on_signed(user_id=user_id, operation_id=operation_id, stone=stone, replayed=replayed)
+        except Exception:
+            # Asset mutation is already committed; side-effect failures must not
+            # turn a successful operation into a retry that can duplicate assets.
+            message = "签到资产已结算，但附加奖励稍后补偿。"
+        return replace(outcome, message=message or outcome.message)
+
     def lookup(self, operation_id: str) -> SignInRecord | None:
         with DatabaseUnitOfWork(self.database) as uow:
             return self.repository.operation(uow, str(operation_id).strip())
@@ -83,7 +93,7 @@ class SignInApplication:
                                 stone=int((replayed.data or {}).get("sign_in", {}).get("stone", 0)),
                                 replayed=True,
                             )
-                            return replayed
+                            return self._apply_effects(replayed, user_id=request.user_id, operation_id=request.operation_id, stone=int((replayed.data or {}).get("sign_in", {}).get("stone", 0)), replayed=True)
                         raise ConflictError("操作正在处理中")
                     legacy_operation = self.repository.operation(uow, request.operation_id)
                     if legacy_operation is not None:
@@ -104,7 +114,7 @@ class SignInApplication:
                             stone=legacy_operation.stone,
                             replayed=True,
                         )
-                        return replayed
+                        return self._apply_effects(replayed, user_id=request.user_id, operation_id=request.operation_id, stone=legacy_operation.stone, replayed=True)
                     before = self.repository.user_snapshot(uow, request.user_id)
                     states = self.repository.user_sign_states(uow, request.user_id)
                     if not states:
@@ -160,13 +170,7 @@ class SignInApplication:
                         occurred_at=now,
                     )
                     self.ledger.finish(uow, outcome)
-                    self.effects.on_signed(
-                        user_id=request.user_id,
-                        operation_id=request.operation_id,
-                        stone=stone,
-                        replayed=False,
-                    )
-                    return outcome
+                    return self._apply_effects(outcome, user_id=request.user_id, operation_id=request.operation_id, stone=stone, replayed=False)
             except DomainError:
                 raise
             except Exception as exc:
