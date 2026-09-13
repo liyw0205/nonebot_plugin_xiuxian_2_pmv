@@ -482,11 +482,16 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
 
 def get_give_stone(bankinfo):
     """获取利息：利息=give_stone,结算时间=timedeff"""
+    from ...features.bank.interest_rules import calculate_interest
+
     savetime = bankinfo['savetime']  # str
     nowtime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # str
-    timedeff = round((datetime.strptime(nowtime, '%Y-%m-%d %H:%M:%S') -
-                      datetime.strptime(savetime, '%Y-%m-%d %H:%M:%S')).total_seconds() / 3600, 2)
-    give_stone = int(bankinfo['savestone'] * timedeff * BANKLEVEL[bankinfo['banklevel']]['interest'])
+    give_stone, timedeff = calculate_interest(
+        saved_stone=bankinfo['savestone'],
+        saved_at=savetime,
+        settled_at=datetime.strptime(nowtime, '%Y-%m-%d %H:%M:%S'),
+        rate=BANKLEVEL[bankinfo['banklevel']]['interest'],
+    )
     bankinfo['savetime'] = nowtime
 
     return bankinfo, give_stone, timedeff
