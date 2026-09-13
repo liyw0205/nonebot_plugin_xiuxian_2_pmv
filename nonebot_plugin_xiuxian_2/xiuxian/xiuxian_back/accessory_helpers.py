@@ -355,20 +355,18 @@ def _reroll_affixes_preserving_locked(quality: int, old_affixes: list[dict], loc
     return result
 
 def create_accessory_instance(item_id: int, quality: int = 1):
-    item = items.get_data_by_item_id(item_id)
-    quality = max(1, min(5, int(quality)))
-    uid = f"acc_{int(time.time())}_{random.randint(1,9999)}"
-    return {
-        "uid": uid,
-        "item_id": item_id,
-        "name": item["name"],
-        "part": item["part"],
-        "set_type": item["set_type"],
-        "quality": quality,
-        "affixes": roll_affixes(quality, _target_affix_count_for_quality(quality)),
-        LOCKED_AFFIX_KEY: [],
-        "wash_count": 0
-    }
+    from ...features.accessory_package.factory import AccessoryInstanceFactory
+    from ...infrastructure.clock import SystemClock
+
+    factory = AccessoryInstanceFactory(
+        clock=SystemClock(),
+        id_generator=lambda now: f"acc_{int(now.timestamp())}_{random.randint(1,9999)}",
+        item_lookup=items.get_data_by_item_id,
+        affix_roller=lambda current_quality: roll_affixes(
+            current_quality, _target_affix_count_for_quality(current_quality)
+        ),
+    )
+    return factory.create(item_id, quality)
 
 def add_accessory_to_bag(user_id: str, item_id: int, quality: int = 1):
     data = _get_data(user_id)
