@@ -145,6 +145,8 @@
 
 2026-09-13 attached database infrastructure live verification：提交 `a85216e` 部署后，真实 `/srv/old/data/player.db` 仍为 `player_accessory=0`，backup `/srv/old/data/backups/20260913T093608Z`、migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 54 个迁移、五库 restore，reconcile clean，恢复后 readiness 全绿。该证据仅证明新 attached UoW 不会改变未迁移的真实 namespace；accessory application 仍未切换到 attached path。
 
+2026-09-13 attached accessory migration scaffold：新增 `features/accessory_package/attached_migrations.py::apply_attached_player_accessory`，明确目标为 `player_data.player_accessory`，并通过 `ATTACHED_SCHEMA_VERSION` 标记独立迁移历史；测试验证 schema 创建与跨库 rollback。该 migration 尚未加入单库 `build_migrations()` catalog，因为当前系统没有 attached namespace 的 durable ledger；不能把 scaffold 或测试通过当作 live migration。真实 live 数据仍保持未修改，等待备份/对账后再执行。
+
 2026-09-13 stone-gift 旧实现隔离：提交 `826ff4e` 将约 7,156 bytes、约 188 行的 `StoneGiftService` 从 `xiuxian_base/transaction_service.py` 删除，完整回滚实现移动到 `compatibility/legacy_stone_gift.py`；compatibility facade 和旧对照测试已改为显式引用该模块。真实 live 验证使用 `/srv/old/data`：备份 `/srv/old/data/backups/20260913T064308Z` 成功，migration dry-run `pending=[]`，reconcile clean，启动后的 readiness 全绿；随后停止实例执行 `recovery_smoke.py --evidence`，覆盖 53 个迁移和五库 restore，reconcile clean，恢复后实例 readiness 仍全绿。该切片的旧实现已不再位于大 transaction service，但 compatibility-only 回滚代码仍保留，不能把它等同于全仓兼容层删除。
 
 2026-09-13 量化审计脚本：`scripts/check_full_refactor_progress.py --json` 输出当前计数与切片状态，确认 `stone_gift`、`sign_in` 的默认新入口均为 true，但 `old_service_removed=false`；报告 `exit_ready=false`，阻塞项明确包含旧 transaction service、`xiuxian2_handle`、sign-in 副作用和完整 driver 重复 prefix 快照。该脚本是进度证据，不是静态“完成”替代。
