@@ -199,6 +199,8 @@
 
 2026-09-13 bank first-use interest slice：新增纯 `decide_interest`、`BankInterestApplication` 和 repository `save_interest`，复用 game-db `bank_accounts`/`bank_account_operations`，显式接收 interest/settled_at，覆盖账户缺失、bank level 状态变化、operation replay/conflict、钱包入账与 ledger 记录。新增 opt-in `POST /api/v1/bank/v2/interest` route 和 `bank_first_use_interest` flag；interest/upgrade/withdraw/application/Web 相关 8 个测试通过，compileall、inventory、architecture、diff 通过。旧 `灵庄结算` handler 与 `BankInterestService` 仍是真实路径，未计为 bank slice 完成。
 
+2026-09-13 bank first-use interest live safety：提交 `25cb6f4` 部署时 interest flag 默认关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；backup `/srv/old/data/backups/20260913T154952Z`、migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据证明新 interest application/route 默认未切换旧 bank runtime。
+
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。
 
 2026-09-13 bank first-use NoneBot boundary：新增 `register_bank_first_use_matcher`，只注册显式灰度命令 `灵庄新存灵石`，在 startup 完成且 `bank_first_use` service 注入后才安装；使用新 parser、Clock、operation_id 和 `BankDepositApplication`，旧 `灵庄` matcher 不变。新增 bank first-use command/application/Web/migration 聚焦测试共 7 个通过，compileall、inventory、architecture、diff 通过；默认灰度关闭，未把该 opt-in matcher 当作旧命令切换完成。
