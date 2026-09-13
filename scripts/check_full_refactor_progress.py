@@ -81,7 +81,7 @@ def main() -> int:
             "legacy transaction services remain",
             "xiuxian2_handle remains in legacy execution paths",
             "sign_in side effects are not yet application-owned",
-            "full NoneBot registration duplicate-prefix snapshot is not clean",
+            "full NoneBot registration snapshot is not yet captured as a machine-readable artifact",
         ],
     }
     print(json.dumps(report, ensure_ascii=False, sort_keys=True, indent=None if args.json else 2))
