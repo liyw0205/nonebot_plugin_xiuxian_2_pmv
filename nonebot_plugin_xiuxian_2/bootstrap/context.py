@@ -72,6 +72,7 @@ def build_runtime_context(
                 SettingDefinition("bank_enabled", bool, default=True, reloadable=True, env_name="XIUXIAN_BANK_ENABLED", description="灵庄新资产结算灰度开关"),
                 SettingDefinition("bank_first_use_enabled", bool, default=False, reloadable=True, env_name="XIUXIAN_BANK_FIRST_USE_ENABLED", description="灵庄首次存款新路径灰度开关"),
                 SettingDefinition("bank_first_use_limit", int, default=1000000000, reloadable=True, env_name="XIUXIAN_BANK_FIRST_USE_LIMIT", description="灵庄首次存款新路径存储上限"),
+                SettingDefinition("bank_first_use_upgrade_enabled", bool, default=False, reloadable=True, env_name="XIUXIAN_BANK_FIRST_USE_UPGRADE_ENABLED", description="灵庄新会员升级路径灰度开关"),
                 SettingDefinition("activity_reward_enabled", bool, default=True, reloadable=True, env_name="XIUXIAN_ACTIVITY_REWARD_ENABLED", description="活动奖励新实现灰度开关"),
                 SettingDefinition("combat_settlement_enabled", bool, default=True, reloadable=True, env_name="XIUXIAN_COMBAT_SETTLEMENT_ENABLED", description="地图战斗结算新实现灰度开关"),
                 SettingDefinition("admin_asset_enabled", bool, default=True, reloadable=True, env_name="XIUXIAN_ADMIN_ASSET_ENABLED", description="管理员资产新实现灰度开关"),
