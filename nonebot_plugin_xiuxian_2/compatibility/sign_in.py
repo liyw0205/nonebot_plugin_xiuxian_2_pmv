@@ -53,9 +53,13 @@ class SignInService:
         self._enabled = enabled not in {"0", "false", "no", "off"}
         self._legacy = None
         if not self._enabled:
-            from ..xiuxian.xiuxian_base.transaction_service import SignInService as LegacySignInService
+            from .legacy_sign_in import SignInService as LegacySignInService
 
             self._legacy = LegacySignInService(database, randint=randint)
+
+    @staticmethod
+    def _legacy_result(result: Any) -> SignInResult:
+        return SignInResult(str(result.status), str(result.user_id), int(result.stone))
 
     def get_result(self, operation_id: str) -> SignInResult | None:
         warnings.warn(
@@ -70,7 +74,8 @@ class SignInService:
         if not operation_id:
             return None
         if self._legacy is not None:
-            return self._legacy.get_result(operation_id)
+            result = self._legacy.get_result(operation_id)
+            return None if result is None else self._legacy_result(result)
         record = self.application.lookup(operation_id)
         if record is None:
             return None
@@ -90,7 +95,7 @@ class SignInService:
         if not operation_id:
             raise ValueError("operation_id must not be empty")
         if self._legacy is not None:
-            return self._legacy.sign(operation_id, user_id, stone_lower, stone_upper)
+            return self._legacy_result(self._legacy.sign(operation_id, user_id, stone_lower, stone_upper))
         try:
             outcome = self.application.claim(
                 user_id=user_id,

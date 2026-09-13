@@ -16,8 +16,8 @@ class LegacyBaseRepository:
         from ...xiuxian.xiuxian_base.transaction_service import (
             BreakthroughService, DestinyTribulationService, OrdinaryTribulationService,
             PlayerRenameService, StoneContestService, StoneRobberySettlementService,
-            SignInService,
         )
+        from ...compatibility.legacy_sign_in import SignInService
         mapping = {
             "breakthrough": (BreakthroughService, "apply_success", (self.game_database,)),
             "tribulation": (OrdinaryTribulationService, "settle", (self.game_database, self.player_database)),
