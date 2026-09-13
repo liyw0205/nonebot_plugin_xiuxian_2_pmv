@@ -122,6 +122,8 @@
 
 2026-09-13 package_reward Web boundary：`features/package_reward` 已补充 manifest route `POST /api/v1/package-reward/open`、标准 feature 文档和 transport-neutral web declaration；真实 Flask 实现位于 `adapters/web/blueprints/package_reward.py` 并在 `adapters/web/app.py` 注册，直接调用 `PackageRewardApplication`。`tests/test_package_reward_web_boundary.py` 通过，compileall、inventory、architecture 通过。旧 NoneBot 礼包命令仍通过 compatibility facade，消息解析/展示尚未迁移，因此该 inventory slice 仍未完成。
 
+2026-09-13 package_reward Web live verification：提交 `7cabcf8` 归档部署到 `/srv/src` 后，真实 `/srv/old/data` backup `/srv/old/data/backups/20260913T085040Z`、migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 54 个迁移、五库 restore，reconcile clean，恢复后 readiness 全绿。该证据只覆盖 application-owned Web route 的部署安全；旧 NoneBot 命令仍通过 compatibility facade，尚未计入 inventory 切片完成。
+
 2026-09-13 stone-gift 旧实现隔离：提交 `826ff4e` 将约 7,156 bytes、约 188 行的 `StoneGiftService` 从 `xiuxian_base/transaction_service.py` 删除，完整回滚实现移动到 `compatibility/legacy_stone_gift.py`；compatibility facade 和旧对照测试已改为显式引用该模块。真实 live 验证使用 `/srv/old/data`：备份 `/srv/old/data/backups/20260913T064308Z` 成功，migration dry-run `pending=[]`，reconcile clean，启动后的 readiness 全绿；随后停止实例执行 `recovery_smoke.py --evidence`，覆盖 53 个迁移和五库 restore，reconcile clean，恢复后实例 readiness 仍全绿。该切片的旧实现已不再位于大 transaction service，但 compatibility-only 回滚代码仍保留，不能把它等同于全仓兼容层删除。
 
 2026-09-13 量化审计脚本：`scripts/check_full_refactor_progress.py --json` 输出当前计数与切片状态，确认 `stone_gift`、`sign_in` 的默认新入口均为 true，但 `old_service_removed=false`；报告 `exit_ready=false`，阻塞项明确包含旧 transaction service、`xiuxian2_handle`、sign-in 副作用和完整 driver 重复 prefix 快照。该脚本是进度证据，不是静态“完成”替代。

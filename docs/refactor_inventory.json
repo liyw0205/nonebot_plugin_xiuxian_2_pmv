@@ -5086,6 +5086,14 @@
       "permission": "user"
     },
     {
+      "feature": "package_reward",
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/v1/package-reward/open",
+      "permission": "user"
+    },
+    {
       "feature": "pet",
       "methods": [
         "POST"
