@@ -241,6 +241,8 @@
 
 2026-09-14 bank migrated-account Clock wiring：新增 bank Clock context provider，旧 matcher 的新账户 deposit/withdrawal/upgrade/interest 分支改用 startup 注入的 runtime Clock；shutdown 时 reset，未注入时才保留兼容 SystemClock fallback。新增 context scope 测试；bank/source-quality 回归 145 个通过，compileall、architecture、diff 通过。legacy attached `bankinfo` fallback 的系统时间仍未迁移，不能计为 bank 完成。
 
+2026-09-14 bank migrated-account Clock wiring live safety：提交 `f0923cc` 部署后真实 bank audit `bankinfo=false`、`bankinfo_rows=0`、`operation_ledgers={}`；backup `/srv/old/data/backups/20260913T181830Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 audit 不变。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。
