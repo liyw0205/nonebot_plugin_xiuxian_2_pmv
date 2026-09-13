@@ -73,7 +73,7 @@
 | 切片 | 旧真实路径 | 新目标路径 | 状态 | 删除/隔离 | 测试/证据 | 风险/回滚 |
 |:--|:--|:--|:--|:--|:--|:--|
 | `stone_gift` | `xiuxian_base/__init__.py` 的旧 `送灵石` handler；`xiuxian_base/transaction_service.py::StoneGiftService` | `features/stone_gift/{domain,application,repository,commands}.py`；`adapters/nonebot/commands.py::_build_stone`；`adapters/web/api.py::create_stone_gift_blueprint` | 默认真实路径已切换；旧代码仅显式回滚开关可达；切片未最终删除旧实现 | 旧 matcher 默认改为不可达占位；旧 service 文件保留待后续删除窗口 | 10 个 command/Web/application/legacy-switch/质量测试通过；新切片 compileall、架构、inventory、diff 通过 | 默认行为走新 application；`XIUXIAN_STONE_GIFT_LEGACY_HANDLER=true` 为回滚点；需继续完成真实旧 service 删除和全量回归 |
-| `sign_in` | `xiuxian_base/__init__.py` 的旧 `修仙签到/签到` handler；`xiuxian_base/transaction_service.py::SignInService` | `features/sign_in/{application,repository,domain,commands}.py`；`adapters/nonebot/commands.py::_build_sign` | 默认真实路径已切换；旧代码仅显式回滚开关可达；切片未最终删除旧实现 | 旧 matcher 默认改为不可达占位；旧 service 和签到后抽奖/日志/任务副作用保留待拆分 | 新 application 已有 operation/随机/Clock 测试；新增 legacy-switch 与 source-quality 测试通过；完整加载仍出现需后续治理的重复 prefix 警告 | `XIUXIAN_SIGN_IN_LEGACY_HANDLER=true` 为回滚点；签到后的 lottery/statistics/task side effects 仍需迁入新 application/orchestrator |
+| `sign_in` | `xiuxian_base/__init__.py` 的旧 `修仙签到/签到` handler；`xiuxian_base/transaction_service.py::SignInService` | `features/sign_in/{application,repository,domain,commands}.py`；`adapters/nonebot/commands.py::_build_sign`；`features/sign_in/effects.py` | 默认真实路径已切换；旧代码仅显式回滚开关可达；切片未最终删除旧实现 | 旧 matcher 默认为不可达占位；旧 service 和签到后抽奖/日志/任务副作用保留待拆分 | 新增 `SignInEffects` post-commit port；成功/replay 注入 effects、拒绝不触发测试通过；legacy-switch/source-quality/compile 通过；完整加载仍有重复 prefix 警告 | `XIUXIAN_SIGN_IN_LEGACY_HANDLER=true` 为回滚点；默认 `NullSignInEffects` 尚未接入真实 lottery/statistics/task adapters，不能计入签到切片完成 |
 
 2026-09-13 首个切片证据：`tests/test_stone_gift_application_real.py` 直接使用 `StoneGiftApplication` + `DatabaseUnitOfWork`，验证双边余额、手续费、`stone_gift_limits`、operation replay、operation payload conflict 和余额不足回滚；`tests/test_stone_gift_matcher_boundary.py` 验证真实 adapter builder 将 sender/recipient/amount/每日限额传入新 application。5 个测试全部通过。边界扫描确认新切片源码不包含 `transaction_service`、`xiuxian2_handle`、`stone_limit`、NoneBot 或 Flask 依赖；同时确认旧 `@give_stone.handle` 和 `stone_gift_service = StoneGiftService(...)` 仍存在，因此没有把该切片标为完成。
 
@@ -84,6 +84,8 @@
 2026-09-13 sign-in 入口审计：旧 `sign_in` matcher 默认规则为 `__legacy_sign_in_disabled__`，新 adapter 规则为 `修仙签到/签到`；旧 handler 的签到后抽奖、统计和任务进度仍是真实旧逻辑，尚未宣称完成。完整 NoneBot 导入探针记录了 `/签到`、`/修仙签到` 与新 matcher 的重复 prefix 警告，列入后续全局注册去重工作，不以测试通过掩盖。现有 `on_compat` 已声明迁移命令抑制，但重复警告仍需用完整 driver 注册快照定位，不能据此宣称去重完成。
 
 2026-09-13 sign-in live 验证：提交 `72173ea` 的归档已部署到受控 live 容器 `/srv/src`，旧源保留于 `/tmp/remote-host/src-pre-72173ea`。使用真实 `/srv/old/data` 重启实例后，`migrate --dry-run` 返回 `pending=[]`，`reconcile` 为 clean 且 operations/outbox/dead events 全为 0，`/health/ready` 的 database/filesystem/jobs/migrations/repositories/web 全部为 true。该结果只证明入口隔离版本可加载旧数据；签到后的 lottery/statistics/task-progress 仍需独立 application 化，旧 `SignInService` 仍待删除。
+
+2026-09-13 sign-in effects 边界：`SignInApplication` 新增 `SignInEffects` port 和默认 `NullSignInEffects`。资产事务提交后才调用 `on_signed(user_id, operation_id, stone, replayed)`；相同 operation replay 会重复通知 replay 标志，拒绝不会通知。新增 `tests/test_sign_in_effects_boundary.py` 覆盖这两个不变量。真实 lottery/statistics/task-progress adapter 尚未接入，旧副作用仍不计入迁移完成。
 
 2026-09-13 量化审计脚本：`scripts/check_full_refactor_progress.py --json` 输出当前计数与切片状态，确认 `stone_gift`、`sign_in` 的默认新入口均为 true，但 `old_service_removed=false`；报告 `exit_ready=false`，阻塞项明确包含旧 transaction service、`xiuxian2_handle`、sign-in 副作用和完整 driver 重复 prefix 快照。该脚本是进度证据，不是静态“完成”替代。
 

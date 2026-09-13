@@ -11,6 +11,7 @@ from ...infrastructure.observability import trace_context
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
 from .domain import SignInRecord, validate_limits
+from .effects import NullSignInEffects, SignInEffects
 from .repository import SignInRepository
 from .schemas import SignInRequest
 
@@ -28,6 +29,7 @@ class SignInApplication:
         clock: Any | None = None,
         lower_limit: int = 100000,
         upper_limit: int = 500000,
+        effects: SignInEffects | None = None,
     ) -> None:
         self.database = str(database)
         self.repository = repository or SignInRepository()
@@ -35,6 +37,7 @@ class SignInApplication:
         self.random = random_source or SystemRandom()
         self.clock = clock or SystemClock()
         self.lower_limit, self.upper_limit = validate_limits(lower_limit, upper_limit)
+        self.effects = effects or NullSignInEffects()
 
     def _now(self) -> datetime:
         value = self.clock.now() if hasattr(self.clock, "now") else self.clock()
@@ -73,7 +76,14 @@ class SignInApplication:
                     if existing is not None:
                         previous = existing.outcome()
                         if previous is not None:
-                            return previous.replay()
+                            replayed = previous.replay()
+                            self.effects.on_signed(
+                                user_id=request.user_id,
+                                operation_id=request.operation_id,
+                                stone=int((replayed.data or {}).get("sign_in", {}).get("stone", 0)),
+                                replayed=True,
+                            )
+                            return replayed
                         raise ConflictError("操作正在处理中")
                     legacy_operation = self.repository.operation(uow, request.operation_id)
                     if legacy_operation is not None:
@@ -87,7 +97,14 @@ class SignInApplication:
                             audit_category="sign_in",
                         )
                         self.ledger.finish(uow, outcome)
-                        return outcome.replay()
+                        replayed = outcome.replay()
+                        self.effects.on_signed(
+                            user_id=request.user_id,
+                            operation_id=request.operation_id,
+                            stone=legacy_operation.stone,
+                            replayed=True,
+                        )
+                        return replayed
                     before = self.repository.user_snapshot(uow, request.user_id)
                     states = self.repository.user_sign_states(uow, request.user_id)
                     if not states:
@@ -143,6 +160,12 @@ class SignInApplication:
                         occurred_at=now,
                     )
                     self.ledger.finish(uow, outcome)
+                    self.effects.on_signed(
+                        user_id=request.user_id,
+                        operation_id=request.operation_id,
+                        stone=stone,
+                        replayed=False,
+                    )
                     return outcome
             except DomainError:
                 raise
