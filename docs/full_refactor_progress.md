@@ -297,6 +297,8 @@
 
 2026-09-14 lottery result adapter cutover：旧 `handle_lottery` 现在真实调用 `features.sign_in.commands.format_lottery_result`，legacy 模块只负责 settlement application/fallback 选择；冲突、缺用户、重复参与、中奖和未中奖文案均移出旧执行模块。formatter/lottery/sign-in/legacy 22 个测试、compileall、architecture、source-quality 通过。
 
+2026-09-14 lottery result adapter cutover live safety：提交 `b19f61b` 部署后 backup `/srv/old/data/backups/20260913T215208Z`、migration dry-run `pending=[]`、reconcile clean、readiness 全绿；recovery smoke 覆盖 58 个迁移、五库 restore、reconcile clean，恢复后 `pool_amount=0`、`economy_log` 行数为 0。live 无 lottery 用户写入，result formatter cutover 仅验证启动、关闭和恢复路径。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。
