@@ -221,6 +221,8 @@
 
 2026-09-14 bank upgrade conditional cutover：旧 `bank_` 的 `升级会员` 分支现在先检查新 `bank_accounts`；已迁移账户走 `BankUpgradeApplication`，无新账户继续 legacy attached `bankinfo`/`BankApplication`，保留历史行为。该改动实际进入旧 matcher 执行链路；144 个 source-quality/bank asset 测试、compileall、inventory、architecture、diff 通过。过渡分支仍使用旧 adapter 的 `SystemClock` 和 `BANKLEVEL` 展示配置，旧会员逻辑及 service 尚未删除，不能计为 bank slice 完成。
 
+2026-09-14 bank upgrade conditional cutover live safety：提交 `861d191` 部署后真实 bank audit `bankinfo=false`、`bankinfo_rows=0`、`operation_ledgers={}`、`read_only=true`；backup `/srv/old/data/backups/20260913T171958Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 audit 不变。live 没有新 bank 账户，升级请求继续 legacy fallback，未伪造账户或升级回执。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。
