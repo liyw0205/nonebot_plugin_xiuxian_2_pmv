@@ -19,6 +19,7 @@ data/xiuxian/activity/activity_config.json
 data/xiuxian/config.json
 data/xiuxian/cache/
 data/xiuxian/media_parser_cache/
+data/xiuxian/compatibility_hits.json
 nonebot_plugin_xiuxian_2/xiuxian/xiuxian_base/lottery_pool.json
 nonebot_plugin_xiuxian_2/xiuxian/xiuxian_buff/*_cd.json
 nonebot_plugin_xiuxian_2/xiuxian/xiuxian_compensation/compensation_data/**/*.json
