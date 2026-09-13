@@ -153,15 +153,14 @@ def _build_stone(context: CommandContext, application: Any, args: Any) -> ReplyP
     return plan
 
 
-def _build_bank_first_use(context: CommandContext, application: Any, args: Any, *, limit: int) -> ReplyPlan:
+def _build_bank_first_use(context: CommandContext, application: Any, args: Any, *, clock: Any, limit: int) -> ReplyPlan:
     from ...features.bank.commands import parse_first_use_deposit
-    from ...infrastructure.clock import SystemClock
 
     command = parse_first_use_deposit(
         user_id=context.user_id,
         text=_plain_text(args),
         operation_id=_message_id(context.raw_event, context.user_id, "bank-deposit-v2"),
-        clock=getattr(application, "clock", None) or SystemClock(),
+        clock=clock,
         limit=limit,
     )
     result = application.deposit(**command.__dict__)
@@ -192,7 +191,7 @@ def register_bank_first_use_matcher(driver: Any, holder: dict[str, Any], *, limi
         context = context_from_event(event, bot=bot)
         try:
             runtime = _runtime(holder)
-            plan = _build_bank_first_use(context, runtime.services["bank_first_use"], args, limit=limit)
+            plan = _build_bank_first_use(context, runtime.services["bank_first_use"], args, clock=runtime.clock, limit=limit)
         except DomainError as exc:
             plan = ReplyPlan(exc.message, reference=True)
         except (KeyError, RuntimeError, TypeError, ValueError) as exc:
