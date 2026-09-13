@@ -18,11 +18,11 @@ from .schemas import AccessoryPackageRequest
 class AccessoryPackageApplication:
     action = "accessory_package.open"
 
-    def __init__(self, game_database: str | Path, player_database: str | Path, *, ledger: OperationLedger | None = None) -> None:
+    def __init__(self, game_database: str | Path, player_database: str | Path, *, ledger: OperationLedger | None = None, player_schema_policy: str = "create") -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
         self.game = AccessoryPackageGameRepository()
-        self.player = AccessoryPackagePlayerRepository()
+        self.player = AccessoryPackagePlayerRepository(schema_policy=player_schema_policy)
         self.ledger = ledger or OperationLedger()
         self.outbox = OutboxStore()
 

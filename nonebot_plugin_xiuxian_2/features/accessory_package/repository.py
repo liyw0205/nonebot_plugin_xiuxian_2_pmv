@@ -222,6 +222,11 @@ class AccessoryPackageGameRepository:
 class AccessoryPackagePlayerRepository:
     """Owns the player-db half and makes accessory writes idempotent."""
 
+    def __init__(self, *, schema_policy: str = "create") -> None:
+        if schema_policy not in {"create", "require_existing"}:
+            raise ValueError("unsupported accessory schema policy")
+        self.schema_policy = schema_policy
+
     def ensure_schema(self, uow: DatabaseUnitOfWork) -> None:
         uow.execute(
             """
@@ -235,7 +240,11 @@ class AccessoryPackagePlayerRepository:
             )
             """
         )
-        uow.execute("CREATE TABLE IF NOT EXISTS player_accessory (user_id TEXT PRIMARY KEY, equipped TEXT, bag TEXT)")
+        exists = bool(uow.query_one("SELECT name FROM sqlite_master WHERE type='table' AND name='player_accessory'"))
+        if not exists and self.schema_policy == "require_existing":
+            raise RuntimeError("accessory player schema migration and namespace reconciliation are required")
+        if not exists:
+            uow.execute("CREATE TABLE player_accessory (user_id TEXT PRIMARY KEY, equipped TEXT, bag TEXT)")
         columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(player_accessory)")}
         if "equipped" not in columns:
             uow.execute("ALTER TABLE player_accessory ADD COLUMN equipped TEXT")

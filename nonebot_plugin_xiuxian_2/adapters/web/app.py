@@ -239,7 +239,7 @@ def create_app(
         from ...features.accessory_package.application import AccessoryPackageApplication
 
         accessory_package = (context.services or {}).get("accessory_package") or AccessoryPackageApplication(
-            str(context.database.path("game_db")), str(context.database.path("player_db"))
+            str(context.database.path("game_db")), str(context.database.path("player_db")), player_schema_policy="require_existing"
         )
         app.register_blueprint(accessory_package_blueprint(accessory_package, permission=has_permission))
     if any(feature.key == "arena" for feature in registry.features):
