@@ -217,6 +217,8 @@
 
 2026-09-14 bank deposit conditional cutover：旧 `bank_` 的 `存灵石` 分支现在先检查新 `bank_accounts`；已迁移账户走 `BankDepositApplication`，无新账户继续 legacy attached `bankinfo` 路径，避免把未迁移历史账户当成新账户。141 个 source-quality/bank asset 测试、compileall、inventory、architecture、diff 通过。该过渡分支仍在旧 adapter 中使用 `SystemClock` 生成 settled_at，旧计息与消息路径尚未移除；真实 live 验证和 Clock 完整注入仍是关闭 bank slice 的前置条件。
 
+2026-09-14 bank deposit conditional cutover live safety：提交 `f948cbc` 部署后真实 bank audit `bankinfo=false`、`bankinfo_rows=0`、`operation_ledgers={}`、`read_only=true`；backup `/srv/old/data/backups/20260913T171129Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 audit 不变。由于 live 没有新账户，存款请求继续走 legacy fallback，未伪造新账户或业务回执。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。
