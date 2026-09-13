@@ -22,6 +22,9 @@ class StoneTrainingSqlRepositoryTests(unittest.TestCase):
         with sqlite3.connect(self.game) as conn:
             conn.execute("CREATE TABLE user_xiuxian (user_id TEXT PRIMARY KEY, stone INTEGER NOT NULL)")
             conn.execute("INSERT INTO user_xiuxian VALUES ('user', 1000)")
+            conn.execute("CREATE TABLE tianti_stone_training_operations (operation_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, requested_stone INTEGER NOT NULL, stone_cost INTEGER NOT NULL, hp_gain INTEGER NOT NULL, new_hp INTEGER NOT NULL)")
+        with sqlite3.connect(self.player) as conn:
+            conn.execute("CREATE TABLE tianti_info (user_id TEXT PRIMARY KEY, tianti_level TEXT, tianti_hp TEXT, last_settle_time TEXT, medicine_last_time TEXT, medicine_end_time TEXT, medicine_effect TEXT, medicine_name TEXT, opened_qiaoxue TEXT, opened_qiaoxue_detail TEXT, qiaoxue_stage_opened TEXT)")
 
         self.default = {
             "tianti_level": "初境", "tianti_hp": 10, "last_settle_time": None,
@@ -55,8 +58,7 @@ class StoneTrainingSqlRepositoryTests(unittest.TestCase):
     def test_success_and_replay_are_atomic(self):
         import sqlite3
         with sqlite3.connect(self.player) as conn:
-            conn.execute("CREATE TABLE tianti_info (user_id TEXT PRIMARY KEY, tianti_level TEXT, tianti_hp TEXT)")
-            conn.execute("INSERT INTO tianti_info VALUES ('user', '初境', '10')")
+            conn.execute("INSERT INTO tianti_info (user_id, tianti_level, tianti_hp) VALUES ('user', '初境', '10')")
         first = self.call()
         second = self.call()
         self.assertEqual((first.status, first.stone_cost, first.hp_gain, first.new_hp), ("trained", 100, 10, 20))
@@ -73,7 +75,6 @@ class StoneTrainingSqlRepositoryTests(unittest.TestCase):
     def test_player_write_failure_rolls_back_game_database(self):
         import sqlite3
         with sqlite3.connect(self.player) as conn:
-            conn.execute("CREATE TABLE tianti_info (user_id TEXT PRIMARY KEY)")
             conn.execute("CREATE TRIGGER fail_tianti_write BEFORE INSERT ON tianti_info BEGIN SELECT RAISE(ABORT, 'write failed'); END")
         with self.assertRaises(sqlite3.IntegrityError):
             self.call("write-fail")

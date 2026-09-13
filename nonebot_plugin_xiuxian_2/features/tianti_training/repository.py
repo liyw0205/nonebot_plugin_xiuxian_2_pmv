@@ -108,12 +108,11 @@ class StoneTrainingSqlRepository:
         fields = tuple(self._profile_reader.default_data().keys())
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
-            uow.execute("CREATE TABLE IF NOT EXISTS player_data.tianti_info (user_id TEXT PRIMARY KEY)")
-            columns = {str(row["name"]) for row in uow.query_all("PRAGMA player_data.table_info(tianti_info)")}
-            for field in fields:
-                if field not in columns:
-                    uow.execute(f'ALTER TABLE player_data.tianti_info ADD COLUMN "{field}" TEXT')
-            uow.execute("CREATE TABLE IF NOT EXISTS tianti_stone_training_operations (operation_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, requested_stone INTEGER NOT NULL, stone_cost INTEGER NOT NULL, hp_gain INTEGER NOT NULL, new_hp INTEGER NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
+            operation_table = uow.query_one("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='tianti_stone_training_operations'")
+            player_table = uow.query_one("SELECT 1 AS present FROM player_data.sqlite_master WHERE type='table' AND name='tianti_info'")
+            player_columns = {str(row["name"]) for row in uow.query_all("PRAGMA player_data.table_info(tianti_info)")}
+            if operation_table is None or player_table is None or not set(fields).issubset(player_columns):
+                raise RuntimeError("tianti training schema is not ready; run migrations first")
             previous = uow.query_one("SELECT user_id, requested_stone, stone_cost, hp_gain, new_hp FROM tianti_stone_training_operations WHERE operation_id=?", (operation_id,))
             if previous:
                 if str(previous["user_id"]) != user_id or int(previous["requested_stone"]) != requested_stone:
