@@ -116,6 +116,8 @@
 
 2026-09-13 lottery runtime cutover：`plugin.py` 的 compatibility startup 默认注入 `LotteryApplication` + `LotteryRepository` + runtime Clock/Random；只有显式 `XIUXIAN_SIGN_IN_LEGACY_LOTTERY=true` 才注入旧 `LotterySettlementService`。`LegacySignInEffects` 统一使用 keyword settlement contract，兼容两种实现。聚焦 lottery/application/effects/wiring 测试、compileall 和 architecture 通过；真实命令行为、legacy JSON migration 和旧 lottery service 删除仍未完成，因此该切片仍未关闭。
 
+2026-09-13 lottery runtime cutover live：提交 `efb05ae` 默认未设置 legacy rollback 环境变量部署到 `/srv/src`；真实 `/srv/old/data` backup `/srv/old/data/backups/20260913T082021Z`、migration dry-run `pending=[]`、reconcile clean、readiness 全绿、runtime errors=0。恢复 smoke 覆盖 54 个迁移、五库 restore、reconcile clean，恢复后 readiness 全绿。该证据证明新 lottery application wiring 可加载真实数据；旧 handler 行为对照、legacy JSON pool migration 接管和旧 service 删除仍未完成。
+
 2026-09-13 stone-gift 旧实现隔离：提交 `826ff4e` 将约 7,156 bytes、约 188 行的 `StoneGiftService` 从 `xiuxian_base/transaction_service.py` 删除，完整回滚实现移动到 `compatibility/legacy_stone_gift.py`；compatibility facade 和旧对照测试已改为显式引用该模块。真实 live 验证使用 `/srv/old/data`：备份 `/srv/old/data/backups/20260913T064308Z` 成功，migration dry-run `pending=[]`，reconcile clean，启动后的 readiness 全绿；随后停止实例执行 `recovery_smoke.py --evidence`，覆盖 53 个迁移和五库 restore，reconcile clean，恢复后实例 readiness 仍全绿。该切片的旧实现已不再位于大 transaction service，但 compatibility-only 回滚代码仍保留，不能把它等同于全仓兼容层删除。
 
 2026-09-13 量化审计脚本：`scripts/check_full_refactor_progress.py --json` 输出当前计数与切片状态，确认 `stone_gift`、`sign_in` 的默认新入口均为 true，但 `old_service_removed=false`；报告 `exit_ready=false`，阻塞项明确包含旧 transaction service、`xiuxian2_handle`、sign-in 副作用和完整 driver 重复 prefix 快照。该脚本是进度证据，不是静态“完成”替代。
