@@ -179,6 +179,8 @@
 
 2026-09-13 bank.002 migration：新增正式 game-db migration `bank.002`，只创建 `bank_accounts` 与 `bank_account_operations`，不触碰旧 attached `player_data.bankinfo`；migration 与 first-use application/repository 共 8 个测试通过，compileall、inventory、architecture、diff 通过。该 migration 预计随下一次 live 部署实际 apply，必须记录 pending/applied、backup、reconcile、恢复结果；新 route 仍保持 opt-in 未注入。
 
+2026-09-13 bank.002 live migration：提交 `c30d985` 部署前完成真实 backup `/srv/old/data/backups/20260913T104238Z`；dry-run 真实返回 `pending=["bank.002"]`，随后实际 migration 返回 `applied=["bank.002"]`。只创建 game DB 的 `bank_accounts`、`bank_account_operations`，真实 `player.db` 仍 `bankinfo=0`；reconcile clean、readiness 全绿。恢复 smoke 覆盖 55 个迁移、五库 restore、reconcile clean，恢复后 `bank.002` ledger 与两张新表存在。新 bank v2 route 仍未注入，旧 bank runtime 未切换。
+
 2026-09-13 attached migration drift gate live verification：提交 `e36a62f` 部署后，真实 audit JSON 输出 `migration.applied=false`、`checksum_valid=null`、`tables=[]`、`accessory_rows=0`、`read_only=true`；backup `/srv/old/data/backups/20260913T100509Z`、migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 54 个迁移、五库 restore，恢复后 audit 仍为 `checksum_valid=null`。该证据确认未迁移状态被机器准确区分，未执行任何 live schema migration。
 
 2026-09-13 attached migration ledger live verification：提交 `0e64366` 部署后，真实 `/srv/old/data/player.db` 只读确认 `attached_schema_migrations=0`、`player_accessory=0`，证明 ledger scaffold 未在启动时隐式执行；backup `/srv/old/data/backups/20260913T094512Z`、migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 54 个迁移、五库 restore，reconcile clean，恢复后 readiness 全绿。该证据只证明 ledger 部署不改 live namespace；真实 migration 仍需明确的运维窗口、备份、namespace 对账和回滚演练。
