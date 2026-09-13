@@ -233,6 +233,8 @@
 
 2026-09-14 bank interest rule deduplication：旧 `get_give_stone` 现在委托 `features.bank.interest_rules.calculate_interest`，保留旧返回结构和 legacy 时间格式，消除按小时利息公式分叉；新账户结算仍由 `BankInterestApplication` 处理，旧账户仍走 attached `bankinfo`。bank/source-quality/service 回归共 153 个通过，compileall、inventory、architecture、diff 通过。该改动未移除旧系统时间、JSON/PlayerDataManager 或 legacy handler，不计为 bank 完成。
 
+2026-09-14 bank interest rule deduplication live safety：提交 `9e1d1e7` 部署后真实 bank audit `bankinfo=false`、`bankinfo_rows=0`、`operation_ledgers={}`、`read_only=true`；backup `/srv/old/data/backups/20260913T174610Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 audit 不变。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。
