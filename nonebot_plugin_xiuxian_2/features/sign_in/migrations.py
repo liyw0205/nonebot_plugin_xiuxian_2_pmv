@@ -27,4 +27,8 @@ def apply_lottery(uow: DatabaseUnitOfWork) -> None:
     LotteryRepository.ensure_schema(uow)
 
 
-__all__ = ["apply_lottery", "apply_sign_in", "apply_sign_in_statistics", "apply_sign_in_tasks"]
+def apply_lottery_audit(uow: DatabaseUnitOfWork) -> None:
+    uow.execute("CREATE TABLE IF NOT EXISTS economy_log(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id TEXT,source TEXT NOT NULL,action TEXT NOT NULL,stone_delta INTEGER NOT NULL DEFAULT 0,item_delta TEXT NOT NULL DEFAULT '[]',detail TEXT NOT NULL DEFAULT '{}',trace_id TEXT,created_at TEXT NOT NULL)")
+
+
+__all__ = ["apply_lottery", "apply_lottery_audit", "apply_sign_in", "apply_sign_in_statistics", "apply_sign_in_tasks"]

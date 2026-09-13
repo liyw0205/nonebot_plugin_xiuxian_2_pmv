@@ -21,6 +21,7 @@ class LotteryRepository:
         uow.execute("CREATE TABLE IF NOT EXISTS lottery_participants(business_date TEXT NOT NULL,user_id TEXT NOT NULL,operation_id TEXT NOT NULL UNIQUE,participated_at TEXT NOT NULL,PRIMARY KEY(business_date,user_id))")
         uow.execute("CREATE TABLE IF NOT EXISTS lottery_winner_history(id INTEGER PRIMARY KEY AUTOINCREMENT,operation_id TEXT NOT NULL UNIQUE,user_id TEXT NOT NULL,user_name TEXT NOT NULL,prize_tier TEXT NOT NULL,lottery_number INTEGER NOT NULL,prize_amount INTEGER NOT NULL,won_at TEXT NOT NULL)")
         uow.execute("CREATE TABLE IF NOT EXISTS lottery_legacy_migrations(migration_key TEXT PRIMARY KEY,source_path TEXT NOT NULL,payload TEXT NOT NULL,migrated_at TEXT NOT NULL)")
+        uow.execute("CREATE TABLE IF NOT EXISTS economy_log(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id TEXT,source TEXT NOT NULL,action TEXT NOT NULL,stone_delta INTEGER NOT NULL DEFAULT 0,item_delta TEXT NOT NULL DEFAULT '[]',detail TEXT NOT NULL DEFAULT '{}',trace_id TEXT,created_at TEXT NOT NULL)")
         uow.execute("INSERT INTO lottery_pool_state(state_id,pool_amount,updated_at) VALUES(1,0,'') ON CONFLICT(state_id) DO NOTHING")
 
     @staticmethod
@@ -52,6 +53,9 @@ class LotteryRepository:
     def insert(self, uow: DatabaseUnitOfWork, result: LotterySettlement, occurred_at: str) -> None:
         uow.execute("INSERT INTO lottery_participants(business_date,user_id,operation_id,participated_at) VALUES(?,?,?,?)", (result.business_date, result.user_id, result.operation_id, occurred_at))
         uow.execute("UPDATE lottery_pool_state SET pool_amount=?,updated_at=? WHERE state_id=1", (result.pool_after, occurred_at))
+        if result.prize > 0:
+            uow.execute("INSERT INTO lottery_winner_history(operation_id,user_id,user_name,prize_tier,lottery_number,prize_amount,won_at) VALUES(?,?,?,?,?,?,?)", (result.operation_id, result.user_id, result.user_name, result.prize_tier, result.lottery_number, result.prize, occurred_at))
+            uow.execute("INSERT INTO economy_log(user_id,source,action,stone_delta,item_delta,detail,trace_id,created_at) VALUES(?,?,?,?,?,?,?,?)", (result.user_id, "lottery", "lottery_prize", result.prize, "[]", "{}", result.operation_id, occurred_at))
         uow.execute("INSERT INTO lottery_settlement_operations(operation_id,user_id,user_name,business_date,deposit_amount,lottery_number,prize_tier,prize_amount,pool_before,pool_after,participant_count,wallet_stone,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (result.operation_id,result.user_id,result.user_name,result.business_date,result.deposit,result.lottery_number,result.prize_tier,result.prize,result.pool_before,result.pool_after,result.participants,result.wallet_stone,occurred_at))
 
 

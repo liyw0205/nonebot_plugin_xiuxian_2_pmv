@@ -28,7 +28,7 @@ from .features.title.manifest import FEATURE as TITLE_FEATURE
 from .features.title.migrations import apply_title
 from .features.title.application import TitleApplication
 from .features.sign_in.manifest import FEATURE as SIGN_IN_FEATURE
-from .features.sign_in.migrations import apply_lottery, apply_sign_in, apply_sign_in_statistics, apply_sign_in_tasks
+from .features.sign_in.migrations import apply_lottery, apply_lottery_audit, apply_sign_in, apply_sign_in_statistics, apply_sign_in_tasks
 from .features.stone_gift.manifest import FEATURE as STONE_GIFT_FEATURE
 from .features.stone_gift.migrations import apply_stone_gift, apply_stone_gift_limits
 from .features.package_reward.manifest import FEATURE as PACKAGE_REWARD_FEATURE
@@ -125,6 +125,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("interactive.001", "interactive_feature_migrations", apply_interactive),
         *(Migration(version, f"{version.replace('.', '_')}_migrations", migration) for version, migration in LEGACY_MIGRATIONS),
         Migration("lottery.001", "lottery_feature_migrations", apply_lottery),
+        Migration("lottery.002", "lottery_audit", apply_lottery_audit),
         Migration("map.001", "map_feature_migrations", apply_map),
         Migration("mixelixir.001", "mixelixir_feature_migrations", apply_mixelixir),
         Migration("natal_treasure.001", "natal_treasure_feature_migrations", apply_natal_treasure),
