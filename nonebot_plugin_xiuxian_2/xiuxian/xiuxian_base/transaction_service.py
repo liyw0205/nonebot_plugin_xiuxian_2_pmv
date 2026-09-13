@@ -9,6 +9,7 @@ import random
 from typing import Callable
 from ..xiuxian_utils import db_backend
 from ..xiuxian_buff.relation_transaction_utils import increment_stat
+from ...features.sign_in.domain import lottery_prize, lottery_tier
 from datetime import date, datetime
 from datetime import datetime
 
@@ -1137,28 +1138,11 @@ class LotterySettlementService:
 
     @staticmethod
     def _tier_for_number(lottery_number: int) -> str:
-        if lottery_number in {6, 66, 666, 6666, 66666}:
-            return "grand"
-        six_count = str(lottery_number).count("6")
-        if six_count == 3:
-            return "first"
-        if six_count == 2:
-            return "second"
-        if six_count == 1:
-            return "third"
-        return "none"
+        return lottery_tier(lottery_number)
 
     @staticmethod
     def _prize_for_tier(pool: int, prize_tier: str) -> int:
-        if prize_tier == "grand":
-            return pool
-        if prize_tier == "first":
-            return pool // 10
-        if prize_tier == "second":
-            return pool // 100
-        if prize_tier == "third":
-            return pool // 1000
-        return 0
+        return lottery_prize(pool, prize_tier)
 
     def settle(
         self,
