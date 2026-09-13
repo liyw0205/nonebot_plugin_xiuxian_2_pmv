@@ -213,6 +213,8 @@
 
 2026-09-14 bank info conditional legacy-handler cutover：旧 `xiuxian_bank/__init__.py::bank_` 的 `信息` 分支现在先读取新 `BankAccountInfoApplication`；仅当新 `bank_accounts` 存在该用户时使用新 read model，否则继续 legacy `readf`/attached `bankinfo`，保护未迁移历史账户。该改动实际进入旧 matcher 执行链路，不是仅新增 facade；12 个 bank info/application/asset 测试、compileall、architecture、diff 通过。回滚点为移除该新查询分支或恢复旧源快照；live 尚无新 bank 账户，因此需用真实新账户灰度后才能扩大写操作切换。
 
+2026-09-14 bank info conditional cutover live safety：提交 `91c2ff7` 部署后真实 bank audit `bankinfo=false`、`bankinfo_rows=0`、`operation_ledgers={}`、`read_only=true`；backup `/srv/old/data/backups/20260913T170103Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 audit 不变。由于 live 没有新 bank 账户，旧 info fallback 保持可用，未伪造新账户或迁移结果。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。
