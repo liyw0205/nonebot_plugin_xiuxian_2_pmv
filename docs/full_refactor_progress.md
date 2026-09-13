@@ -193,6 +193,8 @@
 
 2026-09-13 bank first-use NoneBot live safety：提交 `cefac77` 部署时未设置 `XIUXIAN_BANK_FIRST_USE_ENABLED`，新 `灵庄新存灵石` matcher 未注入，旧 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据确认 opt-in matcher 默认不影响旧命令执行路径。
 
+2026-09-13 bank first-use flag decision test：新增 `features/bank/feature_flag.py::bank_first_use_enabled`，将默认关闭/显式开启决策从 composition root 提取为可测试函数；默认 `None/{}` 为 false，显式 true 才开启。bank flag/command/application/Web/migration 共 9 个测试通过，compileall、inventory、architecture、diff 通过。该测试只锁定灰度决策，不改变默认关闭和旧 bank command 执行路径。
+
 2026-09-13 attached migration drift gate live verification：提交 `e36a62f` 部署后，真实 audit JSON 输出 `migration.applied=false`、`checksum_valid=null`、`tables=[]`、`accessory_rows=0`、`read_only=true`；backup `/srv/old/data/backups/20260913T100509Z`、migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 54 个迁移、五库 restore，恢复后 audit 仍为 `checksum_valid=null`。该证据确认未迁移状态被机器准确区分，未执行任何 live schema migration。
 
 2026-09-13 attached migration ledger live verification：提交 `0e64366` 部署后，真实 `/srv/old/data/player.db` 只读确认 `attached_schema_migrations=0`、`player_accessory=0`，证明 ledger scaffold 未在启动时隐式执行；backup `/srv/old/data/backups/20260913T094512Z`、migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 54 个迁移、五库 restore，reconcile clean，恢复后 readiness 全绿。该证据只证明 ledger 部署不改 live namespace；真实 migration 仍需明确的运维窗口、备份、namespace 对账和回滚演练。

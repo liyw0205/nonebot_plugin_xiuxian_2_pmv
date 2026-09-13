@@ -388,6 +388,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.rift.application import RiftApplication
 
         settings = context.settings
+        from .features.bank.feature_flag import bank_first_use_enabled
         lower = int(settings.get("sign_in_lower_limit", 100000)) if settings is not None else 100000
         upper = int(settings.get("sign_in_upper_limit", 500000)) if settings is not None else 500000
         fee_rate = float(settings.get("stone_gift_fee_rate", 0.1)) if settings is not None else 0.1
@@ -590,7 +591,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             "map": MapApplication(str(context.database.path("game_db")), str(context.database.path("player_db"))),
             "rift": RiftApplication(str(context.database.path("game_db")), str(context.database.path("player_db"))),
         })
-        if context.settings is not None and context.settings.get("bank_first_use_enabled", False):
+        if bank_first_use_enabled(context.settings):
             from .features.bank.account_application import BankDepositApplication
 
             context.services["bank_first_use"] = BankDepositApplication(str(context.database.path("game_db")))
