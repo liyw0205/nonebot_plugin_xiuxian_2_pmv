@@ -205,6 +205,8 @@
 
 2026-09-14 bank extended NoneBot matcher：扩展 matcher 现在按 `bank_first_use_withdrawal`、`bank_first_use_upgrade`、`bank_first_use_interest` service 分别注册 `灵庄新取灵石`、`灵庄新升级`、`灵庄新结息`，未启用的 service 不会留下不可用 matcher；三个 parser 均使用 runtime Clock/operation_id。14 个 bank/application/Web 相关测试、全包 compileall、inventory、architecture、diff 通过；旧 `灵庄` matcher 仍未切换。
 
+2026-09-14 bank extended matcher live safety：提交 `b9d797c` 默认 extended flags 关闭部署，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；backup `/srv/old/data/backups/20260913T163059Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据确认按 service 条件注册的 opt-in matcher 未改变旧 `灵庄` 执行路径。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。
