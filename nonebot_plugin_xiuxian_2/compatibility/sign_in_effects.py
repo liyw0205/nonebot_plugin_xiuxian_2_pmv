@@ -29,6 +29,7 @@ class LegacySignInEffects(SignInEffects):
         statistics: Callable[..., Any] | None = None,
         logger: Callable[..., Any] | None = None,
         statistics_repository: Any | None = None,
+        task_effects: Any | None = None,
     ) -> None:
         self.database = str(database)
         self.lottery_service = lottery_service
@@ -36,6 +37,7 @@ class LegacySignInEffects(SignInEffects):
         self.task_progress = task_progress
         self.statistics = statistics
         self.statistics_repository = statistics_repository
+        self.task_effects = task_effects
         self.logger = logger
 
     def _user_name(self, user_id: str) -> str:
@@ -90,7 +92,9 @@ class LegacySignInEffects(SignInEffects):
             )
         elif self.statistics is not None:
             self.statistics(str(user_id), "修仙签到")
-        if self.task_progress is not None:
+        if self.task_effects is not None:
+            self.task_effects.record(user_id=str(user_id), operation_id=operation_id)
+        elif self.task_progress is not None:
             self.task_progress(str(user_id), "sign_in", operation_id=f"task-progress:{operation_id}")
         if self.logger is not None:
             self.logger(str(user_id), f"签到成功，获取{int(stone)}块灵石")

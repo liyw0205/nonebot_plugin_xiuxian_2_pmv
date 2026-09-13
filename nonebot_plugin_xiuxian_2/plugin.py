@@ -405,6 +405,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             else:
                 from .compatibility.sign_in_effects import LegacySignInEffects
                 from .features.sign_in.statistics import SignInStatisticsRepository
+                from .features.sign_in.tasks import SignInTaskEffects
                 from .xiuxian.xiuxian_base.transaction_service import LotterySettlementService
                 from .xiuxian.xiuxian_tasks.task_data import record_task_progress
                 from .xiuxian.xiuxian_utils.utils import log_message, update_statistics_value
@@ -419,6 +420,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                     task_progress=record_task_progress,
                     statistics=update_statistics_value,
                     statistics_repository=SignInStatisticsRepository(str(context.database.path("game_db"))),
+                    task_effects=SignInTaskEffects(record_task_progress),
                     logger=log_message,
                 )
         context.services = {
