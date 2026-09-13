@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-import random
 from typing import Any
 
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.random_source import SystemRandom
 from .lottery import LotterySettlement, lottery_prize, lottery_tier
 from .lottery_repository import LotteryRepository
 
@@ -17,7 +17,7 @@ class LotteryApplication:
         self.database = str(database)
         self.repository = repository or LotteryRepository()
         self.clock = clock or SystemClock()
-        self.random_source = random_source or random
+        self.random_source = random_source or SystemRandom()
 
     def _now(self) -> datetime:
         value = self.clock.now() if hasattr(self.clock, "now") else self.clock()
