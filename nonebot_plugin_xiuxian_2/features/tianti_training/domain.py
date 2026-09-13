@@ -22,6 +22,28 @@ class StoneTrainingRequest:
 
 
 @dataclass(frozen=True)
+class StoneTrainingDecision:
+    status: str
+    stone_cost: int = 0
+    hp_gain: int = 0
+    new_hp: int = 0
+
+
+def decide_stone_training(*, old_hp: int, requested_stone: int, hp_cap: int) -> StoneTrainingDecision:
+    """Calculate the asset exchange without database or configuration access."""
+    old_hp = max(0, int(old_hp))
+    requested_stone = int(requested_stone)
+    hp_cap = max(old_hp, int(hp_cap))
+    requested_gain = requested_stone // 10
+    new_hp = min(hp_cap, old_hp + requested_gain)
+    hp_gain = max(0, new_hp - old_hp)
+    stone_cost = hp_gain * 10
+    if stone_cost <= 0:
+        return StoneTrainingDecision("at_cap", new_hp=old_hp)
+    return StoneTrainingDecision("trained", stone_cost, hp_gain, new_hp)
+
+
+@dataclass(frozen=True)
 class MedicineBathRequest:
     operation_id: str
     user_id: str
@@ -103,5 +125,7 @@ __all__ = [
     "MedicineBathRequest",
     "QiaoxueRequest",
     "StoneTrainingRequest",
+    "StoneTrainingDecision",
+    "decide_stone_training",
     "normalize_plan",
 ]

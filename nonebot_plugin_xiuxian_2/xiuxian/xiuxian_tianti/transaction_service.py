@@ -18,6 +18,7 @@ from .tianti_data import (
     get_tianti_level_index,
 )
 from .tianti_data import TiantiDataManager, get_qiaoxue_pool, get_tianti_level_data
+from ...features.tianti_training.domain import decide_stone_training
 from datetime import datetime, timedelta
 
 def get_tianti_cap(data: dict) -> int:
@@ -392,10 +393,14 @@ class StoneTrainingService:
                 data = self._manager._clean_user_data(dict(zip(fields, row)) if row else {})
                 old_hp = int(data["tianti_hp"])
                 cap = get_tianti_cap(data)
-                requested_gain = requested_stone // 10
-                new_hp = min(cap, old_hp + requested_gain)
-                hp_gain = max(0, new_hp - old_hp)
-                stone_cost = hp_gain * 10
+                decision = decide_stone_training(
+                    old_hp=old_hp,
+                    requested_stone=requested_stone,
+                    hp_cap=cap,
+                )
+                new_hp = decision.new_hp
+                hp_gain = decision.hp_gain
+                stone_cost = decision.stone_cost
                 if stone_cost <= 0:
                     conn.rollback()
                     return result("at_cap", new_hp=old_hp)
