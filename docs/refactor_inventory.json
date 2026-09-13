@@ -2671,6 +2671,8 @@
     "back",
     "back_feature_migrations",
     "backpack_repair_tasks",
+    "bank_account_operations",
+    "bank_accounts",
     "bank_deposit_operations",
     "bank_feature_migrations",
     "bank_interest_operations",
