@@ -114,6 +114,31 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
     if mode == '存灵石':  # 存灵石逻辑
         event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
         operation_id = f"bank-deposit:{event_id}:{user_id}" if event_id else f"bank-deposit:{user_id}:{time.time_ns()}"
+        from ...features.bank.account_info_application import BankAccountInfoApplication
+        from ...features.bank.account_application import BankDepositApplication
+        from ...infrastructure.clock import SystemClock
+
+        migrated_account = BankAccountInfoApplication(get_paths().game_db).get_info(user_id=user_id)
+        if migrated_account.get("status") == "ok":
+            result = BankDepositApplication(get_paths().game_db).deposit(
+                operation_id=operation_id,
+                user_id=user_id,
+                amount=num,
+                interest=0,
+                limit=int(BANKLEVEL[migrated_account["bank_level"]]["savemax"]),
+                bank_level=migrated_account["bank_level"],
+                settled_at=SystemClock().now().isoformat(),
+            )
+            messages = {
+                "applied": f"新灵庄存款成功：存入 {result['deposited']} 枚，当前存款 {result['saved_stone']} 枚。",
+                "duplicate": "该存款请求已经处理，无需重复提交。",
+                "stone_insufficient": "灵石不足，存款未结算。",
+                "limit_exceeded": "超过灵庄存储上限，存款未结算。",
+                "operation_conflict": "请求冲突，存款未结算。",
+                "user_missing": "未找到修仙数据。",
+            }
+            await handle_send(bot, event, messages.get(str(result.get("status")), "新存款未结算。"), md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
+            await bank.finish()
         # 先回放：成功后余额/额度变化会挡住“灵石不足/额度不足”前置检查。
         prior = bank_deposit_service.get_result(operation_id)
         if prior is not None and prior.succeeded:
