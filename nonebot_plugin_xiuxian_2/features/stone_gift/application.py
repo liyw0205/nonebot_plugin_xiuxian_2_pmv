@@ -8,7 +8,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from ...infrastructure.clock import SystemClock
-from .domain import StoneGiftRecord, calculate_amounts, normalize_transfer_date, validate_daily_limit
+from .domain import StoneGiftRecord, calculate_amounts, daily_cap, normalize_transfer_date, validate_daily_limit
 from .repository import StoneGiftRepository
 from .schemas import StoneGiftRequest
 
@@ -59,6 +59,20 @@ class StoneGiftApplication:
             # A fresh installation may receive a command before the legacy
             # player schema has been imported; treat it as an unknown target.
             return None
+
+    def read_limits(self, sender: dict[str, Any], recipient: dict[str, Any]) -> dict[str, Any]:
+        transfer_date = self._today()
+        sender_id = str(sender["user_id"])
+        recipient_id = str(recipient["user_id"])
+        with DatabaseUnitOfWork(self.database) as uow:
+            usage = self.repository.limits(uow, transfer_date, (sender_id, recipient_id))
+        return {
+            "transfer_date": transfer_date,
+            "send_limit": daily_cap(str(sender.get("level", ""))),
+            "receive_limit": daily_cap(str(recipient.get("level", ""))),
+            "send_used": usage[sender_id]["sent"],
+            "receive_used": usage[recipient_id]["received"],
+        }
 
     def transfer(
         self,

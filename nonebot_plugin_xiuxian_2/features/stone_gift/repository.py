@@ -50,6 +50,20 @@ class StoneGiftRepository:
         )
         return dict(row) if row is not None else None
 
+    def limits(self, uow: DatabaseUnitOfWork, transfer_date: str, user_ids: tuple[str, ...]) -> dict[str, dict[str, int]]:
+        self.ensure_limit_schema(uow)
+        result = {str(user_id): {"sent": 0, "received": 0} for user_id in user_ids}
+        if not result:
+            return result
+        placeholders = ",".join("?" for _ in result)
+        rows = uow.query_all(
+            f"SELECT user_id, sent_amount, received_amount FROM stone_gift_limits WHERE limit_date = ? AND user_id IN ({placeholders})",
+            (transfer_date, *result),
+        )
+        for row in rows:
+            result[str(row["user_id"])] = {"sent": int(row["sent_amount"] or 0), "received": int(row["received_amount"] or 0)}
+        return result
+
     @staticmethod
     def _record(row: dict[str, Any] | None) -> StoneGiftRecord | None:
         if row is None:

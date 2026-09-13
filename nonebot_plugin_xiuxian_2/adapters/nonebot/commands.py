@@ -135,15 +135,20 @@ def _build_stone(context: CommandContext, application: Any, args: Any) -> ReplyP
     if target is None or amount is None:
         return ReplyPlan("请输入正确的指令，例如：送灵石 少姜 600000", reference=True)
     recipient_id = _at_user_id(args) or target.lstrip("@")
+    sender = application.resolve_user(context.user_id)
     recipient = application.resolve_user(recipient_id)
+    if sender is None:
+        return ReplyPlan("请先开始修仙。", reference=True)
     if recipient is None:
         return ReplyPlan("对方未踏入修仙界，不可赠送！", reference=True)
     recipient_id = str(recipient["user_id"])
+    limits = application.read_limits(sender, recipient)
     plan = application.reply(
         operation_id=_message_id(context.raw_event, context.user_id, "stone-gift"),
         sender_id=context.user_id,
         recipient_id=recipient_id,
         gross_amount=amount,
+        **limits,
     )
     return plan
 
