@@ -92,7 +92,7 @@ class StoneTrainingSqlRepository:
         self.player_database = str(player_database)
         self._manager = data_manager
         self._cap_provider = cap_provider
-        self._profile_reader = profile_reader or TiantiProfileReader(Path(player_database).parent)
+        self._profile_reader = profile_reader or TiantiProfileReader(Path(player_database).parent / "xiuxian")
 
     def train(self, operation_id: str, user_id: str, requested_stone: int) -> Any:
         if self._manager is None:

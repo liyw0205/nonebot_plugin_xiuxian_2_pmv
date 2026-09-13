@@ -319,6 +319,8 @@
 
 2026-09-14 tianti profile reader：`StoneTrainingSqlRepository` 默认改用 feature-owned `TiantiProfileReader` 读取运行数据目录的炼体境界 profile，移除新 Web train 路径对 `TiantiDataManager`、`xiuxian2_handle` 和 legacy `get_tianti_cap` 的运行时依赖；profile reader 实例持有缓存，缺失/非法 profile 明确失败，不伪造等级数据。测试可显式注入 profile/data manager/cap provider；legacy repository 仍供 bath/breakthrough/qiaoxue 使用。
 
+2026-09-14 tianti profile path correction：首次 live 预检发现 profile 实际位于部署源码 `/srv/src/data/xiuxian/炼体/炼体境界.json`，而 repository 初版错误查找 `/srv/old/data/炼体/炼体境界.json`；当次未执行用户训练，backup `/srv/old/data/backups/20260913T231537Z`、migration dry-run 全库 pending 为空、reconcile clean。现将默认根修正为 `player_db` 同级 `xiuxian/`，并在下一次 live 预检验证真实 profile load；失败回滚使用上述 backup。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。
