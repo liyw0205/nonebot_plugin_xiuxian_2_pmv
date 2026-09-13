@@ -6,11 +6,13 @@ from .migrations import Migration, MigrationRunner
 from .reconcile import ReconcileReport, ReconcileService
 from .readonly import ReadOnlyQuery
 from .uow import DatabaseUnitOfWork
+from .attached_uow import AttachedDatabaseUnitOfWork
 
 __all__ = [
     "DatabaseCatalog",
     "DatabaseSpec",
     "DatabaseUnitOfWork",
+    "AttachedDatabaseUnitOfWork",
     "CrossDatabaseCoordinator",
     "DatabaseStep",
     "BackupService",
