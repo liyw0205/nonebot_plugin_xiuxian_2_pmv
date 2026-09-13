@@ -245,6 +245,8 @@
 
 2026-09-14 sign-in application-owned effects：新增 `features/sign_in/application_effects.py`，将签到 post-commit 的 statistics/task 编排从 compatibility effects 移入 feature-owned `SignInApplicationEffects`；lottery 仍通过显式 port，task core 仍使用已有 `SignInTaskEffects(record_task_progress)`，lottery schema 缺失时仍可 fallback legacy settlement。更新 wiring 测试断言默认 legacy startup 使用 feature-owned effects；相关 9 个 wiring/effects/task/statistics/lottery 测试通过，compileall、architecture、source-quality 通过。该子切片降低了 compatibility 编排，但不代表 task/lottery core 或 sign-in 整体完成。
 
+2026-09-14 sign-in application-owned effects live safety：提交 `f91d16b` 部署后 backup `/srv/old/data/backups/20260913T183540Z`、migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，reconcile clean。恢复后 attached accessory audit 仍 `tables=[]`、`accessory_rows=0`、`read_only=true`、`metadata_valid=null`。该证据证明 feature-owned effects wiring 可加载真实数据，不代表 lottery/task core 已全部迁移。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。
