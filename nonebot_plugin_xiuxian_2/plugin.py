@@ -58,7 +58,7 @@ from .features.arena.migrations import apply_arena
 from .features.auction.manifest import FEATURE as AUCTION_FEATURE
 from .features.auction.jobs import settle as auction_settle_job
 from .features.bank.manifest import FEATURE as BANK_FEATURE
-from .features.bank.migrations import apply_bank
+from .features.bank.migrations import apply_bank, apply_bank_accounts
 from .features.activity_reward.manifest import FEATURE as ACTIVITY_REWARD_FEATURE
 from .features.activity_reward.migrations import apply_activity_reward
 from .features.combat_settlement.manifest import FEATURE as COMBAT_SETTLEMENT_FEATURE
@@ -113,6 +113,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("auction.001", "auction_feature_migrations", apply_auction),
         Migration("back.001", "back_feature_migrations", apply_back),
         Migration("bank.001", "bank_feature_migrations", apply_bank),
+        Migration("bank.002", "bank_accounts", apply_bank_accounts),
         Migration("base.001", "base_feature_migrations", apply_base),
         Migration("beg.001", "beg_feature_migrations", apply_beg),
         Migration("boss.001", "boss_feature_migrations", apply_boss),
