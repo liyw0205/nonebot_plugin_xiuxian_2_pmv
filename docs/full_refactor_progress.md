@@ -133,6 +133,8 @@
 
 2026-09-13 accessory instance factory：新增 `features/accessory_package/factory.py::AccessoryInstanceFactory`，将 accessory DTO 构造的 item lookup、Clock、IdGenerator、affix roller 变为注入依赖；旧 `accessory_helpers.create_accessory_instance` 现在只作为 compatibility adapter 委托 factory，保留旧 JSON 字段和行为。`tests/test_accessory_instance_factory.py` 与 source-quality 共 134 个通过，compileall、architecture、diff 通过。旧 adapter 仍提供系统 Clock/随机 UID 和全局 Items，尚未计入 accessory/package_reward 完成。
 
+2026-09-13 accessory factory live verification：提交 `b823df8` 归档部署到 `/srv/src` 后，真实 `/srv/old/data` backup `/srv/old/data/backups/20260913T091122Z`、migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 54 个迁移、五库 restore，reconcile clean，恢复后 readiness 全绿。该证据只覆盖 accessory DTO factory 的 compatibility adapter 加载安全；旧全局 Items、系统 Clock/随机 UID 和 accessory JSON store 仍未完全迁移。
+
 2026-09-13 stone-gift 旧实现隔离：提交 `826ff4e` 将约 7,156 bytes、约 188 行的 `StoneGiftService` 从 `xiuxian_base/transaction_service.py` 删除，完整回滚实现移动到 `compatibility/legacy_stone_gift.py`；compatibility facade 和旧对照测试已改为显式引用该模块。真实 live 验证使用 `/srv/old/data`：备份 `/srv/old/data/backups/20260913T064308Z` 成功，migration dry-run `pending=[]`，reconcile clean，启动后的 readiness 全绿；随后停止实例执行 `recovery_smoke.py --evidence`，覆盖 53 个迁移和五库 restore，reconcile clean，恢复后实例 readiness 仍全绿。该切片的旧实现已不再位于大 transaction service，但 compatibility-only 回滚代码仍保留，不能把它等同于全仓兼容层删除。
 
 2026-09-13 量化审计脚本：`scripts/check_full_refactor_progress.py --json` 输出当前计数与切片状态，确认 `stone_gift`、`sign_in` 的默认新入口均为 true，但 `old_service_removed=false`；报告 `exit_ready=false`，阻塞项明确包含旧 transaction service、`xiuxian2_handle`、sign-in 副作用和完整 driver 重复 prefix 快照。该脚本是进度证据，不是静态“完成”替代。
