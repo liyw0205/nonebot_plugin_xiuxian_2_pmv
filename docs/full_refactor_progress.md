@@ -185,6 +185,8 @@
 
 2026-09-13 bank first-use composition flag live safety：提交 `a4cfafd` 部署时未设置 `XIUXIAN_BANK_FIRST_USE_ENABLED`，真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据确认默认灰度关闭不会切换旧 bank runtime；新 v2 route/application 尚未在 live 启用。
 
+2026-09-13 bank first-use command boundary：新增纯 `features/bank/commands.py::parse_first_use_deposit`，将金额校验、Clock 注入、settled_at 和 operation_id 生成边界从旧 NoneBot `xiuxian_bank/__init__.py` 抽出；`tests.test_bank_deposit_commands` 与 bank application/Web/migration 共 7 个通过，compileall、inventory、architecture、diff 通过。旧 `灵庄` handler 仍负责真实命令注册、旧 readf/get_give_stone 和消息展示，未切换到新 parser/application，故 bank slice 仍未完成。
+
 2026-09-13 attached migration drift gate live verification：提交 `e36a62f` 部署后，真实 audit JSON 输出 `migration.applied=false`、`checksum_valid=null`、`tables=[]`、`accessory_rows=0`、`read_only=true`；backup `/srv/old/data/backups/20260913T100509Z`、migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 54 个迁移、五库 restore，恢复后 audit 仍为 `checksum_valid=null`。该证据确认未迁移状态被机器准确区分，未执行任何 live schema migration。
 
 2026-09-13 attached migration ledger live verification：提交 `0e64366` 部署后，真实 `/srv/old/data/player.db` 只读确认 `attached_schema_migrations=0`、`player_accessory=0`，证明 ledger scaffold 未在启动时隐式执行；backup `/srv/old/data/backups/20260913T094512Z`、migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 54 个迁移、五库 restore，reconcile clean，恢复后 readiness 全绿。该证据只证明 ledger 部署不改 live namespace；真实 migration 仍需明确的运维窗口、备份、namespace 对账和回滚演练。
