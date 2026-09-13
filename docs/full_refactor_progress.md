@@ -271,6 +271,8 @@
 
 2026-09-14 lottery winner/audit consistency live safety：提交 `292a2b7` 部署后真实预检 backup `/srv/old/data/backups/20260913T204039Z`、dry-run 仅 `lottery.002`、reconcile clean；`lottery.002` 实际应用，`economy_log` schema 九列存在。readiness 全绿；recovery smoke 覆盖 58 个迁移、五库 restore、reconcile clean，恢复后 `economy_log` 行数为 0、lottery pool 为 0。live 无 lottery 用户写入，未伪造中奖或审计回执。
 
+2026-09-14 lottery legacy entry cutover：旧 `xiuxian_base.handle_lottery` 现在先检查 `lottery_pool_state`；已迁移 schema 的真实旧入口走 `LotteryApplication`，schema 缺失才回退 `LotterySettlementService`。保留旧文案和 fallback，未删除旧 service；`hongyun` 快照查询和旧模块 `datetime.now` 仍待迁移。该入口切换经 lottery/sign-in/legacy 17 个测试、compileall、architecture、source-quality 验证，未在 live 用户上执行业务写入。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。
