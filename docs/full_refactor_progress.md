@@ -329,6 +329,8 @@
 
 2026-09-14 tianti breakthrough domain rule：新增纯 `decide_breakthrough`，实际 `TiantiBreakthroughService.attempt` 调用该规则处理无下一境界、修仙境界不足、气血不足、成功升级、失败掷骰保留等级和 5% 气血消耗；15 个 focused tests、compileall、architecture、source-quality 通过。突破 repository 的 legacy SQLite/JSON I/O 尚未迁移，本切片不宣称突破 service 或 Web 已完成切换。
 
+2026-09-14 tianti breakthrough domain rule live safety：提交 `8dd82bd` 部署后 backup `/srv/old/data/backups/20260913T234522Z`、全库 migration dry-run pending 为空、reconcile clean、readiness 全绿；recovery smoke 恢复后 game_db migrations=60、player_db migrations=2、`tianti_info` 存在，reconcile `operations=0/outbox_events=0/dead_events=0`。live 未执行玩家突破写入。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。
