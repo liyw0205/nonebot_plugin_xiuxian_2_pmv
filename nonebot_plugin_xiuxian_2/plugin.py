@@ -28,7 +28,7 @@ from .features.title.manifest import FEATURE as TITLE_FEATURE
 from .features.title.migrations import apply_title
 from .features.title.application import TitleApplication
 from .features.sign_in.manifest import FEATURE as SIGN_IN_FEATURE
-from .features.sign_in.migrations import apply_sign_in, apply_sign_in_statistics
+from .features.sign_in.migrations import apply_sign_in, apply_sign_in_statistics, apply_sign_in_tasks
 from .features.stone_gift.manifest import FEATURE as STONE_GIFT_FEATURE
 from .features.stone_gift.migrations import apply_stone_gift, apply_stone_gift_limits
 from .features.package_reward.manifest import FEATURE as PACKAGE_REWARD_FEATURE
@@ -135,6 +135,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("sect_fairyland.001", "sect_fairyland_feature_migrations", apply_sect_fairyland),
         Migration("sign_in.001", "sign_in_operations", apply_sign_in),
         Migration("sign_in.002", "sign_in_statistics_events", apply_sign_in_statistics),
+        Migration("sign_in.003", "sign_in_task_events", apply_sign_in_tasks),
         Migration("stone_gift.001", "stone_gift_operations", apply_stone_gift),
         Migration("stone_gift.002", "stone_gift_limits", apply_stone_gift_limits),
         Migration("tianti_settlement.001", "tianti_settlement_feature_migrations", apply_tianti_settlement),
@@ -408,11 +409,12 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             else:
                 from .features.sign_in.application_effects import SignInApplicationEffects
                 from .features.sign_in.statistics import SignInStatisticsRepository
-                from .features.sign_in.tasks import SignInTaskEffects
+                from .features.sign_in.tasks import SignInTaskRepository
+                from .features.sign_in.task_effects import ApplicationSignInTaskEffects
                 from .features.sign_in.lottery_application import LotteryApplication
                 from .features.sign_in.lottery_repository import LotteryRepository
                 from .xiuxian.xiuxian_base.transaction_service import LotterySettlementService
-                from .xiuxian.xiuxian_tasks.task_data import record_task_progress
+
 
 
                 legacy_lottery = os.environ.get("XIUXIAN_SIGN_IN_LEGACY_LOTTERY", "false").strip().lower() in {"1", "true", "yes", "on"}
@@ -430,7 +432,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                     lottery=lottery_service,
                     clock=context.clock,
                     statistics=SignInStatisticsRepository(str(context.database.path("game_db"))),
-                    tasks=SignInTaskEffects(record_task_progress),
+                    tasks=ApplicationSignInTaskEffects(SignInTaskRepository(str(context.database.path("game_db"))), context.clock),
                 )
         context.services = {
             "daily_fortune": DailyFortuneApplication(str(context.database.path("game_db")), clock=context.clock, random_source=context.random),

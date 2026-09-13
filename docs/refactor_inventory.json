@@ -2994,6 +2994,8 @@
     "sign_in_operations",
     "sign_in_statistics_events",
     "sign_in_statistics_projection",
+    "sign_in_task_events",
+    "sign_in_task_projection",
     "simulator_feature_migrations",
     "skill_learning_operations",
     "spirit_vein_lifecycle_operations",

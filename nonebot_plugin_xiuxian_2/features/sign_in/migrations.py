@@ -15,4 +15,10 @@ def apply_sign_in_statistics(uow: DatabaseUnitOfWork) -> None:
     SignInStatisticsRepository.ensure_schema(uow)
 
 
-__all__ = ["apply_sign_in", "apply_sign_in_statistics"]
+def apply_sign_in_tasks(uow: DatabaseUnitOfWork) -> None:
+    from .tasks import SignInTaskRepository
+
+    SignInTaskRepository.ensure_schema(uow)
+
+
+__all__ = ["apply_sign_in", "apply_sign_in_statistics", "apply_sign_in_tasks"]
