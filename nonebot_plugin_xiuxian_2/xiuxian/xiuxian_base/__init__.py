@@ -901,22 +901,9 @@ async def handle_lottery(user_info: dict, operation_id: str):
             occurred_at.date().isoformat(),
             occurred_at=occurred_at,
         )
-    if settled.status == "operation_conflict":
-        return "鸿运结算记录冲突，请联系管理员处理。"
-    if settled.status == "user_missing":
-        return "未找到修仙存档，本次鸿运未结算。"
-    if settled.status == "already_participated" and not settled.lottery_number:
-        return "本期鸿运已经参与，奖池继续累积~"
-    if settled.prize_tier == "grand":
-        return f"✨鸿运当头！恭喜道友获得特等奖！\n中奖号码：{settled.lottery_number}\n获得奖池中{number_to(settled.prize)}灵石！🎉🎉🎉"
-    prize_names = {
-        "first": "一等奖",
-        "second": "二等奖",
-        "third": "三等奖",
-    }
-    if settled.prize_tier in prize_names:
-        return f"🎉恭喜道友获得{prize_names[settled.prize_tier]}！\n中奖号码：{settled.lottery_number}\n获得奖池的{number_to(settled.prize)}灵石！🎉"
-    return "本次签到未中奖，奖池继续累积~"
+    from ...features.sign_in.commands import format_lottery_result
+
+    return format_lottery_result(settled, number_to)
 
 @help_in.handle(parameterless=[Cooldown(cd_time=0)])
 async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
