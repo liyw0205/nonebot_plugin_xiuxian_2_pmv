@@ -75,7 +75,15 @@ tribulation_cd2 = int(XiuConfig().tribulation_cd * 60)
 gfqq = on_command("官群", aliases={"交流群"}, priority=8, block=True)
 run_xiuxian = on_command("我要修仙", aliases={"开始修仙"}, priority=8, block=True)
 restart = on_command("重入仙途", priority=7, block=True)
-sign_in = on_command("修仙签到", aliases={"签到"}, priority=13, block=True)
+_legacy_sign_in_enabled = os.environ.get("XIUXIAN_SIGN_IN_LEGACY_HANDLER", "false").strip().lower() in {
+    "1", "true", "yes", "on"
+}
+sign_in = on_command(
+    "修仙签到" if _legacy_sign_in_enabled else "__legacy_sign_in_disabled__",
+    aliases={"签到"} if _legacy_sign_in_enabled else set(),
+    priority=13,
+    block=True,
+)
 hongyun = on_command("鸿运", aliases={"查看中奖", "奖池查询"}, priority=5, block=True)
 help_in = on_command("修仙帮助", aliases={"修仙菜单"}, priority=12, block=True)
 rank = on_command("排行榜", aliases={"修仙排行榜", "灵石排行榜", "战力排行榜", "境界排行榜", "宗门排行榜", "轮回排行榜"},

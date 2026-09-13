@@ -1276,6 +1276,13 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("stone_gift_service.transfer(", adapter_source)
         self.assertNotIn("transaction_service", adapter_source)
 
+    def test_sign_in_legacy_handler_has_an_explicit_rollback_switch(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian/xiuxian_base/__init__.py").read_text(encoding="utf-8")
+        adapter_source = (SOURCE_ROOT / "adapters/nonebot/commands.py").read_text(encoding="utf-8")
+        self.assertIn("XIUXIAN_SIGN_IN_LEGACY_HANDLER", source)
+        self.assertIn('"修仙签到" if _legacy_sign_in_enabled', source)
+        self.assertIn("handle_sign_in", adapter_source)
+
     def test_stone_theft_uses_transactional_transfer_service(self) -> None:
         base_root = SOURCE_ROOT / "xiuxian" / "xiuxian_base"
         source = (base_root / "__init__.py").read_text(encoding="utf-8")

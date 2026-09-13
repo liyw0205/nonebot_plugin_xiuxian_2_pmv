@@ -73,12 +73,15 @@
 | 切片 | 旧真实路径 | 新目标路径 | 状态 | 删除/隔离 | 测试/证据 | 风险/回滚 |
 |:--|:--|:--|:--|:--|:--|:--|
 | `stone_gift` | `xiuxian_base/__init__.py` 的旧 `送灵石` handler；`xiuxian_base/transaction_service.py::StoneGiftService` | `features/stone_gift/{domain,application,repository,commands}.py`；`adapters/nonebot/commands.py::_build_stone`；`adapters/web/api.py::create_stone_gift_blueprint` | 默认真实路径已切换；旧代码仅显式回滚开关可达；切片未最终删除旧实现 | 旧 matcher 默认改为不可达占位；旧 service 文件保留待后续删除窗口 | 10 个 command/Web/application/legacy-switch/质量测试通过；新切片 compileall、架构、inventory、diff 通过 | 默认行为走新 application；`XIUXIAN_STONE_GIFT_LEGACY_HANDLER=true` 为回滚点；需继续完成真实旧 service 删除和全量回归 |
+| `sign_in` | `xiuxian_base/__init__.py` 的旧 `修仙签到/签到` handler；`xiuxian_base/transaction_service.py::SignInService` | `features/sign_in/{application,repository,domain,commands}.py`；`adapters/nonebot/commands.py::_build_sign` | 默认真实路径已切换；旧代码仅显式回滚开关可达；切片未最终删除旧实现 | 旧 matcher 默认改为不可达占位；旧 service 和签到后抽奖/日志/任务副作用保留待拆分 | 新 application 已有 operation/随机/Clock 测试；新增 legacy-switch 与 source-quality 测试通过；完整加载仍出现需后续治理的重复 prefix 警告 | `XIUXIAN_SIGN_IN_LEGACY_HANDLER=true` 为回滚点；签到后的 lottery/statistics/task side effects 仍需迁入新 application/orchestrator |
 
 2026-09-13 首个切片证据：`tests/test_stone_gift_application_real.py` 直接使用 `StoneGiftApplication` + `DatabaseUnitOfWork`，验证双边余额、手续费、`stone_gift_limits`、operation replay、operation payload conflict 和余额不足回滚；`tests/test_stone_gift_matcher_boundary.py` 验证真实 adapter builder 将 sender/recipient/amount/每日限额传入新 application。5 个测试全部通过。边界扫描确认新切片源码不包含 `transaction_service`、`xiuxian2_handle`、`stone_limit`、NoneBot 或 Flask 依赖；同时确认旧 `@give_stone.handle` 和 `stone_gift_service = StoneGiftService(...)` 仍存在，因此没有把该切片标为完成。
 
 2026-09-13 部署验证：提交 `54af620` 已通过 SSH 推送到 `origin/main`，并以归档形式部署到受控 live 容器 `/srv/src`；旧源保留于 `/tmp/remote-host/src-v2-pre-54af620`。针对真实 `/srv/old/data` 执行 `migrate --dry-run` 返回 `pending=[]`，`reconcile` 返回 `clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`，`/health/ready` 的 database/filesystem/jobs/migrations/repositories/web 全部为 `true`。该证据证明新切片可在真实数据结构上加载，但不证明旧 handler 已被移除。
 
 2026-09-13 真实入口切换：旧 `xiuxian_base/__init__.py` 的 `送灵石` matcher 默认改为 `__legacy_stone_gift_disabled__`，只有显式 `XIUXIAN_STONE_GIFT_LEGACY_HANDLER=true` 才恢复旧入口；新 `adapters/nonebot/commands.py` matcher 和 Web `/api/v1/stone-gift` 均调用 `StoneGiftApplication`。提交 `700b63d` 已推送并以归档部署到 `/srv/src`，针对真实 `/srv/old/data` 的 migration dry-run 为 `pending=[]`、reconcile clean、live health 全绿。该改动保留可回滚开关，不删除旧 service；因此这是“默认执行路径已切换、旧实现待删除”的切片状态，不是全面重构完成。
+
+2026-09-13 sign-in 入口审计：旧 `sign_in` matcher 默认规则为 `__legacy_sign_in_disabled__`，新 adapter 规则为 `修仙签到/签到`；旧 handler 的签到后抽奖、统计和任务进度仍是真实旧逻辑，尚未宣称完成。完整 NoneBot 导入探针记录了 `/签到`、`/修仙签到` 与新 matcher 的重复 prefix 警告，列入后续全局注册去重工作，不以测试通过掩盖。
 
 ## 6. 下一步
 
