@@ -301,6 +301,8 @@
 
 2026-09-14 lottery settlement command cutover：`features.sign_in.commands.settle_lottery` 现在负责 schema 判断、Clock 时间、`LotteryApplication` 新路径和显式 legacy fallback callable；`handle_lottery` 仅解析用户、传入兼容 callable 并格式化结果。旧 service 仍只作为 fallback，且由 lambda 懒加载；lottery/sign-in/legacy 22 个测试、compileall、architecture、source-quality 通过。
 
+2026-09-14 lottery settlement command cutover live safety：提交 `cb18845` 部署后 backup `/srv/old/data/backups/20260913T220119Z`、migration dry-run `pending=[]`、reconcile clean、readiness 全绿；recovery smoke 覆盖 58 个迁移、五库 restore、reconcile clean，恢复后 `pool_amount=0`、`economy_log` 行数为 0。live 无 lottery 用户写入，settlement command cutover 仅验证启动、关闭和恢复路径。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。
