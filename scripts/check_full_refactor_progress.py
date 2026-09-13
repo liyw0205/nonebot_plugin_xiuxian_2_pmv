@@ -49,13 +49,14 @@ def _slice_status() -> dict[str, dict[str, object]]:
     base = (PACKAGE / "xiuxian" / "xiuxian_base" / "__init__.py").read_text(encoding="utf-8")
     adapter = (PACKAGE / "adapters" / "nonebot" / "commands.py").read_text(encoding="utf-8")
     web = (PACKAGE / "adapters" / "web" / "api.py").read_text(encoding="utf-8")
+    legacy_transaction = (PACKAGE / "xiuxian" / "xiuxian_base" / "transaction_service.py").read_text(encoding="utf-8")
     return {
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,
             "nonebot_application_path": "_build_stone" in adapter and "application.read_limits" in adapter and "application.reply" in adapter,
             "web_application_path": "create_stone_gift_blueprint" in web and "application.transfer" in web,
-            "old_service_removed": False,
-            "status": "cutover_with_rollback_old_service_retained",
+            "old_service_removed": "class StoneGiftService" not in legacy_transaction and (PACKAGE / "compatibility" / "legacy_stone_gift.py").is_file(),
+            "status": "cutover_with_compatibility_rollback_isolated",
         },
         "sign_in": {
             "default_legacy_handler_disabled": '"修仙签到" if _legacy_sign_in_enabled' in base,

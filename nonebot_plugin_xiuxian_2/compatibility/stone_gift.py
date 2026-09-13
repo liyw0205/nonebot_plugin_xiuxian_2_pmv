@@ -34,7 +34,7 @@ class StoneGiftService:
         enabled = os.environ.get("XIUXIAN_STONE_GIFT_ENABLED", "true").strip().lower()
         self._legacy = None
         if enabled in {"0", "false", "no", "off"}:
-            from ..xiuxian.xiuxian_base.transaction_service import StoneGiftService as LegacyStoneGiftService
+            from .legacy_stone_gift import StoneGiftService as LegacyStoneGiftService
 
             self._legacy = LegacyStoneGiftService(database)
 
@@ -53,10 +53,22 @@ class StoneGiftService:
     def _result(status: str, sender_id: str, recipient_id: str, gross: int, net: int, fee: int) -> StoneGiftResult:
         return StoneGiftResult(status, str(sender_id), str(recipient_id), int(gross), int(net), int(fee))
 
+    @classmethod
+    def _legacy_result(cls, result: Any) -> StoneGiftResult:
+        return cls._result(
+            str(result.status),
+            str(result.sender_id),
+            str(result.recipient_id),
+            int(result.gross_amount),
+            int(result.net_amount),
+            int(result.fee_amount),
+        )
+
     def get_operation(self, operation_id: str, sender_id: str, recipient_id: str) -> StoneGiftResult | None:
         self._warn()
         if self._legacy is not None:
-            return self._legacy.get_operation(operation_id, sender_id, recipient_id)
+            result = self._legacy.get_operation(operation_id, sender_id, recipient_id)
+            return None if result is None else self._legacy_result(result)
         record = self.application.lookup(operation_id, sender_id=sender_id, recipient_id=recipient_id)
         if record is None:
             return None
@@ -78,7 +90,9 @@ class StoneGiftService:
     ) -> StoneGiftResult:
         self._warn()
         if self._legacy is not None:
-            return self._legacy.transfer(operation_id, sender_id, recipient_id, gross_amount, fee_rate=fee_rate)
+            return self._legacy_result(
+                self._legacy.transfer(operation_id, sender_id, recipient_id, gross_amount, fee_rate=fee_rate)
+            )
         # The historical facade treated an operation key as authoritative and
         # returned its original transfer even when a retried command carried a
         # different amount.  Keep that public contract here; the application
