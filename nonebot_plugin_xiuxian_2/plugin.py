@@ -27,7 +27,7 @@ from .features.title.manifest import FEATURE as TITLE_FEATURE
 from .features.title.migrations import apply_title
 from .features.title.application import TitleApplication
 from .features.sign_in.manifest import FEATURE as SIGN_IN_FEATURE
-from .features.sign_in.migrations import apply_sign_in
+from .features.sign_in.migrations import apply_sign_in, apply_sign_in_statistics
 from .features.stone_gift.manifest import FEATURE as STONE_GIFT_FEATURE
 from .features.stone_gift.migrations import apply_stone_gift, apply_stone_gift_limits
 from .features.package_reward.manifest import FEATURE as PACKAGE_REWARD_FEATURE
@@ -132,6 +132,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("sect.001", "sect_feature_migrations", apply_sect),
         Migration("sect_fairyland.001", "sect_fairyland_feature_migrations", apply_sect_fairyland),
         Migration("sign_in.001", "sign_in_operations", apply_sign_in),
+        Migration("sign_in.002", "sign_in_statistics_events", apply_sign_in_statistics),
         Migration("stone_gift.001", "stone_gift_operations", apply_stone_gift),
         Migration("stone_gift.002", "stone_gift_limits", apply_stone_gift_limits),
         Migration("tianti_settlement.001", "tianti_settlement_feature_migrations", apply_tianti_settlement),
@@ -403,6 +404,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 sign_in_effects = None
             else:
                 from .compatibility.sign_in_effects import LegacySignInEffects
+                from .features.sign_in.statistics import SignInStatisticsRepository
                 from .xiuxian.xiuxian_base.transaction_service import LotterySettlementService
                 from .xiuxian.xiuxian_tasks.task_data import record_task_progress
                 from .xiuxian.xiuxian_utils.utils import log_message, update_statistics_value
@@ -416,6 +418,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                     clock=context.clock,
                     task_progress=record_task_progress,
                     statistics=update_statistics_value,
+                    statistics_repository=SignInStatisticsRepository(str(context.database.path("game_db"))),
                     logger=log_message,
                 )
         context.services = {

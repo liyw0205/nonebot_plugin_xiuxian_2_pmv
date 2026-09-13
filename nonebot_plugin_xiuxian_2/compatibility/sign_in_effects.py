@@ -28,12 +28,14 @@ class LegacySignInEffects(SignInEffects):
         task_progress: Callable[..., Any] | None = None,
         statistics: Callable[..., Any] | None = None,
         logger: Callable[..., Any] | None = None,
+        statistics_repository: Any | None = None,
     ) -> None:
         self.database = str(database)
         self.lottery_service = lottery_service
         self.clock = clock
         self.task_progress = task_progress
         self.statistics = statistics
+        self.statistics_repository = statistics_repository
         self.logger = logger
 
     def _user_name(self, user_id: str) -> str:
@@ -81,7 +83,12 @@ class LegacySignInEffects(SignInEffects):
                 message = "本次签到未中奖，奖池继续累积~"
         if replayed or not self._claim_non_lottery_effects(operation_id):
             return message + "\n该签到请求已经处理，无需重复提交。"
-        if self.statistics is not None:
+        if self.statistics_repository is not None:
+            self.statistics_repository.record(
+                user_id=str(user_id), operation_id=f"statistics:{operation_id}",
+                event_key="修仙签到", occurred_at=now,
+            )
+        elif self.statistics is not None:
             self.statistics(str(user_id), "修仙签到")
         if self.task_progress is not None:
             self.task_progress(str(user_id), "sign_in", operation_id=f"task-progress:{operation_id}")
