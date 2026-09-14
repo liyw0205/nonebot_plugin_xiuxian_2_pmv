@@ -2207,6 +2207,16 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("open(", loader)
         self.assertNotIn("json.load(", loader)
 
+    def test_dungeon_purchase_uses_sql_application(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_dungeon" / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("async def handle_dungeon_purchase")
+        end = source.index("@dungeon_exit.handle", start)
+        handler = source[start:end]
+        self.assertIn("dungeon_application.operation_result(", handler)
+        self.assertIn("dungeon_application.purchase(", handler)
+        self.assertNotIn("dungeon_purchase_service.purchase(", handler)
+        self.assertIn("dungeon_ids.new_id()", handler)
+
     def test_statistics_data_migration_does_not_block_event_loop(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_buff" / "__init__.py"

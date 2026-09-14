@@ -56,12 +56,16 @@ from .transaction_service import (
 )
 from .transaction_service import DungeonTeamExitService
 from ...paths import get_paths
+from ...features.dungeon.application import DungeonApplication
+from ...infrastructure.ids import UUIDGenerator
 
 sql_message = XiuxianDateManage()
 player_data = PlayerDataManager()
 items = Items()
 dungeon_session_service = DungeonSessionService(get_paths().player_db)
 dungeon_purchase_service = DungeonPurchaseService(get_paths().game_db)
+dungeon_application = DungeonApplication(get_paths().game_db, get_paths().player_db)
+dungeon_ids = UUIDGenerator()
 dungeon_explore_operation_service = DungeonExploreOperationService(
     get_paths().game_db, get_paths().player_db
 )
@@ -992,21 +996,21 @@ async def handle_dungeon_purchase(bot: Bot, event: GroupMessageEvent | PrivateMe
         await handle_send(bot, event, "副本商店中没有该商品，或数量无效。")
         await dungeon_purchase.finish()
     event_id = getattr(event, "message_id", None)
-    operation_id = f"dungeon-purchase:{event_id}:{user_info['user_id']}" if event_id else f"dungeon-purchase:{time.time_ns()}:{user_info['user_id']}"
+    operation_id = f"dungeon-purchase:{event_id or dungeon_ids.new_id()}:{user_info['user_id']}"
     try:
-        replay = dungeon_purchase_service.operation_result(
-            operation_id,
-            user_info["user_id"],
-            item_id,
-            quantity,
-            1,
+        replay = dungeon_application.operation_result(
+            operation_id=operation_id,
+            user_id=user_info["user_id"],
+            item_id=item_id,
+            quantity=quantity,
+            bind_flag=1,
         )
     except Exception:
         logger.exception("读取副本商店兑换 operation 失败")
         await handle_send(bot, event, "副本兑换失败：处理过程异常。")
         await dungeon_purchase.finish()
     if replay is not None:
-        await handle_send(bot, event, replay.response or "兑换失败。")
+        await handle_send(bot, event, str(replay.get("response") or "兑换失败。"))
         await dungeon_purchase.finish()
     shop_item = DUNGEON_SHOP.get(item_id)
     item_info = items.get_data_by_item_id(item_id)
@@ -1014,19 +1018,19 @@ async def handle_dungeon_purchase(bot: Bot, event: GroupMessageEvent | PrivateMe
         await handle_send(bot, event, "副本商店中没有该商品，或数量无效。")
         await dungeon_purchase.finish()
     try:
-        result = dungeon_purchase_service.purchase(
-            operation_id,
-            user_info["user_id"],
-            item_id,
-            item_info["name"],
-            item_info.get("type", item_info.get("item_type", "道具")),
-            quantity,
-            shop_item["cost"],
-            user_info["stone"],
-            XiuConfig().max_goods_num,
-            1,
+        outcome = dungeon_application.purchase(
+            operation_id=operation_id,
+            user_id=user_info["user_id"],
+            item_id=item_id,
+            item_name=item_info["name"],
+            item_type=item_info.get("type", item_info.get("item_type", "道具")),
+            quantity=quantity,
+            unit_cost=shop_item["cost"],
+            expected_stone=user_info["stone"],
+            max_goods=XiuConfig().max_goods_num,
+            bind_flag=1,
         )
-        await handle_send(bot, event, result.response or "兑换失败。")
+        await handle_send(bot, event, str((outcome.data or {}).get("response") or outcome.message or "兑换失败。"))
     except Exception:
         logger.exception("副本商店兑换事务失败")
         await handle_send(bot, event, "副本兑换失败：处理过程异常。")

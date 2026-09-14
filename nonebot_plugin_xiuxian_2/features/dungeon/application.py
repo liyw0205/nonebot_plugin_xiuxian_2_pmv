@@ -9,7 +9,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import DungeonPurchaseRequest
-from .repository import DungeonRepository, LegacyDungeonRepository
+from .repository import DungeonPurchaseSqlRepository, DungeonRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -28,7 +28,7 @@ class DungeonApplication:
         self.ledger = ledger or OperationLedger()
 
     def _repository(self) -> DungeonRepository:
-        return self.repository or LegacyDungeonRepository(self.game_database, self.player_database)
+        return self.repository or DungeonPurchaseSqlRepository(self.game_database, self.player_database)
 
     def _execute_purchase(self, request: DungeonPurchaseRequest) -> OperationOutcome[dict[str, Any]]:
         action = "dungeon.purchase"

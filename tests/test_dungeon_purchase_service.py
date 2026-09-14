@@ -17,6 +17,7 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.transaction_service import (
     DungeonPurchaseService,
 )
+from nonebot_plugin_xiuxian_2.features.dungeon.application import DungeonApplication
 from tests.test_db_backend import db_backend
 
 dungeon_plugin = importlib.import_module(
@@ -156,7 +157,7 @@ class DungeonPurchaseServiceTests(unittest.TestCase):
         bot = SimpleNamespace(self_id="bot")
         event = SimpleNamespace(message_id="same-event")
         args = SimpleNamespace(extract_plain_text=lambda: "1 2")
-        service = Mock(wraps=self.service)
+        application = DungeonApplication(self.database, self.database)
         sent = AsyncMock()
 
         with (
@@ -170,7 +171,7 @@ class DungeonPurchaseServiceTests(unittest.TestCase):
                 "check_user",
                 Mock(return_value=(True, {"user_id": "u", "stone": 80}, "")),
             ),
-            patch.object(dungeon_plugin, "dungeon_purchase_service", service),
+            patch.object(dungeon_plugin, "dungeon_application", application),
             patch.object(dungeon_plugin, "handle_send", sent),
             patch.dict(dungeon_plugin.DUNGEON_SHOP, {}, clear=True),
             patch.object(
@@ -185,8 +186,6 @@ class DungeonPurchaseServiceTests(unittest.TestCase):
                 )
 
         sent.assert_awaited_once_with(bot, event, first.response)
-        service.operation_result.assert_called_once_with(operation_id, "u", 1, 2, 1)
-        service.purchase.assert_not_called()
         item_lookup.assert_not_called()
         self.assertEqual(self.state(), before_state)
         self.assertEqual(tuple(self.operation(operation_id)), before_operation)
