@@ -16,6 +16,8 @@ class DungeonRepository(Protocol):
     def prepare(self, *args: Any, **kwargs: Any) -> Any: ...
     def settle(self, *args: Any, **kwargs: Any) -> Any: ...
     def resolve_rejection(self, *args: Any, **kwargs: Any) -> Any: ...
+    def operation_session_result(self, *args: Any, **kwargs: Any) -> Any: ...
+    def session_transition(self, *args: Any, **kwargs: Any) -> Any: ...
 
 
 class LegacyDungeonRepository:
@@ -100,4 +102,36 @@ class DungeonPurchaseSqlRepository(LegacyDungeonRepository):
         uow.execute("INSERT INTO dungeon_purchase_operations(operation_id,payload,result_status,quantity,cost,stone,inventory,response) VALUES(?,?,?,?,?,?,?,?)",(operation_id,payload,result["status"],result["quantity"],result["cost"],result["stone"],result["inventory"],result["response"]));return result
 
 
-__all__ = ["DungeonPurchaseSqlRepository", "DungeonRepository", "LegacyDungeonRepository"]
+class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
+    def operation_session_result(self, operation_id: str, user_id: str, action: str) -> dict[str, Any] | None:
+        with DatabaseUnitOfWork(self.player_database) as uow:
+            row = uow.query_one("SELECT payload,result_status,dungeon_status FROM dungeon_session_operations WHERE operation_id=?", (str(operation_id),))
+        if row is None: return None
+        try: payload=json.loads(str(row["payload"]))
+        except (TypeError,ValueError): return {"status":"state_changed","dungeon_status":str(row["dungeon_status"])}
+        if str(payload.get("user_id",""))!=str(user_id) or str(payload.get("action",""))!=str(action): return {"status":"state_changed","dungeon_status":str(row["dungeon_status"])}
+        status=str(row["result_status"]);return {"status":"duplicate" if status=="applied" else status,"dungeon_status":str(row["dungeon_status"])}
+
+    def session_transition(self, operation_id: str, user_id: str, expected: dict[str, Any], dungeon: dict[str, Any], action: str) -> dict[str, Any]:
+        operation_id,user_id,action=str(operation_id).strip(),str(user_id),str(action);expected=dict(expected);dungeon=dict(dungeon)
+        if not operation_id or action not in {"enter","exit"}: raise ValueError("valid operation required")
+        payload=json.dumps({"user_id":user_id,"dungeon":dungeon,"action":action},ensure_ascii=True,sort_keys=True)
+        with DatabaseUnitOfWork(self.player_database,immediate=True) as uow:
+            old=uow.query_one("SELECT payload,result_status,dungeon_status FROM dungeon_session_operations WHERE operation_id=?",(operation_id,))
+            if old:
+                status=str(old["result_status"]);return {"status":"state_changed" if str(old["payload"])!=payload else ("duplicate" if status=="applied" else status),"dungeon_status":str(old["dungeon_status"])}
+            row=uow.query_one("SELECT dungeon_id,dungeon_status,current_layer,total_layers,last_reset_date,reset_generation,reset_operation_id FROM player_dungeon_status WHERE user_id=?",(user_id,))
+            if row is None:return self._record_session(uow,operation_id,payload,"state_changed","")
+            current={k:(int(row[k] or 0) if k in {"current_layer","total_layers","reset_generation"} else str(row[k] or "")) for k in row.keys()}
+            normalized={k:(int(expected.get(k,0) or 0) if k in {"current_layer","total_layers","reset_generation"} else str(expected.get(k,"") or "")) for k in current}
+            if current!=normalized or current["dungeon_id"]!=str(dungeon.get("dungeon_id","")) or current["last_reset_date"]!=str(dungeon.get("date","")):return self._record_session(uow,operation_id,payload,"state_changed",current["dungeon_status"])
+            if current["dungeon_status"]=="completed":return self._record_session(uow,operation_id,payload,"completed","completed")
+            if action=="exit" and current["dungeon_status"]!="exploring":return self._record_session(uow,operation_id,payload,"not_exploring",current["dungeon_status"])
+            new_status="exploring" if action=="enter" else "exited";uow.execute("UPDATE player_dungeon_status SET dungeon_status=? WHERE user_id=?",(new_status,user_id));return self._record_session(uow,operation_id,payload,"applied",new_status)
+
+    @staticmethod
+    def _record_session(uow:DatabaseUnitOfWork,operation_id:str,payload:str,status:str,dungeon_status:str)->dict[str,Any]:
+        uow.execute("INSERT INTO dungeon_session_operations(operation_id,payload,result_status,dungeon_status) VALUES(?,?,?,?)",(operation_id,payload,status,dungeon_status));return {"status":status,"dungeon_status":dungeon_status}
+
+
+__all__ = ["DungeonPurchaseSqlRepository", "DungeonRepository", "DungeonSessionSqlRepository", "LegacyDungeonRepository"]

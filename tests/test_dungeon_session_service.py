@@ -129,7 +129,7 @@ class DungeonSessionServiceTests(unittest.TestCase):
             )
         ]
         self.assertLess(
-            handler.index("dungeon_session_service.operation_result"),
+            handler.index("dungeon_application.session_operation"),
             handler.index("dungeon_manager.get_player_status"),
         )
 

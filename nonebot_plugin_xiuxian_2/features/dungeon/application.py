@@ -9,7 +9,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import DungeonPurchaseRequest
-from .repository import DungeonPurchaseSqlRepository, DungeonRepository
+from .repository import DungeonRepository, DungeonSessionSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -28,7 +28,7 @@ class DungeonApplication:
         self.ledger = ledger or OperationLedger()
 
     def _repository(self) -> DungeonRepository:
-        return self.repository or DungeonPurchaseSqlRepository(self.game_database, self.player_database)
+        return self.repository or DungeonSessionSqlRepository(self.game_database, self.player_database)
 
     def _execute_purchase(self, request: DungeonPurchaseRequest) -> OperationOutcome[dict[str, Any]]:
         action = "dungeon.purchase"
@@ -67,6 +67,12 @@ class DungeonApplication:
 
     def operation_result(self, *, operation_id: str, user_id: str, item_id: int, quantity: int, bind_flag: int = 1) -> Any:
         return self._repository().operation_result(operation_id, user_id, item_id, quantity, bind_flag)
+
+    def session_operation(self, *, operation_id: str, user_id: str, action: str) -> Any:
+        return self._repository().operation_session_result(operation_id, user_id, action)
+
+    def session_transition(self, *, operation_id: str, user_id: str, expected: Mapping[str, Any], dungeon: Mapping[str, Any], action: str) -> Any:
+        return self._repository().session_transition(operation_id, user_id, dict(expected), dict(dungeon), action)
 
     def replay(self, *, operation_id: str, user_id: str) -> Any:
         return self._repository().replay(operation_id, user_id)

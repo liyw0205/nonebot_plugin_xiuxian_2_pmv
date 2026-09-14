@@ -84,7 +84,7 @@ from .features.puppet.migrations import apply_puppet
 from .features.boss.manifest import FEATURE as BOSS_FEATURE
 from .features.boss.migrations import apply_boss
 from .features.dungeon.manifest import FEATURE as DUNGEON_FEATURE
-from .features.dungeon.migrations import apply_dungeon, apply_dungeon_purchase
+from .features.dungeon.migrations import apply_dungeon, apply_dungeon_purchase, apply_dungeon_session
 from .features.auction.migrations import apply_auction
 from .features._legacy_migrated import (
     APPLICATIONS as LEGACY_MIGRATED_APPLICATIONS,
@@ -125,6 +125,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("daily_fortune.001", "daily_fortune_claims", apply_daily_fortune),
         Migration("dungeon.001", "dungeon_feature_migrations", apply_dungeon),
         Migration("dungeon.002", "dungeon_purchase_operations", apply_dungeon_purchase),
+        Migration("dungeon.003", "dungeon_session_operations", apply_dungeon_session),
         Migration("illusion.001", "illusion_feature_migrations", apply_illusion),
         Migration("interactive.001", "interactive_feature_migrations", apply_interactive),
         *(Migration(version, f"{version.replace('.', '_')}_migrations", migration) for version, migration in LEGACY_MIGRATIONS),
@@ -333,7 +334,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
     context.migrations = migration_runner
     game_migrations = tuple(
         migration for migration in migration_runner.migrations
-        if migration.version not in {"combat_settlement.003", "combat_settlement.004", "map.003", "map.005", "map.008", "map.013", "map.015", "map.016", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005", "tianti_training.006"}
+        if migration.version not in {"combat_settlement.003", "combat_settlement.004", "dungeon.003", "map.003", "map.005", "map.008", "map.013", "map.015", "map.016", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005", "tianti_training.006"}
     )
 
     def ensure_filesystem() -> None:
@@ -360,7 +361,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                     runner = MigrationRunner(game_migrations, clock=context.clock)
                 elif spec.key == "player_db":
                     runner = MigrationRunner(
-                        tuple(migration for migration in migration_runner.migrations if migration.version in {"title.001", "combat_settlement.003", "combat_settlement.004", "map.003", "map.005", "map.008", "map.013", "map.015", "map.016", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005"}),
+                        tuple(migration for migration in migration_runner.migrations if migration.version in {"title.001", "combat_settlement.003", "combat_settlement.004", "dungeon.003", "map.003", "map.005", "map.008", "map.013", "map.015", "map.016", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005"}),
                         clock=context.clock,
                     )
                 else:

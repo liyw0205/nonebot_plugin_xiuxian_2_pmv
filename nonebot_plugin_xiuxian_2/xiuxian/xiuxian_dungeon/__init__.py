@@ -46,6 +46,7 @@ from .transaction_service import (
     build_team_invite_private_message,
 )
 from .transaction_service import DungeonSessionService
+from .transaction_service import DungeonSessionResult
 from ...compatibility.dungeon import DungeonPurchaseService
 from ...compatibility.dungeon import DungeonExploreOperationService
 from .transaction_service import (
@@ -1046,17 +1047,20 @@ async def handle_dungeon_exit(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await dungeon_exit.finish()
     user_id = user_info["user_id"]
     event_id = getattr(event, "message_id", None)
-    operation_id = f"dungeon-exit:{event_id}:{user_id}" if event_id else f"dungeon-exit:{time.time_ns()}:{user_id}"
-    result = dungeon_session_service.operation_result(operation_id, user_id, "exit")
+    operation_id = f"dungeon-exit:{event_id or dungeon_ids.new_id()}:{user_id}"
+    raw_result = dungeon_application.session_operation(operation_id=operation_id, user_id=user_id, action="exit")
+    result = None if raw_result is None else DungeonSessionResult(str(raw_result.get("status")), str(raw_result.get("dungeon_status", "")))
     if result is None:
         status = dungeon_manager.get_player_status(user_id)
         dungeon = dungeon_manager.get_dungeon_progress()
-        result = dungeon_session_service.exit(
-            operation_id,
-            user_id,
-            status,
-            {"dungeon_id": status["dungeon_id"], "date": dungeon["date"]},
+        raw_result = dungeon_application.session_transition(
+            operation_id=operation_id,
+            user_id=user_id,
+            expected=status,
+            dungeon={"dungeon_id": status["dungeon_id"], "date": dungeon["date"]},
+            action="exit",
         )
+        result = DungeonSessionResult(str(raw_result.get("status")), str(raw_result.get("dungeon_status", "")))
     if result.status == "not_exploring":
         await handle_send(bot, event, "当前未在副本探索中。")
     elif result.status == "completed":
