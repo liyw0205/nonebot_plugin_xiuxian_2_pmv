@@ -449,6 +449,8 @@
 
 2026-09-15 map dongfu build cutover：新增 `MapDongfuBuildSqlRepository`，默认 `MapApplication.build_dongfu` 与真实 `建设洞府` handler 不再调用legacy service；game主库attach player原子校验位置/余额/已有洞府、扣款、upsert洞府和operation，UUID显式注入。新增game `map.012` 与player `map.013` schema migrations；legacy dongfu/source共141 tests、80 catalog、compileall、architecture通过。旧service保留回滚。
 
+2026-09-15 map dongfu build live safety：提交 `19b2f0c` 部署后 backup `/srv/old/data/backups/20260914T165849Z`，dry-run/apply game `[map.012]`、player `[map.013]`；readiness全绿，80-entry recovery reconcile clean。live未执行洞府建设写入。
+
 2026-09-14 dao battle settlement live safety：提交 `f9129fc` 部署后 backup `/srv/old/data/backups/20260914T061542Z`；dry-run 真实返回 game_db `[]`、player_db `[combat_settlement.003]`，apply 仅写入 player_db。game_db migrations=67、player_db migrations=6，`map_dao_battle_operations` 存在，readiness 全绿；recovery smoke 覆盖 67-entry catalog，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`。live 未执行玩家道战写入。
 
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
