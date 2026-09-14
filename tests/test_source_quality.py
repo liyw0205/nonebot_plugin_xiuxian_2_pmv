@@ -2188,6 +2188,16 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("map_dongfu_build_service.build(", handler)
         self.assertIn("runtime_ids.new_id()", handler)
 
+    def test_map_dao_battle_uses_injected_random(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("@dao_qc.handle")
+        end = source.index("@dao_view.handle", start)
+        handler = source[start:end]
+        self.assertIn("runtime_random.choice(nearby)", handler)
+        self.assertIn("runtime_random.random()", handler)
+        self.assertNotIn("else random.choice(nearby)", handler)
+        self.assertNotIn("= random.random()", handler)
+
     def test_statistics_data_migration_does_not_block_event_loop(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_buff" / "__init__.py"

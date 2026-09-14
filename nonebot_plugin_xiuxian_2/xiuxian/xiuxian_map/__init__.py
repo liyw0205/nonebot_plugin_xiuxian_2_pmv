@@ -1465,7 +1465,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "附近无可切磋道友。")
         return
 
-    target = next((u for u in nearby if u["user_name"] == target_name), None) if target_name else random.choice(nearby)
+    target = next((u for u in nearby if u["user_name"] == target_name), None) if target_name else runtime_random.choice(nearby)
     if not target:
         await handle_send(bot, event, f"附近未找到道友【{target_name}】")
         return
@@ -1473,7 +1473,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     my_power = int(user_info.get("power", 0))
     ta_power = int(target.get("power", 0))
     my_win_rate = 0.5 if (my_power + ta_power) == 0 else my_power / (my_power + ta_power)
-    my_win = random.random() < my_win_rate
+    my_win = runtime_random.random() < my_win_rate
 
     outcome = dao_battle_application.settle_dao_battle(
         operation_id=_map_operation_id(event, "dao", uid, target["user_id"]),
