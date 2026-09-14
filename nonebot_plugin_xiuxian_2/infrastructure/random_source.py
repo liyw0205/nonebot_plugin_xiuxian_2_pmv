@@ -21,6 +21,9 @@ class SystemRandom:
     def randint(self, start: int, end: int) -> int:
         return self._source.randint(start, end)
 
+    def uniform(self, start: float, end: float) -> float:
+        return self._source.uniform(start, end)
+
     def choice(self, values: Sequence[T]) -> T:
         return self._source.choice(values)
 

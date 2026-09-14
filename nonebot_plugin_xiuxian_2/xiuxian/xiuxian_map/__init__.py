@@ -1907,15 +1907,16 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
 # =========================================
 # 战斗节点：真实战斗（已加每日次数+持久化CD）
 # =========================================
-def _build_map_enemy(user_info: dict, node_type: str, node_name: str):
+def _build_map_enemy(user_info: dict, node_type: str, node_name: str, *, random_source=None):
+    random_source = random_source or runtime_random
     user_exp = int(user_info.get("exp", 1000))
     user_power = int(user_info.get("power", 1000))
 
     if node_type == "试炼":
-        factor = random.uniform(0.75, 1.00)
+        factor = random_source.uniform(0.75, 1.00)
         names = ["守关石傀", "幻影剑修", "试炼战灵", "铜甲傀儡"]
     else:
-        factor = random.uniform(0.95, 1.20)
+        factor = random_source.uniform(0.95, 1.20)
         names = ["瘴骨妖", "赤瞳凶魇", "裂甲魔猿", "险地邪修"]
 
     exp_base = max(500, int(user_exp * factor * 100))
@@ -1933,7 +1934,7 @@ def _build_map_enemy(user_info: dict, node_type: str, node_name: str):
         level = "感气境"
 
     return {
-        "name": f"{random.choice(names)}·{node_name}",
+        "name": f"{random_source.choice(names)}·{node_name}",
         "jj": level,
         "气血": hp,
         "总血量": hp,
@@ -2015,7 +2016,7 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
                 "cooldown_until": cooldown_until,
                 "daily": daily,
                 "decay": _get_reward_decay(uid),
-                "enemy": _build_map_enemy(user_info, ntype, position["node_name"]),
+                "enemy": _build_map_enemy(user_info, ntype, position["node_name"], random_source=runtime_random),
                 "node_name": position["node_name"],
                 "node_type": ntype,
             }
@@ -2079,17 +2080,17 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
             except Exception:
                 pass
             try:
-                big_win = int(remain_hp) > int(user_info.get("hp", 1)) * 0.5 if remain_hp is not None else random.random() < 0.25
+                big_win = int(remain_hp) > int(user_info.get("hp", 1)) * 0.5 if remain_hp is not None else runtime_random.random() < 0.25
             except Exception:
                 big_win = False
             plan = conf["reward_plan_big_win"] if big_win else conf["reward_plan_win"]
-            rewards, stone, reward_items = _roll_rewards(plan, decay)
+            rewards, stone, reward_items = _roll_rewards(plan, decay, random_source=runtime_random)
             drop_rate = MAP_EXTRA_DROP_RATE["combat_trial"] if ntype == "试炼" else MAP_EXTRA_DROP_RATE["combat_risk"]
-            extra_text, extra_item = _roll_skill_equip_drop(user_info, drop_rate)
+            extra_text, extra_item = _roll_skill_equip_drop(user_info, drop_rate, random_source=runtime_random)
             if extra_item:
                 rewards.append(extra_text)
                 reward_items.append(extra_item)
-            material_rewards, material_stone, material_items = _roll_map_dongfu_material(ntype, 1.35 if big_win else 1.0)
+            material_rewards, material_stone, material_items = _roll_map_dongfu_material(ntype, 1.35 if big_win else 1.0, random_source=runtime_random)
             rewards.extend(material_rewards)
             stone += material_stone
             reward_items.extend(material_items)
