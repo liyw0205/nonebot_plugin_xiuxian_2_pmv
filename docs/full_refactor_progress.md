@@ -539,6 +539,8 @@
 
 2026-09-15 sect rename cutover：新增 `SectRenameSqlRepository`、`SectApplication.rename` 与 game migration `sect.002`，真实宗门改名 handler改经application，原子更新宗门名称/灵石/card/operation，校验 owner、同名、余额、卡牌、duplicate/replay/rollback。new+legacy+source共153 tests、95 catalog、compileall、architecture、diff check通过；其它 sect membership paths仍保留legacy rollback。
 
+2026-09-15 sect rename live safety：提交 `f93a6c3` 部署后 backup `/srv/old/data/backups/20260914T213946Z`，dry-run/apply仅game `[sect.002]`；readiness全绿，95-entry recovery reconcile clean。live未执行宗门改名写入。
+
 2026-09-14 dao battle settlement live safety：提交 `f9129fc` 部署后 backup `/srv/old/data/backups/20260914T061542Z`；dry-run 真实返回 game_db `[]`、player_db `[combat_settlement.003]`，apply 仅写入 player_db。game_db migrations=67、player_db migrations=6，`map_dao_battle_operations` 存在，readiness 全绿；recovery smoke 覆盖 67-entry catalog，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`。live 未执行玩家道战写入。
 
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
