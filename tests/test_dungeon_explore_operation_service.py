@@ -476,9 +476,9 @@ class DungeonExploreOperationServiceTests(unittest.TestCase):
             handler.index("dungeon_application.replay"),
             handler.index("dungeon_manager.trigger_event"),
         )
-        self.assertIn("dungeon_explore_operation_service.prepare", handler)
+        self.assertIn("dungeon_application.prepare", handler)
         self.assertIn("dungeon_explore_operation_service.settle", handler)
-        self.assertIn("dungeon_explore_operation_service.resolve_rejection", handler)
+        self.assertIn("dungeon_application.resolve_rejection", handler)
         self.assertIn("type_in=0", handler)
         self.assertNotIn("dungeon_session_service.enter", handler)
         self.assertNotIn("dungeon_battle_progress_service.settle", handler)

@@ -1126,15 +1126,16 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         status = status or {}
         response = _explore_response(message)
         try:
-            stored = dungeon_explore_operation_service.resolve_rejection(
-                operation_id,
-                user_id,
-                result_status,
-                response,
-                XiuConfig().max_goods_num,
+            stored_data = dungeon_application.resolve_rejection(
+                operation_id=operation_id,
+                user_id=user_id,
+                result_status=result_status,
+                response=response,
+                max_goods_num=XiuConfig().max_goods_num,
                 current_layer=int(status.get("current_layer", 0) or 0),
                 dungeon_status=str(status.get("dungeon_status", "")),
             )
+            stored = DungeonExploreOperationResult(**stored_data)
             await _send_explore_response(bot, event, stored.response or response)
         except Exception:
             logger.exception("持久化副本探索拒绝响应失败")
@@ -1419,9 +1420,10 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         "response": response,
     }
     try:
-        prepared = dungeon_explore_operation_service.prepare(
-            operation_id, user_id, plan
+        prepared_data = dungeon_application.prepare(
+            operation_id=operation_id, user_id=user_id, plan=plan
         )
+        prepared = DungeonExploreOperationResult(**prepared_data)
         settled = None
         if prepared.status != "operation_conflict" and prepared.phase != "completed":
             settled = dungeon_explore_operation_service.settle(

@@ -112,17 +112,42 @@ class DungeonPurchaseSqlRepository(LegacyDungeonRepository):
 
 
 class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
-    def replay(self, operation_id: str, user_id: str) -> dict[str, Any]:
-        identity = json.dumps({"action":"explore","user_id":str(user_id)}, ensure_ascii=True, sort_keys=True)
-        with DatabaseUnitOfWork(self.game_database) as uow:
-            row = uow.query_one("SELECT request_identity,phase,prepared_json,result_status,result_json,current_layer,dungeon_status FROM dungeon_explore_operations WHERE operation_id=?", (str(operation_id),))
-        if row is None: return {"status":"missing","phase":"","result_status":"","response":{},"plan":{},"current_layer":0,"dungeon_status":""}
-        if str(row["request_identity"]) != identity: return {"status":"operation_conflict","phase":"","result_status":"","response":{},"plan":{},"current_layer":0,"dungeon_status":""}
-        phase=str(row["phase"] or "");result_status=str(row["result_status"] or "")
+    def prepare(self, operation_id: str, user_id: str, plan: dict[str, Any]) -> dict[str, Any]:
+        operation_id,user_id=str(operation_id).strip(),str(user_id);plan=dict(plan)
+        if not operation_id or not plan: raise ValueError("operation and plan required")
+        identity=json.dumps({"action":"explore","user_id":user_id},ensure_ascii=True,sort_keys=True);prepared=json.dumps(plan,ensure_ascii=True,sort_keys=True,separators=(",",":"))
+        with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
+            existing=self._explore_row(uow,operation_id)
+            if existing:return self._explore_result(existing,identity)
+            uow.execute("INSERT INTO dungeon_explore_operations(operation_id,request_identity,phase,prepared_json,result_status,result_json,current_layer,dungeon_status) VALUES(?,?,'prepared',?,'','{}',0,'')",(operation_id,identity,prepared))
+        return {"status":"prepared","phase":"prepared","result_status":"","response":{},"plan":plan,"current_layer":0,"dungeon_status":""}
+
+    def resolve_rejection(self, operation_id: str, user_id: str, result_status: str, response: dict[str, Any], max_goods_num: int, current_layer: int = 0, dungeon_status: str = "") -> dict[str, Any]:
+        identity=json.dumps({"action":"explore","user_id":str(user_id)},ensure_ascii=True,sort_keys=True);response_json=json.dumps(dict(response),ensure_ascii=True,sort_keys=True,separators=(",",":"))
+        with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
+            existing=self._explore_row(uow,str(operation_id))
+            if existing:return self._explore_result(existing,identity)
+            uow.execute("INSERT INTO dungeon_explore_operations(operation_id,request_identity,phase,prepared_json,result_status,result_json,current_layer,dungeon_status) VALUES(?,?,'completed','{}',?,?,?,?)",(str(operation_id),identity,str(result_status),response_json,int(current_layer),str(dungeon_status)))
+        return {"status":"applied","phase":"completed","result_status":str(result_status),"response":dict(response),"plan":{},"current_layer":int(current_layer),"dungeon_status":str(dungeon_status)}
+
+    @staticmethod
+    def _explore_row(uow: DatabaseUnitOfWork, operation_id: str):
+        return uow.query_one("SELECT request_identity,phase,prepared_json,result_status,result_json,current_layer,dungeon_status FROM dungeon_explore_operations WHERE operation_id=?",(operation_id,))
+
+    @staticmethod
+    def _explore_result(row: Any, identity: str) -> dict[str, Any]:
+        if str(row["request_identity"])!=identity:return {"status":"operation_conflict","phase":"","result_status":"","response":{},"plan":{},"current_layer":0,"dungeon_status":""}
         def load(value):
             try:return json.loads(str(value or "{}"))
             except (TypeError,ValueError):return {}
-        return {"status":"duplicate" if phase=="completed" else phase,"phase":phase,"result_status":result_status,"response":load(row["result_json"]),"plan":load(row["prepared_json"]),"current_layer":int(row["current_layer"] or 0),"dungeon_status":str(row["dungeon_status"] or "")}
+        phase=str(row["phase"] or "");return {"status":"duplicate" if phase=="completed" else phase,"phase":phase,"result_status":str(row["result_status"] or ""),"response":load(row["result_json"]),"plan":load(row["prepared_json"]),"current_layer":int(row["current_layer"] or 0),"dungeon_status":str(row["dungeon_status"] or "")}
+
+    def replay(self, operation_id: str, user_id: str) -> dict[str, Any]:
+        identity = json.dumps({"action":"explore","user_id":str(user_id)}, ensure_ascii=True, sort_keys=True)
+        with DatabaseUnitOfWork(self.game_database) as uow:
+            row = self._explore_row(uow, str(operation_id))
+        if row is None: return {"status":"missing","phase":"","result_status":"","response":{},"plan":{},"current_layer":0,"dungeon_status":""}
+        return self._explore_result(row, identity)
     def operation_session_result(self, operation_id: str, user_id: str, action: str) -> dict[str, Any] | None:
         with DatabaseUnitOfWork(self.player_database) as uow:
             row = uow.query_one("SELECT payload,result_status,dungeon_status FROM dungeon_session_operations WHERE operation_id=?", (str(operation_id),))

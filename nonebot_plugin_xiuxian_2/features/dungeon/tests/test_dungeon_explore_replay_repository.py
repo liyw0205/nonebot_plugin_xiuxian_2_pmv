@@ -21,5 +21,14 @@ class DungeonExploreReplayRepositoryTests(unittest.TestCase):
         replay=self.repo.replay('op','u');self.assertEqual(('duplicate','completed','ok'),(replay['status'],replay['phase'],replay['response']['message']))
         self.assertEqual('operation_conflict',self.repo.replay('op','other')['status'])
 
+    def test_prepare_and_rejection_are_idempotent(self):
+        plan = {"user_id": "u", "response": {"message": "ready"}}
+        self.assertEqual("prepared", self.repo.prepare("prepared", "u", plan)["phase"])
+        self.assertEqual("prepared", self.repo.prepare("prepared", "u", {"other": True})["phase"])
+        response = {"message": "rejected"}
+        first = self.repo.resolve_rejection("rejected", "u", "invalid", response, 99, current_layer=2, dungeon_status="exited")
+        replay = self.repo.replay("rejected", "u")
+        self.assertEqual(("completed", "duplicate", "rejected"), (first["phase"], replay["status"], replay["response"]["message"]))
+
 
 if __name__=='__main__':unittest.main()
