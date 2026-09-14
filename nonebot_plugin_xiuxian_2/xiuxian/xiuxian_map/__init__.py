@@ -41,6 +41,7 @@ from .transaction_service import MapExploreStartService
 from .transaction_service import MapMovementSettlementService
 from .transaction_service import MapDaoBattleSettlementService
 from ...features.combat_settlement.application import CombatSettlementApplication
+from ...features.map.application import MapApplication
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
@@ -62,6 +63,7 @@ map_interactive_action_service = MapInteractiveActionService(
 )
 map_explore_start_service = MapExploreStartService(get_paths().game_db, get_paths().player_db)
 map_movement_service = MapMovementSettlementService(get_paths().game_db, get_paths().player_db)
+map_application = MapApplication(get_paths().game_db, get_paths().player_db)
 map_dao_battle_service = MapDaoBattleSettlementService(get_paths().player_db, get_paths().game_db)
 dao_battle_application = CombatSettlementApplication(
     get_paths().game_db,
@@ -1261,15 +1263,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             await handle_send(bot, event, f"跨界体力不足！需{cost}，当前{stamina}。")
             return
 
-        result = map_movement_service.move(
-            _map_operation_id(event, "move", uid), uid, st,
-            {"realm": tar_realm, "heaven": first_heaven, "node_id": tar_node["id"]}, stamina, cost,
+        result = map_application.move(
+            operation_id=_map_operation_id(event, "move", uid),
+            user_id=uid,
+            expected_position=st,
+            target_position={"realm": tar_realm, "heaven": first_heaven, "node_id": tar_node["id"]},
+            expected_stamina=stamina,
+            cost=cost,
         )
-        if not result.succeeded:
+        if not result.ok:
             message = (
-                "体力不足，无法移动。" if result.status == "stamina_insufficient"
-                else "移动未完成：所在节点已更新，请重新移动。" if result.status == "state_changed"
-                else f"无法移动（{result.status}）。"
+                "体力不足，无法移动。" if result.code == "stamina_insufficient"
+                else "移动未完成：所在节点已更新，请重新移动。" if result.code == "state_changed"
+                else f"无法移动（{result.code}）。"
             )
             await handle_send(bot, event, message)
             return
@@ -1296,15 +1302,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             await handle_send(bot, event, f"跨天体力不足！需{cost}，当前{stamina}。")
             return
 
-        result = map_movement_service.move(
-            _map_operation_id(event, "move", uid), uid, st,
-            {"realm": tar_realm, "heaven": tar_heaven, "node_id": tar_node["id"]}, stamina, cost,
+        result = map_application.move(
+            operation_id=_map_operation_id(event, "move", uid),
+            user_id=uid,
+            expected_position=st,
+            target_position={"realm": tar_realm, "heaven": tar_heaven, "node_id": tar_node["id"]},
+            expected_stamina=stamina,
+            cost=cost,
         )
-        if not result.succeeded:
+        if not result.ok:
             message = (
-                "体力不足，无法移动。" if result.status == "stamina_insufficient"
-                else "移动未完成：所在节点已更新，请重新移动。" if result.status == "state_changed"
-                else f"无法移动（{result.status}）。"
+                "体力不足，无法移动。" if result.code == "stamina_insufficient"
+                else "移动未完成：所在节点已更新，请重新移动。" if result.code == "state_changed"
+                else f"无法移动（{result.code}）。"
             )
             await handle_send(bot, event, message)
             return
@@ -1335,15 +1345,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             await handle_send(bot, event, f"移动体力不足！需{cost}，当前{stamina}。")
             return
 
-        result = map_movement_service.move(
-            _map_operation_id(event, "move", uid), uid, st,
-            {"realm": tar_realm, "heaven": tar_heaven, "node_id": tar_node["id"]}, stamina, cost,
+        result = map_application.move(
+            operation_id=_map_operation_id(event, "move", uid),
+            user_id=uid,
+            expected_position=st,
+            target_position={"realm": tar_realm, "heaven": tar_heaven, "node_id": tar_node["id"]},
+            expected_stamina=stamina,
+            cost=cost,
         )
-        if not result.succeeded:
+        if not result.ok:
             message = (
-                "体力不足，无法移动。" if result.status == "stamina_insufficient"
-                else "移动未完成：所在节点已更新，请重新移动。" if result.status == "state_changed"
-                else f"无法移动（{result.status}）。"
+                "体力不足，无法移动。" if result.code == "stamina_insufficient"
+                else "移动未完成：所在节点已更新，请重新移动。" if result.code == "state_changed"
+                else f"无法移动（{result.code}）。"
             )
             await handle_send(bot, event, message)
             return

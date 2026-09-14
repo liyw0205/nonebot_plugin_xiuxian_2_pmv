@@ -48,7 +48,7 @@ from .features.back.migrations import apply_back
 from .features.trade.manifest import FEATURE as TRADE_FEATURE
 from .features.trade.migrations import apply_trade
 from .features.map.manifest import FEATURE as MAP_FEATURE
-from .features.map.migrations import apply_map
+from .features.map.migrations import apply_map, apply_map_movement
 from .features.rift.manifest import FEATURE as RIFT_FEATURE
 from .features.rift.migrations import apply_rift
 from .features.accessory_package.manifest import FEATURE as ACCESSORY_PACKAGE_FEATURE
@@ -130,6 +130,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("lottery.001", "lottery_feature_migrations", apply_lottery),
         Migration("lottery.002", "lottery_audit", apply_lottery_audit),
         Migration("map.001", "map_feature_migrations", apply_map),
+        Migration("map.002", "map_movement_operations", apply_map_movement),
         Migration("mixelixir.001", "mixelixir_feature_migrations", apply_mixelixir),
         Migration("natal_treasure.001", "natal_treasure_feature_migrations", apply_natal_treasure),
         Migration("package_reward.001", "package_reward_operations", apply_package_reward),
