@@ -654,6 +654,9 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 context.services["bank_first_use_info"] = BankAccountInfoApplication(str(context.database.path("game_db")))
         for feature_key, application_type in LEGACY_MIGRATED_APPLICATIONS.items():
             context.services[feature_key] = application_type(str(context.database.path("game_db")))
+        from .xiuxian.xiuxian_base import configure_sign_in_application
+
+        configure_sign_in_application(context.services["sign_in"])
         context.reconcile_handlers = {
             "accessory_package.open": context.services["accessory_package"].reconcile,
         }

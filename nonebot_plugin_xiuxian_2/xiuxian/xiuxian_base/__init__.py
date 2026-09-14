@@ -46,6 +46,7 @@ from .stone_limit import stone_limit
 
 from ...compatibility.sign_in import SignInService
 from ...features.sign_in.application import SignInApplication
+from ...features.sign_in.effects import NullSignInEffects
 from .transaction_service import PlayerRenameService
 from ...compatibility.stone_gift import StoneGiftService
 from .transaction_service import StoneContestService
@@ -58,6 +59,12 @@ items = Items()
 sql_message = XiuxianDateManage()  # sql类
 sign_in_service = SignInService(get_paths().game_db)
 sign_in_application = SignInApplication(get_paths().game_db)
+
+
+def configure_sign_in_application(application: SignInApplication) -> None:
+    """Bind the handler to the lifecycle-owned sign-in application."""
+    global sign_in_application
+    sign_in_application = application
 
 player_rename_service = PlayerRenameService(get_paths().game_db)
 stone_gift_service = StoneGiftService(get_paths().game_db)
@@ -806,15 +813,6 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_id = user_info['user_id']
     
     sign_operation_id = _sign_operation_id(event, user_id)
-    # 先回放：成功后 is_sign=1 会走 already_signed。
-    prior = sign_in_application.lookup(sign_operation_id)
-    if prior is not None:
-        lottery_result = await handle_lottery(
-            user_info, _lottery_operation_id(sign_operation_id)
-        )
-        msg = f"**修仙签到**\n---\n✅ 签到成功，获取{prior.stone}块灵石!\n\n{lottery_result}\n该签到请求已经处理，无需重复提交。"
-        await handle_send(bot, event, msg, md_type="修仙", k1="修仙签到", v1="修仙签到", k2="鸿运", v2="鸿运", k3="帮助", v3="修仙帮助")
-        await sign_in.finish()
     sign_outcome = sign_in_application.claim(
         operation_id=sign_operation_id,
         user_id=user_id,
@@ -824,31 +822,16 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     sign_data = sign_outcome.data or {}
     sign_record = sign_data.get("sign_in", {})
     sign_result = type("SignInView", (), {"status": sign_outcome.code or ("applied" if sign_outcome.ok else "failed"), "stone": int(sign_record.get("stone", 0) or 0), "succeeded": sign_outcome.ok, "applied": sign_outcome.ok})()
-    if sign_result.status == "duplicate":
-        lottery_result = await handle_lottery(
-            user_info, _lottery_operation_id(sign_operation_id)
-        )
-        msg = f"**修仙签到**\n---\n✅ 签到成功，获取{sign_result.stone}块灵石!\n\n{lottery_result}\n该签到请求已经处理，无需重复提交。"
-        await handle_send(bot, event, msg, md_type="修仙", k1="修仙签到", v1="修仙签到", k2="鸿运", v2="鸿运", k3="帮助", v3="修仙帮助")
-        await sign_in.finish()
     if not sign_result.succeeded:
         await handle_send(bot, event, "❌ 贪心的人是不会有好运的！")
         await sign_in.finish()
     result = f"✅ 签到成功，获取{sign_result.stone}块灵石!"
-
-    lottery_result = await handle_lottery(
-        user_info, _lottery_operation_id(sign_operation_id)
-    )
-    
-    # 3. 组合签到结果和抽奖结果
-    msg = f"**修仙签到**\n---\n{result}\n\n{lottery_result}"
-    
+    effects_message = sign_outcome.message or ""
+    msg = f"**修仙签到**\n---\n{result}"
+    if effects_message:
+        msg += f"\n\n{effects_message}"
     if sign_result.applied:
         log_message(user_id, msg)
-        update_statistics_value(user_id, "修仙签到")
-        record_task_progress(
-            user_id, "sign_in", operation_id=f"task-progress:{sign_operation_id}"
-        )
     await handle_send(bot, event, msg, md_type="修仙", k1="修仙签到", v1="修仙签到", k2="鸿运", v2="鸿运", k3="帮助", v3="修仙帮助")
     await sign_in.finish()
 
