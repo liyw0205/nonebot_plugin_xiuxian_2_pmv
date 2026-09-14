@@ -2056,7 +2056,8 @@ class SourceQualityTests(unittest.TestCase):
         start = source.index("@go_home.handle")
         end = source.index("@map_help.handle", start)
         handler = source[start:end]
-        self.assertIn("map_home_return_service.return_home(", handler)
+        self.assertIn("map_application.return_home(", handler)
+        self.assertNotIn("map_home_return_service.return_home(", handler)
         self.assertIn('_map_operation_id(event, "home", user_id)', handler)
         self.assertNotIn("_save_map_status(", handler)
         self.assertNotIn("player_data_manager.get_fields(", handler)

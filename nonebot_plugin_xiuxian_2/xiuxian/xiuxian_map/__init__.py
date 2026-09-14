@@ -1044,25 +1044,25 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     user_id = str(user_info["user_id"])
-    result = map_home_return_service.return_home(
-        _map_operation_id(event, "home", user_id), user_id
+    outcome = map_application.return_home(
+        operation_id=_map_operation_id(event, "home", user_id), user_id=user_id
     )
-    if result.status == "dongfu_missing":
+    if not outcome.ok and outcome.code == "dongfu_missing":
         await handle_send(bot, event, "你尚未建设洞府，请先使用【建设洞府】。")
         return
-    if result.status == "dongfu_invalid":
+    if not outcome.ok and outcome.code == "dongfu_invalid":
         await handle_send(bot, event, "洞府数据异常，请联系管理员处理。")
         return
-    if result.status == "position_missing":
+    if not outcome.ok and outcome.code == "position_missing":
         await handle_send(bot, event, "地图位置数据异常，请联系管理员处理。")
         return
-    if result.status == "operation_conflict":
+    if not outcome.ok and outcome.code == "operation_conflict":
         await handle_send(bot, event, "该事件已用于其他回府操作。")
         return
     await handle_send(
         bot,
         event,
-        f"你已回到洞府：{result.realm}·{result.heaven}·{result.node_name}",
+        f"你已回到洞府：{outcome.data.get('realm', '')}·{outcome.data.get('heaven', '')}·{outcome.data.get('node_name', '')}",
     )
 
 # =========================================

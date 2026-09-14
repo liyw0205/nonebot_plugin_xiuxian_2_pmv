@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from .._legacy_application import LegacyApplication
-from .repository import LegacyMapRepository, MapMovementSqlRepository, MapRepository
+from .repository import LegacyMapRepository, MapHomeReturnSqlRepository, MapMovementSqlRepository, MapRepository
 
 
 class MapApplication(LegacyApplication):
@@ -27,7 +27,17 @@ class MapApplication(LegacyApplication):
                 call=lambda: MapMovementSqlRepository(self.game_database, self.player_database).move(operation_id, user_id, **kwargs),
             )
         return self._action("move", operation_id=operation_id, user_id=user_id, **kwargs)
-    def return_home(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("return_home", operation_id=operation_id, user_id=user_id, **kwargs)
+    def return_home(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        if self._explicit_repository is None:
+            return self._execute(
+                operation_id=operation_id,
+                user_id=user_id,
+                action="map.return_home",
+                payload={"user_id": user_id, **kwargs},
+                call=lambda: MapHomeReturnSqlRepository(self.player_database).return_home(operation_id, user_id),
+            )
+        return self._action("return_home", operation_id=operation_id, user_id=user_id, **kwargs)
+
     def interactive_start(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("interactive_start", operation_id=operation_id, user_id=user_id, **kwargs)
     def interactive_finish(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("interactive_finish", operation_id=operation_id, user_id=user_id, **kwargs)
     def combat_start(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("combat_start", operation_id=operation_id, user_id=user_id, **kwargs)

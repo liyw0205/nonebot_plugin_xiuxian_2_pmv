@@ -54,6 +54,56 @@ class MapMovementSqlRepository:
             return {"status": "applied", "stamina": remaining}
 
 
+class MapHomeReturnSqlRepository:
+    def __init__(self, player_database: str | Path) -> None:
+        self.player_database = str(player_database)
+
+    def return_home(self, operation_id: str, user_id: str) -> dict[str, Any]:
+        operation_id, user_id = str(operation_id).strip(), str(user_id).strip()
+        if not operation_id or not user_id:
+            raise ValueError("operation and user are required")
+        payload = json.dumps([user_id], ensure_ascii=True, separators=(",", ":"))
+        with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+            previous = uow.query_one("SELECT payload,result_status,realm,heaven,node_id,node_name FROM map_home_return_operations WHERE operation_id=?", (operation_id,))
+            if previous:
+                if str(previous["payload"]) != payload:
+                    return {"status": "operation_conflict"}
+                result = {"status": "duplicate" if str(previous["result_status"]) == "applied" else str(previous["result_status"])}
+                result.update({key: str(previous[key] or "") for key in ("realm", "heaven", "node_id", "node_name")})
+                return result
+            def record(status: str, **values: str) -> dict[str, Any]:
+                fields = {"realm": "", "heaven": "", "node_id": "", "node_name": "", **values}
+                uow.execute("INSERT INTO map_home_return_operations(operation_id,payload,result_status,realm,heaven,node_id,node_name) VALUES(?,?,?,?,?,?,?)", (operation_id, payload, status, fields["realm"], fields["heaven"], fields["node_id"], fields["node_name"]))
+                return {"status": status, **fields}
+            table = uow.query_one("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='dongfu_status'")
+            if table is None:
+                return record("dongfu_missing")
+            columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(dongfu_status)")}
+            selected = "built,realm,heaven,node_id" + (",node_name" if "node_name" in columns else "")
+            dongfu = uow.query_one(f"SELECT {selected} FROM dongfu_status WHERE user_id=?", (user_id,))
+            if dongfu is None or int(dongfu["built"] or 0) != 1:
+                return record("dongfu_missing")
+            realm, heaven, node_id = str(dongfu["realm"] or ""), str(dongfu["heaven"] or ""), str(dongfu["node_id"] or "")
+            if not all((realm, heaven, node_id)):
+                return record("dongfu_invalid")
+            position = uow.query_one("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='map_status'")
+            if position is None:
+                return record("position_missing")
+            current = uow.query_one("SELECT visited_nodes FROM map_status WHERE user_id=?", (user_id,))
+            if current is None:
+                return record("position_missing")
+            visited = current["visited_nodes"]
+            try:
+                visited = json.loads(visited) if isinstance(visited, str) else visited
+            except json.JSONDecodeError:
+                visited = []
+            visited = [str(item) for item in visited] if isinstance(visited, list) else []
+            if node_id not in visited:
+                visited.append(node_id)
+            uow.execute("UPDATE map_status SET realm=?,heaven=?,node_id=?,visited_nodes=? WHERE user_id=?", (realm, heaven, node_id, json.dumps(visited, ensure_ascii=False), user_id))
+            return record("applied", realm=realm, heaven=heaven, node_id=node_id, node_name=str(dongfu.get("node_name") or node_id))
+
+
 class LegacyMapRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database, self.player_database = str(game_database), str(player_database)
@@ -83,4 +133,4 @@ class LegacyMapRepository:
         return getattr(cls(*databases), method)(operation_id, user_id, **kwargs)
 
 
-__all__ = ["LegacyMapRepository", "MapRepository"]
+__all__ = ["LegacyMapRepository", "MapHomeReturnSqlRepository", "MapMovementSqlRepository", "MapRepository"]
