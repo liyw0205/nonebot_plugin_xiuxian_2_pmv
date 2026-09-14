@@ -54,7 +54,7 @@ from .features.rift.migrations import apply_rift
 from .features.accessory_package.manifest import FEATURE as ACCESSORY_PACKAGE_FEATURE
 from .features.accessory_package.migrations import apply_accessory_package
 from .features.arena.manifest import FEATURE as ARENA_FEATURE
-from .features.arena.migrations import apply_arena
+from .features.arena.migrations import apply_arena, apply_arena_challenge_purchase
 from .features.auction.manifest import FEATURE as AUCTION_FEATURE
 from .features.auction.jobs import settle as auction_settle_job
 from .features.bank.manifest import FEATURE as BANK_FEATURE
@@ -110,6 +110,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("activity_reward.001", "activity_reward_feature_migrations", apply_activity_reward),
         Migration("admin_asset.001", "admin_asset_feature_migrations", apply_admin_asset),
         Migration("arena.001", "arena_feature_migrations", apply_arena),
+        Migration("arena.002", "arena_challenge_purchase_operations", apply_arena_challenge_purchase),
         Migration("auction.001", "auction_feature_migrations", apply_auction),
         Migration("back.001", "back_feature_migrations", apply_back),
         Migration("bank.001", "bank_feature_migrations", apply_bank),

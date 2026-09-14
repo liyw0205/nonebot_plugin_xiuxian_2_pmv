@@ -29,7 +29,8 @@ from .transaction_service import ArenaChallengeSettlementService, ArenaChallenge
 from .transaction_service import ArenaWeeklyRankReductionService
 from .transaction_service import ArenaSeasonRewardService
 from ...features.arena.application import ArenaApplication
-from ...features.arena.repository import LegacyArenaRepository
+from ...features.arena.repository import ArenaChallengePurchaseSqlRepository
+from ...infrastructure.ids import UUIDGenerator
 
 arena_purchase_service = ArenaPurchaseService(get_paths().game_db, get_paths().player_db)
 arena_challenge_purchase_service = ArenaChallengePurchaseService(get_paths().game_db, get_paths().player_db)
@@ -40,8 +41,9 @@ arena_season_reward_service = ArenaSeasonRewardService(get_paths().game_db, get_
 arena_application = ArenaApplication(
     get_paths().game_db,
     get_paths().player_db,
-    repository=LegacyArenaRepository(get_paths().game_db, get_paths().player_db),
+    repository=ArenaChallengePurchaseSqlRepository(get_paths().game_db, get_paths().player_db),
 )
+arena_ids = UUIDGenerator()
 
 arena_challenge = on_command("竞技场挑战", priority=10, block=True)
 arena_view = on_command("竞技场查看", priority=10, block=True)
@@ -761,7 +763,7 @@ async def arena_buy_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     operation_id = (
         f"arena-challenge-purchase:{event_id}:{user_id}"
         if event_id
-        else f"arena-challenge-purchase:{time.time_ns()}:{user_id}"
+        else f"arena-challenge-purchase:{arena_ids.new_id()}:{user_id}"
     )
     # 先走 operation：同一事件重放不能被“今日已买满”前置拦截。
     # Legacy facade call: arena_challenge_purchase_service.purchase(...)
