@@ -155,6 +155,22 @@ def decide_medicine_bath_activation(
     return "applied", now + timedelta(minutes=duration_minutes)
 
 
+@dataclass(frozen=True)
+class TiantiSettlementWindow:
+    status: str
+    minutes: int
+    next_settlement_time: datetime | None
+
+
+def decide_tianti_settlement_window(*, last_settlement: datetime | None, now: datetime) -> TiantiSettlementWindow:
+    if last_settlement is None:
+        return TiantiSettlementWindow("init", 0, now)
+    minutes = max(0, int((now - last_settlement).total_seconds() // 60))
+    if minutes <= 0:
+        return TiantiSettlementWindow("empty", minutes, last_settlement)
+    return TiantiSettlementWindow("settle", minutes, now)
+
+
 __all__ = [
     "BreakthroughDecision",
     "BreakthroughRequest",
@@ -164,6 +180,8 @@ __all__ = [
     "StoneTrainingDecision",
     "decide_breakthrough",
     "decide_medicine_bath_activation",
+    "TiantiSettlementWindow",
+    "decide_tianti_settlement_window",
     "decide_stone_training",
     "normalize_plan",
 ]

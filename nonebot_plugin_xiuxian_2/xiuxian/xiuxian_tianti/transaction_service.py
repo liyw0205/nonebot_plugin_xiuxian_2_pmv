@@ -18,7 +18,7 @@ from .tianti_data import (
     get_tianti_level_index,
 )
 from .tianti_data import TiantiDataManager, get_qiaoxue_pool, get_tianti_level_data
-from ...features.tianti_training.domain import decide_breakthrough, decide_medicine_bath_activation, decide_stone_training
+from ...features.tianti_training.domain import decide_breakthrough, decide_medicine_bath_activation, decide_stone_training, decide_tianti_settlement_window
 from datetime import datetime, timedelta
 
 def get_tianti_cap(data: dict) -> int:
@@ -152,12 +152,13 @@ def calc_tianti_gain_rate(data: dict, now_t: datetime | None = None, sect_fairyl
 
 def settle_tianti_gain(data: dict, now_t: datetime, sect_fairyland_level: int = 0):
     last_t = parse_tianti_time(data.get("last_settle_time"))
-    if not last_t:
+    window = decide_tianti_settlement_window(last_settlement=last_t, now=now_t)
+    if window.status == "init":
         data["last_settle_time"] = now_t.strftime("%Y-%m-%d %H:%M:%S")
         return {"status": "init"}
 
-    mins = max(0, int((now_t - last_t).total_seconds() // 60))
-    if mins <= 0:
+    mins = window.minutes
+    if window.status == "empty":
         return {"status": "empty", "mins": mins}
 
     result = _apply_tianti_minutes(data, mins, now_t, sect_fairyland_level)
