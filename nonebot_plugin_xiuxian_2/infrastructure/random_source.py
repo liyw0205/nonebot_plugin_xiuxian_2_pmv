@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import random
+from typing import Sequence, TypeVar
+
+
+T = TypeVar("T")
 
 
 class SystemRandom:
@@ -16,6 +20,9 @@ class SystemRandom:
 
     def randint(self, start: int, end: int) -> int:
         return self._source.randint(start, end)
+
+    def choice(self, values: Sequence[T]) -> T:
+        return self._source.choice(values)
 
 
 __all__ = ["SystemRandom"]

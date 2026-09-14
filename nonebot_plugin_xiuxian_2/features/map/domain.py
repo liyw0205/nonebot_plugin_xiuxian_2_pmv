@@ -18,6 +18,23 @@ class InteractiveActionDecision:
     action: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class InteractiveRewardDecision:
+    plan: tuple[tuple[str, int, int, float], ...]
+    message: str
+
+
+def decide_interactive_reward(roll: float, pool_key: str) -> InteractiveRewardDecision:
+    roll = float(roll)
+    if not 0.0 <= roll <= 1.0 or not pool_key:
+        raise ValueError("valid reward roll and pool are required")
+    if roll < 0.10:
+        return InteractiveRewardDecision((("stone_low", 1, 1, 1.0),), "你惊动了附近的异兽，只来得及捡走些散落资源。")
+    if roll < 0.30:
+        return InteractiveRewardDecision(((pool_key, 1, 2, 1.0), ("stone_low", 1, 2, 1.0), ("wash_stone_low", 1, 1, 0.15)), "运气极佳，收获颇丰！")
+    return InteractiveRewardDecision(((pool_key, 1, 2, 1.0), ("stone_low", 1, 1, 0.55)), "")
+
+
 def decide_interactive_action(
     *, operation_id: str, action_type: str, node: dict[str, Any], pool_key: str,
     started_at: datetime, wait_seconds: int, resolve_timeout: int,
@@ -43,4 +60,4 @@ def decide_interactive_action(
     })
 
 
-__all__ = ["InteractiveActionDecision", "MapOperation", "decide_interactive_action"]
+__all__ = ["InteractiveActionDecision", "InteractiveRewardDecision", "MapOperation", "decide_interactive_action", "decide_interactive_reward"]
