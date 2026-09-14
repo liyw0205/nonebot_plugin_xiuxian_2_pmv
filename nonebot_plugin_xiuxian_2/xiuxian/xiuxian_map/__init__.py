@@ -134,7 +134,7 @@ SEED_SHOP_TYPES = {"坊市", "城池", "驿站"}
 def _map_operation_id(event, action: str, *identifiers) -> str:
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     suffix = ":".join(str(value) for value in identifiers)
-    return f"map-{action}:{event_id or time.time_ns()}:{suffix}"
+    return f"map-{action}:{event_id or runtime_ids.new_id()}:{suffix}"
 
 # =========================================
 # 每日限制配置
@@ -448,8 +448,8 @@ map_mission_claim_cmd = on_command("委托完成", priority=8, block=True)
 # =========================================
 # 限制/冷却工具
 # =========================================
-def _today_str():
-    return datetime.now().strftime("%Y-%m-%d")
+def _today_str(*, clock=None):
+    return (clock or runtime_clock).now().strftime("%Y-%m-%d")
 
 
 def _parse_dt(s: str | None):
@@ -554,12 +554,13 @@ def _save_map_mission(uid: str, d: dict):
         player_data_manager.update_or_write_data(str(uid), MAP_MISSION_TABLE, k, v)
 
 
-def _roll_new_map_mission(uid: str):
-    mission_type = random.choice(list(MAP_MISSION_CONFIG.keys()))
+def _roll_new_map_mission(uid: str, *, random_source=None, clock=None):
+    random_source = random_source or runtime_random
+    mission_type = random_source.choice(list(MAP_MISSION_CONFIG.keys()))
     conf = MAP_MISSION_CONFIG[mission_type]
-    target = random.choice(conf["targets"])
+    target = random_source.choice(conf["targets"])
     d = {
-        "date": _today_str(),
+        "date": _today_str(clock=clock),
         "mission_type": mission_type,
         "target": target,
         "claimed": 0,
@@ -587,20 +588,21 @@ def _get_mission_desc(mission_data: dict):
     return MAP_MISSION_CONFIG[mission_type]["desc"](target)
 
 
-def _roll_map_mission_reward():
+def _roll_map_mission_reward(*, random_source=None):
+    random_source = random_source or runtime_random
     rewards = []
     reward_meta = {"stone_delta": 0, "item_delta": []}
     stone_pool = ACTION_ITEM_POOLS.get("stone_high", [])
     if stone_pool:
-        stone_pick = random.choice(stone_pool)
+        stone_pick = random_source.choice(stone_pool)
         if isinstance(stone_pick, str) and stone_pick.startswith("LS_"):
             stone_num = int(stone_pick.split("_")[1])
             rewards.append(f"灵石x{number_to(stone_num)}")
             reward_meta["stone_delta"] += stone_num
-    extra_pool_key = random.choice(["acc_pack_low", "god_frag", "token_rare"])
+    extra_pool_key = random_source.choice(["acc_pack_low", "god_frag", "token_rare"])
     extra_pool = ACTION_ITEM_POOLS.get(extra_pool_key, [])
     if extra_pool:
-        gid = random.choice(extra_pool)
+        gid = random_source.choice(extra_pool)
         info = items.get_data_by_item_id(str(gid))
         if info:
             rewards.append(f"{info['name']}x1")
@@ -2615,7 +2617,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     mission = _get_map_mission(uid)
 
     if not mission.get("mission_type"):
-        mission = _roll_new_map_mission(uid)
+        mission = _roll_new_map_mission(uid, random_source=runtime_random, clock=runtime_clock)
 
     desc = _get_mission_desc(mission)
     progress = _get_map_mission_progress(uid, mission)
@@ -2663,7 +2665,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await handle_send(bot, event, "委托结算数据异常，请联系管理员处理。")
             return
     if snapshot is None:
-        rewards, reward_meta = _roll_map_mission_reward()
+        rewards, reward_meta = _roll_map_mission_reward(random_source=runtime_random)
         snapshot = {"rewards": rewards, "reward_meta": reward_meta}
         mission["settlement"] = json.dumps(snapshot, ensure_ascii=False, sort_keys=True)
         _save_map_mission(uid, mission)
