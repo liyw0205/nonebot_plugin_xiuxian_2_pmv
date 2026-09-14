@@ -521,6 +521,8 @@
 
 2026-09-15 tower settlement cutover：新增 `TowerPurchaseSqlRepository.settle/settlement_result` 和game migration `tower.003`；真实 `tower_battle` 单层/连续挑战默认composition改为SQL repository，replay与settle均经 `TowerApplication`，UUID fallback注入。跨库UoW原子处理tower层数/积分、玩家stone/exp/HP/MP/体力、奖励背包与operation replay/conflict，成功/失败挑战、库存拒绝、状态冲突和operation trigger rollback有测试；156 tests、92 catalog、compileall、architecture、diff check通过。旧settlement service只保留显式rollback引用。
 
+2026-09-15 tower settlement live safety：提交 `2015d93` 部署后 backup `/srv/old/data/backups/20260914T202158Z`，dry-run/apply仅game `[tower.003]`；readiness全绿，92-entry recovery reconcile clean。live未执行通天塔战斗或奖励写入。
+
 2026-09-14 dao battle settlement live safety：提交 `f9129fc` 部署后 backup `/srv/old/data/backups/20260914T061542Z`；dry-run 真实返回 game_db `[]`、player_db `[combat_settlement.003]`，apply 仅写入 player_db。game_db migrations=67、player_db migrations=6，`map_dao_battle_operations` 存在，readiness 全绿；recovery smoke 覆盖 67-entry catalog，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`。live 未执行玩家道战写入。
 
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
