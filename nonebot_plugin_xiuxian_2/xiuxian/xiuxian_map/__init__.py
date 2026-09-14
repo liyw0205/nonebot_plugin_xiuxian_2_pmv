@@ -63,6 +63,10 @@ map_interactive_action_service = MapInteractiveActionService(
 map_explore_start_service = MapExploreStartService(get_paths().game_db, get_paths().player_db)
 map_movement_service = MapMovementSettlementService(get_paths().game_db, get_paths().player_db)
 map_dao_battle_service = MapDaoBattleSettlementService(get_paths().player_db, get_paths().game_db)
+dao_battle_application = CombatSettlementApplication(
+    get_paths().game_db,
+    get_paths().player_db,
+)
 seed_purchase_service = SeedPurchaseService(get_paths().game_db)
 items = Items()
 
@@ -1412,12 +1416,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     my_win_rate = 0.5 if (my_power + ta_power) == 0 else my_power / (my_power + ta_power)
     my_win = random.random() < my_win_rate
 
-    result = map_dao_battle_service.settle(
-        _map_operation_id(event, "dao", uid, target["user_id"]),
-        uid, target["user_id"], st, my_win,
+    outcome = dao_battle_application.settle_dao_battle(
+        operation_id=_map_operation_id(event, "dao", uid, target["user_id"]),
+        challenger_id=uid,
+        target_id=target["user_id"],
+        expected_position=st,
+        challenger_won=my_win,
     )
-    if not result.succeeded:
-        message = "对方已离开当前节点，论道未结算。" if result.status == "position_changed" else "论道未完成：双方位置或体力已更新，请重新发起。"
+    if not outcome.ok:
+        message = outcome.message or "论道未完成：双方位置或体力已更新，请重新发起。"
         await handle_send(bot, event, message)
         return
 

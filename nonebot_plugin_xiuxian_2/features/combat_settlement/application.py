@@ -8,7 +8,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import CombatSettlementRequest
-from .repository import CombatSettlementRepository, CombatSettlementSqlRepository, LegacyCombatSettlementRepository
+from .repository import CombatSettlementRepository, CombatSettlementSqlRepository, DaoBattleSqlRepository, LegacyCombatSettlementRepository
 from .schemas import CombatSettlementResult
 
 
@@ -109,6 +109,35 @@ class CombatSettlementApplication:
                 raise
             except Exception as exc:
                 self.ledger.record_failure(self.game_database, request.operation_id, self.action, payload, str(exc))
+                raise
+
+    def settle_dao_battle(self, *, operation_id: str, challenger_id: str, target_id: str, expected_position: Mapping[str, Any], challenger_won: bool) -> OperationOutcome[dict[str, Any]]:
+        if not operation_id or not challenger_id or challenger_id == target_id:
+            raise ValidationError("valid operation and distinct players are required")
+        payload = {"challenger_id": str(challenger_id), "target_id": str(target_id), "expected_position": dict(expected_position), "challenger_won": bool(challenger_won)}
+        with trace_context(operation_id=str(operation_id), user_scope=str(challenger_id)):
+            try:
+                with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+                    existing = self.ledger.begin(uow, str(operation_id), "combat.dao_battle", payload)
+                    if existing is not None:
+                        previous = existing.outcome()
+                        if previous is not None:
+                            return previous.replay()
+                        raise ConflictError("操作正在处理中")
+                raw = DaoBattleSqlRepository(self.player_database, self.game_database).settle(str(operation_id), str(challenger_id), str(target_id), dict(expected_position), bool(challenger_won))
+                data = dict(raw)
+                status = str(data.get("status", "failed"))
+                if status in {"applied", "duplicate"}:
+                    outcome = OperationOutcome.applied(str(operation_id), "combat.dao_battle", data=data, audit_category="combat_settlement")
+                else:
+                    outcome = OperationOutcome.rejected(str(operation_id), "combat.dao_battle", {"position_changed": "对方已离开当前节点，论道未结算。", "user_missing": "未找到论道玩家。", "state_changed": "论道状态已更新，请重新发起。"}.get(status, "论道未完成。"), code=status, data=data, audit_category="combat_settlement")
+                with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+                    self.ledger.finish(uow, outcome)
+                return outcome
+            except DomainError:
+                raise
+            except Exception as exc:
+                self.ledger.record_failure(self.player_database, str(operation_id), "combat.dao_battle", payload, str(exc))
                 raise
 
     def reply(self, **kwargs: Any) -> ReplyPlan:

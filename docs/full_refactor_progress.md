@@ -385,6 +385,8 @@
 
 2026-09-14 combat settlement live safety：提交 `fa1eaf0` 部署后 backup `/srv/old/data/backups/20260914T054921Z`；dry-run 真实返回 game_db `[combat_settlement.002]`、player_db `[]`，apply 仅写入 game_db。game_db migrations=66、player_db migrations=5，`map_combat_settlement_operations` 存在，readiness 全绿；recovery smoke 覆盖 66-entry catalog，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`。live 未执行玩家战斗结算写入。
 
+2026-09-14 dao battle settlement cutover：新增 `DaoBattleSqlRepository` 与 `CombatSettlementApplication.settle_dao_battle`，真实 NoneBot `dao_qc` handler 改走 application；player_db 主库 attach game_db，覆盖双方位置校验、对称胜负统计、operation replay/state conflict、失败回滚。新增 player-only migration `combat_settlement.003` 创建 `map_dao_battle_operations`；142 个 combat/dao/application/source tests、compileall、architecture 通过。旧 `MapDaoBattleSettlementService` 保留兼容回滚，`dao_view` 读路径仍待迁移。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。

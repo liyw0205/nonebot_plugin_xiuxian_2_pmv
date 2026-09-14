@@ -65,6 +65,38 @@ class CombatSettlementSqlRepository:
             return {"status": "applied", "stone": stone, "rewards": compact}
 
 
+class DaoBattleSqlRepository:
+    def __init__(self, player_database: str | Path, game_database: str | Path) -> None:
+        self.player_database = str(player_database)
+        self.game_database = str(game_database)
+
+    def settle(self, operation_id: str, challenger_id: str, target_id: str, expected_position: dict[str, Any], challenger_won: bool) -> dict[str, Any]:
+        operation_id = str(operation_id).strip()
+        challenger_id, target_id = str(challenger_id), str(target_id)
+        position = {key: str(dict(expected_position)[key]) for key in ("realm", "heaven", "node_id")}
+        if not operation_id or not challenger_id or challenger_id == target_id:
+            raise ValueError("valid operation and distinct players are required")
+        payload = json.dumps([challenger_id, target_id, position, bool(challenger_won)], ensure_ascii=True, sort_keys=True)
+        with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+            uow.attach_database(self.game_database, "game_data")
+            previous = uow.query_one("SELECT payload FROM map_dao_battle_operations WHERE operation_id=?", (operation_id,))
+            if previous:
+                return {"status": "duplicate" if str(previous["payload"]) == payload else "state_changed"}
+            users = uow.query_all("SELECT user_id FROM game_data.user_xiuxian WHERE user_id IN (?,?)", (challenger_id, target_id))
+            if {str(row["user_id"]) for row in users} != {challenger_id, target_id}:
+                return {"status": "user_missing"}
+            rows = uow.query_all("SELECT user_id,realm,heaven,node_id FROM map_status WHERE user_id IN (?,?)", (challenger_id, target_id))
+            current = {str(row["user_id"]): (str(row["realm"]), str(row["heaven"]), str(row["node_id"])) for row in rows}
+            expected = (position["realm"], position["heaven"], position["node_id"])
+            if current.get(challenger_id) != expected or current.get(target_id) != expected:
+                return {"status": "position_changed"}
+            uow.execute("CREATE TABLE IF NOT EXISTS dao_record (user_id TEXT PRIMARY KEY,total INTEGER DEFAULT 0,win INTEGER DEFAULT 0,lose INTEGER DEFAULT 0)")
+            uow.execute("INSERT INTO dao_record(user_id,total,win,lose) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET total=dao_record.total+1,win=dao_record.win+excluded.win,lose=dao_record.lose+excluded.lose", (challenger_id, 1, int(bool(challenger_won)), int(not challenger_won)))
+            uow.execute("INSERT INTO dao_record(user_id,total,win,lose) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET total=dao_record.total+1,win=dao_record.win+excluded.win,lose=dao_record.lose+excluded.lose", (target_id, 1, int(not challenger_won), int(bool(challenger_won))))
+            uow.execute("INSERT INTO map_dao_battle_operations(operation_id,payload) VALUES(?,?)", (operation_id, payload))
+            return {"status": "applied"}
+
+
 class LegacyCombatSettlementRepository:
     """Lazy adapter around the historical attached-database transaction."""
 
@@ -90,4 +122,4 @@ class LegacyCombatSettlementRepository:
         )
 
 
-__all__ = ["CombatSettlementRepository", "CombatSettlementSqlRepository", "LegacyCombatSettlementRepository"]
+__all__ = ["CombatSettlementRepository", "CombatSettlementSqlRepository", "DaoBattleSqlRepository", "LegacyCombatSettlementRepository"]
