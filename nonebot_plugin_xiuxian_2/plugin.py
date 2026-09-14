@@ -310,7 +310,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
     context.migrations = migration_runner
     game_migrations = tuple(
         migration for migration in migration_runner.migrations
-        if migration.version != "tianti_training.003"
+        if migration.version not in {"tianti_training.003", "tianti_training.004"}
     )
 
     def ensure_filesystem() -> None:

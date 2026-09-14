@@ -55,7 +55,7 @@ def main(argv: list[str] | None = None) -> int:
         migrations = build_migrations()
         game_migrations = tuple(
             migration for migration in migrations
-            if migration.version != "tianti_training.003"
+            if migration.version not in {"tianti_training.003", "tianti_training.004"}
         )
         applied: dict[str, list[str]] = {}
         pending: dict[str, list[str]] = {}
