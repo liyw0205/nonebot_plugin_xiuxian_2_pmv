@@ -691,10 +691,11 @@ def _get_player_map_status(user_id: str, map_data: dict):
     return _init_player_map_status(user_id, map_data)
 
 
-def _init_player_map_status(user_id: str, map_data: dict):
-    realm = random.choice(_all_realms(map_data))
-    heaven = random.choice(_heaven_names(map_data, realm))
-    node = random.choice(_nodes(map_data, realm, heaven))
+def _init_player_map_status(user_id: str, map_data: dict, *, random_source=None):
+    random_source = random_source or runtime_random
+    realm = random_source.choice(_all_realms(map_data))
+    heaven = random_source.choice(_heaven_names(map_data, realm))
+    node = random_source.choice(_nodes(map_data, realm, heaven))
 
     init_data = {
         "realm": realm,
@@ -781,8 +782,9 @@ def get_player_current_position(user_id: str) -> dict | None:
     }
 
 
-def get_random_trial_node() -> dict | None:
+def get_random_trial_node(*, random_source=None) -> dict | None:
     """从地图所有试炼节点中随机获取一个。"""
+    random_source = random_source or runtime_random
     map_data = _load_map_data()
     trial_nodes = []
     for realm in _all_realms(map_data):
@@ -796,11 +798,12 @@ def get_random_trial_node() -> dict | None:
                         "node_name": node["name"],
                         "node_type": node.get("type", ""),
                     })
-    return random.choice(trial_nodes) if trial_nodes else None
+    return random_source.choice(trial_nodes) if trial_nodes else None
 
 
-def get_random_trial_nodes_by_realm() -> list[dict]:
+def get_random_trial_nodes_by_realm(*, random_source=None) -> list[dict]:
     """每一界随机获取一个试炼节点。"""
+    random_source = random_source or runtime_random
     map_data = _load_map_data()
     realms = map_data.get("meta", {}).get("realms") or _all_realms(map_data)
     result = []
@@ -822,7 +825,7 @@ def get_random_trial_nodes_by_realm() -> list[dict]:
                     })
 
         if trial_nodes:
-            result.append(random.choice(trial_nodes))
+            result.append(random_source.choice(trial_nodes))
 
     return result
 
