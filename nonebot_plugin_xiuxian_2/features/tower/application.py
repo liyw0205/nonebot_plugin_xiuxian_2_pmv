@@ -81,6 +81,9 @@ class TowerApplication:
             messages={"stamina_insufficient": "体力不足。", "inventory_full": "通天塔奖励无法放入背包。", "state_changed": "通天塔状态已更新，请重新挑战。", "user_missing": "未找到道友数据。"},
         )
 
+    def settlement_result(self, *, operation_id: str) -> Any:
+        return self._repository().settlement_result(operation_id)
+
     def reply(self, **kwargs: Any) -> ReplyPlan:
         action = str(kwargs.pop("action", "settle"))
         return ReplyPlan(getattr(self, action)(**kwargs).data, reference=True)

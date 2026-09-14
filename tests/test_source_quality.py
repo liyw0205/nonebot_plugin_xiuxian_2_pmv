@@ -1754,7 +1754,9 @@ class SourceQualityTests(unittest.TestCase):
         source = (tower_root / "tower_battle.py").read_text(encoding="utf-8")
         start = source.index("async def _single_challenge")
         handler = source[start:source.index("async def _continuous_challenge", start)]
-        self.assertIn("tower_settlement_service.settle(", handler)
+        self.assertIn("tower_application.settle(", handler)
+        self.assertIn("tower_application.settlement_result(", handler)
+        self.assertNotIn("tower_settlement_service.settle(\n", handler)
         self.assertNotIn("tower_limit.save_user_tower_info(", handler)
         self.assertNotIn("sql_message.update_ls(", handler)
         self.assertNotIn("sql_message.update_exp(", handler)
@@ -1768,7 +1770,9 @@ class SourceQualityTests(unittest.TestCase):
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_tower" / "tower_battle.py").read_text(encoding="utf-8")
         start = source.index("async def _continuous_challenge")
         handler = source[start:source.index("def _select_random_item", start)]
-        self.assertIn("tower_settlement_service.settle(", handler)
+        self.assertIn("tower_application.settle(", handler)
+        self.assertIn("tower_application.settlement_result(", handler)
+        self.assertNotIn("tower_settlement_service.settle(\n", handler)
         self.assertNotIn("tower_limit.save_user_tower_info(", handler)
         self.assertNotIn("sql_message.update_ls(", handler)
         self.assertNotIn("sql_message.update_exp(", handler)

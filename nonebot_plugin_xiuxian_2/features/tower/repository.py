@@ -12,6 +12,7 @@ from ...infrastructure.database import DatabaseUnitOfWork
 class TowerRepository(Protocol):
     def purchase(self, operation_id: str, user_id: str, item_id: int, item_name: str, item_type: str, quantity: int, unit_cost: int, weekly_limit: int, expected_score: int, expected_weekly_purchases: Mapping[str, Any], max_goods_num: int, bind_flag: int = 1, today: Any = None) -> Any: ...
     def settle(self, operation_id: str, user_id: str, expected_tower: Mapping[str, Any], floor: int, score: int, stone: int, exp: int, items: Sequence[Mapping[str, Any]], max_goods_num: int, *, expected_player: Mapping[str, Any] | None = None, final_hp: int | None = None, final_mp: int | None = None, stamina_cost: int = 0, challenge_succeeded: bool = True) -> Any: ...
+    def settlement_result(self, operation_id: str) -> Any: ...
 
 
 class LegacyTowerRepository:
@@ -30,8 +31,52 @@ class LegacyTowerRepository:
     def settle(self, *args, **kwargs):
         return self._services()[1].settle(*args, **kwargs)
 
+    def settlement_result(self, operation_id: str) -> Any:
+        return self._services()[1].get_result(operation_id)
+
 
 class TowerPurchaseSqlRepository(LegacyTowerRepository):
+    def settlement_result(self, operation_id: str) -> dict[str, Any] | None:
+        with DatabaseUnitOfWork(self.game_database) as uow:
+            row = uow.query_one("SELECT payload,result_json FROM tower_settlement_operations WHERE operation_id=?", (str(operation_id),))
+        if row is None:
+            return None
+        try:
+            result = json.loads(str(row["result_json"] or "{}"))
+        except (TypeError, ValueError):
+            return {"status": "state_changed"}
+        if not isinstance(result, dict):
+            return {"status": "state_changed"}
+        result["status"] = "duplicate"
+        return result
+
+    def settle(self, operation_id, user_id, expected_tower, floor, score, stone, exp, items, max_goods_num, *, expected_player=None, final_hp=None, final_mp=None, stamina_cost=0, challenge_succeeded=True):
+        operation_id,user_id=str(operation_id).strip(),str(user_id);floor,score,stone,exp,max_goods_num,stamina_cost=map(int,(floor,score,stone,exp,max_goods_num,stamina_cost));expected={k:int(dict(expected_tower)[k]) for k in ("current_floor","max_floor","score")};player=None if expected_player is None else {k:int(dict(expected_player)[k]) for k in ("hp","mp","user_stamina")};rewards=tuple((int(i["id"]),str(i["name"]),str(i["type"]),int(i["amount"])) for i in items if int(i.get("amount",0))>0);payload=json.dumps([user_id,floor,stamina_cost],ensure_ascii=True,separators=(",",":"));result_json=json.dumps({"score":score,"stone":stone,"exp":exp,"floor":floor,"stamina_cost":stamina_cost,"challenge_succeeded":bool(challenge_succeeded),"rewards":[list(r) for r in rewards]},ensure_ascii=True,separators=(",",":"))
+        if not operation_id or floor<=0 or min(score,stone,exp,max_goods_num,*expected.values())<0:raise ValueError("valid tower settlement required")
+        def result(status):return {"status":status,"score":score if status in {"applied","duplicate"} else 0,"stone":stone if status in {"applied","duplicate"} else 0,"exp":exp if status in {"applied","duplicate"} else 0,"floor":floor if status in {"applied","duplicate"} else 0,"challenge_succeeded":bool(challenge_succeeded) if status in {"applied","duplicate"} else True,"rewards":rewards if status in {"applied","duplicate"} else (),"stamina_cost":stamina_cost if status in {"applied","duplicate"} else 0}
+        with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
+            uow.attach_database(self.player_database,"player_data");old=uow.query_one("SELECT payload,result_json FROM tower_settlement_operations WHERE operation_id=?",(operation_id,))
+            if old:
+                if str(old["payload"])!=payload:return result("state_changed")
+                saved=json.loads(str(old["result_json"]));saved["status"]="duplicate";return saved
+            user=uow.query_one("SELECT hp,mp,user_stamina FROM user_xiuxian WHERE user_id=?",(user_id,));tower=uow.query_one("SELECT current_floor,max_floor,score FROM player_data.tower WHERE user_id=?",(user_id,))
+            if user is None:return self._record_settlement(uow,operation_id,payload,result("user_missing"))
+            if player is not None and tuple(map(int,user.values()))!=tuple(player.values()):return self._record_settlement(uow,operation_id,payload,result("state_changed"))
+            if player is not None and player["user_stamina"]<stamina_cost:return self._record_settlement(uow,operation_id,payload,result("stamina_insufficient"))
+            if tower is None or tuple(map(int,tower.values()))!=tuple(expected.values()):return self._record_settlement(uow,operation_id,payload,result("state_changed"))
+            for item_id,_,_,amount in rewards:
+                row=uow.query_one("SELECT COALESCE(goods_num,0) AS n FROM back WHERE user_id=? AND goods_id=?",(user_id,item_id))
+                if (int(row["n"]) if row else 0)+amount>max_goods_num:return self._record_settlement(uow,operation_id,payload,result("inventory_full"))
+            if challenge_succeeded:uow.execute("UPDATE player_data.tower SET current_floor=?,max_floor=?,score=? WHERE user_id=?",(floor,max(expected["max_floor"],floor),expected["score"]+score,user_id))
+            if player is None:uow.execute("UPDATE user_xiuxian SET stone=COALESCE(stone,0)+?,exp=COALESCE(exp,0)+? WHERE user_id=?",(stone,exp,user_id))
+            else:uow.execute("UPDATE user_xiuxian SET stone=COALESCE(stone,0)+?,exp=COALESCE(exp,0)+?,hp=?,mp=?,user_stamina=user_stamina-? WHERE user_id=?",(stone,exp,max(1,int(final_hp)),max(1,int(final_mp)),stamina_cost,user_id))
+            stamp=self._date(date.today()).isoformat()
+            for item_id,name,item_type,amount in rewards:uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",(user_id,item_id,name,item_type,amount,stamp,stamp,amount))
+            return self._record_settlement(uow,operation_id,payload,result("applied"))
+
+    @staticmethod
+    def _record_settlement(uow,operation_id,payload,result):
+        uow.execute("INSERT INTO tower_settlement_operations(operation_id,payload,result_json) VALUES(?,?,?)",(operation_id,payload,json.dumps(result,ensure_ascii=True,default=list,separators=(",",":"))));return result
     @staticmethod
     def _date(value: Any) -> date:
         if isinstance(value, datetime): return value.date()

@@ -13,9 +13,10 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from .tower_data import tower_data
 from .tower_limit import tower_limit
-from .transaction_service import TowerSettlementService
+from .transaction_service import TowerSettlementService, TowerSettlementResult
 from ...features.tower.application import TowerApplication
-from ...features.tower.repository import LegacyTowerRepository
+from ...features.tower.repository import TowerPurchaseSqlRepository
+from ...infrastructure.ids import UUIDGenerator
 from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
 
@@ -25,8 +26,17 @@ tower_settlement_service = TowerSettlementService(get_paths().game_db, get_paths
 tower_application = TowerApplication(
     get_paths().game_db,
     get_paths().player_db,
-    repository=LegacyTowerRepository(get_paths().game_db, get_paths().player_db),
+    repository=TowerPurchaseSqlRepository(get_paths().game_db, get_paths().player_db),
 )
+tower_ids = UUIDGenerator()
+
+
+def _tower_settlement_result(data):
+    if data is None:
+        return None
+    if isinstance(data, dict):
+        return TowerSettlementResult(**data)
+    return data
 
 # BOSS配置数据
 TOWER_BOSS_CONFIG = {
@@ -119,10 +129,11 @@ class TowerBattle:
         """单层挑战"""
         user_id = user_info["user_id"]
         event_id = getattr(event, "message_id", None)
-        operation_id = f"tower-challenge:{event_id}:{user_id}" if event_id else f"tower-challenge:{time.time_ns()}:{user_id}"
+        operation_id = f"tower-challenge:{event_id}:{user_id}" if event_id else f"tower-challenge:{tower_ids.new_id()}:{user_id}"
         stamina_cost = int(self.config["体力消耗"]["单层爬塔"])
         # 先回放：成功后楼层/体力变化，且不可重开战。
-        prior = tower_settlement_service.get_result(operation_id)
+        prior_data = tower_application.settlement_result(operation_id=operation_id)
+        prior = _tower_settlement_result(prior_data)
         if prior is not None and prior.succeeded:
             if prior.challenge_succeeded:
                 msg = (
@@ -297,8 +308,9 @@ class TowerBattle:
         tower_info = tower_limit.get_user_tower_info(user_id)
         initial_max_floor = tower_info["max_floor"]  # 保存初始的最大层数
         event_id = getattr(event, "message_id", None)
-        operation_id = f"tower-continuous:{event_id}:{user_id}:{target_floors}" if event_id else f"tower-continuous:{time.time_ns()}:{user_id}:{target_floors}"
-        prior = tower_settlement_service.get_result(operation_id)
+        operation_id = f"tower-continuous:{event_id}:{user_id}:{target_floors}" if event_id else f"tower-continuous:{tower_ids.new_id()}:{user_id}:{target_floors}"
+        prior_data = tower_application.settlement_result(operation_id=operation_id)
+        prior = _tower_settlement_result(prior_data)
         if prior is not None and prior.succeeded:
             msg = (
                 f"连续挑战完成，成功通关第{prior.floor or start_floor}层！共获得积分：{prior.score}点，"
