@@ -497,6 +497,8 @@
 
 2026-09-15 arena challenge purchase cutover：新增 `ArenaChallengePurchaseSqlRepository`，真实 `竞技场购买次数` handler继续使用 `ArenaApplication.purchase_challenges` 但默认 repository已改为SQL跨库事务；game wallet、player arena日购买/额外次数与 `arena_challenge_purchase_operations` 在同一UoW中校验和写入，支持重放/冲突、跨日标准化、限额/余额拒绝和触发器回滚。新增game migration `arena.002`；151 tests、87 catalog、compileall、architecture通过。竞技场普通商店购买、战斗结算和票券消费仍为后续slice。
 
+2026-09-15 arena challenge purchase live safety：提交 `2d8883b` 部署后 backup `/srv/old/data/backups/20260914T191903Z`，dry-run/apply仅game `[arena.002]`；readiness全绿，87-entry recovery reconcile clean。live未执行竞技场购买写入。
+
 2026-09-14 dao battle settlement live safety：提交 `f9129fc` 部署后 backup `/srv/old/data/backups/20260914T061542Z`；dry-run 真实返回 game_db `[]`、player_db `[combat_settlement.003]`，apply 仅写入 player_db。game_db migrations=67、player_db migrations=6，`map_dao_battle_operations` 存在，readiness 全绿；recovery smoke 覆盖 67-entry catalog，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`。live 未执行玩家道战写入。
 
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
