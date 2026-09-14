@@ -371,6 +371,8 @@
 
 2026-09-14 tianti settlement repository cutover live safety：提交 `7b15247` 部署后 backup `/srv/old/data/backups/20260914T025022Z`；dry-run 真实返回 game_db `[]`、player_db `[tianti_settlement.002]`，apply 仅写入 player_db。player_db migrations=5，`tianti_settlement_operations` 存在，readiness 全绿；recovery smoke 覆盖 64-entry catalog，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`。live 未执行玩家结算写入。
 
+2026-09-14 tianti NoneBot/application wiring cutover：移除 `xiuxian_tianti/__init__.py` 与 composition root 对 `LegacyTiantiSettlementRepository/LegacyTiantiTrainingRepository` 的显式注入，默认命令/application 使用 feature-owned repositories；旧 service 实例仅作为兼容变量保留。23 个 tianti/settlement/bath/item focused tests、compileall、architecture、source-quality 通过。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。

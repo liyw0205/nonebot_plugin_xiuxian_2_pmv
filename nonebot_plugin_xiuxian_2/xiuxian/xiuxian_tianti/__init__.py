@@ -33,9 +33,7 @@ from .transaction_service import TiantiBreakthroughService
 from .transaction_service import QiaoxueService
 from .transaction_service import TiantiSettlementService
 from ...features.tianti_settlement.application import TiantiSettlementApplication
-from ...features.tianti_settlement.repository import LegacyTiantiSettlementRepository
 from ...features.tianti_training.application import TiantiTrainingApplication
-from ...features.tianti_training.repository import LegacyTiantiTrainingRepository
 from ...paths import get_paths
 
 sql_message = XiuxianDateManage()
@@ -49,12 +47,10 @@ qiaoxue_service = QiaoxueService(get_paths().player_db)
 tianti_settlement_service = TiantiSettlementService(get_paths().player_db)
 tianti_settlement_application = TiantiSettlementApplication(
     get_paths().player_db,
-    repository=LegacyTiantiSettlementRepository(get_paths().player_db),
 )
 tianti_training_application = TiantiTrainingApplication(
     get_paths().game_db,
     get_paths().player_db,
-    repository=LegacyTiantiTrainingRepository(get_paths().game_db, get_paths().player_db),
 )
 
 def _tianti_choice_seed(operation_id: str) -> int:

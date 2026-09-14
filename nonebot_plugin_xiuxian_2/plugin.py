@@ -512,15 +512,10 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             ),
             "tianti_settlement": TiantiSettlementApplication(
                 str(context.database.path("player_db")),
-                repository=LegacyTiantiSettlementRepository(str(context.database.path("player_db"))),
             ),
             "tianti_training": TiantiTrainingApplication(
                 str(context.database.path("game_db")),
                 str(context.database.path("player_db")),
-                repository=LegacyTiantiTrainingRepository(
-                    str(context.database.path("game_db")),
-                    str(context.database.path("player_db")),
-                ),
             ),
             "tower": TowerApplication(
                 str(context.database.path("game_db")),
