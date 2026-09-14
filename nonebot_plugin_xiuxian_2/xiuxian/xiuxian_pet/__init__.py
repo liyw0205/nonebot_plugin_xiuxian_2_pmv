@@ -786,9 +786,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         "duration_hours": duration,
     }
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    started = pet_travel_start_service.start(
-        f"pet-travel-start:{event_id or time.time_ns()}:{user_id}", user_id, pet["uid"], data.get("travel"), travel
+    start_outcome = pet_application.start_travel(
+        operation_id=f"pet-travel-start:{event_id or pet['uid']}:{user_id}",
+        user_id=user_id,
+        pet_uid=pet["uid"],
+        expected_travel=data.get("travel"),
+        travel=travel,
     )
+    started_data = start_outcome.data or {}
+    started = type("PetTravelStartView", (), started_data)()
+    started.succeeded = start_outcome.ok
     if not started.succeeded:
         await handle_send(bot, event, "游历未完成：游历进度已更新，请重新查询游历。")
         return
