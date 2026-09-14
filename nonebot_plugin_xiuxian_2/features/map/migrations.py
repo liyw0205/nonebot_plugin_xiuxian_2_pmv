@@ -47,4 +47,18 @@ def apply_map_resource_reward(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_map", "apply_map_home_return", "apply_map_interactive_player", "apply_map_interactive_start", "apply_map_movement", "apply_map_resource_reward"]
+def apply_map_explore_start(uow: DatabaseUnitOfWork) -> None:
+    uow.execute("CREATE TABLE IF NOT EXISTS map_explore_start_operations (operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,stamina INTEGER NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+
+
+def apply_map_explore_player(uow: DatabaseUnitOfWork) -> None:
+    uow.execute("CREATE TABLE IF NOT EXISTS map_explore_status (user_id TEXT PRIMARY KEY,running INTEGER NOT NULL DEFAULT 0,node_type TEXT NOT NULL DEFAULT '',node_name TEXT NOT NULL DEFAULT '',start_time TEXT NOT NULL DEFAULT '',duration_min INTEGER NOT NULL DEFAULT 0,settlement TEXT NOT NULL DEFAULT '',max_duration_min INTEGER NOT NULL DEFAULT 0,interval_min INTEGER NOT NULL DEFAULT 0)")
+    columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(map_explore_status)")}
+    if "settlement" not in columns:
+        uow.execute("ALTER TABLE map_explore_status ADD COLUMN settlement TEXT DEFAULT ''")
+    cooldown = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(map_cooldown)")}
+    if "explore_start_cd_until" not in cooldown:
+        uow.execute("ALTER TABLE map_cooldown ADD COLUMN explore_start_cd_until TEXT DEFAULT NULL")
+
+
+__all__ = ["apply_map", "apply_map_explore_player", "apply_map_explore_start", "apply_map_home_return", "apply_map_interactive_player", "apply_map_interactive_start", "apply_map_movement", "apply_map_resource_reward"]

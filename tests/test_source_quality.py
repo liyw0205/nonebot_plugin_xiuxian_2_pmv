@@ -2126,10 +2126,24 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("update_user_stamina(", handler)
         self.assertNotIn('_set_cd(uid, "combat_cd_until"', handler)
         self.assertNotIn("player_data_manager.update_or_write_data(", handler)
-
         self.assertIn("map_combat_start_operations", lifecycle)
         self.assertIn("BEGIN IMMEDIATE", lifecycle)
         self.assertIn("combat_cd_until=EXCLUDED.combat_cd_until", lifecycle)
+
+    def test_map_explore_start_uses_feature_repository(self) -> None:
+        source = (
+            Path(__file__).parents[1]
+            / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_map/__init__.py"
+        ).read_text(encoding="utf-8")
+        start = source.index("async def _start_explore")
+        end = source.index("async def _settle_explore", start)
+        handler = source[start:end]
+        self.assertIn("map_application.explore_start(", handler)
+        self.assertNotIn("map_explore_start_service.start(", handler)
+        self.assertIn("runtime_clock.now()", handler)
+        self.assertIn("runtime_ids.new_id()", handler)
+        self.assertNotIn("datetime.now()", handler)
+        self.assertNotIn("time.time_ns()", handler)
 
     def test_statistics_data_migration_does_not_block_event_loop(self) -> None:
         source = (

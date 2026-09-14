@@ -39,6 +39,7 @@ from .transaction_service import MapHomeReturnService
 from .transaction_service import MapInteractiveActionService
 from .transaction_service import MapInteractiveActionResult
 from .transaction_service import MapExploreStartService
+from .transaction_service import MapExploreStartResult
 from .transaction_service import MapMovementSettlementService
 from .transaction_service import MapDaoBattleSettlementService
 from ...features.combat_settlement.application import CombatSettlementApplication
@@ -47,6 +48,7 @@ from ...features.map.domain import decide_interactive_action, decide_interactive
 from ...features._legacy_application import result_data
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
+from ...infrastructure.ids import UUIDGenerator
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
@@ -78,6 +80,7 @@ seed_purchase_service = SeedPurchaseService(get_paths().game_db)
 items = Items()
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
+runtime_ids = UUIDGenerator()
 
 
 def _finish_interactive_failure(operation_id, user_id, action_id, outcome, cooldown_until):
@@ -2231,7 +2234,7 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, f"今日探索发起次数已达上限（{cap}次），请明日再来。")
         return
 
-    now = datetime.now()
+    now = runtime_clock.now().replace(tzinfo=None)
     cd = _get_cd(uid, "explore_start_cd_until")
     if cd and now < cd:
         sec = int((cd - now).total_seconds())
@@ -2264,7 +2267,7 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     else:
         duration_min = max(5, duration_arg)
 
-    start_at = datetime.now()
+    start_at = runtime_clock.now().replace(tzinfo=None)
     new_st = {
         "running": 1,
         "node_type": ntype,
@@ -2297,18 +2300,23 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     cooldown_until = (start_at + timedelta(seconds=EXPLORE_START_COOLDOWN_SEC)).strftime("%Y-%m-%d %H:%M:%S")
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     try:
-        result = map_explore_start_service.start(
-            f"map-explore-start:{uid}:{event_message_id or time.time_ns()}",
-            uid,
-            stamina,
-            need_stamina,
-            {key: position[key] for key in ("realm", "heaven", "node_id")},
-            expected_status,
-            expected_daily,
-            DAILY_LIMIT_CONFIG["explore"],
-            expected_cooldown,
-            cooldown_until,
-            new_st,
+        outcome = map_application.explore_start(
+            operation_id=f"map-explore-start:{uid}:{event_message_id or runtime_ids.new_id()}",
+            user_id=uid,
+            expected_stamina=stamina,
+            stamina_cost=need_stamina,
+            expected_position={key: position[key] for key in ("realm", "heaven", "node_id")},
+            expected_status=expected_status,
+            expected_daily=expected_daily,
+            daily_limit=DAILY_LIMIT_CONFIG["explore"],
+            expected_cooldown=expected_cooldown,
+            cooldown_until=cooldown_until,
+            new_status=new_st,
+        )
+        data = result_data(outcome.data)
+        result = MapExploreStartResult(
+            str(data.get("status", outcome.code)),
+            int(data.get("stamina", stamina) or 0),
         )
     except Exception:
         logger.exception("地图探索发起事务失败 user_id={}", uid)

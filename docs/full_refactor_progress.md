@@ -431,6 +431,8 @@
 
 2026-09-15 map interactive reward decision live safety：提交 `5b51d52` 部署后 backup `/srv/old/data/backups/20260914T161020Z`，全库 migration dry-run pending 为空、reconcile clean、readiness 全绿；recovery smoke 覆盖 73-entry catalog，game_db migrations=73、player_db migrations=9。live 未执行玩家奖励写入。
 
+2026-09-15 map explore start cutover：新增 `MapExploreStartSqlRepository`，默认 `MapApplication.explore_start` 与真实 `开始探索` handler 不再调用 `MapExploreStartService.start`；handler 时间/operation fallback 改用 runtime Clock/UUIDGenerator。新增 game migration `map.007` 创建 start operation，player migration `map.008` 创建/补齐 explore status 与 cooldown schema；repository 在同一 attached UoW 校验位置、idle snapshot、daily、cooldown、stamina并原子扣体力/写 active状态/operation。3 个新 repository tests 与 legacy/source 回归共 143 tests、75-entry catalog、compileall、architecture通过。旧 service保留兼容回滚，explore settlement 仍 legacy。
+
 2026-09-14 dao battle settlement live safety：提交 `f9129fc` 部署后 backup `/srv/old/data/backups/20260914T061542Z`；dry-run 真实返回 game_db `[]`、player_db `[combat_settlement.003]`，apply 仅写入 player_db。game_db migrations=67、player_db migrations=6，`map_dao_battle_operations` 存在，readiness 全绿；recovery smoke 覆盖 67-entry catalog，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`。live 未执行玩家道战写入。
 
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
