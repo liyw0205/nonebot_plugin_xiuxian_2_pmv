@@ -90,7 +90,6 @@ class DaoBattleSqlRepository:
             expected = (position["realm"], position["heaven"], position["node_id"])
             if current.get(challenger_id) != expected or current.get(target_id) != expected:
                 return {"status": "position_changed"}
-            uow.execute("CREATE TABLE IF NOT EXISTS dao_record (user_id TEXT PRIMARY KEY,total INTEGER DEFAULT 0,win INTEGER DEFAULT 0,lose INTEGER DEFAULT 0)")
             uow.execute("INSERT INTO dao_record(user_id,total,win,lose) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET total=dao_record.total+1,win=dao_record.win+excluded.win,lose=dao_record.lose+excluded.lose", (challenger_id, 1, int(bool(challenger_won)), int(not challenger_won)))
             uow.execute("INSERT INTO dao_record(user_id,total,win,lose) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET total=dao_record.total+1,win=dao_record.win+excluded.win,lose=dao_record.lose+excluded.lose", (target_id, 1, int(not challenger_won), int(bool(challenger_won))))
             uow.execute("INSERT INTO map_dao_battle_operations(operation_id,payload) VALUES(?,?)", (operation_id, payload))

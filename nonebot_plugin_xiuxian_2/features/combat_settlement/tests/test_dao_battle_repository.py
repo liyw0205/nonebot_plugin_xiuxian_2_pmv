@@ -17,6 +17,7 @@ class DaoBattleRepositoryTests(unittest.TestCase):
         with sqlite3.connect(self.player) as conn:
             conn.execute("CREATE TABLE map_status (user_id TEXT PRIMARY KEY,realm TEXT,heaven TEXT,node_id TEXT)")
             conn.executemany("INSERT INTO map_status VALUES (?,?,?,?)", [("a", "凡界", "一重天", "n1"), ("b", "凡界", "一重天", "n1")])
+            conn.execute("CREATE TABLE dao_record (user_id TEXT PRIMARY KEY,total INTEGER NOT NULL DEFAULT 0,win INTEGER NOT NULL DEFAULT 0,lose INTEGER NOT NULL DEFAULT 0)")
             conn.execute("CREATE TABLE map_dao_battle_operations (operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL)")
         self.repo = DaoBattleSqlRepository(self.player, self.game)
 

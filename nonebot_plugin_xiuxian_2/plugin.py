@@ -62,7 +62,7 @@ from .features.bank.migrations import apply_bank, apply_bank_accounts
 from .features.activity_reward.manifest import FEATURE as ACTIVITY_REWARD_FEATURE
 from .features.activity_reward.migrations import apply_activity_reward
 from .features.combat_settlement.manifest import FEATURE as COMBAT_SETTLEMENT_FEATURE
-from .features.combat_settlement.migrations import apply_combat_settlement, apply_combat_settlement_operations, apply_dao_battle_operations
+from .features.combat_settlement.migrations import apply_combat_settlement, apply_combat_settlement_operations, apply_dao_battle_operations, apply_dao_battle_record
 from .features.admin_asset.manifest import FEATURE as ADMIN_ASSET_FEATURE
 from .features.admin_asset.migrations import apply_admin_asset
 from .features.tianti_settlement.manifest import FEATURE as TIANTI_SETTLEMENT_FEATURE
@@ -121,6 +121,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("combat_settlement.001", "combat_settlement_feature_migrations", apply_combat_settlement),
         Migration("combat_settlement.002", "map_combat_settlement_operations", apply_combat_settlement_operations),
         Migration("combat_settlement.003", "map_dao_battle_operations", apply_dao_battle_operations),
+        Migration("combat_settlement.004", "dao_battle_record", apply_dao_battle_record),
         Migration("daily_fortune.001", "daily_fortune_claims", apply_daily_fortune),
         Migration("dungeon.001", "dungeon_feature_migrations", apply_dungeon),
         Migration("illusion.001", "illusion_feature_migrations", apply_illusion),
@@ -316,7 +317,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
     context.migrations = migration_runner
     game_migrations = tuple(
         migration for migration in migration_runner.migrations
-        if migration.version not in {"combat_settlement.003", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005", "tianti_training.006"}
+        if migration.version not in {"combat_settlement.003", "combat_settlement.004", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005", "tianti_training.006"}
     )
 
     def ensure_filesystem() -> None:
@@ -343,7 +344,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                     runner = MigrationRunner(game_migrations, clock=context.clock)
                 elif spec.key == "player_db":
                     runner = MigrationRunner(
-                        tuple(migration for migration in migration_runner.migrations if migration.version in {"title.001", "combat_settlement.003", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005"}),
+                        tuple(migration for migration in migration_runner.migrations if migration.version in {"title.001", "combat_settlement.003", "combat_settlement.004", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005"}),
                         clock=context.clock,
                     )
                 else:

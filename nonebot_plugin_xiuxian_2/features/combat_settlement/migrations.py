@@ -24,4 +24,12 @@ def apply_dao_battle_operations(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_combat_settlement", "apply_combat_settlement_operations", "apply_dao_battle_operations"]
+def apply_dao_battle_record(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS dao_record ("
+        "user_id TEXT PRIMARY KEY, total INTEGER NOT NULL DEFAULT 0, "
+        "win INTEGER NOT NULL DEFAULT 0, lose INTEGER NOT NULL DEFAULT 0)"
+    )
+
+
+__all__ = ["apply_combat_settlement", "apply_combat_settlement_operations", "apply_dao_battle_operations", "apply_dao_battle_record"]
