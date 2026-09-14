@@ -587,6 +587,8 @@
 
 2026-09-15 sign-in lifecycle wiring fix：回注 handler 仅在 NoneBot driver 已初始化时执行，避免 CLI `serve`/maintenance context 导入 handler 触发 `ValueError: NoneBot has not been initialized` 并卡在 repositories readiness。修复后 sign-in wiring/source共148 tests、catalog=103、compileall、architecture、diff check通过。
 
+2026-09-15 sign-in lifecycle wiring live safety：`6f1b4b3` 部署后 backup `/srv/old/data/backups/20260914T235737Z`，dry-run pending为空、reconcile clean；真实 `startup` 返回 `phase=ready`，filesystem/database/migrations/repositories/jobs/web 六项全绿，103-entry recovery clean。首次验证脚本在 shutdown 后断言导致假失败，已按正确顺序重跑并确认通过。
+
 2026-09-15 sign-in task side-effect boundary：task/lottery adapters已存在且通过 wiring tests，但真实 `xiuxian_base` handler模块级 `sign_in_application` 与 runtime context service实例尚未共享同一 `SignInApplicationEffects`，直接移除 handler中的 legacy statistics/task calls会改变行为；该边界记录为阻塞，未伪迁移。转入独立 pet travel claim slice。
 
 2026-09-15 pet travel claim cutover：真实宠物游历领奖handler改用 `PetApplication.claim_travel`，保留现有 prepare/story rendering和显式 statistics/game-event side-effect边界；旧 `PetTravelClaimService.claim`不再是默认handler调用。pet claim/source共149 tests、catalog=103、compileall、architecture、diff check通过；pet.001已有schema无需新增migration。
