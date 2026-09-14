@@ -49,6 +49,7 @@ from .transaction_service import DungeonSessionService
 from .transaction_service import DungeonSessionResult
 from ...compatibility.dungeon import DungeonPurchaseService
 from ...compatibility.dungeon import DungeonExploreOperationService
+from .transaction_service import DungeonExploreOperationResult
 from .transaction_service import (
     DungeonTeamTransactionService,
     TeamExitResult,
@@ -1089,11 +1090,12 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
     operation_id = (
         f"dungeon-explore:{event_id}:{user_id}"
         if event_id
-        else f"dungeon-explore:{time.time_ns()}:{user_id}"
+        else f"dungeon-explore:{dungeon_ids.new_id()}:{user_id}"
     )
 
     try:
-        replay = dungeon_explore_operation_service.replay(operation_id, user_id)
+        replay_data = dungeon_application.replay(operation_id=operation_id, user_id=user_id)
+        replay = DungeonExploreOperationResult(**replay_data)
     except Exception:
         logger.exception("读取副本探索 operation 失败")
         await handle_send(bot, event, "副本探索结算失败：处理过程异常。")

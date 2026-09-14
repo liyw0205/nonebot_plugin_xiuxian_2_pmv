@@ -473,7 +473,7 @@ class DungeonExploreOperationServiceTests(unittest.TestCase):
             )
         ]
         self.assertLess(
-            handler.index("dungeon_explore_operation_service.replay"),
+            handler.index("dungeon_application.replay"),
             handler.index("dungeon_manager.trigger_event"),
         )
         self.assertIn("dungeon_explore_operation_service.prepare", handler)
@@ -497,10 +497,14 @@ class DungeonExploreOperationServiceTests(unittest.TestCase):
                     response=response if phase == "completed" else {},
                 )
                 resumed = SimpleNamespace(phase="completed", response=response)
-                operation_service = SimpleNamespace(
-                    replay=Mock(return_value=replay),
-                    settle=Mock(return_value=resumed),
+                application = SimpleNamespace(
+                    replay=Mock(return_value={
+                        "status": replay.status,
+                        "phase": replay.phase,
+                        "response": replay.response,
+                    })
                 )
+                operation_service = SimpleNamespace(settle=Mock(return_value=resumed))
                 sent_response = AsyncMock()
                 sent_error = AsyncMock()
                 with (
@@ -513,6 +517,11 @@ class DungeonExploreOperationServiceTests(unittest.TestCase):
                         dungeon_plugin,
                         "check_user",
                         Mock(return_value=(True, {"user_id": "u"}, "")),
+                    ),
+                    patch.object(
+                        dungeon_plugin,
+                        "dungeon_application",
+                        application,
                     ),
                     patch.object(
                         dungeon_plugin,

@@ -84,7 +84,7 @@ from .features.puppet.migrations import apply_puppet
 from .features.boss.manifest import FEATURE as BOSS_FEATURE
 from .features.boss.migrations import apply_boss
 from .features.dungeon.manifest import FEATURE as DUNGEON_FEATURE
-from .features.dungeon.migrations import apply_dungeon, apply_dungeon_purchase, apply_dungeon_session
+from .features.dungeon.migrations import apply_dungeon, apply_dungeon_explore, apply_dungeon_purchase, apply_dungeon_session
 from .features.auction.migrations import apply_auction
 from .features._legacy_migrated import (
     APPLICATIONS as LEGACY_MIGRATED_APPLICATIONS,
@@ -126,6 +126,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("dungeon.001", "dungeon_feature_migrations", apply_dungeon),
         Migration("dungeon.002", "dungeon_purchase_operations", apply_dungeon_purchase),
         Migration("dungeon.003", "dungeon_session_operations", apply_dungeon_session),
+        Migration("dungeon.004", "dungeon_explore_operations", apply_dungeon_explore),
         Migration("illusion.001", "illusion_feature_migrations", apply_illusion),
         Migration("interactive.001", "interactive_feature_migrations", apply_interactive),
         *(Migration(version, f"{version.replace('.', '_')}_migrations", migration) for version, migration in LEGACY_MIGRATIONS),

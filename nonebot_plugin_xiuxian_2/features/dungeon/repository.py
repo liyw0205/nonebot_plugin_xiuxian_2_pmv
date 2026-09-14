@@ -53,6 +53,15 @@ class LegacyDungeonRepository:
     def resolve_rejection(self, *args: Any, **kwargs: Any) -> Any:
         return self._explore_service().resolve_rejection(*args, **kwargs)
 
+    def operation_session_result(self, operation_id: str, user_id: str, action: str) -> Any:
+        from ...xiuxian.xiuxian_dungeon.transaction_service import DungeonSessionService
+        return DungeonSessionService(self.player_database).operation_result(operation_id, user_id, action)
+
+    def session_transition(self, operation_id: str, user_id: str, expected: dict[str, Any], dungeon: dict[str, Any], action: str) -> Any:
+        from ...xiuxian.xiuxian_dungeon.transaction_service import DungeonSessionService
+        service = DungeonSessionService(self.player_database)
+        return getattr(service, action)(operation_id, user_id, expected, dungeon)
+
 
 class DungeonPurchaseSqlRepository(LegacyDungeonRepository):
     REJECTIONS = {"stone_insufficient": "灵石不足，无法兑换。", "inventory_full": "背包中该物品数量已达上限。", "state_changed": "兑换未结算：数据刚被其他操作改动，请重试。", "user_missing": "未找到道友数据，兑换失败。"}
@@ -103,6 +112,17 @@ class DungeonPurchaseSqlRepository(LegacyDungeonRepository):
 
 
 class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
+    def replay(self, operation_id: str, user_id: str) -> dict[str, Any]:
+        identity = json.dumps({"action":"explore","user_id":str(user_id)}, ensure_ascii=True, sort_keys=True)
+        with DatabaseUnitOfWork(self.game_database) as uow:
+            row = uow.query_one("SELECT request_identity,phase,prepared_json,result_status,result_json,current_layer,dungeon_status FROM dungeon_explore_operations WHERE operation_id=?", (str(operation_id),))
+        if row is None: return {"status":"missing","phase":"","result_status":"","response":{},"plan":{},"current_layer":0,"dungeon_status":""}
+        if str(row["request_identity"]) != identity: return {"status":"operation_conflict","phase":"","result_status":"","response":{},"plan":{},"current_layer":0,"dungeon_status":""}
+        phase=str(row["phase"] or "");result_status=str(row["result_status"] or "")
+        def load(value):
+            try:return json.loads(str(value or "{}"))
+            except (TypeError,ValueError):return {}
+        return {"status":"duplicate" if phase=="completed" else phase,"phase":phase,"result_status":result_status,"response":load(row["result_json"]),"plan":load(row["prepared_json"]),"current_layer":int(row["current_layer"] or 0),"dungeon_status":str(row["dungeon_status"] or "")}
     def operation_session_result(self, operation_id: str, user_id: str, action: str) -> dict[str, Any] | None:
         with DatabaseUnitOfWork(self.player_database) as uow:
             row = uow.query_one("SELECT payload,result_status,dungeon_status FROM dungeon_session_operations WHERE operation_id=?", (str(operation_id),))

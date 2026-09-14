@@ -1776,7 +1776,7 @@ class SourceQualityTests(unittest.TestCase):
         source = (root / "__init__.py").read_text(encoding="utf-8")
         start = source.index("async def handle_explore_dungeon")
         handler = source[start:source.index("async def handle_dungeon_status", start)]
-        self.assertIn("dungeon_explore_operation_service.replay(", handler)
+        self.assertIn("dungeon_application.replay(", handler)
         self.assertIn("dungeon_explore_operation_service.prepare(", handler)
         self.assertIn("dungeon_explore_operation_service.settle(", handler)
         self.assertNotIn("dungeon_reward_service.award(", handler)

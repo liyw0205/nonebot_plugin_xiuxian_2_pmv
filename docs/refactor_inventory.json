@@ -2743,6 +2743,7 @@
     "dufang_payout_operations",
     "dufang_share_operations",
     "dufang_share_progress",
+    "dungeon_explore_operations",
     "dungeon_feature_migrations",
     "dungeon_global_state",
     "dungeon_purchase_operations",
