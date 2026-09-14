@@ -11,6 +11,9 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_arena.transaction_service import (
     ArenaChallengeSettlementService,
 )
+from nonebot_plugin_xiuxian_2.features.arena.repository import (
+    ArenaChallengePurchaseSqlRepository,
+)
 from tests.test_db_backend import db_backend
 
 
@@ -65,6 +68,15 @@ class ArenaChallengeSettlementTests(unittest.TestCase):
                 ("other", *self.opponent_arena.values()),
             )
         self.service = ArenaChallengeSettlementService(self.game, self.player)
+        with db_backend.transaction(self.game) as conn:
+            conn.execute(
+                "CREATE TABLE arena_challenge_settlement_operations("
+                "operation_id TEXT PRIMARY KEY,challenger_id TEXT NOT NULL,payload TEXT NOT NULL,"
+                "result_json TEXT NOT NULL,created_at TIMESTAMP)"
+            )
+        self.feature_repository = ArenaChallengePurchaseSqlRepository(
+            self.game, self.player
+        )
 
     def tearDown(self):
         self.temp.cleanup()
@@ -204,7 +216,7 @@ class ArenaChallengeSettlementTests(unittest.TestCase):
     def test_operation_insert_failure_rolls_back_every_state_change(self):
         with db_backend.transaction(self.game) as conn:
             conn.execute(
-                "CREATE TABLE arena_challenge_settlement_operations("
+                "CREATE TABLE IF NOT EXISTS arena_challenge_settlement_operations("
                 "operation_id TEXT PRIMARY KEY,challenger_id TEXT,payload TEXT,"
                 "result_json TEXT,created_at TIMESTAMP)"
             )
@@ -229,8 +241,9 @@ class ArenaChallengeSettlementTests(unittest.TestCase):
         source = source_path.read_text(encoding="utf-8")
         start = source.index("@arena_challenge.handle")
         handler = source[start:source.index("@arena_view.handle", start)]
-        self.assertIn("arena_challenge_settlement_service.settle(", handler)
+        self.assertIn("arena_application.settle(", handler)
         self.assertIn("arena_application.settlement_result(", handler)
+        self.assertNotIn("arena_challenge_settlement_service.settle(\n", handler)
         self.assertNotIn("arena_challenge_cost_service.consume(", handler)
         self.assertNotIn("arena_battle_settlement_service.settle(", handler)
         self.assertLess(handler.index(".settle("), handler.index("send_msg_handler("))
@@ -239,6 +252,48 @@ class ArenaChallengeSettlementTests(unittest.TestCase):
         self.assertIn("random.seed(operation_id)", helper)
         opponent = source[source.index("async def find_arena_opponent"):]
         self.assertIn("random.Random(operation_id).choice", opponent)
+
+    def feature_settle(self, operation="feature-challenge", **overrides):
+        values = {
+            "opponent_id": "other",
+            "outcome": "win",
+            "cap": 11,
+            "stamina_cost": 3,
+            "challenged_at": "new",
+            "challenger_arena": self.challenger_arena,
+            "opponent_arena": self.opponent_arena,
+            "challenger_player": self.challenger_player,
+            "opponent_player": self.opponent_player,
+            "final_challenger": (11, 12),
+            "final_opponent": (21, 22),
+        }
+        values.update(overrides)
+        return self.feature_repository.settle(
+            operation, "user", values["opponent_id"], values["outcome"],
+            values["cap"], values["stamina_cost"], values["challenged_at"],
+            values["challenger_arena"], values["opponent_arena"],
+            values["challenger_player"], values["opponent_player"],
+            *values["final_challenger"], *values["final_opponent"], 20, 10, 10,
+        )
+
+    def test_feature_repository_commits_win_and_replays(self):
+        first = self.feature_settle()
+        duplicate = self.feature_settle()
+        conflict = self.feature_settle(outcome="loss")
+        self.assertEqual(
+            ("applied", "duplicate", "operation_conflict"),
+            (first["status"], duplicate["status"], conflict["status"]),
+        )
+        self.assertEqual((1510, 1590, 3, 5), (first["challenger_score"], first["opponent_score"], first["used"], first["stamina"]))
+
+    def test_feature_repository_rejections_and_rollback(self):
+        self.assertEqual("limit_reached", self.feature_settle("limit", cap=2)["status"])
+        self.assertEqual("stamina_insufficient", self.feature_settle("stamina", stamina_cost=9)["status"])
+        with db_backend.transaction(self.game) as conn:
+            conn.execute("CREATE TRIGGER fail_feature_settlement BEFORE INSERT ON arena_challenge_settlement_operations BEGIN SELECT RAISE(ABORT,'failed'); END")
+        with self.assertRaises(Exception):
+            self.feature_settle("rollback")
+        self.assertEqual(self.pristine_state(), self.state())
 
 
 if __name__ == "__main__":

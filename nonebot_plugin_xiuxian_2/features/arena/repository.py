@@ -64,6 +64,75 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
             return {"status": "operation_conflict"}
         result["status"] = "duplicate"
         return result
+
+    def settle(self, operation_id, challenger_id, opponent_id, outcome, challenge_cap, stamina_cost, challenged_at, expected_challenger_arena, expected_opponent_arena, expected_challenger_player, expected_opponent_player, final_challenger_hp, final_challenger_mp, final_opponent_hp, final_opponent_mp, win_points, lose_points, no_match_points) -> dict[str, Any]:
+        operation_id, challenger_id = str(operation_id).strip(), str(challenger_id)
+        opponent_id = "" if opponent_id is None else str(opponent_id)
+        outcome, challenged_at = str(outcome), str(challenged_at)
+        challenge_cap, stamina_cost = int(challenge_cap), int(stamina_cost)
+        win_points, lose_points, no_match_points = map(int, (win_points, lose_points, no_match_points))
+        challenger = {key: (str(expected_challenger_arena.get(key, "") or "") if key in {"rank", "last_challenge_time"} else int(expected_challenger_arena.get(key, 0) or 0)) for key in ("score", "total_wins", "total_losses", "win_streak", "max_win_streak", "rank", "daily_challenges_used", "daily_extra_challenges", "last_challenge_time")}
+        opponent = None if expected_opponent_arena is None else {key: (str(expected_opponent_arena.get(key, "") or "") if key == "rank" else int(expected_opponent_arena.get(key, 0) or 0)) for key in ("score", "total_wins", "total_losses", "win_streak", "max_win_streak", "rank")}
+        challenger_player = {"hp": int(expected_challenger_player.get("hp", 0) or 0), "mp": int(expected_challenger_player.get("mp", 0) or 0), "user_stamina": int(expected_challenger_player.get("user_stamina", 0) or 0)}
+        opponent_player = None if expected_opponent_player is None else {"hp": int(expected_opponent_player.get("hp", 0) or 0), "mp": int(expected_opponent_player.get("mp", 0) or 0)}
+        final_challenger_hp, final_challenger_mp = max(1, int(final_challenger_hp)), max(1, int(final_challenger_mp))
+        final_opponent_hp = None if final_opponent_hp is None else max(1, int(final_opponent_hp))
+        final_opponent_mp = None if final_opponent_mp is None else max(1, int(final_opponent_mp))
+        if not operation_id or not challenger_id or outcome not in {"win", "loss", "draw", "no_match"} or challenge_cap < 0 or stamina_cost < 0:
+            raise ValueError("valid arena settlement is required")
+        if outcome != "no_match" and (not opponent_id or opponent is None or opponent_player is None):
+            raise ValueError("opponent snapshot is required")
+        payload = json.dumps([challenger_id, opponent_id, outcome, challenge_cap, stamina_cost, challenged_at, challenger, opponent, challenger_player, opponent_player, final_challenger_hp, final_challenger_mp, final_opponent_hp, final_opponent_mp, win_points, lose_points, no_match_points], ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        def result(status, score=None, rank=None, opponent_score=None, used=None, stamina=None):
+            return {"status": status, "outcome": outcome, "challenger_score": int(challenger["score"] if score is None else score), "challenger_rank": str(challenger["rank"] if rank is None else rank), "opponent_score": None if opponent_score is None else int(opponent_score), "score_delta": win_points if outcome == "win" else no_match_points if outcome == "no_match" else 0, "used": int(challenger["daily_challenges_used"] if used is None else used), "remaining": max(0, challenge_cap - int(challenger["daily_challenges_used"] if used is None else used)), "stamina": int(challenger_player["user_stamina"] if stamina is None else stamina), "challenged_at": challenged_at}
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            uow.attach_database(self.player_database, "player_data")
+            old = uow.query_one("SELECT challenger_id,payload,result_json FROM arena_challenge_settlement_operations WHERE operation_id=?", (operation_id,))
+            if old:
+                if str(old["challenger_id"]) != challenger_id or str(old["payload"]) != payload:
+                    return result("operation_conflict")
+                try: saved = json.loads(str(old["result_json"]))
+                except (TypeError, ValueError): return result("operation_conflict")
+                saved["status"] = "duplicate"; return saved
+            arena = uow.query_one("SELECT score,total_wins,total_losses,win_streak,max_win_streak,rank,daily_challenges_used,daily_extra_challenges,last_challenge_time FROM player_data.arena WHERE user_id=?", (challenger_id,))
+            player = uow.query_one("SELECT COALESCE(hp,0) AS hp,COALESCE(mp,0) AS mp,COALESCE(user_stamina,0) AS user_stamina FROM user_xiuxian WHERE user_id=?", (challenger_id,))
+            actual = dict(arena) if arena else None
+            if actual is None or player is None or any(int(actual[key] or 0) != challenger[key] for key in ("score", "total_wins", "total_losses", "win_streak", "max_win_streak", "daily_challenges_used", "daily_extra_challenges")) or str(actual.get("rank") or "") != challenger["rank"] or str(actual.get("last_challenge_time") or "") != challenger["last_challenge_time"] or tuple(int(player[key]) for key in ("hp", "mp", "user_stamina")) != tuple(challenger_player[key] for key in ("hp", "mp", "user_stamina")):
+                return self._record_settlement(uow, operation_id, challenger_id, payload, result("state_changed"))
+            if opponent is not None:
+                if opponent_player is None:
+                    return self._record_settlement(uow, operation_id, challenger_id, payload, result("state_changed"))
+                opponent_actual = uow.query_one("SELECT score,total_wins,total_losses,win_streak,max_win_streak,rank FROM player_data.arena WHERE user_id=?", (opponent_id,))
+                opponent_vitals = uow.query_one("SELECT COALESCE(hp,0) AS hp,COALESCE(mp,0) AS mp FROM user_xiuxian WHERE user_id=?", (opponent_id,))
+                if opponent_actual is None or opponent_vitals is None or any(int(opponent_actual[key] or 0) != opponent[key] for key in ("score", "total_wins", "total_losses", "win_streak", "max_win_streak")) or str(opponent_actual.get("rank") or "") != opponent["rank"] or tuple(int(opponent_vitals[key]) for key in ("hp", "mp")) != tuple(opponent_player[key] for key in ("hp", "mp")):
+                    return self._record_settlement(uow, operation_id, challenger_id, payload, result("state_changed"))
+            if challenger["daily_challenges_used"] >= challenge_cap: return self._record_settlement(uow, operation_id, challenger_id, payload, result("limit_reached"))
+            if challenger_player["user_stamina"] < stamina_cost: return self._record_settlement(uow, operation_id, challenger_id, payload, result("stamina_insufficient"))
+            challenger_new = dict(challenger); opponent_new = None if opponent is None else dict(opponent)
+            if outcome == "win":
+                challenger_new["score"] += win_points; challenger_new["total_wins"] += 1; challenger_new["win_streak"] += 1; challenger_new["max_win_streak"] = max(challenger_new["max_win_streak"], challenger_new["win_streak"]); opponent_new["score"] = max(0, opponent_new["score"] - lose_points); opponent_new["total_losses"] += 1; opponent_new["win_streak"] = 0
+            elif outcome in {"loss", "draw"}: challenger_new["total_losses"] += 1; challenger_new["win_streak"] = 0
+            else: challenger_new["score"] += no_match_points; challenger_new["total_losses"] += 1; challenger_new["win_streak"] = 0
+            challenger_new["rank"] = self._rank(challenger_new["score"]); challenger_new["daily_challenges_used"] += 1; challenger_new["last_challenge_time"] = challenged_at
+            if opponent_new is not None: opponent_new["rank"] = self._rank(opponent_new["score"])
+            challenger_update = uow.execute("UPDATE player_data.arena SET score=?,total_wins=?,total_losses=?,win_streak=?,max_win_streak=?,rank=?,daily_challenges_used=?,last_challenge_time=? WHERE user_id=?", tuple(challenger_new[key] for key in ("score", "total_wins", "total_losses", "win_streak", "max_win_streak", "rank", "daily_challenges_used", "last_challenge_time")) + (challenger_id,))
+            if challenger_update.rowcount != 1: raise RuntimeError("challenger arena state changed")
+            if opponent_new is not None:
+                opponent_update = uow.execute("UPDATE player_data.arena SET score=?,total_wins=?,total_losses=?,win_streak=?,max_win_streak=?,rank=? WHERE user_id=?", tuple(opponent_new[key] for key in ("score", "total_wins", "total_losses", "win_streak", "max_win_streak", "rank")) + (opponent_id,))
+                if opponent_update.rowcount != 1: raise RuntimeError("opponent arena state changed")
+            stamina = challenger_player["user_stamina"] - stamina_cost; challenger_vitals_update = uow.execute("UPDATE user_xiuxian SET hp=?,mp=?,user_stamina=? WHERE user_id=? AND COALESCE(hp,0)=? AND COALESCE(mp,0)=? AND COALESCE(user_stamina,0)=?", (final_challenger_hp, final_challenger_mp, stamina, challenger_id, challenger_player["hp"], challenger_player["mp"], challenger_player["user_stamina"]))
+            if challenger_vitals_update.rowcount != 1: raise RuntimeError("challenger player state changed")
+            if opponent_player is not None:
+                opponent_vitals_update = uow.execute("UPDATE user_xiuxian SET hp=?,mp=? WHERE user_id=? AND COALESCE(hp,0)=? AND COALESCE(mp,0)=?", (final_opponent_hp, final_opponent_mp, opponent_id, opponent_player["hp"], opponent_player["mp"]))
+                if opponent_vitals_update.rowcount != 1: raise RuntimeError("opponent player state changed")
+            final = result("applied", challenger_new["score"], challenger_new["rank"], None if opponent_new is None else opponent_new["score"], challenger_new["daily_challenges_used"], stamina); return self._record_settlement(uow, operation_id, challenger_id, payload, final)
+
+    @staticmethod
+    def _rank(score): return "王者" if score >= 3200 else "钻石" if score >= 2700 else "铂金" if score >= 2300 else "黄金" if score >= 1900 else "白银" if score >= 1500 else "青铜"
+    @staticmethod
+    def _record_settlement(uow, operation_id, challenger_id, payload, result):
+        uow.execute("INSERT INTO arena_challenge_settlement_operations(operation_id,challenger_id,payload,result_json) VALUES(?,?,?,?)", (operation_id, challenger_id, payload, json.dumps(result, ensure_ascii=True, sort_keys=True, separators=(",", ":"))))
+        return result
     def use_challenge_ticket(self, operation_id, user_id, item_id, requested_count, expected_item_count, expected_challenges_used, expected_extra_challenges, challenge_cap) -> dict[str, Any]:
         operation_id,user_id=str(operation_id).strip(),str(user_id); item_id,requested_count,expected_item_count,expected_challenges_used,expected_extra_challenges,challenge_cap=map(int,(item_id,requested_count,expected_item_count,expected_challenges_used,expected_extra_challenges,challenge_cap));payload=json.dumps([user_id,item_id,requested_count,challenge_cap],ensure_ascii=True,separators=(",",":"))
         if not operation_id or requested_count<=0 or min(expected_item_count,expected_challenges_used,expected_extra_challenges,challenge_cap)<0: raise ValueError("valid arena ticket operation is required")

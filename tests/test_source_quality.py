@@ -2232,6 +2232,8 @@ class SourceQualityTests(unittest.TestCase):
         start = source.index("async def arena_challenge_")
         handler = source[start:source.index("@arena_view.handle", start)]
         self.assertIn("arena_application.settlement_result(", handler)
+        self.assertIn("arena_application.settle(", handler)
+        self.assertNotIn("arena_challenge_settlement_service.settle(\n", handler)
         self.assertIn("arena_ids.new_id()", handler)
         self.assertNotIn("arena_challenge_settlement_service.get_result(", handler)
 
