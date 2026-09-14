@@ -46,7 +46,11 @@ from ..xiuxian_utils.utils import (
 from ..xiuxian_title.title_data import check_and_unlock_titles
 from .boss_limit import boss_limit, player_data_manager, DAILY_BATTLE_COUNT
 from ...compatibility.boss import BossPurchaseService
+from .transaction_service import BossPurchaseResult
 from ...compatibility.boss import WorldBossBattleSettlementService
+from ...features.boss.application import BossApplication
+from ...features.boss.repository import BossPurchaseSqlRepository
+from ...infrastructure.ids import UUIDGenerator
 from .transaction_service import WorldBossManualSpawnService
 from .transaction_service import WorldBossFullRefreshService
 from .transaction_service import WorldBossPunishmentService
@@ -63,6 +67,17 @@ groups = config['open']
 battle_flag = {}
 sql_message = XiuxianDateManage()  # sql类
 boss_purchase_service = BossPurchaseService(get_paths().game_db, get_paths().player_db)
+boss_application = BossApplication(
+    get_paths().game_db,
+    get_paths().player_db,
+    activity_database=get_paths().data / "activity" / "activity.db",
+    repository=BossPurchaseSqlRepository(
+        get_paths().game_db,
+        get_paths().player_db,
+        get_paths().data / "activity" / "activity.db",
+    ),
+)
+boss_ids = UUIDGenerator()
 world_boss_battle_settlement_service = WorldBossBattleSettlementService(
     get_paths().game_db,
     get_paths().player_db,
@@ -1376,7 +1391,7 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         operation_id = (
             f"boss-purchase:{event_id}:{user_id}"
             if event_id
-            else f"boss-purchase:{time_module.time_ns()}:{user_id}"
+            else f"boss-purchase:{boss_ids.new_id()}:{user_id}"
         )
         # 先走 operation：重放必须在限购/积分前置拦截之前完成。
         already_purchased = boss_limit.get_weekly_purchases(user_id, shop_id)
@@ -1393,18 +1408,27 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
 
         user_boss_fight_info = get_user_boss_fight_info(user_id)
         boss_data = boss_limit._load_data(user_id)
-        purchase_result = boss_purchase_service.purchase(
-            operation_id,
-            user_id,
-            item_id,
-            item_info["name"],
-            item_info["type"],
-            request_quantity,
-            cost,
-            weekly_limit,
-            user_boss_fight_info["boss_integral"],
-            boss_data.get("weekly_purchases", {}),
-            XiuConfig().max_goods_num,
+        purchase_outcome = boss_application.purchase(
+            operation_id=operation_id,
+            user_id=user_id,
+            item_id=item_id,
+            item_name=item_info["name"],
+            item_type=item_info["type"],
+            quantity=request_quantity,
+            unit_cost=cost,
+            weekly_limit=weekly_limit,
+            expected_integral=user_boss_fight_info["boss_integral"],
+            expected_weekly_purchases=boss_data.get("weekly_purchases", {}),
+            max_goods_num=XiuConfig().max_goods_num,
+        )
+        purchase_data = purchase_outcome.data or {}
+        purchase_result = BossPurchaseResult(
+            str(purchase_data.get("status", purchase_outcome.code or "failed")),
+            int(purchase_data.get("quantity", 0) or 0),
+            int(purchase_data.get("cost", 0) or 0),
+            int(purchase_data.get("integral", 0) or 0),
+            int(purchase_data.get("purchased", 0) or 0),
+            int(purchase_data.get("inventory", 0) or 0),
         )
         if purchase_result.status == "duplicate":
             msg = "道友成功兑换获得：" + f"{item_info['name']}{purchase_result.quantity}个"

@@ -1669,7 +1669,9 @@ class SourceQualityTests(unittest.TestCase):
         source = (boss_root / "__init__.py").read_text(encoding="utf-8")
         start = source.index("boss_data =", source.index("async def boss_integral_use_"))
         handler = source[start:source.index('msg = f"道友成功兑换', start)]
-        self.assertIn("boss_purchase_service.purchase(", handler)
+        self.assertIn("boss_application.purchase(", handler)
+        self.assertNotIn("boss_purchase_service.purchase(\n", handler)
+        self.assertIn("boss_ids.new_id()", source[source.index("async def boss_integral_use_"):start])
         self.assertNotIn("save_user_boss_fight_info(", handler)
         self.assertNotIn("boss_limit.update_weekly_purchase(", handler)
         self.assertNotIn("sql_message.send_back(", handler)

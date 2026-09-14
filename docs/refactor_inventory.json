@@ -2688,6 +2688,7 @@
     "blessed_spot_operations",
     "boss",
     "boss_feature_migrations",
+    "boss_limit",
     "boss_purchase_operations",
     "boss_reward_operations",
     "breakthrough_rate_item_operations",
