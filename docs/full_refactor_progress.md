@@ -513,6 +513,8 @@
 
 2026-09-15 arena settlement cutover：`ArenaChallengePurchaseSqlRepository.settle`接管默认 `ArenaApplication.settle`，真实竞技场挑战 handler通过application完成双方arena状态、挑战次数、双方玩家HP/MP/体力与积分/段位更新；所有快照采用CAS校验，operation replay/conflict、limit/stamina rejection及operation/vitals failure rollback均有测试。复用 `arena.005` settlement ledger；165 tests、90 catalog、compileall、architecture、diff check通过。live未执行真实竞技场战斗写入，旧战斗service仅保留显式rollback路径。
 
+2026-09-15 arena settlement implementation closure：新SQL repository已补齐对手arena/player快照校验、双方更新rowcount检查及双方玩家体力/HP/MP CAS，防止并发对手状态覆盖；真实 handler默认路径保持 `ArenaApplication.settle`，旧 settlement service只作为显式rollback adapter。完整arena settlement回归165 tests，catalog=91，compileall、architecture、diff check通过；live deployment follows this commit，未执行真实竞技场战斗写入。
+
 2026-09-15 tower shop purchase cutover：新增 `TowerPurchaseSqlRepository` 与 `TowerApplication`默认SQL repository，真实 `通天塔兑换` handler的积分/weekly限购、背包容量、库存写入和operation ledger均由跨库UoW完成，UUID fallback注入；新增game migration `tower.002`。new+legacy+source共152 tests、91 catalog、compileall、architecture、diff check通过。tower settlement仍为后续独立slice。
 
 2026-09-15 tower shop purchase live safety：提交 `1dc30a0` 部署后 backup `/srv/old/data/backups/20260914T200624Z`，dry-run/apply仅game `[tower.002]`；readiness全绿，91-entry recovery reconcile clean。live未执行通天塔兑换写入。
