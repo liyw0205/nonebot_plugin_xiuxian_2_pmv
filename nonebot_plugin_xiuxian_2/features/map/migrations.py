@@ -94,4 +94,7 @@ def apply_map_combat_player(uow: DatabaseUnitOfWork) -> None:
     if 'combat_cd_until' not in columns:uow.execute('ALTER TABLE map_cooldown ADD COLUMN combat_cd_until TEXT DEFAULT NULL')
 
 
-__all__ = ["apply_map", "apply_map_combat_player", "apply_map_combat_start", "apply_map_dongfu_build", "apply_map_dongfu_player", "apply_map_explore_player", "apply_map_explore_settlement", "apply_map_explore_start", "apply_map_home_return", "apply_map_interactive_player", "apply_map_interactive_start", "apply_map_mission_claim", "apply_map_movement", "apply_map_resource_reward", "apply_map_seed_purchase"]
+def apply_map_combat_plan(uow: DatabaseUnitOfWork) -> None:
+    uow.execute("CREATE TABLE IF NOT EXISTS map_combat_plan_operations (operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,task_id TEXT NOT NULL,payload TEXT NOT NULL,snapshot TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+
+__all__ = ["apply_map", "apply_map_combat_plan", "apply_map_combat_player", "apply_map_combat_start", "apply_map_dongfu_build", "apply_map_dongfu_player", "apply_map_explore_player", "apply_map_explore_settlement", "apply_map_explore_start", "apply_map_home_return", "apply_map_interactive_player", "apply_map_interactive_start", "apply_map_mission_claim", "apply_map_movement", "apply_map_resource_reward", "apply_map_seed_purchase"]
