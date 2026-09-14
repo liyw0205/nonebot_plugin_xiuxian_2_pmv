@@ -767,9 +767,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     except Exception as e:
         log_message(user_id, f"[活动首领] 读取世界BOSS联动配置失败：{e}")
 
-    # 发放奖励：boss_reward_service.grant(...) is represented by the
-    # cross-database battle settlement below, so reward and combat state share
-    # one operation boundary.
+    # Rewards and combat state share the composite settlement boundary.
     now = datetime.now()
     settlement = world_boss_battle_settlement_service.settle(
         operation_id=operation_id,
