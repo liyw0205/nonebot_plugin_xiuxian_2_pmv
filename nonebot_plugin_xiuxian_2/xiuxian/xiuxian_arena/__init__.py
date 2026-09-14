@@ -24,7 +24,7 @@ from .arena_limit import arena_limit
 from .arena_shop import arena_shop_data
 from .transaction_service import ArenaPurchaseService, ArenaPurchaseResult
 from .transaction_service import ArenaChallengePurchaseService, ArenaChallengePurchaseResult
-from .transaction_service import ArenaChallengeTicketService
+from .transaction_service import ArenaChallengeTicketService, ArenaChallengeTicketResult
 from .transaction_service import ArenaChallengeSettlementService, ArenaChallengeSettlementResult
 from .transaction_service import ArenaWeeklyRankReductionService
 from .transaction_service import ArenaSeasonRewardService
@@ -126,6 +126,11 @@ def _arena_challenge_purchase_result(outcome) -> ArenaChallengePurchaseResult:
         int(data.get("bought", 0) or 0),
         int(data.get("extra", 0) or 0),
     )
+
+
+def _arena_challenge_ticket_result(outcome) -> ArenaChallengeTicketResult:
+    data = outcome.data or {}
+    return ArenaChallengeTicketResult(str(data.get("status", outcome.code or "failed")), int(data.get("used_tickets", 0) or 0), int(data.get("item_remaining", 0) or 0), int(data.get("challenges_used", 0) or 0), int(data.get("challenges_remaining", 0) or 0), int(data.get("challenge_cap", 0) or 0))
 
 
 def _arena_settlement_result(outcome) -> ArenaChallengeSettlementResult:
@@ -961,17 +966,22 @@ async def use_arena_challenge_ticket(bot: Bot, event: GroupMessageEvent | Privat
     challenge_cap = arena_limit.daily_challenges + extra_challenges
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     # 先走 operation：成功后 used_count 可能已归零，重放不能被前置拦截。
-    result = arena_challenge_ticket_service.use(
-        f"arena-challenge-ticket:{event_id}:{user_id}" if event_id
-        else f"arena-challenge-ticket:{time.time_ns()}:{user_id}",
-        user_id,
-        item_id,
-        int(quantity),
-        item_count,
-        used_count,
-        extra_challenges,
-        challenge_cap,
+    operation_id = (
+        f"arena-challenge-ticket:{event_id}:{user_id}"
+        if event_id
+        else f"arena-challenge-ticket:{arena_ids.new_id()}:{user_id}"
     )
+    outcome = arena_application.use_challenge_ticket(
+        operation_id=operation_id,
+        user_id=user_id,
+        item_id=item_id,
+        requested_count=int(quantity),
+        expected_item_count=item_count,
+        expected_challenges_used=used_count,
+        expected_extra_challenges=extra_challenges,
+        challenge_cap=challenge_cap,
+    )
+    result = _arena_challenge_ticket_result(outcome)
     if result.status == "duplicate" or result.succeeded:
         await handle_send(
             bot, event,

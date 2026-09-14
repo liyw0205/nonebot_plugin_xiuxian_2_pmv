@@ -145,7 +145,8 @@ class ArenaChallengeTicketServiceTests(unittest.TestCase):
             / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_arena/__init__.py"
         ).read_text(encoding="utf-8")
         handler = source.split("async def use_arena_challenge_ticket", 1)[1]
-        self.assertIn("arena_challenge_ticket_service.use(", handler)
+        self.assertIn("arena_application.use_challenge_ticket(", handler)
+        self.assertNotIn("arena_challenge_ticket_service.use(", handler)
         self.assertNotIn("arena_limit.add_challenge_count", handler)
         self.assertNotIn("sql_message.update_back_j", handler)
 

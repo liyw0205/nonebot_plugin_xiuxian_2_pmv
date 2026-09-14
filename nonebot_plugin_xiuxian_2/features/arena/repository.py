@@ -12,6 +12,7 @@ class ArenaRepository(Protocol):
     def purchase(self, *args: Any, **kwargs: Any) -> Any: ...
     def purchase_challenges(self, *args: Any, **kwargs: Any) -> Any: ...
     def settle(self, *args: Any, **kwargs: Any) -> Any: ...
+    def use_challenge_ticket(self, *args: Any, **kwargs: Any) -> Any: ...
 
 
 class LegacyArenaRepository:
@@ -37,8 +38,34 @@ class LegacyArenaRepository:
     def settle(self, *args: Any, **kwargs: Any) -> Any:
         return self._services()[2].settle(*args, **kwargs)
 
+    def use_challenge_ticket(self, *args: Any, **kwargs: Any) -> Any:
+        from ...xiuxian.xiuxian_arena.transaction_service import ArenaChallengeTicketService
+        return ArenaChallengeTicketService(self.game_database, self.player_database).use(*args, **kwargs)
+
 
 class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
+    def use_challenge_ticket(self, operation_id, user_id, item_id, requested_count, expected_item_count, expected_challenges_used, expected_extra_challenges, challenge_cap) -> dict[str, Any]:
+        operation_id,user_id=str(operation_id).strip(),str(user_id); item_id,requested_count,expected_item_count,expected_challenges_used,expected_extra_challenges,challenge_cap=map(int,(item_id,requested_count,expected_item_count,expected_challenges_used,expected_extra_challenges,challenge_cap));payload=json.dumps([user_id,item_id,requested_count,challenge_cap],ensure_ascii=True,separators=(",",":"))
+        if not operation_id or requested_count<=0 or min(expected_item_count,expected_challenges_used,expected_extra_challenges,challenge_cap)<0: raise ValueError("valid arena ticket operation is required")
+        with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
+            uow.attach_database(self.player_database,"player_data")
+            old=uow.query_one("SELECT payload,used_tickets,item_remaining,challenges_used,challenges_remaining,challenge_cap FROM arena_challenge_ticket_operations WHERE operation_id=?",(operation_id,))
+            if old:
+                if str(old["payload"])!=payload:return self._ticket_result("operation_conflict",expected_item_count,expected_challenges_used,challenge_cap)
+                return self._ticket_result("duplicate",int(old["item_remaining"]),int(old["challenges_used"]),int(old["challenge_cap"]),int(old["used_tickets"]))
+            arena=uow.query_one("SELECT COALESCE(daily_challenges_used,0) AS used,COALESCE(daily_extra_challenges,0) AS extra FROM player_data.arena WHERE user_id=?",(user_id,));item=uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num,COALESCE(bind_num,0) AS bind_num FROM back WHERE user_id=? AND goods_id=?",(user_id,item_id))
+            if arena is None or (int(arena["used"]),int(arena["extra"]))!=(expected_challenges_used,expected_extra_challenges):return self._record_ticket(uow,operation_id,payload,self._ticket_result("state_changed",expected_item_count,expected_challenges_used,challenge_cap))
+            if item is None or int(item["goods_num"])<=0:return self._record_ticket(uow,operation_id,payload,self._ticket_result("item_missing",expected_item_count,expected_challenges_used,challenge_cap))
+            if int(item["goods_num"])!=expected_item_count:return self._record_ticket(uow,operation_id,payload,self._ticket_result("state_changed",expected_item_count,expected_challenges_used,challenge_cap))
+            if expected_challenges_used<=0:return self._record_ticket(uow,operation_id,payload,self._ticket_result("no_challenges_used",expected_item_count,expected_challenges_used,challenge_cap))
+            used=min(requested_count,expected_item_count,expected_challenges_used);remaining=expected_item_count-used;new_used=expected_challenges_used-used;new_remaining=max(0,challenge_cap-new_used);bound=min(max(0,int(item["bind_num"])-used),remaining)
+            uow.execute("UPDATE back SET goods_num=?,bind_num=? WHERE user_id=? AND goods_id=? AND COALESCE(goods_num,0)=?",(remaining,bound,user_id,item_id,expected_item_count));uow.execute("UPDATE player_data.arena SET daily_challenges_used=? WHERE user_id=? AND CAST(COALESCE(daily_challenges_used,0) AS INTEGER)=? AND CAST(COALESCE(daily_extra_challenges,0) AS INTEGER)=?",(new_used,user_id,expected_challenges_used,expected_extra_challenges));return self._record_ticket(uow,operation_id,payload,self._ticket_result("applied",remaining,new_used,challenge_cap,used))
+
+    @staticmethod
+    def _ticket_result(status,item_remaining,challenges_used,challenge_cap,used_tickets=0): return {"status":status,"used_tickets":used_tickets,"item_remaining":item_remaining,"challenges_used":challenges_used,"challenges_remaining":max(0,challenge_cap-challenges_used),"challenge_cap":challenge_cap}
+    @staticmethod
+    def _record_ticket(uow,operation_id,payload,result):
+        uow.execute("INSERT INTO arena_challenge_ticket_operations(operation_id,payload,used_tickets,item_remaining,challenges_used,challenges_remaining,challenge_cap) VALUES(?,?,?,?,?,?,?)",(operation_id,payload,result["used_tickets"],result["item_remaining"],result["challenges_used"],result["challenges_remaining"],result["challenge_cap"]));return result
     def purchase(self, operation_id, user_id, item_id, item_name, item_type, quantity, unit_cost, weekly_limit, expected_honor, expected_weekly_purchases, max_goods_num, bind_flag=1, today=None) -> dict[str, Any]:
         operation_id,user_id,item_name,item_type=str(operation_id).strip(),str(user_id),str(item_name),str(item_type);item_id,quantity,unit_cost,weekly_limit,expected_honor,max_goods_num=map(int,(item_id,quantity,unit_cost,weekly_limit,expected_honor,max_goods_num));payload=json.dumps([user_id,item_id,item_name,item_type,quantity,unit_cost,weekly_limit,max_goods_num,int(bind_flag)],ensure_ascii=True,sort_keys=True);today=today or __import__("datetime").date.today();today_key=today.isoformat() if hasattr(today,"isoformat") else str(today)
         if not operation_id or quantity<=0 or min(item_id,unit_cost,weekly_limit,expected_honor,max_goods_num)<0: raise ValueError("valid arena purchase is required")

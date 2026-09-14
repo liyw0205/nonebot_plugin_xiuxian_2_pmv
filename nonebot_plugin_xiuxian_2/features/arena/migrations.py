@@ -14,4 +14,8 @@ def apply_arena_purchase(uow: DatabaseUnitOfWork) -> None:
     uow.execute("CREATE TABLE IF NOT EXISTS arena_purchase_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,quantity INTEGER NOT NULL,cost INTEGER NOT NULL,honor_points INTEGER NOT NULL,purchased INTEGER NOT NULL,inventory INTEGER NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 
 
-__all__ = ["apply_arena", "apply_arena_challenge_purchase", "apply_arena_purchase"]
+def apply_arena_challenge_ticket(uow: DatabaseUnitOfWork) -> None:
+    uow.execute("CREATE TABLE IF NOT EXISTS arena_challenge_ticket_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,used_tickets INTEGER NOT NULL,item_remaining INTEGER NOT NULL,challenges_used INTEGER NOT NULL,challenges_remaining INTEGER NOT NULL,challenge_cap INTEGER NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+
+
+__all__ = ["apply_arena", "apply_arena_challenge_purchase", "apply_arena_challenge_ticket", "apply_arena_purchase"]
