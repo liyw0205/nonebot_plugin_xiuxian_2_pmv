@@ -1457,9 +1457,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         target_id = str(target["user_id"])
         show_name = target["user_name"]
 
-    total = player_data_manager.get_field_data(target_id, "dao_record", "total") or 0
-    win_n = player_data_manager.get_field_data(target_id, "dao_record", "win") or 0
-    lose_n = player_data_manager.get_field_data(target_id, "dao_record", "lose") or 0
+    record = dao_battle_application.get_dao_record(target_id)
+    total = record["total"]
+    win_n = record["win"]
+    lose_n = record["lose"]
     rate = (win_n / total * 100) if total else 0.0
     await handle_send(bot, event, f"【论道战绩】{show_name}\n总场次：{total}\n胜场：{win_n}\n负场：{lose_n}\n胜率：{rate:.1f}%")
 

@@ -14,6 +14,11 @@ class CombatSettlementRepository(Protocol):
                daily_limit: int, stone: int, items: tuple[dict[str, Any], ...], max_goods_num: int) -> Any: ...
 
 
+class DaoBattleRepository(Protocol):
+    def settle(self, operation_id: str, challenger_id: str, target_id: str, expected_position: dict[str, Any], challenger_won: bool) -> Any: ...
+    def get_record(self, user_id: str) -> dict[str, int]: ...
+
+
 class CombatSettlementSqlRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path, *, clock: Any | None = None) -> None:
         self.game_database = str(game_database)
@@ -95,6 +100,15 @@ class DaoBattleSqlRepository:
             uow.execute("INSERT INTO map_dao_battle_operations(operation_id,payload) VALUES(?,?)", (operation_id, payload))
             return {"status": "applied"}
 
+    def get_record(self, user_id: str) -> dict[str, int]:
+        with DatabaseUnitOfWork(self.player_database) as uow:
+            row = uow.query_one(
+                "SELECT total, win, lose FROM dao_record WHERE user_id=?", (str(user_id),)
+            )
+        if row is None:
+            return {"total": 0, "win": 0, "lose": 0}
+        return {"total": int(row["total"] or 0), "win": int(row["win"] or 0), "lose": int(row["lose"] or 0)}
+
 
 class LegacyCombatSettlementRepository:
     """Lazy adapter around the historical attached-database transaction."""
@@ -121,4 +135,4 @@ class LegacyCombatSettlementRepository:
         )
 
 
-__all__ = ["CombatSettlementRepository", "CombatSettlementSqlRepository", "DaoBattleSqlRepository", "LegacyCombatSettlementRepository"]
+__all__ = ["CombatSettlementRepository", "CombatSettlementSqlRepository", "DaoBattleRepository", "DaoBattleSqlRepository", "LegacyCombatSettlementRepository"]

@@ -140,6 +140,10 @@ class CombatSettlementApplication:
                 self.ledger.record_failure(self.player_database, str(operation_id), "combat.dao_battle", payload, str(exc))
                 raise
 
+    def get_dao_record(self, user_id: str) -> dict[str, int]:
+        repository: Any = self.repository if self.repository is not None and hasattr(self.repository, "get_record") else DaoBattleSqlRepository(self.player_database, self.game_database)
+        return dict(repository.get_record(str(user_id)))
+
     def reply(self, **kwargs: Any) -> ReplyPlan:
         outcome = self.settle(**kwargs)
         return ReplyPlan(outcome.message or outcome.data, reference=True)
