@@ -502,10 +502,6 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             "combat_settlement": CombatSettlementApplication(
                 str(context.database.path("game_db")),
                 str(context.database.path("player_db")),
-                repository=LegacyCombatSettlementRepository(
-                    str(context.database.path("game_db")),
-                    str(context.database.path("player_db")),
-                ),
             ),
             "admin_asset": AdminAssetApplication(
                 str(context.database.path("game_db")),

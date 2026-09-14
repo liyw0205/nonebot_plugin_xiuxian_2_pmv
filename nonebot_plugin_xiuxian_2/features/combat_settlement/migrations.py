@@ -6,6 +6,11 @@ def apply_combat_settlement(uow: DatabaseUnitOfWork) -> None:
     # marker lets migration and recovery tooling prove the feature was loaded.
     uow.execute("CREATE TABLE IF NOT EXISTS combat_settlement_feature_migrations (version TEXT PRIMARY KEY)")
     uow.execute("INSERT OR IGNORE INTO combat_settlement_feature_migrations(version) VALUES ('combat_settlement.001')")
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS map_combat_settlement_operations ("
+        "operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, stone INTEGER NOT NULL, "
+        "rewards TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+    )
 
 
 __all__ = ["apply_combat_settlement"]

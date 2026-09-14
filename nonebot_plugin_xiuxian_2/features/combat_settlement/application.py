@@ -8,7 +8,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import CombatSettlementRequest
-from .repository import CombatSettlementRepository, LegacyCombatSettlementRepository
+from .repository import CombatSettlementRepository, CombatSettlementSqlRepository, LegacyCombatSettlementRepository
 from .schemas import CombatSettlementResult
 
 
@@ -58,7 +58,7 @@ class CombatSettlementApplication:
                         if previous is not None:
                             return previous.replay()
                         raise ConflictError("操作正在处理中")
-                repository = self.repository or LegacyCombatSettlementRepository(self.game_database, self.player_database)
+                repository = self.repository or CombatSettlementSqlRepository(self.game_database, self.player_database)
                 raw = repository.settle(
                     request.operation_id,
                     request.user_id,

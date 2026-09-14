@@ -2839,6 +2839,7 @@
     "map_combat_settlement_operations",
     "map_combat_start_operations",
     "map_cooldown",
+    "map_daily_limit",
     "map_dao_battle_operations",
     "map_dongfu_build_operations",
     "map_explore_settlement_operations",

@@ -379,6 +379,8 @@
 
 2026-09-14 tianti item reward live safety：提交 `fd0ef45` 部署后 backup 未改变业务数据；修正后的 dry-run 真实返回 game_db `[tianti_training.007]`、player_db `[]`，apply 仅写入 game_db。game_db migrations=65、player_db migrations=5，`tianti_item_reward_operations` 存在，readiness 全绿；recovery smoke 覆盖 65-entry catalog，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`。live 未执行玩家物品奖励写入。
 
+2026-09-14 combat settlement repository cutover：新增 `CombatSettlementSqlRepository`，默认 `CombatSettlementApplication`/Web `/api/v1/combat/settle` 不再显式使用 legacy adapter；game 主库 attach player_db，覆盖每日计数、snapshot 防重放、stone/item 奖励、库存上限、operation replay 与回滚。`combat_settlement.001` 预创建 `map_combat_settlement_operations`，3 个 repository tests、combat/application/legacy 回归、compileall、architecture、source-quality 通过。修复 mapping row 被按列名迭代导致所有结算误报 `state_changed` 的真实 bug；旧 `MapCombatSettlementService` 保留兼容回滚。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。
