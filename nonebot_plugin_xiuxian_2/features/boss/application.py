@@ -87,6 +87,9 @@ class BossApplication:
         call = lambda: self._repository().settle(**{**kwargs, "operation_id": request.operation_id, "user_id": request.user_id})
         return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="boss.settle", payload=payload, call=call)
 
+    def settlement_result(self, *, operation_id: str) -> Any:
+        return self._repository().settlement_result(operation_id)
+
     def reply(self, **kwargs: Any) -> ReplyPlan:
         action = str(kwargs.pop("action", "purchase"))
         return ReplyPlan(getattr(self, action)(**kwargs).data, reference=True)

@@ -82,7 +82,7 @@ from .features.mixelixir.migrations import apply_mixelixir
 from .features.puppet.manifest import FEATURE as PUPPET_FEATURE
 from .features.puppet.migrations import apply_puppet
 from .features.boss.manifest import FEATURE as BOSS_FEATURE
-from .features.boss.migrations import apply_boss, apply_boss_purchase
+from .features.boss.migrations import apply_boss, apply_boss_purchase, apply_boss_settlement
 from .features.dungeon.manifest import FEATURE as DUNGEON_FEATURE
 from .features.dungeon.migrations import apply_dungeon, apply_dungeon_explore, apply_dungeon_purchase, apply_dungeon_session
 from .features.auction.migrations import apply_auction
@@ -122,6 +122,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("beg.001", "beg_feature_migrations", apply_beg),
         Migration("boss.001", "boss_feature_migrations", apply_boss),
         Migration("boss.002", "boss_purchase_operations", apply_boss_purchase),
+        Migration("boss.003", "world_boss_battle_operations", apply_boss_settlement),
         Migration("buff.001", "buff_feature_migrations", apply_buff),
         Migration("combat_settlement.001", "combat_settlement_feature_migrations", apply_combat_settlement),
         Migration("combat_settlement.002", "map_combat_settlement_operations", apply_combat_settlement_operations),

@@ -12,6 +12,7 @@ from ...infrastructure.database import DatabaseUnitOfWork
 class BossRepository(Protocol):
     def purchase(self, *args: Any, **kwargs: Any) -> Any: ...
     def settle(self, *args: Any, **kwargs: Any) -> Any: ...
+    def settlement_result(self, operation_id: str) -> Any: ...
 
 
 class LegacyBossRepository:
@@ -34,8 +35,38 @@ class LegacyBossRepository:
     def settle(self, *args: Any, **kwargs: Any) -> Any:
         return self._services()[1].settle(*args, **kwargs)
 
+    def settlement_result(self, operation_id: str) -> Any:
+        return self._services()[1].get_result(operation_id)
+
 
 class BossPurchaseSqlRepository(LegacyBossRepository):
+    def settlement_result(self, operation_id: str) -> Any:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with DatabaseUnitOfWork(self.game_database) as uow:
+            row = uow.query_one(
+                "SELECT boss_hp,stamina,battle_count,stone,exp,integral,activity_lines "
+                "FROM world_boss_battle_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+        if row is None:
+            return None
+        try:
+            lines = json.loads(str(row["activity_lines"] or "[]"))
+        except (TypeError, ValueError):
+            lines = []
+        return {
+            "status": "duplicate",
+            "boss_hp": int(row["boss_hp"] or 0),
+            "stamina": int(row["stamina"] or 0),
+            "battle_count": int(row["battle_count"] or 0),
+            "stone": int(row["stone"] or 0),
+            "exp": int(row["exp"] or 0),
+            "integral": int(row["integral"] or 0),
+            "activity_lines": tuple(lines) if isinstance(lines, list) else (),
+        }
+
     @staticmethod
     def _weekly(value, today):
         if isinstance(today, datetime): today=today.date()

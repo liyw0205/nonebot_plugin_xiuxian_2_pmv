@@ -424,10 +424,15 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     user_id = user_info['user_id']
 
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_key = event_id or str(time_module.time_ns())
+    operation_key = event_id or boss_ids.new_id()
     operation_id = f"world-boss-battle:{operation_key}:{user_id}"
     # 先查 operation：同事件重放必须在限购/重伤/境界前置拦截之前回放。
-    previous_settlement = world_boss_battle_settlement_service.get_result(operation_id)
+    previous_settlement_data = boss_application.settlement_result(operation_id=operation_id)
+    previous_settlement = (
+        WorldBossBattleSettlementResult(**previous_settlement_data)
+        if isinstance(previous_settlement_data, dict)
+        else previous_settlement_data
+    )
     if previous_settlement is not None:
         msg = (
             "该讨伐请求已经处理，无需重复提交。\n"
