@@ -1863,7 +1863,8 @@ class SourceQualityTests(unittest.TestCase):
         end = source.index("@join_sect.handle", start)
         command = source[start:end]
 
-        self.assertIn("sect_membership_service.change_position(", command)
+        self.assertIn("sect_application.change_position(", command)
+        self.assertNotIn("sect_membership_service.change_position(", command)
         self.assertNotIn("sql_message.update_usr_sect(", command)
 
     def test_sect_task_completion_preserves_period_and_initializes_message(self) -> None:

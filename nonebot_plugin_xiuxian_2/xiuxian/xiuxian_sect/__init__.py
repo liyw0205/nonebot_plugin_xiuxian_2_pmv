@@ -2776,14 +2776,17 @@ async def sect_position_update_(bot: Bot, event: GroupMessageEvent | PrivateMess
         int(pos_id): int(pos_data.get("max_count", 0) or 0)
         for pos_id, pos_data in jsondata.sect_config_data().items()
     }
-    result = sect_membership_service.change_position(
-        _sect_operation_id(event, "position_change", give_user['user_id']),
-        user_id,
-        give_user['user_id'],
-        int(position_num),
-        position_limits,
+    position_outcome = sect_application.change_position(
+        operation_id=_sect_operation_id(event, "position_change", give_user['user_id']) or f"sect:position:{give_user['user_id']}:{sect_ids.new_id()}",
+        user_id=user_id,
+        target_id=give_user['user_id'],
+        requested_position=int(position_num),
+        position_limits=position_limits,
         manager_max_position=idx_position,
     )
+    position_data = position_outcome.data or {}
+    result = type("SectPositionView", (), position_data)()
+    result.applied = position_outcome.ok
     if result.status == "target_not_member":
         msg = f"请确保变更目标道友与你在同一宗门。"
     elif result.status == "target_not_below_actor":

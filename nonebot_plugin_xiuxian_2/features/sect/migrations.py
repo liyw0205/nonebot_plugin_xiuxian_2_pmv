@@ -18,4 +18,8 @@ def apply_sect_removal(uow: DatabaseUnitOfWork) -> None:
     uow.execute("CREATE TABLE IF NOT EXISTS sect_member_removal_operations(operation_id TEXT PRIMARY KEY,operation_type TEXT NOT NULL,actor_id TEXT NOT NULL,target_id TEXT NOT NULL,sect_id INTEGER,sect_name TEXT NOT NULL,actor_name TEXT NOT NULL,target_name TEXT NOT NULL,actor_position INTEGER,target_position INTEGER,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 
 
-__all__ = ["apply_sect", "apply_sect_rename", "apply_sect_join", "apply_sect_removal"]
+def apply_sect_position(uow: DatabaseUnitOfWork) -> None:
+    uow.execute("CREATE TABLE IF NOT EXISTS sect_position_change_operations(operation_id TEXT PRIMARY KEY,actor_id TEXT NOT NULL,target_id TEXT NOT NULL,sect_id INTEGER NOT NULL,actor_name TEXT NOT NULL,target_name TEXT NOT NULL,old_position INTEGER NOT NULL,new_position INTEGER NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+
+
+__all__ = ["apply_sect", "apply_sect_rename", "apply_sect_join", "apply_sect_removal", "apply_sect_position"]

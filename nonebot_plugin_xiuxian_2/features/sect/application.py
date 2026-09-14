@@ -40,6 +40,10 @@ class SectApplication:
         payload = {"user_id": str(user_id), "target_id": str(target_id), "manager_max_position": int(manager_max_position)}
         return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.kick", payload=payload, call=lambda: self._repository().kick(operation_id, user_id, target_id, manager_max_position=manager_max_position))
 
+    def change_position(self, *, operation_id: str, user_id: str, target_id: str, requested_position: int, position_limits: Mapping[str, Any], manager_max_position: int) -> OperationOutcome[dict[str, Any]]:
+        payload = {"user_id": str(user_id), "target_id": str(target_id), "requested_position": int(requested_position), "position_limits": dict(position_limits), "manager_max_position": int(manager_max_position)}
+        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.position_change", payload=payload, call=lambda: self._repository().change_position(operation_id, user_id, target_id, requested_position, position_limits, manager_max_position=manager_max_position))
+
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):
             try:

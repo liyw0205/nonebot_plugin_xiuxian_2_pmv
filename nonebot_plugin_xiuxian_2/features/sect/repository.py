@@ -7,6 +7,7 @@ from ...infrastructure.database import DatabaseUnitOfWork
 
 
 class SectRepository(Protocol):
+    def change_position(self, *args: Any, **kwargs: Any) -> Any: ...
     def kick(self, *args: Any, **kwargs: Any) -> Any: ...
     def leave(self, *args: Any, **kwargs: Any) -> Any: ...
     def rename(self, *args: Any, **kwargs: Any) -> Any: ...
@@ -45,6 +46,28 @@ class LegacySectRepository:
 
 
 class SectRenameSqlRepository(LegacySectRepository):
+    def change_position(self, operation_id, actor_id, target_id, requested_position, position_limits, *, manager_max_position):
+        operation_id, actor_id, target_id = str(operation_id).strip(), str(actor_id), str(target_id);requested_position=int(requested_position);manager_max_position=int(manager_max_position);limits={int(k):max(0,int(v)) for k,v in position_limits.items()}
+        if requested_position not in limits:return {"status":"invalid_position","actor_id":actor_id,"target_id":target_id}
+        if actor_id==target_id:return {"status":"self_target","actor_id":actor_id,"target_id":target_id}
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            old=uow.query_one("SELECT sect_id,actor_name,target_name,old_position,new_position FROM sect_position_change_operations WHERE operation_id=?",(operation_id,))
+            if old:return {"status":"duplicate","actor_id":actor_id,"target_id":target_id,"sect_id":old["sect_id"],"actor_name":str(old["actor_name"] or ""),"target_name":str(old["target_name"] or ""),"old_position":old["old_position"],"new_position":old["new_position"]}
+            actor=uow.query_one("SELECT sect_id,sect_position,user_name FROM user_xiuxian WHERE user_id=?",(actor_id,));target=uow.query_one("SELECT sect_id,sect_position,user_name FROM user_xiuxian WHERE user_id=?",(target_id,))
+            if actor is None:return {"status":"actor_missing","actor_id":actor_id,"target_id":target_id}
+            if actor["sect_id"] is None:return {"status":"actor_without_sect","actor_id":actor_id,"target_id":target_id}
+            if target is None:return {"status":"target_missing","actor_id":actor_id,"target_id":target_id,"sect_id":actor["sect_id"]}
+            if int(actor["sect_position"] or 0)>manager_max_position:return {"status":"actor_not_manager","actor_id":actor_id,"target_id":target_id,"sect_id":actor["sect_id"]}
+            if target["sect_id"]!=actor["sect_id"]:return {"status":"target_not_member","actor_id":actor_id,"target_id":target_id,"sect_id":actor["sect_id"]}
+            if int(target["sect_position"] or 0)<=int(actor["sect_position"] or 0):return {"status":"target_not_below_actor","actor_id":actor_id,"target_id":target_id,"sect_id":actor["sect_id"]}
+            if requested_position<=int(actor["sect_position"]):return {"status":"position_not_below_actor","actor_id":actor_id,"target_id":target_id,"sect_id":actor["sect_id"]}
+            current=int(target["sect_position"]);count=uow.query_one("SELECT COUNT(*) AS n FROM user_xiuxian WHERE sect_id=? AND sect_position=? AND user_id<>?",(actor["sect_id"],requested_position,target_id))
+            if limits[requested_position]>0 and int(count["n"])>=limits[requested_position]:return {"status":"position_full","actor_id":actor_id,"target_id":target_id,"sect_id":actor["sect_id"]}
+            if current==requested_position:return {"status":"unchanged","actor_id":actor_id,"target_id":target_id,"sect_id":actor["sect_id"],"old_position":current,"new_position":requested_position}
+            changed=uow.execute("UPDATE user_xiuxian SET sect_position=? WHERE user_id=? AND sect_id=? AND sect_position=?",(requested_position,target_id,actor["sect_id"],current))
+            if changed.rowcount!=1:return {"status":"state_changed","actor_id":actor_id,"target_id":target_id}
+            uow.execute("INSERT INTO sect_position_change_operations(operation_id,actor_id,target_id,sect_id,actor_name,target_name,old_position,new_position) VALUES(?,?,?,?,?,?,?,?)",(operation_id,actor_id,target_id,actor["sect_id"],str(actor["user_name"] or ""),str(target["user_name"] or ""),current,requested_position))
+            return {"status":"changed","actor_id":actor_id,"target_id":target_id,"sect_id":actor["sect_id"],"actor_name":str(actor["user_name"] or ""),"target_name":str(target["user_name"] or ""),"old_position":current,"new_position":requested_position}
     def kick(self, operation_id, actor_id, target_id, *, manager_max_position):
         operation_id, actor_id, target_id = str(operation_id).strip(), str(actor_id), str(target_id)
         manager_max_position = int(manager_max_position)
