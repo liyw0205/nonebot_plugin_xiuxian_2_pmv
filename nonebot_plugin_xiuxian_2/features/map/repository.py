@@ -423,6 +423,28 @@ class MapMissionClaimSqlRepository:
             return {'status':'applied','stone':stone,'rewards':compact}
 
 
+class MapSeedPurchaseSqlRepository:
+    def __init__(self, game_database: str | Path, *, clock: Any) -> None:
+        self.game_database,self.clock=str(game_database),clock
+    def purchase(self,operation_id:str,user_id:str,item_id:int,item_name:str,quantity:int,unit_cost:int,expected_stone:int,max_goods_num:int)->dict[str,Any]:
+        operation_id,user_id,item_name=str(operation_id).strip(),str(user_id),str(item_name);item_id,quantity,unit_cost,expected_stone,max_goods_num=map(int,(item_id,quantity,unit_cost,expected_stone,max_goods_num))
+        if not operation_id or quantity<=0 or min(item_id,unit_cost,expected_stone,max_goods_num)<0:raise ValueError('valid seed purchase required')
+        payload=json.dumps([user_id,item_id,item_name,quantity,unit_cost,expected_stone,max_goods_num],ensure_ascii=True,sort_keys=True)
+        with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
+            old=uow.query_one('SELECT payload,quantity,cost,stone,inventory FROM map_seed_purchase_operations WHERE operation_id=?',(operation_id,))
+            if old:
+                return {'status':'duplicate','quantity':int(old['quantity']),'cost':int(old['cost']),'stone':int(old['stone']),'inventory':int(old['inventory'])} if str(old['payload'])==payload else {'status':'state_changed','quantity':0,'cost':0,'stone':expected_stone,'inventory':0}
+            user=uow.query_one('SELECT stone FROM user_xiuxian WHERE user_id=?',(user_id,))
+            if user is None:return {'status':'user_missing','quantity':0,'cost':0,'stone':expected_stone,'inventory':0}
+            stone=int(user['stone'] or 0)
+            if stone!=expected_stone:return {'status':'state_changed','quantity':0,'cost':0,'stone':stone,'inventory':0}
+            cost=quantity*unit_cost
+            if stone<cost:return {'status':'stone_insufficient','quantity':0,'cost':0,'stone':stone,'inventory':0}
+            row=uow.query_one('SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?',(user_id,item_id));inventory=int(row['goods_num']) if row else 0
+            if inventory+quantity>max_goods_num:return {'status':'inventory_full','quantity':0,'cost':0,'stone':stone,'inventory':inventory}
+            stone-=cost;inventory+=quantity;now=self.clock.now().isoformat();uow.execute('UPDATE user_xiuxian SET stone=? WHERE user_id=?',(stone,user_id));uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=excluded.goods_name,goods_type=excluded.goods_type,goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",(user_id,item_id,item_name,'特殊物品',quantity,now,now,quantity));uow.execute('INSERT INTO map_seed_purchase_operations(operation_id,payload,quantity,cost,stone,inventory) VALUES(?,?,?,?,?,?)',(operation_id,payload,quantity,cost,stone,inventory));return {'status':'applied','quantity':quantity,'cost':cost,'stone':stone,'inventory':inventory}
+
+
 class LegacyMapRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database, self.player_database = str(game_database), str(player_database)
@@ -452,4 +474,4 @@ class LegacyMapRepository:
         return getattr(cls(*databases), method)(operation_id, user_id, **kwargs)
 
 
-__all__ = ["LegacyMapRepository", "MapExploreSettlementSqlRepository", "MapMissionClaimSqlRepository", "MapExploreStartSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]
+__all__ = ["LegacyMapRepository", "MapExploreSettlementSqlRepository", "MapMissionClaimSqlRepository", "MapSeedPurchaseSqlRepository", "MapExploreStartSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]

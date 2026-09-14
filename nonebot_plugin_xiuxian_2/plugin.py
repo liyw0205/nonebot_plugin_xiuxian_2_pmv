@@ -48,7 +48,7 @@ from .features.back.migrations import apply_back
 from .features.trade.manifest import FEATURE as TRADE_FEATURE
 from .features.trade.migrations import apply_trade
 from .features.map.manifest import FEATURE as MAP_FEATURE
-from .features.map.migrations import apply_map, apply_map_explore_player, apply_map_explore_settlement, apply_map_explore_start, apply_map_home_return, apply_map_interactive_player, apply_map_interactive_start, apply_map_mission_claim, apply_map_movement, apply_map_resource_reward
+from .features.map.migrations import apply_map, apply_map_explore_player, apply_map_explore_settlement, apply_map_explore_start, apply_map_home_return, apply_map_interactive_player, apply_map_interactive_start, apply_map_mission_claim, apply_map_movement, apply_map_resource_reward, apply_map_seed_purchase
 from .features.rift.manifest import FEATURE as RIFT_FEATURE
 from .features.rift.migrations import apply_rift
 from .features.accessory_package.manifest import FEATURE as ACCESSORY_PACKAGE_FEATURE
@@ -139,6 +139,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("map.008", "map_explore_player", apply_map_explore_player),
         Migration("map.009", "map_explore_settlement_operations", apply_map_explore_settlement),
         Migration("map.010", "map_mission_claim_operations", apply_map_mission_claim),
+        Migration("map.011", "map_seed_purchase_operations", apply_map_seed_purchase),
         Migration("mixelixir.001", "mixelixir_feature_migrations", apply_mixelixir),
         Migration("natal_treasure.001", "natal_treasure_feature_migrations", apply_natal_treasure),
         Migration("package_reward.001", "package_reward_operations", apply_package_reward),

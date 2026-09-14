@@ -2162,6 +2162,16 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("map_mission_claim_service.claim(", handler)
         self.assertIn("clock=runtime_clock", handler)
 
+    def test_map_seed_purchase_uses_feature_repository(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("@buy_seed.handle")
+        end = source.index("def _interactive_start_message", start)
+        handler = source[start:end]
+        self.assertIn("map_application.purchase_seed(", handler)
+        self.assertNotIn("seed_purchase_service.purchase(", handler)
+        self.assertIn("runtime_ids.new_id()", handler)
+        self.assertIn("clock=runtime_clock", handler)
+
     def test_statistics_data_migration_does_not_block_event_loop(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_buff" / "__init__.py"

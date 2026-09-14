@@ -42,6 +42,7 @@ from .transaction_service import MapExploreStartService
 from .transaction_service import MapExploreStartResult
 from .transaction_service import MapExploreSettlementResult
 from .transaction_service import MapMissionClaimResult
+from .transaction_service import SeedPurchaseResult
 from .transaction_service import MapMovementSettlementService
 from .transaction_service import MapDaoBattleSettlementService
 from ...features.combat_settlement.application import CombatSettlementApplication
@@ -1584,11 +1585,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     seed = SEED_CONFIG[seed_id]
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"map-seed-purchase:{uid}:{event_message_id or time.time_ns()}"
-    result = seed_purchase_service.purchase(
-        operation_id, uid, seed_id, seed["name"], num, seed["price"],
-        int(user_info.get("stone", 0)), XiuConfig().max_goods_num,
+    operation_id = f"map-seed-purchase:{uid}:{event_message_id or runtime_ids.new_id()}"
+    outcome = map_application.purchase_seed(
+        operation_id=operation_id, user_id=uid, item_id=seed_id,
+        item_name=seed["name"], quantity=num, unit_cost=seed["price"],
+        expected_stone=int(user_info.get("stone", 0)), max_goods_num=XiuConfig().max_goods_num,
+        clock=runtime_clock,
     )
+    data = result_data(outcome.data)
+    result = SeedPurchaseResult(str(data.get("status", outcome.code)), int(data.get("quantity", 0) or 0), int(data.get("cost", 0) or 0), int(data.get("stone", 0) or 0), int(data.get("inventory", 0) or 0))
     if result.status == "stone_insufficient":
         await handle_send(bot, event, f"灵石不足，需{number_to(num * seed['price'])}。")
         return
