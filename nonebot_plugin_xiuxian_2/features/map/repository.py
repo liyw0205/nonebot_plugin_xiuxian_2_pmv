@@ -445,6 +445,27 @@ class MapSeedPurchaseSqlRepository:
             stone-=cost;inventory+=quantity;now=self.clock.now().isoformat();uow.execute('UPDATE user_xiuxian SET stone=? WHERE user_id=?',(stone,user_id));uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=excluded.goods_name,goods_type=excluded.goods_type,goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",(user_id,item_id,item_name,'特殊物品',quantity,now,now,quantity));uow.execute('INSERT INTO map_seed_purchase_operations(operation_id,payload,quantity,cost,stone,inventory) VALUES(?,?,?,?,?,?)',(operation_id,payload,quantity,cost,stone,inventory));return {'status':'applied','quantity':quantity,'cost':cost,'stone':stone,'inventory':inventory}
 
 
+class MapDongfuBuildSqlRepository:
+    def __init__(self,game_database:str|Path,player_database:str|Path)->None:self.game_database,self.player_database=str(game_database),str(player_database)
+    def build(self,operation_id:str,user_id:str,expected_stone:int,cost:int,expected_position:dict[str,Any],dongfu:dict[str,Any])->dict[str,Any]:
+        operation_id,user_id=str(operation_id).strip(),str(user_id);expected_stone,cost=int(expected_stone),int(cost);position={k:str(v) for k,v in dict(expected_position).items()};dongfu={k:str(v) for k,v in dict(dongfu).items()}
+        if not operation_id or min(expected_stone,cost)<0 or not {'realm','heaven','node_id'}.issubset(position) or dongfu.get('built')!='1':raise ValueError('valid dongfu build required')
+        payload=json.dumps([user_id,expected_stone,cost,position,dongfu],ensure_ascii=True,sort_keys=True)
+        with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
+            uow.attach_database(self.player_database,'player_data');old=uow.query_one('SELECT payload,stone FROM map_dongfu_build_operations WHERE operation_id=?',(operation_id,))
+            if old:return {'status':'duplicate','stone':int(old['stone'])} if str(old['payload'])==payload else {'status':'state_changed','stone':expected_stone}
+            user=uow.query_one('SELECT stone FROM user_xiuxian WHERE user_id=?',(user_id,))
+            if user is None:return {'status':'user_missing','stone':expected_stone}
+            stone=int(user['stone'] or 0)
+            if stone!=expected_stone:return {'status':'state_changed','stone':stone}
+            if stone<cost:return {'status':'stone_insufficient','stone':stone}
+            pos=uow.query_one('SELECT realm,heaven,node_id FROM player_data.map_status WHERE user_id=?',(user_id,))
+            if pos is None or tuple(str(pos[k]) for k in position)!=tuple(position.values()):return {'status':'state_changed','stone':stone}
+            existing=uow.query_one('SELECT built FROM player_data.dongfu_status WHERE user_id=?',(user_id,))
+            if existing is not None and int(existing['built'] or 0)==1:return {'status':'already_built','stone':stone}
+            remaining=stone-cost;uow.execute('UPDATE user_xiuxian SET stone=? WHERE user_id=?',(remaining,user_id));fields=('built','realm','heaven','node_id','node_name','node_type');uow.execute('INSERT INTO player_data.dongfu_status(user_id,'+','.join(fields)+') VALUES('+','.join(['?']*7)+') ON CONFLICT(user_id) DO UPDATE SET '+','.join(f'{k}=excluded.{k}' for k in fields),(user_id,*(dongfu.get(k,'') for k in fields)));uow.execute('INSERT INTO map_dongfu_build_operations(operation_id,payload,stone) VALUES(?,?,?)',(operation_id,payload,remaining));return {'status':'applied','stone':remaining}
+
+
 class LegacyMapRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database, self.player_database = str(game_database), str(player_database)
@@ -474,4 +495,4 @@ class LegacyMapRepository:
         return getattr(cls(*databases), method)(operation_id, user_id, **kwargs)
 
 
-__all__ = ["LegacyMapRepository", "MapExploreSettlementSqlRepository", "MapMissionClaimSqlRepository", "MapSeedPurchaseSqlRepository", "MapExploreStartSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]
+__all__ = ["LegacyMapRepository", "MapDongfuBuildSqlRepository", "MapExploreSettlementSqlRepository", "MapMissionClaimSqlRepository", "MapSeedPurchaseSqlRepository", "MapExploreStartSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]

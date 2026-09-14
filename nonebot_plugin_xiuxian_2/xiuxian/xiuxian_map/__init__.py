@@ -35,6 +35,7 @@ from .transaction_service import MapMissionClaimService
 from .transaction_service import MapCombatSettlementService
 from .transaction_service import MapCombatLifecycleService
 from .transaction_service import MapDongfuBuildService
+from .transaction_service import MapDongfuBuildResult
 from .transaction_service import MapHomeReturnService
 from .transaction_service import MapInteractiveActionService
 from .transaction_service import MapInteractiveActionResult
@@ -1044,14 +1045,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "node_type": node.get("type", ""),
     }
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    result = map_dongfu_build_service.build(
-        f"map-dongfu-build:{user_id}:{event_message_id or time.time_ns()}",
-        user_id,
-        int(user_info.get("stone", 0)),
-        DONGFU_COST,
-        {"realm": realm, "heaven": heaven, "node_id": node_id},
-        save_data,
+    outcome = map_application.build_dongfu(
+        operation_id=f"map-dongfu-build:{user_id}:{event_message_id or runtime_ids.new_id()}",
+        user_id=user_id,
+        expected_stone=int(user_info.get("stone", 0)),
+        cost=DONGFU_COST,
+        expected_position={"realm": realm, "heaven": heaven, "node_id": node_id},
+        dongfu=save_data,
     )
+    data = result_data(outcome.data)
+    result = MapDongfuBuildResult(str(data.get("status", outcome.code)), int(data.get("stone", 0) or 0))
     if result.status == "already_built":
         await handle_send(bot, event, "你已建立洞府，无需重复建设。")
         return

@@ -2172,6 +2172,15 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("runtime_ids.new_id()", handler)
         self.assertIn("clock=runtime_clock", handler)
 
+    def test_map_dongfu_build_uses_feature_repository(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("@build_dongfu.handle")
+        end = source.index("@go_home.handle", start)
+        handler = source[start:end]
+        self.assertIn("map_application.build_dongfu(", handler)
+        self.assertNotIn("map_dongfu_build_service.build(", handler)
+        self.assertIn("runtime_ids.new_id()", handler)
+
     def test_statistics_data_migration_does_not_block_event_loop(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_buff" / "__init__.py"

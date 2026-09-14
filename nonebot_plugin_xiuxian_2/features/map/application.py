@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from .._legacy_application import LegacyApplication
-from .repository import LegacyMapRepository, MapExploreSettlementSqlRepository, MapExploreStartSqlRepository, MapMissionClaimSqlRepository, MapSeedPurchaseSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapRepository
+from .repository import LegacyMapRepository, MapDongfuBuildSqlRepository, MapExploreSettlementSqlRepository, MapExploreStartSqlRepository, MapMissionClaimSqlRepository, MapSeedPurchaseSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapRepository
 
 
 class MapApplication(LegacyApplication):
@@ -106,7 +106,10 @@ class MapApplication(LegacyApplication):
         if self._explicit_repository is None:
             return self._execute(operation_id=operation_id,user_id=user_id,action="map.purchase_seed",payload={"user_id":user_id,**kwargs},call=lambda:MapSeedPurchaseSqlRepository(self.game_database,clock=clock).purchase(operation_id,user_id,**kwargs))
         return self._action("purchase_seed",operation_id=operation_id,user_id=user_id,**kwargs)
-    def build_dongfu(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("build_dongfu", operation_id=operation_id, user_id=user_id, **kwargs)
+    def build_dongfu(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        if self._explicit_repository is None:
+            return self._execute(operation_id=operation_id,user_id=user_id,action="map.build_dongfu",payload={"user_id":user_id,**kwargs},call=lambda:MapDongfuBuildSqlRepository(self.game_database,self.player_database).build(operation_id,user_id,**kwargs))
+        return self._action("build_dongfu",operation_id=operation_id,user_id=user_id,**kwargs)
 
 
 __all__ = ["MapApplication"]

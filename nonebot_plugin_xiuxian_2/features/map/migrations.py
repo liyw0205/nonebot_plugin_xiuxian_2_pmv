@@ -73,4 +73,15 @@ def apply_map_seed_purchase(uow: DatabaseUnitOfWork) -> None:
     uow.execute("CREATE TABLE IF NOT EXISTS map_seed_purchase_operations (operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,quantity INTEGER NOT NULL,cost INTEGER NOT NULL,stone INTEGER NOT NULL,inventory INTEGER NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 
 
-__all__ = ["apply_map", "apply_map_explore_player", "apply_map_explore_settlement", "apply_map_explore_start", "apply_map_home_return", "apply_map_interactive_player", "apply_map_interactive_start", "apply_map_mission_claim", "apply_map_movement", "apply_map_resource_reward", "apply_map_seed_purchase"]
+def apply_map_dongfu_build(uow: DatabaseUnitOfWork) -> None:
+    uow.execute("CREATE TABLE IF NOT EXISTS map_dongfu_build_operations (operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,stone INTEGER NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+
+
+def apply_map_dongfu_player(uow: DatabaseUnitOfWork) -> None:
+    uow.execute("CREATE TABLE IF NOT EXISTS dongfu_status (user_id TEXT PRIMARY KEY,built INTEGER NOT NULL DEFAULT 0,realm TEXT,heaven TEXT,node_id TEXT,node_name TEXT,node_type TEXT)")
+    columns={str(row['name']) for row in uow.query_all('PRAGMA table_info(dongfu_status)')}
+    for name in ('realm','heaven','node_id','node_name','node_type'):
+        if name not in columns:uow.execute(f'ALTER TABLE dongfu_status ADD COLUMN "{name}" TEXT')
+
+
+__all__ = ["apply_map", "apply_map_dongfu_build", "apply_map_dongfu_player", "apply_map_explore_player", "apply_map_explore_settlement", "apply_map_explore_start", "apply_map_home_return", "apply_map_interactive_player", "apply_map_interactive_start", "apply_map_mission_claim", "apply_map_movement", "apply_map_resource_reward", "apply_map_seed_purchase"]
