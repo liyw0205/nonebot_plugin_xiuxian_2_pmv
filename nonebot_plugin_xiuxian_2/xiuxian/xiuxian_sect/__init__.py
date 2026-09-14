@@ -991,11 +991,18 @@ async def sect_elixir_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
                         msg += f"道友成功领取到丹药：{goods_info['name']} {amount} 枚!\n"
                         rewards.append((item_id, goods_info['name'], '丹药', amount))
 
-            result = sect_elixir_claim_service.claim(
-                _sect_operation_id(event, "elixir_claim", user_id), user_id, sect_id,
-                elixir_room_config['领取贡献度要求'], elixir_room_cost, rewards,
-                XiuConfig().max_goods_num,
+            claim_outcome = sect_application.claim_elixir(
+                operation_id=_sect_operation_id(event, "elixir_claim", user_id) or f"sect:elixir:{user_id}:{sect_ids.new_id()}",
+                user_id=user_id,
+                sect_id=sect_id,
+                contribution_required=elixir_room_config['领取贡献度要求'],
+                materials_required=elixir_room_cost,
+                rewards=rewards,
+                max_goods_num=XiuConfig().max_goods_num,
             )
+            claim_data = claim_outcome.data or {}
+            result = type("SectElixirView", (), claim_data)()
+            result.succeeded = claim_outcome.ok
             if not result.succeeded:
                 failure_messages = {
                     "already_claimed": "道友已经领取过了，不要贪心哦~",

@@ -39,4 +39,8 @@ def apply_sect_secbuff(uow: DatabaseUnitOfWork) -> None:
     uow.execute("CREATE TABLE IF NOT EXISTS sect_secbuff_learn_operations(operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,sect_id INTEGER NOT NULL,buff_id INTEGER NOT NULL,materials_cost INTEGER NOT NULL,materials_left INTEGER NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 
 
-__all__ = ["apply_sect", "apply_sect_rename", "apply_sect_join", "apply_sect_removal", "apply_sect_position", "apply_sect_donation", "apply_sect_shop", "apply_sect_mainbuff", "apply_sect_secbuff"]
+def apply_sect_elixir(uow: DatabaseUnitOfWork) -> None:
+    uow.execute("CREATE TABLE IF NOT EXISTS sect_elixir_claim_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,rewards TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+
+
+__all__ = ["apply_sect", "apply_sect_rename", "apply_sect_join", "apply_sect_removal", "apply_sect_position", "apply_sect_donation", "apply_sect_shop", "apply_sect_mainbuff", "apply_sect_secbuff", "apply_sect_elixir"]

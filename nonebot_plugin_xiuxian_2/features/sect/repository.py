@@ -47,6 +47,24 @@ class LegacySectRepository:
 
 
 class SectRenameSqlRepository(LegacySectRepository):
+    def claim_elixir(self, operation_id, user_id, sect_id, contribution_required, materials_required, rewards, max_goods_num):
+        operation_id,user_id=str(operation_id).strip(),str(user_id);sect_id,contribution_required,materials_required,max_goods_num=int(sect_id),int(contribution_required),int(materials_required),int(max_goods_num);normalized=tuple((int(r[0]),str(r[1]),str(r[2]),int(r[3])) for r in rewards);payload=__import__('json').dumps([user_id,sect_id,contribution_required,materials_required,normalized],ensure_ascii=True)
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            old=uow.query_one("SELECT rewards FROM sect_elixir_claim_operations WHERE operation_id=?",(operation_id,))
+            if old:return {"status":"duplicate","rewards":tuple(tuple(x) for x in __import__('json').loads(old["rewards"]))}
+            user=uow.query_one("SELECT sect_id,sect_position,COALESCE(sect_contribution,0) AS contribution,COALESCE(sect_elixir_get,0) AS claimed FROM user_xiuxian WHERE user_id=?",(user_id,));sect=uow.query_one("SELECT COALESCE(elixir_room_level,0) AS level,COALESCE(sect_materials,0) AS materials FROM sects WHERE sect_id=?",(sect_id,))
+            if user is None or sect is None or int(user["sect_id"] or 0)!=sect_id:return {"status":"membership_changed"}
+            if int(user["sect_position"] or 0)==15:return {"status":"position_ineligible"}
+            if int(sect["level"])<=0:return {"status":"room_missing"}
+            if int(user["contribution"])<contribution_required:return {"status":"contribution_insufficient"}
+            if int(sect["materials"])<materials_required:return {"status":"materials_insufficient"}
+            if int(user["claimed"])==1:return {"status":"already_claimed"}
+            for item_id,_,_,qty in normalized:
+                row=uow.query_one("SELECT COALESCE(goods_num,0) AS n FROM back WHERE user_id=? AND goods_id=?",(user_id,item_id))
+                if (int(row["n"]) if row else 0)+qty>max_goods_num:return {"status":"inventory_full"}
+            stamp=__import__('datetime').datetime.now().isoformat()
+            for item_id,name,kind,qty in normalized:uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.goods_num,update_time=excluded.update_time",(user_id,item_id,name,kind,qty,stamp,stamp,qty))
+            uow.execute("UPDATE user_xiuxian SET sect_elixir_get=1 WHERE user_id=? AND COALESCE(sect_elixir_get,0)=0",(user_id,));uow.execute("INSERT INTO sect_elixir_claim_operations(operation_id,payload,rewards) VALUES(?,?,?)",(operation_id,payload,__import__('json').dumps(normalized,ensure_ascii=True)));return {"status":"applied","rewards":normalized}
     def learn_secondary(self, operation_id, user_id, sect_id, buff_id, materials_cost, *, expected_catalog, forbidden_positions=(12,14,15)):
         operation_id,user_id=str(operation_id).strip(),str(user_id);sect_id,buff_id,materials_cost=int(sect_id),int(buff_id),int(materials_cost)
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
@@ -205,9 +223,6 @@ class SectRenameSqlRepository(LegacySectRepository):
             count += 1
             uow.execute("INSERT INTO sect_member_join_operations(operation_id,user_id,sect_id,member_count,member_limit) VALUES(?,?,?,?,?)", (operation_id,user_id,sect_id,count,limit))
             return {"status": "joined", "user_id": user_id, "sect_id": sect_id, "sect_name": str(sect["sect_name"] or ""), "member_count": count, "member_limit": limit}
-
-    def claim_elixir(self, *args: Any, **kwargs: Any) -> Any:
-        return super().claim_elixir(*args, **kwargs)
 
     def rename(self, operation_id, actor_id, sect_id, new_name, cost, card_id):
         operation_id, actor_id, new_name = str(operation_id).strip(), str(actor_id), str(new_name).strip()
