@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from .._legacy_application import LegacyApplication
-from .repository import LegacyMapRepository, MapExploreStartSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapRepository
+from .repository import LegacyMapRepository, MapExploreSettlementSqlRepository, MapExploreStartSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapRepository
 
 
 class MapApplication(LegacyApplication):
@@ -84,7 +84,10 @@ class MapApplication(LegacyApplication):
         if self._explicit_repository is None:
             return self._execute(operation_id=operation_id, user_id=user_id, action="map.explore_start", payload={"user_id": user_id, **kwargs}, call=lambda: MapExploreStartSqlRepository(self.game_database, self.player_database).start(operation_id, user_id, **kwargs))
         return self._action("explore_start", operation_id=operation_id, user_id=user_id, **kwargs)
-    def explore_settle(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("explore_settle", operation_id=operation_id, user_id=user_id, **kwargs)
+    def explore_settle(self, *, operation_id: str, user_id: str, clock: Any, **kwargs: Any):
+        if self._explicit_repository is None:
+            return self._execute(operation_id=operation_id, user_id=user_id, action="map.explore_settle", payload={"user_id": user_id, **kwargs}, call=lambda: MapExploreSettlementSqlRepository(self.game_database, self.player_database, clock=clock).settle(operation_id, user_id, **kwargs))
+        return self._action("explore_settle", operation_id=operation_id, user_id=user_id, **kwargs)
     def resource_reward(self, *, operation_id: str, user_id: str, clock: Any = None, **kwargs: Any):
         if self._explicit_repository is None:
             return self._execute(

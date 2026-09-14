@@ -337,6 +337,58 @@ class MapExploreStartSqlRepository:
             return {"status": "applied", "stamina": remaining}
 
 
+class MapExploreSettlementSqlRepository:
+    def __init__(self, game_database: str | Path, player_database: str | Path, *, clock: Any) -> None:
+        self.game_database, self.player_database, self.clock = str(game_database), str(player_database), clock
+
+    def settle(self, operation_id: str, user_id: str, expected_state: dict[str, Any], expected_daily: dict[str, Any], daily_limit: int, stone: int, items: list[dict[str, Any]], max_goods_num: int) -> dict[str, Any]:
+        state = {key: str(value) for key, value in dict(expected_state).items()}
+        daily = {key: str(value) for key, value in dict(expected_daily).items()}
+        rewards = tuple((int(x["id"]), str(x["name"]), str(x["type"]), int(x["amount"])) for x in items if int(x["amount"]) > 0)
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        daily_limit, stone, max_goods_num = int(daily_limit), int(stone), int(max_goods_num)
+        if not operation_id or state.get("running") != "1" or not daily.get("date") or min(daily_limit, stone, max_goods_num) < 0:
+            raise ValueError("valid explore settlement is required")
+        payload = json.dumps([user_id, state, daily, daily_limit, stone, rewards, max_goods_num], ensure_ascii=True, sort_keys=True)
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            uow.attach_database(self.player_database, "player_data")
+            old = uow.query_one("SELECT payload,stone,rewards FROM map_explore_settlement_operations WHERE operation_id=?", (operation_id,))
+            if old:
+                if str(old["payload"]) != payload:
+                    return {"status": "state_changed", "stone": 0, "rewards": ()}
+                return {"status": "duplicate", "stone": int(old["stone"]), "rewards": tuple(tuple(map(int, x)) for x in json.loads(str(old["rewards"])))}
+            if uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,)) is None:
+                return {"status": "user_missing", "stone": 0, "rewards": ()}
+            current = uow.query_one("SELECT running,node_type,node_name,start_time,duration_min,settlement,max_duration_min,interval_min FROM player_data.map_explore_status WHERE user_id=?", (user_id,))
+            if current is None or any(str("" if current[k] is None else current[k]) != wanted for k, wanted in state.items()):
+                return {"status": "state_changed", "stone": 0, "rewards": ()}
+            daily_row = uow.query_one("SELECT date,explore_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?", (user_id,))
+            if daily_row is None or (str(daily_row["date"]), str(daily_row["explore_count"]), str(daily_row["resource_total_count"])) != (daily["date"], daily.get("explore_count", "0"), daily.get("resource_total_count", "0")):
+                return {"status": "state_changed", "stone": 0, "rewards": ()}
+            if int(daily_row["explore_count"] or 0) >= daily_limit:
+                return {"status": "limit_reached", "stone": 0, "rewards": ()}
+            totals: dict[int, int] = {}
+            metadata: dict[int, tuple[str, str]] = {}
+            for item_id, name, item_type, amount in rewards:
+                totals[item_id] = totals.get(item_id, 0) + amount
+                metadata[item_id] = (name, item_type)
+            for item_id, amount in totals.items():
+                row = uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
+                if (int(row["goods_num"]) if row else 0) + amount > max_goods_num:
+                    return {"status": "inventory_full", "stone": 0, "rewards": ()}
+            uow.execute("UPDATE player_data.map_daily_limit SET explore_count=?,resource_total_count=? WHERE user_id=?", (int(daily_row["explore_count"] or 0) + 1, int(daily_row["resource_total_count"] or 0) + 1, user_id))
+            uow.execute("UPDATE player_data.map_explore_status SET running=0,node_type='',node_name='',start_time='',duration_min=0,settlement='',max_duration_min=0,interval_min=0 WHERE user_id=?", (user_id,))
+            if stone:
+                uow.execute("UPDATE user_xiuxian SET stone=COALESCE(stone,0)+? WHERE user_id=?", (stone, user_id))
+            now = self.clock.now().isoformat()
+            for item_id, amount in totals.items():
+                name, item_type = metadata[item_id]
+                uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time", (user_id, item_id, name, item_type, amount, now, now, amount))
+            compact = tuple(sorted(totals.items()))
+            uow.execute("INSERT INTO map_explore_settlement_operations(operation_id,payload,stone,rewards) VALUES(?,?,?,?)", (operation_id, payload, stone, json.dumps(compact)))
+            return {"status": "applied", "stone": stone, "rewards": compact}
+
+
 class LegacyMapRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database, self.player_database = str(game_database), str(player_database)
@@ -366,4 +418,4 @@ class LegacyMapRepository:
         return getattr(cls(*databases), method)(operation_id, user_id, **kwargs)
 
 
-__all__ = ["LegacyMapRepository", "MapExploreStartSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]
+__all__ = ["LegacyMapRepository", "MapExploreSettlementSqlRepository", "MapExploreStartSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]

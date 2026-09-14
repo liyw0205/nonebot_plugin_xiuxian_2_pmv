@@ -40,6 +40,7 @@ from .transaction_service import MapInteractiveActionService
 from .transaction_service import MapInteractiveActionResult
 from .transaction_service import MapExploreStartService
 from .transaction_service import MapExploreStartResult
+from .transaction_service import MapExploreSettlementResult
 from .transaction_service import MapMovementSettlementService
 from .transaction_service import MapDaoBattleSettlementService
 from ...features.combat_settlement.application import CombatSettlementApplication
@@ -2437,15 +2438,22 @@ async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     }
     operation_id = f"map-explore:{uid}:{start_time}"
     try:
-        result = map_explore_settlement_service.settle(
-            operation_id,
-            uid,
-            expected_state,
-            snapshot["daily"],
-            DAILY_LIMIT_CONFIG["explore"],
-            snapshot["stone"],
-            snapshot["items"],
-            XiuConfig().max_goods_num,
+        outcome = map_application.explore_settle(
+            operation_id=operation_id,
+            user_id=uid,
+            expected_state=expected_state,
+            expected_daily=snapshot["daily"],
+            daily_limit=DAILY_LIMIT_CONFIG["explore"],
+            stone=snapshot["stone"],
+            items=snapshot["items"],
+            max_goods_num=XiuConfig().max_goods_num,
+            clock=runtime_clock,
+        )
+        data = result_data(outcome.data)
+        result = MapExploreSettlementResult(
+            str(data.get("status", outcome.code)),
+            int(data.get("stone", 0) or 0),
+            tuple(data.get("rewards", ())),
         )
     except Exception:
         logger.exception("地图探索结算事务失败 user_id={}", uid)

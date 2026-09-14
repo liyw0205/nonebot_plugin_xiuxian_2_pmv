@@ -61,4 +61,8 @@ def apply_map_explore_player(uow: DatabaseUnitOfWork) -> None:
         uow.execute("ALTER TABLE map_cooldown ADD COLUMN explore_start_cd_until TEXT DEFAULT NULL")
 
 
-__all__ = ["apply_map", "apply_map_explore_player", "apply_map_explore_start", "apply_map_home_return", "apply_map_interactive_player", "apply_map_interactive_start", "apply_map_movement", "apply_map_resource_reward"]
+def apply_map_explore_settlement(uow: DatabaseUnitOfWork) -> None:
+    uow.execute("CREATE TABLE IF NOT EXISTS map_explore_settlement_operations (operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,stone INTEGER NOT NULL,rewards TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+
+
+__all__ = ["apply_map", "apply_map_explore_player", "apply_map_explore_settlement", "apply_map_explore_start", "apply_map_home_return", "apply_map_interactive_player", "apply_map_interactive_start", "apply_map_movement", "apply_map_resource_reward"]

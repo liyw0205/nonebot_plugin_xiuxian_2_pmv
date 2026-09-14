@@ -2145,6 +2145,15 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("datetime.now()", handler)
         self.assertNotIn("time.time_ns()", handler)
 
+    def test_map_explore_settlement_uses_feature_repository(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("async def _settle_explore")
+        end = source.index("@fishing_cmd.handle", start)
+        handler = source[start:end]
+        self.assertIn("map_application.explore_settle(", handler)
+        self.assertNotIn("map_explore_settlement_service.settle(", handler)
+        self.assertIn("clock=runtime_clock", handler)
+
     def test_statistics_data_migration_does_not_block_event_loop(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_buff" / "__init__.py"
