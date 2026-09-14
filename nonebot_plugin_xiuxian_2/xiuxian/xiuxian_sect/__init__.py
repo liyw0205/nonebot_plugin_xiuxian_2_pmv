@@ -2584,11 +2584,14 @@ async def sect_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         await sect_out.finish()
     position_this = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
     owner_position = int(position_this[0]) if len(position_this) == 1 else 0
-    result = sect_membership_service.leave_sect(
-        _sect_operation_id(event, "leave", user_id),
-        user_id,
+    leave_outcome = sect_application.leave(
+        operation_id=_sect_operation_id(event, "leave", user_id) or f"sect:leave:{user_id}:{sect_ids.new_id()}",
+        user_id=user_id,
         owner_position=owner_position,
     )
+    leave_data = leave_outcome.data or {}
+    result = type("SectLeaveView", (), leave_data)()
+    result.applied = leave_outcome.ok
     if result.status == "owner_cannot_leave":
         msg = f"宗主无法直接退出宗门，如确有需要，请完成宗主传位后另行尝试。"
         await handle_send(bot, event, msg, md_type="宗门", k1="传位", v1="宗主传位", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")

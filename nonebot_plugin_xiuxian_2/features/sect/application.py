@@ -32,6 +32,10 @@ class SectApplication:
         payload = {"user_id": str(user_id), "sect_id": int(sect_id), "new_name": str(new_name), "cost": int(cost), "card_id": int(card_id)}
         return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.rename", payload=payload, call=lambda: self._repository().rename(operation_id, user_id, sect_id, new_name, cost, card_id))
 
+    def leave(self, *, operation_id: str, user_id: str, owner_position: int = 0) -> OperationOutcome[dict[str, Any]]:
+        payload = {"user_id": str(user_id), "owner_position": int(owner_position)}
+        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.leave", payload=payload, call=lambda: self._repository().leave(operation_id, user_id, owner_position=owner_position))
+
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):
             try:

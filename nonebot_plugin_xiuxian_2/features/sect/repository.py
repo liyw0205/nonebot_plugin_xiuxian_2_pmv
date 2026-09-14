@@ -7,6 +7,7 @@ from ...infrastructure.database import DatabaseUnitOfWork
 
 
 class SectRepository(Protocol):
+    def leave(self, *args: Any, **kwargs: Any) -> Any: ...
     def rename(self, *args: Any, **kwargs: Any) -> Any: ...
     def join(self, *args: Any, **kwargs: Any) -> Any: ...
     def purchase(self, *args: Any, **kwargs: Any) -> Any: ...
@@ -43,6 +44,22 @@ class LegacySectRepository:
 
 
 class SectRenameSqlRepository(LegacySectRepository):
+    def leave(self, operation_id, user_id, *, owner_position=0):
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            old = uow.query_one("SELECT sect_id,sect_name,actor_name,target_name,actor_position,target_position FROM sect_member_removal_operations WHERE operation_id=?", (operation_id,))
+            if old:
+                return {"status": "duplicate", "user_id": user_id, "sect_id": old["sect_id"], "sect_name": str(old["sect_name"] or ""), "actor_name": str(old["actor_name"] or ""), "target_name": str(old["target_name"] or ""), "actor_position": old["actor_position"], "target_position": old["target_position"]}
+            actor = uow.query_one("SELECT sect_id,sect_position,user_name FROM user_xiuxian WHERE user_id=?", (user_id,))
+            if actor is None: return {"status": "user_not_found", "user_id": user_id, "target_id": user_id}
+            if actor["sect_id"] is None: return {"status": "not_in_sect", "user_id": user_id, "target_id": user_id}
+            if int(actor["sect_position"] or 0) == int(owner_position): return {"status": "owner_cannot_leave", "user_id": user_id, "target_id": user_id, "sect_id": actor["sect_id"], "actor_name": str(actor["user_name"] or ""), "target_name": str(actor["user_name"] or ""), "actor_position": actor["sect_position"], "target_position": actor["sect_position"]}
+            sect = uow.query_one("SELECT sect_name FROM sects WHERE sect_id=?", (actor["sect_id"],))
+            if sect is None: return {"status": "sect_not_found", "user_id": user_id, "target_id": user_id, "sect_id": actor["sect_id"]}
+            changed = uow.execute("UPDATE user_xiuxian SET sect_id=NULL,sect_position=NULL,sect_contribution=0 WHERE user_id=? AND sect_id=? AND sect_position=?", (user_id,actor["sect_id"],actor["sect_position"]))
+            if changed.rowcount != 1: return {"status": "state_changed", "user_id": user_id, "target_id": user_id}
+            uow.execute("INSERT INTO sect_member_removal_operations(operation_id,operation_type,actor_id,target_id,sect_id,sect_name,actor_name,target_name,actor_position,target_position) VALUES(?,?,?,?,?,?,?,?,?,?)", (operation_id,"leave",user_id,user_id,actor["sect_id"],str(sect["sect_name"] or ""),str(actor["user_name"] or ""),str(actor["user_name"] or ""),actor["sect_position"],actor["sect_position"]))
+            return {"status": "left", "user_id": user_id, "target_id": user_id, "sect_id": actor["sect_id"], "sect_name": str(sect["sect_name"] or ""), "actor_name": str(actor["user_name"] or ""), "target_name": str(actor["user_name"] or ""), "actor_position": actor["sect_position"], "target_position": actor["sect_position"]}
     @staticmethod
     def _member_limit(scale: int) -> int:
         return min(20 + max(0, int(scale)) // 50_000_000, 100)

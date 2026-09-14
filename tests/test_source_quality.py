@@ -1849,7 +1849,8 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("sql_message.update_usr_sect(", kick_command)
         self.assertNotIn("sql_message.update_user_sect_contribution(", kick_command)
 
-        self.assertIn("sect_membership_service.leave_sect(", out_command)
+        self.assertIn("sect_application.leave(", out_command)
+        self.assertNotIn("sect_membership_service.leave_sect(", out_command)
         self.assertNotIn("sql_message.update_usr_sect(", out_command)
         self.assertNotIn("sql_message.update_user_sect_contribution(", out_command)
 
