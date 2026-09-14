@@ -45,6 +45,7 @@ from ..xiuxian_tasks.task_data import record_task_progress
 from .stone_limit import stone_limit
 
 from ...compatibility.sign_in import SignInService
+from ...features.sign_in.application import SignInApplication
 from .transaction_service import PlayerRenameService
 from ...compatibility.stone_gift import StoneGiftService
 from .transaction_service import StoneContestService
@@ -56,6 +57,7 @@ from .xiangyuan import clear_all_xiangyuan, reset_xiangyuan_daily  # noqa: F401
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
 sign_in_service = SignInService(get_paths().game_db)
+sign_in_application = SignInApplication(get_paths().game_db)
 
 player_rename_service = PlayerRenameService(get_paths().game_db)
 stone_gift_service = StoneGiftService(get_paths().game_db)
@@ -805,20 +807,23 @@ async def sign_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     sign_operation_id = _sign_operation_id(event, user_id)
     # 先回放：成功后 is_sign=1 会走 already_signed。
-    prior = sign_in_service.get_result(sign_operation_id)
-    if prior is not None and prior.succeeded:
+    prior = sign_in_application.lookup(sign_operation_id)
+    if prior is not None:
         lottery_result = await handle_lottery(
             user_info, _lottery_operation_id(sign_operation_id)
         )
         msg = f"**修仙签到**\n---\n✅ 签到成功，获取{prior.stone}块灵石!\n\n{lottery_result}\n该签到请求已经处理，无需重复提交。"
         await handle_send(bot, event, msg, md_type="修仙", k1="修仙签到", v1="修仙签到", k2="鸿运", v2="鸿运", k3="帮助", v3="修仙帮助")
         await sign_in.finish()
-    sign_result = sign_in_service.sign(
-        sign_operation_id,
-        user_id,
-        XiuConfig().sign_in_lingshi_lower_limit,
-        XiuConfig().sign_in_lingshi_upper_limit,
+    sign_outcome = sign_in_application.claim(
+        operation_id=sign_operation_id,
+        user_id=user_id,
+        lower_limit=XiuConfig().sign_in_lingshi_lower_limit,
+        upper_limit=XiuConfig().sign_in_lingshi_upper_limit,
     )
+    sign_data = sign_outcome.data or {}
+    sign_record = sign_data.get("sign_in", {})
+    sign_result = type("SignInView", (), {"status": sign_outcome.code or ("applied" if sign_outcome.ok else "failed"), "stone": int(sign_record.get("stone", 0) or 0), "succeeded": sign_outcome.ok, "applied": sign_outcome.ok})()
     if sign_result.status == "duplicate":
         lottery_result = await handle_lottery(
             user_info, _lottery_operation_id(sign_operation_id)

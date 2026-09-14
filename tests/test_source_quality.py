@@ -887,7 +887,9 @@ class SourceQualityTests(unittest.TestCase):
         base_root = SOURCE_ROOT / "xiuxian" / "xiuxian_base"
         command_source = (base_root / "__init__.py").read_text(encoding="utf-8")
         service_source = (base_root / "sign_service.py").read_text(encoding="utf-8")
-        self.assertIn("sign_in_service.sign(", command_source)
+        self.assertIn("sign_in_application.claim(", command_source)
+        self.assertIn("sign_in_application.lookup(", command_source)
+        self.assertNotIn("sign_in_service.sign(\n", command_source)
         self.assertNotIn("sql_message.get_sign(user_id)", command_source)
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("sign_in_operations", service_source)
