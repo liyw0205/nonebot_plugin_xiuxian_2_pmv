@@ -40,8 +40,11 @@ class MapApplication(LegacyApplication):
 
     def get_active(self, user_id: str) -> dict[str, Any] | None:
         if self._explicit_repository is None:
-            return MapInteractiveSqlQueryRepository(self.player_database).get_active(user_id)
+            return MapInteractiveSqlQueryRepository(self.player_database, self.game_database).get_active(user_id)
         return self.repository.get_active(user_id)
+
+    def interactive_replay(self, operation_id: str, user_id: str, action_type: str):
+        return MapInteractiveSqlQueryRepository(self.player_database, self.game_database).replay_start(operation_id, user_id, action_type)
 
     def interactive_start(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:

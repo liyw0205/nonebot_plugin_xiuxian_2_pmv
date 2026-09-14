@@ -105,8 +105,28 @@ class MapHomeReturnSqlRepository:
 
 
 class MapInteractiveSqlQueryRepository:
-    def __init__(self, player_database: str | Path) -> None:
+    def __init__(self, player_database: str | Path, game_database: str | Path | None = None) -> None:
         self.player_database = str(player_database)
+        self.game_database = str(game_database) if game_database else None
+
+    def replay_start(self, operation_id: str, user_id: str, action_type: str) -> dict[str, Any] | None:
+        operation_id, user_id, action_type = str(operation_id).strip(), str(user_id).strip(), str(action_type).strip()
+        if not operation_id or not user_id or not action_type:
+            raise ValueError("operation, user and action are required")
+        if not self.game_database:
+            return None
+        payload = json.dumps([user_id, action_type], ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        with DatabaseUnitOfWork(self.game_database) as uow:
+            row = uow.query_one("SELECT payload,result_status,stamina,action_json FROM map_interactive_start_operations WHERE operation_id=?", (operation_id,))
+        if row is None:
+            return None
+        if str(row["payload"]) != payload:
+            return {"status": "operation_conflict", "stamina": 0, "action": {}}
+        try:
+            action = json.loads(str(row["action_json"]))
+        except json.JSONDecodeError:
+            action = {}
+        return {"status": "duplicate" if str(row["result_status"]) == "applied" else str(row["result_status"]), "stamina": int(row["stamina"] or 0), "action": action if isinstance(action, dict) else {}}
 
     def get_active(self, user_id: str) -> dict[str, Any] | None:
         user_id = str(user_id).strip()

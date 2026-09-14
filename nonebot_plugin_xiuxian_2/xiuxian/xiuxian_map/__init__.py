@@ -1690,8 +1690,11 @@ async def _process_node_action(bot: Bot, event: GroupMessageEvent | PrivateMessa
     uid = str(user_info["user_id"])
     now = runtime_clock.now().replace(tzinfo=None)
     operation_id = _map_operation_id(event, "interactive-start", uid)
-    replayed = map_interactive_action_service.replay_start(
-        operation_id, uid, action_type
+    replay_data = map_application.interactive_replay(operation_id, uid, action_type)
+    replayed = None if replay_data is None else MapInteractiveActionResult(
+        str(replay_data.get("status", "state_changed")),
+        int(replay_data.get("stamina", 0) or 0),
+        replay_data.get("action") or {},
     )
     if replayed is not None:
         await handle_send(bot, event, _interactive_start_message(replayed, action_type))
