@@ -210,6 +210,31 @@ class MapInteractiveFailureSqlRepository:
             return {"status": status, "action": action}
 
 
+class MapInteractiveSettlementSqlRepository:
+    def __init__(self, player_database: str | Path) -> None:
+        self.player_database = str(player_database)
+
+    def save_settlement(self, user_id: str, action_id: str, settlement: dict[str, Any]) -> dict[str, Any]:
+        user_id, action_id = str(user_id).strip(), str(action_id).strip()
+        if not user_id or not action_id or not isinstance(settlement, dict):
+            raise ValueError("user, action and settlement are required")
+        value = json.dumps(settlement, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+            row = uow.query_one("SELECT state_json,settlement_json FROM map_interactive_actions WHERE user_id=? AND action_id=? AND status='active'", (user_id, action_id))
+            if row is None:
+                return {"status": "state_changed", "action": {}}
+            try: action = json.loads(str(row["state_json"]))
+            except json.JSONDecodeError: action = {}
+            action["action_id"] = action_id
+            if row["settlement_json"]:
+                try: action["settlement"] = json.loads(str(row["settlement_json"]))
+                except json.JSONDecodeError: action["settlement"] = {}
+                return {"status": "duplicate", "action": action}
+            uow.execute("UPDATE map_interactive_actions SET settlement_json=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND action_id=? AND status='active'", (value, user_id, action_id))
+            action["settlement"] = settlement
+            return {"status": "applied", "action": action}
+
+
 class LegacyMapRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database, self.player_database = str(game_database), str(player_database)
@@ -239,4 +264,4 @@ class LegacyMapRepository:
         return getattr(cls(*databases), method)(operation_id, user_id, **kwargs)
 
 
-__all__ = ["LegacyMapRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapRepository"]
+__all__ = ["LegacyMapRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapRepository"]

@@ -44,6 +44,7 @@ from .transaction_service import MapDaoBattleSettlementService
 from ...features.combat_settlement.application import CombatSettlementApplication
 from ...features.map.application import MapApplication
 from ...features.map.domain import decide_interactive_action
+from ...features._legacy_application import result_data
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
 
@@ -1837,10 +1838,16 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
         if extra_item:
             settlement["rewards"].append(extra_text)
             settlement["items"].append(extra_item)
-        planned = map_interactive_action_service.save_settlement(
-            uid, st["action_id"], settlement
+        settlement_outcome = map_application.interactive_settlement(
+            operation_id=f"map-interactive-settlement:{st['action_id']}",
+            user_id=uid, action_id=st["action_id"], settlement=settlement
         )
-        if not planned.succeeded or planned.action is None:
+        settlement_data = result_data(settlement_outcome.data)
+        planned = MapInteractiveActionResult(
+            str(settlement_data.get("status", settlement_outcome.code)),
+            action=settlement_data.get("action", {}),
+        )
+        if not settlement_outcome.ok or planned.action is None:
             await handle_send(bot, event, "资源行动未完成：节点资源状态已更新，请重新行动。")
             return
         st = planned.action
