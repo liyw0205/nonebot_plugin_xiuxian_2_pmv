@@ -2208,21 +2208,23 @@ def _save_explore_status(uid: str, d: dict):
 # =========================================
 # 探索事件流
 # =========================================
-def _pick_explore_event(ntype: str):
+def _pick_explore_event(ntype: str, *, random_source=None):
+    random_source = random_source or runtime_random
     conf = EXPLORE_CONFIG[ntype]
     event_weights = conf["event_weights"]
-    return random.choices(list(event_weights), weights=list(event_weights.values()), k=1)[0]
+    return random_source.choices(list(event_weights), weights=list(event_weights.values()), k=1)[0]
 
 
-def _roll_explore_event(user_info: dict, node_type: str, node_name: str, decay: float):
-    event_type = _pick_explore_event(node_type)
+def _roll_explore_event(user_info: dict, node_type: str, node_name: str, decay: float, *, random_source=None):
+    random_source = random_source or runtime_random
+    event_type = _pick_explore_event(node_type, random_source=random_source)
     if event_type == "empty":
         text_pool = [
             f"你在【{node_name}】搜索许久，却只看到风过残痕。",
             f"你循迹探查【{node_name}】，最终一无所获。",
             f"这一次在【{node_name}】的探索，未能找到有价值的线索。",
         ]
-        return random.choice(text_pool), [], 0, []
+        return random_source.choice(text_pool), [], 0, []
 
     plans = {
         "normal": [("stone_low", 1, 2, 1.0), ("herb_low", 1, 1, 0.55), ("wash_stone_low", 1, 1, 0.12)],
@@ -2231,19 +2233,19 @@ def _roll_explore_event(user_info: dict, node_type: str, node_name: str, decay: 
         "battle": [("stone_mid", 1, 2, 1.0), ("wash_stone_low", 1, 2, 0.30), ("token_common", 1, 1, 0.15)],
     }
     event_type = event_type if event_type in plans else "battle"
-    rewards, stone, reward_items = _roll_rewards(plans[event_type], decay)
+    rewards, stone, reward_items = _roll_rewards(plans[event_type], decay, random_source=random_source)
     drop_rate = MAP_EXTRA_DROP_RATE["explore_rare"] if event_type == "rare" else MAP_EXTRA_DROP_RATE["explore_normal"]
-    extra_text, extra_item = _roll_skill_equip_drop(user_info, drop_rate)
+    extra_text, extra_item = _roll_skill_equip_drop(user_info, drop_rate, random_source=random_source)
     if extra_item:
         rewards.append(extra_text)
         reward_items.append(extra_item)
     multiplier = {"normal": 1.2, "good": 1.5, "rare": 2.5, "battle": 1.3}[event_type]
-    material_rewards, material_stone, material_items = _roll_map_dongfu_material(node_type, multiplier)
+    material_rewards, material_stone, material_items = _roll_map_dongfu_material(node_type, multiplier, random_source=random_source)
     rewards.extend(material_rewards)
     stone += material_stone
     reward_items.extend(material_items)
-    if event_type == "rare" and random.random() < 0.12:
-        deed_rewards, deed_stone, deed_items = _roll_rewards([("dongfu_deed", 1, 1, 1.0)], decay)
+    if event_type == "rare" and random_source.random() < 0.12:
+        deed_rewards, deed_stone, deed_items = _roll_rewards([("dongfu_deed", 1, 1, 1.0)], decay, random_source=random_source)
         rewards.extend(deed_rewards)
         stone += deed_stone
         reward_items.extend(deed_items)
@@ -2441,7 +2443,7 @@ async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         decay = _get_reward_decay(uid)
         event_lines, rewards, reward_items, stone = [], [], [], 0
         for index in range(rounds):
-            line, event_rewards, event_stone, event_items = _roll_explore_event(user_info, node_type, node_name, decay)
+            line, event_rewards, event_stone, event_items = _roll_explore_event(user_info, node_type, node_name, decay, random_source=runtime_random)
             event_lines.append(f"{index + 1}. {line}")
             rewards.extend(event_rewards)
             reward_items.extend(event_items)

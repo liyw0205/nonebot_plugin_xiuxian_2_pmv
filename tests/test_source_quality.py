@@ -2156,6 +2156,8 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("map_application.explore_settle(", handler)
         self.assertNotIn("map_explore_settlement_service.settle(", handler)
         self.assertIn("clock=runtime_clock", handler)
+        self.assertIn("random_source=runtime_random", handler)
+        self.assertNotIn("random.random()", handler)
 
     def test_map_mission_claim_uses_feature_repository(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
