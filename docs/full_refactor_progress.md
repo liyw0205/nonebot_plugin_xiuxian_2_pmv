@@ -397,6 +397,8 @@
 
 2026-09-14 map movement repository cutover：新增 `MapMovementSqlRepository`，默认 `MapApplication.move` 与 NoneBot 跨界/跨天/节点移动三条真实路径切换到 game_db 主库 attach player_db；新增 game migration `map.002` 创建 `map_movement_operations`，覆盖位置/visited/stamina 原子更新、snapshot replay、过期状态拒绝。其它 map application 动作仍保留 legacy fallback。
 
+2026-09-14 map movement live safety：提交 `bd4ecf9` 部署后 backup `/srv/old/data/backups/20260914T114641Z`；dry-run 真实返回 game_db `[map.002]`、player_db `[]`，apply 仅写入 game_db。game_db migrations=69、player_db migrations=7，`map_movement_operations` 存在，readiness 全绿；recovery smoke 覆盖 69-entry catalog，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`。live 未执行玩家移动写入。
+
 2026-09-14 dao battle settlement live safety：提交 `f9129fc` 部署后 backup `/srv/old/data/backups/20260914T061542Z`；dry-run 真实返回 game_db `[]`、player_db `[combat_settlement.003]`，apply 仅写入 player_db。game_db migrations=67、player_db migrations=6，`map_dao_battle_operations` 存在，readiness 全绿；recovery smoke 覆盖 67-entry catalog，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`。live 未执行玩家道战写入。
 
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
