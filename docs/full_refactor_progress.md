@@ -367,6 +367,8 @@
 
 2026-09-14 tianti settlement repository cutover：新增 `TiantiSettlementSqlRepository`，默认 Web `/api/v1/tianti/settle` 使用 player_db UoW、feature profile、settlement-window/gain decisions 和 operation replay；新增 player migration `tianti_settlement.002`。覆盖 init/elapsed settlement、旧 JSON 字段投影、replay、schema-not-ready；11 个 focused tests、compileall、architecture、source-quality 通过。旧 `TiantiSettlementService` 保留兼容回滚，world-event multiplier 仍显式 provider，未宣称全部 settlement/world-event 迁移完成。
 
+2026-09-14 tianti settlement migration routing correction：首次 `.002` live dry-run 误将 player-only `tianti_settlement.002` 同时列入 game_db/player_db，未执行 apply、未改变数据；现已统一 startup/CLI 将其排除于 game_db，仅 player_db 执行，并通过 64-entry catalog ordering 检查。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。
