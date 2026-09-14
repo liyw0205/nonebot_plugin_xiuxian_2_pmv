@@ -355,6 +355,8 @@
 
 2026-09-14 tianti settlement window rule：新增纯 `decide_tianti_settlement_window`，将 init/empty/elapsed-minute floor 规则接入真实 `settle_tianti_gain`；固定时间覆盖 16 个 focused tests、legacy bath/settlement 回归、compileall、architecture、source-quality 通过。收益公式、世界事件 multiplier、JSON/SQLite I/O 仍在 legacy service，药浴跨库 repository 尚未切换。
 
+2026-09-14 tianti settlement window live safety：提交 `b365087` 部署后 backup `/srv/old/data/backups/20260914T014024Z`、全库 migration dry-run pending 为空、reconcile clean、readiness 全绿；recovery smoke 覆盖 62-entry catalog，player_db migrations=4，reconcile `operations=0/outbox_events=0/dead_events=0`。live 未执行药浴或结算写入。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。
