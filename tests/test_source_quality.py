@@ -2154,6 +2154,14 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("map_explore_settlement_service.settle(", handler)
         self.assertIn("clock=runtime_clock", handler)
 
+    def test_map_mission_claim_uses_feature_repository(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("@map_mission_claim_cmd.handle")
+        handler = source[start:]
+        self.assertIn("map_application.mission_claim(", handler)
+        self.assertNotIn("map_mission_claim_service.claim(", handler)
+        self.assertIn("clock=runtime_clock", handler)
+
     def test_statistics_data_migration_does_not_block_event_loop(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_buff" / "__init__.py"

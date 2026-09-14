@@ -2850,6 +2850,7 @@
     "map_interactive_actions",
     "map_interactive_start_operations",
     "map_interactive_terminal_operations",
+    "map_mission",
     "map_mission_claim_operations",
     "map_movement_operations",
     "map_resource_reward_operations",

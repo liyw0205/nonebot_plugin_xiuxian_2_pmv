@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from .._legacy_application import LegacyApplication
-from .repository import LegacyMapRepository, MapExploreSettlementSqlRepository, MapExploreStartSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapRepository
+from .repository import LegacyMapRepository, MapExploreSettlementSqlRepository, MapExploreStartSqlRepository, MapMissionClaimSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapRepository
 
 
 class MapApplication(LegacyApplication):
@@ -98,7 +98,10 @@ class MapApplication(LegacyApplication):
                 call=lambda: MapResourceRewardSqlRepository(self.game_database, self.player_database, clock=clock).settle(operation_id, user_id, **kwargs),
             )
         return self._action("resource_reward", operation_id=operation_id, user_id=user_id, **kwargs)
-    def mission_claim(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("mission_claim", operation_id=operation_id, user_id=user_id, **kwargs)
+    def mission_claim(self, *, operation_id: str, user_id: str, clock: Any, **kwargs: Any):
+        if self._explicit_repository is None:
+            return self._execute(operation_id=operation_id,user_id=user_id,action="map.mission_claim",payload={"user_id":user_id,**kwargs},call=lambda:MapMissionClaimSqlRepository(self.game_database,self.player_database,clock=clock).claim(operation_id,user_id,**kwargs))
+        return self._action("mission_claim",operation_id=operation_id,user_id=user_id,**kwargs)
     def purchase_seed(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("purchase_seed", operation_id=operation_id, user_id=user_id, **kwargs)
     def build_dongfu(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("build_dongfu", operation_id=operation_id, user_id=user_id, **kwargs)
 

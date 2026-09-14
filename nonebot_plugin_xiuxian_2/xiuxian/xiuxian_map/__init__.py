@@ -41,6 +41,7 @@ from .transaction_service import MapInteractiveActionResult
 from .transaction_service import MapExploreStartService
 from .transaction_service import MapExploreStartResult
 from .transaction_service import MapExploreSettlementResult
+from .transaction_service import MapMissionClaimResult
 from .transaction_service import MapMovementSettlementService
 from .transaction_service import MapDaoBattleSettlementService
 from ...features.combat_settlement.application import CombatSettlementApplication
@@ -2641,16 +2642,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     expected_daily = {"date": daily["date"], progress_key: daily.get(progress_key, 0)}
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"map-mission:{uid}:{mission['date']}:{mission_type}:{event_message_id or mission['settlement']}"
-    result = map_mission_claim_service.claim(
-        operation_id,
-        uid,
-        expected_mission,
-        expected_daily,
-        progress_key,
-        reward_meta["stone_delta"],
-        reward_meta["item_delta"],
-        XiuConfig().max_goods_num,
+    outcome = map_application.mission_claim(
+        operation_id=operation_id,
+        user_id=uid,
+        expected_mission=expected_mission,
+        expected_daily=expected_daily,
+        progress_key=progress_key,
+        stone=reward_meta["stone_delta"],
+        items=reward_meta["item_delta"],
+        max_goods_num=XiuConfig().max_goods_num,
+        clock=runtime_clock,
     )
+    data = result_data(outcome.data)
+    result = MapMissionClaimResult(str(data.get("status", outcome.code)), int(data.get("stone", 0) or 0), tuple(data.get("rewards", ())))
     if result.status == "inventory_full":
         await handle_send(bot, event, "背包物品已达上限，委托奖励尚未领取。")
         return
