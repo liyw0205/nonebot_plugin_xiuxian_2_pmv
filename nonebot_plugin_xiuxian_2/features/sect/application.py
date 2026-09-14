@@ -8,7 +8,7 @@ from ...core.errors import ConflictError, DomainError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
-from .repository import LegacySectRepository, SectRepository
+from .repository import LegacySectRepository, SectRenameSqlRepository, SectRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -26,7 +26,11 @@ class SectApplication:
         self.ledger = ledger or OperationLedger()
 
     def _repository(self) -> SectRepository:
-        return self.repository or LegacySectRepository(self.database)
+        return self.repository or SectRenameSqlRepository(self.database)
+
+    def rename(self, *, operation_id: str, user_id: str, sect_id: int, new_name: str, cost: int, card_id: int) -> OperationOutcome[dict[str, Any]]:
+        payload = {"user_id": str(user_id), "sect_id": int(sect_id), "new_name": str(new_name), "cost": int(cost), "card_id": int(card_id)}
+        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.rename", payload=payload, call=lambda: self._repository().rename(operation_id, user_id, sect_id, new_name, cost, card_id))
 
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):

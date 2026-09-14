@@ -1826,7 +1826,8 @@ class SourceQualityTests(unittest.TestCase):
         start = source.index("async def sect_rename_")
         end = source.index("@create_sect.handle", start)
         command = source[start:end]
-        self.assertIn("sect_membership_service.rename_sect(", command)
+        self.assertIn("sect_application.rename(", command)
+        self.assertNotIn("sect_membership_service.rename_sect(", command)
         self.assertNotIn("sql_message.update_sect_name(", command)
         self.assertNotIn("sql_message.update_back_j(", command)
         self.assertNotIn("sql_message.update_sect_used_stone(", command)

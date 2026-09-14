@@ -87,10 +87,18 @@ from .transaction_service import SectDisbandService
 from .transaction_service import SectDailyResetMaintenanceService
 from ...features.sect_fairyland.application import SectFairylandApplication
 from ...features.sect_fairyland.repository import LegacySectFairylandRepository
+from ...features.sect.application import SectApplication
+from ...features.sect.repository import SectRenameSqlRepository
+from ...infrastructure.ids import UUIDGenerator
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
 sect_membership_service = SectMembershipService(get_paths().game_db)
+sect_application = SectApplication(
+    get_paths().game_db,
+    repository=SectRenameSqlRepository(get_paths().game_db),
+)
+sect_ids = UUIDGenerator()
 fairyland_claim_service = FairylandClaimService(get_paths().player_db)
 sect_fairyland_application = SectFairylandApplication(
     get_paths().player_db,
@@ -2262,15 +2270,17 @@ async def sect_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             await handle_send(bot, event, msg, md_type="宗门", k1="改名", v1="宗门改名", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await sect_rename.finish()
 
-        result = sect_membership_service.rename_sect(
-            _sect_operation_id(event, "rename", sect_id),
-            user_info['user_id'],
-            sect_id,
-            update_sect_name,
-            XiuConfig().sect_rename_cost,
-            SECT_RENAME_CARD_ID,
-            owner_position=owner_position,
+        rename_outcome = sect_application.rename(
+            operation_id=_sect_operation_id(event, "rename", sect_id) or f"sect:rename:{sect_id}:{sect_ids.new_id()}",
+            user_id=user_info['user_id'],
+            sect_id=sect_id,
+            new_name=update_sect_name,
+            cost=XiuConfig().sect_rename_cost,
+            card_id=SECT_RENAME_CARD_ID,
         )
+        rename_data = rename_outcome.data or {}
+        result = type("SectRenameView", (), rename_data)()
+        result.applied = rename_outcome.ok
         if result.status == "name_exists":
             msg = f"已存在同名宗门(自己宗门名字一样的就不要改了),请重新输入！"
             await handle_send(bot, event, msg, md_type="宗门", k1="改名", v1="宗门改名", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
