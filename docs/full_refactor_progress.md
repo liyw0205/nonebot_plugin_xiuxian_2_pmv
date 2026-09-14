@@ -557,6 +557,8 @@
 
 2026-09-15 sect position change live safety：提交 `795418b` 部署后 backup `/srv/old/data/backups/20260914T221008Z`，dry-run/apply仅game `[sect.005]`；readiness全绿，98-entry recovery reconcile clean。live未执行职位变更写入。
 
+2026-09-15 sect donation cutover：新增 `SectRenameSqlRepository.donate`、`SectApplication.donate` 与 game migration `sect.006`，真实宗门捐献 handler切换application；同一UoW原子扣玩家灵石/增贡献、增宗门stone/scale/materials并写operation，覆盖 amount/materials、membership、余额、duplicate/replay/rollback。rename/join/leave/kick/position/donation/source共158 tests、99 catalog、compileall、architecture、diff check通过。
+
 2026-09-14 dao battle settlement live safety：提交 `f9129fc` 部署后 backup `/srv/old/data/backups/20260914T061542Z`；dry-run 真实返回 game_db `[]`、player_db `[combat_settlement.003]`，apply 仅写入 player_db。game_db migrations=67、player_db migrations=6，`map_dao_battle_operations` 存在，readiness 全绿；recovery smoke 覆盖 67-entry catalog，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`。live 未执行玩家道战写入。
 
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。

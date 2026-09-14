@@ -2635,13 +2635,16 @@ async def sect_donate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         materials_rate = config.get("宗门捐献资材倍率", 1)
         add_materials = int(donate_stone * materials_rate)
 
-        donation = sect_membership_service.donate(
-            _sect_operation_id(event, "donate", user_id),
-            user_id,
-            user_info["sect_id"],
-            donate_stone,
-            add_materials,
+        donation_outcome = sect_application.donate(
+            operation_id=_sect_operation_id(event, "donate", user_id) or f"sect:donate:{user_id}:{sect_ids.new_id()}",
+            user_id=user_id,
+            sect_id=user_info["sect_id"],
+            stone=donate_stone,
+            materials=add_materials,
         )
+        donation_data = donation_outcome.data or {}
+        donation = type("SectDonationView", (), donation_data)()
+        donation.applied = donation_outcome.ok
         if donation.status == "stone_insufficient":
             msg = f"道友的灵石数量小于欲捐献数量{donate_stone}，请检查"
             await handle_send(bot, event, msg, md_type="宗门", k1="捐献", v1="宗门捐献", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")

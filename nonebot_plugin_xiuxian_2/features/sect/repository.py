@@ -7,6 +7,7 @@ from ...infrastructure.database import DatabaseUnitOfWork
 
 
 class SectRepository(Protocol):
+    def donate(self, *args: Any, **kwargs: Any) -> Any: ...
     def change_position(self, *args: Any, **kwargs: Any) -> Any: ...
     def kick(self, *args: Any, **kwargs: Any) -> Any: ...
     def leave(self, *args: Any, **kwargs: Any) -> Any: ...
@@ -46,6 +47,22 @@ class LegacySectRepository:
 
 
 class SectRenameSqlRepository(LegacySectRepository):
+    def donate(self, operation_id, user_id, sect_id, stone, materials):
+        operation_id,user_id=str(operation_id).strip(),str(user_id);sect_id,stone,materials=int(sect_id),int(stone),int(materials)
+        if stone<=0:return {"status":"invalid_amount","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
+        if materials<0:return {"status":"invalid_materials","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            old=uow.query_one("SELECT stone,materials FROM sect_donation_operations WHERE operation_id=?",(operation_id,))
+            if old:return {"status":"duplicate","user_id":user_id,"sect_id":sect_id,"stone":old["stone"],"materials":old["materials"]}
+            user=uow.query_one("SELECT sect_id,stone FROM user_xiuxian WHERE user_id=?",(user_id,));sect=uow.query_one("SELECT sect_id FROM sects WHERE sect_id=?",(sect_id,))
+            if user is None:return {"status":"user_missing","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
+            if user["sect_id"] is None or int(user["sect_id"])!=sect_id:return {"status":"sect_changed","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
+            if int(user["stone"] or 0)<stone:return {"status":"stone_insufficient","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
+            if sect is None:return {"status":"sect_missing","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
+            updated=uow.execute("UPDATE user_xiuxian SET stone=stone-?,sect_contribution=COALESCE(sect_contribution,0)+? WHERE user_id=? AND sect_id=? AND stone>=?",(stone,stone,user_id,sect_id,stone));sect_updated=uow.execute("UPDATE sects SET sect_used_stone=COALESCE(sect_used_stone,0)+?,sect_scale=COALESCE(sect_scale,0)+?,sect_materials=COALESCE(sect_materials,0)+? WHERE sect_id=?",(stone,stone,materials,sect_id))
+            if updated.rowcount!=1:return {"status":"user_changed","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
+            if sect_updated.rowcount!=1:return {"status":"sect_changed","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
+            uow.execute("INSERT INTO sect_donation_operations(operation_id,user_id,sect_id,stone,materials) VALUES(?,?,?,?,?)",(operation_id,user_id,sect_id,stone,materials));return {"status":"donated","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
     def change_position(self, operation_id, actor_id, target_id, requested_position, position_limits, *, manager_max_position):
         operation_id, actor_id, target_id = str(operation_id).strip(), str(actor_id), str(target_id);requested_position=int(requested_position);manager_max_position=int(manager_max_position);limits={int(k):max(0,int(v)) for k,v in position_limits.items()}
         if requested_position not in limits:return {"status":"invalid_position","actor_id":actor_id,"target_id":target_id}
