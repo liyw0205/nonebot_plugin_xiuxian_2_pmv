@@ -1510,12 +1510,20 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             break
         new_exp -= need
         new_stars += 1
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns())
-    # 先 settle：成功后材料/经验变化，前置库存检查会挡住同事件重放。
-    result = pet_feed_service.feed(
-        f"pet-feed:{event_id}:{user_id}", user_id, active_pet.get("uid"), item_id, count,
-        (old_stars, old_exp, old_total_exp), (new_stars, new_exp, old_total_exp + feed_exp),
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or active_pet.get("uid", "")).strip()
+    feed_outcome = pet_application.feed(
+        operation_id=f"pet-feed:{event_id}:{user_id}",
+        user_id=user_id,
+        uid=active_pet.get("uid"),
+        item_id=item_id,
+        count=count,
+        expected=(old_stars, old_exp, old_total_exp),
+        updated=(new_stars, new_exp, old_total_exp + feed_exp),
     )
+    feed_data = feed_outcome.data or {}
+    result = type("PetFeedView", (), feed_data)()
+    result.status = str(feed_data.get("status", feed_outcome.code or "failed"))
+    result.succeeded = feed_outcome.ok
     if result.status == "duplicate":
         pet = get_pet_doc(user_id).get("active") or active_pet
         lines = [
