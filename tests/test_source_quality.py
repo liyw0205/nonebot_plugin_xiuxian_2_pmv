@@ -616,7 +616,8 @@ class SourceQualityTests(unittest.TestCase):
         end = back_source.index("else:", start)
         command = back_source[start:end]
 
-        self.assertIn("tianti_item_reward_service.apply(", command)
+        self.assertIn("tianti_training_application.grant_item_tianti(", command)
+        self.assertNotIn("datetime.now()", command)
         self.assertNotIn("tianti_manager.save_user_tianti_info(", command)
         self.assertNotIn("sql_message.update_back_j(", command)
         self.assertIn("ATTACH DATABASE", service_source)
