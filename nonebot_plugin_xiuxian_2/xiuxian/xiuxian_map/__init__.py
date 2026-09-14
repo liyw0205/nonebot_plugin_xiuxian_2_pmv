@@ -516,7 +516,7 @@ def _get_cd(uid: str, cd_key: str):
 
 
 def _set_cd(uid: str, cd_key: str, seconds: int):
-    t = datetime.now() + timedelta(seconds=seconds)
+    t = runtime_clock.now().replace(tzinfo=None) + timedelta(seconds=seconds)
     player_data_manager.update_or_write_data(uid, MAP_CD_TABLE, cd_key, t.strftime("%Y-%m-%d %H:%M:%S"))
     return t
 
@@ -1634,7 +1634,7 @@ def _interactive_start_message(result, action_type: str) -> str:
         return f"今日采集次数已达上限（{cap}次），请明日再来。"
     if result.status == "cooldown":
         cooldown = _parse_dt(action.get("cooldown_until"))
-        seconds = max(1, int((cooldown - datetime.now()).total_seconds())) if cooldown else 1
+        seconds = max(1, int((cooldown - runtime_clock.now().replace(tzinfo=None)).total_seconds())) if cooldown else 1
         return f"你刚忙完，先歇会儿吧（冷却剩余 {seconds}s）"
     if result.status == "already_running":
         return "你已有进行中的采集动作，请先完成。"
@@ -1653,23 +1653,23 @@ async def _interactive_ready_notice(bot, event, uid: str, action: dict):
     expires_at = _parse_dt(action.get("expire_ts"))
     if ready_at is None or expires_at is None:
         return
-    await asyncio.sleep(max(0, (ready_at - datetime.now()).total_seconds()))
+    await asyncio.sleep(max(0, (ready_at - runtime_clock.now().replace(tzinfo=None)).total_seconds()))
     current = map_application.get_active(uid)
     if current is None or str(current.get("action_id")) != action_id:
         return
-    if datetime.now() <= expires_at:
+    if runtime_clock.now().replace(tzinfo=None) <= expires_at:
         await handle_send(
             bot,
             event,
             f"{config['trigger_msg']}（地点：{action['node_name']}）",
         )
 
-    await asyncio.sleep(max(0, (expires_at - datetime.now()).total_seconds()))
+    await asyncio.sleep(max(0, (expires_at - runtime_clock.now().replace(tzinfo=None)).total_seconds()))
     current = map_application.get_active(uid)
     if current is None or str(current.get("action_id")) != action_id:
         return
     cooldown_until = (
-        datetime.now() + timedelta(seconds=int(action["cooldown_sec"]))
+        runtime_clock.now().replace(tzinfo=None) + timedelta(seconds=int(action["cooldown_sec"]))
     ).strftime("%Y-%m-%d %H:%M:%S")
     expired = _finish_interactive_failure(
         f"map-interactive-timeout:{action_id}",
@@ -1986,7 +1986,7 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
                 return
             elif replayed.status == "cooldown":
                 cd = _parse_dt((replayed.task or {}).get("cooldown_until"))
-                sec = max(1, int((cd - datetime.now()).total_seconds())) if cd else 1
+                sec = max(1, int((cd - runtime_clock.now().replace(tzinfo=None)).total_seconds())) if cd else 1
                 await handle_send(bot, event, f"你刚经历一战，尚需冷却 {sec}s")
                 return
             elif replayed.status == "stamina_insufficient":
@@ -2010,7 +2010,7 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
             if ntype not in COMBAT_NODE_TYPES:
                 await handle_send(bot, event, f"当前节点【{position['node_name']}】不是对战节点。")
                 return
-            now = datetime.now()
+            now = runtime_clock.now().replace(tzinfo=None)
             conf = COMBAT_CONFIG[ntype]
             daily = _get_daily_limit(uid)
             cd = _get_cd(uid, "combat_cd_until")
@@ -2436,7 +2436,7 @@ async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
                 st["settlement"] = ""
                 raw_snapshot = ""
     if snapshot is None:
-        elapsed_min = max(0, int((datetime.now() - start_at).total_seconds() // 60))
+        elapsed_min = max(0, int((runtime_clock.now().replace(tzinfo=None) - start_at).total_seconds() // 60))
         duration_min = int(st.get("duration_min", 0))
         max_duration = int(st.get("max_duration_min", 0))
         interval = max(1, int(st.get("interval_min", 20)))
