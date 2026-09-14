@@ -42,6 +42,9 @@ from .transaction_service import MapMovementSettlementService
 from .transaction_service import MapDaoBattleSettlementService
 from ...features.combat_settlement.application import CombatSettlementApplication
 from ...features.map.application import MapApplication
+from ...features.map.domain import decide_interactive_action
+from ...infrastructure.clock import SystemClock
+from ...infrastructure.random_source import SystemRandom
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
@@ -71,6 +74,8 @@ dao_battle_application = CombatSettlementApplication(
 )
 seed_purchase_service = SeedPurchaseService(get_paths().game_db)
 items = Items()
+runtime_clock = SystemClock()
+runtime_random = SystemRandom()
 
 MAP_FILE = get_paths().data / "地图.json"
 MAP_TABLE = "map_status"
@@ -1669,23 +1674,19 @@ async def _process_node_action(bot: Bot, event: GroupMessageEvent | PrivateMessa
 
     ia = INTERACTIVE_ACTION_CONFIG[action_type]
     stamina = int(user_info.get("user_stamina", 0))
-    wait_sec = random.randint(ia["wait_min"], ia["wait_max"])
-    ready_ts = now + timedelta(seconds=wait_sec)
-    expire_ts = ready_ts + timedelta(seconds=ia["resolve_timeout"])
-    action = {
-        "action_id": operation_id,
-        "action": action_type,
-        "node_name": node["name"],
-        "node_type": node["type"],
-        "pool_key": config["pool_key"],
-        "start_ts": now.strftime("%Y-%m-%d %H:%M:%S"),
-        "ready_ts": ready_ts.strftime("%Y-%m-%d %H:%M:%S"),
-        "expire_ts": expire_ts.strftime("%Y-%m-%d %H:%M:%S"),
-        "wait_sec": wait_sec,
-        "cost": config["cost"],
-        "cooldown_sec": ia["cooldown_sec"],
-        "success": random.random() <= ia["success_rate"],
-    }
+    wait_sec = runtime_random.randint(ia["wait_min"], ia["wait_max"])
+    action = decide_interactive_action(
+        operation_id=operation_id,
+        action_type=action_type,
+        node=node,
+        pool_key=config["pool_key"],
+        started_at=now,
+        wait_seconds=wait_sec,
+        resolve_timeout=ia["resolve_timeout"],
+        cooldown_seconds=ia["cooldown_sec"],
+        cost=config["cost"],
+        success=runtime_random.random() <= ia["success_rate"],
+    ).action
     daily = _get_daily_limit(uid)
     gather_cd = _get_cd(uid, "gather_cd_until")
     result = map_interactive_action_service.start(
@@ -1714,7 +1715,7 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
         return
 
     uid = str(user_info["user_id"])
-    now = datetime.now()
+    now = runtime_clock.now().replace(tzinfo=None)
     st = map_interactive_action_service.get_active(uid)
     if not st:
         await handle_send(bot, event, "你当前没有进行中的采集行为。")

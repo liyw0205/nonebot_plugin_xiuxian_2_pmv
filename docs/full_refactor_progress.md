@@ -405,6 +405,8 @@
 
 2026-09-14 map home return verification rerun：提交 `7e7abb5` 部署后 backup `/srv/old/data/backups/20260914T122802Z`，全库 migration dry-run pending 为空、reconcile clean、readiness 全绿；recovery smoke 再次确认 catalog=70、game_db migrations=70、player_db migrations=8、`map_home_return_operations` 存在。live 未执行玩家回府写入。
 
+2026-09-14 map interactive action decision rule：新增纯 `decide_interactive_action`，将 start handler 的等待时间、ready/expire 时间、成功随机结果移出 NoneBot 规则，改用 map runtime `SystemClock/SystemRandom` provider；143 个 map/interactive/source tests、compileall、architecture 通过。旧 `MapInteractiveActionService` 的 start/finish persistence、active query 和 resource settlement 仍未切换，未宣称 interactive 完整迁移。
+
 2026-09-14 dao battle settlement live safety：提交 `f9129fc` 部署后 backup `/srv/old/data/backups/20260914T061542Z`；dry-run 真实返回 game_db `[]`、player_db `[combat_settlement.003]`，apply 仅写入 player_db。game_db migrations=67、player_db migrations=6，`map_dao_battle_operations` 存在，readiness 全绿；recovery smoke 覆盖 67-entry catalog，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`。live 未执行玩家道战写入。
 
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
