@@ -171,6 +171,23 @@ def decide_tianti_settlement_window(*, last_settlement: datetime | None, now: da
     return TiantiSettlementWindow("settle", minutes, now)
 
 
+@dataclass(frozen=True)
+class TiantiGainDecision:
+    gain: int
+    new_hp: int
+    real_gain: int
+
+
+def decide_tianti_gain(*, minutes: int, base_per_min: int, base_ratio: float, gain_pct: float, bath_effect: float, sect_bonus: float, spirit_vein_multiplier: float, old_hp: int, hp_cap: int) -> TiantiGainDecision:
+    if minutes < 0 or base_per_min < 0 or old_hp < 0:
+        raise ValueError("minutes, base_per_min and old_hp must not be negative")
+    if bath_effect <= 0 or spirit_vein_multiplier <= 0:
+        raise ValueError("multipliers must be positive")
+    gain = int(minutes * int(base_per_min * (1 + base_ratio)) * (1 + gain_pct) * bath_effect * (1 + sect_bonus) * spirit_vein_multiplier)
+    new_hp = min(max(int(hp_cap), int(old_hp)), int(old_hp) + max(0, gain))
+    return TiantiGainDecision(gain=max(0, gain), new_hp=new_hp, real_gain=max(0, new_hp - int(old_hp)))
+
+
 __all__ = [
     "BreakthroughDecision",
     "BreakthroughRequest",
@@ -182,6 +199,8 @@ __all__ = [
     "decide_medicine_bath_activation",
     "TiantiSettlementWindow",
     "decide_tianti_settlement_window",
+    "TiantiGainDecision",
+    "decide_tianti_gain",
     "decide_stone_training",
     "normalize_plan",
 ]

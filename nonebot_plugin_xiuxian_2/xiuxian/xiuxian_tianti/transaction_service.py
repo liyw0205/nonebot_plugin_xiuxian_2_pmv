@@ -18,7 +18,7 @@ from .tianti_data import (
     get_tianti_level_index,
 )
 from .tianti_data import TiantiDataManager, get_qiaoxue_pool, get_tianti_level_data
-from ...features.tianti_training.domain import decide_breakthrough, decide_medicine_bath_activation, decide_stone_training, decide_tianti_settlement_window
+from ...features.tianti_training.domain import decide_breakthrough, decide_medicine_bath_activation, decide_stone_training, decide_tianti_gain, decide_tianti_settlement_window
 from datetime import datetime, timedelta
 
 def get_tianti_cap(data: dict) -> int:
@@ -103,11 +103,12 @@ def _apply_tianti_minutes(data: dict, mins: int, now_t: datetime, sect_fairyland
         clear_medicine_bath(data)
         bath_expired = True
 
-    gain = int(mins * real_per_min * (1 + gain_pct) * bath_effect * (1 + sect_bonus) * spirit_vein_multiplier)
     cap = get_tianti_cap(data)
     old_hp = int(data["tianti_hp"])
-    new_hp = min(cap, old_hp + gain)
-    real_gain = max(0, new_hp - old_hp)
+    gain_decision = decide_tianti_gain(minutes=mins, base_per_min=base_per_min, base_ratio=base_ratio, gain_pct=gain_pct, bath_effect=bath_effect, sect_bonus=sect_bonus, spirit_vein_multiplier=spirit_vein_multiplier, old_hp=old_hp, hp_cap=cap)
+    gain = gain_decision.gain
+    new_hp = gain_decision.new_hp
+    real_gain = gain_decision.real_gain
     data["tianti_hp"] = new_hp
 
     return {
