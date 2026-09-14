@@ -43,8 +43,33 @@ class LegacySectRepository:
 
 
 class SectRenameSqlRepository(LegacySectRepository):
-    def join(self, *args: Any, **kwargs: Any) -> Any:
-        return super().join(*args, **kwargs)
+    @staticmethod
+    def _member_limit(scale: int) -> int:
+        return min(20 + max(0, int(scale)) // 50_000_000, 100)
+
+    def join(self, operation_id, user_id, sect_id, *, member_position=12):
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        sect_id, member_position = int(sect_id), int(member_position)
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            old = uow.query_one("SELECT user_id,sect_id,member_count,member_limit FROM sect_member_join_operations WHERE operation_id=?", (operation_id,))
+            if old:
+                if str(old["user_id"]) != user_id or int(old["sect_id"]) != sect_id:
+                    return {"status": "operation_conflict", "user_id": user_id, "sect_id": sect_id}
+                return {"status": "duplicate", "user_id": user_id, "sect_id": sect_id, "member_count": int(old["member_count"]), "member_limit": int(old["member_limit"])}
+            user = uow.query_one("SELECT sect_id FROM user_xiuxian WHERE user_id=?", (user_id,))
+            if user is None: return {"status": "user_missing", "user_id": user_id, "sect_id": sect_id}
+            if user["sect_id"] is not None: return {"status": "already_in_sect", "user_id": user_id, "sect_id": sect_id}
+            sect = uow.query_one("SELECT sect_name,sect_scale,join_open,closed FROM sects WHERE sect_id=?", (sect_id,))
+            if sect is None: return {"status": "sect_missing", "user_id": user_id, "sect_id": sect_id}
+            if int(sect["closed"] or 0) == 1: return {"status": "sect_closed", "user_id": user_id, "sect_id": sect_id, "sect_name": str(sect["sect_name"] or "")}
+            if int(sect["join_open"] or 0) != 1: return {"status": "join_closed", "user_id": user_id, "sect_id": sect_id, "sect_name": str(sect["sect_name"] or "")}
+            limit = self._member_limit(int(sect["sect_scale"] or 0));count = int(uow.query_one("SELECT COUNT(*) AS n FROM user_xiuxian WHERE sect_id=?", (sect_id,))["n"])
+            if count >= limit: return {"status": "sect_full", "user_id": user_id, "sect_id": sect_id, "member_count": count, "member_limit": limit}
+            changed = uow.execute("UPDATE user_xiuxian SET sect_id=?,sect_position=? WHERE user_id=? AND sect_id IS NULL", (sect_id,member_position,user_id))
+            if changed.rowcount != 1: return {"status": "state_changed", "user_id": user_id, "sect_id": sect_id}
+            count += 1
+            uow.execute("INSERT INTO sect_member_join_operations(operation_id,user_id,sect_id,member_count,member_limit) VALUES(?,?,?,?,?)", (operation_id,user_id,sect_id,count,limit))
+            return {"status": "joined", "user_id": user_id, "sect_id": sect_id, "sect_name": str(sect["sect_name"] or ""), "member_count": count, "member_limit": limit}
 
     def purchase(self, *args: Any, **kwargs: Any) -> Any:
         return super().purchase(*args, **kwargs)

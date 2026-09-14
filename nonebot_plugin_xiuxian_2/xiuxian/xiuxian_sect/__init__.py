@@ -2858,12 +2858,15 @@ async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     
     owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "外门弟子"]
     owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 12
-    result = sect_member_join_service.join(
-        _sect_operation_id(event, "member_join", target_sect_id),
-        user_info['user_id'],
-        target_sect_id,
+    join_outcome = sect_application.join(
+        operation_id=_sect_operation_id(event, "member_join", target_sect_id) or f"sect:member_join:{target_sect_id}:{sect_ids.new_id()}",
+        user_id=user_info['user_id'],
+        sect_id=target_sect_id,
         member_position=owner_position,
     )
+    join_data = join_outcome.data or {}
+    result = type("SectJoinView", (), join_data)()
+    result.applied = join_outcome.ok
     if result.applied:
         msg = (
             f"欢迎{user_info['user_name']}道友加入【{result.sect_name or target_sect_name}】！"
