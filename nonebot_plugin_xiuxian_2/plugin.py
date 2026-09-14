@@ -70,7 +70,7 @@ from .features.tianti_settlement.migrations import apply_tianti_settlement, appl
 from .features.tianti_training.manifest import FEATURE as TIANTI_TRAINING_FEATURE
 from .features.tianti_training.migrations import apply_tianti_breakthrough_operations, apply_tianti_item_reward_operations, apply_tianti_medicine_bath_operations, apply_tianti_player_info, apply_tianti_qiaoxue_operations, apply_tianti_training, apply_tianti_training_operations
 from .features.tower.manifest import FEATURE as TOWER_FEATURE
-from .features.tower.migrations import apply_tower
+from .features.tower.migrations import apply_tower, apply_tower_purchase
 from .features.sect_fairyland.manifest import FEATURE as SECT_FAIRYLAND_FEATURE
 from .features.sect_fairyland.migrations import apply_sect_fairyland
 from .features.world_events.manifest import FEATURE as WORLD_EVENTS_FEATURE
@@ -176,6 +176,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("tianti_training.007", "tianti_item_reward_operations", apply_tianti_item_reward_operations),
         Migration("title.001", "title_feature_migrations", apply_title),
         Migration("tower.001", "tower_feature_migrations", apply_tower),
+        Migration("tower.002", "tower_purchase_operations", apply_tower_purchase),
         Migration("trade.001", "trade_feature_migrations", apply_trade),
         Migration("work.001", "work_feature_migrations", apply_work),
         Migration("world_events.001", "world_events_feature_migrations", apply_world_events),

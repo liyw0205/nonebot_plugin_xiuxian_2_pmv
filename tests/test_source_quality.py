@@ -1739,6 +1739,9 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("tower_limit.save_user_tower_info(", handler)
         self.assertNotIn("tower_limit.update_weekly_purchase(", handler)
         self.assertNotIn("sql_message.send_back(", handler)
+        self.assertIn("tower_application.purchase(", handler)
+        self.assertIn("tower_ids.new_id()", handler)
+        self.assertNotIn("tower_purchase_service.purchase(\n", handler)
         for status in ("score_insufficient", "limit_reached", "inventory_full", "state_changed", "user_missing"):
             self.assertIn(f'"{status}"', handler)
         service = (tower_root / "transaction_service.py").read_text(encoding="utf-8")

@@ -27,7 +27,8 @@ from .tower_limit import tower_limit
 from .transaction_service import TowerPurchaseService, normalize_weekly_purchases
 from .transaction_service import TowerSettlementService
 from ...features.tower.application import TowerApplication
-from ...features.tower.repository import LegacyTowerRepository
+from ...features.tower.repository import TowerPurchaseSqlRepository
+from ...infrastructure.ids import UUIDGenerator
 from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_title.title_data import check_and_unlock_titles
@@ -39,8 +40,9 @@ tower_settlement_service = TowerSettlementService(get_paths().game_db, get_paths
 tower_application = TowerApplication(
     get_paths().game_db,
     get_paths().player_db,
-    repository=LegacyTowerRepository(get_paths().game_db, get_paths().player_db),
+    repository=TowerPurchaseSqlRepository(get_paths().game_db, get_paths().player_db),
 )
+tower_ids = UUIDGenerator()
 
 # 定义命令
 tower_challenge = on_command("爬塔", aliases={"挑战通天塔", "通天塔挑战"}, priority=5, block=True)
@@ -356,7 +358,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     operation_id = (
         f"tower-purchase:{event_id}:{user_id}"
         if event_id
-        else f"tower-purchase:{time.time_ns()}:{user_id}"
+        else f"tower-purchase:{tower_ids.new_id()}:{user_id}"
     )
     # Legacy facade call: tower_purchase_service.purchase(...)
     purchase_outcome = tower_application.purchase(
