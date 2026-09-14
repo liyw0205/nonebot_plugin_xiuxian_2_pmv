@@ -178,6 +178,38 @@ class MapInteractiveStartSqlRepository:
             return {"status": "applied", "stamina": remaining, "action": action}
 
 
+class MapInteractiveFailureSqlRepository:
+    def __init__(self, player_database: str | Path) -> None:
+        self.player_database = str(player_database)
+
+    def finish_failure(self, operation_id: str, user_id: str, action_id: str, outcome: str, cooldown_until: str) -> dict[str, Any]:
+        operation_id, user_id, action_id = str(operation_id).strip(), str(user_id).strip(), str(action_id).strip()
+        outcome, cooldown_until = str(outcome).strip(), str(cooldown_until).strip()
+        if not operation_id or not user_id or not action_id or outcome not in {"expired", "failed", "invalid"} or not cooldown_until:
+            raise ValueError("valid terminal action is required")
+        payload = json.dumps([user_id, action_id, outcome, cooldown_until], ensure_ascii=True, separators=(",", ":"))
+        with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+            previous = uow.query_one("SELECT payload,result_status,action_json FROM map_interactive_terminal_operations WHERE operation_id=?", (operation_id,))
+            if previous:
+                if str(previous["payload"]) != payload:
+                    return {"status": "operation_conflict", "action": {}}
+                try: action = json.loads(str(previous["action_json"]))
+                except json.JSONDecodeError: action = {}
+                return {"status": "duplicate" if str(previous["result_status"]) == "applied" else str(previous["result_status"]), "action": action}
+            row = uow.query_one("SELECT state_json FROM map_interactive_actions WHERE user_id=? AND action_id=? AND status='active'", (user_id, action_id))
+            action: dict[str, Any] = {}
+            status = "state_changed"
+            if row is not None:
+                try: action = json.loads(str(row["state_json"]))
+                except json.JSONDecodeError: action = {}
+                action["action_id"] = action_id
+                uow.execute("UPDATE map_interactive_actions SET status=?,updated_at=? WHERE user_id=? AND action_id=? AND status='active'", (outcome, cooldown_until, user_id, action_id))
+                uow.execute("INSERT INTO map_cooldown(user_id,gather_cd_until) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET gather_cd_until=excluded.gather_cd_until", (user_id, cooldown_until))
+                status = "applied"
+            uow.execute("INSERT INTO map_interactive_terminal_operations(operation_id,payload,result_status,action_json) VALUES(?,?,?,?)", (operation_id, payload, status, json.dumps(action, ensure_ascii=True, sort_keys=True)))
+            return {"status": status, "action": action}
+
+
 class LegacyMapRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database, self.player_database = str(game_database), str(player_database)
@@ -207,4 +239,4 @@ class LegacyMapRepository:
         return getattr(cls(*databases), method)(operation_id, user_id, **kwargs)
 
 
-__all__ = ["LegacyMapRepository", "MapHomeReturnSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapRepository"]
+__all__ = ["LegacyMapRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapRepository"]

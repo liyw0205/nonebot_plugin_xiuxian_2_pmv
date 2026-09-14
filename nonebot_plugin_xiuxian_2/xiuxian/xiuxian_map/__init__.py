@@ -78,6 +78,20 @@ items = Items()
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 
+
+def _finish_interactive_failure(operation_id, user_id, action_id, outcome, cooldown_until):
+    result = map_application.interactive_failure(
+        operation_id=operation_id,
+        user_id=user_id,
+        action_id=action_id,
+        outcome=outcome,
+        cooldown_until=cooldown_until,
+    )
+    return MapInteractiveActionResult(
+        str(result.data.get("status", result.code)),
+        action=result.data.get("action", {}),
+    )
+
 MAP_FILE = get_paths().data / "地图.json"
 MAP_TABLE = "map_status"
 MAP_MISSION_TABLE = "map_mission"
@@ -1628,7 +1642,7 @@ async def _interactive_ready_notice(bot, event, uid: str, action: dict):
     cooldown_until = (
         datetime.now() + timedelta(seconds=int(action["cooldown_sec"]))
     ).strftime("%Y-%m-%d %H:%M:%S")
-    expired = map_interactive_action_service.finish_failure(
+    expired = _finish_interactive_failure(
         f"map-interactive-timeout:{action_id}",
         uid,
         action_id,
@@ -1733,7 +1747,7 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
         cooldown_until = (now + timedelta(seconds=25)).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
-        map_interactive_action_service.finish_failure(
+        _finish_interactive_failure(
             f"map-interactive-invalid:{st['action_id']}",
             uid,
             st["action_id"],
@@ -1751,7 +1765,7 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
         cooldown_until = (
             now + timedelta(seconds=int(st.get("cooldown_sec", 25) or 25))
         ).strftime("%Y-%m-%d %H:%M:%S")
-        map_interactive_action_service.finish_failure(
+        _finish_interactive_failure(
             f"map-interactive-invalid:{st['action_id']}",
             uid,
             st["action_id"],
@@ -1768,7 +1782,7 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
         cooldown_until = (now + timedelta(seconds=ia["cooldown_sec"])).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
-        map_interactive_action_service.finish_failure(
+        _finish_interactive_failure(
             f"map-interactive-timeout:{st['action_id']}",
             uid,
             st["action_id"],
@@ -1782,7 +1796,7 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
         cooldown_until = (now + timedelta(seconds=ia["cooldown_sec"])).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
-        map_interactive_action_service.finish_failure(
+        _finish_interactive_failure(
             f"map-interactive-failed:{st['action_id']}",
             uid,
             st["action_id"],
