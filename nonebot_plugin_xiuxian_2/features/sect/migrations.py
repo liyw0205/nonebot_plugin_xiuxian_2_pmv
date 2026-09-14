@@ -26,4 +26,9 @@ def apply_sect_donation(uow: DatabaseUnitOfWork) -> None:
     uow.execute("CREATE TABLE IF NOT EXISTS sect_donation_operations(operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,sect_id INTEGER NOT NULL,stone INTEGER NOT NULL,materials INTEGER NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 
 
-__all__ = ["apply_sect", "apply_sect_rename", "apply_sect_join", "apply_sect_removal", "apply_sect_position", "apply_sect_donation"]
+def apply_sect_shop(uow: DatabaseUnitOfWork) -> None:
+    uow.execute("CREATE TABLE IF NOT EXISTS sect_shop_weekly_purchases(user_id TEXT NOT NULL,week_key TEXT NOT NULL,item_id INTEGER NOT NULL,quantity INTEGER NOT NULL,PRIMARY KEY(user_id,week_key,item_id))")
+    uow.execute("CREATE TABLE IF NOT EXISTS sect_shop_purchase_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,quantity INTEGER NOT NULL,cost INTEGER NOT NULL,contribution INTEGER NOT NULL,materials INTEGER NOT NULL,purchased INTEGER NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+
+
+__all__ = ["apply_sect", "apply_sect_rename", "apply_sect_join", "apply_sect_removal", "apply_sect_position", "apply_sect_donation", "apply_sect_shop"]

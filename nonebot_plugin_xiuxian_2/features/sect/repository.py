@@ -47,6 +47,25 @@ class LegacySectRepository:
 
 
 class SectRenameSqlRepository(LegacySectRepository):
+    def purchase(self, operation_id, user_id, sect_id, item_id, item_name, item_type, quantity, unit_cost, weekly_limit, legacy_purchased, max_goods_num, week_key=None):
+        operation_id,user_id=str(operation_id).strip(),str(user_id);sect_id,item_id,quantity,unit_cost,weekly_limit,legacy_purchased,max_goods_num=int(sect_id),int(item_id),int(quantity),int(unit_cost),int(weekly_limit),int(legacy_purchased),int(max_goods_num);week_key=str(week_key or __import__('datetime').date.today().strftime('%G-W%V'));payload=f'{user_id}|{sect_id}|{item_id}|{item_name}|{item_type}|{quantity}|{unit_cost}|{weekly_limit}|{week_key}'
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            old=uow.query_one("SELECT payload,quantity,cost,contribution,materials,purchased FROM sect_shop_purchase_operations WHERE operation_id=?",(operation_id,))
+            if old:
+                if str(old["payload"])!=payload:return {"status":"state_changed"}
+                return {"status":"duplicate","quantity":old["quantity"],"cost":old["cost"],"contribution":old["contribution"],"materials":old["materials"],"purchased":old["purchased"]}
+            user=uow.query_one("SELECT sect_id,COALESCE(sect_contribution,0) AS contribution FROM user_xiuxian WHERE user_id=?",(user_id,));sect=uow.query_one("SELECT COALESCE(sect_materials,0) AS materials,COALESCE(closed,0) AS closed FROM sects WHERE sect_id=?",(sect_id,))
+            if user is None or sect is None or int(user["sect_id"] or 0)!=sect_id:return {"status":"membership_changed"}
+            contribution,materials=int(float(user["contribution"] or 0)),int(float(sect["materials"] or 0))
+            if int(sect["closed"]):return {"status":"sect_closed","contribution":contribution,"materials":materials}
+            row=uow.query_one("SELECT quantity FROM sect_shop_weekly_purchases WHERE user_id=? AND week_key=? AND item_id=?",(user_id,week_key,item_id));purchased=int(row["quantity"]) if row else legacy_purchased
+            if purchased+quantity>weekly_limit:return {"status":"limit_reached","contribution":contribution,"materials":materials,"purchased":purchased}
+            cost=quantity*unit_cost
+            if contribution<cost:return {"status":"contribution_insufficient","contribution":contribution,"materials":materials,"purchased":purchased}
+            if materials<cost:return {"status":"materials_insufficient","contribution":contribution,"materials":materials,"purchased":purchased}
+            item=uow.query_one("SELECT COALESCE(goods_num,0) AS n FROM back WHERE user_id=? AND goods_id=?",(user_id,item_id));inventory=int(item["n"]) if item else 0
+            if inventory+quantity>max_goods_num:return {"status":"inventory_full","contribution":contribution,"materials":materials,"purchased":purchased}
+            contribution-=cost;materials-=cost;purchased+=quantity;uow.execute("UPDATE user_xiuxian SET sect_contribution=? WHERE user_id=?",(contribution,user_id));uow.execute("UPDATE sects SET sect_materials=? WHERE sect_id=?",(materials,sect_id));stamp=__import__('datetime').datetime.now().isoformat();uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.goods_num,update_time=excluded.update_time",(user_id,item_id,str(item_name),str(item_type),quantity,stamp,stamp,quantity));uow.execute("INSERT INTO sect_shop_weekly_purchases(user_id,week_key,item_id,quantity) VALUES(?,?,?,?) ON CONFLICT(user_id,week_key,item_id) DO UPDATE SET quantity=excluded.quantity",(user_id,week_key,item_id,purchased));uow.execute("INSERT INTO sect_shop_purchase_operations(operation_id,payload,quantity,cost,contribution,materials,purchased) VALUES(?,?,?,?,?,?,?)",(operation_id,payload,quantity,cost,contribution,materials,purchased));return {"status":"applied","quantity":quantity,"cost":cost,"contribution":contribution,"materials":materials,"purchased":purchased}
     def donate(self, operation_id, user_id, sect_id, stone, materials):
         operation_id,user_id=str(operation_id).strip(),str(user_id);sect_id,stone,materials=int(sect_id),int(stone),int(materials)
         if stone<=0:return {"status":"invalid_amount","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
@@ -148,9 +167,6 @@ class SectRenameSqlRepository(LegacySectRepository):
             count += 1
             uow.execute("INSERT INTO sect_member_join_operations(operation_id,user_id,sect_id,member_count,member_limit) VALUES(?,?,?,?,?)", (operation_id,user_id,sect_id,count,limit))
             return {"status": "joined", "user_id": user_id, "sect_id": sect_id, "sect_name": str(sect["sect_name"] or ""), "member_count": count, "member_limit": limit}
-
-    def purchase(self, *args: Any, **kwargs: Any) -> Any:
-        return super().purchase(*args, **kwargs)
 
     def learn_main(self, *args: Any, **kwargs: Any) -> Any:
         return super().learn_main(*args, **kwargs)

@@ -3440,12 +3440,22 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     # 先走 purchase operation，避免成功后贡献/限购前置拦截挡住同事件重放。
     already_purchased = get_sect_weekly_purchases(user_id, shop_id)
-    result = sect_shop_purchase_service.purchase(
-        _sect_operation_id(event, "shop_purchase", f"{user_id}:{shop_id}"),
-        user_id, user_info['sect_id'], shop_id, item_info["name"], item_info["type"],
-        quantity, item_data["cost"], item_data["weekly_limit"], already_purchased,
-        XiuConfig().max_goods_num,
+    purchase_outcome = sect_application.purchase(
+        operation_id=_sect_operation_id(event, "shop_purchase", f"{user_id}:{shop_id}") or f"sect:shop:{user_id}:{sect_ids.new_id()}",
+        user_id=user_id,
+        sect_id=user_info['sect_id'],
+        item_id=shop_id,
+        item_name=item_info["name"],
+        item_type=item_info["type"],
+        quantity=quantity,
+        unit_cost=item_data["cost"],
+        weekly_limit=item_data["weekly_limit"],
+        legacy_purchased=already_purchased,
+        max_goods_num=XiuConfig().max_goods_num,
     )
+    purchase_data = purchase_outcome.data or {}
+    result = type("SectPurchaseView", (), purchase_data)()
+    result.succeeded = purchase_outcome.ok
     total_cost = item_data["cost"] * quantity
     if result.status == "duplicate":
         msg = (
