@@ -854,7 +854,7 @@ def _roll_rewards(reward_plan, decay_ratio: float = 1.0, *, random_source=None):
     rewards = []
     stone = 0
     items_to_add = []
-    random_source = random_source or random
+    random_source = random_source or runtime_random
     for pool_key, cmin, cmax, chance in _expand_reward_plan(reward_plan):
         if random_source.random() > chance:
             continue
@@ -887,101 +887,15 @@ def _roll_map_dongfu_material(node_type: str, chance_multiplier: float = 1.0, *,
     }
     if node_type not in plan:
         return [], 0, []
-    random_source = random_source or random
+    random_source = random_source or runtime_random
     pool_key, chance = plan[node_type]
     if random_source.random() > min(0.80, chance * chance_multiplier):
         return [], 0, []
     return _roll_rewards([(pool_key, 1, 1, 1.0)], random_source=random_source)
 
-def _grant_map_dongfu_material(uid: str, node_type: str, chance_multiplier: float = 1.0):
-    plan = {
-        "水域": ("dongfu_water", 0.16),
-        "灵林": ("dongfu_soil", 0.16),
-        "仙山": ("dongfu_soil", 0.22),
-        "矿脉": ("dongfu_array", 0.16),
-        "试炼": ("dongfu_array", 0.10),
-        "险地": ("dongfu_deed", 0.06),
-    }
-    if node_type not in plan:
-        return None
-    pool_key, chance = plan[node_type]
-    if random.random() > min(0.80, chance * chance_multiplier):
-        return None
-    rewards = _grant_rewards(uid, [(pool_key, 1, 1, 1.0)])
-    return rewards[0] if rewards else None
-
-
-def _grant_rewards(user_id: str, reward_plan, decay_ratio: float = 1.0):
-    rewards = []
-    for pool_key, cmin, cmax, chance in _expand_reward_plan(reward_plan):
-        if random.random() > chance:
-            continue
-        pool_ids = ACTION_ITEM_POOLS.get(pool_key, [])
-        if not pool_ids:
-            continue
-        cnt = random.randint(cmin, cmax)
-        cnt = max(1, int(round(cnt * decay_ratio)))
-
-        for _ in range(cnt):
-            gid = random.choice(pool_ids)
-
-            if isinstance(gid, str) and gid.startswith("LS_"):
-                ls_num = int(gid.split("_")[1])
-                ls_num = max(1, int(round(ls_num * decay_ratio)))
-                sql_message.update_ls(user_id, ls_num, 1)
-                rewards.append(f"灵石x{number_to(ls_num)}")
-                continue
-
-            info = items.get_data_by_item_id(str(gid))
-            if not info:
-                continue
-            gname = info["name"]
-            gtype = info.get("type", "材料")
-            sql_message.send_back(user_id, gid, gname, gtype, 1, 1)
-            rewards.append(f"{gname}x1")
-    return rewards
-
-
-def _grant_skill_equip_drop(user_info: dict, drop_rate: float = 0.1):
-    """
-    随机掉落技能/装备
-    """
-    if random.random() > drop_rate:
-        return None
-
-    user_id = str(user_info["user_id"])
-    user_level = user_info.get("level", "江湖好手")
-
-    item_type = random.choice(SKILL_EQUIP_TYPES)
-
-    if item_type in ["法器", "防具", "辅修功法", "身法", "瞳术"]:
-        zx_rank = base_rank(user_level, 16)
-    else:
-        zx_rank = base_rank(user_level, 5)
-
-    item_id_list = items.get_random_id_list_by_rank_and_item_type(zx_rank, item_type)
-    if not item_id_list:
-        return None
-
-    item_id = random.choice(item_id_list)
-    item_info = items.get_data_by_item_id(item_id)
-    if not item_info:
-        return None
-
-    sql_message.send_back(
-        user_id,
-        item_id,
-        item_info["name"],
-        item_info.get("type", item_type),
-        1,
-        1
-    )
-
-    return f"{item_info.get('level', '未知品级')}:{item_info['name']}x1"
-
 
 def _roll_skill_equip_drop(user_info: dict, drop_rate: float = 0.1, *, random_source=None):
-    random_source = random_source or random
+    random_source = random_source or runtime_random
     if random_source.random() > drop_rate:
         return None, None
     item_type = random_source.choice(SKILL_EQUIP_TYPES)
@@ -1441,7 +1355,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     if len(unique_filtered) > 10:
-        unique_filtered = random.sample(unique_filtered, 10)
+        unique_filtered = runtime_random.sample(unique_filtered, 10)
 
     lines = ["【附近道友】"] + [f"- {u['user_name']}（{u['level']}）" for u in unique_filtered]
     await handle_send(bot, event, "\n".join(lines))

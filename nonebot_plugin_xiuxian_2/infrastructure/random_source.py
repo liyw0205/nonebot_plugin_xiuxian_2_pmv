@@ -30,5 +30,8 @@ class SystemRandom:
     def choices(self, values: Sequence[T], *, weights=None, k: int = 1) -> list[T]:
         return self._source.choices(values, weights=weights, k=k)
 
+    def sample(self, values: Sequence[T], k: int) -> list[T]:
+        return self._source.sample(values, k)
+
 
 __all__ = ["SystemRandom"]
