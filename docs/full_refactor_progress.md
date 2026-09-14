@@ -335,6 +335,8 @@
 
 2026-09-14 tianti breakthrough migration routing correction：首次 `.004` live dry-run 发现 game_db 过滤仅排除了 `.003`，误将 player-only `.004` 列为 game_db pending；未执行 apply、未改变数据。现已统一 startup/CLI 排除 `.003/.004`，player_db 执行两者；此类分库路由错误保留在回滚记录中，不篡改既有 migration 历史。
 
+2026-09-14 tianti breakthrough repository cutover live safety：提交 `740b93d` 部署后 backup `/srv/old/data/backups/20260914T002130Z`；dry-run 真实返回 game_db `[]`、player_db `[tianti_training.004]`，apply 仅写入 player_db。player_db migrations=3，`tianti_breakthrough_operations` 与 `tianti_info` 均存在，readiness 全绿；recovery smoke 覆盖当前 61-entry catalog，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`。live 未执行玩家突破写入。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。
