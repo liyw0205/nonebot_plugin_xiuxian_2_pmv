@@ -487,6 +487,61 @@ class MapCombatLifecycleQueryRepository:
         return {'status':'pending','stamina':0,'task':self._parse(snapshot),'snapshot':snapshot}
 
 
+class MapCombatLifecycleStartSqlRepository:
+    def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
+        self.game_database, self.player_database = str(game_database), str(player_database)
+
+    def start(self, operation_id: str, user_id: str, expected_stamina: int, stamina_cost: int, expected_position: dict[str, Any], expected_daily: dict[str, Any], daily_limit: int, expected_cooldown: str, task: dict[str, Any]) -> dict[str, Any]:
+        operation_id, user_id = str(operation_id).strip(), str(user_id).strip()
+        expected_stamina, stamina_cost, daily_limit = map(int, (expected_stamina, stamina_cost, daily_limit))
+        position = {str(k): str(v) for k, v in dict(expected_position).items()}
+        daily = {str(k): str(v) for k, v in dict(expected_daily).items()}
+        expected_cooldown = "" if expected_cooldown is None else str(expected_cooldown)
+        task = dict(task)
+        required = {"task_id", "status", "started_at", "cooldown_until", "daily", "enemy", "node_name", "node_type"}
+        if not operation_id or not user_id or min(expected_stamina, stamina_cost, daily_limit) < 0 or not {"realm", "heaven", "node_id"}.issubset(position) or not daily.get("date") or not required.issubset(task) or str(task["task_id"]) != operation_id or str(task["status"]) != "running":
+            raise ValueError("valid combat lifecycle snapshots are required")
+        payload = json.dumps([user_id], ensure_ascii=True, separators=(",", ":")); task_json = json.dumps(task, ensure_ascii=False, sort_keys=True)
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            uow.attach_database(self.player_database, "player_data")
+            previous = uow.query_one("SELECT payload,result_status,stamina,task_json FROM map_combat_start_operations WHERE operation_id=?", (operation_id,))
+            if previous:
+                if str(previous["payload"]) != payload: return {"status": "operation_conflict", "stamina": 0, "task": {}, "snapshot": ""}
+                old_task = self._parse(previous["task_json"]); return {"status": "duplicate" if str(previous["result_status"]) == "applied" else str(previous["result_status"]), "stamina": int(previous["stamina"] or 0), "task": old_task, "snapshot": json.dumps(old_task, ensure_ascii=False, sort_keys=True) if old_task else ""}
+            user = uow.query_one("SELECT user_stamina FROM user_xiuxian WHERE user_id=?", (user_id,))
+            if user is None: return self._record(uow, operation_id, payload, "user_missing", expected_stamina, {})
+            stamina = int(user["user_stamina"] or 0)
+            if stamina != expected_stamina: return self._record(uow, operation_id, payload, "state_changed", stamina, {})
+            pos = uow.query_one("SELECT realm,heaven,node_id FROM player_data.map_status WHERE user_id=?", (user_id,))
+            if pos is None or tuple(str(pos[k]) for k in position) != tuple(position.values()): return self._record(uow, operation_id, payload, "state_changed", stamina, {})
+            dr = uow.query_one("SELECT date,combat_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?", (user_id,))
+            if dr is None or (str(dr["date"]), str(dr["combat_count"]), str(dr["resource_total_count"])) != (daily.get("date", ""), daily.get("combat_count", "0"), daily.get("resource_total_count", "0")): return self._record(uow, operation_id, payload, "state_changed", stamina, {})
+            if int(dr["combat_count"] or 0) >= daily_limit: return self._record(uow, operation_id, payload, "limit_reached", stamina, {})
+            cd = uow.query_one("SELECT combat_cd_until FROM player_data.map_cooldown WHERE user_id=?", (user_id,)); current_cd = "" if cd is None or cd["combat_cd_until"] is None else str(cd["combat_cd_until"])
+            if current_cd != expected_cooldown: return self._record(uow, operation_id, payload, "state_changed", stamina, {})
+            if current_cd and current_cd > str(task["started_at"]): return self._record(uow, operation_id, payload, "cooldown", stamina, {"cooldown_until": current_cd})
+            pending = uow.query_one("SELECT snapshot FROM player_data.map_combat_settlement WHERE user_id=?", (user_id,))
+            if pending is not None and str(pending["snapshot"] or ""): return self._record(uow, operation_id, payload, "already_running", stamina, self._parse(pending["snapshot"]))
+            if stamina < stamina_cost: return self._record(uow, operation_id, payload, "stamina_insufficient", stamina, {})
+            remaining = stamina - stamina_cost
+            uow.execute("UPDATE user_xiuxian SET user_stamina=? WHERE user_id=?", (remaining, user_id))
+            uow.execute("INSERT INTO player_data.map_cooldown(user_id,combat_cd_until) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET combat_cd_until=excluded.combat_cd_until", (user_id, str(task["cooldown_until"])))
+            uow.execute("INSERT INTO player_data.map_combat_settlement(user_id,snapshot) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET snapshot=excluded.snapshot", (user_id, task_json))
+            return self._record(uow, operation_id, payload, "applied", remaining, task)
+
+    @staticmethod
+    def _parse(value: Any) -> dict[str, Any]:
+        try: parsed = json.loads(str(value))
+        except (TypeError, ValueError): return {}
+        return parsed if isinstance(parsed, dict) else {}
+
+    @staticmethod
+    def _record(uow: DatabaseUnitOfWork, operation_id: str, payload: str, status: str, stamina: int, task: dict[str, Any]) -> dict[str, Any]:
+        task_json = json.dumps(task, ensure_ascii=False, sort_keys=True)
+        uow.execute("INSERT INTO map_combat_start_operations(operation_id,payload,result_status,stamina,task_json) VALUES(?,?,?,?,?)", (operation_id, payload, status, stamina, task_json))
+        return {"status": status, "stamina": stamina, "task": task, "snapshot": task_json if task else ""}
+
+
 class LegacyMapRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database, self.player_database = str(game_database), str(player_database)
@@ -516,4 +571,4 @@ class LegacyMapRepository:
         return getattr(cls(*databases), method)(operation_id, user_id, **kwargs)
 
 
-__all__ = ["LegacyMapRepository", "MapCombatLifecycleQueryRepository", "MapDongfuBuildSqlRepository", "MapExploreSettlementSqlRepository", "MapMissionClaimSqlRepository", "MapSeedPurchaseSqlRepository", "MapExploreStartSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]
+__all__ = ["LegacyMapRepository", "MapCombatLifecycleQueryRepository", "MapCombatLifecycleStartSqlRepository", "MapDongfuBuildSqlRepository", "MapExploreSettlementSqlRepository", "MapMissionClaimSqlRepository", "MapSeedPurchaseSqlRepository", "MapExploreStartSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]

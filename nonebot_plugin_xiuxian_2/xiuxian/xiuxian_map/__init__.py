@@ -2019,16 +2019,23 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
                 "node_name": position["node_name"],
                 "node_type": ntype,
             }
-            started = map_combat_lifecycle_service.start(
-                operation_id,
-                uid,
-                int(user_info.get("user_stamina", 0)),
-                conf["stamina_cost"],
-                {key: position[key] for key in ("realm", "heaven", "node_id")},
-                daily,
-                DAILY_LIMIT_CONFIG["combat"],
-                "" if cd is None else cd.strftime("%Y-%m-%d %H:%M:%S"),
-                task,
+            outcome = map_application.combat_start(
+                operation_id=operation_id,
+                user_id=uid,
+                expected_stamina=int(user_info.get("user_stamina", 0)),
+                stamina_cost=conf["stamina_cost"],
+                expected_position={key: position[key] for key in ("realm", "heaven", "node_id")},
+                expected_daily=daily,
+                daily_limit=DAILY_LIMIT_CONFIG["combat"],
+                expected_cooldown="" if cd is None else cd.strftime("%Y-%m-%d %H:%M:%S"),
+                task=task,
+            )
+            data = result_data(outcome.data)
+            started = MapCombatLifecycleResult(
+                str(data.get("status", outcome.code)),
+                int(data.get("stamina", 0) or 0),
+                data.get("task") or {},
+                str(data.get("snapshot", "")),
             )
             if started.status == "limit_reached":
                 cap = DAILY_LIMIT_CONFIG["combat"]

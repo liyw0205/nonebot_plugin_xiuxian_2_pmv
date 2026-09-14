@@ -2121,7 +2121,7 @@ class SourceQualityTests(unittest.TestCase):
         handler = source[start:end]
         self.assertIn("map_application.combat_pending(", handler)
         self.assertIn("map_application.combat_replay(", handler)
-        self.assertIn("map_combat_lifecycle_service.start(", handler)
+        self.assertIn("map_application.combat_start(", handler)
         self.assertIn("map_combat_lifecycle_service.save_plan(", handler)
         self.assertNotIn("update_user_stamina(", handler)
         self.assertNotIn('_set_cd(uid, "combat_cd_until"', handler)
