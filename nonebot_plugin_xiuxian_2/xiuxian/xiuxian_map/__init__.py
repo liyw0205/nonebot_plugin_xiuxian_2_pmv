@@ -34,6 +34,7 @@ from .transaction_service import MapExploreSettlementService
 from .transaction_service import MapMissionClaimService
 from .transaction_service import MapCombatSettlementService
 from .transaction_service import MapCombatLifecycleService
+from .transaction_service import MapCombatLifecycleResult
 from .transaction_service import MapDongfuBuildService
 from .transaction_service import MapDongfuBuildResult
 from .transaction_service import MapHomeReturnService
@@ -85,6 +86,12 @@ items = Items()
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
+
+
+def _combat_lifecycle_result(data):
+    if data is None:
+        return None
+    return MapCombatLifecycleResult(str(data.get("status", "state_changed")), int(data.get("stamina", 0) or 0), data.get("task") or {}, str(data.get("snapshot", "")))
 
 
 def _finish_interactive_failure(operation_id, user_id, action_id, outcome, cooldown_until):
@@ -1943,7 +1950,7 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
         return
 
     uid = str(user_info["user_id"])
-    pending = map_combat_lifecycle_service.get_pending(uid)
+    pending = _combat_lifecycle_result(map_application.combat_pending(uid))
     snapshot = None if pending is None else pending.task
     raw_snapshot = "" if pending is None else pending.snapshot
     if pending is not None and not snapshot:
@@ -1952,10 +1959,10 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
 
     if snapshot is None:
         operation_id = _map_operation_id(event, "combat-start", uid)
-        replayed = map_combat_lifecycle_service.replay_start(operation_id, uid)
+        replayed = _combat_lifecycle_result(map_application.combat_replay(operation_id, uid))
         if replayed is not None:
             if replayed.status == "duplicate":
-                current = map_combat_lifecycle_service.get_pending(uid)
+                current = _combat_lifecycle_result(map_application.combat_pending(uid))
                 if (
                     current is None
                     or current.task is None
@@ -1977,7 +1984,7 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
                 await handle_send(bot, event, f"体力不足！当前 {replayed.stamina}")
                 return
             elif replayed.status == "already_running" and replayed.task:
-                current = map_combat_lifecycle_service.get_pending(uid)
+                current = _combat_lifecycle_result(map_application.combat_pending(uid))
                 if current is None or current.task is None:
                     await handle_send(bot, event, "节点战斗未开始：当前没有可继续的战斗任务。")
                     return
@@ -2036,7 +2043,7 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
                 await handle_send(bot, event, f"体力不足！需要 {conf['stamina_cost']}，当前 {started.stamina}")
                 return
             if started.status == "already_running":
-                current = map_combat_lifecycle_service.get_pending(uid)
+                current = _combat_lifecycle_result(map_application.combat_pending(uid))
                 if current is None or current.task is None:
                     await handle_send(bot, event, "节点战斗未开始：当前没有可继续的战斗任务。")
                     return

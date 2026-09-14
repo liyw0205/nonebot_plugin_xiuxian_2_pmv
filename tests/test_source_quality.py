@@ -2119,8 +2119,8 @@ class SourceQualityTests(unittest.TestCase):
         start = source.index("async def _process_node_combat")
         end = source.index("def _get_explore_status", start)
         handler = source[start:end]
-        self.assertIn("map_combat_lifecycle_service.get_pending(", handler)
-        self.assertIn("map_combat_lifecycle_service.replay_start(", handler)
+        self.assertIn("map_application.combat_pending(", handler)
+        self.assertIn("map_application.combat_replay(", handler)
         self.assertIn("map_combat_lifecycle_service.start(", handler)
         self.assertIn("map_combat_lifecycle_service.save_plan(", handler)
         self.assertNotIn("update_user_stamina(", handler)

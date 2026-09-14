@@ -466,6 +466,27 @@ class MapDongfuBuildSqlRepository:
             remaining=stone-cost;uow.execute('UPDATE user_xiuxian SET stone=? WHERE user_id=?',(remaining,user_id));fields=('built','realm','heaven','node_id','node_name','node_type');uow.execute('INSERT INTO player_data.dongfu_status(user_id,'+','.join(fields)+') VALUES('+','.join(['?']*7)+') ON CONFLICT(user_id) DO UPDATE SET '+','.join(f'{k}=excluded.{k}' for k in fields),(user_id,*(dongfu.get(k,'') for k in fields)));uow.execute('INSERT INTO map_dongfu_build_operations(operation_id,payload,stone) VALUES(?,?,?)',(operation_id,payload,remaining));return {'status':'applied','stone':remaining}
 
 
+class MapCombatLifecycleQueryRepository:
+    def __init__(self,game_database:str|Path,player_database:str|Path)->None:self.game_database,self.player_database=str(game_database),str(player_database)
+    @staticmethod
+    def _parse(value:Any)->dict[str,Any]:
+        try: result=json.loads(str(value))
+        except (TypeError,ValueError): return {}
+        return result if isinstance(result,dict) else {}
+    def replay_start(self,operation_id:str,user_id:str)->dict[str,Any]|None:
+        operation_id,user_id=str(operation_id).strip(),str(user_id).strip();payload=json.dumps([user_id],ensure_ascii=True,separators=(',',':'))
+        if not operation_id or not user_id:raise ValueError('operation and user required')
+        with DatabaseUnitOfWork(self.game_database) as uow:row=uow.query_one('SELECT payload,result_status,stamina,task_json FROM map_combat_start_operations WHERE operation_id=?',(operation_id,))
+        if row is None:return None
+        if str(row['payload'])!=payload:return {'status':'operation_conflict','stamina':0,'task':{},'snapshot':''}
+        task=self._parse(row['task_json']);status='duplicate' if str(row['result_status'])=='applied' else str(row['result_status']);return {'status':status,'stamina':int(row['stamina'] or 0),'task':task,'snapshot':json.dumps(task,ensure_ascii=False,sort_keys=True) if task else ''}
+    def get_pending(self,user_id:str)->dict[str,Any]|None:
+        with DatabaseUnitOfWork(self.player_database) as uow:row=uow.query_one('SELECT snapshot FROM map_combat_settlement WHERE user_id=?',(str(user_id),))
+        snapshot='' if row is None or row['snapshot'] is None else str(row['snapshot'])
+        if not snapshot:return None
+        return {'status':'pending','stamina':0,'task':self._parse(snapshot),'snapshot':snapshot}
+
+
 class LegacyMapRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database, self.player_database = str(game_database), str(player_database)
@@ -495,4 +516,4 @@ class LegacyMapRepository:
         return getattr(cls(*databases), method)(operation_id, user_id, **kwargs)
 
 
-__all__ = ["LegacyMapRepository", "MapDongfuBuildSqlRepository", "MapExploreSettlementSqlRepository", "MapMissionClaimSqlRepository", "MapSeedPurchaseSqlRepository", "MapExploreStartSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]
+__all__ = ["LegacyMapRepository", "MapCombatLifecycleQueryRepository", "MapDongfuBuildSqlRepository", "MapExploreSettlementSqlRepository", "MapMissionClaimSqlRepository", "MapSeedPurchaseSqlRepository", "MapExploreStartSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]

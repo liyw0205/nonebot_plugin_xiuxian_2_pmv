@@ -84,4 +84,14 @@ def apply_map_dongfu_player(uow: DatabaseUnitOfWork) -> None:
         if name not in columns:uow.execute(f'ALTER TABLE dongfu_status ADD COLUMN "{name}" TEXT')
 
 
-__all__ = ["apply_map", "apply_map_dongfu_build", "apply_map_dongfu_player", "apply_map_explore_player", "apply_map_explore_settlement", "apply_map_explore_start", "apply_map_home_return", "apply_map_interactive_player", "apply_map_interactive_start", "apply_map_mission_claim", "apply_map_movement", "apply_map_resource_reward", "apply_map_seed_purchase"]
+def apply_map_combat_start(uow: DatabaseUnitOfWork) -> None:
+    uow.execute("CREATE TABLE IF NOT EXISTS map_combat_start_operations (operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_status TEXT NOT NULL,stamina INTEGER NOT NULL DEFAULT 0,task_json TEXT NOT NULL DEFAULT '{}',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+
+
+def apply_map_combat_player(uow: DatabaseUnitOfWork) -> None:
+    uow.execute("CREATE TABLE IF NOT EXISTS map_combat_settlement (user_id TEXT PRIMARY KEY,snapshot TEXT NOT NULL DEFAULT '')")
+    columns={str(row['name']) for row in uow.query_all('PRAGMA table_info(map_cooldown)')}
+    if 'combat_cd_until' not in columns:uow.execute('ALTER TABLE map_cooldown ADD COLUMN combat_cd_until TEXT DEFAULT NULL')
+
+
+__all__ = ["apply_map", "apply_map_combat_player", "apply_map_combat_start", "apply_map_dongfu_build", "apply_map_dongfu_player", "apply_map_explore_player", "apply_map_explore_settlement", "apply_map_explore_start", "apply_map_home_return", "apply_map_interactive_player", "apply_map_interactive_start", "apply_map_mission_claim", "apply_map_movement", "apply_map_resource_reward", "apply_map_seed_purchase"]
