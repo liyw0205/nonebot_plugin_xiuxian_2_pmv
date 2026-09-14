@@ -36,7 +36,7 @@ from .features.package_reward.migrations import apply_package_reward
 from .features.pet.manifest import FEATURE as PET_FEATURE
 from .features.pet.migrations import apply_pet
 from .features.sect.manifest import FEATURE as SECT_FEATURE
-from .features.sect.migrations import apply_sect, apply_sect_rename, apply_sect_join, apply_sect_removal, apply_sect_position, apply_sect_donation, apply_sect_shop, apply_sect_mainbuff
+from .features.sect.migrations import apply_sect, apply_sect_rename, apply_sect_join, apply_sect_removal, apply_sect_position, apply_sect_donation, apply_sect_shop, apply_sect_mainbuff, apply_sect_secbuff
 from .features.natal_treasure.manifest import FEATURE as NATAL_TREASURE_FEATURE
 from .features.natal_treasure.migrations import apply_natal_treasure
 from .features.buff.manifest import FEATURE as BUFF_FEATURE
@@ -168,6 +168,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("sect.006", "sect_donation_operations", apply_sect_donation),
         Migration("sect.007", "sect_shop_purchase_operations", apply_sect_shop),
         Migration("sect.008", "sect_mainbuff_learn_operations", apply_sect_mainbuff),
+        Migration("sect.009", "sect_secbuff_learn_operations", apply_sect_secbuff),
         Migration("sect_fairyland.001", "sect_fairyland_feature_migrations", apply_sect_fairyland),
         Migration("sign_in.001", "sign_in_operations", apply_sign_in),
         Migration("sign_in.002", "sign_in_statistics_events", apply_sign_in_statistics),

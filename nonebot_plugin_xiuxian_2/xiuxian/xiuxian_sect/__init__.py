@@ -1434,14 +1434,17 @@ async def sect_secbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             # 获取逻辑
             materialscost = secbuffgear * secbuffconfig['学习资材消耗']
             if sect_info['sect_materials'] >= materialscost:
-                result = sect_secbuff_learn_service.learn(
-                    _sect_operation_id(event, "secbuff_learn", secbuffid),
-                    user_id,
-                    sect_id,
-                    secbuffid,
-                    materialscost,
+                learn_outcome = sect_application.learn_secondary(
+                    operation_id=_sect_operation_id(event, "secbuff_learn", secbuffid) or f"sect:secbuff:{user_id}:{sect_ids.new_id()}",
+                    user_id=user_id,
+                    sect_id=sect_id,
+                    buff_id=secbuffid,
+                    materials_cost=materialscost,
                     expected_catalog=sect_info['secbuff'],
                 )
+                learn_data = learn_outcome.data or {}
+                result = type("SectSecLearnView", (), learn_data)()
+                result.applied = learn_outcome.ok
                 if not result.applied:
                     if result.status == "duplicate":
                         msg = "本次宗门神通学习已经完成，请刷新神通信息。"
