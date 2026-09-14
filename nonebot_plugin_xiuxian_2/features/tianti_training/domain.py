@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Mapping, Sequence
 
 
@@ -141,6 +141,20 @@ def normalize_plan(value: Sequence[Mapping[str, Any]]) -> tuple[dict[str, Any], 
     )
 
 
+def decide_medicine_bath_activation(
+    *,
+    current_end_time: datetime | None,
+    now: datetime,
+    duration_minutes: int,
+    effect: float,
+) -> tuple[str, datetime | None]:
+    if duration_minutes <= 0 or effect <= 0:
+        raise ValueError("duration_minutes and effect must be positive")
+    if effect > 1 and current_end_time is not None and now <= current_end_time:
+        return "bath_active", None
+    return "applied", now + timedelta(minutes=duration_minutes)
+
+
 __all__ = [
     "BreakthroughDecision",
     "BreakthroughRequest",
@@ -149,6 +163,7 @@ __all__ = [
     "StoneTrainingRequest",
     "StoneTrainingDecision",
     "decide_breakthrough",
+    "decide_medicine_bath_activation",
     "decide_stone_training",
     "normalize_plan",
 ]

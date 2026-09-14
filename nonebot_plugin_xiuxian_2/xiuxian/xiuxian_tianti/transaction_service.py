@@ -18,7 +18,7 @@ from .tianti_data import (
     get_tianti_level_index,
 )
 from .tianti_data import TiantiDataManager, get_qiaoxue_pool, get_tianti_level_data
-from ...features.tianti_training.domain import decide_breakthrough, decide_stone_training
+from ...features.tianti_training.domain import decide_breakthrough, decide_medicine_bath_activation, decide_stone_training
 from datetime import datetime, timedelta
 
 def get_tianti_cap(data: dict) -> int:
@@ -884,6 +884,13 @@ class MedicineBathService:
                 ).fetchone()
                 data = self._manager._clean_user_data(dict(zip(fields, row)) if row else {})
                 if get_active_medicine_bath(data, now_t):
+                    conn.rollback()
+                    return self._result_from_payload("bath_active", user_id, {})
+                activation_status, _ = decide_medicine_bath_activation(
+                    current_end_time=parse_tianti_time(data.get("medicine_end_time")),
+                    now=now_t, duration_minutes=duration_minutes, effect=effect,
+                )
+                if activation_status == "bath_active":
                     conn.rollback()
                     return self._result_from_payload("bath_active", user_id, {})
 
