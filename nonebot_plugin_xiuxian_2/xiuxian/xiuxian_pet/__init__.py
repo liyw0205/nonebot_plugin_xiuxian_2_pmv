@@ -62,6 +62,7 @@ from ..xiuxian_utils.utils import (
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ...paths import get_paths
 from ...compatibility.pet import PetTravelClaimService
+from ...features.pet.application import PetApplication
 from ...compatibility.pet import PetFeedService
 from .transaction_service import PetSkillReplaceService
 from ...compatibility.pet import PetTravelStartService
@@ -74,6 +75,7 @@ from .transaction_service import PetActiveSwitchService
 items = Items()
 sql_message = XiuxianDateManage()
 pet_travel_claim_service = PetTravelClaimService(get_paths().game_db, get_paths().player_db)
+pet_application = PetApplication(get_paths().game_db, get_paths().player_db)
 pet_feed_service = PetFeedService(get_paths().game_db, get_paths().player_db)
 pet_skill_replace_service = PetSkillReplaceService(get_paths().player_db)
 pet_travel_start_service = PetTravelStartService(get_paths().player_db)
@@ -871,15 +873,21 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     travel = result.get("travel", {}) or {}
     travel_id = f"{travel.get('pet_uid', '')}:{travel.get('start_at', '')}:{travel.get('end_at', '')}"
     operation_id = f"pet-travel-claim:{event_id or travel_id}:{user_id}"
-    claim_result = pet_travel_claim_service.claim(
-        operation_id,
-        user_id,
-        travel,
-        int(result.get("stone", 0) or 0),
-        int(result.get("exp", 0) or 0),
-        reward_items,
-        XiuConfig().max_goods_num,
+    claim_outcome = pet_application.claim_travel(
+        operation_id=operation_id,
+        user_id=user_id,
+        expected_travel=travel,
+        stone=int(result.get("stone", 0) or 0),
+        exp=int(result.get("exp", 0) or 0),
+        items=reward_items,
+        max_goods_num=XiuConfig().max_goods_num,
     )
+    claim_data = claim_outcome.data or {}
+    claim_result = type("PetTravelClaimView", (), claim_data)()
+    claim_result.status = str(claim_data.get("status", claim_outcome.code or "failed"))
+    claim_result.stone = int(claim_data.get("stone", 0) or 0)
+    claim_result.exp = int(claim_data.get("exp", 0) or 0)
+    claim_result.succeeded = claim_outcome.ok
     if claim_result.status == "inventory_full":
         await handle_send(bot, event, "背包物品已达上限，宠物游历奖励尚未领取。")
         return

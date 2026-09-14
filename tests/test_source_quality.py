@@ -1691,7 +1691,8 @@ class SourceQualityTests(unittest.TestCase):
         start = source.index("@pet_travel_claim.handle")
         handler = source[start:source.index("@pet_bag.handle", start)]
         self.assertIn("prepare_pet_travel_completion(", handler)
-        self.assertIn("pet_travel_claim_service.claim(", handler)
+        self.assertIn("pet_application.claim_travel(", handler)
+        self.assertNotIn("pet_travel_claim_service.claim(\n", handler)
         self.assertNotIn("complete_pet_travel(", handler)
         self.assertNotIn("sql_message.update_ls(", handler)
         self.assertNotIn("sql_message.update_exp(", handler)
