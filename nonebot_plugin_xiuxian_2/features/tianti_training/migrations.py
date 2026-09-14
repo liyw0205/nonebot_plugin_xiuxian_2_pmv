@@ -59,4 +59,13 @@ def apply_tianti_medicine_bath_operations(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_tianti_breakthrough_operations", "apply_tianti_medicine_bath_operations", "apply_tianti_player_info", "apply_tianti_qiaoxue_operations", "apply_tianti_training", "apply_tianti_training_operations"]
+def apply_tianti_item_reward_operations(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS tianti_item_reward_operations ("
+        "operation_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, item_id INTEGER NOT NULL, "
+        "quantity INTEGER NOT NULL, minutes INTEGER NOT NULL, detail_json TEXT NOT NULL, "
+        "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+__all__ = ["apply_tianti_breakthrough_operations", "apply_tianti_item_reward_operations", "apply_tianti_medicine_bath_operations", "apply_tianti_player_info", "apply_tianti_qiaoxue_operations", "apply_tianti_training", "apply_tianti_training_operations"]

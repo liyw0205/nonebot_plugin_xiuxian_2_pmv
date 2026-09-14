@@ -8,6 +8,7 @@ from typing import Any, Callable, Mapping, Sequence
 from ...core.errors import ConflictError, DomainError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
+from ...infrastructure.clock import SystemClock
 from ...infrastructure.observability import trace_context
 from .domain import (
     BreakthroughRequest,
@@ -44,11 +45,13 @@ class TiantiTrainingApplication:
         *,
         repository: TiantiTrainingRepository | None = None,
         ledger: OperationLedger | None = None,
+        clock: Any | None = None,
     ) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
         self.repository = repository
         self.ledger = ledger or OperationLedger()
+        self.clock = clock or SystemClock()
 
     def _execute(
         self,
@@ -123,6 +126,73 @@ class TiantiTrainingApplication:
 
     def _bath_repository(self) -> TiantiMedicineBathSqlRepository | TiantiTrainingRepository:
         return self.repository or TiantiMedicineBathSqlRepository(self.game_database, self.player_database)
+
+    def _item_reward_repository(self) -> Any:
+        if self.repository is not None and hasattr(self.repository, "apply_item_reward"):
+            return self.repository
+        from .repository import TiantiItemRewardSqlRepository
+        return TiantiItemRewardSqlRepository(self.game_database, self.player_database)
+
+    def grant_item_tianti(
+        self,
+        *,
+        operation_id: str,
+        user_id: str,
+        item_id: int,
+        quantity: int,
+        minutes: int,
+        settled_at: datetime | None = None,
+        sect_fairyland_level: int = 0,
+    ) -> OperationOutcome[dict[str, Any]]:
+        settled_at = settled_at or self.clock.now()
+        if not isinstance(settled_at, datetime):
+            raise ValidationError("settled_at must be a datetime")
+        if not operation_id or not user_id or int(item_id) <= 0 or int(quantity) <= 0 or int(minutes) <= 0:
+            raise ValidationError("operation_id, user_id, item_id, quantity and minutes are required")
+        payload = {
+            "user_id": str(user_id), "item_id": int(item_id),
+            "quantity": int(quantity), "minutes": int(minutes),
+            "settled_at": settled_at.isoformat(),
+            "sect_fairyland_level": int(sect_fairyland_level),
+        }
+        action = "tianti.item_reward"
+        with trace_context(operation_id=str(operation_id), user_scope=str(user_id)):
+            try:
+                with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+                    existing = self.ledger.begin(uow, str(operation_id), action, payload)
+                    if existing is not None:
+                        previous = existing.outcome()
+                        if previous is not None:
+                            return previous.replay()
+                        raise ConflictError("操作正在处理中")
+                raw = self._item_reward_repository().apply(
+                    str(operation_id), str(user_id), int(item_id), int(quantity), int(minutes),
+                    settled_at=settled_at, sect_fairyland_level=int(sect_fairyland_level),
+                )
+                data = _result_data(raw)
+                status = str(data.get("status", "failed"))
+                if status in {"applied", "duplicate"}:
+                    outcome = OperationOutcome.applied(
+                        str(operation_id), action, data=data,
+                        consumed={"item": {"item_id": int(item_id), "quantity": int(quantity)}},
+                        granted={"tianti_hp": int(data.get("detail", {}).get("real_gain", 0) or 0)},
+                        after={"tianti_hp": int(data.get("detail", {}).get("new_hp", 0) or 0)},
+                        audit_category="tianti_training",
+                    )
+                else:
+                    outcome = OperationOutcome.rejected(
+                        str(operation_id), action,
+                        {"item_insufficient": "物品数量不足，炼体时间奖励未结算。", "user_missing": "未找到修仙数据。"}.get(status, "炼体时间奖励未完成。"),
+                        code=status, data=data, audit_category="tianti_training",
+                    )
+                with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+                    self.ledger.finish(uow, outcome)
+                return outcome
+            except DomainError:
+                raise
+            except Exception as exc:
+                self.ledger.record_failure(self.game_database, str(operation_id), action, payload, str(exc))
+                raise
 
     def train(self, *, operation_id: str, user_id: str, requested_stone: int) -> OperationOutcome[dict[str, Any]]:
         try:

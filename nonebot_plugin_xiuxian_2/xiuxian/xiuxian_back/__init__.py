@@ -38,7 +38,7 @@ from ..xiuxian_impart import use_wishing_stone, use_love_sand
 from ..xiuxian_work import use_work_order, use_work_capture_order
 from ..xiuxian_buff import use_two_exp_token
 from ..xiuxian_arena import use_arena_challenge_ticket
-from ..xiuxian_tianti.transaction_service import TiantiItemRewardService
+
 from ..xiuxian_config import XiuConfig, convert_rank, added_ranks
 from ...paths import get_paths
 from ..xiuxian_utils.pet_system import (
@@ -101,9 +101,7 @@ batch_item_use_service = BatchItemUseService(
 )
 backpack_repair_service = BackpackRepairService(get_paths().game_db)
 player_data_manager = PlayerDataManager()
-tianti_item_reward_service = TiantiItemRewardService(
-    get_paths().game_db, get_paths().player_db
-)
+
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 added_ranks = added_ranks()
 # 技能学习确认缓存
@@ -1170,21 +1168,23 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         else:
             tianti_minutes = int(goods_info.get("tianti_settle_minutes", 0) or 0)
             if goods_info.get("buff_type") == "tianti_hp_time" and tianti_minutes > 0:
-                reward = tianti_item_reward_service.apply(
-                    _tianti_item_reward_operation_id(event, user_id, goods_id),
-                    user_id,
-                    goods_id,
-                    num,
-                    tianti_minutes,
+                from ..xiuxian_tianti import tianti_training_application
+                reward = tianti_training_application.grant_item_tianti(
+                    operation_id=_tianti_item_reward_operation_id(event, user_id, goods_id),
+                    user_id=user_id,
+                    item_id=goods_id,
+                    quantity=num,
+                    minutes=tianti_minutes,
+                    settled_at=None,
                     sect_fairyland_level=_get_user_sect_fairyland_level(user_info_full),
                 )
-                if not reward.succeeded:
-                    msg = _back_op_fail_msg(result, action="使用神物")
+                if not reward.ok:
+                    msg = _back_op_fail_msg(reward, action="使用神物")
                     await handle_send(bot, event, msg, md_type="背包", k1="背包", v1="我的背包")
                     await use.finish()
                     return
-                result = reward.detail
-                total_minutes = reward.minutes
+                result = reward.data["detail"]
+                total_minutes = num * tianti_minutes
 
                 bath_msg = ""
                 if result.get("bath"):

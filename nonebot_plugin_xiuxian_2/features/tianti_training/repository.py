@@ -78,6 +78,14 @@ class TiantiProfileReader:
         pool = loaded.get("窍穴", []) if isinstance(loaded, dict) else []
         return [dict(item) for item in pool if isinstance(item, dict) and item.get("name")]
 
+
+class TiantiProfile(Protocol):
+    def default_data(self) -> dict[str, Any]: ...
+    def levels(self) -> Mapping[str, Mapping[str, Any]]: ...
+    def clean(self, row: Mapping[str, Any] | None) -> dict[str, Any]: ...
+    def cap(self, data: Mapping[str, Any]) -> int: ...
+
+
 @dataclass(frozen=True)
 class StoneTrainingPersistenceResult:
     status: str
@@ -120,6 +128,20 @@ class MedicineBathPersistenceResult:
     end_time: str = ""
     settlement: dict[str, Any] | None = None
     insufficient: tuple[dict[str, Any], ...] = ()
+
+
+@dataclass(frozen=True)
+class ItemRewardPersistenceResult:
+    status: str
+    user_id: str
+    item_id: int
+    quantity: int
+    minutes: int
+    detail: dict[str, Any]
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"applied", "duplicate"}
 
 
 def _parse_time(value: Any) -> datetime | None:
@@ -221,7 +243,7 @@ class StoneTrainingSqlRepository:
 class TiantiMedicineBathSqlRepository:
     """Feature-owned cross-database medicine bath transaction."""
 
-    def __init__(self, game_database: str | Path, player_database: str | Path, *, spirit_vein_multiplier: Callable[[], float] | None = None, profile_reader: TiantiProfileReader | None = None) -> None:
+    def __init__(self, game_database: str | Path, player_database: str | Path, *, spirit_vein_multiplier: Callable[[], float] | None = None, profile_reader: TiantiProfile | None = None) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
         self.profile = profile_reader or TiantiProfileReader(Path(player_database).parent / "xiuxian")
@@ -288,6 +310,66 @@ class TiantiMedicineBathSqlRepository:
             payload = {"consumed": list(plan), "effect": float(effect), "bath_name": bath_name, "end_time": data["medicine_end_time"], "settlement": settlement}
             uow.execute("INSERT INTO tianti_medicine_bath_operations(operation_id,user_id,request_json,result_json) VALUES(?,?,?,?)", (operation_id, user_id, json.dumps({"plan": list(plan), "effect": effect}, ensure_ascii=False), json.dumps(payload, ensure_ascii=False, default=str)))
             return MedicineBathPersistenceResult("applied", user_id, tuple(plan), float(effect), bath_name, data["medicine_end_time"], settlement)
+
+
+class TiantiItemRewardSqlRepository:
+    """Feature-owned item-to-tianti-minutes transaction."""
+
+    def __init__(self, game_database: str | Path, player_database: str | Path, *, profile_reader: TiantiProfile | None = None, spirit_vein_multiplier: Callable[[], float] | None = None) -> None:
+        self.game_database = str(game_database)
+        self.player_database = str(player_database)
+        self.profile = profile_reader or TiantiProfileReader(Path(player_database).parent / "xiuxian")
+        self.spirit_vein_multiplier = spirit_vein_multiplier or (lambda: 1.0)
+
+    def apply(self, operation_id: str, user_id: str, item_id: int, quantity: int, minutes: int, *, settled_at: datetime, sect_fairyland_level: int = 0) -> ItemRewardPersistenceResult:
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        item_id, quantity, minutes = int(item_id), int(quantity), int(minutes)
+        if not operation_id or item_id <= 0 or quantity <= 0 or minutes <= 0:
+            raise ValueError("operation_id, item_id, quantity and minutes must be positive")
+        total_minutes = quantity * minutes
+        fields = tuple(self.profile.default_data().keys())
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            uow.attach_database(self.player_database, "player_data")
+            tables = {str(row["name"]) for row in uow.query_all("SELECT name FROM sqlite_master WHERE type='table'")}
+            player_tables = {str(row["name"]) for row in uow.query_all("SELECT name FROM player_data.sqlite_master WHERE type='table'")}
+            player_columns = {str(row["name"]) for row in uow.query_all("PRAGMA player_data.table_info(tianti_info)")}
+            if "tianti_item_reward_operations" not in tables or "tianti_info" not in player_tables or not set(fields).issubset(player_columns):
+                raise RuntimeError("tianti training schema is not ready; run migrations first")
+            previous = uow.query_one("SELECT user_id, item_id, quantity, minutes, detail_json FROM tianti_item_reward_operations WHERE operation_id=?", (operation_id,))
+            if previous:
+                if (str(previous["user_id"]), int(previous["item_id"]), int(previous["quantity"]), int(previous["minutes"])) != (user_id, item_id, quantity, total_minutes):
+                    return ItemRewardPersistenceResult("state_changed", user_id, item_id, quantity, total_minutes, {})
+                return ItemRewardPersistenceResult("duplicate", user_id, item_id, int(previous["quantity"]), int(previous["minutes"]), json.loads(previous["detail_json"]))
+            row = uow.query_one("SELECT * FROM player_data.tianti_info WHERE user_id=?", (user_id,))
+            if row is None:
+                return ItemRewardPersistenceResult("user_missing", user_id, item_id, quantity, total_minutes, {})
+            data = self.profile.clean(row)
+            for field in ("opened_qiaoxue", "opened_qiaoxue_detail", "qiaoxue_stage_opened"):
+                if isinstance(data.get(field), str):
+                    try:
+                        data[field] = json.loads(data[field])
+                    except json.JSONDecodeError:
+                        data[field] = [] if field != "qiaoxue_stage_opened" else {}
+            details = list(data.get("opened_qiaoxue_detail", []) or [])
+            base_ratio = sum(float(item.get("effect_value", 0)) for item in details if item.get("effect_type") == "base_per_min_ratio")
+            gain_pct = sum(float(item.get("effect_value", 0)) for item in details if item.get("effect_type") == "hp_gain_pct")
+            level = self.profile.levels()[str(data["tianti_level"])]
+            gain = decide_tianti_gain(minutes=total_minutes, base_per_min=int(level.get("hp_gain_per_min", 0)), base_ratio=base_ratio, gain_pct=gain_pct, bath_effect=1.0, sect_bonus=_sect_bonus(sect_fairyland_level), spirit_vein_multiplier=float(self.spirit_vein_multiplier()), old_hp=int(data["tianti_hp"]), hp_cap=self.profile.cap(data))
+            consumed = uow.execute("UPDATE back SET goods_num=goods_num-?, bind_num=MIN(COALESCE(bind_num,0), goods_num-?) WHERE user_id=? AND goods_id=? AND goods_num>=?", (quantity, quantity, user_id, item_id, quantity))
+            if consumed.rowcount != 1:
+                return ItemRewardPersistenceResult("item_insufficient", user_id, item_id, quantity, total_minutes, {})
+            data["tianti_hp"] = gain.new_hp
+            values = [json.dumps(data[field], ensure_ascii=False) if isinstance(data[field], (list, dict)) else data[field] for field in fields]
+            columns_sql = ", ".join(["user_id", *fields])
+            placeholders = ", ".join("?" for _ in range(len(values) + 1))
+            updates = ", ".join(f'"{field}"=excluded."{field}"' for field in fields)
+            uow.execute(f'INSERT INTO player_data.tianti_info ({columns_sql}) VALUES ({placeholders}) ON CONFLICT(user_id) DO UPDATE SET {updates}', (user_id, *values))
+            detail = {"status": "ok", "real_gain": gain.real_gain, "new_hp": gain.new_hp, "bath": None, "bath_expired": False, "sect_bonus": _sect_bonus(sect_fairyland_level), "spirit_vein_bonus": float(self.spirit_vein_multiplier()) - 1}
+            uow.execute("INSERT INTO tianti_item_reward_operations(operation_id,user_id,item_id,quantity,minutes,detail_json) VALUES(?,?,?,?,?,?)", (operation_id, user_id, item_id, quantity, total_minutes, json.dumps(detail, ensure_ascii=False)))
+            return ItemRewardPersistenceResult("applied", user_id, item_id, quantity, total_minutes, detail)
+
+    def apply_item_reward(self, operation_id: str, user_id: str, item_id: int, quantity: int, minutes: int, *, settled_at: datetime, sect_fairyland_level: int = 0) -> ItemRewardPersistenceResult:
+        return self.apply(operation_id, user_id, item_id, quantity, minutes, settled_at=settled_at, sect_fairyland_level=sect_fairyland_level)
 
 
 class TiantiBreakthroughSqlRepository:
