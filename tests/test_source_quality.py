@@ -2083,7 +2083,8 @@ class SourceQualityTests(unittest.TestCase):
         end = source.index("async def _resolve_interactive_action", start)
         start_handler = source[start:end]
         self.assertIn("map_interactive_action_service.replay_start(", start_handler)
-        self.assertIn("map_interactive_action_service.start(", start_handler)
+        self.assertIn("map_application.interactive_start(", start_handler)
+        self.assertNotIn("map_interactive_action_service.start(", start_handler)
         self.assertNotIn("update_user_stamina(", start_handler)
         self.assertNotIn("INTERACTIVE_ACTION_STATE", source)
 

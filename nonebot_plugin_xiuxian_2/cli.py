@@ -55,7 +55,7 @@ def main(argv: list[str] | None = None) -> int:
         migrations = build_migrations()
         game_migrations = tuple(
             migration for migration in migrations
-            if migration.version not in {"combat_settlement.003", "combat_settlement.004", "map.003", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005", "tianti_training.006"}
+            if migration.version not in {"combat_settlement.003", "combat_settlement.004", "map.003", "map.005", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005", "tianti_training.006"}
         )
         applied: dict[str, list[str]] = {}
         pending: dict[str, list[str]] = {}
@@ -65,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
             elif spec.key == "player_db":
                 selected = tuple(
                     migration for migration in migrations
-                    if migration.version in {"title.001", "combat_settlement.003", "combat_settlement.004", "map.003", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005"}
+                    if migration.version in {"title.001", "combat_settlement.003", "combat_settlement.004", "map.003", "map.005", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005"}
                 )
             else:
                 selected = ()

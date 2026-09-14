@@ -132,6 +132,52 @@ class MapInteractiveSqlQueryRepository:
         return action
 
 
+class MapInteractiveStartSqlRepository:
+    def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
+        self.game_database = str(game_database)
+        self.player_database = str(player_database)
+
+    def start(self, operation_id: str, user_id: str, action_type: str, expected_stamina: int, stamina_cost: int, expected_position: dict[str, Any], expected_daily: dict[str, Any], daily_limit: int, expected_cooldown: str, action: dict[str, Any]) -> dict[str, Any]:
+        operation_id, user_id, action_type = str(operation_id).strip(), str(user_id).strip(), str(action_type).strip()
+        expected = {key: str(dict(expected_position)[key]) for key in ("realm", "heaven", "node_id")}
+        daily = {str(key): str(value) for key, value in dict(expected_daily).items()}
+        expected_stamina, stamina_cost, daily_limit = int(expected_stamina), int(stamina_cost), int(daily_limit)
+        action = dict(action)
+        required = {"action_id", "action", "start_ts", "ready_ts", "expire_ts", "cooldown_sec"}
+        if not operation_id or not user_id or not action_type or min(expected_stamina, stamina_cost, daily_limit) < 0 or not daily.get("date") or not required.issubset(action) or str(action["action_id"]) != operation_id or str(action["action"]) != action_type:
+            raise ValueError("valid interactive action snapshots are required")
+        identity = json.dumps([user_id, action_type], ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        action_json = json.dumps(action, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            uow.attach_database(self.player_database, "player_data")
+            previous = uow.query_one("SELECT payload,result_status,stamina,action_json FROM map_interactive_start_operations WHERE operation_id=?", (operation_id,))
+            if previous:
+                if str(previous["payload"]) != identity:
+                    return {"status": "operation_conflict", "stamina": expected_stamina, "action": {}}
+                result = {"status": "duplicate" if str(previous["result_status"]) == "applied" else str(previous["result_status"]), "stamina": int(previous["stamina"] or 0)}
+                try: result["action"] = json.loads(str(previous["action_json"]))
+                except json.JSONDecodeError: result["action"] = {}
+                return result
+            user = uow.query_one("SELECT user_stamina FROM user_xiuxian WHERE user_id=?", (user_id,))
+            if user is None: status, stamina = "user_missing", expected_stamina
+            else: stamina = int(user["user_stamina"] or 0); status = "state_changed" if stamina != expected_stamina else ""
+            row = uow.query_one("SELECT realm,heaven,node_id FROM player_data.map_status WHERE user_id=?", (user_id,))
+            if not status and (row is None or (str(row["realm"]), str(row["heaven"]), str(row["node_id"])) != tuple(expected.values())): status = "state_changed"
+            limit_row = uow.query_one("SELECT date,gather_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?", (user_id,))
+            if not status and (limit_row is None or (str(limit_row["date"]), str(limit_row["gather_count"]), str(limit_row["resource_total_count"])) != (daily["date"], daily.get("gather_count", "0"), daily.get("resource_total_count", "0"))): status = "state_changed"
+            if not status and limit_row is not None and int(limit_row["gather_count"] or 0) >= daily_limit: status = "limit_reached"
+            if not status and stamina < stamina_cost: status = "stamina_insufficient"
+            if not status:
+                active = uow.query_one("SELECT action_id,state_json,expires_at FROM player_data.map_interactive_actions WHERE user_id=? AND status='active'", (user_id,))
+                if active is not None: status, action = "already_running", json.loads(str(active["state_json"]))
+            uow.execute("INSERT INTO map_interactive_start_operations(operation_id,payload,result_status,stamina,action_json) VALUES(?,?,?,?,?)", (operation_id, identity, status or "applied", stamina - stamina_cost if not status else stamina, action_json if not status else json.dumps(action, ensure_ascii=True, sort_keys=True)))
+            if status: return {"status": status, "stamina": stamina, "action": action if status == "already_running" else {}}
+            remaining = stamina - stamina_cost
+            uow.execute("UPDATE user_xiuxian SET user_stamina=? WHERE user_id=?", (remaining, user_id))
+            uow.execute("INSERT INTO player_data.map_interactive_actions(user_id,action_id,action_type,status,state_json,settlement_json,ready_at,expires_at,cooldown_seconds,updated_at) VALUES(?,?,?,'active',?,'',?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET action_id=excluded.action_id,action_type=excluded.action_type,status='active',state_json=excluded.state_json,settlement_json='',ready_at=excluded.ready_at,expires_at=excluded.expires_at,cooldown_seconds=excluded.cooldown_seconds,updated_at=excluded.updated_at", (user_id, operation_id, action_type, action_json, str(action["ready_ts"]), str(action["expire_ts"]), int(action["cooldown_sec"]), str(action["start_ts"])))
+            return {"status": "applied", "stamina": remaining, "action": action}
+
+
 class LegacyMapRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database, self.player_database = str(game_database), str(player_database)
@@ -161,4 +207,4 @@ class LegacyMapRepository:
         return getattr(cls(*databases), method)(operation_id, user_id, **kwargs)
 
 
-__all__ = ["LegacyMapRepository", "MapHomeReturnSqlRepository", "MapInteractiveSqlQueryRepository", "MapMovementSqlRepository", "MapRepository"]
+__all__ = ["LegacyMapRepository", "MapHomeReturnSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapRepository"]

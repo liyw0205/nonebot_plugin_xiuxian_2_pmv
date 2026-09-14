@@ -37,6 +37,7 @@ from .transaction_service import MapCombatLifecycleService
 from .transaction_service import MapDongfuBuildService
 from .transaction_service import MapHomeReturnService
 from .transaction_service import MapInteractiveActionService
+from .transaction_service import MapInteractiveActionResult
 from .transaction_service import MapExploreStartService
 from .transaction_service import MapMovementSettlementService
 from .transaction_service import MapDaoBattleSettlementService
@@ -1689,20 +1690,25 @@ async def _process_node_action(bot: Bot, event: GroupMessageEvent | PrivateMessa
     ).action
     daily = _get_daily_limit(uid)
     gather_cd = _get_cd(uid, "gather_cd_until")
-    result = map_interactive_action_service.start(
-        operation_id,
-        uid,
-        action_type,
-        stamina,
-        config["cost"],
-        {key: position[key] for key in ("realm", "heaven", "node_id")},
-        daily,
-        DAILY_LIMIT_CONFIG["gather"],
-        "" if gather_cd is None else gather_cd.strftime("%Y-%m-%d %H:%M:%S"),
-        action,
+    outcome = map_application.interactive_start(
+        operation_id=operation_id,
+        user_id=uid,
+        action_type=action_type,
+        expected_stamina=stamina,
+        stamina_cost=config["cost"],
+        expected_position={key: position[key] for key in ("realm", "heaven", "node_id")},
+        expected_daily=daily,
+        daily_limit=DAILY_LIMIT_CONFIG["gather"],
+        expected_cooldown="" if gather_cd is None else gather_cd.strftime("%Y-%m-%d %H:%M:%S"),
+        action=action,
+    )
+    result = MapInteractiveActionResult(
+        str(outcome.data.get("status", outcome.code)),
+        int(outcome.data.get("stamina", stamina) or 0),
+        outcome.data.get("action", action),
     )
     await handle_send(bot, event, _interactive_start_message(result, action_type))
-    if result.status == "applied":
+    if outcome.ok:
         asyncio.create_task(
             _interactive_ready_notice(bot, event, uid, result.action or action)
         )
