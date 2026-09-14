@@ -1610,7 +1610,7 @@ async def _interactive_ready_notice(bot, event, uid: str, action: dict):
     if ready_at is None or expires_at is None:
         return
     await asyncio.sleep(max(0, (ready_at - datetime.now()).total_seconds()))
-    current = map_interactive_action_service.get_active(uid)
+    current = map_application.get_active(uid)
     if current is None or str(current.get("action_id")) != action_id:
         return
     if datetime.now() <= expires_at:
@@ -1621,7 +1621,7 @@ async def _interactive_ready_notice(bot, event, uid: str, action: dict):
         )
 
     await asyncio.sleep(max(0, (expires_at - datetime.now()).total_seconds()))
-    current = map_interactive_action_service.get_active(uid)
+    current = map_application.get_active(uid)
     if current is None or str(current.get("action_id")) != action_id:
         return
     cooldown_until = (
@@ -1649,7 +1649,7 @@ async def _process_node_action(bot: Bot, event: GroupMessageEvent | PrivateMessa
         return
 
     uid = str(user_info["user_id"])
-    now = datetime.now()
+    now = runtime_clock.now().replace(tzinfo=None)
     operation_id = _map_operation_id(event, "interactive-start", uid)
     replayed = map_interactive_action_service.replay_start(
         operation_id, uid, action_type
@@ -1716,7 +1716,7 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
 
     uid = str(user_info["user_id"])
     now = runtime_clock.now().replace(tzinfo=None)
-    st = map_interactive_action_service.get_active(uid)
+    st = map_application.get_active(uid)
     if not st:
         await handle_send(bot, event, "你当前没有进行中的采集行为。")
         return

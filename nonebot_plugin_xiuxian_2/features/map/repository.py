@@ -104,6 +104,34 @@ class MapHomeReturnSqlRepository:
             return record("applied", realm=realm, heaven=heaven, node_id=node_id, node_name=str(dongfu.get("node_name") or node_id))
 
 
+class MapInteractiveSqlQueryRepository:
+    def __init__(self, player_database: str | Path) -> None:
+        self.player_database = str(player_database)
+
+    def get_active(self, user_id: str) -> dict[str, Any] | None:
+        user_id = str(user_id).strip()
+        if not user_id:
+            return None
+        with DatabaseUnitOfWork(self.player_database) as uow:
+            row = uow.query_one("SELECT action_id,state_json,settlement_json FROM map_interactive_actions WHERE user_id=? AND status='active'", (user_id,))
+        if row is None:
+            return None
+        try:
+            action = json.loads(str(row["state_json"]))
+        except json.JSONDecodeError:
+            action = {}
+        if not isinstance(action, dict):
+            action = {}
+        action["action_id"] = str(row["action_id"])
+        if row["settlement_json"]:
+            try:
+                settlement = json.loads(str(row["settlement_json"]))
+            except json.JSONDecodeError:
+                settlement = {}
+            action["settlement"] = settlement if isinstance(settlement, dict) else {}
+        return action
+
+
 class LegacyMapRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database, self.player_database = str(game_database), str(player_database)
@@ -133,4 +161,4 @@ class LegacyMapRepository:
         return getattr(cls(*databases), method)(operation_id, user_id, **kwargs)
 
 
-__all__ = ["LegacyMapRepository", "MapHomeReturnSqlRepository", "MapMovementSqlRepository", "MapRepository"]
+__all__ = ["LegacyMapRepository", "MapHomeReturnSqlRepository", "MapInteractiveSqlQueryRepository", "MapMovementSqlRepository", "MapRepository"]

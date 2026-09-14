@@ -2090,7 +2090,8 @@ class SourceQualityTests(unittest.TestCase):
         resolve_start = source.index("async def _resolve_interactive_action")
         resolve_end = source.index("def _build_map_enemy", resolve_start)
         resolve_handler = source[resolve_start:resolve_end]
-        self.assertIn("map_interactive_action_service.get_active(", resolve_handler)
+        self.assertIn("map_application.get_active(", resolve_handler)
+        self.assertNotIn("map_interactive_action_service.get_active(", resolve_handler)
         self.assertIn("map_interactive_action_service.save_settlement(", resolve_handler)
         self.assertIn("action_settlement=settlement", resolve_handler)
         self.assertNotIn('_set_cd(uid, "gather_cd_until"', resolve_handler)
