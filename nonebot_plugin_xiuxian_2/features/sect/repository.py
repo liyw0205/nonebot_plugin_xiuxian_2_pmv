@@ -47,6 +47,25 @@ class LegacySectRepository:
 
 
 class SectRenameSqlRepository(LegacySectRepository):
+    def learn_main(self, operation_id, user_id, sect_id, buff_id, materials_cost, *, expected_catalog, forbidden_positions=(12,14,15)):
+        operation_id,user_id=str(operation_id).strip(),str(user_id);sect_id,buff_id,materials_cost=int(sect_id),int(buff_id),int(materials_cost)
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            old=uow.query_one("SELECT user_id,sect_id,buff_id,materials_cost,materials_left FROM sect_mainbuff_learn_operations WHERE operation_id=?",(operation_id,))
+            if old:
+                if (str(old["user_id"]),int(old["sect_id"]),int(old["buff_id"]))!=(user_id,sect_id,buff_id):return {"status":"state_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
+                return {"status":"duplicate","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"materials_cost":old["materials_cost"],"materials_left":old["materials_left"]}
+            user=uow.query_one("SELECT sect_id,sect_position FROM user_xiuxian WHERE user_id=?",(user_id,));
+            if user is None or user["sect_id"] is None or int(user["sect_id"])!=sect_id:return {"status":"membership_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
+            if int(user["sect_position"] or 0) in {int(v) for v in forbidden_positions}:return {"status":"position_forbidden","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
+            sect=uow.query_one("SELECT mainbuff,COALESCE(sect_materials,0) AS materials FROM sects WHERE sect_id=?",(sect_id,));
+            if sect is None or str(sect["mainbuff"])!=str(expected_catalog):return {"status":"catalog_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
+            materials=int(sect["materials"]);buff=uow.query_one("SELECT main_buff FROM BuffInfo WHERE user_id=?",(user_id,))
+            if materials<materials_cost:return {"status":"materials_insufficient","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"materials_cost":materials_cost,"materials_left":materials}
+            if buff is None:return {"status":"buff_missing","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
+            if int(buff["main_buff"] or 0)==buff_id:return {"status":"already_learned","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
+            left=materials-materials_cost;sa=uow.execute("UPDATE sects SET sect_materials=? WHERE sect_id=? AND sect_materials=? AND mainbuff=?",(left,sect_id,materials,str(expected_catalog)));ba=uow.execute("UPDATE BuffInfo SET main_buff=? WHERE user_id=? AND COALESCE(main_buff,0)<>?",(buff_id,user_id,buff_id))
+            if sa.rowcount!=1 or ba.rowcount!=1:return {"status":"state_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
+            uow.execute("INSERT INTO sect_mainbuff_learn_operations(operation_id,user_id,sect_id,buff_id,materials_cost,materials_left) VALUES(?,?,?,?,?,?)",(operation_id,user_id,sect_id,buff_id,materials_cost,left));return {"status":"learned","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"materials_cost":materials_cost,"materials_left":left}
     def purchase(self, operation_id, user_id, sect_id, item_id, item_name, item_type, quantity, unit_cost, weekly_limit, legacy_purchased, max_goods_num, week_key=None):
         operation_id,user_id=str(operation_id).strip(),str(user_id);sect_id,item_id,quantity,unit_cost,weekly_limit,legacy_purchased,max_goods_num=int(sect_id),int(item_id),int(quantity),int(unit_cost),int(weekly_limit),int(legacy_purchased),int(max_goods_num);week_key=str(week_key or __import__('datetime').date.today().strftime('%G-W%V'));payload=f'{user_id}|{sect_id}|{item_id}|{item_name}|{item_type}|{quantity}|{unit_cost}|{weekly_limit}|{week_key}'
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
@@ -167,9 +186,6 @@ class SectRenameSqlRepository(LegacySectRepository):
             count += 1
             uow.execute("INSERT INTO sect_member_join_operations(operation_id,user_id,sect_id,member_count,member_limit) VALUES(?,?,?,?,?)", (operation_id,user_id,sect_id,count,limit))
             return {"status": "joined", "user_id": user_id, "sect_id": sect_id, "sect_name": str(sect["sect_name"] or ""), "member_count": count, "member_limit": limit}
-
-    def learn_main(self, *args: Any, **kwargs: Any) -> Any:
-        return super().learn_main(*args, **kwargs)
 
     def learn_secondary(self, *args: Any, **kwargs: Any) -> Any:
         return super().learn_secondary(*args, **kwargs)

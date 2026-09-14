@@ -1157,14 +1157,17 @@ async def sect_mainbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessa
             # 获取逻辑
             materialscost = mainbuffgear * mainbuffconfig['学习资材消耗']
             if sect_info['sect_materials'] >= materialscost:
-                result = sect_mainbuff_learn_service.learn(
-                    _sect_operation_id(event, "mainbuff_learn", mainbuffid),
-                    user_id,
-                    sect_id,
-                    mainbuffid,
-                    materialscost,
+                learn_outcome = sect_application.learn_main(
+                    operation_id=_sect_operation_id(event, "mainbuff_learn", mainbuffid) or f"sect:mainbuff:{user_id}:{sect_ids.new_id()}",
+                    user_id=user_id,
+                    sect_id=sect_id,
+                    buff_id=mainbuffid,
+                    materials_cost=materialscost,
                     expected_catalog=sect_info['mainbuff'],
                 )
+                learn_data = learn_outcome.data or {}
+                result = type("SectLearnView", (), learn_data)()
+                result.applied = learn_outcome.ok
                 if not result.applied:
                     if result.status == "duplicate":
                         msg = "本次宗门功法学习已经完成，请刷新功法信息。"
