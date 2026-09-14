@@ -2103,8 +2103,18 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
             "title": title,
             "won": won,
         })
-        planned = map_combat_lifecycle_service.save_plan(
-            uid, snapshot["task_id"], plan
+        plan_outcome = map_application.combat_save_plan(
+            operation_id=f"map-combat-plan:{snapshot['task_id']}",
+            user_id=uid,
+            task_id=snapshot["task_id"],
+            plan=plan,
+        )
+        plan_data = result_data(plan_outcome.data)
+        planned = MapCombatLifecycleResult(
+            str(plan_data.get("status", plan_outcome.code)),
+            0,
+            plan_data.get("task") or {},
+            str(plan_data.get("snapshot", "")),
         )
         if not planned.succeeded or planned.task is None:
             await handle_send(bot, event, "节点战斗结果保存失败，请重新执行节点战斗。")

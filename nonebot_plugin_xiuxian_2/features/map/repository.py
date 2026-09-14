@@ -542,6 +542,36 @@ class MapCombatLifecycleStartSqlRepository:
         return {"status": status, "stamina": stamina, "task": task, "snapshot": task_json if task else ""}
 
 
+class MapCombatLifecyclePlanSqlRepository:
+    def __init__(self, player_database: str | Path) -> None:
+        self.player_database = str(player_database)
+
+    def save_plan(self, operation_id: str, user_id: str, task_id: str, plan: dict[str, Any]) -> dict[str, Any]:
+        operation_id, user_id, task_id = str(operation_id).strip(), str(user_id).strip(), str(task_id).strip()
+        plan = dict(plan)
+        if not operation_id or not user_id or not task_id or str(plan.get("task_id", "")) != task_id or str(plan.get("status", "")) != "planned":
+            raise ValueError("valid combat plan is required")
+        snapshot = json.dumps(plan, ensure_ascii=False, sort_keys=True)
+        with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+            old = uow.query_one("SELECT payload,snapshot FROM map_combat_plan_operations WHERE operation_id=?", (operation_id,))
+            if old:
+                return {"status": "duplicate", "task": self._parse(old["snapshot"]), "snapshot": str(old["snapshot"])} if str(old["payload"]) == snapshot else {"status": "operation_conflict", "task": {}, "snapshot": ""}
+            current = uow.query_one("SELECT snapshot FROM map_combat_settlement WHERE user_id=?", (user_id,))
+            current_snapshot = "" if current is None or current["snapshot"] is None else str(current["snapshot"])
+            current_task = self._parse(current_snapshot)
+            if str(current_task.get("task_id", "")) != task_id or str(current_task.get("status", "")) != "running":
+                return {"status": "state_changed", "task": {}, "snapshot": ""}
+            uow.execute("UPDATE map_combat_settlement SET snapshot=? WHERE user_id=?", (snapshot, user_id))
+            uow.execute("INSERT INTO map_combat_plan_operations(operation_id,user_id,task_id,payload,snapshot) VALUES(?,?,?,?,?)", (operation_id, user_id, task_id, snapshot, snapshot))
+            return {"status": "applied", "task": plan, "snapshot": snapshot}
+
+    @staticmethod
+    def _parse(value: Any) -> dict[str, Any]:
+        try: parsed = json.loads(str(value))
+        except (TypeError, ValueError): return {}
+        return parsed if isinstance(parsed, dict) else {}
+
+
 class LegacyMapRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database, self.player_database = str(game_database), str(player_database)
@@ -571,4 +601,4 @@ class LegacyMapRepository:
         return getattr(cls(*databases), method)(operation_id, user_id, **kwargs)
 
 
-__all__ = ["LegacyMapRepository", "MapCombatLifecycleQueryRepository", "MapCombatLifecycleStartSqlRepository", "MapDongfuBuildSqlRepository", "MapExploreSettlementSqlRepository", "MapMissionClaimSqlRepository", "MapSeedPurchaseSqlRepository", "MapExploreStartSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]
+__all__ = ["LegacyMapRepository", "MapCombatLifecyclePlanSqlRepository", "MapCombatLifecycleQueryRepository", "MapCombatLifecycleStartSqlRepository", "MapDongfuBuildSqlRepository", "MapExploreSettlementSqlRepository", "MapMissionClaimSqlRepository", "MapSeedPurchaseSqlRepository", "MapExploreStartSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]

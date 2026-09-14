@@ -2835,6 +2835,7 @@
     "lunhui_feature_migrations",
     "lunhui_recall_operations",
     "lunhui_settlement_operations",
+    "map_combat_plan_operations",
     "map_combat_settlement",
     "map_combat_settlement_operations",
     "map_combat_start_operations",
