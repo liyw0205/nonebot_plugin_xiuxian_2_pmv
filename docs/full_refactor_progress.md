@@ -341,6 +341,8 @@
 
 2026-09-14 tianti breakthrough persistence live safety：补提交 `9386383`（仅补台账）部署后 backup `/srv/old/data/backups/20260914T003203Z`、全库 migration dry-run pending 为空、reconcile clean、readiness 全绿；recovery smoke 覆盖当前 61-entry catalog，player_db migrations=3，`tianti_breakthrough_operations` 存在，reconcile `operations=0/outbox_events=0/dead_events=0`。live 未执行玩家突破写入。
 
+2026-09-14 tianti qiaoxue repository cutover：新增 `TiantiQiaoxueSqlRepository`，默认 Web `/api/v1/tianti/qiaoxue` 使用 player_db UoW、feature-owned qiaoxue pool、显式 roll 和 `.005` operation migration；覆盖首次开窍、候选去重、10% 气血扣除、上限、气血不足、operation replay 与 schema-not-ready。旧 `QiaoxueService` 仍是兼容回滚，bath 仍未迁移。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。

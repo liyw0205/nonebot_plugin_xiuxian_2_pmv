@@ -20,6 +20,7 @@ from .repository import (
     LegacyTiantiTrainingRepository,
     StoneTrainingSqlRepository,
     TiantiBreakthroughSqlRepository,
+    TiantiQiaoxueSqlRepository,
     TiantiTrainingRepository,
 )
 
@@ -115,6 +116,9 @@ class TiantiTrainingApplication:
 
     def _breakthrough_repository(self) -> TiantiBreakthroughSqlRepository | TiantiTrainingRepository:
         return self.repository or TiantiBreakthroughSqlRepository(self.player_database)
+
+    def _qiaoxue_repository(self) -> TiantiQiaoxueSqlRepository | TiantiTrainingRepository:
+        return self.repository or TiantiQiaoxueSqlRepository(self.player_database)
 
     def train(self, *, operation_id: str, user_id: str, requested_stone: int) -> OperationOutcome[dict[str, Any]]:
         try:
@@ -244,7 +248,7 @@ class TiantiTrainingApplication:
             action="tianti.qiaoxue",
             payload=request.payload(),
             ledger_database=self.player_database,
-            call=lambda: self._repository().open_qiaoxue(request.operation_id, request.user_id, request.roll),
+            call=lambda: self._qiaoxue_repository().open_qiaoxue(request.operation_id, request.user_id, request.roll),
             success_statuses={"opened", "duplicate"},
             messages={
                 "limit_reached": "当前炼体境界无法继续开窍。",

@@ -66,6 +66,12 @@ class TiantiProfileReader:
             raise ValueError(f"未知修仙境界: {level}")
         return len(ranks) - ranks.index(level) - 1
 
+    def qiaoxue_pool(self) -> list[dict[str, Any]]:
+        with (self.path.parent / "炼体窍穴.json").open("r", encoding="utf-8") as stream:
+            loaded = json.load(stream)
+        pool = loaded.get("窍穴", []) if isinstance(loaded, dict) else []
+        return [dict(item) for item in pool if isinstance(item, dict) and item.get("name")]
+
 @dataclass(frozen=True)
 class StoneTrainingPersistenceResult:
     status: str
@@ -85,6 +91,17 @@ class BreakthroughPersistenceResult:
     hp_cost: int
     new_hp: int
     success: bool
+
+
+@dataclass(frozen=True)
+class QiaoxuePersistenceResult:
+    status: str
+    user_id: str
+    qiaoxue: dict[str, Any]
+    hp_cost: int
+    new_hp: int
+    opened_count: int
+    unlock_limit: int
 
 
 class TiantiTrainingRepository(Protocol):
@@ -209,6 +226,62 @@ class TiantiBreakthroughSqlRepository:
             return BreakthroughPersistenceResult("completed", user_id, decision.old_level, decision.new_level, decision.hp_cost, decision.new_hp, decision.new_level != decision.old_level)
 
 
+class TiantiQiaoxueSqlRepository:
+    """Feature-owned qiaoxue persistence on player.db."""
+
+    def __init__(self, player_database: str | Path, *, profile_reader: TiantiProfileReader | None = None) -> None:
+        self.player_database = str(player_database)
+        self.profile = profile_reader or TiantiProfileReader(Path(player_database).parent / "xiuxian")
+
+    def open(self, operation_id: str, user_id: str, roll: int) -> Any:
+        operation_id, user_id, roll = str(operation_id).strip(), str(user_id), int(roll)
+        if not operation_id or roll < 0:
+            raise ValueError("operation_id is required and roll must be non-negative")
+        fields = tuple(self.profile.default_data().keys())
+        with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+            operation_table = uow.query_one("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='tianti_qiaoxue_operations'")
+            player_table = uow.query_one("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='tianti_info'")
+            columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(tianti_info)")}
+            if operation_table is None or player_table is None or not set(fields).issubset(columns):
+                raise RuntimeError("tianti training schema is not ready; run migrations first")
+            previous = uow.query_one("SELECT user_id, roll, qiaoxue_json, hp_cost, new_hp, opened_count, unlock_limit FROM tianti_qiaoxue_operations WHERE operation_id=?", (operation_id,))
+            if previous:
+                if str(previous["user_id"]) != user_id or int(previous["roll"]) != roll:
+                    return QiaoxuePersistenceResult("state_changed", user_id, {}, 0, 0, 0, 0)
+                return QiaoxuePersistenceResult("duplicate", user_id, json.loads(previous["qiaoxue_json"]), int(previous["hp_cost"]), int(previous["new_hp"]), int(previous["opened_count"]), int(previous["unlock_limit"]))
+            row = uow.query_one("SELECT * FROM tianti_info WHERE user_id=?", (user_id,))
+            if row is None:
+                return QiaoxuePersistenceResult("user_missing", user_id, {}, 0, 0, 0, 0)
+            data = self.profile.clean(row)
+            opened = list(data.get("opened_qiaoxue", []) or [])
+            opened_count = len(opened)
+            unlock_limit = min(int(self.profile.levels()[str(data["tianti_level"])]["rank"]) * 3, 108)
+            candidates = [item for item in self.profile.qiaoxue_pool() if item["name"] not in set(opened)]
+            if opened_count >= unlock_limit or not candidates:
+                return QiaoxuePersistenceResult("limit_reached", user_id, {}, 0, int(data["tianti_hp"]), opened_count, unlock_limit)
+            old_hp = int(data["tianti_hp"])
+            hp_cost = max(1, int(old_hp * 0.1))
+            if old_hp < hp_cost:
+                return QiaoxuePersistenceResult("hp_insufficient", user_id, {}, 0, old_hp, opened_count, unlock_limit)
+            chosen = dict(candidates[roll % len(candidates)])
+            detail = list(data.get("opened_qiaoxue_detail", []) or [])
+            detail.append({"name": chosen["name"], "group": chosen["group"], "effect_type": chosen["effect_type"], "effect_value": float(chosen["effect_value"])})
+            data["tianti_hp"] = old_hp - hp_cost
+            data["opened_qiaoxue"] = opened + [chosen["name"]]
+            data["opened_qiaoxue_detail"] = detail
+            values = [json.dumps(data[field], ensure_ascii=False) if isinstance(data[field], (list, dict)) else data[field] for field in fields]
+            columns_sql = ", ".join(["user_id", *fields])
+            placeholders = ", ".join("?" for _ in range(len(values) + 1))
+            updates = ", ".join(f'"{field}"=excluded."{field}"' for field in fields)
+            uow.execute(f'INSERT INTO tianti_info ({columns_sql}) VALUES ({placeholders}) ON CONFLICT(user_id) DO UPDATE SET {updates}', (user_id, *values))
+            new_count = opened_count + 1
+            uow.execute("INSERT INTO tianti_qiaoxue_operations(operation_id,user_id,roll,qiaoxue_json,hp_cost,new_hp,opened_count,unlock_limit) VALUES(?,?,?,?,?,?,?,?)", (operation_id, user_id, roll, json.dumps(chosen, ensure_ascii=False), hp_cost, data["tianti_hp"], new_count, unlock_limit))
+            return QiaoxuePersistenceResult("opened", user_id, chosen, hp_cost, int(data["tianti_hp"]), new_count, unlock_limit)
+
+    def open_qiaoxue(self, operation_id: str, user_id: str, roll: int) -> Any:
+        return self.open(operation_id, user_id, roll)
+
+
 class LegacyTiantiTrainingRepository:
     """Lazy adapter for the already transactional Tianti services."""
 
@@ -276,5 +349,6 @@ __all__ = [
     "StoneTrainingSqlRepository",
     "TiantiBreakthroughSqlRepository",
     "TiantiProfileReader",
+    "TiantiQiaoxueSqlRepository",
     "TiantiTrainingRepository",
 ]

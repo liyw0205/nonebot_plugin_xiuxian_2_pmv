@@ -41,4 +41,14 @@ def apply_tianti_training_operations(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_tianti_breakthrough_operations", "apply_tianti_player_info", "apply_tianti_training", "apply_tianti_training_operations"]
+def apply_tianti_qiaoxue_operations(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS tianti_qiaoxue_operations ("
+        "operation_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, roll INTEGER NOT NULL, "
+        "qiaoxue_json TEXT NOT NULL, hp_cost INTEGER NOT NULL, new_hp INTEGER NOT NULL, "
+        "opened_count INTEGER NOT NULL, unlock_limit INTEGER NOT NULL, "
+        "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+__all__ = ["apply_tianti_breakthrough_operations", "apply_tianti_player_info", "apply_tianti_qiaoxue_operations", "apply_tianti_training", "apply_tianti_training_operations"]
