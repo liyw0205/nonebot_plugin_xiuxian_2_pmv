@@ -1845,7 +1845,8 @@ class SourceQualityTests(unittest.TestCase):
         kick_command = source[kick_start:out_start]
         out_command = source[out_start:donate_start]
 
-        self.assertIn("sect_membership_service.kick_member(", kick_command)
+        self.assertIn("sect_application.kick(", kick_command)
+        self.assertNotIn("sect_membership_service.kick_member(", kick_command)
         self.assertNotIn("sql_message.update_usr_sect(", kick_command)
         self.assertNotIn("sql_message.update_user_sect_contribution(", kick_command)
 

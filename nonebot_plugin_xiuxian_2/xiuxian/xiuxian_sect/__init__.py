@@ -2538,12 +2538,15 @@ async def sect_kick_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="宗门", k1="踢出", v1="宗门踢出", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
         await sect_kick_out.finish()
 
-    result = sect_membership_service.kick_member(
-        _sect_operation_id(event, "kick", give_user['user_id']),
-        user_info['user_id'],
-        give_user['user_id'],
+    kick_outcome = sect_application.kick(
+        operation_id=_sect_operation_id(event, "kick", give_user['user_id']) or f"sect:kick:{give_user['user_id']}:{sect_ids.new_id()}",
+        user_id=user_info['user_id'],
+        target_id=give_user['user_id'],
         manager_max_position=idx_position,
     )
+    kick_data = kick_outcome.data or {}
+    result = type("SectKickView", (), kick_data)()
+    result.applied = kick_outcome.ok
     if result.status == "self_target":
         msg = f"无法对自己进行操作，试试退出宗门？"
     elif result.status == "different_sect":

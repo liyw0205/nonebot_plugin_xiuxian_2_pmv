@@ -7,6 +7,7 @@ from ...infrastructure.database import DatabaseUnitOfWork
 
 
 class SectRepository(Protocol):
+    def kick(self, *args: Any, **kwargs: Any) -> Any: ...
     def leave(self, *args: Any, **kwargs: Any) -> Any: ...
     def rename(self, *args: Any, **kwargs: Any) -> Any: ...
     def join(self, *args: Any, **kwargs: Any) -> Any: ...
@@ -44,6 +45,26 @@ class LegacySectRepository:
 
 
 class SectRenameSqlRepository(LegacySectRepository):
+    def kick(self, operation_id, actor_id, target_id, *, manager_max_position):
+        operation_id, actor_id, target_id = str(operation_id).strip(), str(actor_id), str(target_id)
+        manager_max_position = int(manager_max_position)
+        if actor_id == target_id: return {"status": "self_target", "actor_id": actor_id, "target_id": target_id}
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            old = uow.query_one("SELECT sect_id,sect_name,actor_name,target_name,actor_position,target_position FROM sect_member_removal_operations WHERE operation_id=?", (operation_id,))
+            if old: return {"status": "duplicate", "actor_id": actor_id, "target_id": target_id, "sect_id": old["sect_id"], "sect_name": str(old["sect_name"] or ""), "actor_name": str(old["actor_name"] or ""), "target_name": str(old["target_name"] or ""), "actor_position": old["actor_position"], "target_position": old["target_position"]}
+            actor=uow.query_one("SELECT sect_id,sect_position,user_name FROM user_xiuxian WHERE user_id=?",(actor_id,));target=uow.query_one("SELECT sect_id,sect_position,user_name FROM user_xiuxian WHERE user_id=?",(target_id,))
+            if actor is None:return {"status":"actor_not_found","actor_id":actor_id,"target_id":target_id}
+            if actor["sect_id"] is None:return {"status":"actor_not_in_sect","actor_id":actor_id,"target_id":target_id}
+            if target is None:return {"status":"target_not_found","actor_id":actor_id,"target_id":target_id,"sect_id":actor["sect_id"]}
+            if int(actor["sect_position"] or 0)>manager_max_position:return {"status":"insufficient_rank","actor_id":actor_id,"target_id":target_id,"sect_id":actor["sect_id"]}
+            if target["sect_id"]!=actor["sect_id"]:return {"status":"different_sect","actor_id":actor_id,"target_id":target_id,"sect_id":actor["sect_id"]}
+            if int(target["sect_position"] or 0)<=int(actor["sect_position"] or 0):return {"status":"target_not_lower","actor_id":actor_id,"target_id":target_id,"sect_id":actor["sect_id"]}
+            sect=uow.query_one("SELECT sect_name FROM sects WHERE sect_id=?",(actor["sect_id"],));
+            if sect is None:return {"status":"sect_not_found","actor_id":actor_id,"target_id":target_id,"sect_id":actor["sect_id"]}
+            changed=uow.execute("UPDATE user_xiuxian SET sect_id=NULL,sect_position=NULL,sect_contribution=0 WHERE user_id=? AND sect_id=? AND sect_position=?",(target_id,target["sect_id"],target["sect_position"]))
+            if changed.rowcount!=1:return {"status":"state_changed","actor_id":actor_id,"target_id":target_id}
+            uow.execute("INSERT INTO sect_member_removal_operations(operation_id,operation_type,actor_id,target_id,sect_id,sect_name,actor_name,target_name,actor_position,target_position) VALUES(?,?,?,?,?,?,?,?,?,?)",(operation_id,"kick",actor_id,target_id,actor["sect_id"],str(sect["sect_name"] or ""),str(actor["user_name"] or ""),str(target["user_name"] or ""),actor["sect_position"],target["sect_position"]))
+            return {"status":"kicked","actor_id":actor_id,"target_id":target_id,"sect_id":actor["sect_id"],"sect_name":str(sect["sect_name"] or ""),"actor_name":str(actor["user_name"] or ""),"target_name":str(target["user_name"] or ""),"actor_position":actor["sect_position"],"target_position":target["sect_position"]}
     def leave(self, operation_id, user_id, *, owner_position=0):
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:

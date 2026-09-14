@@ -36,6 +36,10 @@ class SectApplication:
         payload = {"user_id": str(user_id), "owner_position": int(owner_position)}
         return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.leave", payload=payload, call=lambda: self._repository().leave(operation_id, user_id, owner_position=owner_position))
 
+    def kick(self, *, operation_id: str, user_id: str, target_id: str, manager_max_position: int) -> OperationOutcome[dict[str, Any]]:
+        payload = {"user_id": str(user_id), "target_id": str(target_id), "manager_max_position": int(manager_max_position)}
+        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.kick", payload=payload, call=lambda: self._repository().kick(operation_id, user_id, target_id, manager_max_position=manager_max_position))
+
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):
             try:
