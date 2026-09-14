@@ -14,6 +14,16 @@ def apply_tianti_player_info(uow: DatabaseUnitOfWork) -> None:
             uow.execute(f'ALTER TABLE tianti_info ADD COLUMN "{field}" TEXT')
 
 
+def apply_tianti_breakthrough_operations(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS tianti_breakthrough_operations ("
+        "operation_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, cultivation_rank INTEGER NOT NULL, "
+        "roll_success INTEGER NOT NULL, old_level TEXT NOT NULL, new_level TEXT NOT NULL, "
+        "hp_cost INTEGER NOT NULL, new_hp INTEGER NOT NULL, success INTEGER NOT NULL, "
+        "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
 def apply_tianti_training(uow: DatabaseUnitOfWork) -> None:
     uow.execute("CREATE TABLE IF NOT EXISTS tianti_training_feature_migrations (version TEXT PRIMARY KEY)")
     uow.execute(
@@ -31,4 +41,4 @@ def apply_tianti_training_operations(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_tianti_player_info", "apply_tianti_training", "apply_tianti_training_operations"]
+__all__ = ["apply_tianti_breakthrough_operations", "apply_tianti_player_info", "apply_tianti_training", "apply_tianti_training_operations"]

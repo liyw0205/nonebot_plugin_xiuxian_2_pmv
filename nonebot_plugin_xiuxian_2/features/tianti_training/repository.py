@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from ...infrastructure.database import DatabaseUnitOfWork
-from .domain import decide_stone_training
+from .domain import decide_breakthrough, decide_stone_training
 
 
 class TiantiProfileReader:
@@ -52,6 +52,19 @@ class TiantiProfileReader:
             return 10**30
         return int(int(next_level.get("need_hp", 0)) * self.closing_multiplier)
 
+    def next_level(self, level: str) -> tuple[str | None, dict[str, Any]]:
+        levels = sorted(self.levels().items(), key=lambda item: int(item[1].get("rank", 0)))
+        for index, (name, _) in enumerate(levels):
+            if name == level:
+                return levels[index + 1] if index + 1 < len(levels) else (None, {})
+        return None, {}
+
+    def cultivation_rank(self, level: str) -> int:
+        with (self.path.parent.parent / "境界.json").open("r", encoding="utf-8") as stream:
+            ranks = list(json.load(stream).keys())
+        if level not in ranks:
+            raise ValueError(f"未知修仙境界: {level}")
+        return len(ranks) - ranks.index(level) - 1
 
 @dataclass(frozen=True)
 class StoneTrainingPersistenceResult:
@@ -61,6 +74,17 @@ class StoneTrainingPersistenceResult:
     stone_cost: int
     hp_gain: int
     new_hp: int
+
+
+@dataclass(frozen=True)
+class BreakthroughPersistenceResult:
+    status: str
+    user_id: str
+    old_level: str
+    new_level: str
+    hp_cost: int
+    new_hp: int
+    success: bool
 
 
 class TiantiTrainingRepository(Protocol):
@@ -142,6 +166,49 @@ class StoneTrainingSqlRepository:
             return StoneTrainingPersistenceResult("trained", user_id, requested_stone, decision.stone_cost, decision.hp_gain, decision.new_hp)
 
 
+class TiantiBreakthroughSqlRepository:
+    """Feature-owned breakthrough persistence on player.db."""
+
+    def __init__(self, player_database: str | Path, *, profile_reader: TiantiProfileReader | None = None) -> None:
+        self.player_database = str(player_database)
+        self.profile = profile_reader or TiantiProfileReader(Path(player_database).parent / "xiuxian")
+
+    def breakthrough(self, operation_id: str, user_id: str, *, cultivation_rank: int, roll_success: bool) -> Any:
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        if not operation_id:
+            raise ValueError("operation_id is required")
+        fields = tuple(self.profile.default_data().keys())
+        with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+            operation_table = uow.query_one("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='tianti_breakthrough_operations'")
+            player_table = uow.query_one("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='tianti_info'")
+            columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(tianti_info)")}
+            if operation_table is None or player_table is None or not set(fields).issubset(columns):
+                raise RuntimeError("tianti training schema is not ready; run migrations first")
+            previous = uow.query_one("SELECT user_id, cultivation_rank, roll_success, old_level, new_level, hp_cost, new_hp, success FROM tianti_breakthrough_operations WHERE operation_id=?", (operation_id,))
+            if previous:
+                if str(previous["user_id"]) != user_id or int(previous["cultivation_rank"]) != int(cultivation_rank):
+                    return BreakthroughPersistenceResult("state_changed", user_id, "", "", 0, 0, False)
+                return BreakthroughPersistenceResult("duplicate", user_id, str(previous["old_level"]), str(previous["new_level"]), int(previous["hp_cost"]), int(previous["new_hp"]), bool(previous["success"]))
+            row = uow.query_one("SELECT * FROM tianti_info WHERE user_id=?", (user_id,))
+            if row is None:
+                return BreakthroughPersistenceResult("user_missing", user_id, "", "", 0, 0, False)
+            data = self.profile.clean(row)
+            old_level = str(data["tianti_level"])
+            next_level, next_config = self.profile.next_level(old_level)
+            required_rank = self.profile.cultivation_rank(str(next_config["min_xx_level"])) if next_config else 0
+            decision = decide_breakthrough(old_level=old_level, next_level=next_level, cultivation_rank=int(cultivation_rank), required_rank=required_rank, old_hp=int(data["tianti_hp"]), required_hp=int(next_config.get("need_hp", 0)), roll_success=bool(roll_success))
+            if decision.status != "completed":
+                return BreakthroughPersistenceResult(decision.status, user_id, old_level, old_level, 0, decision.new_hp, False)
+            data["tianti_level"], data["tianti_hp"] = decision.new_level, decision.new_hp
+            values = [json.dumps(data[field], ensure_ascii=False) if isinstance(data[field], (list, dict)) else data[field] for field in fields]
+            columns_sql = ", ".join(["user_id", *fields])
+            placeholders = ", ".join("?" for _ in range(len(values) + 1))
+            updates = ", ".join(f'"{field}"=excluded."{field}"' for field in fields)
+            uow.execute(f'INSERT INTO tianti_info ({columns_sql}) VALUES ({placeholders}) ON CONFLICT(user_id) DO UPDATE SET {updates}', (user_id, *values))
+            uow.execute("INSERT INTO tianti_breakthrough_operations(operation_id,user_id,cultivation_rank,roll_success,old_level,new_level,hp_cost,new_hp,success) VALUES(?,?,?,?,?,?,?,?,?)", (operation_id, user_id, int(cultivation_rank), int(bool(roll_success)), decision.old_level, decision.new_level, decision.hp_cost, decision.new_hp, int(decision.new_level != decision.old_level)))
+            return BreakthroughPersistenceResult("completed", user_id, decision.old_level, decision.new_level, decision.hp_cost, decision.new_hp, decision.new_level != decision.old_level)
+
+
 class LegacyTiantiTrainingRepository:
     """Lazy adapter for the already transactional Tianti services."""
 
@@ -202,4 +269,12 @@ class LegacyTiantiTrainingRepository:
         return self._services()[3].open(operation_id, user_id, roll)
 
 
-__all__ = ["LegacyTiantiTrainingRepository", "TiantiTrainingRepository"]
+__all__ = [
+    "BreakthroughPersistenceResult",
+    "LegacyTiantiTrainingRepository",
+    "StoneTrainingPersistenceResult",
+    "StoneTrainingSqlRepository",
+    "TiantiBreakthroughSqlRepository",
+    "TiantiProfileReader",
+    "TiantiTrainingRepository",
+]

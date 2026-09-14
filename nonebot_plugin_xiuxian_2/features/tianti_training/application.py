@@ -16,7 +16,12 @@ from .domain import (
     StoneTrainingRequest,
     normalize_plan,
 )
-from .repository import LegacyTiantiTrainingRepository, StoneTrainingSqlRepository, TiantiTrainingRepository
+from .repository import (
+    LegacyTiantiTrainingRepository,
+    StoneTrainingSqlRepository,
+    TiantiBreakthroughSqlRepository,
+    TiantiTrainingRepository,
+)
 
 
 def _result_data(raw: Any) -> dict[str, Any]:
@@ -107,6 +112,9 @@ class TiantiTrainingApplication:
 
     def _stone_repository(self) -> StoneTrainingSqlRepository | TiantiTrainingRepository:
         return self.repository or StoneTrainingSqlRepository(self.game_database, self.player_database)
+
+    def _breakthrough_repository(self) -> TiantiBreakthroughSqlRepository | TiantiTrainingRepository:
+        return self.repository or TiantiBreakthroughSqlRepository(self.player_database)
 
     def train(self, *, operation_id: str, user_id: str, requested_stone: int) -> OperationOutcome[dict[str, Any]]:
         try:
@@ -209,7 +217,7 @@ class TiantiTrainingApplication:
             action="tianti.breakthrough",
             payload=request.payload(),
             ledger_database=self.player_database,
-            call=lambda: self._repository().breakthrough(
+            call=lambda: self._breakthrough_repository().breakthrough(
                 request.operation_id,
                 request.user_id,
                 cultivation_rank=request.cultivation_rank,
