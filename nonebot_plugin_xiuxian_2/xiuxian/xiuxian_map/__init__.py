@@ -1857,22 +1857,25 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
     cooldown_until = (now + timedelta(seconds=ia["cooldown_sec"])).strftime(
         "%Y-%m-%d %H:%M:%S"
     )
-    result = map_resource_reward_service.settle(
-        operation_id,
-        uid,
-        settlement["daily"],
-        DAILY_LIMIT_CONFIG["gather"],
-        settlement["stone"],
-        settlement["items"],
-        XiuConfig().max_goods_num,
+    reward_outcome = map_application.resource_reward(
+        operation_id=operation_id,
+        user_id=uid,
+        expected_daily=settlement["daily"],
+        daily_limit=DAILY_LIMIT_CONFIG["gather"],
+        stone=settlement["stone"],
+        items=settlement["items"],
+        max_goods_num=XiuConfig().max_goods_num,
         action_id=st["action_id"],
         action_settlement=settlement,
         cooldown_until=cooldown_until,
+        clock=runtime_clock,
     )
-    if result.status == "inventory_full":
+    reward_data = result_data(reward_outcome.data)
+    reward_status = str(reward_data.get("status", reward_outcome.code))
+    if reward_status == "inventory_full":
         await handle_send(bot, event, "背包物品已达上限，资源奖励尚未领取。")
         return
-    if result.status in {"limit_reached", "state_changed", "user_missing"}:
+    if reward_status in {"limit_reached", "state_changed", "user_missing"}:
         await handle_send(bot, event, "资源行动未完成：节点资源状态已更新，请重新行动。")
         return
 

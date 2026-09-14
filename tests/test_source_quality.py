@@ -2095,6 +2095,8 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("map_interactive_action_service.get_active(", resolve_handler)
         self.assertIn("map_application.interactive_settlement(", resolve_handler)
         self.assertNotIn("map_interactive_action_service.save_settlement(", resolve_handler)
+        self.assertIn("map_application.resource_reward(", resolve_handler)
+        self.assertNotIn("map_resource_reward_service.settle(", resolve_handler)
         self.assertIn("action_settlement=settlement", resolve_handler)
         self.assertNotIn('_set_cd(uid, "gather_cd_until"', resolve_handler)
 

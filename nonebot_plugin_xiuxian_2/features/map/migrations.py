@@ -39,4 +39,12 @@ def apply_map_interactive_player(uow: DatabaseUnitOfWork) -> None:
     uow.execute("CREATE TABLE IF NOT EXISTS map_cooldown (user_id TEXT PRIMARY KEY, gather_cd_until TEXT DEFAULT NULL)")
 
 
-__all__ = ["apply_map", "apply_map_home_return", "apply_map_interactive_player", "apply_map_interactive_start", "apply_map_movement"]
+def apply_map_resource_reward(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS map_resource_reward_operations ("
+        "operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, stone INTEGER NOT NULL, "
+        "rewards TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+__all__ = ["apply_map", "apply_map_home_return", "apply_map_interactive_player", "apply_map_interactive_start", "apply_map_movement", "apply_map_resource_reward"]
