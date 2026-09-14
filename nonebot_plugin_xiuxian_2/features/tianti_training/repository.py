@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from ...infrastructure.database import DatabaseUnitOfWork
-from .domain import decide_breakthrough, decide_stone_training
+from .domain import (
+    decide_breakthrough,
+    decide_medicine_bath_activation,
+    decide_stone_training,
+    decide_tianti_gain,
+    decide_tianti_settlement_window,
+)
 
 
 class TiantiProfileReader:
@@ -104,6 +110,35 @@ class QiaoxuePersistenceResult:
     unlock_limit: int
 
 
+@dataclass(frozen=True)
+class MedicineBathPersistenceResult:
+    status: str
+    user_id: str
+    consumed: tuple[dict[str, Any], ...] = ()
+    effect: float = 0.0
+    bath_name: str = ""
+    end_time: str = ""
+    settlement: dict[str, Any] | None = None
+    insufficient: tuple[dict[str, Any], ...] = ()
+
+
+def _parse_time(value: Any) -> datetime | None:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
+        try:
+            return datetime.strptime(str(value), fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _sect_bonus(level: int) -> float:
+    return max(0, min(int(level or 0), 10)) * 0.05
+
+
 class TiantiTrainingRepository(Protocol):
     def train(self, operation_id: str, user_id: str, requested_stone: int) -> Any: ...
 
@@ -181,6 +216,78 @@ class StoneTrainingSqlRepository:
             uow.execute(f'INSERT INTO player_data.tianti_info ({columns}) VALUES ({", ".join("?" for _ in range(len(values) + 1))}) ON CONFLICT(user_id) DO UPDATE SET {updates}', (user_id, *values))
             uow.execute("INSERT INTO tianti_stone_training_operations(operation_id,user_id,requested_stone,stone_cost,hp_gain,new_hp) VALUES(?,?,?,?,?,?)", (operation_id, user_id, requested_stone, decision.stone_cost, decision.hp_gain, decision.new_hp))
             return StoneTrainingPersistenceResult("trained", user_id, requested_stone, decision.stone_cost, decision.hp_gain, decision.new_hp)
+
+
+class TiantiMedicineBathSqlRepository:
+    """Feature-owned cross-database medicine bath transaction."""
+
+    def __init__(self, game_database: str | Path, player_database: str | Path, *, spirit_vein_multiplier: Callable[[], float] | None = None, profile_reader: TiantiProfileReader | None = None) -> None:
+        self.game_database = str(game_database)
+        self.player_database = str(player_database)
+        self.profile = profile_reader or TiantiProfileReader(Path(player_database).parent / "xiuxian")
+        self.spirit_vein_multiplier = spirit_vein_multiplier or (lambda: 1.0)
+
+    def apply_bath(self, operation_id: str, user_id: str, consume_plan: Sequence[Mapping[str, Any]], effect: float, slot_name: str, started_at: datetime, duration_minutes: int, *, sect_fairyland_level: int = 0) -> Any:
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        plan = tuple({"item_id": int(item["item_id"]), "name": str(item["name"]), "amount": int(item["amount"])} for item in consume_plan)
+        if not operation_id or not plan or any(item["amount"] <= 0 for item in plan):
+            raise ValueError("operation_id and positive consume plan are required")
+        fields = tuple(self.profile.default_data().keys())
+        now_text = started_at.strftime("%Y-%m-%d %H:%M:%S")
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            uow.attach_database(self.player_database, "player_data")
+            tables = {str(row["name"]) for row in uow.query_all("SELECT name FROM sqlite_master WHERE type='table'")}
+            player_columns = {str(row["name"]) for row in uow.query_all("PRAGMA player_data.table_info(tianti_info)")}
+            if "tianti_medicine_bath_operations" not in tables or "tianti_info" not in {str(row["name"]) for row in uow.query_all("SELECT name FROM player_data.sqlite_master WHERE type='table'")} or not set(fields).issubset(player_columns):
+                raise RuntimeError("tianti training schema is not ready; run migrations first")
+            previous = uow.query_one("SELECT user_id, result_json FROM tianti_medicine_bath_operations WHERE operation_id=?", (operation_id,))
+            if previous:
+                if str(previous["user_id"]) != user_id:
+                    return MedicineBathPersistenceResult("state_changed", user_id)
+                return MedicineBathPersistenceResult("duplicate", user_id, **json.loads(previous["result_json"]))
+            row = uow.query_one("SELECT * FROM player_data.tianti_info WHERE user_id=?", (user_id,))
+            if row is None:
+                return MedicineBathPersistenceResult("user_missing", user_id)
+            data = self.profile.clean(row)
+            current_end = _parse_time(data.get("medicine_end_time"))
+            if current_end is not None and started_at <= current_end and float(data.get("medicine_effect", 0) or 0) > 1:
+                return MedicineBathPersistenceResult("bath_active", user_id)
+            insufficient = []
+            for item in plan:
+                stock = uow.query_one("SELECT COALESCE(goods_num, 0) AS goods_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item["item_id"]))
+                have = int(stock["goods_num"]) if stock else 0
+                if have < item["amount"]:
+                    insufficient.append({**item, "have": have})
+            if insufficient:
+                return MedicineBathPersistenceResult("item_insufficient", user_id, insufficient=tuple(insufficient))
+            old_end = _parse_time(data.get("medicine_end_time"))
+            window = decide_tianti_settlement_window(last_settlement=_parse_time(data.get("last_settle_time")), now=started_at)
+            settlement: dict[str, Any] = {"status": window.status}
+            if window.status == "settle":
+                level = self.profile.levels()[str(data["tianti_level"])]
+                details = list(data.get("opened_qiaoxue_detail", []) or [])
+                base_ratio = sum(float(item.get("effect_value", 0)) for item in details if item.get("effect_type") == "base_per_min_ratio")
+                gain_pct = sum(float(item.get("effect_value", 0)) for item in details if item.get("effect_type") == "hp_gain_pct")
+                old_bath = float(data.get("medicine_effect", 0) or 0) if old_end and started_at <= old_end else 1.0
+                gain = decide_tianti_gain(minutes=window.minutes, base_per_min=int(level.get("hp_gain_per_min", 0)), base_ratio=base_ratio, gain_pct=gain_pct, bath_effect=old_bath if old_bath > 1 else 1.0, sect_bonus=_sect_bonus(sect_fairyland_level), spirit_vein_multiplier=float(self.spirit_vein_multiplier()), old_hp=int(data["tianti_hp"]), hp_cap=self.profile.cap(data))
+                data["tianti_hp"] = gain.new_hp
+                settlement.update({"mins": window.minutes, "real_gain": gain.real_gain, "new_hp": gain.new_hp})
+            data["last_settle_time"] = now_text
+            end_time = started_at + timedelta(minutes=int(duration_minutes))
+            bath_name = f"{slot_name}药浴（" + "、".join(f"{item['name']}x{item['amount']}" for item in plan) + "）"
+            data.update({"medicine_last_time": now_text, "medicine_end_time": end_time.strftime("%Y-%m-%d %H:%M:%S"), "medicine_effect": float(effect), "medicine_name": bath_name})
+            for item in plan:
+                changed = uow.execute("UPDATE back SET goods_num=goods_num-?, bind_num=MIN(COALESCE(bind_num,0), goods_num-?) WHERE user_id=? AND goods_id=? AND goods_num>=?", (item["amount"], item["amount"], user_id, item["item_id"], item["amount"]))
+                if changed.rowcount != 1:
+                    return MedicineBathPersistenceResult("item_changed", user_id)
+            values = [json.dumps(data[field], ensure_ascii=False) if isinstance(data[field], (list, dict)) else data[field] for field in fields]
+            columns_sql = ", ".join(["user_id", *fields])
+            placeholders = ", ".join("?" for _ in range(len(values) + 1))
+            updates = ", ".join(f'"{field}"=excluded."{field}"' for field in fields)
+            uow.execute(f'INSERT INTO player_data.tianti_info ({columns_sql}) VALUES ({placeholders}) ON CONFLICT(user_id) DO UPDATE SET {updates}', (user_id, *values))
+            payload = {"consumed": list(plan), "effect": float(effect), "bath_name": bath_name, "end_time": data["medicine_end_time"], "settlement": settlement}
+            uow.execute("INSERT INTO tianti_medicine_bath_operations(operation_id,user_id,request_json,result_json) VALUES(?,?,?,?)", (operation_id, user_id, json.dumps({"plan": list(plan), "effect": effect}, ensure_ascii=False), json.dumps(payload, ensure_ascii=False, default=str)))
+            return MedicineBathPersistenceResult("applied", user_id, tuple(plan), float(effect), bath_name, data["medicine_end_time"], settlement)
 
 
 class TiantiBreakthroughSqlRepository:
@@ -347,6 +454,7 @@ __all__ = [
     "LegacyTiantiTrainingRepository",
     "StoneTrainingPersistenceResult",
     "StoneTrainingSqlRepository",
+    "TiantiMedicineBathSqlRepository",
     "TiantiBreakthroughSqlRepository",
     "TiantiProfileReader",
     "TiantiQiaoxueSqlRepository",

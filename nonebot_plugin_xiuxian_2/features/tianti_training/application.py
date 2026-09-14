@@ -20,6 +20,7 @@ from .repository import (
     LegacyTiantiTrainingRepository,
     StoneTrainingSqlRepository,
     TiantiBreakthroughSqlRepository,
+    TiantiMedicineBathSqlRepository,
     TiantiQiaoxueSqlRepository,
     TiantiTrainingRepository,
 )
@@ -120,6 +121,9 @@ class TiantiTrainingApplication:
     def _qiaoxue_repository(self) -> TiantiQiaoxueSqlRepository | TiantiTrainingRepository:
         return self.repository or TiantiQiaoxueSqlRepository(self.player_database)
 
+    def _bath_repository(self) -> TiantiMedicineBathSqlRepository | TiantiTrainingRepository:
+        return self.repository or TiantiMedicineBathSqlRepository(self.game_database, self.player_database)
+
     def train(self, *, operation_id: str, user_id: str, requested_stone: int) -> OperationOutcome[dict[str, Any]]:
         try:
             request = StoneTrainingRequest(str(operation_id).strip(), str(user_id).strip(), int(requested_stone))
@@ -181,7 +185,7 @@ class TiantiTrainingApplication:
             action="tianti.bath",
             payload=request.payload(),
             ledger_database=self.game_database,
-            call=lambda: self._repository().apply_bath(
+            call=lambda: self._bath_repository().apply_bath(
                 request.operation_id,
                 request.user_id,
                 request.consume_plan,
