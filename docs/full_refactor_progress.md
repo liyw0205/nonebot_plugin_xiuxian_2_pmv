@@ -429,6 +429,8 @@
 
 2026-09-15 map interactive reward decision cutover：新增纯 `decide_interactive_reward`，成功 resolve 的低收益/幸运/普通三分支移出 NoneBot；`SystemRandom` 补 `choice` port，reward pool、洞府材料和额外装备 helper 接收显式 random source，真实 interactive resolve 全部传 `runtime_random`。4 个 domain tests 与 reward/interactive/source 回归共 153 tests、compileall、architecture 通过。全局 Items lookup 与其它 map 奖励 helper 仍为 legacy 边界，未宣称 map 全部随机依赖完成。
 
+2026-09-15 map interactive reward decision live safety：提交 `5b51d52` 部署后 backup `/srv/old/data/backups/20260914T161020Z`，全库 migration dry-run pending 为空、reconcile clean、readiness 全绿；recovery smoke 覆盖 73-entry catalog，game_db migrations=73、player_db migrations=9。live 未执行玩家奖励写入。
+
 2026-09-14 dao battle settlement live safety：提交 `f9129fc` 部署后 backup `/srv/old/data/backups/20260914T061542Z`；dry-run 真实返回 game_db `[]`、player_db `[combat_settlement.003]`，apply 仅写入 player_db。game_db migrations=67、player_db migrations=6，`map_dao_battle_operations` 存在，readiness 全绿；recovery smoke 覆盖 67-entry catalog，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`。live 未执行玩家道战写入。
 
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
