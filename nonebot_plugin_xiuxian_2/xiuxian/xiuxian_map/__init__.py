@@ -53,6 +53,7 @@ from ...features.map.domain import decide_interactive_action, decide_interactive
 from ...features._legacy_application import result_data
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
+from ...infrastructure.json_document import JsonDocumentReader
 from ...infrastructure.ids import UUIDGenerator
 
 sql_message = XiuxianDateManage()
@@ -86,6 +87,7 @@ items = Items()
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
+map_document_reader = JsonDocumentReader()
 
 
 def _combat_lifecycle_result(data):
@@ -614,10 +616,10 @@ def _roll_map_mission_reward(*, random_source=None):
 # 地图工具
 # =========================================
 def _load_map_data():
-    if not MAP_FILE.exists():
-        raise FileNotFoundError(f"未找到地图文件：{MAP_FILE}")
-    with open(MAP_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        return map_document_reader.read_object(MAP_FILE)
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(f"未找到地图文件：{MAP_FILE}") from exc
 
 
 def _all_realms(map_data):

@@ -2198,6 +2198,15 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("else random.choice(nearby)", handler)
         self.assertNotIn("= random.random()", handler)
 
+    def test_map_json_io_uses_infrastructure_adapter(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("def _load_map_data")
+        end = source.index("def _all_realms", start)
+        loader = source[start:end]
+        self.assertIn("map_document_reader.read_object(MAP_FILE)", loader)
+        self.assertNotIn("open(", loader)
+        self.assertNotIn("json.load(", loader)
+
     def test_statistics_data_migration_does_not_block_event_loop(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_buff" / "__init__.py"
