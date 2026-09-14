@@ -66,7 +66,7 @@ from .features.combat_settlement.migrations import apply_combat_settlement
 from .features.admin_asset.manifest import FEATURE as ADMIN_ASSET_FEATURE
 from .features.admin_asset.migrations import apply_admin_asset
 from .features.tianti_settlement.manifest import FEATURE as TIANTI_SETTLEMENT_FEATURE
-from .features.tianti_settlement.migrations import apply_tianti_settlement
+from .features.tianti_settlement.migrations import apply_tianti_settlement, apply_tianti_settlement_operations
 from .features.tianti_training.manifest import FEATURE as TIANTI_TRAINING_FEATURE
 from .features.tianti_training.migrations import apply_tianti_breakthrough_operations, apply_tianti_medicine_bath_operations, apply_tianti_player_info, apply_tianti_qiaoxue_operations, apply_tianti_training, apply_tianti_training_operations
 from .features.tower.manifest import FEATURE as TOWER_FEATURE
@@ -141,6 +141,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("stone_gift.001", "stone_gift_operations", apply_stone_gift),
         Migration("stone_gift.002", "stone_gift_limits", apply_stone_gift_limits),
         Migration("tianti_settlement.001", "tianti_settlement_feature_migrations", apply_tianti_settlement),
+        Migration("tianti_settlement.002", "tianti_settlement_operations", apply_tianti_settlement_operations),
         Migration("tianti_training.001", "tianti_training_feature_migrations", apply_tianti_training),
         Migration("tianti_training.002", "tianti_stone_training_operations", apply_tianti_training_operations),
         Migration("tianti_training.003", "tianti_player_info", apply_tianti_player_info),
@@ -339,7 +340,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                     runner = MigrationRunner(game_migrations, clock=context.clock)
                 elif spec.key == "player_db":
                     runner = MigrationRunner(
-                        tuple(migration for migration in migration_runner.migrations if migration.version in {"title.001", "tianti_training.003", "tianti_training.004", "tianti_training.005"}),
+                        tuple(migration for migration in migration_runner.migrations if migration.version in {"title.001", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005"}),
                         clock=context.clock,
                     )
                 else:

@@ -9,7 +9,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import TiantiSettlementRequest
-from .repository import LegacyTiantiSettlementRepository, TiantiSettlementRepository
+from .repository import LegacyTiantiSettlementRepository, TiantiSettlementRepository, TiantiSettlementSqlRepository
 from .schemas import TiantiSettlementResult
 
 
@@ -49,7 +49,7 @@ class TiantiSettlementApplication:
                         if previous is not None:
                             return previous.replay()
                         raise ConflictError("操作正在处理中")
-                repository = self.repository or LegacyTiantiSettlementRepository(self.player_database)
+                repository = self.repository or TiantiSettlementSqlRepository(self.player_database)
                 raw = repository.settle(
                     request.operation_id,
                     request.user_id,

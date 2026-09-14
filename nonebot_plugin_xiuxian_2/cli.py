@@ -65,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
             elif spec.key == "player_db":
                 selected = tuple(
                     migration for migration in migrations
-                    if migration.version in {"title.001", "tianti_training.003", "tianti_training.004", "tianti_training.005"}
+                    if migration.version in {"title.001", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005"}
                 )
             else:
                 selected = ()

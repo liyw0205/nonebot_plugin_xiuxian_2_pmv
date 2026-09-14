@@ -365,6 +365,8 @@
 
 2026-09-14 tianti medicine bath repository cutover live safety：提交 `4cd63bf` 部署后 backup `/srv/old/data/backups/20260914T021809Z`；首次 schema 核对误用了不存在的 `/srv/old/data/game.db`，未改变数据，随后按 `XiuxianPaths` 核对真实 `/srv/old/data/xiuxian.db`，确认 game migrations=63、`tianti_medicine_bath_operations` 存在、player migrations=4。readiness 全绿，recovery smoke 覆盖 63-entry catalog，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`。live 未执行药浴库存或玩家状态写入。
 
+2026-09-14 tianti settlement repository cutover：新增 `TiantiSettlementSqlRepository`，默认 Web `/api/v1/tianti/settle` 使用 player_db UoW、feature profile、settlement-window/gain decisions 和 operation replay；新增 player migration `tianti_settlement.002`。覆盖 init/elapsed settlement、旧 JSON 字段投影、replay、schema-not-ready；11 个 focused tests、compileall、architecture、source-quality 通过。旧 `TiantiSettlementService` 保留兼容回滚，world-event multiplier 仍显式 provider，未宣称全部 settlement/world-event 迁移完成。
+
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。
 
 2026-09-13 bank first-use command boundary live safety：提交 `852cdfb` 部署后默认灰度仍关闭，真实 bank audit `bankinfo=false`、`operation_ledgers={}`、`read_only=true`；migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。该证据仅证明新 parser/first-use code 不改变旧 bank runtime；旧 NoneBot handler 仍是真实命令路径。
