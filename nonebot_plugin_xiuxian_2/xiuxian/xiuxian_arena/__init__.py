@@ -632,7 +632,7 @@ async def arena_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     operation_id = (
         f"arena-purchase:{event_id}:{user_id}"
         if event_id
-        else f"arena-purchase:{time.time_ns()}:{user_id}"
+        else f"arena-purchase:{arena_ids.new_id()}:{user_id}"
     )
     # 先走 operation 事务：重放必须在限购/荣誉值前置拦截之前完成。
     already_purchased = arena_limit.get_weekly_purchases(user_id, shop_id)
