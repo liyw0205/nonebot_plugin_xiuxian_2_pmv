@@ -75,6 +75,9 @@ class ArenaApplication:
         payload = {"user_id": str(user_id), "item_id": int(item_id), "requested_count": int(requested_count), "challenge_cap": int(challenge_cap)}
         return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="arena.challenge_ticket", payload=payload, call=lambda: self._repository().use_challenge_ticket(operation_id, user_id, item_id, requested_count, expected_item_count, expected_challenges_used, expected_extra_challenges, challenge_cap))
 
+    def settlement_result(self, *, operation_id: str, challenger_id: str) -> Any:
+        return self._repository().settlement_result(operation_id, challenger_id)
+
     def settle(self, *, operation_id: str, challenger_id: str, opponent_id: str | None, outcome: str, challenge_cap: int, stamina_cost: int, challenged_at: str, expected_challenger_arena: Mapping[str, Any], expected_opponent_arena: Mapping[str, Any] | None, expected_challenger_player: Mapping[str, Any], expected_opponent_player: Mapping[str, Any] | None, final_challenger_hp: int, final_challenger_mp: int, final_opponent_hp: int | None, final_opponent_mp: int | None, win_points: int, lose_points: int, no_match_points: int) -> OperationOutcome[dict[str, Any]]:
         try:
             request = ArenaSettlementRequest(str(operation_id).strip(), str(challenger_id).strip(), None if opponent_id is None else str(opponent_id), str(outcome), int(challenge_cap), int(stamina_cost), str(challenged_at), dict(expected_challenger_arena), None if expected_opponent_arena is None else dict(expected_opponent_arena), dict(expected_challenger_player), None if expected_opponent_player is None else dict(expected_opponent_player), int(final_challenger_hp), int(final_challenger_mp), None if final_opponent_hp is None else int(final_opponent_hp), None if final_opponent_mp is None else int(final_opponent_mp), int(win_points), int(lose_points), int(no_match_points))

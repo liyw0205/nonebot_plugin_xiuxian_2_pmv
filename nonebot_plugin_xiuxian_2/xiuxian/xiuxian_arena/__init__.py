@@ -244,10 +244,16 @@ async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     event_id = str(
         getattr(event, "message_id", "")
         or getattr(event, "id", "")
-        or time.time_ns()
+        or arena_ids.new_id()
     )
     operation_id = f"arena-challenge:{event_id}:{user_id}"
-    previous = arena_challenge_settlement_service.get_result(operation_id, user_id)
+    previous = None
+    previous_data = arena_application.settlement_result(operation_id=operation_id, challenger_id=user_id)
+    if previous_data is not None:
+        if isinstance(previous_data, dict):
+            previous = ArenaChallengeSettlementResult(**previous_data)
+        else:
+            previous = previous_data
     if previous is not None:
         if not previous.succeeded:
             await handle_send(bot, event, "竞技场挑战请求冲突。")

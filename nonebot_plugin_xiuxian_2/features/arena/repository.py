@@ -13,6 +13,7 @@ class ArenaRepository(Protocol):
     def purchase_challenges(self, *args: Any, **kwargs: Any) -> Any: ...
     def settle(self, *args: Any, **kwargs: Any) -> Any: ...
     def use_challenge_ticket(self, *args: Any, **kwargs: Any) -> Any: ...
+    def settlement_result(self, *args: Any, **kwargs: Any) -> Any: ...
 
 
 class LegacyArenaRepository:
@@ -42,8 +43,27 @@ class LegacyArenaRepository:
         from ...xiuxian.xiuxian_arena.transaction_service import ArenaChallengeTicketService
         return ArenaChallengeTicketService(self.game_database, self.player_database).use(*args, **kwargs)
 
+    def settlement_result(self, operation_id: str, challenger_id: str) -> Any:
+        from ...xiuxian.xiuxian_arena.transaction_service import ArenaChallengeSettlementService
+        return ArenaChallengeSettlementService(self.game_database, self.player_database).get_result(operation_id, challenger_id)
+
 
 class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
+    def settlement_result(self, operation_id: str, challenger_id: str) -> dict[str, Any] | None:
+        with DatabaseUnitOfWork(self.game_database) as uow:
+            row = uow.query_one("SELECT challenger_id,payload,result_json FROM arena_challenge_settlement_operations WHERE operation_id=?", (str(operation_id),))
+        if row is None:
+            return None
+        if str(row["challenger_id"]) != str(challenger_id):
+            return {"status": "operation_conflict"}
+        try:
+            result = json.loads(str(row["result_json"] or "{}"))
+        except (TypeError, ValueError):
+            return {"status": "operation_conflict"}
+        if not isinstance(result, dict):
+            return {"status": "operation_conflict"}
+        result["status"] = "duplicate"
+        return result
     def use_challenge_ticket(self, operation_id, user_id, item_id, requested_count, expected_item_count, expected_challenges_used, expected_extra_challenges, challenge_cap) -> dict[str, Any]:
         operation_id,user_id=str(operation_id).strip(),str(user_id); item_id,requested_count,expected_item_count,expected_challenges_used,expected_extra_challenges,challenge_cap=map(int,(item_id,requested_count,expected_item_count,expected_challenges_used,expected_extra_challenges,challenge_cap));payload=json.dumps([user_id,item_id,requested_count,challenge_cap],ensure_ascii=True,separators=(",",":"))
         if not operation_id or requested_count<=0 or min(expected_item_count,expected_challenges_used,expected_extra_challenges,challenge_cap)<0: raise ValueError("valid arena ticket operation is required")

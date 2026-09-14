@@ -507,6 +507,8 @@
 
 2026-09-15 arena challenge ticket live safety：提交 `9edf82c` 部署后 backup `/srv/old/data/backups/20260914T193611Z`，dry-run/apply仅game `[arena.004]`；readiness全绿，89-entry recovery reconcile clean。追加直接SQL repository成功/duplicate/rollback测试后，arena ticket slice共149 tests、compileall、architecture、diff check通过；live未执行挑战券写入。
 
+2026-09-15 arena settlement replay cutover：新增 `ArenaChallengePurchaseSqlRepository.settlement_result` 与 `ArenaApplication.settlement_result`，真实竞技场挑战 handler在匹配/战斗前通过feature query读取已有结算，UUID fallback注入；新增game migration `arena.005` operation schema。new+legacy+source共150 tests、90 catalog、compileall、architecture通过；完整结算写入仍为下一slice。
+
 2026-09-14 dao battle settlement live safety：提交 `f9129fc` 部署后 backup `/srv/old/data/backups/20260914T061542Z`；dry-run 真实返回 game_db `[]`、player_db `[combat_settlement.003]`，apply 仅写入 player_db。game_db migrations=67、player_db migrations=6，`map_dao_battle_operations` 存在，readiness 全绿；recovery smoke 覆盖 67-entry catalog，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`。live 未执行玩家道战写入。
 
 2026-09-14 bank interest boundary live safety：提交 `34e0177` 部署时各 interest/upgrade/withdrawal first-use flag 默认关闭；真实 bank audit 仍 `bankinfo=false`、`operation_ledgers={}`、`read_only=true`，backup `/srv/old/data/backups/20260913T160333Z`、dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 55 个迁移、五库 restore，恢复后 bank audit 不变。

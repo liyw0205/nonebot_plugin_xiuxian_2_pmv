@@ -2227,6 +2227,14 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("arena_ids.new_id()", handler)
         self.assertNotIn("arena_purchase_service.purchase(\n", handler)
 
+    def test_arena_challenge_replays_through_application(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_arena" / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("async def arena_challenge_")
+        handler = source[start:source.index("@arena_view.handle", start)]
+        self.assertIn("arena_application.settlement_result(", handler)
+        self.assertIn("arena_ids.new_id()", handler)
+        self.assertNotIn("arena_challenge_settlement_service.get_result(", handler)
+
     def test_statistics_data_migration_does_not_block_event_loop(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_buff" / "__init__.py"

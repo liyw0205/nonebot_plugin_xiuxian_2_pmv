@@ -230,7 +230,7 @@ class ArenaChallengeSettlementTests(unittest.TestCase):
         start = source.index("@arena_challenge.handle")
         handler = source[start:source.index("@arena_view.handle", start)]
         self.assertIn("arena_challenge_settlement_service.settle(", handler)
-        self.assertIn("arena_challenge_settlement_service.get_result(", handler)
+        self.assertIn("arena_application.settlement_result(", handler)
         self.assertNotIn("arena_challenge_cost_service.consume(", handler)
         self.assertNotIn("arena_battle_settlement_service.settle(", handler)
         self.assertLess(handler.index(".settle("), handler.index("send_msg_handler("))
