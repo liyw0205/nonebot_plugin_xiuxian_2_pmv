@@ -869,6 +869,8 @@
 
 2026-09-15 dufang random boundary：鉴石共享事件、封印物、收益/损失倍率和奖励随机选择统一使用注入 `runtime_random`；dufang/source共153 tests、catalog=103、compileall、architecture、diff check通过。bet/payout/share composite transaction仍由 legacy repository边界承载。
 
+2026-09-15 dufang random live safety：提交 `f0e5c6f` 部署后 backup `/srv/old/data/backups/20260915T140956Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行鉴石共享/封印奖励写入。
+
 2026-09-15 back operation ID boundary：装备操作、背包修复、灵石/物品/炼金/抽奖符/礼包/天梯奖励和批量物品使用 helper的无事件 operation ID统一使用注入 `runtime_ids`；back/source共151 tests、catalog=103、compileall、architecture、diff check通过。legacy inventory、alchemy和奖励 transaction service仍保留为未迁移边界。
 
 2026-09-15 back operation ID live safety：提交 `7a1880e` 部署后 backup `/srv/old/data/backups/20260915T105238Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行背包/炼金/奖励写入。
