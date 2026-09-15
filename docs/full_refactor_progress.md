@@ -949,6 +949,8 @@
 
 2026-09-16 entertainment media random providers：anime reaction 默认类别选择和 random-girl video provider顺序统一使用 `runtime_random`，娱乐模块负向 global-random扫描为空；新增1个 focused test，source共150 tests、catalog=103、compileall、architecture、diff check通过。外部图片/视频 API 与真实媒体发送保留现有边界。
 
+2026-09-16 entertainment media random live safety：提交 `f95c060` 部署后 backup `/srv/old/data/backups/20260915T175554Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未调用外部图片/视频 API或发送媒体。
+
 2026-09-16 adapter sender sequence boundary：低层 QQ group/private sender 的缺省 msg_seq 统一复用注入式 `MessageSequenceStrategy`，显式 msg_seq、引用消息和 adapter API 参数保持不变；新增 focused tests后共145 tests、catalog=103、compileall、architecture、diff check通过。真实发送/外部 adapter副作用未执行。
 
 2026-09-16 adapter sender sequence live safety：提交 `8d37eb8` 部署后 backup `/srv/old/data/backups/20260915T165649Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未发送消息或改变外部 adapter状态。
