@@ -15,7 +15,6 @@ class BankAccountRepository:
         uow.execute("CREATE TABLE IF NOT EXISTS bank_account_operations (operation_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, payload TEXT NOT NULL, deposited INTEGER NOT NULL, interest INTEGER NOT NULL, wallet_after INTEGER NOT NULL, saved_after INTEGER NOT NULL, created_at TEXT NOT NULL)")
 
     def account(self, uow: DatabaseUnitOfWork, user_id: str) -> dict[str, Any] | None:
-        self.ensure_schema(uow)
         return self.existing_account(uow, user_id)
 
     def existing_account(self, uow: DatabaseUnitOfWork, user_id: str) -> dict[str, Any] | None:
@@ -23,7 +22,6 @@ class BankAccountRepository:
         return None if row is None else dict(row)
 
     def operation(self, uow: DatabaseUnitOfWork, operation_id: str) -> dict[str, Any] | None:
-        self.ensure_schema(uow)
         row = uow.query_one("SELECT * FROM bank_account_operations WHERE operation_id=?", (operation_id,))
         return None if row is None else dict(row)
 

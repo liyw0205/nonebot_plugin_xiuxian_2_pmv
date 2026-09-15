@@ -949,6 +949,8 @@
 
 2026-09-16 bank blocked：`BankApplication` 的 deposit/withdraw/upgrade/interest 仍默认桥接 `LegacyBankRepository`，当前正式 SQL 仅覆盖 first-use account 子应用，主 bank repository及四类资产事务尚未实现；保留 replay/结息 legacy边界，不做 facade式默认切换。
 
+2026-09-16 bank account request-DDL boundary：`BankAccountRepository.account/operation` 移除 request-time `ensure_schema`，`apply_bank_accounts`成为 first-use bank projection唯一启动前置；新增缺表 focused test。bank/source共194 tests、catalog=104、compileall、architecture、diff check通过。主 `BankApplication` deposit/withdraw/upgrade/interest legacy transaction仍未迁移。
+
 2026-09-16 world-events blocked：`DemonClaimApplication` 当前仍默认桥接 `LegacyWorldEventClaimRepository`，该 adapter 依赖旧的 game/player ATTACH transaction，尚无正式 SQL claim repository/schema；不做 facade式默认切换，保留 demon attack/claim 跨库事务边界并跳转独立路径。
 
 2026-09-16 auction settlement replay boundary：`AuctionSettlementApplication.lookup` 改为 feature-local 只读查询 `operation_ledger`，缺表返回无记录且不触发 request-time DDL；保留详细 auction settlement 的 legacy adapter，因为尚无正式 SQL settlement repository。auction/trade/source共210 tests、catalog=103、compileall、architecture、diff check通过。
