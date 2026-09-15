@@ -781,6 +781,8 @@
 
 2026-09-15 world-events operation ID boundary：恶魔/灵脉手动生命周期、恶魔攻击和领奖真实入口的无事件 operation ID统一使用注入 `runtime_ids`；demon/source共166 tests、catalog=103、compileall、architecture、diff check通过。攻击/领奖复杂 replay、事件随机与多库 settlement仍为未迁移边界。
 
+2026-09-15 world-events operation ID live safety：提交 `3471689` 部署后 backup `/srv/old/data/backups/20260915T090030Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行恶魔/灵脉事件写入。
+
 2026-09-15 avatar provider boundary：身外化身真实入口的 operation ID、随机化身ID和创建时间统一使用注入 `runtime_ids/runtime_random/runtime_clock`，兼容 JSON mutation仍经 `InfoApplication` ledger；source共143 tests、catalog=103、compileall、architecture、diff check通过，仓库暂无专用 avatar behavior suite。
 
 2026-09-15 avatar provider live safety：提交 `7ae1397` 部署后 backup `/srv/old/data/backups/20260915T083238Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行身外化身切换写入。
