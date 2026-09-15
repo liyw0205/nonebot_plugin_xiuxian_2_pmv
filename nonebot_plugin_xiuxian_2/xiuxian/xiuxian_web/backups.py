@@ -9,6 +9,7 @@ from .core import (
     redirect,
     render_template,
     request,
+    runtime_clock,
     safe_path_under,
     send_file,
     session,
@@ -595,7 +596,7 @@ def export_config():
         
         # 添加元数据
         export_data['_metadata'] = {
-            'backup_time': datetime.now().isoformat(),
+            'backup_time': runtime_clock.now().isoformat(),
             'backup_fields': list(export_data.keys()) if export_all else selected_fields,
             'version': update_manager.current_version
         }
@@ -603,7 +604,7 @@ def export_config():
         return jsonify({
             "success": True,
             "data": export_data,
-            "filename": f"xiuxian_config_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            "filename": f"xiuxian_config_export_{runtime_clock.now().strftime('%Y%m%d_%H%M%S')}.json"
         })
         
     except Exception as e:
@@ -668,13 +669,13 @@ def backup_config():
         backup_dir.mkdir(parents=True, exist_ok=True)
         
         # 生成备份文件名
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = runtime_clock.now().strftime("%Y%m%d_%H%M%S")
         backup_filename = f"config_backup_{timestamp}.json"
         backup_path = backup_dir / backup_filename
         
         # 添加元数据
         backup_data['_metadata'] = {
-            'backup_time': datetime.now().isoformat(),
+            'backup_time': runtime_clock.now().isoformat(),
             'backup_fields': list(backup_data.keys()) if backup_all else selected_fields,
             'version': update_manager.current_version
         }
