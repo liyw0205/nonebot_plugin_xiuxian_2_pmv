@@ -123,7 +123,7 @@ async def mix_elixir_sqdj_up_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     now_level = mix_elixir_info['收取等级']
     now_exp = int(mix_elixir_info['炼丹经验'] or 0)
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"mixelixir-harvest-level:{event_id}:{user_id}" if event_id else f"mixelixir-harvest-level:{user_id}:{time.time_ns()}"
+    operation_id = f"mixelixir-harvest-level:{event_id}:{user_id}" if event_id else f"mixelixir-harvest-level:{user_id}:{runtime_ids.new_id()}"
     # 先回放：成功后等级达上限会挡住同事件幂等。
     prior = mixelixir_harvest_level_upgrade_service.get_result(operation_id)
     if prior is not None and prior.succeeded:
@@ -187,7 +187,7 @@ async def mix_elixir_dykh_up_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     now_level = mix_elixir_info['丹药控火']
     now_exp = int(mix_elixir_info['炼丹经验'] or 0)
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"mixelixir-fire-control:{event_id}:{user_id}" if event_id else f"mixelixir-fire-control:{user_id}:{time.time_ns()}"
+    operation_id = f"mixelixir-fire-control:{event_id}:{user_id}" if event_id else f"mixelixir-fire-control:{user_id}:{runtime_ids.new_id()}"
     upgrade_service = MixelixirFireControlUpgradeService(get_paths().game_db, get_paths().player_db)
     prior = upgrade_service.get_result(operation_id)
     if prior is not None and prior.succeeded:
@@ -499,7 +499,7 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             _saved_recipe(recipe, furnace_id, ldl_name) for recipe in mix_elixir_msgs
         ]
         event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-        operation_id = f"mixelixir-recipe:{event_id}:{user_id}" if event_id else f"mixelixir-recipe:{user_id}:{time.time_ns()}"
+        operation_id = f"mixelixir-recipe:{event_id}:{user_id}" if event_id else f"mixelixir-recipe:{user_id}:{runtime_ids.new_id()}"
         saved = mixelixir_recipe_service.save(
             operation_id,
             user_id,
@@ -641,7 +641,7 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                 claim_operation = (
                     f"mixelixir-reward-recover:{event_id}:{user_id}:{ready_task_id}"
                     if event_id
-                    else f"mixelixir-reward-recover:{user_id}:{ready_task_id}:{time.time_ns()}"
+                    else f"mixelixir-reward-recover:{user_id}:{ready_task_id}:{runtime_ids.new_id()}"
                 )
                 claimed = mixelixir_refine_reward_service.claim(
                     claim_operation, user_id, ready_task_id, XiuConfig().max_goods_num
@@ -701,7 +701,7 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                 records[record_key] = {"name": goods_info["name"], "num": now_num + num}
                 updated_mix_state["炼丹经验"] = int(updated_mix_state["炼丹经验"] or 0) + exp_gain
 
-                operation_id = f"mixelixir-cost:{event_id}:{user_id}" if event_id else f"mixelixir-cost:{user_id}:{time.time_ns()}"
+                operation_id = f"mixelixir-cost:{event_id}:{user_id}" if event_id else f"mixelixir-cost:{user_id}:{runtime_ids.new_id()}"
                 started = mixelixir_refine_cost_service.start(
                     operation_id,
                     user_id,
@@ -717,7 +717,7 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                     reward_name=str(goods_info["name"]),
                 )
                 if started.status == "duplicate":
-                    claim_operation = f"mixelixir-reward:{event_id}:{user_id}" if event_id else f"mixelixir-reward:{user_id}:{time.time_ns()}"
+                    claim_operation = f"mixelixir-reward:{event_id}:{user_id}" if event_id else f"mixelixir-reward:{user_id}:{runtime_ids.new_id()}"
                     claimed = mixelixir_refine_reward_service.claim(
                         claim_operation, user_id, started.task_id, XiuConfig().max_goods_num
                     )
@@ -739,7 +739,7 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                         claim_operation = (
                             f"mixelixir-reward-recover:{event_id}:{user_id}:{ready_task_id}"
                             if event_id
-                            else f"mixelixir-reward-recover:{user_id}:{ready_task_id}:{time.time_ns()}"
+                            else f"mixelixir-reward-recover:{user_id}:{ready_task_id}:{runtime_ids.new_id()}"
                         )
                         claimed = mixelixir_refine_reward_service.claim(
                             claim_operation, user_id, ready_task_id, XiuConfig().max_goods_num
@@ -768,7 +768,7 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                     await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="药材", v3="药材背包")
                     await mix_make.finish()
 
-                claim_operation = f"mixelixir-reward:{event_id}:{user_id}" if event_id else f"mixelixir-reward:{user_id}:{time.time_ns()}"
+                claim_operation = f"mixelixir-reward:{event_id}:{user_id}" if event_id else f"mixelixir-reward:{user_id}:{runtime_ids.new_id()}"
                 claimed = mixelixir_refine_reward_service.claim(
                     claim_operation, user_id, started.task_id, XiuConfig().max_goods_num
                 )
