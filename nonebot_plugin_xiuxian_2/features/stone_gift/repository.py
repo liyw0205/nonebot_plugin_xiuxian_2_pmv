@@ -78,7 +78,6 @@ class StoneGiftRepository:
         )
 
     def operation(self, uow: DatabaseUnitOfWork, operation_id: str) -> StoneGiftRecord | None:
-        self.ensure_schema(uow)
         row = uow.query_one(
             "SELECT operation_id, sender_id, recipient_id, gross_amount, net_amount, fee_amount "
             "FROM stone_gift_operations WHERE operation_id = ?",
