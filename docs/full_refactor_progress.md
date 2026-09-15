@@ -807,6 +807,8 @@
 
 2026-09-15 dongfu operation ID live safety：提交 `ac7a847` 部署后 backup `/srv/old/data/backups/20260915T101414Z`，dry-run pending为空、reconcile clean；startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行洞府写入。
 
+2026-09-15 fusion operation ID boundary：普通合成和强制合成真实 handler的无事件 operation ID统一使用注入 `runtime_ids`；fusion/pill/source共161 tests、catalog=103、compileall、architecture、diff check通过。合成成功率随机决策与历史 FusionService 资产事务仍保留为未迁移边界。
+
 2026-09-15 auction start provider boundary：拍卖启动真实流程的 operation ID、系统拍卖品抽样、session开始时间和自动日期统一使用注入 `runtime_ids/runtime_random/runtime_clock`；trade/auction/source共209 tests、catalog=103、compileall、architecture、diff check通过。拍卖结束、排队和库存 transaction 的历史时间逻辑仍保留为未迁移边界。
 
 2026-09-15 auction start provider live safety：提交 `d06788a` 部署后 backup `/srv/old/data/backups/20260915T094455Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行拍卖启动/商品写入。

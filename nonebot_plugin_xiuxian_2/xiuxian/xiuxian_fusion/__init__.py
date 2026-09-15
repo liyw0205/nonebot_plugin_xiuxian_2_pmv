@@ -21,6 +21,7 @@ from ..xiuxian_utils.utils import (
 from ..xiuxian_back.back_util import check_equipment_use_msg
 from ...paths import get_paths
 from ...features.fusion.application import FusionApplication
+from ...infrastructure.ids import UUIDGenerator
 from .fusion_service import FusionService
 import random
 import time
@@ -29,6 +30,7 @@ items = Items()
 sql_message = XiuxianDateManage()
 fusion_service = FusionService(get_paths().game_db)
 fusion_application = FusionApplication(get_paths().game_db)
+runtime_ids = UUIDGenerator()
 
 
 def _run_fusion_action(action, operation_id, user_id, call, **payload):
@@ -111,7 +113,7 @@ async def fusion_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             await fusion_item.finish()
     
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"fusion:{event_id}:{user_id}" if event_id else f"fusion:{user_id}:{time.time_ns()}"
+    operation_id = f"fusion:{event_id}:{user_id}" if event_id else f"fusion:{user_id}:{runtime_ids.new_id()}"
     success, msg = await general_fusion(user_id, equipment_id, equipment, operation_id, quantity)
     await handle_send(bot, event, msg, md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
     await fusion_item.finish()
@@ -138,7 +140,7 @@ async def force_fusion_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await force_fusion.finish()
     
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"force-fusion:{event_id}:{user_id}" if event_id else f"force-fusion:{user_id}:{time.time_ns()}"
+    operation_id = f"force-fusion:{event_id}:{user_id}" if event_id else f"force-fusion:{user_id}:{runtime_ids.new_id()}"
     success, msg = await general_fusion(user_id, equipment_id, equipment, operation_id, quantity)
     await handle_send(bot, event, msg, md_type="合成", k1="查看", v1="查看可合成物品", k2="合成", v2="合成", k3="背包", v3="我的背包")
     await force_fusion.finish()
