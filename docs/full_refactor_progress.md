@@ -701,6 +701,8 @@
 
 2026-09-15 bank provider boundary：灵庄存取、会员升级、结息真实入口的无事件 operation ID统一使用注入 `runtime_ids`，银行状态/利息兼容时间统一使用 `runtime_clock`；bank/source共192 tests、catalog=103、compileall、architecture、diff check通过。BankApplication当前仍使用 LegacyBankRepository，旧 replay分支保留为未完成事务迁移边界。
 
+2026-09-15 bank provider live safety：提交 `e2b0048` 部署后 backup `/srv/old/data/backups/20260915T044602Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行灵庄资产写入。
+
 2026-09-15 sign-in task projection DDL fix：`SignInTaskRepository.record`移除 request-time `ensure_schema`，正式 schema仅由已有 `apply_sign_in_tasks` startup migration创建；测试fixture改为显式 migration后验证 daily/weekly progress idempotency。task/effects/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 sign-in task projection live safety：提交 `d845283` 部署后 backup `/srv/old/data/backups/20260915T001441Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务进度写入。
