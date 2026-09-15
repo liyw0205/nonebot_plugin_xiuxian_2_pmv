@@ -22,6 +22,9 @@ from ..xiuxian_config import XiuConfig
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
 from ...paths import get_paths
+from ...infrastructure.clock import SystemClock
+from ...infrastructure.random_source import SystemRandom
+from ...infrastructure.ids import UUIDGenerator
 from ...features.dufang.application import DufangApplication
 from .transaction_service import (
     DufangBetService,
@@ -30,6 +33,9 @@ from .transaction_service import (
 )
 
 sql_message = XiuxianDateManage()
+runtime_clock = SystemClock()
+runtime_random = SystemRandom()
+runtime_ids = UUIDGenerator()
 player_data_manager = PlayerDataManager()
 dufang_bet_service = DufangBetService(get_paths().game_db, get_paths().player_db)
 dufang_payout_service = DufangPayoutService(get_paths().game_db, get_paths().player_db)
@@ -116,7 +122,7 @@ def get_unseal_data(user_id):
             "received_profit": 0,
             "received_loss": 0
         },
-        "last_update": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "last_update": runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 
     row = player_data_manager.get_fields(user_id, "unseal_data")
@@ -143,14 +149,14 @@ def get_unseal_data(user_id):
             "received_profit": to_int(row.get("received_profit", 0)),
             "received_loss": to_int(row.get("received_loss", 0)),
         },
-        "last_update": row.get("last_update") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "last_update": row.get("last_update") or runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")
     }
     return data
 
 
 def save_unseal_data(user_id, data):
     user_id = str(user_id)
-    data["last_update"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    data["last_update"] = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")
 
     u = data["unseal_info"]
     s = data["sharing_info"]
