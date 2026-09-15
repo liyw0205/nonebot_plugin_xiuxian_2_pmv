@@ -881,6 +881,8 @@
 
 2026-09-16 pet blocked：`PetApplication` 的 travel/feed/hatch/replay 仍默认桥接 `LegacyPetRepository`，`pet.001` 只创建 feature marker，未提供正式 SQL repository/schema；不能把已完成的 operation ID/provider/replay query边界误报为完整宠物资产迁移，保留 travel/hatch 跨库 transaction blocker并跳转独立路径。
 
+2026-09-16 puppet blocked：`PuppetApplication` 的 purchase/upgrade 仍默认桥接 `LegacyPuppetRepository`，`puppet.001` 只创建 feature marker，未提供正式 SQL repository/schema；已有 operation ID/Clock 边界不等于资产事务迁移，保留 puppet asset transaction legacy边界并跳转独立路径。
+
 2026-09-15 impart PK operation ID boundary：虚神界训练、机器人/双人对决、探索出关真实入口的无事件 operation ID统一使用注入 `runtime_ids`；impart/source共177 tests、catalog=103、compileall、architecture、diff check通过。对战随机决策、跨玩家 settlement和旧 replay service仍为未迁移边界。
 
 2026-09-15 impart PK operation ID live safety：提交 `ba4364f` 部署后 backup `/srv/old/data/backups/20260915T092945Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行虚神界训练/对战写入。
