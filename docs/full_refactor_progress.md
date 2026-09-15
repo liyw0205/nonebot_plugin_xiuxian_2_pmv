@@ -817,6 +817,8 @@
 
 2026-09-15 training provider boundary：历练完成/购买真实入口的 operation ID与状态时间统一使用注入 `runtime_ids/runtime_clock`；training/source共170 tests、catalog=103、compileall、architecture、diff check通过。历练事件随机和历史 completion/purchase transaction service仍保留为未迁移边界；admin reset source guard同步匹配现有 `spawn_admin_job` 可恢复调度。
 
+2026-09-15 training provider live safety：提交 `2054116` 部署后 backup `/srv/old/data/backups/20260915T104141Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行历练/购买/reset写入。
+
 2026-09-15 auction start provider boundary：拍卖启动真实流程的 operation ID、系统拍卖品抽样、session开始时间和自动日期统一使用注入 `runtime_ids/runtime_random/runtime_clock`；trade/auction/source共209 tests、catalog=103、compileall、architecture、diff check通过。拍卖结束、排队和库存 transaction 的历史时间逻辑仍保留为未迁移边界。
 
 2026-09-15 auction start provider live safety：提交 `d06788a` 部署后 backup `/srv/old/data/backups/20260915T094455Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行拍卖启动/商品写入。
