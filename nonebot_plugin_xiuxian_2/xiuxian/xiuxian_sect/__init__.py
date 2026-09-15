@@ -157,7 +157,7 @@ def _sect_operation_id(event, action, target_id):
     ).strip()
     if event_id:
         return f"sect:{event_id}:{action}:{target_id}"
-    return f"sect:{action}:{target_id}:{time.time_ns()}"
+    return f"sect:{action}:{target_id}:{sect_ids.new_id()}"
 
 
 materialsupdate = require("nonebot_plugin_apscheduler").scheduler

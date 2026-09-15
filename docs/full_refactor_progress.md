@@ -787,6 +787,8 @@
 
 2026-09-15 interactive provider live safety：提交 `1624de3` 部署后 backup `/srv/old/data/backups/20260915T091541Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行互动结算/领取写入。
 
+2026-09-15 sect main operation ID boundary：宗门主 handler统一使用既有 `sect_ids` UUID provider生成无事件 operation ID；sect/source共298 tests、catalog=103、compileall、architecture、diff check通过。宗门周常领取和未迁移管理事务仍保留显式 legacy service边界。
+
 2026-09-15 avatar provider boundary：身外化身真实入口的 operation ID、随机化身ID和创建时间统一使用注入 `runtime_ids/runtime_random/runtime_clock`，兼容 JSON mutation仍经 `InfoApplication` ledger；source共143 tests、catalog=103、compileall、architecture、diff check通过，仓库暂无专用 avatar behavior suite。
 
 2026-09-15 avatar provider live safety：提交 `7ae1397` 部署后 backup `/srv/old/data/backups/20260915T083238Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行身外化身切换写入。
