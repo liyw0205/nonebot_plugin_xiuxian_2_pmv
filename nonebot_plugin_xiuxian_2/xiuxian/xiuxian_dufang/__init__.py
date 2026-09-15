@@ -581,35 +581,35 @@ UNSEAL_EVENTS = {
             "title": "上古传承现世",
             "desc": "玉简突然大放光明，海量信息直接灌入你的识海！",
             "outcome": "你将这份完整传承复刻后高价拍卖",
-            "effect": lambda: random.uniform(2.0, 2.5),  # 200%-250%收益
+            "effect": lambda: runtime_random.uniform(2.0, 2.5),  # 200%-250%收益
             "type": ["传承"]
         },
         {
             "title": "灵兽认主",
             "desc": "卵壳破裂，一只稀有灵兽破壳而出，立即与你缔结契约！",
             "outcome": "各大宗门争相出价购买这只潜力无限的灵兽",
-            "effect": lambda: random.uniform(1.8, 2.3),  # 180%-230%收益
+            "effect": lambda: runtime_random.uniform(1.8, 2.3),  # 180%-230%收益
             "type": ["灵宠"]
         },
         {
             "title": "法宝认主",
             "desc": "残剑突然发出龙吟之声，化作流光融入你的丹田！",
             "outcome": "这件古宝主动认你为主，引起轰动",
-            "effect": lambda: random.uniform(1.7, 2.2),  # 170%-220%收益
+            "effect": lambda: runtime_random.uniform(1.7, 2.2),  # 170%-220%收益
             "type": ["法宝"]
         },
         {
             "title": "秘境开启",
             "desc": "石匣中飞出一把钥匙，在空中划出一道空间裂隙！",
             "outcome": "你将秘境入口信息出售给修真联盟",
-            "effect": lambda: random.uniform(2.2, 2.7),  # 220%-270%收益
+            "effect": lambda: runtime_random.uniform(2.2, 2.7),  # 220%-270%收益
             "type": ["容器", "钥匙"]
         },
         {
             "title": "前辈指点",
             "desc": "妖族大能苏醒后，为感谢你解封之恩传授秘法！",
             "outcome": "你将部分功法心得出售",
-            "effect": lambda: random.uniform(1.6, 2.1),  # 160%-210%收益
+            "effect": lambda: runtime_random.uniform(1.6, 2.1),  # 160%-210%收益
             "type": ["存在"]
         }
     ],
@@ -618,35 +618,35 @@ UNSEAL_EVENTS = {
             "title": "残缺功法",
             "desc": "玉简中记载着一部残缺的上古功法",
             "outcome": "将残篇出售给收藏家",
-            "effect": lambda: random.uniform(1.5, 1.8),  # 150%-180%收益
+            "effect": lambda: runtime_random.uniform(1.5, 1.8),  # 150%-180%收益
             "type": ["传承"]
         },
         {
             "title": "灵材现世",
             "desc": "解封出一批珍贵的炼器材料",
             "outcome": "炼器师们高价收购",
-            "effect": lambda: random.uniform(1.5, 1.9),  # 150%-190%收益
+            "effect": lambda: runtime_random.uniform(1.5, 1.9),  # 150%-190%收益
             "type": ["灵材", "材料"]
         },
         {
             "title": "古丹方",
             "desc": "发现几张古老的丹药配方",
             "outcome": "炼丹师们争相购买",
-            "effect": lambda: random.uniform(1.5, 1.8),  # 150%-180%收益
+            "effect": lambda: runtime_random.uniform(1.5, 1.8),  # 150%-180%收益
             "type": ["器具", "传承"]
         },
         {
             "title": "灵宠幼体",
             "desc": "孵化出一只普通灵兽",
             "outcome": "灵兽店老板出价收购",
-            "effect": lambda: random.uniform(1.5, 1.7),  # 150%-170%收益
+            "effect": lambda: runtime_random.uniform(1.5, 1.7),  # 150%-170%收益
             "type": ["灵宠"]
         },
         {
             "title": "法器残件",
             "desc": "解封出几件尚可使用的法器",
             "outcome": "低阶修士抢购这些古物",
-            "effect": lambda: random.uniform(1.5, 1.7),  # 150%-170%收益
+            "effect": lambda: runtime_random.uniform(1.5, 1.7),  # 150%-170%收益
             "type": ["法宝", "器具"]
         }
     ],
@@ -755,25 +755,25 @@ SHARING_EVENTS = [
     {
         "title": "劫修团伙",
         "desc": "你解封时引发的灵气波动引来了劫修团伙！",
-        "effect": lambda cost: int(cost * random.uniform(0.4, 0.6)),  # 40%-60%损失
+        "effect": lambda cost: int(cost * runtime_random.uniform(0.4, 0.6)),  # 40%-60%损失
         "message": "这群劫修顺着灵气波动又袭击了附近的其他道友！"
     },
     {
         "title": "灵气污染",
         "desc": "解封过程中产生了危险的灵气污染！",
-        "effect": lambda cost: int(cost * random.uniform(0.3, 0.5)),  # 30%-50%损失
+        "effect": lambda cost: int(cost * runtime_random.uniform(0.3, 0.5)),  # 30%-50%损失
         "message": "污染的灵气扩散开来，影响了附近修炼的其他道友！"
     },
     {
         "title": "诅咒蔓延",
         "desc": "物品上的古老诅咒开始向外扩散！",
-        "effect": lambda cost: int(cost * random.uniform(0.35, 0.55)),  # 35%-55%损失
+        "effect": lambda cost: int(cost * runtime_random.uniform(0.35, 0.55)),  # 35%-55%损失
         "message": "诅咒之力蔓延，不幸波及了附近的其他道友！"
     },
     {
         "title": "福泽共享",
         "desc": "解封产生的祥瑞之气扩散开来！",
-        "effect": lambda cost: int(cost * random.uniform(0.3, 0.5)),  # 30%-50%收益
+        "effect": lambda cost: int(cost * runtime_random.uniform(0.3, 0.5)),  # 30%-50%收益
         "message": "祥瑞之气惠及了附近的其他道友！"
     }
 ]
