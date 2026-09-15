@@ -396,7 +396,6 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.package_reward.application import PackageRewardApplication
         from .features.accessory_package.application import AccessoryPackageApplication
         from .features.arena.application import ArenaApplication
-        from .features.arena.repository import LegacyArenaRepository
         from .features.auction.application import AuctionBidApplication
         from .features.auction.settlement import AuctionSettlementApplication, LegacyAuctionSettlementRepository
         from .features.bank.application import BankApplication
@@ -412,7 +411,6 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.tianti_training.application import TiantiTrainingApplication
         from .features.tianti_training.repository import LegacyTiantiTrainingRepository
         from .features.tower.application import TowerApplication
-        from .features.tower.repository import LegacyTowerRepository
         from .features.sect_fairyland.application import SectFairylandApplication
         from .features.sect_fairyland.repository import LegacySectFairylandRepository
         from .features.world_events.application import DemonClaimApplication
@@ -424,7 +422,6 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.puppet.application import PuppetApplication
         from .features.puppet.repository import LegacyPuppetRepository
         from .features.boss.application import BossApplication
-        from .features.boss.repository import LegacyBossRepository
         from .features.dungeon.application import DungeonApplication
         from .features.dungeon.repository import LegacyDungeonRepository
         from .features.pet.application import PetApplication
@@ -512,10 +509,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             "arena": ArenaApplication(
                 str(context.database.path("game_db")),
                 str(context.database.path("player_db")),
-                repository=LegacyArenaRepository(
-                    str(context.database.path("game_db")),
-                    str(context.database.path("player_db")),
-                ),
+                clock=context.clock,
             ),
             "auction": AuctionBidApplication(str(context.database.path("game_db"))),
             "auction_settlement": AuctionSettlementApplication(
@@ -555,10 +549,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             "tower": TowerApplication(
                 str(context.database.path("game_db")),
                 str(context.database.path("player_db")),
-                repository=LegacyTowerRepository(
-                    str(context.database.path("game_db")),
-                    str(context.database.path("player_db")),
-                ),
+                clock=context.clock,
             ),
             "sect_fairyland": SectFairylandApplication(
                 str(context.database.path("player_db")),
@@ -596,11 +587,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 str(context.database.path("game_db")),
                 str(context.database.path("player_db")),
                 activity_database=context.paths.data / "activity" / "activity.db",
-                repository=LegacyBossRepository(
-                    str(context.database.path("game_db")),
-                    str(context.database.path("player_db")),
-                    context.paths.data / "activity" / "activity.db",
-                ),
+                clock=context.clock,
             ),
             "dungeon": DungeonApplication(
                 str(context.database.path("game_db")),
