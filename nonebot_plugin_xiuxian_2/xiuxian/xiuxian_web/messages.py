@@ -4,6 +4,7 @@ from urllib.parse import quote, urlparse
 from .core import (
     ALLOWED_MEDIA_TYPES,
     Response,
+    runtime_clock,
     XiuConfig,
     abort,
     app,
@@ -411,7 +412,7 @@ def api_messages_dates():
         conn = get_message_db_connection()
         cur = conn.cursor()
 
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = runtime_clock.now().strftime("%Y-%m-%d")
         rows = []
 
         if include_counts:
