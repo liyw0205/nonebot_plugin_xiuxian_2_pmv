@@ -52,6 +52,7 @@ from ...features.boss.application import BossApplication
 from ...features.boss.repository import BossPurchaseSqlRepository
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
+from ...infrastructure.random_source import SystemRandom
 from .transaction_service import WorldBossManualSpawnService
 from .transaction_service import WorldBossFullRefreshService
 from .transaction_service import WorldBossPunishmentService
@@ -80,6 +81,7 @@ boss_application = BossApplication(
 )
 boss_ids = UUIDGenerator()
 runtime_clock = SystemClock()
+runtime_random = SystemRandom()
 world_boss_battle_settlement_service = WorldBossBattleSettlementService(
     get_paths().game_db,
     get_paths().player_db,
@@ -731,7 +733,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     # =========================
     drops_id, drops_info = boss_drops(user_rank, boss_rank, bossinfo, user_info)
     reward_drop = bool(drops_id and drops_info and boss_rank < convert_rank('遁一境中期')[0]
-                       and (boss_now_hp <= 0 or random.randint(1, 100) > 50))
+                       and (boss_now_hp <= 0 or runtime_random.randint(1, 100) > 50))
 
     settled_bosses = deepcopy(expected_bosses)
     if boss_now_hp <= 0:
@@ -1539,7 +1541,7 @@ class BossDrops:
         if not eligible_drops:
             return None, None
             
-        return random.choice(eligible_drops)
+        return runtime_random.choice(eligible_drops)
 
 def boss_drops(user_rank, boss_rank, boss, user_info):
     """
@@ -1553,13 +1555,13 @@ def boss_drops(user_rank, boss_rank, boss, user_info):
     drops_system = BossDrops()
     
     # 基础掉落概率检查(10%)
-    roll = random.randint(1, 100)
+    roll = runtime_random.randint(1, 100)
     if roll >= 10: 
         return None, None
         
     # 境界差距过大时极低概率掉落(5%)
     if boss_rank - user_rank >= 4 or user_rank - boss_rank >= 4:
-        roll = random.randint(1, 100)
+        roll = runtime_random.randint(1, 100)
         if roll >= 5: 
             return None, None
         
