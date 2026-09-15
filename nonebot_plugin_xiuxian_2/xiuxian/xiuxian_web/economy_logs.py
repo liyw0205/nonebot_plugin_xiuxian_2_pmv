@@ -4,6 +4,7 @@ import csv
 import json
 from datetime import datetime, timedelta
 from io import StringIO
+from ...infrastructure.clock import SystemClock
 
 from .core import (
     DATABASE,
@@ -37,6 +38,7 @@ ECONOMY_LOG_FIELDS = (
 
 FILTER_FIELDS = ("user_id", "sect_id", "source", "action", "trace_id")
 TIME_FILTER_FIELDS = ("start_time", "end_time")
+runtime_clock = SystemClock()
 DELTA_FIELDS = (
     "stone_delta",
     "exp_delta",
@@ -92,7 +94,7 @@ def _apply_time_preset(filters):
     if filters.get("start_time") or filters.get("end_time"):
         return filters
 
-    now = datetime.now()
+    now = runtime_clock.now()
     _, days_back = QUICK_PRESETS[preset]
     start = (now - timedelta(days=days_back)).replace(hour=0, minute=0, second=0, microsecond=0)
     filters["start_time"] = start.strftime("%Y-%m-%d %H:%M:%S")

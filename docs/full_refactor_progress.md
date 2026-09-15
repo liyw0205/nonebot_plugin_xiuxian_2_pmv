@@ -883,6 +883,8 @@
 
 2026-09-15 boss settlement clock live safety：提交 `7df291e` 部署后 backup `/srv/old/data/backups/20260915T153023Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行 world-boss settlement 写入。
 
+2026-09-15 web economy clock boundary：经济日志只读 quick preset 的默认时间范围统一使用注入 `runtime_clock`；source共143 tests、catalog=103、compileall、architecture、diff check通过，仓库暂无专用 economy web behavior suite。web写入/导出路径保持未迁移边界。
+
 2026-09-15 world-events random boundary：恶魔生成、随机奖励、灵脉时长/触发与攻击领奖随机决策统一使用注入 `runtime_random`，时间默认使用 `runtime_clock`；demon/source共166 tests、catalog=103、compileall、architecture、diff check通过。复杂 replay与多库 settlement仍为未迁移边界。
 
 2026-09-15 world-events random live safety：提交 `06dbcfe` 部署后 backup `/srv/old/data/backups/20260915T140006Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行恶魔/灵脉随机奖励写入。
