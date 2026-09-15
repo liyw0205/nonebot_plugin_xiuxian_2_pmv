@@ -5,7 +5,8 @@ from ..xiuxian_config import convert_rank, base_rank
 from ..xiuxian_utils.xiuxian2_handle import OtherSet
 from datetime import datetime
 
-def workmake(work_level, exp, user_level):
+def workmake(work_level, exp, user_level, random_source=None):
+    random_source = random_source or random
     jsondata_ = reward()  # 实例化reward类
     if work_level == '江湖好手':
         work_level = '江湖好手'
@@ -23,7 +24,7 @@ def workmake(work_level, exp, user_level):
     work_list = [yaocai_data[work_level], ansha_data[work_level], zuoyao_data[work_level]]
     
     for w in work_list:
-        work_info = random.choice(w)
+        work_info = random_source.choice(w)
         work_name = work_info['work_name']
         level_price_data = levelpricedata[work_level][work_info['level']]
         rate, isOut = countrate(exp, level_price_data["needexp"])
@@ -31,7 +32,7 @@ def workmake(work_level, exp, user_level):
         success_msg = work_info['succeed']
         fail_msg = work_info['fail']
         
-        item_type = get_random_item_type()
+        item_type = get_random_item_type(random_source)
         if item_type in ["法器", "防具", "辅修功法"]:
             zx_rank = base_rank(user_level, 16)
         else:
@@ -40,7 +41,7 @@ def workmake(work_level, exp, user_level):
         if not item_id:
             item_id = 0
         else:
-            item_id = random.choice(item_id)
+            item_id = random_source.choice(item_id)
         
         work_json[work_name] = [
             rate, 
@@ -53,7 +54,8 @@ def workmake(work_level, exp, user_level):
     
     return work_json
 
-def get_random_item_type():
+def get_random_item_type(random_source=None):
+    random_source = random_source or random
     type_rate = {
         "功法": {"type_rate": 57},
         "神通": {"type_rate": 17},

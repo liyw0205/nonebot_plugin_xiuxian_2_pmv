@@ -14,7 +14,7 @@ sql_message = XiuxianDateManage()  # sql类
 items = Items()
 
 class workhandle(XiuxianJsonDate):
-    def do_work(self, key, work_list=None, name=None, level="江湖好手", exp=None, user_id=None, persist=True):
+    def do_work(self, key, work_list=None, name=None, level="江湖好手", exp=None, user_id=None, persist=True, random_source=None, clock=None):
         """
         悬赏令核心处理逻辑(纯JSON版本)
         
@@ -36,7 +36,7 @@ class workhandle(XiuxianJsonDate):
                 return []
                 
             # 生成悬赏令数据
-            data = workmake(level, exp, user_info['level'])
+            data = workmake(level, exp, user_info['level'], random_source=random_source)
             get_work_list = []
             
             # 构建悬赏令数据结构（task_order 固定展示/接取编号，避免 JSON sort_keys 打乱顺序）
@@ -44,7 +44,7 @@ class workhandle(XiuxianJsonDate):
                 "tasks": {},
                 "task_order": [],
                 "status": 1,
-                "refresh_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                "refresh_time": (clock.now() if clock is not None else datetime.now()).strftime('%Y-%m-%d %H:%M:%S'),
                 "user_level": level
             }
             
@@ -104,7 +104,8 @@ class workhandle(XiuxianJsonDate):
             bigsuc = task_data["rate"] >= 100
             
             # 计算任务结果
-            if random.randint(1, 100) <= task_data["rate"]:
+            rng = random_source or random
+            if rng.randint(1, 100) <= task_data["rate"]:
                 return (
                     task_data["success_msg"],  # 成功消息
                     task_data["award"],        # 基础奖励

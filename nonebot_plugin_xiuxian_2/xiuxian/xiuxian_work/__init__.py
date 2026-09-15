@@ -251,6 +251,8 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         level=user_info["level"],
         exp=user_info["exp"],
         user_id=user_id,
+        random_source=runtime_random,
+        clock=runtime_clock,
     )
     max_exp = int(OtherSet().set_closing_type(user_info["level"])) * XiuConfig().closing_exp_upper_limit
     item_info = items.get_data_by_item_id(item_id) if item_id else None
@@ -396,14 +398,15 @@ def _work_cd_snapshot(user_id: str) -> dict:
 
 def _prepare_work_offer(operation_id: str, user_id: str, user_level: str, exp: int):
     """Generate a stable offer for an operation without leaking RNG state."""
-    random_state = random.getstate()
-    try:
-        random.seed(operation_id)
-        return workhandle().do_work(
-            0, level=user_level, exp=exp, user_id=user_id, persist=False
-        )
-    finally:
-        random.setstate(random_state)
+    return workhandle().do_work(
+        0,
+        level=user_level,
+        exp=exp,
+        user_id=user_id,
+        persist=False,
+        random_source=runtime_random,
+        clock=runtime_clock,
+    )
 
 def get_work_msg(work_):
     item_msg = format_reward_item(work_[4])
@@ -924,7 +927,13 @@ async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMes
     
     # 随机结果先固定，事务成功后再同步旧 JSON 读取投影。
     work_msg, work_data = workhandle().do_work(
-        0, level=user_info['level'], exp=user_info['exp'], user_id=user_id, persist=False
+        0,
+        level=user_info['level'],
+        exp=user_info['exp'],
+        user_id=user_id,
+        persist=False,
+        random_source=runtime_random,
+        clock=runtime_clock,
     )
     if not work_data:
         msg = "悬赏令数据异常：任务记录损坏或不存在。"
