@@ -655,6 +655,8 @@
 
 2026-09-15 work random boundary：`workmake`/`workhandle` 支持显式 `random_source` 与 `clock`，真实悬赏生成/结算调用移除全局 `random.seed/setstate` 包装，统一使用 `runtime_random/runtime_clock`；work settlement/refresh/source共151 tests、catalog=103、compileall、architecture、diff check通过。旧 work transaction service仍为未迁移 repository边界。
 
+2026-09-15 work random live safety：提交 `b68bd65` 部署后 backup `/srv/old/data/backups/20260915T031844Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行悬赏生成/结算写入。
+
 2026-09-15 dufang provider boundary：鉴石数据辅助路径的时间读取改用注入 `runtime_clock`，并在 dufang composition root 建立 `runtime_random/runtime_ids` provider，为后续随机/operation切换保留明确边界；dufang/source共153 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 dufang provider live safety：提交 `19f15b6` 部署后 backup `/srv/old/data/backups/20260915T011737Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行鉴石资产写入。
