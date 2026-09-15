@@ -307,6 +307,8 @@
 
 2026-09-16 tianti training composition boundary：确认 `TiantiTrainingApplication` 的 stone training、medicine bath、breakthrough、qiaoxue、item reward真实方法均分别使用已注册 SQL repository；移除 plugin 中未使用的 `LegacyTiantiTrainingRepository` import，并向 application 注入 context Clock。settlement legacy repository保留为显式兼容边界；tianti/source共179 tests、catalog=103、compileall、architecture、diff check通过。
 
+2026-09-16 tianti training composition live safety：提交 `3504bc6` 部署后 backup `/srv/old/data/backups/20260915T195845Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行天梯训练、药浴、突破或窍穴资产写入。
+
 2026-09-14 tianti stone-training domain rule live safety：提交 `f71b1ab` 部署后 backup `/srv/old/data/backups/20260913T221654Z`、migration dry-run `pending=[]`、reconcile clean、readiness 全绿；recovery smoke 覆盖 58 个迁移、五库 restore、reconcile clean，恢复后 lottery `pool_amount=0`、`economy_log` 行数为 0。live 未执行 tianti 训练写入；本证据只验证规则改动不影响启动、关闭、恢复和现有对账状态。
 
 2026-09-14 tianti stone-training repository cutover：新增 `StoneTrainingSqlRepository`，真实 Web `/api/v1/tianti/train` 默认走 feature-owned UoW；使用受控 `DatabaseUnitOfWork.attach_database` 完成 game/player 双库读写、余额条件扣款、`tianti_info` upsert、operation idempotency 和异常回滚。`TiantiTrainingApplication` 中 bath/breakthrough/qiaoxue 仍保留 legacy repository，stone training 的 `TiantiDataManager` 配置/JSON 投影暂未迁移；本切片不宣称整个 tianti feature 完成。
