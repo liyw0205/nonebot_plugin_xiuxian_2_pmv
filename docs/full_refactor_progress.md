@@ -605,6 +605,8 @@
 
 2026-09-15 tianti qiaoxue live safety：提交 `61b520c` 部署后 backup `/srv/old/data/backups/20260915T003548Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行冲窍资产写入。
 
+2026-09-15 tianti clock boundary：炼体结算、药浴、炼体状态和冲窍/突破 handler的时间读取统一使用注入 `runtime_clock`，operation fallback统一使用 `runtime_ids`，移除真实 handler中的 `datetime.now()`/`time.time_ns()`；tianti全套source/行为共170 tests、catalog=103、compileall、architecture、diff check通过。
+
 2026-09-15 sign-in task projection DDL fix：`SignInTaskRepository.record`移除 request-time `ensure_schema`，正式 schema仅由已有 `apply_sign_in_tasks` startup migration创建；测试fixture改为显式 migration后验证 daily/weekly progress idempotency。task/effects/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 sign-in task projection live safety：提交 `d845283` 部署后 backup `/srv/old/data/backups/20260915T001441Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务进度写入。

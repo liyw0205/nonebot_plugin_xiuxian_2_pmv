@@ -36,6 +36,7 @@ from ...features.tianti_settlement.application import TiantiSettlementApplicatio
 from ...features.tianti_training.application import TiantiTrainingApplication
 from ...paths import get_paths
 from ...infrastructure.ids import UUIDGenerator
+from ...infrastructure.clock import SystemClock
 
 sql_message = XiuxianDateManage()
 tianti_manager = TiantiDataManager()
@@ -54,6 +55,7 @@ tianti_training_application = TiantiTrainingApplication(
     get_paths().player_db,
 )
 runtime_ids = UUIDGenerator()
+runtime_clock = SystemClock()
 
 def _tianti_choice_seed(operation_id: str) -> int:
     return int.from_bytes(str(operation_id).encode("utf-8"), "little") % (2**63)
@@ -238,7 +240,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     user_id = str(user_info["user_id"])
-    now_t = datetime.now()
+    now_t = runtime_clock.now()
     sect_fairyland_level = _get_user_sect_fairyland_level(user_info)
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = (
@@ -371,7 +373,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     user_id = str(user_info["user_id"])
-    now_t = datetime.now()
+    now_t = runtime_clock.now()
     raw_text = args.extract_plain_text().strip()
     slot = _medicine_bath_slot(now_t.hour)
 
@@ -631,7 +633,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     else:
         brk = "已达炼体最高境界"
 
-    now_t = datetime.now()
+    now_t = runtime_clock.now()
     bath = _get_active_medicine_bath(data, now_t)
     sect_fairyland_level = _get_user_sect_fairyland_level(user_info)
     sect_bonus = get_sect_fairyland_bonus(sect_fairyland_level)
