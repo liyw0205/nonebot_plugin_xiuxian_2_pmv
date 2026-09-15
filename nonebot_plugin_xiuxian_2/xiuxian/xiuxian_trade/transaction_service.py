@@ -25,6 +25,13 @@ from datetime import datetime
 import hashlib
 from typing import Any
 from ..xiuxian_utils.numeric_bind import as_int_like, number_count
+from ...infrastructure.clock import SystemClock
+from ...infrastructure.random_source import SystemRandom
+from ...infrastructure.ids import UUIDGenerator
+
+runtime_clock = SystemClock()
+runtime_random = SystemRandom()
+runtime_ids = UUIDGenerator()
 
 class XianshiPurchaseService:
     def __init__(self, repository: TradeRepository) -> None:
@@ -307,7 +314,7 @@ def start_auction_process(bot: Optional[Bot], operation_id: str | None = None) -
     从玩家上架区和系统配置中生成拍卖品，并存入当前拍卖表。
     """
     _, _, _, _, session_service = _auction_dependencies()
-    operation_id = operation_id or f"auction-start:{time.time_ns()}"
+    operation_id = operation_id or f"auction-start:{runtime_ids.new_id()}"
     previous = session_service.get_start_operation(operation_id)
     if previous is not None:
         active_session = session_service.get_active_session()
@@ -320,14 +327,14 @@ def start_auction_process(bot: Optional[Bot], operation_id: str | None = None) -
     schedule_config = auction_config.get_auction_schedule()
 
     # 随机选择5个系统拍卖品
-    selected_system_items_names = random.sample(list(system_items_config.keys()), min(5, len(system_items_config)))
+    selected_system_items_names = runtime_random.sample(list(system_items_config.keys()), min(5, len(system_items_config)))
     selected_system_items = [
         {"item_id": system_items_config[name]["id"],
          "name": name,
          "start_price": system_items_config[name]["start_price"]
         } for name in selected_system_items_names
     ]
-    now_dt = datetime.now()
+    now_dt = runtime_clock.now()
     end_time_dt = now_dt + timedelta(hours=schedule_config["duration_hours"])
     session_id = f"auction:{now_dt.strftime('%Y%m%d%H%M%S')}:{operation_id[-12:]}"
     result = session_service.start(
@@ -337,7 +344,7 @@ def start_auction_process(bot: Optional[Bot], operation_id: str | None = None) -
     if not result.succeeded:
         logger.warning(f"拍卖开启失败：{result.status}")
         return False
-    current_date = datetime.now().strftime('%Y-%m-%d')
+    current_date = runtime_clock.now().strftime('%Y-%m-%d')
     auction_config.set_auction_config_value("schedule", current_date, "last_auto_start_date")
     logger.info(f"拍卖已开启，共 {result.items_count} 件物品参与拍卖！")
     return True
