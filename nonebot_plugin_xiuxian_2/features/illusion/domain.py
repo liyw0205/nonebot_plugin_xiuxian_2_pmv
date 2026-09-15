@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from ...infrastructure.clock import SystemClock
+
 
 @dataclass(frozen=True)
 class IllusionChoiceResult:
@@ -38,7 +40,7 @@ class IllusionChoiceResult:
 
 def period_key(now: datetime | None = None) -> str:
     """Return the gameplay day, whose boundary is 08:00 local time."""
-    value = now or datetime.now()
+    value = now or SystemClock().now()
     boundary = value.replace(hour=8, minute=0, second=0, microsecond=0)
     day = value.date() if value >= boundary else value.date() - timedelta(days=1)
     return day.isoformat()

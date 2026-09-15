@@ -951,6 +951,8 @@
 
 2026-09-15 illusion operation ID live safety：提交 `a48e9d1` 部署后 backup `/srv/old/data/backups/20260915T095343Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行幻境选择写入。
 
+2026-09-16 illusion domain clock boundary：`period_key` 默认时间统一使用 `SystemClock`，`IllusionApplication` 显式 Clock 仍优先；illusion/source共153 tests、catalog=103、compileall、architecture、diff check通过。旧 choice transaction compatibility边界保持不变。
+
 2026-09-15 rift settlement operation ID boundary：秘境结算、终止、钥匙事件、斩妖令战斗和加速真实入口的无事件 operation ID统一使用注入 `runtime_ids`；rift/source共190 tests、catalog=103、compileall、architecture、diff check通过。完整事件随机及跨库 settlement仍保留为未迁移边界。
 
 2026-09-15 rift settlement operation ID live safety：提交 `5891aff` 部署后 backup `/srv/old/data/backups/20260915T095921Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行秘境结算/终止/加速写入。
