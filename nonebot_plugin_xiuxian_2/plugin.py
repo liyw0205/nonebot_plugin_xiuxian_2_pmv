@@ -386,6 +386,17 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 else:
                     runner = MigrationRunner((), clock=context.clock)
                 runner.apply(uow)
+            if spec.key == "game_db":
+                from .features.accessory_package.attached_migrations import apply_attached_player_accessory
+                from .infrastructure.database.attached_uow import AttachedDatabaseUnitOfWork
+
+                player_database = context.database.path("player_db")
+                with AttachedDatabaseUnitOfWork(
+                    spec.path,
+                    attachments={"player_data": player_database},
+                    immediate=True,
+                ) as attached_uow:
+                    apply_attached_player_accessory(attached_uow, clock=context.clock)
         phase_state["migrations"] = True
 
     def ensure_repositories() -> None:
