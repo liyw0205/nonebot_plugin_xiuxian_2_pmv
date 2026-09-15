@@ -6,6 +6,7 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from ...paths import get_paths
+from ...infrastructure.clock import SystemClock
 from ...infrastructure.ids import UUIDGenerator
 
 from ..on_compat import on_command
@@ -70,6 +71,7 @@ from .two_exp_cd import two_exp_cd
 
 partner_invite_cache = {}
 runtime_ids = UUIDGenerator()
+runtime_clock = SystemClock()
 sql_message = XiuxianDateManage()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
@@ -248,7 +250,7 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     if existing_invite is not None:
         other_id = existing_invite.target_id if existing_invite.inviter_id == str(user_id) else existing_invite.inviter_id
         target_info = sql_message.get_user_real_info(other_id)
-        remaining_time = existing_invite.expires_at - datetime.now().timestamp()
+        remaining_time = existing_invite.expires_at - runtime_clock.now().timestamp()
         msg = f"你已经向{target_info['user_name']}发送了双修邀请，请等待{int(remaining_time)}秒后邀请过期或对方回应后再发送新邀请！"
         await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意双修", k2="拒绝", v2="拒绝双修", k3="双修", v3="双修")
         await two_exp_invite.finish()
@@ -1042,7 +1044,7 @@ async def bind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     if str(user_id) in partner_invite_cache:
         inviter_id = partner_invite_cache[str(user_id)]['inviter']
         inviter_info = sql_message.get_user_real_info(inviter_id)
-        remaining_time = 60 - (datetime.now().timestamp() - partner_invite_cache[str(user_id)]['timestamp'])
+        remaining_time = 60 - (runtime_clock.now().timestamp() - partner_invite_cache[str(user_id)]['timestamp'])
         msg = f"你已有来自{inviter_info['user_name']}的道侣绑定邀请（剩余{int(remaining_time)}秒），请先处理！"
         await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意道侣", k2="绑定", v2="绑定道侣", k3="道侣", v3="我的道侣")
         await bind_partner.finish()
@@ -1056,16 +1058,16 @@ async def bind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     if existing_invite is not None:
         target_info = sql_message.get_user_real_info(existing_invite)
-        remaining_time = 60 - (datetime.now().timestamp() - partner_invite_cache[existing_invite]['timestamp'])
+        remaining_time = 60 - (runtime_clock.now().timestamp() - partner_invite_cache[existing_invite]['timestamp'])
         msg = f"你已经向{target_info['user_name']}发送了道侣绑定邀请，请等待{int(remaining_time)}秒后邀请过期或对方回应后再发送新邀请！"
         await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意道侣", k2="绑定", v2="绑定道侣", k3="道侣", v3="我的道侣")
         await bind_partner.finish()
     
     # 创建绑定邀请
-    invite_id = f"{user_id}_{partner_user_id}_{datetime.now().timestamp()}"
+    invite_id = f"{user_id}_{partner_user_id}_{runtime_clock.now().timestamp()}"
     partner_invite_cache[str(partner_user_id)] = {
         'inviter': user_id,
-        'timestamp': datetime.now().timestamp(),
+        'timestamp': runtime_clock.now().timestamp(),
         'invite_id': invite_id
     }
     
@@ -1105,7 +1107,7 @@ async def agree_bind_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意道侣", k2="绑定", v2="绑定道侣", k3="道侣", v3="我的道侣")
         await agree_bind.finish()
         
-    bind_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    bind_time = runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')
     invitee_partner = load_partner(user_id).get("partner_id")
     inviter_partner = load_partner(inviter_id).get("partner_id")
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
@@ -1151,7 +1153,7 @@ async def unbind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     
     partner_user_id = str(partner_data["partner_id"])
     partner_side = load_partner(partner_user_id)
-    checked_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    checked_at = runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     result = partner_unbind_service.apply(
         f"partner-unbind:{user_id}:{event_id or runtime_ids.new_id()}", user_id, partner_user_id,
@@ -1207,7 +1209,7 @@ async def my_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     bind_time = partner_data["bind_time"]
     affection = partner_data["affection"]
-    bound_days = (datetime.now() - datetime.strptime(bind_time, '%Y-%m-%d %H:%M:%S')).days
+    bound_days = (runtime_clock.now() - datetime.strptime(bind_time, '%Y-%m-%d %H:%M:%S')).days
     affection_level = get_affection_level(affection)
     partner_user_info = sql_message.get_user_info_with_id(partner_user_id)
     msg = f"""**我的道侣**
@@ -1241,7 +1243,7 @@ def _get_mentor_apply_remaining(apprentice_id):
         return 0, apply_target
 
     available_time = apply_time + timedelta(hours=MENTOR_APPLY_LIMIT_HOURS)
-    now = datetime.now()
+    now = runtime_clock.now()
     if now >= available_time:
         return 0, None
 
@@ -1301,7 +1303,7 @@ def _cooldown_remaining(user_id, field):
     until = _parse_datetime(data.get(field))
     if until is None:
         return 0
-    now = datetime.now()
+    now = runtime_clock.now()
     if now >= until:
         return 0
     return int((until - now).total_seconds())
@@ -1309,7 +1311,7 @@ def _cooldown_remaining(user_id, field):
 
 def _set_mentor_cooldown(user_id, field, days):
     data = load_mentor(user_id)
-    data[field] = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+    data[field] = (runtime_clock.now() + timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
     save_mentor(user_id, data)
 
 
@@ -1393,7 +1395,7 @@ def _add_mentor_history(user_id, event_type, description, related_id=None):
     data = load_mentor(user_id)
     history = _normalize_history(data.get("mentor_history"))
     history.append({
-        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "time": runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S"),
         "type": str(event_type),
         "related_id": str(related_id) if related_id is not None else "",
         "description": str(description),
@@ -1410,7 +1412,7 @@ def _record_mentor_event(mentor_id, apprentice_id, event_type, mentor_desc, appr
 def _set_pair_rebind_cooldown(apprentice_id, mentor_id, days):
     data = load_mentor(apprentice_id)
     rebind_cd = _normalize_dict(data.get("mentor_rebind_cd"))
-    rebind_cd[str(mentor_id)] = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+    rebind_cd[str(mentor_id)] = (runtime_clock.now() + timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
     data["mentor_rebind_cd"] = rebind_cd
     save_mentor(apprentice_id, data)
 
@@ -1421,7 +1423,7 @@ def _get_pair_rebind_remaining(apprentice_id, mentor_id):
     until = _parse_datetime(rebind_cd.get(str(mentor_id)))
     if until is None:
         return 0
-    now = datetime.now()
+    now = runtime_clock.now()
     if now >= until:
         rebind_cd.pop(str(mentor_id), None)
         data["mentor_rebind_cd"] = rebind_cd
@@ -1436,7 +1438,7 @@ def _get_bind_wait_remaining(apprentice_id):
     if bind_time is None:
         return 0
     available_time = bind_time + timedelta(hours=MENTOR_NEW_BIND_TRANSMISSION_WAIT_HOURS)
-    now = datetime.now()
+    now = runtime_clock.now()
     if now >= available_time:
         return 0
     return int((available_time - now).total_seconds())
@@ -1584,7 +1586,7 @@ def _validate_mentor_application(apprentice_id, mentor_id):
 def _bind_mentor_relation(mentor_id, apprentice_id):
     mentor_id = str(mentor_id)
     apprentice_id = str(apprentice_id)
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")
 
     mentor_data = load_mentor(mentor_id)
     apprentice_ids = get_valid_apprentices(mentor_id)
@@ -1881,7 +1883,7 @@ async def agree_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
     invite_data = pending_invites[apprentice_id]
     apprentice_info = sql_message.get_user_real_info(apprentice_id)
-    bind_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    bind_time = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")
     result = mentor_bind_service.apply(
         operation_id, mentor_id, apprentice_id,
         invite_data["invite_id"], bind_time=bind_time,
@@ -2189,7 +2191,7 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         target_info = sql_message.get_user_real_info(target_id)
         mentor_name = user_info["user_name"]
         target_name = target_info["user_name"] if target_info else str(target_id)
-        now = datetime.now()
+        now = runtime_clock.now()
         occurred_at = now.strftime("%Y-%m-%d %H:%M:%S")
         mentor_cd_until = (now + timedelta(days=MENTOR_COOLDOWN_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
         apprentice_cd_until = (now + timedelta(days=APPRENTICE_COOLDOWN_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
@@ -2260,7 +2262,7 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, **buttons)
         await unbind_mentor.finish()
 
-    now = datetime.now()
+    now = runtime_clock.now()
     occurred_at = now.strftime("%Y-%m-%d %H:%M:%S")
     apprentice_cd_until = (now + timedelta(days=APPRENTICE_COOLDOWN_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
     pair_rebind_until = (now + timedelta(days=MENTOR_SAME_PAIR_REBIND_COOLDOWN_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
