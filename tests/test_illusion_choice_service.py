@@ -9,6 +9,8 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_Illusion.choice_service import IllusionChoiceService
+from nonebot_plugin_xiuxian_2.features.illusion.migrations import apply_illusion
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
 
@@ -20,6 +22,8 @@ class IllusionChoiceServiceTests(unittest.TestCase):
             conn.execute("CREATE TABLE user_xiuxian (user_id TEXT PRIMARY KEY, stone INTEGER, exp INTEGER)")
             conn.execute("INSERT INTO user_xiuxian VALUES (%s,%s,%s)", ("user", 100, 200))
             conn.execute("CREATE TABLE back (user_id TEXT, goods_id INTEGER, goods_name TEXT, goods_type TEXT, goods_num INTEGER, create_time TEXT, update_time TEXT, bind_num INTEGER, UNIQUE(user_id, goods_id))")
+        with DatabaseUnitOfWork(self.database) as uow:
+            apply_illusion(uow)
         self.service = IllusionChoiceService(self.database)
         self.item = {"id": 1, "name": "item", "type": "type", "amount": 2}
 
@@ -72,7 +76,6 @@ class IllusionChoiceServiceTests(unittest.TestCase):
 
     def test_operation_failure_rolls_back_everything(self) -> None:
         with db_backend.transaction(self.database) as conn:
-            conn.execute("CREATE TABLE illusion_choice_operations (operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, choice_count INTEGER NOT NULL, created_at TIMESTAMP)")
             conn.execute("CREATE TRIGGER fail_choice BEFORE INSERT ON illusion_choice_operations BEGIN SELECT RAISE(ABORT, 'failed'); END")
         with self.assertRaises(db_backend.IntegrityError):
             self.choose("rollback")

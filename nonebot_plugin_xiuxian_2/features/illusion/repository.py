@@ -66,7 +66,6 @@ class IllusionRepository:
         )
 
     def get_result(self, uow: DatabaseUnitOfWork, operation_id: str) -> IllusionChoiceResult | None:
-        self.ensure_schema(uow)
         row = uow.execute(
             "SELECT choice_count, result_json FROM illusion_choice_operations WHERE operation_id = ?",
             (str(operation_id).strip(),),
@@ -76,7 +75,6 @@ class IllusionRepository:
         return self._from_row("duplicate", int(row[0]), row[1])
 
     def get_choice(self, uow: DatabaseUnitOfWork, user_id: str, period: str) -> dict[str, Any] | None:
-        self.ensure_schema(uow)
         row = uow.execute(
             "SELECT question_index, choice_index, selected_option FROM illusion_choices "
             "WHERE user_id = ? AND period_key = ?",
@@ -105,7 +103,6 @@ class IllusionRepository:
         item: Mapping[str, Any] | None,
         max_goods_num: int,
     ) -> IllusionChoiceResult:
-        self.ensure_schema(uow)
         operation_id = str(operation_id).strip()
         user_id = str(user_id)
         period = str(period)
