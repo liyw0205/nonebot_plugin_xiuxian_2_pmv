@@ -833,6 +833,8 @@
 
 2026-09-15 dongfu clock boundary：洞府默认状态/成熟时间读取统一使用注入 `runtime_clock`；dongfu/source共174 tests、catalog=103、compileall、architecture、diff check通过。资源 transaction/replay 与完整 application迁移仍为未迁移边界。
 
+2026-09-15 dongfu clock live safety：提交 `2627bad` 部署后 backup `/srv/old/data/backups/20260915T141942Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行洞府状态/成熟时间写入。
+
 2026-09-15 fusion operation ID boundary：普通合成和强制合成真实 handler的无事件 operation ID统一使用注入 `runtime_ids`；fusion/pill/source共161 tests、catalog=103、compileall、architecture、diff check通过。合成成功率随机决策与历史 FusionService 资产事务仍保留为未迁移边界。
 
 2026-09-15 fusion operation ID live safety：提交 `3025002` 部署后 backup `/srv/old/data/backups/20260915T102231Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行合成写入。
