@@ -427,7 +427,6 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.pet.application import PetApplication
         from .features.pet.repository import LegacyPetRepository
         from .features.sect.application import SectApplication
-        from .features.sect.repository import LegacySectRepository
         from .features.natal_treasure.application import NatalTreasureApplication
         from .features.buff.application import BuffApplication
         from .features.base.application import BaseApplication
@@ -607,7 +606,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             ),
             "sect": SectApplication(
                 str(context.database.path("game_db")),
-                repository=LegacySectRepository(str(context.database.path("game_db"))),
+                clock=context.clock,
             ),
         }
         context.services.update({
