@@ -90,6 +90,7 @@ from ...features.sect_fairyland.repository import LegacySectFairylandRepository
 from ...features.sect.application import SectApplication
 from ...features.sect.repository import SectRenameSqlRepository
 from ...infrastructure.ids import UUIDGenerator
+from ...infrastructure.clock import SystemClock
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
@@ -99,6 +100,7 @@ sect_application = SectApplication(
     repository=SectRenameSqlRepository(get_paths().game_db),
 )
 sect_ids = UUIDGenerator()
+runtime_clock = SystemClock()
 fairyland_claim_service = FairylandClaimService(get_paths().player_db)
 sect_fairyland_application = SectFairylandApplication(
     get_paths().player_db,
@@ -342,7 +344,7 @@ __sect_manage_help__ = """
     misfire_grace_time=300,
 )
 async def materialsupdate_():
-    grant_key = f"sect-materials:{datetime.now().date().isoformat()}"
+    grant_key = f"sect-materials:{runtime_clock.now().date().isoformat()}"
     all_sects = sql_message.get_all_sects_id_scale()
     granted = 0
     for s in all_sects:
@@ -364,7 +366,7 @@ async def resetusertask():
         for level, room_config in config["宗门丹房参数"]["elixir_room_level"].items()
     }
     result = sect_daily_reset_maintenance_service.settle(
-        datetime.now().date().isoformat(), maintenance_costs
+        runtime_clock.now().date().isoformat(), maintenance_costs
     )
     if result.status == "operation_conflict":
         logger.error("宗门每日重置 operation 配置冲突，本次未执行")
@@ -386,7 +388,7 @@ async def resetusertask():
 # 定时任务自动检测并处理宗门状态
 async def auto_handle_inactive_sect_owners():
     logger.info("⏳ 开始检测并处理宗门状态")
-    maintenance_checked_at = datetime.now()
+    maintenance_checked_at = runtime_clock.now()
     maintenance_slot = 0 if maintenance_checked_at.hour < 12 else 12
     maintenance_key = (
         f"{maintenance_checked_at.date().isoformat()}:T{maintenance_slot:02d}"
@@ -671,7 +673,7 @@ async def sect_fairyland_info_(bot: Bot, event: GroupMessageEvent | PrivateMessa
 
     level = _get_sect_fairyland_level(sect_info)
     cur_conf = _get_sect_fairyland_config(level)
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = runtime_clock.now().strftime("%Y-%m-%d")
     claimed = _get_fairyland_last_claim(user_info["user_id"], sect_id) == today
 
     next_msg = "已达最高等级"
@@ -802,7 +804,7 @@ async def sect_fairyland_claim_(bot: Bot, event: GroupMessageEvent | PrivateMess
         await handle_send(bot, event, "宗门尚未建设炼体堂，无法进行淬体修行。", md_type="宗门", k1="炼体堂", v1="宗门炼体堂", k2="捐献", v2="宗门捐献", k3="宗门", v3="我的宗门")
         await sect_fairyland_claim.finish()
 
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = runtime_clock.now().strftime("%Y-%m-%d")
     # 事件幂等优先：同 event 必须先走 operation，避免“今日已完成”前置拦截。
     operation_id = _sect_operation_id(event, "fairyland_claim", f"{user_info['user_id']}:{sect_id}:{today}")
     # The legacy ``fairyland_claim_service.claim(...)`` facade remains for

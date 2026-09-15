@@ -803,6 +803,8 @@
 
 2026-09-15 sect main operation ID live safety：提交 `ffa5fad` 部署后 backup `/srv/old/data/backups/20260915T092123Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行宗门操作写入。
 
+2026-09-15 sect clock boundary：宗门材料/每日维护 scheduler、inactive owner检查和 fairyland查询/领取真实入口的日期读取统一使用注入 `runtime_clock`；sect/source共298 tests、catalog=103、compileall、architecture、diff check通过。维护与 fairyland transaction service仍保留为未迁移边界。
+
 2026-09-15 impart PK operation ID boundary：虚神界训练、机器人/双人对决、探索出关真实入口的无事件 operation ID统一使用注入 `runtime_ids`；impart/source共177 tests、catalog=103、compileall、architecture、diff check通过。对战随机决策、跨玩家 settlement和旧 replay service仍为未迁移边界。
 
 2026-09-15 impart PK operation ID live safety：提交 `ba4364f` 部署后 backup `/srv/old/data/backups/20260915T092945Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行虚神界训练/对战写入。
