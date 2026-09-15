@@ -16,6 +16,7 @@ from nonebot.params import CommandArg
 
 from .. import NICKNAME
 from ...features.impart.application import ImpartApplication
+from ...infrastructure.ids import UUIDGenerator
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.lay_out import Cooldown, assign_bot
 from ..xiuxian_utils.utils import (
@@ -59,6 +60,7 @@ card_disassemble_service = CardDisassembleService(get_paths().impart_db)
 love_sand_service = LoveSandUseService(get_paths().game_db, get_paths().impart_db, get_paths().player_db)
 impart_prayer_service = ImpartPrayerSettlementService(get_paths().game_db, get_paths().impart_db)
 impart_application = ImpartApplication(get_paths().game_db)
+runtime_ids = UUIDGenerator()
 
 
 def _run_impart_action(action, operation_id, user_id, call, **payload):
@@ -324,7 +326,7 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     msg_text = args.extract_plain_text().strip()
     times = int(msg_text) if msg_text and msg_text.isdigit() and int(msg_text) > 0 else 1
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"impart-draw:{event_id}:{user_id}" if event_id else f"impart-draw:{user_id}:{time.time_ns()}"
+    operation_id = f"impart-draw:{event_id}:{user_id}" if event_id else f"impart-draw:{user_id}:{runtime_ids.new_id()}"
     # 先回放：成功后每日次数/灵石会挡住同事件幂等。
     prior = impart_draw_service.get_result(operation_id)
     if prior is not None and prior.succeeded:
@@ -465,7 +467,7 @@ async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, "请检查卡图数据完整！")
         return
 
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns())
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or runtime_ids.new_id())
     operation_id = f"impart-prayer:{event_id}:{user_id}:{item_id}"
     result = impart_prayer_service.replay(operation_id, user_id, item_id, quantity)
     if result is not None and result.succeeded:
@@ -547,7 +549,7 @@ async def use_love_sand(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     item_count = sql_message.goods_num(user_id, item_id)
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"love-sand:{event_id}:{user_id}:{item_id}" if event_id else f"love-sand:{time.time_ns()}:{user_id}:{item_id}"
+    operation_id = f"love-sand:{event_id}:{user_id}:{item_id}" if event_id else f"love-sand:{runtime_ids.new_id()}:{user_id}:{item_id}"
     prior = love_sand_service.get_result(operation_id)
     if prior is not None and prior.succeeded:
         final_msg = (
@@ -757,7 +759,7 @@ async def impart_compose_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         return
     user_id = str(user_info["user_id"])
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"impart-compose:{event_id}:{user_id}" if event_id else f"impart-compose:{user_id}:{time.time_ns()}"
+    operation_id = f"impart-compose:{event_id}:{user_id}" if event_id else f"impart-compose:{user_id}:{runtime_ids.new_id()}"
     prior = card_compose_service.get_result(operation_id)
     if prior is not None and prior.succeeded:
         await handle_send(
@@ -807,7 +809,7 @@ async def impart_disassemble_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         return
     user_id = str(user_info["user_id"])
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"impart-disassemble:{event_id}:{user_id}" if event_id else f"impart-disassemble:{user_id}:{time.time_ns()}"
+    operation_id = f"impart-disassemble:{event_id}:{user_id}" if event_id else f"impart-disassemble:{user_id}:{runtime_ids.new_id()}"
     prior = card_disassemble_service.get_result(operation_id)
     if prior is not None and prior.succeeded:
         await handle_send(
