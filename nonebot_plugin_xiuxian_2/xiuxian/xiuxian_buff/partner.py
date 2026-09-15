@@ -8,6 +8,7 @@ from pathlib import Path
 from ...paths import get_paths
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.ids import UUIDGenerator
+from ...infrastructure.random_source import SystemRandom
 
 from ..on_compat import on_command
 from nonebot.log import logger
@@ -72,6 +73,7 @@ from .two_exp_cd import two_exp_cd
 partner_invite_cache = {}
 runtime_ids = UUIDGenerator()
 runtime_clock = SystemClock()
+runtime_random = SystemRandom()
 sql_message = XiuxianDateManage()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
@@ -598,7 +600,7 @@ async def direct_two_exp(
             affection_msg = "\n\n道侣名册暂未理顺，本次亲密度未增加。"
 
     if event_descriptions:
-        msg = f"{random.choice(event_descriptions)}\n\n"
+        msg = f"{runtime_random.choice(event_descriptions)}\n\n"
     else:
         msg = "两位道友气机交融，功法互补，修为有所精进。\n\n"
 
@@ -728,7 +730,7 @@ async def process_two_exp(
             exp_limit_2 = int(exp_limit_2 * 1.2)
 
     # 特殊事件概率
-    is_special = random.randint(1, 100) <= 6
+    is_special = runtime_random.randint(1, 100) <= 6
     event_desc = ""
 
     if is_special:
@@ -739,7 +741,7 @@ async def process_two_exp(
             "两人心意相通，功法运转达到完美契合！",
             "顿悟时刻来临，两人同时进入玄妙境界！"
         ]
-        event_desc = random.choice(special_events)
+        event_desc = runtime_random.choice(special_events)
 
         exp_limit_1 = int(exp_limit_1 * 1.5)
         exp_limit_2 = int(exp_limit_2 * 1.5)
@@ -754,7 +756,7 @@ async def process_two_exp(
             f"竹林小筑内，{user_1['user_name']}与{user_2['user_name']}共饮灵茶，茶香氤氲中功法相互印证。",
             f"云端之上，{user_1['user_name']}与{user_2['user_name']}脚踏飞剑，剑气交织间功法互补，修为大涨。",
         ]
-        event_desc = random.choice(event_descriptions)
+        event_desc = runtime_random.choice(event_descriptions)
 
     # 最终再次裁剪，防止道侣倍率 / 特殊事件倍率后超过上限
     if is_partner:
@@ -2467,7 +2469,7 @@ def trigger_partner_exp_share(user_id, new_level):
             affection = partner_data.get('affection', 0)
             trigger_rate = min(40 + (affection // 1000), 50)
         
-            if random.randint(1, 100) <= trigger_rate:
+            if runtime_random.randint(1, 100) <= trigger_rate:
                 result = partner_breakthrough_service.apply(
                     f"partner-breakthrough:{user_id}:{new_level}", user_id, partner_id, new_level,
                     expected_user_exp=self_exp, expected_partner_exp=partner_exp,
