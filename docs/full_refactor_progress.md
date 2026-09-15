@@ -691,6 +691,8 @@
 
 2026-09-15 buff operation ID live safety：提交 `4516f29` 部署后 backup `/srv/old/data/backups/20260915T042429Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行洞府/训练/PvP写入。
 
+2026-09-15 normal training provider boundary：正常修炼真实 handler的经验倍率、伪灵根灵石奖励和训练周周期统一使用注入 `runtime_random/runtime_clock`；normal-training/source共146 tests、catalog=103、compileall、architecture、diff check通过。NormalTrainingLifecycleService完整跨库事务仍未提升为feature repository。
+
 2026-09-15 sign-in task projection DDL fix：`SignInTaskRepository.record`移除 request-time `ensure_schema`，正式 schema仅由已有 `apply_sign_in_tasks` startup migration创建；测试fixture改为显式 migration后验证 daily/weekly progress idempotency。task/effects/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 sign-in task projection live safety：提交 `d845283` 部署后 backup `/srv/old/data/backups/20260915T001441Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务进度写入。

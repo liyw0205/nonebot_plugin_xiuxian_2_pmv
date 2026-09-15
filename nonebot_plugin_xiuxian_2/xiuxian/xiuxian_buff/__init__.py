@@ -503,11 +503,11 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             XiuConfig().closing_exp * ((level_rate * realm_rate * (1 + mainbuffratebuff) * (1 + mainbuffcloexp) * (1 + user_blessed_spot_data)))
             # 洞天福地为加法
         )  # 本次闭关获取的修为
-        exp_rate = random.uniform(0.9, 1.3)
+        exp_rate = runtime_random.uniform(0.9, 1.3)
         exp = int(exp * exp_rate)
         operation_id = _normal_training_operation_id(event, user_id)
         if user_info['root_type'] == '伪灵根':
-            give_stone_num = int(random.randint(10000, 300000) * exp_rate)
+            give_stone_num = int(runtime_random.randint(10000, 300000) * exp_rate)
             start_result = normal_training_lifecycle_service.start(
                 operation_id, user_id, kind="mining", expected_exp=use_exp,
                 expected_stone=int(user_mes['stone']), reward=give_stone_num,
@@ -519,7 +519,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             msg = f"开始挖矿⛏️！【{user_info['user_name']}开始挖矿】\n挥起玄铁镐砸向发光岩壁\n碎石里蹦出带灵气的矿石\n预计时间：60秒"
             await handle_send(bot, event, msg)
             await asyncio.sleep(60)
-            iso = datetime.now().isocalendar()
+            iso = runtime_clock.now().isocalendar()
             result = normal_training_lifecycle_service.complete(operation_id, task_period=f"{iso.year}-W{iso.week:02d}")
             if not result.succeeded:
                 await up_exp.finish()
@@ -540,7 +540,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             msg = f"【{user_info['user_name']}开始修炼】\n盘膝而坐，五心朝天，闭目凝神，渐入空明之境...\n周身灵气如涓涓细流汇聚，在经脉中缓缓流转\n丹田内真元涌动，与天地灵气相互呼应\n渐入佳境，物我两忘，进入深度修炼状态\n预计修炼时间：60秒"
         await handle_send(bot, event, msg)
         await asyncio.sleep(60)
-        iso = datetime.now().isocalendar()
+        iso = runtime_clock.now().isocalendar()
         result = normal_training_lifecycle_service.complete(operation_id, task_period=f"{iso.year}-W{iso.week:02d}")
         if not result.succeeded:
             await up_exp.finish()
