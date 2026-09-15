@@ -4,6 +4,7 @@
 import json
 from datetime import datetime, timedelta
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
+from ...infrastructure.clock import SystemClock
 from .past_life_state import PAST_LIFE_FIELDS, new_default_state
 
 player_data_manager = PlayerDataManager()
@@ -15,8 +16,9 @@ MAX_ENDINGS_LOG = 10
 
 
 class PastLifeLimit:
-    def __init__(self):
+    def __init__(self, *, clock=None):
         self.table_name = "past_life"
+        self.clock = clock or SystemClock()
 
     def _default_state(self):
         return new_default_state()
@@ -72,7 +74,7 @@ class PastLifeLimit:
 
     def _get_refresh_slot_start(self, now=None):
         """前尘刷新段：每日 00:00 与 12:00。"""
-        now = now or datetime.now()
+        now = now or self.clock.now()
         refresh_hour = 12 if now.hour >= 12 else 0
         return now.replace(hour=refresh_hour, minute=0, second=0, microsecond=0)
 
@@ -80,7 +82,7 @@ class PastLifeLimit:
         return self._get_refresh_slot_start(now)
 
     def _get_next_refresh_time(self, now=None):
-        now = now or datetime.now()
+        now = now or self.clock.now()
         return self._get_refresh_slot_start(now) + timedelta(hours=REFRESH_INTERVAL_HOURS)
 
     def get_next_available_time(self, user_id):
@@ -88,7 +90,7 @@ class PastLifeLimit:
         last = self._parse_run_time(state.get("last_run_time"))
         if not last:
             return None
-        now = datetime.now()
+        now = self.clock.now()
         if last < self._get_refresh_slot_start(now):
             return None
         return self._get_next_refresh_time(now)
@@ -106,7 +108,7 @@ class PastLifeLimit:
         next_time = self.get_next_available_time(user_id)
         if not next_time:
             return 0
-        remaining = next_time - datetime.now()
+        remaining = next_time - self.clock.now()
         seconds = int(remaining.total_seconds())
         if seconds <= 0:
             return 0
