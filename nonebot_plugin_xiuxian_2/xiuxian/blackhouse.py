@@ -11,12 +11,14 @@ from typing import Any
 from nonebot.log import logger
 
 from ..paths import get_paths
+from ..infrastructure.clock import SystemClock
 from .xiuxian_utils.json_store import load_json_file, save_json_file
 
 BLACKHOUSE_FILE = get_paths().data / "blackhouse.json"
 
 # user_id -> {reason, name, updated_at}
 _BANNED: dict[str, dict[str, Any]] = {}
+runtime_clock = SystemClock()
 
 
 def _normalize_user_id(user_id: str | None) -> str:
@@ -106,7 +108,7 @@ def ban_user(user_id: str, *, name: str = "", reason: str = "") -> str:
     _BANNED[uid] = {
         "name": str(name or ""),
         "reason": str(reason or ""),
-        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "updated_at": runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
     save_blackhouse_memory()
     _sync_user_xiuxian_ban(uid, True)
