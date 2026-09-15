@@ -3,6 +3,8 @@ import time
 from pathlib import Path
 
 from ...paths import get_paths
+from ...infrastructure.random_source import SystemRandom
+from ...infrastructure.ids import UUIDGenerator
 from ..on_compat import on_command
 from nonebot.log import logger
 from nonebot.params import CommandArg
@@ -22,6 +24,8 @@ sql_message = XiuxianDateManage()
 xiangyuan_settlement_service = XiangyuanSettlementService(
     get_paths().game_db, get_paths().player_db
 )
+runtime_random = SystemRandom()
+runtime_ids = UUIDGenerator()
 
 give_xiangyuan = on_command("送仙缘", priority=5, block=True)
 get_xiangyuan = on_command("抢仙缘", priority=5, block=True)
@@ -53,7 +57,7 @@ def _xiangyuan_operation_id(event, action, user_id):
     ).strip()
     if event_id:
         return f"xiangyuan:{event_id}:{action}:{user_id}"
-    return f"xiangyuan:{action}:{user_id}:{time.time_ns()}"
+    return f"xiangyuan:{action}:{user_id}:{runtime_ids.new_id()}"
 
 def get_user_name(user_id):
     """根据用户 ID 获取道号"""
@@ -82,7 +86,7 @@ def calculate_xiangyuan_reward(gift, is_last_receiver):
         
         # 随机分配部分 (0 到 random_pool/remaining_receivers*2 之间)
         if remaining_receivers > 0:
-            random_reward = random.randint(0, int(random_pool / remaining_receivers * 2))
+            random_reward = runtime_random.randint(0, int(random_pool / remaining_receivers * 2))
         else:
             random_reward = 0
         
