@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
 from typing import Any
 
 from ...infrastructure.database.attached_uow import AttachedDatabaseUnitOfWork
+from ...infrastructure.clock import SystemClock
 
 
 ATTACHED_SCHEMA_VERSION = "accessory_package.player_data.001"
@@ -25,7 +25,7 @@ def ensure_attached_ledger(uow: AttachedDatabaseUnitOfWork) -> None:
 def apply_attached_player_accessory(uow: AttachedDatabaseUnitOfWork, *, clock: Any | None = None) -> bool:
     """Apply the attached schema exactly once and record durable history."""
     ensure_attached_ledger(uow)
-    applied_at = (clock.now() if clock is not None else datetime.now(timezone.utc)).isoformat()
+    applied_at = (clock.now() if clock is not None else SystemClock().now()).isoformat()
     checksum = _checksum()
     row = uow.query_one(
         "SELECT name, checksum FROM player_data.attached_schema_migrations WHERE version = ?",
