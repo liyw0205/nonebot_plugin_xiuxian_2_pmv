@@ -423,7 +423,6 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.puppet.repository import LegacyPuppetRepository
         from .features.boss.application import BossApplication
         from .features.dungeon.application import DungeonApplication
-        from .features.dungeon.repository import LegacyDungeonRepository
         from .features.pet.application import PetApplication
         from .features.pet.repository import LegacyPetRepository
         from .features.sect.application import SectApplication
@@ -591,10 +590,6 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             "dungeon": DungeonApplication(
                 str(context.database.path("game_db")),
                 str(context.database.path("player_db")),
-                repository=LegacyDungeonRepository(
-                    str(context.database.path("game_db")),
-                    str(context.database.path("player_db")),
-                ),
             ),
             "pet": PetApplication(
                 str(context.database.path("game_db")),
