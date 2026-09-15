@@ -1,9 +1,12 @@
-import random
 import re
+
+from ....infrastructure.random_source import SystemRandom
 
 from nonebot.params import CommandArg
 
 from ..command import *
+
+runtime_random = SystemRandom()
 
 
 POKEAPI_BASE = "https://pokeapi.co/api/v2"
@@ -52,10 +55,10 @@ TYPE_CN = {
 }
 
 
-def _normalize_pokemon_query(text: str) -> str:
+def _normalize_pokemon_query(text: str, random_source=None) -> str:
     query = (text or "").strip()
     if not query:
-        return str(random.randint(1, POKEMON_MAX_ID))
+        return str((random_source or runtime_random).randint(1, POKEMON_MAX_ID))
     if query in POKEMON_CN_ALIASES:
         return POKEMON_CN_ALIASES[query]
     if query.isdigit():
@@ -177,7 +180,7 @@ pokemon_help_cmd = on_command("宝可梦帮助", aliases={"宝可梦盲盒帮助
 @pokemon_box_cmd.handle(parameterless=[Cooldown(cd_time=5)])
 async def pokemon_box_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     try:
-        await _send_pokemon(bot, event, str(random.randint(1, POKEMON_MAX_ID)), True)
+        await _send_pokemon(bot, event, str(runtime_random.randint(1, POKEMON_MAX_ID)), True)
     except Exception as e:
         await handle_send(
             bot,
