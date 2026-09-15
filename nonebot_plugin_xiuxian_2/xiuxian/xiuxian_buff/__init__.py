@@ -5,6 +5,9 @@ import json
 import sqlite3
 from nonebot.log import logger
 from ...paths import get_paths
+from ...infrastructure.clock import SystemClock
+from ...infrastructure.random_source import SystemRandom
+from ...infrastructure.ids import UUIDGenerator
 from datetime import datetime, timedelta
 from ..on_compat import on_command
 from ..adapter_compat import (
@@ -74,6 +77,9 @@ closing_settlement_service = ClosingSettlementService(get_paths().game_db)
 normal_training_lifecycle_service = NormalTrainingLifecycleService(get_paths().game_db, get_paths().player_db)
 normal_pvp_settlement_service = NormalPvpSettlementService(get_paths().game_db, get_paths().player_db)
 stone_training_settlement_service = StoneTrainingSettlementService(get_paths().game_db, get_paths().player_db)
+runtime_clock = SystemClock()
+runtime_random = SystemRandom()
+runtime_ids = UUIDGenerator()
 
 def _blessed_spot_operation_id(event, action, user_id):
     event_id = str(
@@ -81,28 +87,28 @@ def _blessed_spot_operation_id(event, action, user_id):
     ).strip()
     if event_id:
         return f"blessed-spot:{event_id}:{action}:{user_id}"
-    return f"blessed-spot:{action}:{user_id}:{datetime.now().timestamp()}"
+    return f"blessed-spot:{action}:{user_id}:{runtime_ids.new_id()}"
 
 
 def _normal_training_operation_id(event, user_id):
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     if event_id:
         return f"training:{event_id}:normal:{user_id}"
-    return f"training:normal:{user_id}:{datetime.now().timestamp()}"
+    return f"training:normal:{user_id}:{runtime_ids.new_id()}"
 
 
 def _stone_training_operation_id(event, user_id):
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     if event_id:
         return f"training:{event_id}:stone:{user_id}"
-    return f"training:stone:{user_id}:{datetime.now().timestamp()}"
+    return f"training:stone:{user_id}:{runtime_ids.new_id()}"
 
 
 def _normal_pvp_operation_id(event, user_id, opponent_id):
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     if event_id:
         return f"normal-pvp:{event_id}:{user_id}:{opponent_id}"
-    return f"normal-pvp:{user_id}:{opponent_id}:{datetime.now().timestamp()}"
+    return f"normal-pvp:{user_id}:{opponent_id}:{runtime_ids.new_id()}"
 BLESSEDSPOTCOST = 3500000 # 洞天福地购买消耗
 PLAYERSDATA = get_paths().players
 
