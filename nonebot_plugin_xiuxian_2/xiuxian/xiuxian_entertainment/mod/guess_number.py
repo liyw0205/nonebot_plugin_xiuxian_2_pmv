@@ -1,5 +1,7 @@
-import random
 import asyncio
+
+from ....infrastructure.clock import SystemClock
+from ....infrastructure.random_source import SystemRandom
 
 from ...on_compat import on_command
 from nonebot.params import CommandArg
@@ -22,6 +24,8 @@ GUESS_TIMEOUT = 300  # 秒，无操作自动结束（5分钟）
 # =========================
 guess_number_sessions: dict[str, dict] = {}
 guess_number_timeout_tasks: dict[str, asyncio.Task] = {}
+runtime_clock = SystemClock()
+runtime_random = SystemRandom()
 
 
 def _build_range_text(low: int, high: int) -> str:
@@ -98,7 +102,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         )
         return
 
-    answer = random.randint(GUESS_MIN, GUESS_MAX)
+    answer = runtime_random.randint(GUESS_MIN, GUESS_MAX)
     guess_number_sessions[user_id] = {
         "user_id": user_id,
         "user_name": user_name,
@@ -107,8 +111,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "high": GUESS_MAX,
         "tries": 0,
         "status": "playing",
-        "create_time": now_text(),
-        "last_action_time": now_text(),
+        "create_time": now_text(runtime_clock),
+        "last_action_time": now_text(runtime_clock),
     }
 
     await _start_guess_timeout(bot, event, user_id)
@@ -183,7 +187,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await _start_guess_timeout(bot, event, user_id)
 
     game["tries"] += 1
-    game["last_action_time"] = now_text()
+    game["last_action_time"] = now_text(runtime_clock)
 
     ans = game["answer"]
     if num == ans:

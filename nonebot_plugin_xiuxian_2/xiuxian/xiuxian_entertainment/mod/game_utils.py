@@ -1,8 +1,9 @@
 from datetime import datetime
+from ....infrastructure.clock import SystemClock
 
 
-def now_text() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+def now_text(clock=None) -> str:
+    return (clock or SystemClock()).now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def event_display_name(event, fallback_user_id: str | None = None) -> str:
