@@ -1109,6 +1109,8 @@
 
 2026-09-16 illusion request-DDL boundary：`IllusionRepository.get_result/get_choice/choose` 移除 request-time `ensure_schema`，`illusion.001` migration成为 choices/operations schema启动前置；更新 legacy choice service fixture为显式 migration。illusion/source共153 tests、catalog=103、compileall、architecture、diff check通过。
 
+2026-09-16 illusion request-DDL live safety：提交 `254e339` 部署后 backup `/srv/old/data/backups/20260915T211831Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行幻境选择写入。
+
 2026-09-15 rift settlement operation ID boundary：秘境结算、终止、钥匙事件、斩妖令战斗和加速真实入口的无事件 operation ID统一使用注入 `runtime_ids`；rift/source共190 tests、catalog=103、compileall、architecture、diff check通过。完整事件随机及跨库 settlement仍保留为未迁移边界。
 
 2026-09-15 rift settlement operation ID live safety：提交 `5891aff` 部署后 backup `/srv/old/data/backups/20260915T095921Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行秘境结算/终止/加速写入。
