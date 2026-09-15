@@ -865,6 +865,8 @@
 
 2026-09-16 accessory package attached migration blocked：`attached_migrations.py` 定义了 checksum-safe 的 `player_data.player_accessory` migration，但当前源码没有 startup/runner 调用点；直接移除 request-time `player.ensure_schema()` 会使真实 player namespace 缺表。保留正式 migration与现有 guard，待 attached migration 接入 startup 后再收口。
 
+2026-09-16 activity reward blocked：`ActivityRewardApplication` 当前仍默认桥接 `LegacyActivityRewardRepository`，`activity_reward.001` 只创建 feature marker，未提供 activity claim 的正式 SQL repository/schema；不能把 ledger facade当作完整迁移，保留为 pending legacy slice并跳转独立路径。
+
 2026-09-15 impart PK operation ID boundary：虚神界训练、机器人/双人对决、探索出关真实入口的无事件 operation ID统一使用注入 `runtime_ids`；impart/source共177 tests、catalog=103、compileall、architecture、diff check通过。对战随机决策、跨玩家 settlement和旧 replay service仍为未迁移边界。
 
 2026-09-15 impart PK operation ID live safety：提交 `ba4364f` 部署后 backup `/srv/old/data/backups/20260915T092945Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行虚神界训练/对战写入。
