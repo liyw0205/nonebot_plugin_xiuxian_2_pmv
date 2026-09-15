@@ -63,6 +63,7 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ...paths import get_paths
 from ...compatibility.pet import PetTravelClaimService
 from ...features.pet.application import PetApplication
+from ...infrastructure.ids import UUIDGenerator
 from ...compatibility.pet import PetFeedService
 from .transaction_service import PetSkillReplaceService
 from ...compatibility.pet import PetTravelStartService
@@ -76,6 +77,7 @@ items = Items()
 sql_message = XiuxianDateManage()
 pet_travel_claim_service = PetTravelClaimService(get_paths().game_db, get_paths().player_db)
 pet_application = PetApplication(get_paths().game_db, get_paths().player_db)
+runtime_ids = UUIDGenerator()
 pet_feed_service = PetFeedService(get_paths().game_db, get_paths().player_db)
 pet_skill_replace_service = PetSkillReplaceService(get_paths().player_db)
 pet_travel_start_service = PetTravelStartService(get_paths().player_db)
@@ -1294,7 +1296,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         None,
     )
     travel_pet_uid = str((data.get("travel") or {}).get("pet_uid", ""))
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns())
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or runtime_ids.new_id())
     result = pet_active_switch_service.switch(
         f"pet-active-switch:{event_id}:{user_id}",
         user_id,
@@ -1612,7 +1614,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     user_id = str(user_info["user_id"])
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns())
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or runtime_ids.new_id())
     operation_id = f"pet-fusion-breakthrough:{event_id}:{user_id}"
     ok, result_msg, pet, skill_offer, consumed = prepare_pet_fusion(user_id, tokens, operation_id)
     if ok:
@@ -1671,7 +1673,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     user_id = str(user_info["user_id"])
     token = args.extract_plain_text().strip()
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns())
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or runtime_ids.new_id())
     operation_id = f"pet-skill-reroll:{event_id}:{user_id}"
     current_pet, pet, new_skill = prepare_pet_skill_reroll(user_id, token or None, operation_id)
     if not current_pet:
@@ -1728,7 +1730,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     _, _, current_pet = next(((where, key, pet) for where, key, pet in [("active", None, data.get("active"))] + [("bag", i, pet) for i, pet in enumerate(data.get("bag", []))] if pet and str(pet.get("uid")) == str(pending["uid"])), (None, None, None))
     new_skill_id = str(pending["skill"].get("skill_id", ""))
     old_skill_id = str((current_pet or {}).get("skill", {}).get("skill_id", ""))
-    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns())
+    event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or runtime_ids.new_id())
     result = pet_skill_replace_service.replace(f"pet-skill-replace:{event_id}:{user_id}", user_id, pending["uid"], old_skill_id, new_skill_id)
     PET_SKILL_REPLACE_CACHE.pop(user_id, None)
     if not result.succeeded:

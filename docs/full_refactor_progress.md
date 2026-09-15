@@ -783,6 +783,8 @@
 
 2026-09-15 world-events operation ID live safety：提交 `3471689` 部署后 backup `/srv/old/data/backups/20260915T090030Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行恶魔/灵脉事件写入。
 
+2026-09-15 pet operation ID boundary：宠物 active switch、fusion breakthrough、skill reroll/replace真实入口的无事件 operation ID统一使用注入 `runtime_ids`；pet/source共180 tests、catalog=103、compileall、architecture、diff check通过。上述复杂宠物事务仍保留既有 legacy service，hatch完整写事务阻塞边界不变。
+
 2026-09-15 interactive provider boundary：互动经验/灵石结算、早晚安、运势真实入口的无事件 operation ID与清理窗口统一使用注入 `runtime_ids/runtime_clock`，统一经 `InteractiveApplication` action boundary；interactive/source共167 tests、catalog=103、compileall、architecture、diff check通过。历史 greeting/fortune service仅作为显式兼容目标保留。
 
 2026-09-15 interactive provider live safety：提交 `1624de3` 部署后 backup `/srv/old/data/backups/20260915T091541Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行互动结算/领取写入。
