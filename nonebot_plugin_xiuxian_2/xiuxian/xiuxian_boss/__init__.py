@@ -51,6 +51,7 @@ from ...compatibility.boss import WorldBossBattleSettlementService
 from ...features.boss.application import BossApplication
 from ...features.boss.repository import BossPurchaseSqlRepository
 from ...infrastructure.ids import UUIDGenerator
+from ...infrastructure.clock import SystemClock
 from .transaction_service import WorldBossManualSpawnService
 from .transaction_service import WorldBossFullRefreshService
 from .transaction_service import WorldBossPunishmentService
@@ -78,6 +79,7 @@ boss_application = BossApplication(
     ),
 )
 boss_ids = UUIDGenerator()
+runtime_clock = SystemClock()
 world_boss_battle_settlement_service = WorldBossBattleSettlementService(
     get_paths().game_db,
     get_paths().player_db,
@@ -318,7 +320,7 @@ async def save_boss_():
     logger.opt(colors=True).info(f"<green>boss数据已保存</green>")
 
 async def set_boss_limits_reset(business_date=None, *, chunk_size=500):
-    business_date = business_date or datetime.now().date().isoformat()
+    business_date = business_date or runtime_clock.now().date().isoformat()
     while True:
         result = world_boss_daily_limit_reset_service.reset(
             business_date,

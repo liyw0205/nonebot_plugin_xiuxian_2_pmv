@@ -211,7 +211,7 @@ def test_scheduled_and_manual_entries_share_full_refresh_operation():
 
     scheduled = source[
         source.index("async def generate_all_bosses_task") : source.index(
-            "@DRIVER.on_shutdown"
+            "@register_legacy_shutdown"
         )
     ]
     manual = source[

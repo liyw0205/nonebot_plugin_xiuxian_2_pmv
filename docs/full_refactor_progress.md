@@ -855,6 +855,8 @@
 
 2026-09-15 rift lifecycle clock live safety：提交 `84f2282` 部署后 backup `/srv/old/data/backups/20260915T133320Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行秘境生命周期写入。
 
+2026-09-15 boss reset clock boundary：世界BOSS每日额度重置默认 business date统一使用注入 `runtime_clock`；world-boss/boss/source共188 tests、catalog=103、compileall、architecture、diff check通过。完整 world-boss 三库 settlement 仍为明确阻塞边界。
+
 2026-09-15 back operation ID boundary：装备操作、背包修复、灵石/物品/炼金/抽奖符/礼包/天梯奖励和批量物品使用 helper的无事件 operation ID统一使用注入 `runtime_ids`；back/source共151 tests、catalog=103、compileall、architecture、diff check通过。legacy inventory、alchemy和奖励 transaction service仍保留为未迁移边界。
 
 2026-09-15 back operation ID live safety：提交 `7a1880e` 部署后 backup `/srv/old/data/backups/20260915T105238Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行背包/炼金/奖励写入。
