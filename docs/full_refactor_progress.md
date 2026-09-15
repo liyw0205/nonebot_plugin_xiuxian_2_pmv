@@ -865,6 +865,8 @@
 
 2026-09-16 interactive request-DDL blocked：`features/interactive/repository.py` 的六类奖励/greeting/fortune操作仍在请求路径调用 `ensure_schema`；`interactive.001` migration已注册，但现有 legacy service测试fixture广泛依赖 `_ensure_schema` 和隐式建表，需独立批量迁移测试契约后再收口。本轮不做表面替换，跳转至更小的正式 repository slice。
 
+2026-09-16 title request-DDL blocked：`TitleRepository` 的 replay/equip/unlock/rename等路径仍调用 `ensure_schema`，而当前 `title.001` migration只创建 feature marker，未创建 `title`与`title_transaction_operations`实际表；不能直接删除 request-time DDL，需新增 checksum-safe schema migration后再收口。
+
 2026-09-15 interactive provider live safety：提交 `1624de3` 部署后 backup `/srv/old/data/backups/20260915T091541Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行互动结算/领取写入。
 
 2026-09-15 interactive random boundary：fortune、早晚安、互动奖励回复和日常文本选择统一使用注入 `runtime_random`；interactive/source共167 tests、catalog=103、compileall、architecture、diff check通过。InteractiveApplication及历史 greeting/fortune transaction兼容边界保持不变。
