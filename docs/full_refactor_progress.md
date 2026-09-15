@@ -817,6 +817,8 @@
 
 2026-09-16 sect repository clock boundary：`SectApplication` 将注入 Clock 传给 `SectRenameSqlRepository`，claim elixir 与 sect shop 资产时间戳不再直接读取系统时间；sect/source共298 tests、catalog=103、compileall、architecture、diff check通过。其余 legacy repository fallback仍明确保留。
 
+2026-09-16 sect repository clock live safety：提交 `48f065f` 部署后 backup `/srv/old/data/backups/20260915T162923Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行宗门丹药/商店资产写入。
+
 2026-09-15 impart PK operation ID boundary：虚神界训练、机器人/双人对决、探索出关真实入口的无事件 operation ID统一使用注入 `runtime_ids`；impart/source共177 tests、catalog=103、compileall、architecture、diff check通过。对战随机决策、跨玩家 settlement和旧 replay service仍为未迁移边界。
 
 2026-09-15 impart PK operation ID live safety：提交 `ba4364f` 部署后 backup `/srv/old/data/backups/20260915T092945Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行虚神界训练/对战写入。
