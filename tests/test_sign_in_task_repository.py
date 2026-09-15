@@ -33,6 +33,12 @@ class SignInTaskRepositoryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             effects.record(user_id="u1", operation_id="s1", amount=2)
 
+    def test_missing_schema_is_not_created_at_request_time(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo = SignInTaskRepository(Path(d) / "empty.db")
+            with self.assertRaises(sqlite3.OperationalError):
+                repo.record(user_id="u1", operation_id="s1", occurred_at=datetime(2026, 9, 16, tzinfo=timezone.utc))
+
 
 if __name__ == "__main__":
     unittest.main()
