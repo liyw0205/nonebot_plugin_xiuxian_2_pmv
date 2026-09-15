@@ -25,7 +25,6 @@ class SignInStatisticsRepository:
 
     def record(self, *, user_id: str, operation_id: str, event_key: str, occurred_at: Any) -> bool:
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            self.ensure_schema(uow)
             cursor = uow.execute(
                 "INSERT INTO sign_in_statistics_events(operation_id,user_id,event_key,created_at) VALUES (?, ?, ?, ?) "
                 "ON CONFLICT(operation_id) DO NOTHING",
@@ -42,7 +41,6 @@ class SignInStatisticsRepository:
 
     def value(self, *, user_id: str, event_key: str) -> int:
         with DatabaseUnitOfWork(self.database) as uow:
-            self.ensure_schema(uow)
             row = uow.query_one(
                 "SELECT value FROM sign_in_statistics_projection WHERE user_id=? AND event_key=?",
                 (str(user_id), str(event_key)),

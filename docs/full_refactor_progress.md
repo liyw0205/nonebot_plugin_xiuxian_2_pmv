@@ -597,6 +597,8 @@
 
 2026-09-15 sign-in lifecycle wiring live safety：`6f1b4b3` 部署后 backup `/srv/old/data/backups/20260914T235737Z`，dry-run pending为空、reconcile clean；真实 `startup` 返回 `phase=ready`，filesystem/database/migrations/repositories/jobs/web 六项全绿，103-entry recovery clean。首次验证脚本在 shutdown 后断言导致假失败，已按正确顺序重跑并确认通过。
 
+2026-09-16 sign-in lottery/statistics boundary：确认 lottery migration `lottery.001/002` 与 statistics migration 已纳入统一 catalog；`SignInStatisticsRepository.record/value` 移除 request-time `ensure_schema`，缺表显式失败。同步更新过时 lottery source guard为 `sign_in_application.claim`/`settle_lottery`真实路径；sign-in/lottery/source共179 tests、catalog=103、compileall、architecture、diff check通过。旧安装 lottery fallback 与 task/lottery side-effect compatibility边界仍待正式迁移。
+
 2026-09-15 task reward claim boundary：真实 `领取任务奖励` handler移除直接 `task_manager.reward_claim_service.get_result` replay读取，统一经 `TasksApplication.execute(operation_id,user_id,payload)`进入 application ledger；任务定义/奖励快照与跨game/player reward transaction仍保留为显式 legacy repository边界，未将ServicePort facade误报为SQL迁移。task reward/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 task claim live safety：提交 `52eb6d0` 部署后 backup `/srv/old/data/backups/20260915T000645Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务奖励领取写入。
