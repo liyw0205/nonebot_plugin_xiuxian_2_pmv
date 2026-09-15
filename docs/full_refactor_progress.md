@@ -819,6 +819,8 @@
 
 2026-09-15 fusion operation ID live safety：提交 `3025002` 部署后 backup `/srv/old/data/backups/20260915T102231Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行合成写入。
 
+2026-09-15 fusion random boundary：普通/强制合成的成功率决策统一使用注入 `runtime_random`，概率、批量顺序和保护符语义保持不变；fusion/pill/source共161 tests、catalog=103、compileall、architecture、diff check通过。FusionService 资产事务仍为未迁移边界。
+
 2026-09-15 impart operation ID boundary：传承抽卡、祈愿、思恋流沙、卡牌合成/拆解真实入口的无事件 operation ID统一使用注入 `runtime_ids`；impart/source共177 tests、catalog=103、compileall、architecture、diff check通过。抽卡/祈愿/流沙随机与跨库 asset transaction 仍保留为未迁移边界。
 
 2026-09-15 impart operation ID live safety：提交 `ea3eb03` 部署后 backup `/srv/old/data/backups/20260915T103025Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行抽卡/祈愿/合成写入。

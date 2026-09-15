@@ -22,6 +22,7 @@ from ..xiuxian_back.back_util import check_equipment_use_msg
 from ...paths import get_paths
 from ...features.fusion.application import FusionApplication
 from ...infrastructure.ids import UUIDGenerator
+from ...infrastructure.random_source import SystemRandom
 from .fusion_service import FusionService
 import random
 import time
@@ -31,6 +32,7 @@ sql_message = XiuxianDateManage()
 fusion_service = FusionService(get_paths().game_db)
 fusion_application = FusionApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
+runtime_random = SystemRandom()
 
 
 def _run_fusion_action(action, operation_id, user_id, call, **payload):
@@ -260,7 +262,7 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
             return False, "道友还缺少：\n" + "\n".join(missing_names)
     
     guaranteed = int(equipment_id) in FIXED_SUCCESS_IDS or str(equipment['type']) == "特殊道具"
-    outcomes = tuple(guaranteed or random.randint(1, 100) <= 30 for _ in range(quantity))
+    outcomes = tuple(guaranteed or runtime_random.randint(1, 100) <= 30 for _ in range(quantity))
     reserved_items = {}
     for item_id in needed_items:
         item_info = next((back for back in back_msg if back['goods_id'] == int(item_id)), None)
