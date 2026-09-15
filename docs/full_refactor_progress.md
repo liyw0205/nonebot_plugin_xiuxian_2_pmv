@@ -809,6 +809,8 @@
 
 2026-09-15 dongfu random boundary：洞府种植/收获、巡逻、拜访和渗透的随机产出、检测、偷取和延迟决策统一使用注入 `runtime_random`；dongfu/source共174 tests、catalog=103、compileall、architecture、diff check通过。资源 transaction/replay 与完整 application迁移仍为未迁移边界。
 
+2026-09-15 dongfu random live safety：提交 `21aa08a` 部署后 backup `/srv/old/data/backups/20260915T120222Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行洞府随机产出/资产写入。
+
 2026-09-15 fusion operation ID boundary：普通合成和强制合成真实 handler的无事件 operation ID统一使用注入 `runtime_ids`；fusion/pill/source共161 tests、catalog=103、compileall、architecture、diff check通过。合成成功率随机决策与历史 FusionService 资产事务仍保留为未迁移边界。
 
 2026-09-15 fusion operation ID live safety：提交 `3025002` 部署后 backup `/srv/old/data/backups/20260915T102231Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行合成写入。
