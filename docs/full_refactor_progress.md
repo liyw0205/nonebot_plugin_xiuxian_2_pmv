@@ -607,6 +607,8 @@
 
 2026-09-15 tianti clock boundary：炼体结算、药浴、炼体状态和冲窍/突破 handler的时间读取统一使用注入 `runtime_clock`，operation fallback统一使用 `runtime_ids`，移除真实 handler中的 `datetime.now()`/`time.time_ns()`；tianti全套source/行为共170 tests、catalog=103、compileall、architecture、diff check通过。
 
+2026-09-15 tianti breakthrough operation ID closure：补齐突破 handler遗漏的无事件 operation ID fallback，统一使用注入 `runtime_ids.new_id()`；tianti全套source/行为共170 tests、catalog=103、compileall、architecture、diff check通过。
+
 2026-09-15 tianti clock live safety：提交 `bd436dd` 部署后 backup `/srv/old/data/backups/20260915T004302Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行炼体/药浴/冲窍写入。
 
 2026-09-15 partner relation operation ID boundary：`xiuxian_buff/partner.py` 的关系操作ID统一从注入 `UUIDGenerator` 获取，移除 `_relation_operation_id` 的 `time.time_ns()` fallback；partner/source共166 tests、8 subtests、catalog=103、compileall、architecture、diff check通过。关系 transaction services仍保留为兼容边界，未伪报 application迁移。

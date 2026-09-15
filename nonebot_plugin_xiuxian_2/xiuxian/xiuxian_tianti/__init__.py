@@ -544,7 +544,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = (
         f"tianti-break:{event_id}:{user_id}" if event_id
-        else f"tianti-break:{user_id}:{time.time_ns()}"
+        else f"tianti-break:{user_id}:{runtime_ids.new_id()}"
     )
     data = tianti_manager.get_user_tianti_info(user_id)
     next_name = get_next_tianti_level_name(data["tianti_level"])
