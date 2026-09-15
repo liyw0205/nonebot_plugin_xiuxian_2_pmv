@@ -795,6 +795,8 @@
 
 2026-09-15 interactive random live safety：提交 `cf45a83` 部署后 backup `/srv/old/data/backups/20260915T121233Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行互动随机奖励/领取写入。
 
+2026-09-15 interactive clock boundary：互动时段文案、fortune/reward/greeting application business date统一使用注入 `runtime_clock`；interactive/source共167 tests、catalog=103、compileall、architecture、diff check通过。历史 transaction service 时间兼容边界仍保留。
+
 2026-09-15 sect main operation ID boundary：宗门主 handler统一使用既有 `sect_ids` UUID provider生成无事件 operation ID；sect/source共298 tests、catalog=103、compileall、architecture、diff check通过。宗门周常领取和未迁移管理事务仍保留显式 legacy service边界。
 
 2026-09-15 sect main operation ID live safety：提交 `ffa5fad` 部署后 backup `/srv/old/data/backups/20260915T092123Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行宗门操作写入。

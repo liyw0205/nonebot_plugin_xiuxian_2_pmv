@@ -189,7 +189,7 @@ interaction_command = on_command("互动", priority=30, block=True)
 
 # 根据时间获取不同的问候语
 def get_morning_message_by_time(count):
-    now = datetime.now()
+    now = runtime_clock.now()
     hour = now.hour
     
     if 5 <= hour < 8:
@@ -239,7 +239,7 @@ def get_morning_message_by_time(count):
     return runtime_random.choice(messages)
 
 def get_night_message_by_time(count):
-    now = datetime.now()
+    now = runtime_clock.now()
     hour = now.hour
     
     if 18 <= hour < 22:
@@ -458,7 +458,7 @@ WEATHER_MESSAGES = [
 ]
 
 def get_time_message():
-    now = datetime.now()
+    now = runtime_clock.now()
     hour = now.hour
     if 5 <= hour < 8:
         time_msg = "清晨"
@@ -980,7 +980,7 @@ async def handle_give_exp(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         expected_exp=user_info["exp"],
         expected_level=user_info["level"],
         rank_value=convert_rank(user_info["level"])[0],
-        business_date=datetime.now(),
+        business_date=runtime_clock.now(),
     )
     result = dict(outcome.data or {})
     if outcome.ok and result.get("granted"):
@@ -1007,7 +1007,7 @@ async def handle_give_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     outcome = _run_interactive_action(
         "stone_settle", operation_id, user_id,
         expected_stone=user_info["stone"],
-        business_date=datetime.now(),
+        business_date=runtime_clock.now(),
     )
     result = dict(outcome.data or {})
     if outcome.ok and result.get("granted"):
@@ -1043,7 +1043,7 @@ async def handle_good_morning(bot: Bot, event: GroupMessageEvent | PrivateMessag
     # Compatibility target: interactive_greeting_claim_service.claim(
     outcome = _run_interactive_action(
         "greeting_claim", operation_id, user_id,
-        kind="morning", business_date=datetime.now(),
+        kind="morning", business_date=runtime_clock.now(),
     )
     result = dict(outcome.data or {})
     if result.get("status") == "operation_conflict":
@@ -1073,7 +1073,7 @@ async def handle_good_night(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     # Compatibility target: interactive_greeting_claim_service.claim(
     outcome = _run_interactive_action(
         "greeting_claim", operation_id, user_id,
-        kind="night", business_date=datetime.now(),
+        kind="night", business_date=runtime_clock.now(),
     )
     result = dict(outcome.data or {})
     if result.get("status") == "operation_conflict":
@@ -1193,7 +1193,7 @@ async def handle_fortune_command(bot: Bot, event: GroupMessageEvent | PrivateMes
     # Compatibility target: interactive_daily_fortune_service.resolve(
     outcome = _run_interactive_action(
         "fortune_resolve", operation_id, user_id,
-        business_date=datetime.now(), create_fortune=generate_fortune,
+        business_date=runtime_clock.now(), create_fortune=generate_fortune,
     )
     result = dict(outcome.data or {})
     if result.get("status") == "operation_conflict":
