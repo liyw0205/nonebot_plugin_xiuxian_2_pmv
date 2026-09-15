@@ -717,7 +717,7 @@ async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
     user_id = user_info['user_id']
     event_id = _event_id(event)
-    operation_id = f"rift-settlement:{event_id or time.time_ns()}:{user_id}"
+    operation_id = f"rift-settlement:{event_id or runtime_ids.new_id()}:{user_id}"
     if event_id:
         replay = rift_settlement_service.replay(operation_id)
         if replay is not None:
@@ -831,7 +831,7 @@ async def break_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await break_rift.finish()
     user_id = user_info['user_id']
     event_id = _event_id(event)
-    operation_id = f"rift-termination:{event_id or time.time_ns()}:{user_id}"
+    operation_id = f"rift-termination:{event_id or runtime_ids.new_id()}:{user_id}"
     if event_id:
         replay = rift_termination_service.replay(operation_id, user_id)
         if replay is not None and replay.succeeded:
@@ -887,7 +887,7 @@ async def use_rift_key(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 
     user_id = user_info['user_id']
     event_id = _event_id(event)
-    operation_id = f"rift-key-event:{event_id or time.time_ns()}:{user_id}"
+    operation_id = f"rift-key-event:{event_id or runtime_ids.new_id()}:{user_id}"
     if event_id:
         replay = rift_key_event_settlement_service.replay(operation_id)
         if replay is not None:
@@ -971,7 +971,7 @@ async def use_rift_boss(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     user_id = user_info['user_id']
     event_id = _event_id(event)
     operation_id = (
-        f"rift-demon-token-battle:{event_id or time.time_ns()}:{user_id}"
+        f"rift-demon-token-battle:{event_id or runtime_ids.new_id()}:{user_id}"
     )
     if event_id:
         replay = rift_demon_token_battle_settlement_service.replay(
@@ -1061,7 +1061,7 @@ async def _use_rift_speedup(
     user_id = user_info['user_id']
     
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"rift-speedup:{event_id or time.time_ns()}:{user_id}"
+    operation_id = f"rift-speedup:{event_id or runtime_ids.new_id()}:{user_id}"
     try:
         result = rift_speedup_service.apply(
             operation_id,
