@@ -38,7 +38,6 @@ class TitleRepository:
         )
 
     def get_result(self, uow: DatabaseUnitOfWork, operation_id: str) -> TitleTransactionResult | None:
-        self.ensure_schema(uow)
         row = uow.query_one(
             "SELECT result_status,title_id FROM title_transaction_operations WHERE operation_id = ?",
             (str(operation_id).strip(),),
@@ -75,7 +74,6 @@ class TitleRepository:
         expected_equipped: Any,
         title_id: str,
     ) -> TitleTransactionResult:
-        self.ensure_schema(uow)
         operation_id, user_id, title_id = str(operation_id).strip(), str(user_id), str(title_id).strip()
         unlocked = tuple(sorted({str(item) for item in expected_unlocked}))
         expected_equipped = str(expected_equipped or "")
@@ -111,7 +109,6 @@ class TitleRepository:
         user_id: str,
         expected_equipped: Any,
     ) -> TitleTransactionResult:
-        self.ensure_schema(uow)
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         expected_equipped = str(expected_equipped or "")
         if not operation_id or not user_id:
@@ -144,7 +141,6 @@ class TitleRepository:
         expected_unlocked: Any,
         title_id: str,
     ) -> TitleTransactionResult:
-        self.ensure_schema(uow)
         operation_id, user_id, title_id = str(operation_id).strip(), str(user_id), str(title_id).strip()
         unlocked = tuple(sorted({str(item) for item in expected_unlocked}))
         if not operation_id or not user_id or not title_id:
@@ -182,7 +178,6 @@ class TitleRepository:
         expected_unlocked: Any,
         title_ids: Any,
     ) -> TitleTransactionResult:
-        self.ensure_schema(uow)
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         expected = tuple(sorted({str(item) for item in expected_unlocked}))
         additions = tuple(sorted({str(item) for item in title_ids if str(item)} - set(expected)))

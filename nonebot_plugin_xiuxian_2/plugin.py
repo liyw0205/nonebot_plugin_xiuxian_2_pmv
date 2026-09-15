@@ -25,7 +25,7 @@ from .features.beg.manifest import FEATURE as BEG_FEATURE
 from .features.beg.migrations import apply_beg
 from .features.beg.application import BegApplication
 from .features.title.manifest import FEATURE as TITLE_FEATURE
-from .features.title.migrations import apply_title
+from .features.title.migrations import apply_title, apply_title_schema
 from .features.title.application import TitleApplication
 from .features.sign_in.manifest import FEATURE as SIGN_IN_FEATURE
 from .features.sign_in.migrations import apply_lottery, apply_lottery_audit, apply_sign_in, apply_sign_in_statistics, apply_sign_in_tasks
@@ -186,6 +186,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("tianti_training.006", "tianti_medicine_bath_operations", apply_tianti_medicine_bath_operations),
         Migration("tianti_training.007", "tianti_item_reward_operations", apply_tianti_item_reward_operations),
         Migration("title.001", "title_feature_migrations", apply_title),
+        Migration("title.002", "title_schema", apply_title_schema),
         Migration("tower.001", "tower_feature_migrations", apply_tower),
         Migration("tower.002", "tower_purchase_operations", apply_tower_purchase),
         Migration("tower.003", "tower_settlement_operations", apply_tower_settlement),
@@ -379,7 +380,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                     runner = MigrationRunner(game_migrations, clock=context.clock)
                 elif spec.key == "player_db":
                     runner = MigrationRunner(
-                        tuple(migration for migration in migration_runner.migrations if migration.version in {"title.001", "combat_settlement.003", "combat_settlement.004", "dungeon.003", "map.003", "map.005", "map.008", "map.013", "map.015", "map.016", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005"}),
+                        tuple(migration for migration in migration_runner.migrations if migration.version in {"title.001", "title.002", "combat_settlement.003", "combat_settlement.004", "dungeon.003", "map.003", "map.005", "map.008", "map.013", "map.015", "map.016", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005"}),
                         clock=context.clock,
                     )
                 else:

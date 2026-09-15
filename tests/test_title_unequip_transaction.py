@@ -8,6 +8,8 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_title.title_transaction_service import TitleTransactionService
+from nonebot_plugin_xiuxian_2.features.title.migrations import apply_title_schema
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
 
@@ -18,6 +20,8 @@ class TitleUnequipTransactionTests(unittest.TestCase):
         with db_backend.transaction(self.db) as conn:
             conn.execute("CREATE TABLE title(user_id TEXT PRIMARY KEY,unlocked TEXT,equipped TEXT)")
             conn.execute("INSERT INTO title VALUES(%s,%s,%s)", ("u", json.dumps(["1"]), "1"))
+        with DatabaseUnitOfWork(self.db) as uow:
+            apply_title_schema(uow)
         self.service = TitleTransactionService(self.db)
 
     def tearDown(self):
@@ -36,7 +40,6 @@ class TitleUnequipTransactionTests(unittest.TestCase):
 
     def test_failure_rolls_back(self):
         with db_backend.transaction(self.db) as conn:
-            conn.execute("CREATE TABLE title_transaction_operations(operation_id TEXT PRIMARY KEY,payload TEXT,result_status TEXT,title_id TEXT,created_at TEXT)")
             conn.execute("CREATE TRIGGER fail_title_unequip BEFORE INSERT ON title_transaction_operations BEGIN SELECT RAISE(ABORT,'failed'); END")
         with self.assertRaises(Exception):
             self.service.unequip("fail", "u", "1")

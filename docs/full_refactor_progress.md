@@ -865,7 +865,7 @@
 
 2026-09-16 interactive request-DDL blocked：`features/interactive/repository.py` 的六类奖励/greeting/fortune操作仍在请求路径调用 `ensure_schema`；`interactive.001` migration已注册，但现有 legacy service测试fixture广泛依赖 `_ensure_schema` 和隐式建表，需独立批量迁移测试契约后再收口。本轮不做表面替换，跳转至更小的正式 repository slice。
 
-2026-09-16 title request-DDL blocked：`TitleRepository` 的 replay/equip/unlock/rename等路径仍调用 `ensure_schema`，而当前 `title.001` migration只创建 feature marker，未创建 `title`与`title_transaction_operations`实际表；不能直接删除 request-time DDL，需新增 checksum-safe schema migration后再收口。
+2026-09-16 title request-DDL boundary：新增 checksum-safe `title.002` migration，创建/补齐 `title`与`title_transaction_operations` 实际 schema，并加入 player_db startup migration集合；`TitleRepository` replay/equip/unlock/rename路径移除 request-time `ensure_schema`，legacy service fixtures改为显式 `apply_title_schema`。title/source共155 tests、catalog=104、compileall、architecture、diff check通过；旧 title service保留为显式 rollback。
 
 2026-09-16 accessory package request-DDL blocked：game-side `accessory_package.001` 已创建 operation schema，但 repository请求路径与 legacy service同时跨 player attached schema；player attached migration尚未接入 startup，不能只删除 game-side ensure而破坏跨库兼容。保留现状并待 attached migration runner完成后整体收口。
 
