@@ -35,6 +35,7 @@ from .transaction_service import TiantiSettlementService
 from ...features.tianti_settlement.application import TiantiSettlementApplication
 from ...features.tianti_training.application import TiantiTrainingApplication
 from ...paths import get_paths
+from ...infrastructure.ids import UUIDGenerator
 
 sql_message = XiuxianDateManage()
 tianti_manager = TiantiDataManager()
@@ -52,6 +53,7 @@ tianti_training_application = TiantiTrainingApplication(
     get_paths().game_db,
     get_paths().player_db,
 )
+runtime_ids = UUIDGenerator()
 
 def _tianti_choice_seed(operation_id: str) -> int:
     return int.from_bytes(str(operation_id).encode("utf-8"), "little") % (2**63)
@@ -241,7 +243,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = (
         f"tianti-settle:{event_id}:{user_id}" if event_id
-        else f"tianti-settle:{user_id}:{time.time_ns()}"
+        else f"tianti-settle:{user_id}:{runtime_ids.new_id()}"
     )
     # The compatibility service still exposes ``tianti_settlement_service.settle(...)``
     # for older callers; this handler uses the idempotent application boundary.
@@ -327,7 +329,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = (
         f"tianti-stone:{event_id}:{user_id}" if event_id
-        else f"tianti-stone:{user_id}:{time.time_ns()}"
+        else f"tianti-stone:{user_id}:{runtime_ids.new_id()}"
     )
     # The legacy ``stone_training_service.train(...)`` facade remains for
     # callers outside the command adapter; writes go through the application.
