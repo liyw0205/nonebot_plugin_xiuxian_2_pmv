@@ -1238,7 +1238,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
 
 async def confirm_use_invite(bot, event, user_id, goods_id, item_name, skill_type):
     """发送确认使用"""
-    invite_id = f"{user_id}_use_{datetime.now().timestamp()}"
+    invite_id = f"{user_id}_use_{runtime_ids.new_id()}"
     confirm_use_cache[str(user_id)] = {
         'goods_id': goods_id,
         'item_name': item_name,
