@@ -20,6 +20,7 @@ from .common import (
 )
 from .transaction_service import InvitationRewardClaimService
 from .common import _run_compensation_action
+from .common import runtime_ids
 
 INVITATION_DATA_PATH = DATA_PATH / "invitation_data"
 INVITATION_REWARDS_FILE = INVITATION_DATA_PATH / "invitation_rewards.json"
@@ -126,7 +127,7 @@ def _invitation_operation_id(event, user_id: str) -> str:
     event_id = str(
         getattr(event, "message_id", "") or getattr(event, "id", "") or ""
     ).strip()
-    return f"invitation:claim:{user_id}:{event_id or time.time_ns()}"
+    return f"invitation:claim:{user_id}:{event_id or runtime_ids.new_id()}"
 
 
 @invitation_use_cmd.handle(parameterless=[Cooldown(cd_time=0)])
@@ -160,7 +161,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "邀请人不存在")
         return
 
-    operation_id = f"compensation:invitation_bind:{getattr(event, 'message_id', '') or getattr(event, 'id', '') or time.time_ns()}:{user_id}"
+    operation_id = f"compensation:invitation_bind:{getattr(event, 'message_id', '') or getattr(event, 'id', '') or runtime_ids.new_id()}:{user_id}"
     result = _run_compensation_action(
         "invitation_bind",
         operation_id,
@@ -372,7 +373,7 @@ async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
 
     rewards = load_invitation_rewards()
     rewards[str(threshold)] = reward_items
-    operation_id = f"compensation:invitation_reward_set:{getattr(event, 'message_id', '') or getattr(event, 'id', '') or time.time_ns()}:{threshold}"
+    operation_id = f"compensation:invitation_reward_set:{getattr(event, 'message_id', '') or getattr(event, 'id', '') or runtime_ids.new_id()}:{threshold}"
     result = _run_compensation_action(
         "invitation_reward_set",
         operation_id,

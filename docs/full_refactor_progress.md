@@ -723,6 +723,8 @@
 
 2026-09-15 base daohao random live safety：提交 `4b69070` 部署后 backup `/srv/old/data/backups/20260915T055934Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行注册/改名写入。
 
+2026-09-15 compensation provider boundary：补偿 common 的随机ID、duration解析和 invitation 三处无事件 operation ID统一使用注入 `runtime_random/runtime_clock/runtime_ids`；修复相对过期时间使用 aware runtime clock 与固定日期/时间比较时的 aware/naive不一致。compensation/invitation/source共164 tests、catalog=103、compileall、architecture、diff check通过；JSON mutator 仍通过 `CompensationApplication` compatibility boundary。
+
 2026-09-15 sign-in task projection DDL fix：`SignInTaskRepository.record`移除 request-time `ensure_schema`，正式 schema仅由已有 `apply_sign_in_tasks` startup migration创建；测试fixture改为显式 migration后验证 daily/weekly progress idempotency。task/effects/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 sign-in task projection live safety：提交 `d845283` 部署后 backup `/srv/old/data/backups/20260915T001441Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务进度写入。

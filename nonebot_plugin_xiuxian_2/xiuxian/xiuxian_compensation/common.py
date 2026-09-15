@@ -9,6 +9,9 @@ from typing import Dict, List, Any, Union
 
 from nonebot.log import logger
 from ...paths import get_paths
+from ...infrastructure.clock import SystemClock
+from ...infrastructure.random_source import SystemRandom
+from ...infrastructure.ids import UUIDGenerator
 from ...features.compensation.application import CompensationApplication
 
 from ..adapter_compat import Bot, MessageEvent, GroupMessageEvent, PrivateMessageEvent
@@ -61,6 +64,9 @@ compensation_definition_service = CompensationDefinitionService(
     DATA_CONFIG["补偿"]["data_path"],
     DATA_CONFIG["补偿"]["claimed_path"],
 )
+runtime_clock = SystemClock()
+runtime_random = SystemRandom()
+runtime_ids = UUIDGenerator()
 def _run_compensation_action(
     action: str,
     operation_id: str,
@@ -141,9 +147,9 @@ def save_claimed_data(config: Dict[str, Any], data: Dict[str, List[str]]):
 def generate_unique_id(existing_ids: List[str]) -> str:
     """生成 4-6 位随机 ID，必须包含字母和数字"""
     while True:
-        length = random.randint(4, 6)
+        length = runtime_random.randint(4, 6)
         chars = string.ascii_uppercase + string.digits
-        new_id = "".join(random.choice(chars) for _ in range(length))
+        new_id = "".join(runtime_random.choice(chars) for _ in range(length))
 
         if not any(c.isalpha() for c in new_id):
             continue
@@ -175,7 +181,7 @@ def parse_duration(duration_str: str, is_start_time: bool = False) -> Union[date
         duration_str = duration_str.strip()
 
         if duration_str.lower() in ["无限", "0"]:
-            return datetime.now() if is_start_time else "无限"
+            return runtime_clock.now() if is_start_time else "无限"
 
         if duration_str.isdigit() and len(duration_str) == 6:
             year = int("20" + duration_str[:2])
@@ -190,13 +196,13 @@ def parse_duration(duration_str: str, is_start_time: bool = False) -> Union[date
         if "小时" in duration_str:
             hours = int(duration_str.split("小时")[0])
             if is_start_time:
-                return datetime.now() + timedelta(hours=hours)
+                return runtime_clock.now() + timedelta(hours=hours)
             return timedelta(hours=hours)
 
         if "天" in duration_str:
             days = int(duration_str.split("天")[0])
             if is_start_time:
-                return (datetime.now() + timedelta(days=days)).replace(
+                return (runtime_clock.now() + timedelta(days=days)).replace(
                     hour=0,
                     minute=0,
                     second=0,
@@ -477,7 +483,7 @@ async def create_reward_record(
         if expire_parsed == "无限":
             expire_time = "无限"
         elif isinstance(expire_parsed, timedelta):
-            expire_time = datetime.now() + expire_parsed
+            expire_time = runtime_clock.now() + expire_parsed
         elif isinstance(expire_parsed, datetime):
             expire_time = expire_parsed
         else:
