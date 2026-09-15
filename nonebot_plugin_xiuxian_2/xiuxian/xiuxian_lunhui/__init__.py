@@ -30,6 +30,8 @@ from ..xiuxian_impart.impart_uitls import (
     update_user_impart_data
 )
 from ...paths import get_paths
+from ...infrastructure.clock import SystemClock
+from ...infrastructure.ids import UUIDGenerator
 from ...features.lunhui.application import LunhuiApplication
 from .transaction_service import (
     CultivationResetService,
@@ -48,6 +50,8 @@ lunhui_application = LunhuiApplication(
     get_paths().player_db,
     get_paths().impart_db,
 )
+runtime_clock = SystemClock()
+runtime_ids = UUIDGenerator()
 
 
 def _run_lunhui_action(action: str, operation_id: str, user_id: str, **payload):
@@ -127,7 +131,7 @@ async def resetting_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         
     user_id = user_info['user_id']
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"cultivation-reset:{user_id}:{event_id}" if event_id else f"cultivation-reset:{user_id}:{datetime.now().timestamp()}"
+    operation_id = f"cultivation-reset:{user_id}:{event_id}" if event_id else f"cultivation-reset:{user_id}:{runtime_ids.new_id()}"
     # 先回放：成功后境界变为江湖好手会挡住同事件幂等。
     prior = cultivation_reset_service.get_result(operation_id)
     if prior is not None and prior.succeeded:
@@ -270,7 +274,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     skill_type = type_map[arg]
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"lunhui-recall:{event_id}:{user_id}:{skill_type}" if event_id else f"lunhui-recall:{user_id}:{skill_type}:{datetime.now().timestamp()}"
+    operation_id = f"lunhui-recall:{event_id}:{user_id}:{skill_type}" if event_id else f"lunhui-recall:{user_id}:{skill_type}:{runtime_ids.new_id()}"
     # 先回放：成功后 retrieved 标记会挡住同事件幂等。
     prior = lunhui_recall_service.get_result(operation_id)
     if prior is not None and prior.succeeded:
@@ -339,7 +343,7 @@ async def confirm_lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     user_id = user_info['user_id']
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     # event-scoped op：成功后 invite cache 会清空，不能把 invite_id 放进 operation_id/payload。
-    operation_id = f"lunhui-settlement:{event_id}:{user_id}" if event_id else f"lunhui-settlement:{user_id}:{datetime.now().timestamp()}"
+    operation_id = f"lunhui-settlement:{event_id}:{user_id}" if event_id else f"lunhui-settlement:{user_id}:{runtime_ids.new_id()}"
     prior = lunhui_settlement_service.get_result(operation_id)
     if prior is not None and prior.succeeded:
         msg = (
@@ -404,7 +408,7 @@ async def confirm_lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
 async def confirm_lunhui_invite(bot, event, user_id, root_level, lunhui_level2, msg):
     """发送确认轮回"""
-    invite_id = f"{user_id}_lunhui_{datetime.now().timestamp()}"
+    invite_id = f"{user_id}_lunhui_{runtime_ids.new_id()}"
     confirm_lunhui_cache[str(user_id)] = {
         'root_level': root_level,
         'msg': msg,

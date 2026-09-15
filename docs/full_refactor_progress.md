@@ -799,6 +799,8 @@
 
 2026-09-15 impart PK operation ID live safety：提交 `ba4364f` 部署后 backup `/srv/old/data/backups/20260915T092945Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行虚神界训练/对战写入。
 
+2026-09-15 lunhui operation ID boundary：轮回 reset、前世技能 recall、三库轮回 settlement和确认邀请真实入口的无事件 operation ID统一使用注入 `runtime_ids`；lunhui/source共151 tests、catalog=103、compileall、architecture、diff check通过。三库 reset/recall/settlement完整事务及旧 replay service仍为未迁移边界。
+
 2026-09-15 auction start provider boundary：拍卖启动真实流程的 operation ID、系统拍卖品抽样、session开始时间和自动日期统一使用注入 `runtime_ids/runtime_random/runtime_clock`；trade/auction/source共209 tests、catalog=103、compileall、architecture、diff check通过。拍卖结束、排队和库存 transaction 的历史时间逻辑仍保留为未迁移边界。
 
 2026-09-15 auction start provider live safety：提交 `d06788a` 部署后 backup `/srv/old/data/backups/20260915T094455Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行拍卖启动/商品写入。
