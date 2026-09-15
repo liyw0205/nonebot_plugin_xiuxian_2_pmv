@@ -41,6 +41,7 @@ from ..xiuxian_arena import use_arena_challenge_ticket
 
 from ..xiuxian_config import XiuConfig, convert_rank, added_ranks
 from ...paths import get_paths
+from ...infrastructure.ids import UUIDGenerator
 from ..xiuxian_utils.pet_system import (
     PET_BAG_LIMIT,
     PET_EGG_IDS,
@@ -101,6 +102,7 @@ batch_item_use_service = BatchItemUseService(
 )
 backpack_repair_service = BackpackRepairService(get_paths().game_db)
 player_data_manager = PlayerDataManager()
+runtime_ids = UUIDGenerator()
 
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 added_ranks = added_ranks()
@@ -135,7 +137,7 @@ def _equipment_operation_id(event, action, goods_id):
     ).strip()
     if event_id:
         return f"equipment:{event_id}:{action}:{goods_id}"
-    return f"equipment:{action}:{goods_id}:{time.time_ns()}"
+    return f"equipment:{action}:{goods_id}:{runtime_ids.new_id()}"
 
 
 def _backpack_repair_operation_id(event):
@@ -144,7 +146,7 @@ def _backpack_repair_operation_id(event):
     ).strip()
     if event_id:
         return f"backpack-repair:{event_id}"
-    return f"backpack-repair:{time.time_ns()}"
+    return f"backpack-repair:{runtime_ids.new_id()}"
 
 
 def _stone_reward_operation_id(event, reward_type, user_id):
@@ -153,7 +155,7 @@ def _stone_reward_operation_id(event, reward_type, user_id):
     ).strip()
     if event_id:
         return f"stone-reward:{event_id}:{reward_type}:{user_id}"
-    return f"stone-reward:{reward_type}:{user_id}:{time.time_ns()}"
+    return f"stone-reward:{reward_type}:{user_id}:{runtime_ids.new_id()}"
 
 
 def _cultivation_item_operation_id(event, user_id, goods_id):
@@ -162,7 +164,7 @@ def _cultivation_item_operation_id(event, user_id, goods_id):
     ).strip()
     if event_id:
         return f"cultivation-item:{event_id}:{user_id}:{goods_id}"
-    return f"cultivation-item:{user_id}:{goods_id}:{time.time_ns()}"
+    return f"cultivation-item:{user_id}:{goods_id}:{runtime_ids.new_id()}"
 
 
 def _alchemy_operation_id(event, user_id, mode):
@@ -171,7 +173,7 @@ def _alchemy_operation_id(event, user_id, mode):
     ).strip()
     if event_id:
         return f"alchemy:{event_id}:{user_id}:{mode}"
-    return f"alchemy:{user_id}:{mode}:{time.time_ns()}"
+    return f"alchemy:{user_id}:{mode}:{runtime_ids.new_id()}"
 
 
 def _lottery_talisman_operation_id(event, user_id, goods_id):
@@ -180,7 +182,7 @@ def _lottery_talisman_operation_id(event, user_id, goods_id):
     ).strip()
     if event_id:
         return f"lottery-talisman:{event_id}:{user_id}:{goods_id}"
-    return f"lottery-talisman:{user_id}:{goods_id}:{time.time_ns()}"
+    return f"lottery-talisman:{user_id}:{goods_id}:{runtime_ids.new_id()}"
 
 
 def _skill_learning_operation_id(event, invite_id, user_id, goods_id):
@@ -198,7 +200,7 @@ def _package_reward_operation_id(event, user_id, goods_id):
     ).strip()
     if event_id:
         return f"package-reward:{event_id}:{user_id}:{goods_id}"
-    return f"package-reward:{user_id}:{goods_id}:{time.time_ns()}"
+    return f"package-reward:{user_id}:{goods_id}:{runtime_ids.new_id()}"
 
 
 def _tianti_item_reward_operation_id(event, user_id, goods_id):
@@ -207,7 +209,7 @@ def _tianti_item_reward_operation_id(event, user_id, goods_id):
     ).strip()
     if event_id:
         return f"tianti-item-reward:{event_id}:{user_id}:{goods_id}"
-    return f"tianti-item-reward:{user_id}:{goods_id}:{time.time_ns()}"
+    return f"tianti-item-reward:{user_id}:{goods_id}:{runtime_ids.new_id()}"
 
 
 def _batch_item_use_operation_id(event, user_id, goods_id):
@@ -216,7 +218,7 @@ def _batch_item_use_operation_id(event, user_id, goods_id):
     ).strip()
     if event_id:
         return f"batch-item-use:{event_id}:{user_id}:{goods_id}"
-    return f"batch-item-use:{user_id}:{goods_id}:{time.time_ns()}"
+    return f"batch-item-use:{user_id}:{goods_id}:{runtime_ids.new_id()}"
 
 
 # 通用物品类型和炼金最低价格
