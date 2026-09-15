@@ -785,6 +785,8 @@
 
 2026-09-15 interactive provider boundary：互动经验/灵石结算、早晚安、运势真实入口的无事件 operation ID与清理窗口统一使用注入 `runtime_ids/runtime_clock`，统一经 `InteractiveApplication` action boundary；interactive/source共167 tests、catalog=103、compileall、architecture、diff check通过。历史 greeting/fortune service仅作为显式兼容目标保留。
 
+2026-09-15 interactive provider live safety：提交 `1624de3` 部署后 backup `/srv/old/data/backups/20260915T091541Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行互动结算/领取写入。
+
 2026-09-15 avatar provider boundary：身外化身真实入口的 operation ID、随机化身ID和创建时间统一使用注入 `runtime_ids/runtime_random/runtime_clock`，兼容 JSON mutation仍经 `InfoApplication` ledger；source共143 tests、catalog=103、compileall、architecture、diff check通过，仓库暂无专用 avatar behavior suite。
 
 2026-09-15 avatar provider live safety：提交 `7ae1397` 部署后 backup `/srv/old/data/backups/20260915T083238Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行身外化身切换写入。
