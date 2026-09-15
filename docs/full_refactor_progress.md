@@ -837,6 +837,8 @@
 
 2026-09-15 past-life clock boundary：PastLifeLimit 的刷新窗口、可用时间和冷却剩余计算支持注入 `Clock`，默认使用 `SystemClock`；past-life/source共174 tests、catalog=103、compileall、architecture、diff check通过。三库 past-life transaction service 仍为未迁移边界。
 
+2026-09-15 past-life clock live safety：提交 `3c4ee2f` 部署后 backup `/srv/old/data/backups/20260915T125640Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行前尘状态写入。
+
 2026-09-15 back operation ID boundary：装备操作、背包修复、灵石/物品/炼金/抽奖符/礼包/天梯奖励和批量物品使用 helper的无事件 operation ID统一使用注入 `runtime_ids`；back/source共151 tests、catalog=103、compileall、architecture、diff check通过。legacy inventory、alchemy和奖励 transaction service仍保留为未迁移边界。
 
 2026-09-15 back operation ID live safety：提交 `7a1880e` 部署后 backup `/srv/old/data/backups/20260915T105238Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行背包/炼金/奖励写入。
