@@ -547,6 +547,8 @@
 
 2026-09-16 sect composition SQL cutover：`plugin.py` 移除 sect 默认 `LegacySectRepository` 注入，改由 `SectApplication` 默认 `SectRenameSqlRepository` 并传入 context Clock；sect 真实 startup graph不再默认命中旧宗门 service，legacy 类保留为显式 rollback。sect/source共298 tests、catalog=103、compileall、architecture、diff check通过。
 
+2026-09-16 sect coverage correction：复核 `SectRenameSqlRepository` 方法覆盖，确认其实现 `join/purchase/learn_main/learn_secondary/claim_elixir/donate/change_position/kick/leave/rename` 全部十个 `SectRepository` 操作；此前将其余宗门操作描述为 legacy 的台账文字已更正。`LegacySectRepository` 仅保留为显式 rollback，未改变 runtime graph。
+
 2026-09-16 sect composition SQL cutover live safety：提交 `04e85e2` 部署后 backup `/srv/old/data/backups/20260915T192316Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行宗门资产写入。
 
 2026-09-15 boss shop purchase live safety：提交 `34d91fc` 部署后 backup `/srv/old/data/backups/20260914T203127Z`，dry-run/apply仅game `[boss.002]`；readiness全绿，93-entry recovery reconcile clean。live未执行世界BOSS兑换写入。
