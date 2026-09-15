@@ -593,6 +593,8 @@
 
 2026-09-15 task claim live safety：提交 `52eb6d0` 部署后 backup `/srv/old/data/backups/20260915T000645Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务奖励领取写入。
 
+2026-09-15 sign-in task projection DDL fix：`SignInTaskRepository.record`移除 request-time `ensure_schema`，正式 schema仅由已有 `apply_sign_in_tasks` startup migration创建；测试fixture改为显式 migration后验证 daily/weekly progress idempotency。task/effects/source共149 tests、catalog=103、compileall、architecture、diff check通过。
+
 2026-09-15 sign-in task side-effect boundary：task/lottery adapters已存在且通过 wiring tests，但真实 `xiuxian_base` handler模块级 `sign_in_application` 与 runtime context service实例尚未共享同一 `SignInApplicationEffects`，直接移除 handler中的 legacy statistics/task calls会改变行为；该边界记录为阻塞，未伪迁移。转入独立 pet travel claim slice。
 
 2026-09-15 pet travel claim cutover：真实宠物游历领奖handler改用 `PetApplication.claim_travel`，保留现有 prepare/story rendering和显式 statistics/game-event side-effect边界；旧 `PetTravelClaimService.claim`不再是默认handler调用。pet claim/source共149 tests、catalog=103、compileall、architecture、diff check通过；pet.001已有schema无需新增migration。

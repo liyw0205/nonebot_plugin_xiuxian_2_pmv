@@ -20,7 +20,6 @@ class SignInTaskRepository:
 
     def record(self, *, user_id: str, operation_id: str, occurred_at: datetime) -> list[str]:
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            self.ensure_schema(uow)
             inserted = uow.execute("INSERT INTO sign_in_task_events(operation_id,user_id,occurred_at) VALUES(?,?,?) ON CONFLICT(operation_id) DO NOTHING", (str(operation_id), str(user_id), occurred_at.isoformat()))
             if inserted.rowcount != 1:
                 return []

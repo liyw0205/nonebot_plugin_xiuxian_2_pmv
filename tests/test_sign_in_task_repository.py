@@ -5,12 +5,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from nonebot_plugin_xiuxian_2.features.sign_in.tasks import SignInTaskRepository
+from nonebot_plugin_xiuxian_2.features.sign_in.migrations import apply_sign_in_tasks
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 
 
 class SignInTaskRepositoryTests(unittest.TestCase):
     def test_daily_and_weekly_completion_are_idempotent(self):
         with tempfile.TemporaryDirectory() as d:
             db = Path(d) / "game.db"
+            with DatabaseUnitOfWork(db) as uow:
+                apply_sign_in_tasks(uow)
             repo = SignInTaskRepository(db)
             now = datetime(2026, 9, 14, tzinfo=timezone.utc)
             self.assertEqual(repo.record(user_id="u1", operation_id="s1", occurred_at=now), ["今日问道"])
