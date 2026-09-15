@@ -64,11 +64,13 @@ from .transaction_service import GuishiStoneService
 from .transaction_service import AuctionQueueService
 from .transaction_service import AuctionSessionService
 from ...paths import get_paths
+from ...infrastructure.ids import UUIDGenerator
 from ...bootstrap.legacy import register_legacy_startup
 from urllib.parse import quote
 
 # 初始化全局组件
 items = Items()
+runtime_ids = UUIDGenerator()
 sql_message = XiuxianDateManage()
 trade_manager = TradeDataManager()
 xianshi_repository = TradeRepository(
@@ -122,7 +124,7 @@ def _xianshi_removal_operation_id(event, listing_id):
     ).strip()
     if event_id:
         return f"xianshi-remove:{event_id}:{listing_id}"
-    return f"xianshi-remove:{listing_id}:{time.time_ns()}"
+    return f"xianshi-remove:{listing_id}:{runtime_ids.new_id()}"
 
 
 def _xianshi_clear_operation_id(event):
@@ -131,7 +133,7 @@ def _xianshi_clear_operation_id(event):
     ).strip()
     if event_id:
         return f"xianshi-clear:{event_id}"
-    return f"xianshi-clear:{time.time_ns()}"
+    return f"xianshi-clear:{runtime_ids.new_id()}"
 
 
 def _xianshi_name_removal_operation_id(event, user_id, item_name, quantity):
@@ -140,7 +142,7 @@ def _xianshi_name_removal_operation_id(event, user_id, item_name, quantity):
     ).strip()
     if event_id:
         return f"xianshi-remove-name:{event_id}:{user_id}:{item_name}:{quantity}"
-    return f"xianshi-remove-name:{user_id}:{item_name}:{quantity}:{time.time_ns()}"
+    return f"xianshi-remove-name:{user_id}:{item_name}:{quantity}:{runtime_ids.new_id()}"
 
 
 # === 仙肆命令 ===
@@ -232,7 +234,7 @@ def _xianshi_fast_purchase_stamina_operation_id(event, buyer_id):
     ).strip()
     if event_id:
         return f"xianshi-fast-buy-stamina:{event_id}:{buyer_id}"
-    return f"xianshi-fast-buy-stamina:{buyer_id}:{time.time_ns()}"
+    return f"xianshi-fast-buy-stamina:{buyer_id}:{runtime_ids.new_id()}"
 
 
 def _xianshi_listing_operation_id(event, seller_id, goods_id, price, quantity, suffix=""):
@@ -272,7 +274,7 @@ def _guishi_order_operation_id(event, order_type, user_id, item_id, price, quant
     ).strip()
     if event_id:
         return f"guishi-order:{order_type}:{event_id}:{user_id}:{item_id}:{price}:{quantity}"
-    return f"guishi-order:{order_type}:{user_id}:{item_id}:{price}:{quantity}:{time.time_ns()}"
+    return f"guishi-order:{order_type}:{user_id}:{item_id}:{price}:{quantity}:{runtime_ids.new_id()}"
 
 
 def _auction_queue_operation_id(event, action, user_id, item_id):
@@ -291,7 +293,7 @@ def _auction_session_operation_id(event, action):
     ).strip()
     if event_id:
         return f"auction-session:{action}:{event_id}"
-    return f"auction-session:{action}:{time.time_ns()}"
+    return f"auction-session:{action}:{runtime_ids.new_id()}"
 
 
 def buy_xianshi_item_safely(
