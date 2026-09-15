@@ -1,9 +1,11 @@
-import random
 import asyncio
 from pathlib import Path
 from io import BytesIO
 from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
+
+from ....infrastructure.clock import SystemClock
+from ....infrastructure.ids import UUIDGenerator
 
 from ...on_compat import on_command
 from ...xiuxian_utils.json_store import load_json_file, save_json_file
@@ -11,6 +13,9 @@ from nonebot.params import CommandArg
 
 from ..command import *
 from .game_utils import event_display_name, format_board_coord, now_text, parse_board_coord
+
+runtime_clock = SystemClock()
+runtime_ids = UUIDGenerator()
 
 # =========================
 # 数据目录（娱乐独立）
@@ -61,7 +66,7 @@ class GomokuGame:
         self.status = "waiting"  # waiting/playing/finished
         self.winner = None
 
-        self.create_time = now_text()
+        self.create_time = now_text(runtime_clock)
         self.last_move_time = None
 
     def to_dict(self):
@@ -149,7 +154,7 @@ class GomokuRoomManager:
         game.player_names[user_id] = user_name
         game.status = "playing"
         game.current_player = game.player_black
-        game.last_move_time = now_text()
+        game.last_move_time = now_text(runtime_clock)
         self.save_room(room_id)
         return True, ""
 
@@ -417,7 +422,7 @@ async def start_move_timeout(bot, event, room_id: str):
             return
 
         last = datetime.strptime(g.last_move_time, "%Y-%m-%d %H:%M:%S")
-        if (datetime.now() - last).total_seconds() < MOVE_TIMEOUT:
+        if (runtime_clock.now().replace(tzinfo=None) - last).total_seconds() < MOVE_TIMEOUT:
             return
 
         loser = g.current_player
@@ -454,7 +459,7 @@ gomoku_quit = on_command("退出五子棋", priority=5, block=True)
 
 
 def _random_room_id():
-    return str(random.randint(1000, 9999))
+    return runtime_ids.new_id()
 
 
 @gomoku_start.handle(parameterless=[Cooldown(cd_time=1.0)])
@@ -511,7 +516,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     g.player_white = "__AI__"
     g.status = "playing"
     g.current_player = g.player_black
-    g.last_move_time = now_text()
+    g.last_move_time = now_text(runtime_clock)
     room_manager.save_room(room_id)
 
     user_room_status[user_id] = room_id
@@ -598,7 +603,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     stone = 1 if user_id == g.player_black else 2
     g.board[y][x] = stone
     g.moves.append((x, y))
-    g.last_move_time = now_text()
+    g.last_move_time = now_text(runtime_clock)
 
     # 胜负
     if check_win(g.board, x, y, stone):
@@ -623,7 +628,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         if g.board[ay][ax] == 0:
             g.board[ay][ax] = 2
             g.moves.append((ax, ay))
-            g.last_move_time = now_text()
+            g.last_move_time = now_text(runtime_clock)
 
             if check_win(g.board, ax, ay, 2):
                 g.status = "finished"
