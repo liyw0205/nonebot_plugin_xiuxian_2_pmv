@@ -8,6 +8,8 @@ from typing import Dict, List, Any, Optional
 
 from nonebot.log import logger
 from ...paths import get_paths
+from ...infrastructure.clock import SystemClock
+from ...infrastructure.random_source import SystemRandom
 
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.item_json import Items
@@ -59,7 +61,8 @@ class DungeonEvent:
 class DungeonTemplate:
     """副本模板类"""
 
-    def __init__(self, template_data: Dict):
+    def __init__(self, template_data: Dict, random_source=None):
+        self.random = random_source or SystemRandom()
         self.id = template_data.get("id")
         self.name = template_data.get("name")
         self.type = template_data.get("type", "explore")
@@ -87,8 +90,8 @@ class DungeonTemplate:
             template_type = "common"
 
         template = self.monster_templates.get(template_type, {})
-        prefix = random.choice(template.get("name_prefix", [""]))
-        base_name = random.choice(template.get("base_names", ["怪物"]))
+        prefix = self.random.choice(template.get("name_prefix", [""]))
+        base_name = self.random.choice(template.get("base_names", ["怪物"]))
         name = f"{prefix}·{base_name}" if prefix else base_name
 
         hp_range = template.get("hp_range", [50, 100])
@@ -101,15 +104,15 @@ class DungeonTemplate:
 
         if skill_pool:
             pick_n = 1 if template_type == "common" else min(2, len(skill_pool))
-            skills = random.sample(skill_pool, pick_n)
+            skills = self.random.sample(skill_pool, pick_n)
         else:
             skills = DEFAULT_MINION_SKILLS[:1]
 
         return {
             "name": name,
-            "hp_base_multiplier": random.uniform(hp_range[0], hp_range[1]),
-            "mp_base_multiplier": random.uniform(mp_range[0], mp_range[1]),
-            "attack_base_multiplier": random.uniform(attack_range[0], attack_range[1]),
+            "hp_base_multiplier": self.random.uniform(hp_range[0], hp_range[1]),
+            "mp_base_multiplier": self.random.uniform(mp_range[0], mp_range[1]),
+            "attack_base_multiplier": self.random.uniform(attack_range[0], attack_range[1]),
             "skills": skills,
             "reward": template.get("reward", {}),
         }
@@ -129,9 +132,9 @@ class DungeonTemplate:
 
         return {
             "name": boss_config.get("name", "副本BOSS"),
-            "hp_base_multiplier": random.uniform(hp_range[0], hp_range[1]),
-            "mp_base_multiplier": random.uniform(mp_range[0], mp_range[1]),
-            "attack_base_multiplier": random.uniform(attack_range[0], attack_range[1]),
+            "hp_base_multiplier": self.random.uniform(hp_range[0], hp_range[1]),
+            "mp_base_multiplier": self.random.uniform(mp_range[0], mp_range[1]),
+            "attack_base_multiplier": self.random.uniform(attack_range[0], attack_range[1]),
             "skills": skills,
             "reward": boss_config.get("reward", {})
         }
@@ -196,11 +199,13 @@ class DungeonManager:
                 cls._instance = super(DungeonManager, cls).__new__(cls)
         return cls._instance
 
-    def __init__(self):
+    def __init__(self, random_source=None, clock=None):
         with self._lock:
             if self.__class__._has_init:
                 return
             self.__class__._has_init = True
+            self.random = random_source or SystemRandom()
+            self.clock = clock or SystemClock()
 
             self.plugin_path = Path(__file__).parent.absolute()
             self.dungeon_data_path = get_paths().data / "副本"
@@ -219,7 +224,7 @@ class DungeonManager:
             logger.info("DungeonManager 初始化完成")
 
     def _get_current_date(self) -> str:
-        return datetime.now().strftime("%Y-%m-%d")
+        return self.clock.now().strftime("%Y-%m-%d")
 
     def _init_dungeon_tables(self):
         player_data._ensure_table_exists(self.DUNGEON_GLOBAL_STATE_TABLE)
@@ -265,7 +270,7 @@ class DungeonManager:
                 with open(config_file, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
                 for template_data in config_data:
-                    templates.append(DungeonTemplate(template_data))
+                    templates.append(DungeonTemplate(template_data, random_source=self.random))
             except Exception as e:
                 logger.error(f"加载副本模板失败: {e}")
         else:
@@ -307,7 +312,8 @@ class DungeonManager:
                 "events": snapshot.get("events", []),
                 "monster_templates": snapshot.get("monster_templates", {}),
                 "boss": snapshot.get("boss", {}),
-            }
+            },
+            random_source=SystemRandom(),
         )
 
     def _published_template(self, global_state: dict) -> Optional[DungeonTemplate]:
@@ -635,7 +641,7 @@ class DungeonManager:
         monster_base_exp_for_level = self._safe_level_power(monster_level_key)
         player_level_power = self._safe_level_power(user_level)
         player_exp_factor = max(0.8, min(1.3, (user_exp / max(1, player_level_power)) ** 0.2))
-        type_diff_factor = random.uniform(diff_low, diff_high)
+        type_diff_factor = self.random.uniform(diff_low, diff_high)
 
         if monster_type == "boss":
             boss_bonus = 1.25 if dungeon_type == "challenge" else 1.10
@@ -645,9 +651,9 @@ class DungeonManager:
 
         power_anchor = max(100, power_anchor)
 
-        hp = int(power_anchor * monsters_info.get("hp_base_multiplier", 60) * random.uniform(0.92, 1.08))
-        mp = int(power_anchor * monsters_info.get("mp_base_multiplier", 1.5) * random.uniform(0.92, 1.08))
-        attack = int(power_anchor * monsters_info.get("attack_base_multiplier", 0.15) * random.uniform(0.92, 1.08))
+        hp = int(power_anchor * monsters_info.get("hp_base_multiplier", 60) * self.random.uniform(0.92, 1.08))
+        mp = int(power_anchor * monsters_info.get("mp_base_multiplier", 1.5) * self.random.uniform(0.92, 1.08))
+        attack = int(power_anchor * monsters_info.get("attack_base_multiplier", 0.15) * self.random.uniform(0.92, 1.08))
 
         hp = max(hp, 100)
         mp = max(mp, 10)
@@ -658,12 +664,12 @@ class DungeonManager:
         spirit_stone_cfg = reward_cfg.get("spirit_stone", [0.2, 0.6])
         if not isinstance(spirit_stone_cfg, list) or len(spirit_stone_cfg) != 2:
             spirit_stone_cfg = [0.2, 0.6]
-        rand_stone_mul = random.uniform(spirit_stone_cfg[0], spirit_stone_cfg[1])
+        rand_stone_mul = self.random.uniform(spirit_stone_cfg[0], spirit_stone_cfg[1])
         stone_base = 12000 if monster_type == "boss" else 8000
-        final_stone_value = int(stone_base * rand_stone_mul * reward_mult * random.uniform(90, 150))
+        final_stone_value = int(stone_base * rand_stone_mul * reward_mult * self.random.uniform(90, 150))
 
         exp_ratio = float(reward_cfg.get("experience", 0.002))
-        base_exp_reward = power_anchor * 180 * exp_ratio * reward_mult * random.uniform(1.0, 1.8)
+        base_exp_reward = power_anchor * 180 * exp_ratio * reward_mult * self.random.uniform(1.0, 1.8)
         if monster_type == "boss":
             base_exp_reward *= 1.6
         final_exp_reward = int(base_exp_reward)
@@ -746,7 +752,7 @@ class DungeonManager:
             elif dungeon_type == "challenge":
                 low *= 1.05
                 high *= 1.10
-            result["damage"] = random.uniform(low, high)
+            result["damage"] = self.random.uniform(low, high)
 
         elif event.event_type == "monster":
             battle_config = getattr(event, "battle", {}) or {}
@@ -803,7 +809,7 @@ class DungeonManager:
             if not isinstance(spirit_stone_cfg, list) or len(spirit_stone_cfg) != 2:
                 spirit_stone_cfg = [1, 2]
 
-            rand_mul = random.uniform(spirit_stone_cfg[0], spirit_stone_cfg[1])
+            rand_mul = self.random.uniform(spirit_stone_cfg[0], spirit_stone_cfg[1])
 
             player_rank_val, _ = convert_rank(user_level)
             if player_rank_val is None:
@@ -812,7 +818,7 @@ class DungeonManager:
             rank_diff = max(0, player_rank_val - base_rank)
 
             base_stone = 12000
-            final_stone_value = int(base_stone * rand_mul * (1.18 ** rank_diff) * non_battle_reward_mult * random.uniform(90, 140))
+            final_stone_value = int(base_stone * rand_mul * (1.18 ** rank_diff) * non_battle_reward_mult * self.random.uniform(90, 140))
             result["stones"] = max(1, final_stone_value)
 
         return result

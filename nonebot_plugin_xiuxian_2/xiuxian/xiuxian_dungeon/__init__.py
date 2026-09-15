@@ -60,6 +60,7 @@ from .transaction_service import DungeonTeamExitService
 from ...paths import get_paths
 from ...features.dungeon.application import DungeonApplication
 from ...infrastructure.ids import UUIDGenerator
+from ...infrastructure.clock import SystemClock
 
 sql_message = XiuxianDateManage()
 player_data = PlayerDataManager()
@@ -68,6 +69,7 @@ dungeon_session_service = DungeonSessionService(get_paths().player_db)
 dungeon_purchase_service = DungeonPurchaseService(get_paths().game_db)
 dungeon_application = DungeonApplication(get_paths().game_db, get_paths().player_db)
 dungeon_ids = UUIDGenerator()
+runtime_clock = SystemClock()
 dungeon_explore_operation_service = DungeonExploreOperationService(
     get_paths().game_db, get_paths().player_db
 )
@@ -89,7 +91,7 @@ TEAM_JOIN_CD_HOURS = 3
 
 
 def _now_dt():
-    return datetime.now()
+    return runtime_clock.now()
 
 
 def _team_cooldown_until(hours: int = TEAM_JOIN_CD_HOURS) -> str:
@@ -100,7 +102,7 @@ def _team_operation_id(event, action: str, user_id: str) -> str:
     event_id = getattr(event, "message_id", None)
     if event_id:
         return f"dungeon-team-{action}:{event_id}:{user_id}"
-    return f"dungeon-team-{action}:{time.time_ns()}:{user_id}"
+    return f"dungeon-team-{action}:{dungeon_ids.new_id()}:{user_id}"
 
 
 def format_seconds(sec: int):
@@ -336,7 +338,7 @@ async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
         team_name = f"{user_info['user_name']}的队伍"
 
     team_id = f"{group_id or 'private'}_{operation_id.rsplit(':', 2)[-2]}"
-    now = datetime.now()
+    now = runtime_clock.now()
     result = dungeon_team_transaction_service.create(
         operation_id, team_id, team_name, user_id, group_id,
         now.strftime("%Y-%m-%d %H:%M:%S"), now.timestamp(),
@@ -369,7 +371,7 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
     target_user_id = str(target_user_id or "")
     team_id = get_user_team(user_id) or ""
     group_id = str(getattr(event, "group_id", "") or "")
-    now = datetime.now().timestamp()
+    now = runtime_clock.now().timestamp()
     invite_id = f"{operation_id}:{target_user_id or 'missing'}"
     result = dungeon_team_transaction_service.invite(
         operation_id,
@@ -416,7 +418,7 @@ async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
         await handle_send(bot, event, _team_mutation_message("join", replay), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
         await agree_team_cmd.finish()
 
-    now = datetime.now().timestamp()
+    now = runtime_clock.now().timestamp()
     invite = dungeon_team_transaction_service.pending_invite(user_id, now)
     invite_id = invite.invite_id if invite else ""
     team_id = invite.team_id if invite else ""
@@ -454,7 +456,7 @@ async def reject_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
         await handle_send(bot, event, _team_mutation_message("reject", replay), md_type="team", k1="队伍帮助", v1="队伍帮助")
         await reject_team_cmd.finish()
 
-    now = datetime.now().timestamp()
+    now = runtime_clock.now().timestamp()
     invite = dungeon_team_transaction_service.pending_invite(user_id, now)
     group_id = str(event.group_id) if isinstance(event, GroupMessageEvent) else ""
     result = dungeon_team_transaction_service.reject(
@@ -928,7 +930,7 @@ async def handle_manual_reset(bot: Bot, event: GroupMessageEvent | PrivateMessag
         operation_id = (
             f"dungeon-reset:manual:{event_id}:{user_id}"
             if event_id
-            else f"dungeon-reset:manual:{time.time_ns()}:{user_id}"
+            else f"dungeon-reset:manual:{dungeon_ids.new_id()}:{user_id}"
         )
         result = dungeon_manager.reset_dungeon(operation_id, source="manual")
         dungeon_info = result.dungeon_snapshot
