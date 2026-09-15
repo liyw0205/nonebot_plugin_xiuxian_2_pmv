@@ -871,7 +871,7 @@ async def use_work_order(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     status, work_data = get_user_work_status(user_id)
     if status in (1, 2):
         event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-        operation_id = f"work-item-accelerate:{user_id}:{event_message_id or time.time_ns()}"
+        operation_id = f"work-item-accelerate:{user_id}:{event_message_id or runtime_ids.new_id()}"
         item_count = sql_message.goods_num(user_id, item_id)
         result = work_item_use_service.accelerate(
             operation_id,
@@ -932,12 +932,12 @@ async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMes
         return
     
     # 修改奖励倍率(2-5倍)并更新到数据中
-    reward_multiplier = random.randint(2, 5)
+    reward_multiplier = runtime_random.randint(2, 5)
     for task_name, task_data in work_data["tasks"].items():
         task_data["award"] = int(task_data["award"] * reward_multiplier)
     
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"work-item-capture:{user_id}:{event_message_id or time.time_ns()}"
+    operation_id = f"work-item-capture:{user_id}:{event_message_id or runtime_ids.new_id()}"
     item_count = sql_message.goods_num(user_id, item_id)
     user_cd = sql_message.get_user_cd(user_id)
     result = work_item_use_service.capture(
