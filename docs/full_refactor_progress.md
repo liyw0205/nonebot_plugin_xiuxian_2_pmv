@@ -887,6 +887,8 @@
 
 2026-09-16 attached migration clock fallback：`apply_attached_player_accessory` 未显式传入 Clock 时改用 `SystemClock`，保留显式 runtime Clock优先和既有 checksum；attached/accessory/source共179 tests、catalog=104、compileall、architecture、diff check通过。
 
+2026-09-16 attached migration clock live safety：提交 `5d842a3` 部署后 backup `/srv/old/data/backups/20260915T220352Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，104-entry recovery clean。live未执行饰品礼包或player accessory写入。
+
 2026-09-16 accessory attached migration live safety：提交 `a9a7c48` 部署后 backup `/srv/old/data/backups/20260915T215030Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，104-entry recovery clean。live未执行饰品礼包、player accessory或资产写入。
 
 2026-09-15 interactive provider live safety：提交 `1624de3` 部署后 backup `/srv/old/data/backups/20260915T091541Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行互动结算/领取写入。
