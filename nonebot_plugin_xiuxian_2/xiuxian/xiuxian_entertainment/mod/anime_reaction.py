@@ -1,9 +1,11 @@
-import random
+from ....infrastructure.random_source import SystemRandom
 from io import BytesIO
 
 from nonebot.params import CommandArg
 
 from ..command import *
+
+runtime_random = SystemRandom()
 from ...xiuxian_utils.http_proxy import http_client
 
 
@@ -75,11 +77,11 @@ async def _fetch_nekos(category: str) -> tuple[BytesIO, str]:
     return await run_blocking_io(_fetch_nekos_sync, category, timeout=30)
 
 
-def _pick_image_category(raw: str) -> tuple[str, str]:
+def _pick_image_category(raw: str, random_source=None) -> tuple[str, str]:
     text = (raw or "").strip().lower()
     if text in IMAGE_CATEGORIES:
         return IMAGE_CATEGORIES[text], text
-    category = random.choice(DEFAULT_IMAGE_CATEGORIES)
+    category = (random_source or runtime_random).choice(DEFAULT_IMAGE_CATEGORIES)
     return category, "随机"
 
 

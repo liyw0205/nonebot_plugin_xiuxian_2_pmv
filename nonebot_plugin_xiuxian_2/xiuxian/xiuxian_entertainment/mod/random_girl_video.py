@@ -1,6 +1,8 @@
-import random
 from collections.abc import Awaitable, Callable
+from ....infrastructure.random_source import SystemRandom
 from ..command import *
+
+runtime_random = SystemRandom()
 
 random_girl_video_cmd = on_command(
     "随机小姐姐",
@@ -58,7 +60,7 @@ async def _fetch_random_girl_video() -> tuple[str, str]:
     for name, url in DWO_VIDEO_APIS.items():
         providers.append(_make_dwo_fetcher(name, url))
 
-    random.shuffle(providers)
+    runtime_random.shuffle(providers)
 
     errors: list[str] = []
     for name, fetcher in providers:
