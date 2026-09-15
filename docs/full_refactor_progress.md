@@ -753,6 +753,8 @@
 
 2026-09-15 blackhouse clock boundary：小黑屋 JSON 管理记录的更新时间统一使用注入 `runtime_clock`；admin blackhouse/source共148 tests、catalog=103、compileall、architecture、diff check通过。该路径为非资产管理同步，仍使用现有 JSON store。
 
+2026-09-15 blackhouse clock live safety：提交 `b032554` 部署后 backup `/srv/old/data/backups/20260915T072114Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行小黑屋名单写入。
+
 2026-09-15 sign-in task projection DDL fix：`SignInTaskRepository.record`移除 request-time `ensure_schema`，正式 schema仅由已有 `apply_sign_in_tasks` startup migration创建；测试fixture改为显式 migration后验证 daily/weekly progress idempotency。task/effects/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 sign-in task projection live safety：提交 `d845283` 部署后 backup `/srv/old/data/backups/20260915T001441Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务进度写入。
