@@ -6,6 +6,8 @@ import unittest
 from pathlib import Path
 
 from nonebot_plugin_xiuxian_2.features.bank.account_application import BankDepositApplication
+from nonebot_plugin_xiuxian_2.features.bank.migrations import apply_bank_accounts
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 
 
 class BankDepositApplicationTests(unittest.TestCase):
@@ -15,6 +17,8 @@ class BankDepositApplicationTests(unittest.TestCase):
         with sqlite3.connect(self.database) as connection:
             connection.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY, stone INTEGER)")
             connection.execute("INSERT INTO user_xiuxian VALUES ('u1', 1000)")
+        with DatabaseUnitOfWork(self.database) as uow:
+            apply_bank_accounts(uow)
         self.application = BankDepositApplication(self.database)
 
     def tearDown(self) -> None:

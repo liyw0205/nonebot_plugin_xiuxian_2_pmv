@@ -7,6 +7,8 @@ from pathlib import Path
 
 from nonebot_plugin_xiuxian_2.features.bank.account_application import BankDepositApplication
 from nonebot_plugin_xiuxian_2.features.bank.account_interest_application import BankInterestApplication
+from nonebot_plugin_xiuxian_2.features.bank.migrations import apply_bank_accounts
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 
 
 class BankInterestApplicationTests(unittest.TestCase):
@@ -16,6 +18,8 @@ class BankInterestApplicationTests(unittest.TestCase):
             with sqlite3.connect(database) as connection:
                 connection.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY, stone INTEGER)")
                 connection.execute("INSERT INTO user_xiuxian VALUES ('u1', 100)")
+            with DatabaseUnitOfWork(database) as uow:
+                apply_bank_accounts(uow)
             BankDepositApplication(database).deposit(operation_id="d1", user_id="u1", amount=50, interest=0, limit=1000, bank_level="1", settled_at="t")
             application = BankInterestApplication(database)
             first = application.settle_interest(operation_id="i1", user_id="u1", interest=7, bank_level="1", settled_at="t2")
@@ -32,6 +36,8 @@ class BankInterestApplicationTests(unittest.TestCase):
             with sqlite3.connect(database) as connection:
                 connection.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY, stone INTEGER)")
                 connection.execute("INSERT INTO user_xiuxian VALUES ('u1', 100)")
+            with DatabaseUnitOfWork(database) as uow:
+                apply_bank_accounts(uow)
             result = BankInterestApplication(database).settle_interest(operation_id="i1", user_id="u1", interest=7, bank_level="1", settled_at="t")
             self.assertEqual(result["status"], "user_missing")
 

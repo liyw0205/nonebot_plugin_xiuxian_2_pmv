@@ -7,6 +7,8 @@ from pathlib import Path
 
 from nonebot_plugin_xiuxian_2.features.bank.account_application import BankDepositApplication
 from nonebot_plugin_xiuxian_2.features.bank.account_withdrawal_application import BankWithdrawalApplication
+from nonebot_plugin_xiuxian_2.features.bank.migrations import apply_bank_accounts
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from nonebot_plugin_xiuxian_2.features.bank.withdrawal_rules import decide_withdraw
 
 
@@ -21,6 +23,8 @@ class BankWithdrawalTests(unittest.TestCase):
             with sqlite3.connect(database) as connection:
                 connection.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY, stone INTEGER)")
                 connection.execute("INSERT INTO user_xiuxian VALUES ('u1', 700)")
+            with DatabaseUnitOfWork(database) as uow:
+                apply_bank_accounts(uow)
             deposit = BankDepositApplication(database)
             deposit.deposit(operation_id="d1", user_id="u1", amount=300, interest=0, limit=1000, bank_level="1", settled_at="t")
             withdrawal = BankWithdrawalApplication(database)
