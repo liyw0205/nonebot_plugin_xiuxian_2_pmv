@@ -96,7 +96,8 @@ class SectMemberJoinServiceTests(unittest.TestCase):
         start = source.index("async def join_sect_")
         end = source.index("@my_sect.handle", start)
         handler = source[start:end]
-        self.assertIn("sect_member_join_service.join(", handler)
+        self.assertIn("sect_application.join(", handler)
+        self.assertNotIn("sect_member_join_service.join(", handler)
         self.assertNotIn("sql_message.update_usr_sect(", handler)
         self.assertNotIn("can_join_sect(", handler)
 

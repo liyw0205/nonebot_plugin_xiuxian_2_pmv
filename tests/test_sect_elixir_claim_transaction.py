@@ -48,6 +48,7 @@ def test_already_claimed_does_not_grant_rewards(tmp_path):
 def test_elixir_handler_has_no_legacy_split_writes():
     source = open("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_sect/__init__.py", encoding="utf-8").read()
     handler = source[source.index("async def sect_elixir_get_"):source.index("@sect_buff_info.handle")]
-    assert "sect_elixir_claim_service.claim(" in handler
+    assert "sect_application.claim_elixir(" in handler
+    assert "sect_elixir_claim_service.claim(" not in handler
     assert "sql_message.send_back(" not in handler
     assert "sql_message.update_user_sect_elixir_get_num(" not in handler

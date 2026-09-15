@@ -87,7 +87,8 @@ class SectSecBuffLearnServiceTests(unittest.TestCase):
         end = source.index("@upatkpractice.handle", start)
         handler = source[start:end]
 
-        self.assertIn("sect_secbuff_learn_service.learn(", handler)
+        self.assertIn("sect_application.learn_secondary(", handler)
+        self.assertNotIn("sect_secbuff_learn_service.learn(", handler)
         self.assertNotIn("sql_message.update_sect_materials(", handler)
         self.assertNotIn("sql_message.updata_user_sec_buff(", handler)
 

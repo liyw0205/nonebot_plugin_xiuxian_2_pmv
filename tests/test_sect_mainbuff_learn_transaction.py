@@ -89,7 +89,8 @@ class SectMainBuffLearnServiceTests(unittest.TestCase):
         end = source.index("@sect_mainbuff_get.handle", start)
         handler = source[start:end]
 
-        self.assertIn("sect_mainbuff_learn_service.learn(", handler)
+        self.assertIn("sect_application.learn_main(", handler)
+        self.assertNotIn("sect_mainbuff_learn_service.learn(", handler)
         self.assertNotIn("sql_message.update_sect_materials(", handler)
         self.assertNotIn("sql_message.updata_user_main_buff(", handler)
 

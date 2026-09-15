@@ -3,6 +3,7 @@ import time
 from nonebot.params import CommandArg
 
 from ...paths import get_paths
+from ...infrastructure.ids import UUIDGenerator
 from ..adapter_compat import Bot, GroupMessageEvent, Message, PrivateMessageEvent
 from ..on_compat import on_command
 from ..xiuxian_config import XiuConfig
@@ -21,6 +22,7 @@ sect_weekly_reward_service = SectWeeklyRewardClaimService(
     get_paths().player_db,
     sql_message.lock,
 )
+runtime_ids = UUIDGenerator()
 
 sect_weekly = on_command("宗门周常", priority=7, block=True)
 sect_weekly_claim = on_command("领取宗门周常", priority=7, block=True)
@@ -62,7 +64,7 @@ def _sect_weekly_operation_id(event, user_id: str, goal_key: str) -> str:
     ).strip()
     if event_id:
         return f"sect-weekly:{event_id}:{user_id}:{goal_key}"
-    return f"sect-weekly:{user_id}:{goal_key}:{time.time_ns()}"
+    return f"sect-weekly:{user_id}:{goal_key}:{runtime_ids.new_id()}"
 
 
 def _prepare_claim_goals(goals: list[dict]) -> list[dict]:

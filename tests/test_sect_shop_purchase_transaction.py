@@ -48,7 +48,8 @@ def test_purchase_limit_failure_rolls_back_everything(tmp_path):
 def test_shop_handler_has_no_legacy_split_writes():
     source = open("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_sect/__init__.py", encoding="utf-8").read()
     handler = source[source.index("async def _(bot: Bot", source.index("@sect_buy.handle")):]
-    assert "sect_shop_purchase_service.purchase(" in handler
+    assert "sect_application.purchase(" in handler
+    assert "sect_shop_purchase_service.purchase(" not in handler
     assert "sql_message.update_sect_materials(" not in handler[:handler.index("await sect_buy.finish()", handler.index("成功兑换"))]
     assert "sql_message.deduct_sect_contribution(" not in handler
     assert "update_sect_weekly_purchase(" not in handler
