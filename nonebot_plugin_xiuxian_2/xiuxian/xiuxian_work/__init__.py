@@ -417,7 +417,7 @@ def get_work_msg(work_):
 
 # 重置悬赏令刷新次数
 async def resetrefreshnum():
-    business_date = datetime.now().date().isoformat()
+    business_date = runtime_clock.now().date().isoformat()
     while True:
         result = work_daily_refresh_reset_service.reset(business_date, count)
         if result.status == "operation_conflict":
@@ -436,7 +436,7 @@ async def delayed_reminder(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         if user_id in user_reminder_status and user_reminder_status[user_id]["pending"]:
             has_work, work_data = has_unaccepted_work(user_id)
             if has_work:
-                remaining_minutes = (datetime.now() - user_reminder_status[user_id]["refresh_time"]).total_seconds() / 60
+                remaining_minutes = (runtime_clock.now() - user_reminder_status[user_id]["refresh_time"]).total_seconds() / 60
                 remaining_minutes = max(WORK_EXPIRE_MINUTES - remaining_minutes, 0)
                 reminder_msg = (
                     "您已有未接取的悬赏令\n"
@@ -566,7 +566,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             user_reminder_status[user_id] = {
                 "pending": True,
                 "reminded": False,
-                "refresh_time": datetime.now()
+                "refresh_time": runtime_clock.now()
             }
             
             task = asyncio.create_task(delayed_reminder(bot, event, user_id))
@@ -613,7 +613,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             user_reminder_status[user_id] = {
                 "pending": True,
                 "reminded": False,
-                "refresh_time": datetime.now()
+                "refresh_time": runtime_clock.now()
             }
             
             task = asyncio.create_task(delayed_reminder(bot, event, user_id))
@@ -676,7 +676,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         user_reminder_status[user_id] = {
             "pending": True,
             "reminded": False,
-            "refresh_time": datetime.now()
+            "refresh_time": runtime_clock.now()
         }
         
         task = asyncio.create_task(delayed_reminder(bot, event, user_id))
