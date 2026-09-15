@@ -759,6 +759,8 @@
 
 2026-09-16 arena repository clock boundary：`ArenaApplication` 将注入 Clock 传入默认 SQL repository，honor weekly purchase 与 challenge daily reset 默认日期不再直接使用 `date.today()`；arena/source共186 tests、catalog=103、compileall、architecture、diff check通过。跨库 UoW已保持，challenge settlement legacy bridge仍未迁移。
 
+2026-09-16 arena repository clock live safety：提交 `84fbd75` 部署后 backup `/srv/old/data/backups/20260915T181409Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行竞技场购买/挑战写入。
+
 2026-09-15 arena clock live safety：提交 `6eb94d0` 部署后 backup `/srv/old/data/backups/20260915T065429Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行竞技场挑战/缓存/赛季写入。
 
 2026-09-15 tribulation operation ID boundary：突破、丹药融合和普通/天命/心魔渡劫真实入口的无事件 operation ID统一使用注入 `runtime_ids`；breakthrough/tribulation/source共159 tests、catalog=103、compileall、architecture、diff check通过。渡劫多库 transaction service 与 legacy JSON state migration仍未提升为feature application。
