@@ -651,6 +651,8 @@
 
 2026-09-15 work clock boundary：悬赏刷新、提醒倒计时、提醒状态和每日刷新重置的真实 handler/job时间读取统一改用注入 `runtime_clock.now()`，移除该入口的 `datetime.now()`；work settlement/refresh/source共151 tests、catalog=103、compileall、architecture、diff check通过。
 
+2026-09-15 work clock live safety：提交 `f65657a` 部署后 backup `/srv/old/data/backups/20260915T030704Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行悬赏时间状态写入。
+
 2026-09-15 dufang provider boundary：鉴石数据辅助路径的时间读取改用注入 `runtime_clock`，并在 dufang composition root 建立 `runtime_random/runtime_ids` provider，为后续随机/operation切换保留明确边界；dufang/source共153 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 dufang provider live safety：提交 `19f15b6` 部署后 backup `/srv/old/data/backups/20260915T011737Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行鉴石资产写入。
