@@ -30,6 +30,8 @@ from ..xiuxian_utils.xiuxian2_handle import (
 )
 from ...paths import get_paths
 from ...infrastructure.ids import UUIDGenerator
+from ...infrastructure.clock import SystemClock
+from ...infrastructure.random_source import SystemRandom
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from ...features.world_events.application import DemonClaimApplication
@@ -56,6 +58,8 @@ demon_event_lifecycle_service = DemonEventLifecycleService(get_paths().player_db
 demon_wave_refresh_service = DemonWaveRefreshService(get_paths().player_db)
 spirit_vein_lifecycle_service = SpiritVeinLifecycleService(get_paths().player_db)
 runtime_ids = UUIDGenerator()
+runtime_clock = SystemClock()
+runtime_random = SystemRandom()
 
 EVENT_TABLE = "world_event_state"
 EVENT_KEY = "global"
@@ -173,7 +177,7 @@ __world_event_help__ = f"""
 
 
 def _now() -> datetime:
-    return datetime.now()
+    return runtime_clock.now()
 
 
 def _current_period() -> str:
@@ -290,14 +294,14 @@ def _pick_demon_random_reward(contribution: float):
     reward_pool = _get_demon_random_reward_pool(contribution)
     if not reward_pool:
         return None
-    pick = random.choice(reward_pool)
+    pick = runtime_random.choice(reward_pool)
     item = pick[1] if isinstance(pick, tuple) and len(pick) > 1 else None
     if item is not None and _is_wushang_reward_item(item):
         # 1% 保留无上，否则降为非无上
-        if random.randint(1, 100) != 100:
+        if runtime_random.randint(1, 100) != 100:
             normal_pool = [row for row in reward_pool if not _is_wushang_reward_item(row[1])]
             if normal_pool:
-                return random.choice(normal_pool)
+                return runtime_random.choice(normal_pool)
             return None
     return pick
 
@@ -387,15 +391,15 @@ def _create_demon_boss(realm: str, wave: int = 1) -> dict:
     wave = max(1, int(wave))
     is_chief = _is_demon_chief_wave(wave)
     power = _get_level_power(realm)
-    battle_hp = int(power * random.randint(32, 42))
-    battle_mp = int(power * random.randint(6, 9))
-    battle_atk = int(power * random.uniform(3.8, 5.2))
+    battle_hp = int(power * runtime_random.randint(32, 42))
+    battle_mp = int(power * runtime_random.randint(6, 9))
+    battle_atk = int(power * runtime_random.uniform(3.8, 5.2))
     if is_chief:
         battle_hp *= DEMON_CHIEF_HP_MULTIPLIER
         battle_atk *= DEMON_CHIEF_ATK_MULTIPLIER
     real_hp = battle_hp * BOSS_REAL_HP_MULTIPLIER
     name_pool = DEMON_CHIEF_NAMES if is_chief else DEMON_NAMES
-    name = f"{random.choice(name_pool)}·{realm}"
+    name = f"{runtime_random.choice(name_pool)}·{realm}"
     return {
         "name": name,
         "jj": realm,
@@ -447,7 +451,7 @@ def _build_spirit_vein_state(
     event_id: str | None = None,
 ) -> dict:
     now = now or _now()
-    duration_minutes = duration_minutes or random.randint(SPIRIT_VEIN_MIN_DURATION, SPIRIT_VEIN_MAX_DURATION)
+    duration_minutes = duration_minutes or runtime_random.randint(SPIRIT_VEIN_MIN_DURATION, SPIRIT_VEIN_MAX_DURATION)
     duration_minutes = max(SPIRIT_VEIN_MIN_DURATION, min(int(duration_minutes), SPIRIT_VEIN_MAX_DURATION))
     ends_at = now + timedelta(minutes=duration_minutes)
     return {
@@ -570,7 +574,7 @@ def _try_start_auto_spirit_vein() -> tuple[dict, str]:
     if state.get("status") == "active":
         action = "auto_skip"
         target = state
-    elif random.random() >= SPIRIT_VEIN_TRIGGER_CHANCE:
+    elif runtime_random.random() >= SPIRIT_VEIN_TRIGGER_CHANCE:
         action = "auto_miss"
         target = state
     else:
@@ -1497,7 +1501,7 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             )
             talisman_reward = _demon_talisman_reward_count(contribution)
             random_reward = None
-            if random.random() <= contribution:
+            if runtime_random.random() <= contribution:
                 random_reward = _pick_demon_random_reward(contribution)
 
             expected_claimed = dict(claimed)
