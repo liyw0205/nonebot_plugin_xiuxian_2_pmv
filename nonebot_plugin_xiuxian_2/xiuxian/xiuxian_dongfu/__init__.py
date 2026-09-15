@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from ...paths import get_paths
 from ...features.dongfu.application import DongfuApplication
+from ...infrastructure.ids import UUIDGenerator
 from ..on_compat import on_command
 from nonebot.params import CommandArg
 
@@ -45,6 +46,7 @@ dongfu_infiltrate_failure_service = InfiltrateFailureService(get_paths().game_db
 dongfu_infiltrate_success_service = InfiltrateSuccessService(get_paths().game_db, get_paths().player_db)
 dongfu_harvest_settlement_service = DongfuHarvestSettlementService(get_paths().game_db, get_paths().player_db)
 dongfu_application = DongfuApplication(get_paths().game_db)
+runtime_ids = UUIDGenerator()
 
 
 def _run_dongfu_action(action, operation_id, user_id, call, **payload):
@@ -100,7 +102,7 @@ def _dongfu_expansion_operation_id(event, user_id: str) -> str:
     ).strip()
     if event_id:
         return f"dongfu:{event_id}:expand:{user_id}"
-    return f"dongfu:expand:{user_id}:{time.time_ns()}"
+    return f"dongfu:expand:{user_id}:{runtime_ids.new_id()}"
 
 DONGFU_GEOMANCY = {
     "水域": {
@@ -731,7 +733,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"dongfu-plant:{uid}:{event_message_id or time.time_ns()}"
+    operation_id = f"dongfu-plant:{uid}:{event_message_id or runtime_ids.new_id()}"
     # 先回放：成功后灵田占用会挡住“已有种植/种子不足”。
     prior = dongfu_plant_service.get_result(operation_id)
     if prior is not None and prior.succeeded:
@@ -835,7 +837,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             wait_lines.append(f"{slot.get('slot')}号灵田状态异常，无法收获。")
 
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"dongfu-harvest:{uid}:{event_message_id or time.time_ns()}"
+    operation_id = f"dongfu-harvest:{uid}:{event_message_id or runtime_ids.new_id()}"
     prior = dongfu_harvest_settlement_service.get_result(operation_id)
     if prior is not None and prior.succeeded:
         lines = [f"洞府收获完成，共收获{len(prior.rewards)}种产出："] if prior.rewards else ["洞府收获请求已处理。"]
@@ -1000,7 +1002,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         if random.random() < chance:
             reward = (item_id, item_name, 1)
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"dongfu-patrol:{uid}:{event_message_id or time.time_ns()}"
+    operation_id = f"dongfu-patrol:{uid}:{event_message_id or runtime_ids.new_id()}"
     prior = dongfu_patrol_service.get_result(operation_id)
     if prior is not None and prior.succeeded:
         await handle_send(
@@ -1093,7 +1095,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"dongfu-fertilize:{uid}:{event_message_id or time.time_ns()}"
+    operation_id = f"dongfu-fertilize:{uid}:{event_message_id or runtime_ids.new_id()}"
     prior = dongfu_fertilize_service.get_result(operation_id)
     if prior is not None and prior.succeeded:
         d = _get_dongfu(uid)
@@ -1157,7 +1159,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"dongfu-accelerate:{uid}:{event_message_id or time.time_ns()}"
+    operation_id = f"dongfu-accelerate:{uid}:{event_message_id or runtime_ids.new_id()}"
     prior = dongfu_accelerate_service.get_result(operation_id)
     if prior is not None and prior.succeeded:
         d = _get_dongfu(uid)
@@ -1277,7 +1279,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
     gain = random.randint(10000, 50000)
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"dongfu-visit:{uid}:{event_message_id or time.time_ns()}"
+    operation_id = f"dongfu-visit:{uid}:{event_message_id or runtime_ids.new_id()}"
     result = _run_dongfu_action(
         "visit", operation_id, uid,
         call=lambda: dongfu_visit_reward_service.reward(operation_id, uid, tid, gain),
@@ -1313,7 +1315,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     cost = int(3000000 * (lv + 1) * (1 - float(geomancy.get("array_discount", 0))))
     array_stone_need = max(0, next_lv - 3 - _to_int(geomancy.get("array_stone_reduce")))
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"dongfu-array:{uid}:{event_message_id or time.time_ns()}"
+    operation_id = f"dongfu-array:{uid}:{event_message_id or runtime_ids.new_id()}"
     result = _run_dongfu_action(
         "array_upgrade", operation_id, uid,
         call=lambda: dongfu_array_upgrade_service.upgrade(
@@ -1420,7 +1422,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if detected and not success:
         loss_stone = random.randint(50000, 200000) * max(1, array_lv)
         event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-        operation_id = f"dongfu-infiltrate-failure:{my_uid}:{event_message_id or time.time_ns()}"
+        operation_id = f"dongfu-infiltrate-failure:{my_uid}:{event_message_id or runtime_ids.new_id()}"
         result = _run_dongfu_action(
             "infiltrate_failure", operation_id, my_uid,
             call=lambda: dongfu_infiltrate_failure_service.settle(
@@ -1474,7 +1476,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         new_finish = _fmt_dt(finish + timedelta(minutes=added_minutes))
     expected_slots = json.dumps(_normalize_plant_slots(td), ensure_ascii=False)
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"dongfu-infiltrate-success:{my_uid}:{event_message_id or time.time_ns()}"
+    operation_id = f"dongfu-infiltrate-success:{my_uid}:{event_message_id or runtime_ids.new_id()}"
     result = _run_dongfu_action(
         "infiltrate_success", operation_id, my_uid,
         call=lambda: dongfu_infiltrate_success_service.settle(
