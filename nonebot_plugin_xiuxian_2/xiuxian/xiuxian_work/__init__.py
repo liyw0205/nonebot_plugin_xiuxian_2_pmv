@@ -30,6 +30,9 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import convert_rank, XiuConfig
 from pathlib import Path
 from ...paths import get_paths
+from ...infrastructure.clock import SystemClock
+from ...infrastructure.random_source import SystemRandom
+from ...infrastructure.ids import UUIDGenerator
 from ...features.work.application import WorkClaimApplication, WorkSettlementApplication
 from ...features.work.repository import LegacyWorkClaimRepository, LegacyWorkSettlementRepository
 from .transaction_service import WorkSettlementService
@@ -53,6 +56,9 @@ work_item_use_service = WorkItemUseService(get_paths().game_db)
 work_refresh_service = WorkRefreshSettlementService(get_paths().game_db)
 work_abort_cleanup_service = WorkAbortCleanupService(get_paths().game_db)
 work_daily_refresh_reset_service = WorkDailyRefreshResetService(get_paths().game_db)
+runtime_clock = SystemClock()
+runtime_random = SystemRandom()
+runtime_ids = UUIDGenerator()
 sql_message = XiuxianDateManage()  # sql类
 items = Items()
 count = 5  # 每日刷新次数
@@ -236,25 +242,7 @@ async def get_work_status_message(user_id: str, work_data: dict) -> str:
 async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, user_id: str, work_data: dict):
     """结算悬赏令。随机结果先固定，再由事务服务一次提交。"""
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"work-settlement:{user_id}:{event_message_id or time.time_ns()}"
-    # 先回放：成功后 type=0 / 奖励已发，前置状态检查会挡住同事件重放；随机结果不可重掷。
-    prior = work_settlement_service.get_result(operation_id)
-    if prior is not None and prior.succeeded:
-        success_msg = {
-            "big": "🎉 悬赏大成功！",
-            "ok": "✅ 悬赏完成！",
-            "half": "⚠️ 悬赏勉强完成",
-        }.get(prior.success_kind, "✅ 悬赏完成！")
-        msg = (
-            f"**悬赏结算**\n---\n{success_msg}\n"
-            f"悬赏名称\n> {prior.scheduled_time or work_data.get('scheduled_time', '')}\n"
-            f"获得修为\n> {number_to(prior.exp)}"
-        )
-        if prior.item_awarded and prior.item_msg:
-            msg += f"\n额外奖励\n> {prior.item_msg}！"
-        msg += "\n✅ 该结算请求已经处理，无需重复提交。"
-        await handle_send(bot, event, msg, md_type="悬赏令", k1="刷新", v1="悬赏令刷新", k2="数据", v2="统计数据", k3="帮助", v3="悬赏令帮助")
-        return msg
+    operation_id = f"work-settlement:{user_id}:{event_message_id or runtime_ids.new_id()}"
 
     user_info = sql_message.get_user_info_with_id(user_id)
     _, give_exp, s_o_f, item_id, big_suc = workhandle().do_work(
@@ -270,7 +258,7 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     item_msg = f"{item_info['level']}:{item_info['name']}" if item_flag else None
 
     if big_suc:
-        gain_exp = int(give_exp * random.uniform(1.5, 2.5))
+        gain_exp = int(give_exp * runtime_random.uniform(1.5, 2.5))
         success_msg = "🎉 悬赏大成功！"
         success_kind = "big"
     elif s_o_f:
@@ -349,7 +337,7 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 
 def generate_work_message(work_list: list, freenum: int) -> str:
     """生成悬赏令消息"""
-    remaining_minutes, _, _ = calculate_remaining_time(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    remaining_minutes, _, _ = calculate_remaining_time(runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S"))
     
     work_msg_f = (
         f"【道友的悬赏令】\n"
@@ -394,7 +382,7 @@ def _ordered_work_tasks(work_data: dict | None) -> list[tuple[str, dict]]:
 
 def _work_operation_id(event, action: str, user_id: str) -> str:
     message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    return f"work-{action}:{user_id}:{message_id or time.time_ns()}"
+    return f"work-{action}:{user_id}:{message_id or runtime_ids.new_id()}"
 
 
 def _work_cd_snapshot(user_id: str) -> dict:
