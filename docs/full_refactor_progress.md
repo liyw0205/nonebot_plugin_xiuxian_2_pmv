@@ -825,6 +825,8 @@
 
 2026-09-16 sect tasks blocked：`sect_tasks.py` 仍在构造/读取路径调用 request-time `ensure_table()`，并直接持有 `XiuxianDateManage`、时间和随机任务状态；在正式 migration、UoW/application 设计完成前不做 provider-only 伪迁移，保留为 pending legacy slice。
 
+2026-09-16 partner mentor blocked：`xiuxian_buff/partner.py` 的双修邀请、师徒绑定/收徒/出师和突破奖励仍直接依赖多组 legacy transaction service；仓库暂无对应 feature application，暂不做 provider-only 伪迁移，保留为 pending legacy slice。
+
 2026-09-15 impart PK operation ID boundary：虚神界训练、机器人/双人对决、探索出关真实入口的无事件 operation ID统一使用注入 `runtime_ids`；impart/source共177 tests、catalog=103、compileall、architecture、diff check通过。对战随机决策、跨玩家 settlement和旧 replay service仍为未迁移边界。
 
 2026-09-15 impart PK operation ID live safety：提交 `ba4364f` 部署后 backup `/srv/old/data/backups/20260915T092945Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行虚神界训练/对战写入。
