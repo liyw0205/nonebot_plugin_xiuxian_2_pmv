@@ -67,8 +67,10 @@ trade_manager = TradeDataManager()
 from ..xiuxian_utils.periods import format_duration_full
 from ...features.status.application import StatusApplication
 from ...paths import get_paths
+from ...infrastructure.ids import UUIDGenerator
 
 status_application = StatusApplication(get_paths().game_db)
+runtime_ids = UUIDGenerator()
 
 
 def _run_status_action(action: str, operation_id: str, user_id: str, call, **payload):
@@ -493,7 +495,7 @@ async def handle_version_update(bot: Bot, event: GroupMessageEvent | PrivateMess
     await handle_send(bot, event, f"更新版本 {release_tag}，开始更新...")
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     user_id = str(event.get_user_id())
-    operation_id = f"status:version-update:{event_id or time.time_ns()}:{user_id}:{release_tag}"
+    operation_id = f"status:version-update:{event_id or runtime_ids.new_id()}:{user_id}:{release_tag}"
     # 执行更新流程，并把整个真实更新调用纳入操作账本。
     outcome = await asyncio.to_thread(
         _run_status_action,

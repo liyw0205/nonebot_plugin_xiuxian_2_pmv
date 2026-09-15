@@ -831,6 +831,8 @@
 
 2026-09-15 accessory operation ID live safety：提交 `b7bfcc9` 部署后 backup `/srv/old/data/backups/20260915T111211Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行饰品写入。
 
+2026-09-15 status operation ID boundary：版本更新真实入口的无事件 operation ID统一使用注入 `runtime_ids`，外部 updater/backup副作用仍经 `StatusApplication` ledger wrapper；status/admin/source共165 tests、catalog=103、compileall、architecture、diff check通过。
+
 2026-09-15 auction start provider boundary：拍卖启动真实流程的 operation ID、系统拍卖品抽样、session开始时间和自动日期统一使用注入 `runtime_ids/runtime_random/runtime_clock`；trade/auction/source共209 tests、catalog=103、compileall、architecture、diff check通过。拍卖结束、排队和库存 transaction 的历史时间逻辑仍保留为未迁移边界。
 
 2026-09-15 auction start provider live safety：提交 `d06788a` 部署后 backup `/srv/old/data/backups/20260915T094455Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行拍卖启动/商品写入。
