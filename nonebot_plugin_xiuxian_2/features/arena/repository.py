@@ -6,6 +6,7 @@ from typing import Any, Protocol
 import json
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.clock import SystemClock
 
 
 class ArenaRepository(Protocol):
@@ -49,6 +50,10 @@ class LegacyArenaRepository:
 
 
 class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
+    def __init__(self, game_database: str | Path, player_database: str | Path, *, clock=None) -> None:
+        super().__init__(game_database, player_database)
+        self.clock = clock or SystemClock()
+
     def settlement_result(self, operation_id: str, challenger_id: str) -> dict[str, Any] | None:
         with DatabaseUnitOfWork(self.game_database) as uow:
             row = uow.query_one("SELECT challenger_id,payload,result_json FROM arena_challenge_settlement_operations WHERE operation_id=?", (str(operation_id),))
@@ -156,7 +161,7 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
     def _record_ticket(uow,operation_id,payload,result):
         uow.execute("INSERT INTO arena_challenge_ticket_operations(operation_id,payload,used_tickets,item_remaining,challenges_used,challenges_remaining,challenge_cap) VALUES(?,?,?,?,?,?,?)",(operation_id,payload,result["used_tickets"],result["item_remaining"],result["challenges_used"],result["challenges_remaining"],result["challenge_cap"]));return result
     def purchase(self, operation_id, user_id, item_id, item_name, item_type, quantity, unit_cost, weekly_limit, expected_honor, expected_weekly_purchases, max_goods_num, bind_flag=1, today=None) -> dict[str, Any]:
-        operation_id,user_id,item_name,item_type=str(operation_id).strip(),str(user_id),str(item_name),str(item_type);item_id,quantity,unit_cost,weekly_limit,expected_honor,max_goods_num=map(int,(item_id,quantity,unit_cost,weekly_limit,expected_honor,max_goods_num));payload=json.dumps([user_id,item_id,item_name,item_type,quantity,unit_cost,weekly_limit,max_goods_num,int(bind_flag)],ensure_ascii=True,sort_keys=True);today=today or __import__("datetime").date.today();today_key=today.isoformat() if hasattr(today,"isoformat") else str(today)
+        operation_id,user_id,item_name,item_type=str(operation_id).strip(),str(user_id),str(item_name),str(item_type);item_id,quantity,unit_cost,weekly_limit,expected_honor,max_goods_num=map(int,(item_id,quantity,unit_cost,weekly_limit,expected_honor,max_goods_num));payload=json.dumps([user_id,item_id,item_name,item_type,quantity,unit_cost,weekly_limit,max_goods_num,int(bind_flag)],ensure_ascii=True,sort_keys=True);today=today or self.clock.now().date();today_key=today.isoformat() if hasattr(today,"isoformat") else str(today)
         if not operation_id or quantity<=0 or min(item_id,unit_cost,weekly_limit,expected_honor,max_goods_num)<0: raise ValueError("valid arena purchase is required")
         with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
             uow.attach_database(self.player_database,"player_data")
@@ -191,7 +196,7 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
         amount, unit_cost, daily_limit, expected_stone, expected_bought, expected_extra = map(int, (amount, unit_cost, daily_limit, expected_stone, expected_bought, expected_extra))
         if not operation_id or amount <= 0 or min(unit_cost, daily_limit, expected_stone, expected_bought, expected_extra) < 0:
             raise ValueError("valid arena challenge purchase is required")
-        today = today or __import__("datetime").date.today()
+        today = today or self.clock.now().date()
         payload = json.dumps([user_id, amount, unit_cost, daily_limit], ensure_ascii=True, separators=(",", ":"))
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
