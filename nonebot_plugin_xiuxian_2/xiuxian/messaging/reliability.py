@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import random
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Literal
+
+from ...infrastructure.random_source import SystemRandom
 
 
 DeliveryErrorKind = Literal[
@@ -101,16 +102,17 @@ class DeliveryError(RuntimeError):
 class MessageSequenceStrategy:
     """按 Bot、场景和目标生成递增 QQ msg_seq。"""
 
-    def __init__(self) -> None:
+    def __init__(self, random_source: Any | None = None) -> None:
+        self.random = random_source or SystemRandom()
         self._values: dict[tuple[str, str, str], int] = defaultdict(
-            lambda: random.randint(1000, 900000)
+            lambda: self.random.randint(1000, 900000)
         )
 
     def next(self, bot: Any, scene: str, target_id: str) -> int:
         key = (str(getattr(bot, "self_id", "")), scene, str(target_id))
-        value = self._values[key] + random.randint(1, 3)
+        value = self._values[key] + self.random.randint(1, 3)
         if value > 1_000_000:
-            value = random.randint(1000, 10000)
+            value = self.random.randint(1000, 10000)
         self._values[key] = value
         return value
 
