@@ -88,4 +88,5 @@ def test_real_entry_passes_event_operation_to_coop_service():
     ).read()
     handler = text[text.index("@activity_boss_atk_cmd.handle"):text.index("@activity_boss_claim_cmd.handle")]
     assert '_activity_operation_id(event, "boss-item" if raw else "boss-coop", uid)' in handler
-    assert "fight_cooperative_boss(uid, operation_id=operation_id)" in handler
+    assert '"activity_boss.fight_cooperative_boss", operation_id, uid' in handler
+    assert "fight_cooperative_boss(uid, operation_id=operation_id)" not in handler

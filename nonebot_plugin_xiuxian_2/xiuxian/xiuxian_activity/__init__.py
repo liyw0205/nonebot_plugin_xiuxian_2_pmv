@@ -8,6 +8,7 @@ from ..xiuxian_utils.lay_out import Cooldown, assign_bot
 from ..xiuxian_utils.utils import check_user, handle_send, send_help_message
 from ...features.activity.application import ActivityApplication
 from ...paths import get_paths
+from ...infrastructure.ids import UUIDGenerator
 
 from .service import (
     build_activity_gameplay_text,
@@ -52,6 +53,7 @@ activity_close_cmd = on_command("关闭活动", permission=SUPERUSER, priority=5
 # action crosses the feature application boundary and is recorded in the
 # operation ledger before the legacy service runs.
 activity_application = ActivityApplication(get_paths().game_db)
+runtime_ids = UUIDGenerator()
 
 
 def _run_activity_action(action: str, operation_id: str, user_id: str, **payload):
@@ -72,7 +74,7 @@ async def _ensure_user(event) -> tuple[bool, dict | None, str]:
 
 def _activity_operation_id(event, action: str, user_id: str) -> str:
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    return f"activity:{action}:{user_id}:{event_id or time.time_ns()}"
+    return f"activity:{action}:{user_id}:{event_id or runtime_ids.new_id()}"
 
 
 @activity_help_cmd.handle(parameterless=[Cooldown(cd_time=0)])

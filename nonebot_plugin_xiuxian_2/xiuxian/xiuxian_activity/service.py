@@ -5,6 +5,7 @@ from copy import deepcopy
 from nonebot.log import logger
 
 from ...paths import get_paths
+from ...infrastructure.ids import UUIDGenerator
 from ..xiuxian_compensation.common import get_item_list, send_reward_to_user
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils import db_backend
@@ -54,6 +55,8 @@ from .activity_views import (
     _stage_time_text,
     _task_status_text,
 )
+
+runtime_ids = UUIDGenerator()
 
 from .activity_storage import *
 from .activity_rules import *
@@ -501,7 +504,7 @@ def claim_collect_phrase(user_id: str, query: str, operation_id: str | None = No
 
     ensure_activity_files()
     result = activity_collect_exchange_service.exchange(
-        operation_id or f"activity-exchange:{uid}:{time.time_ns()}", uid, activity["key"],
+        operation_id or f"activity-exchange:{uid}:{runtime_ids.new_id()}", uid, activity["key"],
         phrase["phrase"], need, _as_int(phrase.get("limit"), 1), reward_items,
         XiuConfig().max_goods_num,
     )
@@ -763,7 +766,7 @@ def claim_activity_tasks(user_id: str, query: str = "", operation_id: str | None
         conn.close()
 
     result = activity_task_claim_service.claim(
-        operation_id or f"activity-task:{uid}:{time.time_ns()}", uid, activity_key, tasks, XiuConfig().max_goods_num
+        operation_id or f"activity-task:{uid}:{runtime_ids.new_id()}", uid, activity_key, tasks, XiuConfig().max_goods_num
     )
     if not result.succeeded:
         messages = {
@@ -913,7 +916,7 @@ def claim_activity_pass_rewards(user_id: str, query: str = "", operation_id: str
         conn.close()
 
     result = activity_pass_claim_service.claim(
-        operation_id or f"activity-pass:{uid}:{time.time_ns()}", uid, activity_key,
+        operation_id or f"activity-pass:{uid}:{runtime_ids.new_id()}", uid, activity_key,
         balance["level"], reward_jobs, XiuConfig().max_goods_num,
     )
     if not result.succeeded:
@@ -926,7 +929,7 @@ def claim_activity_pass_rewards(user_id: str, query: str = "", operation_id: str
 
 def claim_activity_rewards(user_id: str, operation_id: str | None = None) -> tuple[bool, str]:
     uid = str(user_id)
-    operation_id = operation_id or f"activity:claim-all:{uid}:{time.time_ns()}"
+    operation_id = operation_id or f"activity:claim-all:{uid}:{runtime_ids.new_id()}"
     from .activity_boss import claim_boss_milestone_reward, claim_boss_rank_reward
 
     result = activity_claim_all_service.run(
@@ -1692,7 +1695,7 @@ def claim_sign(user_id: str, operation_id: str | None = None) -> tuple[bool, str
 
     uid = str(user_id)
     today = today_str()
-    operation_id = str(operation_id or f"activity-sign:{uid}:{time.time_ns()}")
+    operation_id = str(operation_id or f"activity-sign:{uid}:{runtime_ids.new_id()}")
     # 同事件重放优先回放 operation，避免“今日已签到”前置拦截。
     previous = activity_sign_settlement_service.get_result(operation_id)
     if previous is not None:
@@ -2200,7 +2203,7 @@ def set_enabled(
     operation_id: str | None = None,
     operator_id: str = "",
 ) -> str:
-    operation_id = str(operation_id or f"activity-config-toggle:{time.time_ns()}")
+    operation_id = str(operation_id or f"activity-config-toggle:{runtime_ids.new_id()}")
     target_text = _clean_text(target)
     action_text = "开启" if enabled else "关闭"
     request_identity = {

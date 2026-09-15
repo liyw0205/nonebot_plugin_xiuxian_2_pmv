@@ -25,6 +25,7 @@ from .service import (
     now_str,
     resolve_daohao,
     today_str,
+    runtime_ids,
 )
 from .transaction_service import BossRewardClaimService
 from .transaction_service import ActivityBossCoopSettlementService
@@ -431,7 +432,7 @@ def fight_cooperative_boss(user_id: str, query: str = "", operation_id: str | No
         conn.close()
 
     result = activity_boss_coop_settlement_service.settle(
-        operation_id or f"activity-boss-coop:{user_id}:{time.time_ns()}",
+        operation_id or f"activity-boss-coop:{user_id}:{runtime_ids.new_id()}",
         str(user_id), activity["key"], hp_left, max_hp, used, limit, damage,
         today_str(), now_str(), activity.get("server_milestones") or (),
     )
@@ -485,7 +486,7 @@ def use_item_on_boss(user_id: str, query: str, operation_id: str | None = None) 
     if not item_def:
         return False, f"未找到道具【{item_query}】，请查看活动玩法说明"
 
-    operation_id = operation_id or f"activity-boss-item:{user_id}:{time.time_ns()}"
+    operation_id = operation_id or f"activity-boss-item:{user_id}:{runtime_ids.new_id()}"
 
     ensure_activity_files()
     conn = db_backend.connect(DB_PATH)

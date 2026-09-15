@@ -94,7 +94,8 @@ def test_real_entry_passes_event_operation_to_item_service():
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_activity/__init__.py", encoding="utf-8"
     ).read()
     handler = text[text.index("@activity_boss_atk_cmd.handle"):text.index("@activity_boss_claim_cmd.handle")]
-    assert "use_item_on_boss(uid, raw, operation_id)" in handler
+    assert '"activity_boss.use_item_on_boss", operation_id, uid' in handler
+    assert "use_item_on_boss(uid, raw, operation_id)" not in handler
 
 
 def test_item_damage_is_fixed_by_operation_id():
