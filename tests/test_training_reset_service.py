@@ -262,7 +262,7 @@ def test_production_entry_uses_resumable_reset_service():
         "@tower_reset.handle", 1
     )[0]
     assert "training_reset_limits(operation_id, operator_id)" in handler
-    assert "await asyncio.sleep(0)" in handler
+    assert "await spawn_admin_job(" in handler
     assert "training_limit.reset_limits(" not in handler
     limit_source = (
         root

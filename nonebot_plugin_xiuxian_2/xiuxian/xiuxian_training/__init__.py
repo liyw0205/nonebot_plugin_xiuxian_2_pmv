@@ -22,6 +22,8 @@ from .transaction_service import TrainingPurchaseService
 from .transaction_service import TrainingResetService
 from ...paths import get_paths
 from ...features.training.application import TrainingApplication
+from ...infrastructure.clock import SystemClock
+from ...infrastructure.ids import UUIDGenerator
 from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from ..xiuxian_utils.item_json import Items
@@ -35,6 +37,8 @@ training_event_service = TrainingEventService(get_paths().game_db, get_paths().p
 training_purchase_service = TrainingPurchaseService(get_paths().game_db, get_paths().player_db)
 training_reset_service = TrainingResetService(get_paths().game_db, get_paths().player_db)
 training_application = TrainingApplication(get_paths().game_db)
+runtime_clock = SystemClock()
+runtime_ids = UUIDGenerator()
 
 
 def _run_training_action(action: str, operation_id: str, user_id: str, **payload):
@@ -113,7 +117,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     # 检查历练时间 - 同小时内不可重复历练
     training_info = training_limit.get_user_training_info(user_id)
-    now = datetime.now()
+    now = runtime_clock.now()
     last_time = training_info["last_time"]
     
     if last_time and last_time.year == now.year and last_time.month == now.month and last_time.day == now.day and last_time.hour == now.hour:
@@ -125,7 +129,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     # 开始历练 - 随机选择事件类型
     event_id = getattr(event, "message_id", None)
-    operation_id = f"training-completion:{event_id}:{user_id}" if event_id else f"training-completion:{time.time_ns()}:{user_id}"
+    operation_id = f"training-completion:{event_id}:{user_id}" if event_id else f"training-completion:{runtime_ids.new_id()}:{user_id}"
     try:
         result = make_choice(user_id, operation_id)
     except Exception:
@@ -148,7 +152,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     user_id = user_info["user_id"]
     training_info = training_limit.get_user_training_info(user_id)
-    now = datetime.now()
+    now = runtime_clock.now()
     
     # 计算下次可历练时间
     if training_info["last_time"]:
@@ -291,7 +295,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await training_buy.finish()
     
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"training-purchase:{event_id}:{user_id}" if event_id else f"training-purchase:{time.time_ns()}:{user_id}"
+    operation_id = f"training-purchase:{event_id}:{user_id}" if event_id else f"training-purchase:{runtime_ids.new_id()}:{user_id}"
     try:
         purchase_result = _run_training_action(
             "purchase", operation_id, user_id,
@@ -383,7 +387,7 @@ def make_choice(user_id, operation_id):
     if isinstance(expected_training_info["last_time"], datetime):
         expected_training_info["last_time"] = expected_training_info["last_time"].strftime("%Y-%m-%d %H:%M:%S")
     user_info = sql_message.get_user_info_with_id(user_id)
-    now = datetime.now()
+    now = runtime_clock.now()
     
     # 记录本次历练时间
     training_info["last_time"] = now
