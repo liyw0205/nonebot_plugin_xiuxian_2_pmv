@@ -697,6 +697,8 @@
 
 2026-09-15 buff clock boundary：洞府购买、灵田状态、历练状态和银行兼容默认值的真实入口时间读取统一使用注入 `runtime_clock.now()`；normal-training/source共146 tests、catalog=103、compileall、architecture、diff check通过。
 
+2026-09-15 buff clock live safety：提交 `0a4f1cc` 部署后 backup `/srv/old/data/backups/20260915T043737Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行洞府/状态写入。
+
 2026-09-15 sign-in task projection DDL fix：`SignInTaskRepository.record`移除 request-time `ensure_schema`，正式 schema仅由已有 `apply_sign_in_tasks` startup migration创建；测试fixture改为显式 migration后验证 daily/weekly progress idempotency。task/effects/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 sign-in task projection live safety：提交 `d845283` 部署后 backup `/srv/old/data/backups/20260915T001441Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务进度写入。
