@@ -651,6 +651,8 @@
 
 2026-09-16 legacy graph audit：`xiuxian_buff/partner.py` 仍暴露双修/师徒等大量真实 legacy handlers，并直接依赖 `xiuxian2_handle`与 relation transaction services；无可验证 feature-owned repository/application，保留为 mentor/partner 多库事务 blocker。world-boss仍仅有 boss purchase/replay/Clock/random slices，完整 activity/game/player settlement保持未迁移。
 
+2026-09-16 facade coverage audit：`features/entertainment`、`features/tasks`、`features/dufang`、`features/training`等 repository仍是 `ServicePort`/旧 service handler映射，不包含 feature-owned SQL schema或跨库事务；其 application只提供 operation ledger协调，不能计为完整迁移。保留为 legacy graph blocker，不做 facade-only cutover。
+
 2026-09-15 task reward claim boundary：真实 `领取任务奖励` handler移除直接 `task_manager.reward_claim_service.get_result` replay读取，统一经 `TasksApplication.execute(operation_id,user_id,payload)`进入 application ledger；任务定义/奖励快照与跨game/player reward transaction仍保留为显式 legacy repository边界，未将ServicePort facade误报为SQL迁移。task reward/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 task claim live safety：提交 `52eb6d0` 部署后 backup `/srv/old/data/backups/20260915T000645Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务奖励领取写入。
