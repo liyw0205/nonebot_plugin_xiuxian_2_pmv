@@ -377,6 +377,8 @@
 
 2026-09-16 tianti settlement composition cleanup：确认 `TiantiSettlementApplication` 默认使用已注册 `TiantiSettlementSqlRepository`，移除 plugin 中未使用的 `LegacyTiantiSettlementRepository` import；legacy settlement service保留为显式 rollback。tianti/source共179 tests、catalog=103、compileall、architecture、diff check通过。
 
+2026-09-16 tianti settlement composition live safety：提交 `1792153` 部署后 backup `/srv/old/data/backups/20260915T200609Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行天梯结算写入。
+
 2026-09-14 tianti NoneBot/application wiring cutover：移除 `xiuxian_tianti/__init__.py` 与 composition root 对 `LegacyTiantiSettlementRepository/LegacyTiantiTrainingRepository` 的显式注入，默认命令/application 使用 feature-owned repositories；旧 service 实例仅作为兼容变量保留。23 个 tianti/settlement/bath/item focused tests、compileall、architecture、source-quality 通过。
 
 2026-09-14 tianti NoneBot/application wiring live safety：提交 `38f2908` 部署后 backup `/srv/old/data/backups/20260914T032022Z`、全库 migration dry-run pending 为空、reconcile clean、readiness 全绿；recovery smoke 覆盖 64-entry catalog，真实 game_db migrations=64、player_db migrations=5，默认 tianti application wiring 可启动。live 未执行玩家资产写入。
