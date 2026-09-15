@@ -535,6 +535,8 @@
 
 2026-09-16 composition root SQL cutover：`plugin.py` 移除 arena/tower/boss 默认 `Legacy*Repository` 注入，改由各 Application 默认 SQL repository并传入 context Clock；三模块真实 startup graph不再默认命中这三组 legacy bridge，legacy 类保留为显式 rollback。arena/tower/boss/source共253 tests、catalog=103、compileall、architecture、diff check通过。
 
+2026-09-16 composition root SQL cutover live safety：提交 `af76fcb` 部署后 backup `/srv/old/data/backups/20260915T191347Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行 arena/tower/boss 资产写入。
+
 2026-09-15 boss shop purchase live safety：提交 `34d91fc` 部署后 backup `/srv/old/data/backups/20260914T203127Z`，dry-run/apply仅game `[boss.002]`；readiness全绿，93-entry recovery reconcile clean。live未执行世界BOSS兑换写入。
 
 2026-09-15 boss purchase verification closure：补齐 `BossPurchaseSqlRepository` 独立双库测试及真实 handler source-quality，确认积分/weekly/back/operation 在同一UoW内完成，duplicate/conflict、限购、积分不足、库存容量和 operation replay 边界均有证据。boss.002 已在上一提交 live 应用；当前工作树随后仅用于下一 world-boss settlement slice。
