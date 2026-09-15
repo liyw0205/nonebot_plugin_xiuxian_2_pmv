@@ -16,6 +16,7 @@ SQLITE_MAX_INT = 2**63 - 1
 from typing import Dict, List
 from ...paths import get_paths
 from ...features.impart_pk.application import ImpartPkApplication
+from ...infrastructure.ids import UUIDGenerator
 import time
 from ...paths import get_paths
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
@@ -81,6 +82,7 @@ impart_closing_enter_service = ImpartClosingEnterService(
 )
 impart_project_join_service = ImpartProjectJoinService(get_paths().player_db)
 impart_pk_application = ImpartPkApplication(get_paths().game_db)
+runtime_ids = UUIDGenerator()
 
 
 def _run_impart_pk_action(action, operation_id, user_id, call, **payload):
@@ -149,7 +151,7 @@ def calc_xu_soul_load_gain(request_time, used_time=0):
 
 def _impart_operation_id(event, action, user_id):
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    return f"impart-{action}:{event_id}:{user_id}" if event_id else f"impart-{action}:{user_id}:{time.time_ns()}"
+    return f"impart-{action}:{event_id}:{user_id}" if event_id else f"impart-{action}:{user_id}:{runtime_ids.new_id()}"
 
 def _daily_impart_state(user_id):
     return impart_training_settlement_service.get_daily_state(user_id, impart_pk.find_user_data(user_id))
@@ -335,7 +337,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     # 无目标编号的情况（与机器人对决）
     if not target_num:
         event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-        operation_id = f"impart-battle:{event_id}:{user_id}" if event_id else f"impart-battle:{user_id}:{time.time_ns()}"
+        operation_id = f"impart-battle:{event_id}:{user_id}" if event_id else f"impart-battle:{user_id}:{runtime_ids.new_id()}"
         prior_battle = impart_battle_batch_service.get_result(operation_id)
         if prior_battle is not None and prior_battle.succeeded:
             msg = f"**对决结束**（重放）\n---\n剩余对决次数\n> {prior_battle.challenger_pk_num}\n该对决请求已经处理，无需重复提交。"
@@ -507,7 +509,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         combined_msg += battle_combined_msg + "\n"
 
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"impart-battle:{event_id}:{player_1}:{player_2}" if event_id else f"impart-battle:{player_1}:{player_2}:{time.time_ns()}"
+    operation_id = f"impart-battle:{event_id}:{player_1}:{player_2}" if event_id else f"impart-battle:{player_1}:{player_2}:{runtime_ids.new_id()}"
     settlement = _run_impart_pk_action(
         "battle_settle_pair", operation_id, player_1,
         call=lambda: impart_battle_batch_service.settle(
@@ -985,7 +987,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     
     user_id = _resolve_impart_closing_user_id(event, user_info)
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"impart-closing:{event_id}:{user_id}" if event_id else f"impart-closing:{user_id}:{time.time_ns()}"
+    operation_id = f"impart-closing:{event_id}:{user_id}" if event_id else f"impart-closing:{user_id}:{runtime_ids.new_id()}"
     # 先回放：出关成功后 type!=4 会挡住同事件幂等。
     prior = impart_closing_settlement_service.get_result(operation_id)
     if prior is not None and prior.succeeded:
