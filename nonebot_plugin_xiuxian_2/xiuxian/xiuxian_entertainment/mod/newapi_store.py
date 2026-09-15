@@ -14,6 +14,7 @@ from ...xiuxian_utils.json_store import (
 )
 from ....paths import get_paths
 from ....features.entertainment.application import EntertainmentApplication
+from ....infrastructure.ids import UUIDGenerator
 
 AuthMode = Literal["token", "cookie"]
 
@@ -25,6 +26,7 @@ _HISTORY_DIR = Path(__file__).resolve().parent / "data" / "newapi_checkin_histor
 _HISTORY_DIR.mkdir(parents=True, exist_ok=True)
 
 entertainment_application = EntertainmentApplication(get_paths().game_db)
+runtime_ids = UUIDGenerator()
 
 
 def _run_entertainment_write(
@@ -103,7 +105,7 @@ def append_account(
     if not base_stored:
         return False, "须填写接口地址（绑定格式：站点用户ID#密钥#接口）"
 
-    op_id = operation_id or f"entertainment:newapi-bind:{qq_id}:{api_user_id}:{base_stored}:{time.time_ns()}"
+    op_id = operation_id or f"entertainment:newapi-bind:{qq_id}:{api_user_id}:{base_stored}:{runtime_ids.new_id()}"
     payload = {
         "mode": mode,
         "api_user_id": api_user_id,
@@ -158,7 +160,7 @@ def delete_accounts(
     operation_id: str | None = None,
 ) -> tuple[bool, str]:
     requested = "all" if indices is None else sorted({int(index) for index in indices})
-    op_id = operation_id or f"entertainment:newapi-delete:{qq_id}:{requested}:{time.time_ns()}"
+    op_id = operation_id or f"entertainment:newapi-delete:{qq_id}:{requested}:{runtime_ids.new_id()}"
     payload = {"indices": requested}
     accounts = load_accounts(qq_id)
     if not accounts:
@@ -298,7 +300,7 @@ def toggle_auto_checkin(
     operation_id: str | None = None,
 ) -> tuple[bool, str]:
     text = (index_text or "").strip()
-    op_id = operation_id or f"entertainment:newapi-auto:{qq_id}:{text}:{time.time_ns()}"
+    op_id = operation_id or f"entertainment:newapi-auto:{qq_id}:{text}:{runtime_ids.new_id()}"
     payload = {"index_text": text}
     accounts = load_accounts(qq_id)
     if not accounts:

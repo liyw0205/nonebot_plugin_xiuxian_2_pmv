@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 from ..command import *
 from ..io_runtime import run_blocking_io
+from ....infrastructure.ids import UUIDGenerator
 from .newapi_client import (
     account_base_url,
     detect_auth_mode,
@@ -39,6 +40,8 @@ _NEWAPI_FUN_KW = dict(
     k3="帮助",
     v3="newapi帮助",
 )
+
+runtime_ids = UUIDGenerator()
 
 _URL_LIKE = re.compile(r"^https?://", re.I)
 
@@ -112,7 +115,7 @@ def _qq(event: GroupMessageEvent | PrivateMessageEvent) -> str:
 def _write_operation_id(event, action: str, target: str = "") -> str:
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     suffix = f":{target}" if target else ""
-    return f"entertainment:{action}:{event_id or time.time_ns()}:{_qq(event)}{suffix}"
+    return f"entertainment:{action}:{event_id or runtime_ids.new_id()}:{_qq(event)}{suffix}"
 
 
 def _parse_delete_indices(text: str) -> list[int] | None:
