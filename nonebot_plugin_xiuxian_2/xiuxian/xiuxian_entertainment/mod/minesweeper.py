@@ -1,14 +1,21 @@
-import random
 import asyncio
 from pathlib import Path
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
+
+from ....infrastructure.clock import SystemClock
+from ....infrastructure.random_source import SystemRandom
+from ....infrastructure.ids import UUIDGenerator
 
 from ...on_compat import on_command
 from ...xiuxian_utils.json_store import load_json_file, save_json_file
 from nonebot.params import CommandArg
 from ..command import *
 from .game_utils import event_display_name, format_board_coord, now_text, parse_board_coord
+
+runtime_clock = SystemClock()
+runtime_random = SystemRandom()
+runtime_ids = UUIDGenerator()
 
 ms_start = on_command("开始扫雷", priority=5, block=True)
 ms_open = on_command("翻开", priority=5, block=True)
@@ -94,7 +101,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     flood_reveal(g, x, y)
-    g.last_action_time = now_text()
+    g.last_action_time = now_text(runtime_clock)
 
     if check_win(g):
         g.status = "win"
@@ -218,8 +225,8 @@ class MinesweeperGame:
         self.mines = mines
 
         self.status = "playing"  # playing/win/lose/closed
-        self.create_time = now_text()
-        self.last_action_time = now_text()
+        self.create_time = now_text(runtime_clock)
+        self.last_action_time = now_text(runtime_clock)
 
         self.first_click_done = False
 
@@ -283,9 +290,9 @@ class MinesweeperManager:
             return None, "你已有进行中的扫雷局，请先结束当前局。"
         if mines <= 0 or mines >= w * h:
             return None, "雷数不合法：雷数必须大于 0 且小于格子总数。"
-        game_id = f"ms_{random.randint(100000, 999999)}"
+        game_id = f"ms_{runtime_ids.new_id()}"
         while game_id in self.games:
-            game_id = f"ms_{random.randint(100000, 999999)}"
+            game_id = f"ms_{runtime_ids.new_id()}"
         g = MinesweeperGame(game_id, str(user_id), user_name, w, h, mines)
         self.games[game_id] = g
         user_minesweeper_status[str(user_id)] = game_id
@@ -320,7 +327,7 @@ def plant_mines(g: MinesweeperGame, safe_x: int, safe_y: int):
                 forbidden.add((nx, ny))
 
     cells = [(x, y) for y in range(g.height) for x in range(g.width) if (x, y) not in forbidden]
-    random.shuffle(cells)
+    runtime_random.shuffle(cells)
     for i in range(g.mines):
         x, y = cells[i]
         g.board[y][x] = -1
