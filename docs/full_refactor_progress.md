@@ -819,6 +819,8 @@
 
 2026-09-16 sect repository clock live safety：提交 `48f065f` 部署后 backup `/srv/old/data/backups/20260915T162923Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行宗门丹药/商店资产写入。
 
+2026-09-16 sect weekly-key clock boundary：宗门商店默认 ISO week key 从 `date.today()` 改为同一 `SectApplication` 注入 Clock，显式 week_key仍优先；sect/source共298 tests、catalog=103、compileall、architecture、diff check通过。legacy maintenance/weekly service边界保持不变。
+
 2026-09-15 impart PK operation ID boundary：虚神界训练、机器人/双人对决、探索出关真实入口的无事件 operation ID统一使用注入 `runtime_ids`；impart/source共177 tests、catalog=103、compileall、architecture、diff check通过。对战随机决策、跨玩家 settlement和旧 replay service仍为未迁移边界。
 
 2026-09-15 impart PK operation ID live safety：提交 `ba4364f` 部署后 backup `/srv/old/data/backups/20260915T092945Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行虚神界训练/对战写入。
