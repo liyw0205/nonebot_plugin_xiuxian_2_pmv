@@ -777,6 +777,8 @@
 
 2026-09-15 rift operation ID boundary：秘境手动生成、普通入口和门票入口的无事件 operation ID统一使用注入 `runtime_ids`；rift/source共190 tests、catalog=103、compileall、architecture、diff check通过。秘境 deterministic RNG、完整事件/资产 settlement仍保留为未迁移边界。
 
+2026-09-15 rift operation ID live safety：提交 `bed0b5d` 部署后 backup `/srv/old/data/backups/20260915T084745Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行秘境生成/进入写入。
+
 2026-09-15 avatar provider boundary：身外化身真实入口的 operation ID、随机化身ID和创建时间统一使用注入 `runtime_ids/runtime_random/runtime_clock`，兼容 JSON mutation仍经 `InfoApplication` ledger；source共143 tests、catalog=103、compileall、architecture、diff check通过，仓库暂无专用 avatar behavior suite。
 
 2026-09-15 avatar provider live safety：提交 `7ae1397` 部署后 backup `/srv/old/data/backups/20260915T083238Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行身外化身切换写入。
