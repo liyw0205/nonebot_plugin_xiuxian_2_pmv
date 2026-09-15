@@ -723,6 +723,8 @@
 
 2026-09-15 base sign operation ID live safety：提交 `28f5528` 部署后 backup `/srv/old/data/backups/20260915T073714Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行签到/lottery写入。
 
+2026-09-15 registration batch ID boundary：RegistrationBatcher内部请求标识从 `time.time_ns()` 改为注入 `UUIDGenerator`；队列等待仍使用 `time.monotonic()` 作为非业务超时钟。registration/source共144 tests、catalog=103、compileall、architecture、diff check通过。
+
 2026-09-15 base daohao random boundary：注册/随机改名共用的道号生成helper支持显式 `random_source`，词库选择、结构权重、连接符和递归重试不再直接使用全局 random；base stone/player/source共197 tests、2 subtests、catalog=103、compileall、architecture、diff check通过。玩家命名 transaction service仍为未迁移边界。
 
 2026-09-15 base daohao random live safety：提交 `4b69070` 部署后 backup `/srv/old/data/backups/20260915T055934Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行注册/改名写入。

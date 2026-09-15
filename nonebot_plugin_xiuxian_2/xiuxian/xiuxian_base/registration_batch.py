@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from nonebot.log import logger
+from ...infrastructure.ids import UUIDGenerator
+
+runtime_ids = UUIDGenerator()
 
 
 @dataclass(frozen=True)
@@ -30,7 +33,7 @@ class RegistrationBatcher:
     async def submit(self, request: RegistrationRequest) -> tuple[Any, str]:
         loop = asyncio.get_running_loop()
         future = loop.create_future()
-        request_id = f"{id(future)}:{time.time_ns()}"
+        request_id = f"{id(future)}:{runtime_ids.new_id()}"
         await self._ensure_worker()
         await self._queue.put((request_id, request, future))
         return await future
