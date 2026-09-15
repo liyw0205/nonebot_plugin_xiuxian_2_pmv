@@ -10,6 +10,7 @@ from nonebot.log import logger
 from ...paths import get_paths
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
+from ...infrastructure.ids import UUIDGenerator
 
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.item_json import Items
@@ -206,6 +207,7 @@ class DungeonManager:
             self.__class__._has_init = True
             self.random = random_source or SystemRandom()
             self.clock = clock or SystemClock()
+            self.ids = UUIDGenerator()
 
             self.plugin_path = Path(__file__).parent.absolute()
             self.dungeon_data_path = get_paths().data / "副本"
@@ -444,13 +446,13 @@ class DungeonManager:
                 operation_id = (
                     DungeonResetService.automatic_operation_id(current_date)
                     if source in {"daily", "crossday"}
-                    else f"dungeon-reset:manual:{time.time_ns()}"
+                    else f"dungeon-reset:manual:{self.ids.new_id()}"
                 )
             result = self.reset_service.reset(
                 operation_id,
                 current_date,
                 source,
-                lambda: self._template_snapshot(random.choice(self.dungeon_templates)),
+                lambda: self._template_snapshot(self.random.choice(self.dungeon_templates)),
             )
             if not result.succeeded:
                 raise RuntimeError(f"dungeon reset failed: {result.status}")
@@ -518,7 +520,7 @@ class DungeonManager:
         if self.current_dungeon is None:
             raise RuntimeError("current dungeon is unavailable")
         result = self.reset_service.reset(
-            f"dungeon-reset:clear:{time.time_ns()}",
+            f"dungeon-reset:clear:{self.ids.new_id()}",
             self._get_current_date(),
             "manual",
             lambda: self._template_snapshot(self.current_dungeon),
@@ -585,7 +587,7 @@ class DungeonManager:
                 w = 1
             weighted.extend([jj] * w)
 
-        return random.choice(weighted) if weighted else random.choice([x[0] for x in available])
+        return self.random.choice(weighted) if weighted else self.random.choice([x[0] for x in available])
 
     def _get_type_multipliers(self):
         t = self._get_dungeon_type()
@@ -604,23 +606,23 @@ class DungeonManager:
 
         items_list = list(drop_items.keys())
         weights = list(drop_items.values())
-        selected_item = random.choices(items_list, weights=weights, k=1)[0]
+        selected_item = self.random.choices(items_list, weights=weights, k=1)[0]
 
         player_rank_val, _ = convert_rank(user_level)
         if player_rank_val is None:
             player_rank_val = convert_rank("江湖好手")[0] or 0
 
         max_rank = convert_rank("江湖好手")[0] or 55
-        item_base_rank = max(player_rank_val - random.randint(15, 20), 5)
-        item_final_rank = random.randint(item_base_rank, min(item_base_rank + random.randint(5, 10), max_rank))
+        item_base_rank = max(player_rank_val - self.random.randint(15, 20), 5)
+        item_final_rank = self.random.randint(item_base_rank, min(item_base_rank + self.random.randint(5, 10), max_rank))
 
-        if item_final_rank <= 10 and random.random() < 0.2:
-            item_final_rank = random.randint(11, 20)
+        if item_final_rank <= 10 and self.random.random() < 0.2:
+            item_final_rank = self.random.randint(11, 20)
 
         items_id = item_s.get_random_id_list_by_rank_and_item_type(item_final_rank, selected_item)
         if not items_id:
             return 0
-        return random.choice(items_id)
+        return self.random.choice(items_id)
 
     def creating_monsters(self, user_level, user_exp, monsters_info, monster_type="minion"):
         self.sync_current_dungeon()

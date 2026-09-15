@@ -767,6 +767,8 @@
 
 2026-09-15 dungeon provider live safety：提交 `2f1cf4f` 部署后 backup `/srv/old/data/backups/20260915T081427Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行副本生成/重置/结算写入。
 
+2026-09-15 dungeon manager provider boundary：DungeonManager/DungeonTemplate的重置ID、模板/BOSS/怪物属性、事件和掉落随机统一使用实例 `runtime_ids/runtime_clock/runtime_random`；dungeon/source共236 tests、4 subtests、catalog=103、compileall、architecture、diff check通过。副本完整 settlement 与 snapshot兼容服务仍为未迁移边界。
+
 2026-09-15 sign-in task projection DDL fix：`SignInTaskRepository.record`移除 request-time `ensure_schema`，正式 schema仅由已有 `apply_sign_in_tasks` startup migration创建；测试fixture改为显式 migration后验证 daily/weekly progress idempotency。task/effects/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 sign-in task projection live safety：提交 `d845283` 部署后 backup `/srv/old/data/backups/20260915T001441Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务进度写入。
