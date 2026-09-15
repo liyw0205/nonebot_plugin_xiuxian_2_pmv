@@ -915,6 +915,8 @@
 
 2026-09-16 message sequence random live safety：提交 `ffe0c9b` 部署后 backup `/srv/old/data/backups/20260915T163945Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未发送消息或改变外部 adapter状态。
 
+2026-09-16 adapter sender sequence boundary：低层 QQ group/private sender 的缺省 msg_seq 统一复用注入式 `MessageSequenceStrategy`，显式 msg_seq、引用消息和 adapter API 参数保持不变；新增 focused tests后共145 tests、catalog=103、compileall、architecture、diff check通过。真实发送/外部 adapter副作用未执行。
+
 2026-09-15 world-events random boundary：恶魔生成、随机奖励、灵脉时长/触发与攻击领奖随机决策统一使用注入 `runtime_random`，时间默认使用 `runtime_clock`；demon/source共166 tests、catalog=103、compileall、architecture、diff check通过。复杂 replay与多库 settlement仍为未迁移边界。
 
 2026-09-15 world-events random live safety：提交 `06dbcfe` 部署后 backup `/srv/old/data/backups/20260915T140006Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行恶魔/灵脉随机奖励写入。

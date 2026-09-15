@@ -5,6 +5,10 @@ from typing import Any
 
 from .adapter_message_actions import schedule_delete_message
 from .adapter_message_records import extract_result_message_id, record_send_message
+from .messaging.reliability import MessageSequenceStrategy
+
+
+_message_sequences = MessageSequenceStrategy()
 
 
 def _maybe_int(value: Any) -> Any:
@@ -122,7 +126,9 @@ async def send_group_message(bot: Any, *, group_id: Any, message: Any, **kwargs)
 
     if is_qq_bot(bot):
         msg_ref_id = _pop_reference_id(kwargs)
-        msg_seq = kwargs.pop("msg_seq", random.randint(1, 900000))
+        msg_seq = kwargs.pop(
+            "msg_seq", _message_sequences.next(bot, "group", str(group_id))
+        )
         if source_message_id:
             # 普通消息回复用 msg_id；lifecycle 事件 id 形如 GROUP_ADD_ROBOT:xxx，应走 event_id
             eid = str(source_message_id)
@@ -206,7 +212,9 @@ async def send_private_message(bot: Any, *, user_id: Any, message: Any, **kwargs
 
     if is_qq_bot(bot):
         msg_ref_id = _pop_reference_id(kwargs)
-        msg_seq = kwargs.pop("msg_seq", random.randint(1, 900000))
+        msg_seq = kwargs.pop(
+            "msg_seq", _message_sequences.next(bot, "private", str(user_id))
+        )
         if source_message_id:
             kwargs.setdefault("msg_id", source_message_id)
         result = await _call_qq_send(
