@@ -7,6 +7,7 @@ from typing import Any, Mapping
 from ...core.errors import ConflictError, DomainError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
+from ...infrastructure.clock import SystemClock
 from ...infrastructure.observability import trace_context
 from .domain import BossPurchaseRequest, BossSettlementRequest
 from .repository import BossPurchaseSqlRepository, BossRepository
@@ -21,15 +22,16 @@ def _data(raw: Any) -> dict[str, Any]:
 
 
 class BossApplication:
-    def __init__(self, game_database: str | Path, player_database: str | Path, *, activity_database: str | Path | None = None, repository: BossRepository | None = None, ledger: OperationLedger | None = None) -> None:
+    def __init__(self, game_database: str | Path, player_database: str | Path, *, activity_database: str | Path | None = None, repository: BossRepository | None = None, ledger: OperationLedger | None = None, clock=None) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
         self.activity_database = str(activity_database) if activity_database else None
         self.repository = repository
         self.ledger = ledger or OperationLedger()
+        self.clock = clock or SystemClock()
 
     def _repository(self) -> BossRepository:
-        return self.repository or BossPurchaseSqlRepository(self.game_database, self.player_database, self.activity_database)
+        return self.repository or BossPurchaseSqlRepository(self.game_database, self.player_database, self.activity_database, clock=self.clock)
 
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):

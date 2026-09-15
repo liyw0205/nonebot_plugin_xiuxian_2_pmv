@@ -7,6 +7,7 @@ import json
 from datetime import date, datetime
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.clock import SystemClock
 
 
 class BossRepository(Protocol):
@@ -40,6 +41,10 @@ class LegacyBossRepository:
 
 
 class BossPurchaseSqlRepository(LegacyBossRepository):
+    def __init__(self, game_database: str | Path, player_database: str | Path, activity_database: str | Path | None = None, *, clock=None) -> None:
+        super().__init__(game_database, player_database, activity_database)
+        self.clock = clock or SystemClock()
+
     def settlement_result(self, operation_id: str) -> Any:
         operation_id = str(operation_id).strip()
         if not operation_id:
@@ -79,7 +84,7 @@ class BossPurchaseSqlRepository(LegacyBossRepository):
         return {str(k):v for k,v in data.items()}
 
     def purchase(self,operation_id,user_id,item_id,item_name,item_type,quantity,unit_cost,weekly_limit,expected_integral,expected_weekly_purchases,max_goods_num,today=None):
-        operation_id,user_id,item_name,item_type=str(operation_id).strip(),str(user_id),str(item_name),str(item_type);item_id,quantity,unit_cost,weekly_limit,expected_integral,max_goods_num=map(int,(item_id,quantity,unit_cost,weekly_limit,expected_integral,max_goods_num));today=today or date.today();weekly=self._weekly(expected_weekly_purchases,today);payload=json.dumps([user_id,item_id,item_name,item_type,quantity,unit_cost,weekly_limit,max_goods_num],ensure_ascii=True,sort_keys=True,separators=(",",":"))
+        operation_id,user_id,item_name,item_type=str(operation_id).strip(),str(user_id),str(item_name),str(item_type);item_id,quantity,unit_cost,weekly_limit,expected_integral,max_goods_num=map(int,(item_id,quantity,unit_cost,weekly_limit,expected_integral,max_goods_num));today=today or self.clock.now().date();weekly=self._weekly(expected_weekly_purchases,today);payload=json.dumps([user_id,item_id,item_name,item_type,quantity,unit_cost,weekly_limit,max_goods_num],ensure_ascii=True,sort_keys=True,separators=(",",":"))
         if not operation_id or quantity<=0 or min(item_id,unit_cost,weekly_limit,expected_integral,max_goods_num)<0:raise ValueError("valid boss purchase required")
         def result(status,integral=expected_integral,purchased=0,inventory=0):
             ok=status in {"applied","duplicate"};return {"status":status,"quantity":quantity if ok else 0,"cost":quantity*unit_cost if ok else 0,"integral":int(integral),"purchased":int(purchased),"inventory":int(inventory)}
