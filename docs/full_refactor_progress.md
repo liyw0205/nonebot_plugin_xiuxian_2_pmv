@@ -861,6 +861,8 @@
 
 2026-09-16 daily fortune request-DDL boundary：`DailyFortuneRepository.get/insert` 移除 request-time `ensure_schema`，已注册 `daily_fortune.001` migration成为 claims 表唯一启动前置；architecture fixture改为显式 migration。architecture/source共157 tests、catalog=103、compileall、architecture、diff check通过；旧 greeting/fortune compatibility边界仍保留。
 
+2026-09-16 daily fortune request-DDL live safety：提交 `26da470` 部署后 backup `/srv/old/data/backups/20260915T210630Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行运势领取写入。
+
 2026-09-15 interactive provider live safety：提交 `1624de3` 部署后 backup `/srv/old/data/backups/20260915T091541Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行互动结算/领取写入。
 
 2026-09-15 interactive random boundary：fortune、早晚安、互动奖励回复和日常文本选择统一使用注入 `runtime_random`；interactive/source共167 tests、catalog=103、compileall、architecture、diff check通过。InteractiveApplication及历史 greeting/fortune transaction兼容边界保持不变。
