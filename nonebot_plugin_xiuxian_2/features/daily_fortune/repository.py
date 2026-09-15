@@ -23,7 +23,6 @@ class DailyFortuneRepository:
         )
 
     def get(self, uow: DatabaseUnitOfWork, user_id: str, fortune_date: str) -> Mapping[str, Any] | None:
-        self.ensure_schema(uow)
         return uow.query_one(
             "SELECT user_id, fortune_date, score, title, message, operation_id, created_at "
             "FROM daily_fortune_claims WHERE user_id = ? AND fortune_date = ?",
@@ -31,7 +30,6 @@ class DailyFortuneRepository:
         )
 
     def insert(self, uow: DatabaseUnitOfWork, row: Mapping[str, Any]) -> None:
-        self.ensure_schema(uow)
         uow.execute(
             "INSERT INTO daily_fortune_claims(user_id, fortune_date, score, title, message, operation_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (row["user_id"], row["fortune_date"], row["score"], row["title"], row["message"], row["operation_id"], row["created_at"]),

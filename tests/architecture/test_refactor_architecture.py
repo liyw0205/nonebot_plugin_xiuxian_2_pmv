@@ -18,6 +18,7 @@ from nonebot_plugin_xiuxian_2.bootstrap import (
 )
 from nonebot_plugin_xiuxian_2.core.result import OperationOutcome, utc_now
 from nonebot_plugin_xiuxian_2.features.daily_fortune.application import DailyFortuneApplication
+from nonebot_plugin_xiuxian_2.features.daily_fortune.migrations import apply_daily_fortune
 from nonebot_plugin_xiuxian_2.infrastructure.database import (
     DatabaseUnitOfWork,
     Migration,
@@ -131,6 +132,8 @@ class RefactorArchitectureTests(unittest.TestCase):
     def test_daily_fortune_ledger_and_reconcile(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             database = str(Path(directory) / "game.db")
+            with DatabaseUnitOfWork(database) as uow:
+                apply_daily_fortune(uow)
             clock = lambda: datetime(2026, 9, 12, tzinfo=timezone.utc)
             random_source = type("Random", (), {"randint": lambda self, start, end: 90})()
             app = DailyFortuneApplication(database, clock=clock, random_source=random_source)
