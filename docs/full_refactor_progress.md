@@ -897,6 +897,8 @@
 
 2026-09-15 puppet clock boundary：傀儡 harvest 的当前时间和灵田状态展示统一使用注入 `runtime_clock`；puppet/source共153 tests、catalog=103、compileall、architecture、diff check通过。harvest legacy transaction service仍为未迁移边界。
 
+2026-09-15 puppet clock live safety：提交 `9e20c67` 部署后 backup `/srv/old/data/backups/20260915T144718Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行傀儡 harvest/状态写入。
+
 2026-09-15 accessory operation ID boundary：饰品真实操作 helper的无事件 operation ID统一使用注入 `runtime_ids`；accessory相关测试/source共190 tests、catalog=103、compileall、architecture、diff check通过。饰品跨 game/player transaction service仍保留为未迁移边界。
 
 2026-09-15 accessory operation ID live safety：提交 `b7bfcc9` 部署后 backup `/srv/old/data/backups/20260915T111211Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行饰品写入。
