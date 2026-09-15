@@ -27,12 +27,14 @@ from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from ..xiuxian_config import convert_rank, base_rank, XiuConfig
 from ...paths import get_paths
 from ...features.illusion.application import IllusionApplication
+from ...infrastructure.ids import UUIDGenerator
 from .choice_service import IllusionChoiceService
 from .IllusionData import *
 sql_message = XiuxianDateManage()
 items = Items()
 illusion_choice_service = IllusionChoiceService(get_paths().game_db)
 illusion_application = IllusionApplication(get_paths().game_db)
+runtime_ids = UUIDGenerator()
 
 
 def _run_illusion_action(action, operation_id, user_id, call=None, **payload):
@@ -130,7 +132,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await illusion_choice.finish()
 
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"illusion-choice:{event_id}:{user_id}" if event_id else f"illusion-choice:{time.time_ns()}:{user_id}"
+    operation_id = f"illusion-choice:{event_id}:{user_id}" if event_id else f"illusion-choice:{runtime_ids.new_id()}:{user_id}"
     # 先回放：成功后 today_choice 已写，前置“今日已参与”会挡住同事件重放；随机奖励不可重掷。
     prior = illusion_application.get_result(operation_id)
     if prior is not None and prior.succeeded:
