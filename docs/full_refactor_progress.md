@@ -641,6 +641,8 @@
 
 2026-09-16 sign-in lottery helper blocked：`features/sign_in/commands.py::settle_lottery` 仍按 `LotteryRepository.schema_exists` 在 legacy base handler内选择 `LotteryApplication`或旧 settle adapter；默认 startup已创建 lottery schema，但 base handler尚未接收 lifecycle-owned LotteryApplication实例。直接删除分支会丢失显式旧安装 rollback，保留为后续 wiring slice。
 
+2026-09-16 feature provider audit：当前 `features/` 层 direct Clock/Random 命中仅为已注入的 `PackageRewardResolver` 与 `SignInApplication`，未发现新的未注入系统来源；`LotteryApplication` 已显式使用 Clock/Random。剩余可执行风险集中在 legacy handler/service graph，未对旧实现做表面替换。
+
 2026-09-16 tianti legacy time backlog：`xiuxian_tianti/transaction_service.py` 仍有若干 helper以 `datetime.now()` 作为兼容默认值；真实默认 training/settlement application已使用 feature-owned SQL repositories和注入 Clock，本轮不改 legacy helper以避免改变旧 Web/NoneBot兼容语义，保留为 legacy-only provider backlog。
 
 2026-09-16 legacy time audit：全项目剩余 direct `datetime.now/date.today` 命中主要集中在 `xiuxian_map/transaction_service.py`、`xiuxian_arena/transaction_service.py`、`xiuxian_compensation/transaction_service.py`、`xiuxian_buff` relation/mentor service及 tianti legacy helpers；这些均仍处于旧 transaction/service graph，默认 application SQL paths已完成 Clock收口。未对旧兼容实现做表面替换，保留为后续真实 service/application migration blocker。
