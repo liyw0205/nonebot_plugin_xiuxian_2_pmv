@@ -772,7 +772,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         log_message(user_id, f"[活动首领] 读取世界BOSS联动配置失败：{e}")
 
     # Rewards and combat state share the composite settlement boundary.
-    now = datetime.now()
+    now = runtime_clock.now()
     settlement = world_boss_battle_settlement_service.settle(
         operation_id=operation_id,
         user_id=user_id,
