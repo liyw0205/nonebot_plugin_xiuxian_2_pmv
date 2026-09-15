@@ -603,6 +603,8 @@
 
 2026-09-15 tianti qiaoxue operation ID boundary：真实冲窍 handler已使用 `TiantiTrainingApplication.open_qiaoxue`，无事件 fallback改用注入 `UUIDGenerator`；突破/冲窍/source共155 tests、catalog=103、compileall、architecture、diff check通过。旧 `QiaoxueService`仅保留兼容入口。
 
+2026-09-15 tianti qiaoxue live safety：提交 `61b520c` 部署后 backup `/srv/old/data/backups/20260915T003548Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行冲窍资产写入。
+
 2026-09-15 sign-in task projection DDL fix：`SignInTaskRepository.record`移除 request-time `ensure_schema`，正式 schema仅由已有 `apply_sign_in_tasks` startup migration创建；测试fixture改为显式 migration后验证 daily/weekly progress idempotency。task/effects/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 sign-in task projection live safety：提交 `d845283` 部署后 backup `/srv/old/data/backups/20260915T001441Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务进度写入。
