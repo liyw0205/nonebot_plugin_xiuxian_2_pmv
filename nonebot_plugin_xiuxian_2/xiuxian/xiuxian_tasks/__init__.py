@@ -8,8 +8,10 @@ from ..xiuxian_utils.utils import check_user, handle_send
 from .task_data import task_manager
 from ...features.tasks.application import TasksApplication
 from ...paths import get_paths
+from ...infrastructure.ids import UUIDGenerator
 
 tasks_application = TasksApplication(get_paths().game_db)
+runtime_ids = UUIDGenerator()
 
 
 task_info = on_command("我的任务", aliases={"修仙任务", "任务列表"}, priority=6, block=True)
@@ -111,7 +113,7 @@ async def claim_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     cycle = _parse_cycle(arg_text) or _parse_cycle(str(event.message))
     user_id = str(user_info["user_id"])
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"task-reward-claim:{user_id}:{event_id or time.time_ns()}"
+    operation_id = f"task-reward-claim:{user_id}:{event_id or runtime_ids.new_id()}"
     try:
         outcome = tasks_application.execute(
             operation_id=operation_id,

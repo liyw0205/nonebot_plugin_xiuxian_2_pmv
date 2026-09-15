@@ -831,6 +831,8 @@
 
 2026-09-15 back operation ID live safety：提交 `7a1880e` 部署后 backup `/srv/old/data/backups/20260915T105238Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行背包/炼金/奖励写入。
 
+2026-09-15 task operation ID boundary：任务奖励真实 handler的无事件 operation ID统一使用注入 `runtime_ids`，领取请求继续经 `TasksApplication.execute`；task/effects/source共151 tests、catalog=103、compileall、architecture、diff check通过。动态任务 snapshot、reward parsing和跨库 reward transaction仍为未迁移边界。
+
 2026-09-15 puppet operation ID boundary：灵田傀儡购买、升级、开关和 harvest 真实入口的无事件 operation ID统一使用注入 `runtime_ids`；puppet/source共153 tests、catalog=103、compileall、architecture、diff check通过。傀儡 harvest 与 legacy repository 事务仍保留为未迁移边界。
 
 2026-09-15 puppet operation ID live safety：提交 `df950ed` 部署后 backup `/srv/old/data/backups/20260915T110230Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行傀儡购买/升级/harvest写入。
