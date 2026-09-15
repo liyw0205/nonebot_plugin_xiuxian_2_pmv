@@ -26,6 +26,7 @@ from ..xiuxian_utils.lay_out import Cooldown
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items
 from ...paths import get_paths
+from ...infrastructure.ids import UUIDGenerator
 
 from .natal_data import *
 from .natal_config import (
@@ -52,6 +53,7 @@ natal_engraving_service = EngravingService(get_paths().game_db, get_paths().play
 natal_forget_service = ForgetEffectService(get_paths().game_db, get_paths().player_db)
 natal_reawaken_service = ReawakenService(get_paths().game_db, get_paths().player_db)
 natal_awaken_service = AwakenService(get_paths().player_db)
+runtime_ids = UUIDGenerator()
 
 def _natal_choice_seed(operation_id: str) -> int:
     # Stable per event/op so same-event replay reuses first roll.
@@ -91,7 +93,7 @@ async def natal_awaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
             NatalEffectType.SPEED,
         }
         event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-        operation_id = f"natal-awaken:{event_id}:{user_id}" if event_id else f"natal-awaken:{user_id}:{datetime.now().timestamp()}"
+        operation_id = f"natal-awaken:{event_id}:{user_id}" if event_id else f"natal-awaken:{user_id}:{runtime_ids.new_id()}"
         prior = natal_awaken_service.get_result(operation_id)
         if prior is not None and prior.succeeded:
             await handle_send(
@@ -194,7 +196,7 @@ async def natal_reawaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMes
         NatalEffectType.SPEED,
     }
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"natal-reawaken:{event_id}:{user_id}" if event_id else f"natal-reawaken:{user_id}:{datetime.now().timestamp()}"
+    operation_id = f"natal-reawaken:{event_id}:{user_id}" if event_id else f"natal-reawaken:{user_id}:{runtime_ids.new_id()}"
     reawakened = natal_reawaken_service.reawaken(
         operation_id, user_id, MYSTERIOUS_SCRIPTURE_ID,
         mysterious_scripture_info["name"], mysterious_scripture_info["type"],
@@ -294,7 +296,7 @@ async def natal_upgrade_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
                           md_type="法宝", k1="养成", v1="养成本命法宝", k2="升阶", v2="本命法宝升阶", k3="法宝", v3="我的本命法宝")
         return
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"natal-train:{event_id}:{user_id}" if event_id else f"natal-train:{user_id}:{datetime.now().timestamp()}"
+    operation_id = f"natal-train:{event_id}:{user_id}" if event_id else f"natal-train:{user_id}:{runtime_ids.new_id()}"
     # 先回放：成功后等级/经验满会挡住同事件幂等。
     prior = natal_training_service.get_result(operation_id)
     if prior is not None and prior.succeeded:
@@ -402,7 +404,7 @@ async def natal_effect_upgrade_handler(bot: Bot, event: GroupMessageEvent | Priv
 
     scripture_cost = 1
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"natal-effect-upgrade:{event_id}:{user_id}" if event_id else f"natal-effect-upgrade:{user_id}:{datetime.now().timestamp()}"
+    operation_id = f"natal-effect-upgrade:{event_id}:{user_id}" if event_id else f"natal-effect-upgrade:{user_id}:{runtime_ids.new_id()}"
     prior = natal_effect_upgrade_service.get_result(operation_id)
     if prior is not None and prior.succeeded:
         effect_name = EFFECT_NAME_MAP.get(NatalEffectType(prior.effect_type), "未知效果")
@@ -455,7 +457,7 @@ async def natal_engrave_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
     user_id = user_info['user_id']
     scripture_cost = MYSTERIOUS_SCRIPTURE_COST_ENGRAVE
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"natal-engrave:{event_id}:{user_id}" if event_id else f"natal-engrave:{user_id}:{datetime.now().timestamp()}"
+    operation_id = f"natal-engrave:{event_id}:{user_id}" if event_id else f"natal-engrave:{user_id}:{runtime_ids.new_id()}"
     # 先回放：成功后槽位已满会挡住同事件幂等。
     prior = natal_engraving_service.get_result(operation_id)
     if prior is not None and prior.succeeded:
@@ -568,7 +570,7 @@ async def natal_forget_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
     scripture_cost = MYSTERIOUS_SCRIPTURE_COST_FORGET
     mysterious_scripture_info = items.get_data_by_item_id(MYSTERIOUS_SCRIPTURE_ID)
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"natal-forget:{event_id}:{user_id}" if event_id else f"natal-forget:{user_id}:{datetime.now().timestamp()}"
+    operation_id = f"natal-forget:{event_id}:{user_id}" if event_id else f"natal-forget:{user_id}:{runtime_ids.new_id()}"
     forgotten = natal_forget_service.forget(
         operation_id, user_id, effect_type_to_forget.value,
         MYSTERIOUS_SCRIPTURE_ID, mysterious_scripture_info["name"],

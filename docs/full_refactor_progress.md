@@ -703,6 +703,8 @@
 
 2026-09-15 bank provider live safety：提交 `e2b0048` 部署后 backup `/srv/old/data/backups/20260915T044602Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行灵庄资产写入。
 
+2026-09-15 natal operation ID boundary：本命觉醒、重塑、养成、效果升阶、铭刻和遗忘真实入口的无事件 operation ID统一使用注入 `runtime_ids`；natal全套行为/source共177 tests、catalog=103、compileall、architecture、diff check通过。完整 NatalTreasureApplication 尚未接入真实 handler，旧 services/replay仍为未迁移边界。
+
 2026-09-15 sign-in task projection DDL fix：`SignInTaskRepository.record`移除 request-time `ensure_schema`，正式 schema仅由已有 `apply_sign_in_tasks` startup migration创建；测试fixture改为显式 migration后验证 daily/weekly progress idempotency。task/effects/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 sign-in task projection live safety：提交 `d845283` 部署后 backup `/srv/old/data/backups/20260915T001441Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务进度写入。
