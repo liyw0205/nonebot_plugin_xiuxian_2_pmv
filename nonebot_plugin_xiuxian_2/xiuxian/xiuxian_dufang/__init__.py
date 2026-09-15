@@ -103,7 +103,7 @@ def get_random_sharing_users(user_id, count=3):
     if not users:
         return []
     count = min(count, len(users))
-    return random.sample(users, count)
+    return runtime_random.sample(users, count)
 
 # 鉴石数据管理
 def get_unseal_data(user_id):
@@ -250,7 +250,7 @@ async def handle_shared_event(
     :param current_cost: 本次鉴石消耗的灵石
     :param total_cost: 累计鉴石总消耗
     """
-    sharing_users = get_random_sharing_users(user_id, random.randint(1, 3))
+    sharing_users = get_random_sharing_users(user_id, runtime_random.randint(1, 3))
     if not sharing_users:
         return None, None
     
@@ -281,7 +281,7 @@ async def handle_shared_event(
     if not eligible_events:
         return None, None
     
-    event_data = random.choice(eligible_events)
+    event_data = runtime_random.choice(eligible_events)
     
     recipients = []
     for target_id in sharing_users:
@@ -474,7 +474,7 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     unseal_data = get_unseal_data(user_id)
     
     # 随机选择封印物
-    entity = random.choice(SEALED_ENTITIES)
+    entity = runtime_random.choice(SEALED_ENTITIES)
     base_msg = [
         f"【发现尘封之物】",
         f"名称：{entity['name']}",
@@ -483,10 +483,10 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     ]
     
     # 添加随机解封过程
-    base_msg.append(random.choice(UNSEAL_PROCESS))
+    base_msg.append(runtime_random.choice(UNSEAL_PROCESS))
     
     # 结果判定 (大成功15%, 成功50%, 失败30%, 大失败5%)
-    result = random.choices(
+    result = runtime_random.choices(
         ["great_success", "success", "failure", "critical_failure"],
         weights=[15, 50, 30, 5]
     )[0]
@@ -496,7 +496,7 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         e for e in UNSEAL_EVENTS[result] 
         if "all" in e["type"] or entity["type"] in e["type"]
     ]
-    events = random.choice(eligible_events) if eligible_events else random.choice(UNSEAL_EVENTS[result])
+    events = runtime_random.choice(eligible_events) if eligible_events else runtime_random.choice(UNSEAL_EVENTS[result])
     
     base_ratio = events["effect"]()
     if result in ["great_success", "success"]:
@@ -544,7 +544,7 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     # 处理共享事件
     if is_sharing_user(user_id):
         # 负面结果有20%概率触发共享，大失败100%触发
-        if (result in ["failure", "critical_failure"] and random.random() < 0.2) or result == "critical_failure":
+        if (result in ["failure", "critical_failure"] and runtime_random.random() < 0.2) or result == "critical_failure":
             shared_event_msg, _ = await handle_shared_event(
                 user_id=user_id,
                 current_cost=cost,          # 本次鉴石消耗
@@ -555,7 +555,7 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             if shared_event_msg:
                 await handle_send(bot, event, shared_event_msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
         # 正面结果有10%概率触发共享，大成功100%触发
-        elif (result == "success" and random.random() < 0.1) or (result == "great_success"):
+        elif (result == "success" and runtime_random.random() < 0.1) or (result == "great_success"):
             shared_event_msg, _ = await handle_shared_event(
                 user_id=user_id,
                 current_cost=cost,          # 本次鉴石消耗
