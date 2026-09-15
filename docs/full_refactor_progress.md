@@ -871,6 +871,8 @@
 
 2026-09-16 sect fairyland blocked：`SectFairylandApplication` 当前仍默认桥接 `LegacySectFairylandRepository`，`sect_fairyland.001` 只创建 feature marker，未提供正式 SQL repository/schema；不做 facade/provider-only 伪迁移，保留为 pending legacy slice并跳转独立路径。
 
+2026-09-16 work blocked：`WorkClaimApplication`/settlement 仍默认桥接 `LegacyWork*Repository`，`work.001` 只创建 feature marker，未提供正式 SQL repository/schema；不把 ledger facade当作完整迁移，保留 claim/settlement legacy边界并跳转独立路径。
+
 2026-09-15 impart PK operation ID boundary：虚神界训练、机器人/双人对决、探索出关真实入口的无事件 operation ID统一使用注入 `runtime_ids`；impart/source共177 tests、catalog=103、compileall、architecture、diff check通过。对战随机决策、跨玩家 settlement和旧 replay service仍为未迁移边界。
 
 2026-09-15 impart PK operation ID live safety：提交 `ba4364f` 部署后 backup `/srv/old/data/backups/20260915T092945Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行虚神界训练/对战写入。
