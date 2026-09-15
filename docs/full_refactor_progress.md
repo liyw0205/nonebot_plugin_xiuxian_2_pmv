@@ -899,6 +899,8 @@
 
 2026-09-16 auction settlement replay live safety：提交 `fe7ded3` 部署后 backup `/srv/old/data/backups/20260915T202351Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行拍卖结算写入。
 
+2026-09-16 auction bid blocked：`AuctionBidApplication` 当前默认使用 `LegacyTradeRepository`，feature层没有正式 SQL bid repository/schema；auction bid 的 operation ledger边界已存在，但不能将旧 TradeRepository facade误报为完整出价迁移，保留 bid/refund legacy transaction边界并跳转独立路径。
+
 2026-09-15 impart PK operation ID boundary：虚神界训练、机器人/双人对决、探索出关真实入口的无事件 operation ID统一使用注入 `runtime_ids`；impart/source共177 tests、catalog=103、compileall、architecture、diff check通过。对战随机决策、跨玩家 settlement和旧 replay service仍为未迁移边界。
 
 2026-09-15 impart PK operation ID live safety：提交 `ba4364f` 部署后 backup `/srv/old/data/backups/20260915T092945Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行虚神界训练/对战写入。
