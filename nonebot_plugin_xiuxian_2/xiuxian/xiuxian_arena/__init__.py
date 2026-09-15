@@ -31,6 +31,7 @@ from .transaction_service import ArenaSeasonRewardService
 from ...features.arena.application import ArenaApplication
 from ...features.arena.repository import ArenaChallengePurchaseSqlRepository
 from ...infrastructure.ids import UUIDGenerator
+from ...infrastructure.clock import SystemClock
 
 arena_purchase_service = ArenaPurchaseService(get_paths().game_db, get_paths().player_db)
 arena_challenge_purchase_service = ArenaChallengePurchaseService(get_paths().game_db, get_paths().player_db)
@@ -44,6 +45,7 @@ arena_application = ArenaApplication(
     repository=ArenaChallengePurchaseSqlRepository(get_paths().game_db, get_paths().player_db),
 )
 arena_ids = UUIDGenerator()
+runtime_clock = SystemClock()
 
 arena_challenge = on_command("竞技场挑战", priority=10, block=True)
 arena_view = on_command("竞技场查看", priority=10, block=True)
@@ -284,7 +286,7 @@ async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 
     arena_info = arena_limit.get_user_arena_info(user_id)
     challenger_player = sql_message.get_user_info_with_id(user_id)
-    challenged_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+    challenged_at = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S.%f")
     challenge_cap = arena_limit.daily_challenges + int(
         arena_info.get("daily_extra_challenges", 0)
     )
@@ -888,7 +890,7 @@ def set_arena_opponent_cache(user_id: str, targets: list):
     """设置竞技场对手缓存"""
     arena_opponent_cache[str(user_id)] = {
         "targets": targets,
-        "expire_time": datetime.now().timestamp() + ARENA_CACHE_EXPIRE_SECONDS
+        "expire_time": runtime_clock.now().timestamp() + ARENA_CACHE_EXPIRE_SECONDS
     }
 
 
@@ -900,7 +902,7 @@ def get_arena_opponent_cache(user_id: str):
         return None
 
     expire_time = cache.get("expire_time", 0)
-    if datetime.now().timestamp() > expire_time:
+    if runtime_clock.now().timestamp() > expire_time:
         arena_opponent_cache.pop(user_id, None)
         return None
 
@@ -915,7 +917,7 @@ async def reset_arena_daily_challenges():
     """每日重置竞技场挑战次数并发放荣誉值奖励"""
     all_users = player_data_manager.get_all_field_data("arena", "score")
     honor_distribution = {}
-    season_key = datetime.now().strftime("%Y-%m-%d")
+    season_key = runtime_clock.now().strftime("%Y-%m-%d")
 
     for user_id, _ in all_users:
         user_id = str(user_id)

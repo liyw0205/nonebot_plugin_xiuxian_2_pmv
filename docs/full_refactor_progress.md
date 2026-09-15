@@ -739,6 +739,8 @@
 
 2026-09-15 beg novice live safety：提交 `6200770` 部署后 backup `/srv/old/data/backups/20260915T064723Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行新手礼包写入。
 
+2026-09-15 arena clock boundary：竞技场挑战时间、对手缓存过期和赛季日期统一使用注入 `runtime_clock`；arena/source共186 tests、catalog=103、compileall、architecture、diff check通过。`_arena_fight` 全局 RNG seed/state 与完整 settlement service仍是后续迁移边界。
+
 2026-09-15 sign-in task projection DDL fix：`SignInTaskRepository.record`移除 request-time `ensure_schema`，正式 schema仅由已有 `apply_sign_in_tasks` startup migration创建；测试fixture改为显式 migration后验证 daily/weekly progress idempotency。task/effects/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 sign-in task projection live safety：提交 `d845283` 部署后 backup `/srv/old/data/backups/20260915T001441Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务进度写入。
