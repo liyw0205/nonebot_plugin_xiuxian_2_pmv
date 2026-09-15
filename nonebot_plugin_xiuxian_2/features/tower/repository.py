@@ -7,6 +7,7 @@ import json
 from datetime import date, datetime
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.clock import SystemClock
 
 
 class TowerRepository(Protocol):
@@ -36,6 +37,10 @@ class LegacyTowerRepository:
 
 
 class TowerPurchaseSqlRepository(LegacyTowerRepository):
+    def __init__(self, game_database: str | Path, player_database: str | Path, *, clock=None) -> None:
+        super().__init__(game_database, player_database)
+        self.clock = clock or SystemClock()
+
     def settlement_result(self, operation_id: str) -> dict[str, Any] | None:
         with DatabaseUnitOfWork(self.game_database) as uow:
             row = uow.query_one("SELECT payload,result_json FROM tower_settlement_operations WHERE operation_id=?", (str(operation_id),))
@@ -70,7 +75,7 @@ class TowerPurchaseSqlRepository(LegacyTowerRepository):
             if challenge_succeeded:uow.execute("UPDATE player_data.tower SET current_floor=?,max_floor=?,score=? WHERE user_id=?",(floor,max(expected["max_floor"],floor),expected["score"]+score,user_id))
             if player is None:uow.execute("UPDATE user_xiuxian SET stone=COALESCE(stone,0)+?,exp=COALESCE(exp,0)+? WHERE user_id=?",(stone,exp,user_id))
             else:uow.execute("UPDATE user_xiuxian SET stone=COALESCE(stone,0)+?,exp=COALESCE(exp,0)+?,hp=?,mp=?,user_stamina=user_stamina-? WHERE user_id=?",(stone,exp,max(1,int(final_hp)),max(1,int(final_mp)),stamina_cost,user_id))
-            stamp=self._date(date.today()).isoformat()
+            stamp=self._date(self.clock.now()).isoformat()
             for item_id,name,item_type,amount in rewards:uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",(user_id,item_id,name,item_type,amount,stamp,stamp,amount))
             return self._record_settlement(uow,operation_id,payload,result("applied"))
 
@@ -101,7 +106,7 @@ class TowerPurchaseSqlRepository(LegacyTowerRepository):
 
     def purchase(self, operation_id, user_id, item_id, item_name, item_type, quantity, unit_cost, weekly_limit, expected_score, expected_weekly_purchases, max_goods_num, bind_flag=1, today=None):
         operation_id,user_id,item_name,item_type=str(operation_id).strip(),str(user_id),str(item_name),str(item_type);item_id,quantity,unit_cost,weekly_limit,expected_score,max_goods_num=map(int,(item_id,quantity,unit_cost,weekly_limit,expected_score,max_goods_num));bind_flag=1 if int(bind_flag)==1 else 0
-        if today is None: today=dict(expected_weekly_purchases or {}).get("_last_reset",date.today().isoformat())
+        if today is None: today=dict(expected_weekly_purchases or {}).get("_last_reset",self.clock.now().date().isoformat())
         weekly=self._weekly(expected_weekly_purchases,today);payload=json.dumps([user_id,item_id,quantity,unit_cost,weekly_limit,max_goods_num,bind_flag],ensure_ascii=True,separators=(",",":"))
         if not operation_id or quantity<=0 or min(item_id,unit_cost,weekly_limit,expected_score,max_goods_num)<0:raise ValueError("valid tower purchase required")
         def result(status,score=expected_score,purchased=0,inventory=0):
