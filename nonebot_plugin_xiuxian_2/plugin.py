@@ -407,7 +407,6 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.admin_asset.application import AdminAssetApplication
         from .features.admin_asset.repository import LegacyAdminStoneRepository
         from .features.tianti_settlement.application import TiantiSettlementApplication
-        from .features.tianti_settlement.repository import LegacyTiantiSettlementRepository
         from .features.tianti_training.application import TiantiTrainingApplication
         from .features.tower.application import TowerApplication
         from .features.sect_fairyland.application import SectFairylandApplication
