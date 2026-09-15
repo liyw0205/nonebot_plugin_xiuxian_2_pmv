@@ -22,6 +22,7 @@ from .transaction_service import InteractiveDailyFortuneService
 from ...features.interactive.application import InteractiveApplication
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.ids import UUIDGenerator
+from ...infrastructure.random_source import SystemRandom
 sql_message = XiuxianDateManage()
 interactive_exp_daily_reward_service = InteractiveExpDailyRewardService(get_paths().game_db)
 interactive_stone_daily_reward_service = InteractiveStoneDailyRewardService(get_paths().game_db)
@@ -30,6 +31,7 @@ interactive_daily_fortune_service = InteractiveDailyFortuneService(get_paths().g
 interactive_application = InteractiveApplication(get_paths().game_db)
 runtime_clock = SystemClock()
 runtime_ids = UUIDGenerator()
+runtime_random = SystemRandom()
 
 
 def _run_interactive_action(action: str, operation_id: str, user_id: str, **payload):
@@ -153,8 +155,8 @@ def generate_fortune():
     """生成一份尚未持久化的随机签文。"""
     fortune_options = list(FORTUNE_TYPES.keys())
     weights = [0.05, 0.1, 0.15, 0.25, 0.3, 0.15]
-    fortune_type = random.choices(fortune_options, weights=weights, k=1)[0]
-    description = random.choice(FORTUNE_DESCRIPTIONS[fortune_type])
+    fortune_type = runtime_random.choices(fortune_options, weights=weights, k=1)[0]
+    description = runtime_random.choice(FORTUNE_DESCRIPTIONS[fortune_type])
     return {
         "type": fortune_type,
         "description": description,
@@ -234,7 +236,7 @@ def get_morning_message_by_time(count):
             f"{time_msg}安！第{count}位道友，早安虽迟但到！"
         ]
     
-    return random.choice(messages)
+    return runtime_random.choice(messages)
 
 def get_night_message_by_time(count):
     now = datetime.now()
@@ -298,7 +300,7 @@ def get_night_message_by_time(count):
             f"{time_msg}安！第{count}位道友，晚安虽早但到！"
         ]
     
-    return random.choice(messages)
+    return runtime_random.choice(messages)
 
 def get_time_period(hour):
     if 5 <= hour < 8:
@@ -982,9 +984,9 @@ async def handle_give_exp(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     )
     result = dict(outcome.data or {})
     if outcome.ok and result.get("granted"):
-        message = f"{random.choice(AGREE_EXP_MESSAGES)}\n获得修为：{number_to(result.get('exp_reward', 0))}点！"
+        message = f"{runtime_random.choice(AGREE_EXP_MESSAGES)}\n获得修为：{number_to(result.get('exp_reward', 0))}点！"
     elif result.get("status") in {"applied", "duplicate", "already_claimed"}:
-        message = random.choice(REFUSE_EXP_MESSAGES)
+        message = runtime_random.choice(REFUSE_EXP_MESSAGES)
     elif result.get("status") in {"state_changed", "operation_conflict"}:
         message = "互动未结算：角色当前状态已更新。"
     else:
@@ -1009,9 +1011,9 @@ async def handle_give_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     )
     result = dict(outcome.data or {})
     if outcome.ok and result.get("granted"):
-        message = f"{random.choice(AGREE_STONE_MESSAGES)}\n获得灵石：{number_to(result.get('stone_reward', 0))}枚！"
+        message = f"{runtime_random.choice(AGREE_STONE_MESSAGES)}\n获得灵石：{number_to(result.get('stone_reward', 0))}枚！"
     elif result.get("status") in {"applied", "duplicate", "already_claimed"}:
-        message = random.choice(REFUSE_STONE_MESSAGES)
+        message = runtime_random.choice(REFUSE_STONE_MESSAGES)
     elif result.get("status") in {"state_changed", "operation_conflict"}:
         message = "互动未结算：角色当前状态已更新。"
     else:
@@ -1022,7 +1024,7 @@ async def handle_give_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 @what_to_eat.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_what_to_eat(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理今天吃什么命令"""
-    food = random.choice(FOOD_MESSAGES)
+    food = runtime_random.choice(FOOD_MESSAGES)
     message = f"今天推荐吃：{food}！"
     await handle_send(bot, event, message)
 
@@ -1089,37 +1091,37 @@ async def handle_good_night(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 @cute_command.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_cute(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理可爱命令"""
-    message = random.choice(CUTE_MESSAGES)
+    message = runtime_random.choice(CUTE_MESSAGES)
     await handle_send(bot, event, message)
 
 @hello_command.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_hello(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理你好命令"""
-    message = random.choice(HELLO_MESSAGES)
+    message = runtime_random.choice(HELLO_MESSAGES)
     await handle_send(bot, event, message)
 
 @thanks_command.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_thanks(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理谢谢命令"""
-    message = random.choice(THANKS_MESSAGES)
+    message = runtime_random.choice(THANKS_MESSAGES)
     await handle_send(bot, event, message)
 
 @bye_command.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_bye(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理再见命令"""
-    message = random.choice(BYE_MESSAGES)
+    message = runtime_random.choice(BYE_MESSAGES)
     await handle_send(bot, event, message)
 
 @how_are_you.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_how_are_you(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理你好吗命令"""
-    message = random.choice(HOW_ARE_YOU_MESSAGES)
+    message = runtime_random.choice(HOW_ARE_YOU_MESSAGES)
     await handle_send(bot, event, message)
 
 @weather_command.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_weather(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理天气命令"""
-    message = random.choice(WEATHER_MESSAGES)
+    message = runtime_random.choice(WEATHER_MESSAGES)
     await handle_send(bot, event, message)
 
 @time_command.handle(parameterless=[Cooldown(cd_time=0)])
@@ -1131,49 +1133,49 @@ async def handle_time(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 @eat_command.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_eat(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理吃饭命令"""
-    message = random.choice(EAT_MESSAGES)
+    message = runtime_random.choice(EAT_MESSAGES)
     await handle_send(bot, event, message)
 
 @study_command.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_study(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理学习命令"""
-    message = random.choice(STUDY_MESSAGES)
+    message = runtime_random.choice(STUDY_MESSAGES)
     await handle_send(bot, event, message)
 
 @work_command.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理工作命令"""
-    message = random.choice(WORK_MESSAGES)
+    message = runtime_random.choice(WORK_MESSAGES)
     await handle_send(bot, event, message)
 
 @rest_command.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_rest(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理休息命令"""
-    message = random.choice(REST_MESSAGES)
+    message = runtime_random.choice(REST_MESSAGES)
     await handle_send(bot, event, message)
 
 @joke_command.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_joke(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理笑话命令"""
-    message = random.choice(JOKE_MESSAGES)
+    message = runtime_random.choice(JOKE_MESSAGES)
     await handle_send(bot, event, message)
 
 @encourage_command.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_encourage(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理加油命令"""
-    message = random.choice(ENCOURAGE_MESSAGES)
+    message = runtime_random.choice(ENCOURAGE_MESSAGES)
     await handle_send(bot, event, message)
 
 @funny_story.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_funny_story(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理讲个段子命令"""
-    message = random.choice(FUNNY_STORY_MESSAGES)
+    message = runtime_random.choice(FUNNY_STORY_MESSAGES)
     await handle_send(bot, event, message)
 
 @love_sentence.handle(parameterless=[Cooldown(cd_time=0)])
 async def handle_love_sentence(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """处理土味情话命令"""
-    message = random.choice(LOVE_SENTENCE_MESSAGES)
+    message = runtime_random.choice(LOVE_SENTENCE_MESSAGES)
     await handle_send(bot, event, message)
 
 @fortune_command.handle(parameterless=[Cooldown(cd_time=0)])
