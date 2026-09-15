@@ -661,6 +661,8 @@
 
 2026-09-15 work helper clock fallback：`workhandle.do_work` 的兼容默认时间也改由 `SystemClock` 提供，真实 handler仍显式传入 `runtime_clock`；work settlement/refresh/source共151 tests、catalog=103、compileall、architecture、diff check通过。
 
+2026-09-15 work helper clock live safety：提交 `e10fabc` 部署后 backup `/srv/old/data/backups/20260915T040254Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行悬赏生成写入。
+
 2026-09-15 dufang provider boundary：鉴石数据辅助路径的时间读取改用注入 `runtime_clock`，并在 dufang composition root 建立 `runtime_random/runtime_ids` provider，为后续随机/operation切换保留明确边界；dufang/source共153 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 dufang provider live safety：提交 `19f15b6` 部署后 backup `/srv/old/data/backups/20260915T011737Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行鉴石资产写入。
