@@ -1588,7 +1588,8 @@ async def view_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await send_msg_handler(bot, event, '统计数据', bot.self_id, msg_list, title=title)
     await view_data.finish()
 
-def generate_daohao():
+def generate_daohao(random_source=None):
+    random_source = random_source or runtime_random
     """生成严格控制在2-7实际汉字长度的道号系统（完整词库版）"""
     # 拼接符号库（不计入总字数）
     connectors = ['·', '-', '※']
@@ -1673,39 +1674,39 @@ def generate_daohao():
     }
 
     # 选择修饰词类型（权重分配）
-    mod_type = random.choices(
+    mod_type = random_source.choices(
         ['single', 'double', 'triple', 'quad'],
         weights=[65, 20, 10, 5]
     )[0]
-    modifier = random.choice(modifiers[mod_type])
+    modifier = random_source.choice(modifiers[mod_type])
 
     # 根据修饰词长度选择姓氏和名字
     if mod_type == 'quad':  # 5字修饰词特殊处理
         # 只能搭配单字姓或单字名
-        if random.random() < 0.7:
-            family_name = random.choice(family_names['single'])
+        if random_source.random() < 0.7:
+            family_name = random_source.choice(family_names['single'])
             given_name = ""
         else:
             family_name = ""
-            given_name = random.choice(given_names['single'])
+            given_name = random_source.choice(given_names['single'])
     else:
         # 正常选择姓氏（单70%，复25%，三字5%）
-        family_type = random.choices(
+        family_type = random_source.choices(
             ['single', 'double', 'triple'],
             weights=[70, 25, 5]
         )[0]
-        family_name = random.choice(family_names[family_type])
+        family_name = random_source.choice(family_names[family_type])
         
         # 正常选择名字（单40%，双50%，三字10%）
-        given_type = random.choices(
+        given_type = random_source.choices(
             ['single', 'double', 'triple'],
             weights=[40, 50, 10]
         )[0]
-        given_name = random.choice(given_names[given_type])
+        given_name = random_source.choice(given_names[given_type])
 
     # 可选的拼接符号（30%概率添加）
-    connector = random.choices(
-        ['', random.choice(connectors)],
+    connector = random_source.choices(
+        ['', random_source.choice(connectors)],
         weights=[70, 30]
     )[0]
 
@@ -1745,11 +1746,11 @@ def generate_daohao():
 
     # 按权重随机选择
     daohao_list, weights = zip(*options)
-    daohao = random.choices(daohao_list, weights=weights)[0]
+    daohao = random_source.choices(daohao_list, weights=weights)[0]
 
     # 最终验证
     if not (2 <= real_length(daohao) <= 7):
-        return generate_daohao()  # 重新生成
+        return generate_daohao(random_source)  # 重新生成
     
     return daohao
 
