@@ -717,6 +717,8 @@
 
 2026-09-15 base player/stone provider boundary：玩家改名、送石、偷石、抢石真实入口的无事件 operation ID统一使用注入 `runtime_ids`，注册/lottery业务日期使用 `runtime_clock`，偷石成功率及金额选择使用 `runtime_random`；base stone/player/source共197 tests、2 subtests、catalog=103、compileall、architecture、diff check通过。完整 player/stone transaction service仍是未迁移边界。
 
+2026-09-15 base player/stone provider live safety：提交 `e5b731d` 部署后 backup `/srv/old/data/backups/20260915T054936Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行玩家/灵石资产写入。
+
 2026-09-15 sign-in task projection DDL fix：`SignInTaskRepository.record`移除 request-time `ensure_schema`，正式 schema仅由已有 `apply_sign_in_tasks` startup migration创建；测试fixture改为显式 migration后验证 daily/weekly progress idempotency。task/effects/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 sign-in task projection live safety：提交 `d845283` 部署后 backup `/srv/old/data/backups/20260915T001441Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务进度写入。
