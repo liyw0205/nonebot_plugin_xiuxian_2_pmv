@@ -945,6 +945,8 @@
 
 2026-09-16 entertainment pokemon-box provider：Pokemon 随机查询 ID统一使用注入 `runtime_random`，新增1个不触发 PokeAPI 的 focused test；entertainment/source共150 tests、catalog=103、compileall、architecture、diff check通过。外部 PokeAPI、图片和真实消息发送保留现有边界。
 
+2026-09-16 entertainment pokemon-box live safety：提交 `e058673` 部署后 backup `/srv/old/data/backups/20260915T174740Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未调用 PokeAPI、图片或发送消息。
+
 2026-09-16 adapter sender sequence boundary：低层 QQ group/private sender 的缺省 msg_seq 统一复用注入式 `MessageSequenceStrategy`，显式 msg_seq、引用消息和 adapter API 参数保持不变；新增 focused tests后共145 tests、catalog=103、compileall、architecture、diff check通过。真实发送/外部 adapter副作用未执行。
 
 2026-09-16 adapter sender sequence live safety：提交 `8d37eb8` 部署后 backup `/srv/old/data/backups/20260915T165649Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未发送消息或改变外部 adapter状态。
