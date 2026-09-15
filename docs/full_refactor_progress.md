@@ -807,6 +807,8 @@
 
 2026-09-16 beg request-DDL boundary：`BegRepository.daily_result/novice_result/settle_daily/claim_novice` 移除 request-time `ensure_schema`，`beg.001` migration成为两类 operation 表唯一启动前置；更新 legacy service fixture并新增缺表 replay拒绝测试。beg/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
+2026-09-16 beg request-DDL live safety：提交 `f467b0e` 部署后 backup `/srv/old/data/backups/20260915T210023Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行日常奇缘或新手礼包写入。
+
 2026-09-15 arena clock boundary：竞技场挑战时间、对手缓存过期和赛季日期统一使用注入 `runtime_clock`；arena/source共186 tests、catalog=103、compileall、architecture、diff check通过。`_arena_fight` 全局 RNG seed/state 与完整 settlement service仍是后续迁移边界。
 
 2026-09-16 arena repository clock boundary：`ArenaApplication` 将注入 Clock 传入默认 SQL repository，honor weekly purchase 与 challenge daily reset 默认日期不再直接使用 `date.today()`；arena/source共186 tests、catalog=103、compileall、architecture、diff check通过。跨库 UoW已保持，challenge settlement legacy bridge仍未迁移。
