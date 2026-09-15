@@ -655,6 +655,8 @@
 
 2026-09-16 map default graph audit：`MapApplication` 默认真实路径已覆盖 interactive start/failure/settlement query、combat lifecycle、explore start/settle、resource reward、mission claim、seed purchase、dongfu build等 SQL repositories；`interactive_finish`与`combat_settle`仍显式落回 LegacyMapRepository，分别保留为 interactive settlement/combat settlement后续 blocker。未将 MapApplication 的 LegacyApplication 基类误报为所有 map 操作未迁移。
 
+2026-09-16 map interactive/combat correction：复核 `MapApplication.interactive_finish` 无真实调用者，实际 interactive settlement handler走 `interactive_settlement` 的 SQL repository；`MapApplication.combat_settle` 仍无 feature-owned SQL repository，repository中仅有 combat lifecycle start/query/plan classes，保留为 map combat settlement blocker。
+
 2026-09-15 task reward claim boundary：真实 `领取任务奖励` handler移除直接 `task_manager.reward_claim_service.get_result` replay读取，统一经 `TasksApplication.execute(operation_id,user_id,payload)`进入 application ledger；任务定义/奖励快照与跨game/player reward transaction仍保留为显式 legacy repository边界，未将ServicePort facade误报为SQL迁移。task reward/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 task claim live safety：提交 `52eb6d0` 部署后 backup `/srv/old/data/backups/20260915T000645Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务奖励领取写入。
