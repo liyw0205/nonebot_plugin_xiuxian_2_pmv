@@ -212,18 +212,7 @@ async def novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await novice.finish()
     user_id = str(user_info['user_id'])
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"novice-gift:{event_id}:{user_id}" if event_id else f"novice-gift:{time.time_ns()}:{user_id}"
-    # 先回放：成功后 is_novice=1 会走“已领取”前置语义，挡住同事件幂等。
-    prior = novice_gift_claim_service.get_result(operation_id)
-    if prior is not None and prior.succeeded:
-        msg = (
-            f"**新手礼包**\n---\n✅ 已发放\n"
-            f"灵石\n> {prior.stone}\n"
-            f"该礼包请求已经处理，无需重复提交。\n"
-            f"建议：修仙签到 → 日常 → 悬赏令查看"
-        )
-        await handle_send(bot, event, msg, md_type="修仙", k1="签到", v1="修仙签到", k2="日常", v2="日常", k3="悬赏", v3="悬赏令查看", k4="帮助", v4="修仙帮助")
-        await novice.finish()
+    operation_id = f"novice-gift:{event_id}:{user_id}" if event_id else f"novice-gift:{runtime_ids.new_id()}:{user_id}"
 
     goods_info = items.get_data_by_item_id("18052")
     msg_parts = []
@@ -268,7 +257,7 @@ async def novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         operation_id,
         user_id,
         expected_create_time=user_info["create_time"],
-        claimed_at=datetime.now(),
+        claimed_at=runtime_clock.now(),
         max_age_days=XiuConfig().beg_max_days,
         stone=stone,
         rewards=rewards,
