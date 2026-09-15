@@ -688,12 +688,6 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
     elif mode == "结算":
         # 先回放：成功后 type=0，check_user_type(2) 会误拒同事件。
         event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-        settle_operation_id = f"work-settlement:{user_id}:{event_message_id or time.time_ns()}"
-        prior_settle = work_settlement_service.get_result(settle_operation_id)
-        if prior_settle is not None and prior_settle.succeeded:
-            await settle_work(bot, event, user_id, {"scheduled_time": prior_settle.scheduled_time})
-            await do_work.finish()
-
         is_type, msg = check_user_type(user_id, 2)
         if not is_type:
             await handle_send(bot, event, msg, md_type="2", k2="修仙帮助", v2="修仙帮助", k3="悬赏令帮助", v3="悬赏令帮助")
@@ -768,17 +762,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await do_work.finish()
         work_num = int(num)
         event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-        operation_id = f"work-claim:{user_id}:{event_message_id or time.time_ns()}"
-        prior = work_claim_service.get_result(operation_id)
-        if prior is not None and prior.succeeded:
-            msg = (
-                f"成功接取悬赏令！\n"
-                f"悬赏名称：{prior.task_name}\n"
-                f"请努力完成悬赏！\n"
-                "该接取请求已经处理，无需重复提交。"
-            )
-            await send_work_message(bot, event, msg, md_type="悬赏令", k1="结算", v1="悬赏令结算", k2="终止", v2="悬赏令终止", k3="帮助", v3="悬赏令帮助")
-            await do_work.finish()
+        operation_id = f"work-claim:{user_id}:{event_message_id or runtime_ids.new_id()}"
         is_type, msg = check_user_type(user_id, 0)
         if not is_type:
             await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="悬赏令帮助", v3="悬赏令帮助")
@@ -807,7 +791,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         remaining = int(sql_message.get_work_num(user_id) or 0)
             
         task_name, task_data = tasks[work_num - 1]
-        started_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        started_at = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")
         # Legacy facade call: work_claim_service.claim(...) remains documented;
         # the application owns idempotency and the command write path.
         outcome = work_claim_application.claim(
