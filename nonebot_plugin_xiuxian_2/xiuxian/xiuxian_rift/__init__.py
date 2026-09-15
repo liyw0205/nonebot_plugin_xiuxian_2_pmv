@@ -4,6 +4,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from nonebot import get_bots, get_bot
 from ...paths import get_paths
+from ...infrastructure.ids import UUIDGenerator
 from ..on_compat import on_command
 from nonebot.params import CommandArg
 from ..adapter_compat import (
@@ -60,6 +61,7 @@ rift_settlement_service = RiftSettlementService(
 cache_help = {}
 group_rift = {}  # dict
 config = get_rift_config() # 获取秘境配置
+runtime_ids = UUIDGenerator()
 groups = config['open']  # list
 
 
@@ -457,7 +459,7 @@ async def rift_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 async def create_rift(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """生成秘境（手动触发，通常由管理员使用）"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    operation_id = f"rift-generation:manual:{_event_id(event) or time.time_ns()}"
+    operation_id = f"rift-generation:manual:{_event_id(event) or runtime_ids.new_id()}"
     rift = _build_fixed_rift(operation_id)
     result = rift_entry_service.generate(
         operation_id,
@@ -483,7 +485,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await explore_rift.finish()
     user_id = user_info['user_id']
     event_id = _event_id(event)
-    operation_id = f"rift-entry:{event_id or time.time_ns()}:{user_id}"
+    operation_id = f"rift-entry:{event_id or runtime_ids.new_id()}:{user_id}"
     if event_id:
         replay = rift_entry_service.replay(operation_id, GLOBAL_RIFT_KEY)
         if replay is not None:
@@ -576,7 +578,7 @@ async def use_rift_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         return
     user_id = user_info['user_id']
     event_id = _event_id(event)
-    operation_id = f"rift-ticket-entry:{event_id or time.time_ns()}:{user_id}"
+    operation_id = f"rift-ticket-entry:{event_id or runtime_ids.new_id()}:{user_id}"
     if event_id:
         replay = rift_entry_service.replay(operation_id, GLOBAL_RIFT_KEY)
         if replay is not None:
