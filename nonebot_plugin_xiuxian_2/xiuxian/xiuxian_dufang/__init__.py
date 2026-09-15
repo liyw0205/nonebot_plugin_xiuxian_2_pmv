@@ -292,7 +292,7 @@ async def handle_shared_event(
     if not recipients:
         return None, None
 
-    settled_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    settled_at = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")
     settlement = _run_dufang_action(
         "share_settle", operation_id, user_id,
         call=lambda: dufang_share_service.settle(
@@ -416,7 +416,7 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         return
     
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"dufang-bet:{event_id}:{user_id}" if event_id else f"dufang-bet:{user_id}:{time.time_ns()}"
+    operation_id = f"dufang-bet:{event_id}:{user_id}" if event_id else f"dufang-bet:{user_id}:{runtime_ids.new_id()}"
     payout_operation_id = f"dufang-payout:{operation_id}"
     # 先回放完整鉴石单：成功后余额/注单状态会挡住二次下注与二次结算。
     prior_bet = dufang_bet_service.get_result(operation_id)
@@ -435,7 +435,7 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         )
         await handle_send(bot, event, msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
         return
-    placed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    placed_at = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")
     bet = _run_dufang_action(
         "bet", operation_id, user_id,
         call=lambda: dufang_bet_service.place(operation_id, user_id, cost, placed_at),
@@ -511,7 +511,7 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         "payout", payout_operation_id, user_id,
         call=lambda: dufang_payout_service.settle(
             payout_operation_id, operation_id, user_id, outcome, gain, requested_loss,
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S"),
         ),
         parent_operation_id=operation_id, outcome=outcome, gain=gain,
         requested_loss=requested_loss,
@@ -839,7 +839,7 @@ def _migrate_unseal_data_sync(players_dir: Path, sharing_data_path: Path) -> tup
                     "received_profit": int(sharing_info.get("received_profit", 0)),
                     "received_loss": int(sharing_info.get("received_loss", 0)),
                 },
-                "last_update": raw.get("last_update", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                "last_update": raw.get("last_update", runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")),
             }
             save_unseal_data(user_id, data)
             ok += 1
