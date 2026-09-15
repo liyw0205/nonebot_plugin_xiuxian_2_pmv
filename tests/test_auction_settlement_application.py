@@ -54,6 +54,15 @@ class AuctionSettlementApplicationTests(unittest.TestCase):
                 app.settle_active(operation_id="", end_time=100.0, fee_rate=0.1)
             self.assertEqual(repo.calls, 0)
 
+    def test_lookup_does_not_create_ledger_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "empty.db"
+            app = AuctionSettlementApplication(database)
+            self.assertIsNone(app.lookup("missing"))
+            with DatabaseUnitOfWork(database) as uow:
+                table = uow.query_one("SELECT name FROM sqlite_master WHERE type='table' AND name='operation_ledger'")
+            self.assertIsNone(table)
+
 
 if __name__ == "__main__":
     unittest.main()

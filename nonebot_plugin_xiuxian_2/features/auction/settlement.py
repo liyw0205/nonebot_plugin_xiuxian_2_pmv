@@ -13,6 +13,7 @@ from typing import Any, Mapping, Protocol
 from ...core.errors import ConflictError, DomainError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
+from ...infrastructure.database.ledger import OperationRecord
 from ...infrastructure.observability import trace_context
 
 
@@ -91,7 +92,17 @@ class AuctionSettlementApplication:
 
     def lookup(self, operation_id: str) -> dict[str, Any] | None:
         with DatabaseUnitOfWork(self.database) as uow:
-            record = self.ledger.get(uow, str(operation_id).strip(), self.action)
+            try:
+                row = uow.query_one(
+                    "SELECT operation_id, action, request_hash, status, result_json, created_at, updated_at "
+                    "FROM operation_ledger WHERE operation_id = ? AND action = ?",
+                    (str(operation_id).strip(), self.action),
+                )
+            except Exception as exc:
+                if "no such table" in str(exc).lower():
+                    return None
+                raise
+            record = OperationRecord(**row) if row else None
         return record.outcome().to_dict() if record and record.outcome() else None
 
     def settle_active(
