@@ -7,6 +7,7 @@ import time
 from datetime import datetime
 
 from ...paths import get_paths
+from ...infrastructure.ids import UUIDGenerator
 from ..on_compat import on_command
 from nonebot.params import CommandArg
 
@@ -37,6 +38,7 @@ ordinary_tribulation_service = OrdinaryTribulationService(get_paths().game_db, g
 destiny_tribulation_service = DestinyTribulationService(get_paths().game_db, get_paths().player_db)
 heart_devil_tribulation_service = HeartDevilTribulationService(get_paths().game_db, get_paths().player_db)
 tribulation_state_migration_service = TribulationStateMigrationService(get_paths().game_db)
+runtime_ids = UUIDGenerator()
 PLAYERSDATA = get_paths().players
 tribulation_cd2 = int(XiuConfig().tribulation_cd * 60)
 
@@ -62,7 +64,7 @@ def _breakthrough_operation_id(event, action, user_id):
     ).strip()
     if event_id:
         return f"breakthrough:{event_id}:{action}:{user_id}"
-    return f"breakthrough:{action}:{user_id}:{time.time_ns()}"
+    return f"breakthrough:{action}:{user_id}:{runtime_ids.new_id()}"
 
 
 def _pill_fusion_operation_id(event, action, user_id):
@@ -71,14 +73,14 @@ def _pill_fusion_operation_id(event, action, user_id):
     ).strip()
     if event_id:
         return f"pill-fusion:{event_id}:{action}:{user_id}"
-    return f"pill-fusion:{action}:{user_id}:{time.time_ns()}"
+    return f"pill-fusion:{action}:{user_id}:{runtime_ids.new_id()}"
 
 
 def _tribulation_operation_id(event, action, user_id):
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     if event_id:
         return f"tribulation:{event_id}:{action}:{user_id}"
-    return f"tribulation:{action}:{user_id}:{time.time_ns()}"
+    return f"tribulation:{action}:{user_id}:{runtime_ids.new_id()}"
 
 
 def get_user_tribulation_info(user_id):
