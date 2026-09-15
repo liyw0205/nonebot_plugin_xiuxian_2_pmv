@@ -645,6 +645,8 @@
 
 2026-09-16 legacy time audit：全项目剩余 direct `datetime.now/date.today` 命中主要集中在 `xiuxian_map/transaction_service.py`、`xiuxian_arena/transaction_service.py`、`xiuxian_compensation/transaction_service.py`、`xiuxian_buff` relation/mentor service及 tianti legacy helpers；这些均仍处于旧 transaction/service graph，默认 application SQL paths已完成 Clock收口。未对旧兼容实现做表面替换，保留为后续真实 service/application migration blocker。
 
+2026-09-16 facade audit：`features/base`、`features/status`及多个 `MigratedFeatureApplication` 目前仍是 `LegacyApplication/ServicePort` facade，未提供可验证的 feature-owned SQL repository；不将 facade当作完整迁移，保留 base/status legacy graph blocker并继续扫描独立真实边界。
+
 2026-09-15 task reward claim boundary：真实 `领取任务奖励` handler移除直接 `task_manager.reward_claim_service.get_result` replay读取，统一经 `TasksApplication.execute(operation_id,user_id,payload)`进入 application ledger；任务定义/奖励快照与跨game/player reward transaction仍保留为显式 legacy repository边界，未将ServicePort facade误报为SQL迁移。task reward/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 task claim live safety：提交 `52eb6d0` 部署后 backup `/srv/old/data/backups/20260915T000645Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务奖励领取写入。
