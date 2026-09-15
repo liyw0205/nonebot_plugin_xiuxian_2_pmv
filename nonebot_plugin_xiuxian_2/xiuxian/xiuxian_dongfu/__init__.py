@@ -12,6 +12,7 @@ from ...paths import get_paths
 from ...features.dongfu.application import DongfuApplication
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.random_source import SystemRandom
+from ...infrastructure.clock import SystemClock
 from ..on_compat import on_command
 from nonebot.params import CommandArg
 
@@ -49,6 +50,7 @@ dongfu_harvest_settlement_service = DongfuHarvestSettlementService(get_paths().g
 dongfu_application = DongfuApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
 runtime_random = SystemRandom()
+runtime_clock = SystemClock()
 
 
 def _run_dongfu_action(action, operation_id, user_id, call, **payload):
@@ -154,7 +156,7 @@ infiltrate_dongfu = on_command("潜入洞府", aliases={"随机潜入洞府", "�
 
 
 def _now():
-    return datetime.now()
+    return runtime_clock.now()
 
 
 def _fmt_dt(dt: datetime):
