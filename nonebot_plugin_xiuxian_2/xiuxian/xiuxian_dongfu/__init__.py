@@ -11,6 +11,7 @@ from pathlib import Path
 from ...paths import get_paths
 from ...features.dongfu.application import DongfuApplication
 from ...infrastructure.ids import UUIDGenerator
+from ...infrastructure.random_source import SystemRandom
 from ..on_compat import on_command
 from nonebot.params import CommandArg
 
@@ -47,6 +48,7 @@ dongfu_infiltrate_success_service = InfiltrateSuccessService(get_paths().game_db
 dongfu_harvest_settlement_service = DongfuHarvestSettlementService(get_paths().game_db, get_paths().player_db)
 dongfu_application = DongfuApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
+runtime_random = SystemRandom()
 
 
 def _run_dongfu_action(action, operation_id, user_id, call, **payload):
@@ -497,13 +499,13 @@ def _roll_harvest(seed_id: int, array_lv: int):
     pool = _pick_pool(conf["pool"])
 
     # 降收益：普通 1~2，高阵法最多加1
-    base_num = random.randint(1, 2)
-    bonus = 1 if (array_lv >= 3 and random.random() < min(0.45, array_lv * 0.04)) else 0
+    base_num = runtime_random.randint(1, 2)
+    bonus = 1 if (array_lv >= 3 and runtime_random.random() < min(0.45, array_lv * 0.04)) else 0
     total_num = base_num + bonus
 
     result = []
     for _ in range(total_num):
-        gid = random.choice(pool)
+        gid = runtime_random.choice(pool)
         item = items.get_data_by_item_id(gid)
         if item:
             result.append((gid, item["name"], item.get("type", "药材"), 1))
@@ -621,7 +623,7 @@ def _get_random_dongfu_target(my_uid: str):
         ui = sql_message.get_user_info_with_id(uid)
         if ui:
             candidates.append(ui)
-    return random.choice(candidates) if candidates else None
+    return runtime_random.choice(candidates) if candidates else None
 
 
 @dongfu_help.handle(parameterless=[Cooldown(cd_time=0)])
@@ -871,14 +873,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             for _ in range(_to_int(slot.get("fertilizer"))):
                 extra_drops = _roll_harvest(seed_id, array_lv)
                 if extra_drops:
-                    drops.append(random.choice(extra_drops))
+                    drops.append(runtime_random.choice(extra_drops))
             extra_rate = float(geomancy.get("harvest_bonus", 0))
             if SEED_CONFIG.get(seed_id, {}).get("pool", "").startswith("god"):
                 extra_rate += float(geomancy.get("god_bonus", 0))
-            if extra_rate > 0 and random.random() < extra_rate:
+            if extra_rate > 0 and runtime_random.random() < extra_rate:
                 extra_drops = _roll_harvest(seed_id, array_lv)
                 if extra_drops:
-                    drops.append(random.choice(extra_drops))
+                    drops.append(runtime_random.choice(extra_drops))
             if not drops:
                 failed_slots.append(str(slot.get("slot")))
             for gid, name, item_type, amount in drops:
@@ -999,7 +1001,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     reward = None
     if node_type in material_plan:
         item_id, item_name, chance = material_plan[node_type]
-        if random.random() < chance:
+        if runtime_random.random() < chance:
             reward = (item_id, item_name, 1)
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"dongfu-patrol:{uid}:{event_message_id or runtime_ids.new_id()}"
@@ -1015,7 +1017,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         )
         return
 
-    stone_gain = random.randint(50000, 150000)
+    stone_gain = runtime_random.randint(50000, 150000)
     if geomancy.get("name"):
         stone_gain = int(stone_gain * 1.2)
     result = _run_dongfu_action(
@@ -1277,7 +1279,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if _to_int(td.get("built")) != 1:
         await handle_send(bot, event, f"{tname}尚未建设洞府。")
         return
-    gain = random.randint(10000, 50000)
+    gain = runtime_random.randint(10000, 50000)
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"dongfu-visit:{uid}:{event_message_id or runtime_ids.new_id()}"
     result = _run_dongfu_action(
@@ -1381,7 +1383,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if not active_slots:
         await handle_send(bot, event, f"{tname}的洞府当前没有可图谋的灵田。")
         return
-    target_slot = random.choice(active_slots)
+    target_slot = runtime_random.choice(active_slots)
 
     can_intrude, td = _can_intrude(target_uid)
     if not can_intrude:
@@ -1417,10 +1419,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         success_rate = max(0.05, success_rate - 0.18)
     success_rate = min(0.90, success_rate)
 
-    detected = random.random() < detect_rate
-    success = random.random() < success_rate
+    detected = runtime_random.random() < detect_rate
+    success = runtime_random.random() < success_rate
     if detected and not success:
-        loss_stone = random.randint(50000, 200000) * max(1, array_lv)
+        loss_stone = runtime_random.randint(50000, 200000) * max(1, array_lv)
         event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
         operation_id = f"dongfu-infiltrate-failure:{my_uid}:{event_message_id or runtime_ids.new_id()}"
         result = _run_dongfu_action(
@@ -1447,7 +1449,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         all_drops = _roll_harvest(seed_id, array_lv)
         if all_drops:
             take_n = max(1, min(len(all_drops), int(len(all_drops) * 0.5)))
-            random.shuffle(all_drops)
+            runtime_random.shuffle(all_drops)
             steal_drops = all_drops[:take_n]
             if stealth_penalty < 1.0 and len(steal_drops) > 1:
                 steal_drops = steal_drops[:max(1, len(steal_drops) // 2)]
@@ -1457,21 +1459,21 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     else:
         pool_name = SEED_CONFIG.get(seed_id, {}).get("pool", "herb_low")
         pool = HERB_MID[:8] if pool_name in {"herb_mid", "god_low"} else HERB_LOW[:8]
-        steal_count = 1 if detected or random.random() < 0.75 else 2
+        steal_count = 1 if detected or runtime_random.random() < 0.75 else 2
         for _ in range(steal_count):
-            gid = random.choice(pool)
+            gid = runtime_random.choice(pool)
             item = items.get_data_by_item_id(gid)
             if item:
                 reward_rows.append((gid, item["name"], item.get("type", "药材"), 1))
                 reward_messages.append(f"{item['name']} x1")
-        stone_gain = int(random.randint(30000, 80000) * stealth_penalty)
+        stone_gain = int(runtime_random.randint(30000, 80000) * stealth_penalty)
         if stone_gain:
             reward_messages.append(f"灵石 x{number_to(stone_gain)}")
 
     added_minutes = 0
     new_finish = ""
     if reward_rows or stone_gain:
-        base_delay = random.randint(20, 45) if matured else random.randint(8, 20)
+        base_delay = runtime_random.randint(20, 45) if matured else runtime_random.randint(8, 20)
         added_minutes = min(180, base_delay + array_lv * 2)
         new_finish = _fmt_dt(finish + timedelta(minutes=added_minutes))
     expected_slots = json.dumps(_normalize_plant_slots(td), ensure_ascii=False)
