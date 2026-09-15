@@ -46,7 +46,6 @@ class BegRepository:
         )
 
     def daily_result(self, uow: DatabaseUnitOfWork, operation_id: str) -> BegDailyRewardResult | None:
-        self.ensure_schema(uow)
         row = uow.query_one(
             "SELECT stone_reward,stone FROM beg_daily_reward_operations WHERE operation_id = ?",
             (str(operation_id).strip(),),
@@ -56,7 +55,6 @@ class BegRepository:
         return BegDailyRewardResult("duplicate", int(row["stone_reward"]), int(row["stone"]))
 
     def novice_result(self, uow: DatabaseUnitOfWork, operation_id: str) -> NoviceGiftClaimResult | None:
-        self.ensure_schema(uow)
         row = uow.query_one(
             "SELECT stone FROM novice_gift_claim_operations WHERE operation_id = ?",
             (str(operation_id).strip(),),
@@ -81,7 +79,6 @@ class BegRepository:
         eligible_levels: Iterable[str],
         stone_reward: int,
     ) -> BegDailyRewardResult:
-        self.ensure_schema(uow)
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         expected_create_time = canonical_datetime(expected_create_time)
         expected_stone = int(expected_stone)
@@ -162,7 +159,6 @@ class BegRepository:
         rewards: Iterable[dict[str, Any]],
         max_goods_num: int,
     ) -> NoviceGiftClaimResult:
-        self.ensure_schema(uow)
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         expected_create_time = canonical_datetime(expected_create_time)
         claimed_at = parse_datetime(claimed_at)

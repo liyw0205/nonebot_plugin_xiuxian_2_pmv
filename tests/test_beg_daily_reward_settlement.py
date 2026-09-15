@@ -8,6 +8,8 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_beg.transaction_service import BegDailyRewardService
+from nonebot_plugin_xiuxian_2.features.beg.migrations import apply_beg
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
 
@@ -25,6 +27,8 @@ class BegDailyRewardServiceTests(unittest.TestCase):
                 "INSERT INTO user_xiuxian VALUES (%s,%s,%s,%s,%s,%s,%s)",
                 ("u1", 100, self.created_at, 0, None, "天灵根", "练气境初期"),
             )
+        with DatabaseUnitOfWork(self.database) as uow:
+            apply_beg(uow)
         self.service = BegDailyRewardService(self.database)
 
     def tearDown(self):
