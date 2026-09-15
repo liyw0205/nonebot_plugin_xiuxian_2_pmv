@@ -683,7 +683,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = (
         f"tianti-qiaoxue:{event_id}:{user_id}" if event_id
-        else f"tianti-qiaoxue:{user_id}:{time.time_ns()}"
+        else f"tianti-qiaoxue:{user_id}:{runtime_ids.new_id()}"
     )
     # The compatibility ``qiaoxue_service.open(...)`` facade remains for old
     # callers; the command writes through the application boundary.
