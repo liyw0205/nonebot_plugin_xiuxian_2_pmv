@@ -613,6 +613,8 @@
 
 2026-09-15 partner relation ID live safety：提交 `ddda831` 部署后 backup `/srv/old/data/backups/20260915T004838Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行关系绑定/解除或师徒资产写入。
 
+2026-09-15 partner operation ID closure：partner token use、bind、unbind以及统一 relation operation helper的无事件 fallback全部改用注入 `UUIDGenerator`，不再使用 `time.time_ns()`；partner/source共166 tests、8 subtests、catalog=103、compileall、architecture、diff check通过。mentor/partner transaction service默认迁移仍未完成。
+
 2026-09-15 sign-in task projection DDL fix：`SignInTaskRepository.record`移除 request-time `ensure_schema`，正式 schema仅由已有 `apply_sign_in_tasks` startup migration创建；测试fixture改为显式 migration后验证 daily/weekly progress idempotency。task/effects/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 sign-in task projection live safety：提交 `d845283` 部署后 backup `/srv/old/data/backups/20260915T001441Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务进度写入。

@@ -978,7 +978,7 @@ async def use_two_exp_token(bot, event, item_id, num):
     current_count = two_exp_cd.find_user(user_id)
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     result = partner_token_service.apply(
-        f"partner-token:{user_id}:{event_id or time.time_ns()}", user_id, item_id,
+        f"partner-token:{user_id}:{event_id or runtime_ids.new_id()}", user_id, item_id,
         requested_count=num, expected_item_count=sql_message.goods_num(user_id, item_id),
         expected_used_count=current_count,
     )
@@ -1110,7 +1110,7 @@ async def agree_bind_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     inviter_partner = load_partner(inviter_id).get("partner_id")
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     result = partner_bind_service.apply(
-        f"partner-bind:{user_id}:{invite_data.get('invite_id', event_id or time.time_ns())}",
+        f"partner-bind:{user_id}:{invite_data.get('invite_id', event_id or runtime_ids.new_id())}",
         user_id, inviter_id, bind_time=bind_time,
         expected_invitee_partner=invitee_partner, expected_inviter_partner=inviter_partner,
     )
@@ -1154,7 +1154,7 @@ async def unbind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     checked_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     result = partner_unbind_service.apply(
-        f"partner-unbind:{user_id}:{event_id or time.time_ns()}", user_id, partner_user_id,
+        f"partner-unbind:{user_id}:{event_id or runtime_ids.new_id()}", user_id, partner_user_id,
         expected_user_bind_time=partner_data.get("bind_time"),
         expected_partner_bind_time=partner_side.get("bind_time"),
         expected_user_affection=partner_data.get("affection", 0),
