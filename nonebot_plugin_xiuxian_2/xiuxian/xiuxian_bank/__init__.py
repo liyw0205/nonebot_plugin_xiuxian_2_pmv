@@ -7,6 +7,8 @@ import time
 from typing import Any, Tuple
 
 from ...paths import get_paths
+from ...infrastructure.clock import SystemClock
+from ...infrastructure.ids import UUIDGenerator
 from ..on_compat import on_regex
 from nonebot.log import logger
 from nonebot.params import RegexGroup
@@ -45,6 +47,8 @@ bank_application = BankApplication(
     get_paths().player_db,
     repository=LegacyBankRepository(get_paths().game_db, get_paths().player_db),
 )
+runtime_clock = SystemClock()
+runtime_ids = UUIDGenerator()
 PLAYERSDATA = get_paths().players
 
 bank = on_regex(
@@ -107,13 +111,13 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
     except Exception:
         bankinfo = {
             'savestone': 0,
-            'savetime': str(datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
+            'savetime': str(runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')),
             'banklevel': '1',
         }
 
     if mode == '存灵石':  # 存灵石逻辑
         event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-        operation_id = f"bank-deposit:{event_id}:{user_id}" if event_id else f"bank-deposit:{user_id}:{time.time_ns()}"
+        operation_id = f"bank-deposit:{event_id}:{user_id}" if event_id else f"bank-deposit:{user_id}:{runtime_ids.new_id()}"
         from ...features.bank.account_info_application import BankAccountInfoApplication
         from ...features.bank.account_application import BankDepositApplication
         from ...features.bank.clock import bank_clock
@@ -208,7 +212,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
 
     elif mode == '取灵石':  # 取灵石逻辑
         event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "")).strip()
-        operation_id = f"bank-withdrawal:{event_id}:{user_id}" if event_id else f"bank-withdrawal:{user_id}:{time.time_ns()}"
+        operation_id = f"bank-withdrawal:{event_id}:{user_id}" if event_id else f"bank-withdrawal:{user_id}:{runtime_ids.new_id()}"
         from ...features.bank.account_info_application import BankAccountInfoApplication
         from ...features.bank.account_withdrawal_application import BankWithdrawalApplication
         from ...features.bank.clock import bank_clock
@@ -287,7 +291,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
 
     elif mode == '升级会员':  # 升级会员逻辑
         event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-        operation_id = f"bank-upgrade:{event_id}:{user_id}" if event_id else f"bank-upgrade:{user_id}:{time.time_ns()}"
+        operation_id = f"bank-upgrade:{event_id}:{user_id}" if event_id else f"bank-upgrade:{user_id}:{runtime_ids.new_id()}"
         from ...features.bank.account_info_application import BankAccountInfoApplication
         from ...features.bank.account_upgrade_application import BankUpgradeApplication
         from ...features.bank.clock import bank_clock
@@ -412,7 +416,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
 
     elif mode == '结算':
         event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "")).strip()
-        operation_id = f"bank-interest:{event_id}:{user_id}" if event_id else f"bank-interest:{user_id}:{time.time_ns()}"
+        operation_id = f"bank-interest:{event_id}:{user_id}" if event_id else f"bank-interest:{user_id}:{runtime_ids.new_id()}"
         from ...features.bank.account_info_application import BankAccountInfoApplication
         from ...features.bank.account_interest_application import BankInterestApplication
         from ...features.bank.interest_rules import calculate_interest
@@ -485,7 +489,7 @@ def get_give_stone(bankinfo):
     from ...features.bank.interest_rules import calculate_interest
 
     savetime = bankinfo['savetime']  # str
-    nowtime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # str
+    nowtime = runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')  # str
     give_stone, timedeff = calculate_interest(
         saved_stone=bankinfo['savestone'],
         saved_at=savetime,
@@ -504,13 +508,13 @@ def readf(user_id):
     if not bank_data:
         return {
             "savestone": 0,
-            "savetime": str(datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
+            "savetime": str(runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')),
             "banklevel": "1",
         }
 
     # 兼容缺失字段
     savestone = bank_data.get("savestone", 0)
-    savetime = bank_data.get("savetime", str(datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+    savetime = bank_data.get("savetime", str(runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')))
     banklevel = str(bank_data.get("banklevel", "1"))
 
     try:
@@ -529,6 +533,6 @@ def savef(user_id, data):
     """保存灵庄信息到动态数据库"""
     user_id = str(user_id)
     player_data_manager.update_or_write_data(user_id, "bankinfo", "savestone", int(data.get("savestone", 0)), data_type="INTEGER")
-    player_data_manager.update_or_write_data(user_id, "bankinfo", "savetime", str(data.get("savetime", datetime.now().strftime('%Y-%m-%d %H:%M:%S'))), data_type="TEXT")
+    player_data_manager.update_or_write_data(user_id, "bankinfo", "savetime", str(data.get("savetime", runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S'))), data_type="TEXT")
     player_data_manager.update_or_write_data(user_id, "bankinfo", "banklevel", str(data.get("banklevel", "1")), data_type="TEXT")
     return True
