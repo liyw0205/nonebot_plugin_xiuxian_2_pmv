@@ -1,5 +1,7 @@
 import asyncio
-import random
+
+from ....infrastructure.clock import SystemClock
+from ....infrastructure.random_source import SystemRandom
 
 from nonebot.params import CommandArg
 
@@ -37,6 +39,8 @@ FULLWIDTH_DIGIT_TABLE = str.maketrans("０１２３４５６７８９", "0123456
 
 guess_puzzle_sessions: dict[str, dict] = {}
 guess_puzzle_timeout_tasks: dict[str, asyncio.Task] = {}
+runtime_clock = SystemClock()
+runtime_random = SystemRandom()
 
 
 def _normalize_digits(text: str) -> str:
@@ -52,9 +56,10 @@ def _difficulty_hint() -> str:
     return "简单=4位，普通=7位，困难=9位"
 
 
-def _make_answer(digits: int) -> str:
-    first = random.choice("123456789")
-    rest = "".join(random.choice("0123456789") for _ in range(digits - 1))
+def _make_answer(digits: int, random_source=None) -> str:
+    source = random_source or runtime_random
+    first = source.choice("123456789")
+    rest = "".join(source.choice("0123456789") for _ in range(digits - 1))
     return first + rest
 
 
@@ -69,7 +74,8 @@ def _correct_count(answer: str, guess: str) -> int:
     return sum(1 for a, g in zip(answer, guess) if a == g)
 
 
-def _encourage(correct: int, digits: int) -> str:
+def _encourage(correct: int, digits: int, random_source=None) -> str:
+    source = random_source or runtime_random
     if correct == 0:
         choices = [
             "这一手还没撞上，但信息已经到手了，换个组合继续压。",
@@ -88,7 +94,7 @@ def _encourage(correct: int, digits: int) -> str:
             "这一手很漂亮，再压一轮就可能破局。",
             "命中不少，保持这个思路继续收缩。",
         ]
-    return random.choice(choices)
+    return source.choice(choices)
 
 
 def _clear_session(user_id: str) -> None:
@@ -202,7 +208,7 @@ async def _start_game(
         return
 
     difficulty, digits = parsed
-    answer = _make_answer(digits)
+    answer = _make_answer(digits, runtime_random)
     guess_puzzle_sessions[user_id] = {
         "user_id": user_id,
         "user_name": event_display_name(event),
@@ -211,8 +217,8 @@ async def _start_game(
         "digits": digits,
         "tries": 0,
         "status": "playing",
-        "create_time": now_text(),
-        "last_action_time": now_text(),
+        "create_time": now_text(runtime_clock),
+        "last_action_time": now_text(runtime_clock),
     }
     await _start_timeout(bot, event, user_id)
 
@@ -369,7 +375,7 @@ async def _handle_guess(
 
     await _start_timeout(bot, event, user_id)
     game["tries"] += 1
-    game["last_action_time"] = now_text()
+    game["last_action_time"] = now_text(runtime_clock)
 
     answer = game["answer"]
     correct = _correct_count(answer, guess)
@@ -401,7 +407,7 @@ async def _handle_guess(
         f"【猜数谜提示】\n"
         f"本次猜测：对了 {correct} 位\n"
         f"已尝试：{tries} 次\n"
-        f"{_encourage(correct, digits)}",
+        f"{_encourage(correct, digits, runtime_random)}",
         md_type="娱乐",
         k1="继续猜",
         v1=f"猜数谜 {_example_guess(digits)}",

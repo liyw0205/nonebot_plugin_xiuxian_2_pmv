@@ -923,6 +923,8 @@
 
 2026-09-16 entertainment guess-number live safety：提交 `ec06c2e` 部署后 backup `/srv/old/data/backups/20260915T170604Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未启动游戏会话或发送娱乐消息。
 
+2026-09-16 entertainment guess-number puzzle providers：猜数谜答案生成、鼓励文案和内存会话时间统一使用注入 `runtime_random/runtime_clock`；新增2个 focused tests，entertainment/source共151 tests、catalog=103、compileall、architecture、diff check通过。内存 session 与 asyncio timeout 仍保留现有边界。
+
 2026-09-16 adapter sender sequence boundary：低层 QQ group/private sender 的缺省 msg_seq 统一复用注入式 `MessageSequenceStrategy`，显式 msg_seq、引用消息和 adapter API 参数保持不变；新增 focused tests后共145 tests、catalog=103、compileall、architecture、diff check通过。真实发送/外部 adapter副作用未执行。
 
 2026-09-16 adapter sender sequence live safety：提交 `8d37eb8` 部署后 backup `/srv/old/data/backups/20260915T165649Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未发送消息或改变外部 adapter状态。
