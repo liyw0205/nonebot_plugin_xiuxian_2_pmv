@@ -35,6 +35,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, j
 from nonebot.log import logger
 from nonebot import get_driver, get_bots, __version__ as nb_version
 from ...paths import get_paths
+from ...infrastructure.clock import SystemClock
 # --- 消息统计核心导入 ---
 from nonebot.message import event_preprocessor
 from nonebot.adapters import Bot as BaseBot, Event
@@ -395,6 +396,7 @@ if not 1 <= PORT <= 65535:
 HOST = str(getattr(get_driver().config, "host", "127.0.0.1"))
 
 WEB_UPLOAD_CACHE = get_paths().cache / "web_uploads"
+runtime_clock = SystemClock()
 
 ALLOWED_MEDIA_TYPES = {"image", "video", "audio", "file"}
 
@@ -457,7 +459,7 @@ def save_uploaded_media(file_storage):
     """
     filename = secure_filename(file_storage.filename or "upload.bin")
     suffix = Path(filename).suffix
-    save_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}{suffix}"
+    save_name = f"{runtime_clock.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}{suffix}"
     save_path = WEB_UPLOAD_CACHE / save_name
     file_storage.save(save_path)
     return save_path
@@ -894,7 +896,7 @@ def get_latest_reply_candidates_for_qq(scene: str, target_id: str, limit: int = 
         if seconds <= 0:
             return []
 
-        since = (datetime.now() - timedelta(seconds=seconds)).strftime("%Y-%m-%d %H:%M:%S")
+        since = (runtime_clock.now() - timedelta(seconds=seconds)).strftime("%Y-%m-%d %H:%M:%S")
 
         if scene in ("group", "channel_group"):
             cur.execute("""
@@ -1265,6 +1267,6 @@ def is_message_within_seconds(created_at: str, seconds: int) -> bool:
 
     try:
         msg_time = datetime.strptime(created_at[:19], "%Y-%m-%d %H:%M:%S")
-        return datetime.now() - msg_time <= timedelta(seconds=seconds)
+        return runtime_clock.now().replace(tzinfo=None) - msg_time <= timedelta(seconds=seconds)
     except Exception:
         return False
