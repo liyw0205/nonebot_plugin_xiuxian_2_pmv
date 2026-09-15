@@ -353,7 +353,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
     context.migrations = migration_runner
     game_migrations = tuple(
         migration for migration in migration_runner.migrations
-        if migration.version not in {"combat_settlement.003", "combat_settlement.004", "dungeon.003", "map.003", "map.005", "map.008", "map.013", "map.015", "map.016", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005", "tianti_training.006"}
+        if migration.version not in {"title.002", "combat_settlement.003", "combat_settlement.004", "dungeon.003", "map.003", "map.005", "map.008", "map.013", "map.015", "map.016", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005", "tianti_training.006"}
     )
 
     def ensure_filesystem() -> None:
