@@ -85,7 +85,6 @@ class AccessoryPackageApplication:
                 if outcome is not None:
                     return outcome.replay()
                 raise ConflictError("操作正在处理中")
-            self.game.ensure_schema(uow)
             row = self.game.get(uow, request.operation_id)
             if row is not None and row["status"] == "pending_accessory":
                 return None

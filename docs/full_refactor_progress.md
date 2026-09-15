@@ -889,6 +889,8 @@
 
 2026-09-16 accessory game request-DDL boundary：`AccessoryPackageGameRepository.get/prepare/finalize` 移除 request-time `ensure_schema`，game-side `accessory_package.001`成为 operation表启动前置；player-side `schema_policy`与attached namespace guard保持不变。accessory/source共179 tests、catalog=104、compileall、architecture、diff check通过。
 
+2026-09-16 accessory application request-DDL boundary：`AccessoryPackageApplication` replay guard移除 game repository `ensure_schema`调用，完全依赖 startup `accessory_package.001`；ledger failure schema初始化保持 infrastructure-owned。accessory/source共179 tests、catalog=104、compileall、architecture、diff check通过。
+
 2026-09-16 accessory game request-DDL live safety：提交 `6ab73e8` 部署后 backup `/srv/old/data/backups/20260915T215716Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，104-entry recovery clean。live未执行饰品礼包或资产写入。
 
 2026-09-16 attached migration clock fallback：`apply_attached_player_accessory` 未显式传入 Clock 时改用 `SystemClock`，保留显式 runtime Clock优先和既有 checksum；attached/accessory/source共179 tests、catalog=104、compileall、architecture、diff check通过。
