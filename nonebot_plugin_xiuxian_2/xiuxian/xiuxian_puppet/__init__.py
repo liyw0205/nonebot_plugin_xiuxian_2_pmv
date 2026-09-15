@@ -24,6 +24,7 @@ from .transaction_service import (
 )
 from ...features.puppet.application import PuppetApplication
 from ...features.puppet.repository import LegacyPuppetRepository
+from ...infrastructure.ids import UUIDGenerator
 
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
@@ -38,6 +39,7 @@ puppet_application = PuppetApplication(
     get_paths().player_db,
     repository=LegacyPuppetRepository(get_paths().game_db, get_paths().player_db),
 )
+runtime_ids = UUIDGenerator()
 
 # 引入定时任务
 scheduler = require("nonebot_plugin_apscheduler").scheduler
@@ -94,7 +96,7 @@ def _puppet_operation_id(event, action: str, user_id: str) -> str:
     user_id = str(user_id)
     if event_id:
         return f"puppet:{action}:{event_id}:{user_id}"
-    return f"puppet:{action}:{user_id}:{time.time_ns()}"
+    return f"puppet:{action}:{user_id}:{runtime_ids.new_id()}"
 
 
 def _puppet_operation_message(result: PuppetOperation) -> str:
