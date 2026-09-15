@@ -48,7 +48,6 @@ class AccessoryPackageGameRepository:
                 uow.execute(f"ALTER TABLE accessory_package_operations ADD COLUMN {name} {declaration}")
 
     def get(self, uow: DatabaseUnitOfWork, operation_id: str) -> dict[str, Any] | None:
-        self.ensure_schema(uow)
         return uow.query_one("SELECT * FROM accessory_package_operations WHERE operation_id = ?", (operation_id,))
 
     def snapshot(self, uow: DatabaseUnitOfWork, request: AccessoryPackageRequest) -> dict[str, Any]:
@@ -157,7 +156,6 @@ class AccessoryPackageGameRepository:
                     "goods_num=COALESCE(back.goods_num, 0)+excluded.goods_num",
                     (request.user_id, reward.item_id, reward.name, reward.item_type, reward.quantity),
                 )
-        self.ensure_schema(uow)
         uow.execute(
             "INSERT INTO accessory_package_operations(operation_id,user_id,package_id,quantity,rewards_json,accessories_json,before_json,status,max_goods_num,accessory_limit) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_accessory', ?, ?)",
@@ -215,7 +213,6 @@ class AccessoryPackageGameRepository:
             )
 
     def finalize(self, uow: DatabaseUnitOfWork, operation_id: str) -> None:
-        self.ensure_schema(uow)
         uow.execute("UPDATE accessory_package_operations SET status='applied', updated_at=CURRENT_TIMESTAMP WHERE operation_id=?", (operation_id,))
 
 

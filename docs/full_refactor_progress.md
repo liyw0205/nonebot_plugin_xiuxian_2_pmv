@@ -879,6 +879,8 @@
 
 2026-09-16 accessory attached migration boundary：startup migration阶段在 game_db UoW 显式 attach player_db 为 `player_data`，执行 checksum-safe `accessory_package.player_data.001`；新增 runner wiring与首次/重复应用 checksum focused test。attached/accessory/source/architecture共179 tests、catalog=104、compileall、diff check通过；原 player attached migration blocker已解除，旧 accessory transaction compatibility仍保留。
 
+2026-09-16 accessory game request-DDL boundary：`AccessoryPackageGameRepository.get/prepare/finalize` 移除 request-time `ensure_schema`，game-side `accessory_package.001`成为 operation表启动前置；player-side `schema_policy`与attached namespace guard保持不变。accessory/source共179 tests、catalog=104、compileall、architecture、diff check通过。
+
 2026-09-16 accessory attached migration live safety：提交 `a9a7c48` 部署后 backup `/srv/old/data/backups/20260915T215030Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，104-entry recovery clean。live未执行饰品礼包、player accessory或资产写入。
 
 2026-09-15 interactive provider live safety：提交 `1624de3` 部署后 backup `/srv/old/data/backups/20260915T091541Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行互动结算/领取写入。
