@@ -176,7 +176,7 @@ async def blessed_spot_creat_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await blessed_spot_creat.finish()
     user_id = user_info['user_id']
     default_name = f"{user_info['user_name']}道友的家"
-    harvest_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    harvest_time = runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')
     # 先走 operation，避免已拥有洞天福地时同事件重放被前置拦截。
     result = blessed_spot_service.open(
         _blessed_spot_operation_id(event, "open", user_id),
@@ -1141,7 +1141,7 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if mix_elixir_info and '收取时间' in mix_elixir_info:
         last_collect_time = datetime.strptime(mix_elixir_info['收取时间'], '%Y-%m-%d %H:%M:%S')
         next_collect_time = last_collect_time + timedelta(hours=23)
-        now_time = datetime.now()
+        now_time = runtime_clock.now()
         
         if now_time >= next_collect_time:
             lingtian_msg = "🌱 已成熟"
@@ -1281,7 +1281,7 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     # 11. 获取历练状态信息
     training_info = training_limit.get_user_training_info(user_id)
-    now = datetime.now()
+    now = runtime_clock.now()
     
     if training_info["last_time"]:
         last_time = training_info["last_time"]
@@ -1579,7 +1579,7 @@ def _migrate_bank_data_sync(players_dir):
                 continue
             data = json.loads(content)
             savestone = int(data.get("savestone", 0))
-            savetime = str(data.get("savetime", datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+            savetime = str(data.get("savetime", runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')))
             banklevel = str(data.get("banklevel", "1"))
 
             player_data_manager.update_or_write_data(user_id, "bankinfo", "savestone", savestone, data_type="INTEGER")
