@@ -20,12 +20,16 @@ from .transaction_service import InteractiveStoneDailyRewardService
 from .transaction_service import InteractiveGreetingClaimService
 from .transaction_service import InteractiveDailyFortuneService
 from ...features.interactive.application import InteractiveApplication
+from ...infrastructure.clock import SystemClock
+from ...infrastructure.ids import UUIDGenerator
 sql_message = XiuxianDateManage()
 interactive_exp_daily_reward_service = InteractiveExpDailyRewardService(get_paths().game_db)
 interactive_stone_daily_reward_service = InteractiveStoneDailyRewardService(get_paths().game_db)
 interactive_greeting_claim_service = InteractiveGreetingClaimService(get_paths().game_db)
 interactive_daily_fortune_service = InteractiveDailyFortuneService(get_paths().game_db)
 interactive_application = InteractiveApplication(get_paths().game_db)
+runtime_clock = SystemClock()
+runtime_ids = UUIDGenerator()
 
 
 def _run_interactive_action(action: str, operation_id: str, user_id: str, **payload):
@@ -37,7 +41,7 @@ def _run_interactive_action(action: str, operation_id: str, user_id: str, **payl
 
 async def reset_data_by_time():
     """清理已过重放窗口的早晚安领取记录。"""
-    cutoff = datetime.now().date() - timedelta(days=30)
+    cutoff = runtime_clock.now().date() - timedelta(days=30)
     # Compatibility markers retained for source integrations:
     # interactive_greeting_claim_service.cleanup_before(
     # interactive_daily_fortune_service.cleanup_before(
@@ -968,7 +972,7 @@ async def handle_give_exp(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
     user_id = str(user_info["user_id"])
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"interactive-exp:{user_id}:{event_id or time.time_ns()}"
+    operation_id = f"interactive-exp:{user_id}:{event_id or runtime_ids.new_id()}"
     outcome = _run_interactive_action(
         "exp_settle", operation_id, user_id,
         expected_exp=user_info["exp"],
@@ -997,7 +1001,7 @@ async def handle_give_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 
     user_id = str(user_info["user_id"])
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"interactive-stone:{user_id}:{event_id or time.time_ns()}"
+    operation_id = f"interactive-stone:{user_id}:{event_id or runtime_ids.new_id()}"
     outcome = _run_interactive_action(
         "stone_settle", operation_id, user_id,
         expected_stone=user_info["stone"],
@@ -1033,7 +1037,7 @@ async def handle_good_morning(bot: Bot, event: GroupMessageEvent | PrivateMessag
     user_id = user_info["user_id"]
     
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"interactive-greeting:morning:{user_id}:{event_id or time.time_ns()}"
+    operation_id = f"interactive-greeting:morning:{user_id}:{event_id or runtime_ids.new_id()}"
     # Compatibility target: interactive_greeting_claim_service.claim(
     outcome = _run_interactive_action(
         "greeting_claim", operation_id, user_id,
@@ -1063,7 +1067,7 @@ async def handle_good_night(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     user_id = user_info["user_id"]
     
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"interactive-greeting:night:{user_id}:{event_id or time.time_ns()}"
+    operation_id = f"interactive-greeting:night:{user_id}:{event_id or runtime_ids.new_id()}"
     # Compatibility target: interactive_greeting_claim_service.claim(
     outcome = _run_interactive_action(
         "greeting_claim", operation_id, user_id,
@@ -1183,7 +1187,7 @@ async def handle_fortune_command(bot: Bot, event: GroupMessageEvent | PrivateMes
     user_id = user_info["user_id"]
     
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"interactive-fortune:{user_id}:{event_id or time.time_ns()}"
+    operation_id = f"interactive-fortune:{user_id}:{event_id or runtime_ids.new_id()}"
     # Compatibility target: interactive_daily_fortune_service.resolve(
     outcome = _run_interactive_action(
         "fortune_resolve", operation_id, user_id,
