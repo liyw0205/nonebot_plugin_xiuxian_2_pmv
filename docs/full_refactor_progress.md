@@ -525,6 +525,8 @@
 
 2026-09-16 tower repository clock boundary：`TowerApplication` 将 Clock 传入 SQL repository，通天塔结算日期及商店 weekly key 默认值不再使用 `date.today()`；tower/source共165 tests、catalog=103、compileall、architecture、diff check通过。跨库 UoW/CAS保持不变，legacy bridge仍明确保留。
 
+2026-09-16 tower repository clock live safety：提交 `8e937a1` 部署后 backup `/srv/old/data/backups/20260915T182242Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行通天塔购买/结算写入。
+
 2026-09-15 boss shop purchase cutover：新增 `BossPurchaseSqlRepository`、`BossApplication`默认SQL repository与game migration `boss.002`；真实 `世界BOSS兑换` handler不再调用compatibility purchase service，UUID fallback注入。跨库UoW原子处理boss_limit积分、boss weekly、game背包和operation replay/conflict，new+legacy+source共153 tests、93 catalog、compileall、architecture、diff check通过。world boss battle settlement仍为后续slice。
 
 2026-09-15 boss shop purchase live safety：提交 `34d91fc` 部署后 backup `/srv/old/data/backups/20260914T203127Z`，dry-run/apply仅game `[boss.002]`；readiness全绿，93-entry recovery reconcile clean。live未执行世界BOSS兑换写入。
