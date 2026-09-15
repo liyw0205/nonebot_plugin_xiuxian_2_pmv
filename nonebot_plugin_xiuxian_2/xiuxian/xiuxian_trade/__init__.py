@@ -65,12 +65,14 @@ from .transaction_service import AuctionQueueService
 from .transaction_service import AuctionSessionService
 from ...paths import get_paths
 from ...infrastructure.ids import UUIDGenerator
+from ...infrastructure.clock import SystemClock
 from ...bootstrap.legacy import register_legacy_startup
 from urllib.parse import quote
 
 # 初始化全局组件
 items = Items()
 runtime_ids = UUIDGenerator()
+runtime_clock = SystemClock()
 sql_message = XiuxianDateManage()
 trade_manager = TradeDataManager()
 xianshi_repository = TradeRepository(
@@ -244,7 +246,7 @@ def _xianshi_listing_operation_id(event, seller_id, goods_id, price, quantity, s
     extra = f":{suffix}" if suffix else ""
     if event_id:
         return f"xianshi-list:{event_id}:{seller_id}:{goods_id}:{price}:{quantity}{extra}"
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
+    timestamp = runtime_clock.now().strftime("%Y%m%d%H%M%S%f")
     return f"xianshi-list:{seller_id}:{goods_id}:{price}:{quantity}:{timestamp}{extra}"
 
 
@@ -254,7 +256,7 @@ def _guishi_stone_operation_id(event, operation_type, user_id):
     ).strip()
     if event_id:
         return f"guishi-stone:{operation_type}:{event_id}:{user_id}"
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
+    timestamp = runtime_clock.now().strftime("%Y%m%d%H%M%S%f")
     return f"guishi-stone:{operation_type}:{user_id}:{timestamp}"
 
 
@@ -264,7 +266,7 @@ def _guishi_take_item_operation_id(event, user_id, goods_id):
     ).strip()
     if event_id:
         return f"guishi-item-take:{event_id}:{user_id}:{goods_id}"
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
+    timestamp = runtime_clock.now().strftime("%Y%m%d%H%M%S%f")
     return f"guishi-item-take:{user_id}:{goods_id}:{timestamp}"
 
 
@@ -283,7 +285,7 @@ def _auction_queue_operation_id(event, action, user_id, item_id):
     ).strip()
     if event_id:
         return f"auction-queue:{action}:{event_id}:{user_id}:{item_id}"
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
+    timestamp = runtime_clock.now().strftime("%Y%m%d%H%M%S%f")
     return f"auction-queue:{action}:{user_id}:{item_id}:{timestamp}"
 
 
@@ -1503,7 +1505,7 @@ async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await guishi_withdraw.finish()
     
     # 检查是否是周末
-    today = datetime.now().weekday()
+    today = runtime_clock.now().weekday()
     if today not in [5, 6]:  # 5 是周六，6 是周日
         msg = "鬼市取灵石功能仅在周六和周日开放！"
         await handle_send(bot, event, msg)
@@ -1702,7 +1704,7 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await guishi_baitan.finish()
     
     # 检查摆摊时间
-    now = datetime.now()
+    now = runtime_clock.now()
     current_hour = now.hour
     
     # 判断是否在允许摆摊的时间段 (20:00-23:59 或 00:00-07:59)
@@ -1893,7 +1895,7 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await guishi_take_item.finish()
     
     # 检查是否是周末
-    today = datetime.now().weekday()
+    today = runtime_clock.now().weekday()
     if today not in [5, 6]:  # 5 是周六，6 是周日
         msg = "鬼市取物品功能仅在周六和周日开放！"
         await handle_send(bot, event, msg)
@@ -2740,7 +2742,7 @@ async def auction_activity_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     current_auctions = xianshi_repository.get_current_auction() or []
     current_auctions_count = len(current_auctions)
     waiting_auctions_count = len(trade_manager.get_player_auction_items() or [])
-    now = datetime.now()
+    now = runtime_clock.now()
     max_user_items = _safe_auction_int(rules.get("max_user_items"), 3)
     hot_items_limit = min(_safe_auction_int(activity_config.get("hot_items_limit"), 5), 5)
     recent_deals_limit = _safe_auction_int(activity_config.get("recent_deals_limit"), 5)
@@ -2913,7 +2915,7 @@ async def _auto_start_auction_job_impl():
         logger.info("自动拍卖功能已禁用。")
         return
     
-    current_date = datetime.now().strftime('%Y-%m-%d')
+    current_date = runtime_clock.now().strftime('%Y-%m-%d')
     if schedule_config.get("last_auto_start_date") == current_date:
         logger.info("今日自动拍卖已开启，跳过本次调度。")
         return  # 今日已开启过，防止重复
@@ -2957,7 +2959,7 @@ async def _check_auction_end_job_impl():
     if session is None:
         logger.error("拍卖库内存在拍品，但数据库场次不存在，停止自动收尾。")
         return
-    now_dt = datetime.now()
+    now_dt = runtime_clock.now()
     end_dt = datetime.fromtimestamp(session["end_time"])
     n = len(current_auctions)
 
