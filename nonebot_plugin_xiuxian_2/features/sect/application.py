@@ -7,6 +7,7 @@ from typing import Any, Mapping
 from ...core.errors import ConflictError, DomainError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
+from ...infrastructure.clock import SystemClock
 from ...infrastructure.observability import trace_context
 from .repository import LegacySectRepository, SectRenameSqlRepository, SectRepository
 
@@ -20,13 +21,14 @@ def _data(raw: Any) -> dict[str, Any]:
 
 
 class SectApplication:
-    def __init__(self, database: str | Path, *, repository: SectRepository | None = None, ledger: OperationLedger | None = None) -> None:
+    def __init__(self, database: str | Path, *, repository: SectRepository | None = None, ledger: OperationLedger | None = None, clock=None) -> None:
         self.database = str(database)
         self.repository = repository
         self.ledger = ledger or OperationLedger()
+        self.clock = clock or SystemClock()
 
     def _repository(self) -> SectRepository:
-        return self.repository or SectRenameSqlRepository(self.database)
+        return self.repository or SectRenameSqlRepository(self.database, clock=self.clock)
 
     def rename(self, *, operation_id: str, user_id: str, sect_id: int, new_name: str, cost: int, card_id: int) -> OperationOutcome[dict[str, Any]]:
         payload = {"user_id": str(user_id), "sect_id": int(sect_id), "new_name": str(new_name), "cost": int(cost), "card_id": int(card_id)}

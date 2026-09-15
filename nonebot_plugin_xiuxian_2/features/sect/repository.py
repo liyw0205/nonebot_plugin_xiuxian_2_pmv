@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.clock import SystemClock
 
 
 class SectRepository(Protocol):
@@ -47,6 +48,10 @@ class LegacySectRepository:
 
 
 class SectRenameSqlRepository(LegacySectRepository):
+    def __init__(self, database: str | Path, *, clock=None) -> None:
+        super().__init__(database)
+        self.clock = clock or SystemClock()
+
     def claim_elixir(self, operation_id, user_id, sect_id, contribution_required, materials_required, rewards, max_goods_num):
         operation_id,user_id=str(operation_id).strip(),str(user_id);sect_id,contribution_required,materials_required,max_goods_num=int(sect_id),int(contribution_required),int(materials_required),int(max_goods_num);normalized=tuple((int(r[0]),str(r[1]),str(r[2]),int(r[3])) for r in rewards);payload=__import__('json').dumps([user_id,sect_id,contribution_required,materials_required,normalized],ensure_ascii=True)
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
@@ -62,7 +67,7 @@ class SectRenameSqlRepository(LegacySectRepository):
             for item_id,_,_,qty in normalized:
                 row=uow.query_one("SELECT COALESCE(goods_num,0) AS n FROM back WHERE user_id=? AND goods_id=?",(user_id,item_id))
                 if (int(row["n"]) if row else 0)+qty>max_goods_num:return {"status":"inventory_full"}
-            stamp=__import__('datetime').datetime.now().isoformat()
+            stamp=self.clock.now().isoformat()
             for item_id,name,kind,qty in normalized:uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.goods_num,update_time=excluded.update_time",(user_id,item_id,name,kind,qty,stamp,stamp,qty))
             uow.execute("UPDATE user_xiuxian SET sect_elixir_get=1 WHERE user_id=? AND COALESCE(sect_elixir_get,0)=0",(user_id,));uow.execute("INSERT INTO sect_elixir_claim_operations(operation_id,payload,rewards) VALUES(?,?,?)",(operation_id,payload,__import__('json').dumps(normalized,ensure_ascii=True)));return {"status":"applied","rewards":normalized}
     def learn_secondary(self, operation_id, user_id, sect_id, buff_id, materials_cost, *, expected_catalog, forbidden_positions=(12,14,15)):
@@ -121,7 +126,7 @@ class SectRenameSqlRepository(LegacySectRepository):
             if materials<cost:return {"status":"materials_insufficient","contribution":contribution,"materials":materials,"purchased":purchased}
             item=uow.query_one("SELECT COALESCE(goods_num,0) AS n FROM back WHERE user_id=? AND goods_id=?",(user_id,item_id));inventory=int(item["n"]) if item else 0
             if inventory+quantity>max_goods_num:return {"status":"inventory_full","contribution":contribution,"materials":materials,"purchased":purchased}
-            contribution-=cost;materials-=cost;purchased+=quantity;uow.execute("UPDATE user_xiuxian SET sect_contribution=? WHERE user_id=?",(contribution,user_id));uow.execute("UPDATE sects SET sect_materials=? WHERE sect_id=?",(materials,sect_id));stamp=__import__('datetime').datetime.now().isoformat();uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.goods_num,update_time=excluded.update_time",(user_id,item_id,str(item_name),str(item_type),quantity,stamp,stamp,quantity));uow.execute("INSERT INTO sect_shop_weekly_purchases(user_id,week_key,item_id,quantity) VALUES(?,?,?,?) ON CONFLICT(user_id,week_key,item_id) DO UPDATE SET quantity=excluded.quantity",(user_id,week_key,item_id,purchased));uow.execute("INSERT INTO sect_shop_purchase_operations(operation_id,payload,quantity,cost,contribution,materials,purchased) VALUES(?,?,?,?,?,?,?)",(operation_id,payload,quantity,cost,contribution,materials,purchased));return {"status":"applied","quantity":quantity,"cost":cost,"contribution":contribution,"materials":materials,"purchased":purchased}
+            contribution-=cost;materials-=cost;purchased+=quantity;uow.execute("UPDATE user_xiuxian SET sect_contribution=? WHERE user_id=?",(contribution,user_id));uow.execute("UPDATE sects SET sect_materials=? WHERE sect_id=?",(materials,sect_id));stamp=self.clock.now().isoformat();uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.goods_num,update_time=excluded.update_time",(user_id,item_id,str(item_name),str(item_type),quantity,stamp,stamp,quantity));uow.execute("INSERT INTO sect_shop_weekly_purchases(user_id,week_key,item_id,quantity) VALUES(?,?,?,?) ON CONFLICT(user_id,week_key,item_id) DO UPDATE SET quantity=excluded.quantity",(user_id,week_key,item_id,purchased));uow.execute("INSERT INTO sect_shop_purchase_operations(operation_id,payload,quantity,cost,contribution,materials,purchased) VALUES(?,?,?,?,?,?,?)",(operation_id,payload,quantity,cost,contribution,materials,purchased));return {"status":"applied","quantity":quantity,"cost":cost,"contribution":contribution,"materials":materials,"purchased":purchased}
     def donate(self, operation_id, user_id, sect_id, stone, materials):
         operation_id,user_id=str(operation_id).strip(),str(user_id);sect_id,stone,materials=int(sect_id),int(stone),int(materials)
         if stone<=0:return {"status":"invalid_amount","user_id":user_id,"sect_id":sect_id,"stone":stone,"materials":materials}
