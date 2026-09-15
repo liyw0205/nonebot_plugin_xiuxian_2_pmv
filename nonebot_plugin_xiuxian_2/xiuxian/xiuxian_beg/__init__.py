@@ -76,7 +76,7 @@ __beg_help__ = f"""
 > 灵石、功法、装备等基础资源，限领一次（创建角色24小时内）
 
 > 这些是起点助力，真正机缘还需自行探索。
-> 当前时间：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+> 当前时间：{runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")}
 """.strip()
 
 
