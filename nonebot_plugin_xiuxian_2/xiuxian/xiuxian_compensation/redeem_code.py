@@ -20,6 +20,7 @@ from .common import (
     format_reward_delivery,
     create_item_message,
     reward_claim_service,
+    runtime_clock,
 )
 
 config = DATA_CONFIG["兑换码"]
@@ -195,7 +196,7 @@ async def send_redeem_code_list(bot: Bot, event: MessageEvent):
         await handle_send(bot, event, "当前没有兑换码")
         return
 
-    current_time = datetime.now()
+    current_time = runtime_clock.now()
 
     valid = []
     not_started = []

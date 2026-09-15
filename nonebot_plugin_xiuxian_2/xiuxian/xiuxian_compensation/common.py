@@ -318,7 +318,7 @@ def is_expired(item_info: Dict[str, Any]) -> bool:
     if isinstance(expire_time, str):
         expire_time = datetime.strptime(expire_time, "%Y-%m-%d %H:%M:%S")
 
-    return datetime.now() > expire_time
+    return runtime_clock.now() > expire_time
 
 
 def is_not_started(item_info: Dict[str, Any]) -> bool:
@@ -330,7 +330,7 @@ def is_not_started(item_info: Dict[str, Any]) -> bool:
     if isinstance(start_time, str):
         start_time = datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S")
 
-    return datetime.now() < start_time
+    return runtime_clock.now() < start_time
 
 
 def has_claimed(user_id: str, item_id: str, config: Dict[str, Any]) -> bool:
@@ -408,7 +408,7 @@ def _compensation_upsert_operation_id(event: MessageEvent) -> str:
     return (
         f"compensation-upsert:{event_id}:{admin_id}"
         if event_id
-        else f"compensation-upsert:{time.time_ns()}:{admin_id}"
+        else f"compensation-upsert:{runtime_ids.new_id()}:{admin_id}"
     )
 
 
@@ -418,7 +418,7 @@ def _compensation_operation_id(event: MessageEvent, action: str, target: str = "
     ).strip()
     user_id = str(event.get_user_id()).strip()
     suffix = f":{target}" if target else ""
-    return f"compensation:{action}:{event_id or time.time_ns()}:{user_id}{suffix}"
+    return f"compensation:{action}:{event_id or runtime_ids.new_id()}:{user_id}{suffix}"
 
 
 async def create_reward_record(
@@ -496,7 +496,7 @@ async def create_reward_record(
         record = {
             "items": reward_items,
             "expire_time": expire_time.strftime("%Y-%m-%d %H:%M:%S") if isinstance(expire_time, datetime) else expire_time,
-            "create_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "create_time": runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S"),
             "start_time": start_time.strftime("%Y-%m-%d %H:%M:%S") if isinstance(start_time, datetime) else None,
         }
 
@@ -623,7 +623,7 @@ async def claim_normal_reward(
 
     # 先 claim：成功后 has_claimed 会挡住同事件重放。
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"compensation:claim:{event_id or time.time_ns()}:{user_id}:{config['type_key']}:{record_id}"
+    operation_id = f"compensation:claim:{event_id or runtime_ids.new_id()}:{user_id}:{config['type_key']}:{record_id}"
     result = _run_compensation_action(
         "reward_claim",
         operation_id,
@@ -765,7 +765,7 @@ async def list_normal_rewards(
         await handle_send(bot, event, f"当前没有可用的{config['type_key']}")
         return
 
-    current_time = datetime.now()
+    current_time = runtime_clock.now()
 
     valid = []
     not_started = []
