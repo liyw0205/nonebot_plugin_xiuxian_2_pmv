@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from nonebot import get_bots, get_bot
 from ...paths import get_paths
 from ...infrastructure.ids import UUIDGenerator
+from ...infrastructure.clock import SystemClock
 from ..on_compat import on_command
 from nonebot.params import CommandArg
 from ..adapter_compat import (
@@ -62,6 +63,7 @@ cache_help = {}
 group_rift = {}  # dict
 config = get_rift_config() # 获取秘境配置
 runtime_ids = UUIDGenerator()
+runtime_clock = SystemClock()
 groups = config['open']  # list
 
 
@@ -95,7 +97,9 @@ def _rift_elapsed_minutes(value, *, now: datetime | None = None) -> int:
         return 10**9
     try:
         started_at = _parse_rift_datetime(value)
-        current = now or datetime.now(timezone.utc)
+        current = now or runtime_clock.now()
+        if current.tzinfo is None:
+            current = current.replace(tzinfo=timezone.utc)
         if started_at.tzinfo is None:
             current = current.astimezone(timezone.utc).replace(tzinfo=None)
         else:
@@ -114,7 +118,7 @@ def _rift_operation_seed(operation_id: str, scope: str) -> int:
 
 
 def _scheduled_generation_operation_id(now: datetime | None = None) -> str:
-    now = now or datetime.now()
+    now = now or runtime_clock.now()
     slot = 0 if now.hour < 12 else 12
     return f"rift-generation:scheduled:{now:%Y-%m-%d}:{slot:02d}"
 
