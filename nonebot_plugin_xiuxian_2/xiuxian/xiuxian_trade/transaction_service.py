@@ -367,7 +367,7 @@ async def end_auction_process(
             item_types[int(item["item_id"])] = str(info["type"])
     result = session_service.finish(
         operation_id or f"auction-finish:{session['session_id']}",
-        session["session_id"], end_time=time.time(),
+        session["session_id"], end_time=runtime_clock.now().timestamp(),
         fee_rate=auction_config.get_auction_rules()["fee_rate"],
         item_types=item_types,
     )
@@ -429,9 +429,9 @@ async def reconcile_auction_after_restart() -> None:
     session = session_service.get_active_session()
     if session is None:
         raise RuntimeError("auction items exist without an active database session")
-    now_dt = datetime.now()
+    now_dt = runtime_clock.now()
+    end_dt = datetime.fromtimestamp(session["end_time"], tz=now_dt.tzinfo)
     item_count = len(current_auctions)
-    end_dt = datetime.fromtimestamp(session["end_time"])
     if now_dt >= end_dt:
         logger.info(
             f"拍卖重启后对账：已过结束时间（{end_dt.strftime('%m-%d %H:%M')}），"

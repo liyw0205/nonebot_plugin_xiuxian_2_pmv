@@ -919,6 +919,8 @@
 
 2026-09-15 auction start provider live safety：提交 `d06788a` 部署后 backup `/srv/old/data/backups/20260915T094455Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行拍卖启动/商品写入。
 
+2026-09-15 auction end/reconcile clock boundary：拍卖结束使用注入 `runtime_clock` 的 epoch 时间，重启对账将 session epoch 转为同一 UTC aware 时区；trade/auction/source共209 tests、catalog=103、compileall、architecture、diff check通过。queue/repository历史 asset transaction 仍保留为未迁移边界。
+
 2026-09-15 illusion operation ID boundary：幻境心境试炼真实入口的无事件 operation ID统一使用注入 `runtime_ids`，choice结果查询与写入继续经 `IllusionApplication`；illusion/data/source共153 tests、catalog=103、compileall、architecture、diff check通过。旧 `IllusionChoiceService` 仅保留兼容边界。
 
 2026-09-15 illusion operation ID live safety：提交 `a48e9d1` 部署后 backup `/srv/old/data/backups/20260915T095343Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行幻境选择写入。
