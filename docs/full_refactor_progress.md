@@ -869,6 +869,8 @@
 
 2026-09-16 title migration routing correction：首次 `title.002` live dry-run发现其错误出现在 game_db pending；未执行 apply、未改变数据。修正 startup 分库过滤，将 `title.002` 排除于 game_db并保留于 player_db，重新通过 title/source 155 tests、catalog=104、compileall、architecture、diff check；待修复提交重新执行 live safety。
 
+2026-09-16 title schema live safety：修复提交 `73b2f26` 部署后 backup `/srv/old/data/backups/20260915T213408Z`，game_db/player_db migration dry-run均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，104-entry recovery clean。live未执行称号解锁/装备写入。
+
 2026-09-16 accessory package request-DDL blocked：game-side `accessory_package.001` 已创建 operation schema，但 repository请求路径与 legacy service同时跨 player attached schema；player attached migration尚未接入 startup，不能只删除 game-side ensure而破坏跨库兼容。保留现状并待 attached migration runner完成后整体收口。
 
 2026-09-15 interactive provider live safety：提交 `1624de3` 部署后 backup `/srv/old/data/backups/20260915T091541Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行互动结算/领取写入。
