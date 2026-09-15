@@ -709,6 +709,8 @@
 
 2026-09-15 sect weekly/provider guard：宗门周常无事件 operation ID改用注入 `runtime_ids`；同步修正四个已完成 application handler的过时 source guard（elixir/mainbuff/join/secbuff/shop），均明确要求 application调用并禁止旧 service。sect/source共298 tests、catalog=103、compileall、architecture、diff check通过；宗门周常 reward transaction仍是未迁移边界。
 
+2026-09-15 sect weekly/provider live safety：提交 `76d79da` 部署后 backup `/srv/old/data/backups/20260915T051217Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行宗门周常奖励写入。
+
 2026-09-15 sign-in task projection DDL fix：`SignInTaskRepository.record`移除 request-time `ensure_schema`，正式 schema仅由已有 `apply_sign_in_tasks` startup migration创建；测试fixture改为显式 migration后验证 daily/weekly progress idempotency。task/effects/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 sign-in task projection live safety：提交 `d845283` 部署后 backup `/srv/old/data/backups/20260915T001441Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务进度写入。
