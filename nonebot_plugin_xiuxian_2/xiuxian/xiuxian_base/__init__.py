@@ -7,6 +7,9 @@ from datetime import datetime
 
 from nonebot.typing import T_State
 from ...paths import get_paths
+from ...infrastructure.clock import SystemClock
+from ...infrastructure.random_source import SystemRandom
+from ...infrastructure.ids import UUIDGenerator
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from nonebot import get_bot
 from ..on_compat import on_command
@@ -72,6 +75,9 @@ stone_contest_service = StoneContestService(get_paths().game_db)
 stone_robbery_service = StoneRobberySettlementService(
     get_paths().game_db, get_paths().player_db
 )
+runtime_clock = SystemClock()
+runtime_random = SystemRandom()
+runtime_ids = UUIDGenerator()
 registration_batcher = RegistrationBatcher(sql_message)
 player_data_manager = PlayerDataManager()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
@@ -143,7 +149,7 @@ def _player_rename_operation_id(event, rename_type, user_id):
     ).strip()
     if event_id:
         return f"player-rename:{event_id}:{rename_type}:{user_id}"
-    return f"player-rename:{rename_type}:{user_id}:{time.time_ns()}"
+    return f"player-rename:{rename_type}:{user_id}:{runtime_ids.new_id()}"
 
 
 def _stone_gift_operation_id(event, sender_id, recipient_id):
@@ -152,7 +158,7 @@ def _stone_gift_operation_id(event, sender_id, recipient_id):
     ).strip()
     if event_id:
         return f"stone-gift:{event_id}:{sender_id}:{recipient_id}"
-    return f"stone-gift:{sender_id}:{recipient_id}:{time.time_ns()}"
+    return f"stone-gift:{sender_id}:{recipient_id}:{runtime_ids.new_id()}"
 
 
 def _stone_theft_operation_id(event, thief_id):
@@ -161,7 +167,7 @@ def _stone_theft_operation_id(event, thief_id):
     ).strip()
     if event_id:
         return f"stone-theft:{event_id}:{thief_id}"
-    return f"stone-theft:{thief_id}:{time.time_ns()}"
+    return f"stone-theft:{thief_id}:{runtime_ids.new_id()}"
 
 
 def _stone_theft_messages(result, thief_name, victim_name):
@@ -188,7 +194,7 @@ def _stone_robbery_operation_id(event, robber_id):
     ).strip()
     if event_id:
         return f"stone-robbery:{event_id}:{robber_id}"
-    return f"stone-robbery:{robber_id}:{time.time_ns()}"
+    return f"stone-robbery:{robber_id}:{runtime_ids.new_id()}"
 
 
 def _stone_robbery_messages(result, robber_name):
@@ -762,7 +768,7 @@ async def run_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     root, root_type = XiuxianJsonDate().linggen_get()
     rate = sql_message.get_root_rate(root_type, user_id)
     power = 100 * float(rate)
-    create_time = str(datetime.now())
+    create_time = str(runtime_clock.now())
 
     # 并发注册直接尝试插入；道号冲突时只重试当前用户，不先做全表查重。
     for _ in range(20):
@@ -1335,14 +1341,14 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
         await handle_send(bot, event, power_rate)
         await steal_stone.finish()
 
-    steal_success = random.randint(0, 100)
+    steal_success = runtime_random.randint(0, 100)
     if steal_success > power_rate:
         outcome = "failure"
         requested_amount = coststone_num
     else:
         lower = max(1, int(XiuConfig().tou_lower_limit * steal_user_stone))
         upper = max(lower, int(XiuConfig().tou_upper_limit * steal_user_stone))
-        requested_amount = min(random.randint(lower, upper), 1000000)
+        requested_amount = min(runtime_random.randint(lower, upper), 1000000)
         outcome = "success"
 
     settlement = stone_contest_service.settle_theft(
@@ -1748,7 +1754,7 @@ def generate_daohao():
     return daohao
 
 async def reset_lottery_participants():
-    business_date = datetime.now().date().isoformat()
+    business_date = runtime_clock.now().date().isoformat()
     lottery_settlement_service.get_snapshot(business_date)
     logger.opt(colors=True).info(
         f"<green>鸿运业务日已切换：{business_date}</green>"
