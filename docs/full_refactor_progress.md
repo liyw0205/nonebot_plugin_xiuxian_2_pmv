@@ -901,6 +901,8 @@
 
 2026-09-16 web logs clock boundary：无年份日志记录的当前年份解析统一使用 `core.runtime_clock`；source共143 tests、catalog=103、compileall、architecture、diff check通过。日志写入和管理查询的 legacy web边界保持不变。
 
+2026-09-16 web logs clock live safety：提交 `c93dfb6` 部署后 backup `/srv/old/data/backups/20260915T161728Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行日志写入/管理变更。
+
 2026-09-15 world-events random boundary：恶魔生成、随机奖励、灵脉时长/触发与攻击领奖随机决策统一使用注入 `runtime_random`，时间默认使用 `runtime_clock`；demon/source共166 tests、catalog=103、compileall、architecture、diff check通过。复杂 replay与多库 settlement仍为未迁移边界。
 
 2026-09-15 world-events random live safety：提交 `06dbcfe` 部署后 backup `/srv/old/data/backups/20260915T140006Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行恶魔/灵脉随机奖励写入。
