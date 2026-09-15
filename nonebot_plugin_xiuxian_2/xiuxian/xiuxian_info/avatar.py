@@ -12,6 +12,9 @@ from ..xiuxian_utils.utils import check_user, get_impersonating_target, handle_s
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ...features.info.application import InfoApplication
 from ...paths import get_paths
+from ...infrastructure.clock import SystemClock
+from ...infrastructure.random_source import SystemRandom
+from ...infrastructure.ids import UUIDGenerator
 
 
 avatar_switch_cmd = on_command("身外化身", priority=5, block=True)
@@ -20,6 +23,9 @@ my_id_cmd = on_command("我的ID", aliases={"我的id", "myid", "id"}, priority=
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
 info_application = InfoApplication(get_paths().game_db)
+runtime_clock = SystemClock()
+runtime_random = SystemRandom()
+runtime_ids = UUIDGenerator()
 
 
 def _run_info_action(action: str, operation_id: str, user_id: str, call, **payload):
@@ -42,7 +48,7 @@ def _run_info_action(action: str, operation_id: str, user_id: str, call, **paylo
 
 def _avatar_operation_id(event, action: str, user_id: str) -> str:
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    return f"info:{action}:{event_id or time.time_ns()}:{user_id}"
+    return f"info:{action}:{event_id or runtime_ids.new_id()}:{user_id}"
 
 
 @avatar_switch_cmd.handle(parameterless=[Cooldown(cd_time=0)])
@@ -156,7 +162,7 @@ async def my_id_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 def _generate_unique_avatar_id() -> str:
     """生成不与现有修仙用户冲突的化身ID"""
     while True:
-        new_id = str(random.randint(10_000_000, 9_999_999_999))
+        new_id = str(runtime_random.randint(10_000_000, 9_999_999_999))
         if not sql_message.get_user_info_with_id(new_id):
             return new_id
 
@@ -180,7 +186,7 @@ def init_avatar_if_needed(main_id: str, *, operation_id: str | None = None) -> d
         return info
 
     avatar_id = _generate_unique_avatar_id()
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now_str = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")
 
     op = operation_id or f"info:avatar-init:{main_id}"
     def persist_avatar():
@@ -219,7 +225,7 @@ def toggle_avatar(main_id: str, *, operation_id: str | None = None) -> tuple[str
 
     result = _run_info_action(
         "avatar_toggle",
-        operation_id or f"info:avatar-toggle:{main_id}:{time.time_ns()}",
+        operation_id or f"info:avatar-toggle:{main_id}:{runtime_ids.new_id()}",
         str(main_id),
         lambda: (
             player_data_manager.update_or_write_data(main_id, "avatar", "active_id", new_active),
