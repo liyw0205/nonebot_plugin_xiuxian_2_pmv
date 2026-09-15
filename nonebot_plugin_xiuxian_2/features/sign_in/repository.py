@@ -22,7 +22,6 @@ class SignInRepository:
         )
 
     def operation(self, uow: DatabaseUnitOfWork, operation_id: str) -> SignInRecord | None:
-        self.ensure_schema(uow)
         row = uow.query_one(
             "SELECT operation_id, user_id, stone FROM sign_in_operations WHERE operation_id = ?",
             (operation_id,),

@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 from nonebot_plugin_xiuxian_2.features.sign_in.application import SignInApplication
+from nonebot_plugin_xiuxian_2.features.sign_in.migrations import apply_sign_in
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 
 
@@ -28,6 +29,7 @@ class SignInEffectsBoundaryTests(unittest.TestCase):
             with DatabaseUnitOfWork(database) as uow:
                 uow.execute("CREATE TABLE user_xiuxian (user_id TEXT, is_sign INTEGER, stone INTEGER)")
                 uow.execute("INSERT INTO user_xiuxian VALUES (?, ?, ?)", ("u1", 0, 0))
+                apply_sign_in(uow)
             effects = Mock()
             app = SignInApplication(database, random_source=FixedRandom(), clock=FixedClock(), effects=effects)
 
@@ -48,6 +50,7 @@ class SignInEffectsBoundaryTests(unittest.TestCase):
             database = Path(directory) / "sign.db"
             with DatabaseUnitOfWork(database) as uow:
                 uow.execute("CREATE TABLE user_xiuxian (user_id TEXT, is_sign INTEGER, stone INTEGER)")
+                apply_sign_in(uow)
             effects = Mock()
             app = SignInApplication(database, random_source=FixedRandom(), clock=FixedClock(), effects=effects)
 
