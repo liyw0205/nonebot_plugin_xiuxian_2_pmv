@@ -29,6 +29,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
     leave_harm_time,
 )
 from ...paths import get_paths
+from ...infrastructure.ids import UUIDGenerator
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from ...features.world_events.application import DemonClaimApplication
@@ -54,6 +55,7 @@ demon_attack_settlement_service = DemonAttackSettlementService(get_paths().playe
 demon_event_lifecycle_service = DemonEventLifecycleService(get_paths().player_db)
 demon_wave_refresh_service = DemonWaveRefreshService(get_paths().player_db)
 spirit_vein_lifecycle_service = SpiritVeinLifecycleService(get_paths().player_db)
+runtime_ids = UUIDGenerator()
 
 EVENT_TABLE = "world_event_state"
 EVENT_KEY = "global"
@@ -1171,7 +1173,7 @@ async def start_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMess
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     with _state_lock:
         expected = _load_state()
-        message_id = getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns()
+        message_id = getattr(event, "message_id", "") or getattr(event, "id", "") or runtime_ids.new_id()
         operation_id = f"demon-lifecycle:manual-start:{message_id}"
         replay = demon_event_lifecycle_service.replay(operation_id)
         if replay is not None:
@@ -1196,7 +1198,7 @@ async def start_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMess
 async def start_spirit_vein_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     with _state_lock:
-        message_id = getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns()
+        message_id = getattr(event, "message_id", "") or getattr(event, "id", "") or runtime_ids.new_id()
         operation_id = f"spirit-vein:manual-start:{message_id}"
         result = _start_spirit_vein_manual(operation_id)
         state = result.state or {}
@@ -1220,7 +1222,7 @@ async def close_world_event_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     with _state_lock:
         state = _load_state()
-        message_id = getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns()
+        message_id = getattr(event, "message_id", "") or getattr(event, "id", "") or runtime_ids.new_id()
         operation_id = f"demon-lifecycle:manual-finish:{message_id}"
         replay = demon_event_lifecycle_service.replay(operation_id)
         if replay is not None:
@@ -1241,7 +1243,7 @@ async def close_world_event_(bot: Bot, event: GroupMessageEvent | PrivateMessage
 async def close_spirit_vein_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     with _state_lock:
-        message_id = getattr(event, "message_id", "") or getattr(event, "id", "") or time.time_ns()
+        message_id = getattr(event, "message_id", "") or getattr(event, "id", "") or runtime_ids.new_id()
         operation_id = f"spirit-vein:manual-finish:{message_id}"
         result = _close_spirit_vein_manual(operation_id)
     msg = (
@@ -1331,7 +1333,7 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
     operation_id = (
         f"demon-attack:{event_snapshot.get('event_id')}:{user_id}:{event_message_id}"
         if event_message_id
-        else f"demon-attack:{event_snapshot.get('event_id')}:{user_id}:{time.time_ns()}"
+        else f"demon-attack:{event_snapshot.get('event_id')}:{user_id}:{runtime_ids.new_id()}"
     )
     prior_attack = demon_attack_settlement_service.get_result(operation_id)
     if prior_attack is not None and prior_attack.status in {"applied", "duplicate"}:
@@ -1535,7 +1537,7 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     operation_id = (
         f"demon-claim:{claim_event_id}:{user_id}:{event_message_id}"
         if event_message_id
-        else f"demon-claim:{claim_event_id}:{user_id}:{time.time_ns()}"
+        else f"demon-claim:{claim_event_id}:{user_id}:{runtime_ids.new_id()}"
     )
     # Legacy facade call: demon_claim_service.claim(...) remains documented for
     # source-quality checks; the application owns the actual command write path.
