@@ -17,6 +17,7 @@ from typing import Dict, List
 from ...paths import get_paths
 from ...features.impart_pk.application import ImpartPkApplication
 from ...infrastructure.ids import UUIDGenerator
+from ...infrastructure.random_source import SystemRandom
 import time
 from ...paths import get_paths
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
@@ -83,6 +84,7 @@ impart_closing_enter_service = ImpartClosingEnterService(
 impart_project_join_service = ImpartProjectJoinService(get_paths().player_db)
 impart_pk_application = ImpartPkApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
+runtime_random = SystemRandom()
 
 
 def _run_impart_pk_action(action, operation_id, user_id, call, **payload):
@@ -828,57 +830,57 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             await handle_send(bot, event, msg, md_type="虚神界", k1="探索", v1="虚神界探索", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
             await impart_pk_go.finish()
     
-    impart_suc = random.randint(1, 100)
-    impart_time = random.randint(1, 100)
-    impart_rate = random.randint(1, 3)
+    impart_suc = runtime_random.randint(1, 100)
+    impart_time = runtime_random.randint(1, 100)
+    impart_rate = runtime_random.randint(1, 3)
     rates = get_rates_by_floor(impart_lv) # 概率权重线性渐变
     all_msgs : Dict[str, List[str]] = {
         "stay": [
             f"道友突然心有所感，决定原地静修，参悟{impart_name}的玄机",
-            f"《{random.choice(['太虚','九幽','混元'])}经》自行运转，道友决定暂缓探索",
+            f"《{runtime_random.choice(['太虚','九幽','混元'])}经》自行运转，道友决定暂缓探索",
             f"冥冥中似有警示，道友决定今日不宜继续探索虚神界",
             f"道友在{impart_name}中偶得顿悟，决定就地闭关参悟",
-            f"「{random.choice(['青萍剑','昆仑镜','造化玉碟'])}」发出共鸣，道友决定停下脚步"
+            f"「{runtime_random.choice(['青萍剑','昆仑镜','造化玉碟'])}」发出共鸣，道友决定停下脚步"
         ],
         "fail": [
             f"遭遇{impart_name}守护大阵反噬，道友元神受创退回！",
-            f"虚空突现《{random.choice(['太虚','九幽','混元'])}禁制》，将道友逼退！",
-            f"心魔劫显化{random.choice(['天魔','域外邪神','上古怨灵'])}虚影，道友不得不暂避锋芒！",
-            f"{random.choice(['青冥','玄黄','混沌'])}道则显化，阻断道友前进之路！",
-            f"道友本命法宝「{random.choice(['青萍剑','昆仑镜','造化玉碟'])}」震颤示警，被迫撤退！"
+            f"虚空突现《{runtime_random.choice(['太虚','九幽','混元'])}禁制》，将道友逼退！",
+            f"心魔劫显化{runtime_random.choice(['天魔','域外邪神','上古怨灵'])}虚影，道友不得不暂避锋芒！",
+            f"{runtime_random.choice(['青冥','玄黄','混沌'])}道则显化，阻断道友前进之路！",
+            f"道友本命法宝「{runtime_random.choice(['青萍剑','昆仑镜','造化玉碟'])}」震颤示警，被迫撤退！"
         ],
         "down": [
-            f"道友误触{random.choice(['周天','洪荒','太古'])}禁制，境界暂时跌落",
-            f"遭遇{random.choice(['虚空风暴','法则乱流','混沌潮汐'])}，被迫退守",
-            f"{random.choice(['诛仙','戮神','陷仙'])}剑气纵横，斩落道友一缕元神",
-            f"神秘存在「{random.choice(['荒天帝','叶天帝','楚天尊'])}」虚影显现，威压逼退道友",
-            f"《{random.choice(['道藏','佛经','魔典'])}》显化天碑，道友参悟有误反受其害"
+            f"道友误触{runtime_random.choice(['周天','洪荒','太古'])}禁制，境界暂时跌落",
+            f"遭遇{runtime_random.choice(['虚空风暴','法则乱流','混沌潮汐'])}，被迫退守",
+            f"{runtime_random.choice(['诛仙','戮神','陷仙'])}剑气纵横，斩落道友一缕元神",
+            f"神秘存在「{runtime_random.choice(['荒天帝','叶天帝','楚天尊'])}」虚影显现，威压逼退道友",
+            f"《{runtime_random.choice(['道藏','佛经','魔典'])}》显化天碑，道友参悟有误反受其害"
         ],
         "up": [
-            f"道友顿悟{random.choice(['太初','鸿蒙','混沌'])}真意，境界突破！",
-            f"得「{random.choice(['菩提树','悟道石','混沌青莲'])}」相助，勘破一层玄机",
-            f"以《{random.choice(['大衍诀','神象镇狱劲','他化自在法'])}》破开禁制",
-            f"献祭{random.choice(['千年修为','本命精血','先天灵宝'])}，强行突破桎梏",
-            f"引动{random.choice(['周天星辰','地脉龙气','混沌雷劫'])}之力，开辟前路"
+            f"道友顿悟{runtime_random.choice(['太初','鸿蒙','混沌'])}真意，境界突破！",
+            f"得「{runtime_random.choice(['菩提树','悟道石','混沌青莲'])}」相助，勘破一层玄机",
+            f"以《{runtime_random.choice(['大衍诀','神象镇狱劲','他化自在法'])}》破开禁制",
+            f"献祭{runtime_random.choice(['千年修为','本命精血','先天灵宝'])}，强行突破桎梏",
+            f"引动{runtime_random.choice(['周天星辰','地脉龙气','混沌雷劫'])}之力，开辟前路"
         ],
         "down_rate": [
-            f"遭逢{random.choice(['量劫','天人五衰','纪元更迭'])}天象，道基受损！",
-            f"{random.choice(['天道','大道','混沌'])}反噬，境界连跌！",
-            f"被「{random.choice(['时间长河','命运长河','因果长河'])}」冲刷，丢失部分道果",
-            f"{random.choice(['上苍之上','界海彼岸','黑暗源头'])}传来诡异低语，道友道心几近崩溃",
-            f"《{random.choice(['葬经','度人经','灭世书'])}》显化，强行削去道友修为"
+            f"遭逢{runtime_random.choice(['量劫','天人五衰','纪元更迭'])}天象，道基受损！",
+            f"{runtime_random.choice(['天道','大道','混沌'])}反噬，境界连跌！",
+            f"被「{runtime_random.choice(['时间长河','命运长河','因果长河'])}」冲刷，丢失部分道果",
+            f"{runtime_random.choice(['上苍之上','界海彼岸','黑暗源头'])}传来诡异低语，道友道心几近崩溃",
+            f"《{runtime_random.choice(['葬经','度人经','灭世书'])}》显化，强行削去道友修为"
         ],
         "up_rate": [
-            f"触发{random.choice(['混沌青莲','世界树','玄黄母气'])}异象，连破数关！",
-            f"得「{random.choice(['盘古斧','造化玉碟','东皇钟'])}」道韵洗礼，修为暴涨",
-            f"参透《{random.choice(['道经','佛经','魔典'])}》终极奥义，直指大道本源",
-            f"{random.choice(['鸿钧','陆压','扬眉'])}老祖显圣点化，醍醐灌顶",
-            f"吞噬{random.choice(['先天灵宝','混沌至宝','大道碎片'])}，实力飙升"
+            f"触发{runtime_random.choice(['混沌青莲','世界树','玄黄母气'])}异象，连破数关！",
+            f"得「{runtime_random.choice(['盘古斧','造化玉碟','东皇钟'])}」道韵洗礼，修为暴涨",
+            f"参透《{runtime_random.choice(['道经','佛经','魔典'])}》终极奥义，直指大道本源",
+            f"{runtime_random.choice(['鸿钧','陆压','扬眉'])}老祖显圣点化，醍醐灌顶",
+            f"吞噬{runtime_random.choice(['先天灵宝','混沌至宝','大道碎片'])}，实力飙升"
         ]
     }
-    msg_type = random.choices(list(all_msgs.keys()), weights=rates)[0]
+    msg_type = runtime_random.choices(list(all_msgs.keys()), weights=rates)[0]
     
-    msg = random.choice(all_msgs[msg_type])
+    msg = runtime_random.choice(all_msgs[msg_type])
     match msg_type:
         case "stay":
             impart_time = 0
