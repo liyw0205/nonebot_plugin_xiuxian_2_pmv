@@ -719,6 +719,8 @@
 
 2026-09-15 base player/stone provider live safety：提交 `e5b731d` 部署后 backup `/srv/old/data/backups/20260915T054936Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行玩家/灵石资产写入。
 
+2026-09-15 base sign operation ID boundary：签到真实入口的无事件 operation ID统一使用注入 `runtime_ids`；sign/source146 tests、stone/player54 tests及2 subtests、catalog=103、compileall、architecture、diff check通过。签到 task/lottery side effects仍按已记录 wiring/legacy blocker处理。
+
 2026-09-15 base daohao random boundary：注册/随机改名共用的道号生成helper支持显式 `random_source`，词库选择、结构权重、连接符和递归重试不再直接使用全局 random；base stone/player/source共197 tests、2 subtests、catalog=103、compileall、architecture、diff check通过。玩家命名 transaction service仍为未迁移边界。
 
 2026-09-15 base daohao random live safety：提交 `4b69070` 部署后 backup `/srv/old/data/backups/20260915T055934Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行注册/改名写入。

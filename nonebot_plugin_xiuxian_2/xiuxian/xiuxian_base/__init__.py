@@ -136,7 +136,7 @@ def _sign_operation_id(event, user_id):
     ).strip()
     if event_id:
         return f"sign:{event_id}:{user_id}"
-    return f"sign:{user_id}:{time.time_ns()}"
+    return f"sign:{user_id}:{runtime_ids.new_id()}"
 
 
 def _lottery_operation_id(sign_operation_id):
