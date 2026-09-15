@@ -603,6 +603,8 @@
 
 2026-09-16 sign-in task projection DDL boundary：`SignInTaskRepository.record` 不再 request-time 建表，`apply_sign_in_tasks` 作为唯一 schema 前置，新增缺表拒绝测试；sign-in/task/lottery/source共180 tests、catalog=103、compileall、architecture、diff check通过。lottery legacy fallback与 task side-effect compatibility边界仍待正式收口。
 
+2026-09-16 sign-in task projection DDL live safety：提交 `4880137` 部署后 backup `/srv/old/data/backups/20260915T185548Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行签到任务进度或奖励写入。
+
 2026-09-15 task reward claim boundary：真实 `领取任务奖励` handler移除直接 `task_manager.reward_claim_service.get_result` replay读取，统一经 `TasksApplication.execute(operation_id,user_id,payload)`进入 application ledger；任务定义/奖励快照与跨game/player reward transaction仍保留为显式 legacy repository边界，未将ServicePort facade误报为SQL迁移。task reward/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 task claim live safety：提交 `52eb6d0` 部署后 backup `/srv/old/data/backups/20260915T000645Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务奖励领取写入。
