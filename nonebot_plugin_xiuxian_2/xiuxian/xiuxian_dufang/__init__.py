@@ -418,23 +418,6 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"dufang-bet:{event_id}:{user_id}" if event_id else f"dufang-bet:{user_id}:{runtime_ids.new_id()}"
     payout_operation_id = f"dufang-payout:{operation_id}"
-    # 先回放完整鉴石单：成功后余额/注单状态会挡住二次下注与二次结算。
-    prior_bet = dufang_bet_service.get_result(operation_id)
-    prior_pay = dufang_payout_service.get_result(payout_operation_id)
-    if prior_bet is not None and prior_bet.succeeded and prior_pay is not None and prior_pay.succeeded:
-        if prior_pay.gain > 0:
-            effect_text = f"获得 {number_to(prior_pay.gain)} 灵石"
-        else:
-            effect_text = f"损失 {number_to(prior_pay.loss)} 灵石"
-        msg = (
-            f"鉴石已完成（重放）。\n"
-            f"消耗：{number_to(prior_bet.cost)}灵石\n"
-            f"{effect_text}\n"
-            f"当前灵石：{prior_pay.wallet_stone}({number_to(prior_pay.wallet_stone)})\n"
-            f"该鉴石请求已经处理，无需重复提交。"
-        )
-        await handle_send(bot, event, msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")
-        return
     placed_at = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")
     bet = _run_dufang_action(
         "bet", operation_id, user_id,

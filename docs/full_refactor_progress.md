@@ -671,6 +671,8 @@
 
 2026-09-15 dufang clock/operation live safety：提交 `f58773d` 部署后 backup `/srv/old/data/backups/20260915T033844Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行鉴石下注/支付/共享写入。
 
+2026-09-15 dufang bet replay boundary：鉴石下注handler移除最前置的 bet/payout legacy replay直读，统一先经 `_run_dufang_action` 进入 dufang application ledger；二阶段 payout duplicate兼容分支保留以支持当前旧 settlement 合同。dufang/source共153 tests、catalog=103、compileall、architecture、diff check通过。
+
 2026-09-15 sign-in task projection DDL fix：`SignInTaskRepository.record`移除 request-time `ensure_schema`，正式 schema仅由已有 `apply_sign_in_tasks` startup migration创建；测试fixture改为显式 migration后验证 daily/weekly progress idempotency。task/effects/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 sign-in task projection live safety：提交 `d845283` 部署后 backup `/srv/old/data/backups/20260915T001441Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务进度写入。
