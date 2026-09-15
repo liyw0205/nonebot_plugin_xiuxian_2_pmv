@@ -1,5 +1,7 @@
 from ..command import *
-import random
+from ....infrastructure.random_source import SystemRandom
+
+runtime_random = SystemRandom()
 
 random_voice_cmd = on_command(
     "随机语音",
@@ -13,7 +15,7 @@ random_voice_cmd = on_command(
 async def random_voice_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """随机语音（绿茶/御姐/怼人）"""
 
-    voice_type = random.choice(["绿茶", "御姐", "怼人"])
+    voice_type = runtime_random.choice(["绿茶", "御姐", "怼人"])
     if voice_type == "绿茶":
         api_url = "https://api.pearapi.ai/api/greentea/"
     elif voice_type == "御姐":
