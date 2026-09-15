@@ -761,6 +761,8 @@
 
 2026-09-15 activity operation ID boundary：活动主命令、活动任务/战令/兑换及 boss item/cooperative action 的无事件 operation ID统一使用注入 `UUIDGenerator`；activity/source共189 tests、catalog=103、compileall、architecture、diff check通过。ActivityApplication仍将历史 activity service 作为显式兼容执行器，尚未完成所有活动事务的独立 repository迁移。
 
+2026-09-15 activity operation ID live safety：提交 `7cad020` 部署后 backup `/srv/old/data/backups/20260915T075751Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行活动领取/兑换/boss写入。
+
 2026-09-15 sign-in task projection DDL fix：`SignInTaskRepository.record`移除 request-time `ensure_schema`，正式 schema仅由已有 `apply_sign_in_tasks` startup migration创建；测试fixture改为显式 migration后验证 daily/weekly progress idempotency。task/effects/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 sign-in task projection live safety：提交 `d845283` 部署后 backup `/srv/old/data/backups/20260915T001441Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务进度写入。
