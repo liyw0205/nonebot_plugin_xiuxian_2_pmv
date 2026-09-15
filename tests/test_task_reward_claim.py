@@ -203,7 +203,8 @@ class TaskRewardClaimTests(unittest.TestCase):
         entry_source = (root / "xiuxian_tasks/__init__.py").read_text(encoding="utf-8")
         self.assertIn("self.reward_claim_service.claim(", manager_source)
         self.assertNotIn("grant_reward(", manager_source)
-        self.assertIn("task_manager.claim_rewards(operation_id, user_id, cycle)", entry_source)
+        self.assertIn("tasks_application.execute(", entry_source)
+        self.assertNotIn("task_manager.claim_rewards(operation_id, user_id, cycle)", entry_source)
 
 
 if __name__ == "__main__":

@@ -112,32 +112,15 @@ async def claim_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     user_id = str(user_info["user_id"])
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"task-reward-claim:{user_id}:{event_id or time.time_ns()}"
-    # 先回放：成功后 claimed 会变成“无可领”。
-    prior = task_manager.reward_claim_service.get_result(operation_id)
-    if prior is not None and prior.succeeded:
-        if prior.tasks:
-            lines = ["任务奖励领取成功："]
-            for task in prior.tasks:
-                reward_parts = []
-                for item in task.get("items", ()):
-                    reward_parts.append(f"{item['name']}x{item['amount']}")
-                lines.append(
-                    f"- {task['name']}：{'、'.join(reward_parts) if reward_parts else '无'}"
-                )
-            msg = "\n".join(lines) + "\n该领奖请求已经处理，无需重复提交。"
-        else:
-            msg = "当前没有可领取的任务奖励。\n该领奖请求已经处理，无需重复提交。"
-    else:
-        try:
-            # Compatibility target: task_manager.claim_rewards(operation_id, user_id, cycle)
-            outcome = tasks_application.execute(
-                operation_id=operation_id,
-                user_id=user_id,
-                payload={"action": "claim_rewards", "cycle": cycle},
-            )
-            msg = str(outcome.message or (outcome.data or {}).get("message") or "任务奖励领取失败：领取未完成。")
-        except Exception:
-            msg = "任务奖励领取失败：领取过程异常，请稍后再试。"
+    try:
+        outcome = tasks_application.execute(
+            operation_id=operation_id,
+            user_id=user_id,
+            payload={"action": "claim_rewards", "cycle": cycle},
+        )
+        msg = str(outcome.message or (outcome.data or {}).get("message") or "任务奖励领取失败：领取未完成。")
+    except Exception:
+        msg = "任务奖励领取失败：领取过程异常，请稍后再试。"
     await handle_send(
         bot,
         event,
