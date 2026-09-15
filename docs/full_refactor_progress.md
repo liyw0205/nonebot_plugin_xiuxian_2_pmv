@@ -395,6 +395,8 @@
 
 2026-09-16 combat settlement composition cleanup：复核 `CombatSettlementApplication` 默认使用 `CombatSettlementSqlRepository`/`DaoBattleSqlRepository`，移除 plugin 中未使用的 `LegacyCombatSettlementRepository` import；旧 MapCombatSettlementService 保留为显式 rollback。combat/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
+2026-09-16 combat settlement composition live safety：提交 `f03683f` 部署后 backup `/srv/old/data/backups/20260915T203651Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行战斗结算或道具资产写入。
+
 2026-09-14 dao battle settlement cutover：新增 `DaoBattleSqlRepository` 与 `CombatSettlementApplication.settle_dao_battle`，真实 NoneBot `dao_qc` handler 改走 application；player_db 主库 attach game_db，覆盖双方位置校验、对称胜负统计、operation replay/state conflict、失败回滚。新增 player-only migration `combat_settlement.003` 创建 `map_dao_battle_operations`；142 个 combat/dao/application/source tests、compileall、architecture 通过。旧 `MapDaoBattleSettlementService` 保留兼容回滚，`dao_view` 读路径仍待迁移。
 
 2026-09-14 dao battle schema correction：发现新 repository 仍在请求路径创建 `dao_record`，已移入 checksum-safe player migration `combat_settlement.004`；恢复已应用 `.003` operation-only 实现，未修改其 checksum，142 tests、66-entry catalog ordering 和 architecture 通过。
