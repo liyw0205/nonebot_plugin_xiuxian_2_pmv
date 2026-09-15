@@ -5,6 +5,7 @@ from ..on_compat import on_command
 from nonebot.params import CommandArg
 
 from ...paths import get_paths
+from ...infrastructure.ids import UUIDGenerator
 from ..adapter_compat import (
     Bot,
     Message,
@@ -37,6 +38,7 @@ player_data_manager = PlayerDataManager()
 accessory_transaction_service = AccessoryTransactionService(
     get_paths().game_db, get_paths().player_db
 )
+runtime_ids = UUIDGenerator()
 
 
 
@@ -61,7 +63,7 @@ def _accessory_operation_id(event, action, user_id, target):
     ).strip()
     if event_id:
         return f"accessory:{event_id}:{action}:{user_id}:{target}"
-    return f"accessory:{action}:{user_id}:{target}:{time.time_ns()}"
+    return f"accessory:{action}:{user_id}:{target}:{runtime_ids.new_id()}"
 
 my_accessory = on_command("我的饰品", priority=10, block=True)
 accessory_bag = on_command("饰品背包", priority=10, block=True)
