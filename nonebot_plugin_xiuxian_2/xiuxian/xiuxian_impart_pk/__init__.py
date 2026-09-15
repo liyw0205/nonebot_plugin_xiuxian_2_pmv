@@ -18,6 +18,7 @@ from ...paths import get_paths
 from ...features.impart_pk.application import ImpartPkApplication
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.random_source import SystemRandom
+from ...infrastructure.clock import SystemClock
 import time
 from ...paths import get_paths
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
@@ -85,6 +86,7 @@ impart_project_join_service = ImpartProjectJoinService(get_paths().player_db)
 impart_pk_application = ImpartPkApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
 runtime_random = SystemRandom()
+runtime_clock = SystemClock()
 
 
 def _run_impart_pk_action(action, operation_id, user_id, call, **payload):
@@ -953,7 +955,7 @@ async def impart_pk_in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMess
         msg = "进入虚神界闭关状态，如需出关，发送【虚神界出关】！\n该闭关请求已经处理，无需重复提交。"
         await handle_send(bot, event, msg, md_type="虚神界", k1="出关", v1="虚神界出关", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_in_closing.finish()
-    started_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+    started_at = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S.%f")
     result = _run_impart_pk_action(
         "closing_enter", op_id, user_id,
         call=lambda: impart_closing_enter_service.enter(op_id, user_id, started_at),
@@ -1024,7 +1026,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     use_exp = as_int_like(use_exp)
     user_get_exp_max = max(0, as_int_like(max_exp) - use_exp)  # 确保不为负数
 
-    now_time = datetime.now()
+    now_time = runtime_clock.now()
     user_cd_message = sql_message.get_user_cd(user_id)
     
     # 计算闭关时长：坏 create_time → 0 分钟，仍可出关清 type=4

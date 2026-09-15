@@ -815,6 +815,8 @@
 
 2026-09-15 impart PK random live safety：提交 `0f8aba4` 部署后 backup `/srv/old/data/backups/20260915T130526Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行虚神界探索/资产写入。
 
+2026-09-15 impart PK clock boundary：虚神界闭关进入和出关 cooldown 的默认时间读取统一使用注入 `runtime_clock`；impart/source共177 tests、catalog=103、compileall、architecture、diff check通过。跨玩家 battle/closing settlement仍保留为未迁移边界。
+
 2026-09-15 lunhui operation ID boundary：轮回 reset、前世技能 recall、三库轮回 settlement和确认邀请真实入口的无事件 operation ID统一使用注入 `runtime_ids`；lunhui/source共151 tests、catalog=103、compileall、architecture、diff check通过。三库 reset/recall/settlement完整事务及旧 replay service仍为未迁移边界。
 
 2026-09-15 lunhui operation ID live safety：提交 `18e18dc` 部署后 backup `/srv/old/data/backups/20260915T100658Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行轮回 reset/recall/settlement写入。
