@@ -465,7 +465,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = (
         f"tianti-bath:{event_id}:{user_id}" if event_id
-        else f"tianti-bath:{user_id}:{time.time_ns()}"
+        else f"tianti-bath:{user_id}:{runtime_ids.new_id()}"
     )
     # The legacy ``medicine_bath_service.apply(...)`` facade remains for
     # imports during the compatibility window; application owns this write.

@@ -597,6 +597,8 @@
 
 2026-09-15 tianti operation ID live safety：提交 `f8de4e5` 部署后 backup `/srv/old/data/backups/20260915T002629Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行炼体资产写入。
 
+2026-09-15 tianti medicine bath operation ID boundary：真实 `tianti_training_application.apply_bath` handler的无事件 fallback改用注入 `UUIDGenerator`，不再使用 `time.time_ns()`；药浴/炼体/source共158 tests、catalog=103、compileall、architecture、diff check通过。药浴旧 service仍为兼容边界。
+
 2026-09-15 sign-in task projection DDL fix：`SignInTaskRepository.record`移除 request-time `ensure_schema`，正式 schema仅由已有 `apply_sign_in_tasks` startup migration创建；测试fixture改为显式 migration后验证 daily/weekly progress idempotency。task/effects/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 sign-in task projection live safety：提交 `d845283` 部署后 backup `/srv/old/data/backups/20260915T001441Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务进度写入。
