@@ -647,6 +647,8 @@
 
 2026-09-15 work item operation boundary：悬赏加速/捕获 handler的无事件 operation ID改用注入 `runtime_ids`，捕获奖励倍率改用 `runtime_random`；work item/settlement/source共151 tests、catalog=103、compileall、architecture、diff check通过。`WorkItemUseService`完整SQL事务仍未提升为feature repository。
 
+2026-09-15 work item live safety：提交 `29d7b46` 部署后 backup `/srv/old/data/backups/20260915T025940Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行悬赏加速/捕获写入。
+
 2026-09-15 dufang provider boundary：鉴石数据辅助路径的时间读取改用注入 `runtime_clock`，并在 dufang composition root 建立 `runtime_random/runtime_ids` provider，为后续随机/operation切换保留明确边界；dufang/source共153 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 dufang provider live safety：提交 `19f15b6` 部署后 backup `/srv/old/data/backups/20260915T011737Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行鉴石资产写入。
