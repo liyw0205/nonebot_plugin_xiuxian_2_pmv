@@ -1,6 +1,9 @@
-import random
 import asyncio
 from pathlib import Path
+
+from ....infrastructure.clock import SystemClock
+from ....infrastructure.random_source import SystemRandom
+from ....infrastructure.ids import UUIDGenerator
 
 from ...on_compat import on_command
 from ...xiuxian_utils.json_store import load_json_file, save_json_file
@@ -33,10 +36,13 @@ CARD_POINTS = {
 # 状态
 user_half_status: dict[str, str] = {}       # user_id -> room_id
 half_timeout_tasks: dict[str, asyncio.Task] = {}  # room_id -> task
+runtime_clock = SystemClock()
+runtime_random = SystemRandom()
+runtime_ids = UUIDGenerator()
 
 
 def _random_room_id():
-    return str(random.randint(1000, 9999))
+    return runtime_ids.new_id()
 
 
 # =========================
@@ -50,7 +56,7 @@ class HalfTenGame:
         self.player_names = {creator_id: creator_name}
 
         self.status = "waiting"  # waiting/finished/closed
-        self.create_time = now_text()
+        self.create_time = now_text(runtime_clock)
         self.start_time = None
         self.close_reason = None
 
@@ -122,11 +128,11 @@ class HalfTenGame:
     def start_and_settle(self):
         """十点半：发牌后立即结算。"""
         self.status = "finished"
-        self.start_time = now_text()
+        self.start_time = now_text(runtime_clock)
 
         # 组牌并洗牌
         deck = [f"{s}{v}" for s in CARD_SUITS for v in CARD_VALUES]
-        random.shuffle(deck)
+        runtime_random.shuffle(deck)
 
         self.cards = {}
         idx = 0

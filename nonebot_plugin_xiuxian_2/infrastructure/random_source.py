@@ -33,5 +33,8 @@ class SystemRandom:
     def sample(self, values: Sequence[T], k: int) -> list[T]:
         return self._source.sample(values, k)
 
+    def shuffle(self, values: list[T]) -> None:
+        self._source.shuffle(values)
+
 
 __all__ = ["SystemRandom"]
