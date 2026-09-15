@@ -409,7 +409,6 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.tianti_settlement.application import TiantiSettlementApplication
         from .features.tianti_settlement.repository import LegacyTiantiSettlementRepository
         from .features.tianti_training.application import TiantiTrainingApplication
-        from .features.tianti_training.repository import LegacyTiantiTrainingRepository
         from .features.tower.application import TowerApplication
         from .features.sect_fairyland.application import SectFairylandApplication
         from .features.sect_fairyland.repository import LegacySectFairylandRepository
@@ -543,6 +542,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             "tianti_training": TiantiTrainingApplication(
                 str(context.database.path("game_db")),
                 str(context.database.path("player_db")),
+                clock=context.clock,
             ),
             "tower": TowerApplication(
                 str(context.database.path("game_db")),
