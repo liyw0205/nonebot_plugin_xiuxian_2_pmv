@@ -5,6 +5,7 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import number_to
 from datetime import datetime
+from ...infrastructure.clock import SystemClock
 import json
 import os
 from pathlib import Path
@@ -44,7 +45,7 @@ class workhandle(XiuxianJsonDate):
                 "tasks": {},
                 "task_order": [],
                 "status": 1,
-                "refresh_time": (clock.now() if clock is not None else datetime.now()).strftime('%Y-%m-%d %H:%M:%S'),
+                "refresh_time": (clock.now() if clock is not None else SystemClock().now()).strftime('%Y-%m-%d %H:%M:%S'),
                 "user_level": level
             }
             
