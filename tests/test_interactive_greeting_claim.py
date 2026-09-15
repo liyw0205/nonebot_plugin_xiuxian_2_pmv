@@ -12,6 +12,8 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_Interactive.transaction_service import (
     InteractiveGreetingClaimService,
 )
+from nonebot_plugin_xiuxian_2.features.interactive.migrations import apply_interactive
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
 
@@ -25,6 +27,8 @@ class InteractiveGreetingClaimTests(unittest.TestCase):
                 "INSERT INTO user_xiuxian VALUES(%s)",
                 (("1",), ("2",), ("3",)),
             )
+        with DatabaseUnitOfWork(self.database) as uow:
+            apply_interactive(uow)
         self.service = InteractiveGreetingClaimService(self.database)
         self.day = date(2026, 7, 14)
 

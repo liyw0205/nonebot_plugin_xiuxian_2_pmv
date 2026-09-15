@@ -46,7 +46,6 @@ class InteractiveRepository:
         return granted, reward if granted else 0
 
     def settle_exp(self, uow: DatabaseUnitOfWork, *, operation_id: str, user_id: str, expected_exp: int, expected_level: str, rank_value: int, business_day: date | datetime | str) -> ExpRewardResult:
-        self.ensure_schema(uow)
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         expected_exp, expected_level, rank_value = int(expected_exp), str(expected_level), int(rank_value)
         day = business_date(business_day)
@@ -80,7 +79,6 @@ class InteractiveRepository:
         return ExpRewardResult("applied", granted, reward, final_exp)
 
     def settle_stone(self, uow: DatabaseUnitOfWork, *, operation_id: str, user_id: str, expected_stone: int, business_day: date | datetime | str) -> StoneRewardResult:
-        self.ensure_schema(uow)
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         expected_stone, day = int(expected_stone), business_date(business_day)
         if not operation_id or not user_id or expected_stone < 0:
@@ -112,7 +110,6 @@ class InteractiveRepository:
         return StoneRewardResult("applied", granted, reward, final_stone)
 
     def claim_greeting(self, uow: DatabaseUnitOfWork, *, operation_id: str, user_id: str, kind: str, business_day: date | datetime | str) -> GreetingClaimResult:
-        self.ensure_schema(uow)
         operation_id, user_id, kind = str(operation_id).strip(), str(user_id).strip(), str(kind).strip().lower()
         day = business_date(business_day)
         if not operation_id or not user_id or kind not in {"morning", "night"}:
@@ -137,7 +134,6 @@ class InteractiveRepository:
         return GreetingClaimResult("claimed", kind, day, True, position)
 
     def cleanup_greeting(self, uow: DatabaseUnitOfWork, cutoff: date | datetime | str) -> int:
-        self.ensure_schema(uow)
         day = business_date(cutoff)
         return int(uow.execute("DELETE FROM interactive_greeting_operations WHERE business_date < ?", (day,)).rowcount) + int(uow.execute("DELETE FROM interactive_greeting_claims WHERE business_date < ?", (day,)).rowcount)
 
@@ -155,7 +151,6 @@ class InteractiveRepository:
         return DailyFortuneResult(status, day, str(values[0]), str(values[1]), str(values[2]))
 
     def resolve_fortune(self, uow: DatabaseUnitOfWork, *, operation_id: str, user_id: str, business_day: date | datetime | str, create_fortune: Callable[[], Mapping[str, str]]) -> DailyFortuneResult:
-        self.ensure_schema(uow)
         operation_id, user_id, day = str(operation_id).strip(), str(user_id).strip(), business_date(business_day)
         if not operation_id or not user_id or not callable(create_fortune):
             raise ValueError("valid daily fortune request is required")
@@ -178,7 +173,6 @@ class InteractiveRepository:
         return self._fortune_result("generated", day, fortune)
 
     def cleanup_fortune(self, uow: DatabaseUnitOfWork, cutoff: date | datetime | str) -> int:
-        self.ensure_schema(uow)
         day = business_date(cutoff)
         return int(uow.execute("DELETE FROM interactive_daily_fortune_operations WHERE business_date < ?", (day,)).rowcount) + int(uow.execute("DELETE FROM interactive_daily_fortunes WHERE business_date < ?", (day,)).rowcount)
 

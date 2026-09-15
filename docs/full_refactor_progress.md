@@ -865,6 +865,8 @@
 
 2026-09-16 interactive request-DDL blocked：`features/interactive/repository.py` 的六类奖励/greeting/fortune操作仍在请求路径调用 `ensure_schema`；`interactive.001` migration已注册，但现有 legacy service测试fixture广泛依赖 `_ensure_schema` 和隐式建表，需独立批量迁移测试契约后再收口。本轮不做表面替换，跳转至更小的正式 repository slice。
 
+2026-09-16 interactive request-DDL boundary：`InteractiveRepository` 六类奖励/greeting/fortune操作移除 request-time `ensure_schema`，`interactive.001` migration成为全部 operation/claim/fortune表的启动前置；exp/stone/greeting/fortune legacy service fixtures改为显式 migration。interactive/source共167 tests、catalog=104、compileall、architecture、diff check通过；旧 service保留为显式 rollback。
+
 2026-09-16 title request-DDL boundary：新增 checksum-safe `title.002` migration，创建/补齐 `title`与`title_transaction_operations` 实际 schema，并加入 player_db startup migration集合；`TitleRepository` replay/equip/unlock/rename路径移除 request-time `ensure_schema`，legacy service fixtures改为显式 `apply_title_schema`。title/source共155 tests、catalog=104、compileall、architecture、diff check通过；旧 title service保留为显式 rollback。
 
 2026-09-16 title migration routing correction：首次 `title.002` live dry-run发现其错误出现在 game_db pending；未执行 apply、未改变数据。修正 startup 分库过滤，将 `title.002` 排除于 game_db并保留于 player_db，重新通过 title/source 155 tests、catalog=104、compileall、architecture、diff check；待修复提交重新执行 live safety。

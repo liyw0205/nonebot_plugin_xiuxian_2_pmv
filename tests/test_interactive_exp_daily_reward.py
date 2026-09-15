@@ -12,6 +12,8 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_Interactive.transaction_service import (
     InteractiveExpDailyRewardService,
 )
+from nonebot_plugin_xiuxian_2.features.interactive.migrations import apply_interactive
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
 
@@ -24,6 +26,8 @@ class InteractiveExpDailyRewardServiceTests(unittest.TestCase):
                 "CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,exp INTEGER,level TEXT)"
             )
             conn.execute("INSERT INTO user_xiuxian VALUES(%s,%s,%s)", ("u1", 100_000, "练气境初期"))
+        with DatabaseUnitOfWork(self.database) as uow:
+            apply_interactive(uow)
         self.service = InteractiveExpDailyRewardService(self.database)
         self.day = date(2026, 7, 14)
         self.grant_operation = self._operation_for(True)
