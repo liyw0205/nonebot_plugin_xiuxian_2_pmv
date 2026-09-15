@@ -91,6 +91,7 @@ from ...features.sect.application import SectApplication
 from ...features.sect.repository import SectRenameSqlRepository
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
+from ...infrastructure.random_source import SystemRandom
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
@@ -101,6 +102,7 @@ sect_application = SectApplication(
 )
 sect_ids = UUIDGenerator()
 runtime_clock = SystemClock()
+runtime_random = SystemRandom()
 fairyland_claim_service = FairylandClaimService(get_paths().player_db)
 sect_fairyland_application = SectFairylandApplication(
     get_paths().player_db,
@@ -984,7 +986,7 @@ async def sect_elixir_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
                     rewards = [(1999, "渡厄丹", "丹药", 2)]
                 else:
                     for _ in range(give_num):
-                        item_id = random.choice(give_elixir_id_list)
+                        item_id = runtime_random.choice(give_elixir_id_list)
                         give_dict[item_id] = give_dict.get(item_id, 0) + 1
                     msg = f"道友成功领取到丹药:渡厄丹 1 枚!\n"
                     rewards = [(1999, "渡厄丹", "丹药", 1)]
@@ -1238,11 +1240,11 @@ async def sect_mainbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessage
                 results = []
 
                 for i in range(100):  # 每次搜寻尝试100次
-                    if random.randint(0, 100) <= mainbuffconfig['获取到功法的概率']:
+                    if runtime_random.randint(0, 100) <= mainbuffconfig['获取到功法的概率']:
                         # 随机从可获取品阶中选择一个
-                        selected_tier = random.choice(mainbufftypes)
+                        selected_tier = runtime_random.choice(mainbufftypes)
                         # 从该品阶的功法列表中随机选择
-                        mainbuffid = random.choice(BuffJsonDate().get_gfpeizhi()[selected_tier]['gf_list'])
+                        mainbuffid = runtime_random.choice(BuffJsonDate().get_gfpeizhi()[selected_tier]['gf_list'])
                         
                         if mainbuffid in mainbuffidlist:
                             mainbuff, mainbuffmsg = get_main_info_msg(mainbuffid)
@@ -1335,11 +1337,11 @@ async def sect_secbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 results = []
 
                 for i in range(100):  # 每次搜寻尝试100次
-                    if random.randint(0, 100) <= secbuffconfig['获取到神通的概率']:
+                    if runtime_random.randint(0, 100) <= secbuffconfig['获取到神通的概率']:
                         # 随机从可获取品阶中选择一个
-                        selected_tier = random.choice(secbufftypes)
+                        selected_tier = runtime_random.choice(secbufftypes)
                         # 从该品阶的神通列表中随机选择
-                        secbuffid = random.choice(BuffJsonDate().get_gfpeizhi()[selected_tier]['st_list'])
+                        secbuffid = runtime_random.choice(BuffJsonDate().get_gfpeizhi()[selected_tier]['st_list'])
                         
                         if secbuffid in secbuffidlist:
                             secbuff = items.get_data_by_item_id(secbuffid)
@@ -2440,7 +2442,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_S
         # 检查灵石是否足够
         if user_info['stone'] < stone_cost:
             # 灵石不足，自动随机选择一个
-            sect_name = random.choice(name_options)
+            sect_name = runtime_random.choice(name_options)
             msg = f"灵石不足，已自动选择宗门名称：{sect_name}"
             await handle_send(bot, event, msg, md_type="宗门", k1="创建", v1="创建宗门", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             # 继续创建流程（不return，走后续统一创建）
@@ -2480,7 +2482,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_S
         sect_name = name_options[int(user_choice) - 1]
     else:
         # 非数字或超出范围，随机选择一个名字
-        sect_name = random.choice(name_options)
+        sect_name = runtime_random.choice(name_options)
     
     owner_position = next(
         (k for k, v in jsondata.sect_config_data().items() if v.get("title") == "宗主"),
