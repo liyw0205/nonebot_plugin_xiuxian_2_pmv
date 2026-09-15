@@ -6,6 +6,7 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from ...paths import get_paths
+from ...infrastructure.ids import UUIDGenerator
 
 from ..on_compat import on_command
 from nonebot.log import logger
@@ -68,6 +69,7 @@ from .relation_utils import (
 from .two_exp_cd import two_exp_cd
 
 partner_invite_cache = {}
+runtime_ids = UUIDGenerator()
 sql_message = XiuxianDateManage()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
@@ -130,7 +132,7 @@ bind_partner_storage(
 def _relation_operation_id(event, action, *user_ids):
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     suffix = ":".join(str(user_id) for user_id in user_ids)
-    return f"relation:{action}:{event_id or time.time_ns()}:{suffix}"
+    return f"relation:{action}:{event_id or runtime_ids.new_id()}:{suffix}"
 
 
 def _relation_power(user_info, new_exp):
