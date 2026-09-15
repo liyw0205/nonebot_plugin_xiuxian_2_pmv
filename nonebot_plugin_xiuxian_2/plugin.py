@@ -403,7 +403,6 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.activity_reward.application import ActivityRewardApplication
         from .features.activity_reward.repository import LegacyActivityRewardRepository
         from .features.combat_settlement.application import CombatSettlementApplication
-        from .features.combat_settlement.repository import LegacyCombatSettlementRepository
         from .features.admin_asset.application import AdminAssetApplication
         from .features.admin_asset.repository import LegacyAdminStoneRepository
         from .features.tianti_settlement.application import TiantiSettlementApplication
