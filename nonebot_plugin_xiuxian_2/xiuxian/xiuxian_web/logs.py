@@ -12,6 +12,7 @@ from .core import (
     redirect,
     render_template,
     request,
+    runtime_clock,
     session,
     url_for,
 )
@@ -686,7 +687,7 @@ def _parse_line_time(line: str):
     m2 = re.search(r'(\d{2}-\d{2} \d{2}:\d{2}:\d{2})', clean)
     if m2:
         try:
-            now_year = datetime.now().year
+            now_year = runtime_clock.now().year
             return datetime.strptime(f"{now_year}-{m2.group(1)}", "%Y-%m-%d %H:%M:%S")
         except ValueError:
             pass
