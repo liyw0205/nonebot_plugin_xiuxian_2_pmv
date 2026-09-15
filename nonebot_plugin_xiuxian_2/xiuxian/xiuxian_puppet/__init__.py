@@ -25,6 +25,7 @@ from .transaction_service import (
 from ...features.puppet.application import PuppetApplication
 from ...features.puppet.repository import LegacyPuppetRepository
 from ...infrastructure.ids import UUIDGenerator
+from ...infrastructure.clock import SystemClock
 
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
@@ -40,6 +41,7 @@ puppet_application = PuppetApplication(
     repository=LegacyPuppetRepository(get_paths().game_db, get_paths().player_db),
 )
 runtime_ids = UUIDGenerator()
+runtime_clock = SystemClock()
 
 # 引入定时任务
 scheduler = require("nonebot_plugin_apscheduler").scheduler
@@ -214,7 +216,7 @@ async def check_and_harvest(user_id):
 
     result = puppet_harvest_service.harvest(
         user_id,
-        now=datetime.now(),
+        now=runtime_clock.now(),
         time_cost_hours=GETCONFIG['time_cost'],
         speed_base=GETCONFIG['加速基数'],
         harvest_costs={
@@ -382,7 +384,7 @@ async def puppet_info_handler(bot: Bot, event: GroupMessageEvent | PrivateMessag
         "加速基数": 0.05
     }
 
-    nowtime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # str
+    nowtime = runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')  # str
     timedeff = round((datetime.strptime(nowtime, '%Y-%m-%d %H:%M:%S') -
                       datetime.strptime(last_time,'%Y-%m-%d %H:%M:%S')).total_seconds() / 3600,2)
 
