@@ -8,11 +8,13 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from nonebot.log import logger
+from ...infrastructure.ids import UUIDGenerator
 
 from .utils import handle_send
 
 # job_key -> (task, started_at)
 _JOBS: dict[str, tuple[asyncio.Task, float]] = {}
+runtime_ids = UUIDGenerator()
 
 
 def is_job_running(job_key: str) -> bool:
@@ -35,7 +37,7 @@ async def spawn_admin_job(
     返回 True 表示已启动；False 表示同 key 仍在跑。
     work 可为同步或协程函数；同步会丢到 to_thread。
     """
-    key = str(job_key).strip() or f"job:{time.time_ns()}"
+    key = str(job_key).strip() or f"job:{runtime_ids.new_id()}"
     if is_job_running(key):
         await handle_send(
             bot,
