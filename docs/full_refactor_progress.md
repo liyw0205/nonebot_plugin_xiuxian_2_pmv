@@ -84,6 +84,8 @@
 
 2026-09-16 stone gift request-DDL boundary：`StoneGiftRepository.operation` 移除 request-time `ensure_schema`，`stone_gift.001/002` 成为 operation/limit schema 的启动前置；real application fixture改为显式 migration。stone-gift/source共158 tests、2 subtests、catalog=103、compileall、architecture、diff check通过；旧 NoneBot handler与 legacy compatibility service保留为显式 rollback。
 
+2026-09-16 stone gift request-DDL live safety：提交 `abfe590` 部署后 backup `/srv/old/data/backups/20260915T205209Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行灵石转赠或账户资产写入。
+
 2026-09-13 sign-in 入口审计：旧 `sign_in` matcher 默认规则为 `__legacy_sign_in_disabled__`，新 adapter 规则为 `修仙签到/签到`；旧 handler 的签到后抽奖、统计和任务进度仍是真实旧逻辑，尚未宣称完成。最初探针在完整插件导入后再次手动调用 `register_migrated_matchers`，因此人为制造了重复 prefix 警告；在全新 NoneBot 进程中只执行正式包初始化没有重复警告。该误报已纠正，不把它当作生产缺陷；旧实现隔离和副作用迁移仍未完成。
 
 2026-09-13 sign-in live 验证：提交 `72173ea` 的归档已部署到受控 live 容器 `/srv/src`，旧源保留于 `/tmp/remote-host/src-pre-72173ea`。使用真实 `/srv/old/data` 重启实例后，`migrate --dry-run` 返回 `pending=[]`，`reconcile` 为 clean 且 operations/outbox/dead events 全为 0，`/health/ready` 的 database/filesystem/jobs/migrations/repositories/web 全部为 true。该结果只证明入口隔离版本可加载旧数据；签到后的 lottery/statistics/task-progress 仍需独立 application 化。
