@@ -721,6 +721,8 @@
 
 2026-09-15 base daohao random boundary：注册/随机改名共用的道号生成helper支持显式 `random_source`，词库选择、结构权重、连接符和递归重试不再直接使用全局 random；base stone/player/source共197 tests、2 subtests、catalog=103、compileall、architecture、diff check通过。玩家命名 transaction service仍为未迁移边界。
 
+2026-09-15 base daohao random live safety：提交 `4b69070` 部署后 backup `/srv/old/data/backups/20260915T055934Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行注册/改名写入。
+
 2026-09-15 sign-in task projection DDL fix：`SignInTaskRepository.record`移除 request-time `ensure_schema`，正式 schema仅由已有 `apply_sign_in_tasks` startup migration创建；测试fixture改为显式 migration后验证 daily/weekly progress idempotency。task/effects/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 sign-in task projection live safety：提交 `d845283` 部署后 backup `/srv/old/data/backups/20260915T001441Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务进度写入。
