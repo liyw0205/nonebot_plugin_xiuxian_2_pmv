@@ -743,6 +743,8 @@
 
 2026-09-15 beg clock boundary：新手/奇缘帮助文本的当前时间统一使用注入 `runtime_clock`；beg/source共148 tests、catalog=103、compileall、architecture、diff check通过。daily/novice reward transaction legacy兼容边界保持不变。
 
+2026-09-15 beg clock live safety：提交 `3e98504` 部署后 backup `/srv/old/data/backups/20260915T142921Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行新手/奇缘奖励写入。
+
 2026-09-15 beg daily live safety：提交 `61955a4` 部署后 backup `/srv/old/data/backups/20260915T064025Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行日常奇缘奖励写入。
 
 2026-09-15 beg novice boundary：新手礼包真实 handler移除 `NoviceGiftClaimService.get_result` 前置 replay，统一经 `BegApplication.execute` ledger；claimed_at及无事件 operation ID使用注入 `runtime_clock/runtime_ids`。beg daily/novice/source共148 tests、catalog=103、compileall、architecture、diff check通过。
