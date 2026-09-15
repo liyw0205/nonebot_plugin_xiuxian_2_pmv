@@ -29,7 +29,6 @@ class PackageRewardRepository:
         return tuple(PackageReward(**item) for item in json.loads(payload))
 
     def operation(self, uow: DatabaseUnitOfWork, operation_id: str) -> dict[str, Any] | None:
-        self.ensure_schema(uow)
         row = uow.query_one(
             "SELECT operation_id, user_id, package_id, quantity, rewards_json "
             "FROM package_reward_operations WHERE operation_id = ?",

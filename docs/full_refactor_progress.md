@@ -129,6 +129,8 @@
 
 2026-09-13 package_reward command partial cutover：旧 `xiuxian_back/__init__.py` 的礼包 handler 已改为调用 `PackageRewardResolver(random)`，移除原地 `random.choice`、`buff_N/name_N` 解析循环，保留既有饰品容量检查、DTO 转换和 application 资产事务。`tests.test_source_quality` 137 个通过，compileall、architecture、diff 通过。旧 handler 仍负责事件解析、饰品实例化、消息展示和 compatibility service 初始化；因此这是“奖励解析子路径已迁移”，不是 package_reward 整体完成。
 
+2026-09-16 package reward request-DDL boundary：`PackageRewardRepository.operation` 移除 request-time `ensure_schema`，唯一 schema 前置为已注册 `package_reward.001` migration；新增显式 migration与缺表不建表测试。package/source共153 tests、catalog=103、compileall、architecture、diff check通过。旧 NoneBot 礼包命令与消息解析/展示仍是未完成边界。
+
 2026-09-13 package_reward resolver live verification：提交 `c7a200c` 归档部署后，真实 `/srv/old/data` backup `/srv/old/data/backups/20260913T090234Z`、migration dry-run `pending=[]`、reconcile clean、readiness 全绿；恢复 smoke 覆盖 54 个迁移、五库 restore，reconcile clean，恢复后 readiness 全绿。该证据只证明 resolver 替换未破坏旧数据加载；旧 command 的随机奖励之外的解析、饰品实例化、展示和 facade 仍是真实路径。
 
 2026-09-13 accessory instance factory：新增 `features/accessory_package/factory.py::AccessoryInstanceFactory`，将 accessory DTO 构造的 item lookup、Clock、IdGenerator、affix roller 变为注入依赖；旧 `accessory_helpers.create_accessory_instance` 现在只作为 compatibility adapter 委托 factory，保留旧 JSON 字段和行为。`tests/test_accessory_instance_factory.py` 与 source-quality 共 134 个通过，compileall、architecture、diff 通过。旧 adapter 仍提供系统 Clock/随机 UID 和全局 Items，尚未计入 accessory/package_reward 完成。
