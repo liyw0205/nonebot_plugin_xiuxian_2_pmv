@@ -679,6 +679,8 @@
 
 2026-09-15 dufang bet replay live safety：提交 `fec39a7` 部署后 backup `/srv/old/data/backups/20260915T035119Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行鉴石下注/支付写入。
 
+2026-09-15 mixelixir harvest boundary：真实灵田收取 handler移除 `MixelixirHarvestService.get_result` 前置 replay直读，统一经 `MixelixirApplication.harvest` ledger；收取时间、药材随机选择、无事件 operation ID分别使用注入 `runtime_clock/runtime_random/runtime_ids`。harvest/source共148 tests、catalog=103、compileall、architecture、diff check通过；跨 game/player harvest repository仍是下一步 SQL 迁移边界。
+
 2026-09-15 sign-in task projection DDL fix：`SignInTaskRepository.record`移除 request-time `ensure_schema`，正式 schema仅由已有 `apply_sign_in_tasks` startup migration创建；测试fixture改为显式 migration后验证 daily/weekly progress idempotency。task/effects/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 sign-in task projection live safety：提交 `d845283` 部署后 backup `/srv/old/data/backups/20260915T001441Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务进度写入。

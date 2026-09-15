@@ -29,6 +29,9 @@ from ..xiuxian_config import convert_rank, XiuConfig, added_ranks
 from datetime import datetime
 from .mix_elixir_config import MIXELIXIRCONFIG
 from ...paths import get_paths
+from ...infrastructure.clock import SystemClock
+from ...infrastructure.random_source import SystemRandom
+from ...infrastructure.ids import UUIDGenerator
 from ...features.mixelixir.application import MixelixirApplication
 from ...features.mixelixir.repository import LegacyMixelixirRepository
 from .transaction_service import MixelixirHarvestService
@@ -57,6 +60,9 @@ mixelixir_refine_reward_service = MixelixirRefineRewardService(get_paths().game_
 mixelixir_settlement_service = MixelixirSettlementService(get_paths().game_db)
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 items = Items()
+runtime_clock = SystemClock()
+runtime_random = SystemRandom()
+runtime_ids = UUIDGenerator()
 added_rank = added_ranks()
 cache_help = {}
 
@@ -243,20 +249,10 @@ async def yaocai_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "加速基数": 0.05
     }
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"mixelixir-harvest:{event_id}:{user_id}" if event_id else f"mixelixir-harvest:{user_id}:{time.time_ns()}"
-    # 先回放：成功后收取时间推进会挡住同事件幂等。
-    prior = mixelixir_harvest_service.get_result(operation_id)
-    if prior is not None and prior.succeeded:
-        msg = "".join(
-            f"道友成功收获药材：{reward.name} {reward.quantity} 个！\n"
-            for reward in prior.rewards
-        ) + "该收取请求已经处理，无需重复提交。"
-        l_msg = [msg]
-        await send_msg_handler(bot, event, '灵田收取', bot.self_id, l_msg)
-        await yaocai_get.finish()
+    operation_id = f"mixelixir-harvest:{event_id}:{user_id}" if event_id else f"mixelixir-harvest:{user_id}:{runtime_ids.new_id()}"
     last_time = mix_elixir_info['收取时间']
     if last_time != 0:
-        nowtime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # str
+        nowtime = runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')  # str
         timedeff = round((datetime.strptime(nowtime, '%Y-%m-%d %H:%M:%S') - datetime.strptime(last_time,
                                                                                               '%Y-%m-%d %H:%M:%S')).total_seconds() / 3600,
                          2)
@@ -281,7 +277,7 @@ async def yaocai_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 i = 1
                 give_dict = {}
                 while i <= num:
-                    id = random.choice(yaocai_id_list)
+                    id = runtime_random.choice(yaocai_id_list)
                     try:
                         give_dict[id] += 1
                         i += 1
