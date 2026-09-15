@@ -3,6 +3,9 @@ import time
 from types import SimpleNamespace
 from datetime import datetime
 from ...paths import get_paths
+from ...infrastructure.clock import SystemClock
+from ...infrastructure.random_source import SystemRandom
+from ...infrastructure.ids import UUIDGenerator
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..on_compat import on_command
 from ..adapter_compat import (
@@ -38,6 +41,9 @@ sql_message = XiuxianDateManage()  # sql类
 novice_gift_claim_service = NoviceGiftClaimService(get_paths().game_db)
 beg_daily_reward_service = BegDailyRewardService(get_paths().game_db)
 beg_application = BegApplication(get_paths().game_db)
+runtime_clock = SystemClock()
+runtime_random = SystemRandom()
+runtime_ids = UUIDGenerator()
 
 
 def _run_beg_action(action: str, operation_id: str, user_id: str, **payload):
@@ -100,13 +106,7 @@ async def beg_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     user_id = str(user_info['user_id'])
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"beg-daily:{event_id}:{user_id}" if event_id else f"beg-daily:{time.time_ns()}:{user_id}"
-    # 先回放：成功后 is_beg/stone 变化，或随机奖励重掷，都会挡住同事件幂等。
-    prior = beg_daily_reward_service.get_result(operation_id)
-    if prior is not None and prior.succeeded:
-        msg = f"你获得了 {prior.stone_reward} 枚灵石。\n该奇缘请求已经处理，无需重复提交。"
-        await handle_send(bot, event, msg)
-        await beg_stone.finish()
+    operation_id = f"beg-daily:{event_id}:{user_id}" if event_id else f"beg-daily:{runtime_ids.new_id()}:{user_id}"
 
     user_msg = sql_message.get_user_info_with_id(user_id)
     user_root = user_msg['root_type']
@@ -115,7 +115,7 @@ async def beg_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     list_level_all = list(jsondata.level_data().keys())
 
     create_time = datetime.strptime(user_info['create_time'], "%Y-%m-%d %H:%M:%S.%f")
-    now_time = datetime.now()
+    now_time = runtime_clock.now()
     diff_time = now_time - create_time
     diff_days = diff_time.days # 距离创建账号时间的天数
     
@@ -140,7 +140,7 @@ async def beg_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await beg_stone.finish()
 
-    stone_reward = random.randint(
+    stone_reward = runtime_random.randint(
         XiuConfig().beg_lingshi_lower_limit,
         XiuConfig().beg_lingshi_upper_limit,
     )
@@ -165,7 +165,7 @@ async def beg_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         msg = f"你获得了 {result.stone_reward} 枚灵石。\n该奇缘请求已经处理，无需重复提交。"
     elif result.succeeded:
         stone = result.stone_reward
-        msg = random.choice(
+        msg = runtime_random.choice(
     [
         f"在一次深入古老森林的修炼旅程中，你意外地遇到了一位神秘的前辈高人。这位前辈不仅给予了你宝贵的修炼指导，还在临别时赠予了你 {stone} 枚灵石，以表达对你的认可和鼓励。",
         f"某日，在一个清澈的小溪边，一只珍稀的灵兽突然出现在你面前。它似乎对你的气息感到亲切，竟然留下了 {stone} 枚灵石，好像是在对你展示它的友好和感激。",
