@@ -673,6 +673,8 @@
 
 2026-09-16 map legacy graph cleanup continuation：调用图确认 `MapExploreStartService`、`MapHomeReturnService`、`MapMovementSettlementService`、`MapCombatLifecycleService`、`MapDongfuBuildService`、`SeedPurchaseService`、`MapDaoBattleSettlementService` 实例同样无生产调用者；移除默认实例与imports，保留 `MapApplication`/`CombatSettlementApplication` 真实路径及旧类显式 rollback。map/source共195 tests、compileall、architecture、diff check通过。
 
+2026-09-16 map AST import sweep：对 `xiuxian_map/__init__.py` 执行未使用 import核查，仅发现并移除 `Path` dead import；结果类型和 runtime providers均有真实 handler引用。map/source共195 tests、compileall、architecture、diff check通过。
+
 2026-09-16 combat settlement import cleanup：`CombatSettlementApplication` 默认使用 `CombatSettlementSqlRepository`/`DaoBattleSqlRepository`，移除未使用 `LegacyCombatSettlementRepository` import；legacy adapter保留在 repository作为显式 rollback。combat/map/source共149 tests、compileall、architecture、diff check通过。
 
 2026-09-16 tianti training application cleanup：调用图确认 `TiantiTrainingApplication._repository` 无真实调用者，所有 training handler分别使用 StoneTraining/Breakthrough/Qiaoxue/MedicineBath/ItemReward SQL repositories；移除未使用 `LegacyTiantiTrainingRepository` import与fallback。tianti/source共179 tests、compileall、architecture、diff check通过。
