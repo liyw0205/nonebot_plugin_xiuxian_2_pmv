@@ -787,6 +787,8 @@
 
 2026-09-16 trade/rift blocker re-audit：Web `TradeApplication`仍默认 `LegacyTradeFeatureRepository`，Web/command trade模块的仙肆、鬼市、拍卖 queue/session handlers仍有真实 legacy service calls；`RiftApplication`仍默认 `LegacyRiftRepository`，rift entry/settlement handlers直接调用旧 services。两者缺少 feature-owned schema/repository与完整资产事务，未做 facade-only cutover。
 
+2026-09-16 base/back/status boundary audit：Web base/back routes及旧命令仍使用 `BaseApplication`/`BackApplication` 的 `Legacy*Repository` facade，不能移除默认实例；`StatusApplication`虽有 migrated feature boundary，但未发现可替换 base/back handler graph。保留为 facade/legacy execution blocker，未做表面清理。
+
 2026-09-16 mixelixir default graph cleanup live safety：提交 `2d15bc8` 部署后 backup `/srv/old/data/backups/20260916T044201Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行炼丹收取、配方、药材或资产写入。
 
 2026-09-16 lottery audit precision live safety：提交 `28c7943` 部署后 backup `/srv/old/data/backups/20260916T035645Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。运行期审计确认 `lottery_core_default_legacy=false`，仅显式 compatibility fallback保留。
