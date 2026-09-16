@@ -241,7 +241,6 @@ class OutboxStore:
         event_type: str,
         payload: Mapping[str, Any],
     ) -> None:
-        self.ensure_schema(uow)
         now = self._now()
         uow.execute(
             "INSERT OR IGNORE INTO domain_outbox "
@@ -251,7 +250,6 @@ class OutboxStore:
         )
 
     def pending(self, uow: DatabaseUnitOfWork, *, limit: int = 100) -> list[Mapping[str, Any]]:
-        self.ensure_schema(uow)
         return uow.query_all(
             "SELECT * FROM domain_outbox WHERE status = 'pending' "
             "AND (next_attempt_at IS NULL OR next_attempt_at <= ?) ORDER BY created_at LIMIT ?",

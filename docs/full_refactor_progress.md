@@ -733,6 +733,8 @@
 
 2026-09-16 platform ledger no-request-DDL：移除 `OperationLedger.get/finish/record_failure/list_pending` 的 request-time `ensure_schema`；application fixtures显式执行 `apply_platform_schema`并保留空库读不建表契约。application/architecture/source共204 tests，focused ledger/app共181 tests，catalog=105、compileall、architecture、diff check通过。
 
+2026-09-16 platform outbox no-request-DDL：`platform.001`已覆盖五库 domain_outbox，移除 `OutboxStore.append/pending` request-time `ensure_schema`；新增空库 pending不建表契约。application/architecture/source共205 tests，catalog=105、compileall、architecture、diff check通过。
+
 2026-09-16 platform ledger no-request-DDL live safety：提交 `c1dc625` 部署后 backup `/srv/old/data/backups/20260916T024523Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行玩家资产、奖励、交易或计数写入。
 
 2026-09-16 platform ledger migration live safety：提交 `f3d474e` 部署后 backup `/srv/old/data/backups/20260916T021150Z`；首次 dry-run仅 game_db pending `platform.001`，真实 startup apply后 post-startup dry-run五库均为空，readiness六项全绿，105-entry recovery/reconcile clean。live未执行玩家资产、奖励或业务写入。
