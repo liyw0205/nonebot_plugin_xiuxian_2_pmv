@@ -45,8 +45,10 @@ from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_base import clear_all_xiangyuan
 from ..xiuxian_rift import create_rift
 from ..xiuxian_utils.xiuxian2_handle import (
-    XiuxianDateManage, XiuxianJsonDate, OtherSet, 
-    UserBuffDate, migrate_user_id_to_openid, migrate_single_user_id, swap_two_user_ids
+    XiuxianDateManage,
+    migrate_user_id_to_openid,
+    migrate_single_user_id,
+    swap_two_user_ids,
 )
 from ..xiuxian_config import XiuConfig, JsonConfig, convert_rank
 from ..xiuxian_utils.utils import (
