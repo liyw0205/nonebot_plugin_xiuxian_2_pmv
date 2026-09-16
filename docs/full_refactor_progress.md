@@ -733,6 +733,8 @@
 
 2026-09-16 platform ledger no-request-DDL：移除 `OperationLedger.get/finish/record_failure/list_pending` 的 request-time `ensure_schema`；application fixtures显式执行 `apply_platform_schema`并保留空库读不建表契约。application/architecture/source共204 tests，focused ledger/app共181 tests，catalog=105、compileall、architecture、diff check通过。
 
+2026-09-16 platform ledger no-request-DDL live safety：提交 `c1dc625` 部署后 backup `/srv/old/data/backups/20260916T024523Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行玩家资产、奖励、交易或计数写入。
+
 2026-09-16 platform ledger migration live safety：提交 `f3d474e` 部署后 backup `/srv/old/data/backups/20260916T021150Z`；首次 dry-run仅 game_db pending `platform.001`，真实 startup apply后 post-startup dry-run五库均为空，readiness六项全绿，105-entry recovery/reconcile clean。live未执行玩家资产、奖励或业务写入。
 
 2026-09-16 auction settlement boundary audit：`AuctionSettlementApplication` 的 operation ledger/replay/read-only lookup已feature-owned，但 `settle_active` 默认仍调用 `LegacyAuctionSettlementRepository` 的 trade session algorithm；auction bid也同样依赖 legacy trade repository。未发现可独立切换的 queue/history/settlement SQL schema，保留为完整 auction migration blocker。
