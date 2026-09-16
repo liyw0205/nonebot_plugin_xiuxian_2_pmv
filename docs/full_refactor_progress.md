@@ -801,6 +801,8 @@
 
 2026-09-16 illusion default graph cleanup：`_run_illusion_action`已明确丢弃 legacy callback并通过 `IllusionApplication.execute`；删除 dead `IllusionChoiceService`实例/import及未执行callback，修正 stale source gate以断言应用adapter。illusion/source/architecture共167 tests、compileall、architecture、diff check通过。
 
+2026-09-16 illusion default graph cleanup live safety：提交 `a5eedb6` 部署后 backup `/srv/old/data/backups/20260916T123203Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行幻境选择、奖励或资产写入。
+
 2026-09-16 interactive default graph cleanup continuation live safety：提交 `ab5c523` 部署后 backup `/srv/old/data/backups/20260916T122650Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行互动经验奖励、每日奖励、运势或资产写入。
 
 2026-09-16 interactive default graph cleanup live safety：提交 `47df707` 部署后 backup `/srv/old/data/backups/20260916T122258Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行互动问候、每日奖励、运势或资产写入。
