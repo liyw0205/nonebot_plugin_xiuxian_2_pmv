@@ -661,6 +661,8 @@
 
 2026-09-16 map default graph audit：`MapApplication` 默认真实路径已覆盖 interactive start/failure/settlement query、combat lifecycle、explore start/settle、resource reward、mission claim、seed purchase、dongfu build等 SQL repositories；`interactive_finish`与`combat_settle`仍显式落回 LegacyMapRepository，分别保留为 interactive settlement/combat settlement后续 blocker。未将 MapApplication 的 LegacyApplication 基类误报为所有 map 操作未迁移。
 
+2026-09-16 map interactive acceptance correction：source-quality调用图确认真实 interactive handler已使用 `map_application.interactive_replay/interactive_settlement/resource_reward`，奖励决策使用注入 `runtime_random`/`random_source`；`MapInteractiveActionService`仅作为兼容 facade与历史测试对象，未处于默认 handler graph。interactive finish/settlement主路径不再作为未切换 blocker。
+
 2026-09-16 map interactive/combat correction：复核 `MapApplication.interactive_finish` 无真实调用者，实际 interactive settlement handler走 `interactive_settlement` 的 SQL repository；`MapApplication.combat_settle` 仍无 feature-owned SQL repository，repository中仅有 combat lifecycle start/query/plan classes，保留为 map combat settlement blocker。
 
 2026-09-16 map combat wiring correction：复核真实 `xiuxian_map` 模块已持有 `CombatSettlementApplication`/`DaoBattleApplication`，Web combat route也从 `context.services["combat_settlement"]`获取 feature application；`MapApplication.combat_settle`仅为未调用的 compatibility method。保留旧 MapCombatSettlementService为 rollback，不将 dead method误报为默认 runtime blocker。
