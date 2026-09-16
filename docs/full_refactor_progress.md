@@ -665,6 +665,8 @@
 
 2026-09-16 map legacy graph cleanup：调用图确认 `xiuxian_map/__init__.py` 中旧 `MapInteractiveActionService`、`MapResourceRewardService`、`MapExploreSettlementService`、`MapMissionClaimService`、`MapCombatSettlementService` 实例均无生产调用者；移除这些默认实例与imports，保留旧类供显式 rollback/历史测试。map/source共169 tests、compileall、architecture、diff check通过。
 
+2026-09-16 map legacy graph cleanup live safety：提交 `ceee816` 部署后 backup `/srv/old/data/backups/20260916T004816Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，104-entry recovery clean。live未执行地图探索、奖励、战斗或资产写入。
+
 2026-09-16 map interactive/combat correction：复核 `MapApplication.interactive_finish` 无真实调用者，实际 interactive settlement handler走 `interactive_settlement` 的 SQL repository；`MapApplication.combat_settle` 仍无 feature-owned SQL repository，repository中仅有 combat lifecycle start/query/plan classes，保留为 map combat settlement blocker。
 
 2026-09-16 map combat wiring correction：复核真实 `xiuxian_map` 模块已持有 `CombatSettlementApplication`/`DaoBattleApplication`，Web combat route也从 `context.services["combat_settlement"]`获取 feature application；`MapApplication.combat_settle`仅为未调用的 compatibility method。保留旧 MapCombatSettlementService为 rollback，不将 dead method误报为默认 runtime blocker。
