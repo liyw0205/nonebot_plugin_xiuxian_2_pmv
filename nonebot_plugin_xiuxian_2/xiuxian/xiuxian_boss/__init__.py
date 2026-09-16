@@ -28,7 +28,9 @@ from nonebot.permission import SUPERUSER
 from nonebot.log import logger
 from ...paths import get_paths
 from ..xiuxian_utils.xiuxian2_handle import (
-    XiuxianDateManage ,UserBuffDate, OtherSet, leave_harm_time
+    XiuxianDateManage,
+    UserBuffDate,
+    leave_harm_time,
 )
 from ..xiuxian_config import convert_rank, base_rank, XiuConfig, JsonConfig
 from .makeboss import createboss, createboss_jj, create_all_bosses
