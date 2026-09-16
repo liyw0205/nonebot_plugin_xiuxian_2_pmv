@@ -10,7 +10,7 @@ from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.observability import trace_context
 from .domain import ArenaChallengePurchaseRequest, ArenaPurchaseRequest, ArenaSettlementRequest
-from .repository import ArenaChallengePurchaseSqlRepository, ArenaRepository, LegacyArenaRepository
+from .repository import ArenaChallengePurchaseSqlRepository, ArenaRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
