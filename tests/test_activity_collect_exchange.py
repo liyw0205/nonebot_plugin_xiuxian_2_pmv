@@ -15,6 +15,11 @@ from tests.test_db_backend import db_backend
 
 
 class ActivityCollectExchangeTests(unittest.TestCase):
+    def test_activity_service_defers_collect_exchange_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity import service
+
+        self.assertIsNone(service._activity_collect_exchange_service_instance)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         root = Path(self.temp_dir.name)

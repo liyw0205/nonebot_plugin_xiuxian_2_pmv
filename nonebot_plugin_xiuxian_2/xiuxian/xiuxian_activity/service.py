@@ -74,7 +74,7 @@ _point_shop_purchase_service_instance = None
 activity_task_claim_service = ActivityTaskClaimService(DB_PATH, get_paths().game_db)
 activity_sign_settlement_service = ActivitySignSettlementService(DB_PATH, get_paths().game_db)
 activity_pass_claim_service = ActivityPassClaimService(DB_PATH, get_paths().game_db)
-activity_collect_exchange_service = ActivityCollectExchangeService(DB_PATH, get_paths().game_db)
+_activity_collect_exchange_service_instance = None
 _activity_claim_all_service_instance = None
 
 
@@ -90,6 +90,13 @@ def _point_shop_purchase_service():
     if _point_shop_purchase_service_instance is None:
         _point_shop_purchase_service_instance = ActivityPointShopPurchaseService(DB_PATH, get_paths().game_db)
     return _point_shop_purchase_service_instance
+
+
+def _activity_collect_exchange_service():
+    global _activity_collect_exchange_service_instance
+    if _activity_collect_exchange_service_instance is None:
+        _activity_collect_exchange_service_instance = ActivityCollectExchangeService(DB_PATH, get_paths().game_db)
+    return _activity_collect_exchange_service_instance
 
 
 def _reward_by_day(config: dict, day_index: int) -> dict:
@@ -517,7 +524,7 @@ def claim_collect_phrase(user_id: str, query: str, operation_id: str | None = No
         return False, f"兑换奖励配置错误：{e}"
 
     ensure_activity_files()
-    result = activity_collect_exchange_service.exchange(
+    result = _activity_collect_exchange_service().exchange(
         operation_id or f"activity-exchange:{uid}:{runtime_ids.new_id()}", uid, activity["key"],
         phrase["phrase"], need, _as_int(phrase.get("limit"), 1), reward_items,
         XiuConfig().max_goods_num,
