@@ -743,6 +743,8 @@
 
 2026-09-16 partner/mentor migration blocker：`xiuxian_buff/partner.py`真实 matcher仍直接调用 `PartnerProtection/Invite/Cultivation` 与 Mentor transaction services；其 `PartnerProtectionService.read_status`会在请求路径调用 legacy `ensure_schema`并修改 player status表，relation history/mentor字段也由旧 service管理。缺少 feature-owned migration/application/UoW边界，未做局部表面替换，保留为关系多库事务 blocker。
 
+2026-09-16 tianti compatibility audit：`xiuxian_tianti/__init__.py` 中 stone training/medicine bath/breakthrough/qiaoxue/settlement旧 service实例仍为兼容导出，但真实 command handlers均调用 `TiantiTrainingApplication`/`TiantiSettlementApplication`；剩余 `transaction_service.py` direct datetime仅在未调用 legacy helper。CombatSettlement legacy adapter同样仅保留显式 rollback，默认 application使用SQL repository。
+
 2026-09-16 platform schema ownership cleanup live safety：提交 `5e9df39` 部署后 backup `/srv/old/data/backups/20260916T031829Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行玩家资产、奖励、交易或计数写入。
 
 2026-09-16 accessory/coordinator no-request-DDL live safety：提交 `8a15db2` 部署后 backup `/srv/old/data/backups/20260916T031105Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行饰品礼包、资产、奖励或计数写入。
