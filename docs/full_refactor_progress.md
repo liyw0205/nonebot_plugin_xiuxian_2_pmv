@@ -731,6 +731,8 @@
 
 2026-09-16 platform ledger migration：新增 checksum-safe `platform.001` migration，将 operation_ledger、operation_audit、domain_outbox作为 startup-owned shared schema；首次测试发现 player/other DB routing排除 platform.001，修正后 game/player/trade/impart/message 五库均执行。platform-ledger/sign-in/architecture/source共160 tests、catalog=105、compileall、diff check通过。OperationLedger lazy ensure_schema暂保留为兼容，下一独立slice再收口调用。
 
+2026-09-16 platform ledger migration live safety：提交 `f3d474e` 部署后 backup `/srv/old/data/backups/20260916T021150Z`；首次 dry-run仅 game_db pending `platform.001`，真实 startup apply后 post-startup dry-run五库均为空，readiness六项全绿，105-entry recovery/reconcile clean。live未执行玩家资产、奖励或业务写入。
+
 2026-09-16 auction settlement boundary audit：`AuctionSettlementApplication` 的 operation ledger/replay/read-only lookup已feature-owned，但 `settle_active` 默认仍调用 `LegacyAuctionSettlementRepository` 的 trade session algorithm；auction bid也同样依赖 legacy trade repository。未发现可独立切换的 queue/history/settlement SQL schema，保留为完整 auction migration blocker。
 
 2026-09-16 marker-only feature audit：`puppet`、`natal_treasure`、`sect_fairyland` migrations均只创建 feature marker；对应 repositories分别只提供 LegacyPuppet、LegacyNatalTreasure、LegacySectFairyland adapters，没有 feature-owned asset schema/SQL transaction。三者保留为独立 migration/asset blocker，不做 facade-only切换。
