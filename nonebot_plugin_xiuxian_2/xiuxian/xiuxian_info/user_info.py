@@ -13,7 +13,7 @@ from ..xiuxian_utils.utils import (
     handle_pic_send, handle_pic_msg_send,
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager, OtherSet, UserBuffDate, get_base_attributes, get_final_attributes
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager, OtherSet, UserBuffDate, get_final_attributes
 from ..xiuxian_utils.data_source import jsondata
 from .draw_user_info import draw_user_info_img, draw_user_info_img_with_default_bg
 from ..xiuxian_config import XiuConfig

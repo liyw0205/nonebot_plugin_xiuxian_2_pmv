@@ -4,7 +4,7 @@ from nonebot.log import logger
 from ...paths import get_paths
 
 from .xiuxian2_handle import (
-    XiuxianDateManage, OtherSet, UserBuffDate, XIUXIAN_IMPART_BUFF,
+    XiuxianDateManage, UserBuffDate, XIUXIAN_IMPART_BUFF,
     calc_realm_base_speed,
     get_final_attributes
 )
