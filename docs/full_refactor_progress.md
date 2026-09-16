@@ -675,6 +675,8 @@
 
 2026-09-16 map AST import sweep：对 `xiuxian_map/__init__.py` 执行未使用 import核查，仅发现并移除 `Path` dead import；结果类型和 runtime providers均有真实 handler引用。map/source共195 tests、compileall、architecture、diff check通过。
 
+2026-09-16 map AST import sweep live safety：提交 `cc7c260` 部署后 backup `/srv/old/data/backups/20260916T014326Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，104-entry recovery clean。live未执行地图操作或资产写入。
+
 2026-09-16 combat settlement import cleanup：`CombatSettlementApplication` 默认使用 `CombatSettlementSqlRepository`/`DaoBattleSqlRepository`，移除未使用 `LegacyCombatSettlementRepository` import；legacy adapter保留在 repository作为显式 rollback。combat/map/source共149 tests、compileall、architecture、diff check通过。
 
 2026-09-16 tianti training application cleanup：调用图确认 `TiantiTrainingApplication._repository` 无真实调用者，所有 training handler分别使用 StoneTraining/Breakthrough/Qiaoxue/MedicineBath/ItemReward SQL repositories；移除未使用 `LegacyTiantiTrainingRepository` import与fallback。tianti/source共179 tests、compileall、architecture、diff check通过。
