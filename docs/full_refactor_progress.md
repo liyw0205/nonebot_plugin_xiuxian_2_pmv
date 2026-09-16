@@ -859,6 +859,8 @@
 
 2026-09-17 user-info/player-fight/web legacy-import cleanup：AST及跨仓库调用图确认 `user_info.get_base_attributes`、`player_fight.OtherSet`、`xiuxian_web.core.trade_manager` 仅为未使用 imports，删除三处绑定；保留 user-info 的真实属性渲染、player-fight 的战斗状态和 Web 的 `config_impart` 路径。web/source/architecture共208 tests、compileall、inventory、diff check通过，仅有预期 legacy URL deprecation warning。
 
+2026-09-17 user-info/player-fight/web legacy-import cleanup live safety：提交 `74020c06` 部署到受控容器后，backup manifest包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db` 五库；migration dry-run五库均无 pending，旧实例 `5897` 停止后新实例 `5898` readiness通过，manifest只读命令通过，专用 operation marker写入并由rollback删除，reconcile `clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`，五库 restore完成；后置核验旧端口 healthy、新端口 closed、marker removed。未执行用户信息、战斗、交易或资产写入。
+
 2026-09-16 sect default graph cleanup live safety：提交 `b148dc28` 部署后 backup `/srv/old/data/backups/20260916T165029Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行宗门购买、入宗、丹药领取、主副 buff 学习或资产写入。
 
 2026-09-16 work default graph cleanup live safety：提交 `6c5793fe` 部署后 backup `/srv/old/data/backups/20260916T164552Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行悬赏接取、结算、物品使用或资产写入。
