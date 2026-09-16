@@ -16,10 +16,6 @@ from ..xiuxian_utils.item_json import Items
 from .training_data import training_data
 from .training_limit import training_limit
 from .training_events import training_events
-from .transaction_service import TrainingCompletionService
-from .transaction_service import TrainingEventService
-from .transaction_service import TrainingPurchaseService
-from .transaction_service import TrainingResetService
 from ...paths import get_paths
 from ...features.training.application import TrainingApplication
 from ...infrastructure.clock import SystemClock
@@ -32,10 +28,6 @@ from ..xiuxian_utils.utils import number_to
 player_data_manager = PlayerDataManager()
 sql_message = XiuxianDateManage()
 items = Items()
-training_completion_service = TrainingCompletionService(get_paths().game_db, get_paths().player_db)
-training_event_service = TrainingEventService(get_paths().game_db, get_paths().player_db)
-training_purchase_service = TrainingPurchaseService(get_paths().game_db, get_paths().player_db)
-training_reset_service = TrainingResetService(get_paths().game_db, get_paths().player_db)
 training_application = TrainingApplication(get_paths().game_db)
 runtime_clock = SystemClock()
 runtime_ids = UUIDGenerator()
