@@ -9,7 +9,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.observability import trace_context
-from .repository import LegacySectRepository, SectRenameSqlRepository, SectRepository
+from .repository import SectRenameSqlRepository, SectRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
