@@ -45,7 +45,6 @@ from ..xiuxian_utils.utils import (
 )
 from ..xiuxian_title.title_data import check_and_unlock_titles
 from .boss_limit import boss_limit, player_data_manager, DAILY_BATTLE_COUNT
-from ...compatibility.boss import BossPurchaseService
 from .transaction_service import BossPurchaseResult
 from ...compatibility.boss import WorldBossBattleSettlementService
 from ...features.boss.application import BossApplication
@@ -68,7 +67,6 @@ group_boss = {}
 groups = config['open']
 battle_flag = {}
 sql_message = XiuxianDateManage()  # sql类
-boss_purchase_service = BossPurchaseService(get_paths().game_db, get_paths().player_db)
 boss_application = BossApplication(
     get_paths().game_db,
     get_paths().player_db,

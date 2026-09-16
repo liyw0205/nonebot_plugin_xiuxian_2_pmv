@@ -765,6 +765,8 @@
 
 2026-09-16 admin default graph cleanup：AST调用图确认 stone adjustment与item grant handlers已调用 `AdminAssetApplication.adjust_stone/grant_item`，删除 `AdminStoneAdjustmentService`、`AdminItemGrantService` 默认实例及imports；`AdminItemDestroyService`仍有两处真实调用，未删除。admin/source/architecture共231 tests、compileall、architecture、diff check通过。
 
+2026-09-16 boss default graph cleanup：调用图确认 boss shop purchase handler已使用 `BossApplication.purchase`/`BossPurchaseSqlRepository`；删除无生产调用的 `BossPurchaseService` 默认实例/import，保留 `WorldBossBattleSettlementService`（battle settlement仍真实legacy）。boss/source/architecture共173 tests、compileall、diff check通过。
+
 2026-09-16 admin default graph cleanup live safety：提交 `342b984` 部署后 backup `/srv/old/data/backups/20260916T043013Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行管理员资产调整、物品发放或计数写入。
 
 2026-09-16 sect fairyland default graph cleanup live safety：提交 `30b60b7` 部署后 backup `/srv/old/data/backups/20260916T042524Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行宗门炼体堂领取、资产或计数写入。
