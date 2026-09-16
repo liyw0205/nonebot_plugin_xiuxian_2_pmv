@@ -677,6 +677,8 @@
 
 2026-09-16 map provider import cleanup：AST确认 `xiuxian_map/__init__.py` 顶层 `random`/`time` 均无引用；移除 dead imports，真实随机路径继续使用 `runtime_random`。map/source共195 tests、compileall、architecture、diff check通过；全局直接调用指标不变，剩余命中位于 legacy transaction graph。
 
+2026-09-16 map runtime provider audit：复核真实 map handler的时间路径均经 `runtime_clock`（today/cooldown/expiry），随机路径均经 `runtime_random`（nearby/interactive reward/dao battle）；未发现新的直接系统 Clock/Random调用。剩余 transaction_service direct time命中仅在未调用 legacy implementations。
+
 2026-09-16 map provider import cleanup live safety：提交 `1ba31d8` 部署后 backup `/srv/old/data/backups/20260916T014913Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，104-entry recovery clean。live未执行地图操作或资产写入。
 
 2026-09-16 map AST import sweep live safety：提交 `cc7c260` 部署后 backup `/srv/old/data/backups/20260916T014326Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，104-entry recovery clean。live未执行地图操作或资产写入。
