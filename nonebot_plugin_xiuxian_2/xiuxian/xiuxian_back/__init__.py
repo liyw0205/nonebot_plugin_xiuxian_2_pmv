@@ -30,8 +30,10 @@ from ..xiuxian_utils.utils import (
 )
 from ..xiuxian_utils.sect_utils import get_user_sect_fairyland_level as _get_user_sect_fairyland_level
 from ..xiuxian_utils.xiuxian2_handle import (
-    XiuxianDateManage, PlayerDataManager, get_weapon_info_msg, get_armor_info_msg,
-    get_sec_msg, get_main_info_msg, get_sub_info_msg, UserBuffDate, OtherSet, calc_accessory_effects
+    XiuxianDateManage,
+    PlayerDataManager,
+    UserBuffDate,
+    OtherSet,
 )
 from ..xiuxian_rift import use_rift_explore, use_rift_key, use_rift_boss, use_rift_speedup, use_rift_big_speedup
 from ..xiuxian_impart import use_wishing_stone, use_love_sand

@@ -833,6 +833,8 @@
 
 2026-09-17 admin legacy-import cleanup live safety：提交 `d859a6e5` 部署到受控容器后，backup manifest包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db` 五库；migration dry-run五库均无 pending，旧实例 `5897` 停止后新实例 `5898` readiness通过，manifest只读命令通过，专用 operation marker写入并由rollback删除，reconcile `clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`，五库 restore完成；后置核验旧端口 healthy、新端口 closed、marker removed。未执行管理员迁移、资产或玩家数据写入。
 
+2026-09-17 back legacy-import cleanup：AST调用图确认 `xiuxian_back` facade 中 `get_weapon_info_msg`、`get_armor_info_msg`、`get_sec_msg`、`get_main_info_msg`、`get_sub_info_msg`、`calc_accessory_effects` 无本模块或跨仓库生产引用，删除七个未绑定 `xiuxian2_handle` imports；保留真实 `XiuxianDateManage`、玩家状态、装备渲染及 transaction service 兼容路径。back/accessory/source/architecture共217 tests、compileall、inventory、diff check通过。
+
 2026-09-16 sect default graph cleanup live safety：提交 `b148dc28` 部署后 backup `/srv/old/data/backups/20260916T165029Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行宗门购买、入宗、丹药领取、主副 buff 学习或资产写入。
 
 2026-09-16 work default graph cleanup live safety：提交 `6c5793fe` 部署后 backup `/srv/old/data/backups/20260916T164552Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行悬赏接取、结算、物品使用或资产写入。
