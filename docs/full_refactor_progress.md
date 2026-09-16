@@ -751,6 +751,8 @@
 
 2026-09-16 lottery audit precision：审计输出拆分 `lottery_core_default_legacy=false` 与 `lottery_compatibility_fallback=true`；源码确认 `legacy_lottery` false时构造 `LotteryApplication`，旧 service仅由显式环境变量选择。source/architecture共157 tests，audit仍保留 explicit fallback blocker。
 
+2026-09-16 lottery audit precision live safety：提交 `28c7943` 部署后 backup `/srv/old/data/backups/20260916T035645Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。运行期审计确认 `lottery_core_default_legacy=false`，仅显式 compatibility fallback保留。
+
 2026-09-16 progress audit correction live safety：提交 `2de01de` 部署后 backup `/srv/old/data/backups/20260916T034555Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。audit仍诚实输出 `exit_ready=false` 与 legacy transaction/handle/explicit lottery fallback blockers。
 
 2026-09-16 tianti source-quality correction live safety：提交 `c765eb5` 部署后 backup `/srv/old/data/backups/20260916T034056Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行天梯结算、修炼、药浴、突破或资产写入。
