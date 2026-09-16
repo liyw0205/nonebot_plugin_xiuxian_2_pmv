@@ -703,6 +703,8 @@
 
 2026-09-16 trade/back facade audit：`TradeApplication`、`BackApplication`、`BaseApplication`、`RiftApplication` 默认均通过 `LegacyApplication`/旧 transaction service mapping执行；`trade.001`仅为 marker，无 trade queue/history SQL schema，back也无 feature-owned asset repository。不能把这些 operation-ledger facade当作底层迁移，保留为 trade/back/base/rift legacy blockers。
 
+2026-09-16 legacy import sweep：确认 `AuctionBidApplication`、`BankApplication`、`AdminAssetApplication`、`SectFairylandApplication`、`WorldEventApplication`、`PetApplication`、`MixelixirApplication`等仍在默认方法内真实调用对应 LegacyRepository；`MapApplication`的 LegacyMapRepository仅作为兼容基类，已切换方法走独立 SQL repositories但未切换操作仍需保留。未做广泛删除，避免破坏真实 rollback graph。
+
 2026-09-16 dungeon settlement audit：`DungeonSessionSqlRepository`真实覆盖 purchase/prepare/replay/resolve_rejection/session transition，但 `settle()`仍继承 `LegacyDungeonRepository` 的旧 explore settlement；未找到正式 prepared settlement SQL实现，保留为明确 legacy fallback blocker，不做不完整默认切换。
 
 2026-09-16 auction bid audit：`AuctionBidApplication` 默认仍使用 `LegacyTradeRepository`，`auction.001`仅创建 feature marker，未创建 bid/queue/history SQL schema；详细 settlement/replay也仍依赖 trade legacy graph。未移除 plugin 默认 adapter，保留为 auction SQL repository/跨库资产事务 blocker。
