@@ -10,7 +10,6 @@ from ..adapter_compat import (
 )
 from ..xiuxian_utils.utils import handle_send, check_user, number_to
 from ..xiuxian_utils.lay_out import Cooldown
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 import random
 import time
 from datetime import datetime, timedelta
@@ -21,9 +20,6 @@ from ...features.interactive.application import InteractiveApplication
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.random_source import SystemRandom
-sql_message = XiuxianDateManage()
-
-
 interactive_application = InteractiveApplication(get_paths().game_db)
 runtime_clock = SystemClock()
 runtime_ids = UUIDGenerator()

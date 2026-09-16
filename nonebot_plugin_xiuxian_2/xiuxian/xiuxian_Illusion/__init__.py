@@ -21,7 +21,6 @@ from ..xiuxian_utils.utils import (
     get_msg_pic, log_message, handle_send, 
     number_to, send_msg_handler, update_statistics_value
 )
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from ..xiuxian_config import convert_rank, base_rank, XiuConfig
@@ -30,7 +29,6 @@ from ...features.illusion.application import IllusionApplication
 from ...infrastructure.ids import UUIDGenerator
 
 from .IllusionData import *
-sql_message = XiuxianDateManage()
 items = Items()
 illusion_application = IllusionApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
