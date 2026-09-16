@@ -855,6 +855,8 @@
 
 2026-09-17 past-life/rift/tower legacy-import cleanup：AST及跨仓库调用图确认 `past_life_events.UserBuffDate`、`riftmake.UserBuffDate`、`tower_battle.leave_harm_time` 无模块内或外部生产/测试引用，删除三个未绑定 `xiuxian2_handle` imports；保留真实故事结算、秘境、爬塔战斗的数据库/buff/伤害路径。past-life/rift/tower/source/architecture共257 tests、compileall、inventory、diff check通过。
 
+2026-09-17 past-life/rift/tower legacy-import cleanup live safety：提交 `e75c9d41` 部署到受控容器后，backup manifest包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db` 五库；migration dry-run五库均无 pending，旧实例 `5897` 停止后新实例 `5898` readiness通过，manifest只读命令通过，专用 operation marker写入并由rollback删除，reconcile `clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`，五库 restore完成；后置核验旧端口 healthy、新端口 closed、marker removed。未执行前世、秘境、爬塔或资产写入。
+
 2026-09-16 sect default graph cleanup live safety：提交 `b148dc28` 部署后 backup `/srv/old/data/backups/20260916T165029Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行宗门购买、入宗、丹药领取、主副 buff 学习或资产写入。
 
 2026-09-16 work default graph cleanup live safety：提交 `6c5793fe` 部署后 backup `/srv/old/data/backups/20260916T164552Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行悬赏接取、结算、物品使用或资产写入。
