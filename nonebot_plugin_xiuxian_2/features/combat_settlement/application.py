@@ -8,7 +8,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import CombatSettlementRequest
-from .repository import CombatSettlementRepository, CombatSettlementSqlRepository, DaoBattleSqlRepository, LegacyCombatSettlementRepository
+from .repository import CombatSettlementRepository, CombatSettlementSqlRepository, DaoBattleSqlRepository
 from .schemas import CombatSettlementResult
 
 
