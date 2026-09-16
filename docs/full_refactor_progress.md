@@ -671,6 +671,8 @@
 
 2026-09-16 blocker re-audit：`activity_reward`仅有 `LegacyActivityRewardRepository`，`admin_asset`仅有 legacy stone/item transaction adapters，`sect_fairyland`仅有 `LegacySectFairylandRepository`；三者均无 feature-owned SQL schema/repository，不能移除 plugin 默认 legacy 注入或以 application facade宣称切换。继续寻找不依赖这些资产事务的独立 slice。
 
+2026-09-16 dungeon settlement audit：`DungeonSessionSqlRepository`真实覆盖 purchase/prepare/replay/resolve_rejection/session transition，但 `settle()`仍继承 `LegacyDungeonRepository` 的旧 explore settlement；未找到正式 prepared settlement SQL实现，保留为明确 legacy fallback blocker，不做不完整默认切换。
+
 2026-09-15 task reward claim boundary：真实 `领取任务奖励` handler移除直接 `task_manager.reward_claim_service.get_result` replay读取，统一经 `TasksApplication.execute(operation_id,user_id,payload)`进入 application ledger；任务定义/奖励快照与跨game/player reward transaction仍保留为显式 legacy repository边界，未将ServicePort facade误报为SQL迁移。task reward/source共149 tests、catalog=103、compileall、architecture、diff check通过。
 
 2026-09-15 task claim live safety：提交 `52eb6d0` 部署后 backup `/srv/old/data/backups/20260915T000645Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，103-entry recovery clean。live未执行任务奖励领取写入。
