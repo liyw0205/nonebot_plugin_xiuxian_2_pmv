@@ -67,7 +67,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "old_service_removed": "class SignInService" not in legacy_transaction and (PACKAGE / "compatibility" / "legacy_sign_in.py").is_file(),
             "effects_application_owned": "SignInApplicationEffects" in sign_effects and "SignInApplicationEffects(" in plugin,
             "task_core_legacy": "SignInTaskEffects(record_task_progress)" in plugin,
-            "lottery_core_legacy_possible": "XIUXIAN_SIGN_IN_LEGACY_LOTTERY" in plugin and "LotterySettlementService" in plugin,
+            "lottery_core_default_legacy": "if legacy_lottery else LotteryApplication(" not in plugin,
+            "lottery_compatibility_fallback": "XIUXIAN_SIGN_IN_LEGACY_LOTTERY" in plugin and "LotterySettlementService" in plugin,
             "status": "cutover_with_compatibility_rollback_side_effects_retained",
         },
     }
