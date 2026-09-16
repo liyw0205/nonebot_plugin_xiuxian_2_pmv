@@ -75,7 +75,14 @@ activity_task_claim_service = ActivityTaskClaimService(DB_PATH, get_paths().game
 activity_sign_settlement_service = ActivitySignSettlementService(DB_PATH, get_paths().game_db)
 activity_pass_claim_service = ActivityPassClaimService(DB_PATH, get_paths().game_db)
 activity_collect_exchange_service = ActivityCollectExchangeService(DB_PATH, get_paths().game_db)
-activity_claim_all_service = ActivityClaimAllService(DB_PATH)
+_activity_claim_all_service_instance = None
+
+
+def _activity_claim_all_service():
+    global _activity_claim_all_service_instance
+    if _activity_claim_all_service_instance is None:
+        _activity_claim_all_service_instance = ActivityClaimAllService(DB_PATH)
+    return _activity_claim_all_service_instance
 
 
 def _reward_by_day(config: dict, day_index: int) -> dict:
@@ -932,7 +939,7 @@ def claim_activity_rewards(user_id: str, operation_id: str | None = None) -> tup
     operation_id = operation_id or f"activity:claim-all:{uid}:{runtime_ids.new_id()}"
     from .activity_boss import claim_boss_milestone_reward, claim_boss_rank_reward
 
-    result = activity_claim_all_service.run(
+    result = _activity_claim_all_service().run(
         operation_id,
         uid,
         {

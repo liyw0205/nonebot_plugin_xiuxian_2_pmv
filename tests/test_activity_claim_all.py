@@ -181,8 +181,13 @@ class ActivityClaimAllTests(unittest.TestCase):
         service_source = (activity_root / "service.py").read_text(encoding="utf-8")
         start = service_source.index("def claim_activity_rewards")
         claim_all = service_source[start:service_source.index("def _parse_shop_query", start)]
-        self.assertIn("activity_claim_all_service.run(", claim_all)
+        self.assertIn("_activity_claim_all_service().run(", claim_all)
         self.assertNotIn("claim_boss_rewards(uid)", claim_all)
+
+    def test_activity_service_defers_claim_all_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity import service
+
+        self.assertIsNone(service._activity_claim_all_service_instance)
 
 
 if __name__ == "__main__":
