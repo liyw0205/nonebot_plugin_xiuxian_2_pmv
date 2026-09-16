@@ -55,6 +55,7 @@ class MigratedFeatureApplication:
         operation_id: str,
         user_id: str,
         payload: Mapping[str, Any] | None = None,
+        ledger_payload: Mapping[str, Any] | None = None,
     ) -> OperationOutcome[dict[str, Any]]:
         operation_id, user_id = str(operation_id).strip(), str(user_id).strip()
         if not operation_id or not user_id:
@@ -62,6 +63,8 @@ class MigratedFeatureApplication:
         request = dict(payload or {})
         action = str(request.pop("action", request.pop("operation", "execute")) or "execute")
         request["user_id"] = user_id
+        ledger_request = dict(ledger_payload or request)
+        ledger_request["user_id"] = user_id
         ledger_action = f"{self.feature}.{action}"
         with trace_context(operation_id=operation_id, user_scope=user_id):
             try:
@@ -69,7 +72,7 @@ class MigratedFeatureApplication:
                 # ledger reservation short so those connections never contend
                 # with the reservation transaction itself.
                 with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-                    existing = self.ledger.begin(uow, operation_id, ledger_action, request)
+                    existing = self.ledger.begin(uow, operation_id, ledger_action, ledger_request)
                     if existing is not None:
                         previous = existing.outcome()
                         if previous is not None:
@@ -97,7 +100,7 @@ class MigratedFeatureApplication:
             except DomainError:
                 raise
             except Exception as exc:
-                self.ledger.record_failure(self.database, operation_id, ledger_action, request, str(exc))
+                self.ledger.record_failure(self.database, operation_id, ledger_action, ledger_request, str(exc))
                 raise
 
     def execute_legacy_call(

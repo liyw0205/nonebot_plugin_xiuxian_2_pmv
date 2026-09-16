@@ -27,7 +27,6 @@ from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.ids import UUIDGenerator
 from ...features.dufang.application import DufangApplication
 from .transaction_service import (
-    DufangBetService,
     DufangPayoutService,
     DufangShareSettlementService,
 )
@@ -37,10 +36,9 @@ runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
 player_data_manager = PlayerDataManager()
-dufang_bet_service = DufangBetService(get_paths().game_db, get_paths().player_db)
 dufang_payout_service = DufangPayoutService(get_paths().game_db, get_paths().player_db)
 dufang_share_service = DufangShareSettlementService(get_paths().game_db, get_paths().player_db)
-dufang_application = DufangApplication(get_paths().game_db)
+dufang_application = DufangApplication(get_paths().game_db, get_paths().player_db)
 
 
 def _run_dufang_action(action, operation_id, user_id, call, **payload):
@@ -419,11 +417,16 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     operation_id = f"dufang-bet:{event_id}:{user_id}" if event_id else f"dufang-bet:{user_id}:{runtime_ids.new_id()}"
     payout_operation_id = f"dufang-payout:{operation_id}"
     placed_at = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")
-    bet = _run_dufang_action(
-        "bet", operation_id, user_id,
-        call=lambda: dufang_bet_service.place(operation_id, user_id, cost, placed_at),
-        cost=cost, placed_at=placed_at,
+    bet_outcome = dufang_application.bet(
+        operation_id=operation_id,
+        user_id=user_id,
+        cost=cost,
+        placed_at=placed_at,
     )
+    bet_data = dict(bet_outcome.data or {})
+    bet_data.setdefault("status", bet_outcome.status)
+    bet_data["succeeded"] = bet_outcome.ok
+    bet = SimpleNamespace(**bet_data)
     if bet.status == "stone_insufficient":
         await handle_send(bot, event, "灵石余额已变化，本次鉴石未下注。", md_type="鉴石")
         return

@@ -1477,6 +1477,8 @@
 
 2026-09-13 NoneBot 注册快照：全新 Python 进程只执行 `nonebot.init(); import nonebot_plugin_xiuxian_2`，`scripts/snapshot_nonebot_registrations.py` 输出 9 个迁移命令/别名各恰好 1 个 matcher，且全部来自 `nonebot_plugin_xiuxian_2.adapters.nonebot.commands`；未发现旧 `xiuxian_base` matcher。此前重复 prefix 警告来自导入完成后再次手动注册 matcher 的测试探针，不是干净生产启动结果。
 
+2026-09-17 dufang bet application cutover：新增 `DufangApplication.bet` 与显式 `DufangRepository` bet port，下注 handler 不再直接调用 `dufang_bet_service.place`；application contract 验证 game/player 双库扣款、`unseal_data` 更新和相同 operation replay 只执行一次。通用 migrated application 增加执行 payload 与 ledger identity payload 分离，以保留 `placed_at` metadata 不参与下注幂等身份。dufang/bet/source/legacy-boundary/architecture 共 178 tests、compileall、inventory、diff check通过。`DufangPayoutService` 与 `DufangShareSettlementService` 仍由旧 compatibility service 承担，记录为后续跨库迁移 blocker。
+
 ## 6. 下一步
 
 先把 `stone_gift` 的真实 handler 从旧模块迁移到 `features/stone_gift/commands.py`，通过新 application 的 DTO/operation_id/Clock 路径；随后补真实 NoneBot 注册测试、删除旧 `StoneGiftService` 执行实现，并在真实部署数据上执行 dry-run/reconcile/恢复。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。

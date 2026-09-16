@@ -1954,6 +1954,14 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn(".iterdir()", handler)
         self.assertNotIn(".read_text(", handler)
 
+    def test_dufang_bet_enters_feature_application(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_dufang" / "__init__.py"
+        ).read_text(encoding="utf-8")
+        handler = source[source.index("async def unseal_(bot"):]
+        self.assertIn("dufang_application.bet(", handler)
+        self.assertNotIn("dufang_bet_service.place(", handler)
+
     def test_partner_protection_is_rechecked_inside_transactions(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_buff"
         source = (root / "partner.py").read_text(encoding="utf-8")
