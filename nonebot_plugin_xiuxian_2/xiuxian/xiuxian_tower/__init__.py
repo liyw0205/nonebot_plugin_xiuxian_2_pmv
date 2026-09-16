@@ -24,7 +24,7 @@ from ..xiuxian_utils.item_json import Items
 from .tower_data import tower_data
 from .tower_battle import tower_battle
 from .tower_limit import tower_limit
-from .transaction_service import TowerPurchaseService, normalize_weekly_purchases
+from .transaction_service import normalize_weekly_purchases
 from .transaction_service import TowerSettlementService
 from ...features.tower.application import TowerApplication
 from ...features.tower.repository import TowerPurchaseSqlRepository
@@ -35,7 +35,6 @@ from ..xiuxian_title.title_data import check_and_unlock_titles
 player_data_manager = PlayerDataManager()
 sql_message = XiuxianDateManage()
 items = Items()
-tower_purchase_service = TowerPurchaseService(get_paths().game_db, get_paths().player_db)
 tower_settlement_service = TowerSettlementService(get_paths().game_db, get_paths().player_db)
 tower_application = TowerApplication(
     get_paths().game_db,

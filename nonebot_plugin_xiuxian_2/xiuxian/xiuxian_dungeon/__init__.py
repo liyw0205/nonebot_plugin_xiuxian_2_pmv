@@ -45,9 +45,7 @@ from .transaction_service import (
     build_team_invite_message,
     build_team_invite_private_message,
 )
-from .transaction_service import DungeonSessionService
 from .transaction_service import DungeonSessionResult
-from ...compatibility.dungeon import DungeonPurchaseService
 from ...compatibility.dungeon import DungeonExploreOperationService
 from .transaction_service import DungeonExploreOperationResult
 from .transaction_service import (
@@ -65,8 +63,6 @@ from ...infrastructure.clock import SystemClock
 sql_message = XiuxianDateManage()
 player_data = PlayerDataManager()
 items = Items()
-dungeon_session_service = DungeonSessionService(get_paths().player_db)
-dungeon_purchase_service = DungeonPurchaseService(get_paths().game_db)
 dungeon_application = DungeonApplication(get_paths().game_db, get_paths().player_db)
 dungeon_ids = UUIDGenerator()
 runtime_clock = SystemClock()
