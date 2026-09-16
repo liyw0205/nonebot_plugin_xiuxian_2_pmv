@@ -741,6 +741,8 @@
 
 2026-09-16 final feature request-DDL sweep：生产 `features/` application/repository层剩余 `ensure_schema`命中均位于 migration函数；shared OperationLedger/OutboxStore、accessory player apply、coordinator failure paths均已迁移为startup-owned schema。`MigrationRunner`自身的 schema_migrations metadata初始化仅保留在startup/maintenance runner，dry-run preview继续只读。
 
+2026-09-16 partner/mentor migration blocker：`xiuxian_buff/partner.py`真实 matcher仍直接调用 `PartnerProtection/Invite/Cultivation` 与 Mentor transaction services；其 `PartnerProtectionService.read_status`会在请求路径调用 legacy `ensure_schema`并修改 player status表，relation history/mentor字段也由旧 service管理。缺少 feature-owned migration/application/UoW边界，未做局部表面替换，保留为关系多库事务 blocker。
+
 2026-09-16 platform schema ownership cleanup live safety：提交 `5e9df39` 部署后 backup `/srv/old/data/backups/20260916T031829Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行玩家资产、奖励、交易或计数写入。
 
 2026-09-16 accessory/coordinator no-request-DDL live safety：提交 `8a15db2` 部署后 backup `/srv/old/data/backups/20260916T031105Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行饰品礼包、资产、奖励或计数写入。
