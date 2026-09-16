@@ -781,6 +781,8 @@
 
 2026-09-16 admin item-destroy blocker re-audit：管理员物品销毁两处真实handler仍调用 `AdminItemDestroyService.destroy`；`AdminAssetApplication`仅覆盖stone adjustment/item grant，`admin_asset.001`仅marker，没有 item-destroy application/repository/schema或幂等资产事务。保留为独立 admin asset blocker。
 
+2026-09-16 mixelixir blocker re-audit：harvest handler通过 `MixelixirApplication`，但其默认 repository仍为 `LegacyMixelixirRepository`，继续调用 `MixelixirHarvestService/MixelixirSettlementService`；`mixelixir.001`仅marker。炼丹recipe、cost、reward recovery等另有真实 legacy services，缺少统一 feature-owned schema/UoW，未做表面切换。
+
 2026-09-16 lottery audit precision live safety：提交 `28c7943` 部署后 backup `/srv/old/data/backups/20260916T035645Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。运行期审计确认 `lottery_core_default_legacy=false`，仅显式 compatibility fallback保留。
 
 2026-09-16 progress audit correction live safety：提交 `2de01de` 部署后 backup `/srv/old/data/backups/20260916T034555Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。audit仍诚实输出 `exit_ready=false` 与 legacy transaction/handle/explicit lottery fallback blockers。
