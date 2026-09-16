@@ -805,6 +805,8 @@
 
 2026-09-16 tower/dungeon default graph cleanup：AST调用图确认 `tower_purchase_service`、`dungeon_session_service`、`dungeon_purchase_service`无可执行调用，真实路径使用各自 application；删除dead实例/import，保留 `tower_settlement_service`、dungeon explore/team/settlement live services。tower+dungeon/source/architecture共272 tests、4 architecture subtests、compileall、diff check通过。
 
+2026-09-16 tower/dungeon default graph cleanup live safety：提交 `efea630` 部署后 backup `/srv/old/data/backups/20260916T160707Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行爬塔购买、地牢购买、会话或资产写入。
+
 2026-09-16 arena default graph cleanup live safety：提交 `ebae8a0` 部署后 backup `/srv/old/data/backups/20260916T153608Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行竞技场购买、挑战、结算或资产写入。
 
 2026-09-16 interactive acceptance correction：删除已不存在的 greeting compatibility comments，并更新 daily fortune/greeting source gates为断言 `InteractiveApplication.cleanup_before/execute`，拒绝真实 legacy调用形态。interactive/source/architecture共181 tests、compileall、architecture、diff check通过。
