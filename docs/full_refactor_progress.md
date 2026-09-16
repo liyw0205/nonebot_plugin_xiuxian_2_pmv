@@ -677,6 +677,8 @@
 
 2026-09-16 map provider import cleanup：AST确认 `xiuxian_map/__init__.py` 顶层 `random`/`time` 均无引用；移除 dead imports，真实随机路径继续使用 `runtime_random`。map/source共195 tests、compileall、architecture、diff check通过；全局直接调用指标不变，剩余命中位于 legacy transaction graph。
 
+2026-09-16 map provider import cleanup live safety：提交 `1ba31d8` 部署后 backup `/srv/old/data/backups/20260916T014913Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，104-entry recovery clean。live未执行地图操作或资产写入。
+
 2026-09-16 map AST import sweep live safety：提交 `cc7c260` 部署后 backup `/srv/old/data/backups/20260916T014326Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，104-entry recovery clean。live未执行地图操作或资产写入。
 
 2026-09-16 combat settlement import cleanup：`CombatSettlementApplication` 默认使用 `CombatSettlementSqlRepository`/`DaoBattleSqlRepository`，移除未使用 `LegacyCombatSettlementRepository` import；legacy adapter保留在 repository作为显式 rollback。combat/map/source共149 tests、compileall、architecture、diff check通过。
