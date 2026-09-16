@@ -2,7 +2,7 @@ import random
 from .riftconfig import get_rift_config
 from ..xiuxian_utils.utils import number_to
 from .jsondata import read_f
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, UserBuffDate, XIUXIAN_IMPART_BUFF, OtherSet
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, XIUXIAN_IMPART_BUFF, OtherSet
 from ..xiuxian_utils.player_fight import Boss_fight
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig, convert_rank, base_rank

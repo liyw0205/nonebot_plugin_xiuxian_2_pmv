@@ -10,7 +10,7 @@ from .past_life_data import (
     BIRTH_SCENARIOS, REWARD_TABLE, get_choice_branch, check_early_death
 )
 from .past_life_limit import past_life_limit
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, UserBuffDate
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import number_to
 from ..xiuxian_config import XiuConfig, convert_rank

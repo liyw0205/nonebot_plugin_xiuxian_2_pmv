@@ -1,7 +1,7 @@
 import random
 import asyncio
 import time
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, UserBuffDate, leave_harm_time
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, UserBuffDate
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.player_fight import Boss_fight
 from ..xiuxian_utils.utils import (
