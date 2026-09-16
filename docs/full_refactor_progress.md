@@ -803,6 +803,8 @@
 
 2026-09-16 arena default graph cleanup：AST调用图确认 `arena_purchase_service`、`arena_challenge_purchase_service`、`arena_challenge_ticket_service`、`arena_challenge_settlement_service`无可执行调用，真实命令使用 `ArenaApplication`；删除四个dead service实例及class imports，保留结果dataclass、weekly rank/season reward真实服务。arena/source/architecture共200 tests、compileall、diff check通过。
 
+2026-09-16 arena default graph cleanup live safety：提交 `ebae8a0` 部署后 backup `/srv/old/data/backups/20260916T153608Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行竞技场购买、挑战、结算或资产写入。
+
 2026-09-16 interactive acceptance correction：删除已不存在的 greeting compatibility comments，并更新 daily fortune/greeting source gates为断言 `InteractiveApplication.cleanup_before/execute`，拒绝真实 legacy调用形态。interactive/source/architecture共181 tests、compileall、architecture、diff check通过。
 
 2026-09-16 interactive acceptance correction live safety：提交 `f0ef6a5` 部署后 backup `/srv/old/data/backups/20260916T152203Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行互动问候、运势、经验、奖励或资产写入。
