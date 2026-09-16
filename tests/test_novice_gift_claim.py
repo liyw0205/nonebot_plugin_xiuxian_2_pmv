@@ -8,6 +8,9 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_beg.transaction_service import NoviceGiftClaimService
+from nonebot_plugin_xiuxian_2.features.beg.migrations import apply_beg
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 from tests.test_db_backend import db_backend
 
 
@@ -20,6 +23,9 @@ class NoviceGiftClaimServiceTests(unittest.TestCase):
             conn.execute("CREATE TABLE user_xiuxian (user_id TEXT PRIMARY KEY,stone INTEGER,create_time TEXT,is_novice INTEGER)")
             conn.execute("INSERT INTO user_xiuxian VALUES (%s,%s,%s,%s)", ("u1", 10, self.created_at, 0))
             conn.execute("CREATE TABLE back (user_id TEXT,goods_id INTEGER,goods_name TEXT,goods_type TEXT,goods_num INTEGER,create_time TEXT,update_time TEXT,bind_num INTEGER,UNIQUE(user_id,goods_id))")
+        with DatabaseUnitOfWork(self.database) as uow:
+            apply_platform_schema(uow)
+            apply_beg(uow)
         self.service = NoviceGiftClaimService(self.database)
         self.rewards = [
             {"id": 101, "name": "青木剑", "type": "装备", "amount": 1},
@@ -95,7 +101,10 @@ class NoviceGiftClaimServiceTests(unittest.TestCase):
             self.claim()
         self.assert_unchanged()
         with db_backend.connection(self.database) as conn:
-            self.assertFalse(conn.table_exists("novice_gift_claim_operations"))
+            self.assertEqual(
+                conn.execute("SELECT COUNT(*) FROM novice_gift_claim_operations").fetchone()[0],
+                0,
+            )
 
     def assert_unchanged(self, expected_create_time=None):
         with db_backend.connection(self.database) as conn:

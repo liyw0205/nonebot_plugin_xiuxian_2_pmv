@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+
 from flask import Blueprint, request
 
 from ..api import api_error, api_success
@@ -25,6 +27,10 @@ def create_blueprint(*, application, settlement=None, permission, clock=None, id
                 bid_price=payload.get("bid_price", 0), expected_price=payload.get("expected_price", 0),
                 expected_bids=payload.get("expected_bids", {}), bid_time=payload.get("bid_time", 0),
             )
+        except sqlite3.OperationalError as exc:
+            if "no such table" not in str(exc):
+                raise
+            return api_error("migrations_required", "数据库尚未完成迁移", status=503)
         except DomainError as exc:
             return api_error(exc.code, exc.message, details=exc.details, status=400)
         return api_success(outcome.to_dict(), status=200 if outcome.ok else 409)
@@ -40,6 +46,10 @@ def create_blueprint(*, application, settlement=None, permission, clock=None, id
                 fee_rate=payload.get("fee_rate", 0.1),
                 item_types=payload.get("item_types", {}),
             )
+        except sqlite3.OperationalError as exc:
+            if "no such table" not in str(exc):
+                raise
+            return api_error("migrations_required", "数据库尚未完成迁移", status=503)
         except DomainError as exc:
             return api_error(exc.code, exc.message, details=exc.details, status=400)
         return api_success(outcome.to_dict(), status=200 if outcome.ok else 409)

@@ -817,6 +817,8 @@
 
 2026-09-16 dungeon import cleanup live safety：提交 `b398f617` 部署后 backup `/srv/old/data/backups/20260916T165551Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行地牢组队、探索或资产写入。
 
+2026-09-17 acceptance contract follow-up：补齐 legacy application/compensation/sign-in/Beg 临时fixture的 platform→feature migrations；统一 legacy contract action筛选排除查询/replay与必填业务参数，修正 stale source gates。web reconcile/dungeon/auction未迁移库现返回结构化 `503 migrations_required`，package reward接入统一 user/CSRF envelope，bank灰度v2路由从默认manifest移除。completion audit P0-P6全绿，P7按真实release证据缺失保持阻塞。
+
 2026-09-16 sect default graph cleanup live safety：提交 `b148dc28` 部署后 backup `/srv/old/data/backups/20260916T165029Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行宗门购买、入宗、丹药领取、主副 buff 学习或资产写入。
 
 2026-09-16 work default graph cleanup live safety：提交 `6c5793fe` 部署后 backup `/srv/old/data/backups/20260916T164552Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行悬赏接取、结算、物品使用或资产写入。

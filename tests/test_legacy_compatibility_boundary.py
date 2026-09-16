@@ -14,6 +14,8 @@ from nonebot_plugin_xiuxian_2.features._legacy_feature import (
 )
 from nonebot_plugin_xiuxian_2.features._migrated_application import MigratedFeatureApplication
 from nonebot_plugin_xiuxian_2.features._service_port import ServicePort
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 
 
 @dataclass(frozen=True)
@@ -23,6 +25,11 @@ class _LegacyResult:
 
 
 class LegacyCompatibilityBoundaryTests(unittest.TestCase):
+    @staticmethod
+    def _prepare_database(database: str | Path) -> None:
+        with DatabaseUnitOfWork(database) as uow:
+            apply_platform_schema(uow)
+
     def test_repository_dispatches_and_normalizes_legacy_results(self) -> None:
         calls: list[tuple[str, str, int]] = []
 
@@ -82,6 +89,7 @@ class LegacyCompatibilityBoundaryTests(unittest.TestCase):
                 return True
 
             repository = CompatibilityRepository("fake", handlers={"apply": apply})
+            self._prepare_database(database)
             application = LegacyFeatureApplication(database, feature="fake", repository=repository)
             first = application.execute(
                 operation_id="op-1",
@@ -100,6 +108,8 @@ class LegacyCompatibilityBoundaryTests(unittest.TestCase):
 
     def test_application_preserves_legacy_rejection_on_replay(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "game.db"
+            self._prepare_database(database)
             calls: list[str] = []
 
             def reject(**_: object):
@@ -129,6 +139,8 @@ class LegacyCompatibilityBoundaryTests(unittest.TestCase):
 
     def test_application_records_callback_failure_and_allows_retry(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "game.db"
+            self._prepare_database(database)
             calls: list[str] = []
 
             def flaky(**_: object):
@@ -160,6 +172,7 @@ class LegacyCompatibilityBoundaryTests(unittest.TestCase):
     def test_migrated_application_releases_ledger_lock_before_legacy_write(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             database = Path(directory) / "game.db"
+            self._prepare_database(database)
 
             class Repository:
                 def execute(self, operation_id: str, user_id: str, action: str, payload: dict[str, object]):
@@ -183,6 +196,8 @@ class LegacyCompatibilityBoundaryTests(unittest.TestCase):
 
     def test_migrated_application_uses_feature_service_port_for_bound_callback(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "game.db"
+            self._prepare_database(database)
             calls: list[str] = []
 
             class Repository(ServicePort):
@@ -194,7 +209,7 @@ class LegacyCompatibilityBoundaryTests(unittest.TestCase):
                     return super().execute_callback(operation_id, user_id, action, payload, callback)
 
             application = MigratedFeatureApplication(
-                Path(directory) / "game.db",
+                database,
                 feature="fake",
                 repository=Repository(),
             )

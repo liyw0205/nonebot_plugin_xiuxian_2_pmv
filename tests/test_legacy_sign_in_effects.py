@@ -8,7 +8,9 @@ from unittest.mock import Mock
 
 from nonebot_plugin_xiuxian_2.compatibility.sign_in_effects import LegacySignInEffects
 from nonebot_plugin_xiuxian_2.features.sign_in.application import SignInApplication
+from nonebot_plugin_xiuxian_2.features.sign_in.migrations import apply_sign_in
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 
 
 class FixedRandom:
@@ -29,6 +31,8 @@ class LegacySignInEffectsTests(unittest.TestCase):
             with DatabaseUnitOfWork(database) as uow:
                 uow.execute("CREATE TABLE user_xiuxian (user_id TEXT, user_name TEXT, is_sign INTEGER, stone INTEGER)")
                 uow.execute("INSERT INTO user_xiuxian VALUES (?, ?, ?, ?)", ("u1", "甲", 0, 0))
+                apply_platform_schema(uow)
+                apply_sign_in(uow)
             lottery = Mock()
             task_progress = Mock()
             statistics = Mock()
@@ -57,6 +61,8 @@ class LegacySignInEffectsTests(unittest.TestCase):
             with DatabaseUnitOfWork(database) as uow:
                 uow.execute("CREATE TABLE user_xiuxian (user_id TEXT, user_name TEXT, is_sign INTEGER, stone INTEGER)")
                 uow.execute("INSERT INTO user_xiuxian VALUES (?, ?, ?, ?)", ("u1", "甲", 0, 0))
+                apply_platform_schema(uow)
+                apply_sign_in(uow)
             lottery = Mock()
             statistics = Mock()
             task_progress = Mock()
@@ -75,6 +81,8 @@ class LegacySignInEffectsTests(unittest.TestCase):
             with DatabaseUnitOfWork(database) as uow:
                 uow.execute("CREATE TABLE user_xiuxian (user_id TEXT, user_name TEXT, is_sign INTEGER, stone INTEGER)")
                 uow.execute("INSERT INTO user_xiuxian VALUES (?, ?, ?, ?)", ("u1", "甲", 0, 0))
+                apply_platform_schema(uow)
+                apply_sign_in(uow)
             lottery = Mock()
             statistics = Mock()
             effects = LegacySignInEffects(database, lottery_service=lottery, clock=FixedClock(), statistics=statistics)

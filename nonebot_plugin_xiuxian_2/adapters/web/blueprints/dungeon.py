@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+
 from flask import Blueprint, request
 
 from ....core.errors import DomainError
@@ -19,6 +21,10 @@ def create_blueprint(*, application, permission) -> Blueprint:
                 operation_id=request.headers.get("Idempotency-Key") or payload.get("operation_id", ""),
                 **{key: value for key, value in payload.items() if key != "operation_id"},
             )
+        except sqlite3.OperationalError as exc:
+            if "no such table" not in str(exc):
+                raise
+            return api_error("migrations_required", "数据库尚未完成迁移", status=503)
         except DomainError as exc:
             return api_error(exc.code, exc.message, details=exc.details, status=400)
         return api_success(outcome.to_dict(), status=200 if outcome.ok else 409)
@@ -33,6 +39,10 @@ def create_blueprint(*, application, permission) -> Blueprint:
                 result = application.prepare(operation_id=operation_id, user_id=payload.get("user_id", ""), plan=payload.get("plan", {}))
             else:
                 result = application.settle(operation_id=operation_id, user_id=payload.get("user_id", ""), max_goods_num=payload.get("max_goods_num", 0))
+        except sqlite3.OperationalError as exc:
+            if "no such table" not in str(exc):
+                raise
+            return api_error("migrations_required", "数据库尚未完成迁移", status=503)
         except DomainError as exc:
             return api_error(exc.code, exc.message, details=exc.details, status=400)
         data = result if isinstance(result, dict) else getattr(result, "__dict__", {})

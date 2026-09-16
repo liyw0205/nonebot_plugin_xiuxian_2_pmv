@@ -11,10 +11,7 @@ FEATURE = FeatureManifest(
         RouteSpec("/api/v1/bank/withdraw", methods=("POST",), permission="user"),
         RouteSpec("/api/v1/bank/upgrade", methods=("POST",), permission="user"),
         RouteSpec("/api/v1/bank/interest", methods=("POST",), permission="user"),
-        RouteSpec("/api/v1/bank/v2/deposit", methods=("POST",), permission="user"),
-        RouteSpec("/api/v1/bank/v2/upgrade", methods=("POST",), permission="user"),
-        RouteSpec("/api/v1/bank/v2/interest", methods=("POST",), permission="user"),
-        RouteSpec("/api/v1/bank/v2/info", methods=("GET",), permission="user"),
+
     ),
     config=(ConfigSpec("bank_enabled", "bool", default=True, reloadable=True, description="灵庄新资产结算灰度开关"),),
     migration_version="bank.001",

@@ -14,12 +14,15 @@ class PackageRewardWebTests(unittest.TestCase):
         outcome = Mock(ok=True, code=None, message="", to_dict=lambda: {"status": "applied"})
         application.open_package.return_value = outcome
         app = Flask(__name__)
+        app.secret_key = "test"
         app.register_blueprint(create_blueprint(application=application, permission=lambda _: True))
 
         client = app.test_client()
+        with client.session_transaction() as session:
+            session["_csrf_token"] = "csrf"
         response = client.post(
             "/api/v1/package-reward/open",
-            headers={"Idempotency-Key": "package-1"},
+            headers={"Idempotency-Key": "package-1", "X-CSRF-Token": "csrf"},
             json={
                 "user_id": "u1",
                 "package_id": 9001,

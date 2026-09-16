@@ -22,6 +22,8 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_compensation.transaction_service i
     RewardClaimService,
 )
 from tests.test_db_backend import db_backend
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 
 
 class CompensationDefinitionServiceTests(unittest.TestCase):
@@ -64,6 +66,8 @@ class CompensationDefinitionServiceTests(unittest.TestCase):
                 "goods_type TEXT,goods_num INTEGER,create_time TEXT,update_time TEXT,"
                 "bind_num INTEGER DEFAULT 0,UNIQUE(user_id,goods_id))"
             )
+        with DatabaseUnitOfWork(self.database) as uow:
+            apply_platform_schema(uow)
         self.service = CompensationDefinitionService(
             self.database, self.definitions_path, self.claims_path
         )

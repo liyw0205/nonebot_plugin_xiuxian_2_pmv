@@ -80,6 +80,11 @@ class RefactoredWebTests(unittest.TestCase):
         self.assertIn(response.status_code, {200, 400})
         self.assertIn("request_id", response.get_json())
 
+    def test_reconcile_requires_platform_migration(self) -> None:
+        response = self.client.get("/api/v1/reconcile", headers={"X-Role": "admin"})
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.get_json()["error"]["code"], "migrations_required")
+
     def test_browser_login_home_and_logout_flow(self) -> None:
         class Settings:
             def get(self, name, default=None):

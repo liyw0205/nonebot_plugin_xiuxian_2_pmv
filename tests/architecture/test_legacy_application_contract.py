@@ -12,6 +12,8 @@ from nonebot_plugin_xiuxian_2.features.map.application import MapApplication
 from nonebot_plugin_xiuxian_2.features.natal_treasure.application import NatalTreasureApplication
 from nonebot_plugin_xiuxian_2.features.rift.application import RiftApplication
 from nonebot_plugin_xiuxian_2.features.trade.application import TradeApplication
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 
 
 class _Repository:
@@ -48,6 +50,9 @@ class LegacyApplicationContractTests(unittest.TestCase):
         game = Path(directory) / "game.db"
         player = Path(directory) / "player.db"
         trade = Path(directory) / "trade.db"
+        for database in (game, player, trade):
+            with DatabaseUnitOfWork(database) as uow:
+                apply_platform_schema(uow)
         if application is BackApplication:
             return application(game, player, repository=repository)
         if application is TradeApplication:
@@ -61,7 +66,22 @@ class LegacyApplicationContractTests(unittest.TestCase):
             actions = [
                 method
                 for method, value in inspect.getmembers(application, inspect.isfunction)
-                if not method.startswith("_") and method not in {"reply", "snapshot"}
+                if not method.startswith("_")
+                and method not in {"reply", "snapshot"}
+                and not method.endswith("_replay")
+                and {"operation_id", "user_id"}.issubset(
+                    inspect.signature(value).parameters
+                )
+                and not any(
+                    parameter.default is inspect.Parameter.empty
+                    and parameter.name not in {"self", "operation_id", "user_id"}
+                    and parameter.kind
+                    not in {
+                        inspect.Parameter.VAR_POSITIONAL,
+                        inspect.Parameter.VAR_KEYWORD,
+                    }
+                    for parameter in inspect.signature(value).parameters.values()
+                )
             ]
             self.assertTrue(actions, application.__name__)
             with tempfile.TemporaryDirectory() as directory:

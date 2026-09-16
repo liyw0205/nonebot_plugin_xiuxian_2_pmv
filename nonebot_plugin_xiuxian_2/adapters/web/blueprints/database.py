@@ -7,6 +7,24 @@ def create_blueprint(*, context=None, permission=None) -> Blueprint:
     blueprint = Blueprint("database", __name__)
     resolver = permission or (lambda _required: True)
 
+    def reconcile_database():
+        from ....infrastructure.database import DatabaseUnitOfWork
+
+        catalog = getattr(context, "database", None)
+        if catalog is None:
+            return None, api_error("unavailable", "数据库目录不可用", status=503)
+        database = catalog.path("game_db")
+        if not database.exists():
+            return None, api_error("migrations_required", "数据库尚未初始化", status=503)
+        with DatabaseUnitOfWork(database) as uow:
+            ledger = uow.query_one(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+                ("operation_ledger",),
+            )
+            if ledger is None:
+                return None, api_error("migrations_required", "数据库尚未完成迁移", status=503)
+        return database, None
+
     @blueprint.get("/api/v1/database")
     @guard("admin", resolver)
     def database_status():
@@ -30,10 +48,10 @@ def create_blueprint(*, context=None, permission=None) -> Blueprint:
     def reconcile_status():
         from ....infrastructure.database import DatabaseUnitOfWork, ReconcileService
 
-        catalog = getattr(context, "database", None)
-        if catalog is None:
-            return api_error("unavailable", "数据库目录不可用", status=503)
-        with DatabaseUnitOfWork(catalog.path("game_db")) as uow:
+        database, error = reconcile_database()
+        if error is not None:
+            return error
+        with DatabaseUnitOfWork(database) as uow:
             report = ReconcileService().inspect(uow)
         return api_success(report.to_dict())
 
@@ -42,10 +60,10 @@ def create_blueprint(*, context=None, permission=None) -> Blueprint:
     def reconcile_run():
         from ....infrastructure.database import DatabaseUnitOfWork, ReconcileService
 
-        catalog = getattr(context, "database", None)
-        if catalog is None:
-            return api_error("unavailable", "数据库目录不可用", status=503)
-        with DatabaseUnitOfWork(catalog.path("game_db")) as uow:
+        database, error = reconcile_database()
+        if error is not None:
+            return error
+        with DatabaseUnitOfWork(database) as uow:
             report = ReconcileService().run(
                 uow,
                 operation_handlers=getattr(context, "reconcile_handlers", None),
