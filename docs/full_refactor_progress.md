@@ -679,6 +679,8 @@
 
 2026-09-16 sect wiring cleanup：`SectApplication` 默认使用 `SectRenameSqlRepository`，移除未使用 `LegacySectRepository` import；legacy adapter继续保留在 repository作为显式 rollback。sect/source共298 tests、compileall、architecture、diff check通过。SectFairyland仍是独立 legacy blocker。
 
+2026-09-16 sect wiring cleanup live safety：提交 `c5458b1` 部署后 backup `/srv/old/data/backups/20260916T011712Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，104-entry recovery clean。live未执行宗门改名、资产或成员操作。
+
 2026-09-16 arena wiring cleanup live safety：提交 `9f616e4` 部署后 backup `/srv/old/data/backups/20260916T011247Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，104-entry recovery clean。live未执行竞技场挑战、战斗或资产写入。
 
 2026-09-16 tianti training application cleanup live safety：提交 `3eabc11` 部署后 backup `/srv/old/data/backups/20260916T010232Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，104-entry recovery clean。live未执行天梯修炼、药浴、窍穴、突破或物品写入。
