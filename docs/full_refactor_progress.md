@@ -643,6 +643,8 @@
 
 2026-09-16 sign-in lottery lifecycle wiring：新增 `configure_lottery_application`，真实 base `handle_lottery` 在 lifecycle注入 `LotteryApplication`时直接使用 feature-owned settlement；未注入时保留 schema probe与显式 legacy rollback。修复 isolated runtime 缺少 player.db 时 attached migration无法启动的问题。sign-in/lottery/source共180 tests、catalog=104、compileall、architecture、diff check通过。
 
+2026-09-16 sign-in lottery explicit fallback：startup `apply_lottery`已创建正式 lottery schema，移除 plugin 默认的 `LotteryRepository.schema_exists` request-time选择；默认 migrated runtime直接使用 `LotteryApplication`，仅显式 `XIUXIAN_SIGN_IN_LEGACY_LOTTERY=true`启用旧 settlement rollback。sign-in/lottery/source共180 tests、catalog=104、compileall、architecture、diff check通过。
+
 2026-09-16 sign-in effects audit correction：确认默认 lifecycle wiring已使用 `SignInStatisticsRepository` 与 `ApplicationSignInTaskEffects`，task/statistics projection不再默认走旧 side-effect service；剩余 sign-in compatibility blocker缩小为旧安装/显式 lottery fallback与base handler兼容分支。
 
 2026-09-16 sign-in lottery lifecycle live safety：提交 `5154b34` 部署后 backup `/srv/old/data/backups/20260916T002828Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，104-entry recovery clean。live未执行签到、lottery或资产写入。
