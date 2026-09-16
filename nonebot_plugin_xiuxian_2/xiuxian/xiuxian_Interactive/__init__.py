@@ -40,18 +40,8 @@ def _run_interactive_action(action: str, operation_id: str, user_id: str, **payl
 async def reset_data_by_time():
     """清理已过重放窗口的早晚安领取记录。"""
     cutoff = runtime_clock.now().date() - timedelta(days=30)
-    # Compatibility markers retained for source integrations:
-    # interactive_greeting_claim_service.cleanup_before(
-    # interactive_daily_fortune_service.cleanup_before(
     return interactive_application.cleanup_before(cutoff)
 
-
-# The application repository resolves these historical service calls lazily;
-# the targets remain named here as an explicit compatibility contract.
-_GREETING_SERVICE_COMPATIBILITY_CALLS = (
-    "interactive_greeting_claim_service.claim(",
-    "interactive_greeting_claim_service.claim(",
-)
 
 # 运势类型和对应的星数
 FORTUNE_TYPES = {
@@ -1036,7 +1026,6 @@ async def handle_good_morning(bot: Bot, event: GroupMessageEvent | PrivateMessag
     
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"interactive-greeting:morning:{user_id}:{event_id or runtime_ids.new_id()}"
-    # Compatibility target: interactive_greeting_claim_service.claim(
     outcome = _run_interactive_action(
         "greeting_claim", operation_id, user_id,
         kind="morning", business_date=runtime_clock.now(),
@@ -1066,7 +1055,6 @@ async def handle_good_night(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"interactive-greeting:night:{user_id}:{event_id or runtime_ids.new_id()}"
-    # Compatibility target: interactive_greeting_claim_service.claim(
     outcome = _run_interactive_action(
         "greeting_claim", operation_id, user_id,
         kind="night", business_date=runtime_clock.now(),
@@ -1186,7 +1174,6 @@ async def handle_fortune_command(bot: Bot, event: GroupMessageEvent | PrivateMes
     
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"interactive-fortune:{user_id}:{event_id or runtime_ids.new_id()}"
-    # Compatibility target: interactive_daily_fortune_service.resolve(
     outcome = _run_interactive_action(
         "fortune_resolve", operation_id, user_id,
         business_date=runtime_clock.now(), create_fortune=generate_fortune,

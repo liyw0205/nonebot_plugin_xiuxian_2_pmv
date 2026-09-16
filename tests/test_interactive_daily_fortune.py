@@ -149,8 +149,10 @@ class InteractiveDailyFortuneTests(unittest.TestCase):
             Path(__file__).parents[1]
             / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py"
         ).read_text(encoding="utf-8")
-        self.assertIn("interactive_daily_fortune_service.resolve(", source)
-        self.assertIn("interactive_daily_fortune_service.cleanup_before(", source)
+        self.assertIn("interactive_application.cleanup_before(cutoff)", source)
+        self.assertIn('"fortune_resolve", operation_id, user_id,', source)
+        self.assertNotIn("interactive_daily_fortune_service.resolve(\n", source)
+        self.assertNotIn("interactive_daily_fortune_service.cleanup_before(\n", source)
         for old_call in (
             "load_fortune_data(",
             "save_fortune_data(",

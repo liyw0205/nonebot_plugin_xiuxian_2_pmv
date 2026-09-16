@@ -141,10 +141,10 @@ class InteractiveGreetingClaimTests(unittest.TestCase):
             Path(__file__).parents[1]
             / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_Interactive/__init__.py"
         ).read_text(encoding="utf-8")
-        self.assertGreaterEqual(
-            source.count("interactive_greeting_claim_service.claim("), 2
-        )
-        self.assertIn("interactive_greeting_claim_service.cleanup_before(", source)
+        self.assertGreaterEqual(source.count('"greeting_claim", operation_id, user_id,'), 2)
+        self.assertIn("interactive_application.cleanup_before(cutoff)", source)
+        self.assertNotIn("interactive_greeting_claim_service.claim(\n", source)
+        self.assertNotIn("interactive_greeting_claim_service.cleanup_before(\n", source)
         for old_call in (
             "has_user_triggered(",
             "mark_user_triggered(",
