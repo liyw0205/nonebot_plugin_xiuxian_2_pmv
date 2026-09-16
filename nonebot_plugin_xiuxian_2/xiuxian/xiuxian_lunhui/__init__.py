@@ -33,18 +33,10 @@ from ...paths import get_paths
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.ids import UUIDGenerator
 from ...features.lunhui.application import LunhuiApplication
-from .transaction_service import (
-    CultivationResetService,
-    LunhuiRecallService,
-    LunhuiSettlementService,
-)
 
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
 items = Items()
-lunhui_recall_service = LunhuiRecallService(get_paths().game_db, get_paths().player_db)
-lunhui_settlement_service = LunhuiSettlementService(get_paths().game_db, get_paths().player_db, get_paths().impart_db)
-cultivation_reset_service = CultivationResetService(get_paths().game_db)
 lunhui_application = LunhuiApplication(
     get_paths().game_db,
     get_paths().player_db,
@@ -133,7 +125,7 @@ async def resetting_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"cultivation-reset:{user_id}:{event_id}" if event_id else f"cultivation-reset:{user_id}:{runtime_ids.new_id()}"
     # 先回放：成功后境界变为江湖好手会挡住同事件幂等。
-    prior = cultivation_reset_service.get_result(operation_id)
+    prior = lunhui_application.reset_result(operation_id)
     if prior is not None and prior.succeeded:
         user_msg = sql_message.get_user_info_with_id(user_id)
         msg = f"{user_msg['user_name']}现在是一介凡人了！！\n该自废修为请求已经处理，无需重复提交。"
@@ -276,7 +268,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"lunhui-recall:{event_id}:{user_id}:{skill_type}" if event_id else f"lunhui-recall:{user_id}:{skill_type}:{runtime_ids.new_id()}"
     # 先回放：成功后 retrieved 标记会挡住同事件幂等。
-    prior = lunhui_recall_service.get_result(operation_id)
+    prior = lunhui_application.recall_result(operation_id)
     if prior is not None and prior.succeeded:
         skill_name = items.get_data_by_item_id(prior.skill_id).get('name', '未知技能') if prior.skill_id else '未知技能'
         reason = f"成功回忆前世中的技能：{skill_name}\n该回忆请求已经处理，无需重复提交。"
@@ -344,7 +336,7 @@ async def confirm_lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     # event-scoped op：成功后 invite cache 会清空，不能把 invite_id 放进 operation_id/payload。
     operation_id = f"lunhui-settlement:{event_id}:{user_id}" if event_id else f"lunhui-settlement:{user_id}:{runtime_ids.new_id()}"
-    prior = lunhui_settlement_service.get_result(operation_id)
+    prior = lunhui_application.settle_result(operation_id)
     if prior is not None and prior.succeeded:
         msg = (
             f"轮回已完成（重放）。\n保留灵石至{number_to(prior.stone)}"
@@ -579,7 +571,7 @@ def retrieve_reincarnation_skill(user_id, skill_type, operation_id=None):
     返回 (success: bool, msg: str)
     """
     if operation_id:
-        prior = lunhui_recall_service.get_result(operation_id)
+        prior = lunhui_application.recall_result(operation_id)
         if prior is not None and prior.succeeded:
             skill_name = items.get_data_by_item_id(prior.skill_id).get('name', '未知技能') if prior.skill_id else '未知技能'
             return True, f"成功回忆前世中的技能：{skill_name}\n该回忆请求已经处理，无需重复提交。"

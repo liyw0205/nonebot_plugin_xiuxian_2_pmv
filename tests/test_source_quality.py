@@ -1966,6 +1966,17 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("dufang_payout_service.settle(", handler)
         self.assertNotIn("dufang_payout_service.get_result(", handler)
 
+    def test_lunhui_replay_queries_enter_feature_application(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_lunhui" / "__init__.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("lunhui_application.reset_result(", source)
+        self.assertIn("lunhui_application.recall_result(", source)
+        self.assertIn("lunhui_application.settle_result(", source)
+        self.assertNotIn("cultivation_reset_service.get_result(", source)
+        self.assertNotIn("lunhui_recall_service.get_result(", source)
+        self.assertNotIn("lunhui_settlement_service.get_result(", source)
+
     def test_partner_protection_is_rechecked_inside_transactions(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_buff"
         source = (root / "partner.py").read_text(encoding="utf-8")
