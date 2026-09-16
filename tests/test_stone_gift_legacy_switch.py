@@ -32,6 +32,10 @@ class StoneGiftLegacySwitchTests(unittest.TestCase):
         source = Path(cast(str, module.__file__)).read_text(encoding="utf-8")
         self.assertIn("XIUXIAN_STONE_GIFT_LEGACY_HANDLER", source)
 
+    def test_default_import_defers_compatibility_service_construction(self) -> None:
+        module = importlib.import_module("nonebot_plugin_xiuxian_2.xiuxian.xiuxian_base")
+        self.assertIsNone(module._stone_gift_service_instance)
+
 
 if __name__ == "__main__":
     unittest.main()

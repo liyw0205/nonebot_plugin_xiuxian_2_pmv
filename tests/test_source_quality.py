@@ -1279,6 +1279,9 @@ class SourceQualityTests(unittest.TestCase):
 
         self.assertIn("XIUXIAN_STONE_GIFT_LEGACY_HANDLER", command_source)
         self.assertIn('"送灵石" if _legacy_stone_gift_enabled', command_source)
+        self.assertIn("_stone_gift_service_instance = None", command_source)
+        self.assertIn("def _stone_gift_service(", command_source)
+        self.assertNotIn("stone_gift_service = StoneGiftService(", command_source)
         self.assertIn("application.read_limits(", adapter_source)
         self.assertIn("application.reply(", adapter_source)
         self.assertNotIn("stone_gift_service.transfer(", adapter_source)

@@ -53,7 +53,6 @@ from ...features.sign_in.application import SignInApplication
 from ...features.sign_in.lottery_application import LotteryApplication
 from ...features.sign_in.effects import NullSignInEffects
 from .transaction_service import PlayerRenameService
-from ...compatibility.stone_gift import StoneGiftService
 from .transaction_service import StoneContestService
 from .transaction_service import StoneRobberySettlementService
 from .registration_batch import RegistrationBatcher, RegistrationRequest
@@ -77,7 +76,7 @@ def configure_lottery_application(application: Any) -> None:
     lottery_application = application
 
 player_rename_service = PlayerRenameService(get_paths().game_db)
-stone_gift_service = StoneGiftService(get_paths().game_db)
+_stone_gift_service_instance = None
 stone_contest_service = StoneContestService(get_paths().game_db)
 stone_robbery_service = StoneRobberySettlementService(
     get_paths().game_db, get_paths().player_db
@@ -85,6 +84,15 @@ stone_robbery_service = StoneRobberySettlementService(
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
+
+
+def _stone_gift_service():
+    global _stone_gift_service_instance
+    if _stone_gift_service_instance is None:
+        from ...compatibility.stone_gift import StoneGiftService
+
+        _stone_gift_service_instance = StoneGiftService(get_paths().game_db)
+    return _stone_gift_service_instance
 registration_batcher = RegistrationBatcher(sql_message)
 player_data_manager = PlayerDataManager()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
@@ -1237,7 +1245,7 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         await give_stone.finish()
 
     operation_id = _stone_gift_operation_id(event, user_id, recipient_id)
-    result = stone_gift_service.get_operation(operation_id, user_id, recipient_id)
+    result = _stone_gift_service().get_operation(operation_id, user_id, recipient_id)
     if result is not None:
         msg = (
             f"共赠送{number_to(result.gross_amount)}枚灵石给{give_user['user_name']}道友！"
@@ -1265,7 +1273,7 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         await handle_send(bot, event, msg)
         await give_stone.finish()
 
-    result = stone_gift_service.transfer(
+    result = _stone_gift_service().transfer(
         operation_id,
         user_id,
         recipient_id,
