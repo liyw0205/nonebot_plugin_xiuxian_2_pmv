@@ -70,7 +70,7 @@ from .transaction_service import ActivityCollectExchangeService
 from .transaction_service import ActivityClaimAllService
 
 
-point_shop_purchase_service = ActivityPointShopPurchaseService(DB_PATH, get_paths().game_db)
+_point_shop_purchase_service_instance = None
 activity_task_claim_service = ActivityTaskClaimService(DB_PATH, get_paths().game_db)
 activity_sign_settlement_service = ActivitySignSettlementService(DB_PATH, get_paths().game_db)
 activity_pass_claim_service = ActivityPassClaimService(DB_PATH, get_paths().game_db)
@@ -83,6 +83,13 @@ def _activity_claim_all_service():
     if _activity_claim_all_service_instance is None:
         _activity_claim_all_service_instance = ActivityClaimAllService(DB_PATH)
     return _activity_claim_all_service_instance
+
+
+def _point_shop_purchase_service():
+    global _point_shop_purchase_service_instance
+    if _point_shop_purchase_service_instance is None:
+        _point_shop_purchase_service_instance = ActivityPointShopPurchaseService(DB_PATH, get_paths().game_db)
+    return _point_shop_purchase_service_instance
 
 
 def _reward_by_day(config: dict, day_index: int) -> dict:
@@ -1034,7 +1041,7 @@ def claim_point_shop_item(user_id: str, query: str, operation_id: str | None = N
     total_cost = cost * quantity
     ensure_activity_files()
     operation_id = str(operation_id or f"activity-shop:{uid}:{activity['key']}:{item_key}:{now_str()}")
-    result = point_shop_purchase_service.purchase(
+    result = _point_shop_purchase_service().purchase(
         operation_id, uid, activity["key"], item_key, quantity, cost,
         _as_int(item.get("limit"), 1), _as_int(item.get("stock_limit"), 0),
         reward_items, XiuConfig().max_goods_num,

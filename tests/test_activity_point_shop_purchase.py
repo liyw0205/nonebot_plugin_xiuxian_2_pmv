@@ -11,6 +11,11 @@ from tests.test_db_backend import db_backend
 
 
 class ActivityPointShopPurchaseTests(unittest.TestCase):
+    def test_activity_service_defers_point_shop_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity import service
+
+        self.assertIsNone(service._point_shop_purchase_service_instance)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(); root = Path(self.tmp.name)
         self.activity, self.game = root / "activity.db", root / "game.db"
