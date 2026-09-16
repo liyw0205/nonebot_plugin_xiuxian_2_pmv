@@ -75,14 +75,9 @@ from .transaction_service import SectMembershipService
 
 from .transaction_service import SectCloseMountainService
 from .transaction_service import SectOwnerInheritService
-from ...compatibility.sect import SectShopPurchaseService
-from ...compatibility.sect import SectElixirClaimService
 from .transaction_service import SectOpenJoinService
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from .transaction_service import SectCloseJoinService
-from ...compatibility.sect import SectMemberJoinService
-from ...compatibility.sect import SectMainBuffLearnService
-from ...compatibility.sect import SectSecBuffLearnService
 from .transaction_service import SectDisbandService
 from .transaction_service import SectDailyResetMaintenanceService
 from ...features.sect_fairyland.application import SectFairylandApplication
@@ -109,13 +104,8 @@ sect_fairyland_application = SectFairylandApplication(
 )
 sect_close_mountain_service = SectCloseMountainService(get_paths().game_db)
 sect_owner_inherit_service = SectOwnerInheritService(get_paths().game_db)
-sect_shop_purchase_service = SectShopPurchaseService(get_paths().game_db)
-sect_elixir_claim_service = SectElixirClaimService(get_paths().game_db)
 sect_open_join_service = SectOpenJoinService(get_paths().game_db)
 sect_close_join_service = SectCloseJoinService(get_paths().game_db)
-sect_member_join_service = SectMemberJoinService(get_paths().game_db)
-sect_mainbuff_learn_service = SectMainBuffLearnService(get_paths().game_db)
-sect_secbuff_learn_service = SectSecBuffLearnService(get_paths().game_db)
 sect_disband_service = SectDisbandService(get_paths().game_db)
 sect_daily_reset_maintenance_service = SectDailyResetMaintenanceService(get_paths().game_db)
 config = get_config()
