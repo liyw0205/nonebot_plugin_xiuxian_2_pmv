@@ -42,7 +42,6 @@ from .transaction_service import (
     build_transfer_team_not_member_message,
     build_transfer_team_self_message,
     build_transfer_team_success_message,
-    build_team_invite_message,
     build_team_invite_private_message,
 )
 from .transaction_service import DungeonSessionResult
