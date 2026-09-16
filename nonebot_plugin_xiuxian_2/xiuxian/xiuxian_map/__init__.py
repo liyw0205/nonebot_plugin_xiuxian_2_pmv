@@ -3,9 +3,7 @@ try:
 except ImportError:
     import json
 
-import random
 import asyncio
-import time
 from datetime import datetime, timedelta
 from ...paths import get_paths
 from ..on_compat import on_command
