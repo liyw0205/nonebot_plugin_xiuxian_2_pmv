@@ -34,7 +34,7 @@ from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 
 _arena_weekly_rank_reduction_service_instance = None
-arena_season_reward_service = ArenaSeasonRewardService(get_paths().game_db, get_paths().player_db)
+_arena_season_reward_service_instance = None
 arena_application = ArenaApplication(
     get_paths().game_db,
     get_paths().player_db,
@@ -49,6 +49,13 @@ def _arena_weekly_rank_reduction_service():
     if _arena_weekly_rank_reduction_service_instance is None:
         _arena_weekly_rank_reduction_service_instance = ArenaWeeklyRankReductionService(get_paths().player_db)
     return _arena_weekly_rank_reduction_service_instance
+
+
+def _arena_season_reward_service():
+    global _arena_season_reward_service_instance
+    if _arena_season_reward_service_instance is None:
+        _arena_season_reward_service_instance = ArenaSeasonRewardService(get_paths().game_db, get_paths().player_db)
+    return _arena_season_reward_service_instance
 
 arena_challenge = on_command("竞技场挑战", priority=10, block=True)
 arena_view = on_command("竞技场查看", priority=10, block=True)
@@ -926,7 +933,7 @@ async def reset_arena_daily_challenges():
         user_id = str(user_id)
         arena_info = arena_limit.get_user_arena_info(user_id)
         total_honor, base_honor, ranking_bonus = arena_limit.calculate_daily_honor(user_id)
-        claimed = arena_season_reward_service.claim(
+        claimed = _arena_season_reward_service().claim(
             f"arena-season-reward:{season_key}:{user_id}", user_id, season_key,
             int(arena_info["score"]), arena_info["rank"], arena_limit.get_user_ranking(user_id),
             int(arena_info["honor_points"]), int(arena_info["total_honor_earned"]),

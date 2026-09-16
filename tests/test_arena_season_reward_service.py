@@ -13,6 +13,11 @@ from tests.test_db_backend import db_backend
 
 
 class ArenaSeasonRewardServiceTests(unittest.TestCase):
+    def test_arena_facade_defers_season_reward_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_arena
+
+        self.assertIsNone(xiuxian_arena._arena_season_reward_service_instance)
+
     reset = {"daily_challenges_used": 3, "daily_extra_challenges": 1, "daily_challenge_buys": 1, "last_reset_date": "old", "last_buy_date": "old"}
 
     def setUp(self):

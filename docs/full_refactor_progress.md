@@ -1527,6 +1527,8 @@
 
 2026-09-17 arena weekly-rank compatibility live safety：提交 `06ec0a7c` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260916T234813Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。live 未执行真实竞技场降段任务。
 
+2026-09-17 arena season-reward compatibility construction slice：`xiuxian_arena` 不再 module-level 构造 `ArenaSeasonRewardService`，新增 `_arena_season_reward_service()` 惰性 getter，仅每日重置任务执行时加载；weekly reduction getter与对战 application路径未改。arena/source/architecture 共 205 tests、compileall、inventory、diff check通过。
+
 ## 6. 下一步
 
 先把 `stone_gift` 的真实 handler 从旧模块迁移到 `features/stone_gift/commands.py`，通过新 application 的 DTO/operation_id/Clock 路径；随后补真实 NoneBot 注册测试、删除旧 `StoneGiftService` 执行实现，并在真实部署数据上执行 dry-run/reconcile/恢复。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。
