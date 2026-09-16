@@ -747,6 +747,8 @@
 
 2026-09-16 tianti source-quality correction：更新 stale source gate，真实 handler断言 `TiantiTrainingApplication.train/apply_bath/breakthrough/open_qiaoxue` 与 `TiantiSettlementApplication.settle`，同时只拒绝旧 service的真实调用形态，允许兼容说明注释。tianti/source/architecture共193 tests、compileall、diff check通过。
 
+2026-09-16 progress audit correction：`check_full_refactor_progress.py` 修正 sign-in分类，默认 `SignInStatisticsRepository`/`ApplicationSignInTaskEffects` 不再标为 task legacy；`LotterySettlementService` 仅在显式 `XIUXIAN_SIGN_IN_LEGACY_LOTTERY` fallback路径中计为兼容残留。audit输出保留 `exit_ready=false`，不放宽完成门禁；source/architecture共157 tests、compileall、diff check通过。
+
 2026-09-16 tianti source-quality correction live safety：提交 `c765eb5` 部署后 backup `/srv/old/data/backups/20260916T034056Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行天梯结算、修炼、药浴、突破或资产写入。
 
 2026-09-16 platform schema ownership cleanup live safety：提交 `5e9df39` 部署后 backup `/srv/old/data/backups/20260916T031829Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行玩家资产、奖励、交易或计数写入。
