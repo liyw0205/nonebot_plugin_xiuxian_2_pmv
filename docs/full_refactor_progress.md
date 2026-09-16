@@ -785,6 +785,8 @@
 
 2026-09-16 mixelixir default graph cleanup：AST调用图确认 `mixelixir_harvest_service`、`mixelixir_settlement_service`无可执行调用，harvest handler使用 `MixelixirApplication`；删除两个dead legacy实例及imports，保留 `LegacyMixelixirRepository`与recipe/cost/reward legacy services作为未迁移边界。mixelixir/source/architecture共183 tests、compileall、diff check通过。
 
+2026-09-16 mixelixir default graph cleanup live safety：提交 `2d15bc8` 部署后 backup `/srv/old/data/backups/20260916T044201Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行炼丹收取、配方、药材或资产写入。
+
 2026-09-16 lottery audit precision live safety：提交 `28c7943` 部署后 backup `/srv/old/data/backups/20260916T035645Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。运行期审计确认 `lottery_core_default_legacy=false`，仅显式 compatibility fallback保留。
 
 2026-09-16 progress audit correction live safety：提交 `2de01de` 部署后 backup `/srv/old/data/backups/20260916T034555Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。audit仍诚实输出 `exit_ready=false` 与 legacy transaction/handle/explicit lottery fallback blockers。
