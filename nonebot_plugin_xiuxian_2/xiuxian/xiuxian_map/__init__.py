@@ -28,21 +28,13 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.player_fight import Boss_fight
 from ..xiuxian_config import XiuConfig, base_rank
-from .transaction_service import SeedPurchaseService
-
-from .transaction_service import MapCombatLifecycleService
 from .transaction_service import MapCombatLifecycleResult
-from .transaction_service import MapDongfuBuildService
 from .transaction_service import MapDongfuBuildResult
-from .transaction_service import MapHomeReturnService
-
-from .transaction_service import MapExploreStartService
 from .transaction_service import MapExploreStartResult
 from .transaction_service import MapExploreSettlementResult
 from .transaction_service import MapMissionClaimResult
 from .transaction_service import SeedPurchaseResult
-from .transaction_service import MapMovementSettlementService
-from .transaction_service import MapDaoBattleSettlementService
+
 from ...features.combat_settlement.application import CombatSettlementApplication
 from ...features.map.application import MapApplication
 from ...features.map.domain import decide_interactive_action, decide_interactive_reward
@@ -59,21 +51,12 @@ combat_settlement_application = CombatSettlementApplication(
     get_paths().game_db,
     get_paths().player_db,
 )
-map_combat_lifecycle_service = MapCombatLifecycleService(
-    get_paths().game_db, get_paths().player_db
-)
-map_dongfu_build_service = MapDongfuBuildService(get_paths().game_db, get_paths().player_db)
-map_home_return_service = MapHomeReturnService(get_paths().player_db)
-
-map_explore_start_service = MapExploreStartService(get_paths().game_db, get_paths().player_db)
-map_movement_service = MapMovementSettlementService(get_paths().game_db, get_paths().player_db)
 map_application = MapApplication(get_paths().game_db, get_paths().player_db)
-map_dao_battle_service = MapDaoBattleSettlementService(get_paths().player_db, get_paths().game_db)
 dao_battle_application = CombatSettlementApplication(
     get_paths().game_db,
     get_paths().player_db,
 )
-seed_purchase_service = SeedPurchaseService(get_paths().game_db)
+
 items = Items()
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
