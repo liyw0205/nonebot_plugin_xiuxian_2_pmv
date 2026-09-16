@@ -375,9 +375,6 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 raise RuntimeError("database path is empty")
             spec.path.parent.mkdir(parents=True, exist_ok=True)
         primary = context.database.path("game_db")
-        with DatabaseUnitOfWork(primary) as uow:
-            OperationLedger(clock=context.clock).ensure_schema(uow)
-            OutboxStore(clock=context.clock).ensure_schema(uow)
         phase_state["database"] = True
 
     def ensure_migrations() -> None:

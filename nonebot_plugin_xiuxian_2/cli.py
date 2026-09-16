@@ -65,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
             elif spec.key == "player_db":
                 selected = tuple(
                     migration for migration in migrations
-                    if migration.version in {"title.001", "combat_settlement.003", "combat_settlement.004", "dungeon.003", "map.003", "map.005", "map.008", "map.013", "map.015", "map.016", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005"}
+                    if migration.version in {"platform.001", "title.001", "combat_settlement.003", "combat_settlement.004", "dungeon.003", "map.003", "map.005", "map.008", "map.013", "map.015", "map.016", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005"}
                 )
             else:
                 selected = ()
@@ -77,9 +77,6 @@ def main(argv: list[str] | None = None) -> int:
                     changed = runner.apply(uow)
                     if changed:
                         applied[spec.key] = changed
-                    if spec.key == "game_db":
-                        OperationLedger(clock=context.clock).ensure_schema(uow)
-                        OutboxStore(clock=context.clock).ensure_schema(uow)
         if args.dry_run:
             print(json.dumps({"dry_run": True, "pending": pending}, ensure_ascii=False))
         else:
