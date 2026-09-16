@@ -803,6 +803,8 @@
 
 2026-09-16 interactive acceptance correction：删除已不存在的 greeting compatibility comments，并更新 daily fortune/greeting source gates为断言 `InteractiveApplication.cleanup_before/execute`，拒绝真实 legacy调用形态。interactive/source/architecture共181 tests、compileall、architecture、diff check通过。
 
+2026-09-16 interactive acceptance correction live safety：提交 `f0ef6a5` 部署后 backup `/srv/old/data/backups/20260916T152203Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行互动问候、运势、经验、奖励或资产写入。
+
 2026-09-16 illusion default graph cleanup live safety：提交 `a5eedb6` 部署后 backup `/srv/old/data/backups/20260916T123203Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行幻境选择、奖励或资产写入。
 
 2026-09-16 interactive default graph cleanup continuation live safety：提交 `ab5c523` 部署后 backup `/srv/old/data/backups/20260916T122650Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行互动经验奖励、每日奖励、运势或资产写入。
