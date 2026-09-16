@@ -673,6 +673,8 @@
 
 2026-09-16 tianti settlement import cleanup：`TiantiSettlementApplication` 默认使用 `TiantiSettlementSqlRepository`，移除未使用 `LegacyTiantiSettlementRepository` import；legacy adapter继续保留在 repository作为显式 rollback。tianti/source共179 tests、compileall、architecture、diff check通过。
 
+2026-09-16 tianti settlement import cleanup live safety：提交 `f9a4685` 部署后 backup `/srv/old/data/backups/20260916T010709Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，104-entry recovery clean。live未执行天梯结算、奖励或资产写入。
+
 2026-09-16 tianti training application cleanup live safety：提交 `3eabc11` 部署后 backup `/srv/old/data/backups/20260916T010232Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，104-entry recovery clean。live未执行天梯修炼、药浴、窍穴、突破或物品写入。
 
 2026-09-16 combat settlement import cleanup live safety：提交 `4e2c545` 部署后 backup `/srv/old/data/backups/20260916T005704Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，104-entry recovery clean。live未执行战斗结算、奖励或资产写入。
