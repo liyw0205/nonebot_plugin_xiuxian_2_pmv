@@ -33,7 +33,7 @@ from ...features.arena.repository import ArenaChallengePurchaseSqlRepository
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 
-arena_weekly_rank_reduction_service = ArenaWeeklyRankReductionService(get_paths().player_db)
+_arena_weekly_rank_reduction_service_instance = None
 arena_season_reward_service = ArenaSeasonRewardService(get_paths().game_db, get_paths().player_db)
 arena_application = ArenaApplication(
     get_paths().game_db,
@@ -42,6 +42,13 @@ arena_application = ArenaApplication(
 )
 arena_ids = UUIDGenerator()
 runtime_clock = SystemClock()
+
+
+def _arena_weekly_rank_reduction_service():
+    global _arena_weekly_rank_reduction_service_instance
+    if _arena_weekly_rank_reduction_service_instance is None:
+        _arena_weekly_rank_reduction_service_instance = ArenaWeeklyRankReductionService(get_paths().player_db)
+    return _arena_weekly_rank_reduction_service_instance
 
 arena_challenge = on_command("竞技场挑战", priority=10, block=True)
 arena_view = on_command("竞技场查看", priority=10, block=True)
@@ -938,7 +945,7 @@ async def reset_arena_daily_challenges():
 async def reduce_arena_rank(reduce_steps=2, business_week=None, *, chunk_size=500):
     """每周竞技场统一降段"""
     while True:
-        result = arena_weekly_rank_reduction_service.reduce(
+        result = _arena_weekly_rank_reduction_service().reduce(
             business_week,
             reduce_steps,
             chunk_size=chunk_size,

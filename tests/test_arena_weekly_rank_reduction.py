@@ -15,6 +15,11 @@ from tests.test_db_backend import db_backend
 
 
 class ArenaWeeklyRankReductionTests(unittest.TestCase):
+    def test_arena_facade_defers_weekly_reduction_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_arena
+
+        self.assertIsNone(xiuxian_arena._arena_weekly_rank_reduction_service_instance)
+
     business_week = "2026-W29"
 
     def setUp(self):
@@ -201,7 +206,7 @@ class ArenaWeeklyRankReductionTests(unittest.TestCase):
         arena_source = (root / "xiuxian_arena/__init__.py").read_text(encoding="utf-8")
         start = arena_source.index("async def reduce_arena_rank")
         handler = arena_source[start:arena_source.index("async def use_arena_challenge_ticket", start)]
-        self.assertIn("arena_weekly_rank_reduction_service.reduce(", handler)
+        self.assertIn("_arena_weekly_rank_reduction_service().reduce(", handler)
         self.assertIn("await asyncio.sleep(0)", handler)
         self.assertNotIn("arena_limit.reduce_all_users_rank(", handler)
 
