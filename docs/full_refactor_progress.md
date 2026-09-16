@@ -805,6 +805,8 @@
 
 2026-09-16 tower/dungeon default graph cleanup：AST调用图确认 `tower_purchase_service`、`dungeon_session_service`、`dungeon_purchase_service`无可执行调用，真实路径使用各自 application；删除dead实例/import，保留 `tower_settlement_service`、dungeon explore/team/settlement live services。tower+dungeon/source/architecture共272 tests、4 architecture subtests、compileall、diff check通过。
 
+2026-09-16 pet default graph cleanup：AST调用图确认模块级 `pet_travel_start_service`无可执行调用，真实游历入口使用 `PetApplication`；删除dead module import/instance，保留 `LegacyPetRepository`内部按需兼容factory。pet/source/architecture共194 tests、compileall、diff check通过。
+
 2026-09-16 tower/dungeon default graph cleanup live safety：提交 `efea630` 部署后 backup `/srv/old/data/backups/20260916T160707Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行爬塔购买、地牢购买、会话或资产写入。
 
 2026-09-16 arena default graph cleanup live safety：提交 `ebae8a0` 部署后 backup `/srv/old/data/backups/20260916T153608Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行竞技场购买、挑战、结算或资产写入。

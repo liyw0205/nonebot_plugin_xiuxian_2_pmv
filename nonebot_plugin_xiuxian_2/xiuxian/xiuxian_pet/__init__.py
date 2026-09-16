@@ -64,7 +64,6 @@ from ...paths import get_paths
 from ...features.pet.application import PetApplication
 from ...infrastructure.ids import UUIDGenerator
 from .transaction_service import PetSkillReplaceService
-from ...compatibility.pet import PetTravelStartService
 from ...compatibility.pet import PetHatchService
 from .transaction_service import PetReleaseService
 from .transaction_service import PetFusionBreakthroughService
@@ -76,7 +75,6 @@ sql_message = XiuxianDateManage()
 pet_application = PetApplication(get_paths().game_db, get_paths().player_db)
 runtime_ids = UUIDGenerator()
 pet_skill_replace_service = PetSkillReplaceService(get_paths().player_db)
-pet_travel_start_service = PetTravelStartService(get_paths().player_db)
 pet_hatch_service = PetHatchService(get_paths().game_db, get_paths().player_db)
 pet_release_service = PetReleaseService(get_paths().game_db, get_paths().player_db)
 pet_fusion_breakthrough_service = PetFusionBreakthroughService(get_paths().player_db)
