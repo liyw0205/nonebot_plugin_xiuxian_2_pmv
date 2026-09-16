@@ -795,6 +795,8 @@
 
 2026-09-16 beg default graph cleanup：AST调用图确认 `novice_gift_claim_service`、`beg_daily_reward_service`无可执行调用，daily/novice handlers均通过 `BegApplication.execute`进入 feature-owned `BegRepository`；删除两个dead legacy实例及imports，保留旧 service类文件作为rollback artifact。beg/source/architecture共163 tests、compileall、architecture、diff check通过。
 
+2026-09-16 interactive default graph cleanup：AST调用图确认 stone daily reward、greeting claim、daily fortune三个旧 service实例无可执行调用，命令通过 `InteractiveApplication.execute`；删除三个dead实例及imports，保留 `InteractiveExpDailyRewardService`待其独立调用图审计。interactive/source/architecture共181 tests、compileall、architecture、diff check通过。
+
 2026-09-16 beg default graph cleanup live safety：提交 `e683c8d` 部署后 backup `/srv/old/data/backups/20260916T121853Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行仙途奇缘、新手礼包或资产写入。
 
 2026-09-16 base sign-in default graph cleanup live safety：提交 `d7a6b95` 部署后 backup `/srv/old/data/backups/20260916T121019Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行签到、lottery、资产或计数写入。

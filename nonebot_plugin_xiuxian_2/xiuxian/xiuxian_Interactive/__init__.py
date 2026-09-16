@@ -16,18 +16,14 @@ import time
 from datetime import datetime, timedelta
 from ..xiuxian_config import convert_rank
 from .transaction_service import InteractiveExpDailyRewardService
-from .transaction_service import InteractiveStoneDailyRewardService
-from .transaction_service import InteractiveGreetingClaimService
-from .transaction_service import InteractiveDailyFortuneService
+
 from ...features.interactive.application import InteractiveApplication
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.random_source import SystemRandom
 sql_message = XiuxianDateManage()
 interactive_exp_daily_reward_service = InteractiveExpDailyRewardService(get_paths().game_db)
-interactive_stone_daily_reward_service = InteractiveStoneDailyRewardService(get_paths().game_db)
-interactive_greeting_claim_service = InteractiveGreetingClaimService(get_paths().game_db)
-interactive_daily_fortune_service = InteractiveDailyFortuneService(get_paths().game_db)
+
 interactive_application = InteractiveApplication(get_paths().game_db)
 runtime_clock = SystemClock()
 runtime_ids = UUIDGenerator()
