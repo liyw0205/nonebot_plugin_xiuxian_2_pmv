@@ -68,8 +68,6 @@ from .admin_helpers import (
 from .transaction_service import AdminLevelChangeService
 from .transaction_service import AdminRootChangeService
 from .transaction_service import AdminExpAdjustmentService
-from .transaction_service import AdminStoneAdjustmentService
-from .transaction_service import AdminItemGrantService
 from .transaction_service import AdminItemDestroyService
 from .transaction_service import AdminItemBatchGrantService
 from .transaction_service import AdminAccessoryAdjustmentService
@@ -93,9 +91,7 @@ sql_message = XiuxianDateManage()  # sql类
 admin_level_change_service = AdminLevelChangeService(get_paths().game_db)
 admin_root_change_service = AdminRootChangeService(get_paths().game_db)
 admin_exp_adjustment_service = AdminExpAdjustmentService(get_paths().game_db)
-admin_stone_adjustment_service = AdminStoneAdjustmentService(get_paths().game_db)
 admin_asset_application = AdminAssetApplication(get_paths().game_db)
-admin_item_grant_service = AdminItemGrantService(get_paths().game_db)
 admin_item_destroy_service = AdminItemDestroyService(get_paths().game_db)
 admin_item_batch_grant_service = AdminItemBatchGrantService(get_paths().game_db)
 admin_accessory_adjustment_service = AdminAccessoryAdjustmentService(

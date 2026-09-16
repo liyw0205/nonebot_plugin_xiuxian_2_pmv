@@ -763,6 +763,8 @@
 
 2026-09-16 sect fairyland default graph cleanup：调用图确认 fairyland claim handler已实际调用 `SectFairylandApplication.claim`；删除 `xiuxian_sect/__init__.py` 中无生产调用的 `FairylandClaimService` 默认实例/import，并修正 stale source gate。保留 `LegacySectFairylandRepository`作为未迁移rollback边界。sect/source/architecture共312 tests、compileall、diff check通过。
 
+2026-09-16 admin default graph cleanup：AST调用图确认 stone adjustment与item grant handlers已调用 `AdminAssetApplication.adjust_stone/grant_item`，删除 `AdminStoneAdjustmentService`、`AdminItemGrantService` 默认实例及imports；`AdminItemDestroyService`仍有两处真实调用，未删除。admin/source/architecture共231 tests、compileall、architecture、diff check通过。
+
 2026-09-16 sect fairyland default graph cleanup live safety：提交 `30b60b7` 部署后 backup `/srv/old/data/backups/20260916T042524Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行宗门炼体堂领取、资产或计数写入。
 
 2026-09-16 pet default graph cleanup live safety：提交 `947e1b2` 部署后 backup `/srv/old/data/backups/20260916T042002Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行宠物旅行、喂养、孵化或资产写入。
