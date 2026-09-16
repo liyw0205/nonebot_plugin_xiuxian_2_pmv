@@ -4,6 +4,7 @@ import asyncio
 import time
 import os
 from datetime import datetime
+from typing import Any
 
 from nonebot.typing import T_State
 from ...paths import get_paths
@@ -49,6 +50,7 @@ from .stone_limit import stone_limit
 
 from ...compatibility.sign_in import SignInService
 from ...features.sign_in.application import SignInApplication
+from ...features.sign_in.lottery_application import LotteryApplication
 from ...features.sign_in.effects import NullSignInEffects
 from .transaction_service import PlayerRenameService
 from ...compatibility.stone_gift import StoneGiftService
@@ -62,12 +64,18 @@ items = Items()
 sql_message = XiuxianDateManage()  # sql类
 sign_in_service = SignInService(get_paths().game_db)
 sign_in_application = SignInApplication(get_paths().game_db)
+lottery_application: Any | None = None
 
 
 def configure_sign_in_application(application: SignInApplication) -> None:
     """Bind the handler to the lifecycle-owned sign-in application."""
     global sign_in_application
     sign_in_application = application
+
+
+def configure_lottery_application(application: Any) -> None:
+    global lottery_application
+    lottery_application = application
 
 player_rename_service = PlayerRenameService(get_paths().game_db)
 stone_gift_service = StoneGiftService(get_paths().game_db)
@@ -878,6 +886,7 @@ async def handle_lottery(user_info: dict, operation_id: str):
         user_name=user_name,
         operation_id=operation_id,
         legacy_settle=lambda *args, **kwargs: _legacy_lottery_service().settle(*args, **kwargs),
+        application=lottery_application,
     )
 
     return format_lottery_result(settled, number_to)

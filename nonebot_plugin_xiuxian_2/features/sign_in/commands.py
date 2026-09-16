@@ -57,9 +57,18 @@ def settle_lottery(
     user_name: str,
     operation_id: str,
     legacy_settle: Any,
+    application: LotteryApplication | None = None,
 ) -> Any:
     occurred_at = sign_in_clock().now()
     business_date = occurred_at.date().isoformat()
+    if application is not None:
+        return application.settle(
+            operation_id=operation_id,
+            user_id=user_id,
+            user_name=user_name,
+            business_date=business_date,
+            occurred_at=occurred_at,
+        )
     with DatabaseUnitOfWork(database) as uow:
         migrated = LotteryRepository.schema_exists(uow)
     if migrated:

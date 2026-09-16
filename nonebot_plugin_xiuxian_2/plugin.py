@@ -391,6 +391,9 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 from .infrastructure.database.attached_uow import AttachedDatabaseUnitOfWork
 
                 player_database = context.database.path("player_db")
+                player_database.parent.mkdir(parents=True, exist_ok=True)
+                if not player_database.exists():
+                    player_database.touch()
                 with AttachedDatabaseUnitOfWork(
                     spec.path,
                     attachments={"player_data": player_database},
@@ -449,6 +452,8 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         upper = int(settings.get("sign_in_upper_limit", 500000)) if settings is not None else 500000
         fee_rate = float(settings.get("stone_gift_fee_rate", 0.1)) if settings is not None else 0.1
         sign_in_effects = None
+        lottery_service = None
+        lottery_application_type = None
         if context.legacy_startup:
             # Keep historical lottery/statistics/task behavior at the adapter
             # boundary while the side effects are migrated independently.
@@ -469,6 +474,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 from .features.sign_in.lottery_application import LotteryApplication
                 from .features.sign_in.lottery_repository import LotteryRepository
                 from .xiuxian.xiuxian_base.transaction_service import LotterySettlementService
+                lottery_application_type = LotteryApplication
 
 
 
@@ -652,9 +658,11 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         except ValueError:
             pass
         else:
-            from .xiuxian.xiuxian_base import configure_sign_in_application
+            from .xiuxian.xiuxian_base import configure_lottery_application, configure_sign_in_application
 
             configure_sign_in_application(context.services["sign_in"])
+            if lottery_application_type is not None and lottery_service is not None and isinstance(lottery_service, lottery_application_type):
+                configure_lottery_application(lottery_service)
         context.reconcile_handlers = {
             "accessory_package.open": context.services["accessory_package"].reconcile,
         }
