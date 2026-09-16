@@ -1714,7 +1714,8 @@ class SourceQualityTests(unittest.TestCase):
         source = (illusion_root / "__init__.py").read_text(encoding="utf-8")
         start = source.index("@illusion_choice.handle")
         handler = source[start:source.index("@illusion_reset.handle", start)]
-        self.assertIn("illusion_choice_service.choose(", handler)
+        self.assertIn("_run_illusion_action(\n", handler)
+        self.assertNotIn("illusion_choice_service.choose(\n", handler)
         self.assertNotIn("IllusionData.save_user_illusion_info(", handler)
         self.assertNotIn("IllusionData.update_question_stats(", handler)
         self.assertNotIn("sql_message.update_ls(", handler)

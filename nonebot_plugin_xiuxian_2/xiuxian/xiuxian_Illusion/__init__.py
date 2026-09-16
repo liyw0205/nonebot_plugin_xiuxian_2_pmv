@@ -28,19 +28,15 @@ from ..xiuxian_config import convert_rank, base_rank, XiuConfig
 from ...paths import get_paths
 from ...features.illusion.application import IllusionApplication
 from ...infrastructure.ids import UUIDGenerator
-from .choice_service import IllusionChoiceService
+
 from .IllusionData import *
 sql_message = XiuxianDateManage()
 items = Items()
-illusion_choice_service = IllusionChoiceService(get_paths().game_db)
 illusion_application = IllusionApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
 
 
 def _run_illusion_action(action, operation_id, user_id, call=None, **payload):
-    # The command adapter keeps the historical ``call`` argument for source
-    # compatibility, while the migrated application now owns the transaction.
-    del call
     outcome = illusion_application.execute(
         operation_id=operation_id,
         user_id=str(user_id),
@@ -248,10 +244,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         "choose",
         operation_id,
         user_id,
-        call=lambda: illusion_choice_service.choose(
-            operation_id, user_id, period_key, illusion_info["question_index"], choice_num - 1,
-            selected_option, stone_reward, exp_reward, item_reward, XiuConfig().max_goods_num,
-        ),
         period_key=period_key,
         question_index=illusion_info["question_index"],
         choice_index=choice_num - 1,
