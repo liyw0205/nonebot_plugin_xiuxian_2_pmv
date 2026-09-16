@@ -749,6 +749,8 @@
 
 2026-09-16 tianti default graph cleanup：删除 `xiuxian_tianti/__init__.py` 中五个未被生产调用的旧 service实例及imports（stone training、medicine bath、breakthrough、qiaoxue、settlement）；保留旧 service类文件作为显式rollback artifact，真实handlers继续使用 application。tianti/source/architecture共193 tests、compileall、diff check通过。
 
+2026-09-16 tianti default graph cleanup live safety：提交 `25dc01a` 部署后 backup `/srv/old/data/backups/20260916T041555Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行天梯结算、修炼、药浴、突破或资产写入。
+
 2026-09-16 progress audit correction：`check_full_refactor_progress.py` 修正 sign-in分类，默认 `SignInStatisticsRepository`/`ApplicationSignInTaskEffects` 不再标为 task legacy；`LotterySettlementService` 仅在显式 `XIUXIAN_SIGN_IN_LEGACY_LOTTERY` fallback路径中计为兼容残留。audit输出保留 `exit_ready=false`，不放宽完成门禁；source/architecture共157 tests、compileall、diff check通过。
 
 2026-09-16 lottery audit precision：审计输出拆分 `lottery_core_default_legacy=false` 与 `lottery_compatibility_fallback=true`；源码确认 `legacy_lottery` false时构造 `LotteryApplication`，旧 service仅由显式环境变量选择。source/architecture共157 tests，audit仍保留 explicit fallback blocker。
