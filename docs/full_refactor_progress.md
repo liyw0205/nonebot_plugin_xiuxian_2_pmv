@@ -707,6 +707,8 @@
 
 2026-09-16 web facade audit：Web registry确实注册了 base/back/trade/rift blueprints，但其 application底层仍分别映射 `LegacyBaseRepository`、`LegacyBackRepository`、`LegacyTradeFeatureRepository`、`LegacyRiftRepository`；route存在不等于底层切换，保留为 Web legacy execution blocker，继续检查 scheduler/worker调用图。
 
+2026-09-16 scheduler/worker audit：bootstrap jobs与scheduler Web route主要管理 `JobRegistry`/`JobExecutor`，未发现可独立切换的正式玩法 job repository；交易 jobs仍为空兼容声明，auction job仍依赖 trade legacy settlement。`xiuxian_buff/partner.py` matcher仍直接调用 mentor/partner transaction services，保留为真实关系事务 blocker，不做 scheduler facade式改写。
+
 2026-09-16 dungeon settlement audit：`DungeonSessionSqlRepository`真实覆盖 purchase/prepare/replay/resolve_rejection/session transition，但 `settle()`仍继承 `LegacyDungeonRepository` 的旧 explore settlement；未找到正式 prepared settlement SQL实现，保留为明确 legacy fallback blocker，不做不完整默认切换。
 
 2026-09-16 auction bid audit：`AuctionBidApplication` 默认仍使用 `LegacyTradeRepository`，`auction.001`仅创建 feature marker，未创建 bid/queue/history SQL schema；详细 settlement/replay也仍依赖 trade legacy graph。未移除 plugin 默认 adapter，保留为 auction SQL repository/跨库资产事务 blocker。
