@@ -791,6 +791,8 @@
 
 2026-09-16 base sign-in default graph cleanup：AST调用图确认 `sign_in_service`无可执行调用，真实签到 handler使用 lifecycle-bound `sign_in_application`；删除 dead `SignInService`默认实例/import，保留改名、送灵石、夺灵石等仍有真实调用的base services。顺带修复两处 isolated sign-in fixtures：在 feature schema前显式 `apply_platform_schema`，符合 shared ledger startup-only契约。exact regression与sign-in/source/architecture共177 tests、compileall、architecture、diff check通过。
 
+2026-09-16 base sign-in default graph cleanup live safety：提交 `d7a6b95` 部署后 backup `/srv/old/data/backups/20260916T121019Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行签到、lottery、资产或计数写入。
+
 2026-09-16 mixelixir default graph cleanup live safety：提交 `2d15bc8` 部署后 backup `/srv/old/data/backups/20260916T044201Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行炼丹收取、配方、药材或资产写入。
 
 2026-09-16 lottery audit precision live safety：提交 `28c7943` 部署后 backup `/srv/old/data/backups/20260916T035645Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。运行期审计确认 `lottery_core_default_legacy=false`，仅显式 compatibility fallback保留。
