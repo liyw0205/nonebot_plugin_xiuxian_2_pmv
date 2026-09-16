@@ -729,6 +729,8 @@
 
 2026-09-16 operation ledger infrastructure blocker：`OperationLedger.get/finish/list_pending`仍在请求路径调用 `ensure_schema`；startup当前只在 `game_db`创建 ledger/outbox，而 legacy facade及部分 application会在 player/trade数据库使用 ledger。移除这些调用前必须新增 checksum-safe多数据库 ledger migration并明确各数据库路由，避免把 request-time DDL或跨库 ledger写入误迁移；本轮保留为 infrastructure blocker。
 
+2026-09-16 platform ledger migration：新增 checksum-safe `platform.001` migration，将 operation_ledger、operation_audit、domain_outbox作为 startup-owned shared schema；首次测试发现 player/other DB routing排除 platform.001，修正后 game/player/trade/impart/message 五库均执行。platform-ledger/sign-in/architecture/source共160 tests、catalog=105、compileall、diff check通过。OperationLedger lazy ensure_schema暂保留为兼容，下一独立slice再收口调用。
+
 2026-09-16 auction settlement boundary audit：`AuctionSettlementApplication` 的 operation ledger/replay/read-only lookup已feature-owned，但 `settle_active` 默认仍调用 `LegacyAuctionSettlementRepository` 的 trade session algorithm；auction bid也同样依赖 legacy trade repository。未发现可独立切换的 queue/history/settlement SQL schema，保留为完整 auction migration blocker。
 
 2026-09-16 marker-only feature audit：`puppet`、`natal_treasure`、`sect_fairyland` migrations均只创建 feature marker；对应 repositories分别只提供 LegacyPuppet、LegacyNatalTreasure、LegacySectFairyland adapters，没有 feature-owned asset schema/SQL transaction。三者保留为独立 migration/asset blocker，不做 facade-only切换。

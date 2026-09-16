@@ -99,6 +99,12 @@ from .infrastructure.database import DatabaseUnitOfWork, Migration, MigrationRun
 from .infrastructure.scheduler import JobExecutor, JobRegistry
 
 
+def apply_platform_schema(uow: DatabaseUnitOfWork) -> None:
+    """Create shared operation/outbox tables during startup migration."""
+    OperationLedger().ensure_schema(uow)
+    OutboxStore().ensure_schema(uow)
+
+
 def build_migrations() -> tuple[Migration, ...]:
     """Return the one migration catalog used by every runtime entry point.
 
@@ -158,6 +164,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("natal_treasure.001", "natal_treasure_feature_migrations", apply_natal_treasure),
         Migration("package_reward.001", "package_reward_operations", apply_package_reward),
         Migration("pet.001", "pet_feature_migrations", apply_pet),
+        Migration("platform.001", "operation_ledger_outbox", apply_platform_schema),
         Migration("puppet.001", "puppet_feature_migrations", apply_puppet),
         Migration("rift.001", "rift_feature_migrations", apply_rift),
         Migration("sect.001", "sect_feature_migrations", apply_sect),
@@ -380,11 +387,14 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                     runner = MigrationRunner(game_migrations, clock=context.clock)
                 elif spec.key == "player_db":
                     runner = MigrationRunner(
-                        tuple(migration for migration in migration_runner.migrations if migration.version in {"title.001", "title.002", "combat_settlement.003", "combat_settlement.004", "dungeon.003", "map.003", "map.005", "map.008", "map.013", "map.015", "map.016", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005"}),
+                        tuple(migration for migration in migration_runner.migrations if migration.version in {"platform.001", "title.001", "title.002", "combat_settlement.003", "combat_settlement.004", "dungeon.003", "map.003", "map.005", "map.008", "map.013", "map.015", "map.016", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005"}),
                         clock=context.clock,
                     )
                 else:
-                    runner = MigrationRunner((), clock=context.clock)
+                    runner = MigrationRunner(
+                        tuple(migration for migration in migration_runner.migrations if migration.version == "platform.001"),
+                        clock=context.clock,
+                    )
                 runner.apply(uow)
             if spec.key == "game_db":
                 from .features.accessory_package.attached_migrations import apply_attached_player_accessory
