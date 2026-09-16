@@ -699,6 +699,8 @@
 
 2026-09-16 blocker re-audit：`activity_reward`仅有 `LegacyActivityRewardRepository`，`admin_asset`仅有 legacy stone/item transaction adapters，`sect_fairyland`仅有 `LegacySectFairylandRepository`；三者均无 feature-owned SQL schema/repository，不能移除 plugin 默认 legacy 注入或以 application facade宣称切换。继续寻找不依赖这些资产事务的独立 slice。
 
+2026-09-16 tower/boss wiring audit：`TowerApplication` 默认使用 `TowerPurchaseSqlRepository`，`BossApplication` 默认使用 `BossPurchaseSqlRepository`，application与plugin均无未使用 tower/boss legacy repository import；保留 repository层兼容边界，不重复做空切片。SectFairyland/WorldEvents仍为独立 legacy blockers。
+
 2026-09-16 dungeon settlement audit：`DungeonSessionSqlRepository`真实覆盖 purchase/prepare/replay/resolve_rejection/session transition，但 `settle()`仍继承 `LegacyDungeonRepository` 的旧 explore settlement；未找到正式 prepared settlement SQL实现，保留为明确 legacy fallback blocker，不做不完整默认切换。
 
 2026-09-16 auction bid audit：`AuctionBidApplication` 默认仍使用 `LegacyTradeRepository`，`auction.001`仅创建 feature marker，未创建 bid/queue/history SQL schema；详细 settlement/replay也仍依赖 trade legacy graph。未移除 plugin 默认 adapter，保留为 auction SQL repository/跨库资产事务 blocker。
