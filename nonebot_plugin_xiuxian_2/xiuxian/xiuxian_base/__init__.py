@@ -48,7 +48,7 @@ from ..xiuxian_utils.season_rank_service import (
 from ..xiuxian_tasks.task_data import record_task_progress
 from .stone_limit import stone_limit
 
-from ...compatibility.sign_in import SignInService
+
 from ...features.sign_in.application import SignInApplication
 from ...features.sign_in.lottery_application import LotteryApplication
 from ...features.sign_in.effects import NullSignInEffects
@@ -62,7 +62,6 @@ from .xiangyuan import clear_all_xiangyuan, reset_xiangyuan_daily  # noqa: F401
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
-sign_in_service = SignInService(get_paths().game_db)
 sign_in_application = SignInApplication(get_paths().game_db)
 lottery_application: Any | None = None
 

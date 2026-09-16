@@ -12,6 +12,7 @@ from nonebot_plugin_xiuxian_2.features.sign_in.statistics import SignInStatistic
 from nonebot_plugin_xiuxian_2.features.sign_in.task_effects import ApplicationSignInTaskEffects
 from nonebot_plugin_xiuxian_2.features.sign_in.tasks import SignInTaskRepository
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 
 
 class FixedClock:
@@ -31,6 +32,7 @@ class SignInVerticalSliceTests(unittest.TestCase):
             with DatabaseUnitOfWork(database) as uow:
                 uow.execute("CREATE TABLE user_xiuxian (user_id TEXT PRIMARY KEY, user_name TEXT, stone INTEGER, is_sign INTEGER)")
                 uow.execute("INSERT INTO user_xiuxian VALUES (?, ?, ?, ?)", ("u1", "道友", 100, 0))
+                apply_platform_schema(uow)
                 LotteryRepository.ensure_schema(uow)
                 SignInRepository().ensure_schema(uow)
                 SignInStatisticsRepository.ensure_schema(uow)
