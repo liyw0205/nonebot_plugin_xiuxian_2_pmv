@@ -669,6 +669,8 @@
 
 2026-09-16 combat settlement import cleanup：`CombatSettlementApplication` 默认使用 `CombatSettlementSqlRepository`/`DaoBattleSqlRepository`，移除未使用 `LegacyCombatSettlementRepository` import；legacy adapter保留在 repository作为显式 rollback。combat/map/source共149 tests、compileall、architecture、diff check通过。
 
+2026-09-16 combat settlement import cleanup live safety：提交 `4e2c545` 部署后 backup `/srv/old/data/backups/20260916T005704Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，104-entry recovery clean。live未执行战斗结算、奖励或资产写入。
+
 2026-09-16 map legacy graph cleanup continuation live safety：提交 `4b65c4a` 部署后 backup `/srv/old/data/backups/20260916T005240Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，104-entry recovery clean。live未执行地图移动、探索、种植、战斗或资产写入。
 
 2026-09-16 map legacy graph cleanup live safety：提交 `ceee816` 部署后 backup `/srv/old/data/backups/20260916T004816Z`，dry-run pending为空、reconcile clean；真实 startup `phase=ready` 六项全绿，104-entry recovery clean。live未执行地图探索、奖励、战斗或资产写入。
