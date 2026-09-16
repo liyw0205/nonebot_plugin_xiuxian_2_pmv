@@ -29,17 +29,13 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.player_fight import Boss_fight
 from ..xiuxian_config import XiuConfig, base_rank
 from .transaction_service import SeedPurchaseService
-from .transaction_service import MapResourceRewardService
-from .transaction_service import MapExploreSettlementService
-from .transaction_service import MapMissionClaimService
-from .transaction_service import MapCombatSettlementService
+
 from .transaction_service import MapCombatLifecycleService
 from .transaction_service import MapCombatLifecycleResult
 from .transaction_service import MapDongfuBuildService
 from .transaction_service import MapDongfuBuildResult
 from .transaction_service import MapHomeReturnService
-from .transaction_service import MapInteractiveActionService
-from .transaction_service import MapInteractiveActionResult
+
 from .transaction_service import MapExploreStartService
 from .transaction_service import MapExploreStartResult
 from .transaction_service import MapExploreSettlementResult
@@ -58,10 +54,7 @@ from ...infrastructure.ids import UUIDGenerator
 
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
-map_explore_settlement_service = MapExploreSettlementService(get_paths().game_db, get_paths().player_db)
-map_mission_claim_service = MapMissionClaimService(get_paths().game_db, get_paths().player_db)
-map_resource_reward_service = MapResourceRewardService(get_paths().game_db, get_paths().player_db)
-map_combat_settlement_service = MapCombatSettlementService(get_paths().game_db, get_paths().player_db)
+
 combat_settlement_application = CombatSettlementApplication(
     get_paths().game_db,
     get_paths().player_db,
@@ -71,9 +64,7 @@ map_combat_lifecycle_service = MapCombatLifecycleService(
 )
 map_dongfu_build_service = MapDongfuBuildService(get_paths().game_db, get_paths().player_db)
 map_home_return_service = MapHomeReturnService(get_paths().player_db)
-map_interactive_action_service = MapInteractiveActionService(
-    get_paths().game_db, get_paths().player_db
-)
+
 map_explore_start_service = MapExploreStartService(get_paths().game_db, get_paths().player_db)
 map_movement_service = MapMovementSettlementService(get_paths().game_db, get_paths().player_db)
 map_application = MapApplication(get_paths().game_db, get_paths().player_db)
