@@ -1961,6 +1961,10 @@ class SourceQualityTests(unittest.TestCase):
         handler = source[source.index("async def unseal_(bot"):]
         self.assertIn("dufang_application.bet(", handler)
         self.assertNotIn("dufang_bet_service.place(", handler)
+        self.assertIn("dufang_application.payout(", handler)
+        self.assertIn("dufang_application.payout_result(", handler)
+        self.assertNotIn("dufang_payout_service.settle(", handler)
+        self.assertNotIn("dufang_payout_service.get_result(", handler)
 
     def test_partner_protection_is_rechecked_inside_transactions(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_buff"

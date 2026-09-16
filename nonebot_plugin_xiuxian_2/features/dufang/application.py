@@ -28,5 +28,16 @@ class DufangApplication(MigratedFeatureApplication):
             ledger_payload={"cost": kwargs["cost"]},
         )
 
+    def payout(self, *, operation_id: str, user_id: str, **kwargs):
+        return self.execute(
+            operation_id=operation_id,
+            user_id=user_id,
+            payload={"action": "payout", **kwargs},
+            ledger_payload={"bet_id": kwargs["bet_id"]},
+        )
+
+    def payout_result(self, operation_id: str):
+        return self.repository.payout_result(operation_id)
+
 
 __all__ = ["DufangApplication"]

@@ -27,7 +27,6 @@ from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.ids import UUIDGenerator
 from ...features.dufang.application import DufangApplication
 from .transaction_service import (
-    DufangPayoutService,
     DufangShareSettlementService,
 )
 
@@ -36,7 +35,6 @@ runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
 player_data_manager = PlayerDataManager()
-dufang_payout_service = DufangPayoutService(get_paths().game_db, get_paths().player_db)
 dufang_share_service = DufangShareSettlementService(get_paths().game_db, get_paths().player_db)
 dufang_application = DufangApplication(get_paths().game_db, get_paths().player_db)
 
@@ -434,7 +432,7 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await handle_send(bot, event, "未找到修仙数据，本次鉴石未下注。", md_type="我要修仙")
         return
     if bet.status == "duplicate":
-        prior_pay = dufang_payout_service.get_result(payout_operation_id)
+        prior_pay = dufang_application.payout_result(payout_operation_id)
         if prior_pay is not None and prior_pay.succeeded:
             if prior_pay.gain > 0:
                 effect_text = f"获得 {number_to(prior_pay.gain)} 灵石"
@@ -493,15 +491,19 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         gain = 0
         requested_loss = int(cost * base_ratio)
         outcome = "loss"
-    payout = _run_dufang_action(
-        "payout", payout_operation_id, user_id,
-        call=lambda: dufang_payout_service.settle(
-            payout_operation_id, operation_id, user_id, outcome, gain, requested_loss,
-            runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S"),
-        ),
-        parent_operation_id=operation_id, outcome=outcome, gain=gain,
+    payout_outcome = dufang_application.payout(
+        operation_id=payout_operation_id,
+        user_id=user_id,
+        bet_id=operation_id,
+        outcome=outcome,
+        gain=gain,
         requested_loss=requested_loss,
+        settled_at=runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S"),
     )
+    payout_data = dict(payout_outcome.data or {})
+    payout_data.setdefault("status", payout_outcome.status)
+    payout_data["succeeded"] = payout_outcome.ok
+    payout = SimpleNamespace(**payout_data)
     if not payout.succeeded:
         await handle_send(bot, event, "鉴石派彩未入账或已处理，请稍后查看灵石余额。", md_type="鉴石")
         return

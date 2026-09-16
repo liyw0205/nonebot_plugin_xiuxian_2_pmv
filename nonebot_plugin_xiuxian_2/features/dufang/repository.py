@@ -22,7 +22,26 @@ class DufangRepository(ServicePort):
                 payload["cost"],
                 payload["placed_at"],
             )
+        if str(action).casefold() == "payout" and self.player_database is not None:
+            from ...xiuxian.xiuxian_dufang.transaction_service import DufangPayoutService
+
+            return DufangPayoutService(self.database, self.player_database).settle(
+                operation_id,
+                payload["bet_id"],
+                user_id,
+                payload["outcome"],
+                payload["gain"],
+                payload["requested_loss"],
+                payload["settled_at"],
+            )
         return super().execute(operation_id, user_id, action, payload)
+
+    def payout_result(self, operation_id: str) -> Any:
+        if self.player_database is None:
+            return None
+        from ...xiuxian.xiuxian_dufang.transaction_service import DufangPayoutService
+
+        return DufangPayoutService(self.database, self.player_database).get_result(operation_id)
 
 
 __all__ = ["DufangRepository"]
