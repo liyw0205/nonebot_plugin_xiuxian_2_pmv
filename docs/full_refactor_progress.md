@@ -809,6 +809,8 @@
 
 2026-09-16 training default graph cleanup：AST调用图确认 `training_completion_service`、`training_event_service`、`training_purchase_service`、`training_reset_service`无可执行调用，真实历练入口使用 `TrainingApplication`；删除四个dead service实例/import。training/source/architecture共184 tests、compileall、diff check通过。
 
+2026-09-16 training default graph cleanup live safety：提交 `104012ff` 部署后 backup `/srv/old/data/backups/20260916T161921Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行历练购买、完成、事件或资产写入。
+
 2026-09-16 pet default graph cleanup live safety：提交 `2feb89db` 部署后 backup `/srv/old/data/backups/20260916T161405Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行宠物游历、孵化、融合或资产写入。
 
 2026-09-16 tower/dungeon default graph cleanup live safety：提交 `efea630` 部署后 backup `/srv/old/data/backups/20260916T160707Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行爬塔购买、地牢购买、会话或资产写入。
