@@ -73,7 +73,7 @@ from .transaction_service import ActivityClaimAllService
 _point_shop_purchase_service_instance = None
 _activity_task_claim_service_instance = None
 activity_sign_settlement_service = ActivitySignSettlementService(DB_PATH, get_paths().game_db)
-activity_pass_claim_service = ActivityPassClaimService(DB_PATH, get_paths().game_db)
+_activity_pass_claim_service_instance = None
 _activity_collect_exchange_service_instance = None
 _activity_claim_all_service_instance = None
 
@@ -104,6 +104,13 @@ def _activity_task_claim_service():
     if _activity_task_claim_service_instance is None:
         _activity_task_claim_service_instance = ActivityTaskClaimService(DB_PATH, get_paths().game_db)
     return _activity_task_claim_service_instance
+
+
+def _activity_pass_claim_service():
+    global _activity_pass_claim_service_instance
+    if _activity_pass_claim_service_instance is None:
+        _activity_pass_claim_service_instance = ActivityPassClaimService(DB_PATH, get_paths().game_db)
+    return _activity_pass_claim_service_instance
 
 
 def _reward_by_day(config: dict, day_index: int) -> dict:
@@ -883,7 +890,7 @@ def build_activity_pass_text(user_id: str) -> str:
 def claim_activity_pass_rewards(user_id: str, query: str = "", operation_id: str | None = None) -> tuple[bool, str]:
     uid = str(user_id)
     if operation_id:
-        previous = activity_pass_claim_service.get_result(operation_id, uid)
+        previous = _activity_pass_claim_service().get_result(operation_id, uid)
         if previous is not None:
             if not previous.succeeded:
                 return False, "领取请求冲突，请重新发送"
@@ -943,7 +950,7 @@ def claim_activity_pass_rewards(user_id: str, query: str = "", operation_id: str
     finally:
         conn.close()
 
-    result = activity_pass_claim_service.claim(
+    result = _activity_pass_claim_service().claim(
         operation_id or f"activity-pass:{uid}:{runtime_ids.new_id()}", uid, activity_key,
         balance["level"], reward_jobs, XiuConfig().max_goods_num,
     )

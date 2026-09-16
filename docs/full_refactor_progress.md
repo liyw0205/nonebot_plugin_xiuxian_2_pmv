@@ -1511,6 +1511,8 @@
 
 2026-09-17 activity task-claim compatibility live safety：提交 `c39bb3c8` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260916T231715Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。live 未执行真实活动任务领取。
 
+2026-09-17 activity pass-claim compatibility construction slice：`xiuxian_activity.service` 不再 module-level 构造 `ActivityPassClaimService`，新增 `_activity_pass_claim_service()` 惰性 getter，replay query 与 claim execute 均经 getter；pass/task/collect/point/claim/application/source/architecture 共 186 tests、compileall、inventory、diff check通过。
+
 ## 6. 下一步
 
 先把 `stone_gift` 的真实 handler 从旧模块迁移到 `features/stone_gift/commands.py`，通过新 application 的 DTO/operation_id/Clock 路径；随后补真实 NoneBot 注册测试、删除旧 `StoneGiftService` 执行实现，并在真实部署数据上执行 dry-run/reconcile/恢复。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。
