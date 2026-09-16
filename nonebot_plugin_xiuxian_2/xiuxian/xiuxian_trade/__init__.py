@@ -24,8 +24,7 @@ from ..xiuxian_utils.utils import (
     Txt2Img, number_to, handle_send,
 )
 from ..xiuxian_utils.xiuxian2_handle import (
-    XiuxianDateManage, TradeDataManager, get_weapon_info_msg, get_armor_info_msg,
-    get_sec_msg, get_main_info_msg, get_sub_info_msg, UserBuffDate
+    XiuxianDateManage, TradeDataManager
 )
 from ..xiuxian_back import type_mapping, rank_map, get_recover # 引用 xiuxian_back 中的类型和炼金函数
 from ..xiuxian_back.back_util import check_equipment_use_msg, get_item_msg_rank # 引用 xiuxian_back.back_util
