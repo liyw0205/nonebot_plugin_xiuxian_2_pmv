@@ -739,6 +739,8 @@
 
 2026-09-16 platform schema ownership cleanup：移除 startup `ensure_database`与CLI migrate中对 game_db ledger/outbox的重复初始化，统一由 `platform.001` migration及五库路由负责；CLI player/other dry-run/apply路由与startup一致。platform/accessory/application/architecture/source共206 tests，catalog=105、compileall、architecture、diff check通过。
 
+2026-09-16 platform schema ownership cleanup live safety：提交 `5e9df39` 部署后 backup `/srv/old/data/backups/20260916T031829Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行玩家资产、奖励、交易或计数写入。
+
 2026-09-16 accessory/coordinator no-request-DDL live safety：提交 `8a15db2` 部署后 backup `/srv/old/data/backups/20260916T031105Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行饰品礼包、资产、奖励或计数写入。
 
 2026-09-16 platform outbox no-request-DDL live safety：提交 `b216b28` 部署后 backup `/srv/old/data/backups/20260916T025628Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行玩家资产、奖励、交易或计数写入。
