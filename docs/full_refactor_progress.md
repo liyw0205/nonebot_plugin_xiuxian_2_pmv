@@ -791,6 +791,8 @@
 
 2026-09-16 base sign-in default graph cleanup：AST调用图确认 `sign_in_service`无可执行调用，真实签到 handler使用 lifecycle-bound `sign_in_application`；删除 dead `SignInService`默认实例/import，保留改名、送灵石、夺灵石等仍有真实调用的base services。顺带修复两处 isolated sign-in fixtures：在 feature schema前显式 `apply_platform_schema`，符合 shared ledger startup-only契约。exact regression与sign-in/source/architecture共177 tests、compileall、architecture、diff check通过。
 
+2026-09-16 dongfu execution blocker audit：Map seed purchase/build已通过 `MapApplication` SQL repositories；但 `xiuxian_dongfu` expansion、plant、accelerate、patrol、array、visit、fertilize、infiltrate、harvest等十个旧 service实例均有真实AST调用。`DongfuApplication.execute_legacy_call`仍是 facade，未删除任何live instance，保留为 dongfu legacy execution blocker。
+
 2026-09-16 base sign-in default graph cleanup live safety：提交 `d7a6b95` 部署后 backup `/srv/old/data/backups/20260916T121019Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行签到、lottery、资产或计数写入。
 
 2026-09-16 mixelixir default graph cleanup live safety：提交 `2d15bc8` 部署后 backup `/srv/old/data/backups/20260916T044201Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行炼丹收取、配方、药材或资产写入。
