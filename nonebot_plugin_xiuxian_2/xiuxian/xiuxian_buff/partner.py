@@ -26,10 +26,6 @@ from ..xiuxian_utils.xiuxian2_handle import (
     PlayerDataManager,
     UserBuffDate,
     XiuxianDateManage,
-    get_base_attributes,
-    get_final_attributes,
-    get_player_info,
-    save_player_info,
 )
 from .mentor_exp_cd import mentor_exp_cd
 from .transaction_service import MentorBindService
