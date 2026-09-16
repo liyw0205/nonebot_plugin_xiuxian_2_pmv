@@ -717,6 +717,8 @@
 
 2026-09-16 application legacy AST sweep：对全部 `features/*/application.py` 的 `Legacy*` imports执行 AST 引用核查；所有命中均在默认 repository/fallback或 `LegacyApplication` 基类中真实使用，没有可安全删除的死 import。保留 activity/admin/auction/bank/mixelixir/pet/puppet/sect-fairyland/work/world-events及 base/back/buff/map/natal/rift/trade 的真实兼容边界。
 
+2026-09-16 auction settlement boundary audit：`AuctionSettlementApplication` 的 operation ledger/replay/read-only lookup已feature-owned，但 `settle_active` 默认仍调用 `LegacyAuctionSettlementRepository` 的 trade session algorithm；auction bid也同样依赖 legacy trade repository。未发现可独立切换的 queue/history/settlement SQL schema，保留为完整 auction migration blocker。
+
 2026-09-16 dungeon settlement audit：`DungeonSessionSqlRepository`真实覆盖 purchase/prepare/replay/resolve_rejection/session transition，但 `settle()`仍继承 `LegacyDungeonRepository` 的旧 explore settlement；未找到正式 prepared settlement SQL实现，保留为明确 legacy fallback blocker，不做不完整默认切换。
 
 2026-09-16 auction bid audit：`AuctionBidApplication` 默认仍使用 `LegacyTradeRepository`，`auction.001`仅创建 feature marker，未创建 bid/queue/history SQL schema；详细 settlement/replay也仍依赖 trade legacy graph。未移除 plugin 默认 adapter，保留为 auction SQL repository/跨库资产事务 blocker。
