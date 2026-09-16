@@ -72,7 +72,7 @@ from .transaction_service import ActivityClaimAllService
 
 _point_shop_purchase_service_instance = None
 _activity_task_claim_service_instance = None
-activity_sign_settlement_service = ActivitySignSettlementService(DB_PATH, get_paths().game_db)
+_activity_sign_settlement_service_instance = None
 _activity_pass_claim_service_instance = None
 _activity_collect_exchange_service_instance = None
 _activity_claim_all_service_instance = None
@@ -111,6 +111,13 @@ def _activity_pass_claim_service():
     if _activity_pass_claim_service_instance is None:
         _activity_pass_claim_service_instance = ActivityPassClaimService(DB_PATH, get_paths().game_db)
     return _activity_pass_claim_service_instance
+
+
+def _activity_sign_settlement_service():
+    global _activity_sign_settlement_service_instance
+    if _activity_sign_settlement_service_instance is None:
+        _activity_sign_settlement_service_instance = ActivitySignSettlementService(DB_PATH, get_paths().game_db)
+    return _activity_sign_settlement_service_instance
 
 
 def _reward_by_day(config: dict, day_index: int) -> dict:
@@ -1732,7 +1739,7 @@ def claim_sign(user_id: str, operation_id: str | None = None) -> tuple[bool, str
     today = today_str()
     operation_id = str(operation_id or f"activity-sign:{uid}:{runtime_ids.new_id()}")
     # 同事件重放优先回放 operation，避免“今日已签到”前置拦截。
-    previous = activity_sign_settlement_service.get_result(operation_id)
+    previous = _activity_sign_settlement_service().get_result(operation_id)
     if previous is not None:
         lines = [
             f"{cfg.get('festival_name', '节日')}签到成功",
@@ -1768,7 +1775,7 @@ def claim_sign(user_id: str, operation_id: str | None = None) -> tuple[bool, str
     finally:
         conn.close()
 
-    result = activity_sign_settlement_service.settle(
+    result = _activity_sign_settlement_service().settle(
         operation_id, uid, today,
         current_sign_days, current_total_sign_days, daily_reward_items,
         milestone_reward_items, XiuConfig().max_goods_num,
