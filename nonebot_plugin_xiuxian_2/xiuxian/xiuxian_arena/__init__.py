@@ -22,10 +22,10 @@ sql_message = XiuxianDateManage()
 
 from .arena_limit import arena_limit
 from .arena_shop import arena_shop_data
-from .transaction_service import ArenaPurchaseService, ArenaPurchaseResult
-from .transaction_service import ArenaChallengePurchaseService, ArenaChallengePurchaseResult
-from .transaction_service import ArenaChallengeTicketService, ArenaChallengeTicketResult
-from .transaction_service import ArenaChallengeSettlementService, ArenaChallengeSettlementResult
+from .transaction_service import ArenaPurchaseResult
+from .transaction_service import ArenaChallengePurchaseResult
+from .transaction_service import ArenaChallengeTicketResult
+from .transaction_service import ArenaChallengeSettlementResult
 from .transaction_service import ArenaWeeklyRankReductionService
 from .transaction_service import ArenaSeasonRewardService
 from ...features.arena.application import ArenaApplication
@@ -33,10 +33,6 @@ from ...features.arena.repository import ArenaChallengePurchaseSqlRepository
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 
-arena_purchase_service = ArenaPurchaseService(get_paths().game_db, get_paths().player_db)
-arena_challenge_purchase_service = ArenaChallengePurchaseService(get_paths().game_db, get_paths().player_db)
-arena_challenge_ticket_service = ArenaChallengeTicketService(get_paths().game_db, get_paths().player_db)
-arena_challenge_settlement_service = ArenaChallengeSettlementService(get_paths().game_db, get_paths().player_db)
 arena_weekly_rank_reduction_service = ArenaWeeklyRankReductionService(get_paths().player_db)
 arena_season_reward_service = ArenaSeasonRewardService(get_paths().game_db, get_paths().player_db)
 arena_application = ArenaApplication(
