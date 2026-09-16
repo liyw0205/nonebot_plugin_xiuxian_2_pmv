@@ -727,6 +727,8 @@
 
 2026-09-16 application legacy AST sweep：对全部 `features/*/application.py` 的 `Legacy*` imports执行 AST 引用核查；所有命中均在默认 repository/fallback或 `LegacyApplication` 基类中真实使用，没有可安全删除的死 import。保留 activity/admin/auction/bank/mixelixir/pet/puppet/sect-fairyland/work/world-events及 base/back/buff/map/natal/rift/trade 的真实兼容边界。
 
+2026-09-16 operation ledger infrastructure blocker：`OperationLedger.get/finish/list_pending`仍在请求路径调用 `ensure_schema`；startup当前只在 `game_db`创建 ledger/outbox，而 legacy facade及部分 application会在 player/trade数据库使用 ledger。移除这些调用前必须新增 checksum-safe多数据库 ledger migration并明确各数据库路由，避免把 request-time DDL或跨库 ledger写入误迁移；本轮保留为 infrastructure blocker。
+
 2026-09-16 auction settlement boundary audit：`AuctionSettlementApplication` 的 operation ledger/replay/read-only lookup已feature-owned，但 `settle_active` 默认仍调用 `LegacyAuctionSettlementRepository` 的 trade session algorithm；auction bid也同样依赖 legacy trade repository。未发现可独立切换的 queue/history/settlement SQL schema，保留为完整 auction migration blocker。
 
 2026-09-16 marker-only feature audit：`puppet`、`natal_treasure`、`sect_fairyland` migrations均只创建 feature marker；对应 repositories分别只提供 LegacyPuppet、LegacyNatalTreasure、LegacySectFairyland adapters，没有 feature-owned asset schema/SQL transaction。三者保留为独立 migration/asset blocker，不做 facade-only切换。
