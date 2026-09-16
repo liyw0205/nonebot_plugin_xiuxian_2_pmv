@@ -813,6 +813,8 @@
 
 2026-09-16 sect default graph cleanup：AST调用图确认 `sect_shop_purchase_service`、`sect_elixir_claim_service`、`sect_member_join_service`、`sect_mainbuff_learn_service`、`sect_secbuff_learn_service`无可执行调用，真实入口使用 `SectApplication`；删除五个dead compatibility实例/import，保留membership/open/close/disband/maintenance及fairyland live services。sect/source/architecture共312 tests、compileall、diff check通过。
 
+2026-09-16 sect default graph cleanup live safety：提交 `b148dc28` 部署后 backup `/srv/old/data/backups/20260916T165029Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行宗门购买、入宗、丹药领取、主副 buff 学习或资产写入。
+
 2026-09-16 work default graph cleanup live safety：提交 `6c5793fe` 部署后 backup `/srv/old/data/backups/20260916T164552Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行悬赏接取、结算、物品使用或资产写入。
 
 2026-09-16 training default graph cleanup live safety：提交 `104012ff` 部署后 backup `/srv/old/data/backups/20260916T161921Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行历练购买、完成、事件或资产写入。
