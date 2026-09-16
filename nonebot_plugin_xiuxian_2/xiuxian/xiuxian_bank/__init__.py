@@ -38,10 +38,10 @@ config = get_config()
 BANKLEVEL = config["BANKLEVEL"]
 sql_message = XiuxianDateManage()  # sql类
 player_data_manager = PlayerDataManager()
-bank_deposit_service = BankDepositService(get_paths().game_db, get_paths().player_db)
-bank_withdrawal_service = BankWithdrawalService(get_paths().game_db, get_paths().player_db)
-bank_upgrade_service = BankUpgradeService(get_paths().game_db, get_paths().player_db)
-bank_interest_service = BankInterestService(get_paths().game_db, get_paths().player_db)
+_bank_deposit_service_instance = None
+_bank_withdrawal_service_instance = None
+_bank_upgrade_service_instance = None
+_bank_interest_service_instance = None
 bank_application = BankApplication(
     get_paths().game_db,
     get_paths().player_db,
@@ -50,6 +50,34 @@ bank_application = BankApplication(
 runtime_clock = SystemClock()
 runtime_ids = UUIDGenerator()
 PLAYERSDATA = get_paths().players
+
+
+def _bank_deposit_service():
+    global _bank_deposit_service_instance
+    if _bank_deposit_service_instance is None:
+        _bank_deposit_service_instance = BankDepositService(get_paths().game_db, get_paths().player_db)
+    return _bank_deposit_service_instance
+
+
+def _bank_withdrawal_service():
+    global _bank_withdrawal_service_instance
+    if _bank_withdrawal_service_instance is None:
+        _bank_withdrawal_service_instance = BankWithdrawalService(get_paths().game_db, get_paths().player_db)
+    return _bank_withdrawal_service_instance
+
+
+def _bank_upgrade_service():
+    global _bank_upgrade_service_instance
+    if _bank_upgrade_service_instance is None:
+        _bank_upgrade_service_instance = BankUpgradeService(get_paths().game_db, get_paths().player_db)
+    return _bank_upgrade_service_instance
+
+
+def _bank_interest_service():
+    global _bank_interest_service_instance
+    if _bank_interest_service_instance is None:
+        _bank_interest_service_instance = BankInterestService(get_paths().game_db, get_paths().player_db)
+    return _bank_interest_service_instance
 
 bank = on_regex(
     r'^灵庄(存灵石|取灵石|升级会员|信息|结算)?(.*)?',
@@ -144,7 +172,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await handle_send(bot, event, messages.get(str(result.get("status")), "新存款未结算。"), md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
         # 先回放：成功后余额/额度变化会挡住“灵石不足/额度不足”前置检查。
-        prior = bank_deposit_service.get_result(operation_id)
+        prior = _bank_deposit_service().get_result(operation_id)
         if prior is not None and prior.succeeded:
             msg = (
                 f"道友本次结息时间为：已处理，获得灵石：{prior.interest}枚!\n"
@@ -236,7 +264,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             }
             await handle_send(bot, event, messages.get(str(result.get("status")), "新取款未结算。"), md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
-        prior = bank_withdrawal_service.get_result(operation_id)
+        prior = _bank_withdrawal_service().get_result(operation_id)
         if prior is not None and prior.succeeded:
             msg = (
                 f"道友本次结息时间为：已处理，获得灵石：{prior.interest}枚!\n"
@@ -322,7 +350,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             }
             await handle_send(bot, event, messages.get(str(result.get("status")), "会员升级未结算。"), md_type="灵庄", k1="升级", v1="灵庄升级会员", k2="信息", v2="灵庄信息", k3="帮助", v3="灵庄帮助")
             await bank.finish()
-        prior = bank_upgrade_service.get_result(operation_id)
+        prior = _bank_upgrade_service().get_result(operation_id)
         if prior is not None and prior.succeeded:
             msg = (
                 f"道友成功升级灵庄会员等级，消耗灵石{prior.cost}枚，当前为：{BANKLEVEL[prior.bank_level]['level']}，"
@@ -450,7 +478,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
                 msg = "灵庄结息未完成。"
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
-        prior = bank_interest_service.get_result(operation_id)
+        prior = _bank_interest_service().get_result(operation_id)
         if prior is not None and prior.succeeded:
             msg = f"**灵庄结息**\n---\n✅ 结息成功\n获得灵石\n> {prior.interest}枚\n该结息请求已经处理，无需重复提交。"
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")

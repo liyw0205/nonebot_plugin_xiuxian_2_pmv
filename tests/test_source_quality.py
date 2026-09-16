@@ -1657,6 +1657,15 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("bank_interest_operations", service)
 
+    def test_bank_replay_services_are_lazy_compatibility_boundaries(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
+        self.assertIn("_bank_deposit_service_instance = None", source)
+        self.assertNotIn("bank_deposit_service = BankDepositService", source)
+        self.assertIn("_bank_deposit_service().get_result", source)
+        self.assertIn("_bank_withdrawal_service().get_result", source)
+        self.assertIn("_bank_upgrade_service().get_result", source)
+        self.assertIn("_bank_interest_service().get_result", source)
+
     def test_world_boss_rewards_use_cross_database_transaction(self) -> None:
         boss_root = SOURCE_ROOT / "xiuxian" / "xiuxian_boss"
         source = (boss_root / "__init__.py").read_text(encoding="utf-8")

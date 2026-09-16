@@ -13,6 +13,14 @@ from tests.test_db_backend import db_backend
 
 
 class BankDepositServiceTests(unittest.TestCase):
+    def test_bank_facade_defers_replay_service_construction(self) -> None:
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_bank
+
+        self.assertIsNone(xiuxian_bank._bank_deposit_service_instance)
+        self.assertIsNone(xiuxian_bank._bank_withdrawal_service_instance)
+        self.assertIsNone(xiuxian_bank._bank_upgrade_service_instance)
+        self.assertIsNone(xiuxian_bank._bank_interest_service_instance)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         root = Path(self.temp_dir.name)
