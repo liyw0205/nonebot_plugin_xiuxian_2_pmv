@@ -34,15 +34,13 @@ from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.ids import UUIDGenerator
 from ...features.mixelixir.application import MixelixirApplication
 from ...features.mixelixir.repository import LegacyMixelixirRepository
-from .transaction_service import MixelixirHarvestService
 from .transaction_service import MixelixirHarvestLevelUpgradeService
 from .transaction_service import MixelixirRecipeService
 from .transaction_service import MixelixirRefineCostService
 from .transaction_service import MixelixirRefineRewardService
-from .transaction_service import MixelixirSettlementService
+
 
 sql_message = XiuxianDateManage()  # sql类
-mixelixir_harvest_service = MixelixirHarvestService(get_paths().game_db, get_paths().player_db)
 mixelixir_application = MixelixirApplication(
     get_paths().game_db,
     get_paths().player_db,
@@ -57,7 +55,7 @@ mixelixir_harvest_level_upgrade_service = MixelixirHarvestLevelUpgradeService(
 mixelixir_recipe_service = MixelixirRecipeService(get_paths().game_db)
 mixelixir_refine_cost_service = MixelixirRefineCostService(get_paths().game_db)
 mixelixir_refine_reward_service = MixelixirRefineRewardService(get_paths().game_db, get_paths().player_db)
-mixelixir_settlement_service = MixelixirSettlementService(get_paths().game_db)
+
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 items = Items()
 runtime_clock = SystemClock()
