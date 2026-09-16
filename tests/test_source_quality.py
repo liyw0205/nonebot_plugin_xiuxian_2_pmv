@@ -628,7 +628,8 @@ class SourceQualityTests(unittest.TestCase):
         tianti_root = SOURCE_ROOT / "xiuxian" / "xiuxian_tianti"
         source = (tianti_root / "__init__.py").read_text(encoding="utf-8")
         handler = source[source.index("@tianti_stone.handle"):source.index("@tianti_medicine_bath.handle")]
-        self.assertIn("stone_training_service.train(", handler)
+        self.assertIn("tianti_training_application.train(", handler)
+        self.assertNotIn("\n    result = stone_training_service.train(", handler)
         self.assertNotIn("sql_message.update_ls(", handler)
         self.assertNotIn("tianti_manager.save_user_tianti_info(", handler)
 
@@ -643,7 +644,8 @@ class SourceQualityTests(unittest.TestCase):
         handler = source[
             source.index("@tianti_medicine_bath.handle"):source.index("@tianti_break.handle")
         ]
-        self.assertIn("medicine_bath_service.apply(", handler)
+        self.assertIn("tianti_training_application.apply_bath(", handler)
+        self.assertNotIn("\n    outcome = medicine_bath_service.apply(", handler)
         self.assertNotIn("sql_message.update_back_j(", handler)
         self.assertNotIn("tianti_manager.save_user_tianti_info(", handler)
 
@@ -656,7 +658,8 @@ class SourceQualityTests(unittest.TestCase):
         tianti_root = SOURCE_ROOT / "xiuxian" / "xiuxian_tianti"
         source = (tianti_root / "__init__.py").read_text(encoding="utf-8")
         handler = source[source.index("@tianti_break.handle"):source.index("@tianti_info.handle")]
-        self.assertIn("tianti_breakthrough_service.attempt(", handler)
+        self.assertIn("tianti_training_application.breakthrough(", handler)
+        self.assertNotIn("\n    result = tianti_breakthrough_service.attempt(", handler)
         self.assertNotIn("tianti_manager.save_user_tianti_info(", handler)
 
         service_source = (tianti_root / "breakthrough_service.py").read_text(encoding="utf-8")
@@ -667,7 +670,8 @@ class SourceQualityTests(unittest.TestCase):
         tianti_root = SOURCE_ROOT / "xiuxian" / "xiuxian_tianti"
         source = (tianti_root / "__init__.py").read_text(encoding="utf-8")
         handler = source[source.index("@tianti_chongqiao.handle"):source.index("def _effect_type_cn")]
-        self.assertIn("qiaoxue_service.open(", handler)
+        self.assertIn("tianti_training_application.open_qiaoxue(", handler)
+        self.assertNotIn("\n    result = qiaoxue_service.open(", handler)
         self.assertNotIn("tianti_manager.save_user_tianti_info(", handler)
 
         service_source = (tianti_root / "qiaoxue_service.py").read_text(encoding="utf-8")
@@ -678,7 +682,8 @@ class SourceQualityTests(unittest.TestCase):
         tianti_root = SOURCE_ROOT / "xiuxian" / "xiuxian_tianti"
         source = (tianti_root / "__init__.py").read_text(encoding="utf-8")
         handler = source[source.index("@tianti_settle.handle"):source.index("@tianti_stone.handle")]
-        self.assertIn("tianti_settlement_service.settle(", handler)
+        self.assertIn("tianti_settlement_application.settle(", handler)
+        self.assertNotIn("\n    result = tianti_settlement_service.settle(", handler)
         self.assertNotIn("tianti_manager.save_user_tianti_info(", handler)
         service_source = (tianti_root / "settlement_service.py").read_text(encoding="utf-8")
         self.assertIn("BEGIN IMMEDIATE", service_source)
