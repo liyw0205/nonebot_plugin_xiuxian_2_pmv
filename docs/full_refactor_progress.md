@@ -761,6 +761,8 @@
 
 2026-09-16 pet default graph cleanup：调用图确认 travel claim/feed handlers已实际调用 `PetApplication`；删除 `xiuxian_pet/__init__.py` 中无生产调用的 `PetTravelClaimService`、`PetFeedService` 默认实例及imports，保留 hatch/start/release/fusion/skill 等尚未迁移 service。pet/source/architecture共194 tests、compileall、diff check通过。
 
+2026-09-16 pet default graph cleanup live safety：提交 `947e1b2` 部署后 backup `/srv/old/data/backups/20260916T042002Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行宠物旅行、喂养、孵化或资产写入。
+
 2026-09-16 bank main transaction blocker re-audit：`xiuxian_bank` matcher仅在已存在 `bank_accounts` first-use projection时走 `BankDeposit/Withdrawal/Upgrade/InterestApplication`；旧账户继续通过 `BankApplication → LegacyBankRepository → xiuxian_bank.transaction_service`执行 deposit/withdraw/upgrade/interest。`bank_accounts` schema未覆盖旧账户完整语义与迁移，不能把 first-use子路径当作主银行transaction cutover。
 
 2026-09-16 lottery audit precision live safety：提交 `28c7943` 部署后 backup `/srv/old/data/backups/20260916T035645Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。运行期审计确认 `lottery_core_default_legacy=false`，仅显式 compatibility fallback保留。
