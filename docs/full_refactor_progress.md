@@ -719,6 +719,8 @@
 
 2026-09-16 auction settlement boundary audit：`AuctionSettlementApplication` 的 operation ledger/replay/read-only lookup已feature-owned，但 `settle_active` 默认仍调用 `LegacyAuctionSettlementRepository` 的 trade session algorithm；auction bid也同样依赖 legacy trade repository。未发现可独立切换的 queue/history/settlement SQL schema，保留为完整 auction migration blocker。
 
+2026-09-16 marker-only feature audit：`puppet`、`natal_treasure`、`sect_fairyland` migrations均只创建 feature marker；对应 repositories分别只提供 LegacyPuppet、LegacyNatalTreasure、LegacySectFairyland adapters，没有 feature-owned asset schema/SQL transaction。三者保留为独立 migration/asset blocker，不做 facade-only切换。
+
 2026-09-16 dungeon settlement audit：`DungeonSessionSqlRepository`真实覆盖 purchase/prepare/replay/resolve_rejection/session transition，但 `settle()`仍继承 `LegacyDungeonRepository` 的旧 explore settlement；未找到正式 prepared settlement SQL实现，保留为明确 legacy fallback blocker，不做不完整默认切换。
 
 2026-09-16 auction bid audit：`AuctionBidApplication` 默认仍使用 `LegacyTradeRepository`，`auction.001`仅创建 feature marker，未创建 bid/queue/history SQL schema；详细 settlement/replay也仍依赖 trade legacy graph。未移除 plugin 默认 adapter，保留为 auction SQL repository/跨库资产事务 blocker。
