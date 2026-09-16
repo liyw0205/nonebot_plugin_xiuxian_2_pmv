@@ -751,6 +751,8 @@
 
 2026-09-16 lottery audit precision：审计输出拆分 `lottery_core_default_legacy=false` 与 `lottery_compatibility_fallback=true`；源码确认 `legacy_lottery` false时构造 `LotteryApplication`，旧 service仅由显式环境变量选择。source/architecture共157 tests，audit仍保留 explicit fallback blocker。
 
+2026-09-16 dungeon settlement blocker re-audit：NoneBot/Web真实入口的 purchase/prepare/replay/resolve_rejection多数通过 `DungeonApplication`；但 `xiuxian_dungeon/__init__.py:1114` prepared replay分支仍直接调用 `dungeon_explore_operation_service.settle()`。`DungeonSessionSqlRepository.settle()`未实现，当前继承 `LegacyDungeonRepository` 的旧 explore settlement；缺少正式SQL settlement算法与跨库资产事务，不能只切入口，保留为 dungeon prepared settlement blocker。
+
 2026-09-16 lottery audit precision live safety：提交 `28c7943` 部署后 backup `/srv/old/data/backups/20260916T035645Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。运行期审计确认 `lottery_core_default_legacy=false`，仅显式 compatibility fallback保留。
 
 2026-09-16 progress audit correction live safety：提交 `2de01de` 部署后 backup `/srv/old/data/backups/20260916T034555Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。audit仍诚实输出 `exit_ready=false` 与 legacy transaction/handle/explicit lottery fallback blockers。
