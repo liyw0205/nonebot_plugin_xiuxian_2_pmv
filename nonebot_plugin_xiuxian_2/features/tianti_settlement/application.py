@@ -9,7 +9,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import TiantiSettlementRequest
-from .repository import LegacyTiantiSettlementRepository, TiantiSettlementRepository, TiantiSettlementSqlRepository
+from .repository import TiantiSettlementRepository, TiantiSettlementSqlRepository
 from .schemas import TiantiSettlementResult
 
 
