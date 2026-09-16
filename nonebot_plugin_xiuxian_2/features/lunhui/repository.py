@@ -10,7 +10,9 @@ class LunhuiRepository(ServicePort):
     def __init__(self, database: str | Path, *databases: str | Path) -> None:
         self.database = str(database)
         self.databases = tuple(str(item) for item in databases)
-        self._reset_service, self._recall_service, self._settle_service = self._build_services()
+        self._reset_service = None
+        self._recall_service = None
+        self._settle_service = None
         super().__init__("lunhui", "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_lunhui", handlers={
             "reset": self._reset,
             "recall": self._recall,
@@ -32,16 +34,24 @@ class LunhuiRepository(ServicePort):
             LunhuiSettlementService(self.database, player, impart),
         )
 
+    def _ensure_services(self) -> None:
+        if self._reset_service is None:
+            self._reset_service, self._recall_service, self._settle_service = self._build_services()
+
     def _reset(self, **kwargs: Any):
+        self._ensure_services()
         return self._reset_service.reset(**kwargs)
 
     def _recall(self, **kwargs: Any):
+        self._ensure_services()
         return self._recall_service.recall(**kwargs)
 
     def _settle(self, **kwargs: Any):
+        self._ensure_services()
         return self._settle_service.settle(**kwargs)
 
     def execute(self, operation_id: str, user_id: str, action: str, payload: dict[str, Any]) -> Any:
+        self._ensure_services()
         service = {"reset": self._reset_service, "recall": self._recall_service, "settle": self._settle_service}.get(str(action).casefold())
         if service is not None:
             return getattr(service, {"reset": "reset", "recall": "recall", "settle": "settle"}[str(action).casefold()])(
@@ -50,12 +60,15 @@ class LunhuiRepository(ServicePort):
         return super().execute(operation_id, user_id, action, payload)
 
     def reset_result(self, operation_id: str) -> Any:
+        self._ensure_services()
         return self._reset_service.get_result(operation_id)
 
     def recall_result(self, operation_id: str) -> Any:
+        self._ensure_services()
         return self._recall_service.get_result(operation_id)
 
     def settle_result(self, operation_id: str) -> Any:
+        self._ensure_services()
         return self._settle_service.get_result(operation_id)
 
 

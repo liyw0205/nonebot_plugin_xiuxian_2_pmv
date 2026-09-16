@@ -8,11 +8,19 @@ import nonebot
 nonebot.init()
 
 from ..application import LunhuiApplication
+from ..repository import LunhuiRepository
 from ....infrastructure.database import DatabaseUnitOfWork
 from ....plugin import apply_platform_schema
 
 
 class LunhuiApplicationTest(unittest.TestCase):
+    def test_repository_defers_legacy_service_import_until_use(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = LunhuiRepository(f"{directory}/game.db")
+            self.assertIsNone(repository._reset_service)
+            self.assertIsNone(repository._recall_service)
+            self.assertIsNone(repository._settle_service)
+
     def test_recall_result_is_exposed_by_application_boundary(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             database = f"{directory}/game.db"

@@ -1487,6 +1487,8 @@
 
 2026-09-17 lunhui replay-query application cutover：`LunhuiApplication`/`LunhuiRepository` 新增 reset/recall/settle result query boundary，handler 不再直接读取 `cultivation_reset_service`、`lunhui_recall_service`、`lunhui_settlement_service` facade defaults；repository 自己持有显式 legacy service adapter，底层跨 game/player/impart transaction仍保留为 compatibility implementation。lunhui feature/transaction/source/architecture 共 169 tests、compileall、inventory、diff check通过。
 
+2026-09-17 lunhui readiness correction：首次受控 smoke 的新实例 readiness 超时，`health` 精确错误为 `ValueError: NoneBot has not been initialized.`，根因是 `LunhuiRepository` 构造阶段立即导入 legacy transaction services。改为惰性 service adapter 初始化，并新增 repository defer 回归测试；本地 `health` 全绿 `ready=true`、`filesystem/database/migrations/repositories/jobs/web` 六项通过，lunhui/source/architecture 共 170 tests、compileall、inventory、diff check通过。首次 smoke 不计为通过，待修复提交后重新执行完整 remote safety。
+
 ## 6. 下一步
 
 先把 `stone_gift` 的真实 handler 从旧模块迁移到 `features/stone_gift/commands.py`，通过新 application 的 DTO/operation_id/Clock 路径；随后补真实 NoneBot 注册测试、删除旧 `StoneGiftService` 执行实现，并在真实部署数据上执行 dry-run/reconcile/恢复。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。
