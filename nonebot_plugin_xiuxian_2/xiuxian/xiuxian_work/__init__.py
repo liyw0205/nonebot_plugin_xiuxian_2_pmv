@@ -35,15 +35,11 @@ from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.ids import UUIDGenerator
 from ...features.work.application import WorkClaimApplication, WorkSettlementApplication
 from ...features.work.repository import LegacyWorkClaimRepository, LegacyWorkSettlementRepository
-from .transaction_service import WorkSettlementService
-from .transaction_service import WorkClaimService
 from .transaction_service import WorkItemUseService
 from .transaction_service import WorkRefreshSettlementService
 from .transaction_service import WorkAbortCleanupService
 from .transaction_service import WorkDailyRefreshResetService
 
-work_settlement_service = WorkSettlementService(get_paths().game_db)
-work_claim_service = WorkClaimService(get_paths().game_db)
 work_claim_application = WorkClaimApplication(
     get_paths().game_db,
     repository=LegacyWorkClaimRepository(get_paths().game_db),
@@ -272,7 +268,6 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         success_msg = "⚠️ 悬赏勉强完成"
         success_kind = "half"
 
-    # Legacy facade call: work_settlement_service.settle(...)
     outcome = work_settlement_application.settle(
         operation_id=operation_id,
         user_id=user_id,
@@ -795,8 +790,6 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             
         task_name, task_data = tasks[work_num - 1]
         started_at = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")
-        # Legacy facade call: work_claim_service.claim(...) remains documented;
-        # the application owns idempotency and the command write path.
         outcome = work_claim_application.claim(
             operation_id=operation_id,
             user_id=user_id,
