@@ -72,7 +72,7 @@ from .sect_fairyland import (
 from ..adapter_compat import is_channel_event
 from ...paths import get_paths
 from .transaction_service import SectMembershipService
-from .transaction_service import FairylandClaimService
+
 from .transaction_service import SectCloseMountainService
 from .transaction_service import SectOwnerInheritService
 from ...compatibility.sect import SectShopPurchaseService
@@ -103,7 +103,6 @@ sect_application = SectApplication(
 sect_ids = UUIDGenerator()
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
-fairyland_claim_service = FairylandClaimService(get_paths().player_db)
 sect_fairyland_application = SectFairylandApplication(
     get_paths().player_db,
     repository=LegacySectFairylandRepository(get_paths().player_db),
@@ -809,8 +808,6 @@ async def sect_fairyland_claim_(bot: Bot, event: GroupMessageEvent | PrivateMess
     today = runtime_clock.now().strftime("%Y-%m-%d")
     # 事件幂等优先：同 event 必须先走 operation，避免“今日已完成”前置拦截。
     operation_id = _sect_operation_id(event, "fairyland_claim", f"{user_info['user_id']}:{sect_id}:{today}")
-    # The legacy ``fairyland_claim_service.claim(...)`` facade remains for
-    # imports during migration; this command uses the application boundary.
     outcome = sect_fairyland_application.claim(
         operation_id=operation_id,
         user_id=user_info["user_id"],

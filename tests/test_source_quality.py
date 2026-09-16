@@ -699,7 +699,8 @@ class SourceQualityTests(unittest.TestCase):
         end = command_source.index("@sect_elixir_room_make.handle", start)
         command = command_source[start:end]
 
-        self.assertIn("fairyland_claim_service.claim(", command)
+        self.assertIn("sect_fairyland_application.claim(", command)
+        self.assertNotIn("\n    outcome = fairyland_claim_service.claim(", command)
         self.assertNotIn("tianti_manager.save_user_tianti_info(", command)
         self.assertNotIn("_set_fairyland_last_claim(", command)
         self.assertIn("BEGIN IMMEDIATE", service_source)
