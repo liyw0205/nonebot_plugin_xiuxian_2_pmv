@@ -15,7 +15,7 @@ from ..adapter_compat import (
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.xiuxian2_handle import (
-    XiuxianDateManage, get_player_info, save_player_info,
+    XiuxianDateManage, get_player_info,
     UserBuffDate, XIUXIAN_IMPART_BUFF
 )
 from ..xiuxian_utils.utils import (
