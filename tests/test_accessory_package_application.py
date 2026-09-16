@@ -6,9 +6,14 @@ import unittest
 from pathlib import Path
 
 from nonebot_plugin_xiuxian_2.features.accessory_package.application import AccessoryPackageApplication
+from nonebot_plugin_xiuxian_2.features.accessory_package.attached_migrations import (
+    apply_attached_player_accessory,
+    apply_attached_player_accessory_operations,
+)
 from nonebot_plugin_xiuxian_2.features.accessory_package.migrations import apply_accessory_package
 from nonebot_plugin_xiuxian_2.features.package_reward.domain import PackageReward
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.infrastructure.database.attached_uow import AttachedDatabaseUnitOfWork
 from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 
 
@@ -38,6 +43,9 @@ class AccessoryPackageApplicationTests(unittest.TestCase):
             apply_accessory_package(uow)
         with DatabaseUnitOfWork(self.player) as uow:
             apply_platform_schema(uow)
+        with AttachedDatabaseUnitOfWork(self.game, attachments={"player_data": self.player}) as uow:
+            apply_attached_player_accessory(uow)
+            apply_attached_player_accessory_operations(uow)
         self.application = AccessoryPackageApplication(self.game, self.player)
 
     def tearDown(self) -> None:
@@ -74,10 +82,7 @@ class AccessoryPackageApplicationTests(unittest.TestCase):
 
     def test_accessory_rejection_compensates_game_stage(self) -> None:
         connection = sqlite3.connect(self.player)
-        connection.executescript(
-            "CREATE TABLE player_accessory (user_id TEXT PRIMARY KEY, equipped TEXT, bag TEXT);"
-            "INSERT INTO player_accessory VALUES ('u', '{}', '[{\"uid\":\"old\"}]');"
-        )
+        connection.execute("INSERT INTO player_accessory VALUES ('u', '{}', '[{\"uid\":\"old\"}]')")
         connection.commit()
         connection.close()
         result = self.request("full", limit=1)
@@ -87,10 +92,7 @@ class AccessoryPackageApplicationTests(unittest.TestCase):
 
     def test_player_write_failure_is_recorded_and_compensated(self) -> None:
         connection = sqlite3.connect(self.player)
-        connection.executescript(
-            "CREATE TABLE player_accessory (user_id TEXT PRIMARY KEY, equipped TEXT, bag TEXT);"
-            "CREATE TRIGGER fail_accessory BEFORE INSERT ON player_accessory BEGIN SELECT RAISE(ABORT, 'player unavailable'); END;"
-        )
+        connection.execute("CREATE TRIGGER fail_accessory BEFORE INSERT ON player_accessory BEGIN SELECT RAISE(ABORT, 'player unavailable'); END")
         connection.commit()
         connection.close()
         result = self.request("failure")

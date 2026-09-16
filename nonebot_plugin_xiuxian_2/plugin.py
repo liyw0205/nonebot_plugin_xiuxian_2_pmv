@@ -397,7 +397,10 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                     )
                 runner.apply(uow)
             if spec.key == "game_db":
-                from .features.accessory_package.attached_migrations import apply_attached_player_accessory
+                from .features.accessory_package.attached_migrations import (
+                    apply_attached_player_accessory,
+                    apply_attached_player_accessory_operations,
+                )
                 from .infrastructure.database.attached_uow import AttachedDatabaseUnitOfWork
 
                 player_database = context.database.path("player_db")
@@ -410,6 +413,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                     immediate=True,
                 ) as attached_uow:
                     apply_attached_player_accessory(attached_uow, clock=context.clock)
+                    apply_attached_player_accessory_operations(attached_uow, clock=context.clock)
         phase_state["migrations"] = True
 
     def ensure_repositories() -> None:

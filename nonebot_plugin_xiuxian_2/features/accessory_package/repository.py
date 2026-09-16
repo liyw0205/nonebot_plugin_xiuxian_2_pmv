@@ -249,7 +249,6 @@ class AccessoryPackagePlayerRepository:
             uow.execute("ALTER TABLE player_accessory ADD COLUMN bag TEXT")
 
     def apply(self, uow: DatabaseUnitOfWork, *, operation_id: str, user_id: str, accessories: tuple[AccessoryReward, ...], limit: int) -> str:
-        self.ensure_schema(uow)
         previous = uow.query_one("SELECT status FROM accessory_package_operations WHERE operation_id=?", (operation_id,))
         if previous is not None:
             return "applied" if previous["status"] == "applied" else "state_changed"

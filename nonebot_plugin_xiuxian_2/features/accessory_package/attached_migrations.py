@@ -9,6 +9,8 @@ from ...infrastructure.clock import SystemClock
 
 ATTACHED_SCHEMA_VERSION = "accessory_package.player_data.001"
 ATTACHED_SCHEMA_NAME = "player_accessory"
+ATTACHED_OPERATION_VERSION = "accessory_package.player_data.002"
+ATTACHED_OPERATION_NAME = "accessory_package_operations"
 
 
 def _checksum() -> str:
@@ -51,4 +53,29 @@ def apply_attached_player_accessory(uow: AttachedDatabaseUnitOfWork, *, clock: A
     return True
 
 
-__all__ = ["ATTACHED_SCHEMA_VERSION", "apply_attached_player_accessory", "ensure_attached_ledger"]
+def apply_attached_player_accessory_operations(uow: AttachedDatabaseUnitOfWork, *, clock: Any | None = None) -> bool:
+    """Create the player-side accessory replay table without rewriting v1."""
+    ensure_attached_ledger(uow)
+    applied_at = (clock.now() if clock is not None else SystemClock().now()).isoformat()
+    checksum = hashlib.sha256(f"{ATTACHED_OPERATION_VERSION}:{ATTACHED_OPERATION_NAME}:v1".encode()).hexdigest()
+    row = uow.query_one(
+        "SELECT name, checksum FROM player_data.attached_schema_migrations WHERE version = ?",
+        (ATTACHED_OPERATION_VERSION,),
+    )
+    if row is not None:
+        if row["name"] != ATTACHED_OPERATION_NAME or row["checksum"] != checksum:
+            raise ValueError(f"attached migration checksum changed: {ATTACHED_OPERATION_VERSION}")
+        return False
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS player_data.accessory_package_operations "
+        "(operation_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, accessories_json TEXT NOT NULL, "
+        "before_json TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+    )
+    uow.execute(
+        "INSERT INTO player_data.attached_schema_migrations(version,name,checksum,applied_at) VALUES (?, ?, ?, ?)",
+        (ATTACHED_OPERATION_VERSION, ATTACHED_OPERATION_NAME, checksum, applied_at),
+    )
+    return True
+
+
+__all__ = ["ATTACHED_OPERATION_VERSION", "ATTACHED_SCHEMA_VERSION", "apply_attached_player_accessory", "apply_attached_player_accessory_operations", "ensure_attached_ledger"]

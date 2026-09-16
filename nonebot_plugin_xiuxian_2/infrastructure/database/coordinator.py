@@ -87,7 +87,6 @@ class CrossDatabaseCoordinator:
                 audit_category="cross_database_failure",
             )
             with DatabaseUnitOfWork(primary) as uow:
-                self.ledger.ensure_schema(uow)
                 self.ledger.finish(self._ensure_record(uow, operation_id, action, payload), failed)
             return failed
         with DatabaseUnitOfWork(primary) as uow:

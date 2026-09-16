@@ -227,7 +227,6 @@ class AccessoryPackageApplication:
         """Keep a committed game phase visible when the final phase fails."""
         try:
             with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
-                self.ledger.ensure_schema(uow)
                 outcome = OperationOutcome.failed(
                     request.operation_id,
                     self.action,

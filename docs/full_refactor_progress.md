@@ -735,6 +735,8 @@
 
 2026-09-16 platform outbox no-request-DDL：`platform.001`已覆盖五库 domain_outbox，移除 `OutboxStore.append/pending` request-time `ensure_schema`；新增空库 pending不建表契约。application/architecture/source共205 tests，catalog=105、compileall、architecture、diff check通过。
 
+2026-09-16 accessory/coordinator no-request-DDL：移除 AccessoryPackagePlayerRepository.apply、accessory reconcile failure与 CrossDatabaseCoordinator failure path的 request-time schema调用；新增 checksum-safe attached `accessory_package.player_data.002`创建 player-side replay table，保留 v1 checksum。附件v2 idempotency、失败补偿和重放均覆盖。accessory/platform/application/architecture/source共227 tests，catalog=105、compileall、architecture、diff check通过。
+
 2026-09-16 platform outbox no-request-DDL live safety：提交 `b216b28` 部署后 backup `/srv/old/data/backups/20260916T025628Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行玩家资产、奖励、交易或计数写入。
 
 2026-09-16 platform ledger no-request-DDL live safety：提交 `c1dc625` 部署后 backup `/srv/old/data/backups/20260916T024523Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行玩家资产、奖励、交易或计数写入。
