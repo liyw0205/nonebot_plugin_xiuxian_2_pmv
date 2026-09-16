@@ -27,11 +27,7 @@ from .transaction_service import (
     get_tianti_cap,
     settle_tianti_gain,
 )
-from .transaction_service import StoneTrainingService
-from .transaction_service import MedicineBathService
-from .transaction_service import TiantiBreakthroughService
-from .transaction_service import QiaoxueService
-from .transaction_service import TiantiSettlementService
+
 from ...features.tianti_settlement.application import TiantiSettlementApplication
 from ...features.tianti_training.application import TiantiTrainingApplication
 from ...paths import get_paths
@@ -40,13 +36,6 @@ from ...infrastructure.clock import SystemClock
 
 sql_message = XiuxianDateManage()
 tianti_manager = TiantiDataManager()
-stone_training_service = StoneTrainingService(get_paths().game_db, get_paths().player_db)
-medicine_bath_service = MedicineBathService(get_paths().game_db, get_paths().player_db)
-tianti_breakthrough_service = TiantiBreakthroughService(get_paths().player_db)
-qiaoxue_service = QiaoxueService(get_paths().player_db)
-# The historical service remains available as a compatibility facade while
-# command execution is routed through the application boundary below.
-tianti_settlement_service = TiantiSettlementService(get_paths().player_db)
 tianti_settlement_application = TiantiSettlementApplication(
     get_paths().player_db,
 )
@@ -247,8 +236,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         f"tianti-settle:{event_id}:{user_id}" if event_id
         else f"tianti-settle:{user_id}:{runtime_ids.new_id()}"
     )
-    # The compatibility service still exposes ``tianti_settlement_service.settle(...)``
-    # for older callers; this handler uses the idempotent application boundary.
     outcome = tianti_settlement_application.settle(
         operation_id=operation_id,
         user_id=user_id,
@@ -333,8 +320,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         f"tianti-stone:{event_id}:{user_id}" if event_id
         else f"tianti-stone:{user_id}:{runtime_ids.new_id()}"
     )
-    # The legacy ``stone_training_service.train(...)`` facade remains for
-    # callers outside the command adapter; writes go through the application.
     outcome = tianti_training_application.train(
         operation_id=operation_id,
         user_id=user_id,
@@ -469,8 +454,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         f"tianti-bath:{event_id}:{user_id}" if event_id
         else f"tianti-bath:{user_id}:{runtime_ids.new_id()}"
     )
-    # The legacy ``medicine_bath_service.apply(...)`` facade remains for
-    # imports during the compatibility window; application owns this write.
     outcome = tianti_training_application.apply_bath(
         operation_id=operation_id,
         user_id=user_id,
@@ -554,8 +537,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     next_cfg = get_tianti_level_data(next_name)
     min_xx = next_cfg["min_xx_level"]
     user_xx_rank = get_tianti_level_index(user_info["level"], is_xiuxian=True)
-    # The compatibility ``tianti_breakthrough_service.attempt(...)`` remains
-    # available to old imports; this command uses the application boundary.
     outcome = tianti_training_application.breakthrough(
         operation_id=operation_id,
         user_id=user_id,
@@ -687,8 +668,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         f"tianti-qiaoxue:{event_id}:{user_id}" if event_id
         else f"tianti-qiaoxue:{user_id}:{runtime_ids.new_id()}"
     )
-    # The compatibility ``qiaoxue_service.open(...)`` facade remains for old
-    # callers; the command writes through the application boundary.
     outcome = tianti_training_application.open_qiaoxue(
         operation_id=operation_id,
         user_id=user_id,
