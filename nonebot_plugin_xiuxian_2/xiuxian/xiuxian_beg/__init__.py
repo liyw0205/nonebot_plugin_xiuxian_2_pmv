@@ -22,10 +22,7 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.data_source import jsondata
-from .transaction_service import (
-    BegDailyRewardService,
-    NoviceGiftClaimService,
-)
+
 from ...features.beg.application import BegApplication
 from ..xiuxian_utils.utils import (
     check_user,Txt2Img,
@@ -38,8 +35,6 @@ items = Items()
 cache_level_help = {}
 cache_beg_help = {}
 sql_message = XiuxianDateManage()  # sql类
-novice_gift_claim_service = NoviceGiftClaimService(get_paths().game_db)
-beg_daily_reward_service = BegDailyRewardService(get_paths().game_db)
 beg_application = BegApplication(get_paths().game_db)
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
