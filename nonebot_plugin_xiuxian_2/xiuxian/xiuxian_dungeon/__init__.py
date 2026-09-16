@@ -21,7 +21,7 @@ from ..adapter_compat import (
 )
 from ..messaging.delivery import delivery_service
 
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, leave_harm_time, OtherSet, PlayerDataManager
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, leave_harm_time, PlayerDataManager
 from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, number_to, check_user_type, _impersonating_users, send_help_message
 from ..xiuxian_utils.player_fight import pve_fight, resolve_final_user_statuses
 from ..xiuxian_utils import db_backend
