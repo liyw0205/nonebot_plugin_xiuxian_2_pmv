@@ -28,7 +28,7 @@ from nonebot_plugin_xiuxian_2.infrastructure.database import (
 )
 from nonebot_plugin_xiuxian_2.infrastructure.observability import current_context, trace_context
 from nonebot_plugin_xiuxian_2.adapters.nonebot import context_from_event
-from nonebot_plugin_xiuxian_2.plugin import build_lifecycle, build_migrations, build_registry
+from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema, build_lifecycle, build_migrations, build_registry
 from nonebot_plugin_xiuxian_2.cli import main as cli_main
 
 
@@ -133,6 +133,7 @@ class RefactorArchitectureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             database = str(Path(directory) / "game.db")
             with DatabaseUnitOfWork(database) as uow:
+                apply_platform_schema(uow)
                 apply_daily_fortune(uow)
             clock = lambda: datetime(2026, 9, 12, tzinfo=timezone.utc)
             random_source = type("Random", (), {"randint": lambda self, start, end: 90})()

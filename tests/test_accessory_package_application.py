@@ -6,7 +6,10 @@ import unittest
 from pathlib import Path
 
 from nonebot_plugin_xiuxian_2.features.accessory_package.application import AccessoryPackageApplication
+from nonebot_plugin_xiuxian_2.features.accessory_package.migrations import apply_accessory_package
 from nonebot_plugin_xiuxian_2.features.package_reward.domain import PackageReward
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 
 
 class AccessoryPackageApplicationTests(unittest.TestCase):
@@ -30,6 +33,11 @@ class AccessoryPackageApplicationTests(unittest.TestCase):
         )
         connection.commit()
         connection.close()
+        with DatabaseUnitOfWork(self.game) as uow:
+            apply_platform_schema(uow)
+            apply_accessory_package(uow)
+        with DatabaseUnitOfWork(self.player) as uow:
+            apply_platform_schema(uow)
         self.application = AccessoryPackageApplication(self.game, self.player)
 
     def tearDown(self) -> None:

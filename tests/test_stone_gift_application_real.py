@@ -9,6 +9,7 @@ from nonebot_plugin_xiuxian_2.core.errors import OperationConflictError
 from nonebot_plugin_xiuxian_2.features.stone_gift.application import StoneGiftApplication
 from nonebot_plugin_xiuxian_2.features.stone_gift.migrations import apply_stone_gift, apply_stone_gift_limits
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 
 
 class FixedClock:
@@ -24,6 +25,7 @@ class StoneGiftApplicationTests(unittest.TestCase):
             uow.execute("CREATE TABLE user_xiuxian (user_id TEXT PRIMARY KEY, user_name TEXT, level TEXT, stone INTEGER)")
             uow.execute("INSERT INTO user_xiuxian VALUES (?, ?, ?, ?)", ("sender", "甲", "江湖好手", 1000))
             uow.execute("INSERT INTO user_xiuxian VALUES (?, ?, ?, ?)", ("recipient", "乙", "江湖好手", 100))
+            apply_platform_schema(uow)
             apply_stone_gift(uow)
             apply_stone_gift_limits(uow)
         self.application = StoneGiftApplication(self.database, clock=FixedClock())

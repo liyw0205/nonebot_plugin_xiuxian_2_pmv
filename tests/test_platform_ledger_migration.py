@@ -5,11 +5,23 @@ from pathlib import Path
 
 from nonebot_plugin_xiuxian_2.bootstrap import build_runtime_context
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.infrastructure.database import OperationLedger
 from nonebot_plugin_xiuxian_2.plugin import build_lifecycle
 from tests.bootstrap import copy_static_data
 
 
 class PlatformLedgerMigrationTests(unittest.TestCase):
+    def test_ledger_read_does_not_create_schema_before_startup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "empty.db"
+            with DatabaseUnitOfWork(database) as uow:
+                with self.assertRaises(Exception):
+                    OperationLedger().get(uow, "missing", "test.action")
+                table = uow.query_one(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='operation_ledger'"
+                )
+            self.assertIsNone(table)
+
     def test_startup_creates_shared_schema_for_every_database(self):
         with tempfile.TemporaryDirectory() as directory:
             data_dir = Path(directory) / "data"

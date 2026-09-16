@@ -6,6 +6,7 @@ from pathlib import Path
 
 from nonebot_plugin_xiuxian_2.features.combat_settlement.application import CombatSettlementApplication
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 
 
 class _Repository:
@@ -19,6 +20,15 @@ class _Repository:
 
 
 class CombatSettlementApplicationTests(unittest.TestCase):
+    @staticmethod
+    def _application(directory: str, repository: _Repository) -> CombatSettlementApplication:
+        game = Path(directory) / "game.db"
+        player = Path(directory) / "player.db"
+        for database in (game, player):
+            with DatabaseUnitOfWork(database) as uow:
+                apply_platform_schema(uow)
+        return CombatSettlementApplication(game, player, repository=repository)
+
     def _call(self, app, operation_id="combat-1"):
         return app.settle(
             operation_id=operation_id,
@@ -34,7 +44,7 @@ class CombatSettlementApplicationTests(unittest.TestCase):
     def test_settlement_is_audited_and_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = _Repository()
-            app = CombatSettlementApplication(Path(directory) / "game.db", Path(directory) / "player.db", repository=repository)
+            app = self._application(directory, repository)
             first = self._call(app)
             second = self._call(app)
             self.assertTrue(first.ok)
@@ -49,7 +59,7 @@ class CombatSettlementApplicationTests(unittest.TestCase):
     def test_business_rejection_is_stable(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = _Repository("inventory_full")
-            app = CombatSettlementApplication(Path(directory) / "game.db", Path(directory) / "player.db", repository=repository)
+            app = self._application(directory, repository)
             result = self._call(app, "combat-2")
             replay = self._call(app, "combat-2")
             self.assertFalse(result.ok)
@@ -60,7 +70,7 @@ class CombatSettlementApplicationTests(unittest.TestCase):
     def test_invalid_request_does_not_call_repository(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = _Repository()
-            app = CombatSettlementApplication(Path(directory) / "game.db", Path(directory) / "player.db", repository=repository)
+            app = self._application(directory, repository)
             with self.assertRaises(Exception):
                 self._call(app, "")
             self.assertEqual(repository.calls, 0)

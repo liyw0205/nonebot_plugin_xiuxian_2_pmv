@@ -6,6 +6,7 @@ from pathlib import Path
 
 from nonebot_plugin_xiuxian_2.features.admin_asset.application import AdminAssetApplication
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 
 
 class _Repository:
@@ -39,6 +40,13 @@ class _ItemRepository:
 
 
 class AdminAssetApplicationTests(unittest.TestCase):
+    @staticmethod
+    def _application(directory: str, *, repository=None, item_repository=None) -> AdminAssetApplication:
+        database = Path(directory) / "game.db"
+        with DatabaseUnitOfWork(database) as uow:
+            apply_platform_schema(uow)
+        return AdminAssetApplication(database, repository=repository, item_repository=item_repository)
+
     def _call(self, app, operation_id="admin-1"):
         return app.adjust_stone(
             operation_id=operation_id,
@@ -52,7 +60,7 @@ class AdminAssetApplicationTests(unittest.TestCase):
     def test_adjustment_is_audited_and_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = _Repository()
-            app = AdminAssetApplication(Path(directory) / "game.db", repository=repository)
+            app = self._application(directory, repository=repository)
             first = self._call(app)
             second = self._call(app)
             self.assertTrue(first.ok)
@@ -67,7 +75,7 @@ class AdminAssetApplicationTests(unittest.TestCase):
     def test_state_rejection_is_stable(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = _Repository("state_changed")
-            app = AdminAssetApplication(Path(directory) / "game.db", repository=repository)
+            app = self._application(directory, repository=repository)
             first = self._call(app, "admin-2")
             second = self._call(app, "admin-2")
             self.assertFalse(first.ok)
@@ -78,7 +86,7 @@ class AdminAssetApplicationTests(unittest.TestCase):
     def test_zero_delta_is_rejected_before_repository(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = _Repository()
-            app = AdminAssetApplication(Path(directory) / "game.db", repository=repository)
+            app = self._application(directory, repository=repository)
             with self.assertRaises(Exception):
                 app.adjust_stone(operation_id="admin-3", operator_id="operator-1", user_id="user-1", expected_stone=100, requested_delta=0)
             self.assertEqual(repository.calls, 0)
@@ -86,7 +94,7 @@ class AdminAssetApplicationTests(unittest.TestCase):
     def test_item_grant_is_audited_and_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = _ItemRepository()
-            app = AdminAssetApplication(Path(directory) / "game.db", item_repository=repository)
+            app = self._application(directory, item_repository=repository)
             kwargs = {
                 "operation_id": "item-1", "operator_id": "operator-1", "user_id": "user-1",
                 "item_id": 9, "item_name": "丹药", "item_type": "丹药", "quantity": 2,

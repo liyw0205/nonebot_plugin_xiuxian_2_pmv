@@ -96,7 +96,6 @@ class OperationLedger:
         )
 
     def get(self, uow: DatabaseUnitOfWork, operation_id: str, action: str) -> OperationRecord | None:
-        self.ensure_schema(uow)
         row = uow.query_one(
             "SELECT operation_id, action, request_hash, status, result_json, created_at, updated_at "
             "FROM operation_ledger WHERE operation_id = ? AND action = ?",
@@ -134,7 +133,6 @@ class OperationLedger:
         return None
 
     def finish(self, uow: DatabaseUnitOfWork, outcome: OperationOutcome[Any]) -> None:
-        self.ensure_schema(uow)
         encoded = json.dumps(outcome.to_dict(), ensure_ascii=False, sort_keys=True, default=str)
         uow.execute(
             "UPDATE operation_ledger SET status = ?, result_json = ?, updated_at = ? "
@@ -187,7 +185,6 @@ class OperationLedger:
             occurred_at=now,
         )
         with DatabaseUnitOfWork(database) as uow:
-            self.ensure_schema(uow)
             existing = self.get(uow, operation_id, action)
             if existing is not None:
                 if existing.request_hash != digest:
@@ -203,7 +200,6 @@ class OperationLedger:
             self.finish(uow, outcome)
 
     def list_pending(self, uow: DatabaseUnitOfWork, *, limit: int = 100) -> list[Mapping[str, Any]]:
-        self.ensure_schema(uow)
         return uow.query_all(
             "SELECT * FROM operation_ledger WHERE status IN ('started', 'failed', 'needs_reconcile') ORDER BY created_at LIMIT ?",
             (max(1, min(int(limit), 1000)),),

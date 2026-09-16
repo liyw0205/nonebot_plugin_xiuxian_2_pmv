@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from nonebot_plugin_xiuxian_2.features.auction.application import AuctionBidApplication
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 
 
 class FakeRepository:
@@ -24,6 +25,8 @@ class AuctionApplicationTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.db = Path(self.temp.name) / "game.db"
+        with DatabaseUnitOfWork(self.db) as uow:
+            apply_platform_schema(uow)
 
     def tearDown(self):
         self.temp.cleanup()

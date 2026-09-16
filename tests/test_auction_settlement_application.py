@@ -7,6 +7,7 @@ from pathlib import Path
 from nonebot_plugin_xiuxian_2.core.result import OperationOutcome
 from nonebot_plugin_xiuxian_2.features.auction.settlement import AuctionSettlementApplication
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 
 
 class _Repository:
@@ -23,7 +24,10 @@ class AuctionSettlementApplicationTests(unittest.TestCase):
     def test_settlement_is_audited_and_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = _Repository()
-            app = AuctionSettlementApplication(Path(directory) / "game.db", repository=repo)
+            database = Path(directory) / "game.db"
+            with DatabaseUnitOfWork(database) as uow:
+                apply_platform_schema(uow)
+            app = AuctionSettlementApplication(database, repository=repo)
             first = app.settle_active(operation_id="op-1", end_time=100.0, fee_rate=0.1)
             second = app.settle_active(operation_id="op-1", end_time=100.0, fee_rate=0.1)
             self.assertTrue(first.ok)
@@ -38,7 +42,10 @@ class AuctionSettlementApplicationTests(unittest.TestCase):
     def test_business_rejection_is_stable(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = _Repository("inventory_full")
-            app = AuctionSettlementApplication(Path(directory) / "game.db", repository=repo)
+            database = Path(directory) / "game.db"
+            with DatabaseUnitOfWork(database) as uow:
+                apply_platform_schema(uow)
+            app = AuctionSettlementApplication(database, repository=repo)
             result = app.settle_active(operation_id="op-2", end_time=100.0, fee_rate=0.1)
             replay = app.settle_active(operation_id="op-2", end_time=100.0, fee_rate=0.1)
             self.assertFalse(result.ok)

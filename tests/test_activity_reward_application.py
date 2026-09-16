@@ -6,6 +6,7 @@ from pathlib import Path
 
 from nonebot_plugin_xiuxian_2.features.activity_reward.application import ActivityRewardApplication
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 
 
 class _Repository:
@@ -19,10 +20,17 @@ class _Repository:
 
 
 class ActivityRewardApplicationTests(unittest.TestCase):
+    @staticmethod
+    def _application(directory: str, repository: _Repository) -> ActivityRewardApplication:
+        database = Path(directory) / "game.db"
+        with DatabaseUnitOfWork(database) as uow:
+            apply_platform_schema(uow)
+        return ActivityRewardApplication(database, repository=repository)
+
     def test_success_and_replay(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = _Repository()
-            app = ActivityRewardApplication(Path(directory) / "game.db", repository=repo)
+            app = self._application(directory, repo)
             first = app.claim_all(operation_id="activity-1", user_id="u-1")
             replay = app.claim_all(operation_id="activity-1", user_id="u-1")
             self.assertTrue(first.ok)
@@ -35,7 +43,7 @@ class ActivityRewardApplicationTests(unittest.TestCase):
     def test_rejection_is_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = _Repository(False)
-            app = ActivityRewardApplication(Path(directory) / "game.db", repository=repo)
+            app = self._application(directory, repo)
             result = app.claim_all(operation_id="activity-2", user_id="u-1")
             replay = app.claim_all(operation_id="activity-2", user_id="u-1")
             self.assertFalse(result.ok)
