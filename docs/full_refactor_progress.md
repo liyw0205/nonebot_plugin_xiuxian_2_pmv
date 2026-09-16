@@ -821,6 +821,8 @@
 
 2026-09-17 task-progress/title acceptance slice：签到入口已由 `SignInApplication` 注入 application-owned task effects，删除 `xiuxian_base` 未使用的旧 task-progress import；source gate改为验证 `ApplicationSignInTaskEffects` 与 `SignInTaskRepository` 的 operation幂等及仍存活旧入口的显式 task operation。title batch transaction fixture补齐 platform ledger migration。focused 22 tests、compileall、inventory、diff check通过；未改变仍有真实调用的 buff/impart/work task-progress路径。
 
+2026-09-17 task-progress/title live safety：提交 `41d278a0` 部署到受控容器后，backup manifest位于隔离 smoke data，包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db` 五库；migration dry-run五库均无 pending，旧实例 `5897` 停止后新实例 `5898` readiness通过，manifest只读命令通过，专用 operation marker写入并由rollback删除，reconcile `clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`，五库 restore完成且 checksum manifest可读；后置核验旧端口 healthy、新端口 closed、marker removed。未执行玩家任务、签到、称号或资产写入。
+
 2026-09-16 sect default graph cleanup live safety：提交 `b148dc28` 部署后 backup `/srv/old/data/backups/20260916T165029Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行宗门购买、入宗、丹药领取、主副 buff 学习或资产写入。
 
 2026-09-16 work default graph cleanup live safety：提交 `6c5793fe` 部署后 backup `/srv/old/data/backups/20260916T164552Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行悬赏接取、结算、物品使用或资产写入。
