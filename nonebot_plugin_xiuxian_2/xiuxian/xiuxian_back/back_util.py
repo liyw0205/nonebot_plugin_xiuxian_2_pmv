@@ -8,7 +8,7 @@ from ..xiuxian_utils.utils import number_to
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, UserBuffDate, 
     get_weapon_info_msg, get_armor_info_msg,
-    get_player_info, save_player_info, 
+    get_player_info,
     get_sec_msg, get_main_info_msg, get_sub_info_msg, get_effect_info_msg
 )
 from datetime import datetime
