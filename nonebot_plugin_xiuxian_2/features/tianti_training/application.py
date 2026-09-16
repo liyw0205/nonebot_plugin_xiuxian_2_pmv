@@ -18,7 +18,6 @@ from .domain import (
     normalize_plan,
 )
 from .repository import (
-    LegacyTiantiTrainingRepository,
     StoneTrainingSqlRepository,
     TiantiBreakthroughSqlRepository,
     TiantiMedicineBathSqlRepository,
@@ -111,9 +110,6 @@ class TiantiTrainingApplication:
             except Exception as exc:
                 self.ledger.record_failure(ledger_database, operation_id, action, payload, str(exc))
                 raise
-
-    def _repository(self) -> TiantiTrainingRepository:
-        return self.repository or LegacyTiantiTrainingRepository(self.game_database, self.player_database)
 
     def _stone_repository(self) -> StoneTrainingSqlRepository | TiantiTrainingRepository:
         return self.repository or StoneTrainingSqlRepository(self.game_database, self.player_database)
