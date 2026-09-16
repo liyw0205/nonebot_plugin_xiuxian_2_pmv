@@ -811,6 +811,8 @@
 
 2026-09-16 work default graph cleanup：AST调用图确认 `work_settlement_service`、`work_claim_service`无可执行调用，真实悬赏入口使用 `WorkClaimApplication`/`WorkSettlementApplication`；删除两个dead service实例/import及stale compatibility comments，保留item-use/refresh/abort/reset live services。work/source/architecture共183 tests、compileall、diff check通过。
 
+2026-09-16 work default graph cleanup live safety：提交 `6c5793fe` 部署后 backup `/srv/old/data/backups/20260916T164552Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行悬赏接取、结算、物品使用或资产写入。
+
 2026-09-16 training default graph cleanup live safety：提交 `104012ff` 部署后 backup `/srv/old/data/backups/20260916T161921Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行历练购买、完成、事件或资产写入。
 
 2026-09-16 pet default graph cleanup live safety：提交 `2feb89db` 部署后 backup `/srv/old/data/backups/20260916T161405Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。live未执行宠物游历、孵化、融合或资产写入。
