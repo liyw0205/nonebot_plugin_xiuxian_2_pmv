@@ -235,12 +235,17 @@ def test_production_entries_use_batched_idempotent_task_events() -> None:
     impart_source = (root / "xiuxian_impart_pk/__init__.py").read_text(encoding="utf-8")
     work_source = (root / "xiuxian_work/__init__.py").read_text(encoding="utf-8")
     pet_source = (root / "xiuxian_pet/__init__.py").read_text(encoding="utf-8")
+    task_repository_source = (root.parent / "features/sign_in/tasks.py").read_text(encoding="utf-8")
+    task_effects_source = (root.parent / "features/sign_in/task_effects.py").read_text(encoding="utf-8")
 
     assert "TaskProgressEventService(get_paths().player_db)" in task_source
     assert "update_or_write_data" not in task_source
     assert "record_task_progress_event(user_id, updates, operation_id)" in event_source
     assert "completed.extend(record_task_progress(" not in event_source
-    for source in (base_source, buff_source, impart_source, work_source):
+    assert "self.repository.record(user_id=str(user_id), operation_id=str(operation_id), occurred_at=now)" in task_effects_source
+    assert "ON CONFLICT(operation_id) DO NOTHING" in task_repository_source
+    assert "record_task_progress" not in base_source
+    for source in (buff_source, impart_source, work_source):
         assert "operation_id=f\"task-progress:" in source
     assert "def _grant_pet_travel_rewards" not in pet_source
     travel_handler = pet_source[pet_source.index("@pet_travel_claim.handle"):]

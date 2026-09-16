@@ -45,7 +45,7 @@ from ..xiuxian_utils.season_rank_service import (
     get_top_season_rank,
     get_user_current_season_entries,
 )
-from ..xiuxian_tasks.task_data import record_task_progress
+
 from .stone_limit import stone_limit
 
 

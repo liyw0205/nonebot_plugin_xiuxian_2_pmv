@@ -10,6 +10,7 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_title.title_transaction_service import TitleTransactionService
 from nonebot_plugin_xiuxian_2.features.title.migrations import apply_title_schema
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 from tests.test_db_backend import db_backend
 
 
@@ -21,6 +22,7 @@ class TitleUnequipTransactionTests(unittest.TestCase):
             conn.execute("CREATE TABLE title(user_id TEXT PRIMARY KEY,unlocked TEXT,equipped TEXT)")
             conn.execute("INSERT INTO title VALUES(%s,%s,%s)", ("u", json.dumps(["1"]), "1"))
         with DatabaseUnitOfWork(self.db) as uow:
+            apply_platform_schema(uow)
             apply_title_schema(uow)
         self.service = TitleTransactionService(self.db)
 
