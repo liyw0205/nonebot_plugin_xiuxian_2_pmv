@@ -15,14 +15,14 @@ import random
 import time
 from datetime import datetime, timedelta
 from ..xiuxian_config import convert_rank
-from .transaction_service import InteractiveExpDailyRewardService
+
 
 from ...features.interactive.application import InteractiveApplication
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.random_source import SystemRandom
 sql_message = XiuxianDateManage()
-interactive_exp_daily_reward_service = InteractiveExpDailyRewardService(get_paths().game_db)
+
 
 interactive_application = InteractiveApplication(get_paths().game_db)
 runtime_clock = SystemClock()
