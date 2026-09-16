@@ -755,6 +755,8 @@
 
 2026-09-16 pet/work migration blocker re-audit：Pet Web/application入口存在，但 `PetApplication`默认 `LegacyPetRepository`，travel/feed/hatch全部委托 `xiuxian_pet.transaction_service`；`pet.001`仅marker。Work claim/settlement application同样默认 LegacyWork repositories，`work.001`仅marker。二者均缺少 feature-owned SQL schema/repository与完整资产事务，不能将 application shell视为cutover。
 
+2026-09-16 bank main transaction blocker re-audit：`xiuxian_bank` matcher仅在已存在 `bank_accounts` first-use projection时走 `BankDeposit/Withdrawal/Upgrade/InterestApplication`；旧账户继续通过 `BankApplication → LegacyBankRepository → xiuxian_bank.transaction_service`执行 deposit/withdraw/upgrade/interest。`bank_accounts` schema未覆盖旧账户完整语义与迁移，不能把 first-use子路径当作主银行transaction cutover。
+
 2026-09-16 lottery audit precision live safety：提交 `28c7943` 部署后 backup `/srv/old/data/backups/20260916T035645Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。运行期审计确认 `lottery_core_default_legacy=false`，仅显式 compatibility fallback保留。
 
 2026-09-16 progress audit correction live safety：提交 `2de01de` 部署后 backup `/srv/old/data/backups/20260916T034555Z`，dry-run五库均无 pending、reconcile clean；真实 startup `phase=ready` 六项全绿，105-entry recovery clean。audit仍诚实输出 `exit_ready=false` 与 legacy transaction/handle/explicit lottery fallback blockers。
