@@ -52,7 +52,7 @@ _natal_effect_upgrade_service_instance = None
 _natal_engraving_service_instance = None
 _natal_forget_service_instance = None
 _natal_reawaken_service_instance = None
-natal_awaken_service = AwakenService(get_paths().player_db)
+_natal_awaken_service_instance = None
 runtime_ids = UUIDGenerator()
 
 
@@ -81,6 +81,13 @@ def _natal_engraving_service():
             get_paths().game_db, get_paths().player_db
         )
     return _natal_engraving_service_instance
+
+
+def _natal_awaken_service():
+    global _natal_awaken_service_instance
+    if _natal_awaken_service_instance is None:
+        _natal_awaken_service_instance = AwakenService(get_paths().player_db)
+    return _natal_awaken_service_instance
 
 
 def _natal_reawaken_service():
@@ -140,7 +147,7 @@ async def natal_awaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
         }
         event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
         operation_id = f"natal-awaken:{event_id}:{user_id}" if event_id else f"natal-awaken:{user_id}:{runtime_ids.new_id()}"
-        prior = natal_awaken_service.get_result(operation_id)
+        prior = _natal_awaken_service().get_result(operation_id)
         if prior is not None and prior.succeeded:
             await handle_send(
                 bot, event,
@@ -148,7 +155,7 @@ async def natal_awaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
                 md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="养成", v3="养成本命法宝"
             )
             await natal_awaken.finish()
-        awakened = natal_awaken_service.awaken(
+        awakened = _natal_awaken_service().awaken(
             operation_id, user_id, MAX_EFFECT_SLOTS,
             {
                 effect_type.value: (config["min_value"], config["max_value"])

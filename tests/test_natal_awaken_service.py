@@ -13,6 +13,11 @@ from tests.test_db_backend import db_backend
 
 
 class AwakenServiceTests(unittest.TestCase):
+    def test_natal_facade_defers_awaken_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_natal_treasure
+
+        self.assertIsNone(xiuxian_natal_treasure._natal_awaken_service_instance)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.player = Path(self.temp_dir.name) / "player.sqlite3"
