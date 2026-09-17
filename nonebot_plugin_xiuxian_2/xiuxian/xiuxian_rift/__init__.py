@@ -54,9 +54,7 @@ _rift_termination_service_instance = None
 _rift_key_event_settlement_service_instance = None
 _rift_demon_token_battle_settlement_service_instance = None
 _rift_speedup_service_instance = None
-rift_settlement_service = RiftSettlementService(
-    get_paths().game_db, get_paths().player_db
-)
+_rift_settlement_service_instance = None
 cache_help = {}
 group_rift = {}  # dict
 config = get_rift_config() # 获取秘境配置
@@ -95,6 +93,15 @@ def _rift_speedup_service():
     if _rift_speedup_service_instance is None:
         _rift_speedup_service_instance = RiftSpeedupService(get_paths().game_db)
     return _rift_speedup_service_instance
+
+
+def _rift_settlement_service():
+    global _rift_settlement_service_instance
+    if _rift_settlement_service_instance is None:
+        _rift_settlement_service_instance = RiftSettlementService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _rift_settlement_service_instance
 
 
 def _event_id(event) -> str:
@@ -753,7 +760,7 @@ async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     event_id = _event_id(event)
     operation_id = f"rift-settlement:{event_id or runtime_ids.new_id()}:{user_id}"
     if event_id:
-        replay = rift_settlement_service.replay(operation_id)
+        replay = _rift_settlement_service().replay(operation_id)
         if replay is not None:
             await handle_send(bot, event, replay.message)
             await complete_rift.finish()
@@ -798,7 +805,7 @@ async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                     int(outcome.get("statistics", {}).get("秘境次数", 0)) + 1
                 )
                 outcome["message"] = f"{outcome['message']}{progress_msg}"
-                result = rift_settlement_service.settle(
+                result = _rift_settlement_service().settle(
                     operation_id,
                     user_id,
                     rift_info,

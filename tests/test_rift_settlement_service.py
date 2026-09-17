@@ -16,6 +16,11 @@ from tests.test_db_backend import db_backend
 
 
 class RiftSettlementServiceTests(unittest.TestCase):
+    def test_rift_facade_defers_settlement_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_rift
+
+        self.assertIsNone(xiuxian_rift._rift_settlement_service_instance)
+
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         root = Path(self.temp_dir.name)
