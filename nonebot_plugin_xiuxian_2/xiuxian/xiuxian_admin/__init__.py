@@ -92,7 +92,7 @@ items = Items()
 sql_message = XiuxianDateManage()  # sql类
 _admin_level_change_service_instance = None
 admin_root_change_service = AdminRootChangeService(get_paths().game_db)
-admin_exp_adjustment_service = AdminExpAdjustmentService(get_paths().game_db)
+_admin_exp_adjustment_service_instance = None
 admin_asset_application = AdminAssetApplication(get_paths().game_db)
 admin_item_destroy_service = AdminItemDestroyService(get_paths().game_db)
 admin_item_batch_grant_service = AdminItemBatchGrantService(get_paths().game_db)
@@ -125,6 +125,13 @@ def _admin_level_change_service():
     if _admin_level_change_service_instance is None:
         _admin_level_change_service_instance = AdminLevelChangeService(get_paths().game_db)
     return _admin_level_change_service_instance
+
+
+def _admin_exp_adjustment_service():
+    global _admin_exp_adjustment_service_instance
+    if _admin_exp_adjustment_service_instance is None:
+        _admin_exp_adjustment_service_instance = AdminExpAdjustmentService(get_paths().game_db)
+    return _admin_exp_adjustment_service_instance
 
 
 def _admin_operation_id(event, action: str, user_id: str) -> str:
@@ -608,7 +615,7 @@ async def adjust_exp_command_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     if give_qq:
         give_user = sql_message.get_user_info_with_id(give_qq)
         if give_user:
-            result = admin_exp_adjustment_service.adjust(
+            result = _admin_exp_adjustment_service().adjust(
                 _admin_operation_id(event, "exp-adjust", str(give_qq)),
                 str(get_user_id(event) or "unknown"),
                 give_qq,

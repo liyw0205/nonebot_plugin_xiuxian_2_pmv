@@ -13,6 +13,11 @@ from tests.test_db_backend import db_backend
 
 
 class AdminExpAdjustmentTransactionTests(unittest.TestCase):
+    def test_admin_facade_defers_exp_adjustment_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_admin
+
+        self.assertIsNone(xiuxian_admin._admin_exp_adjustment_service_instance)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.database = Path(self.temp.name) / "game.db"
@@ -81,7 +86,7 @@ class AdminExpAdjustmentTransactionTests(unittest.TestCase):
         with open(path, encoding="utf-8") as source_file:
             text = source_file.read()
         handler = text[text.index("async def adjust_exp_command_"):text.index("@zaohua_xiuxian.handle")]
-        self.assertIn("admin_exp_adjustment_service.adjust(", handler)
+        self.assertIn("_admin_exp_adjustment_service().adjust(", handler)
         self.assertNotIn("sql_message.update_exp(", handler)
         self.assertNotIn("sql_message.update_j_exp(", handler)
 
