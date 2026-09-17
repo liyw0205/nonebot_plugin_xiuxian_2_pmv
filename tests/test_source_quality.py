@@ -2057,7 +2057,7 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn('expected_target_protection="on"', invite_handler)
         self.assertIn('expected_target_protection="off"', invite_handler)
 
-        invite_service = (root / "partner_invite_service.py").read_text(encoding="utf-8")
+        invite_service = (root / "transaction_service.py").read_text(encoding="utf-8")
         cultivation_service = (root / "partner_cultivation_service.py").read_text(encoding="utf-8")
         protection_service = (root / "partner_protection_service.py").read_text(encoding="utf-8")
         self.assertIn("_partner_cultivation_service_instance = None", source)
@@ -2068,6 +2068,16 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", cultivation_service)
         self.assertIn("BEGIN IMMEDIATE", protection_service)
         self.assertIn("partner_protection_operations", protection_service)
+
+        self.assertIn("_partner_invite_service_instance = None", source)
+        self.assertIn("def _partner_invite_service(", source)
+        self.assertIn("_partner_invite_service().create(", invite_handler)
+        self.assertIn("_partner_invite_service().pending_for_user(", invite_handler)
+        self.assertIn("_partner_invite_service().resolve(", source)
+        self.assertNotIn("partner_invite_service.create(", source)
+        self.assertNotIn("partner_invite_service.resolve(", source)
+        self.assertIn("partner_cultivation_invites", invite_service)
+        self.assertIn("expected_target_protection", invite_service)
 
     def test_partner_token_uses_transactional_service(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_buff"

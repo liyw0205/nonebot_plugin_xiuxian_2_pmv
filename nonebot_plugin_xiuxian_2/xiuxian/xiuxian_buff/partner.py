@@ -80,7 +80,7 @@ _partner_unbind_service_instance = None
 _partner_breakthrough_service_instance = None
 _mentor_bind_service_instance = None
 _mentor_application_service_instance = None
-partner_invite_service = PartnerInviteService(get_paths().player_db)
+_partner_invite_service_instance = None
 partner_protection_service = PartnerProtectionService(get_paths().player_db)
 _mentor_expel_service_instance = None
 _mentor_breakthrough_reward_service_instance = None
@@ -129,6 +129,13 @@ def _partner_token_service():
             get_paths().game_db, get_paths().player_db
         )
     return _partner_token_service_instance
+
+
+def _partner_invite_service():
+    global _partner_invite_service_instance
+    if _partner_invite_service_instance is None:
+        _partner_invite_service_instance = PartnerInviteService(get_paths().player_db)
+    return _partner_invite_service_instance
 
 
 def _partner_cultivation_service():
@@ -354,7 +361,7 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
     user_id = user_1['user_id']
 
-    existing_invite = partner_invite_service.pending_for_user(user_id)
+    existing_invite = _partner_invite_service().pending_for_user(user_id)
     if existing_invite is not None:
         other_id = existing_invite.target_id if existing_invite.inviter_id == str(user_id) else existing_invite.inviter_id
         target_info = sql_message.get_user_real_info(other_id)
@@ -395,7 +402,7 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
         await two_exp_invite.finish()
 
-    if partner_invite_service.pending_for_user(two_qq) is not None:
+    if _partner_invite_service().pending_for_user(two_qq) is not None:
         msg = "对方已有未处理的双修邀请，请稍后再试！"
         await handle_send(bot, event, msg, md_type="buff", k1="同意", v1="同意双修", k2="拒绝", v2="拒绝双修", k3="双修", v3="双修")
         await two_exp_invite.finish()
@@ -452,7 +459,7 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         invite_id = _relation_operation_id(
             event, "cultivation-invite", user_id, two_qq
         )
-        created = partner_invite_service.create(
+        created = _partner_invite_service().create(
             invite_id, user_id, two_qq, min(exp_count, max_count_2),
             expected_target_protection="on",
         )
@@ -898,7 +905,7 @@ async def two_exp_accept_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         
     user_id = user_info['user_id']
     
-    invite = partner_invite_service.pending_for_target(user_id)
+    invite = _partner_invite_service().pending_for_target(user_id)
     if invite is None:
         msg = "没有待处理的双修邀请！"
         await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
@@ -910,7 +917,7 @@ async def two_exp_accept_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 async def expire_invite(user_id, invite_id, bot, event):
     """邀请过期处理"""
     await asyncio.sleep(60)
-    result = partner_invite_service.resolve(invite_id, user_id, "expired")
+    result = _partner_invite_service().resolve(invite_id, user_id, "expired")
     if result.status == "applied":
         # 发送过期提示
         msg = f"双修邀请已过期！"
@@ -927,7 +934,7 @@ async def two_exp_reject_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         
     user_id = user_info['user_id']
     
-    invite = partner_invite_service.pending_for_target(user_id)
+    invite = _partner_invite_service().pending_for_target(user_id)
     if invite is None:
         msg = "没有待处理的双修邀请！"
         await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
@@ -938,7 +945,7 @@ async def two_exp_reject_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     inviter_info = sql_message.get_user_real_info(inviter_id)
     msg = f"你拒绝了{inviter_info['user_name']}的双修邀请！"
     
-    partner_invite_service.resolve(invite.invite_id, user_id, "rejected")
+    _partner_invite_service().resolve(invite.invite_id, user_id, "rejected")
     
     await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
     await two_exp_reject.finish()
