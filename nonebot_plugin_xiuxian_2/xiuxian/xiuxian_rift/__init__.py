@@ -49,7 +49,7 @@ from .riftmake import (
 )
 
 sql_message = XiuxianDateManage()  # sql类
-rift_entry_service = RiftEntryService(get_paths().game_db)
+_rift_entry_service_instance = None
 _rift_termination_service_instance = None
 _rift_key_event_settlement_service_instance = None
 _rift_demon_token_battle_settlement_service_instance = None
@@ -61,6 +61,13 @@ config = get_rift_config() # 获取秘境配置
 runtime_ids = UUIDGenerator()
 runtime_clock = SystemClock()
 groups = config['open']  # list
+
+
+def _rift_entry_service():
+    global _rift_entry_service_instance
+    if _rift_entry_service_instance is None:
+        _rift_entry_service_instance = RiftEntryService(get_paths().game_db)
+    return _rift_entry_service_instance
 
 
 def _rift_termination_service():
@@ -204,14 +211,14 @@ def _sync_world_projection(state, *, save_legacy=True) -> Rift:
 
 
 def _load_current_rift():
-    state = rift_entry_service.get_current(GLOBAL_RIFT_KEY)
+    state = _rift_entry_service().get_current(GLOBAL_RIFT_KEY)
     if state is None:
         return None, None
     return state, _sync_world_projection(state, save_legacy=False)
 
 
 def _sync_entry_projection(user_id, entry) -> None:
-    state = rift_entry_service.get_current(GLOBAL_RIFT_KEY)
+    state = _rift_entry_service().get_current(GLOBAL_RIFT_KEY)
     if state is not None:
         _sync_world_projection(state)
     try:
@@ -276,9 +283,9 @@ __rift_help_md__ = f"""
 async def read_rift_():
     """读取历史秘境数据"""
     legacy = old_rift_info.read_rift_info()
-    state = rift_entry_service.get_current(GLOBAL_RIFT_KEY)
+    state = _rift_entry_service().get_current(GLOBAL_RIFT_KEY)
     if state is None and GLOBAL_RIFT_KEY in legacy:
-        state = rift_entry_service.bootstrap(
+        state = _rift_entry_service().bootstrap(
             GLOBAL_RIFT_KEY,
             _rift_world_snapshot(legacy[GLOBAL_RIFT_KEY]),
         )
@@ -289,7 +296,7 @@ async def read_rift_():
 @register_legacy_shutdown
 async def save_rift_():
     """保存秘境数据"""
-    state = rift_entry_service.get_current(GLOBAL_RIFT_KEY)
+    state = _rift_entry_service().get_current(GLOBAL_RIFT_KEY)
     if state is not None:
         _sync_world_projection(state)
     logger.opt(colors=True).info(f"<green>rift数据已保存</green>")
@@ -308,7 +315,7 @@ async def generate_rift_for_group():
     """为群组生成新的秘境"""
     operation_id = _scheduled_generation_operation_id()
     rift = _build_fixed_rift(operation_id)
-    result = rift_entry_service.generate(
+    result = _rift_entry_service().generate(
         operation_id,
         GLOBAL_RIFT_KEY,
         _rift_world_snapshot(rift),
@@ -502,7 +509,7 @@ async def create_rift(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     operation_id = f"rift-generation:manual:{_event_id(event) or runtime_ids.new_id()}"
     rift = _build_fixed_rift(operation_id)
-    result = rift_entry_service.generate(
+    result = _rift_entry_service().generate(
         operation_id,
         GLOBAL_RIFT_KEY,
         _rift_world_snapshot(rift),
@@ -528,7 +535,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     event_id = _event_id(event)
     operation_id = f"rift-entry:{event_id or runtime_ids.new_id()}:{user_id}"
     if event_id:
-        replay = rift_entry_service.replay(operation_id, GLOBAL_RIFT_KEY)
+        replay = _rift_entry_service().replay(operation_id, GLOBAL_RIFT_KEY)
         if replay is not None:
             _sync_entry_projection(user_id, replay)
             await handle_send(bot, event, _entry_success_message(replay.rift_data))
@@ -568,7 +575,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             0 if str(user_id) in DRIVER.config.superusers else 6
         )
         try:
-            entry = rift_entry_service.enter(
+            entry = _rift_entry_service().enter(
                 operation_id,
                 user_id,
                 GLOBAL_RIFT_KEY,
@@ -621,7 +628,7 @@ async def use_rift_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     event_id = _event_id(event)
     operation_id = f"rift-ticket-entry:{event_id or runtime_ids.new_id()}:{user_id}"
     if event_id:
-        replay = rift_entry_service.replay(operation_id, GLOBAL_RIFT_KEY)
+        replay = _rift_entry_service().replay(operation_id, GLOBAL_RIFT_KEY)
         if replay is not None:
             _sync_entry_projection(user_id, replay)
             await handle_send(
@@ -644,7 +651,7 @@ async def use_rift_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 
         rift_data = build_rift_data(current_rift)
         try:
-            entry = rift_entry_service.enter(
+            entry = _rift_entry_service().enter(
                 operation_id,
                 user_id,
                 GLOBAL_RIFT_KEY,

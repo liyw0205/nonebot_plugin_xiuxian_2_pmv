@@ -21,6 +21,11 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift.transaction_service import (
 from tests.test_db_backend import db_backend
 
 
+def test_rift_facades_defer_entry_service_construction():
+    assert rift_module._rift_entry_service_instance is None
+    assert jsondata._rift_entry_reader_instance is None
+
+
 class RiftEntryServiceTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -489,7 +494,9 @@ class RiftEntryServiceTests(unittest.TestCase):
         stale_file = players / "u" / "riftinfo.json"
         stale_file.parent.mkdir(parents=True)
         stale_file.write_text('{"name":"stale","time":1}', encoding="utf-8")
-        with patch.object(jsondata, "_rift_entry_reader", self.service), patch.object(
+        with patch.object(
+            jsondata, "_rift_entry_reader_instance", self.service
+        ), patch.object(
             jsondata, "PLAYERSDATA", players
         ):
             loaded = jsondata.read_rift_data("u")
@@ -532,7 +539,9 @@ class RiftEntryServiceTests(unittest.TestCase):
                 "def _rift_progress_snapshot"
             )
         ]
-        self.assertIn("rift_entry_service.enter(", handler)
+        self.assertIn("_rift_entry_service().enter(", handler)
+        self.assertIn("_rift_entry_service_instance = None", source)
+        self.assertIn("def _rift_entry_service(", source)
         self.assertIn("expected_generation_id=", handler)
         self.assertIn("expected_revision=", handler)
         self.assertIn("stamina_cost=stamina_cost", handler)

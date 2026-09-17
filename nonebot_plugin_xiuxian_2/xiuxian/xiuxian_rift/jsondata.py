@@ -11,7 +11,14 @@ from .transaction_service import RiftEntryService
 
 SKILLPATH = get_paths().data / "功法" / "功法概率设置.json"
 PLAYERSDATA = get_paths().players
-_rift_entry_reader = RiftEntryService(get_paths().game_db)
+_rift_entry_reader_instance = None
+
+
+def _rift_entry_reader():
+    global _rift_entry_reader_instance
+    if _rift_entry_reader_instance is None:
+        _rift_entry_reader_instance = RiftEntryService(get_paths().game_db)
+    return _rift_entry_reader_instance
 
 
 def read_f():
@@ -22,7 +29,7 @@ def read_f():
 
 def read_rift_data(user_id):
     user_id = str(user_id)
-    database_state = _rift_entry_reader.read_entry(user_id, active_only=True)
+    database_state = _rift_entry_reader().read_entry(user_id, active_only=True)
     if database_state is not None:
         return database_state
     FILEPATH = PLAYERSDATA / user_id / "riftinfo.json"
