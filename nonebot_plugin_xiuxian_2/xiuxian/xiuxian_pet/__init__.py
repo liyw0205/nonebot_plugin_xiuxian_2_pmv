@@ -79,7 +79,7 @@ _pet_hatch_service_instance = None
 _pet_release_service_instance = None
 _pet_fusion_breakthrough_service_instance = None
 _pet_skill_reroll_service_instance = None
-pet_active_switch_service = PetActiveSwitchService(get_paths().player_db)
+_pet_active_switch_service_instance = None
 
 pet_help = on_command("宠物帮助", aliases={"宠物系统帮助"}, priority=10, block=True)
 pet_intro_help = on_command("宠物入门帮助", aliases={"宠物获取帮助", "宠物查看帮助"}, priority=10, block=True)
@@ -147,6 +147,13 @@ def _pet_skill_reroll_service():
             get_paths().game_db, get_paths().player_db
         )
     return _pet_skill_reroll_service_instance
+
+
+def _pet_active_switch_service():
+    global _pet_active_switch_service_instance
+    if _pet_active_switch_service_instance is None:
+        _pet_active_switch_service_instance = PetActiveSwitchService(get_paths().player_db)
+    return _pet_active_switch_service_instance
 
 
 def _split_args(text: str):
@@ -1334,7 +1341,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     )
     travel_pet_uid = str((data.get("travel") or {}).get("pet_uid", ""))
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or runtime_ids.new_id())
-    result = pet_active_switch_service.switch(
+    result = _pet_active_switch_service().switch(
         f"pet-active-switch:{event_id}:{user_id}",
         user_id,
         active.get("uid", ""),

@@ -11,6 +11,11 @@ from tests.test_db_backend import db_backend
 
 
 class PetActiveSwitchServiceTest(unittest.TestCase):
+    def test_pet_facade_defers_active_switch_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_pet
+
+        self.assertIsNone(xiuxian_pet._pet_active_switch_service_instance)
+
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "player.db"
