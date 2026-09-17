@@ -57,10 +57,17 @@ xiuxian_impart = XIUXIAN_IMPART_BUFF()
 impart_draw_service = ImpartDrawService(get_paths().game_db, get_paths().impart_db)
 card_compose_service = CardComposeService(get_paths().impart_db)
 card_disassemble_service = CardDisassembleService(get_paths().impart_db)
-love_sand_service = LoveSandUseService(get_paths().game_db, get_paths().impart_db, get_paths().player_db)
+_love_sand_service_instance = None
 impart_prayer_service = ImpartPrayerSettlementService(get_paths().game_db, get_paths().impart_db)
 impart_application = ImpartApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
+
+
+def _love_sand_service():
+    global _love_sand_service_instance
+    if _love_sand_service_instance is None:
+        _love_sand_service_instance = LoveSandUseService(get_paths().game_db, get_paths().impart_db, get_paths().player_db)
+    return _love_sand_service_instance
 
 
 def _run_impart_action(action, operation_id, user_id, call, **payload):
@@ -550,7 +557,7 @@ async def use_love_sand(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     item_count = sql_message.goods_num(user_id, item_id)
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"love-sand:{event_id}:{user_id}:{item_id}" if event_id else f"love-sand:{runtime_ids.new_id()}:{user_id}:{item_id}"
-    prior = love_sand_service.get_result(operation_id)
+    prior = _love_sand_service().get_result(operation_id)
     if prior is not None and prior.succeeded:
         final_msg = (
             f"获得思恋结晶 {prior.gained} 颗\n当前思恋结晶：{prior.stone_num}颗\n"
@@ -560,7 +567,7 @@ async def use_love_sand(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         return
     # 使用思恋流沙，随机获得思恋结晶（首次结果固化在 operation）
     total_gained = sum(random.choice([10, 20, 30]) for _ in range(quantity))
-    result = love_sand_service.apply(operation_id, user_id, item_id, quantity, total_gained, item_count, current_stones)
+    result = _love_sand_service().apply(operation_id, user_id, item_id, quantity, total_gained, item_count, current_stones)
     if result.status == "duplicate":
         final_msg = (
             f"获得思恋结晶 {result.gained} 颗\n当前思恋结晶：{result.stone_num}颗\n"
