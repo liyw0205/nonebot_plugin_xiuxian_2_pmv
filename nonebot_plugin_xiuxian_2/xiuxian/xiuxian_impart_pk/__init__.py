@@ -71,7 +71,7 @@ def _resolve_impart_closing_user_id(event, user_info) -> str:
     return active_id
 
 
-impart_training_settlement_service = ImpartTrainingSettlementService(get_paths().game_db, get_paths().impart_db, get_paths().player_db)
+_impart_training_settlement_service_instance = None
 impart_explore_settlement_service = ImpartExploreSettlementService(get_paths().game_db, get_paths().impart_db, get_paths().player_db)
 impart_closing_settlement_service = ImpartClosingSettlementService(
     get_paths().game_db, get_paths().impart_db, get_paths().player_db
@@ -87,6 +87,15 @@ impart_pk_application = ImpartPkApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
 runtime_random = SystemRandom()
 runtime_clock = SystemClock()
+
+
+def _impart_training_settlement_service():
+    global _impart_training_settlement_service_instance
+    if _impart_training_settlement_service_instance is None:
+        _impart_training_settlement_service_instance = ImpartTrainingSettlementService(
+            get_paths().game_db, get_paths().impart_db, get_paths().player_db
+        )
+    return _impart_training_settlement_service_instance
 
 
 def _run_impart_pk_action(action, operation_id, user_id, call, **payload):
@@ -122,7 +131,7 @@ XU_SOUL_LOAD_CAP_EXP = 1
 
 async def impart_re():
     impart_pk.re_data()
-    impart_training_settlement_service.reset_daily()
+    _impart_training_settlement_service().reset_daily()
     xu_world.re_data()
     logger.opt(colors=True).info(f"<green>已重置虚神界次数</green>")
 
@@ -158,7 +167,7 @@ def _impart_operation_id(event, action, user_id):
     return f"impart-{action}:{event_id}:{user_id}" if event_id else f"impart-{action}:{user_id}:{runtime_ids.new_id()}"
 
 def _daily_impart_state(user_id):
-    return impart_training_settlement_service.get_daily_state(user_id, impart_pk.find_user_data(user_id))
+    return _impart_training_settlement_service().get_daily_state(user_id, impart_pk.find_user_data(user_id))
 
 @impart_pk_project.handle(parameterless=[Cooldown(stamina_cost = 1)])
 async def impart_pk_project_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
@@ -584,7 +593,7 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     impaer_exp_time = max(1, impaer_exp_time)
     # 先回放：成功后时间/日额度变化会挡住同事件幂等。
     op_id = _impart_operation_id(event, "training", user_id)
-    prior = impart_training_settlement_service.get_result(op_id)
+    prior = _impart_training_settlement_service().get_result(op_id)
     if prior is not None and prior.succeeded:
         msg = (
             f"虚神界修炼结束（重放），共修炼{impaer_exp_time}分钟\n"
@@ -658,7 +667,7 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
     result = _run_impart_pk_action(
         "training_settle", op_id, user_id,
-        call=lambda: impart_training_settlement_service.settle(
+        call=lambda: _impart_training_settlement_service().settle(
             op_id, user_id, expected_exp=current_exp,
             expected_exp_day=int(impart_data_draw['exp_day']),
             expected_daily={key: user_data[key] for key in ("exp_used", "exp_count", "exp_load", "exp_gain")},
