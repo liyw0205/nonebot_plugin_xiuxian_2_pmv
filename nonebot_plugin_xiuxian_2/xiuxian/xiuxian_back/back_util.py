@@ -25,7 +25,7 @@ from nonebot.log import logger
 items = Items()
 sql_message = XiuxianDateManage()
 _cultivation_item_service_instance = None
-breakthrough_rate_item_service = BreakthroughRateItemService(get_paths().game_db)
+_breakthrough_rate_item_service_instance = None
 recovery_item_service = RecoveryItemService(get_paths().game_db)
 permanent_atk_item_service = PermanentAtkItemService(get_paths().game_db)
 _blessed_flag_replace_service_instance = None
@@ -44,6 +44,14 @@ def _blessed_flag_replace_service():
             get_paths().game_db, get_paths().player_db
         )
     return _blessed_flag_replace_service_instance
+
+def _breakthrough_rate_item_service():
+    global _breakthrough_rate_item_service_instance
+    if _breakthrough_rate_item_service_instance is None:
+        _breakthrough_rate_item_service_instance = BreakthroughRateItemService(
+            get_paths().game_db
+        )
+    return _breakthrough_rate_item_service_instance
 
 sign = lambda x: (x > 0) - (x < 0)
 YAOCAIINFOMSG = {
@@ -886,7 +894,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
         else:  # 检查完毕
             level_up_rate = True
         if level_up_rate:
-            result = breakthrough_rate_item_service.apply(
+            result = _breakthrough_rate_item_service().apply(
                 operation_id or f"elixir-rate:{user_id}:{goods_id}:{datetime.now().timestamp()}",
                 user_id,
                 goods_id,
@@ -913,7 +921,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
                 else:
                     msg = f"道友成功使用丹药：{goods_name}{num}颗, 下一次突破的成功概率提高{goods_info['buff'] * num}%!"
 
-                result = breakthrough_rate_item_service.apply(
+                result = _breakthrough_rate_item_service().apply(
                     operation_id or f"elixir-rate:{user_id}:{goods_id}:{datetime.now().timestamp()}",
                     user_id,
                     goods_id,
