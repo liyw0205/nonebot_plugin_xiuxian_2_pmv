@@ -1316,9 +1316,23 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("def _stone_gift_service(", command_source)
         self.assertNotIn("stone_gift_service = StoneGiftService(", command_source)
         self.assertIn("application.read_limits(", adapter_source)
-        self.assertIn("application.reply(", adapter_source)
+        self.assertIn("handle_stone_gift", adapter_source)
         self.assertNotIn("stone_gift_service.transfer(", adapter_source)
         self.assertNotIn("transaction_service", adapter_source)
+
+    def test_stone_gift_matcher_dispatches_through_feature_command(self) -> None:
+        adapter_source = (
+            SOURCE_ROOT / "adapters/nonebot/commands.py"
+        ).read_text(encoding="utf-8")
+        stone_command_source = (
+            SOURCE_ROOT / "features/stone_gift/commands.py"
+        ).read_text(encoding="utf-8")
+        build_start = adapter_source.index("def _build_stone")
+        build_end = adapter_source.index("def _build_bank_first_use", build_start)
+        build = adapter_source[build_start:build_end]
+        self.assertIn("handle_stone_gift", build)
+        self.assertNotIn("application.reply(", build)
+        self.assertIn("def handle_stone_gift", stone_command_source)
 
     def test_sign_in_legacy_handler_has_an_explicit_rollback_switch(self) -> None:
         source = (SOURCE_ROOT / "xiuxian/xiuxian_base/__init__.py").read_text(encoding="utf-8")

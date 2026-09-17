@@ -55,7 +55,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     return {
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,
-            "nonebot_application_path": "_build_stone" in adapter and "application.read_limits" in adapter and "application.reply" in adapter,
+            "nonebot_application_path": "_build_stone" in adapter and "application.read_limits" in adapter and "handle_stone_gift" in adapter,
             "web_application_path": "create_stone_gift_blueprint" in web and "application.transfer" in web,
             "old_service_removed": "class StoneGiftService" not in legacy_transaction and (PACKAGE / "compatibility" / "legacy_stone_gift.py").is_file(),
             "status": "cutover_with_compatibility_rollback_isolated",

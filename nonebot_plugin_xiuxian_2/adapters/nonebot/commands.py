@@ -131,6 +131,8 @@ def _stone_arguments(args: Any) -> tuple[str, int] | tuple[None, None]:
 
 
 def _build_stone(context: CommandContext, application: Any, args: Any) -> ReplyPlan:
+    from ...features.stone_gift.commands import handle_stone_gift
+
     target, amount = _stone_arguments(args)
     if target is None or amount is None:
         return ReplyPlan("请输入正确的指令，例如：送灵石 少姜 600000", reference=True)
@@ -143,7 +145,8 @@ def _build_stone(context: CommandContext, application: Any, args: Any) -> ReplyP
         return ReplyPlan("对方未踏入修仙界，不可赠送！", reference=True)
     recipient_id = str(recipient["user_id"])
     limits = application.read_limits(sender, recipient)
-    plan = application.reply(
+    plan = handle_stone_gift(
+        application,
         operation_id=_message_id(context.raw_event, context.user_id, "stone-gift"),
         sender_id=context.user_id,
         recipient_id=recipient_id,
