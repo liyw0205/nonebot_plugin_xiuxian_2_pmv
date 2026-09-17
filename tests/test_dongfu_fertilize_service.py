@@ -9,6 +9,10 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dongfu.transaction_service import 
 from tests.test_db_backend import db_backend
 
 class DongfuFertilizeServiceTests(unittest.TestCase):
+ def test_dongfu_facade_defers_fertilize_service_construction(self):
+  from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dongfu
+  self.assertIsNone(xiuxian_dongfu._dongfu_fertilize_service_instance)
+
  def setUp(self):
   self.temp_dir=tempfile.TemporaryDirectory(); root=Path(self.temp_dir.name); self.game,self.player=root/"game.sqlite3",root/"player.sqlite3"; self.slots=[{"slot":1,"seed_id":21001,"fertilizer":0}]; self.expected=json.dumps(self.slots,ensure_ascii=False)
   with db_backend.transaction(self.game) as c: c.execute("CREATE TABLE back (user_id TEXT,goods_id INTEGER,goods_num INTEGER)"); c.execute("INSERT INTO back VALUES (%s,%s,%s)",("u",21006,2))
