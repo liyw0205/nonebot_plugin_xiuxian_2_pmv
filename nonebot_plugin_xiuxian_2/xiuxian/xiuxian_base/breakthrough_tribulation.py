@@ -32,7 +32,7 @@ from .transaction_service import PillFusionService
 from .transaction_service import TribulationStateMigrationService
 
 sql_message = XiuxianDateManage()
-breakthrough_service = BreakthroughService(get_paths().game_db)
+_breakthrough_service_instance = None
 pill_fusion_service = PillFusionService(get_paths().game_db)
 ordinary_tribulation_service = OrdinaryTribulationService(get_paths().game_db, get_paths().player_db)
 destiny_tribulation_service = DestinyTribulationService(get_paths().game_db, get_paths().player_db)
@@ -41,6 +41,13 @@ tribulation_state_migration_service = TribulationStateMigrationService(get_paths
 runtime_ids = UUIDGenerator()
 PLAYERSDATA = get_paths().players
 tribulation_cd2 = int(XiuConfig().tribulation_cd * 60)
+
+
+def _breakthrough_service():
+    global _breakthrough_service_instance
+    if _breakthrough_service_instance is None:
+        _breakthrough_service_instance = BreakthroughService(get_paths().game_db)
+    return _breakthrough_service_instance
 
 level_up = on_command("突破", priority=6, block=True)
 level_up_dr = on_command("渡厄突破", priority=7, block=True)
@@ -1055,7 +1062,7 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         nowmp = user_msg['mp'] - now_exp if (user_msg['mp'] - now_exp) > 0 else 1
         update_rate = 1 if int(level_rate * XiuConfig().level_up_probability) <= 1 else int(
             level_rate * XiuConfig().level_up_probability)  # 失败增加突破几率
-        result = breakthrough_service.apply_failure(
+        result = _breakthrough_service().apply_failure(
             _breakthrough_operation_id(event, "direct", user_id),
             user_id,
             level_name,
@@ -1080,7 +1087,7 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         # 突破成功
         root_rate = sql_message.get_root_rate(user_msg["root_type"], user_id)
         level_spend = jsondata.level_data()[le[0]]["spend"]
-        result = breakthrough_service.apply_success(
+        result = _breakthrough_service().apply_success(
             _breakthrough_operation_id(event, "direct", user_id),
             user_id,
             level_name,
@@ -1198,7 +1205,7 @@ async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMes
     if success:
         root_rate = sql_message.get_root_rate(user_msg["root_type"], user_id)
         level_spend = jsondata.level_data()[final_level]["spend"]
-    result = breakthrough_service.apply_continuous(
+    result = _breakthrough_service().apply_continuous(
         _breakthrough_operation_id(event, "continuous", user_id),
         user_id,
         level_name,
@@ -1293,7 +1300,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         now_exp = int(int(exp) * 0.1)
         update_rate = 1 if int(level_rate * XiuConfig().level_up_probability) <= 1 else int(
             level_rate * XiuConfig().level_up_probability)  # 失败增加突破几率
-        result = breakthrough_service.apply_tribulation_failure(
+        result = _breakthrough_service().apply_tribulation_failure(
             _breakthrough_operation_id(event, "tribulation_gold", user_id),
             user_id,
             level_name,
@@ -1321,7 +1328,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         now_exp = int(int(exp) * 0.1)
         root_rate = sql_message.get_root_rate(user_msg["root_type"], user_id)
         level_spend = jsondata.level_data()[le[0]]["spend"]
-        result = breakthrough_service.apply_tribulation_success(
+        result = _breakthrough_service().apply_tribulation_success(
             _breakthrough_operation_id(event, "tribulation_gold", user_id),
             user_id,
             level_name,
@@ -1415,7 +1422,7 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         # 突破失败
         update_rate = 1 if int(level_rate * XiuConfig().level_up_probability) <= 1 else int(
             level_rate * XiuConfig().level_up_probability)  # 失败增加突破几率
-        result = breakthrough_service.apply_tribulation_failure(
+        result = _breakthrough_service().apply_tribulation_failure(
             _breakthrough_operation_id(event, "tribulation", user_id),
             user_id,
             level_name,
@@ -1441,7 +1448,7 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         # 突破成功
         root_rate = sql_message.get_root_rate(user_msg["root_type"], user_id)
         level_spend = jsondata.level_data()[le[0]]["spend"]
-        result = breakthrough_service.apply_tribulation_success(
+        result = _breakthrough_service().apply_tribulation_success(
             _breakthrough_operation_id(event, "tribulation", user_id),
             user_id,
             level_name,
@@ -1581,7 +1588,7 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
     if success:
         root_rate = sql_message.get_root_rate(user_msg["root_type"], user_id)
         level_spend = jsondata.level_data()[final_level]["spend"]
-    result = breakthrough_service.apply_continuous_tribulation(
+    result = _breakthrough_service().apply_continuous_tribulation(
         _breakthrough_operation_id(event, "continuous_tribulation", user_id),
         user_id,
         level_name,
@@ -1738,7 +1745,7 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
     if success:
         root_rate = sql_message.get_root_rate(user_msg["root_type"], user_id)
         level_spend = jsondata.level_data()[final_level]["spend"]
-    result = breakthrough_service.apply_continuous_tribulation(
+    result = _breakthrough_service().apply_continuous_tribulation(
         _breakthrough_operation_id(event, "continuous_tribulation_gold", user_id),
         user_id,
         level_name,

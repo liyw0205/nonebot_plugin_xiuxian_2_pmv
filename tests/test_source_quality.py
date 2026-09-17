@@ -1165,8 +1165,8 @@ class SourceQualityTests(unittest.TestCase):
         service_source = (base_root / "breakthrough_service.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn("breakthrough_service.apply_failure(", command_source)
-        self.assertIn("breakthrough_service.apply_success(", command_source)
+        self.assertIn("_breakthrough_service().apply_failure(", command_source)
+        self.assertIn("_breakthrough_service().apply_success(", command_source)
         self.assertIn("direct_breakthrough_operations", service_source)
         self.assertIn("BEGIN IMMEDIATE", service_source)
 
@@ -1250,10 +1250,10 @@ class SourceQualityTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn(
-            "breakthrough_service.apply_tribulation_failure(", command_source
+            "_breakthrough_service().apply_tribulation_failure(", command_source
         )
         self.assertIn(
-            "breakthrough_service.apply_tribulation_success(", command_source
+            "_breakthrough_service().apply_tribulation_success(", command_source
         )
         self.assertIn('"tribulation_gold"', command_source)
         self.assertIn("tribulation_breakthrough_operations", service_source)
@@ -1266,7 +1266,7 @@ class SourceQualityTests(unittest.TestCase):
         service_source = (base_root / "breakthrough_service.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn("breakthrough_service.apply_continuous(", command_source)
+        self.assertIn("_breakthrough_service().apply_continuous(", command_source)
         self.assertIn('"continuous"', command_source)
         self.assertIn("continuous_breakthrough_operations", service_source)
 
@@ -1279,7 +1279,7 @@ class SourceQualityTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn(
-            "breakthrough_service.apply_continuous_tribulation(", command_source
+            "_breakthrough_service().apply_continuous_tribulation(", command_source
         )
         self.assertIn('"continuous_tribulation"', command_source)
         self.assertIn('"continuous_tribulation_gold"', command_source)
