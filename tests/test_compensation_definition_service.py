@@ -30,6 +30,10 @@ def test_compensation_facade_defers_reward_claim_service_construction() -> None:
     assert compensation_common._reward_claim_service_instance is None
 
 
+def test_compensation_facade_defers_definition_service_construction() -> None:
+    assert compensation_common._compensation_definition_service_instance is None
+
+
 class CompensationDefinitionServiceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -191,7 +195,7 @@ class CompensationDefinitionServiceTests(unittest.TestCase):
         with (
             patch.object(
                 compensation_common,
-                "compensation_definition_service",
+                "_compensation_definition_service_instance",
                 self.service,
             ),
             patch.object(compensation_common, "generate_unique_id", generate),
@@ -465,10 +469,10 @@ class CompensationDefinitionServiceTests(unittest.TestCase):
         )[0]
         compensation_delete = delete_body.split("data = load_data(config)", 1)[0]
 
-        self.assertIn("compensation_definition_service.delete(", compensation_delete)
-        self.assertIn("compensation_definition_service.clear(", common)
-        self.assertIn("compensation_definition_service.upsert(", common)
-        self.assertIn("compensation_definition_service.replay_upsert(", common)
+        self.assertIn("_compensation_definition_service().delete(", compensation_delete)
+        self.assertIn("_compensation_definition_service().clear(", common)
+        self.assertIn("_compensation_definition_service().upsert(", common)
+        self.assertIn("_compensation_definition_service().replay_upsert(", common)
         self.assertIn("expected_definition_version=", common)
         self.assertIn("result = delete_record(comp_id, config)", compensation)
         self.assertNotIn("reward_claim_service.delete_claims", compensation_delete)

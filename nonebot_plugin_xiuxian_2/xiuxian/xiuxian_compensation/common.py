@@ -66,11 +66,18 @@ DATA_CONFIG = {
     },
 }
 
-compensation_definition_service = CompensationDefinitionService(
-    get_paths().game_db,
-    DATA_CONFIG["补偿"]["data_path"],
-    DATA_CONFIG["补偿"]["claimed_path"],
-)
+_compensation_definition_service_instance = None
+
+
+def _compensation_definition_service():
+    global _compensation_definition_service_instance
+    if _compensation_definition_service_instance is None:
+        _compensation_definition_service_instance = CompensationDefinitionService(
+            get_paths().game_db,
+            DATA_CONFIG["补偿"]["data_path"],
+            DATA_CONFIG["补偿"]["claimed_path"],
+        )
+    return _compensation_definition_service_instance
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
@@ -86,7 +93,7 @@ def _run_compensation_action(
     # Resolve the database from the active legacy service.  Tests and runtime
     # migrations may replace that service with one backed by a temporary or
     # alternate catalog; the idempotency ledger must follow the same store.
-    database = database or getattr(compensation_definition_service, "_database", None)
+    database = database or getattr(_compensation_definition_service(), "_database", None)
     if database is None:
         database = getattr(_reward_claim_service(), "_database", None)
     compensation_application = CompensationApplication(database or get_paths().game_db)
@@ -128,20 +135,20 @@ init_data_files()
 
 def load_data(config: Dict[str, Any]) -> Dict[str, dict]:
     if config["type_key"] == "补偿":
-        return compensation_definition_service.list()
+        return _compensation_definition_service().list()
     return load_json_file(config["data_path"], {}, dict)
 
 
 def save_data(config: Dict[str, Any], data: Dict[str, dict]):
     if config["type_key"] == "补偿":
-        compensation_definition_service.sync(data)
+        _compensation_definition_service().sync(data)
         return
     save_json_file(config["data_path"], data)
 
 
 def load_claimed_data(config: Dict[str, Any]) -> Dict[str, List[str]]:
     if config["type_key"] == "补偿":
-        return compensation_definition_service.claimed_data()
+        return _compensation_definition_service().claimed_data()
     return load_json_file(config["claimed_path"], {}, dict)
 
 
@@ -458,7 +465,7 @@ async def create_reward_record(
     replay = None
     if config["type_key"] == "补偿":
         operation_id = _compensation_upsert_operation_id(event)
-        replay = compensation_definition_service.replay_upsert(
+        replay = _compensation_definition_service().replay_upsert(
             operation_id, request_identity
         )
         if replay is not None and replay.status == "operation_conflict":
@@ -528,14 +535,14 @@ async def create_reward_record(
                 "definition_upsert",
                 operation_id,
                 str(event.get_user_id()),
-                lambda: compensation_definition_service.upsert(
+                lambda: _compensation_definition_service().upsert(
                     operation_id,
                     request_identity,
                     record_id,
                     record,
                     expected_version,
                 ),
-                database=getattr(compensation_definition_service, "_database", None),
+                database=getattr(_compensation_definition_service(), "_database", None),
                 record_id=record_id,
                 request_identity=request_identity,
                 expected_version=expected_version,
@@ -554,7 +561,7 @@ async def create_reward_record(
                 operation_id,
                 str(event.get_user_id()),
                 lambda: save_data(config, data),
-                database=getattr(compensation_definition_service, "_database", None),
+                database=getattr(_compensation_definition_service(), "_database", None),
                 record_id=record_id,
                 request_identity=request_identity,
             )
@@ -683,15 +690,15 @@ async def claim_normal_reward(
 
 def delete_record(record_id: str, config: Dict[str, Any]):
     if config["type_key"] == "补偿":
-        definition = compensation_definition_service.get(record_id)
+        definition = _compensation_definition_service().get(record_id)
         version = None if definition is None else definition.version
         operation_id = f"compensation-delete:{record_id}:v{version or 'missing'}"
         return _run_compensation_action(
             "definition_delete",
             operation_id,
             "system",
-            lambda: compensation_definition_service.delete(operation_id, record_id, version),
-            database=getattr(compensation_definition_service, "_database", None),
+            lambda: _compensation_definition_service().delete(operation_id, record_id, version),
+            database=getattr(_compensation_definition_service(), "_database", None),
             record_id=record_id,
             expected_version=version,
         )
@@ -705,7 +712,7 @@ def delete_record(record_id: str, config: Dict[str, Any]):
             f"compensation-delete:{config['type_key']}:{record_id}",
             "system",
             lambda: save_data(config, data),
-            database=getattr(compensation_definition_service, "_database", None),
+            database=getattr(_compensation_definition_service(), "_database", None),
             record_id=record_id,
         )
 
@@ -730,14 +737,14 @@ def delete_record(record_id: str, config: Dict[str, Any]):
 
 def clear_records(config: Dict[str, Any]):
     if config["type_key"] == "补偿":
-        catalog_version = compensation_definition_service.catalog_version()
+        catalog_version = _compensation_definition_service().catalog_version()
         operation_id = f"compensation-clear:{catalog_version}"
         result = _run_compensation_action(
             "definition_clear",
             operation_id,
             "system",
-            lambda: compensation_definition_service.clear(operation_id, catalog_version),
-            database=getattr(compensation_definition_service, "_database", None),
+            lambda: _compensation_definition_service().clear(operation_id, catalog_version),
+            database=getattr(_compensation_definition_service(), "_database", None),
             expected_catalog_version=catalog_version,
         )
         logger.info(
@@ -833,7 +840,7 @@ def clean_expired_by_config(config: Dict[str, Any]):
             if not is_expired(info):
                 continue
             version = int(info["_definition_version"])
-            result = compensation_definition_service.delete(
+            result = _compensation_definition_service().delete(
                 f"compensation-expire:{record_id}:v{version}",
                 record_id,
                 version,
