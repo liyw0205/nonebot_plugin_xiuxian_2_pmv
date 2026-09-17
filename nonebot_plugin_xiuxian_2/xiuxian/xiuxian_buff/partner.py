@@ -75,7 +75,7 @@ xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
 _partner_cultivation_service_instance = None
 _partner_token_service_instance = None
-partner_bind_service = PartnerBindService(get_paths().game_db, get_paths().player_db)
+_partner_bind_service_instance = None
 partner_unbind_service = PartnerUnbindService(get_paths().game_db, get_paths().player_db)
 partner_breakthrough_service = PartnerBreakthroughService(get_paths().game_db, get_paths().player_db)
 mentor_bind_service = MentorBindService(get_paths().game_db, get_paths().player_db)
@@ -138,6 +138,15 @@ def _partner_cultivation_service():
             get_paths().game_db, get_paths().player_db
         )
     return _partner_cultivation_service_instance
+
+
+def _partner_bind_service():
+    global _partner_bind_service_instance
+    if _partner_bind_service_instance is None:
+        _partner_bind_service_instance = PartnerBindService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _partner_bind_service_instance
 
 
 TITLE_JSONPATH = get_paths().data / "修炼物品" / "称号.json"
@@ -1129,7 +1138,7 @@ async def agree_bind_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     invitee_partner = load_partner(user_id).get("partner_id")
     inviter_partner = load_partner(inviter_id).get("partner_id")
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    result = partner_bind_service.apply(
+    result = _partner_bind_service().apply(
         f"partner-bind:{user_id}:{invite_data.get('invite_id', event_id or runtime_ids.new_id())}",
         user_id, inviter_id, bind_time=bind_time,
         expected_invitee_partner=invitee_partner, expected_inviter_partner=inviter_partner,

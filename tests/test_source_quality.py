@@ -2080,6 +2080,19 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("expected_item_count=sql_message.goods_num", handler)
         self.assertIn("expected_used_count=current_count", handler)
 
+    def test_partner_bind_uses_lazy_transactional_service(self) -> None:
+        root = SOURCE_ROOT / "xiuxian" / "xiuxian_buff"
+        source = (root / "partner.py").read_text(encoding="utf-8")
+        start = source.index("async def agree_bind_")
+        end = source.index("@apply_mentor.handle", start)
+        handler = source[start:end]
+        self.assertIn("_partner_bind_service_instance = None", source)
+        self.assertIn("def _partner_bind_service(", source)
+        self.assertIn("_partner_bind_service().apply(", handler)
+        self.assertNotIn("partner_bind_service.apply(", handler)
+        self.assertIn("expected_invitee_partner=invitee_partner", handler)
+        self.assertIn("expected_inviter_partner=inviter_partner", handler)
+
     def test_mentor_protection_uses_one_application_transaction(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_buff"
         source = (root / "partner.py").read_text(encoding="utf-8")
