@@ -89,7 +89,7 @@ items = Items()
 sql_message = XiuxianDateManage()
 _equipment_service_instance = None
 _cultivation_item_service_instance = None
-stone_reward_service = StoneItemRewardService(get_paths().game_db)
+_stone_reward_service_instance = None
 _three_cultivation_pill_service_instance = None
 _unbind_item_service_instance = None
 _lottery_talisman_service_instance = None
@@ -122,6 +122,12 @@ def _equipment_service():
     if _equipment_service_instance is None:
         _equipment_service_instance = EquipmentService(get_paths().game_db)
     return _equipment_service_instance
+
+def _stone_reward_service():
+    global _stone_reward_service_instance
+    if _stone_reward_service_instance is None:
+        _stone_reward_service_instance = StoneItemRewardService(get_paths().game_db)
+    return _stone_reward_service_instance
 
 def _unbind_item_service():
     global _unbind_item_service_instance
@@ -1668,7 +1674,7 @@ async def use_spirit_stone_bag(bot: Bot, event: GroupMessageEvent | PrivateMessa
         )[0]
         for _ in range(num)
     ]
-    reward = stone_reward_service.apply(
+    reward = _stone_reward_service().apply(
         _stone_reward_operation_id(event, "spirit_stone_bag", user_id),
         user_id,
         reward_type="spirit_stone_bag",
@@ -1707,7 +1713,7 @@ async def use_tianji_stone_trigger(bot: Bot, event: GroupMessageEvent | PrivateM
     MIN_STONE = 10_000_000
     MAX_STONE = 100_000_000
     rolled_rewards = [random.randint(MIN_STONE, MAX_STONE) for _ in range(num)]
-    reward = stone_reward_service.apply(
+    reward = _stone_reward_service().apply(
         _stone_reward_operation_id(event, "tianji_stone_trigger", user_id),
         user_id,
         reward_type="tianji_stone_trigger",
