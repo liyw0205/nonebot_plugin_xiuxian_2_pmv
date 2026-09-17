@@ -2059,6 +2059,8 @@
 
 2026-09-18 invitation reward claim lazy construction slice：`xiuxian_compensation.invitation` 不再 module-level 构造 `InvitationRewardClaimService`，新增 `_invitation_reward_service()` game-db 惰性 getter；绑定邀请码、邀请信息、奖励领取、门槛查询和管理员设置均使用 getter，`_run_compensation_action` 的 database binding 与 service 保持同一 store，legacy claimed thresholds、资产上限、batch claim、operation replay/conflict 和 rollback 语义保持不变。construction、invitation/reward/compensation/task/sect/activity/source/architecture 共 227 tests passed，另有 1 个既有 compatibility boundary DeprecationWarning，compileall、inventory、diff check通过。
 
+2026-09-18 invitation reward claim lazy construction live safety：提交 `c859107e` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260917T221500Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。
