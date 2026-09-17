@@ -1389,7 +1389,7 @@ class SourceQualityTests(unittest.TestCase):
         source = (natal_root / "__init__.py").read_text(encoding="utf-8")
         start = source.index("@natal_upgrade.handle")
         handler = source[start:source.index("# 定义本命法宝效果升阶命令", start)]
-        self.assertIn("natal_training_service.train(", handler)
+        self.assertIn("_natal_training_service().train(", handler)
         self.assertNotIn("sql_message.update_ls(", handler)
         self.assertNotIn("nt.add_exp(", handler)
         service = (natal_root / "training_service.py").read_text(encoding="utf-8")
