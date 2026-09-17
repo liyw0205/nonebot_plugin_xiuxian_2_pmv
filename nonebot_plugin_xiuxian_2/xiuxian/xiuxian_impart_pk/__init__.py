@@ -74,9 +74,7 @@ def _resolve_impart_closing_user_id(event, user_info) -> str:
 _impart_training_settlement_service_instance = None
 _impart_explore_settlement_service_instance = None
 _impart_closing_settlement_service_instance = None
-impart_battle_batch_service = ImpartBattleBatchService(
-    get_paths().impart_db, get_paths().player_db
-)
+_impart_battle_batch_service_instance = None
 impart_closing_enter_service = ImpartClosingEnterService(
     get_paths().game_db, get_paths().player_db
 )
@@ -112,6 +110,15 @@ def _impart_closing_settlement_service():
             get_paths().game_db, get_paths().impart_db, get_paths().player_db
         )
     return _impart_closing_settlement_service_instance
+
+
+def _impart_battle_batch_service():
+    global _impart_battle_batch_service_instance
+    if _impart_battle_batch_service_instance is None:
+        _impart_battle_batch_service_instance = ImpartBattleBatchService(
+            get_paths().impart_db, get_paths().player_db
+        )
+    return _impart_battle_batch_service_instance
 
 
 def _run_impart_pk_action(action, operation_id, user_id, call, **payload):
@@ -318,7 +325,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     args_text = args.extract_plain_text().strip()
     user_data = _daily_impart_state(user_info['user_id'])
     user_data = dict(user_data)
-    user_data["pk_num"] = impart_battle_batch_service.get_pk_num(
+    user_data["pk_num"] = _impart_battle_batch_service().get_pk_num(
         user_id, user_data["pk_num"]
     )
     expected_player_1_pk_num = user_data["pk_num"]
@@ -367,7 +374,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     if not target_num:
         event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
         operation_id = f"impart-battle:{event_id}:{user_id}" if event_id else f"impart-battle:{user_id}:{runtime_ids.new_id()}"
-        prior_battle = impart_battle_batch_service.get_result(operation_id)
+        prior_battle = _impart_battle_batch_service().get_result(operation_id)
         if prior_battle is not None and prior_battle.succeeded:
             msg = f"**对决结束**（重放）\n---\n剩余对决次数\n> {prior_battle.challenger_pk_num}\n该对决请求已经处理，无需重复提交。"
             await handle_send(bot, event, msg, md_type="虚神界", k1="对决", v1="虚神界对决", k2="信息", v2="虚神界信息", k3="祈愿", v3="传承祈愿")
@@ -402,7 +409,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
         settlement = _run_impart_pk_action(
             "battle_settle", operation_id, user_id,
-            call=lambda: impart_battle_batch_service.settle(
+            call=lambda: _impart_battle_batch_service().settle(
                 operation_id, user_id, expected_player_1_pk_num,
                 total_wins, total_losses, player_1_stones,
             ),
@@ -471,7 +478,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     player_1_name = user_info['user_name']
     player_2_name = sql_message.get_user_info_with_id(player_2)['user_name']
     player_2_legacy = impart_pk.find_user_data(player_2)
-    expected_player_2_pk_num = impart_battle_batch_service.get_pk_num(
+    expected_player_2_pk_num = _impart_battle_batch_service().get_pk_num(
         player_2, player_2_legacy["pk_num"]
     )
     player_2_pk_num = expected_player_2_pk_num
@@ -541,7 +548,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     operation_id = f"impart-battle:{event_id}:{player_1}:{player_2}" if event_id else f"impart-battle:{player_1}:{player_2}:{runtime_ids.new_id()}"
     settlement = _run_impart_pk_action(
         "battle_settle_pair", operation_id, player_1,
-        call=lambda: impart_battle_batch_service.settle(
+        call=lambda: _impart_battle_batch_service().settle(
             operation_id, player_1, expected_player_1_pk_num, player_1_wins,
             player_2_wins, player_1_stones, player_2, expected_player_2_pk_num,
             player_2_wins, player_1_wins, player_2_stones,

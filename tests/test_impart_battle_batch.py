@@ -1,11 +1,33 @@
 from __future__ import annotations
 import tempfile
 import unittest
+import importlib
 from pathlib import Path
 import nonebot
 nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart_pk.transaction_service import ImpartBattleBatchService
 from tests.test_db_backend import db_backend
+
+
+def test_impart_facade_defers_battle_batch_service_construction():
+    impart = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart_pk"
+    )
+    assert impart._impart_battle_batch_service_instance is None
+
+
+def test_impart_battle_handler_uses_lazy_dual_database_service():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py"
+    ).read_text(encoding="utf-8")
+    handler = source[source.index("async def impart_pk_now_"):source.index("async def impart_pk_exp_")]
+    assert "_impart_battle_batch_service().get_pk_num(" in handler
+    assert "_impart_battle_batch_service().get_result(" in handler
+    assert "_impart_battle_batch_service().settle(" in handler
+    assert "_impart_battle_batch_service_instance = None" in source
+    assert "def _impart_battle_batch_service(" in source
+    assert "get_paths().impart_db, get_paths().player_db" in source
+    assert "impart_battle_batch_service.settle(" not in handler
 
 class ImpartBattleBatchTests(unittest.TestCase):
     def setUp(self):
