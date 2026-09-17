@@ -1943,6 +1943,8 @@
 
 2026-09-18 world boss manual spawn lazy construction slice：`xiuxian_boss.__init__` 不再 module-level 构造 `WorldBossManualSpawnService`，新增 `_world_boss_manual_spawn_service()` player-db/config 惰性 getter；随机与指定生成共用 `_spawn_world_boss` 的 replay/snapshot/config/spawn 事务入口，config/revision/session snapshot、boss cache、operation 幂等/conflict 和 rollback 语义保持不变。construction、manual spawn/full refresh/daily limit/battle/punishment、source/architecture 共 209 tests passed，compileall、inventory、diff check通过。
 
+2026-09-18 world boss manual spawn lazy construction live safety：提交 `29298825` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260917T171419Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。
