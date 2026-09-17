@@ -38,7 +38,7 @@ sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
 items = Items()
 _dongfu_expansion_service_instance = None
-dongfu_plant_service = DongfuPlantService(get_paths().game_db, get_paths().player_db)
+_dongfu_plant_service_instance = None
 dongfu_accelerate_service = DongfuAccelerateService(get_paths().game_db, get_paths().player_db)
 dongfu_patrol_service = DongfuPatrolService(get_paths().game_db, get_paths().player_db)
 _dongfu_array_upgrade_service_instance = None
@@ -60,6 +60,15 @@ def _dongfu_expansion_service():
             get_paths().game_db, get_paths().player_db
         )
     return _dongfu_expansion_service_instance
+
+
+def _dongfu_plant_service():
+    global _dongfu_plant_service_instance
+    if _dongfu_plant_service_instance is None:
+        _dongfu_plant_service_instance = DongfuPlantService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _dongfu_plant_service_instance
 
 
 def _dongfu_array_upgrade_service():
@@ -802,7 +811,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"dongfu-plant:{uid}:{event_message_id or runtime_ids.new_id()}"
     # 先回放：成功后灵田占用会挡住“已有种植/种子不足”。
-    prior = dongfu_plant_service.get_result(operation_id)
+    prior = _dongfu_plant_service().get_result(operation_id)
     if prior is not None and prior.succeeded:
         d = _get_dongfu(uid)
         await handle_send(bot, event, f"该种植请求已经处理，无需重复提交。\n{_format_plant_slots(d)}")
@@ -832,7 +841,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     plant_finish = _fmt_dt(now + timedelta(minutes=real_minutes))
     result = _run_dongfu_action(
         "plant", operation_id, uid,
-        call=lambda: dongfu_plant_service.plant(
+        call=lambda: _dongfu_plant_service().plant(
             operation_id, uid, expected_slots, _to_int(slot.get("slot")), seed_id, seed_name, plant_start, plant_finish,
         ),
         expected_slots=expected_slots, slot_no=_to_int(slot.get("slot")), seed_id=seed_id,

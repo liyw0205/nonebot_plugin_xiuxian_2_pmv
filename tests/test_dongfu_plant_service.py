@@ -14,6 +14,11 @@ from tests.test_db_backend import db_backend
 
 
 class DongfuPlantServiceTests(unittest.TestCase):
+    def test_dongfu_facade_defers_plant_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dongfu
+
+        self.assertIsNone(xiuxian_dongfu._dongfu_plant_service_instance)
+
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         root = Path(self.temp_dir.name)
