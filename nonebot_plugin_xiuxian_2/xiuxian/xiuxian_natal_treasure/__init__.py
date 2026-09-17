@@ -51,9 +51,19 @@ natal_training_service = NatalTrainingService(get_paths().game_db, get_paths().p
 natal_effect_upgrade_service = EffectUpgradeService(get_paths().game_db, get_paths().player_db)
 natal_engraving_service = EngravingService(get_paths().game_db, get_paths().player_db)
 natal_forget_service = ForgetEffectService(get_paths().game_db, get_paths().player_db)
-natal_reawaken_service = ReawakenService(get_paths().game_db, get_paths().player_db)
+_natal_reawaken_service_instance = None
 natal_awaken_service = AwakenService(get_paths().player_db)
 runtime_ids = UUIDGenerator()
+
+
+def _natal_reawaken_service():
+    global _natal_reawaken_service_instance
+    if _natal_reawaken_service_instance is None:
+        _natal_reawaken_service_instance = ReawakenService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _natal_reawaken_service_instance
+
 
 def _natal_choice_seed(operation_id: str) -> int:
     # Stable per event/op so same-event replay reuses first roll.
@@ -197,7 +207,7 @@ async def natal_reawaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMes
     }
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"natal-reawaken:{event_id}:{user_id}" if event_id else f"natal-reawaken:{user_id}:{runtime_ids.new_id()}"
-    reawakened = natal_reawaken_service.reawaken(
+    reawakened = _natal_reawaken_service().reawaken(
         operation_id, user_id, MYSTERIOUS_SCRIPTURE_ID,
         mysterious_scripture_info["name"], mysterious_scripture_info["type"],
         scripture_cost_for_reawaken, MAX_EFFECT_SLOTS, XiuConfig().max_goods_num,

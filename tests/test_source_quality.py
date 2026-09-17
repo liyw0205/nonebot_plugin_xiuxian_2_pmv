@@ -1452,7 +1452,7 @@ class SourceQualityTests(unittest.TestCase):
         source = (natal_root / "__init__.py").read_text(encoding="utf-8")
         start = source.index("@natal_reawaken.handle")
         handler = source[start:source.index("# 定义查看本命法宝信息命令", start)]
-        self.assertIn("natal_reawaken_service.reawaken(", handler)
+        self.assertIn("_natal_reawaken_service().reawaken(", handler)
         self.assertNotIn("nt.awaken(force_new=True)", handler)
         self.assertNotIn("sql_message.update_back_j(", handler)
         self.assertNotIn("sql_message.send_back(", handler)
