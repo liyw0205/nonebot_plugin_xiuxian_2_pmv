@@ -73,7 +73,7 @@ sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
 _blessed_spot_service_instance = None
-closing_settlement_service = ClosingSettlementService(get_paths().game_db)
+_closing_settlement_service_instance = None
 normal_training_lifecycle_service = NormalTrainingLifecycleService(get_paths().game_db, get_paths().player_db)
 normal_pvp_settlement_service = NormalPvpSettlementService(get_paths().game_db, get_paths().player_db)
 stone_training_settlement_service = StoneTrainingSettlementService(get_paths().game_db, get_paths().player_db)
@@ -89,6 +89,15 @@ def _blessed_spot_service():
             get_paths().game_db, get_paths().player_db
         )
     return _blessed_spot_service_instance
+
+
+def _closing_settlement_service():
+    global _closing_settlement_service_instance
+    if _closing_settlement_service_instance is None:
+        _closing_settlement_service_instance = ClosingSettlementService(
+            get_paths().game_db
+        )
+    return _closing_settlement_service_instance
 
 def _blessed_spot_operation_id(event, action, user_id):
     event_id = str(
@@ -661,7 +670,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     closing_operation_id = _blessed_spot_operation_id(
         event, "closing-settle", user_id
     )
-    previous = closing_settlement_service.get_result(closing_operation_id)
+    previous = _closing_settlement_service().get_result(closing_operation_id)
     if previous is not None and previous.succeeded:
         await handle_send(
             bot,
@@ -720,7 +729,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     new_atk = int(new_exp / 10)
     new_power = int(new_exp * level_rate * realm_rate)
     try:
-        result = closing_settlement_service.settle(
+        result = _closing_settlement_service().settle(
             closing_operation_id,
             user_id, create_time, exp, stone_cost, new_hp, new_mp, new_atk, new_power,
         )

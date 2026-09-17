@@ -1,11 +1,32 @@
 from __future__ import annotations
 import tempfile
 import unittest
+import importlib
 from pathlib import Path
 import nonebot
 nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import ClosingSettlementService
 from tests.test_db_backend import db_backend
+
+
+def test_buff_facade_defers_closing_settlement_service_construction():
+    buff = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff"
+    )
+    assert buff._closing_settlement_service_instance is None
+
+
+def test_buff_closing_handler_uses_lazy_game_database_service():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_buff/__init__.py"
+    ).read_text(encoding="utf-8")
+    handler = source[source.index("async def out_closing_"):]
+    assert "_closing_settlement_service().get_result(" in handler
+    assert "_closing_settlement_service().settle(" in handler
+    assert "_closing_settlement_service_instance = None" in source
+    assert "def _closing_settlement_service(" in source
+    assert "get_paths().game_db" in source
+    assert "closing_settlement_service.settle(" not in handler
 
 class ClosingSettlementServiceTests(unittest.TestCase):
     def setUp(self):
