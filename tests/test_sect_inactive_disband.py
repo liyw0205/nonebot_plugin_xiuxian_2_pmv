@@ -245,7 +245,7 @@ class SectInactiveDisbandTests(unittest.TestCase):
         handler = source.split("async def auto_handle_inactive_sect_owners", 1)[1].split(
             "@sect_help.handle", 1
         )[0]
-        self.assertEqual(handler.count("sect_disband_service.disband_inactive("), 3)
+        self.assertEqual(handler.count("_sect_disband_service().disband_inactive("), 3)
         self.assertNotIn("sql_message.delete_sect(", handler)
         self.assertNotIn("time.time_ns()", handler)
         self.assertIn("maintenance_key", handler)

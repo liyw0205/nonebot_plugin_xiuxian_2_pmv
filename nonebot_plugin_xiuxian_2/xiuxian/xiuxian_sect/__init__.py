@@ -106,7 +106,7 @@ _sect_close_mountain_service_instance = None
 _sect_owner_inherit_service_instance = None
 _sect_open_join_service_instance = None
 _sect_close_join_service_instance = None
-sect_disband_service = SectDisbandService(get_paths().game_db)
+_sect_disband_service_instance = None
 sect_daily_reset_maintenance_service = SectDailyResetMaintenanceService(get_paths().game_db)
 
 
@@ -144,6 +144,15 @@ def _sect_close_join_service():
             get_paths().game_db
         )
     return _sect_close_join_service_instance
+
+
+def _sect_disband_service():
+    global _sect_disband_service_instance
+    if _sect_disband_service_instance is None:
+        _sect_disband_service_instance = SectDisbandService(
+            get_paths().game_db
+        )
+    return _sect_disband_service_instance
 
 
 config = get_config()
@@ -457,7 +466,7 @@ async def auto_handle_inactive_sect_owners():
                     
                     if not members:
                         logger.info("宗门没有成员，执行解散操作")
-                        disbanded = sect_disband_service.disband_inactive(
+                        disbanded = _sect_disband_service().disband_inactive(
                             f"sect:auto-disband:{maintenance_key}:{sect_id}:empty",
                             sect_id,
                             "empty",
@@ -495,7 +504,7 @@ async def auto_handle_inactive_sect_owners():
                     
                     if not active_candidates:
                         logger.info("没有活跃的继承人，执行解散操作")
-                        disbanded = sect_disband_service.disband_inactive(
+                        disbanded = _sect_disband_service().disband_inactive(
                             f"sect:auto-disband:{maintenance_key}:{sect_id}:no-successor",
                             sect_id,
                             "no_active_successor",
@@ -571,7 +580,7 @@ async def auto_handle_inactive_sect_owners():
                 # 检查宗门成员数量
                 if len(members) == 1:
                     logger.info("宗门只有宗主一人，执行解散操作")
-                    disbanded = sect_disband_service.disband_inactive(
+                    disbanded = _sect_disband_service().disband_inactive(
                         f"sect:auto-disband:{maintenance_key}:{sect_id}:sole-owner",
                         sect_id,
                         "inactive_sole_owner",
@@ -3341,7 +3350,7 @@ async def sect_disband2_confirm(bot: Bot, event: GroupMessageEvent | PrivateMess
     owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
     owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
 
-    result = sect_disband_service.disband(
+    result = _sect_disband_service().disband(
         _sect_operation_id(event, "disband", sect_id),
         user_info['user_id'],
         expected_sect_id=sect_id,

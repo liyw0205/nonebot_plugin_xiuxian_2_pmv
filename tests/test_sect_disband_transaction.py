@@ -15,6 +15,11 @@ from tests.test_db_backend import db_backend
 
 
 class SectDisbandServiceTests(unittest.TestCase):
+    def test_sect_facade_defers_disband_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_sect as sect_plugin
+
+        self.assertIsNone(sect_plugin._sect_disband_service_instance)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "sect.sqlite3"
@@ -114,7 +119,9 @@ class SectDisbandServiceTests(unittest.TestCase):
         end = source.index("@sect_power_top.handle", start)
         handler = source[start:end]
 
-        self.assertIn("sect_disband_service.disband(", handler)
+        self.assertIn("_sect_disband_service().disband(", handler)
+        self.assertIn("_sect_disband_service_instance = None", source)
+        self.assertIn("def _sect_disband_service(", source)
         self.assertNotIn("sql_message.delete_sect(", handler)
 
 
