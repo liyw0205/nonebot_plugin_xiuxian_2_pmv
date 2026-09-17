@@ -73,9 +73,7 @@ def _resolve_impart_closing_user_id(event, user_info) -> str:
 
 _impart_training_settlement_service_instance = None
 _impart_explore_settlement_service_instance = None
-impart_closing_settlement_service = ImpartClosingSettlementService(
-    get_paths().game_db, get_paths().impart_db, get_paths().player_db
-)
+_impart_closing_settlement_service_instance = None
 impart_battle_batch_service = ImpartBattleBatchService(
     get_paths().impart_db, get_paths().player_db
 )
@@ -105,6 +103,15 @@ def _impart_explore_settlement_service():
             get_paths().game_db, get_paths().impart_db, get_paths().player_db
         )
     return _impart_explore_settlement_service_instance
+
+
+def _impart_closing_settlement_service():
+    global _impart_closing_settlement_service_instance
+    if _impart_closing_settlement_service_instance is None:
+        _impart_closing_settlement_service_instance = ImpartClosingSettlementService(
+            get_paths().game_db, get_paths().impart_db, get_paths().player_db
+        )
+    return _impart_closing_settlement_service_instance
 
 
 def _run_impart_pk_action(action, operation_id, user_id, call, **payload):
@@ -1011,7 +1018,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"impart-closing:{event_id}:{user_id}" if event_id else f"impart-closing:{user_id}:{runtime_ids.new_id()}"
     # 先回放：出关成功后 type!=4 会挡住同事件幂等。
-    prior = impart_closing_settlement_service.get_result(operation_id)
+    prior = _impart_closing_settlement_service().get_result(operation_id)
     if prior is not None and prior.succeeded:
         msg = (
             f"虚神界闭关结束（重放），本次闭关增加修为：{number_to(prior.exp_gain)}\n"
@@ -1116,7 +1123,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     new_power = as_int_like(round((use_exp + total_exp) * level_rate * realm_rate))
     settlement = _run_impart_pk_action(
         "closing_settle", operation_id, user_id,
-        call=lambda: impart_closing_settlement_service.settle(
+        call=lambda: _impart_closing_settlement_service().settle(
             operation_id, user_id, create_time_token, use_exp, available_exp_day,
             total_exp, int(exp_day_cost), exp_time, result_hp_mp[0], result_hp_mp[1],
             int(result_hp_mp[2] / 10), new_power,
