@@ -15,6 +15,11 @@ from tests.test_db_backend import db_backend
 
 
 class BlessedFlagReplaceServiceTests(unittest.TestCase):
+    def test_back_util_defers_blessed_flag_replace_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back import back_util
+
+        self.assertIsNone(back_util._blessed_flag_replace_service_instance)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)

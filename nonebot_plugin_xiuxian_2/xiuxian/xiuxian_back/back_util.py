@@ -28,7 +28,7 @@ _cultivation_item_service_instance = None
 breakthrough_rate_item_service = BreakthroughRateItemService(get_paths().game_db)
 recovery_item_service = RecoveryItemService(get_paths().game_db)
 permanent_atk_item_service = PermanentAtkItemService(get_paths().game_db)
-blessed_flag_replace_service = BlessedFlagReplaceService(get_paths().game_db, get_paths().player_db)
+_blessed_flag_replace_service_instance = None
 ADDED_RANKS = get_added_ranks()
 
 def _cultivation_item_service():
@@ -36,6 +36,14 @@ def _cultivation_item_service():
     if _cultivation_item_service_instance is None:
         _cultivation_item_service_instance = CultivationItemService(get_paths().game_db)
     return _cultivation_item_service_instance
+
+def _blessed_flag_replace_service():
+    global _blessed_flag_replace_service_instance
+    if _blessed_flag_replace_service_instance is None:
+        _blessed_flag_replace_service_instance = BlessedFlagReplaceService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _blessed_flag_replace_service_instance
 
 sign = lambda x: (x > 0) - (x < 0)
 YAOCAIINFOMSG = {
@@ -1115,7 +1123,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
     item_info = items.get_data_by_item_id(goods_id)
     user_buff_data = UserBuffDate(user_id).BuffInfo
     mix_elixir_info = get_player_info(user_id, "mix_elixir_info") or {}
-    result = blessed_flag_replace_service.replace(
+    result = _blessed_flag_replace_service().replace(
         f"blessed-flag:{user_id}:{goods_id}:{datetime.now().timestamp()}",
         user_id, goods_id, item_info['level'], item_info['药材速度'],
         expected_level=int(user_buff_data['blessed_spot']),
