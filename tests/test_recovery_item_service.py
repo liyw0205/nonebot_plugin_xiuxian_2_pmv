@@ -15,6 +15,11 @@ from tests.test_db_backend import db_backend
 
 
 class RecoveryItemServiceTests(unittest.TestCase):
+    def test_back_util_defers_recovery_item_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back import back_util
+
+        self.assertIsNone(back_util._recovery_item_service_instance)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "recovery-item.sqlite3"

@@ -839,7 +839,7 @@ class SourceQualityTests(unittest.TestCase):
         end = utility_source.index('elif goods_info[\'buff_type\'] == "atk_buff"', start)
         command = utility_source[start:end]
 
-        self.assertGreaterEqual(command.count("recovery_item_service.apply("), 4)
+        self.assertGreaterEqual(command.count("_recovery_item_service().apply("), 4)
         self.assertNotIn("sql_message.update_user_hp_mp(", command)
         self.assertNotIn("sql_message.update_user_hp(", command)
         self.assertNotIn("sql_message.update_user_stamina(", command)

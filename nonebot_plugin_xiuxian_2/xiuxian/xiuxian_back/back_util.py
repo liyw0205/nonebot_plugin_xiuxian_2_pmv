@@ -26,7 +26,7 @@ items = Items()
 sql_message = XiuxianDateManage()
 _cultivation_item_service_instance = None
 _breakthrough_rate_item_service_instance = None
-recovery_item_service = RecoveryItemService(get_paths().game_db)
+_recovery_item_service_instance = None
 permanent_atk_item_service = PermanentAtkItemService(get_paths().game_db)
 _blessed_flag_replace_service_instance = None
 ADDED_RANKS = get_added_ranks()
@@ -52,6 +52,12 @@ def _breakthrough_rate_item_service():
             get_paths().game_db
         )
     return _breakthrough_rate_item_service_instance
+
+def _recovery_item_service():
+    global _recovery_item_service_instance
+    if _recovery_item_service_instance is None:
+        _recovery_item_service_instance = RecoveryItemService(get_paths().game_db)
+    return _recovery_item_service_instance
 
 sign = lambda x: (x > 0) - (x < 0)
 YAOCAIINFOMSG = {
@@ -950,7 +956,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
                     new_mp = user_max_mp
                 else:
                     new_mp = user_info['mp'] + recover_mp
-                result = recovery_item_service.apply(
+                result = _recovery_item_service().apply(
                     operation_id or f"elixir-recovery:{user_id}:{goods_id}:{datetime.now().timestamp()}",
                     user_id,
                     goods_id,
@@ -985,7 +991,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
                         new_mp = user_max_mp
                     else:
                         new_mp = user_info['mp'] + recover_mp
-                    result = recovery_item_service.apply(
+                    result = _recovery_item_service().apply(
                         operation_id or f"elixir-recovery:{user_id}:{goods_id}:{datetime.now().timestamp()}",
                         user_id,
                         goods_id,
@@ -1012,7 +1018,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
         else:
             recover_stamina = max(1, int(max_stamina * goods_info['buff'] * num))
             real_recover = min(recover_stamina, max_stamina - current_stamina)
-            result = recovery_item_service.apply(
+            result = _recovery_item_service().apply(
                 operation_id or f"elixir-recovery:{user_id}:{goods_id}:{datetime.now().timestamp()}",
                 user_id,
                 goods_id,
@@ -1035,7 +1041,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
             if user_info['hp'] == user_max_hp and user_info['mp'] == user_max_mp:
                 msg = f"道友的状态是满的，用不了哦！"
             else:
-                result = recovery_item_service.apply(
+                result = _recovery_item_service().apply(
                     operation_id or f"elixir-recovery:{user_id}:{goods_id}:{datetime.now().timestamp()}",
                     user_id,
                     goods_id,
@@ -1056,7 +1062,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
                 if user_info['hp'] == user_max_hp and user_info['mp'] == user_max_mp:
                     msg = f"道友的状态是满的，用不了哦！"
                 else:
-                    result = recovery_item_service.apply(
+                    result = _recovery_item_service().apply(
                         operation_id or f"elixir-recovery:{user_id}:{goods_id}:{datetime.now().timestamp()}",
                         user_id,
                         goods_id,
