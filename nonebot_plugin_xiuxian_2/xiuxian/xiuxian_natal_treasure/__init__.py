@@ -50,7 +50,7 @@ sql_message = XiuxianDateManage()
 natal_training_service = NatalTrainingService(get_paths().game_db, get_paths().player_db)
 natal_effect_upgrade_service = EffectUpgradeService(get_paths().game_db, get_paths().player_db)
 natal_engraving_service = EngravingService(get_paths().game_db, get_paths().player_db)
-natal_forget_service = ForgetEffectService(get_paths().game_db, get_paths().player_db)
+_natal_forget_service_instance = None
 _natal_reawaken_service_instance = None
 natal_awaken_service = AwakenService(get_paths().player_db)
 runtime_ids = UUIDGenerator()
@@ -63,6 +63,15 @@ def _natal_reawaken_service():
             get_paths().game_db, get_paths().player_db
         )
     return _natal_reawaken_service_instance
+
+
+def _natal_forget_service():
+    global _natal_forget_service_instance
+    if _natal_forget_service_instance is None:
+        _natal_forget_service_instance = ForgetEffectService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _natal_forget_service_instance
 
 
 def _natal_choice_seed(operation_id: str) -> int:
@@ -581,7 +590,7 @@ async def natal_forget_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
     mysterious_scripture_info = items.get_data_by_item_id(MYSTERIOUS_SCRIPTURE_ID)
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"natal-forget:{event_id}:{user_id}" if event_id else f"natal-forget:{user_id}:{runtime_ids.new_id()}"
-    forgotten = natal_forget_service.forget(
+    forgotten = _natal_forget_service().forget(
         operation_id, user_id, effect_type_to_forget.value,
         MYSTERIOUS_SCRIPTURE_ID, mysterious_scripture_info["name"],
         mysterious_scripture_info["type"], scripture_cost,

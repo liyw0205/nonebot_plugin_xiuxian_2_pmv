@@ -1433,7 +1433,7 @@ class SourceQualityTests(unittest.TestCase):
         source = (natal_root / "__init__.py").read_text(encoding="utf-8")
         start = source.index("@natal_forget.handle")
         handler = source[start:source.index("natal_help = on_command", start)]
-        self.assertIn("natal_forget_service.forget(", handler)
+        self.assertIn("_natal_forget_service().forget(", handler)
         self.assertNotIn("nt.forget_effect(", handler)
         self.assertNotIn("sql_message.update_back_j(", handler)
         self.assertNotIn("sql_message.send_back(", handler)
