@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import importlib
 from pathlib import Path
 
 import nonebot
@@ -12,6 +13,29 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_mixelixir.transaction_service impo
     MixelixirHarvestLevelUpgradeService,
 )
 from tests.test_db_backend import db_backend
+
+
+def test_mixelixir_facade_defers_harvest_level_upgrade_service_construction():
+    mixelixir = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_mixelixir"
+    )
+    assert mixelixir._mixelixir_harvest_level_upgrade_service_instance is None
+
+
+def test_mixelixir_harvest_level_upgrade_uses_lazy_dual_database_service():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_mixelixir/__init__.py"
+    ).read_text(encoding="utf-8")
+    handler = source[
+        source.index("@mix_elixir_sqdj_up.handle"):
+        source.index("@mix_elixir_dykh_up.handle")
+    ]
+    assert "_mixelixir_harvest_level_upgrade_service_instance = None" in source
+    assert "def _mixelixir_harvest_level_upgrade_service(" in source
+    assert "get_paths().game_db, get_paths().player_db" in source
+    assert "_mixelixir_harvest_level_upgrade_service().get_result(" in handler
+    assert "_mixelixir_harvest_level_upgrade_service().upgrade(" in handler
+    assert "mixelixir_harvest_level_upgrade_service.upgrade(" not in handler
 
 
 class MixelixirHarvestLevelUpgradeTests(unittest.TestCase):
