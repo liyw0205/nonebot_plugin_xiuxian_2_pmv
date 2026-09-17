@@ -47,12 +47,21 @@ scheduler = require("nonebot_plugin_apscheduler").scheduler
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
 items = Items()
-demon_claim_service = DemonClaimService(get_paths().game_db, get_paths().player_db)
+_demon_claim_service_instance = None
 demon_claim_application = DemonClaimApplication(
     get_paths().game_db,
     get_paths().player_db,
     repository=LegacyWorldEventClaimRepository(get_paths().game_db, get_paths().player_db),
 )
+
+
+def _demon_claim_service():
+    global _demon_claim_service_instance
+    if _demon_claim_service_instance is None:
+        _demon_claim_service_instance = DemonClaimService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _demon_claim_service_instance
 demon_attack_settlement_service = DemonAttackSettlementService(get_paths().player_db)
 demon_event_lifecycle_service = DemonEventLifecycleService(get_paths().player_db)
 demon_wave_refresh_service = DemonWaveRefreshService(get_paths().player_db)
@@ -1480,7 +1489,7 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             if event_message_id
             else ""
         )
-        prior_claim = demon_claim_service.get_result(claim_op_preview) if claim_op_preview else None
+        prior_claim = _demon_claim_service().get_result(claim_op_preview) if claim_op_preview else None
         already_claimed = _has_user_claimed(claimed, user_id, claim_key) if not no_reward_event else False
         if prior_claim is not None and prior_claim.succeeded:
             # force fallthrough to replay path by clearing already_claimed gate via marker
@@ -1543,8 +1552,6 @@ async def claim_demon_reward_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         if event_message_id
         else f"demon-claim:{claim_event_id}:{user_id}:{runtime_ids.new_id()}"
     )
-    # Legacy facade call: demon_claim_service.claim(...) remains documented for
-    # source-quality checks; the application owns the actual command write path.
     claim_outcome = demon_claim_application.claim(
         operation_id=operation_id,
         event_key=EVENT_KEY,

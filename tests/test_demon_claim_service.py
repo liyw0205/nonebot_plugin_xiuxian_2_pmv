@@ -7,6 +7,14 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.transaction_service i
 from tests.test_db_backend import db_backend
 
 class DemonClaimServiceTests(unittest.TestCase):
+    def test_world_events_facade_defers_claim_service_construction(self):
+        import importlib
+
+        world_events = importlib.import_module(
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events"
+        )
+        self.assertIsNone(world_events._demon_claim_service_instance)
+
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory(); root=Path(self.tmp.name); self.g=root/'g.db'; self.p=root/'p.db'; self.claimed={}
         with db_backend.transaction(self.g) as c:

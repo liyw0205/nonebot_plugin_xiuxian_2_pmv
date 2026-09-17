@@ -1797,7 +1797,7 @@ class SourceQualityTests(unittest.TestCase):
         source = (root / "__init__.py").read_text(encoding="utf-8")
         start = source.index("@claim_demon_reward.handle")
         handler = source[start:]
-        self.assertIn("demon_claim_service.claim(", handler)
+        self.assertIn("_demon_claim_service().get_result(", handler)
         self.assertNotIn("claimed[claim_key] = True", handler)
         self.assertNotIn("sql_message.update_ls(", handler)
         self.assertNotIn("sql_message.update_exp(", handler)
@@ -1805,6 +1805,10 @@ class SourceQualityTests(unittest.TestCase):
         service = (root / "demon_claim_service.py").read_text(encoding="utf-8")
         self.assertIn("ATTACH DATABASE", service)
         self.assertIn("BEGIN IMMEDIATE", service)
+        self.assertIn("_demon_claim_service_instance = None", source)
+        self.assertIn("def _demon_claim_service(", source)
+        self.assertIn("demon_claim_application.claim(", handler)
+        self.assertNotIn("demon_claim_service.claim(", handler)
 
     def test_tower_purchase_uses_cross_database_transaction(self) -> None:
         tower_root = SOURCE_ROOT / "xiuxian" / "xiuxian_tower"
