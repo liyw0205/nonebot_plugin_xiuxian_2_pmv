@@ -72,7 +72,7 @@ cache_help = {}
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
-blessed_spot_service = BlessedSpotService(get_paths().game_db, get_paths().player_db)
+_blessed_spot_service_instance = None
 closing_settlement_service = ClosingSettlementService(get_paths().game_db)
 normal_training_lifecycle_service = NormalTrainingLifecycleService(get_paths().game_db, get_paths().player_db)
 normal_pvp_settlement_service = NormalPvpSettlementService(get_paths().game_db, get_paths().player_db)
@@ -80,6 +80,15 @@ stone_training_settlement_service = StoneTrainingSettlementService(get_paths().g
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
+
+
+def _blessed_spot_service():
+    global _blessed_spot_service_instance
+    if _blessed_spot_service_instance is None:
+        _blessed_spot_service_instance = BlessedSpotService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _blessed_spot_service_instance
 
 def _blessed_spot_operation_id(event, action, user_id):
     event_id = str(
@@ -178,7 +187,7 @@ async def blessed_spot_creat_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     default_name = f"{user_info['user_name']}道友的家"
     harvest_time = runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')
     # 先走 operation，避免已拥有洞天福地时同事件重放被前置拦截。
-    result = blessed_spot_service.open(
+    result = _blessed_spot_service().open(
         _blessed_spot_operation_id(event, "open", user_id),
         user_id,
         BLESSEDSPOTCOST,
@@ -290,7 +299,7 @@ async def ling_tian_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         if int(user_info['stone']) < cost:
             msg = f"本次开垦需要灵石：{cost}，道友的灵石不足！"
         else:
-            result = blessed_spot_service.upgrade_field(
+            result = _blessed_spot_service().upgrade_field(
                 _blessed_spot_operation_id(event, "upgrade", user_id),
                 user_id,
                 now_num,
@@ -327,7 +336,7 @@ async def blessed_spot_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     if len(arg) > 9:
         msg = f"洞天福地的名字不可大于9位,请重新命名"
     else:
-        result = blessed_spot_service.rename(
+        result = _blessed_spot_service().rename(
             _blessed_spot_operation_id(event, "rename", user_id),
             user_id,
             str(user_info.get("blessed_spot_name", "") or ""),
