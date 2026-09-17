@@ -94,7 +94,7 @@ _admin_level_change_service_instance = None
 admin_root_change_service = AdminRootChangeService(get_paths().game_db)
 _admin_exp_adjustment_service_instance = None
 admin_asset_application = AdminAssetApplication(get_paths().game_db)
-admin_item_destroy_service = AdminItemDestroyService(get_paths().game_db)
+_admin_item_destroy_service_instance = None
 _admin_item_batch_grant_service_instance = None
 admin_accessory_adjustment_service = AdminAccessoryAdjustmentService(
     get_paths().game_db, get_paths().player_db
@@ -139,6 +139,13 @@ def _admin_item_batch_grant_service():
     if _admin_item_batch_grant_service_instance is None:
         _admin_item_batch_grant_service_instance = AdminItemBatchGrantService(get_paths().game_db)
     return _admin_item_batch_grant_service_instance
+
+
+def _admin_item_destroy_service():
+    global _admin_item_destroy_service_instance
+    if _admin_item_destroy_service_instance is None:
+        _admin_item_destroy_service_instance = AdminItemDestroyService(get_paths().game_db)
+    return _admin_item_destroy_service_instance
 
 
 def _admin_operation_id(event, action: str, user_id: str) -> str:
@@ -1261,7 +1268,7 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
                 await handle_send(bot, event, f"玩家 {target} 没有 {item_info['name']}！")
                 await hmll.finish()
 
-            result = admin_item_destroy_service.destroy(
+            result = _admin_item_destroy_service().destroy(
                 _admin_operation_id(event, "item-destroy", user_id),
                 str(get_user_id(event) or "unknown"),
                 user_id,
@@ -1329,7 +1336,7 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await handle_send(bot, event, f"您没有 {item_info['name']}！")
             await hmll.finish()
 
-        result = admin_item_destroy_service.destroy(
+        result = _admin_item_destroy_service().destroy(
             _admin_operation_id(event, "item-destroy", self_user_id),
             str(get_user_id(event) or "unknown"),
             self_user_id,

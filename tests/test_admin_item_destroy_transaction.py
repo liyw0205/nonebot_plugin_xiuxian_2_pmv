@@ -14,6 +14,11 @@ from tests.test_db_backend import db_backend
 
 
 class AdminItemDestroyTransactionTests(unittest.TestCase):
+    def test_admin_facade_defers_item_destroy_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_admin
+
+        self.assertIsNone(xiuxian_admin._admin_item_destroy_service_instance)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.database = Path(self.temp.name) / "game.db"
@@ -103,7 +108,7 @@ class AdminItemDestroyTransactionTests(unittest.TestCase):
             Path(__file__).parents[1]
             / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
         ).read_text(encoding="utf-8")
-        self.assertGreaterEqual(source.count("admin_item_destroy_service.destroy("), 2)
+        self.assertGreaterEqual(source.count("_admin_item_destroy_service().destroy("), 2)
         self.assertGreaterEqual(source.count("_destroy_admin_accessory("), 3)
 
 
