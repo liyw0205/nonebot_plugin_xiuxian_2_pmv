@@ -37,7 +37,7 @@ from .transaction_service import InfiltrateSuccessService
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
 items = Items()
-dongfu_expansion_service = DongfuExpansionService(get_paths().game_db, get_paths().player_db)
+_dongfu_expansion_service_instance = None
 dongfu_plant_service = DongfuPlantService(get_paths().game_db, get_paths().player_db)
 dongfu_accelerate_service = DongfuAccelerateService(get_paths().game_db, get_paths().player_db)
 dongfu_patrol_service = DongfuPatrolService(get_paths().game_db, get_paths().player_db)
@@ -51,6 +51,15 @@ dongfu_application = DongfuApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
 runtime_random = SystemRandom()
 runtime_clock = SystemClock()
+
+
+def _dongfu_expansion_service():
+    global _dongfu_expansion_service_instance
+    if _dongfu_expansion_service_instance is None:
+        _dongfu_expansion_service_instance = DongfuExpansionService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _dongfu_expansion_service_instance
 
 
 def _run_dongfu_action(action, operation_id, user_id, call, **payload):
@@ -1227,7 +1236,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     operation_id = _dongfu_expansion_operation_id(event, uid)
     result = _run_dongfu_action(
         "expand", operation_id, uid,
-        call=lambda: dongfu_expansion_service.expand(
+        call=lambda: _dongfu_expansion_service().expand(
             operation_id, uid, deed_id=DONGFU_ITEM_DEED,
             base_plot_count=DONGFU_PLOT_COUNT, max_plot_count=DONGFU_PLOT_MAX,
             stone_cost_per_level=20000000,
