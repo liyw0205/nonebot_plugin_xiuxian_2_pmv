@@ -51,7 +51,7 @@ from .riftmake import (
 sql_message = XiuxianDateManage()  # sql类
 rift_entry_service = RiftEntryService(get_paths().game_db)
 _rift_termination_service_instance = None
-rift_key_event_settlement_service = RiftKeyEventSettlementService(get_paths().game_db, get_paths().player_db)
+_rift_key_event_settlement_service_instance = None
 rift_demon_token_battle_settlement_service = RiftDemonTokenBattleSettlementService(
     get_paths().game_db, get_paths().player_db
 )
@@ -72,6 +72,15 @@ def _rift_termination_service():
     if _rift_termination_service_instance is None:
         _rift_termination_service_instance = RiftTerminationService(get_paths().game_db)
     return _rift_termination_service_instance
+
+
+def _rift_key_event_settlement_service():
+    global _rift_key_event_settlement_service_instance
+    if _rift_key_event_settlement_service_instance is None:
+        _rift_key_event_settlement_service_instance = RiftKeyEventSettlementService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _rift_key_event_settlement_service_instance
 
 
 def _event_id(event) -> str:
@@ -900,7 +909,7 @@ async def use_rift_key(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     event_id = _event_id(event)
     operation_id = f"rift-key-event:{event_id or runtime_ids.new_id()}:{user_id}"
     if event_id:
-        replay = rift_key_event_settlement_service.replay(operation_id)
+        replay = _rift_key_event_settlement_service().replay(operation_id)
         if replay is not None:
             await handle_send(bot, event, replay.message)
             return
@@ -934,7 +943,7 @@ async def use_rift_key(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             int(outcome.get("statistics", {}).get("秘境次数", 0)) + 1
         )
         outcome["message"] = f"{outcome['message']}{progress_msg}"
-        result = rift_key_event_settlement_service.settle(
+        result = _rift_key_event_settlement_service().settle(
             operation_id, user_id, item_id, rift_info,
             {
                 key: int(user_info.get(key, 0))
