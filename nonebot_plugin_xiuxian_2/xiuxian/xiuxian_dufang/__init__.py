@@ -35,8 +35,17 @@ runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
 player_data_manager = PlayerDataManager()
-dufang_share_service = DufangShareSettlementService(get_paths().game_db, get_paths().player_db)
+_dufang_share_service_instance = None
 dufang_application = DufangApplication(get_paths().game_db, get_paths().player_db)
+
+
+def _dufang_share_service():
+    global _dufang_share_service_instance
+    if _dufang_share_service_instance is None:
+        _dufang_share_service_instance = DufangShareSettlementService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _dufang_share_service_instance
 
 
 def _run_dufang_action(action, operation_id, user_id, call, **payload):
@@ -291,7 +300,7 @@ async def handle_shared_event(
     settled_at = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")
     settlement = _run_dufang_action(
         "share_settle", operation_id, user_id,
-        call=lambda: dufang_share_service.settle(
+        call=lambda: _dufang_share_service().settle(
             operation_id, user_id, event_type, event_data["title"], event_data["desc"],
             effect_amount, int(cost_bonus * 100), recipients, settled_at,
         ),

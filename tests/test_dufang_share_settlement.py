@@ -15,6 +15,11 @@ from tests.test_db_backend import db_backend
 
 
 class DufangShareSettlementTests(unittest.TestCase):
+    def test_dufang_facade_defers_share_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dufang
+
+        self.assertIsNone(xiuxian_dufang._dufang_share_service_instance)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         root = Path(self.temp.name)
@@ -220,7 +225,7 @@ class DufangShareSettlementTests(unittest.TestCase):
         handler = source.split("async def handle_shared_event", 1)[1].split(
             "# 鉴石信息", 1
         )[0]
-        self.assertIn("dufang_share_service.settle(", handler)
+        self.assertIn("_dufang_share_service().settle(", handler)
         self.assertNotIn("sql_message.update_ls(", handler)
         self.assertNotIn("save_unseal_data(", handler)
         unseal_share = source.split("# 处理共享事件", 2)[2].split(
