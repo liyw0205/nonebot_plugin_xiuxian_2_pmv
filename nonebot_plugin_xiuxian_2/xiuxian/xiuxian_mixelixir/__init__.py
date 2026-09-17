@@ -54,7 +54,7 @@ mixelixir_harvest_level_upgrade_service = MixelixirHarvestLevelUpgradeService(
 )
 _mixelixir_recipe_service_instance = None
 _mixelixir_refine_cost_service_instance = None
-mixelixir_refine_reward_service = MixelixirRefineRewardService(get_paths().game_db, get_paths().player_db)
+_mixelixir_refine_reward_service_instance = None
 
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 items = Items()
@@ -79,6 +79,15 @@ def _mixelixir_refine_cost_service():
             get_paths().game_db
         )
     return _mixelixir_refine_cost_service_instance
+
+
+def _mixelixir_refine_reward_service():
+    global _mixelixir_refine_reward_service_instance
+    if _mixelixir_refine_reward_service_instance is None:
+        _mixelixir_refine_reward_service_instance = MixelixirRefineRewardService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _mixelixir_refine_reward_service_instance
 
 
 mix_elixir = on_command("炼丹", priority=17, block=True)
@@ -651,14 +660,14 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
 
             # 优先补领此前同配方已扣材未发的任务（不依赖保存表）
             event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-            ready_task_id = mixelixir_refine_reward_service.latest_ready_task(user_id, recipe_key)
+            ready_task_id = _mixelixir_refine_reward_service().latest_ready_task(user_id, recipe_key)
             if ready_task_id:
                 claim_operation = (
                     f"mixelixir-reward-recover:{event_id}:{user_id}:{ready_task_id}"
                     if event_id
                     else f"mixelixir-reward-recover:{user_id}:{ready_task_id}:{runtime_ids.new_id()}"
                 )
-                claimed = mixelixir_refine_reward_service.claim(
+                claimed = _mixelixir_refine_reward_service().claim(
                     claim_operation, user_id, ready_task_id, XiuConfig().max_goods_num
                 )
                 if claimed.succeeded:
@@ -733,7 +742,7 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                 )
                 if started.status == "duplicate":
                     claim_operation = f"mixelixir-reward:{event_id}:{user_id}" if event_id else f"mixelixir-reward:{user_id}:{runtime_ids.new_id()}"
-                    claimed = mixelixir_refine_reward_service.claim(
+                    claimed = _mixelixir_refine_reward_service().claim(
                         claim_operation, user_id, started.task_id, XiuConfig().max_goods_num
                     )
                     if claimed.succeeded:
@@ -747,16 +756,16 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                     # statuses: "item_insufficient", "state_changed", "user_missing", "duplicate"
                     # )
                     # 扣材失败时再尝试补领任意 ready（兼容旧任务）
-                    ready_task_id = mixelixir_refine_reward_service.latest_ready_task(
+                    ready_task_id = _mixelixir_refine_reward_service().latest_ready_task(
                         user_id, recipe_key
-                    ) or mixelixir_refine_reward_service.latest_ready_task(user_id)
+                    ) or _mixelixir_refine_reward_service().latest_ready_task(user_id)
                     if ready_task_id:
                         claim_operation = (
                             f"mixelixir-reward-recover:{event_id}:{user_id}:{ready_task_id}"
                             if event_id
                             else f"mixelixir-reward-recover:{user_id}:{ready_task_id}:{runtime_ids.new_id()}"
                         )
-                        claimed = mixelixir_refine_reward_service.claim(
+                        claimed = _mixelixir_refine_reward_service().claim(
                             claim_operation, user_id, ready_task_id, XiuConfig().max_goods_num
                         )
                         if claimed.succeeded:
@@ -784,7 +793,7 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                     await mix_make.finish()
 
                 claim_operation = f"mixelixir-reward:{event_id}:{user_id}" if event_id else f"mixelixir-reward:{user_id}:{runtime_ids.new_id()}"
-                claimed = mixelixir_refine_reward_service.claim(
+                claimed = _mixelixir_refine_reward_service().claim(
                     claim_operation, user_id, started.task_id, XiuConfig().max_goods_num
                 )
                 if claimed.status == "duplicate":
