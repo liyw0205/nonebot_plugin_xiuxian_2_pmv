@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib
 import sqlite3
 from pathlib import Path
 
@@ -12,6 +13,13 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_boss.transaction_service import (
     WorldBossPunishmentService,
 )
+
+
+def test_boss_facade_defers_punishment_service_construction():
+    world_boss = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_boss"
+    )
+    assert world_boss._world_boss_punishment_service_instance is None
 
 
 BOSSES = [
@@ -184,3 +192,11 @@ def test_single_and_all_handlers_share_service_without_direct_save():
         assert ".remove(" not in section
     assert '"single"' in single
     assert '"all"' in delete_all
+    helper = source[
+        source.index("def _punish_world_bosses(") : source.index("async def boss_delete_(")
+    ]
+    assert "_world_boss_punishment_service().get_result(" in helper
+    assert "_world_boss_punishment_service().snapshot()" in helper
+    assert "_world_boss_punishment_service().punish(" in helper
+    assert "_world_boss_punishment_service_instance = None" in source
+    assert "def _world_boss_punishment_service(" in source

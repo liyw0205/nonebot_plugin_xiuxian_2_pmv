@@ -1861,6 +1861,17 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("def _world_boss_full_refresh_service(", source)
         self.assertNotIn("world_boss_full_refresh_service.refresh(", helper)
 
+    def test_world_boss_punishment_uses_lazy_service(self) -> None:
+        root = SOURCE_ROOT / "xiuxian" / "xiuxian_boss"
+        source = (root / "__init__.py").read_text(encoding="utf-8")
+        helper = source[source.index("def _punish_world_bosses"):source.index("async def boss_delete_")]
+        self.assertIn("_world_boss_punishment_service().get_result(", helper)
+        self.assertIn("_world_boss_punishment_service().snapshot(", helper)
+        self.assertIn("_world_boss_punishment_service().punish(", helper)
+        self.assertIn("_world_boss_punishment_service_instance = None", source)
+        self.assertIn("def _world_boss_punishment_service(", source)
+        self.assertNotIn("world_boss_punishment_service.punish(", helper)
+
     def test_tower_purchase_uses_cross_database_transaction(self) -> None:
         tower_root = SOURCE_ROOT / "xiuxian" / "xiuxian_tower"
         source = (tower_root / "__init__.py").read_text(encoding="utf-8")

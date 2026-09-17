@@ -127,7 +127,16 @@ def _world_boss_full_refresh_service():
             get_boss_config,
         )
     return _world_boss_full_refresh_service_instance
-world_boss_punishment_service = WorldBossPunishmentService(get_paths().player_db)
+_world_boss_punishment_service_instance = None
+
+
+def _world_boss_punishment_service():
+    global _world_boss_punishment_service_instance
+    if _world_boss_punishment_service_instance is None:
+        _world_boss_punishment_service_instance = WorldBossPunishmentService(
+            get_paths().player_db
+        )
+    return _world_boss_punishment_service_instance
 _world_boss_daily_limit_reset_service_instance = None
 BOSSDROPSPATH = get_paths().data / "boss掉落物"
 
@@ -275,14 +284,14 @@ def _punish_world_bosses(
     action: str,
     boss_number: int | None = None,
 ):
-    result = world_boss_punishment_service.get_result(operation_id)
+    result = _world_boss_punishment_service().get_result(operation_id)
     if result is not None:
-        current_bosses, _ = world_boss_punishment_service.snapshot()
+        current_bosses, _ = _world_boss_punishment_service().snapshot()
         _sync_world_boss_cache(current_bosses)
         return result
 
-    expected_bosses, expected_revision = world_boss_punishment_service.snapshot()
-    result = world_boss_punishment_service.punish(
+    expected_bosses, expected_revision = _world_boss_punishment_service().snapshot()
+    result = _world_boss_punishment_service().punish(
         operation_id=operation_id,
         action=action,
         expected_revision=expected_revision,
