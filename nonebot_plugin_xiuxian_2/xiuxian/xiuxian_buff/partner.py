@@ -78,7 +78,7 @@ _partner_token_service_instance = None
 _partner_bind_service_instance = None
 _partner_unbind_service_instance = None
 _partner_breakthrough_service_instance = None
-mentor_bind_service = MentorBindService(get_paths().game_db, get_paths().player_db)
+_mentor_bind_service_instance = None
 mentor_application_service = MentorApplicationService(get_paths().player_db)
 partner_invite_service = PartnerInviteService(get_paths().player_db)
 partner_protection_service = PartnerProtectionService(get_paths().player_db)
@@ -165,6 +165,15 @@ def _partner_breakthrough_service():
             get_paths().game_db, get_paths().player_db
         )
     return _partner_breakthrough_service_instance
+
+
+def _mentor_bind_service():
+    global _mentor_bind_service_instance
+    if _mentor_bind_service_instance is None:
+        _mentor_bind_service_instance = MentorBindService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _mentor_bind_service_instance
 
 
 TITLE_JSONPATH = get_paths().data / "修炼物品" / "称号.json"
@@ -1886,7 +1895,7 @@ async def agree_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     if apprentice_id:
         apprentice_id = str(apprentice_id)
         operation_id = _relation_operation_id(event, "mentor-bind", mentor_id)
-        replayed = mentor_bind_service.replay(
+        replayed = _mentor_bind_service().replay(
             operation_id, mentor_id, apprentice_id
         )
         if replayed is not None:
@@ -1929,7 +1938,7 @@ async def agree_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     invite_data = pending_invites[apprentice_id]
     apprentice_info = sql_message.get_user_real_info(apprentice_id)
     bind_time = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")
-    result = mentor_bind_service.apply(
+    result = _mentor_bind_service().apply(
         operation_id, mentor_id, apprentice_id,
         invite_data["invite_id"], bind_time=bind_time,
         expected_mentor_level=user_info["level"], expected_apprentice_level=apprentice_info["level"],

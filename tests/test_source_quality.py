@@ -2158,11 +2158,11 @@ class SourceQualityTests(unittest.TestCase):
         end = source.index("@reject_mentor.handle", start)
         handler = source[start:end]
         self.assertLess(
-            handler.index("mentor_bind_service.replay("),
+            handler.index("_mentor_bind_service().replay("),
             handler.index("_get_pending_mentor_invites("),
         )
         self.assertIn('event, "mentor-bind", mentor_id', handler)
-        self.assertIn("mentor_bind_service.apply(\n        operation_id", handler)
+        self.assertIn("_mentor_bind_service().apply(\n        operation_id", handler)
 
         send_start = source.index("async def _send_mentor_bind_success")
         send_end = source.index("@agree_mentor.handle", send_start)
