@@ -91,7 +91,7 @@ from . import group_welcome as _group_welcome  # noqa: F401
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
 _admin_level_change_service_instance = None
-admin_root_change_service = AdminRootChangeService(get_paths().game_db)
+_admin_root_change_service_instance = None
 _admin_exp_adjustment_service_instance = None
 admin_asset_application = AdminAssetApplication(get_paths().game_db)
 _admin_item_destroy_service_instance = None
@@ -132,6 +132,13 @@ def _admin_exp_adjustment_service():
     if _admin_exp_adjustment_service_instance is None:
         _admin_exp_adjustment_service_instance = AdminExpAdjustmentService(get_paths().game_db)
     return _admin_exp_adjustment_service_instance
+
+
+def _admin_root_change_service():
+    global _admin_root_change_service_instance
+    if _admin_root_change_service_instance is None:
+        _admin_root_change_service_instance = AdminRootChangeService(get_paths().game_db)
+    return _admin_root_change_service_instance
 
 
 def _admin_item_batch_grant_service():
@@ -791,7 +798,7 @@ async def gmm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, "未找到目标用户（或对方未踏入修仙界）")
         return
 
-    _, new_root_type = admin_root_change_service.root_values(root_id, target_user["user_name"])
+    _, new_root_type = _admin_root_change_service().root_values(root_id, target_user["user_name"])
     root_config = jsondata.root_data()
     if new_root_type == "命运道果":
         new_root_rate = float(root_config["永恒道果"]["type_speeds"])
@@ -807,7 +814,7 @@ async def gmm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                 break
     else:
         new_root_rate = float(root_config[new_root_type]["type_speeds"])
-    result = admin_root_change_service.change(
+    result = _admin_root_change_service().change(
         _admin_operation_id(event, "root-change", str(target_qq)),
         str(get_user_id(event) or "unknown"),
         target_qq,

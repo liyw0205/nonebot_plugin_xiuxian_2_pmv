@@ -1882,6 +1882,15 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("_activity_config_event_service().replace(", source)
         self.assertNotIn("activity_config_event_service.replace(", source)
 
+    def test_admin_root_change_uses_lazy_service(self) -> None:
+        root = SOURCE_ROOT / "xiuxian" / "xiuxian_admin"
+        source = (root / "__init__.py").read_text(encoding="utf-8")
+        self.assertIn("_admin_root_change_service_instance = None", source)
+        self.assertIn("def _admin_root_change_service(", source)
+        self.assertIn("_admin_root_change_service().root_values(", source)
+        self.assertIn("_admin_root_change_service().change(", source)
+        self.assertNotIn("admin_root_change_service.change(", source)
+
     def test_tower_purchase_uses_cross_database_transaction(self) -> None:
         tower_root = SOURCE_ROOT / "xiuxian" / "xiuxian_tower"
         source = (tower_root / "__init__.py").read_text(encoding="utf-8")

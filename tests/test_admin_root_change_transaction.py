@@ -1,4 +1,5 @@
 import sqlite3
+import importlib
 
 import nonebot
 import pytest
@@ -8,6 +9,13 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin.transaction_service import (
     AdminRootChangeService,
 )
+
+
+def test_admin_facade_defers_root_change_service_construction():
+    admin = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin"
+    )
+    assert admin._admin_root_change_service_instance is None
 
 
 OLD = ("金灵根", "天灵根", 0, "练气境圆满", 10000, 31200, "青云")
@@ -80,3 +88,17 @@ def test_fate_root_uses_snapshot_name_and_operation_failure_rolls_back(tmp_path)
     ).fetchone() == OLD
     assert conn.execute("SELECT COUNT(*) FROM admin_root_change_operations").fetchone()[0] == 0
     conn.close()
+
+
+def test_admin_root_change_entry_uses_lazy_service():
+    source = open(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py",
+        encoding="utf-8",
+    ).read()
+    handler = source[source.index("async def gmm_command_"):source.index("@cz.handle", source.index("async def gmm_command_"))]
+    assert "_admin_root_change_service().root_values(" in handler
+    assert "_admin_root_change_service().change(" in handler
+    assert "_admin_root_change_service_instance = None" in source
+    assert "def _admin_root_change_service(" in source
+    assert handler.index("_admin_root_change_service().root_values(") < handler.index("_admin_root_change_service().change(")
+    assert "_admin_operation_id(event, \"root-change\", str(target_qq))" in handler
