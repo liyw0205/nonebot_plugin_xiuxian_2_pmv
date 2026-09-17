@@ -14,6 +14,11 @@ from tests.test_db_backend import db_backend
 
 
 class DungeonTeamTransactionServiceTests(unittest.TestCase):
+    def test_dungeon_facade_defers_team_transaction_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dungeon as dungeon_plugin
+
+        self.assertIsNone(dungeon_plugin._dungeon_team_transaction_service_instance)
+
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "player.sqlite3"

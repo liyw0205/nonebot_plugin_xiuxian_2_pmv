@@ -66,7 +66,7 @@ dungeon_application = DungeonApplication(get_paths().game_db, get_paths().player
 dungeon_ids = UUIDGenerator()
 runtime_clock = SystemClock()
 _dungeon_explore_operation_service_instance = None
-dungeon_team_transaction_service = DungeonTeamTransactionService(get_paths().player_db)
+_dungeon_team_transaction_service_instance = None
 dungeon_team_exit_service = DungeonTeamExitService(get_paths().player_db)
 
 
@@ -77,6 +77,15 @@ def _dungeon_explore_operation_service():
             get_paths().game_db, get_paths().player_db
         )
     return _dungeon_explore_operation_service_instance
+
+
+def _dungeon_team_transaction_service():
+    global _dungeon_team_transaction_service_instance
+    if _dungeon_team_transaction_service_instance is None:
+        _dungeon_team_transaction_service_instance = DungeonTeamTransactionService(
+            get_paths().player_db
+        )
+    return _dungeon_team_transaction_service_instance
 
 
 DUNGEON_SHOP = {
@@ -330,7 +339,7 @@ async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
     user_id = str(user_info['user_id'])
     operation_id = _team_operation_id(event, "create", user_id)
-    replay = dungeon_team_transaction_service.operation_result(operation_id, "create")
+    replay = _dungeon_team_transaction_service().operation_result(operation_id, "create")
     if replay is not None:
         await handle_send(bot, event, _team_mutation_message("create", replay), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
         await create_team_cmd.finish()
@@ -343,7 +352,7 @@ async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
     team_id = f"{group_id or 'private'}_{operation_id.rsplit(':', 2)[-2]}"
     now = runtime_clock.now()
-    result = dungeon_team_transaction_service.create(
+    result = _dungeon_team_transaction_service().create(
         operation_id, team_id, team_name, user_id, group_id,
         now.strftime("%Y-%m-%d %H:%M:%S"), now.timestamp(),
     )
@@ -361,7 +370,7 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
     user_id = str(user_info['user_id'])
     operation_id = _team_operation_id(event, "invite", user_id)
-    replay = dungeon_team_transaction_service.operation_result(operation_id, "invite")
+    replay = _dungeon_team_transaction_service().operation_result(operation_id, "invite")
     if replay is not None:
         await handle_send(bot, event, _team_mutation_message("invite", replay), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
         await invite_team_cmd.finish()
@@ -377,7 +386,7 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
     group_id = str(getattr(event, "group_id", "") or "")
     now = runtime_clock.now().timestamp()
     invite_id = f"{operation_id}:{target_user_id or 'missing'}"
-    result = dungeon_team_transaction_service.invite(
+    result = _dungeon_team_transaction_service().invite(
         operation_id,
         invite_id,
         team_id,
@@ -417,13 +426,13 @@ async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
 
     user_id = str(user_info['user_id'])
     operation_id = _team_operation_id(event, "join", user_id)
-    replay = dungeon_team_transaction_service.operation_result(operation_id, "join")
+    replay = _dungeon_team_transaction_service().operation_result(operation_id, "join")
     if replay is not None:
         await handle_send(bot, event, _team_mutation_message("join", replay), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
         await agree_team_cmd.finish()
 
     now = runtime_clock.now().timestamp()
-    invite = dungeon_team_transaction_service.pending_invite(user_id, now)
+    invite = _dungeon_team_transaction_service().pending_invite(user_id, now)
     invite_id = invite.invite_id if invite else ""
     team_id = invite.team_id if invite else ""
     inviter_id = invite.inviter_id if invite else ""
@@ -431,7 +440,7 @@ async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
     request_group_id = (
         str(event.group_id) if isinstance(event, GroupMessageEvent) else invite_group_id
     )
-    join_result = dungeon_team_transaction_service.join(
+    join_result = _dungeon_team_transaction_service().join(
         operation_id,
         invite_id,
         team_id,
@@ -455,15 +464,15 @@ async def reject_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
     user_id = str(user_info['user_id'])
     operation_id = _team_operation_id(event, "reject", user_id)
-    replay = dungeon_team_transaction_service.operation_result(operation_id, "reject")
+    replay = _dungeon_team_transaction_service().operation_result(operation_id, "reject")
     if replay is not None:
         await handle_send(bot, event, _team_mutation_message("reject", replay), md_type="team", k1="队伍帮助", v1="队伍帮助")
         await reject_team_cmd.finish()
 
     now = runtime_clock.now().timestamp()
-    invite = dungeon_team_transaction_service.pending_invite(user_id, now)
+    invite = _dungeon_team_transaction_service().pending_invite(user_id, now)
     group_id = str(event.group_id) if isinstance(event, GroupMessageEvent) else ""
-    result = dungeon_team_transaction_service.reject(
+    result = _dungeon_team_transaction_service().reject(
         operation_id,
         invite.invite_id if invite else "",
         user_id,
@@ -613,7 +622,7 @@ async def transfer_team_handler(bot: Bot, event: Union[GroupMessageEvent, Privat
 
     user_id = str(user_info['user_id'])
     operation_id = _team_operation_id(event, "transfer", user_id)
-    replay = dungeon_team_transaction_service.operation_result(
+    replay = _dungeon_team_transaction_service().operation_result(
         operation_id, "transfer"
     )
     if replay is not None:
@@ -628,8 +637,8 @@ async def transfer_team_handler(bot: Bot, event: Union[GroupMessageEvent, Privat
             target_user_id = str(target_db_info['user_id'])
     target_user_id = str(target_user_id or "")
     team_id = get_user_team(user_id) or f"missing:{user_id}"
-    snapshot = dungeon_team_transaction_service.snapshot(team_id)
-    result = dungeon_team_transaction_service.transfer(
+    snapshot = _dungeon_team_transaction_service().snapshot(team_id)
+    result = _dungeon_team_transaction_service().transfer(
         operation_id,
         user_id,
         target_user_id,
