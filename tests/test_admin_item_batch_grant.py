@@ -4,6 +4,12 @@ import nonebot
 
 nonebot.init()
 
+
+def test_admin_facade_defers_item_batch_grant_service_construction():
+    from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_admin
+
+    assert xiuxian_admin._admin_item_batch_grant_service_instance is None
+
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin.transaction_service import AdminItemBatchGrantService
 
 

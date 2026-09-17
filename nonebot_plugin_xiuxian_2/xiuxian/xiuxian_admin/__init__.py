@@ -95,7 +95,7 @@ admin_root_change_service = AdminRootChangeService(get_paths().game_db)
 _admin_exp_adjustment_service_instance = None
 admin_asset_application = AdminAssetApplication(get_paths().game_db)
 admin_item_destroy_service = AdminItemDestroyService(get_paths().game_db)
-admin_item_batch_grant_service = AdminItemBatchGrantService(get_paths().game_db)
+_admin_item_batch_grant_service_instance = None
 admin_accessory_adjustment_service = AdminAccessoryAdjustmentService(
     get_paths().game_db, get_paths().player_db
 )
@@ -132,6 +132,13 @@ def _admin_exp_adjustment_service():
     if _admin_exp_adjustment_service_instance is None:
         _admin_exp_adjustment_service_instance = AdminExpAdjustmentService(get_paths().game_db)
     return _admin_exp_adjustment_service_instance
+
+
+def _admin_item_batch_grant_service():
+    global _admin_item_batch_grant_service_instance
+    if _admin_item_batch_grant_service_instance is None:
+        _admin_item_batch_grant_service_instance = AdminItemBatchGrantService(get_paths().game_db)
+    return _admin_item_batch_grant_service_instance
 
 
 def _admin_operation_id(event, action: str, user_id: str) -> str:
@@ -936,7 +943,7 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
 
             def _work():
                 return run_chunked_until_done(
-                    lambda: admin_item_batch_grant_service.grant(
+                    lambda: _admin_item_batch_grant_service().grant(
                         operation_id,
                         operator_id,
                         users,
