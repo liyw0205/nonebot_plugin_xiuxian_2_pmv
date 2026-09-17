@@ -1967,6 +1967,8 @@
 
 2026-09-18 compensation reward claim lazy construction slice：`xiuxian_compensation.common` 不再 module-level 构造 `RewardClaimService`，新增 `_reward_claim_service()` game-db 惰性 getter；普通补偿与兑换码入口、claimed/replay/counter/delete 路径均复用 getter，`_run_compensation_action` 仍从 active service 解析临时数据库，保证 application 与 claim ledger 同库。`BEGIN IMMEDIATE`、reward_claims、usage limit、inventory 上限、definition version、operation replay/conflict 和 rollback 语义保持不变。construction、compensation/invitation、source/architecture 共 204 tests passed，compileall、inventory、diff check通过。
 
+2026-09-18 compensation reward claim lazy construction live safety：提交 `b2f9573c` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260917T182625Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。
