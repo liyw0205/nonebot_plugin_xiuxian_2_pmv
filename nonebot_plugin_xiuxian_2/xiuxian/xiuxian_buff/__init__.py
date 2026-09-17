@@ -76,7 +76,7 @@ _blessed_spot_service_instance = None
 _closing_settlement_service_instance = None
 _normal_training_lifecycle_service_instance = None
 _normal_pvp_settlement_service_instance = None
-stone_training_settlement_service = StoneTrainingSettlementService(get_paths().game_db, get_paths().player_db)
+_stone_training_settlement_service_instance = None
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
@@ -116,6 +116,15 @@ def _normal_pvp_settlement_service():
             get_paths().game_db, get_paths().player_db
         )
     return _normal_pvp_settlement_service_instance
+
+
+def _stone_training_settlement_service():
+    global _stone_training_settlement_service_instance
+    if _stone_training_settlement_service_instance is None:
+        _stone_training_settlement_service_instance = StoneTrainingSettlementService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _stone_training_settlement_service_instance
 
 def _blessed_spot_operation_id(event, action, user_id):
     event_id = str(
@@ -629,7 +638,7 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     level_rate = sql_message.get_root_rate(user_mes['root_type'], user_id)
     realm_rate = jsondata.level_data()[level]["spend"]
     stone_op_id = _stone_training_operation_id(event, user_id)
-    result = stone_training_settlement_service.settle(
+    result = _stone_training_settlement_service().settle(
         stone_op_id, user_id,
         requested_stone=stone_num, expected_exp=use_exp, expected_stone=use_stone,
         exp_cap=max_exp, power_multiplier=level_rate * realm_rate,
