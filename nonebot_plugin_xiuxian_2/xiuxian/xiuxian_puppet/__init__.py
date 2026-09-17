@@ -30,11 +30,7 @@ from ...infrastructure.clock import SystemClock
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 items = Items()
-puppet_harvest_service = PuppetHarvestService(
-    get_paths().game_db,
-    get_paths().player_db,
-    max_goods_num=XiuConfig().max_goods_num,
-)
+_puppet_harvest_service_instance = None
 puppet_application = PuppetApplication(
     get_paths().game_db,
     get_paths().player_db,
@@ -42,6 +38,18 @@ puppet_application = PuppetApplication(
 )
 runtime_ids = UUIDGenerator()
 runtime_clock = SystemClock()
+
+
+def _puppet_harvest_service():
+    global _puppet_harvest_service_instance
+    if _puppet_harvest_service_instance is None:
+        _puppet_harvest_service_instance = PuppetHarvestService(
+            get_paths().game_db,
+            get_paths().player_db,
+            max_goods_num=XiuConfig().max_goods_num,
+        )
+    return _puppet_harvest_service_instance
+
 
 # 引入定时任务
 scheduler = require("nonebot_plugin_apscheduler").scheduler
@@ -214,7 +222,7 @@ async def check_and_harvest(user_id):
             for goods_id, amount in give_dict.items()
         ]
 
-    result = puppet_harvest_service.harvest(
+    result = _puppet_harvest_service().harvest(
         user_id,
         now=runtime_clock.now(),
         time_cost_hours=GETCONFIG['time_cost'],

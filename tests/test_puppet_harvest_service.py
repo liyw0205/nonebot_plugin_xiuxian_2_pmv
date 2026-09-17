@@ -21,6 +21,11 @@ LAST_HARVEST = "2026-07-10 12:00:00"
 
 
 class PuppetHarvestServiceTests(unittest.TestCase):
+    def test_puppet_facade_defers_harvest_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_puppet
+
+        self.assertIsNone(xiuxian_puppet._puppet_harvest_service_instance)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         root = Path(self.temp_dir.name)
