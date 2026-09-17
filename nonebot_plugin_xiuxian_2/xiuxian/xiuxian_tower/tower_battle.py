@@ -13,7 +13,7 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from .tower_data import tower_data
 from .tower_limit import tower_limit
-from .transaction_service import TowerSettlementService, TowerSettlementResult
+from .transaction_service import TowerSettlementResult
 from ...features.tower.application import TowerApplication
 from ...features.tower.repository import TowerPurchaseSqlRepository
 from ...infrastructure.ids import UUIDGenerator
@@ -22,7 +22,6 @@ from ..xiuxian_config import XiuConfig
 
 sql_message = XiuxianDateManage()
 items = Items()
-tower_settlement_service = TowerSettlementService(get_paths().game_db, get_paths().player_db)
 tower_application = TowerApplication(
     get_paths().game_db,
     get_paths().player_db,
@@ -223,7 +222,6 @@ class TowerBattle:
             # 更新积分
             total_score = int(total_score * (1 + sub_buff_integral_buff))
             total_stone = int(total_stone * (1 + sub_buff_stone_buff))
-            # Legacy facade call: tower_settlement_service.settle(...)
             settlement_outcome = tower_application.settle(
                 operation_id=operation_id,
                 user_id=user_id,
@@ -261,7 +259,6 @@ class TowerBattle:
             
             return True, msg
         else:
-            # Legacy facade call: tower_settlement_service.settle(...)
             settlement_outcome = tower_application.settle(
                 operation_id=operation_id,
                 user_id=user_id,
@@ -400,7 +397,6 @@ class TowerBattle:
             # 一次性更新所有数据
             total_score = int(total_score * (1 + sub_buff_integral_buff))
             total_stone = int(total_stone * (1 + sub_buff_stone_buff))
-            # Legacy facade call: tower_settlement_service.settle(...)
             settlement_outcome = tower_application.settle(
                 operation_id=operation_id,
                 user_id=user_id,

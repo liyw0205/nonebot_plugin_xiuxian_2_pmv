@@ -1802,6 +1802,11 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("sql_message.update_exp(", handler)
         self.assertNotIn("sql_message.send_back(", handler)
 
+    def test_tower_battle_does_not_construct_unused_legacy_settlement_service(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_tower" / "tower_battle.py").read_text(encoding="utf-8")
+        self.assertNotIn("TowerSettlementService", source)
+        self.assertNotIn("tower_settlement_service", source)
+
     def test_dungeon_exploration_uses_cross_database_operation_transaction(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_dungeon"
         source = (root / "__init__.py").read_text(encoding="utf-8")
