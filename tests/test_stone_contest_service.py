@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import importlib
 from pathlib import Path
 
 import nonebot
@@ -10,6 +11,25 @@ nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_base.transaction_service import StoneContestService
 from tests.test_db_backend import db_backend
+
+
+def test_base_facade_defers_stone_contest_service_construction():
+    base = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_base"
+    )
+    assert base._stone_contest_service_instance is None
+
+
+def test_stone_theft_handler_uses_lazy_contest_service():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_base/__init__.py"
+    ).read_text(encoding="utf-8")
+    handler = source[source.index("@steal_stone.handle"):source.index("@rob_stone.handle")]
+    assert "_stone_contest_service().replay_theft(" in handler
+    assert "_stone_contest_service().settle_theft(" in handler
+    assert "_stone_contest_service_instance = None" in source
+    assert "def _stone_contest_service(" in source
+    assert "stone_contest_service.replay_theft(" not in source
 
 
 class StoneContestServiceTests(unittest.TestCase):

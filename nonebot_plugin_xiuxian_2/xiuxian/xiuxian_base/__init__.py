@@ -77,7 +77,7 @@ def configure_lottery_application(application: Any) -> None:
 
 _player_rename_service_instance = None
 _stone_gift_service_instance = None
-stone_contest_service = StoneContestService(get_paths().game_db)
+_stone_contest_service_instance = None
 stone_robbery_service = StoneRobberySettlementService(
     get_paths().game_db, get_paths().player_db
 )
@@ -100,6 +100,13 @@ def _player_rename_service():
     if _player_rename_service_instance is None:
         _player_rename_service_instance = PlayerRenameService(get_paths().game_db)
     return _player_rename_service_instance
+
+
+def _stone_contest_service():
+    global _stone_contest_service_instance
+    if _stone_contest_service_instance is None:
+        _stone_contest_service_instance = StoneContestService(get_paths().game_db)
+    return _stone_contest_service_instance
 registration_batcher = RegistrationBatcher(sql_message)
 player_data_manager = PlayerDataManager()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
@@ -1340,7 +1347,7 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
         await steal_stone.finish()
 
     operation_id = _stone_theft_operation_id(event, user_id)
-    previous = stone_contest_service.replay_theft(operation_id, user_id, steal_qq)
+    previous = _stone_contest_service().replay_theft(operation_id, user_id, steal_qq)
     if previous is not None:
         if not previous.succeeded:
             await handle_send(bot, event, "本次偷窃与首次请求目标不一致，未重复结算。")
@@ -1374,7 +1381,7 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
         requested_amount = min(runtime_random.randint(lower, upper), 1000000)
         outcome = "success"
 
-    settlement = stone_contest_service.settle_theft(
+    settlement = _stone_contest_service().settle_theft(
         operation_id,
         user_id,
         steal_qq,
