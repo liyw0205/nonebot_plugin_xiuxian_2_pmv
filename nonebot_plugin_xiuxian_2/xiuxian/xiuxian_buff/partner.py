@@ -74,7 +74,7 @@ sql_message = XiuxianDateManage()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
 partner_cultivation_service = PartnerCultivationService(get_paths().game_db, get_paths().player_db)
-partner_token_service = PartnerTokenUseService(get_paths().game_db, get_paths().player_db)
+_partner_token_service_instance = None
 partner_bind_service = PartnerBindService(get_paths().game_db, get_paths().player_db)
 partner_unbind_service = PartnerUnbindService(get_paths().game_db, get_paths().player_db)
 partner_breakthrough_service = PartnerBreakthroughService(get_paths().game_db, get_paths().player_db)
@@ -120,6 +120,17 @@ MENTOR_TITLE_IDS = {
     "transmission_100": "30120",
     "receive_transmission_50": "30121",
 }
+
+
+def _partner_token_service():
+    global _partner_token_service_instance
+    if _partner_token_service_instance is None:
+        _partner_token_service_instance = PartnerTokenUseService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _partner_token_service_instance
+
+
 TITLE_JSONPATH = get_paths().data / "修炼物品" / "称号.json"
 _mentor_title_cache = None
 bind_partner_storage(
@@ -977,7 +988,7 @@ async def use_two_exp_token(bot, event, item_id, num):
     
     current_count = two_exp_cd.find_user(user_id)
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    result = partner_token_service.apply(
+    result = _partner_token_service().apply(
         f"partner-token:{user_id}:{event_id or runtime_ids.new_id()}", user_id, item_id,
         requested_count=num, expected_item_count=sql_message.goods_num(user_id, item_id),
         expected_used_count=current_count,

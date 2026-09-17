@@ -1817,6 +1817,8 @@
 
 2026-09-17 back alchemy compatibility construction slice：`xiuxian_back` 不再 module-level 构造 `AlchemyService`，新增 `_alchemy_service()` 惰性 getter，单次炼金、快速回血丹和快速类型/品阶炼金三个入口均经 getter；保留装备/使用中物品数量、随机外逻辑、operation action 和批量事务语义。新增 source gate 校验三个 handler、`BEGIN IMMEDIATE` 和 `alchemy_operations`；back/admin/mixelixir/past-life/activity/puppet/pet/source/architecture 共 533 tests、compileall、inventory、diff check通过。
 
+2026-09-17 partner token compatibility construction slice：`xiuxian_buff.partner` 不再 module-level 构造双库 `PartnerTokenUseService`，新增 `_partner_token_service()` 惰性 getter，双修次数令牌入口经 getter；`expected_item_count`、`expected_used_count`、operation_id、duplicate/conflict 和回滚语义保持不变。partner/source/architecture 及相邻回归共 24 passed、8 subtests passed，compileall、inventory、diff check通过。
+
 2026-09-17 back alchemy compatibility live safety：提交 `8969f6d8` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260917T105754Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。live 未执行真实炼金操作。
 
 2026-09-17 back accessory-transaction compatibility construction slice：`xiuxian_back.accessory` 不再 module-level 构造 `AccessoryTransactionService`，新增 `_accessory_transaction_service()` 双库惰性 getter，锁定/解锁词条、洗练、分解、批量分解、升阶、预设保存和快速装备的 replay/写入入口均经 getter；game/player 双库 attach、operation_id、snapshot、幂等和 rollback 语义保持不变。accessory transaction/application、attached audit、back 及相邻 source/architecture 共 559 tests、compileall、inventory、diff check通过。
