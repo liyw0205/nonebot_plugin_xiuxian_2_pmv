@@ -1821,6 +1821,8 @@
 
 2026-09-17 back accessory-transaction compatibility construction slice：`xiuxian_back.accessory` 不再 module-level 构造 `AccessoryTransactionService`，新增 `_accessory_transaction_service()` 双库惰性 getter，锁定/解锁词条、洗练、分解、批量分解、升阶、预设保存和快速装备的 replay/写入入口均经 getter；game/player 双库 attach、operation_id、snapshot、幂等和 rollback 语义保持不变。accessory transaction/application、attached audit、back 及相邻 source/architecture 共 559 tests、compileall、inventory、diff check通过。
 
+2026-09-17 back accessory-transaction compatibility live safety：提交 `ba911508` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260917T110731Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。live 未执行真实饰品交易操作。
+
 ## 6. 下一步
 
 先把 `stone_gift` 的真实 handler 从旧模块迁移到 `features/stone_gift/commands.py`，通过新 application 的 DTO/operation_id/Clock 路径；随后补真实 NoneBot 注册测试、删除旧 `StoneGiftService` 执行实现，并在真实部署数据上执行 dry-run/reconcile/恢复。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。
