@@ -77,7 +77,7 @@ runtime_ids = UUIDGenerator()
 _pet_skill_replace_service_instance = None
 _pet_hatch_service_instance = None
 _pet_release_service_instance = None
-pet_fusion_breakthrough_service = PetFusionBreakthroughService(get_paths().player_db)
+_pet_fusion_breakthrough_service_instance = None
 pet_skill_reroll_service = PetSkillRerollService(get_paths().game_db, get_paths().player_db)
 pet_active_switch_service = PetActiveSwitchService(get_paths().player_db)
 
@@ -129,6 +129,15 @@ def _pet_release_service():
             get_paths().game_db, get_paths().player_db
         )
     return _pet_release_service_instance
+
+
+def _pet_fusion_breakthrough_service():
+    global _pet_fusion_breakthrough_service_instance
+    if _pet_fusion_breakthrough_service_instance is None:
+        _pet_fusion_breakthrough_service_instance = PetFusionBreakthroughService(
+            get_paths().player_db
+        )
+    return _pet_fusion_breakthrough_service_instance
 
 
 def _split_args(text: str):
@@ -1638,7 +1647,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     ok, result_msg, pet, skill_offer, consumed = prepare_pet_fusion(user_id, tokens, operation_id)
     if ok:
         current = get_pet_doc(user_id).get("active")
-        result = pet_fusion_breakthrough_service.breakthrough(
+        result = _pet_fusion_breakthrough_service().breakthrough(
             operation_id,
             user_id,
             _pet_transaction_snapshot(current, True),
