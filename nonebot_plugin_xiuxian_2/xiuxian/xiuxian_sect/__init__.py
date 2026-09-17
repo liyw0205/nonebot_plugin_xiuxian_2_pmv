@@ -105,7 +105,7 @@ sect_fairyland_application = SectFairylandApplication(
 _sect_close_mountain_service_instance = None
 _sect_owner_inherit_service_instance = None
 _sect_open_join_service_instance = None
-sect_close_join_service = SectCloseJoinService(get_paths().game_db)
+_sect_close_join_service_instance = None
 sect_disband_service = SectDisbandService(get_paths().game_db)
 sect_daily_reset_maintenance_service = SectDailyResetMaintenanceService(get_paths().game_db)
 
@@ -135,6 +135,15 @@ def _sect_open_join_service():
             get_paths().game_db
         )
     return _sect_open_join_service_instance
+
+
+def _sect_close_join_service():
+    global _sect_close_join_service_instance
+    if _sect_close_join_service_instance is None:
+        _sect_close_join_service_instance = SectCloseJoinService(
+            get_paths().game_db
+        )
+    return _sect_close_join_service_instance
 
 
 config = get_config()
@@ -3104,7 +3113,7 @@ async def sect_close_join_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
     owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
 
-    result = sect_close_join_service.close(
+    result = _sect_close_join_service().close(
         _sect_operation_id(event, "close_join", sect_id),
         user_info['user_id'],
         owner_position=owner_position,

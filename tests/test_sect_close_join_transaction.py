@@ -13,6 +13,11 @@ from tests.test_db_backend import db_backend
 
 
 class SectCloseJoinServiceTests(unittest.TestCase):
+    def test_sect_facade_defers_close_join_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_sect as sect_plugin
+
+        self.assertIsNone(sect_plugin._sect_close_join_service_instance)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "sect.sqlite3"
@@ -78,7 +83,9 @@ class SectCloseJoinServiceTests(unittest.TestCase):
         start = source.index("async def sect_close_join_")
         end = source.index("@sect_open_join.handle", start)
         handler = source[start:end]
-        self.assertIn("sect_close_join_service.close(", handler)
+        self.assertIn("_sect_close_join_service().close(", handler)
+        self.assertIn("_sect_close_join_service_instance = None", source)
+        self.assertIn("def _sect_close_join_service(", source)
         self.assertNotIn("sql_message.update_sect_join_status(", handler)
 
 
