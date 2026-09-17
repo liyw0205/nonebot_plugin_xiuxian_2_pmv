@@ -806,7 +806,7 @@ class SourceQualityTests(unittest.TestCase):
         end = command_source.index("\n\n@chakan_wupin.handle", start)
         command = command_source[start:end]
 
-        self.assertIn("three_cultivation_pill_service.apply(", command)
+        self.assertIn("_three_cultivation_pill_service().apply(", command)
         self.assertNotIn("sql_message.update_exp(", command)
         self.assertNotIn("sql_message.update_user_attribute(", command)
         self.assertNotIn("sql_message.update_back_j(", command)

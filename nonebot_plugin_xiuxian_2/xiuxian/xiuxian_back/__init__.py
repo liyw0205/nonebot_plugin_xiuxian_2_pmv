@@ -90,7 +90,7 @@ sql_message = XiuxianDateManage()
 equipment_service = EquipmentService(get_paths().game_db)
 cultivation_item_service = CultivationItemService(get_paths().game_db)
 stone_reward_service = StoneItemRewardService(get_paths().game_db)
-three_cultivation_pill_service = ThreeCultivationPillService(get_paths().game_db)
+_three_cultivation_pill_service_instance = None
 unbind_item_service = UnbindItemService(get_paths().game_db)
 lottery_talisman_service = LotteryTalismanService(get_paths().game_db)
 package_reward_service = PackageRewardService(get_paths().game_db)
@@ -105,6 +105,15 @@ batch_item_use_service = BatchItemUseService(
 backpack_repair_service = BackpackRepairService(get_paths().game_db)
 player_data_manager = PlayerDataManager()
 runtime_ids = UUIDGenerator()
+
+
+def _three_cultivation_pill_service():
+    global _three_cultivation_pill_service_instance
+    if _three_cultivation_pill_service_instance is None:
+        _three_cultivation_pill_service_instance = ThreeCultivationPillService(
+            get_paths().game_db
+        )
+    return _three_cultivation_pill_service_instance
 
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 added_ranks = added_ranks()
@@ -1724,7 +1733,7 @@ async def use_three_cultivation_pill(bot: Bot, event: GroupMessageEvent | Privat
     max_exp_for_level_up = OtherSet().set_closing_type(level) 
     max_exp = max_exp_for_level_up * XiuConfig().closing_exp_upper_limit # 境界上限
 
-    result = three_cultivation_pill_service.apply(
+    result = _three_cultivation_pill_service().apply(
         _cultivation_item_operation_id(event, user_id, item_id),
         user_id,
         item_id,
