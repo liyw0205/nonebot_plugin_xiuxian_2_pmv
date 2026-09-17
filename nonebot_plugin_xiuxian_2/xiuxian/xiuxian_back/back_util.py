@@ -24,12 +24,18 @@ from .transaction_service import BlessedFlagReplaceService
 from nonebot.log import logger
 items = Items()
 sql_message = XiuxianDateManage()
-cultivation_item_service = CultivationItemService(get_paths().game_db)
+_cultivation_item_service_instance = None
 breakthrough_rate_item_service = BreakthroughRateItemService(get_paths().game_db)
 recovery_item_service = RecoveryItemService(get_paths().game_db)
 permanent_atk_item_service = PermanentAtkItemService(get_paths().game_db)
 blessed_flag_replace_service = BlessedFlagReplaceService(get_paths().game_db, get_paths().player_db)
 ADDED_RANKS = get_added_ranks()
+
+def _cultivation_item_service():
+    global _cultivation_item_service_instance
+    if _cultivation_item_service_instance is None:
+        _cultivation_item_service_instance = CultivationItemService(get_paths().game_db)
+    return _cultivation_item_service_instance
 
 sign = lambda x: (x > 0) - (x < 0)
 YAOCAIINFOMSG = {
@@ -1081,7 +1087,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
             exp = goods_info['buff'] * num
             root_rate = sql_message.get_root_rate(user_info['root_type'], user_id)
             level_spend = jsondata.level_data()[user_info['level']]["spend"]
-            result = cultivation_item_service.apply(
+            result = _cultivation_item_service().apply(
                 operation_id or f"elixir-exp:{user_id}:{goods_id}:{datetime.now().timestamp()}",
                 user_id,
                 goods_id,

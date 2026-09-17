@@ -789,7 +789,7 @@ class SourceQualityTests(unittest.TestCase):
         elixir_start = utility_source.index('elif goods_info[\'buff_type\'] == "exp_up"')
         elixir_end = utility_source.index("    else:\n        msg =", elixir_start)
         elixir_branch = utility_source[elixir_start:elixir_end]
-        self.assertIn("cultivation_item_service.apply(", elixir_branch)
+        self.assertIn("_cultivation_item_service().apply(", elixir_branch)
         self.assertNotIn("sql_message.update_exp(", elixir_branch)
         self.assertNotIn("sql_message.update_user_attribute(", elixir_branch)
         self.assertNotIn("sql_message.update_back_j(", elixir_branch)
