@@ -62,10 +62,19 @@ def _demon_claim_service():
             get_paths().game_db, get_paths().player_db
         )
     return _demon_claim_service_instance
-demon_attack_settlement_service = DemonAttackSettlementService(get_paths().player_db)
+_demon_attack_settlement_service_instance = None
 demon_event_lifecycle_service = DemonEventLifecycleService(get_paths().player_db)
 demon_wave_refresh_service = DemonWaveRefreshService(get_paths().player_db)
 spirit_vein_lifecycle_service = SpiritVeinLifecycleService(get_paths().player_db)
+
+
+def _demon_attack_settlement_service():
+    global _demon_attack_settlement_service_instance
+    if _demon_attack_settlement_service_instance is None:
+        _demon_attack_settlement_service_instance = DemonAttackSettlementService(
+            get_paths().player_db
+        )
+    return _demon_attack_settlement_service_instance
 runtime_ids = UUIDGenerator()
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
@@ -1348,7 +1357,7 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
         if event_message_id
         else f"demon-attack:{event_snapshot.get('event_id')}:{user_id}:{runtime_ids.new_id()}"
     )
-    prior_attack = demon_attack_settlement_service.get_result(operation_id)
+    prior_attack = _demon_attack_settlement_service().get_result(operation_id)
     if prior_attack is not None and prior_attack.status in {"applied", "duplicate"}:
         msg = (
             f"讨伐已结算（重放）。\n"
@@ -1376,7 +1385,7 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
     total_contribution = 0.0
     attack_duplicate_after_fight = False
     with _state_lock:
-        settlement = demon_attack_settlement_service.settle(
+        settlement = _demon_attack_settlement_service().settle(
             operation_id, EVENT_KEY, user_id, user_info.get("user_name", user_id), realm,
             total_damage, event_snapshot, expected_boss_snapshot, participants_snapshot,
             attack_limit=DEMON_ATTACK_LIMIT,

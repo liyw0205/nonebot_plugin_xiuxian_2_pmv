@@ -1,4 +1,5 @@
 import json
+import importlib
 import sqlite3
 
 import nonebot
@@ -7,6 +8,13 @@ import pytest
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.transaction_service import DemonAttackSettlementService
+
+
+def test_world_events_facade_defers_attack_settlement_service_construction():
+    world_events = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events"
+    )
+    assert world_events._demon_attack_settlement_service_instance is None
 
 
 def create_db(path):
@@ -93,7 +101,8 @@ def test_real_entry_uses_transaction_service_without_old_side_paths():
     with open(source, encoding="utf-8") as source_file:
         text = source_file.read()
     handler = text[text.index("async def attack_demon_invasion_"):text.index("async def claim_demon_reward_")]
-    assert "demon_attack_settlement_service.settle(" in handler
+    assert "_demon_attack_settlement_service().settle(" in handler
+    assert "_demon_attack_settlement_service().get_result(" in handler
     post_battle = handler[handler.index("result, victor, bossinfo_new, status_list"):]
     assert "_save_state(state)" not in post_battle
     assert 'update_statistics_value(user_id, "魔修入侵参与")' not in handler
