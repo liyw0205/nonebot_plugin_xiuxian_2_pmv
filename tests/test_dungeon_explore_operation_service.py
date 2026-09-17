@@ -26,6 +26,9 @@ dungeon_plugin = importlib.import_module(
 
 
 class DungeonExploreOperationServiceTests(unittest.TestCase):
+    def test_dungeon_facade_defers_explore_operation_service_construction(self):
+        self.assertIsNone(dungeon_plugin._dungeon_explore_operation_service_instance)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         root = Path(self.temp.name)
@@ -477,7 +480,7 @@ class DungeonExploreOperationServiceTests(unittest.TestCase):
             handler.index("dungeon_manager.trigger_event"),
         )
         self.assertIn("dungeon_application.prepare", handler)
-        self.assertIn("dungeon_explore_operation_service.settle", handler)
+        self.assertIn("_dungeon_explore_operation_service().settle", handler)
         self.assertIn("dungeon_application.resolve_rejection", handler)
         self.assertIn("type_in=0", handler)
         self.assertNotIn("dungeon_session_service.enter", handler)
@@ -525,7 +528,7 @@ class DungeonExploreOperationServiceTests(unittest.TestCase):
                     ),
                     patch.object(
                         dungeon_plugin,
-                        "dungeon_explore_operation_service",
+                        "_dungeon_explore_operation_service_instance",
                         operation_service,
                     ),
                     patch.object(

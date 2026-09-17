@@ -65,11 +65,20 @@ items = Items()
 dungeon_application = DungeonApplication(get_paths().game_db, get_paths().player_db)
 dungeon_ids = UUIDGenerator()
 runtime_clock = SystemClock()
-dungeon_explore_operation_service = DungeonExploreOperationService(
-    get_paths().game_db, get_paths().player_db
-)
+_dungeon_explore_operation_service_instance = None
 dungeon_team_transaction_service = DungeonTeamTransactionService(get_paths().player_db)
 dungeon_team_exit_service = DungeonTeamExitService(get_paths().player_db)
+
+
+def _dungeon_explore_operation_service():
+    global _dungeon_explore_operation_service_instance
+    if _dungeon_explore_operation_service_instance is None:
+        _dungeon_explore_operation_service_instance = DungeonExploreOperationService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _dungeon_explore_operation_service_instance
+
+
 DUNGEON_SHOP = {
     1999: {"name": "渡厄丹", "cost": 100000},
     20012: {"name": "秘境加速券", "cost": 500000},
@@ -1106,7 +1115,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         await explore_dungeon.finish()
     if replay.phase == "prepared":
         try:
-            resumed = dungeon_explore_operation_service.settle(
+            resumed = _dungeon_explore_operation_service().settle(
                 operation_id, user_id, XiuConfig().max_goods_num
             )
         except Exception:
@@ -1423,7 +1432,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         prepared = DungeonExploreOperationResult(**prepared_data)
         settled = None
         if prepared.status != "operation_conflict" and prepared.phase != "completed":
-            settled = dungeon_explore_operation_service.settle(
+            settled = _dungeon_explore_operation_service().settle(
                 operation_id, user_id, XiuConfig().max_goods_num
             )
     except Exception:

@@ -1861,7 +1861,7 @@ class SourceQualityTests(unittest.TestCase):
         handler = source[start:source.index("async def handle_dungeon_status", start)]
         self.assertIn("dungeon_application.replay(", handler)
         self.assertIn("dungeon_application.prepare(", handler)
-        self.assertIn("dungeon_explore_operation_service.settle(", handler)
+        self.assertIn("_dungeon_explore_operation_service().settle(", handler)
         self.assertIn("dungeon_application.resolve_rejection(", handler)
         self.assertNotIn("dungeon_reward_service.award(", handler)
         self.assertNotIn("sql_message.update_ls(", handler)
