@@ -90,7 +90,7 @@ from . import group_welcome as _group_welcome  # noqa: F401
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
-admin_level_change_service = AdminLevelChangeService(get_paths().game_db)
+_admin_level_change_service_instance = None
 admin_root_change_service = AdminRootChangeService(get_paths().game_db)
 admin_exp_adjustment_service = AdminExpAdjustmentService(get_paths().game_db)
 admin_asset_application = AdminAssetApplication(get_paths().game_db)
@@ -118,6 +118,13 @@ admin_player_status_batch_reset_service = AdminPlayerStatusBatchResetService(
     admin_player_status_reset_service,
 )
 admin_blackhouse_status_service = AdminBlackhouseStatusService(get_paths().game_db)
+
+
+def _admin_level_change_service():
+    global _admin_level_change_service_instance
+    if _admin_level_change_service_instance is None:
+        _admin_level_change_service_instance = AdminLevelChangeService(get_paths().game_db)
+    return _admin_level_change_service_instance
 
 
 def _admin_operation_id(event, action: str, user_id: str) -> str:
@@ -686,7 +693,7 @@ async def zaohua_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         return
 
     level_config = jsondata.level_data()[level]
-    result = admin_level_change_service.change(
+    result = _admin_level_change_service().change(
         _admin_operation_id(event, "level-change", str(target_qq)),
         str(get_user_id(event) or "unknown"),
         target_qq,

@@ -13,6 +13,12 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin.transaction_service import (
 OLD = ("练气境初期", 6000, 3000, 6000, 600, 22800, "混沌灵根", 0)
 
 
+def test_admin_facade_defers_level_change_service_construction():
+    from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_admin
+
+    assert xiuxian_admin._admin_level_change_service_instance is None
+
+
 def create_service(tmp_path):
     database = tmp_path / "game.db"
     conn = sqlite3.connect(database)
