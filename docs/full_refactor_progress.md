@@ -2005,6 +2005,8 @@
 
 2026-09-18 impart closing enter lazy construction live safety：提交 `c2c2ec7a` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260917T195455Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
 
+2026-09-18 impart project join lazy construction slice：`xiuxian_impart_pk.__init__` 不再 module-level 构造 `ImpartProjectJoinService`，新增 `_impart_project_join_service()` player-db 惰性 getter；`xu_world` 改为保存 resolver 并在首次成员访问时解析缓存，投影 join callback 使用同一 getter。legacy member 一次性导入、capacity race、pk state/statistics、operation replay/conflict 和 rollback 语义保持不变。construction、project/training/explore/closing/enter/battle/card/prayer、source/architecture 共 227 tests passed，compileall、inventory、diff check通过。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。

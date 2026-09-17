@@ -16,6 +16,11 @@ class XU_WORLD(object):
     def bind_service(self, service):
         self.service = service
 
+    def _bound_service(self):
+        if callable(self.service):
+            self.service = self.service()
+        return self.service
+
     def __save(self):
         """
         :return:保存
@@ -34,8 +39,9 @@ class XU_WORLD(object):
         检查是否加入
         """
         user_id = str(user_id)
-        if self.service is not None:
-            return self.service.contains(user_id, self.data.keys())
+        service = self._bound_service()
+        if service is not None:
+            return service.contains(user_id, self.data.keys())
         return bool(self.data.get(user_id))
 
     def add_xu_world(self, user_id):
@@ -58,8 +64,9 @@ class XU_WORLD(object):
         加入虚神界
         """
         user_id = str(user_id)
-        if self.service is not None:
-            return self.service.remove(user_id)
+        service = self._bound_service()
+        if service is not None:
+            return service.remove(user_id)
         del self.data[user_id]
         self.__save()
 
@@ -67,8 +74,9 @@ class XU_WORLD(object):
         """
         全部虚神界用户
         """
-        if self.service is not None:
-            return self.service.members(self.data.keys())
+        service = self._bound_service()
+        if service is not None:
+            return service.members(self.data.keys())
         all_user = self.data.keys()
         if all_user is None:
             return None
@@ -79,8 +87,9 @@ class XU_WORLD(object):
         """
         重置数据
         """
-        if self.service is not None:
-            self.service.reset_daily(self.data.keys())
+        service = self._bound_service()
+        if service is not None:
+            service.reset_daily(self.data.keys())
             return
         self.data = {}
         self.__save()

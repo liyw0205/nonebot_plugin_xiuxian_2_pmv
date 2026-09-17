@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import threading
 import unittest
+import importlib
 from pathlib import Path
 
 import nonebot
@@ -11,6 +12,28 @@ nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart_pk.transaction_service import ImpartProjectJoinService
 from tests.test_db_backend import db_backend
+
+
+def test_impart_facade_defers_project_join_service_construction():
+    impart = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart_pk"
+    )
+    assert impart._impart_project_join_service_instance is None
+
+
+def test_impart_project_binding_and_handler_are_lazy():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py"
+    ).read_text(encoding="utf-8")
+    world_source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/xu_world.py"
+    ).read_text(encoding="utf-8")
+    handler = source[source.index("async def impart_pk_project_"):source.index("async def impart_top_")]
+    assert "xu_world.bind_service(_impart_project_join_service)" in source
+    assert "_impart_project_join_service().join(" in handler
+    assert "impart_project_join_service.join(" not in handler
+    assert "def _bound_service(self):" in world_source
+    assert "if callable(self.service):" in world_source
 
 
 class ImpartProjectJoinTests(unittest.TestCase):

@@ -76,7 +76,7 @@ _impart_explore_settlement_service_instance = None
 _impart_closing_settlement_service_instance = None
 _impart_battle_batch_service_instance = None
 _impart_closing_enter_service_instance = None
-impart_project_join_service = ImpartProjectJoinService(get_paths().player_db)
+_impart_project_join_service_instance = None
 impart_pk_application = ImpartPkApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
 runtime_random = SystemRandom()
@@ -128,6 +128,15 @@ def _impart_closing_enter_service():
     return _impart_closing_enter_service_instance
 
 
+def _impart_project_join_service():
+    global _impart_project_join_service_instance
+    if _impart_project_join_service_instance is None:
+        _impart_project_join_service_instance = ImpartProjectJoinService(
+            get_paths().player_db
+        )
+    return _impart_project_join_service_instance
+
+
 def _run_impart_pk_action(action, operation_id, user_id, call, **payload):
     outcome = impart_pk_application.execute_legacy_call(
         operation_id=operation_id,
@@ -140,7 +149,7 @@ def _run_impart_pk_action(action, operation_id, user_id, call, **payload):
     data.setdefault("status", outcome.status)
     data["succeeded"] = outcome.ok
     return SimpleNamespace(**data)
-xu_world.bind_service(impart_project_join_service)
+xu_world.bind_service(_impart_project_join_service)
 
 impart_pk_project = on_command("投影虚神界", priority=6, block=True)
 impart_pk_go = on_command("探索虚神界", aliases={"虚神界探索"}, priority=6, block=True)
@@ -219,7 +228,7 @@ async def impart_pk_project_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     operation_id = _impart_operation_id(event, "project", user_id)
     result = _run_impart_pk_action(
         "project_join", operation_id, user_id,
-        call=lambda: impart_project_join_service.join(
+        call=lambda: _impart_project_join_service().join(
             operation_id, user_id, legacy_pk_num=legacy_state["pk_num"],
             legacy_members=xu_world.data.keys(),
         ),
