@@ -27,8 +27,18 @@ _paths = get_paths()
 final_settlement_service = PastLifeFinalSettlementService(
     _paths.game_db, _paths.player_db, max_goods_num=XiuConfig().max_goods_num
 )
-start_service = PastLifeStartService(_paths.game_db, _paths.player_db)
+_past_life_start_service_instance = None
 choice_service = PastLifeChoiceService(_paths.game_db, _paths.player_db)
+
+
+def _past_life_start_service():
+    global _past_life_start_service_instance
+    if _past_life_start_service_instance is None:
+        _past_life_start_service_instance = PastLifeStartService(
+            _paths.game_db, _paths.player_db
+        )
+    return _past_life_start_service_instance
+
 
 ATTR_NAMES = ["悟性", "机缘", "根骨", "气运", "心性"]
 INITIAL_APTITUDE_MIN = 3
@@ -295,7 +305,7 @@ class PastLifeEngine:
             birth_scenario,
             first_event,
         )
-        result = start_service.start(
+        result = _past_life_start_service().start(
             operation_id,
             user_id,
             past_life_limit.get_user_state(user_id),
