@@ -5,6 +5,10 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift.transaction_service import RiftSpeedupService
 from tests.test_db_backend import db_backend
 class T(unittest.TestCase):
+ def test_rift_facade_defers_speedup_service_construction(self):
+  from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_rift
+  self.assertIsNone(xiuxian_rift._rift_speedup_service_instance)
+
  def setUp(self):
   self.t=tempfile.TemporaryDirectory();self.d=Path(self.t.name)/'d';
   with db_backend.transaction(self.d) as c:c.execute('CREATE TABLE rift_entries(user_id TEXT,status TEXT,duration INTEGER)');c.execute("INSERT INTO rift_entries VALUES ('u','active',20)");c.execute('CREATE TABLE user_cd(user_id TEXT,scheduled_time INTEGER)');c.execute("INSERT INTO user_cd VALUES ('u',20)");c.execute('CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_num INTEGER)');c.execute("INSERT INTO back VALUES ('u',7,1)")

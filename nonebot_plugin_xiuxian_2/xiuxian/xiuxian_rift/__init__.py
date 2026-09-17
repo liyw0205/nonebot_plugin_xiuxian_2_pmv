@@ -53,7 +53,7 @@ rift_entry_service = RiftEntryService(get_paths().game_db)
 _rift_termination_service_instance = None
 _rift_key_event_settlement_service_instance = None
 _rift_demon_token_battle_settlement_service_instance = None
-rift_speedup_service = RiftSpeedupService(get_paths().game_db)
+_rift_speedup_service_instance = None
 rift_settlement_service = RiftSettlementService(
     get_paths().game_db, get_paths().player_db
 )
@@ -88,6 +88,13 @@ def _rift_demon_token_battle_settlement_service():
             get_paths().game_db, get_paths().player_db
         )
     return _rift_demon_token_battle_settlement_service_instance
+
+
+def _rift_speedup_service():
+    global _rift_speedup_service_instance
+    if _rift_speedup_service_instance is None:
+        _rift_speedup_service_instance = RiftSpeedupService(get_paths().game_db)
+    return _rift_speedup_service_instance
 
 
 def _event_id(event) -> str:
@@ -1090,7 +1097,7 @@ async def _use_rift_speedup(
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"rift-speedup:{event_id or runtime_ids.new_id()}:{user_id}"
     try:
-        result = rift_speedup_service.apply(
+        result = _rift_speedup_service().apply(
             operation_id,
             user_id,
             item_id,
