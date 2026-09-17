@@ -16,6 +16,11 @@ from tests.test_db_backend import db_backend
 
 
 class PackageRewardServiceTests(unittest.TestCase):
+    def test_back_facade_defers_package_reward_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_back
+
+        self.assertIsNone(xiuxian_back._package_reward_service_instance)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "xiuxian.sqlite3"

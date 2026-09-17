@@ -1763,6 +1763,8 @@
 
 2026-09-17 back lottery-talisman compatibility live safety：提交 `bb4e3675` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260917T084253Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。live 未执行真实灵签宝箓使用。
 
+2026-09-17 back package-reward compatibility construction slice：`xiuxian_back` 不再 module-level 构造 `PackageRewardService`，新增 `_package_reward_service()` 惰性 getter，礼包奖励入口经 getter；附件需求分支、`PackageRewardResolver` 和事务 service 保持不变。lottery-talisman/unbind/three-pill service 已延迟，`back_util` 的另一 `CultivationItemService` 未改。back/admin/mixelixir/past-life/activity/puppet/pet/source/architecture 共 462 tests、compileall、inventory、diff check通过。
+
 ## 6. 下一步
 
 先把 `stone_gift` 的真实 handler 从旧模块迁移到 `features/stone_gift/commands.py`，通过新 application 的 DTO/operation_id/Clock 路径；随后补真实 NoneBot 注册测试、删除旧 `StoneGiftService` 执行实现，并在真实部署数据上执行 dry-run/reconcile/恢复。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。
