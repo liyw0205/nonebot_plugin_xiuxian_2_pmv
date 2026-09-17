@@ -1,4 +1,5 @@
 import json
+import importlib
 import sqlite3
 
 import nonebot
@@ -10,6 +11,13 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.transaction_service i
     DemonEventLifecycleService,
 )
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.transaction_service import STATE_FIELDS
+
+
+def test_world_events_facade_defers_event_lifecycle_service_construction():
+    world_events = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events"
+    )
+    assert world_events._demon_event_lifecycle_service_instance is None
 
 
 def idle():
@@ -94,5 +102,7 @@ def test_real_auto_and_manual_entries_share_lifecycle_service():
         ("async def close_world_event_", "async def close_spirit_vein_"),
     ]:
         body = text[text.index(start):text.index(end, text.index(start))]
-        assert "demon_event_lifecycle_service" in body
+        assert "_demon_event_lifecycle_service()" in body
+        assert "_demon_event_lifecycle_service_instance = None" in text
+        assert "def _demon_event_lifecycle_service(" in text
         assert "_save_state(state)" not in body
