@@ -873,7 +873,7 @@ class SourceQualityTests(unittest.TestCase):
         end = command_source.index("\nasync def use_spirit_stone_bag", start)
         command = command_source[start:end]
 
-        self.assertIn("unbind_item_service.apply(", command)
+        self.assertIn("_unbind_item_service().apply(", command)
         self.assertNotIn("sql_message.unbind_item(", command)
         self.assertNotIn("sql_message.update_back_j(", command)
         self.assertIn("BEGIN IMMEDIATE", service_source)

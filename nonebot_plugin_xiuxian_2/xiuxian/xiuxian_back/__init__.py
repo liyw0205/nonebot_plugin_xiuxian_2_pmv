@@ -91,7 +91,7 @@ equipment_service = EquipmentService(get_paths().game_db)
 cultivation_item_service = CultivationItemService(get_paths().game_db)
 stone_reward_service = StoneItemRewardService(get_paths().game_db)
 _three_cultivation_pill_service_instance = None
-unbind_item_service = UnbindItemService(get_paths().game_db)
+_unbind_item_service_instance = None
 lottery_talisman_service = LotteryTalismanService(get_paths().game_db)
 package_reward_service = PackageRewardService(get_paths().game_db)
 accessory_package_service = AccessoryPackageService(
@@ -114,6 +114,12 @@ def _three_cultivation_pill_service():
             get_paths().game_db
         )
     return _three_cultivation_pill_service_instance
+
+def _unbind_item_service():
+    global _unbind_item_service_instance
+    if _unbind_item_service_instance is None:
+        _unbind_item_service_instance = UnbindItemService(get_paths().game_db)
+    return _unbind_item_service_instance
 
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 added_ranks = added_ranks()
@@ -1570,7 +1576,7 @@ async def use_unbind_charm(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, msg)
         return
 
-    result = unbind_item_service.apply(
+    result = _unbind_item_service().apply(
         _cultivation_item_operation_id(event, user_id, item_id),
         user_id,
         item_id,
