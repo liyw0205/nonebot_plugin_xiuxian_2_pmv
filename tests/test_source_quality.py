@@ -2106,6 +2106,19 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("expected_user_bind_time=partner_data.get", handler)
         self.assertIn("expected_partner_bind_time=partner_side.get", handler)
 
+    def test_partner_breakthrough_uses_lazy_transactional_service(self) -> None:
+        root = SOURCE_ROOT / "xiuxian" / "xiuxian_buff"
+        source = (root / "partner.py").read_text(encoding="utf-8")
+        start = source.index("async def check_is_partner")
+        handler = source[start:]
+        self.assertIn("_partner_breakthrough_service_instance = None", source)
+        self.assertIn("def _partner_breakthrough_service(", source)
+        self.assertIn("_partner_breakthrough_service().apply(", handler)
+        self.assertNotIn("partner_breakthrough_service.apply(", handler)
+        self.assertIn("expected_user_exp=self_exp", handler)
+        self.assertIn("expected_partner_exp=partner_exp", handler)
+        self.assertIn("expected_affection=affection", handler)
+
     def test_mentor_protection_uses_one_application_transaction(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_buff"
         source = (root / "partner.py").read_text(encoding="utf-8")

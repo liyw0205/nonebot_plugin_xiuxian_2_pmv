@@ -77,7 +77,7 @@ _partner_cultivation_service_instance = None
 _partner_token_service_instance = None
 _partner_bind_service_instance = None
 _partner_unbind_service_instance = None
-partner_breakthrough_service = PartnerBreakthroughService(get_paths().game_db, get_paths().player_db)
+_partner_breakthrough_service_instance = None
 mentor_bind_service = MentorBindService(get_paths().game_db, get_paths().player_db)
 mentor_application_service = MentorApplicationService(get_paths().player_db)
 partner_invite_service = PartnerInviteService(get_paths().player_db)
@@ -156,6 +156,15 @@ def _partner_unbind_service():
             get_paths().game_db, get_paths().player_db
         )
     return _partner_unbind_service_instance
+
+
+def _partner_breakthrough_service():
+    global _partner_breakthrough_service_instance
+    if _partner_breakthrough_service_instance is None:
+        _partner_breakthrough_service_instance = PartnerBreakthroughService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _partner_breakthrough_service_instance
 
 
 TITLE_JSONPATH = get_paths().data / "修炼物品" / "称号.json"
@@ -2504,7 +2513,7 @@ def trigger_partner_exp_share(user_id, new_level):
             trigger_rate = min(40 + (affection // 1000), 50)
         
             if runtime_random.randint(1, 100) <= trigger_rate:
-                result = partner_breakthrough_service.apply(
+                result = _partner_breakthrough_service().apply(
                     f"partner-breakthrough:{user_id}:{new_level}", user_id, partner_id, new_level,
                     expected_user_exp=self_exp, expected_partner_exp=partner_exp,
                     expected_affection=affection, reward_exp=give_exp,
