@@ -16,6 +16,11 @@ from tests.test_db_backend import db_backend
 
 
 class WorkAbortCleanupTests(unittest.TestCase):
+    def test_work_facade_defers_abort_cleanup_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_work
+
+        self.assertIsNone(xiuxian_work._work_abort_cleanup_service_instance)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.db = Path(self.temp.name) / "game.db"

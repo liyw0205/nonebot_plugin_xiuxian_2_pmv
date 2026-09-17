@@ -50,7 +50,7 @@ work_settlement_application = WorkSettlementApplication(
 )
 _work_item_use_service_instance = None
 _work_refresh_service_instance = None
-work_abort_cleanup_service = WorkAbortCleanupService(get_paths().game_db)
+_work_abort_cleanup_service_instance = None
 _work_daily_refresh_reset_service_instance = None
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
@@ -82,6 +82,13 @@ def _work_refresh_service():
     if _work_refresh_service_instance is None:
         _work_refresh_service_instance = WorkRefreshSettlementService(get_paths().game_db)
     return _work_refresh_service_instance
+
+
+def _work_abort_cleanup_service():
+    global _work_abort_cleanup_service_instance
+    if _work_abort_cleanup_service_instance is None:
+        _work_abort_cleanup_service_instance = WorkAbortCleanupService(get_paths().game_db)
+    return _work_abort_cleanup_service_instance
 
 
 def format_reward_item(item_id: int) -> str:
@@ -737,7 +744,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await do_work.finish()
         elif status == 1:  # 进行中的悬赏，终止并惩罚
             stone = 4000000
-            result = work_abort_cleanup_service.cleanup(
+            result = _work_abort_cleanup_service().cleanup(
                 _work_operation_id(event, "abort", user_id),
                 user_id,
                 "active_abort",
@@ -756,7 +763,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             )
         elif status == 3 or status == 4:  # 有未接取的悬赏
             reason = "offer_abort" if status == 3 else "expired"
-            result = work_abort_cleanup_service.cleanup(
+            result = _work_abort_cleanup_service().cleanup(
                 _work_operation_id(event, reason, user_id),
                 user_id,
                 reason,
@@ -860,7 +867,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         await do_work.finish()
 
     elif mode == "重置":
-        result = work_abort_cleanup_service.cleanup(
+        result = _work_abort_cleanup_service().cleanup(
             _work_operation_id(event, "reset", user_id),
             user_id,
             "reset",
