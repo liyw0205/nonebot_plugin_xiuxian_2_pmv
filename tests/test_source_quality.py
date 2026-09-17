@@ -857,7 +857,7 @@ class SourceQualityTests(unittest.TestCase):
         end = utility_source.index('elif goods_info[\'buff_type\'] == "exp_up"', start)
         command = utility_source[start:end]
 
-        self.assertGreaterEqual(command.count("permanent_atk_item_service.apply("), 2)
+        self.assertGreaterEqual(command.count("_permanent_atk_item_service().apply("), 2)
         self.assertNotIn("sql_message.updata_user_atk_buff(", command)
         self.assertNotIn("sql_message.update_back_j(", command)
         self.assertIn("BEGIN IMMEDIATE", service_source)
