@@ -78,7 +78,7 @@ _pet_skill_replace_service_instance = None
 _pet_hatch_service_instance = None
 _pet_release_service_instance = None
 _pet_fusion_breakthrough_service_instance = None
-pet_skill_reroll_service = PetSkillRerollService(get_paths().game_db, get_paths().player_db)
+_pet_skill_reroll_service_instance = None
 pet_active_switch_service = PetActiveSwitchService(get_paths().player_db)
 
 pet_help = on_command("宠物帮助", aliases={"宠物系统帮助"}, priority=10, block=True)
@@ -138,6 +138,15 @@ def _pet_fusion_breakthrough_service():
             get_paths().player_db
         )
     return _pet_fusion_breakthrough_service_instance
+
+
+def _pet_skill_reroll_service():
+    global _pet_skill_reroll_service_instance
+    if _pet_skill_reroll_service_instance is None:
+        _pet_skill_reroll_service_instance = PetSkillRerollService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _pet_skill_reroll_service_instance
 
 
 def _split_args(text: str):
@@ -1707,7 +1716,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if not current_pet:
         await handle_send(bot, event, "未找到可启明的宠物，请检查宠物UID。")
         return
-    result = pet_skill_reroll_service.reroll(
+    result = _pet_skill_reroll_service().reroll(
         operation_id,
         user_id,
         _pet_transaction_snapshot(
