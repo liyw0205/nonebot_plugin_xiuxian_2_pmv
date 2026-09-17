@@ -28,6 +28,11 @@ from tests.test_db_backend import db_backend
 
 
 class PastLifeChoiceTests(unittest.TestCase):
+    def test_past_life_events_defers_choice_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_past_life import past_life_events
+
+        self.assertIsNone(past_life_events._past_life_choice_service_instance)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
@@ -218,7 +223,7 @@ class PastLifeChoiceTests(unittest.TestCase):
         self_state = self.initial
         engine = past_life_events.PastLifeEngine()
         with (
-            patch.object(past_life_events, "choice_service", self.service),
+            patch.object(past_life_events, "_past_life_choice_service_instance", self.service),
             patch.object(past_life_events, "past_life_limit", FixedLimit()),
         ):
             applied = engine.process_choice("u", 1, "past-life-choice:u:message-1")

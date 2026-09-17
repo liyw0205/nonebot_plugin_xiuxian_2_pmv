@@ -28,7 +28,7 @@ final_settlement_service = PastLifeFinalSettlementService(
     _paths.game_db, _paths.player_db, max_goods_num=XiuConfig().max_goods_num
 )
 _past_life_start_service_instance = None
-choice_service = PastLifeChoiceService(_paths.game_db, _paths.player_db)
+_past_life_choice_service_instance = None
 
 
 def _past_life_start_service():
@@ -38,6 +38,15 @@ def _past_life_start_service():
             _paths.game_db, _paths.player_db
         )
     return _past_life_start_service_instance
+
+
+def _past_life_choice_service():
+    global _past_life_choice_service_instance
+    if _past_life_choice_service_instance is None:
+        _past_life_choice_service_instance = PastLifeChoiceService(
+            _paths.game_db, _paths.player_db
+        )
+    return _past_life_choice_service_instance
 
 
 ATTR_NAMES = ["悟性", "机缘", "根骨", "气运", "心性"]
@@ -364,7 +373,7 @@ class PastLifeEngine:
         """
         operation_id = str(operation_id or "").strip()
         if operation_id:
-            replay = choice_service.get_result(operation_id, user_id)
+            replay = _past_life_choice_service().get_result(operation_id, user_id)
             if replay is not None:
                 if replay.succeeded:
                     return self._choice_response(replay.response, replay.status)
@@ -514,7 +523,7 @@ class PastLifeEngine:
                     "operation_status": settlement.status,
                 }
             if settlement.status == "duplicate":
-                replay = choice_service.get_result(operation_id, user_id)
+                replay = _past_life_choice_service().get_result(operation_id, user_id)
                 if replay is not None and replay.succeeded:
                     return self._choice_response(replay.response, replay.status)
             return self._choice_response(response, settlement.status)
@@ -565,7 +574,7 @@ class PastLifeEngine:
                     "operation_status": settlement.status,
                 }
             if settlement.status == "duplicate":
-                replay = choice_service.get_result(operation_id, user_id)
+                replay = _past_life_choice_service().get_result(operation_id, user_id)
                 if replay is not None and replay.succeeded:
                     return self._choice_response(replay.response, replay.status)
             return self._choice_response(response, settlement.status)
@@ -583,7 +592,7 @@ class PastLifeEngine:
             for i, c in enumerate(next_event["choices"], 1):
                 next_msg += f"\n[{i}] {c['text']}"
             response = {"message": next_msg, "is_end": False, "ending": None}
-            settlement = choice_service.advance(
+            settlement = _past_life_choice_service().advance(
                 operation_id,
                 user_id,
                 choice_idx,
