@@ -78,9 +78,7 @@ def configure_lottery_application(application: Any) -> None:
 _player_rename_service_instance = None
 _stone_gift_service_instance = None
 _stone_contest_service_instance = None
-stone_robbery_service = StoneRobberySettlementService(
-    get_paths().game_db, get_paths().player_db
-)
+_stone_robbery_service_instance = None
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
@@ -107,6 +105,15 @@ def _stone_contest_service():
     if _stone_contest_service_instance is None:
         _stone_contest_service_instance = StoneContestService(get_paths().game_db)
     return _stone_contest_service_instance
+
+
+def _stone_robbery_service():
+    global _stone_robbery_service_instance
+    if _stone_robbery_service_instance is None:
+        _stone_robbery_service_instance = StoneRobberySettlementService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _stone_robbery_service_instance
 registration_batcher = RegistrationBatcher(sql_message)
 player_data_manager = PlayerDataManager()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
@@ -1443,7 +1450,7 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
         await rob_stone.finish()
 
     operation_id = _stone_robbery_operation_id(event, user_id)
-    previous = stone_robbery_service.replay(operation_id, user_id, give_qq)
+    previous = _stone_robbery_service().replay(operation_id, user_id, give_qq)
     if previous is not None:
         if not previous.succeeded:
             await handle_send(bot, event, "本次抢劫与首次请求目标不一致，未重复结算。")
@@ -1495,7 +1502,7 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
     player1 = _stone_robbery_player(user_mes)
     player2 = _stone_robbery_player(user_2)
     battle_messages, winner_id, final = OtherSet().player_fight(player1, player2)
-    settlement = stone_robbery_service.settle(
+    settlement = _stone_robbery_service().settle(
         operation_id,
         user_id,
         give_qq,

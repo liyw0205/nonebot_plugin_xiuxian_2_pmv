@@ -1390,8 +1390,11 @@ class SourceQualityTests(unittest.TestCase):
         source = (base_root / "__init__.py").read_text(encoding="utf-8")
         start = source.index("@rob_stone.handle")
         handler = source[start:source.index("@view_logs.handle", start)]
-        self.assertIn("stone_robbery_service.replay(", handler)
-        self.assertIn("stone_robbery_service.settle(", handler)
+        self.assertIn("_stone_robbery_service().replay(", handler)
+        self.assertIn("_stone_robbery_service().settle(", handler)
+        self.assertIn("_stone_robbery_service_instance = None", source)
+        self.assertIn("def _stone_robbery_service(", source)
+        self.assertNotIn("stone_robbery_service.settle(", handler)
         self.assertNotIn("stone_contest_service.transfer(", handler)
         self.assertNotIn("sql_message.update_ls(", handler)
         self.assertNotIn("sql_message.update_user_stamina(", handler)
@@ -1399,7 +1402,7 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("update_statistics_value(", handler)
         self.assertNotIn("Cooldown(stamina_cost=15", handler)
         self.assertLess(
-            handler.index("stone_robbery_service.replay("),
+            handler.index("_stone_robbery_service().replay("),
             handler.index("OtherSet().player_fight("),
         )
         service = (base_root / "stone_robbery_service.py").read_text(encoding="utf-8")
