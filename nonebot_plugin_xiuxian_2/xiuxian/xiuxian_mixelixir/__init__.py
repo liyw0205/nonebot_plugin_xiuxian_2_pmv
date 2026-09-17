@@ -52,7 +52,7 @@ mixelixir_application = MixelixirApplication(
 mixelixir_harvest_level_upgrade_service = MixelixirHarvestLevelUpgradeService(
     get_paths().game_db, get_paths().player_db
 )
-mixelixir_recipe_service = MixelixirRecipeService(get_paths().game_db)
+_mixelixir_recipe_service_instance = None
 mixelixir_refine_cost_service = MixelixirRefineCostService(get_paths().game_db)
 mixelixir_refine_reward_service = MixelixirRefineRewardService(get_paths().game_db, get_paths().player_db)
 
@@ -63,6 +63,14 @@ runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
 added_rank = added_ranks()
 cache_help = {}
+
+
+def _mixelixir_recipe_service():
+    global _mixelixir_recipe_service_instance
+    if _mixelixir_recipe_service_instance is None:
+        _mixelixir_recipe_service_instance = MixelixirRecipeService(get_paths().game_db)
+    return _mixelixir_recipe_service_instance
+
 
 mix_elixir = on_command("炼丹", priority=17, block=True)
 mix_make = on_command("配方", priority=5, block=True)
@@ -498,7 +506,7 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         ]
         event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
         operation_id = f"mixelixir-recipe:{event_id}:{user_id}" if event_id else f"mixelixir-recipe:{user_id}:{runtime_ids.new_id()}"
-        saved = mixelixir_recipe_service.save(
+        saved = _mixelixir_recipe_service().save(
             operation_id,
             user_id,
             int(user_info.get("mixelixir_num", 0) or 0),
