@@ -35,13 +35,23 @@ from ..xiuxian_title.title_data import check_and_unlock_titles
 player_data_manager = PlayerDataManager()
 sql_message = XiuxianDateManage()
 items = Items()
-tower_settlement_service = TowerSettlementService(get_paths().game_db, get_paths().player_db)
+_tower_settlement_service_instance = None
 tower_application = TowerApplication(
     get_paths().game_db,
     get_paths().player_db,
     repository=TowerPurchaseSqlRepository(get_paths().game_db, get_paths().player_db),
 )
 tower_ids = UUIDGenerator()
+
+
+def _tower_settlement_service():
+    global _tower_settlement_service_instance
+    if _tower_settlement_service_instance is None:
+        _tower_settlement_service_instance = TowerSettlementService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _tower_settlement_service_instance
+
 
 # 定义命令
 tower_challenge = on_command("爬塔", aliases={"挑战通天塔", "通天塔挑战"}, priority=5, block=True)
@@ -138,7 +148,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"tower-challenge:{event_id}:{user_id}" if event_id else ""
     if operation_id:
-        prior = tower_settlement_service.get_result(operation_id)
+        prior = _tower_settlement_service().get_result(operation_id)
         if prior is not None and prior.succeeded:
             if prior.challenge_succeeded:
                 msg = (
@@ -201,7 +211,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"tower-continuous:{event_id}:{user_id}:{target_floors}" if event_id else ""
     if operation_id:
-        prior = tower_settlement_service.get_result(operation_id)
+        prior = _tower_settlement_service().get_result(operation_id)
         if prior is not None and prior.succeeded:
             msg = (
                 f"连续挑战完成，成功通关第{prior.floor}层！共获得积分：{prior.score}点，"

@@ -1,4 +1,5 @@
 import json
+import importlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,6 +10,28 @@ nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tower.transaction_service import TowerSettlementService
 from tests.test_db_backend import db_backend
+
+
+def test_tower_facade_defers_settlement_service_construction():
+    tower = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tower"
+    )
+    assert tower._tower_settlement_service_instance is None
+
+
+def test_tower_challenge_replay_uses_lazy_settlement_reader():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tower/__init__.py"
+    ).read_text(encoding="utf-8")
+    battle_source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tower/tower_battle.py"
+    ).read_text(encoding="utf-8")
+    assert "_tower_settlement_service_instance = None" in source
+    assert "def _tower_settlement_service(" in source
+    assert source.count("_tower_settlement_service().get_result(") == 2
+    assert "tower_settlement_service.get_result(" not in source
+    assert "tower_application.settle(" in battle_source
+    assert "tower_application.settlement_result(" in battle_source
 
 
 class TowerSettlementServiceTests(unittest.TestCase):
