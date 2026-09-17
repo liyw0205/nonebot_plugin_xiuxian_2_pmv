@@ -40,7 +40,7 @@ items = Items()
 _dongfu_expansion_service_instance = None
 _dongfu_plant_service_instance = None
 _dongfu_accelerate_service_instance = None
-dongfu_patrol_service = DongfuPatrolService(get_paths().game_db, get_paths().player_db)
+_dongfu_patrol_service_instance = None
 _dongfu_array_upgrade_service_instance = None
 _dongfu_visit_reward_service_instance = None
 _dongfu_fertilize_service_instance = None
@@ -78,6 +78,15 @@ def _dongfu_accelerate_service():
             get_paths().game_db, get_paths().player_db
         )
     return _dongfu_accelerate_service_instance
+
+
+def _dongfu_patrol_service():
+    global _dongfu_patrol_service_instance
+    if _dongfu_patrol_service_instance is None:
+        _dongfu_patrol_service_instance = DongfuPatrolService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _dongfu_patrol_service_instance
 
 
 def _dongfu_array_upgrade_service():
@@ -1088,7 +1097,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             reward = (item_id, item_name, 1)
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"dongfu-patrol:{uid}:{event_message_id or runtime_ids.new_id()}"
-    prior = dongfu_patrol_service.get_result(operation_id)
+    prior = _dongfu_patrol_service().get_result(operation_id)
     if prior is not None and prior.succeeded:
         await handle_send(
             bot,
@@ -1105,7 +1114,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         stone_gain = int(stone_gain * 1.2)
     result = _run_dongfu_action(
         "patrol", operation_id, uid,
-        call=lambda: dongfu_patrol_service.patrol(
+        call=lambda: _dongfu_patrol_service().patrol(
             operation_id, uid, _today_str(), DONGFU_PATROL_STAMINA,
             DONGFU_PATROL_DAILY_LIMIT, stone_gain, reward, XiuConfig().max_goods_num,
         ),
