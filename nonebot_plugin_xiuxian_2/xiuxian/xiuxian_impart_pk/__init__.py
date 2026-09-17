@@ -75,9 +75,7 @@ _impart_training_settlement_service_instance = None
 _impart_explore_settlement_service_instance = None
 _impart_closing_settlement_service_instance = None
 _impart_battle_batch_service_instance = None
-impart_closing_enter_service = ImpartClosingEnterService(
-    get_paths().game_db, get_paths().player_db
-)
+_impart_closing_enter_service_instance = None
 impart_project_join_service = ImpartProjectJoinService(get_paths().player_db)
 impart_pk_application = ImpartPkApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
@@ -119,6 +117,15 @@ def _impart_battle_batch_service():
             get_paths().impart_db, get_paths().player_db
         )
     return _impart_battle_batch_service_instance
+
+
+def _impart_closing_enter_service():
+    global _impart_closing_enter_service_instance
+    if _impart_closing_enter_service_instance is None:
+        _impart_closing_enter_service_instance = ImpartClosingEnterService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _impart_closing_enter_service_instance
 
 
 def _run_impart_pk_action(action, operation_id, user_id, call, **payload):
@@ -982,7 +989,7 @@ async def impart_pk_in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMess
     user_id = user_info['user_id']
     op_id = _impart_operation_id(event, "closing-enter", user_id)
     # 先回放：成功后 type=4 会挡住同事件幂等；started_at 每次不同不能进 payload。
-    prior = impart_closing_enter_service.get_result(op_id)
+    prior = _impart_closing_enter_service().get_result(op_id)
     if prior is not None and prior.succeeded:
         msg = "进入虚神界闭关状态，如需出关，发送【虚神界出关】！\n该闭关请求已经处理，无需重复提交。"
         await handle_send(bot, event, msg, md_type="虚神界", k1="出关", v1="虚神界出关", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
@@ -990,7 +997,7 @@ async def impart_pk_in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMess
     started_at = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S.%f")
     result = _run_impart_pk_action(
         "closing_enter", op_id, user_id,
-        call=lambda: impart_closing_enter_service.enter(op_id, user_id, started_at),
+        call=lambda: _impart_closing_enter_service().enter(op_id, user_id, started_at),
         started_at=started_at,
     )
     if result.status == "ineligible":

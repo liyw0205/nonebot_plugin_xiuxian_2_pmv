@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import importlib
 from pathlib import Path
 
 import nonebot
@@ -12,6 +13,26 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart_pk.transaction_service impo
     ImpartClosingEnterService,
 )
 from tests.test_db_backend import db_backend
+
+
+def test_impart_facade_defers_closing_enter_service_construction():
+    impart = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart_pk"
+    )
+    assert impart._impart_closing_enter_service_instance is None
+
+
+def test_impart_closing_enter_handler_uses_lazy_dual_database_service():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py"
+    ).read_text(encoding="utf-8")
+    handler = source[source.index("async def impart_pk_in_closing_"):source.index("async def impart_pk_out_closing_")]
+    assert "_impart_closing_enter_service().get_result(" in handler
+    assert "_impart_closing_enter_service().enter(" in handler
+    assert "_impart_closing_enter_service_instance = None" in source
+    assert "def _impart_closing_enter_service(" in source
+    assert "get_paths().game_db, get_paths().player_db" in source
+    assert "impart_closing_enter_service.enter(" not in handler
 
 
 class ImpartClosingEnterTests(unittest.TestCase):
