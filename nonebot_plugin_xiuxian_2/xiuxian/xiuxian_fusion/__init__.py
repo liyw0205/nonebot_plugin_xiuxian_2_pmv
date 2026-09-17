@@ -29,10 +29,17 @@ import time
 
 items = Items()
 sql_message = XiuxianDateManage()
-fusion_service = FusionService(get_paths().game_db)
+_fusion_service_instance = None
 fusion_application = FusionApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
 runtime_random = SystemRandom()
+
+
+def _fusion_service():
+    global _fusion_service_instance
+    if _fusion_service_instance is None:
+        _fusion_service_instance = FusionService(get_paths().game_db)
+    return _fusion_service_instance
 
 
 def _run_fusion_action(action, operation_id, user_id, call, **payload):
@@ -171,7 +178,7 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
         return False, "合成数量必须是正整数！"
     # 先回放：成功后 limit/库存变化会挡住同事件幂等。
     if quantity == 1:
-        prior = fusion_service.get_result(operation_id)
+        prior = _fusion_service().get_result(operation_id)
         if prior is not None and prior.succeeded:
             if prior.successful:
                 item_type = equipment.get('type', '物品')
@@ -180,7 +187,7 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
                 return False, "合成失败！幸好使用了福缘石，材料没有损失。\n该合成请求已经处理，无需重复提交。"
             return False, "合成失败！材料已消耗。\n该合成请求已经处理，无需重复提交。"
     else:
-        prior_batch = fusion_service.get_batch_result(operation_id)
+        prior_batch = _fusion_service().get_batch_result(operation_id)
         if prior_batch is not None and prior_batch.succeeded:
             consumed_failures = prior_batch.failed_count - prior_batch.protected_count
             return prior_batch.successful_count > 0, (
@@ -271,7 +278,7 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
     if quantity == 1:
         result = _run_fusion_action(
             "apply", operation_id, user_id,
-            call=lambda: fusion_service.apply(
+            call=lambda: _fusion_service().apply(
                 operation_id, user_id, int(fusion_info.get('need_stone', 0)), needed_items,
                 equipment_id, equipment['name'], equipment['type'], successful=outcomes[0],
                 protection_item_id=None if guaranteed else 20006,
@@ -308,7 +315,7 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
 
     result = _run_fusion_action(
         "apply_batch", operation_id, user_id,
-        call=lambda: fusion_service.apply_batch(
+        call=lambda: _fusion_service().apply_batch(
             operation_id, user_id, int(fusion_info.get('need_stone', 0)), needed_items,
             equipment_id, equipment['name'], equipment['type'], outcomes,
             protection_item_id=None if guaranteed else 20006, reserved_items=reserved_items,

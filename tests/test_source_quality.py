@@ -1346,7 +1346,7 @@ class SourceQualityTests(unittest.TestCase):
         fusion_root = SOURCE_ROOT / "xiuxian" / "xiuxian_fusion"
         source = (fusion_root / "__init__.py").read_text(encoding="utf-8")
         handler = source[source.index("async def general_fusion("):source.index("@available_fusion.handle")]
-        self.assertIn("fusion_service.apply(", handler)
+        self.assertIn("_fusion_service().apply(", handler)
         self.assertNotIn("sql_message.update_ls(", handler)
         self.assertNotIn("sql_message.update_back_j(", handler)
         self.assertNotIn("sql_message.send_back(", handler)

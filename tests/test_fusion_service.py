@@ -13,6 +13,11 @@ from tests.test_db_backend import db_backend
 
 
 class FusionServiceTests(unittest.TestCase):
+    def test_fusion_facade_defers_service_construction(self) -> None:
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_fusion
+
+        self.assertIsNone(xiuxian_fusion._fusion_service_instance)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "fusion.sqlite3"
