@@ -498,8 +498,8 @@ class SourceQualityTests(unittest.TestCase):
         end = command_source.index("@guishi_take_item.handle", start)
         command = command_source[start:end]
 
-        self.assertIn("guishi_stone_service.deposit(", command)
-        self.assertIn("guishi_stone_service.withdraw(", command)
+        self.assertIn("_guishi_stone_service().deposit(", command)
+        self.assertIn("_guishi_stone_service().withdraw(", command)
         self.assertNotIn("sql_message.try_update_ls(", command)
         self.assertNotIn("trade_manager.try_update_stored_stone(", command)
         self.assertIn("ATTACH DATABASE", service_source)

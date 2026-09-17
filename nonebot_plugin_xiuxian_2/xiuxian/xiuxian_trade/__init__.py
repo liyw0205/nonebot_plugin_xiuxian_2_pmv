@@ -79,7 +79,7 @@ xianshi_repository = TradeRepository(
     max_goods_num=XiuConfig().max_goods_num,
 )
 xianshi_purchase_service = XianshiPurchaseService(xianshi_repository)
-guishi_stone_service = GuishiStoneService(get_paths().game_db, get_paths().trade_db)
+_guishi_stone_service_instance = None
 auction_queue_service = AuctionQueueService(
     get_paths().game_db,
     get_paths().trade_db,
@@ -98,6 +98,15 @@ bind_auction_service_dependencies(
     auction_repository=xianshi_repository,
     auction_session_service=auction_session_service,
 )
+
+
+def _guishi_stone_service():
+    global _guishi_stone_service_instance
+    if _guishi_stone_service_instance is None:
+        _guishi_stone_service_instance = GuishiStoneService(
+            get_paths().game_db, get_paths().trade_db
+        )
+    return _guishi_stone_service_instance
 
 
 @register_legacy_startup
@@ -1449,7 +1458,7 @@ async def guishi_deposit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_deposit.finish()
     
-    result = guishi_stone_service.deposit(
+    result = _guishi_stone_service().deposit(
         _guishi_stone_operation_id(event, "deposit", user_id),
         user_id,
         amount,
@@ -1524,7 +1533,7 @@ async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_withdraw.finish()
     
-    result = guishi_stone_service.withdraw(
+    result = _guishi_stone_service().withdraw(
         _guishi_stone_operation_id(event, "withdraw", user_id),
         user_id,
         amount,
