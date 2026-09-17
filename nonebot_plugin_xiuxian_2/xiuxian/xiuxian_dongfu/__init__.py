@@ -46,7 +46,7 @@ _dongfu_visit_reward_service_instance = None
 dongfu_fertilize_service = DongfuFertilizeService(get_paths().game_db, get_paths().player_db)
 _dongfu_infiltrate_failure_service_instance = None
 _dongfu_infiltrate_success_service_instance = None
-dongfu_harvest_settlement_service = DongfuHarvestSettlementService(get_paths().game_db, get_paths().player_db)
+_dongfu_harvest_settlement_service_instance = None
 dongfu_application = DongfuApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
 runtime_random = SystemRandom()
@@ -96,6 +96,15 @@ def _dongfu_infiltrate_success_service():
             get_paths().game_db, get_paths().player_db
         )
     return _dongfu_infiltrate_success_service_instance
+
+
+def _dongfu_harvest_settlement_service():
+    global _dongfu_harvest_settlement_service_instance
+    if _dongfu_harvest_settlement_service_instance is None:
+        _dongfu_harvest_settlement_service_instance = DongfuHarvestSettlementService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _dongfu_harvest_settlement_service_instance
 
 
 def _run_dongfu_action(action, operation_id, user_id, call, **payload):
@@ -887,7 +896,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"dongfu-harvest:{uid}:{event_message_id or runtime_ids.new_id()}"
-    prior = dongfu_harvest_settlement_service.get_result(operation_id)
+    prior = _dongfu_harvest_settlement_service().get_result(operation_id)
     if prior is not None and prior.succeeded:
         lines = [f"洞府收获完成，共收获{len(prior.rewards)}种产出："] if prior.rewards else ["洞府收获请求已处理。"]
         if prior.rewards:
@@ -949,7 +958,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     result = _run_dongfu_action(
         "harvest", operation_id, uid,
-        call=lambda: dongfu_harvest_settlement_service.harvest(
+        call=lambda: _dongfu_harvest_settlement_service().harvest(
             operation_id, uid, snapshot["expected_slots"], snapshot["slot_numbers"],
             snapshot["items"], XiuConfig().max_goods_num, _fmt_dt(now),
         ),
