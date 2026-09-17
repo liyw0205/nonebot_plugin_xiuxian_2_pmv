@@ -14,6 +14,11 @@ from tests.test_db_backend import db_backend
 
 
 class RefineCostServiceTests(unittest.TestCase):
+    def test_mixelixir_facade_defers_refine_cost_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_mixelixir
+
+        self.assertIsNone(xiuxian_mixelixir._mixelixir_refine_cost_service_instance)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.db = Path(self.tmp.name) / "game.db"

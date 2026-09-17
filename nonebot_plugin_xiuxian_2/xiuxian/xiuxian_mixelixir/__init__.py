@@ -53,7 +53,7 @@ mixelixir_harvest_level_upgrade_service = MixelixirHarvestLevelUpgradeService(
     get_paths().game_db, get_paths().player_db
 )
 _mixelixir_recipe_service_instance = None
-mixelixir_refine_cost_service = MixelixirRefineCostService(get_paths().game_db)
+_mixelixir_refine_cost_service_instance = None
 mixelixir_refine_reward_service = MixelixirRefineRewardService(get_paths().game_db, get_paths().player_db)
 
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
@@ -70,6 +70,15 @@ def _mixelixir_recipe_service():
     if _mixelixir_recipe_service_instance is None:
         _mixelixir_recipe_service_instance = MixelixirRecipeService(get_paths().game_db)
     return _mixelixir_recipe_service_instance
+
+
+def _mixelixir_refine_cost_service():
+    global _mixelixir_refine_cost_service_instance
+    if _mixelixir_refine_cost_service_instance is None:
+        _mixelixir_refine_cost_service_instance = MixelixirRefineCostService(
+            get_paths().game_db
+        )
+    return _mixelixir_refine_cost_service_instance
 
 
 mix_elixir = on_command("炼丹", priority=17, block=True)
@@ -708,7 +717,7 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                 updated_mix_state["炼丹经验"] = int(updated_mix_state["炼丹经验"] or 0) + exp_gain
 
                 operation_id = f"mixelixir-cost:{event_id}:{user_id}" if event_id else f"mixelixir-cost:{user_id}:{runtime_ids.new_id()}"
-                started = mixelixir_refine_cost_service.start(
+                started = _mixelixir_refine_cost_service().start(
                     operation_id,
                     user_id,
                     "custom",
