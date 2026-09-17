@@ -67,7 +67,7 @@ dungeon_ids = UUIDGenerator()
 runtime_clock = SystemClock()
 _dungeon_explore_operation_service_instance = None
 _dungeon_team_transaction_service_instance = None
-dungeon_team_exit_service = DungeonTeamExitService(get_paths().player_db)
+_dungeon_team_exit_service_instance = None
 
 
 def _dungeon_explore_operation_service():
@@ -86,6 +86,15 @@ def _dungeon_team_transaction_service():
             get_paths().player_db
         )
     return _dungeon_team_transaction_service_instance
+
+
+def _dungeon_team_exit_service():
+    global _dungeon_team_exit_service_instance
+    if _dungeon_team_exit_service_instance is None:
+        _dungeon_team_exit_service_instance = DungeonTeamExitService(
+            get_paths().player_db
+        )
+    return _dungeon_team_exit_service_instance
 
 
 DUNGEON_SHOP = {
@@ -493,7 +502,7 @@ async def leave_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
 
     user_id = str(user_info['user_id'])
     operation_id = _team_operation_id(event, "leave", user_id)
-    replay = dungeon_team_exit_service.exit_operation_result(
+    replay = _dungeon_team_exit_service().exit_operation_result(
         operation_id, "leave", user_id
     )
     if replay is not None:
@@ -501,8 +510,8 @@ async def leave_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
         await leave_team_cmd.finish()
 
     team_id = get_user_team(user_id) or f"missing:{user_id}"
-    team_snapshot = dungeon_team_exit_service.snapshot(team_id)
-    exit_result = dungeon_team_exit_service.leave(
+    team_snapshot = _dungeon_team_exit_service().snapshot(team_id)
+    exit_result = _dungeon_team_exit_service().leave(
         operation_id,
         user_id,
         team_snapshot or _missing_team_snapshot(team_id),
@@ -522,7 +531,7 @@ async def kick_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
 
     user_id = str(user_info['user_id'])
     operation_id = _team_operation_id(event, "kick", user_id)
-    replay = dungeon_team_exit_service.exit_operation_result(
+    replay = _dungeon_team_exit_service().exit_operation_result(
         operation_id, "kick", user_id
     )
     if replay is not None:
@@ -537,8 +546,8 @@ async def kick_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
             target_user_id = str(target_db_info['user_id'])
     target_user_id = str(target_user_id or "")
     team_id = get_user_team(user_id) or f"missing:{user_id}"
-    team_snapshot = dungeon_team_exit_service.snapshot(team_id)
-    exit_result = dungeon_team_exit_service.kick(
+    team_snapshot = _dungeon_team_exit_service().snapshot(team_id)
+    exit_result = _dungeon_team_exit_service().kick(
         operation_id,
         user_id,
         target_user_id,
@@ -559,7 +568,7 @@ async def disband_team_handler(bot: Bot, event: Union[GroupMessageEvent, Private
 
     user_id = str(user_info['user_id'])
     operation_id = _team_operation_id(event, "disband", user_id)
-    replay = dungeon_team_exit_service.exit_operation_result(
+    replay = _dungeon_team_exit_service().exit_operation_result(
         operation_id, "disband", user_id
     )
     if replay is not None:
@@ -567,8 +576,8 @@ async def disband_team_handler(bot: Bot, event: Union[GroupMessageEvent, Private
         await disband_team_cmd.finish()
 
     team_id = get_user_team(user_id) or f"missing:{user_id}"
-    team_snapshot = dungeon_team_exit_service.snapshot(team_id)
-    exit_result = dungeon_team_exit_service.disband(
+    team_snapshot = _dungeon_team_exit_service().snapshot(team_id)
+    exit_result = _dungeon_team_exit_service().disband(
         operation_id,
         user_id,
         team_snapshot or _missing_team_snapshot(team_id),

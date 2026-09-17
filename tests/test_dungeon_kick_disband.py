@@ -206,8 +206,8 @@ class DungeonKickDisbandTests(unittest.TestCase):
         kick_handler = source[kick_start:disband_start]
         disband_handler = source[disband_start:view_start]
 
-        self.assertIn("dungeon_team_exit_service.kick(", kick_handler)
-        self.assertIn("dungeon_team_exit_service.disband(", disband_handler)
+        self.assertIn("_dungeon_team_exit_service().kick(", kick_handler)
+        self.assertIn("_dungeon_team_exit_service().disband(", disband_handler)
         self.assertNotIn("remove_member_from_team(", kick_handler)
         self.assertNotIn("disband_team(", disband_handler)
         self.assertNotIn("set_team_cd(", kick_handler)

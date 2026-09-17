@@ -16,6 +16,11 @@ from tests.test_db_backend import db_backend
 
 
 class DungeonMemberLeaveTests(unittest.TestCase):
+    def test_dungeon_facade_defers_team_exit_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dungeon as dungeon_plugin
+
+        self.assertIsNone(dungeon_plugin._dungeon_team_exit_service_instance)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "player.sqlite3"
@@ -173,7 +178,7 @@ class DungeonMemberLeaveTests(unittest.TestCase):
         end = source.index("@kick_team_cmd.handle", start)
         handler = source[start:end]
 
-        self.assertIn("dungeon_team_exit_service.leave(", handler)
+        self.assertIn("_dungeon_team_exit_service().leave(", handler)
         self.assertNotIn("remove_member_from_team(", handler)
         self.assertNotIn("set_team_cd(", handler)
 
