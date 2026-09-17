@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib
 import tempfile
 import unittest
 from datetime import datetime
@@ -12,6 +13,27 @@ nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import NormalTrainingLifecycleService
 from tests.test_db_backend import db_backend
+
+
+def test_buff_facade_defers_normal_training_lifecycle_service_construction():
+    buff = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff"
+    )
+    assert buff._normal_training_lifecycle_service_instance is None
+
+
+def test_buff_training_handler_uses_lazy_dual_database_service():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_buff/__init__.py"
+    ).read_text(encoding="utf-8")
+    handler = source[source.index("async def up_exp_"):source.index("async def stone_exp_")]
+    assert "_normal_training_lifecycle_service().start(" in handler
+    assert "_normal_training_lifecycle_service().complete(" in handler
+    assert "_normal_training_lifecycle_service_instance = None" in source
+    assert "def _normal_training_lifecycle_service(" in source
+    assert "get_paths().game_db, get_paths().player_db" in source
+    assert "normal_training_lifecycle_service.start(" not in handler
+    assert "normal_training_lifecycle_service.complete(" not in handler
 
 
 class NormalTrainingLifecycleTests(unittest.TestCase):

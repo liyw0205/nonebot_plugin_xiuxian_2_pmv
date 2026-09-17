@@ -74,7 +74,7 @@ xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
 _blessed_spot_service_instance = None
 _closing_settlement_service_instance = None
-normal_training_lifecycle_service = NormalTrainingLifecycleService(get_paths().game_db, get_paths().player_db)
+_normal_training_lifecycle_service_instance = None
 normal_pvp_settlement_service = NormalPvpSettlementService(get_paths().game_db, get_paths().player_db)
 stone_training_settlement_service = StoneTrainingSettlementService(get_paths().game_db, get_paths().player_db)
 runtime_clock = SystemClock()
@@ -98,6 +98,15 @@ def _closing_settlement_service():
             get_paths().game_db
         )
     return _closing_settlement_service_instance
+
+
+def _normal_training_lifecycle_service():
+    global _normal_training_lifecycle_service_instance
+    if _normal_training_lifecycle_service_instance is None:
+        _normal_training_lifecycle_service_instance = NormalTrainingLifecycleService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _normal_training_lifecycle_service_instance
 
 def _blessed_spot_operation_id(event, action, user_id):
     event_id = str(
@@ -526,7 +535,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         operation_id = _normal_training_operation_id(event, user_id)
         if user_info['root_type'] == '伪灵根':
             give_stone_num = int(runtime_random.randint(10000, 300000) * exp_rate)
-            start_result = normal_training_lifecycle_service.start(
+            start_result = _normal_training_lifecycle_service().start(
                 operation_id, user_id, kind="mining", expected_exp=use_exp,
                 expected_stone=int(user_mes['stone']), reward=give_stone_num,
                 exp_cap=max_exp, power_multiplier=level_rate * realm_rate,
@@ -538,7 +547,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await handle_send(bot, event, msg)
             await asyncio.sleep(60)
             iso = runtime_clock.now().isocalendar()
-            result = normal_training_lifecycle_service.complete(operation_id, task_period=f"{iso.year}-W{iso.week:02d}")
+            result = _normal_training_lifecycle_service().complete(operation_id, task_period=f"{iso.year}-W{iso.week:02d}")
             if not result.succeeded:
                 await up_exp.finish()
             msg = f"挖矿结束，增加灵石：{result.stone_gain}"
@@ -547,7 +556,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await up_exp.finish()
         else:
             exp, spirit_vein_msg = _apply_spirit_vein_exp_bonus(exp, user_get_exp_max)
-            start_result = normal_training_lifecycle_service.start(
+            start_result = _normal_training_lifecycle_service().start(
                 operation_id, user_id, kind="cultivation", expected_exp=use_exp,
                 expected_stone=int(user_mes['stone']), reward=exp,
                 exp_cap=max_exp, power_multiplier=level_rate * realm_rate,
@@ -559,7 +568,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await asyncio.sleep(60)
         iso = runtime_clock.now().isocalendar()
-        result = normal_training_lifecycle_service.complete(operation_id, task_period=f"{iso.year}-W{iso.week:02d}")
+        result = _normal_training_lifecycle_service().complete(operation_id, task_period=f"{iso.year}-W{iso.week:02d}")
         if not result.succeeded:
             await up_exp.finish()
         recovery_msg = ""
