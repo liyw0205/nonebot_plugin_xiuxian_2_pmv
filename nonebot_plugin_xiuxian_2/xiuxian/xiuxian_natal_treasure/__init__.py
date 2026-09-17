@@ -48,7 +48,7 @@ from .transaction_service import AwakenService
 items = Items()
 sql_message = XiuxianDateManage()
 _natal_training_service_instance = None
-natal_effect_upgrade_service = EffectUpgradeService(get_paths().game_db, get_paths().player_db)
+_natal_effect_upgrade_service_instance = None
 natal_engraving_service = EngravingService(get_paths().game_db, get_paths().player_db)
 _natal_forget_service_instance = None
 _natal_reawaken_service_instance = None
@@ -63,6 +63,15 @@ def _natal_training_service():
             get_paths().game_db, get_paths().player_db
         )
     return _natal_training_service_instance
+
+
+def _natal_effect_upgrade_service():
+    global _natal_effect_upgrade_service_instance
+    if _natal_effect_upgrade_service_instance is None:
+        _natal_effect_upgrade_service_instance = EffectUpgradeService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _natal_effect_upgrade_service_instance
 
 
 def _natal_reawaken_service():
@@ -433,7 +442,7 @@ async def natal_effect_upgrade_handler(bot: Bot, event: GroupMessageEvent | Priv
     scripture_cost = 1
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"natal-effect-upgrade:{event_id}:{user_id}" if event_id else f"natal-effect-upgrade:{user_id}:{runtime_ids.new_id()}"
-    prior = natal_effect_upgrade_service.get_result(operation_id)
+    prior = _natal_effect_upgrade_service().get_result(operation_id)
     if prior is not None and prior.succeeded:
         effect_name = EFFECT_NAME_MAP.get(NatalEffectType(prior.effect_type), "未知效果")
         await handle_send(bot, event, f"效果升阶成功！消耗{scripture_cost}个【神秘经书】。\n效果【{effect_name}】等级提升至 {prior.level}。\n该升阶请求已经处理，无需重复提交。",
@@ -446,7 +455,7 @@ async def natal_effect_upgrade_handler(bot: Bot, event: GroupMessageEvent | Priv
                           md_type="法宝", k1="升阶", v1="本命法宝升阶", k2="法宝", v2="我的本命法宝", k3="觉醒", v3="觉醒本命法宝")
         return
 
-    upgrade = natal_effect_upgrade_service.upgrade(
+    upgrade = _natal_effect_upgrade_service().upgrade(
         operation_id, user_id, MYSTERIOUS_SCRIPTURE_ID, scripture_cost,
         MAX_EFFECT_SLOTS, nt.max_effect_level_all_effects,
         _natal_choice_seed(operation_id),
