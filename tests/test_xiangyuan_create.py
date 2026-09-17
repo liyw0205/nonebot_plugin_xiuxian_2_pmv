@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import importlib
 from pathlib import Path
 
 import nonebot
@@ -12,6 +13,28 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_base.transaction_service import (
     XiangyuanSettlementService,
 )
 from tests.test_db_backend import db_backend
+
+
+def test_xiangyuan_facade_defers_settlement_service_construction():
+    xiangyuan = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_base.xiangyuan"
+    )
+    assert xiangyuan._xiangyuan_settlement_service_instance is None
+
+
+def test_xiangyuan_facade_uses_lazy_dual_database_service():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_base/xiangyuan.py"
+    ).read_text(encoding="utf-8")
+    assert "_xiangyuan_settlement_service_instance = None" in source
+    assert "def _xiangyuan_settlement_service(" in source
+    assert "get_paths().game_db, get_paths().player_db" in source
+    assert "_xiangyuan_settlement_service().get_group(" in source
+    assert "_xiangyuan_settlement_service().create(" in source
+    assert "_xiangyuan_settlement_service().claim(" in source
+    assert "_xiangyuan_settlement_service().clear_all(" in source
+    assert "xiangyuan_settlement_service.create(" not in source
+    assert "xiangyuan_settlement_service.claim(" not in source
 
 
 class XiangyuanCreateTests(unittest.TestCase):

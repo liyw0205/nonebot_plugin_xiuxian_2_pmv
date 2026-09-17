@@ -21,11 +21,18 @@ from .transaction_service import XiangyuanSettlementService
 
 items = Items()
 sql_message = XiuxianDateManage()
-xiangyuan_settlement_service = XiangyuanSettlementService(
-    get_paths().game_db, get_paths().player_db
-)
+_xiangyuan_settlement_service_instance = None
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
+
+
+def _xiangyuan_settlement_service():
+    global _xiangyuan_settlement_service_instance
+    if _xiangyuan_settlement_service_instance is None:
+        _xiangyuan_settlement_service_instance = XiangyuanSettlementService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _xiangyuan_settlement_service_instance
 
 give_xiangyuan = on_command("送仙缘", priority=5, block=True)
 get_xiangyuan = on_command("抢仙缘", priority=5, block=True)
@@ -49,7 +56,7 @@ def get_xiangyuan_data(group_id):
     """获取群仙缘数据"""
     file_path = XIANGYUAN_DATA_PATH / f"xiangyuan_{group_id}.json"
     legacy_data = load_json_file(file_path, {"gifts": {}, "last_id": 1}, dict)
-    return xiangyuan_settlement_service.get_group(group_id, legacy_data=legacy_data)
+    return _xiangyuan_settlement_service().get_group(group_id, legacy_data=legacy_data)
 
 def _xiangyuan_operation_id(event, action, user_id):
     event_id = str(
@@ -260,7 +267,7 @@ async def give_xiangyuan_(bot: Bot, event: GroupMessageEvent, args: Message = Co
     
     legacy_path = XIANGYUAN_DATA_PATH / f"xiangyuan_{group_id}.json"
     legacy_data = load_json_file(legacy_path, {"gifts": {}, "last_id": 1}, dict)
-    result = xiangyuan_settlement_service.create(
+    result = _xiangyuan_settlement_service().create(
         _xiangyuan_operation_id(event, "create", user_id),
         group_id, user_id, user_info["user_name"], stone_amount, items_list,
         receiver_count, XIANGYUAN_SEND_LIMIT, legacy_data=legacy_data,
@@ -347,7 +354,7 @@ async def get_xiangyuan_(bot: Bot, event: GroupMessageEvent):
     item_ids = [item["goods_id"] for item in gift.get("items", ()) if item["quantity"] > 0]
     legacy_path = XIANGYUAN_DATA_PATH / f"xiangyuan_{group_id}.json"
     legacy_data = load_json_file(legacy_path, {"gifts": {}, "last_id": 1}, dict)
-    result = xiangyuan_settlement_service.claim(
+    result = _xiangyuan_settlement_service().claim(
         _xiangyuan_operation_id(event, "claim", user_id), group_id, gift_id,
         user_id, reward, item_ids, XIANGYUAN_RECEIVE_LIMIT,
         XiuConfig().max_goods_num, legacy_data=legacy_data,
@@ -506,7 +513,7 @@ async def reset_xiangyuan_daily():
 async def clear_all_xiangyuan():
     """清空所有群的仙缘（超级管理员）"""
     total_groups, total_gifts, total_refund_stone, total_refund_items = (
-        xiangyuan_settlement_service.clear_all(XiuConfig().max_goods_num)
+        _xiangyuan_settlement_service().clear_all(XiuConfig().max_goods_num)
     )
     if total_gifts == 0:
         return "当前没有仙缘数据可清空！"
