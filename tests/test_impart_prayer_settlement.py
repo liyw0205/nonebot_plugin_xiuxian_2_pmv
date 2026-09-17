@@ -22,6 +22,11 @@ BONUS_COLUMNS = (
 
 
 class ImpartPrayerSettlementTests(unittest.TestCase):
+    def test_impart_facade_defers_prayer_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_impart
+
+        self.assertIsNone(xiuxian_impart._impart_prayer_service_instance)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         root = Path(self.temp.name)
@@ -137,7 +142,7 @@ class ImpartPrayerSettlementTests(unittest.TestCase):
         handler = impart_source.split("async def use_wishing_stone", 1)[1].split(
             "async def use_love_sand", 1
         )[0]
-        self.assertIn("impart_prayer_service.settle(", handler)
+        self.assertIn("_impart_prayer_service().settle(", handler)
         self.assertNotIn("data_person_add_batch(", handler)
         self.assertNotIn("update_back_j(", handler)
         self.assertNotIn("re_impart_data(", handler)

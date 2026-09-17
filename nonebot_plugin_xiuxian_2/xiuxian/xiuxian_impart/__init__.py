@@ -58,7 +58,7 @@ _impart_draw_service_instance = None
 _card_compose_service_instance = None
 _card_disassemble_service_instance = None
 _love_sand_service_instance = None
-impart_prayer_service = ImpartPrayerSettlementService(get_paths().game_db, get_paths().impart_db)
+_impart_prayer_service_instance = None
 impart_application = ImpartApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
 
@@ -89,6 +89,15 @@ def _card_disassemble_service():
     if _card_disassemble_service_instance is None:
         _card_disassemble_service_instance = CardDisassembleService(get_paths().impart_db)
     return _card_disassemble_service_instance
+
+
+def _impart_prayer_service():
+    global _impart_prayer_service_instance
+    if _impart_prayer_service_instance is None:
+        _impart_prayer_service_instance = ImpartPrayerSettlementService(
+            get_paths().game_db, get_paths().impart_db
+        )
+    return _impart_prayer_service_instance
 
 
 def _run_impart_action(action, operation_id, user_id, call, **payload):
@@ -497,7 +506,7 @@ async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or runtime_ids.new_id())
     operation_id = f"impart-prayer:{event_id}:{user_id}:{item_id}"
-    result = impart_prayer_service.replay(operation_id, user_id, item_id, quantity)
+    result = _impart_prayer_service().replay(operation_id, user_id, item_id, quantity)
     if result is not None and result.succeeded:
         # fall through to existing message builder using result fields
         pass
@@ -505,7 +514,7 @@ async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         drawn_cards = [random.choice(img_list) for _ in range(quantity)]
         result = _run_impart_action(
             "prayer_settle", operation_id, user_id,
-            call=lambda: impart_prayer_service.settle(
+            call=lambda: _impart_prayer_service().settle(
                 operation_id, user_id, item_id, quantity, drawn_cards, impart_data_json.data_all_(),
             ),
             item_id=item_id, quantity=quantity, cards=drawn_cards,
