@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import importlib
 from pathlib import Path
 
 import nonebot
@@ -11,6 +12,24 @@ nonebot.init()
 from tests.test_db_backend import db_backend
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade.repository import TradeRepository
+
+
+def test_trade_facade_defers_xianshi_purchase_service_construction():
+    trade = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade"
+    )
+    assert trade._xianshi_purchase_service_instance is None
+
+
+def test_xianshi_purchase_handler_uses_lazy_repository_service():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_trade/__init__.py"
+    ).read_text(encoding="utf-8")
+    assert "_xianshi_purchase_service_instance = None" in source
+    assert "def _xianshi_purchase_service(" in source
+    assert "xianshi_repository" in source
+    assert "_xianshi_purchase_service().purchase(" in source
+    assert "xianshi_purchase_service.purchase(" not in source
 
 
 class TradePurchaseTests(unittest.TestCase):

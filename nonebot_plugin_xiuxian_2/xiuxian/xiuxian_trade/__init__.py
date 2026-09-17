@@ -78,7 +78,7 @@ xianshi_repository = TradeRepository(
     get_paths().game_db,
     max_goods_num=XiuConfig().max_goods_num,
 )
-xianshi_purchase_service = XianshiPurchaseService(xianshi_repository)
+_xianshi_purchase_service_instance = None
 _guishi_stone_service_instance = None
 auction_queue_service = AuctionQueueService(
     get_paths().game_db,
@@ -107,6 +107,15 @@ def _guishi_stone_service():
             get_paths().game_db, get_paths().trade_db
         )
     return _guishi_stone_service_instance
+
+
+def _xianshi_purchase_service():
+    global _xianshi_purchase_service_instance
+    if _xianshi_purchase_service_instance is None:
+        _xianshi_purchase_service_instance = XianshiPurchaseService(
+            xianshi_repository
+        )
+    return _xianshi_purchase_service_instance
 
 
 @register_legacy_startup
@@ -316,7 +325,7 @@ def buy_xianshi_item_safely(
     stamina_cost=0,
 ):
     """通过同库事务完成扣款、减库存、发货、卖家入账和幂等记录。"""
-    result = xianshi_purchase_service.purchase(
+    result = _xianshi_purchase_service().purchase(
         buyer_id,
         item_to_buy["id"],
         quantity_to_buy,
