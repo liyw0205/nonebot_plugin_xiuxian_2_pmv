@@ -75,7 +75,7 @@ sql_message = XiuxianDateManage()
 pet_application = PetApplication(get_paths().game_db, get_paths().player_db)
 runtime_ids = UUIDGenerator()
 _pet_skill_replace_service_instance = None
-pet_hatch_service = PetHatchService(get_paths().game_db, get_paths().player_db)
+_pet_hatch_service_instance = None
 pet_release_service = PetReleaseService(get_paths().game_db, get_paths().player_db)
 pet_fusion_breakthrough_service = PetFusionBreakthroughService(get_paths().player_db)
 pet_skill_reroll_service = PetSkillRerollService(get_paths().game_db, get_paths().player_db)
@@ -111,6 +111,15 @@ def _pet_skill_replace_service():
     if _pet_skill_replace_service_instance is None:
         _pet_skill_replace_service_instance = PetSkillReplaceService(get_paths().player_db)
     return _pet_skill_replace_service_instance
+
+
+def _pet_hatch_service():
+    global _pet_hatch_service_instance
+    if _pet_hatch_service_instance is None:
+        _pet_hatch_service_instance = PetHatchService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _pet_hatch_service_instance
 
 
 def _split_args(text: str):
@@ -1165,7 +1174,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     new_rows = [(p, str(p.get("uid")) == str((working.get("active") or {}).get("uid", ""))) for p in ([working.get("active")] + working.get("bag", [])) if p and str(p.get("uid")) not in original_uids]
     expected_meta = [str((data.get("active") or {}).get("uid", "")), int(data.get("egg_pity_count", 0)), int(data.get("egg_pity_no_mythic_count", 0)), data.get("travel")]
     updated_meta = [str((working.get("active") or {}).get("uid", "")), pity_count, no_mythic_count]
-    hatched = pet_hatch_service.hatch(
+    hatched = _pet_hatch_service().hatch(
         operation_id,
         user_id,
         int(user_info.get("stone", 0)),
