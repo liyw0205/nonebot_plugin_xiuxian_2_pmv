@@ -55,7 +55,7 @@ from .transaction_service import (
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 _impart_draw_service_instance = None
-card_compose_service = CardComposeService(get_paths().impart_db)
+_card_compose_service_instance = None
 card_disassemble_service = CardDisassembleService(get_paths().impart_db)
 _love_sand_service_instance = None
 impart_prayer_service = ImpartPrayerSettlementService(get_paths().game_db, get_paths().impart_db)
@@ -75,6 +75,13 @@ def _impart_draw_service():
     if _impart_draw_service_instance is None:
         _impart_draw_service_instance = ImpartDrawService(get_paths().game_db, get_paths().impart_db)
     return _impart_draw_service_instance
+
+
+def _card_compose_service():
+    global _card_compose_service_instance
+    if _card_compose_service_instance is None:
+        _card_compose_service_instance = CardComposeService(get_paths().impart_db)
+    return _card_compose_service_instance
 
 
 def _run_impart_action(action, operation_id, user_id, call, **payload):
@@ -774,7 +781,7 @@ async def impart_compose_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     user_id = str(user_info["user_id"])
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"impart-compose:{event_id}:{user_id}" if event_id else f"impart-compose:{user_id}:{runtime_ids.new_id()}"
-    prior = card_compose_service.get_result(operation_id)
+    prior = _card_compose_service().get_result(operation_id)
     if prior is not None and prior.succeeded:
         await handle_send(
             bot, event,
@@ -785,7 +792,7 @@ async def impart_compose_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     cards = impart_data_json.data_person_list(user_id) or {}
     result = _run_impart_action(
         "compose", operation_id, user_id,
-        call=lambda: card_compose_service.compose(
+        call=lambda: _card_compose_service().compose(
             operation_id, user_id, source_card, target_card, cards.get(source_card, 0),
             cards.get(target_card, 0), 5, impart_data_json.data_all_(),
         ),
