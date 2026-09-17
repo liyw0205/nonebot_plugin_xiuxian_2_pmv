@@ -26,9 +26,18 @@ INVITATION_DATA_PATH = DATA_PATH / "invitation_data"
 INVITATION_REWARDS_FILE = INVITATION_DATA_PATH / "invitation_rewards.json"
 INVITATION_RECORDS_FILE = INVITATION_DATA_PATH / "invitation_records.json"
 INVITATION_CLAIMED_FILE = INVITATION_DATA_PATH / "invitation_claimed.json"
-invitation_reward_service = InvitationRewardClaimService(get_paths().game_db)
+_invitation_reward_service_instance = None
 
 INVITATION_DATA_PATH.mkdir(parents=True, exist_ok=True)
+
+
+def _invitation_reward_service():
+    global _invitation_reward_service_instance
+    if _invitation_reward_service_instance is None:
+        _invitation_reward_service_instance = InvitationRewardClaimService(
+            get_paths().game_db
+        )
+    return _invitation_reward_service_instance
 
 
 def init_file(path: Path):
@@ -167,7 +176,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         operation_id,
         user_id,
         lambda: add_invitation_record(inviter_id, user_id),
-        database=getattr(invitation_reward_service, "_database", None),
+        database=getattr(_invitation_reward_service(), "_database", None),
         inviter_id=inviter_id,
         invited_id=user_id,
     )
@@ -229,7 +238,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     claimed = {
         str(value) for value in load_claimed_records().get(user_id, [])
     } | {
-        str(value) for value in invitation_reward_service.claimed_thresholds(user_id)
+        str(value) for value in _invitation_reward_service().claimed_thresholds(user_id)
     }
 
     available = []
@@ -261,7 +270,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     arg = args.extract_plain_text().strip()
     operation_id = _invitation_operation_id(event, user_id)
     # 先回放：成功后门槛已领会变 no_available，挡住同事件幂等。
-    prior = invitation_reward_service.get_result(operation_id)
+    prior = _invitation_reward_service().get_result(operation_id)
     if prior is not None and prior.succeeded:
         rewards = load_invitation_rewards()
         claimed_msgs = [
@@ -303,7 +312,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         "invitation_reward_claim",
         operation_id,
         user_id,
-        lambda: invitation_reward_service.claim(
+        lambda: _invitation_reward_service().claim(
             operation_id=operation_id,
             user_id=user_id,
             invited_user_ids=invited_user_ids,
@@ -312,7 +321,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             legacy_claimed_thresholds=load_claimed_records().get(user_id, []),
             max_goods_num=XiuConfig().max_goods_num,
         ),
-        database=getattr(invitation_reward_service, "_database", None),
+        database=getattr(_invitation_reward_service(), "_database", None),
         thresholds=thresholds,
     )
     if result.status == "duplicate":
@@ -379,7 +388,7 @@ async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
         operation_id,
         str(event.get_user_id()),
         lambda: save_invitation_rewards(rewards),
-        database=getattr(invitation_reward_service, "_database", None),
+        database=getattr(_invitation_reward_service(), "_database", None),
         threshold=threshold,
     )
     if not result.succeeded:
