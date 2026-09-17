@@ -750,7 +750,7 @@ class SourceQualityTests(unittest.TestCase):
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         command_source = (back_root / "__init__.py").read_text(encoding="utf-8")
         service_source = (back_root / "equipment_service.py").read_text(encoding="utf-8")
-        self.assertIn("equipment_service.change(", command_source)
+        self.assertGreaterEqual(command_source.count("_equipment_service().change("), 2)
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("equipment_operations", service_source)
 

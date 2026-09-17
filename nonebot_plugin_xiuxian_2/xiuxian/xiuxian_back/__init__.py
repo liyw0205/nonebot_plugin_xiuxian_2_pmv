@@ -87,7 +87,7 @@ from .backpack_render import (
 # 初始化组件
 items = Items()
 sql_message = XiuxianDateManage()
-equipment_service = EquipmentService(get_paths().game_db)
+_equipment_service_instance = None
 _cultivation_item_service_instance = None
 stone_reward_service = StoneItemRewardService(get_paths().game_db)
 _three_cultivation_pill_service_instance = None
@@ -116,6 +116,12 @@ def _cultivation_item_service():
     if _cultivation_item_service_instance is None:
         _cultivation_item_service_instance = CultivationItemService(get_paths().game_db)
     return _cultivation_item_service_instance
+
+def _equipment_service():
+    global _equipment_service_instance
+    if _equipment_service_instance is None:
+        _equipment_service_instance = EquipmentService(get_paths().game_db)
+    return _equipment_service_instance
 
 def _unbind_item_service():
     global _unbind_item_service_instance
@@ -849,7 +855,7 @@ async def no_use_zb_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     if goods_type == "装备":
         if check_equipment_use_msg(user_id, goods_id): # 检查装备是否在使用中
             item_type = items.get_data_by_item_id(goods_id)["item_type"]
-            result = equipment_service.change(
+            result = _equipment_service().change(
                 _equipment_operation_id(event, "unequip", goods_id),
                 user_id,
                 goods_id,
@@ -1151,7 +1157,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
             msg = f"道友实力不足使用{goods_info['name']}\n请提升至：{required_rank_name}{lh_msg}"
         else:
             item_type = goods_info["item_type"]
-            result = equipment_service.change(
+            result = _equipment_service().change(
                 _equipment_operation_id(event, "equip", goods_id),
                 user_id,
                 goods_id,
