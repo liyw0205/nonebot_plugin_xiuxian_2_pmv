@@ -1891,6 +1891,18 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("_admin_root_change_service().change(", source)
         self.assertNotIn("admin_root_change_service.change(", source)
 
+    def test_title_transaction_uses_lazy_replay_service(self) -> None:
+        root = SOURCE_ROOT / "xiuxian" / "xiuxian_title"
+        source = (root / "__init__.py").read_text(encoding="utf-8")
+        data_source = (root / "title_data.py").read_text(encoding="utf-8")
+        self.assertIn("_title_transaction_service_instance = None", source)
+        self.assertIn("def _title_transaction_service(", source)
+        self.assertIn("_title_transaction_service().get_result(", source)
+        self.assertIn("title_application.execute(", source)
+        self.assertNotIn("title_transaction_service.get_result(", source)
+        self.assertIn("from . import _title_transaction_service", data_source)
+        self.assertIn("_title_transaction_service().unlock_batch(", data_source)
+
     def test_tower_purchase_uses_cross_database_transaction(self) -> None:
         tower_root = SOURCE_ROOT / "xiuxian" / "xiuxian_tower"
         source = (tower_root / "__init__.py").read_text(encoding="utf-8")

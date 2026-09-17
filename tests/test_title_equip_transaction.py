@@ -1,4 +1,5 @@
 import json
+import importlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,6 +13,31 @@ from nonebot_plugin_xiuxian_2.features.title.migrations import apply_title_schem
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 from tests.test_db_backend import db_backend
+
+
+def test_title_facade_defers_transaction_service_construction():
+    title = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_title"
+    )
+    assert title._title_transaction_service_instance is None
+
+
+def test_title_entries_use_lazy_replay_and_application_write_paths():
+    title_source = open(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py",
+        encoding="utf-8",
+    ).read()
+    data_source = open(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/title_data.py",
+        encoding="utf-8",
+    ).read()
+    assert "_title_transaction_service_instance = None" in title_source
+    assert "def _title_transaction_service(" in title_source
+    assert "_title_transaction_service().get_result(" in title_source
+    assert "title_application.execute(" in title_source
+    assert "title_transaction_service.get_result(" not in title_source
+    assert "from . import _title_transaction_service" in data_source
+    assert "_title_transaction_service().unlock_batch(" in data_source
 
 
 class TitleEquipTransactionTests(unittest.TestCase):

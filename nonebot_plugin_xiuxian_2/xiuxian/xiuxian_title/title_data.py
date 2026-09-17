@@ -440,7 +440,7 @@ def find_unlockable_titles(user_id: str) -> List[dict]:
 
 def check_and_unlock_titles(user_id: str) -> List[dict]:
     """Compatibility wrapper for non-command callers."""
-    from .title_transaction_service import TitleTransactionService
+    from . import _title_transaction_service
 
     expected = get_user_unlocked_titles(user_id)
     unlockable = find_unlockable_titles(user_id)
@@ -448,7 +448,7 @@ def check_and_unlock_titles(user_id: str) -> List[dict]:
         return []
     title_ids = [str(title["id"]) for title in unlockable]
     operation_id = "title-auto-unlock:" + str(user_id) + ":" + ",".join(sorted(title_ids))
-    result = TitleTransactionService(get_paths().player_db).unlock_batch(
+    result = _title_transaction_service().unlock_batch(
         operation_id, user_id, expected, title_ids
     )
     return unlockable if result.succeeded else []
