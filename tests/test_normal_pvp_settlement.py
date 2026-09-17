@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import importlib
 from pathlib import Path
 
 import nonebot
@@ -12,6 +13,27 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import (
     NormalPvpSettlementService,
 )
 from tests.test_db_backend import db_backend
+
+
+def test_buff_facade_defers_normal_pvp_settlement_service_construction():
+    buff = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff"
+    )
+    assert buff._normal_pvp_settlement_service_instance is None
+
+
+def test_buff_pvp_handler_uses_lazy_dual_database_service():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_buff/__init__.py"
+    ).read_text(encoding="utf-8")
+    handler = source[source.index("async def qc_"):source.index("async def reset_exp_")]
+    assert "_normal_pvp_settlement_service().replay(" in handler
+    assert "_normal_pvp_settlement_service().calculate_battle(" in handler
+    assert "_normal_pvp_settlement_service().settle(" in handler
+    assert "_normal_pvp_settlement_service_instance = None" in source
+    assert "def _normal_pvp_settlement_service(" in source
+    assert "get_paths().game_db, get_paths().player_db" in source
+    assert "normal_pvp_settlement_service.settle(" not in handler
 
 
 class NormalPvpSettlementTests(unittest.TestCase):

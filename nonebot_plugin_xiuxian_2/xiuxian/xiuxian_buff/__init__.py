@@ -75,7 +75,7 @@ player_data_manager = PlayerDataManager()
 _blessed_spot_service_instance = None
 _closing_settlement_service_instance = None
 _normal_training_lifecycle_service_instance = None
-normal_pvp_settlement_service = NormalPvpSettlementService(get_paths().game_db, get_paths().player_db)
+_normal_pvp_settlement_service_instance = None
 stone_training_settlement_service = StoneTrainingSettlementService(get_paths().game_db, get_paths().player_db)
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
@@ -107,6 +107,15 @@ def _normal_training_lifecycle_service():
             get_paths().game_db, get_paths().player_db
         )
     return _normal_training_lifecycle_service_instance
+
+
+def _normal_pvp_settlement_service():
+    global _normal_pvp_settlement_service_instance
+    if _normal_pvp_settlement_service_instance is None:
+        _normal_pvp_settlement_service_instance = NormalPvpSettlementService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _normal_pvp_settlement_service_instance
 
 def _blessed_spot_operation_id(event, action, user_id):
     event_id = str(
@@ -408,7 +417,7 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
         await qc.finish()
 
     operation_id = _normal_pvp_operation_id(event, base1['user_id'], base2['user_id'])
-    replay = normal_pvp_settlement_service.replay(operation_id, base1['user_id'], base2['user_id'])
+    replay = _normal_pvp_settlement_service().replay(operation_id, base1['user_id'], base2['user_id'])
     if replay is not None:
         if replay.succeeded:
             await send_msg_handler(bot, event, replay.battle_messages)
@@ -426,10 +435,10 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
         await handle_send(bot, event, msg, md_type="buff", k1="切磋", v1="切磋", k2="状态", v2="我的状态", k3="修为", v3="我的修为")
         await qc.finish()
 
-    result, winner_id, winner_name, final = normal_pvp_settlement_service.calculate_battle(
+    result, winner_id, winner_name, final = _normal_pvp_settlement_service().calculate_battle(
         base1['user_id'], base2['user_id'], bot.self_id
     )
-    settlement = normal_pvp_settlement_service.settle(
+    settlement = _normal_pvp_settlement_service().settle(
         operation_id,
         base1['user_id'],
         base2['user_id'],
