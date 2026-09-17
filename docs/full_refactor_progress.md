@@ -1861,6 +1861,8 @@
 
 2026-09-17 mentor breakthrough reward lazy construction slice：`xiuxian_buff.partner` 不再 module-level 构造 `MentorBreakthroughRewardService`，新增 `_mentor_breakthrough_reward_service()` 双库惰性 getter，突破返修唯一 `apply` 入口经 getter；business_event_id、new_level、双方 exp/reward_count snapshot、reward limit、幂等/conflict 和 rollback 语义保持不变。construction、mentor breakthrough reward/expel/application/bind/protection、partner bind/unbind/cultivation/invite/token/breakthrough、source/architecture 共 219 tests、4 subtests passed，compileall、inventory、diff check通过。
 
+2026-09-17 mentor breakthrough reward lazy construction live safety：提交 `4fa72a21` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260917T130514Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。
