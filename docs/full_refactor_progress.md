@@ -1893,6 +1893,8 @@
 
 2026-09-17 dungeon team exit lazy construction slice：`xiuxian_dungeon.__init__` 不再 module-level 构造 `DungeonTeamExitService`，新增 `_dungeon_team_exit_service()` player-db 惰性 getter；leave/kick/disband 的 operation replay、team snapshot、成员状态/cooldown 清理和 rollback 全部经 getter，原事务边界保持不变。construction、dungeon team exit/transaction/lifecycle/explore、source/architecture 共 227 tests、4 subtests passed，compileall、inventory、diff check通过。
 
+2026-09-17 dungeon team exit construction evidence：新增 construction RED 后，production service 已改为 private lazy state/getter；leave/kick/disband 的 source gate 与 focused handler assertions 已迁移到 getter，未恢复 public module-level instance。construction、dungeon team exit/transaction/lifecycle/explore、source/architecture 共 227 tests、4 subtests passed。
+
 2026-09-17 dungeon team exit lazy construction live safety：提交 `1434d57b` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260917T143512Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
 
 ## 6. 下一步
