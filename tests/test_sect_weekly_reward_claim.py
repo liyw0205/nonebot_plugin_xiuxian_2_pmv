@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import importlib
 from pathlib import Path
 
 import nonebot
@@ -8,6 +9,30 @@ nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.transaction_service import SectWeeklyRewardClaimService
 from tests.test_db_backend import db_backend
+
+
+def test_sect_weekly_facade_defers_reward_claim_service_construction():
+    weekly = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.sect_weekly_commands"
+    )
+    assert weekly._sect_weekly_reward_service_instance is None
+
+
+def test_sect_weekly_claim_uses_lazy_dual_database_service():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_sect/sect_weekly_commands.py"
+    ).read_text(encoding="utf-8")
+    handler = source[
+        source.index("@sect_weekly_claim.handle"):
+        source.index("@sect_weekly_rank.handle")
+    ]
+    assert "_sect_weekly_reward_service_instance = None" in source
+    assert "def _sect_weekly_reward_service(" in source
+    assert "get_paths().game_db" in source
+    assert "get_paths().player_db" in source
+    assert "sql_message.lock" in source
+    assert "_sect_weekly_reward_service().claim(" in handler
+    assert "sect_weekly_reward_service.claim(" not in handler
 
 
 class SectWeeklyRewardClaimTests(unittest.TestCase):

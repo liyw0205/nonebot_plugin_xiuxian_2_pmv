@@ -2075,6 +2075,8 @@
 
 2026-09-18 sect membership lazy construction postcondition verification：隔离容器 postcondition 独立核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260917T224821Z` 恰好包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
 
+2026-09-18 sect weekly reward claim lazy construction slice：`xiuxian_sect.sect_weekly_commands` 不再 module-level 构造 `SectWeeklyRewardClaimService`，新增 `_sect_weekly_reward_service()` game/player 双库惰性 getter并保留 `sql_message.lock`；批量/单目标 claim、week/member/completion recheck、game/player 资产与 inventory atomic、operation replay/conflict 和 rollback 语义不变。construction、weekly/task/compensation、source/architecture 共 225 tests passed（1 warning为既有 compatibility boundary），compileall、inventory、diff check通过。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。

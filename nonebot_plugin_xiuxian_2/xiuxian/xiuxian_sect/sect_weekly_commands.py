@@ -17,12 +17,20 @@ from .transaction_service import SectWeeklyRewardClaimService
 
 items = Items()
 sql_message = XiuxianDateManage()
-sect_weekly_reward_service = SectWeeklyRewardClaimService(
-    get_paths().game_db,
-    get_paths().player_db,
-    sql_message.lock,
-)
+_sect_weekly_reward_service_instance = None
 runtime_ids = UUIDGenerator()
+
+
+def _sect_weekly_reward_service():
+    global _sect_weekly_reward_service_instance
+    if _sect_weekly_reward_service_instance is None:
+        _sect_weekly_reward_service_instance = SectWeeklyRewardClaimService(
+            get_paths().game_db,
+            get_paths().player_db,
+            sql_message.lock,
+        )
+    return _sect_weekly_reward_service_instance
+
 
 sect_weekly = on_command("宗门周常", priority=7, block=True)
 sect_weekly_claim = on_command("领取宗门周常", priority=7, block=True)
@@ -228,7 +236,7 @@ async def sect_weekly_claim_(
 
     week_key = sect_weekly_goal_manager.current_week_key()
     goal_scope = claimable[0]["key"] if len(claimable) == 1 else "all"
-    result = sect_weekly_reward_service.claim(
+    result = _sect_weekly_reward_service().claim(
         _sect_weekly_operation_id(event, user_id, goal_scope),
         user_id,
         sect_id,
