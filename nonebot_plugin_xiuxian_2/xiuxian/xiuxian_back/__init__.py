@@ -96,7 +96,7 @@ _lottery_talisman_service_instance = None
 _package_reward_service_instance = None
 _accessory_package_service_instance = None
 alchemy_service = AlchemyService(get_paths().game_db)
-skill_learning_service = SkillLearningService(get_paths().game_db)
+_skill_learning_service_instance = None
 batch_item_use_service = BatchItemUseService(
     get_paths().game_db, get_paths().player_db
 )
@@ -138,6 +138,12 @@ def _accessory_package_service():
             get_paths().game_db, get_paths().player_db
         )
     return _accessory_package_service_instance
+
+def _skill_learning_service():
+    global _skill_learning_service_instance
+    if _skill_learning_service_instance is None:
+        _skill_learning_service_instance = SkillLearningService(get_paths().game_db)
+    return _skill_learning_service_instance
 
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 added_ranks = added_ranks()
@@ -1305,7 +1311,7 @@ async def confirm_use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await confirm_use.finish()
     data = confirm_use_cache[str(user_id)]
     gid, name, s_type = data['goods_id'], data['item_name'], data['skill_type']
-    result = skill_learning_service.learn(
+    result = _skill_learning_service().learn(
         _skill_learning_operation_id(event, data['invite_id'], user_id, gid),
         user_id,
         gid,

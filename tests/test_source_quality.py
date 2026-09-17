@@ -764,7 +764,7 @@ class SourceQualityTests(unittest.TestCase):
         end = command_source.index("@use_item.handle", start)
         command = command_source[start:end]
 
-        self.assertIn("skill_learning_service.learn(", command)
+        self.assertIn("_skill_learning_service().learn(", command)
         self.assertNotIn("sql_message.update_back_j(", command)
         self.assertNotIn("updata_user_", command)
         self.assertIn("BEGIN IMMEDIATE", service_source)
