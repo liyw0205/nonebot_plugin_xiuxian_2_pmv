@@ -96,14 +96,8 @@ _admin_exp_adjustment_service_instance = None
 admin_asset_application = AdminAssetApplication(get_paths().game_db)
 _admin_item_destroy_service_instance = None
 _admin_item_batch_grant_service_instance = None
-admin_accessory_adjustment_service = AdminAccessoryAdjustmentService(
-    get_paths().game_db, get_paths().player_db
-)
-admin_accessory_batch_adjustment_service = AdminAccessoryBatchAdjustmentService(
-    get_paths().game_db,
-    get_paths().player_db,
-    admin_accessory_adjustment_service,
-)
+_admin_accessory_adjustment_service_instance = None
+_admin_accessory_batch_adjustment_service_instance = None
 admin_impart_stone_adjustment_service = AdminImpartStoneAdjustmentService(
     get_paths().game_db, get_paths().impart_db
 )
@@ -118,6 +112,26 @@ admin_player_status_batch_reset_service = AdminPlayerStatusBatchResetService(
     admin_player_status_reset_service,
 )
 admin_blackhouse_status_service = AdminBlackhouseStatusService(get_paths().game_db)
+
+
+def _admin_accessory_adjustment_service():
+    global _admin_accessory_adjustment_service_instance
+    if _admin_accessory_adjustment_service_instance is None:
+        _admin_accessory_adjustment_service_instance = AdminAccessoryAdjustmentService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _admin_accessory_adjustment_service_instance
+
+
+def _admin_accessory_batch_adjustment_service():
+    global _admin_accessory_batch_adjustment_service_instance
+    if _admin_accessory_batch_adjustment_service_instance is None:
+        _admin_accessory_batch_adjustment_service_instance = AdminAccessoryBatchAdjustmentService(
+            get_paths().game_db,
+            get_paths().player_db,
+            _admin_accessory_adjustment_service(),
+        )
+    return _admin_accessory_batch_adjustment_service_instance
 
 
 def _admin_level_change_service():
@@ -169,8 +183,8 @@ def _grant_admin_accessory(
     quantity: int,
     target_name: str,
 ):
-    equipped, bag = admin_accessory_adjustment_service.snapshot(user_id)
-    return admin_accessory_adjustment_service.grant(
+    equipped, bag = _admin_accessory_adjustment_service().snapshot(user_id)
+    return _admin_accessory_adjustment_service().grant(
         _admin_operation_id(event, "accessory-grant", user_id),
         str(get_user_id(event) or "unknown"),
         user_id,
@@ -216,8 +230,8 @@ def _destroy_admin_accessory(
     quantity: int,
     target_name: str,
 ):
-    equipped, bag = admin_accessory_adjustment_service.snapshot(user_id)
-    return admin_accessory_adjustment_service.destroy(
+    equipped, bag = _admin_accessory_adjustment_service().snapshot(user_id)
+    return _admin_accessory_adjustment_service().destroy(
         _admin_operation_id(event, "accessory-destroy", user_id),
         str(get_user_id(event) or "unknown"),
         user_id,
@@ -905,7 +919,7 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
         users = list(all_users)
         operator_id = str(get_user_id(event) or "unknown")
         if is_accessory:
-            operation_id = admin_accessory_batch_adjustment_service.find_running(
+            operation_id = _admin_accessory_batch_adjustment_service().find_running(
                 "grant",
                 operator_id,
                 goods_id,
@@ -917,7 +931,7 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
 
             def _work():
                 return run_chunked_until_done(
-                    lambda: admin_accessory_batch_adjustment_service.grant(
+                    lambda: _admin_accessory_batch_adjustment_service().grant(
                         operation_id,
                         operator_id,
                         users,
@@ -1154,7 +1168,7 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
 
         if is_accessory:
             operator_id = str(get_user_id(event) or "unknown")
-            operation_id = admin_accessory_batch_adjustment_service.find_running(
+            operation_id = _admin_accessory_batch_adjustment_service().find_running(
                 "destroy",
                 operator_id,
                 goods_id,
@@ -1167,7 +1181,7 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
 
             def _work():
                 return run_chunked_until_done(
-                    lambda: admin_accessory_batch_adjustment_service.destroy(
+                    lambda: _admin_accessory_batch_adjustment_service().destroy(
                         operation_id,
                         operator_id,
                         users,

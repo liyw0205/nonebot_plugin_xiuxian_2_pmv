@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,6 +14,30 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin.transaction_service import (
     AdminAccessoryAdjustmentService,
 )
 from tests.test_db_backend import db_backend
+
+
+def test_admin_facade_defers_accessory_service_construction():
+    admin = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin"
+    )
+    assert admin._admin_accessory_adjustment_service_instance is None
+    assert admin._admin_accessory_batch_adjustment_service_instance is None
+
+
+def test_admin_accessory_helpers_use_lazy_dual_database_services():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
+    ).read_text(encoding="utf-8")
+    assert "_admin_accessory_adjustment_service_instance = None" in source
+    assert "_admin_accessory_batch_adjustment_service_instance = None" in source
+    assert "def _admin_accessory_adjustment_service(" in source
+    assert "def _admin_accessory_batch_adjustment_service(" in source
+    assert "get_paths().game_db" in source
+    assert "get_paths().player_db" in source
+    assert "_admin_accessory_adjustment_service().grant(" in source
+    assert "_admin_accessory_adjustment_service().destroy(" in source
+    assert "admin_accessory_adjustment_service.grant(" not in source
+    assert "admin_accessory_adjustment_service.destroy(" not in source
 
 
 class AdminAccessoryAdjustmentTests(unittest.TestCase):
