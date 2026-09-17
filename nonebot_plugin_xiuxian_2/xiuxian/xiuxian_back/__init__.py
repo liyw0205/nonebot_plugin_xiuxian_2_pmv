@@ -98,7 +98,7 @@ _accessory_package_service_instance = None
 alchemy_service = AlchemyService(get_paths().game_db)
 _skill_learning_service_instance = None
 _batch_item_use_service_instance = None
-backpack_repair_service = BackpackRepairService(get_paths().game_db)
+_backpack_repair_service_instance = None
 player_data_manager = PlayerDataManager()
 runtime_ids = UUIDGenerator()
 
@@ -156,6 +156,12 @@ def _batch_item_use_service():
             get_paths().game_db, get_paths().player_db
         )
     return _batch_item_use_service_instance
+
+def _backpack_repair_service():
+    global _backpack_repair_service_instance
+    if _backpack_repair_service_instance is None:
+        _backpack_repair_service_instance = BackpackRepairService(get_paths().game_db)
+    return _backpack_repair_service_instance
 
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 added_ranks = added_ranks()
@@ -2438,14 +2444,14 @@ async def check_user_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         if isinstance(item_info, dict) and item_info.get("name")
     }
     operation_id = _backpack_repair_operation_id(event)
-    result = backpack_repair_service.run(
+    result = _backpack_repair_service().run(
         operation_id,
         catalog,
         int(XiuConfig().max_goods_num),
         batch_size=100,
     )
     while result.succeeded and not result.done:
-        result = backpack_repair_service.run(
+        result = _backpack_repair_service().run(
             result.operation_id,
             batch_size=100,
         )

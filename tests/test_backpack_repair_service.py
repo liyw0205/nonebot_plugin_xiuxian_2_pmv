@@ -15,6 +15,11 @@ from tests.test_db_backend import db_backend
 
 
 class BackpackRepairServiceTests(unittest.TestCase):
+    def test_back_facade_defers_backpack_repair_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_back
+
+        self.assertIsNone(xiuxian_back._backpack_repair_service_instance)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "xiuxian.sqlite3"
@@ -213,7 +218,7 @@ class BackpackRepairServiceTests(unittest.TestCase):
             "@compare_items.handle", 1
         )[0]
 
-        self.assertIn("backpack_repair_service.run(", handler)
+        self.assertIn("_backpack_repair_service().run(", handler)
         self.assertNotIn("check_and_adjust_goods_quantity(", handler)
         self.assertNotIn("sql_message.send_back(", handler)
         self.assertNotIn("sql_message.update_back_equipment(", handler)
