@@ -35,11 +35,17 @@ from .transaction_service import AccessoryTransactionService
 items = Items()
 sql_message = XiuxianDateManage()
 player_data_manager = PlayerDataManager()
-accessory_transaction_service = AccessoryTransactionService(
-    get_paths().game_db, get_paths().player_db
-)
+_accessory_transaction_service_instance = None
 runtime_ids = UUIDGenerator()
 
+
+def _accessory_transaction_service():
+    global _accessory_transaction_service_instance
+    if _accessory_transaction_service_instance is None:
+        _accessory_transaction_service_instance = AccessoryTransactionService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _accessory_transaction_service_instance
 
 
 def _acc_fail_msg(result, *, action: str = "饰品操作") -> str:
@@ -792,7 +798,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     index_tokens = parts[1:]
     user_id = str(user_info["user_id"])
     operation_id = _accessory_operation_id(event, "lock", user_id, uid)
-    replay = accessory_transaction_service.replay(operation_id, "lock")
+    replay = _accessory_transaction_service().replay(operation_id, "lock")
     if replay is not None and replay.accessory is not None:
         target = replay.accessory
         q = max(1, min(5, int(target.get("quality", 1))))
@@ -824,7 +830,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
                     if len(new_locked) >= target_count:
                         result_msg = f"锁定失败：{quality_to_cn(q)}最多锁定{target_count - 1}条，至少保留1条参与洗练"
                     else:
-                        result = accessory_transaction_service.set_affix_locks(
+                        result = _accessory_transaction_service().set_affix_locks(
                             operation_id, "lock", user_id, uid,
                             deepcopy(target), new_locked,
                         )
@@ -860,7 +866,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     unlock_all = any(str(token).strip() in {"全部", "全解", "all", "ALL"} for token in index_tokens)
     user_id = str(user_info["user_id"])
     operation_id = _accessory_operation_id(event, "unlock", user_id, uid)
-    replay = accessory_transaction_service.replay(operation_id, "unlock")
+    replay = _accessory_transaction_service().replay(operation_id, "unlock")
     if replay is not None and replay.accessory is not None:
         target = replay.accessory
         q = max(1, min(5, int(target.get("quality", 1))))
@@ -892,7 +898,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
                 if err:
                     result_msg = f"解锁失败：{err}"
                 else:
-                    result = accessory_transaction_service.set_affix_locks(
+                    result = _accessory_transaction_service().set_affix_locks(
                         operation_id, "unlock", user_id, uid,
                         deepcopy(target), new_locked,
                     )
@@ -926,7 +932,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     user_id = str(user_info["user_id"])
     operation_id = _accessory_operation_id(event, "wash", user_id, uid)
-    replay = accessory_transaction_service.replay(operation_id, "wash")
+    replay = _accessory_transaction_service().replay(operation_id, "wash")
     if replay is not None and replay.accessory is not None:
         updated = replay.accessory
         q2 = max(1, min(5, int(updated.get("quality", 1))))
@@ -996,7 +1002,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         _set_locked_affixes(t, _normalize_locked_affixes(t, len(t["affixes"])))
         return t
 
-    result = accessory_transaction_service.wash(
+    result = _accessory_transaction_service().wash(
         operation_id,
         user_id,
         uid,
@@ -1045,7 +1051,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     user_id = str(user_info["user_id"])
     operation_id = _accessory_operation_id(event, "decompose", user_id, uid)
-    replay = accessory_transaction_service.replay(operation_id, "decompose")
+    replay = _accessory_transaction_service().replay(operation_id, "decompose")
     if replay is not None and replay.accessory is not None:
         decomposed = replay.accessory
         q = max(1, min(5, int(decomposed.get("quality", 1))))
@@ -1062,7 +1068,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
     q = max(1, min(5, int(target.get("quality", 1))))
     gain = ACCESSORY_DECOMPOSE_GAIN.get(q, 1)
-    result = accessory_transaction_service.decompose(
+    result = _accessory_transaction_service().decompose(
         operation_id,
         user_id,
         uid,
@@ -1153,7 +1159,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     selected_uids = [str(acc.get("uid", "")) for acc in hit]
     target_key = f"{t}:{q_text}:{','.join(selected_uids)}"
-    result = accessory_transaction_service.batch_decompose(
+    result = _accessory_transaction_service().batch_decompose(
         _accessory_operation_id(event, "batch-decompose", user_id, target_key),
         user_id,
         deepcopy(bag),
@@ -1206,7 +1212,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         user_id,
         f"{part}:{','.join(material_uids)}",
     )
-    result = accessory_transaction_service.replay(operation_id, "upgrade")
+    result = _accessory_transaction_service().replay(operation_id, "upgrade")
     if result is None:
         data = _get_data(user_id)
         equipped = data.get("equipped", {})
@@ -1250,7 +1256,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
                 upgraded, len(upgraded.get("affixes", []))
             ),
         )
-        result = accessory_transaction_service.upgrade(
+        result = _accessory_transaction_service().upgrade(
             operation_id,
             user_id,
             part,
@@ -1328,12 +1334,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     operation_id = _accessory_operation_id(
         event, "save_preset", user_id, str(preset_idx)
     )
-    save_result = accessory_transaction_service.replay(
+    save_result = _accessory_transaction_service().replay(
         operation_id, "save_preset"
     )
     if save_result is None:
         data = _get_data(user_id)
-        save_result = accessory_transaction_service.save_preset(
+        save_result = _accessory_transaction_service().save_preset(
             operation_id,
             user_id,
             preset_idx,
@@ -1381,7 +1387,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     operation_id = _accessory_operation_id(
         event, "quick_equip_preset", user_id, str(preset_idx)
     )
-    equip_result = accessory_transaction_service.replay(
+    equip_result = _accessory_transaction_service().replay(
         operation_id, "quick_equip_preset"
     )
     if equip_result is None:
@@ -1390,7 +1396,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         if not any(preset.get(slot) for slot in SLOTS):
             await handle_send(bot, event, f"饰品预设{preset_idx}为空，无法快速装备。")
             return
-        equip_result = accessory_transaction_service.quick_equip_preset(
+        equip_result = _accessory_transaction_service().quick_equip_preset(
             operation_id,
             user_id,
             preset_idx,

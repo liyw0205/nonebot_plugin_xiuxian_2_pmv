@@ -16,6 +16,11 @@ from tests.test_db_backend import db_backend
 
 
 class AccessoryTransactionServiceTests(unittest.TestCase):
+    def test_accessory_facade_defers_transaction_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back import accessory
+
+        self.assertIsNone(accessory._accessory_transaction_service_instance)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         root = Path(self.temp_dir.name)
@@ -628,8 +633,8 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
             "@wash_accessory.handle", 1
         )[0]
 
-        self.assertIn("accessory_transaction_service.set_affix_locks", lock_handler)
-        self.assertIn("accessory_transaction_service.set_affix_locks", unlock_handler)
+        self.assertIn("_accessory_transaction_service().set_affix_locks", lock_handler)
+        self.assertIn("_accessory_transaction_service().set_affix_locks", unlock_handler)
         self.assertNotIn("player_data_manager.patch_doc", lock_handler)
         self.assertNotIn("player_data_manager.patch_doc", unlock_handler)
 
@@ -641,8 +646,8 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
         handler = source.split("@upgrade_accessory.handle", 1)[1].split(
             "@accessory_preset.handle", 1
         )[0]
-        self.assertIn("accessory_transaction_service.replay(", handler)
-        self.assertIn("accessory_transaction_service.upgrade(", handler)
+        self.assertIn("_accessory_transaction_service().replay(", handler)
+        self.assertIn("_accessory_transaction_service().upgrade(", handler)
         self.assertNotIn("_save_data(", handler)
         self.assertNotIn("del bag[", handler)
 
@@ -660,10 +665,10 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
             / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_back/accessory_helpers.py"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("accessory_transaction_service.save_preset(", save_handler)
+        self.assertIn("_accessory_transaction_service().save_preset(", save_handler)
         self.assertNotIn("_save_accessory_preset(", save_handler)
         self.assertIn(
-            "accessory_transaction_service.quick_equip_preset(", equip_handler
+            "_accessory_transaction_service().quick_equip_preset(", equip_handler
         )
         self.assertNotIn("player_data_manager.patch_doc(", equip_handler)
         self.assertNotIn("def _save_accessory_preset(", helpers)
