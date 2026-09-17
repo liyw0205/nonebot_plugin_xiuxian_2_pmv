@@ -79,7 +79,7 @@ _partner_bind_service_instance = None
 _partner_unbind_service_instance = None
 _partner_breakthrough_service_instance = None
 _mentor_bind_service_instance = None
-mentor_application_service = MentorApplicationService(get_paths().player_db)
+_mentor_application_service_instance = None
 partner_invite_service = PartnerInviteService(get_paths().player_db)
 partner_protection_service = PartnerProtectionService(get_paths().player_db)
 mentor_expel_service = MentorExpelService(get_paths().game_db, get_paths().player_db)
@@ -174,6 +174,15 @@ def _mentor_bind_service():
             get_paths().game_db, get_paths().player_db
         )
     return _mentor_bind_service_instance
+
+
+def _mentor_application_service():
+    global _mentor_application_service_instance
+    if _mentor_application_service_instance is None:
+        _mentor_application_service_instance = MentorApplicationService(
+            get_paths().player_db
+        )
+    return _mentor_application_service_instance
 
 
 TITLE_JSONPATH = get_paths().data / "修炼物品" / "称号.json"
@@ -953,7 +962,7 @@ async def mentor_protect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
 
     user_id = str(user_info["user_id"])
     arg = args.extract_plain_text().strip().lower()
-    expected_status = mentor_application_service.get_protection(user_id)
+    expected_status = _mentor_application_service().get_protection(user_id)
     buttons = {
         "md_type": "buff",
         "k1": "开启", "v1": "拜师保护 开启",
@@ -975,7 +984,7 @@ async def mentor_protect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         msg = "请使用：拜师保护 开启/关闭/状态"
 
     if arg in ["开启", "on", "关闭", "off"]:
-        changed = mentor_application_service.set_protection(
+        changed = _mentor_application_service().set_protection(
             _relation_operation_id(event, "mentor-protection", user_id),
             user_id,
             expected_status,
@@ -1311,7 +1320,7 @@ def _get_pending_mentor_invites(mentor_id):
             "expires_at": app.expires_at,
             "invite_id": app.invite_id,
         }
-        for app in mentor_application_service.list_pending(mentor_id)
+        for app in _mentor_application_service().list_pending(mentor_id)
     }
 
 
@@ -1320,12 +1329,12 @@ def _remove_pending_mentor_invite(mentor_id, apprentice_id):
     apprentice_id = str(apprentice_id)
     invite = _get_pending_mentor_invites(mentor_id).get(apprentice_id)
     if invite:
-        mentor_application_service.resolve(invite["invite_id"], mentor_id, apprentice_id, "cancelled")
+        _mentor_application_service().resolve(invite["invite_id"], mentor_id, apprentice_id, "cancelled")
 
 
 def _find_pending_mentor_invite_by_apprentice(apprentice_id):
     apprentice_id = str(apprentice_id)
-    app = mentor_application_service.find_pending_by_apprentice(apprentice_id)
+    app = _mentor_application_service().find_pending_by_apprentice(apprentice_id)
     if app:
         return app.mentor_id, {"timestamp": app.created_at, "expires_at": app.expires_at, "invite_id": app.invite_id}
     return None, None
@@ -1765,7 +1774,7 @@ async def apply_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await apply_mentor.finish()
 
     invite_id = _relation_operation_id(event, "mentor-application", user_id)
-    replayed = mentor_application_service.replay_create(
+    replayed = _mentor_application_service().replay_create(
         invite_id, mentor_id, user_id
     )
     if replayed is not None:
@@ -1799,7 +1808,7 @@ async def apply_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await apply_mentor.finish()
 
     mentor_info = sql_message.get_user_real_info(mentor_id)
-    created = mentor_application_service.create(invite_id, mentor_id, user_id)
+    created = _mentor_application_service().create(invite_id, mentor_id, user_id)
     if not created.succeeded:
         await handle_send(
             bot, event,
@@ -1834,7 +1843,7 @@ async def expire_mentor_invite(mentor_id, apprentice_id, invite_id, bot, event):
     await asyncio.sleep(60)
     mentor_id = str(mentor_id)
     apprentice_id = str(apprentice_id)
-    expired = mentor_application_service.resolve(
+    expired = _mentor_application_service().resolve(
         invite_id, mentor_id, apprentice_id, "expired",
         operation_id=f"mentor-application-expire:{invite_id}",
     )
@@ -1984,7 +1993,7 @@ async def reject_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         operation_id = _relation_operation_id(
             event, "mentor-application-reject", mentor_id
         )
-        replayed = mentor_application_service.replay_resolution(
+        replayed = _mentor_application_service().replay_resolution(
             operation_id, mentor_id, apprentice_id, "rejected"
         )
         if replayed is not None:
@@ -2028,7 +2037,7 @@ async def reject_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
     apprentice_info = sql_message.get_user_real_info(apprentice_id)
     apprentice_name = apprentice_info["user_name"] if apprentice_info else apprentice_id
-    rejected = mentor_application_service.resolve(
+    rejected = _mentor_application_service().resolve(
         pending_invites[apprentice_id]["invite_id"],
         mentor_id,
         apprentice_id,

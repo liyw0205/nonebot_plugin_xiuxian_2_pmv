@@ -2129,15 +2129,15 @@ class SourceQualityTests(unittest.TestCase):
         protection_start = source.index("async def mentor_protect_")
         protection_end = source.index("@my_exp_num.handle", protection_start)
         protection_handler = source[protection_start:protection_end]
-        self.assertIn("mentor_application_service.set_protection(", protection_handler)
+        self.assertIn("_mentor_application_service().set_protection(", protection_handler)
         self.assertNotIn("save_mentor(", protection_handler)
-        self.assertNotIn("mentor_application_service.resolve(", protection_handler)
+        self.assertNotIn("_mentor_application_service().resolve(", protection_handler)
 
         apply_start = source.index("async def apply_mentor_")
         apply_end = source.index("async def expire_mentor_invite", apply_start)
         apply_handler = source[apply_start:apply_end]
         self.assertIn('event, "mentor-application"', apply_handler)
-        self.assertIn("mentor_application_service.create(", apply_handler)
+        self.assertIn("_mentor_application_service().create(", apply_handler)
         self.assertIn(
             "_mentor_application_result_message(created, mentor_id)", apply_handler
         )
@@ -2184,7 +2184,7 @@ class SourceQualityTests(unittest.TestCase):
         apply_end = source.index("async def expire_mentor_invite", apply_start)
         apply_handler = source[apply_start:apply_end]
         self.assertLess(
-            apply_handler.index("mentor_application_service.replay_create("),
+            apply_handler.index("_mentor_application_service().replay_create("),
             apply_handler.index("_validate_mentor_application("),
         )
         self.assertIn('event, "mentor-application", user_id', apply_handler)
@@ -2202,7 +2202,7 @@ class SourceQualityTests(unittest.TestCase):
         reject_end = source.index("@my_mentor.handle", reject_start)
         reject_handler = source[reject_start:reject_end]
         self.assertLess(
-            reject_handler.index("mentor_application_service.replay_resolution("),
+            reject_handler.index("_mentor_application_service().replay_resolution("),
             reject_handler.index("_get_pending_mentor_invites("),
         )
         self.assertIn('event, "mentor-application-reject", mentor_id', reject_handler)
