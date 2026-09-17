@@ -15,6 +15,11 @@ from tests.test_db_backend import db_backend
 
 
 class SectDailyResetMaintenanceTests(unittest.TestCase):
+    def test_sect_facade_defers_daily_reset_maintenance_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_sect as sect_plugin
+
+        self.assertIsNone(sect_plugin._sect_daily_reset_maintenance_service_instance)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "sect-daily-reset.sqlite3"
@@ -132,7 +137,9 @@ class SectDailyResetMaintenanceTests(unittest.TestCase):
         handler = source[source.index("async def resetusertask") : source.index(
             "async def auto_handle_inactive_sect_owners"
         )]
-        self.assertIn("sect_daily_reset_maintenance_service.settle", handler)
+        self.assertIn("_sect_daily_reset_maintenance_service().settle", handler)
+        self.assertIn("_sect_daily_reset_maintenance_service_instance = None", source)
+        self.assertIn("def _sect_daily_reset_maintenance_service(", source)
         self.assertNotIn("sect_task_reset()", handler)
         self.assertNotIn("sect_elixir_get_num_reset()", handler)
         self.assertNotIn("charge_elixir_room_maintenance", handler)

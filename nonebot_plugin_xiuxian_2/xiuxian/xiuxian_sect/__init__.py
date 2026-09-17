@@ -107,7 +107,7 @@ _sect_owner_inherit_service_instance = None
 _sect_open_join_service_instance = None
 _sect_close_join_service_instance = None
 _sect_disband_service_instance = None
-sect_daily_reset_maintenance_service = SectDailyResetMaintenanceService(get_paths().game_db)
+_sect_daily_reset_maintenance_service_instance = None
 
 
 def _sect_close_mountain_service():
@@ -153,6 +153,15 @@ def _sect_disband_service():
             get_paths().game_db
         )
     return _sect_disband_service_instance
+
+
+def _sect_daily_reset_maintenance_service():
+    global _sect_daily_reset_maintenance_service_instance
+    if _sect_daily_reset_maintenance_service_instance is None:
+        _sect_daily_reset_maintenance_service_instance = SectDailyResetMaintenanceService(
+            get_paths().game_db
+        )
+    return _sect_daily_reset_maintenance_service_instance
 
 
 config = get_config()
@@ -403,7 +412,7 @@ async def resetusertask():
         int(level): room_config["level_up_cost"]["建设度"]
         for level, room_config in config["宗门丹房参数"]["elixir_room_level"].items()
     }
-    result = sect_daily_reset_maintenance_service.settle(
+    result = _sect_daily_reset_maintenance_service().settle(
         runtime_clock.now().date().isoformat(), maintenance_costs
     )
     if result.status == "operation_conflict":
