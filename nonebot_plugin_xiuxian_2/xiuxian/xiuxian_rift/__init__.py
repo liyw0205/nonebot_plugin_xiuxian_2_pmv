@@ -52,9 +52,7 @@ sql_message = XiuxianDateManage()  # sql类
 rift_entry_service = RiftEntryService(get_paths().game_db)
 _rift_termination_service_instance = None
 _rift_key_event_settlement_service_instance = None
-rift_demon_token_battle_settlement_service = RiftDemonTokenBattleSettlementService(
-    get_paths().game_db, get_paths().player_db
-)
+_rift_demon_token_battle_settlement_service_instance = None
 rift_speedup_service = RiftSpeedupService(get_paths().game_db)
 rift_settlement_service = RiftSettlementService(
     get_paths().game_db, get_paths().player_db
@@ -81,6 +79,15 @@ def _rift_key_event_settlement_service():
             get_paths().game_db, get_paths().player_db
         )
     return _rift_key_event_settlement_service_instance
+
+
+def _rift_demon_token_battle_settlement_service():
+    global _rift_demon_token_battle_settlement_service_instance
+    if _rift_demon_token_battle_settlement_service_instance is None:
+        _rift_demon_token_battle_settlement_service_instance = RiftDemonTokenBattleSettlementService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _rift_demon_token_battle_settlement_service_instance
 
 
 def _event_id(event) -> str:
@@ -994,7 +1001,7 @@ async def use_rift_boss(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         f"rift-demon-token-battle:{event_id or runtime_ids.new_id()}:{user_id}"
     )
     if event_id:
-        replay = rift_demon_token_battle_settlement_service.replay(
+        replay = _rift_demon_token_battle_settlement_service().replay(
             operation_id
         )
         if replay is not None:
@@ -1032,7 +1039,7 @@ async def use_rift_boss(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             f"秘境 {rift_info['name']} 已使用斩妖令结算！\n"
             f"战斗结果：{result_msg}{progress_msg}"
         )
-        settlement = rift_demon_token_battle_settlement_service.settle(
+        settlement = _rift_demon_token_battle_settlement_service().settle(
             operation_id, user_id, item_id, rift_info,
             {
                 key: int(user_info.get(key, 0))
