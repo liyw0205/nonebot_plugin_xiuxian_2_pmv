@@ -102,12 +102,23 @@ sect_fairyland_application = SectFairylandApplication(
     get_paths().player_db,
     repository=LegacySectFairylandRepository(get_paths().player_db),
 )
-sect_close_mountain_service = SectCloseMountainService(get_paths().game_db)
+_sect_close_mountain_service_instance = None
 sect_owner_inherit_service = SectOwnerInheritService(get_paths().game_db)
 sect_open_join_service = SectOpenJoinService(get_paths().game_db)
 sect_close_join_service = SectCloseJoinService(get_paths().game_db)
 sect_disband_service = SectDisbandService(get_paths().game_db)
 sect_daily_reset_maintenance_service = SectDailyResetMaintenanceService(get_paths().game_db)
+
+
+def _sect_close_mountain_service():
+    global _sect_close_mountain_service_instance
+    if _sect_close_mountain_service_instance is None:
+        _sect_close_mountain_service_instance = SectCloseMountainService(
+            get_paths().game_db
+        )
+    return _sect_close_mountain_service_instance
+
+
 config = get_config()
 SECT_RENAME_CARD_ID = 20026
 SECT_RENAME_CARD_NAME = "宗门易名符"
@@ -558,7 +569,7 @@ async def auto_handle_inactive_sect_owners():
                     
                 logger.info(f"检测到不活跃宗主：{user_info['user_name']} 已离线 {offline_days} 天")
                 
-                result = sect_close_mountain_service.close(
+                result = _sect_close_mountain_service().close(
                     f"sect:auto-close:{maintenance_key}:{sect_id}:{owner_id}",
                     owner_id,
                     expected_sect_id=sect_id,
@@ -3182,7 +3193,7 @@ async def sect_close_mountain2_confirm(bot: Bot, event: GroupMessageEvent | Priv
     owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
     
     if sect_position == owner_position:
-        result = sect_close_mountain_service.close(
+        result = _sect_close_mountain_service().close(
             _sect_operation_id(event, "close_mountain", sect_id),
             user_info['user_id'],
             owner_position=owner_position,

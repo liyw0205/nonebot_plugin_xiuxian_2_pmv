@@ -15,6 +15,11 @@ from tests.test_db_backend import db_backend
 
 
 class SectCloseMountainServiceTests(unittest.TestCase):
+    def test_sect_facade_defers_close_mountain_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_sect as sect_plugin
+
+        self.assertIsNone(sect_plugin._sect_close_mountain_service_instance)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "sect.sqlite3"
@@ -118,8 +123,10 @@ class SectCloseMountainServiceTests(unittest.TestCase):
         auto_handler = source[auto_start:auto_end]
         manual_handler = source[manual_start:manual_end]
 
-        self.assertIn("sect_close_mountain_service.close(", auto_handler)
-        self.assertIn("sect_close_mountain_service.close(", manual_handler)
+        self.assertIn("_sect_close_mountain_service().close(", auto_handler)
+        self.assertIn("_sect_close_mountain_service().close(", manual_handler)
+        self.assertIn("_sect_close_mountain_service_instance = None", source)
+        self.assertIn("def _sect_close_mountain_service(", source)
         for old_call in (
             "sql_message.update_sect_closed_status(",
             "sql_message.update_usr_sect(",
