@@ -2240,6 +2240,21 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("expected_reward_count=reward_count", handler)
         self.assertIn("reward_limit=MENTOR_BREAKTHROUGH_REWARD_LIMIT", handler)
 
+    def test_apprentice_leave_uses_lazy_transactional_service(self) -> None:
+        root = SOURCE_ROOT / "xiuxian" / "xiuxian_buff"
+        source = (root / "partner.py").read_text(encoding="utf-8")
+        start = source.index("async def unbind_mentor_")
+        end = source.index("@mentor_transmission.handle", start)
+        handler = source[start:end]
+        self.assertIn("_apprentice_leave_service_instance = None", source)
+        self.assertIn("def _apprentice_leave_service(", source)
+        self.assertIn("_apprentice_leave_service().apply(", handler)
+        self.assertNotIn("apprentice_leave_service.apply(", handler)
+        self.assertIn("expected_apprentice_level=user_info[\"level\"]", handler)
+        self.assertIn("graduation_eligible=False", handler)
+        self.assertIn("apprentice_cd_until=apprentice_cd_until", handler)
+        self.assertIn("pair_rebind_until=pair_rebind_until", handler)
+
     def test_map_home_return_uses_one_event_transaction(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_map"
         source = (root / "__init__.py").read_text(encoding="utf-8")
