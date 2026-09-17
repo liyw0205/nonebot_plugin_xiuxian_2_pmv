@@ -11,6 +11,11 @@ from tests.test_db_backend import db_backend
 
 
 class RiftTerminationServiceTests(unittest.TestCase):
+    def test_rift_facade_defers_termination_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_rift
+
+        self.assertIsNone(xiuxian_rift._rift_termination_service_instance)
+
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "game.db"

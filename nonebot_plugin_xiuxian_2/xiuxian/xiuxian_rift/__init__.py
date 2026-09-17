@@ -50,7 +50,7 @@ from .riftmake import (
 
 sql_message = XiuxianDateManage()  # sql类
 rift_entry_service = RiftEntryService(get_paths().game_db)
-rift_termination_service = RiftTerminationService(get_paths().game_db)
+_rift_termination_service_instance = None
 rift_key_event_settlement_service = RiftKeyEventSettlementService(get_paths().game_db, get_paths().player_db)
 rift_demon_token_battle_settlement_service = RiftDemonTokenBattleSettlementService(
     get_paths().game_db, get_paths().player_db
@@ -65,6 +65,13 @@ config = get_rift_config() # 获取秘境配置
 runtime_ids = UUIDGenerator()
 runtime_clock = SystemClock()
 groups = config['open']  # list
+
+
+def _rift_termination_service():
+    global _rift_termination_service_instance
+    if _rift_termination_service_instance is None:
+        _rift_termination_service_instance = RiftTerminationService(get_paths().game_db)
+    return _rift_termination_service_instance
 
 
 def _event_id(event) -> str:
@@ -837,7 +844,7 @@ async def break_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     event_id = _event_id(event)
     operation_id = f"rift-termination:{event_id or runtime_ids.new_id()}:{user_id}"
     if event_id:
-        replay = rift_termination_service.replay(operation_id, user_id)
+        replay = _rift_termination_service().replay(operation_id, user_id)
         if replay is not None and replay.succeeded:
             await handle_send(
                 bot,
@@ -862,7 +869,7 @@ async def break_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await break_rift.finish()
 
         try:
-            result = rift_termination_service.terminate(
+            result = _rift_termination_service().terminate(
                 operation_id, user_id, rift_info
             )
         except Exception as exc:
