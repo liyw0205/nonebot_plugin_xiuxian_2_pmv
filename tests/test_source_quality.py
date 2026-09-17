@@ -598,7 +598,7 @@ class SourceQualityTests(unittest.TestCase):
         end = command_source.index("elif goods_type == \"装备\":", start)
         command = command_source[start:end]
 
-        self.assertIn("accessory_package_service.apply(", command)
+        self.assertIn("_accessory_package_service().apply(", command)
         self.assertNotIn("sql_message.update_back_j(", command)
         self.assertNotIn("sql_message.send_back(", command)
         self.assertIn("ATTACH DATABASE", service_source)

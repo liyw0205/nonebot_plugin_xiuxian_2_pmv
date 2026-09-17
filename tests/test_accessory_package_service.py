@@ -19,6 +19,11 @@ from tests.test_db_backend import db_backend
 
 
 class AccessoryPackageServiceTests(unittest.TestCase):
+    def test_back_facade_defers_accessory_package_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_back
+
+        self.assertIsNone(xiuxian_back._accessory_package_service_instance)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         root = Path(self.temp_dir.name)

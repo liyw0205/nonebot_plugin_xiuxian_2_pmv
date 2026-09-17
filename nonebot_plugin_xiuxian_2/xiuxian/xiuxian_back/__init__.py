@@ -94,9 +94,7 @@ _three_cultivation_pill_service_instance = None
 _unbind_item_service_instance = None
 _lottery_talisman_service_instance = None
 _package_reward_service_instance = None
-accessory_package_service = AccessoryPackageService(
-    get_paths().game_db, get_paths().player_db
-)
+_accessory_package_service_instance = None
 alchemy_service = AlchemyService(get_paths().game_db)
 skill_learning_service = SkillLearningService(get_paths().game_db)
 batch_item_use_service = BatchItemUseService(
@@ -132,6 +130,14 @@ def _package_reward_service():
     if _package_reward_service_instance is None:
         _package_reward_service_instance = PackageRewardService(get_paths().game_db)
     return _package_reward_service_instance
+
+def _accessory_package_service():
+    global _accessory_package_service_instance
+    if _accessory_package_service_instance is None:
+        _accessory_package_service_instance = AccessoryPackageService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _accessory_package_service_instance
 
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 added_ranks = added_ranks()
@@ -968,7 +974,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 await use.finish()
                 return
 
-            result = accessory_package_service.apply(
+            result = _accessory_package_service().apply(
                 _package_reward_operation_id(event, user_id, goods_id),
                 user_id,
                 goods_id,
