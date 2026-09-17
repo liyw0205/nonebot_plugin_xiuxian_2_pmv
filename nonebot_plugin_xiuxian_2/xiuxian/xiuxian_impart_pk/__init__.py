@@ -72,7 +72,7 @@ def _resolve_impart_closing_user_id(event, user_info) -> str:
 
 
 _impart_training_settlement_service_instance = None
-impart_explore_settlement_service = ImpartExploreSettlementService(get_paths().game_db, get_paths().impart_db, get_paths().player_db)
+_impart_explore_settlement_service_instance = None
 impart_closing_settlement_service = ImpartClosingSettlementService(
     get_paths().game_db, get_paths().impart_db, get_paths().player_db
 )
@@ -96,6 +96,15 @@ def _impart_training_settlement_service():
             get_paths().game_db, get_paths().impart_db, get_paths().player_db
         )
     return _impart_training_settlement_service_instance
+
+
+def _impart_explore_settlement_service():
+    global _impart_explore_settlement_service_instance
+    if _impart_explore_settlement_service_instance is None:
+        _impart_explore_settlement_service_instance = ImpartExploreSettlementService(
+            get_paths().game_db, get_paths().impart_db, get_paths().player_db
+        )
+    return _impart_explore_settlement_service_instance
 
 
 def _run_impart_pk_action(action, operation_id, user_id, call, **payload):
@@ -796,7 +805,7 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     user_id = user_info['user_id']
     # 先回放：成功后次数/层数变化会挡住同事件幂等。
     op_id = _impart_operation_id(event, "explore", user_id)
-    prior = impart_explore_settlement_service.get_result(op_id)
+    prior = _impart_explore_settlement_service().get_result(op_id)
     if prior is not None and prior.succeeded:
         msg = (
             f"探索完成（重放）。\n现位于层级：{prior.impart_lv}\n"
@@ -908,7 +917,7 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
     result = _run_impart_pk_action(
         "explore_settle", op_id, user_id,
-        call=lambda: impart_explore_settlement_service.settle(
+        call=lambda: _impart_explore_settlement_service().settle(
             op_id, user_id, event_type=msg_type,
             expected_exp_day=int(impart_data_draw['exp_day']),
             expected_impart_lv=int(impart_data_draw['impart_lv']),

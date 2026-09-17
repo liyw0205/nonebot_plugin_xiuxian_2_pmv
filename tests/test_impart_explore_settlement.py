@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import importlib
 from pathlib import Path
 import nonebot
 
@@ -7,6 +8,26 @@ nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart_pk.transaction_service import ImpartExploreSettlementService
 from tests.test_db_backend import db_backend
+
+
+def test_impart_facade_defers_explore_settlement_service_construction():
+    impart = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart_pk"
+    )
+    assert impart._impart_explore_settlement_service_instance is None
+
+
+def test_impart_explore_handler_uses_lazy_three_database_service():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py"
+    ).read_text(encoding="utf-8")
+    handler = source[source.index("async def impart_pk_go_"):]
+    assert "_impart_explore_settlement_service().get_result(" in handler
+    assert "_impart_explore_settlement_service().settle(" in handler
+    assert "_impart_explore_settlement_service_instance = None" in source
+    assert "def _impart_explore_settlement_service(" in source
+    assert "get_paths().game_db, get_paths().impart_db, get_paths().player_db" in source
+    assert "impart_explore_settlement_service.settle(" not in handler
 
 
 class ImpartExploreSettlementTests(unittest.TestCase):
