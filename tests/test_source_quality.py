@@ -2213,6 +2213,20 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("def replay_create(", service)
         self.assertIn("def replay_resolution(", service)
 
+    def test_mentor_expel_uses_lazy_transactional_service(self) -> None:
+        root = SOURCE_ROOT / "xiuxian" / "xiuxian_buff"
+        source = (root / "partner.py").read_text(encoding="utf-8")
+        start = source.index("async def unbind_mentor_")
+        end = source.index("@mentor_transmission.handle", start)
+        handler = source[start:end]
+        self.assertIn("_mentor_expel_service_instance = None", source)
+        self.assertIn("def _mentor_expel_service(", source)
+        self.assertIn("_mentor_expel_service().apply(", handler)
+        self.assertNotIn("mentor_expel_service.apply(", handler)
+        self.assertIn("mentor_cd_until=mentor_cd_until", handler)
+        self.assertIn("apprentice_cd_until=apprentice_cd_until", handler)
+        self.assertIn("pair_rebind_until=pair_rebind_until", handler)
+
     def test_map_home_return_uses_one_event_transaction(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_map"
         source = (root / "__init__.py").read_text(encoding="utf-8")

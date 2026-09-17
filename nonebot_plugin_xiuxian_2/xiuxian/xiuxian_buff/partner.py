@@ -82,7 +82,7 @@ _mentor_bind_service_instance = None
 _mentor_application_service_instance = None
 partner_invite_service = PartnerInviteService(get_paths().player_db)
 partner_protection_service = PartnerProtectionService(get_paths().player_db)
-mentor_expel_service = MentorExpelService(get_paths().game_db, get_paths().player_db)
+_mentor_expel_service_instance = None
 mentor_breakthrough_reward_service = MentorBreakthroughRewardService(get_paths().game_db, get_paths().player_db)
 apprentice_leave_service = ApprenticeLeaveService(get_paths().game_db, get_paths().player_db)
 mentor_graduation_service = MentorGraduationService(get_paths().game_db, get_paths().player_db)
@@ -183,6 +183,15 @@ def _mentor_application_service():
             get_paths().player_db
         )
     return _mentor_application_service_instance
+
+
+def _mentor_expel_service():
+    global _mentor_expel_service_instance
+    if _mentor_expel_service_instance is None:
+        _mentor_expel_service_instance = MentorExpelService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _mentor_expel_service_instance
 
 
 TITLE_JSONPATH = get_paths().data / "修炼物品" / "称号.json"
@@ -2259,7 +2268,7 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         mentor_cd_until = (now + timedelta(days=MENTOR_COOLDOWN_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
         apprentice_cd_until = (now + timedelta(days=APPRENTICE_COOLDOWN_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
         pair_rebind_until = (now + timedelta(days=MENTOR_SAME_PAIR_REBIND_COOLDOWN_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
-        settlement = mentor_expel_service.apply(
+        settlement = _mentor_expel_service().apply(
             _relation_operation_id(event, "expel", user_id, target_id), user_id, target_id,
             occurred_at=occurred_at, mentor_cd_until=mentor_cd_until,
             apprentice_cd_until=apprentice_cd_until, pair_rebind_until=pair_rebind_until,

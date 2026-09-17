@@ -1855,6 +1855,8 @@
 
 2026-09-17 mentor application lazy construction live safety：提交 `fc7bc7ec` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260917T123944Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
 
+2026-09-17 mentor expel lazy construction slice：`xiuxian_buff.partner` 不再 module-level 构造 `MentorExpelService`，新增 `_mentor_expel_service()` 双库惰性 getter，逐出师门唯一 `apply` 入口经 getter；occurred_at、mentor/apprentice cooldown、pair rebind、history、双方关系 snapshot、幂等和 rollback 语义保持不变。construction、mentor expel/application/bind/protection、partner bind/unbind/cultivation/invite/token/breakthrough、source/architecture 共 215 tests、4 subtests passed，compileall、inventory、diff check通过。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。
