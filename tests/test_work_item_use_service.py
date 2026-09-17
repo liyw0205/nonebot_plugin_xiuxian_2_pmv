@@ -13,6 +13,11 @@ from tests.test_db_backend import db_backend
 
 
 class WorkItemUseServiceTests(unittest.TestCase):
+    def test_work_facade_defers_item_use_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_work
+
+        self.assertIsNone(xiuxian_work._work_item_use_service_instance)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.database = Path(self.temp.name) / "game.sqlite3"
