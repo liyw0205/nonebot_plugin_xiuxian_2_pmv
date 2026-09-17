@@ -96,6 +96,15 @@ def _world_boss_battle_settlement_service():
     return _world_boss_battle_settlement_service_instance
 
 
+def _world_boss_daily_limit_reset_service():
+    global _world_boss_daily_limit_reset_service_instance
+    if _world_boss_daily_limit_reset_service_instance is None:
+        _world_boss_daily_limit_reset_service_instance = WorldBossDailyLimitResetService(
+            get_paths().player_db
+        )
+    return _world_boss_daily_limit_reset_service_instance
+
+
 world_boss_manual_spawn_service = WorldBossManualSpawnService(
     get_paths().player_db,
     get_boss_config,
@@ -105,9 +114,7 @@ world_boss_full_refresh_service = WorldBossFullRefreshService(
     get_boss_config,
 )
 world_boss_punishment_service = WorldBossPunishmentService(get_paths().player_db)
-world_boss_daily_limit_reset_service = WorldBossDailyLimitResetService(
-    get_paths().player_db
-)
+_world_boss_daily_limit_reset_service_instance = None
 BOSSDROPSPATH = get_paths().data / "boss掉落物"
 
 create = on_command("世界BOSS生成", aliases={"世界boss生成", "世界Boss生成", "生成世界BOSS", "生成世界boss", "生成世界Boss"}, permission=SUPERUSER, priority=5, block=True)
@@ -333,7 +340,7 @@ async def save_boss_():
 async def set_boss_limits_reset(business_date=None, *, chunk_size=500):
     business_date = business_date or runtime_clock.now().date().isoformat()
     while True:
-        result = world_boss_daily_limit_reset_service.reset(
+        result = _world_boss_daily_limit_reset_service().reset(
             business_date,
             chunk_size=chunk_size,
         )

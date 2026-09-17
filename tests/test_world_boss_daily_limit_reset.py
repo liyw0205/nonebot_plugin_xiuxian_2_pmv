@@ -172,7 +172,7 @@ def test_scheduler_and_admin_entries_share_resumable_daily_service():
             "@boss_help.handle"
         )
     ]
-    assert "world_boss_daily_limit_reset_service.reset(" in reset_entry
+    assert "_world_boss_daily_limit_reset_service().reset(" in reset_entry
     assert "await asyncio.sleep(0)" in reset_entry
     assert "boss_limit.reset_limits(" not in reset_entry
 
@@ -194,3 +194,9 @@ def test_scheduler_and_admin_entries_share_resumable_daily_service():
         root / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/boss_limit.py"
     ).read_text(encoding="utf-8")
     assert "def reset_limits(" not in limit_source
+
+
+def test_boss_facade_defers_daily_limit_reset_service_construction():
+    from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_boss
+
+    assert xiuxian_boss._world_boss_daily_limit_reset_service_instance is None
