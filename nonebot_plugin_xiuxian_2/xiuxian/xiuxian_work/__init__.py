@@ -49,7 +49,7 @@ work_settlement_application = WorkSettlementApplication(
     repository=LegacyWorkSettlementRepository(get_paths().game_db),
 )
 _work_item_use_service_instance = None
-work_refresh_service = WorkRefreshSettlementService(get_paths().game_db)
+_work_refresh_service_instance = None
 work_abort_cleanup_service = WorkAbortCleanupService(get_paths().game_db)
 _work_daily_refresh_reset_service_instance = None
 runtime_clock = SystemClock()
@@ -75,6 +75,13 @@ def _work_item_use_service():
     if _work_item_use_service_instance is None:
         _work_item_use_service_instance = WorkItemUseService(get_paths().game_db)
     return _work_item_use_service_instance
+
+
+def _work_refresh_service():
+    global _work_refresh_service_instance
+    if _work_refresh_service_instance is None:
+        _work_refresh_service_instance = WorkRefreshSettlementService(get_paths().game_db)
+    return _work_refresh_service_instance
 
 
 def format_reward_item(item_id: int) -> str:
@@ -541,7 +548,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
     elif mode == "刷新":
         # 先回放：成功后已有未接取悬赏/次数变化，前置拦截会挡住同事件重放。
         operation_id = _work_operation_id(event, "refresh", user_id)
-        prior = work_refresh_service.get_result(operation_id)
+        prior = _work_refresh_service().get_result(operation_id)
         if prior is not None and prior.succeeded:
             msg = _refresh_replay_msg(prior.offer, prior.remaining_count)
             await send_work_message(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3", k4="刷新", v4="悬赏令确认刷新")
@@ -598,7 +605,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             work_msg, new_offer = _prepare_work_offer(
                 operation_id, user_id, user_level, user_info['exp']
             )
-            result = work_refresh_service.refresh(
+            result = _work_refresh_service().refresh(
                 operation_id,
                 user_id,
                 usernums,
@@ -639,7 +646,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 
     elif mode == "确认刷新":
         operation_id = _work_operation_id(event, "force-refresh", user_id)
-        prior = work_refresh_service.get_result(operation_id)
+        prior = _work_refresh_service().get_result(operation_id)
         if prior is not None and prior.succeeded:
             msg = _refresh_replay_msg(prior.offer, prior.remaining_count)
             await send_work_message(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3", k4="刷新", v4="悬赏令确认刷新")
@@ -665,7 +672,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         work_msg, new_offer = _prepare_work_offer(
             operation_id, user_id, user_level, user_info['exp']
         )
-        result = work_refresh_service.refresh(
+        result = _work_refresh_service().refresh(
             operation_id,
             user_id,
             usernums,
