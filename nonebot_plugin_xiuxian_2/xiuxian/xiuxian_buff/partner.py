@@ -83,7 +83,7 @@ _mentor_application_service_instance = None
 partner_invite_service = PartnerInviteService(get_paths().player_db)
 partner_protection_service = PartnerProtectionService(get_paths().player_db)
 _mentor_expel_service_instance = None
-mentor_breakthrough_reward_service = MentorBreakthroughRewardService(get_paths().game_db, get_paths().player_db)
+_mentor_breakthrough_reward_service_instance = None
 apprentice_leave_service = ApprenticeLeaveService(get_paths().game_db, get_paths().player_db)
 mentor_graduation_service = MentorGraduationService(get_paths().game_db, get_paths().player_db)
 mentor_transmission_service = MentorTransmissionService(get_paths().game_db, get_paths().player_db)
@@ -192,6 +192,15 @@ def _mentor_expel_service():
             get_paths().game_db, get_paths().player_db
         )
     return _mentor_expel_service_instance
+
+
+def _mentor_breakthrough_reward_service():
+    global _mentor_breakthrough_reward_service_instance
+    if _mentor_breakthrough_reward_service_instance is None:
+        _mentor_breakthrough_reward_service_instance = MentorBreakthroughRewardService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _mentor_breakthrough_reward_service_instance
 
 
 TITLE_JSONPATH = get_paths().data / "修炼物品" / "称号.json"
@@ -2616,7 +2625,7 @@ def trigger_mentor_breakthrough_reward(apprentice_id, new_level):
     mentor_name = mentor_info["user_name"]
     apprentice_name = apprentice_info["user_name"]
     business_event_id = f"mentor-breakthrough:{apprentice_id}:{new_level}:{apprentice_info['exp']}"
-    result = mentor_breakthrough_reward_service.apply(
+    result = _mentor_breakthrough_reward_service().apply(
         business_event_id, mentor_id, apprentice_id, new_level, business_event_id,
         expected_mentor_exp=mentor_exp, expected_apprentice_exp=apprentice_info["exp"],
         expected_reward_count=reward_count, reward_limit=MENTOR_BREAKTHROUGH_REWARD_LIMIT,
