@@ -9,6 +9,10 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dongfu.transaction_service import 
 from tests.test_db_backend import db_backend
 
 class InfiltrateSuccessServiceTests(unittest.TestCase):
+ def test_dongfu_facade_defers_infiltrate_success_service_construction(self):
+  from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dongfu
+  self.assertIsNone(xiuxian_dongfu._dongfu_infiltrate_success_service_instance)
+
  def setUp(self):
   self.temp=tempfile.TemporaryDirectory();root=Path(self.temp.name);self.game,self.player=root/"g.db",root/"p.db";self.slots=[{"slot":1,"seed_id":21001,"plant_finish":"2026-07-13 12:00:00"}];self.expected=json.dumps(self.slots)
   with db_backend.transaction(self.game) as c:c.execute("CREATE TABLE user_xiuxian (user_id TEXT PRIMARY KEY,stone INTEGER)");c.execute("INSERT INTO user_xiuxian VALUES (%s,%s)",("u",100));c.execute("CREATE TABLE back (user_id TEXT,goods_id INTEGER,goods_name TEXT,goods_type TEXT,goods_num INTEGER,create_time TEXT,update_time TEXT,bind_num INTEGER,UNIQUE(user_id,goods_id))")

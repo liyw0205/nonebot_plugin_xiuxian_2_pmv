@@ -45,7 +45,7 @@ _dongfu_array_upgrade_service_instance = None
 _dongfu_visit_reward_service_instance = None
 dongfu_fertilize_service = DongfuFertilizeService(get_paths().game_db, get_paths().player_db)
 _dongfu_infiltrate_failure_service_instance = None
-dongfu_infiltrate_success_service = InfiltrateSuccessService(get_paths().game_db, get_paths().player_db)
+_dongfu_infiltrate_success_service_instance = None
 dongfu_harvest_settlement_service = DongfuHarvestSettlementService(get_paths().game_db, get_paths().player_db)
 dongfu_application = DongfuApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
@@ -87,6 +87,15 @@ def _dongfu_infiltrate_failure_service():
             get_paths().game_db, get_paths().player_db
         )
     return _dongfu_infiltrate_failure_service_instance
+
+
+def _dongfu_infiltrate_success_service():
+    global _dongfu_infiltrate_success_service_instance
+    if _dongfu_infiltrate_success_service_instance is None:
+        _dongfu_infiltrate_success_service_instance = InfiltrateSuccessService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _dongfu_infiltrate_success_service_instance
 
 
 def _run_dongfu_action(action, operation_id, user_id, call, **payload):
@@ -1519,7 +1528,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     operation_id = f"dongfu-infiltrate-success:{my_uid}:{event_message_id or runtime_ids.new_id()}"
     result = _run_dongfu_action(
         "infiltrate_success", operation_id, my_uid,
-        call=lambda: dongfu_infiltrate_success_service.settle(
+        call=lambda: _dongfu_infiltrate_success_service().settle(
             operation_id, my_uid, target_uid, _today_str(),
             _get_infiltrate_count_field(is_random_mode), _get_infiltrate_limit(is_random_mode),
             INFILTRATE_DAILY_LIMIT, expected_slots, _to_int(target_slot.get("slot")),
