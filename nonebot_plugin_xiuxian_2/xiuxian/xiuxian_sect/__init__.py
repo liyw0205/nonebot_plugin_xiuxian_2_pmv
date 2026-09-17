@@ -103,7 +103,7 @@ sect_fairyland_application = SectFairylandApplication(
     repository=LegacySectFairylandRepository(get_paths().player_db),
 )
 _sect_close_mountain_service_instance = None
-sect_owner_inherit_service = SectOwnerInheritService(get_paths().game_db)
+_sect_owner_inherit_service_instance = None
 sect_open_join_service = SectOpenJoinService(get_paths().game_db)
 sect_close_join_service = SectCloseJoinService(get_paths().game_db)
 sect_disband_service = SectDisbandService(get_paths().game_db)
@@ -117,6 +117,15 @@ def _sect_close_mountain_service():
             get_paths().game_db
         )
     return _sect_close_mountain_service_instance
+
+
+def _sect_owner_inherit_service():
+    global _sect_owner_inherit_service_instance
+    if _sect_owner_inherit_service_instance is None:
+        _sect_owner_inherit_service_instance = SectOwnerInheritService(
+            get_paths().game_db
+        )
+    return _sect_owner_inherit_service_instance
 
 
 config = get_config()
@@ -491,7 +500,7 @@ async def auto_handle_inactive_sect_owners():
                     new_owner = active_candidates[0]
                     logger.info(f"选定继承人：{new_owner['user_name']}")
                     
-                    result = sect_owner_inherit_service.inherit(
+                    result = _sect_owner_inherit_service().inherit(
                         f"sect:auto-inherit:{maintenance_key}:{sect_id}:{new_owner['user_id']}",
                         new_owner['user_id'],
                         expected_sect_id=sect_id,
@@ -3251,7 +3260,7 @@ async def sect_inherit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, msg, md_type="宗门", k1="继承", v1="继承宗主", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_inherit.finish()
     
-    result = sect_owner_inherit_service.inherit(
+    result = _sect_owner_inherit_service().inherit(
         _sect_operation_id(event, "inherit_owner", sect_id),
         user_info['user_id'],
         expected_sect_id=sect_id,

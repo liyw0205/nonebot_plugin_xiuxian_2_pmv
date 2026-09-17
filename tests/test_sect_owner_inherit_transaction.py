@@ -15,6 +15,11 @@ from tests.test_db_backend import db_backend
 
 
 class SectOwnerInheritServiceTests(unittest.TestCase):
+    def test_sect_facade_defers_owner_inherit_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_sect as sect_plugin
+
+        self.assertIsNone(sect_plugin._sect_owner_inherit_service_instance)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "sect.sqlite3"
@@ -122,8 +127,10 @@ class SectOwnerInheritServiceTests(unittest.TestCase):
         auto_handler = source[auto_start:auto_end]
         manual_handler = source[manual_start:manual_end]
 
-        self.assertIn("sect_owner_inherit_service.inherit(", auto_handler)
-        self.assertIn("sect_owner_inherit_service.inherit(", manual_handler)
+        self.assertIn("_sect_owner_inherit_service().inherit(", auto_handler)
+        self.assertIn("_sect_owner_inherit_service().inherit(", manual_handler)
+        self.assertIn("_sect_owner_inherit_service_instance = None", source)
+        self.assertIn("def _sect_owner_inherit_service(", source)
         for old_call in (
             "sql_message.update_sect_closed_status(",
             "sql_message.update_usr_sect(",
