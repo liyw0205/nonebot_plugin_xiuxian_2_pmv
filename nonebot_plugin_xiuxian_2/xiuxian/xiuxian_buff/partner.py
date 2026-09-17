@@ -73,7 +73,7 @@ runtime_random = SystemRandom()
 sql_message = XiuxianDateManage()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
-partner_cultivation_service = PartnerCultivationService(get_paths().game_db, get_paths().player_db)
+_partner_cultivation_service_instance = None
 _partner_token_service_instance = None
 partner_bind_service = PartnerBindService(get_paths().game_db, get_paths().player_db)
 partner_unbind_service = PartnerUnbindService(get_paths().game_db, get_paths().player_db)
@@ -129,6 +129,15 @@ def _partner_token_service():
             get_paths().game_db, get_paths().player_db
         )
     return _partner_token_service_instance
+
+
+def _partner_cultivation_service():
+    global _partner_cultivation_service_instance
+    if _partner_cultivation_service_instance is None:
+        _partner_cultivation_service_instance = PartnerCultivationService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _partner_cultivation_service_instance
 
 
 TITLE_JSONPATH = get_paths().data / "修炼物品" / "称号.json"
@@ -549,7 +558,7 @@ async def direct_two_exp(
     hp_1, mp_1, atk_1 = _recovered_attributes(user_1, new_exp_1)
     hp_2, mp_2, atk_2 = _recovered_attributes(user_2, new_exp_2)
     special_count = sum("天降异象" in desc for desc in event_descriptions)
-    settlement = partner_cultivation_service.apply(
+    settlement = _partner_cultivation_service().apply(
         _relation_operation_id(event, "cultivation", user_id_1, user_id_2),
         user_id_1, user_id_2,
         expected_exp_1=safe_int(user_1["exp"]), expected_exp_2=safe_int(user_2["exp"]),
