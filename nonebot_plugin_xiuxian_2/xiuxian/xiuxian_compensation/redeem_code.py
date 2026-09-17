@@ -19,7 +19,7 @@ from .common import (
     is_not_started,
     format_reward_delivery,
     create_item_message,
-    reward_claim_service,
+    _reward_claim_service,
     runtime_clock,
 )
 
@@ -107,14 +107,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     redeem_info = data.get(code)
 
     if not redeem_info:
-        if reward_claim_service.has_claimed(config["type_key"], code, user_id):
+        if _reward_claim_service().has_claimed(config["type_key"], code, user_id):
             await handle_send(bot, event, f"你已经使用过兑换码 {code}\n该兑换请求已经处理，无需重复提交。")
             return
         await handle_send(bot, event, "兑换码不存在")
         return
 
     if is_expired(redeem_info):
-        if reward_claim_service.has_claimed(config["type_key"], code, user_id):
+        if _reward_claim_service().has_claimed(config["type_key"], code, user_id):
             await handle_send(bot, event, f"你已经使用过兑换码 {code}\n该兑换请求已经处理，无需重复提交。")
             return
         await handle_send(bot, event, "该兑换码已过期")
@@ -131,7 +131,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     usage_limit = redeem_info.get("usage_limit", 0)
     legacy_used_count = redeem_info.get("used_count", 0)
     # 先 claim：成功后 has_claimed/used_count 会挡住同事件重放。
-    result = reward_claim_service.claim(
+    result = _reward_claim_service().claim(
         config["type_key"],
         code,
         user_id,
@@ -226,7 +226,7 @@ async def send_redeem_code_list(bot: Bot, event: MessageEvent):
         for code, info in codes:
             item_msg = create_item_message(info["items"])
             usage_limit = info.get("usage_limit", 0)
-            used_count = reward_claim_service.get_used_count(
+            used_count = _reward_claim_service().get_used_count(
                 config["type_key"], code, info.get("used_count", 0)
             )
 

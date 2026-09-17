@@ -966,7 +966,9 @@ class SourceQualityTests(unittest.TestCase):
         claim_body = common_source.split("async def claim_normal_reward", 1)[1].split(
             "\ndef delete_record", 1
         )[0]
-        self.assertIn("reward_claim_service.claim(", claim_body)
+        self.assertIn("_reward_claim_service().claim(", claim_body)
+        self.assertIn("_reward_claim_service_instance = None", common_source)
+        self.assertIn("def _reward_claim_service(", common_source)
         self.assertNotIn("send_reward_to_user(", claim_body)
         self.assertNotIn("mark_claimed(", claim_body)
         self.assertIn("BEGIN IMMEDIATE", service_source)
@@ -975,7 +977,9 @@ class SourceQualityTests(unittest.TestCase):
     def test_redeem_code_uses_transactional_limited_claim(self) -> None:
         compensation_root = SOURCE_ROOT / "xiuxian" / "xiuxian_compensation"
         source = (compensation_root / "redeem_code.py").read_text(encoding="utf-8")
-        self.assertIn("reward_claim_service.claim(", source)
+        self.assertIn("_reward_claim_service().claim(", source)
+        self.assertIn("_reward_claim_service().has_claimed(", source)
+        self.assertIn("_reward_claim_service().get_used_count(", source)
         self.assertIn("usage_limit=usage_limit", source)
         self.assertNotIn("send_reward_to_user(", source)
         self.assertNotIn("mark_claimed(", source)

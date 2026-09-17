@@ -30,10 +30,17 @@ from ..xiuxian_utils.utils import (
 
 items = Items()
 sql_message = XiuxianDateManage()
-reward_claim_service = RewardClaimService(
-    get_paths().game_db,
-    max_goods_num=XiuConfig().max_goods_num,
-)
+_reward_claim_service_instance = None
+
+
+def _reward_claim_service():
+    global _reward_claim_service_instance
+    if _reward_claim_service_instance is None:
+        _reward_claim_service_instance = RewardClaimService(
+            get_paths().game_db,
+            max_goods_num=XiuConfig().max_goods_num,
+        )
+    return _reward_claim_service_instance
 
 DATA_PATH = Path(__file__).parent / "compensation_data"
 
@@ -81,7 +88,7 @@ def _run_compensation_action(
     # alternate catalog; the idempotency ledger must follow the same store.
     database = database or getattr(compensation_definition_service, "_database", None)
     if database is None:
-        database = getattr(reward_claim_service, "_database", None)
+        database = getattr(_reward_claim_service(), "_database", None)
     compensation_application = CompensationApplication(database or get_paths().game_db)
 
     def invoke():
@@ -596,7 +603,7 @@ async def claim_normal_reward(
 
     if not record:
         # 已领后定义被删时仍允许服务层 duplicate 回放（若 claim 表有记录）
-        if reward_claim_service.has_claimed(config["type_key"], record_id, user_id):
+        if _reward_claim_service().has_claimed(config["type_key"], record_id, user_id):
             await handle_send(
                 bot,
                 event,
@@ -607,7 +614,7 @@ async def claim_normal_reward(
         return
 
     if is_expired(record):
-        if reward_claim_service.has_claimed(config["type_key"], record_id, user_id):
+        if _reward_claim_service().has_claimed(config["type_key"], record_id, user_id):
             await handle_send(
                 bot,
                 event,
@@ -628,7 +635,7 @@ async def claim_normal_reward(
         "reward_claim",
         operation_id,
         user_id,
-        lambda: reward_claim_service.claim(
+        lambda: _reward_claim_service().claim(
             config["type_key"],
             record_id,
             user_id,
@@ -639,7 +646,7 @@ async def claim_normal_reward(
                 else None
             ),
         ),
-        database=getattr(reward_claim_service, "_database", None),
+        database=getattr(_reward_claim_service(), "_database", None),
         reward_type=config["type_key"],
         record_id=record_id,
     )
@@ -715,8 +722,8 @@ def delete_record(record_id: str, config: Dict[str, Any]):
         "claim_delete",
         f"compensation-claim-delete:{config['type_key']}:{record_id}",
         "system",
-        lambda: (save_claimed_data(config, claimed_data), reward_claim_service.delete_claims(config["type_key"], record_id)),
-        database=getattr(reward_claim_service, "_database", None),
+        lambda: (save_claimed_data(config, claimed_data), _reward_claim_service().delete_claims(config["type_key"], record_id)),
+        database=getattr(_reward_claim_service(), "_database", None),
         record_id=record_id,
     )
 
@@ -743,8 +750,8 @@ def clear_records(config: Dict[str, Any]):
         "definition_clear",
         f"compensation-clear:{config['type_key']}",
         "system",
-        lambda: (save_data(config, {}), save_claimed_data(config, {}), reward_claim_service.delete_claims(config["type_key"])),
-        database=getattr(reward_claim_service, "_database", None),
+        lambda: (save_data(config, {}), save_claimed_data(config, {}), _reward_claim_service().delete_claims(config["type_key"])),
+        database=getattr(_reward_claim_service(), "_database", None),
         reward_type=config["type_key"],
     )
     logger.info(f"已清空所有{config['type_key']}数据")

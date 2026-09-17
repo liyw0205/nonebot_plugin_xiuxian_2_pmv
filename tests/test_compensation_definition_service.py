@@ -26,6 +26,10 @@ from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 
 
+def test_compensation_facade_defers_reward_claim_service_construction() -> None:
+    assert compensation_common._reward_claim_service_instance is None
+
+
 class CompensationDefinitionServiceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
