@@ -95,7 +95,7 @@ _unbind_item_service_instance = None
 _lottery_talisman_service_instance = None
 _package_reward_service_instance = None
 _accessory_package_service_instance = None
-alchemy_service = AlchemyService(get_paths().game_db)
+_alchemy_service_instance = None
 _skill_learning_service_instance = None
 _batch_item_use_service_instance = None
 _backpack_repair_service_instance = None
@@ -128,6 +128,12 @@ def _stone_reward_service():
     if _stone_reward_service_instance is None:
         _stone_reward_service_instance = StoneItemRewardService(get_paths().game_db)
     return _stone_reward_service_instance
+
+def _alchemy_service():
+    global _alchemy_service_instance
+    if _alchemy_service_instance is None:
+        _alchemy_service_instance = AlchemyService(get_paths().game_db)
+    return _alchemy_service_instance
 
 def _unbind_item_service():
     global _unbind_item_service_instance
@@ -598,7 +604,7 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await goods_re_root.finish()
 
     # 先走 alchemy operation，避免成功后数量归零挡住同事件重放。
-    alchemy_result = alchemy_service.apply(
+    alchemy_result = _alchemy_service().apply(
         _alchemy_operation_id(event, user_id, "single"),
         user_id,
         price,
@@ -689,7 +695,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             consume_items.append((elixir['id'], elixir['num']))
             results.append(f"{elixir['name']} x{elixir['num']} → {number_to(total_price)}灵石")
 
-        alchemy_result = alchemy_service.apply(
+        alchemy_result = _alchemy_service().apply(
             _alchemy_operation_id(event, user_id, "fast-hp"),
             user_id,
             total_stone,
@@ -802,7 +808,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         
         result_msg.append(f"{item['name']} x{item['available_num']}{status_info} → {number_to(total_price)}灵石")
 
-    alchemy_result = alchemy_service.apply(
+    alchemy_result = _alchemy_service().apply(
         _alchemy_operation_id(event, user_id, f"fast-{item_type}-{rank_name}"),
         user_id,
         total_stone,
