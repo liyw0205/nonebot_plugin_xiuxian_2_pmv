@@ -11,6 +11,7 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity import (
+    activity_config,
     service as activity_service,
 )
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity.config_event_service import (
@@ -23,6 +24,9 @@ from tests.test_db_backend import db_backend
 
 
 class ActivityConfigEventServiceTests(unittest.TestCase):
+    def test_activity_config_defers_event_service_construction(self) -> None:
+        self.assertIsNone(activity_config._activity_config_event_service_instance)
+
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.database = Path(self.temp.name) / "activity.db"
@@ -226,8 +230,11 @@ class ActivityConfigEventServiceTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertIn("activity_config_event_service.load_or_import(", config_source)
-        self.assertIn("activity_config_event_service.replace(", config_source)
+        self.assertIn("_activity_config_event_service().load_or_import(", config_source)
+        self.assertIn("_activity_config_event_service().replace(", config_source)
+        self.assertIn("_activity_config_event_service_instance = None", config_source)
+        self.assertIn("def _activity_config_event_service(", config_source)
+        self.assertNotIn("activity_config_event_service.replace(", config_source)
         self.assertIn("expected_revision=state.revision", service_source)
         self.assertIn('operation_id=_activity_operation_id(event, "config-open"', command_source)
         self.assertIn("expected_revision=expected_revision", web_source)

@@ -1872,6 +1872,16 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("def _world_boss_punishment_service(", source)
         self.assertNotIn("world_boss_punishment_service.punish(", helper)
 
+    def test_activity_config_uses_lazy_event_service(self) -> None:
+        root = SOURCE_ROOT / "xiuxian" / "xiuxian_activity"
+        source = (root / "activity_config.py").read_text(encoding="utf-8")
+        self.assertIn("_activity_config_event_service_instance = None", source)
+        self.assertIn("def _activity_config_event_service(", source)
+        self.assertIn("_activity_config_event_service().load_or_import(", source)
+        self.assertIn("_activity_config_event_service().replay(", source)
+        self.assertIn("_activity_config_event_service().replace(", source)
+        self.assertNotIn("activity_config_event_service.replace(", source)
+
     def test_tower_purchase_uses_cross_database_transaction(self) -> None:
         tower_root = SOURCE_ROOT / "xiuxian" / "xiuxian_tower"
         source = (tower_root / "__init__.py").read_text(encoding="utf-8")

@@ -18,7 +18,14 @@ BASE_DIR = get_paths().data / "activity"
 CONFIG_PATH = BASE_DIR / "activity_config.json"
 DEFAULT_CONFIG_PATH = Path(__file__).parent / "activity_config.json"
 CONFIG_DB_PATH = BASE_DIR / "activity.db"
-activity_config_event_service = ActivityConfigEventService(CONFIG_DB_PATH)
+_activity_config_event_service_instance = None
+
+
+def _activity_config_event_service():
+    global _activity_config_event_service_instance
+    if _activity_config_event_service_instance is None:
+        _activity_config_event_service_instance = ActivityConfigEventService(CONFIG_DB_PATH)
+    return _activity_config_event_service_instance
 
 DATE_FMT = "%Y-%m-%d"
 TIME_FMT = "%Y-%m-%d %H:%M:%S"
@@ -171,7 +178,7 @@ def _load_legacy_config() -> dict:
 
 
 def load_config_state() -> ActivityConfigState:
-    return activity_config_event_service.load_or_import(_load_legacy_config())
+    return _activity_config_event_service().load_or_import(_load_legacy_config())
 
 
 def load_config() -> dict:
@@ -181,7 +188,7 @@ def load_config() -> dict:
 def replay_config_event(
     operation_id, request_identity
 ) -> ActivityConfigMutationResult | None:
-    result = activity_config_event_service.replay(operation_id, request_identity)
+    result = _activity_config_event_service().replay(operation_id, request_identity)
     if result is not None and result.succeeded and result.config is not None:
         _save_config_projection(result.config)
     return result
@@ -195,7 +202,7 @@ def save_config(
     expected_revision,
     result_text: str = "",
 ) -> ActivityConfigMutationResult:
-    result = activity_config_event_service.replace(
+    result = _activity_config_event_service().replace(
         operation_id,
         request_identity,
         expected_revision,
