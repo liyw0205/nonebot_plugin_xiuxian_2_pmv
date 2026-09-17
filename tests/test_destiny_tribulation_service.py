@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import importlib
 from pathlib import Path
 
 import nonebot
@@ -8,6 +9,13 @@ nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_base.transaction_service import DestinyTribulationService
 from tests.test_db_backend import db_backend
+
+
+def test_breakthrough_facade_defers_destiny_tribulation_service_construction():
+    breakthrough = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_base.breakthrough_tribulation"
+    )
+    assert breakthrough._destiny_tribulation_service_instance is None
 
 
 class DestinyTribulationServiceTests(unittest.TestCase):

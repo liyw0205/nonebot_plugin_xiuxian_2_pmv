@@ -1226,13 +1226,18 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("ordinary_tribulation_service.replay(", ordinary)
         self.assertNotIn("ordinary_tribulation_service.settle(", ordinary)
         self.assertLess(
-            destiny.index("destiny_tribulation_service.replay("),
+            destiny.index("_destiny_tribulation_service().replay("),
             destiny.index("get_user_tribulation_info("),
         )
         self.assertLess(
-            destiny.index("destiny_tribulation_service.replay("),
+            destiny.index("_destiny_tribulation_service().replay("),
             destiny.index("sql_message.get_back_msg("),
         )
+        self.assertIn("_destiny_tribulation_service_instance = None", command_source)
+        self.assertIn("def _destiny_tribulation_service(", command_source)
+        self.assertIn("_destiny_tribulation_service().settle(", destiny)
+        self.assertNotIn("destiny_tribulation_service.replay(", destiny)
+        self.assertNotIn("destiny_tribulation_service.settle(", destiny)
         self.assertLess(
             heart_devil.index("heart_devil_tribulation_service.replay("),
             heart_devil.index("get_user_tribulation_info("),
