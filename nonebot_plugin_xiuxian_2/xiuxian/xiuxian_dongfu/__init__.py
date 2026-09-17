@@ -41,7 +41,7 @@ _dongfu_expansion_service_instance = None
 dongfu_plant_service = DongfuPlantService(get_paths().game_db, get_paths().player_db)
 dongfu_accelerate_service = DongfuAccelerateService(get_paths().game_db, get_paths().player_db)
 dongfu_patrol_service = DongfuPatrolService(get_paths().game_db, get_paths().player_db)
-dongfu_array_upgrade_service = DongfuArrayUpgradeService(get_paths().game_db, get_paths().player_db)
+_dongfu_array_upgrade_service_instance = None
 dongfu_visit_reward_service = DongfuVisitRewardService(get_paths().game_db, get_paths().player_db)
 dongfu_fertilize_service = DongfuFertilizeService(get_paths().game_db, get_paths().player_db)
 dongfu_infiltrate_failure_service = InfiltrateFailureService(get_paths().game_db, get_paths().player_db)
@@ -60,6 +60,15 @@ def _dongfu_expansion_service():
             get_paths().game_db, get_paths().player_db
         )
     return _dongfu_expansion_service_instance
+
+
+def _dongfu_array_upgrade_service():
+    global _dongfu_array_upgrade_service_instance
+    if _dongfu_array_upgrade_service_instance is None:
+        _dongfu_array_upgrade_service_instance = DongfuArrayUpgradeService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _dongfu_array_upgrade_service_instance
 
 
 def _run_dongfu_action(action, operation_id, user_id, call, **payload):
@@ -1331,7 +1340,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     operation_id = f"dongfu-array:{uid}:{event_message_id or runtime_ids.new_id()}"
     result = _run_dongfu_action(
         "array_upgrade", operation_id, uid,
-        call=lambda: dongfu_array_upgrade_service.upgrade(
+        call=lambda: _dongfu_array_upgrade_service().upgrade(
             operation_id, uid, lv, next_lv, cost, DONGFU_ITEM_ARRAY_STONE, array_stone_need,
         ),
         current_level=lv, next_level=next_lv, cost=cost,

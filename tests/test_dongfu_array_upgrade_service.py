@@ -8,6 +8,10 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dongfu.transaction_service import 
 from tests.test_db_backend import db_backend
 
 class DongfuArrayUpgradeServiceTests(unittest.TestCase):
+ def test_dongfu_facade_defers_array_upgrade_service_construction(self):
+  from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dongfu
+  self.assertIsNone(xiuxian_dongfu._dongfu_array_upgrade_service_instance)
+
  def setUp(self):
   self.temp_dir=tempfile.TemporaryDirectory(); root=Path(self.temp_dir.name); self.game,self.player=root/"game.sqlite3",root/"player.sqlite3"
   with db_backend.transaction(self.game) as c:
