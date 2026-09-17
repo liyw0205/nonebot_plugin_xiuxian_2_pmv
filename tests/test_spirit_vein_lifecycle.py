@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib
 import sqlite3
 from pathlib import Path
 
@@ -15,6 +16,13 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.transaction_service i
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.transaction_service import (
     SpiritVeinLifecycleService,
 )
+
+
+def test_world_events_facade_defers_spirit_vein_lifecycle_service_construction():
+    world_events = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events"
+    )
+    assert world_events._spirit_vein_lifecycle_service_instance is None
 
 
 def idle():
@@ -257,7 +265,11 @@ def test_all_production_entries_use_lifecycle_operations():
         ("def _close_spirit_vein_manual", "def _ensure_daily_state"),
     ):
         section = source[source.index(start) : source.index(end, source.index(start))]
-        assert "spirit_vein_lifecycle_service" in section
+        assert "_spirit_vein_lifecycle_service()" in section
+
+    assert "_spirit_vein_lifecycle_service_instance = None" in source
+    assert "def _spirit_vein_lifecycle_service(" in source
+    assert "spirit_vein_lifecycle_service.transition(" not in source
 
     start_handler = source[
         source.index("async def start_spirit_vein_") : source.index(
