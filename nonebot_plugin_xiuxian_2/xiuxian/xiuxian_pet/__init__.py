@@ -76,7 +76,7 @@ pet_application = PetApplication(get_paths().game_db, get_paths().player_db)
 runtime_ids = UUIDGenerator()
 _pet_skill_replace_service_instance = None
 _pet_hatch_service_instance = None
-pet_release_service = PetReleaseService(get_paths().game_db, get_paths().player_db)
+_pet_release_service_instance = None
 pet_fusion_breakthrough_service = PetFusionBreakthroughService(get_paths().player_db)
 pet_skill_reroll_service = PetSkillRerollService(get_paths().game_db, get_paths().player_db)
 pet_active_switch_service = PetActiveSwitchService(get_paths().player_db)
@@ -120,6 +120,15 @@ def _pet_hatch_service():
             get_paths().game_db, get_paths().player_db
         )
     return _pet_hatch_service_instance
+
+
+def _pet_release_service():
+    global _pet_release_service_instance
+    if _pet_release_service_instance is None:
+        _pet_release_service_instance = PetReleaseService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _pet_release_service_instance
 
 
 def _split_args(text: str):
@@ -1363,7 +1372,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     refund_item = items.get_data_by_item_id(PET_RELEASE_REFUND_ITEM_ID) or {}
     refund_count = calc_pet_release_refund(pet, refund_item)[0]
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    release_result = pet_release_service.release(
+    release_result = _pet_release_service().release(
         f"pet-release:{event_id or pet.get('uid', '')}:{user_id}",
         user_id,
         pet.get("uid", ""),
@@ -1418,7 +1427,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     refund_count = sum(calc_pet_release_refund(pet, refund_item)[0] for pet in pets)
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     snapshot_id = ":".join(sorted(str(pet.get("uid", "")) for pet in pets))
-    release_result = pet_release_service.release_batch(
+    release_result = _pet_release_service().release_batch(
         f"pet-release-batch:{event_id or snapshot_id}:{user_id}",
         user_id,
         [{"uid": pet.get("uid"), "total_exp": pet.get("total_exp", 0), "is_active": 0} for pet in pets],
