@@ -81,7 +81,7 @@ _partner_breakthrough_service_instance = None
 _mentor_bind_service_instance = None
 _mentor_application_service_instance = None
 _partner_invite_service_instance = None
-partner_protection_service = PartnerProtectionService(get_paths().player_db)
+_partner_protection_service_instance = None
 _mentor_expel_service_instance = None
 _mentor_breakthrough_reward_service_instance = None
 _apprentice_leave_service_instance = None
@@ -136,6 +136,15 @@ def _partner_invite_service():
     if _partner_invite_service_instance is None:
         _partner_invite_service_instance = PartnerInviteService(get_paths().player_db)
     return _partner_invite_service_instance
+
+
+def _partner_protection_service():
+    global _partner_protection_service_instance
+    if _partner_protection_service_instance is None:
+        _partner_protection_service_instance = PartnerProtectionService(
+            get_paths().player_db
+        )
+    return _partner_protection_service_instance
 
 
 def _partner_cultivation_service():
@@ -347,7 +356,7 @@ async def two_exp_cd_up():
 
 def load_player_user(user_id):
     """加载用户数据，如果不存在或为空，返回默认数据"""
-    return partner_protection_service.get_status(user_id)
+    return _partner_protection_service().get_status(user_id)
 
 @two_exp_invite.handle(parameterless=[Cooldown(stamina_cost=10)])
 async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -990,7 +999,7 @@ async def two_exp_protect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, msg, md_type="buff", k1="开启", v1="双修保护 开启", k2="关闭", v2="双修保护 关闭", k3="拒绝", v3="双修保护 拒绝", k4="状态", v4="双修保护 状态")
         await two_exp_protect.finish()
     
-    changed = partner_protection_service.set_status(
+    changed = _partner_protection_service().set_status(
         _relation_operation_id(event, "cultivation-protection", user_id),
         user_id,
         expected_status,

@@ -2048,7 +2048,7 @@ class SourceQualityTests(unittest.TestCase):
         protection_start = source.index("async def two_exp_protect_")
         protection_end = source.index("@mentor_protect.handle", protection_start)
         protection_handler = source[protection_start:protection_end]
-        self.assertIn("partner_protection_service.set_status(", protection_handler)
+        self.assertIn("_partner_protection_service().set_status(", protection_handler)
         self.assertNotIn("save_player_user(", source)
 
         invite_start = source.index("async def two_exp_invite_")
@@ -2078,6 +2078,10 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("partner_invite_service.resolve(", source)
         self.assertIn("partner_cultivation_invites", invite_service)
         self.assertIn("expected_target_protection", invite_service)
+        self.assertIn("_partner_protection_service_instance = None", source)
+        self.assertIn("def _partner_protection_service(", source)
+        self.assertIn("_partner_protection_service().get_status(", source)
+        self.assertNotIn("partner_protection_service.set_status(", source)
 
     def test_partner_token_uses_transactional_service(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_buff"
