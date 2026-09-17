@@ -1885,6 +1885,8 @@
 
 2026-09-17 dungeon explore lazy construction slice：`xiuxian_dungeon.__init__` 不再 module-level 构造 `DungeonExploreOperationService`，新增 `_dungeon_explore_operation_service()` game/player 双库惰性 getter；探索恢复和真实结算的 `settle` 入口经 getter，`DungeonApplication` 继续拥有 replay/prepare/resolve_rejection。replay-before-random、prepared/completed 恢复、operation 状态、跨库玩家/副本写入和 rollback 语义保持不变。construction、dungeon explore/team lifecycle/join/leave/kick/disband、source/architecture 共 223 tests、4 subtests passed，compileall、inventory、diff check通过。
 
+2026-09-17 dungeon explore lazy construction live safety：提交 `51dd091d` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260917T141019Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。
