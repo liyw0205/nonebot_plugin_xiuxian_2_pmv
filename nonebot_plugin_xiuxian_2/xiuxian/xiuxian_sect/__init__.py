@@ -90,7 +90,7 @@ from ...infrastructure.random_source import SystemRandom
 
 items = Items()
 sql_message = XiuxianDateManage()  # sql类
-sect_membership_service = SectMembershipService(get_paths().game_db)
+_sect_membership_service_instance = None
 sect_application = SectApplication(
     get_paths().game_db,
     repository=SectRenameSqlRepository(get_paths().game_db),
@@ -108,6 +108,15 @@ _sect_open_join_service_instance = None
 _sect_close_join_service_instance = None
 _sect_disband_service_instance = None
 _sect_daily_reset_maintenance_service_instance = None
+
+
+def _sect_membership_service():
+    global _sect_membership_service_instance
+    if _sect_membership_service_instance is None:
+        _sect_membership_service_instance = SectMembershipService(
+            get_paths().game_db
+        )
+    return _sect_membership_service_instance
 
 
 def _sect_close_mountain_service():
@@ -395,7 +404,7 @@ async def materialsupdate_():
     all_sects = sql_message.get_all_sects_id_scale()
     granted = 0
     for s in all_sects:
-        result = sect_membership_service.grant_scheduled_materials(
+        result = _sect_membership_service().grant_scheduled_materials(
             grant_key,
             s[0],
             config["发放宗门资材"]["倍率"],
@@ -785,7 +794,7 @@ async def sect_fairyland_upgrade_(bot: Bot, event: GroupMessageEvent | PrivateMe
         await handle_send(bot, event, f"宗门资材不足，还需{number_to(lack)}资材。", md_type="宗门", k1="捐献", v1="宗门捐献", k2="炼体堂", v2="宗门炼体堂", k3="宗门", v3="我的宗门")
         await sect_fairyland_upgrade.finish()
 
-    result = sect_membership_service.upgrade_fairyland(
+    result = _sect_membership_service().upgrade_fairyland(
         _sect_operation_id(event, "fairyland_upgrade", sect_id),
         user_info["user_id"],
         sect_id,
@@ -931,7 +940,7 @@ async def sect_elixir_room_make_(bot: Bot, event: GroupMessageEvent | PrivateMes
                 await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_elixir_room_make.finish()
             else:
-                result = sect_membership_service.upgrade_elixir_room(
+                result = _sect_membership_service().upgrade_elixir_room(
                     _sect_operation_id(event, "elixir_room_upgrade", sect_id),
                     user_info["user_id"],
                     sect_id,
@@ -1302,7 +1311,7 @@ async def sect_mainbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessage
                         fail_count += 1
 
                 sql = set_sect_list(mainbuffidlist)
-                result = sect_membership_service.apply_buff_search(
+                result = _sect_membership_service().apply_buff_search(
                     _sect_operation_id(event, "mainbuff_search", sect_id),
                     user_info["user_id"],
                     sect_id,
@@ -1399,7 +1408,7 @@ async def sect_secbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                         fail_count += 1
 
                 sql = set_sect_list(secbuffidlist)
-                result = sect_membership_service.apply_buff_search(
+                result = _sect_membership_service().apply_buff_search(
                     _sect_operation_id(event, "secbuff_search", sect_id),
                     user_info["user_id"],
                     sect_id,
@@ -1587,7 +1596,7 @@ async def upatkpractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级攻击修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await upatkpractice.finish()
 
-        result = sect_membership_service.upgrade_practice(
+        result = _sect_membership_service().upgrade_practice(
             _sect_operation_id(event, "attack_practice_upgrade", sect_id),
             user_id,
             sect_id,
@@ -1674,7 +1683,7 @@ async def uphppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级元血修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await uphppractice.finish()
 
-        result = sect_membership_service.upgrade_practice(
+        result = _sect_membership_service().upgrade_practice(
             _sect_operation_id(event, "health_practice_upgrade", sect_id),
             user_id,
             sect_id,
@@ -1761,7 +1770,7 @@ async def upmppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级灵海修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await upmppractice.finish()
 
-        result = sect_membership_service.upgrade_practice(
+        result = _sect_membership_service().upgrade_practice(
             _sect_operation_id(event, "mana_practice_upgrade", sect_id),
             user_id,
             sect_id,
@@ -2109,7 +2118,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             task_operation_id = _sect_operation_id(
                 event, "task_complete", user_id
             )
-            settlement = sect_membership_service.settle_task(
+            settlement = _sect_membership_service().settle_task(
                 task_operation_id,
                 user_id,
                 sect_id,
@@ -2192,7 +2201,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             task_operation_id = _sect_operation_id(
                 event, "task_complete", user_id
             )
-            settlement = sect_membership_service.settle_task(
+            settlement = _sect_membership_service().settle_task(
                 task_operation_id,
                 user_id,
                 sect_id,
@@ -2269,7 +2278,7 @@ async def sect_owner_change_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             await handle_send(bot, event, msg)
             await sect_owner_change.finish()
         else:
-            result = sect_membership_service.transfer_owner(
+            result = _sect_membership_service().transfer_owner(
                 _sect_operation_id(event, "transfer_owner", give_qq),
                 user_id,
                 give_qq,
@@ -2412,7 +2421,7 @@ async def create_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             (k for k, v in jsondata.sect_config_data().items() if v.get("title") == "宗主"),
             0
         )
-        creation = sect_membership_service.create_sect(
+        creation = _sect_membership_service().create_sect(
             _sect_operation_id(event, "create", user_id),
             user_id,
             sect_name,
@@ -2490,7 +2499,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_S
             await handle_send(bot, event, msg, md_type="宗门", k1="创建", v1="创建宗门", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             # 继续创建流程（不return，走后续统一创建）
         else:
-            refresh = sect_membership_service.charge_name_refresh(
+            refresh = _sect_membership_service().charge_name_refresh(
                 _sect_operation_id(event, "name_refresh", user_id),
                 user_id,
                 stone_cost,
@@ -2531,7 +2540,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_S
         (k for k, v in jsondata.sect_config_data().items() if v.get("title") == "宗主"),
         0
     )
-    creation = sect_membership_service.create_sect(
+    creation = _sect_membership_service().create_sect(
         _sect_operation_id(event, "create", user_id),
         user_id,
         sect_name,

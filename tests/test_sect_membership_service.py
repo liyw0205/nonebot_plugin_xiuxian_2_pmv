@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import importlib
 from pathlib import Path
 
 import nonebot
@@ -12,6 +13,13 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.transaction_service import (
     SectMembershipService,
 )
 from tests.test_db_backend import db_backend
+
+
+def test_sect_facade_defers_membership_service_construction():
+    sect = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect"
+    )
+    assert sect._sect_membership_service_instance is None
 
 
 class SectMembershipServiceTests(unittest.TestCase):

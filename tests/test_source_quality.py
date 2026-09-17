@@ -918,7 +918,7 @@ class SourceQualityTests(unittest.TestCase):
         service_source = (sect_root / "membership_service.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn("sect_membership_service.transfer_owner(", command_source)
+        self.assertIn("_sect_membership_service().transfer_owner(", command_source)
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("sect_operations", service_source)
 
@@ -1079,7 +1079,7 @@ class SourceQualityTests(unittest.TestCase):
         service_source = (sect_root / "membership_service.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn("sect_membership_service.upgrade_fairyland(", command_source)
+        self.assertIn("_sect_membership_service().upgrade_fairyland(", command_source)
         self.assertIn("sect_fairyland_operations", service_source)
         self.assertIn("BEGIN IMMEDIATE", service_source)
 
@@ -1090,7 +1090,7 @@ class SourceQualityTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn(
-            "sect_membership_service.upgrade_elixir_room(", command_source
+            "_sect_membership_service().upgrade_elixir_room(", command_source
         )
         self.assertIn('"elixir_room_upgrade"', command_source)
         self.assertIn("sect_elixir_room_operations", service_source)
@@ -1102,7 +1102,7 @@ class SourceQualityTests(unittest.TestCase):
         service_source = (sect_root / "membership_service.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn("sect_membership_service.apply_buff_search(", command_source)
+        self.assertIn("_sect_membership_service().apply_buff_search(", command_source)
         self.assertIn('"mainbuff_search"', command_source)
         self.assertIn("sect_buff_search_operations", service_source)
         self.assertNotIn(
@@ -1112,7 +1112,7 @@ class SourceQualityTests(unittest.TestCase):
     def test_sect_secbuff_search_uses_transactional_service(self) -> None:
         sect_root = SOURCE_ROOT / "xiuxian" / "xiuxian_sect"
         command_source = (sect_root / "__init__.py").read_text(encoding="utf-8")
-        self.assertIn("sect_membership_service.apply_buff_search(", command_source)
+        self.assertIn("_sect_membership_service().apply_buff_search(", command_source)
         self.assertIn('"secbuff_search"', command_source)
         self.assertIn('"secondary"', command_source)
         self.assertNotIn(
@@ -1151,7 +1151,7 @@ class SourceQualityTests(unittest.TestCase):
         service_source = (sect_root / "membership_service.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn("sect_membership_service.upgrade_practice(", command_source)
+        self.assertIn("_sect_membership_service().upgrade_practice(", command_source)
         self.assertIn('"health_practice_upgrade"', command_source)
         self.assertIn('"mana_practice_upgrade"', command_source)
         self.assertIn("sect_practice_operations", service_source)
