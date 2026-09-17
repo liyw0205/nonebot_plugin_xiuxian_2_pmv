@@ -22,6 +22,11 @@ from tests.test_db_backend import db_backend
 
 
 class PastLifeResetTests(unittest.TestCase):
+    def test_past_life_facade_defers_reset_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_past_life
+
+        self.assertIsNone(xiuxian_past_life._past_life_reset_service_instance)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
@@ -244,9 +249,9 @@ class PastLifeResetTests(unittest.TestCase):
             / "__init__.py"
         ).read_text(encoding="utf-8")
         handler = source[source.index("@reset_past_life_cmd.handle"):source.index("# ═══ 工具函数")]
-        self.assertIn("past_life_reset_service.reset_one(", handler)
-        self.assertIn("past_life_reset_service.create_all(", handler)
-        self.assertIn("past_life_reset_service.run_batch(", handler)
+        self.assertIn("_past_life_reset_service().reset_one(", handler)
+        self.assertIn("_past_life_reset_service().create_all(", handler)
+        self.assertIn("_past_life_reset_service().run_batch(", handler)
         self.assertNotIn("past_life_limit.reset_", handler)
 
 

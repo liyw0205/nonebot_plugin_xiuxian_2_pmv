@@ -23,8 +23,17 @@ from ...features.past_life.application import PastLifeApplication
 player_data_manager = PlayerDataManager()
 sql_message = XiuxianDateManage()
 _paths = get_paths()
-past_life_reset_service = PastLifeResetService(_paths.game_db, _paths.player_db)
+_past_life_reset_service_instance = None
 past_life_application = PastLifeApplication(_paths.game_db)
+
+
+def _past_life_reset_service():
+    global _past_life_reset_service_instance
+    if _past_life_reset_service_instance is None:
+        _past_life_reset_service_instance = PastLifeResetService(
+            _paths.game_db, _paths.player_db
+        )
+    return _past_life_reset_service_instance
 
 
 class _LegacyResult(dict):
@@ -301,7 +310,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     event_id = _stable_event_id(event)
 
     if _is_reset_all(text):
-        pending = past_life_reset_service.find_pending_all()
+        pending = _past_life_reset_service().find_pending_all()
         if pending is not None and pending.clear_history != clear_history:
             pending_mode = "全清" if pending.clear_history else "保留历史"
             await handle_send(
@@ -317,7 +326,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         )
         result = pending or _run_past_life_action(
             "reset_all_create", operation_id, str(getattr(event, "user_id", "admin")),
-            call=lambda: past_life_reset_service.create_all(operation_id, clear_history),
+            call=lambda: _past_life_reset_service().create_all(operation_id, clear_history),
             clear_history=clear_history,
         )
         if not result.succeeded:
@@ -334,12 +343,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
                     f"reset_all_batch:{result.processed}",
                     f"{operation_id}:batch:{result.processed}",
                     str(getattr(event, "user_id", "admin")),
-                    call=lambda: past_life_reset_service.run_batch(operation_id, batch_size=500),
+                    call=lambda: _past_life_reset_service().run_batch(operation_id, batch_size=500),
                     batch_size=500,
                 )
                 await asyncio.sleep(0)
         except Exception:
-            progress = past_life_reset_service.find_pending_all() or result
+            progress = _past_life_reset_service().find_pending_all() or result
             await handle_send(
                 bot,
                 event,
@@ -375,7 +384,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     operation_id = f"past-life-reset-one:{event_id}"
     result = _run_past_life_action(
         "reset_one", operation_id, str(target_user["user_id"]),
-        call=lambda: past_life_reset_service.reset_one(
+        call=lambda: _past_life_reset_service().reset_one(
             operation_id, target_user["user_id"], clear_history,
         ),
         clear_history=clear_history,
