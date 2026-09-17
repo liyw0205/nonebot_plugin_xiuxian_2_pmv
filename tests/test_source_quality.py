@@ -2093,6 +2093,19 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("expected_invitee_partner=invitee_partner", handler)
         self.assertIn("expected_inviter_partner=inviter_partner", handler)
 
+    def test_partner_unbind_uses_lazy_transactional_service(self) -> None:
+        root = SOURCE_ROOT / "xiuxian" / "xiuxian_buff"
+        source = (root / "partner.py").read_text(encoding="utf-8")
+        start = source.index("async def unbind_partner_")
+        end = source.index("@partner_rank.handle", start)
+        handler = source[start:end]
+        self.assertIn("_partner_unbind_service_instance = None", source)
+        self.assertIn("def _partner_unbind_service(", source)
+        self.assertIn("_partner_unbind_service().apply(", handler)
+        self.assertNotIn("partner_unbind_service.apply(", handler)
+        self.assertIn("expected_user_bind_time=partner_data.get", handler)
+        self.assertIn("expected_partner_bind_time=partner_side.get", handler)
+
     def test_mentor_protection_uses_one_application_transaction(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_buff"
         source = (root / "partner.py").read_text(encoding="utf-8")

@@ -76,7 +76,7 @@ player_data_manager = PlayerDataManager()
 _partner_cultivation_service_instance = None
 _partner_token_service_instance = None
 _partner_bind_service_instance = None
-partner_unbind_service = PartnerUnbindService(get_paths().game_db, get_paths().player_db)
+_partner_unbind_service_instance = None
 partner_breakthrough_service = PartnerBreakthroughService(get_paths().game_db, get_paths().player_db)
 mentor_bind_service = MentorBindService(get_paths().game_db, get_paths().player_db)
 mentor_application_service = MentorApplicationService(get_paths().player_db)
@@ -147,6 +147,15 @@ def _partner_bind_service():
             get_paths().game_db, get_paths().player_db
         )
     return _partner_bind_service_instance
+
+
+def _partner_unbind_service():
+    global _partner_unbind_service_instance
+    if _partner_unbind_service_instance is None:
+        _partner_unbind_service_instance = PartnerUnbindService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _partner_unbind_service_instance
 
 
 TITLE_JSONPATH = get_paths().data / "修炼物品" / "称号.json"
@@ -1182,7 +1191,7 @@ async def unbind_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     partner_side = load_partner(partner_user_id)
     checked_at = runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    result = partner_unbind_service.apply(
+    result = _partner_unbind_service().apply(
         f"partner-unbind:{user_id}:{event_id or runtime_ids.new_id()}", user_id, partner_user_id,
         expected_user_bind_time=partner_data.get("bind_time"),
         expected_partner_bind_time=partner_side.get("bind_time"),

@@ -11,6 +11,11 @@ from tests.test_db_backend import db_backend
 
 
 class PartnerUnbindTests(unittest.TestCase):
+    def test_partner_facade_defers_unbind_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff import partner
+
+        self.assertIsNone(partner._partner_unbind_service_instance)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         root = Path(self.temp.name)
