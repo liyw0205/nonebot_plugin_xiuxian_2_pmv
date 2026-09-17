@@ -88,7 +88,7 @@ from .backpack_render import (
 items = Items()
 sql_message = XiuxianDateManage()
 equipment_service = EquipmentService(get_paths().game_db)
-cultivation_item_service = CultivationItemService(get_paths().game_db)
+_cultivation_item_service_instance = None
 stone_reward_service = StoneItemRewardService(get_paths().game_db)
 _three_cultivation_pill_service_instance = None
 _unbind_item_service_instance = None
@@ -110,6 +110,12 @@ def _three_cultivation_pill_service():
             get_paths().game_db
         )
     return _three_cultivation_pill_service_instance
+
+def _cultivation_item_service():
+    global _cultivation_item_service_instance
+    if _cultivation_item_service_instance is None:
+        _cultivation_item_service_instance = CultivationItemService(get_paths().game_db)
+    return _cultivation_item_service_instance
 
 def _unbind_item_service():
     global _unbind_item_service_instance
@@ -1257,7 +1263,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 exp = goods_info['buff'] * num
                 root_rate = sql_message.get_root_rate(user_info_full['root_type'], user_id)
                 level_spend = jsondata.level_data()[user_info_full['level']]["spend"]
-                result = cultivation_item_service.apply(
+                result = _cultivation_item_service().apply(
                     _cultivation_item_operation_id(event, user_id, goods_id),
                     user_id,
                     goods_id,

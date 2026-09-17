@@ -782,7 +782,7 @@ class SourceQualityTests(unittest.TestCase):
         command = command_source[start:end]
         growth_branch = command[command.index("                exp = goods_info['buff'] * num"):]
 
-        self.assertIn("cultivation_item_service.apply(", growth_branch)
+        self.assertIn("_cultivation_item_service().apply(", growth_branch)
         self.assertNotIn("sql_message.update_exp(", growth_branch)
         self.assertNotIn("sql_message.update_user_attribute(", growth_branch)
         self.assertNotIn("sql_message.update_back_j(", growth_branch)
