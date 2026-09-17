@@ -5,6 +5,12 @@ import pytest
 
 nonebot.init()
 
+
+def test_activity_boss_facade_defers_item_raid_settlement_service_construction():
+    from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity import activity_boss
+
+    assert activity_boss._activity_boss_item_raid_settlement_service_instance is None
+
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity.transaction_service import (
     ActivityBossItemRaidSettlementService,
 )

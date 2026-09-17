@@ -34,7 +34,7 @@ from .transaction_service import ActivityBossItemRaidSettlementService
 BOSS_MODES = {"item_raid", "cooperative", "both"}
 
 _activity_boss_coop_settlement_service_instance = None
-activity_boss_item_raid_settlement_service = ActivityBossItemRaidSettlementService(DB_PATH)
+_activity_boss_item_raid_settlement_service_instance = None
 
 
 def _activity_boss_coop_settlement_service():
@@ -44,6 +44,15 @@ def _activity_boss_coop_settlement_service():
             DB_PATH
         )
     return _activity_boss_coop_settlement_service_instance
+
+
+def _activity_boss_item_raid_settlement_service():
+    global _activity_boss_item_raid_settlement_service_instance
+    if _activity_boss_item_raid_settlement_service_instance is None:
+        _activity_boss_item_raid_settlement_service_instance = ActivityBossItemRaidSettlementService(
+            DB_PATH
+        )
+    return _activity_boss_item_raid_settlement_service_instance
 
 
 def _fixed_item_damage(operation_id: str, damage_min: int, damage_max: int) -> int:
@@ -522,7 +531,7 @@ def use_item_on_boss(user_id: str, query: str, operation_id: str | None = None) 
     finally:
         conn.close()
 
-    result = activity_boss_item_raid_settlement_service.settle(
+    result = _activity_boss_item_raid_settlement_service().settle(
         operation_id, str(user_id), activity["key"], item_def["id"], have, need,
         hp_left, max_hp, used, limit, damage, today_str(), now_str(),
         activity.get("server_milestones") or (),
