@@ -54,7 +54,7 @@ from .transaction_service import (
 )
 sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
-impart_draw_service = ImpartDrawService(get_paths().game_db, get_paths().impart_db)
+_impart_draw_service_instance = None
 card_compose_service = CardComposeService(get_paths().impart_db)
 card_disassemble_service = CardDisassembleService(get_paths().impart_db)
 _love_sand_service_instance = None
@@ -68,6 +68,13 @@ def _love_sand_service():
     if _love_sand_service_instance is None:
         _love_sand_service_instance = LoveSandUseService(get_paths().game_db, get_paths().impart_db, get_paths().player_db)
     return _love_sand_service_instance
+
+
+def _impart_draw_service():
+    global _impart_draw_service_instance
+    if _impart_draw_service_instance is None:
+        _impart_draw_service_instance = ImpartDrawService(get_paths().game_db, get_paths().impart_db)
+    return _impart_draw_service_instance
 
 
 def _run_impart_action(action, operation_id, user_id, call, **payload):
@@ -335,7 +342,7 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"impart-draw:{event_id}:{user_id}" if event_id else f"impart-draw:{user_id}:{runtime_ids.new_id()}"
     # 先回放：成功后每日次数/灵石会挡住同事件幂等。
-    prior = impart_draw_service.get_result(operation_id)
+    prior = _impart_draw_service().get_result(operation_id)
     if prior is not None and prior.succeeded:
         await handle_send(
             bot, event,
@@ -411,7 +418,7 @@ async def impart_draw2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     # 更新用户数据
     result = _run_impart_action(
         "draw", operation_id, user_id,
-        call=lambda: impart_draw_service.draw(
+        call=lambda: _impart_draw_service().draw(
             operation_id, user_id, user_stone_num, impart_data_draw["wish"],
             impart_data_draw["impart_num"], required_crystals, current_wish, times, drawn_cards,
         ),

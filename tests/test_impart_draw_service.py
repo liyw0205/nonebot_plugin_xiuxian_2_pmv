@@ -4,6 +4,10 @@ from pathlib import Path
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart.transaction_service import ImpartDrawService
 from tests.test_db_backend import db_backend
 class T(unittest.TestCase):
+ def test_impart_facade_defers_draw_service_construction(self):
+  from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_impart
+  self.assertIsNone(xiuxian_impart._impart_draw_service_instance)
+
  def setUp(self):
   self.t=tempfile.TemporaryDirectory(); r=Path(self.t.name); self.g=r/'g'; self.i=r/'i'
   with db_backend.transaction(self.g) as c: c.execute('CREATE TABLE user_xiuxian(user_id TEXT,stone INTEGER)'); c.execute("INSERT INTO user_xiuxian VALUES ('u',100)")
