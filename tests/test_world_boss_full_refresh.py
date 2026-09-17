@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib
 import sqlite3
 from pathlib import Path
 
@@ -12,6 +13,13 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_boss.transaction_service import (
     WorldBossFullRefreshService,
 )
+
+
+def test_boss_facade_defers_full_refresh_service_construction():
+    world_boss = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_boss"
+    )
+    assert world_boss._world_boss_full_refresh_service_instance is None
 
 
 OLD_BOSS = {
@@ -202,11 +210,13 @@ def test_scheduled_and_manual_entries_share_full_refresh_operation():
             "async def generate_all_bosses_task"
         )
     ]
-    assert helper.index("world_boss_full_refresh_service.get_result(") < helper.index(
+    assert helper.index("_world_boss_full_refresh_service().get_result(") < helper.index(
         "create_all_bosses()"
     )
-    assert "world_boss_full_refresh_service.snapshot()" in helper
-    assert "world_boss_full_refresh_service.refresh(" in helper
+    assert "_world_boss_full_refresh_service().snapshot()" in helper
+    assert "_world_boss_full_refresh_service().refresh(" in helper
+    assert "_world_boss_full_refresh_service_instance = None" in source
+    assert "def _world_boss_full_refresh_service(" in source
     assert "_sync_world_boss_cache(" in helper
 
     scheduled = source[

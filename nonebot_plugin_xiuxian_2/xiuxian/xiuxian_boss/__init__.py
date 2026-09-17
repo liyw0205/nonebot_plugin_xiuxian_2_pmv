@@ -106,10 +106,7 @@ def _world_boss_daily_limit_reset_service():
 
 
 _world_boss_manual_spawn_service_instance = None
-world_boss_full_refresh_service = WorldBossFullRefreshService(
-    get_paths().player_db,
-    get_boss_config,
-)
+_world_boss_full_refresh_service_instance = None
 
 
 def _world_boss_manual_spawn_service():
@@ -120,6 +117,16 @@ def _world_boss_manual_spawn_service():
             get_boss_config,
         )
     return _world_boss_manual_spawn_service_instance
+
+
+def _world_boss_full_refresh_service():
+    global _world_boss_full_refresh_service_instance
+    if _world_boss_full_refresh_service_instance is None:
+        _world_boss_full_refresh_service_instance = WorldBossFullRefreshService(
+            get_paths().player_db,
+            get_boss_config,
+        )
+    return _world_boss_full_refresh_service_instance
 world_boss_punishment_service = WorldBossPunishmentService(get_paths().player_db)
 _world_boss_daily_limit_reset_service_instance = None
 BOSSDROPSPATH = get_paths().data / "boss掉落物"
@@ -238,21 +245,21 @@ def _sync_world_boss_cache(bosses):
 
 
 def _refresh_all_world_bosses(operation_id: str, trigger: str):
-    result = world_boss_full_refresh_service.get_result(operation_id)
+    result = _world_boss_full_refresh_service().get_result(operation_id)
     if result is not None:
-        current_bosses, _ = world_boss_full_refresh_service.snapshot()
+        current_bosses, _ = _world_boss_full_refresh_service().snapshot()
         _sync_world_boss_cache(current_bosses)
         return result
 
-    expected_bosses, expected_revision = world_boss_full_refresh_service.snapshot()
+    expected_bosses, expected_revision = _world_boss_full_refresh_service().snapshot()
     bosses = create_all_bosses()
     realms = [str(boss.get("jj", "")) for boss in bosses]
-    result = world_boss_full_refresh_service.refresh(
+    result = _world_boss_full_refresh_service().refresh(
         operation_id=operation_id,
         trigger=trigger,
         expected_revision=expected_revision,
         expected_bosses=expected_bosses,
-        expected_config=world_boss_full_refresh_service.config_snapshot(
+        expected_config=_world_boss_full_refresh_service().config_snapshot(
             get_boss_config(),
             realms,
         ),
