@@ -64,7 +64,7 @@ def _demon_claim_service():
     return _demon_claim_service_instance
 _demon_attack_settlement_service_instance = None
 _demon_event_lifecycle_service_instance = None
-demon_wave_refresh_service = DemonWaveRefreshService(get_paths().player_db)
+_demon_wave_refresh_service_instance = None
 spirit_vein_lifecycle_service = SpiritVeinLifecycleService(get_paths().player_db)
 
 
@@ -84,6 +84,15 @@ def _demon_event_lifecycle_service():
             get_paths().player_db
         )
     return _demon_event_lifecycle_service_instance
+
+
+def _demon_wave_refresh_service():
+    global _demon_wave_refresh_service_instance
+    if _demon_wave_refresh_service_instance is None:
+        _demon_wave_refresh_service_instance = DemonWaveRefreshService(
+            get_paths().player_db
+        )
+    return _demon_wave_refresh_service_instance
 runtime_ids = UUIDGenerator()
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
@@ -1066,7 +1075,7 @@ def _refresh_defeated_demon_bosses() -> tuple[dict, list[str]]:
 
     slot = _now().strftime("%Y%m%d%H30")
     operation_id = f"demon-wave-refresh:{state.get('event_id')}:{slot}"
-    replay = demon_wave_refresh_service.replay(operation_id)
+    replay = _demon_wave_refresh_service().replay(operation_id)
     if replay is not None:
         return replay.state or state, list(replay.refreshed_realms)
     next_bosses = {}
@@ -1075,7 +1084,7 @@ def _refresh_defeated_demon_bosses() -> tuple[dict, list[str]]:
             next_bosses[realm] = _create_demon_boss(realm, wave=max(_to_int(boss_info.get("wave"), 1), 1) + 1)
     realms = list(next_bosses)
     last_result = f"每小时30分刷新检查：{', '.join(realms)}魔修已重新入侵。"
-    result = demon_wave_refresh_service.refresh(operation_id, EVENT_KEY, state, next_bosses, last_result)
+    result = _demon_wave_refresh_service().refresh(operation_id, EVENT_KEY, state, next_bosses, last_result)
     return result.state or state, list(result.refreshed_realms)
 
 

@@ -1830,6 +1830,15 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("_demon_event_lifecycle_service().transition(", source)
         self.assertNotIn("demon_event_lifecycle_service.transition(", source)
 
+    def test_demon_wave_refresh_uses_lazy_service(self) -> None:
+        root = SOURCE_ROOT / "xiuxian" / "xiuxian_world_events"
+        source = (root / "__init__.py").read_text(encoding="utf-8")
+        self.assertIn("_demon_wave_refresh_service_instance = None", source)
+        self.assertIn("def _demon_wave_refresh_service(", source)
+        self.assertIn("_demon_wave_refresh_service().replay(", source)
+        self.assertIn("_demon_wave_refresh_service().refresh(", source)
+        self.assertNotIn("demon_wave_refresh_service.refresh(", source)
+
     def test_tower_purchase_uses_cross_database_transaction(self) -> None:
         tower_root = SOURCE_ROOT / "xiuxian" / "xiuxian_tower"
         source = (tower_root / "__init__.py").read_text(encoding="utf-8")

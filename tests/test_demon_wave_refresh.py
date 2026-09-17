@@ -1,4 +1,5 @@
 import json
+import importlib
 import sqlite3
 
 import nonebot
@@ -10,6 +11,13 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.transaction_service i
     DemonWaveRefreshService,
     STATE_FIELDS,
 )
+
+
+def test_world_events_facade_defers_wave_refresh_service_construction():
+    world_events = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events"
+    )
+    assert world_events._demon_wave_refresh_service_instance is None
 
 
 def state():
@@ -93,5 +101,8 @@ def test_refresh_verification_failure_rolls_back_state_and_operation(tmp_path):
 def test_real_refresh_entry_uses_transaction_service():
     text = open("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_world_events/__init__.py", encoding="utf-8").read()
     body = text[text.index("def _refresh_defeated_demon_bosses"):text.index("@scheduler.scheduled_job", text.index("def _refresh_defeated_demon_bosses"))]
-    assert "demon_wave_refresh_service.refresh(" in body
+    assert "_demon_wave_refresh_service().refresh(" in body
+    assert "_demon_wave_refresh_service().replay(" in body
+    assert "_demon_wave_refresh_service_instance = None" in text
+    assert "def _demon_wave_refresh_service(" in text
     assert "_save_state(state)" not in body
