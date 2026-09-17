@@ -97,9 +97,7 @@ _package_reward_service_instance = None
 _accessory_package_service_instance = None
 alchemy_service = AlchemyService(get_paths().game_db)
 _skill_learning_service_instance = None
-batch_item_use_service = BatchItemUseService(
-    get_paths().game_db, get_paths().player_db
-)
+_batch_item_use_service_instance = None
 backpack_repair_service = BackpackRepairService(get_paths().game_db)
 player_data_manager = PlayerDataManager()
 runtime_ids = UUIDGenerator()
@@ -144,6 +142,14 @@ def _skill_learning_service():
     if _skill_learning_service_instance is None:
         _skill_learning_service_instance = SkillLearningService(get_paths().game_db)
     return _skill_learning_service_instance
+
+def _batch_item_use_service():
+    global _batch_item_use_service_instance
+    if _batch_item_use_service_instance is None:
+        _batch_item_use_service_instance = BatchItemUseService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _batch_item_use_service_instance
 
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 added_ranks = added_ranks()
@@ -1484,7 +1490,7 @@ async def use_pet_egg_item(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         for pet in ([current_doc.get("active")] + current_doc.get("bag", []))
         if pet
     ]
-    result = batch_item_use_service.use_pet_eggs(
+    result = _batch_item_use_service().use_pet_eggs(
         _batch_item_use_operation_id(event, user_id, item_id),
         user_id,
         item_id,
