@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import importlib
 from pathlib import Path
 
 import nonebot
@@ -10,6 +11,13 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_base.transaction_service import (
     TribulationStateMigrationService,
 )
 from tests.test_db_backend import db_backend
+
+
+def test_breakthrough_facade_defers_state_migration_service_construction():
+    breakthrough = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_base.breakthrough_tribulation"
+    )
+    assert breakthrough._tribulation_state_migration_service_instance is None
 
 
 class TribulationStateMigrationServiceTests(unittest.TestCase):

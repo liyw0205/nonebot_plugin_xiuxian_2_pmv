@@ -1179,7 +1179,14 @@ class SourceQualityTests(unittest.TestCase):
             base_root / "tribulation_state_migration_service.py"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("tribulation_state_migration_service.migrate(", command_source)
+        self.assertIn(
+            "_tribulation_state_migration_service().migrate(", command_source
+        )
+        self.assertIn(
+            "_tribulation_state_migration_service_instance = None", command_source
+        )
+        self.assertIn("def _tribulation_state_migration_service(", command_source)
+        self.assertNotIn("tribulation_state_migration_service.migrate(", command_source)
         self.assertNotIn("sql_message.save_user_tribulation_info(", command_source)
         self.assertNotIn("sql_message.clear_user_tribulation_info(", command_source)
         self.assertIn("tribulation_state_migration_operations", service_source)

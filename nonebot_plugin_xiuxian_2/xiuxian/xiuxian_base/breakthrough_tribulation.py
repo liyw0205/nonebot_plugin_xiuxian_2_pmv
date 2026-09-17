@@ -37,7 +37,7 @@ _pill_fusion_service_instance = None
 ordinary_tribulation_service = OrdinaryTribulationService(get_paths().game_db, get_paths().player_db)
 destiny_tribulation_service = DestinyTribulationService(get_paths().game_db, get_paths().player_db)
 heart_devil_tribulation_service = HeartDevilTribulationService(get_paths().game_db, get_paths().player_db)
-tribulation_state_migration_service = TribulationStateMigrationService(get_paths().game_db)
+_tribulation_state_migration_service_instance = None
 runtime_ids = UUIDGenerator()
 PLAYERSDATA = get_paths().players
 tribulation_cd2 = int(XiuConfig().tribulation_cd * 60)
@@ -55,6 +55,15 @@ def _pill_fusion_service():
     if _pill_fusion_service_instance is None:
         _pill_fusion_service_instance = PillFusionService(get_paths().game_db)
     return _pill_fusion_service_instance
+
+
+def _tribulation_state_migration_service():
+    global _tribulation_state_migration_service_instance
+    if _tribulation_state_migration_service_instance is None:
+        _tribulation_state_migration_service_instance = TribulationStateMigrationService(
+            get_paths().game_db
+        )
+    return _tribulation_state_migration_service_instance
 
 level_up = on_command("突破", priority=6, block=True)
 level_up_dr = on_command("渡厄突破", priority=7, block=True)
@@ -111,7 +120,7 @@ def get_user_tribulation_info(user_id):
             legacy_data = None
 
         if isinstance(legacy_data, dict) and legacy_data:
-            migration = tribulation_state_migration_service.migrate(
+            migration = _tribulation_state_migration_service().migrate(
                 f"tribulation-state-migration:{user_id}",
                 user_id,
                 legacy_data,
