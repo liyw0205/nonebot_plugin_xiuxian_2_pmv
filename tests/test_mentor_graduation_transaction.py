@@ -5,6 +5,10 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import MentorGraduationService
 from tests.test_db_backend import db_backend
 class Tests(unittest.TestCase):
+ def test_partner_facade_defers_mentor_graduation_service_construction(self):
+  from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff import partner
+  self.assertIsNone(partner._mentor_graduation_service_instance)
+
  def setUp(self):
   self.t=tempfile.TemporaryDirectory();r=Path(self.t.name);self.g=r/'g';self.p=r/'p'
   with db_backend.transaction(self.g) as c:c.execute('CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)');c.executemany('INSERT INTO user_xiuxian VALUES (%s,%s)',[('m',10),('a',20)])

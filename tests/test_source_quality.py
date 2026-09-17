@@ -2255,6 +2255,24 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("apprentice_cd_until=apprentice_cd_until", handler)
         self.assertIn("pair_rebind_until=pair_rebind_until", handler)
 
+    def test_mentor_graduation_uses_lazy_transactional_service(self) -> None:
+        root = SOURCE_ROOT / "xiuxian" / "xiuxian_buff"
+        source = (root / "partner.py").read_text(encoding="utf-8")
+        start = source.index("async def unbind_mentor_")
+        end = source.index("@mentor_transmission.handle", start)
+        handler = source[start:end]
+        graduation_start = handler.index("if is_wujie_or_above")
+        graduation_handler = handler[graduation_start:]
+        self.assertIn("_mentor_graduation_service_instance = None", source)
+        self.assertIn("def _mentor_graduation_service(", source)
+        self.assertIn("_mentor_graduation_service().apply(", graduation_handler)
+        self.assertNotIn("mentor_graduation_service.apply(", graduation_handler)
+        self.assertIn("expected_mentor_stone=mentor_info[\"stone\"]", graduation_handler)
+        self.assertIn("expected_apprentice_stone=user_info[\"stone\"]", graduation_handler)
+        self.assertIn("cooldown_days=MENTOR_GRADUATE_PAIR_REBIND_COOLDOWN_DAYS", graduation_handler)
+        self.assertIn("apprentice_title_ids=[MENTOR_TITLE_IDS[\"graduate\"]]", graduation_handler)
+        self.assertIn("mentor_title_ids=mentor_titles", graduation_handler)
+
     def test_map_home_return_uses_one_event_transaction(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_map"
         source = (root / "__init__.py").read_text(encoding="utf-8")

@@ -85,7 +85,7 @@ partner_protection_service = PartnerProtectionService(get_paths().player_db)
 _mentor_expel_service_instance = None
 _mentor_breakthrough_reward_service_instance = None
 _apprentice_leave_service_instance = None
-mentor_graduation_service = MentorGraduationService(get_paths().game_db, get_paths().player_db)
+_mentor_graduation_service_instance = None
 mentor_transmission_service = MentorTransmissionService(get_paths().game_db, get_paths().player_db)
 two_exp_limit = 3
 mentor_config = XiuConfig()
@@ -210,6 +210,15 @@ def _apprentice_leave_service():
             get_paths().game_db, get_paths().player_db
         )
     return _apprentice_leave_service_instance
+
+
+def _mentor_graduation_service():
+    global _mentor_graduation_service_instance
+    if _mentor_graduation_service_instance is None:
+        _mentor_graduation_service_instance = MentorGraduationService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _mentor_graduation_service_instance
 
 
 TITLE_JSONPATH = get_paths().data / "修炼物品" / "称号.json"
@@ -2323,7 +2332,7 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         mentor_titles = [MENTOR_TITLE_IDS["mentor_graduate"]]
         if safe_int(mentor_stats.get("培养出师徒弟"), 0) + 1 >= 5:
             mentor_titles.append(MENTOR_TITLE_IDS["mentor_graduate_5"])
-        settlement = mentor_graduation_service.apply(
+        settlement = _mentor_graduation_service().apply(
             _relation_operation_id(event, "graduate", mentor_id, user_id), mentor_id, user_id,
             expected_mentor_stone=mentor_info["stone"], expected_apprentice_stone=user_info["stone"],
             apprentice_reward=MENTOR_GRADUATE_APPRENTICE_STONE_REWARD,
