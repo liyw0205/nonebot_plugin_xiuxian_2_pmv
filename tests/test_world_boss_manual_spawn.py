@@ -1,4 +1,5 @@
 import json
+import importlib
 import sqlite3
 
 import nonebot
@@ -9,6 +10,13 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_boss.transaction_service import (
     WorldBossManualSpawnService,
 )
+
+
+def test_boss_facade_defers_manual_spawn_service_construction():
+    world_boss = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_boss"
+    )
+    assert world_boss._world_boss_manual_spawn_service_instance is None
 
 
 OLD_BOSS = {
@@ -139,12 +147,14 @@ def test_random_and_appointed_entries_share_transaction_without_side_paths():
             "async def generate_all_bosses_task"
         )
     ]
-    assert helper.index("world_boss_manual_spawn_service.get_result(") < helper.index(
+    assert helper.index("_world_boss_manual_spawn_service().get_result(") < helper.index(
         "createboss_jj("
     )
-    assert "world_boss_manual_spawn_service.snapshot()" in helper
+    assert "_world_boss_manual_spawn_service().snapshot()" in helper
     assert "expected_revision=" in helper
-    assert "world_boss_manual_spawn_service.spawn(" in helper
+    assert "_world_boss_manual_spawn_service().spawn(" in helper
+    assert "_world_boss_manual_spawn_service_instance = None" in text
+    assert "def _world_boss_manual_spawn_service(" in text
 
     random_handler = text[
         text.index("async def create_(") : text.index("@create_appoint.handle")

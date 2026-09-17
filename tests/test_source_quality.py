@@ -1839,6 +1839,17 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("_demon_wave_refresh_service().refresh(", source)
         self.assertNotIn("demon_wave_refresh_service.refresh(", source)
 
+    def test_world_boss_manual_spawn_uses_lazy_service(self) -> None:
+        root = SOURCE_ROOT / "xiuxian" / "xiuxian_boss"
+        source = (root / "__init__.py").read_text(encoding="utf-8")
+        helper = source[source.index("def _spawn_world_boss("):source.index("async def generate_all_bosses_task")]
+        self.assertIn("_world_boss_manual_spawn_service().get_result(", helper)
+        self.assertIn("_world_boss_manual_spawn_service().snapshot(", helper)
+        self.assertIn("_world_boss_manual_spawn_service().spawn(", helper)
+        self.assertIn("_world_boss_manual_spawn_service_instance = None", source)
+        self.assertIn("def _world_boss_manual_spawn_service(", source)
+        self.assertNotIn("world_boss_manual_spawn_service.spawn(", helper)
+
     def test_tower_purchase_uses_cross_database_transaction(self) -> None:
         tower_root = SOURCE_ROOT / "xiuxian" / "xiuxian_tower"
         source = (tower_root / "__init__.py").read_text(encoding="utf-8")
