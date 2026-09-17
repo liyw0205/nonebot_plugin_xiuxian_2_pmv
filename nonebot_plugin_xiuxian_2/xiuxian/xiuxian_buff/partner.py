@@ -86,7 +86,7 @@ _mentor_expel_service_instance = None
 _mentor_breakthrough_reward_service_instance = None
 _apprentice_leave_service_instance = None
 _mentor_graduation_service_instance = None
-mentor_transmission_service = MentorTransmissionService(get_paths().game_db, get_paths().player_db)
+_mentor_transmission_service_instance = None
 two_exp_limit = 3
 mentor_config = XiuConfig()
 mentor_transmission_limit = getattr(mentor_config, "mentor_transmission_limit", two_exp_limit)
@@ -219,6 +219,15 @@ def _mentor_graduation_service():
             get_paths().game_db, get_paths().player_db
         )
     return _mentor_graduation_service_instance
+
+
+def _mentor_transmission_service():
+    global _mentor_transmission_service_instance
+    if _mentor_transmission_service_instance is None:
+        _mentor_transmission_service_instance = MentorTransmissionService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _mentor_transmission_service_instance
 
 
 TITLE_JSONPATH = get_paths().data / "修炼物品" / "称号.json"
@@ -2470,7 +2479,7 @@ async def mentor_transmission_(bot: Bot, event: GroupMessageEvent | PrivateMessa
 
     new_exp = apprentice_exp + give_exp
     hp, mp, atk = _recovered_attributes(apprentice_info, new_exp)
-    settlement = mentor_transmission_service.apply(
+    settlement = _mentor_transmission_service().apply(
         _relation_operation_id(event, "transmission", mentor_id, target_id), mentor_id, target_id,
         expected_apprentice_exp=apprentice_exp, reward_exp=give_exp,
         power=_relation_power(apprentice_info, new_exp), hp=hp, mp=mp, atk=atk,

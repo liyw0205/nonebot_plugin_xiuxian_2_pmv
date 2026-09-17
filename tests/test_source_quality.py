@@ -2273,6 +2273,23 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("apprentice_title_ids=[MENTOR_TITLE_IDS[\"graduate\"]]", graduation_handler)
         self.assertIn("mentor_title_ids=mentor_titles", graduation_handler)
 
+    def test_mentor_transmission_uses_lazy_transactional_service(self) -> None:
+        root = SOURCE_ROOT / "xiuxian" / "xiuxian_buff"
+        source = (root / "partner.py").read_text(encoding="utf-8")
+        start = source.index("async def mentor_transmission_")
+        end = source.index("@partner_rank.handle", start)
+        handler = source[start:end]
+        self.assertIn("_mentor_transmission_service_instance = None", source)
+        self.assertIn("def _mentor_transmission_service(", source)
+        self.assertIn("_mentor_transmission_service().apply(", handler)
+        self.assertNotIn("mentor_transmission_service.apply(", handler)
+        self.assertIn('event, "transmission", mentor_id, target_id', handler)
+        self.assertIn("expected_apprentice_exp=apprentice_exp", handler)
+        self.assertIn("mentor_used=mentor_transmission_limit - mentor_remain", handler)
+        self.assertIn("apprentice_used=mentor_transmission_limit - apprentice_remain", handler)
+        self.assertIn("daily_limit=mentor_transmission_limit", handler)
+        self.assertLess(handler.index("_mentor_transmission_service().apply("), handler.index("mentor_exp_cd.add_user"))
+
     def test_map_home_return_uses_one_event_transaction(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_map"
         source = (root / "__init__.py").read_text(encoding="utf-8")

@@ -8,6 +8,10 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import Me
 from tests.test_db_backend import db_backend
 
 class Tests(unittest.TestCase):
+ def test_partner_facade_defers_mentor_transmission_service_construction(self):
+  from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff import partner
+  self.assertIsNone(partner._mentor_transmission_service_instance)
+
  def setUp(self):
   self.t=tempfile.TemporaryDirectory();r=Path(self.t.name);self.g=r/'g';self.p=r/'p'
   with db_backend.transaction(self.g) as c:
