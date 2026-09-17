@@ -2037,6 +2037,8 @@
 
 2026-09-18 breakthrough service lazy construction live safety：提交 `537d46d8` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260917T212228Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
 
+2026-09-18 pill fusion lazy construction slice：`xiuxian_base.breakthrough_tribulation` 不再 module-level 构造 `PillFusionService`，新增 `_pill_fusion_service()` game-db 惰性 getter；天命丹与天命渡劫丹两个融合 handler 均经 getter，success/failure roll、材料与绑定数量、目标库存上限、operation replay/conflict 和 rollback 语义保持不变。construction、pill fusion/breakthrough/tribulation、source/architecture 共 223 tests passed，compileall、inventory、diff check通过。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。

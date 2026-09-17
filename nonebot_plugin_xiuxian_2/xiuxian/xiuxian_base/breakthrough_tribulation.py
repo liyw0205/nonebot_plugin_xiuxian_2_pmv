@@ -33,7 +33,7 @@ from .transaction_service import TribulationStateMigrationService
 
 sql_message = XiuxianDateManage()
 _breakthrough_service_instance = None
-pill_fusion_service = PillFusionService(get_paths().game_db)
+_pill_fusion_service_instance = None
 ordinary_tribulation_service = OrdinaryTribulationService(get_paths().game_db, get_paths().player_db)
 destiny_tribulation_service = DestinyTribulationService(get_paths().game_db, get_paths().player_db)
 heart_devil_tribulation_service = HeartDevilTribulationService(get_paths().game_db, get_paths().player_db)
@@ -48,6 +48,13 @@ def _breakthrough_service():
     if _breakthrough_service_instance is None:
         _breakthrough_service_instance = BreakthroughService(get_paths().game_db)
     return _breakthrough_service_instance
+
+
+def _pill_fusion_service():
+    global _pill_fusion_service_instance
+    if _pill_fusion_service_instance is None:
+        _pill_fusion_service_instance = PillFusionService(get_paths().game_db)
+    return _pill_fusion_service_instance
 
 level_up = on_command("突破", priority=6, block=True)
 level_up_dr = on_command("渡厄突破", priority=7, block=True)
@@ -333,7 +340,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     success_rate = min(100, num * 10)  # 上限100%
     roll = random.randint(1, 100)
     
-    result = pill_fusion_service.apply(
+    result = _pill_fusion_service().apply(
         _pill_fusion_operation_id(event, "destiny", user_id),
         user_id,
         1999,
@@ -397,7 +404,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     success_rate = min(100, num * 10)  # 上限100%
     roll = random.randint(1, 100)
     
-    result = pill_fusion_service.apply(
+    result = _pill_fusion_service().apply(
         _pill_fusion_operation_id(event, "destiny-tribulation", user_id),
         user_id,
         1996,

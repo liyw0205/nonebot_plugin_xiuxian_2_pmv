@@ -1297,7 +1297,9 @@ class SourceQualityTests(unittest.TestCase):
         end = command_source.index("@start_tribulation.handle", start)
         command = command_source[start:end]
 
-        self.assertEqual(command.count("pill_fusion_service.apply("), 2)
+        self.assertEqual(command.count("_pill_fusion_service().apply("), 2)
+        self.assertIn("_pill_fusion_service_instance = None", command_source)
+        self.assertIn("def _pill_fusion_service(", command_source)
         self.assertNotIn("sql_message.get_back_msg(", command)
         self.assertNotIn("sql_message.update_back_j(", command)
         self.assertNotIn("sql_message.send_back(", command)
