@@ -74,7 +74,7 @@ items = Items()
 sql_message = XiuxianDateManage()
 pet_application = PetApplication(get_paths().game_db, get_paths().player_db)
 runtime_ids = UUIDGenerator()
-pet_skill_replace_service = PetSkillReplaceService(get_paths().player_db)
+_pet_skill_replace_service_instance = None
 pet_hatch_service = PetHatchService(get_paths().game_db, get_paths().player_db)
 pet_release_service = PetReleaseService(get_paths().game_db, get_paths().player_db)
 pet_fusion_breakthrough_service = PetFusionBreakthroughService(get_paths().player_db)
@@ -104,6 +104,13 @@ pet_travel_claim = on_command("领取宠物游历", aliases={"宠物游历领取
 
 PET_SKILL_REPLACE_CACHE = {}
 PET_SKILL_REPLACE_EXPIRE = 300
+
+
+def _pet_skill_replace_service():
+    global _pet_skill_replace_service_instance
+    if _pet_skill_replace_service_instance is None:
+        _pet_skill_replace_service_instance = PetSkillReplaceService(get_paths().player_db)
+    return _pet_skill_replace_service_instance
 
 
 def _split_args(text: str):
@@ -1725,7 +1732,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     new_skill_id = str(pending["skill"].get("skill_id", ""))
     old_skill_id = str((current_pet or {}).get("skill", {}).get("skill_id", ""))
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or runtime_ids.new_id())
-    result = pet_skill_replace_service.replace(f"pet-skill-replace:{event_id}:{user_id}", user_id, pending["uid"], old_skill_id, new_skill_id)
+    result = _pet_skill_replace_service().replace(f"pet-skill-replace:{event_id}:{user_id}", user_id, pending["uid"], old_skill_id, new_skill_id)
     PET_SKILL_REPLACE_CACHE.pop(user_id, None)
     if not result.succeeded:
         await handle_send(bot, event, "替换失败：未找到对应宠物，或技能类型不匹配。")
