@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import importlib
 from pathlib import Path
 
 import nonebot
@@ -12,6 +13,26 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_base.transaction_service import (
     PlayerRenameService,
 )
 from tests.test_db_backend import db_backend
+
+
+def test_base_facade_defers_player_rename_service_construction():
+    base = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_base"
+    )
+    assert base._player_rename_service_instance is None
+
+
+def test_player_rename_handlers_use_lazy_service():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_base/__init__.py"
+    ).read_text(encoding="utf-8")
+    handler = source[source.index("async def remaname_"):source.index("@run_xiuxian.handle")]
+    assert "_player_rename_service().get_result(" in handler
+    assert "_player_rename_service().rename_user(" in handler
+    assert "_player_rename_service().rename_root(" in source
+    assert "_player_rename_service_instance = None" in source
+    assert "def _player_rename_service(" in source
+    assert "player_rename_service.rename_user(" not in source
 
 
 class PlayerRenameServiceTests(unittest.TestCase):

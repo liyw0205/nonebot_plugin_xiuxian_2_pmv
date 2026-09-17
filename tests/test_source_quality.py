@@ -1314,8 +1314,11 @@ class SourceQualityTests(unittest.TestCase):
         end = command_source.index("@run_xiuxian.handle", start)
         command = command_source[start:end]
 
-        self.assertIn("player_rename_service.rename_user(", command)
-        self.assertIn("player_rename_service.rename_root(", command)
+        self.assertIn("_player_rename_service().rename_user(", command)
+        self.assertIn("_player_rename_service().rename_root(", command)
+        self.assertIn("_player_rename_service_instance = None", command_source)
+        self.assertIn("def _player_rename_service(", command_source)
+        self.assertNotIn("player_rename_service.rename_user(", command)
         self.assertNotIn("sql_message.update_ls(", command)
         self.assertNotIn("sql_message.update_back_j(", command)
         self.assertNotIn("sql_message.update_user_name(", command)

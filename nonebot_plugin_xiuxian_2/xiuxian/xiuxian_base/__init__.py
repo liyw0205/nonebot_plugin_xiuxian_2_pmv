@@ -75,7 +75,7 @@ def configure_lottery_application(application: Any) -> None:
     global lottery_application
     lottery_application = application
 
-player_rename_service = PlayerRenameService(get_paths().game_db)
+_player_rename_service_instance = None
 _stone_gift_service_instance = None
 stone_contest_service = StoneContestService(get_paths().game_db)
 stone_robbery_service = StoneRobberySettlementService(
@@ -93,6 +93,13 @@ def _stone_gift_service():
 
         _stone_gift_service_instance = StoneGiftService(get_paths().game_db)
     return _stone_gift_service_instance
+
+
+def _player_rename_service():
+    global _player_rename_service_instance
+    if _player_rename_service_instance is None:
+        _player_rename_service_instance = PlayerRenameService(get_paths().game_db)
+    return _player_rename_service_instance
 registration_batcher = RegistrationBatcher(sql_message)
 player_data_manager = PlayerDataManager()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
@@ -622,7 +629,7 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         await remaname.finish()
     user_id = user_info['user_id']
     operation_id = _player_rename_operation_id(event, "user-name", user_id)
-    prior = player_rename_service.get_result(operation_id)
+    prior = _player_rename_service().get_result(operation_id)
     if prior is not None and prior.succeeded:
         msg = f"你获得了随机道号：{prior.new_name}\n" if prior.previous_name != prior.new_name else ""
         # previous random vs explicit unknown; use generic
@@ -641,7 +648,7 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
             user_name = generate_daohao()
             if not sql_message.get_user_info_with_name(user_name):
                 break
-        result = player_rename_service.rename_user(
+        result = _player_rename_service().rename_user(
             operation_id,
             user_id,
             user_name,
@@ -655,7 +662,7 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
             await remaname.finish()
             
         msg = ""
-        result = player_rename_service.rename_user(
+        result = _player_rename_service().rename_user(
             operation_id,
             user_id,
             user_name,
@@ -704,7 +711,7 @@ async def root_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, msg, md_type="修仙", k1="改名", v1="灵根改名", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
         await root_rename.finish()
 
-    result = player_rename_service.rename_root(
+    result = _player_rename_service().rename_root(
         _player_rename_operation_id(event, "root", user_id),
         user_id,
         root_name,
