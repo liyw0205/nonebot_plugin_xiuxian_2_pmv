@@ -162,8 +162,8 @@ class AdminImpartStoneBatchAdjustmentTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         start = source.index("async def ccll_command_")
         handler = source[start:source.index("@adjust_exp_command.handle", start)]
-        self.assertIn("admin_impart_stone_batch_adjustment_service.find_running(", handler)
-        self.assertIn("admin_impart_stone_batch_adjustment_service.adjust(", handler)
+        self.assertIn("_admin_impart_stone_batch_adjustment_service().find_running(", handler)
+        self.assertIn("_admin_impart_stone_batch_adjustment_service().adjust(", handler)
         self.assertNotIn("update_impart_stone_all(", handler)
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,6 +14,30 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin.transaction_service import (
     AdminImpartStoneAdjustmentService,
 )
 from tests.test_db_backend import db_backend
+
+
+def test_admin_facade_defers_impart_stone_service_construction():
+    admin = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin"
+    )
+    assert admin._admin_impart_stone_adjustment_service_instance is None
+    assert admin._admin_impart_stone_batch_adjustment_service_instance is None
+
+
+def test_admin_impart_stone_helpers_use_lazy_dual_database_services():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
+    ).read_text(encoding="utf-8")
+    assert "_admin_impart_stone_adjustment_service_instance = None" in source
+    assert "_admin_impart_stone_batch_adjustment_service_instance = None" in source
+    assert "def _admin_impart_stone_adjustment_service(" in source
+    assert "def _admin_impart_stone_batch_adjustment_service(" in source
+    assert "get_paths().game_db" in source
+    assert "get_paths().impart_db" in source
+    assert "_admin_impart_stone_adjustment_service().adjust(" in source
+    assert "_admin_impart_stone_batch_adjustment_service().adjust(" in source
+    assert "admin_impart_stone_adjustment_service.adjust(" not in source
+    assert "admin_impart_stone_batch_adjustment_service.adjust(" not in source
 
 
 class AdminImpartStoneAdjustmentTests(unittest.TestCase):
@@ -156,9 +181,9 @@ class AdminImpartStoneAdjustmentTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         start = source.index("async def ccll_command_")
         handler = source[start:source.index("@adjust_exp_command.handle", start)]
-        self.assertIn("admin_impart_stone_adjustment_service.adjust(", handler)
+        self.assertIn("_admin_impart_stone_adjustment_service().adjust(", handler)
         self.assertNotIn("xiuxian_impart.update_stone_num(", handler)
-        self.assertIn("admin_impart_stone_batch_adjustment_service.adjust(", handler)
+        self.assertIn("_admin_impart_stone_batch_adjustment_service().adjust(", handler)
 
 
 if __name__ == "__main__":

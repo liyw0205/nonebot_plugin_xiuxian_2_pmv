@@ -98,14 +98,8 @@ _admin_item_destroy_service_instance = None
 _admin_item_batch_grant_service_instance = None
 _admin_accessory_adjustment_service_instance = None
 _admin_accessory_batch_adjustment_service_instance = None
-admin_impart_stone_adjustment_service = AdminImpartStoneAdjustmentService(
-    get_paths().game_db, get_paths().impart_db
-)
-admin_impart_stone_batch_adjustment_service = AdminImpartStoneBatchAdjustmentService(
-    get_paths().game_db,
-    get_paths().impart_db,
-    admin_impart_stone_adjustment_service,
-)
+_admin_impart_stone_adjustment_service_instance = None
+_admin_impart_stone_batch_adjustment_service_instance = None
 admin_player_status_reset_service = AdminPlayerStatusResetService(get_paths().game_db)
 admin_player_status_batch_reset_service = AdminPlayerStatusBatchResetService(
     get_paths().game_db,
@@ -132,6 +126,26 @@ def _admin_accessory_batch_adjustment_service():
             _admin_accessory_adjustment_service(),
         )
     return _admin_accessory_batch_adjustment_service_instance
+
+
+def _admin_impart_stone_adjustment_service():
+    global _admin_impart_stone_adjustment_service_instance
+    if _admin_impart_stone_adjustment_service_instance is None:
+        _admin_impart_stone_adjustment_service_instance = AdminImpartStoneAdjustmentService(
+            get_paths().game_db, get_paths().impart_db
+        )
+    return _admin_impart_stone_adjustment_service_instance
+
+
+def _admin_impart_stone_batch_adjustment_service():
+    global _admin_impart_stone_batch_adjustment_service_instance
+    if _admin_impart_stone_batch_adjustment_service_instance is None:
+        _admin_impart_stone_batch_adjustment_service_instance = AdminImpartStoneBatchAdjustmentService(
+            get_paths().game_db,
+            get_paths().impart_db,
+            _admin_impart_stone_adjustment_service(),
+        )
+    return _admin_impart_stone_batch_adjustment_service_instance
 
 
 def _admin_level_change_service():
@@ -543,7 +557,7 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             await handle_send(bot, event, "当前没有可调整的用户")
             return
         operator_id = str(get_user_id(event) or "unknown")
-        operation_id = admin_impart_stone_batch_adjustment_service.find_running(
+        operation_id = _admin_impart_stone_batch_adjustment_service().find_running(
             operator_id, amount
         ) or _admin_operation_id(event, "impart-stone-adjust-all", "all")
         action = "增加" if amount > 0 else "扣除"
@@ -551,7 +565,7 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
         def _work():
             return run_chunked_until_done(
-                lambda: admin_impart_stone_batch_adjustment_service.adjust(
+                lambda: _admin_impart_stone_batch_adjustment_service().adjust(
                     operation_id, operator_id, users, amount
                 )
             )
@@ -581,8 +595,8 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         if amount == 0:
             await handle_send(bot, event, "单人思恋结晶调整数量不能为 0")
             return
-        expected_stone = admin_impart_stone_adjustment_service.snapshot(user_id)
-        result = admin_impart_stone_adjustment_service.adjust(
+        expected_stone = _admin_impart_stone_adjustment_service().snapshot(user_id)
+        result = _admin_impart_stone_adjustment_service().adjust(
             _admin_operation_id(event, "impart-stone-adjust", str(user_id)),
             str(get_user_id(event) or "unknown"),
             user_id,
