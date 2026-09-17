@@ -24,9 +24,7 @@ from ..xiuxian_utils.numeric_bind import percent_exp_reward
 sql_message = XiuxianDateManage()
 items = Items()
 _paths = get_paths()
-final_settlement_service = PastLifeFinalSettlementService(
-    _paths.game_db, _paths.player_db, max_goods_num=XiuConfig().max_goods_num
-)
+_past_life_final_settlement_service_instance = None
 _past_life_start_service_instance = None
 _past_life_choice_service_instance = None
 
@@ -47,6 +45,17 @@ def _past_life_choice_service():
             _paths.game_db, _paths.player_db
         )
     return _past_life_choice_service_instance
+
+
+def _past_life_final_settlement_service():
+    global _past_life_final_settlement_service_instance
+    if _past_life_final_settlement_service_instance is None:
+        _past_life_final_settlement_service_instance = PastLifeFinalSettlementService(
+            _paths.game_db,
+            _paths.player_db,
+            max_goods_num=XiuConfig().max_goods_num,
+        )
+    return _past_life_final_settlement_service_instance
 
 
 ATTR_NAMES = ["悟性", "机缘", "根骨", "气运", "心性"]
@@ -737,7 +746,7 @@ class PastLifeEngine:
                 sort_keys=True, separators=(",", ":")
             ).encode("utf-8")).hexdigest()[:24]
             operation_id = f"past-life-choice:{user_id}:{fingerprint}"
-        return final_settlement_service.settle(
+        return _past_life_final_settlement_service().settle(
             operation_id, user_id, expected_state, state, ending["name"], state["total_score"],
             plan["exp"], plan["stone"], plan["points"], plan.get("item"),
             choice_response=response,

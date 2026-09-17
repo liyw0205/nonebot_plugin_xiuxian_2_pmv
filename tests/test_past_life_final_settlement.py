@@ -21,6 +21,11 @@ from tests.test_db_backend import db_backend
 
 
 class PastLifeFinalSettlementTests(unittest.TestCase):
+    def test_past_life_events_defers_final_settlement_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_past_life import past_life_events
+
+        self.assertIsNone(past_life_events._past_life_final_settlement_service_instance)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
