@@ -56,7 +56,7 @@ sql_message = XiuxianDateManage()  # sql类
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 _impart_draw_service_instance = None
 _card_compose_service_instance = None
-card_disassemble_service = CardDisassembleService(get_paths().impart_db)
+_card_disassemble_service_instance = None
 _love_sand_service_instance = None
 impart_prayer_service = ImpartPrayerSettlementService(get_paths().game_db, get_paths().impart_db)
 impart_application = ImpartApplication(get_paths().game_db)
@@ -82,6 +82,13 @@ def _card_compose_service():
     if _card_compose_service_instance is None:
         _card_compose_service_instance = CardComposeService(get_paths().impart_db)
     return _card_compose_service_instance
+
+
+def _card_disassemble_service():
+    global _card_disassemble_service_instance
+    if _card_disassemble_service_instance is None:
+        _card_disassemble_service_instance = CardDisassembleService(get_paths().impart_db)
+    return _card_disassemble_service_instance
 
 
 def _run_impart_action(action, operation_id, user_id, call, **payload):
@@ -831,7 +838,7 @@ async def impart_disassemble_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     user_id = str(user_info["user_id"])
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"impart-disassemble:{event_id}:{user_id}" if event_id else f"impart-disassemble:{user_id}:{runtime_ids.new_id()}"
-    prior = card_disassemble_service.get_result(operation_id)
+    prior = _card_disassemble_service().get_result(operation_id)
     if prior is not None and prior.succeeded:
         await handle_send(
             bot, event,
@@ -846,7 +853,7 @@ async def impart_disassemble_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         return
     result = _run_impart_action(
         "disassemble", operation_id, user_id,
-        call=lambda: card_disassemble_service.disassemble(
+        call=lambda: _card_disassemble_service().disassemble(
             operation_id, user_id, card_name, quantity, cards.get(card_name, 0),
             impart_state["stone_num"], 2, impart_data_json.data_all_(),
         ),

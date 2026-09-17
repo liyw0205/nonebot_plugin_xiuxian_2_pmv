@@ -9,6 +9,11 @@ from tests.test_db_backend import db_backend
 
 
 class CardDisassembleServiceTests(unittest.TestCase):
+    def test_impart_facade_defers_card_disassemble_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_impart
+
+        self.assertIsNone(xiuxian_impart._card_disassemble_service_instance)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.db = Path(self.temp.name) / "impart.db"
