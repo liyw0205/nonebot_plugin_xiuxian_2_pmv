@@ -1239,17 +1239,24 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("destiny_tribulation_service.replay(", destiny)
         self.assertNotIn("destiny_tribulation_service.settle(", destiny)
         self.assertLess(
-            heart_devil.index("heart_devil_tribulation_service.replay("),
+            heart_devil.index("_heart_devil_tribulation_service().replay("),
             heart_devil.index("get_user_tribulation_info("),
         )
         self.assertLess(
-            heart_devil.index("heart_devil_tribulation_service.replay("),
+            heart_devil.index("_heart_devil_tribulation_service().replay("),
             heart_devil.index("random.choices("),
         )
         self.assertLess(
-            heart_devil.index("heart_devil_tribulation_service.replay("),
+            heart_devil.index("_heart_devil_tribulation_service().replay("),
             heart_devil.index("Boss_fight("),
         )
+        self.assertIn(
+            "_heart_devil_tribulation_service_instance = None", command_source
+        )
+        self.assertIn("def _heart_devil_tribulation_service(", command_source)
+        self.assertIn("_heart_devil_tribulation_service().settle(", heart_devil)
+        self.assertNotIn("heart_devil_tribulation_service.replay(", heart_devil)
+        self.assertNotIn("heart_devil_tribulation_service.settle(", heart_devil)
         self.assertIn("battle_messages=result", heart_devil)
 
         for filename in (

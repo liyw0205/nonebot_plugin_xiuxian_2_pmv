@@ -36,7 +36,7 @@ _breakthrough_service_instance = None
 _pill_fusion_service_instance = None
 _ordinary_tribulation_service_instance = None
 _destiny_tribulation_service_instance = None
-heart_devil_tribulation_service = HeartDevilTribulationService(get_paths().game_db, get_paths().player_db)
+_heart_devil_tribulation_service_instance = None
 _tribulation_state_migration_service_instance = None
 runtime_ids = UUIDGenerator()
 PLAYERSDATA = get_paths().players
@@ -82,6 +82,15 @@ def _destiny_tribulation_service():
             get_paths().game_db, get_paths().player_db
         )
     return _destiny_tribulation_service_instance
+
+
+def _heart_devil_tribulation_service():
+    global _heart_devil_tribulation_service_instance
+    if _heart_devil_tribulation_service_instance is None:
+        _heart_devil_tribulation_service_instance = HeartDevilTribulationService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _heart_devil_tribulation_service_instance
 
 level_up = on_command("突破", priority=6, block=True)
 level_up_dr = on_command("渡厄突破", priority=7, block=True)
@@ -720,7 +729,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     user_id = user_info['user_id']
     operation_id = _tribulation_operation_id(event, "heart-devil", user_id)
-    replay = heart_devil_tribulation_service.replay(operation_id, user_id)
+    replay = _heart_devil_tribulation_service().replay(operation_id, user_id)
     if replay is not None:
         if not replay.succeeded:
             await handle_send(bot, event, "心魔劫事件标识冲突，请重新发起渡劫！")
@@ -823,7 +832,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             "道友福缘深厚，渡过了心魔劫！\n"
             f"渡劫成功率提升至{new_rate}%！"
         )
-        settlement = heart_devil_tribulation_service.settle(
+        settlement = _heart_devil_tribulation_service().settle(
             operation_id, user_id,
             expected_rate=tribulation_data['current_rate'], expected_count=heart_devil_count,
             successful=True, new_rate=new_rate, occurred_at=occurred_at,
@@ -857,7 +866,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 f"心魔突然爆发，道心受损！\n"
                 f"下次渡劫成功率降低至{new_rate}%！"
             )
-        settlement = heart_devil_tribulation_service.settle(
+        settlement = _heart_devil_tribulation_service().settle(
             operation_id, user_id,
             expected_rate=tribulation_data['current_rate'], expected_count=heart_devil_count,
             successful=False, new_rate=new_rate, occurred_at=occurred_at,
@@ -939,7 +948,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                 f"经过艰苦战斗，道友战胜了{devil_name}！\n"
                 f"渡劫成功率提升至{new_rate}%！"
             )
-            settlement = heart_devil_tribulation_service.settle(
+            settlement = _heart_devil_tribulation_service().settle(
                 operation_id, user_id,
                 expected_rate=tribulation_data['current_rate'], expected_count=heart_devil_count,
                 successful=True, new_rate=new_rate, occurred_at=occurred_at,
@@ -961,7 +970,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
                     f"{devil_data['lose_desc']}\n"
                     f"道友不敌{devil_name}，渡劫成功率降低至{new_rate}%！"
                 )
-            settlement = heart_devil_tribulation_service.settle(
+            settlement = _heart_devil_tribulation_service().settle(
                 operation_id, user_id,
                 expected_rate=tribulation_data['current_rate'], expected_count=heart_devil_count,
                 successful=False, new_rate=new_rate, occurred_at=occurred_at,
