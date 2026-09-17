@@ -34,7 +34,7 @@ from .transaction_service import TribulationStateMigrationService
 sql_message = XiuxianDateManage()
 _breakthrough_service_instance = None
 _pill_fusion_service_instance = None
-ordinary_tribulation_service = OrdinaryTribulationService(get_paths().game_db, get_paths().player_db)
+_ordinary_tribulation_service_instance = None
 destiny_tribulation_service = DestinyTribulationService(get_paths().game_db, get_paths().player_db)
 heart_devil_tribulation_service = HeartDevilTribulationService(get_paths().game_db, get_paths().player_db)
 _tribulation_state_migration_service_instance = None
@@ -64,6 +64,15 @@ def _tribulation_state_migration_service():
             get_paths().game_db
         )
     return _tribulation_state_migration_service_instance
+
+
+def _ordinary_tribulation_service():
+    global _ordinary_tribulation_service_instance
+    if _ordinary_tribulation_service_instance is None:
+        _ordinary_tribulation_service_instance = OrdinaryTribulationService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _ordinary_tribulation_service_instance
 
 level_up = on_command("突破", priority=6, block=True)
 level_up_dr = on_command("渡厄突破", priority=7, block=True)
@@ -462,7 +471,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     user_id = user_info['user_id']
     operation_id = _tribulation_operation_id(event, "ordinary", user_id)
-    replay = ordinary_tribulation_service.replay(operation_id, user_id)
+    replay = _ordinary_tribulation_service().replay(operation_id, user_id)
     if replay is not None:
         if not replay.succeeded:
             await handle_send(bot, event, "渡劫事件标识冲突，请重新发起渡劫！")
@@ -549,7 +558,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     occurred_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
     root_rate = sql_message.get_root_rate(user_info['root_type'], user_id)
     power = round(current_exp * root_rate * float(next_level_data['spend']), 0) if successful else int(user_info['power'])
-    settlement = ordinary_tribulation_service.settle(
+    settlement = _ordinary_tribulation_service().settle(
         operation_id, user_id,
         expected_level=level_name, expected_exp=current_exp, expected_rate=success_rate,
         target_level=next_level, successful=successful, new_rate=new_rate,

@@ -1211,13 +1211,20 @@ class SourceQualityTests(unittest.TestCase):
         ]
 
         self.assertLess(
-            ordinary.index("ordinary_tribulation_service.replay("),
+            ordinary.index("_ordinary_tribulation_service().replay("),
             ordinary.index("get_user_tribulation_info("),
         )
         self.assertLess(
-            ordinary.index("ordinary_tribulation_service.replay("),
+            ordinary.index("_ordinary_tribulation_service().replay("),
             ordinary.index("random.randint("),
         )
+        self.assertIn(
+            "_ordinary_tribulation_service_instance = None", command_source
+        )
+        self.assertIn("def _ordinary_tribulation_service(", command_source)
+        self.assertIn("_ordinary_tribulation_service().settle(", ordinary)
+        self.assertNotIn("ordinary_tribulation_service.replay(", ordinary)
+        self.assertNotIn("ordinary_tribulation_service.settle(", ordinary)
         self.assertLess(
             destiny.index("destiny_tribulation_service.replay("),
             destiny.index("get_user_tribulation_info("),
