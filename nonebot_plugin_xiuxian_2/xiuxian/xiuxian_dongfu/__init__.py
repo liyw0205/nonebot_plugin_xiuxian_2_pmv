@@ -39,7 +39,7 @@ player_data_manager = PlayerDataManager()
 items = Items()
 _dongfu_expansion_service_instance = None
 _dongfu_plant_service_instance = None
-dongfu_accelerate_service = DongfuAccelerateService(get_paths().game_db, get_paths().player_db)
+_dongfu_accelerate_service_instance = None
 dongfu_patrol_service = DongfuPatrolService(get_paths().game_db, get_paths().player_db)
 _dongfu_array_upgrade_service_instance = None
 _dongfu_visit_reward_service_instance = None
@@ -69,6 +69,15 @@ def _dongfu_plant_service():
             get_paths().game_db, get_paths().player_db
         )
     return _dongfu_plant_service_instance
+
+
+def _dongfu_accelerate_service():
+    global _dongfu_accelerate_service_instance
+    if _dongfu_accelerate_service_instance is None:
+        _dongfu_accelerate_service_instance = DongfuAccelerateService(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _dongfu_accelerate_service_instance
 
 
 def _dongfu_array_upgrade_service():
@@ -1236,7 +1245,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"dongfu-accelerate:{uid}:{event_message_id or runtime_ids.new_id()}"
-    prior = dongfu_accelerate_service.get_result(operation_id)
+    prior = _dongfu_accelerate_service().get_result(operation_id)
     if prior is not None and prior.succeeded:
         d = _get_dongfu(uid)
         await handle_send(bot, event, f"该催熟请求已经处理，无需重复提交。\n{_format_plant_slots(d)}")
@@ -1257,7 +1266,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     expected_slots = json.dumps(_normalize_plant_slots(d), ensure_ascii=False)
     result = _run_dongfu_action(
         "accelerate", operation_id, uid,
-        call=lambda: dongfu_accelerate_service.accelerate(
+        call=lambda: _dongfu_accelerate_service().accelerate(
             operation_id, uid, expected_slots, slot_no, DONGFU_ITEM_ACCELERATE, _fmt_dt(now), _fmt_dt(new_finish),
         ),
         expected_slots=expected_slots, slot_no=slot_no, accelerate_item=DONGFU_ITEM_ACCELERATE,
