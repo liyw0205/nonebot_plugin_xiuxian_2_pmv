@@ -15,6 +15,11 @@ from tests.test_db_backend import db_backend
 
 
 class WorkDailyRefreshResetTests(unittest.TestCase):
+    def test_work_facade_defers_daily_refresh_reset_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_work
+
+        self.assertIsNone(xiuxian_work._work_daily_refresh_reset_service_instance)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.database = Path(self.temp.name) / "work.db"
@@ -177,7 +182,7 @@ class WorkDailyRefreshResetTests(unittest.TestCase):
         handler = source.split("async def resetrefreshnum", 1)[1].split(
             "async def delayed_reminder", 1
         )[0]
-        self.assertIn("work_daily_refresh_reset_service.reset(", handler)
+        self.assertIn("_work_daily_refresh_reset_service().reset(", handler)
         self.assertIn("return result", handler)
         self.assertIn("await asyncio.sleep(0)", handler)
         self.assertNotIn("sql_message.reset_work_num(", handler)

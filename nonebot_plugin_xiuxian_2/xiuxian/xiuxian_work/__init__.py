@@ -51,7 +51,7 @@ work_settlement_application = WorkSettlementApplication(
 work_item_use_service = WorkItemUseService(get_paths().game_db)
 work_refresh_service = WorkRefreshSettlementService(get_paths().game_db)
 work_abort_cleanup_service = WorkAbortCleanupService(get_paths().game_db)
-work_daily_refresh_reset_service = WorkDailyRefreshResetService(get_paths().game_db)
+_work_daily_refresh_reset_service_instance = None
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
@@ -59,6 +59,16 @@ sql_message = XiuxianDateManage()  # sql类
 items = Items()
 count = 5  # 每日刷新次数
 WORK_EXPIRE_MINUTES = 30  # 悬赏令过期时间(分钟)
+
+
+def _work_daily_refresh_reset_service():
+    global _work_daily_refresh_reset_service_instance
+    if _work_daily_refresh_reset_service_instance is None:
+        _work_daily_refresh_reset_service_instance = WorkDailyRefreshResetService(
+            get_paths().game_db
+        )
+    return _work_daily_refresh_reset_service_instance
+
 
 def format_reward_item(item_id: int) -> str:
     """格式化额外奖励物品，支持点击查看效果。"""
@@ -417,7 +427,7 @@ def get_work_msg(work_):
 async def resetrefreshnum():
     business_date = runtime_clock.now().date().isoformat()
     while True:
-        result = work_daily_refresh_reset_service.reset(business_date, count)
+        result = _work_daily_refresh_reset_service().reset(business_date, count)
         if result.status == "operation_conflict":
             raise RuntimeError(f"悬赏令刷新次数重置配置冲突：{business_date}")
         if result.task_status != "running":
