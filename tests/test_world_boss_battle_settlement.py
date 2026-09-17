@@ -53,6 +53,12 @@ def create_databases(tmp_path):
     return game, player, activity
 
 
+def test_boss_facade_defers_battle_settlement_service_construction():
+    from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_boss
+
+    assert xiuxian_boss._world_boss_battle_settlement_service_instance is None
+
+
 def settle(service, operation_id="op-1", settled=None, item=None, activities=None, killed=False, boss_index=0, stamina_cost=10):
     settled = settled or [{**OLD_BOSS, "气血": 800}]
     return service.settle(
@@ -188,7 +194,7 @@ def test_real_entry_uses_composite_service_without_segmented_side_paths():
     with open(path, encoding="utf-8") as source_file:
         text = source_file.read()
     handler = text[text.index("async def battle_"):text.index("@boss_info.handle")]
-    assert "world_boss_battle_settlement_service.settle(" in handler
+    assert "_world_boss_battle_settlement_service().settle(" in handler
     assert "Boss_fight(\n        user_id,\n        bossinfo,\n        type_in=1," in handler
     post_fight = handler[handler.index("result, victor, bossinfo_new, status_list"):]
     assert "boss_reward_service.grant(" not in post_fight

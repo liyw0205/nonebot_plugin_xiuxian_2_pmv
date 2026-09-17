@@ -1669,9 +1669,9 @@ class SourceQualityTests(unittest.TestCase):
     def test_world_boss_rewards_use_cross_database_transaction(self) -> None:
         boss_root = SOURCE_ROOT / "xiuxian" / "xiuxian_boss"
         source = (boss_root / "__init__.py").read_text(encoding="utf-8")
-        start = source.index("settlement = world_boss_battle_settlement_service.settle(")
+        start = source.index("settlement = _world_boss_battle_settlement_service().settle(")
         handler = source[start:source.index("await handle_send", start)]
-        self.assertIn("world_boss_battle_settlement_service.settle(", handler)
+        self.assertIn("_world_boss_battle_settlement_service().settle(", handler)
         self.assertNotIn("boss_reward_service.grant(", handler)
         self.assertNotIn("sql_message.update_ls(", handler)
         self.assertNotIn("boss_limit.update_stone(", handler)

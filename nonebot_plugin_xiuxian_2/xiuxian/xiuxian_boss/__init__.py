@@ -82,11 +82,20 @@ boss_application = BossApplication(
 boss_ids = UUIDGenerator()
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
-world_boss_battle_settlement_service = WorldBossBattleSettlementService(
-    get_paths().game_db,
-    get_paths().player_db,
-    get_paths().data / "activity" / "activity.db",
-)
+_world_boss_battle_settlement_service_instance = None
+
+
+def _world_boss_battle_settlement_service():
+    global _world_boss_battle_settlement_service_instance
+    if _world_boss_battle_settlement_service_instance is None:
+        _world_boss_battle_settlement_service_instance = WorldBossBattleSettlementService(
+            get_paths().game_db,
+            get_paths().player_db,
+            get_paths().data / "activity" / "activity.db",
+        )
+    return _world_boss_battle_settlement_service_instance
+
+
 world_boss_manual_spawn_service = WorldBossManualSpawnService(
     get_paths().player_db,
     get_boss_config,
@@ -773,7 +782,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
 
     # Rewards and combat state share the composite settlement boundary.
     now = runtime_clock.now()
-    settlement = world_boss_battle_settlement_service.settle(
+    settlement = _world_boss_battle_settlement_service().settle(
         operation_id=operation_id,
         user_id=user_id,
         expected_bosses=expected_bosses,
