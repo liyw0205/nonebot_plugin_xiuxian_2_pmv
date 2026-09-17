@@ -16,6 +16,11 @@ from tests.test_db_backend import db_backend
 
 
 class LotteryTalismanServiceTests(unittest.TestCase):
+    def test_back_facade_defers_lottery_talisman_service_construction(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_back
+
+        self.assertIsNone(xiuxian_back._lottery_talisman_service_instance)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "lottery-talisman.sqlite3"

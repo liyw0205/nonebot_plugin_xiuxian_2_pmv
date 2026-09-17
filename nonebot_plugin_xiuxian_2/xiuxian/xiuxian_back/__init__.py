@@ -92,7 +92,7 @@ cultivation_item_service = CultivationItemService(get_paths().game_db)
 stone_reward_service = StoneItemRewardService(get_paths().game_db)
 _three_cultivation_pill_service_instance = None
 _unbind_item_service_instance = None
-lottery_talisman_service = LotteryTalismanService(get_paths().game_db)
+_lottery_talisman_service_instance = None
 package_reward_service = PackageRewardService(get_paths().game_db)
 accessory_package_service = AccessoryPackageService(
     get_paths().game_db, get_paths().player_db
@@ -120,6 +120,12 @@ def _unbind_item_service():
     if _unbind_item_service_instance is None:
         _unbind_item_service_instance = UnbindItemService(get_paths().game_db)
     return _unbind_item_service_instance
+
+def _lottery_talisman_service():
+    global _lottery_talisman_service_instance
+    if _lottery_talisman_service_instance is None:
+        _lottery_talisman_service_instance = LotteryTalismanService(get_paths().game_db)
+    return _lottery_talisman_service_instance
 
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 added_ranks = added_ranks()
@@ -1515,7 +1521,7 @@ async def use_lottery_talisman(bot: Bot, event: GroupMessageEvent | PrivateMessa
                     LotteryReward(rank_id, item_info["name"], item_info["type"], 1)
                 )
 
-    result = lottery_talisman_service.apply(
+    result = _lottery_talisman_service().apply(
         _lottery_talisman_operation_id(event, user_id, item_id),
         user_id,
         item_id,
