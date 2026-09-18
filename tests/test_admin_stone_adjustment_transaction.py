@@ -88,7 +88,7 @@ class AdminStoneAdjustmentTransactionTests(unittest.TestCase):
         single_user = handler[handler.index("else:  # 单人"):]
         self.assertIn("admin_stone_adjustment_service.adjust(", single_user)
         self.assertNotIn("sql_message.update_ls(", single_user)
-        self.assertIn("sql_message.update_ls_all(amount)", handler)
+        self.assertIn("_sql_message().update_ls_all(amount)", handler)
 
 
 if __name__ == "__main__":

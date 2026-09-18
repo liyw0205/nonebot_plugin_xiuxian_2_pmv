@@ -89,7 +89,7 @@ from . import event_debug as _event_debug  # noqa: F401
 from . import group_welcome as _group_welcome  # noqa: F401
 
 items = Items()
-sql_message = XiuxianDateManage()  # sql类
+_sql_message_instance = None
 _admin_level_change_service_instance = None
 _admin_root_change_service_instance = None
 _admin_exp_adjustment_service_instance = None
@@ -103,6 +103,13 @@ _admin_impart_stone_batch_adjustment_service_instance = None
 _admin_player_status_reset_service_instance = None
 _admin_player_status_batch_reset_service_instance = None
 _admin_blackhouse_status_service_instance = None
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _admin_accessory_adjustment_service():
@@ -390,14 +397,14 @@ async def admin_rename_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         if not arg_list:
             await handle_send(bot, event, "用法：易名 @用户 新道号")
             return
-        target_user = sql_message.get_user_info_with_id(at_user_id)
+        target_user = _sql_message().get_user_info_with_id(at_user_id)
         new_name = arg_list[-1]
     else:
         if len(arg_list) < 2:
             await handle_send(bot, event, "用法：易名 旧道号 新道号\n或：易名 @用户 新道号")
             return
         old_name, new_name = arg_list[0], arg_list[1]
-        target_user = sql_message.get_user_info_with_name(old_name)
+        target_user = _sql_message().get_user_info_with_name(old_name)
 
     new_name = new_name.strip()
     if not target_user:
@@ -415,7 +422,7 @@ async def admin_rename_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, "道号长度不能超过7个字符！")
         return
 
-    same_name_user = sql_message.get_user_info_with_name(new_name)
+    same_name_user = _sql_message().get_user_info_with_name(new_name)
     if same_name_user and str(same_name_user.get("user_id", "")) != target_user_id:
         await handle_send(bot, event, "该道号已被使用，请选择其他道号！")
         return
@@ -424,7 +431,7 @@ async def admin_rename_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, f"{old_name} 的道号未变化")
         return
 
-    result = sql_message.update_user_name(target_user_id, new_name)
+    result = _sql_message().update_user_name(target_user_id, new_name)
     await handle_send(bot, event, f"已将 {old_name} 的道号修改为 {new_name}\n{result}")
 
 
@@ -457,7 +464,7 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 
     if at_qq:
         user_id = at_qq
-        user = sql_message.get_user_info_with_id(user_id)
+        user = _sql_message().get_user_info_with_id(user_id)
         if not user:
             await handle_send(bot, event, "该艾特用户尚未踏入修仙界")
             return
@@ -466,7 +473,7 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         user_id = None      # 代表全服
         target_name = "全服"
     elif target:
-        user = sql_message.get_user_info_with_name(target)
+        user = _sql_message().get_user_info_with_name(target)
         if not user:
             await handle_send(bot, event, f"未找到道号为 {target} 的修士")
             return
@@ -483,7 +490,7 @@ async def gm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 
     # 执行发放/扣除
     if user_id is None:  # 全服
-        sql_message.update_ls_all(amount)
+        _sql_message().update_ls_all(amount)
         action = "增加" if amount > 0 else "扣除"
         msg = f"全服通告：{action}{number_to(abs(amount))}枚灵石，请注意查收！"
         await handle_send(bot, event, msg)
@@ -550,7 +557,7 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
     if at_qq:
         user_id = at_qq
-        user = sql_message.get_user_info_with_id(user_id)
+        user = _sql_message().get_user_info_with_id(user_id)
         if not user:
             await handle_send(bot, event, "该用户尚未踏入修仙界")
             return
@@ -559,7 +566,7 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         user_id = None
         target_name = "全服"
     elif target:
-        user = sql_message.get_user_info_with_name(target)
+        user = _sql_message().get_user_info_with_name(target)
         if not user:
             await handle_send(bot, event, f"未找到道号 {target}")
             return
@@ -577,7 +584,7 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         if amount == 0:
             await handle_send(bot, event, "全服思恋结晶调整数量不能为 0")
             return
-        all_users = sql_message.get_all_user_id()
+        all_users = _sql_message().get_all_user_id()
         if not all_users:
             await handle_send(bot, event, "当前没有可调整的用户")
             return
@@ -680,14 +687,14 @@ async def adjust_exp_command_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     give_qq = get_at_user_id(args)
     
     if nick_name:
-        give_message = sql_message.get_user_info_with_name(nick_name)
+        give_message = _sql_message().get_user_info_with_name(nick_name)
         if give_message:
             give_qq = give_message['user_id']
         else:
             give_qq = None
     
     if give_qq:
-        give_user = sql_message.get_user_info_with_id(give_qq)
+        give_user = _sql_message().get_user_info_with_id(give_qq)
         if give_user:
             result = _admin_exp_adjustment_service().adjust(
                 _admin_operation_id(event, "exp-adjust", str(give_qq)),
@@ -743,11 +750,11 @@ async def zaohua_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     target_qq = get_at_user_id(args)
 
     if target_qq:
-        target_user = sql_message.get_user_info_with_id(target_qq)
+        target_user = _sql_message().get_user_info_with_id(target_qq)
     elif len(parts) >= 2:
         # 最后一个参数视为道号
         dao_name = parts[-1]
-        target_user = sql_message.get_user_info_with_name(dao_name)
+        target_user = _sql_message().get_user_info_with_name(dao_name)
         if target_user:
             target_qq = target_user['user_id']
     else:
@@ -786,7 +793,7 @@ async def zaohua_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         level,
         int(level_config["power"]),
         float(level_config["spend"]),
-        float(sql_message.get_root_rate(target_user["root_type"], target_qq)),
+        float(_sql_message().get_root_rate(target_user["root_type"], target_qq)),
     )
     if result.status == "state_changed":
         msg = "调整未完成：玩家属性已更新，请重新执行。"
@@ -834,10 +841,10 @@ async def gmm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     target_qq = get_at_user_id(args)
 
     if target_qq:
-        target_user = sql_message.get_user_info_with_id(target_qq)
+        target_user = _sql_message().get_user_info_with_id(target_qq)
     elif len(parts) >= 2:
         dao_name = parts[-1]
-        target_user = sql_message.get_user_info_with_name(dao_name)
+        target_user = _sql_message().get_user_info_with_name(dao_name)
         if target_user:
             target_qq = target_user['user_id']
     else:
@@ -950,7 +957,7 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
 
     # ===== 全服发放 =====
     if target and str(target).lower() == "all":
-        all_users = sql_message.get_all_user_id()
+        all_users = _sql_message().get_all_user_id()
         if not all_users:
             await handle_send(bot, event, "当前没有可发放的用户。")
             await cz.finish()
@@ -1048,7 +1055,7 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
 
     # ===== 指定玩家发放 =====
     if target:
-        user_info = sql_message.get_user_info_with_name(target)
+        user_info = _sql_message().get_user_info_with_name(target)
         if not user_info:
             await handle_send(bot, event, f"玩家 {target} 不存在！")
             await cz.finish()
@@ -1083,7 +1090,7 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
                     f"x{result.affected_quantity}（{quality}阶）"
                 )
         else:
-            expected_quantity = int(sql_message.goods_num(user_id, goods_id) or 0)
+            expected_quantity = int(_sql_message().goods_num(user_id, goods_id) or 0)
             # Compatibility fallback remains available: admin_item_grant_service.grant(...)
             result = _grant_admin_item(
                 event, user_id, goods_id, item_info["name"], goods_type, quantity,
@@ -1139,7 +1146,7 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
                 f"x{result.affected_quantity}（{quality}阶）"
             )
     else:
-        expected_quantity = int(sql_message.goods_num(self_user_id, goods_id) or 0)
+        expected_quantity = int(_sql_message().goods_num(self_user_id, goods_id) or 0)
         # Compatibility fallback remains available: admin_item_grant_service.grant(...)
         result = _grant_admin_item(
             event, self_user_id, goods_id, item_info["name"], goods_type, quantity,
@@ -1200,7 +1207,7 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
 
     # ===== 全服扣除 =====
     if target and str(target).lower() == "all":
-        all_users = sql_message.get_all_user_id()
+        all_users = _sql_message().get_all_user_id()
         if not all_users:
             await handle_send(bot, event, "当前没有可扣除的用户。")
             await hmll.finish()
@@ -1267,10 +1274,10 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
                 uid_str = str(uid)
                 try:
                     # 普通物品：先检查数量再扣
-                    have = sql_message.goods_num(uid_str, goods_id)
+                    have = _sql_message().goods_num(uid_str, goods_id)
                     if have > 0:
                         deduct = min(quantity, have)
-                        sql_message.update_back_j(
+                        _sql_message().update_back_j(
                             uid_str,
                             goods_id,
                             num=deduct,
@@ -1287,7 +1294,7 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
 
     # ===== 指定玩家扣除 =====
     if target:
-        user_info = sql_message.get_user_info_with_name(target)
+        user_info = _sql_message().get_user_info_with_name(target)
         if not user_info:
             await handle_send(bot, event, f"玩家 {target} 不存在！")
             await hmll.finish()
@@ -1323,7 +1330,7 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await handle_send(bot, event, msg)
             await hmll.finish()
         else:
-            have = sql_message.goods_num(user_id, goods_id)
+            have = _sql_message().goods_num(user_id, goods_id)
             if have <= 0:
                 await handle_send(bot, event, f"玩家 {target} 没有 {item_info['name']}！")
                 await hmll.finish()
@@ -1391,7 +1398,7 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         await handle_send(bot, event, msg)
         await hmll.finish()
     else:
-        have = sql_message.goods_num(self_user_id, goods_id)
+        have = _sql_message().goods_num(self_user_id, goods_id)
         if have <= 0:
             await handle_send(bot, event, f"您没有 {item_info['name']}！")
             await hmll.finish()
@@ -1443,7 +1450,7 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
     plain_args = plain_text.split()
     # 无纯文本判空：QQ 官方 AT 事件可能带 mention 段，bool(args) 为真却无道号
     if not plain_args and not give_qq:
-        all_users = sql_message.get_all_user_id()
+        all_users = _sql_message().get_all_user_id()
         operator_id = str(get_user_id(event) or "unknown")
         max_stamina = XiuConfig().max_stamina
         running_operation = _admin_player_status_batch_reset_service().find_running(
@@ -1490,7 +1497,7 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         await restate.finish()
     nick_name = plain_args[0] if plain_args else ""
     if nick_name and not give_qq:
-        give_message = sql_message.get_user_info_with_name(nick_name)
+        give_message = _sql_message().get_user_info_with_name(nick_name)
         if give_message:
             give_qq = give_message['user_id']
         else:
@@ -1661,13 +1668,13 @@ async def xiuxian_updata_level_(bot: Bot, event: GroupMessageEvent | PrivateMess
     }
     
     # 获取所有用户
-    all_users = sql_message.get_all_user_id()
+    all_users = _sql_message().get_all_user_id()
     adapted_count = 0
     success_count = 0
     failed_count = 0
     
     for user in all_users:
-        user_info = sql_message.get_user_info_with_id(user)
+        user_info = _sql_message().get_user_info_with_id(user)
         user_id = user_info['user_id']
         old_level = user_info['level']
         try:
@@ -1682,7 +1689,7 @@ async def xiuxian_updata_level_(bot: Bot, event: GroupMessageEvent | PrivateMess
             # 进行境界适配
             if base_level in level_dict:
                 new_level = level_dict[base_level] + stage
-                sql_message.updata_level(user_id=user_id, level_name=new_level)
+                _sql_message().updata_level(user_id=user_id, level_name=new_level)
                 adapted_count += 1
                 
                 # 记录适配日志
@@ -1718,7 +1725,7 @@ async def clear_xiangyuan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 async def xiuxian_novice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """重置新手礼包"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    sql_message.novice_remake()
+    _sql_message().novice_remake()
     msg = "新手礼包重置成功，所有玩家可以重新领取新手礼包！"
     await handle_send(bot, event, msg)
     await xiuxian_novice.finish()
@@ -1733,7 +1740,7 @@ async def create_new_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 async def do_work_cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """重置所有用户的悬赏令"""
     from ..xiuxian_work import count
-    sql_message.reset_work_num(count)
+    _sql_message().reset_work_num(count)
     msg = "用户悬赏令刷新次数重置成功"
     await handle_send(bot, event, msg)
     await do_work_cz.finish()
@@ -1813,7 +1820,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     at_qq = get_at_user_id(args)
     if at_qq:
         target_user_id = str(at_qq)
-        user = sql_message.get_user_info_with_id(target_user_id)
+        user = _sql_message().get_user_info_with_id(target_user_id)
         if user:
             target_name = user.get("user_name") or target_user_id
         else:
@@ -1821,7 +1828,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     elif plain_text:
         tokens = plain_text.split()
         dao_name = tokens[-1]
-        user = sql_message.get_user_info_with_name(dao_name)
+        user = _sql_message().get_user_info_with_name(dao_name)
         if user:
             target_user_id = str(user["user_id"])
             target_name = user.get("user_name") or target_user_id
@@ -1862,12 +1869,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     at_qq = get_at_user_id(args)
     if at_qq:
         target_user_id = str(at_qq)
-        user = sql_message.get_user_info_with_id(target_user_id)
+        user = _sql_message().get_user_info_with_id(target_user_id)
         target_name = (user.get("user_name") if user else None) or target_user_id
     elif plain_text:
         tokens = plain_text.split()
         dao_name = tokens[-1]
-        user = sql_message.get_user_info_with_name(dao_name)
+        user = _sql_message().get_user_info_with_name(dao_name)
         if user:
             target_user_id = str(user["user_id"])
             target_name = user.get("user_name") or target_user_id
@@ -2406,7 +2413,7 @@ async def impersonate_user_command_(bot: Bot, event: GroupMessageEvent | Private
     if not arg_text and not has_at_user(args):
         current_target_id = _impersonating_users.get(admin_user_id)
         if current_target_id:
-            target_user_info = sql_message.get_user_info_with_id(current_target_id)
+            target_user_info = _sql_message().get_user_info_with_id(current_target_id)
             target_name = target_user_info['user_name'] if target_user_info else f"ID: {current_target_id}"
             await handle_send(bot, event, f"您当前正在伪装用户：{target_name}。\n发送「用户伪装 取消」停止伪装。")
         else:
@@ -2421,11 +2428,11 @@ async def impersonate_user_command_(bot: Bot, event: GroupMessageEvent | Private
 
     if at_qq:
         target_user_id = str(at_qq)
-        target_user_info = sql_message.get_user_info_with_id(target_user_id)
+        target_user_info = _sql_message().get_user_info_with_id(target_user_id)
 
     # 2) 再按道号查
     if not target_user_id and arg_text:
-        info_by_name = sql_message.get_user_info_with_name(arg_text)
+        info_by_name = _sql_message().get_user_info_with_name(arg_text)
         if info_by_name:
             target_user_info = info_by_name
             target_user_id = str(info_by_name["user_id"])
@@ -2433,7 +2440,7 @@ async def impersonate_user_command_(bot: Bot, event: GroupMessageEvent | Private
     # 3) 最后把输入当ID（重点：即使数据库没有，也允许伪装）
     if not target_user_id and arg_text:
         target_user_id = str(arg_text)
-        target_user_info = sql_message.get_user_info_with_id(target_user_id)
+        target_user_info = _sql_message().get_user_info_with_id(target_user_id)
 
     # 兜底
     if not target_user_id:
