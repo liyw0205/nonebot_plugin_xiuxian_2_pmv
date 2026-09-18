@@ -4474,7 +4474,7 @@ def get_user_buff(user_id):
 mix_elixir_infoconfigkey = ["收取时间", "收取等级", "灵田数量", '药材速度', '灵田傀儡', "丹药控火", "丹药耐药性", "炼丹记录", "炼丹经验"]
 
 def read_player_info(user_id, info_name):
-    player_data_manager = PlayerDataManager()
+    player_data_manager = _player_data_manager()
     user_id_str = str(user_id)
     info = {}
     record = player_data_manager.get_fields(user_id_str, info_name) # 直接获取所有字段
@@ -4485,7 +4485,7 @@ def read_player_info(user_id, info_name):
     return info
 
 def save_player_info(user_id, data, info_name):
-    player_data_manager = PlayerDataManager()
+    player_data_manager = _player_data_manager()
     user_id_str = str(user_id)
     for field, value in data.items():
         player_data_manager.update_or_write_data(user_id_str, info_name, field, value, data_type="TEXT")
@@ -4542,15 +4542,47 @@ def number_count(num):
 
     return _number_count(num)
 
-sql_message = XiuxianDateManage()  # sql类
+_sql_message_instance = None
+_player_data_manager_instance = None
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
+
+
+def _player_data_manager():
+    global _player_data_manager_instance
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+    return _player_data_manager_instance
+
+
+class _LazyManagerProxy:
+    def __init__(self, resolver):
+        object.__setattr__(self, "_resolver", resolver)
+
+    def __getattr__(self, name):
+        return getattr(self._resolver(), name)
+
+    def __setattr__(self, name, value):
+        if name == "_resolver":
+            object.__setattr__(self, name, value)
+            return
+        setattr(self._resolver(), name, value)
+
+
+sql_message = _LazyManagerProxy(_sql_message)  # sql类
 items = Items()
 trade_manager = TradeDataManager()
-player_data_manager = PlayerDataManager()
+player_data_manager = _LazyManagerProxy(_player_data_manager)
 
 @register_legacy_shutdown
 async def close_db():
     # 统一调用单例关闭连接
-    XiuxianDateManage().close()
+    _sql_message().close()
     XIUXIAN_IMPART_BUFF().close()
     TradeDataManager().close()
-    PlayerDataManager().close()
+    _player_data_manager().close()
