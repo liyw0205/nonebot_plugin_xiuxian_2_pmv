@@ -23,13 +23,20 @@ from .transaction_service import PermanentAtkItemService
 from .transaction_service import BlessedFlagReplaceService
 from nonebot.log import logger
 items = Items()
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 _cultivation_item_service_instance = None
 _breakthrough_rate_item_service_instance = None
 _recovery_item_service_instance = None
 _permanent_atk_item_service_instance = None
 _blessed_flag_replace_service_instance = None
 ADDED_RANKS = get_added_ranks()
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 def _cultivation_item_service():
     global _cultivation_item_service_instance
@@ -157,7 +164,7 @@ def check_equipment_can_use(user_id, goods_id):
     顶用：
     """
     flag = False
-    back_equipment = sql_message.get_item_by_good_id_and_user_id(user_id, goods_id)
+    back_equipment = _sql_message().get_item_by_good_id_and_user_id(user_id, goods_id)
     if back_equipment and int(back_equipment.get('state', 0) or 0) == 0:
         flag = True
     return flag
@@ -260,7 +267,7 @@ def check_equipment_use_msg(user_id, goods_id):
     """
     检测装备是否已用
     """
-    user_back = sql_message.get_item_by_good_id_and_user_id(user_id, goods_id)
+    user_back = _sql_message().get_item_by_good_id_and_user_id(user_id, goods_id)
     if not user_back:
         return False
     state = int(user_back.get('state', 0) or 0)
@@ -276,7 +283,7 @@ def get_user_main_back_msg(user_id):
     获取背包内的所有物品信息（已装备的装备会显示在前面）
     """
     l_msg = []
-    user_backs = sql_message.get_back_msg(user_id)  # list(back)
+    user_backs = _sql_message().get_back_msg(user_id)  # list(back)
     if not user_backs:
         return l_msg
     
@@ -414,7 +421,7 @@ def get_user_equipment_msg(user_id):
     获取背包内的所有装备及其详细信息
     """
     l_msg = []
-    user_backs = sql_message.get_back_msg(user_id)
+    user_backs = _sql_message().get_back_msg(user_id)
     if not user_backs:
         return l_msg
     
@@ -494,7 +501,7 @@ def get_user_danyao_back_msg(user_id):
     - 其他丹药
     """
     l_msg = []
-    user_backs = sql_message.get_back_msg(user_id)
+    user_backs = _sql_message().get_back_msg(user_id)
     if not user_backs:
         return l_msg
 
@@ -558,7 +565,7 @@ def get_user_yaocai_back_msg(user_id):
     获取药材背包信息
     """
     l_msg = []
-    user_backs = sql_message.get_back_msg(user_id)
+    user_backs = _sql_message().get_back_msg(user_id)
     if not user_backs:
         return l_msg
     
@@ -593,7 +600,7 @@ def get_user_yaocai_detail_back_msg(user_id):
     获取药材背包详细信息
     """
     l_msg = []
-    user_backs = sql_message.get_back_msg(user_id)
+    user_backs = _sql_message().get_back_msg(user_id)
     if not user_backs:
         return l_msg
     
@@ -772,15 +779,15 @@ def get_item_msg(goods_id, user_id=None):
     if item_info['item_type'] == '饰品':
         return get_accessory_info_msg(item_info)
 
-    user_info = sql_message.get_user_info_with_id(user_id) if user_id else None
+    user_info = _sql_message().get_user_info_with_id(user_id) if user_id else None
     required_rank_name, _ = get_required_rank_name(item_info, user_info)
-    goods_max_num = sql_message.goods_max_num(goods_id)
+    goods_max_num = _sql_message().goods_max_num(goods_id)
     msg = ''
     if item_info['type'] == '丹药':
         msg = f"名字：{item_info['name']}\n"
         msg += f"效果：{item_info['desc']}"
         if item_info['buff_type'] == 'level_up_big':
-            back = sql_message.get_item_by_good_id_and_user_id(user_id, goods_id)
+            back = _sql_message().get_item_by_good_id_and_user_id(user_id, goods_id)
             goods_all_num = back['all_num'] if back is not None else 0
             rank = item_info.get('境界', '')
             msg += f"\n境界：{rank}\n耐药性：{goods_all_num}/{item_info['all_num']}"
@@ -881,12 +888,12 @@ def get_yaocai_info_msg(goods_id, item_info):
 
 
 def check_use_elixir(user_id, goods_id, num, operation_id=None):
-    user_info = sql_message.get_user_info_with_id(user_id)
+    user_info = _sql_message().get_user_info_with_id(user_id)
     user_rank = convert_rank(user_info['level'])[0]
     goods_info = items.get_data_by_item_id(goods_id)
     goods_rank = goods_info['rank'] + ADDED_RANKS - 2
     goods_name = goods_info['name']
-    back = sql_message.get_item_by_good_id_and_user_id(user_id, goods_id)
+    back = _sql_message().get_item_by_good_id_and_user_id(user_id, goods_id)
     if not back or int(back.get('goods_num', 0) or 0) <= 0:
         return f"背包中没有足够的 {goods_name} ！"
     goods_all_num = int(back.get('all_num', 0) or 0) # 数据库里的使用数量
@@ -1013,7 +1020,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
                     )
 
     elif goods_info['buff_type'] == "stamina":  # 回复体力的丹药
-        user_info = sql_message.get_user_info_with_id(user_id) or user_info
+        user_info = _sql_message().get_user_info_with_id(user_id) or user_info
         user_rank = convert_rank(user_info['level'])[0]
         max_stamina = int(XiuConfig().max_stamina)
         current_stamina = int(user_info.get('user_stamina') or 0)
@@ -1113,7 +1120,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
             msg = f"丹药：{goods_name}的使用境界为{goods_info['境界']}以上，道友不满足使用条件！"
         else:
             exp = goods_info['buff'] * num
-            root_rate = sql_message.get_root_rate(user_info['root_type'], user_id)
+            root_rate = _sql_message().get_root_rate(user_info['root_type'], user_id)
             level_spend = jsondata.level_data()[user_info['level']]["spend"]
             result = _cultivation_item_service().apply(
                 operation_id or f"elixir-exp:{user_id}:{goods_id}:{datetime.now().timestamp()}",
@@ -1137,7 +1144,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
     return msg
 
 
-    user_info = sql_message.get_user_info_with_id(user_id)
+    user_info = _sql_message().get_user_info_with_id(user_id)
     if user_info['blessed_spot_flag'] == 0:
         return "道友还未拥有洞天福地，无法使用该物品"
     item_info = items.get_data_by_item_id(goods_id)
@@ -1148,7 +1155,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
         user_id, goods_id, item_info['level'], item_info['药材速度'],
         expected_level=int(user_buff_data['blessed_spot']),
         expected_herb_speed=int(mix_elixir_info.get('药材速度', 0) or 0),
-        expected_quantity=sql_message.goods_num(user_id, goods_id),
+        expected_quantity=_sql_message().goods_num(user_id, goods_id),
     )
     if result.succeeded:
         return f"道友洞天福地的聚灵旗已经替换为：{item_info['name']}"
