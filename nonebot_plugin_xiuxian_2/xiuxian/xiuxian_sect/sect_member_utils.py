@@ -16,6 +16,10 @@ userstask = {}
 
 def _sql_message():
     global _sql_message_instance
+    if callable(sql_message):
+        return sql_message()
+    if sql_message is not None:
+        return sql_message
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
@@ -29,7 +33,7 @@ def bind_sect_member_dependencies(task_store=None, sql_manager=None, item_manage
         userstask = task_store
     if sql_manager is not None:
         sql_message = sql_manager
-        _sql_message_instance = sql_manager
+        _sql_message_instance = None if callable(sql_manager) else sql_manager
     if item_manager is not None:
         items = item_manager
     if sect_config is not None:
