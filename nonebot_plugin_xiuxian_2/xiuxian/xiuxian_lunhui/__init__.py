@@ -35,7 +35,7 @@ from ...infrastructure.ids import UUIDGenerator
 from ...features.lunhui.application import LunhuiApplication
 
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
-player_data_manager = PlayerDataManager()
+_player_data_manager_instance = None
 items = Items()
 lunhui_application = LunhuiApplication(
     get_paths().game_db,
@@ -44,6 +44,25 @@ lunhui_application = LunhuiApplication(
 )
 runtime_clock = SystemClock()
 runtime_ids = UUIDGenerator()
+
+
+def _resolve_player_data_manager():
+    global _player_data_manager_instance
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+    return _player_data_manager_instance
+
+
+class _LazyPlayerDataManager:
+    def __getattr__(self, name):
+        return getattr(_resolve_player_data_manager(), name)
+
+
+player_data_manager = _LazyPlayerDataManager()
+
+
+def _player_data_manager():
+    return player_data_manager
 
 
 def _run_lunhui_action(action: str, operation_id: str, user_id: str, **payload):
@@ -450,7 +469,7 @@ def save_reincarnation_memory(user_id):
     
     # 字段化存储，每个属性独立存储
     for field, value in memory.items():
-        player_data_manager.update_or_write_data(
+        _player_data_manager().update_or_write_data(
             str(user_id),
             "reincarnation_memory",
             field,
@@ -464,7 +483,7 @@ def save_reincarnation_memory(user_id):
 
 def get_reincarnation_memory(user_id):
     """读取轮回印记"""
-    data = player_data_manager.get_fields(str(user_id), "reincarnation_memory")
+    data = _player_data_manager().get_fields(str(user_id), "reincarnation_memory")
     if not data:
         return None
     
