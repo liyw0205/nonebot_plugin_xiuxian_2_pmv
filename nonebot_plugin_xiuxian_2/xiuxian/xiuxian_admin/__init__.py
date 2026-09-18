@@ -102,7 +102,7 @@ _admin_impart_stone_adjustment_service_instance = None
 _admin_impart_stone_batch_adjustment_service_instance = None
 _admin_player_status_reset_service_instance = None
 _admin_player_status_batch_reset_service_instance = None
-admin_blackhouse_status_service = AdminBlackhouseStatusService(get_paths().game_db)
+_admin_blackhouse_status_service_instance = None
 
 
 def _admin_accessory_adjustment_service():
@@ -162,6 +162,15 @@ def _admin_player_status_batch_reset_service():
             _admin_player_status_reset_service(),
         )
     return _admin_player_status_batch_reset_service_instance
+
+
+def _admin_blackhouse_status_service():
+    global _admin_blackhouse_status_service_instance
+    if _admin_blackhouse_status_service_instance is None:
+        _admin_blackhouse_status_service_instance = AdminBlackhouseStatusService(
+            get_paths().game_db
+        )
+    return _admin_blackhouse_status_service_instance
 
 
 def _admin_level_change_service():
@@ -1825,8 +1834,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "未找到目标用户！请正确艾特、输入道号，或直接输入用户ID。")
         return
 
-    expected_banned = admin_blackhouse_status_service.snapshot(str(target_user_id))
-    result = admin_blackhouse_status_service.set_banned(
+    expected_banned = _admin_blackhouse_status_service().snapshot(str(target_user_id))
+    result = _admin_blackhouse_status_service().set_banned(
         _admin_operation_id(event, "blackhouse-ban", str(target_user_id)),
         str(get_user_id(event) or "unknown"),
         str(target_user_id),
@@ -1870,8 +1879,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "未找到目标用户！请正确艾特、输入道号，或直接输入用户ID。")
         return
 
-    expected_banned = admin_blackhouse_status_service.snapshot(str(target_user_id))
-    result = admin_blackhouse_status_service.set_banned(
+    expected_banned = _admin_blackhouse_status_service().snapshot(str(target_user_id))
+    result = _admin_blackhouse_status_service().set_banned(
         _admin_operation_id(event, "blackhouse-unban", str(target_user_id)),
         str(get_user_id(event) or "unknown"),
         str(target_user_id),
