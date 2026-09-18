@@ -17,7 +17,14 @@ SECT_FAIRYLAND_CONFIG = {
     10: {"name": "永恒炼体堂", "minutes": 360, "bonus": 0.50, "stone": 12800000000, "materials": 128000000000},
 }
 
-_player_data_manager = PlayerDataManager()
+_player_data_manager_instance = None
+
+
+def _player_data_manager():
+    global _player_data_manager_instance
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+    return _player_data_manager_instance
 
 
 def _to_int(value, default: int = 0) -> int:
@@ -43,13 +50,13 @@ def _fairyland_claim_key(sect_id) -> str:
 
 
 def _get_fairyland_last_claim(user_id, sect_id) -> str:
-    data = _player_data_manager.get_fields(str(user_id), SECT_FAIRYLAND_CLAIM_TABLE) or {}
+    data = _player_data_manager().get_fields(str(user_id), SECT_FAIRYLAND_CLAIM_TABLE) or {}
     value = data.get(_fairyland_claim_key(sect_id), "")
     return str(value or "")
 
 
 def _set_fairyland_last_claim(user_id, sect_id, day: str):
-    _player_data_manager.update_or_write_data(
+    _player_data_manager().update_or_write_data(
         str(user_id),
         SECT_FAIRYLAND_CLAIM_TABLE,
         _fairyland_claim_key(sect_id),
