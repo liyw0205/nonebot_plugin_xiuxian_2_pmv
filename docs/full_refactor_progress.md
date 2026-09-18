@@ -2171,6 +2171,8 @@
 
 2026-09-18 tower/training limit boundary audit：`TowerLimit`/`TrainingLimit` 的 state services依赖 `PlayerDataManager.lock` 作为兼容锁，不能直接删除 manager；下一切片先核对 public facade 与 lazy wrapper边界，保留 state service事务 ownership。
 
+2026-09-18 tower limit lazy state slice：`tower_limit.py` 保留 `tower_limit`/`TowerLimit` public facade与显式 `TowerStateService` 注入，但默认 manager、共享 `PlayerDataManager.lock` 和 `TowerStateService` 均改为首次读取 lazy；reset仍通过 manager getter保留原语义。TowerStateService atomic initialize/week repair/rollback、purchase/settlement replay及 production facade未改变。construction/source/architecture及 tower regression 共 218 tests passed，compileall、inventory、diff check通过。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。
