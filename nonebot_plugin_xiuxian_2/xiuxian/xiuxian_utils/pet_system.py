@@ -66,12 +66,31 @@ from .pet_constants import (
 )
 from .xiuxian2_handle import PlayerDataManager
 
-player_data_manager = PlayerDataManager()
+_player_data_manager_instance = None
 _PET_POOL_CACHE = None
 _PET_SKILL_CACHE = None
 _HERB_IDS_BY_LEVEL_CACHE = None
 _PET_STORAGE_READY = False
 _PET_STORAGE_MIGRATION_ATTEMPTED = False
+
+
+def _resolve_player_data_manager():
+    global _player_data_manager_instance
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+    return _player_data_manager_instance
+
+
+class _LazyPlayerDataManager:
+    def __getattr__(self, name):
+        return getattr(_resolve_player_data_manager(), name)
+
+
+player_data_manager = _LazyPlayerDataManager()
+
+
+def _player_data_manager():
+    return player_data_manager
 
 
 def reset_pet_storage_state():
@@ -277,18 +296,18 @@ def _ensure_pet_storage():
     if _PET_STORAGE_READY:
         return
 
-    q = player_data_manager._quote_ident
-    with player_data_manager._conn_lock:
+    q = _player_data_manager()._quote_ident
+    with _player_data_manager()._conn_lock:
         if _PET_STORAGE_READY:
             return
 
-        player_data_manager._ensure_table_exists(TABLE)
+        _player_data_manager()._ensure_table_exists(TABLE)
         for field in PET_META_STORAGE_FIELDS:
-            player_data_manager._ensure_field_exists(TABLE, field, "TEXT")
+            _player_data_manager()._ensure_field_exists(TABLE, field, "TEXT")
 
-        cursor = player_data_manager._get_cursor()
+        cursor = _player_data_manager()._get_cursor()
         item_table_sql = q(PET_ITEM_TABLE)
-        if not player_data_manager.conn.table_exists(PET_ITEM_TABLE):
+        if not _player_data_manager().conn.table_exists(PET_ITEM_TABLE):
             cursor.execute(
                 f"""
                 CREATE TABLE {item_table_sql} (
@@ -307,7 +326,7 @@ def _ensure_pet_storage():
                 """
             )
         else:
-            existing_fields = set(player_data_manager.conn.column_names(PET_ITEM_TABLE))
+            existing_fields = set(_player_data_manager().conn.column_names(PET_ITEM_TABLE))
             column_defs = {
                 "id": "TEXT",
                 "user_id": "TEXT",
@@ -333,7 +352,7 @@ def _ensure_pet_storage():
             f"CREATE INDEX IF NOT EXISTS {q('idx_player_pet_item_user_active')} "
             f"ON {item_table_sql} ({q('user_id')}, {q('is_active')})"
         )
-        player_data_manager._commit_write()
+        _player_data_manager()._commit_write()
         _PET_STORAGE_READY = True
 
 
@@ -343,7 +362,7 @@ def _row_to_dict(cursor, row):
 
 
 def _get_pet_meta(user_id: str):
-    meta = player_data_manager.get_doc(
+    meta = _player_data_manager().get_doc(
         user_id=user_id,
         table_name=TABLE,
         fields=PET_META_STORAGE_FIELDS,
@@ -443,10 +462,10 @@ def _row_to_pet(row: dict):
 
 def _fetch_pet_rows(user_id: str):
     _ensure_pet_storage()
-    q = player_data_manager._quote_ident
-    with player_data_manager._conn_lock:
-        cursor = player_data_manager._get_cursor()
-        existing_fields = set(player_data_manager.conn.column_names(PET_ITEM_TABLE))
+    q = _player_data_manager()._quote_ident
+    with _player_data_manager()._conn_lock:
+        cursor = _player_data_manager()._get_cursor()
+        existing_fields = set(_player_data_manager().conn.column_names(PET_ITEM_TABLE))
         select_fields = PET_ITEM_FIELDS + [
             field
             for field in PET_ITEM_LEGACY_FIELDS
@@ -517,7 +536,7 @@ def _save_pet_meta(user_id: str, data: dict, pet_count: int):
     active = data.get("active")
     active_uid = _clean_uid(active.get("uid", "")) if isinstance(active, dict) else ""
     travel = _normalize_pet_travel_state(data.get("travel"))
-    player_data_manager.save_doc(
+    _player_data_manager().save_doc(
         user_id=user_id,
         table_name=TABLE,
         data={
@@ -556,12 +575,12 @@ def _pet_to_item_values(user_id: str, pet: dict, is_active: bool, now: int):
 
 
 def _clear_legacy_pet_item_columns(cursor, user_id: str):
-    existing_fields = set(player_data_manager.conn.column_names(PET_ITEM_TABLE))
+    existing_fields = set(_player_data_manager().conn.column_names(PET_ITEM_TABLE))
     legacy_fields = [field for field in PET_ITEM_LEGACY_FIELDS if field in existing_fields]
     if not legacy_fields:
         return
 
-    q = player_data_manager._quote_ident
+    q = _player_data_manager()._quote_ident
     set_sql = ", ".join(f"{q(field)}=NULL" for field in legacy_fields)
     cursor.execute(
         f"UPDATE {q(PET_ITEM_TABLE)} SET {set_sql} WHERE {q('user_id')}=%s",
@@ -571,13 +590,13 @@ def _clear_legacy_pet_item_columns(cursor, user_id: str):
 
 def _save_pet_items(user_id: str, data: dict):
     _ensure_pet_storage()
-    q = player_data_manager._quote_ident
+    q = _player_data_manager()._quote_ident
     now = int(time.time())
     pet_rows = list(_iter_unique_pet_rows(data))
     keep_ids = [_pet_storage_id(user_id, str(pet.get("uid", ""))) for pet, _ in pet_rows]
 
-    with player_data_manager._conn_lock:
-        cursor = player_data_manager._get_cursor()
+    with _player_data_manager()._conn_lock:
+        cursor = _player_data_manager()._get_cursor()
         item_table_sql = q(PET_ITEM_TABLE)
         if keep_ids:
             placeholders = ", ".join(["%s"] * len(keep_ids))
@@ -604,7 +623,7 @@ def _save_pet_items(user_id: str, data: dict):
             cursor.execute(insert_sql, _pet_to_item_values(user_id, pet, is_active, now))
 
         _clear_legacy_pet_item_columns(cursor, user_id)
-        player_data_manager._commit_write()
+        _player_data_manager()._commit_write()
     return len(pet_rows)
 
 
@@ -640,7 +659,7 @@ def save_pet_doc(user_id: str | int, data: dict):
 def migrate_all_legacy_pet_docs():
     _ensure_pet_storage()
     compacted = 0
-    for record in player_data_manager.get_all_records(TABLE):
+    for record in _player_data_manager().get_all_records(TABLE):
         user_id = record.get("user_id")
         if not user_id:
             continue
@@ -653,16 +672,16 @@ def migrate_all_legacy_pet_docs():
 
 
 def _pet_item_has_legacy_payload(user_id: str):
-    q = player_data_manager._quote_ident
-    with player_data_manager._conn_lock:
-        if not player_data_manager.conn.table_exists(PET_ITEM_TABLE):
+    q = _player_data_manager()._quote_ident
+    with _player_data_manager()._conn_lock:
+        if not _player_data_manager().conn.table_exists(PET_ITEM_TABLE):
             return False
-        existing_fields = set(player_data_manager.conn.column_names(PET_ITEM_TABLE))
+        existing_fields = set(_player_data_manager().conn.column_names(PET_ITEM_TABLE))
         legacy_fields = [field for field in PET_ITEM_LEGACY_FIELDS if field in existing_fields]
         if not legacy_fields:
             return False
 
-        cursor = player_data_manager._get_cursor()
+        cursor = _player_data_manager()._get_cursor()
         clauses = [f"({q(field)} IS NOT NULL AND CAST({q(field)} AS TEXT) <> '')" for field in legacy_fields]
         cursor.execute(
             f"""
@@ -947,11 +966,11 @@ def _sqlite_pet_doc_for_user(conn, user_id: str):
 
 def _active_pet_user_has_items(user_id: str):
     _ensure_pet_storage()
-    q = player_data_manager._quote_ident
-    with player_data_manager._conn_lock:
-        if not player_data_manager.conn.table_exists(PET_ITEM_TABLE):
+    q = _player_data_manager()._quote_ident
+    with _player_data_manager()._conn_lock:
+        if not _player_data_manager().conn.table_exists(PET_ITEM_TABLE):
             return False
-        cursor = player_data_manager._get_cursor()
+        cursor = _player_data_manager()._get_cursor()
         cursor.execute(
             f"""
             SELECT 1
@@ -966,9 +985,9 @@ def _active_pet_user_has_items(user_id: str):
 
 def _active_pet_meta_exists(user_id: str):
     _ensure_pet_storage()
-    q = player_data_manager._quote_ident
-    with player_data_manager._conn_lock:
-        cursor = player_data_manager._get_cursor()
+    q = _player_data_manager()._quote_ident
+    with _player_data_manager()._conn_lock:
+        cursor = _player_data_manager()._get_cursor()
         cursor.execute(
             f"""
             SELECT 1

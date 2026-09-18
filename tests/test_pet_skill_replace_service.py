@@ -15,6 +15,13 @@ class T(unittest.TestCase):
   self.assertIn("def _sql_message(", source)
   self.assertIn("_sql_message().goods_num(", source)
   self.assertNotIn("sql_message = XiuxianDateManage()", source)
+  pet_source = Path("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/pet_system.py").read_text(encoding="utf-8")
+  self.assertIn("_player_data_manager_instance = None", pet_source)
+  self.assertIn("def _player_data_manager(", pet_source)
+  self.assertNotIn("player_data_manager = PlayerDataManager()", pet_source)
+  self.assertIn("_player_data_manager().get_doc(", pet_source)
+  self.assertIn("_player_data_manager().save_doc(", pet_source)
+  self.assertIn("_player_data_manager().get_all_records(", pet_source)
 
  def setUp(self):
   self.t=tempfile.TemporaryDirectory(); self.d=Path(self.t.name)/'d'
