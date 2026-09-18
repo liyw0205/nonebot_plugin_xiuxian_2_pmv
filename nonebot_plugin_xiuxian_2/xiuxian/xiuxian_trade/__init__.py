@@ -80,11 +80,7 @@ xianshi_repository = TradeRepository(
 )
 _xianshi_purchase_service_instance = None
 _guishi_stone_service_instance = None
-auction_queue_service = AuctionQueueService(
-    get_paths().game_db,
-    get_paths().trade_db,
-    XiuConfig().max_goods_num,
-)
+_auction_queue_service_instance = None
 auction_session_service = AuctionSessionService(
     get_paths().game_db, get_paths().trade_db
 )
@@ -107,6 +103,17 @@ def _guishi_stone_service():
             get_paths().game_db, get_paths().trade_db
         )
     return _guishi_stone_service_instance
+
+
+def _auction_queue_service():
+    global _auction_queue_service_instance
+    if _auction_queue_service_instance is None:
+        _auction_queue_service_instance = AuctionQueueService(
+            get_paths().game_db,
+            get_paths().trade_db,
+            XiuConfig().max_goods_num,
+        )
+    return _auction_queue_service_instance
 
 
 def _xianshi_purchase_service():
@@ -2540,7 +2547,7 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await auction_add.finish()
 
     auction_rules = auction_config.get_auction_rules()
-    result = auction_queue_service.enqueue(
+    result = _auction_queue_service().enqueue(
         _auction_queue_operation_id(event, "enqueue", user_id, goods_id),
         user_id,
         goods_id,
@@ -2612,7 +2619,7 @@ async def auction_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         operation_id = _auction_queue_operation_id(
             event, "dequeue", user_id, goods_id
         )
-        previous = auction_queue_service.get_operation(
+        previous = _auction_queue_service().get_operation(
             operation_id, "dequeue", user_id, goods_id
         )
         if previous is not None and previous.succeeded:
@@ -2641,7 +2648,7 @@ async def auction_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     operation_id = _auction_queue_operation_id(
         event, "dequeue", user_id, item_to_remove["item_id"]
     )
-    result = auction_queue_service.dequeue(
+    result = _auction_queue_service().dequeue(
         operation_id,
         user_id,
         item_to_remove["item_id"],

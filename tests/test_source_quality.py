@@ -516,8 +516,8 @@ class SourceQualityTests(unittest.TestCase):
         end = command_source.index("@my_auction.handle", start)
         command = command_source[start:end]
 
-        self.assertIn("auction_queue_service.enqueue(", command)
-        self.assertIn("auction_queue_service.dequeue(", command)
+        self.assertIn("_auction_queue_service().enqueue(", command)
+        self.assertIn("_auction_queue_service().dequeue(", command)
         self.assertNotIn("sql_message.consume_trade_item(", command)
         self.assertNotIn("trade_manager.add_player_auction_item(", command)
         self.assertNotIn("trade_manager.claim_player_auction_item(", command)
