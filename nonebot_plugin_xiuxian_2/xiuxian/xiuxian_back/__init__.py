@@ -85,7 +85,7 @@ from .backpack_render import (
 
 # 初始化组件
 items = Items()
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 _equipment_service_instance = None
 _cultivation_item_service_instance = None
 _stone_reward_service_instance = None
@@ -99,6 +99,13 @@ _skill_learning_service_instance = None
 _batch_item_use_service_instance = None
 _backpack_repair_service_instance = None
 runtime_ids = UUIDGenerator()
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _three_cultivation_pill_service():
@@ -616,7 +623,7 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
         await goods_re_root.finish()
     if alchemy_result.status == "item_insufficient":
-        back_item = sql_message.get_item_by_good_id_and_user_id(user_id, goods_id)
+        back_item = _sql_message().get_item_by_good_id_and_user_id(user_id, goods_id)
         goods_num = int((back_item or {}).get("goods_num", 0) or 0)
         available_num = get_alchemy_available_num(back_item) if back_item else 0
         if not back_item or goods_num <= 0:
@@ -654,7 +661,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     # === 特殊处理回血丹 ===
     if len(args) > 0 and args[0] == "回血丹":
-        back_msg = sql_message.get_back_msg(user_id)
+        back_msg = _sql_message().get_back_msg(user_id)
         if not back_msg:
             msg = "💼 道友的背包空空如也！"
             await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="快速炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
@@ -737,7 +744,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await fast_alchemy.finish()
     
     # === 获取背包物品 ===
-    back_msg = sql_message.get_back_msg(user_id)
+    back_msg = _sql_message().get_back_msg(user_id)
     if not back_msg:
         msg = "💼 道友的背包空空如也！"
         await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="快速炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
@@ -843,7 +850,7 @@ async def no_use_zb_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     user_id = user_info['user_id']
     arg = args.extract_plain_text().strip()
 
-    back_msg = sql_message.get_back_msg(user_id)  # 背包sql信息,list(back)
+    back_msg = _sql_message().get_back_msg(user_id)  # 背包sql信息,list(back)
     if not back_msg:
         msg = "道友的背包空空如也！"
         await handle_send(bot, event, msg, md_type="背包", k1="卸装", v1="卸装", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
@@ -1186,7 +1193,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 msg = _back_op_fail_msg(result, action="装备")
 
     elif goods_type == "技能":
-        goods_num = sql_message.goods_num(user_info['user_id'], goods_id)
+        goods_num = _sql_message().goods_num(user_info['user_id'], goods_id)
         if goods_num <= 0:
             msg = f"背包中没有足够的 {item_name} ！"
             await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
@@ -1210,7 +1217,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 return
 
     elif goods_type == "丹药":
-        goods_num = sql_message.goods_num(user_info['user_id'], goods_id)
+        goods_num = _sql_message().goods_num(user_info['user_id'], goods_id)
         if goods_num <= 0:
             msg = f"背包中没有足够的 {item_name} ！"
             await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
@@ -1230,7 +1237,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
         msg = f"请使用【道具使用 {goods_info['name']}】命令来使用此道具。"
 
     elif goods_type == "神物":
-        goods_num = sql_message.goods_num(user_info['user_id'], goods_id)
+        goods_num = _sql_message().goods_num(user_info['user_id'], goods_id)
         if goods_num <= 0:
             msg = f"背包中没有足够的 {item_name} ！"
             await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
@@ -1239,7 +1246,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
             msg = f"道友背包中的{item_name}数量不足，当前仅有{goods_num}个！"
             await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
             await use.finish()
-        user_info_full = sql_message.get_user_info_with_id(user_id)
+        user_info_full = _sql_message().get_user_info_with_id(user_id)
         if (goods_info['rank'] + added_ranks) < convert_rank(user_info_full['level'])[0]:
             msg = f"神物：{goods_info['name']}的使用境界为{goods_info['境界']}以上，道友不满足条件！"
         else:
@@ -1283,7 +1290,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 )
             else:
                 exp = goods_info['buff'] * num
-                root_rate = sql_message.get_root_rate(user_info_full['root_type'], user_id)
+                root_rate = _sql_message().get_root_rate(user_info_full['root_type'], user_id)
                 level_spend = jsondata.level_data()[user_info_full['level']]["spend"]
                 result = _cultivation_item_service().apply(
                     _cultivation_item_operation_id(event, user_id, goods_id),
@@ -1414,7 +1421,7 @@ async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     # 祈愿石由结算服务按原始请求数量校验库存，确保同一消息可以幂等重放。
     if goods_id != 20005:
         replay_safe_item_ids = {20001, 20007, 20012, 20013, 20018}
-        goods_num = sql_message.goods_num(user_info['user_id'], goods_id)
+        goods_num = _sql_message().goods_num(user_info['user_id'], goods_id)
         if goods_id not in replay_safe_item_ids:
             if goods_num <= 0:
                 msg = f"背包中没有足够的 {item_name} ！"
@@ -1474,7 +1481,7 @@ async def use_pet_egg_item(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, "宠物蛋稀有度配置异常，无法孵化。")
         return
 
-    have = sql_message.goods_num(user_id, item_id)
+    have = _sql_message().goods_num(user_id, item_id)
     use_num = min(max(1, int(num)), int(have))
     if use_num <= 0:
         await handle_send(bot, event, f"背包中没有{item_info.get('name', '宠物蛋')}。")
@@ -1760,7 +1767,7 @@ async def use_three_cultivation_pill(bot: Bot, event: GroupMessageEvent | Privat
         return
 
     user_id = user_info['user_id']
-    user_mes = sql_message.get_user_info_with_id(user_id)
+    user_mes = _sql_message().get_user_info_with_id(user_id)
 
     if not user_mes:
         await handle_send(bot, event, "获取用户信息失败！")
@@ -1770,7 +1777,7 @@ async def use_three_cultivation_pill(bot: Bot, event: GroupMessageEvent | Privat
     current_exp = user_mes['exp']
 
     # 获取单次修炼的修为
-    level_rate = sql_message.get_root_rate(user_mes['root_type'], user_id)           # 灵根倍率
+    level_rate = _sql_message().get_root_rate(user_mes['root_type'], user_id)           # 灵根倍率
     realm_rate = jsondata.level_data()[level]["spend"]                               # 境界倍率
 
     user_buff_data = UserBuffDate(user_id)
@@ -1940,7 +1947,7 @@ async def chakan_wupin_(
     await chakan_wupin.finish()
 
 def _build_main_backpack_sections_for_md(user_id: str):
-    back_data = sql_message.get_back_msg(user_id)
+    back_data = _sql_message().get_back_msg(user_id)
     if not back_data:
         return []
 
@@ -2051,7 +2058,7 @@ def _build_danyao_sections_for_md(user_id: str):
     - 按 buff_type 分类
     - 同分类按名字排序
     """
-    back_data = sql_message.get_back_msg(user_id)
+    back_data = _sql_message().get_back_msg(user_id)
     if not back_data:
         return []
 
@@ -2100,7 +2107,7 @@ def _build_yaocai_sections_for_md(user_id: str):
     - 按 一~九品药材 分类
     - 同分类按名字排序
     """
-    back_data = sql_message.get_back_msg(user_id)
+    back_data = _sql_message().get_back_msg(user_id)
     if not back_data:
         return []
 
