@@ -2435,6 +2435,8 @@
 
 2026-09-18 partner storage lazy construction live safety：提交 `4462b583` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T143410Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
 
+2026-09-18 partner facade lazy construction slice：`partner.py` 延迟 compatibility `PlayerDataManager`，通过同一 lazy proxy绑定已完成的 `partner_storage`，覆盖 title/statistics/rank readers及兼容 title write；Partner/Mentor relation service的双库事务、operation/replay、state ownership未改变。Partner/mentor regression共 266 passed、8 subtests passed，compileall、inventory、diff check通过。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。

@@ -72,7 +72,7 @@ runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 _sql_message_instance = None
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
-player_data_manager = PlayerDataManager()
+_player_data_manager_instance = None
 _partner_cultivation_service_instance = None
 _partner_token_service_instance = None
 _partner_bind_service_instance = None
@@ -105,6 +105,25 @@ MENTOR_BREAKTHROUGH_REWARD_LIMIT = 27
 MENTOR_BREAKTHROUGH_REWARD_BASE_RATE = getattr(mentor_config, "mentor_breakthrough_reward_base_rate", 0.005)
 MENTOR_BREAKTHROUGH_REWARD_MIN_RATE = getattr(mentor_config, "mentor_breakthrough_reward_min_rate", 0.001)
 MENTOR_BREAKTHROUGH_REWARD_MAX_RATE = getattr(mentor_config, "mentor_breakthrough_reward_max_rate", 0.01)
+
+
+def _resolve_player_data_manager():
+    global _player_data_manager_instance
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+    return _player_data_manager_instance
+
+
+class _LazyPlayerDataManager:
+    def __getattr__(self, name):
+        return getattr(_resolve_player_data_manager(), name)
+
+
+player_data_manager = _LazyPlayerDataManager()
+
+
+def _player_data_manager():
+    return player_data_manager
 
 
 def _sql_message():
@@ -256,7 +275,7 @@ def _mentor_transmission_service():
 TITLE_JSONPATH = get_paths().data / "修炼物品" / "称号.json"
 _mentor_title_cache = None
 bind_partner_storage(
-    player_data_manager,
+    _player_data_manager(),
     mentor_history_limit=MENTOR_HISTORY_LIMIT,
     mentor_breakthrough_reward_limit=MENTOR_BREAKTHROUGH_REWARD_LIMIT,
 )
@@ -1464,7 +1483,7 @@ def _get_mentor_title_by_id(title_id):
 
 
 def _get_user_title_ids(user_id):
-    unlocked = player_data_manager.get_field_data(str(user_id), "title", "unlocked")
+    unlocked = _player_data_manager().get_field_data(str(user_id), "title", "unlocked")
     if not unlocked:
         return []
     if isinstance(unlocked, list):
@@ -1485,7 +1504,7 @@ def _grant_title_to_user(user_id, title_id):
     if str(title_id) in unlocked_set:
         return False, f"用户已拥有称号【{title_data['name']}】"
     unlocked_set.add(str(title_id))
-    player_data_manager.update_or_write_data(
+    _player_data_manager().update_or_write_data(
         str(user_id), "title", "unlocked", list(unlocked_set), data_type="TEXT"
     )
     return True, f"已赠送称号【{title_data['name']}】"
@@ -1505,7 +1524,7 @@ def _grant_mentor_title(user_id, title_key):
 
 
 def _grant_mentor_titles_by_stats(user_id):
-    stats = player_data_manager.get_fields(str(user_id), "statistics") or {}
+    stats = _player_data_manager().get_fields(str(user_id), "statistics") or {}
     granted = []
     if safe_int(stats.get("师徒传功次数")) >= 100:
         msg = _grant_mentor_title(user_id, "transmission_100")
@@ -2161,7 +2180,7 @@ async def my_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, c
         cd_lines.append(f"拜师冷却：{_format_seconds(apprentice_cd)}")
     cd_msg = "\n".join(cd_lines) if cd_lines else "无"
 
-    stats_data = player_data_manager.get_fields(user_id, "statistics") or {}
+    stats_data = _player_data_manager().get_fields(user_id, "statistics") or {}
     remain = _get_remaining_mentor_transmission(user_id)
     mentor_protect_status = "开启（自动拒绝拜师）" if mentor_data.get("mentor_protect") == "on" else "关闭（允许拜师申请）"
     pending_count = _count_pending_mentor_invites(user_id)
@@ -2251,7 +2270,7 @@ async def mentor_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await handle_send(bot, event, msg, md_type="我要修仙")
         await mentor_rank.finish()
 
-    all_stats = player_data_manager.get_all_records("statistics")
+    all_stats = _player_data_manager().get_all_records("statistics")
     rank_rows = []
     for stats in all_stats:
         user_id = str(stats.get("user_id", ""))
@@ -2360,7 +2379,7 @@ async def unbind_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     mentor_info = _sql_message().get_user_real_info(mentor_id)
     mentor_name = mentor_info["user_name"] if mentor_info else str(mentor_id)
     if is_wujie_or_above(user_info["level"]):
-        mentor_stats = player_data_manager.get_fields(mentor_id, "statistics") or {}
+        mentor_stats = _player_data_manager().get_fields(mentor_id, "statistics") or {}
         mentor_titles = [MENTOR_TITLE_IDS["mentor_graduate"]]
         if safe_int(mentor_stats.get("培养出师徒弟"), 0) + 1 >= 5:
             mentor_titles.append(MENTOR_TITLE_IDS["mentor_graduate_5"])
@@ -2544,7 +2563,7 @@ async def partner_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await partner_rank.finish()
 
     # 获取所有用户的affection数据
-    all_user_integral = player_data_manager.get_all_field_data("partner", "affection")
+    all_user_integral = _player_data_manager().get_all_field_data("partner", "affection")
     
     # 排序数据
     sorted_integral = sorted(all_user_integral, key=lambda x: safe_int(x[1]), reverse=True)
@@ -2553,7 +2572,7 @@ async def partner_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     rank_lines = ["【道侣排行榜】"]
     for i, (user_id, affection) in enumerate(sorted_integral[:50], start=1):
         user_info = _sql_message().get_user_info_with_id(user_id)
-        partner_id = player_data_manager.get_field_data(str(user_id), "partner", "partner_id")
+        partner_id = _player_data_manager().get_field_data(str(user_id), "partner", "partner_id")
         partner_info = _sql_message().get_user_info_with_id(partner_id)
         if partner_info is None:
             continue
