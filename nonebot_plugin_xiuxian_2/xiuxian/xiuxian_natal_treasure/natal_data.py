@@ -2,7 +2,16 @@ import json
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
 from .natal_config import *
 
-player_data = PlayerDataManager()
+_player_data_manager_instance = None
+player_data = None
+
+
+def _player_data_manager():
+    global _player_data_manager_instance, player_data
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+        player_data = _player_data_manager_instance
+    return _player_data_manager_instance
 
 # ======================
 #   本命法宝数据管理类
@@ -56,7 +65,7 @@ class NatalTreasure:
         }
         
         # 逐个检查字段是否存在并添加，以兼容旧数据
-        record = player_data.get_fields(self.user_id, self.table)
+        record = _player_data_manager().get_fields(self.user_id, self.table)
         
         # 记录是否存在（判断是否是首次创建）
         is_new_record = not bool(record)
@@ -65,7 +74,7 @@ class NatalTreasure:
             for field, default_value in default_data.items():
                 # 只有当default_value为字典时，才使用JSON字符串存储，否则直接存储
                 store_value = json.dumps(default_value) if isinstance(default_value, dict) else default_value
-                player_data.update_or_write_data(self.user_id, self.table, field, store_value, data_type=type(default_value).__name__.upper() if not isinstance(default_value, dict) else 'TEXT')
+                _player_data_manager().update_or_write_data(self.user_id, self.table, field, store_value, data_type=type(default_value).__name__.upper() if not isinstance(default_value, dict) else 'TEXT')
         else: # 如果记录已存在，检查并添加新字段
             for field, default_value in default_data.items():
                 # 如果这个字段在数据库中不存在或值为None，则设置默认值
@@ -73,7 +82,7 @@ class NatalTreasure:
                 if field not in record or record.get(field) is None: 
                     # 只有当字段不存在于record中，或者其值为None时，才设置默认值
                     store_value = json.dumps(default_value) if isinstance(default_value, dict) else default_value
-                    player_data.update_or_write_data(self.user_id, self.table, field, store_value, data_type=type(default_value).__name__.upper() if not isinstance(default_value, dict) else 'TEXT')
+                    _player_data_manager().update_or_write_data(self.user_id, self.table, field, store_value, data_type=type(default_value).__name__.upper() if not isinstance(default_value, dict) else 'TEXT')
         self._natal_data_cache = None # 清除缓存，以便下次从数据库加载最新数据
 
     def exists(self) -> bool:
@@ -82,7 +91,7 @@ class NatalTreasure:
         :return: True如果已觉醒 (form不为0)，False否则。
         """
         self._ensure_record() # 确保字段存在
-        form = player_data.get_field_data(self.user_id, self.table, "form")
+        form = _player_data_manager().get_field_data(self.user_id, self.table, "form")
         return form is not None and form != 0
 
     def get_data(self) -> dict | None:
@@ -94,7 +103,7 @@ class NatalTreasure:
             return self._natal_data_cache # 返回缓存数据
 
         self._ensure_record() # 确保字段存在
-        data = player_data.get_fields(self.user_id, self.table)
+        data = _player_data_manager().get_fields(self.user_id, self.table)
         if not data:
             return None
         
@@ -138,7 +147,7 @@ class NatalTreasure:
             value = json.dumps(value) # 字典类型存储为JSON字符串
             data_type = 'TEXT'
         
-        player_data.update_or_write_data(self.user_id, self.table, field, value, data_type=data_type)
+        _player_data_manager().update_or_write_data(self.user_id, self.table, field, value, data_type=data_type)
         self._natal_data_cache = None # 清除缓存，以便下次从数据库加载最新数据
 
     def get_effect_value(self, effect_type: NatalEffectType, natal_treasure_level: int = 0, is_first_gain: bool = False) -> float | tuple[float, float]:
