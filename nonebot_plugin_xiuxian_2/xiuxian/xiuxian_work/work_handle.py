@@ -11,8 +11,15 @@ import os
 from pathlib import Path
 import random
 
-sql_message = XiuxianDateManage()  # sql类
+_sql_message_instance = None
 items = Items()
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 class workhandle(XiuxianJsonDate):
     def do_work(self, key, work_list=None, name=None, level="江湖好手", exp=None, user_id=None, persist=True, random_source=None, clock=None):
@@ -32,7 +39,7 @@ class workhandle(XiuxianJsonDate):
         """
         if key == 0:  # 生成新悬赏令
             # 获取用户信息
-            user_info = sql_message.get_user_info_with_id(user_id)
+            user_info = _sql_message().get_user_info_with_id(user_id)
             if not user_info:
                 return []
                 
