@@ -14,6 +14,15 @@ from .periods import get_season_key
 from .season_service import build_season_rank_key, normalize_season_mode
 from .xiuxian2_handle import XiuxianDateManage
 
+_sql_message_instance = None
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
+
 SeasonNow = date | datetime | None
 
 SEASON_RANK_MODES = ("weekly", "monthly", "quarterly")
@@ -86,9 +95,8 @@ def _normalize_subject(
 
 
 def ensure_season_rank_table() -> None:
-    sql_message = XiuxianDateManage()
-    with sql_message.lock:
-        cur = sql_message.conn.cursor()
+    with _sql_message().lock:
+        cur = _sql_message().conn.cursor()
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS season_rank (
@@ -111,7 +119,7 @@ def ensure_season_rank_table() -> None:
             ON season_rank(mode, period_key, rank_type, score)
             """
         )
-        sql_message._commit_write()
+        _sql_message()._commit_write()
 
 
 def _build_rank_identity(
@@ -151,10 +159,9 @@ def add_season_rank_score(
     rank_key, normalized_mode, period_key = _build_rank_identity(rank_type_text, mode, now)
     extra_text = _json_dumps(extra, {})
     updated_at = _now_text()
-    sql_message = XiuxianDateManage()
 
-    with sql_message.lock:
-        cur = sql_message.conn.cursor()
+    with _sql_message().lock:
+        cur = _sql_message().conn.cursor()
         cur.execute(
             """
             UPDATE season_rank
@@ -186,7 +193,7 @@ def add_season_rank_score(
                     updated_at,
                 ),
             )
-        sql_message._commit_write()
+        _sql_message()._commit_write()
 
     return {
         "rank_key": rank_key,
@@ -224,8 +231,7 @@ def get_top_season_rank(
 
     rank_key, _, _ = _build_rank_identity(rank_type_text, mode, now)
     limit_value = max(1, min(_to_int(limit, 10), 100))
-    sql_message = XiuxianDateManage()
-    rows = sql_message._read_query(
+    rows = _sql_message()._read_query(
         """
         SELECT
             r.rank_key,
@@ -266,8 +272,7 @@ def get_user_season_rank(
 
     rank_key, _, _ = _build_rank_identity(rank_type_text, mode, now)
     user_id_text = str(user_id)
-    sql_message = XiuxianDateManage()
-    row = sql_message._read_query(
+    row = _sql_message()._read_query(
         """
         SELECT
             r.rank_key,
@@ -293,7 +298,7 @@ def get_user_season_rank(
     if not row:
         return None
 
-    rank_value_row = sql_message._read_query(
+    rank_value_row = _sql_message()._read_query(
         """
         SELECT COUNT(1) + 1 AS rank_value
         FROM season_rank
