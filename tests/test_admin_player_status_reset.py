@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import importlib
 from pathlib import Path
 
 import nonebot
@@ -12,6 +13,14 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin.transaction_service import (
     AdminPlayerStatusResetService,
 )
 from tests.test_db_backend import db_backend
+
+
+def test_admin_facade_defers_player_status_service_construction():
+    admin = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin"
+    )
+    assert admin._admin_player_status_reset_service_instance is None
+    assert admin._admin_player_status_batch_reset_service_instance is None
 
 
 class AdminPlayerStatusResetTests(unittest.TestCase):
@@ -123,7 +132,7 @@ class AdminPlayerStatusResetTests(unittest.TestCase):
         start = source.index("async def restate_")
         handler = source[start:source.index("@set_xiuxian.handle", start)]
         single = handler[handler.index("if give_qq:"):]
-        self.assertIn("admin_player_status_reset_service.reset(", single)
+        self.assertIn("_admin_player_status_reset_service().reset(", single)
         self.assertNotIn("sql_message.restate(give_qq)", single)
         self.assertNotIn("sql_message.update_user_stamina(give_qq", single)
 

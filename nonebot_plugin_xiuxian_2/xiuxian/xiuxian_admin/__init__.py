@@ -100,11 +100,8 @@ _admin_accessory_adjustment_service_instance = None
 _admin_accessory_batch_adjustment_service_instance = None
 _admin_impart_stone_adjustment_service_instance = None
 _admin_impart_stone_batch_adjustment_service_instance = None
-admin_player_status_reset_service = AdminPlayerStatusResetService(get_paths().game_db)
-admin_player_status_batch_reset_service = AdminPlayerStatusBatchResetService(
-    get_paths().game_db,
-    admin_player_status_reset_service,
-)
+_admin_player_status_reset_service_instance = None
+_admin_player_status_batch_reset_service_instance = None
 admin_blackhouse_status_service = AdminBlackhouseStatusService(get_paths().game_db)
 
 
@@ -146,6 +143,25 @@ def _admin_impart_stone_batch_adjustment_service():
             _admin_impart_stone_adjustment_service(),
         )
     return _admin_impart_stone_batch_adjustment_service_instance
+
+
+def _admin_player_status_reset_service():
+    global _admin_player_status_reset_service_instance
+    if _admin_player_status_reset_service_instance is None:
+        _admin_player_status_reset_service_instance = AdminPlayerStatusResetService(
+            get_paths().game_db
+        )
+    return _admin_player_status_reset_service_instance
+
+
+def _admin_player_status_batch_reset_service():
+    global _admin_player_status_batch_reset_service_instance
+    if _admin_player_status_batch_reset_service_instance is None:
+        _admin_player_status_batch_reset_service_instance = AdminPlayerStatusBatchResetService(
+            get_paths().game_db,
+            _admin_player_status_reset_service(),
+        )
+    return _admin_player_status_batch_reset_service_instance
 
 
 def _admin_level_change_service():
@@ -1407,10 +1423,10 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
     if not args:
         _batch_operator_id = str(get_user_id(event) or "unknown")
         _batch_max_stamina = XiuConfig().max_stamina
-        _batch_running = admin_player_status_batch_reset_service.find_running(
+        _batch_running = _admin_player_status_batch_reset_service().find_running(
             _batch_operator_id, _batch_max_stamina
         )
-        _batch_reset = lambda *call_args, **call_kwargs: admin_player_status_batch_reset_service.reset(
+        _batch_reset = lambda *call_args, **call_kwargs: _admin_player_status_batch_reset_service().reset(
             *call_args, **call_kwargs
         )
     give_qq = get_at_user_id(args)
@@ -1421,7 +1437,7 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         all_users = sql_message.get_all_user_id()
         operator_id = str(get_user_id(event) or "unknown")
         max_stamina = XiuConfig().max_stamina
-        running_operation = admin_player_status_batch_reset_service.find_running(
+        running_operation = _admin_player_status_batch_reset_service().find_running(
             operator_id, max_stamina
         )
         if not all_users and not running_operation:
@@ -1434,7 +1450,7 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 
         def _work():
             return run_chunked_until_done(
-                lambda: admin_player_status_batch_reset_service.reset(
+                lambda: _admin_player_status_batch_reset_service().reset(
                     operation_id,
                     operator_id,
                     users,
@@ -1471,12 +1487,12 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         else:
             give_qq = None
     if give_qq:
-        expected_state = admin_player_status_reset_service.snapshot(give_qq)
+        expected_state = _admin_player_status_reset_service().snapshot(give_qq)
         if expected_state is None:
             await handle_send(bot, event, "目标玩家已不存在")
             await restate.finish()
         try:
-            result = admin_player_status_reset_service.reset(
+            result = _admin_player_status_reset_service().reset(
                 _admin_operation_id(event, "player-status-reset", str(give_qq)),
                 str(get_user_id(event) or "unknown"),
                 give_qq,
