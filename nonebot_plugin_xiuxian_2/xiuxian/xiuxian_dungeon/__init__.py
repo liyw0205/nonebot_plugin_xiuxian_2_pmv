@@ -109,8 +109,23 @@ DUNGEON_SHOP = {
     20004: {"name": "蕴灵石", "cost": 1000000},
 }
 
-# 统一单例 DungeonManager
-dungeon_manager = DungeonManager()
+_dungeon_manager_instance = None
+
+
+def _dungeon_manager():
+    global _dungeon_manager_instance
+    if _dungeon_manager_instance is None:
+        _dungeon_manager_instance = DungeonManager()
+    return _dungeon_manager_instance
+
+
+class _LazyDungeonManager:
+    def __getattr__(self, name):
+        return getattr(_dungeon_manager(), name)
+
+
+# Preserve the module-level manager API without importing dungeon state.
+dungeon_manager = _LazyDungeonManager()
 
 # =========================
 # 组队冷却配置

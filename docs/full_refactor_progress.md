@@ -2409,6 +2409,8 @@
 
 2026-09-18 dungeon team manager lazy construction live safety：提交 `952e0707` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T132026Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
 
+2026-09-18 dungeon manager lazy import slice：`xiuxian_dungeon.__init__` 以 lazy proxy 保留 module-level `dungeon_manager` API；首次 method/property access才执行原 `DungeonManager` 单例构造、schema ensure、`DungeonResetService` 绑定和今日 crossday reset/replay，未改变 handler、operation ID、锁或 team/explore transaction ownership。Dungeon tests共 101 passed、4 subtests passed，source/architecture/scheduler bridge 201 passed，compileall、inventory、diff check通过。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。
