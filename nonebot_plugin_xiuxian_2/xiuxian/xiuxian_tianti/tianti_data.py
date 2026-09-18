@@ -10,7 +10,14 @@ DATABASE = get_paths().data
 TIANTI_LEVEL_FILE = DATABASE / "炼体" / "炼体境界.json"
 TIANTI_QIAOXUE_FILE = DATABASE / "炼体" / "炼体窍穴.json"
 
-player_data_manager = PlayerDataManager()
+_player_data_manager_instance = None
+
+
+def _player_data_manager():
+    global _player_data_manager_instance
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+    return _player_data_manager_instance
 
 _TIANTI_LEVEL_CACHE = None
 _TIANTI_QIAOXUE_CACHE = None
@@ -308,7 +315,7 @@ class TiantiDataManager:
 
     def get_user_tianti_info(self, user_id: str):
         user_id = str(user_id)
-        row = player_data_manager.get_fields(user_id, self.TABLE)
+        row = _player_data_manager().get_fields(user_id, self.TABLE)
 
         if not row:
             data = self._default()
@@ -331,4 +338,4 @@ class TiantiDataManager:
         for k, v in clean_data.items():
             if isinstance(v, (list, dict)):
                 v = json.dumps(v, ensure_ascii=False)
-            player_data_manager.update_or_write_data(user_id, self.TABLE, k, v, data_type="TEXT")
+            _player_data_manager().update_or_write_data(user_id, self.TABLE, k, v, data_type="TEXT")
