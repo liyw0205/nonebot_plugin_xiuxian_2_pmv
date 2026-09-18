@@ -42,7 +42,7 @@ from ...infrastructure.json_document import JsonDocumentReader
 from ...infrastructure.ids import UUIDGenerator
 
 _sql_message_instance = None
-player_data_manager = PlayerDataManager()
+_player_data_manager_instance = None
 
 combat_settlement_application = CombatSettlementApplication(
     get_paths().game_db,
@@ -59,6 +59,25 @@ runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
 map_document_reader = JsonDocumentReader()
+
+
+def _resolve_player_data_manager():
+    global _player_data_manager_instance
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+    return _player_data_manager_instance
+
+
+class _LazyPlayerDataManager:
+    def __getattr__(self, name):
+        return getattr(_resolve_player_data_manager(), name)
+
+
+player_data_manager = _LazyPlayerDataManager()
+
+
+def _player_data_manager():
+    return player_data_manager
 
 
 def _sql_message():
@@ -446,7 +465,7 @@ def _parse_dt(s: str | None):
 
 
 def _get_daily_limit(uid: str):
-    d = player_data_manager.get_fields(uid, MAP_LIMIT_TABLE) or {}
+    d = _player_data_manager().get_fields(uid, MAP_LIMIT_TABLE) or {}
     today = _today_str()
     if d.get("date") != today:
         d = {
@@ -457,13 +476,13 @@ def _get_daily_limit(uid: str):
             "resource_total_count": 0,
         }
         for k, v in d.items():
-            player_data_manager.update_or_write_data(uid, MAP_LIMIT_TABLE, k, v)
+            _player_data_manager().update_or_write_data(uid, MAP_LIMIT_TABLE, k, v)
     return d
 
 
 def _save_daily_limit(uid: str, d: dict):
     for k, v in d.items():
-        player_data_manager.update_or_write_data(uid, MAP_LIMIT_TABLE, k, v)
+        _player_data_manager().update_or_write_data(uid, MAP_LIMIT_TABLE, k, v)
 
 
 def _inc_daily_count(uid: str, key: str, n: int = 1):
@@ -491,13 +510,13 @@ def _get_reward_decay(uid: str):
 
 
 def _get_cd(uid: str, cd_key: str):
-    s = player_data_manager.get_field_data(uid, MAP_CD_TABLE, cd_key)
+    s = _player_data_manager().get_field_data(uid, MAP_CD_TABLE, cd_key)
     return _parse_dt(s)
 
 
 def _set_cd(uid: str, cd_key: str, seconds: int):
     t = runtime_clock.now().replace(tzinfo=None) + timedelta(seconds=seconds)
-    player_data_manager.update_or_write_data(uid, MAP_CD_TABLE, cd_key, t.strftime("%Y-%m-%d %H:%M:%S"))
+    _player_data_manager().update_or_write_data(uid, MAP_CD_TABLE, cd_key, t.strftime("%Y-%m-%d %H:%M:%S"))
     return t
 
 
@@ -512,26 +531,26 @@ def _default_map_mission():
 
 
 def _get_map_mission(uid: str):
-    d = player_data_manager.get_fields(str(uid), MAP_MISSION_TABLE) or {}
+    d = _player_data_manager().get_fields(str(uid), MAP_MISSION_TABLE) or {}
     default = _default_map_mission()
 
     # 跨天重置
     if d.get("date") != _today_str():
         d = default.copy()
         for k, v in d.items():
-            player_data_manager.update_or_write_data(str(uid), MAP_MISSION_TABLE, k, v)
+            _player_data_manager().update_or_write_data(str(uid), MAP_MISSION_TABLE, k, v)
         return d
 
     for k, v in default.items():
         if k not in d or d.get(k) is None:
             d[k] = v
-            player_data_manager.update_or_write_data(str(uid), MAP_MISSION_TABLE, k, v)
+            _player_data_manager().update_or_write_data(str(uid), MAP_MISSION_TABLE, k, v)
     return d
 
 
 def _save_map_mission(uid: str, d: dict):
     for k, v in d.items():
-        player_data_manager.update_or_write_data(str(uid), MAP_MISSION_TABLE, k, v)
+        _player_data_manager().update_or_write_data(str(uid), MAP_MISSION_TABLE, k, v)
 
 
 def _roll_new_map_mission(uid: str, *, random_source=None, clock=None):
@@ -642,11 +661,11 @@ def _get_realm_heaven_order(map_data, realm: str):
 
 
 def _get_player_map_status(user_id: str, map_data: dict):
-    data = player_data_manager.get_fields(str(user_id), MAP_TABLE)
+    data = _player_data_manager().get_fields(str(user_id), MAP_TABLE)
     if data and data.get("realm") and data.get("heaven") and data.get("node_id"):
         if data.get("realm") == "仙域" and data.get("heaven") == "九天天":
             data["heaven"] = "九重天"
-            player_data_manager.update_or_write_data(str(user_id), MAP_TABLE, "heaven", "九重天")
+            _player_data_manager().update_or_write_data(str(user_id), MAP_TABLE, "heaven", "九重天")
         realm = data.get("realm")
         if realm not in _all_realms(map_data):
             return _init_player_map_status(user_id, map_data)
@@ -654,18 +673,18 @@ def _get_player_map_status(user_id: str, map_data: dict):
         heaven = _resolve_heaven_alias(map_data, realm, data.get("heaven"))
         if heaven != data.get("heaven"):
             data["heaven"] = heaven
-            player_data_manager.update_or_write_data(str(user_id), MAP_TABLE, "heaven", heaven)
+            _player_data_manager().update_or_write_data(str(user_id), MAP_TABLE, "heaven", heaven)
 
         if heaven not in map_data[realm]["heavens"]:
             order = _get_realm_heaven_order(map_data, realm)
             heaven = order[0]
             data["heaven"] = heaven
-            player_data_manager.update_or_write_data(str(user_id), MAP_TABLE, "heaven", heaven)
+            _player_data_manager().update_or_write_data(str(user_id), MAP_TABLE, "heaven", heaven)
 
         if not _find_node_by_id(map_data, realm, heaven, data.get("node_id")):
             node = _nodes(map_data, realm, heaven)[0]
             data["node_id"] = node["id"]
-            player_data_manager.update_or_write_data(str(user_id), MAP_TABLE, "node_id", node["id"])
+            _player_data_manager().update_or_write_data(str(user_id), MAP_TABLE, "node_id", node["id"])
 
         return data
     return _init_player_map_status(user_id, map_data)
@@ -684,19 +703,19 @@ def _init_player_map_status(user_id: str, map_data: dict, *, random_source=None)
         "visited_nodes": [node["id"]],
     }
     for k, v in init_data.items():
-        player_data_manager.update_or_write_data(str(user_id), MAP_TABLE, k, v)
+        _player_data_manager().update_or_write_data(str(user_id), MAP_TABLE, k, v)
     return init_data
 
 
 def _save_map_status(uid: str, realm: str, heaven: str, node_id: str):
-    player_data_manager.update_or_write_data(uid, MAP_TABLE, "realm", realm)
-    player_data_manager.update_or_write_data(uid, MAP_TABLE, "heaven", heaven)
-    player_data_manager.update_or_write_data(uid, MAP_TABLE, "node_id", node_id)
+    _player_data_manager().update_or_write_data(uid, MAP_TABLE, "realm", realm)
+    _player_data_manager().update_or_write_data(uid, MAP_TABLE, "heaven", heaven)
+    _player_data_manager().update_or_write_data(uid, MAP_TABLE, "node_id", node_id)
 
-    visited = player_data_manager.get_field_data(uid, MAP_TABLE, "visited_nodes") or []
+    visited = _player_data_manager().get_field_data(uid, MAP_TABLE, "visited_nodes") or []
     if node_id not in visited:
         visited.append(node_id)
-        player_data_manager.update_or_write_data(uid, MAP_TABLE, "visited_nodes", visited)
+        _player_data_manager().update_or_write_data(uid, MAP_TABLE, "visited_nodes", visited)
 
 
 def _parse_map_query(map_data, text: str):
@@ -718,7 +737,7 @@ def _parse_map_query(map_data, text: str):
 
 
 def _get_all_in_same_node(realm, heaven, node_id):
-    uids = player_data_manager.list_users_by_fields(
+    uids = _player_data_manager().list_users_by_fields(
         MAP_TABLE,
         {"realm": realm, "heaven": heaven, "node_id": node_id},
         cache_ttl=20,
@@ -912,7 +931,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     map_data = _load_map_data()
     status = _get_player_map_status(user_id, map_data)
 
-    dongfu_data = player_data_manager.get_fields(user_id, DONGFU_TABLE) or {}
+    dongfu_data = _player_data_manager().get_fields(user_id, DONGFU_TABLE) or {}
     if int(dongfu_data.get("built", 0)) == 1:
         await handle_send(bot, event, f"你已建立洞府：{dongfu_data.get('node_name', '未知节点')}，无需重复建设。")
         return
@@ -2059,7 +2078,7 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
 # 探索状态
 # =========================================
 def _get_explore_status(uid: str):
-    d = player_data_manager.get_fields(str(uid), EXPLORE_TABLE)
+    d = _player_data_manager().get_fields(str(uid), EXPLORE_TABLE)
     if not d:
         d = {
             "running": 0,
@@ -2072,7 +2091,7 @@ def _get_explore_status(uid: str):
             "interval_min": 0,
         }
         for k, v in d.items():
-            player_data_manager.update_or_write_data(str(uid), EXPLORE_TABLE, k, v)
+            _player_data_manager().update_or_write_data(str(uid), EXPLORE_TABLE, k, v)
     else:
         from .explore_schema import _blank_snapshot
 
@@ -2090,7 +2109,7 @@ def _get_explore_status(uid: str):
             d.get("reward_plan") or ""
         ).strip().lower() in {"none", "null"}:
             try:
-                player_data_manager.update_or_write_data(str(uid), EXPLORE_TABLE, "reward_plan", "")
+                _player_data_manager().update_or_write_data(str(uid), EXPLORE_TABLE, "reward_plan", "")
             except Exception:
                 pass
     return d
@@ -2104,7 +2123,7 @@ def _save_explore_status(uid: str, d: dict):
             continue
         if k == "settlement":
             v = _blank_snapshot(v)
-        player_data_manager.update_or_write_data(str(uid), EXPLORE_TABLE, k, v)
+        _player_data_manager().update_or_write_data(str(uid), EXPLORE_TABLE, k, v)
 
 
 # =========================================
@@ -2235,7 +2254,7 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         }.items()
     }
     expected_daily = _get_daily_limit(uid)
-    expected_cooldown = player_data_manager.get_field_data(uid, MAP_CD_TABLE, "explore_start_cd_until")
+    expected_cooldown = _player_data_manager().get_field_data(uid, MAP_CD_TABLE, "explore_start_cd_until")
     cooldown_until = (start_at + timedelta(seconds=EXPLORE_START_COOLDOWN_SEC)).strftime("%Y-%m-%d %H:%M:%S")
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     try:
