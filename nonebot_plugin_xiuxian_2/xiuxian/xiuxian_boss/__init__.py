@@ -68,7 +68,7 @@ config = get_boss_config()
 group_boss = {}
 groups = config['open']
 battle_flag = {}
-sql_message = XiuxianDateManage()  # sql类
+_sql_message_instance = None
 boss_application = BossApplication(
     get_paths().game_db,
     get_paths().player_db,
@@ -83,6 +83,13 @@ boss_ids = UUIDGenerator()
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 _world_boss_battle_settlement_service_instance = None
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _world_boss_battle_settlement_service():
@@ -559,8 +566,8 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await battle.finish()
 
     if user_info['hp'] is None or user_info['hp'] == 0:
-        sql_message.update_user_hp(user_id)
-        user_info = sql_message.get_user_info_with_id(user_id)
+        _sql_message().update_user_hp(user_id)
+        user_info = _sql_message().get_user_info_with_id(user_id)
 
     if user_info['hp'] <= user_info['exp'] / 10:
         time = leave_harm_time(user_id)
@@ -636,7 +643,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await handle_send(bot, event, "你没有足够的体力，请等待体力恢复后再试！")
         await battle.finish()
 
-    checked_at = sql_message.get_last_check_info_time(user_id)
+    checked_at = _sql_message().get_last_check_info_time(user_id)
 
     battle_flag[GLOBAL_BOSS_KEY] = True
 
@@ -974,23 +981,22 @@ async def challenge_scarecrow_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     """挑战稻草人"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
-    sql_message = XiuxianDateManage()
 
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await challenge_scarecrow.finish()
 
     user_id = user_info['user_id']
-    sql_message.update_last_check_info_time(user_id)
+    _sql_message().update_last_check_info_time(user_id)
 
     # 检查用户状态
     if user_info['hp'] is None or user_info['hp'] == 0:
-        sql_message.update_user_hp(user_id)
+        _sql_message().update_user_hp(user_id)
     if user_info['hp'] <= user_info['exp'] / 10:
         time = leave_harm_time(user_id)
         msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n"
         msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
-        sql_message.update_user_stamina(user_id, 20, 1)
+        _sql_message().update_user_stamina(user_id, 20, 1)
         await handle_send(bot, event, msg, md_type="世界BOSS", k1="闭关", v1="闭关", k2="丹药", v2="丹药背包", k3="状态", v3="我的状态")
         await challenge_scarecrow.finish()
 
@@ -1035,23 +1041,22 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
     """挑战训练傀儡"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
-    sql_message = XiuxianDateManage()
 
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await challenge_training_puppet.finish()
 
     user_id = user_info['user_id']
-    sql_message.update_last_check_info_time(user_id)
+    _sql_message().update_last_check_info_time(user_id)
 
     # 检查用户状态
     if user_info['hp'] is None or user_info['hp'] == 0:
-        sql_message.update_user_hp(user_id)
+        _sql_message().update_user_hp(user_id)
     if user_info['hp'] <= user_info['exp'] / 10:
         time = leave_harm_time(user_id)
         msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n"
         msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
-        sql_message.update_user_stamina(user_id, 20, 1)
+        _sql_message().update_user_stamina(user_id, 20, 1)
         await handle_send(bot, event, msg, md_type="世界BOSS", k1="闭关", v1="闭关", k2="丹药", v2="丹药背包", k3="状态", v3="我的状态")
         await challenge_training_puppet.finish()
 
@@ -1069,7 +1074,7 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
         if len(arg_list) == 2:
             boss_name = arg_list[1]
 
-    player = sql_message.get_player_data(user_id)
+    player = _sql_message().get_player_data(user_id)
     bossinfo = createboss_jj(scarecrow_jj, boss_name)
     if bossinfo is None:
         boss_name = "散发着威压的尸体"
@@ -1524,7 +1529,7 @@ async def boss_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     # 生成排行榜
     rank_msg = "【世界BOSS积分排行榜】\n"
     for i, (user_id, integral) in enumerate(sorted_integral[:50], start=1):
-        user_info = sql_message.get_user_info_with_id(user_id)
+        user_info = _sql_message().get_user_info_with_id(user_id)
         rank_msg += f"第{i}位 | {user_info['user_name']} | {number_to(integral)}\n"
     
     await handle_send(bot, event, rank_msg)
