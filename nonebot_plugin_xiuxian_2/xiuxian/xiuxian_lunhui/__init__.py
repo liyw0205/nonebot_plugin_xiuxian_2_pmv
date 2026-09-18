@@ -95,7 +95,14 @@ __warring_help__ = f"""
 """.strip()
 
 cache_help_fk = {}
-sql_message = XiuxianDateManage()  # sql类
+_sql_message_instance = None
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 warring_help = on_command("轮回重修帮助", aliases={"轮回帮助"}, priority=12, block=True)
 lunhui = on_command('进入轮回', aliases={"开始轮回"}, priority=15,  block=True)
@@ -127,11 +134,11 @@ async def resetting_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 先回放：成功后境界变为江湖好手会挡住同事件幂等。
     prior = lunhui_application.reset_result(operation_id)
     if prior is not None and prior.succeeded:
-        user_msg = sql_message.get_user_info_with_id(user_id)
+        user_msg = _sql_message().get_user_info_with_id(user_id)
         msg = f"{user_msg['user_name']}现在是一介凡人了！！\n该自废修为请求已经处理，无需重复提交。"
         await handle_send(bot, event, msg)
         await resetting.finish()
-    user_msg = sql_message.get_user_info_with_id(user_id)
+    user_msg = _sql_message().get_user_info_with_id(user_id)
     user_name = user_msg['user_name']
     if user_msg['level'] in ['感气境初期', '感气境中期', '感气境圆满']:
         exp = user_msg['exp']
@@ -166,7 +173,7 @@ async def lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await lunhui.finish()
         
     user_id = user_info['user_id']
-    user_msg = sql_message.get_user_info_with_id(user_id) 
+    user_msg = _sql_message().get_user_info_with_id(user_id)
     user_name = user_msg['user_name']
     user_root = user_msg['root_type']
     list_level_all = list(jsondata.level_data().keys())
@@ -216,7 +223,7 @@ async def Infinite_reincarnation_(bot: Bot, event: GroupMessageEvent | PrivateMe
         await Infinite_reincarnation.finish()
         
     user_id = user_info['user_id']
-    user_msg = sql_message.get_user_info_with_id(user_id) 
+    user_msg = _sql_message().get_user_info_with_id(user_id)
     user_name = user_msg['user_name']
     user_root = user_msg['root_type']
     list_level_all = list(jsondata.level_data().keys())
@@ -355,7 +362,7 @@ async def confirm_lunhui_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     root_level = confirm_data['root_level']
     original_msg = confirm_data['msg']
     impart_data_draw = await impart_check(user_id)
-    user_msg = sql_message.get_user_info_with_id(user_id)
+    user_msg = _sql_message().get_user_info_with_id(user_id)
     buff_info = UserBuffDate(user_id).BuffInfo or {}
     expected_buffs = {
         key: int(buff_info.get(key, 0) or 0)
@@ -432,7 +439,7 @@ def save_reincarnation_memory(user_id):
         "effect1_buff": buff.get('effect1_buff', 0),
         "effect2_buff": buff.get('effect2_buff', 0),
         # 记录时的境界，用于后续判断可取回的最低境界
-        "memory_level": sql_message.get_user_info_with_id(user_id)['level'],
+        "memory_level": _sql_message().get_user_info_with_id(user_id)['level'],
         # 已取回的标记（每种技能只能取一次）
         "retrieved_main": 0,
         "retrieved_sub": 0,
@@ -486,7 +493,7 @@ def can_retrieve_skill(user_id, skill_type):
     返回 (can_retrieve: bool, reason: str, required_level_name: str or None)
     """
     memory = get_reincarnation_memory(user_id)
-    user_info = sql_message.get_user_info_with_id(user_id)
+    user_info = _sql_message().get_user_info_with_id(user_id)
     if not memory:
         return False, "你没有任何轮回印记", None
     

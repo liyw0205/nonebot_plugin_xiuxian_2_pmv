@@ -9,6 +9,16 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_lunhui.transaction_service import 
 from tests.test_db_backend import db_backend
 
 
+def test_lunhui_facade_defers_sql_manager_construction():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_lunhui/__init__.py"
+    ).read_text(encoding="utf-8")
+    assert "_sql_message_instance = None" in source
+    assert "def _sql_message(" in source
+    assert source.count("_sql_message().get_user_info_with_id(") == 7
+    assert "sql_message = XiuxianDateManage()" not in source
+
+
 class LunhuiSettlementServiceTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
