@@ -21,12 +21,19 @@ from .transaction_service import PastLifeFinalSettlementService
 from .transaction_service import PastLifeStartService
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 items = Items()
 _paths = get_paths()
 _past_life_final_settlement_service_instance = None
 _past_life_start_service_instance = None
 _past_life_choice_service_instance = None
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _past_life_start_service():
@@ -656,7 +663,7 @@ class PastLifeEngine:
         tier = ending["tier"]
         reward = REWARD_TABLE.get(tier, REWARD_TABLE[5])
 
-        user_info = sql_message.get_user_info_with_id(user_id)
+        user_info = _sql_message().get_user_info_with_id(user_id)
         if not user_info:
             raise ValueError("past life user missing")
 

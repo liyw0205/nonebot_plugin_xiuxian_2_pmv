@@ -639,6 +639,14 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("_player_data_manager().get_fields(", source)
         self.assertNotIn("player_data_manager = PlayerDataManager()", source)
 
+    def test_past_life_events_defers_sql_manager_construction(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_past_life" / "past_life_events.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("_sql_message_instance = None", source)
+        self.assertIn("def _sql_message(", source)
+        self.assertNotIn("sql_message = XiuxianDateManage()", source)
+
     def test_accessory_package_rewards_use_attached_database_transaction(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         command_source = (back_root / "__init__.py").read_text(encoding="utf-8")
