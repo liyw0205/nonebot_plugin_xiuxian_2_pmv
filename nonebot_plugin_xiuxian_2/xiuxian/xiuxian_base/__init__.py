@@ -122,7 +122,28 @@ def _stone_robbery_service():
         )
     return _stone_robbery_service_instance
 registration_batcher = RegistrationBatcher(_sql_message)
-player_data_manager = PlayerDataManager()
+_player_data_manager_instance = None
+
+
+def _resolve_player_data_manager():
+    global _player_data_manager_instance
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+    return _player_data_manager_instance
+
+
+class _LazyPlayerDataManager:
+    def __getattr__(self, name):
+        return getattr(_resolve_player_data_manager(), name)
+
+
+player_data_manager = _LazyPlayerDataManager()
+
+
+def _player_data_manager():
+    return player_data_manager
+
+
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 PLAYERSDATA = get_paths().players
 qqq = XiuConfig().qqq
@@ -778,7 +799,7 @@ async def run_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     real_user_id = str(event.get_user_id())
 
     # 先本号/化身
-    active_id = player_data_manager.get_field_data(real_user_id, "avatar", "active_id")
+    active_id = _player_data_manager().get_field_data(real_user_id, "avatar", "active_id")
     user_id = str(active_id) if active_id else real_user_id
 
     # 再伪装（优先级最高）
