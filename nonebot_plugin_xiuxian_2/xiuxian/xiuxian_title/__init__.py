@@ -22,7 +22,7 @@ from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import (
     check_user, handle_send, send_help_message
 )
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from .title_data import (
     get_all_titles, get_title_by_id,
     check_and_unlock_titles, get_user_unlocked_titles,
@@ -35,7 +35,6 @@ from ...features.title.application import TitleApplication
 from .title_transaction_service import TitleTransactionService
 
 sql_message = XiuxianDateManage()
-player_data_manager = PlayerDataManager()
 _title_transaction_service_instance = None
 
 def _title_transaction_service():
