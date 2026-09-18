@@ -60,7 +60,7 @@ from .breakthrough_tribulation import *  # noqa: F401,F403
 from .xiangyuan import clear_all_xiangyuan, reset_xiangyuan_daily  # noqa: F401
 
 items = Items()
-sql_message = XiuxianDateManage()  # sql类
+_sql_message_instance = None
 sign_in_application = SignInApplication(get_paths().game_db)
 lottery_application: Any | None = None
 
@@ -82,6 +82,13 @@ _stone_robbery_service_instance = None
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _stone_gift_service():
@@ -114,7 +121,7 @@ def _stone_robbery_service():
             get_paths().game_db, get_paths().player_db
         )
     return _stone_robbery_service_instance
-registration_batcher = RegistrationBatcher(sql_message)
+registration_batcher = RegistrationBatcher(_sql_message)
 player_data_manager = PlayerDataManager()
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 PLAYERSDATA = get_paths().players
@@ -454,7 +461,7 @@ def _get_sect_weekly_rank_fallback(limit: int = 5):
         return None
 
     week_key = get_current_season("weekly").key
-    return sql_message._read_query(
+    return _sql_message()._read_query(
         """
         SELECT
             g.sect_id,
@@ -479,7 +486,7 @@ def _append_global_rank_preview(lines: list[str]) -> None:
         lines.extend(
             _format_top_rows(
                 "修为境界榜 前五",
-                sql_message.realm_top(),
+                _sql_message().realm_top(),
                 lambda row: f"{row[0]} {row[1]} 修为{number_to(row[2])}",
             )
         )
@@ -491,7 +498,7 @@ def _append_global_rank_preview(lines: list[str]) -> None:
         lines.extend(
             _format_top_rows(
                 "灵石榜 前五",
-                sql_message.stone_top(),
+                _sql_message().stone_top(),
                 lambda row: f"{row[0]} 灵石{number_to(row[1])}枚",
             )
         )
@@ -503,7 +510,7 @@ def _append_global_rank_preview(lines: list[str]) -> None:
         lines.extend(
             _format_top_rows(
                 "战力榜 前五",
-                sql_message.power_top(),
+                _sql_message().power_top(),
                 lambda row: f"{row[0]} 战力{number_to(row[1])}",
             )
         )
@@ -515,7 +522,7 @@ def _append_global_rank_preview(lines: list[str]) -> None:
         lines.extend(
             _format_top_rows(
                 "宗门建设榜 前五",
-                sql_message.scale_top(),
+                _sql_message().scale_top(),
                 lambda row: f"{row[1]} 建设度{number_to(row[2])}",
             )
         )
@@ -660,7 +667,7 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         # 生成不重复的道号
         while True:
             user_name = generate_daohao()
-            if not sql_message.get_user_info_with_name(user_name):
+            if not _sql_message().get_user_info_with_name(user_name):
                 break
         result = _player_rename_service().rename_user(
             operation_id,
@@ -786,7 +793,7 @@ async def run_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         pass
 
     # 再查一次目标 ID：避免 check_user 读到重复行/缓存竞态时重复建档
-    if sql_message.get_user_info_with_id(user_id):
+    if _sql_message().get_user_info_with_id(user_id):
         await handle_send(
             bot,
             event,
@@ -802,7 +809,7 @@ async def run_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await run_xiuxian.finish()
 
     root, root_type = XiuxianJsonDate().linggen_get()
-    rate = sql_message.get_root_rate(root_type, user_id)
+    rate = _sql_message().get_root_rate(root_type, user_id)
     power = 100 * float(rate)
     create_time = str(runtime_clock.now())
 
@@ -820,9 +827,9 @@ async def run_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 
     if is_new_user:
         # 补全初始气血
-        new_user_info = sql_message.get_user_info_with_id(user_id)
+        new_user_info = _sql_message().get_user_info_with_id(user_id)
         if new_user_info and (new_user_info.get('hp') is None or new_user_info.get('hp') == 0):
-            sql_message.update_user_hp(user_id)
+            _sql_message().update_user_hp(user_id)
 
     final_msg = (
         f"{create_msg}\n"
@@ -1050,7 +1057,7 @@ async def restart_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sta
         # 按灵根倍率排序选择最佳灵根
         selected_name, selected_root_type = max(linggen_options, 
                                              key=lambda x: jsondata.root_data()[x[1]]["type_speeds"])
-        msg = sql_message.ramaker(selected_name, selected_root_type, user_id)
+        msg = _sql_message().ramaker(selected_name, selected_root_type, user_id)
         await handle_send(bot, event, msg)
         await restart.finish()
     else:
@@ -1082,7 +1089,7 @@ async def handle_user_choice(bot: Bot, event: GroupMessageEvent | PrivateMessage
         else:
             msg = "输入有误，帮你自动选择最佳灵根了嗷！\n"
    
-    msg += sql_message.ramaker(selected_name, selected_root_type, user_id)
+    msg += _sql_message().ramaker(selected_name, selected_root_type, user_id)
 
     await handle_send(bot, event, msg)
 
@@ -1097,7 +1104,7 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if message:
         message = message[0]
     if message in ["排行榜", "修仙排行榜", "境界排行榜", "修为排行榜"]:
-        p_rank = sql_message.realm_top()
+        p_rank = _sql_message().realm_top()
         msg = "【位面境界排行榜 前五十】\n"
         num = 0
         for i in p_rank:
@@ -1108,7 +1115,7 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await rank.finish()
     elif message == "灵石排行榜":
-        a_rank = sql_message.stone_top()
+        a_rank = _sql_message().stone_top()
         msg = "【位面灵石排行榜 前五十】\n"
         num = 0
         for i in a_rank:
@@ -1119,7 +1126,7 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await rank.finish()
     elif message == "战力排行榜":
-        c_rank = sql_message.power_top()
+        c_rank = _sql_message().power_top()
         msg = "【位面战力排行榜 前五十】\n"
         num = 0
         for i in c_rank:
@@ -1130,7 +1137,7 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await rank.finish()
     elif message in ["宗门排行榜", "宗门建设度排行榜"]:
-        s_rank = sql_message.scale_top()
+        s_rank = _sql_message().scale_top()
         msg = "【位面宗门建设排行榜 前五十】\n"
         num = 0
         for i in s_rank:
@@ -1141,7 +1148,7 @@ async def rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg)
         await rank.finish()
     elif message == "轮回排行榜":
-        r_rank = sql_message.root_top()
+        r_rank = _sql_message().root_top()
         msg = "【轮回排行榜 前五十】\n"
         num = 0
         for i in r_rank:
@@ -1253,8 +1260,8 @@ async def give_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     # 群聊可@；私聊无@时走道号
     give_qq = get_at_user_id(args) if isinstance(event, GroupMessageEvent) else None
     give_user = (
-        sql_message.get_user_info_with_id(give_qq)
-        if give_qq else sql_message.get_user_info_with_name(nick_name)
+        _sql_message().get_user_info_with_id(give_qq)
+        if give_qq else _sql_message().get_user_info_with_name(nick_name)
     )
     if not give_user:
         msg = "对方未踏入修仙界，不可赠送！"
@@ -1335,7 +1342,7 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
     steal_qq = get_at_user_id(args)
     nick_name = args.extract_plain_text().split()[0] if args.extract_plain_text().split() else None
     if nick_name:
-        give_message = sql_message.get_user_info_with_name(nick_name)
+        give_message = _sql_message().get_user_info_with_name(nick_name)
         if give_message:
             steal_qq = give_message['user_id']
         else:
@@ -1348,7 +1355,7 @@ async def steal_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Comma
     if steal_qq == user_id:
         await handle_send(bot, event, "请不要偷自己刷成就！")
         await steal_stone.finish()
-    steal_user = sql_message.get_user_info_with_id(steal_qq)
+    steal_user = _sql_message().get_user_info_with_id(steal_qq)
     if not steal_user:
         await handle_send(bot, event, "对方未踏入修仙界，不要对杂修出手！")
         await steal_stone.finish()
@@ -1427,11 +1434,11 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
         await rob_stone.finish()
     
     user_id = str(user_info["user_id"])
-    user_mes = sql_message.get_user_info_with_id(user_id)
+    user_mes = _sql_message().get_user_info_with_id(user_id)
     give_qq = get_at_user_id(args)
     nick_name = args.extract_plain_text().split()[0] if args.extract_plain_text().split() else None
     if nick_name:
-        give_message = sql_message.get_user_info_with_name(nick_name)
+        give_message = _sql_message().get_user_info_with_name(nick_name)
         if give_message:
             give_qq = give_message['user_id']
         else:
@@ -1441,7 +1448,7 @@ async def rob_stone_(bot: Bot, event: GroupMessageEvent, args: Message = Command
         await handle_send(bot, event, "对方未踏入修仙界，不可抢劫！")
         await rob_stone.finish()
     give_qq = str(give_qq)
-    user_2 = sql_message.get_user_info_with_id(give_qq)
+    user_2 = _sql_message().get_user_info_with_id(give_qq)
     if not user_mes or not user_2:
         await handle_send(bot, event, "对方未踏入修仙界，不可抢劫！")
         await rob_stone.finish()
@@ -1814,7 +1821,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 构建境界 → 人数 的映射
     realm_count = {}
     for rank in all_ranks:
-        count = sql_message.get_user_count_by_level(rank)
+        count = _sql_message().get_user_count_by_level(rank)
         realm_count[rank] = count
 
     total_users = sum(realm_count.values())

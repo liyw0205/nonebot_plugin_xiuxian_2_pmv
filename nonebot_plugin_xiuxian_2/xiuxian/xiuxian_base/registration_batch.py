@@ -23,7 +23,7 @@ class RegistrationRequest:
 
 class RegistrationBatcher:
     def __init__(self, manager, *, max_batch_size: int = 200, flush_delay: float = 0.01) -> None:
-        self._manager = manager
+        self._manager_resolver = manager if callable(manager) else lambda: manager
         self._max_batch_size = max(1, int(max_batch_size))
         self._flush_delay = max(0.0, float(flush_delay))
         self._queue: asyncio.Queue[tuple[str, RegistrationRequest, asyncio.Future]] = asyncio.Queue()
@@ -65,7 +65,10 @@ class RegistrationBatcher:
         for request_id, request, _future in batch:
             rows.append({"request_id": request_id, **request.__dict__})
         try:
-            results = await asyncio.to_thread(self._manager.create_users_batch_fast, rows)
+            results = await asyncio.to_thread(
+                self._manager_resolver().create_users_batch_fast,
+                rows,
+            )
         except Exception as exc:
             logger.exception(f"批量注册任务失败: {exc}")
             results = {}
