@@ -2197,6 +2197,8 @@
 
 2026-09-18 accessory boundary audit：`xiuxian_back.accessory` 的 `sql_message.goods_num` 仍是洗练库存的真实 read；`player_data_manager.patch_doc` 仍保留旧装备/卸载兼容写路径，未整体删除共享 manager，先处理独立 sql read lazy slice。
 
+2026-09-18 accessory lazy inventory read slice：`xiuxian_back.accessory` 的 `XiuxianDateManage.goods_num` 洗练石查询已改为 `_sql_message_instance`/`_sql_message()` lazy holder；`PlayerDataManager.patch_doc` equip/unequip compatibility writes、AccessoryTransactionService multi-database transaction/replay/conflict/rollback semantics未改变。construction/source/architecture及 accessory/admin-accessory regression 共 244 tests passed，compileall、inventory、diff check通过。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。

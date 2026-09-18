@@ -21,6 +21,16 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
 
         self.assertIsNone(accessory._accessory_transaction_service_instance)
 
+    def test_accessory_facade_defers_sql_manager_construction(self):
+        source = Path(
+            Path(__file__).parents[1]
+            / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_back/accessory.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("_sql_message_instance = None", source)
+        self.assertIn("def _sql_message(", source)
+        self.assertIn("_sql_message().goods_num(", source)
+        self.assertNotIn("sql_message = XiuxianDateManage()", source)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         root = Path(self.temp_dir.name)

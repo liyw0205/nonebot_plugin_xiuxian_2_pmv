@@ -33,10 +33,17 @@ from .accessory_helpers import (  # noqa: F401
 from .transaction_service import AccessoryTransactionService
 
 items = Items()
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 player_data_manager = PlayerDataManager()
 _accessory_transaction_service_instance = None
 runtime_ids = UUIDGenerator()
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _accessory_transaction_service():
@@ -967,7 +974,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     need = _wash_stone_need(q, len(locked_indexes))
-    have = sql_message.goods_num(user_id, WASH_STONE_ID)
+    have = _sql_message().goods_num(user_id, WASH_STONE_ID)
 
     if have < need:
         await handle_send(
