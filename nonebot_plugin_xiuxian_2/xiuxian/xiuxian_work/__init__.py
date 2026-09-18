@@ -55,10 +55,17 @@ _work_daily_refresh_reset_service_instance = None
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
-sql_message = XiuxianDateManage()  # sql类
+_sql_message_instance = None
 items = Items()
 count = 5  # 每日刷新次数
 WORK_EXPIRE_MINUTES = 30  # 悬赏令过期时间(分钟)
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _work_daily_refresh_reset_service():
@@ -195,7 +202,7 @@ def get_user_work_status(user_id: str) -> Tuple[int, Any]:
         4 - 已过期的悬赏令
     """
     # 先检查是否有进行中的悬赏
-    user_cd_message = sql_message.get_user_cd(user_id)
+    user_cd_message = _sql_message().get_user_cd(user_id)
     if user_cd_message and user_cd_message['type'] == 2:
         try:
             remaining_minutes, _, _ = calculate_remaining_time(
@@ -271,7 +278,7 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"work-settlement:{user_id}:{event_message_id or runtime_ids.new_id()}"
 
-    user_info = sql_message.get_user_info_with_id(user_id)
+    user_info = _sql_message().get_user_info_with_id(user_id)
     _, give_exp, s_o_f, item_id, big_suc = workhandle().do_work(
         2,
         work_list=work_data["scheduled_time"],
@@ -414,7 +421,7 @@ def _work_operation_id(event, action: str, user_id: str) -> str:
 
 
 def _work_cd_snapshot(user_id: str) -> dict:
-    cd = sql_message.get_user_cd(user_id) or {}
+    cd = _sql_message().get_user_cd(user_id) or {}
     return {
         "type": int(cd.get("type", 0)),
         "create_time": cd.get("create_time"),
@@ -519,7 +526,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
     user_level = user_info['level']
     user_id = user_info['user_id']
     user_rank = convert_rank(user_info['level'])[0]
-    sql_message.update_last_check_info_time(user_id)  # 更新查看修仙信息时间
+    _sql_message().update_last_check_info_time(user_id)  # 更新查看修仙信息时间
     
     if user_rank == 0:
         msg = "道友实力通天彻地，悬赏令已经不能满足道友的需求了！"
@@ -573,7 +580,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await send_work_message(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看 ", k2="结算", v2="悬赏令确认结算", k3="终止", v3="悬赏令终止")
             await do_work.finish()
             
-        usernums = sql_message.get_work_num(user_id)
+        usernums = _sql_message().get_work_num(user_id)
         if usernums <= 0:
             msg = (
                 f"道友今日的悬赏令刷新次数已用尽\n"
@@ -664,7 +671,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="悬赏令帮助", v3="悬赏令帮助")
             await do_work.finish()
             
-        usernums = sql_message.get_work_num(user_id)
+        usernums = _sql_message().get_work_num(user_id)
         if usernums <= 0:
             msg = result_card("悬赏令", kind="done", summary="道友今日的悬赏令刷新次数已用尽！")
             await handle_send(bot, event, msg, **nav_kwargs("work", md_type="悬赏令", extra=[("日常","日常")]))
@@ -817,7 +824,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await do_work.finish()
 
         # work_num 是刷新次数：接取不消耗；0 也可以接已刷新出来的悬赏
-        remaining = int(sql_message.get_work_num(user_id) or 0)
+        remaining = int(_sql_message().get_work_num(user_id) or 0)
             
         task_name, task_data = tasks[work_num - 1]
         started_at = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -899,7 +906,7 @@ async def use_work_order(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     if status in (1, 2):
         event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
         operation_id = f"work-item-accelerate:{user_id}:{event_message_id or runtime_ids.new_id()}"
-        item_count = sql_message.goods_num(user_id, item_id)
+        item_count = _sql_message().goods_num(user_id, item_id)
         result = _work_item_use_service().accelerate(
             operation_id,
             user_id,
@@ -971,8 +978,8 @@ async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMes
     
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"work-item-capture:{user_id}:{event_message_id or runtime_ids.new_id()}"
-    item_count = sql_message.goods_num(user_id, item_id)
-    user_cd = sql_message.get_user_cd(user_id)
+    item_count = _sql_message().goods_num(user_id, item_id)
+    user_cd = _sql_message().get_user_cd(user_id)
     result = _work_item_use_service().capture(
         operation_id,
         user_id,
@@ -1004,7 +1011,7 @@ async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMes
         ])
     
     # 生成显示消息
-    msg = generate_work_message(updated_work_msg, sql_message.get_work_num(user_id))
+    msg = generate_work_message(updated_work_msg, _sql_message().get_work_num(user_id))
     msg2 = f"※使用追捕令效果：所有悬赏修为奖励提升{reward_multiplier}倍！"
     
     await handle_send(bot, event, msg2)
