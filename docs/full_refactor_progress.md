@@ -2243,6 +2243,8 @@
 
 2026-09-18 dongfu lazy compatibility reader slice：`xiuxian_dongfu.__init__` 的物品预检/兼容扣除、用户 profile enumeration/name lookup已改为 `_sql_message_instance`/`_sql_message()` lazy holder；`PlayerDataManager` shared dongfu state boundary、DongfuApplication及 expansion/plant/harvest/accelerate/patrol/array/visit/fertilize/infiltrate 双库 service、snapshot/replay/conflict/rollback semantics未改变。construction/source/architecture及 dongfu regression共 240 tests passed，compileall、inventory、diff check通过。
 
+2026-09-18 dongfu lazy compatibility reader live safety：提交 `a09cb145` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T055230Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。
