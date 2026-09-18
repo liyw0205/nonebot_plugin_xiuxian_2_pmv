@@ -18,6 +18,15 @@ class FusionServiceTests(unittest.TestCase):
 
         self.assertIsNone(xiuxian_fusion._fusion_service_instance)
 
+    def test_fusion_facade_defers_sql_manager_construction(self) -> None:
+        from pathlib import Path
+        source = Path("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_fusion/__init__.py").read_text(encoding="utf-8")
+        self.assertIn("_sql_message_instance = None", source)
+        self.assertIn("def _sql_message(", source)
+        self.assertIn("_sql_message().get_back_msg(", source)
+        self.assertIn("_sql_message().get_user_info_with_id(", source)
+        self.assertNotIn("sql_message = XiuxianDateManage()", source)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "fusion.sqlite3"

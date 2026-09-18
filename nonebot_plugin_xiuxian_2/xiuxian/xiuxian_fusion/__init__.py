@@ -28,11 +28,18 @@ import random
 import time
 
 items = Items()
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 _fusion_service_instance = None
 fusion_application = FusionApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
 runtime_random = SystemRandom()
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _fusion_service():
@@ -109,7 +116,7 @@ async def fusion_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     # 检查是否是必定成功ID，如果是则跳过福缘石检测
     if int(equipment_id) not in FIXED_SUCCESS_IDS or str(equipment['type']) != "特殊道具":
         # 检查是否有福缘石
-        back_msg = sql_message.get_back_msg(user_id) or []
+        back_msg = _sql_message().get_back_msg(user_id) or []
         has_protection = False
         for back in back_msg:
             if back['goods_id'] == 20006 and back['goods_num'] > 0:
@@ -196,8 +203,8 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
                 f"损失材料 {consumed_failures} 次。\n该合成请求已经处理，无需重复提交。"
             )
 
-    user_info = sql_message.get_user_info_with_id(user_id)
-    back_msg = sql_message.get_back_msg(user_id) or []
+    user_info = _sql_message().get_user_info_with_id(user_id)
+    back_msg = _sql_message().get_back_msg(user_id) or []
     
     fusion_info = equipment.get('fusion', None)
     if not fusion_info:
