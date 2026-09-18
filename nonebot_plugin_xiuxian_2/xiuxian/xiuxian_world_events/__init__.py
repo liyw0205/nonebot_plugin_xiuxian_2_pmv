@@ -44,7 +44,7 @@ from .transaction_service import SpiritVeinLifecycleService
 
 
 scheduler = require("nonebot_plugin_apscheduler").scheduler
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 player_data_manager = PlayerDataManager()
 items = Items()
 _demon_claim_service_instance = None
@@ -105,6 +105,13 @@ def _spirit_vein_lifecycle_service():
 runtime_ids = UUIDGenerator()
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 EVENT_TABLE = "world_event_state"
 EVENT_KEY = "global"
@@ -1322,10 +1329,10 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
         await handle_send(bot, event, msg, md_type="世界事件", k1="帮助", v1="世界事件帮助")
         await attack_demon_invasion.finish()
 
-    sql_message.update_last_check_info_time(user_id)
+    _sql_message().update_last_check_info_time(user_id)
     if user_info["hp"] is None or user_info["hp"] == 0:
-        sql_message.update_user_hp(user_id)
-        user_info = sql_message.get_user_info_with_id(user_id)
+        _sql_message().update_user_hp(user_id)
+        user_info = _sql_message().get_user_info_with_id(user_id)
 
     if user_info["hp"] <= user_info["exp"] / 10:
         harm_time = leave_harm_time(user_id)
