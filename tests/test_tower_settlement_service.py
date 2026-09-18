@@ -12,11 +12,11 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tower.transaction_service import T
 from tests.test_db_backend import db_backend
 
 
-def test_tower_facade_defers_settlement_service_construction():
+def test_tower_facade_does_not_construct_legacy_settlement_service():
     tower = importlib.import_module(
         "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tower"
     )
-    assert tower._tower_settlement_service_instance is None
+    assert not hasattr(tower, "_tower_settlement_service_instance")
 
 
 def test_tower_challenge_replay_uses_lazy_settlement_reader():
@@ -26,10 +26,11 @@ def test_tower_challenge_replay_uses_lazy_settlement_reader():
     battle_source = Path(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tower/tower_battle.py"
     ).read_text(encoding="utf-8")
-    assert "_tower_settlement_service_instance = None" in source
-    assert "def _tower_settlement_service(" in source
-    assert source.count("_tower_settlement_service().get_result(") == 2
-    assert "tower_settlement_service.get_result(" not in source
+    assert "_tower_settlement_service_instance" not in source
+    assert "def _tower_settlement_service(" not in source
+    assert source.count("tower_application.settlement_result(operation_id=operation_id)") == 2
+    assert "_tower_settlement_service().get_result(" not in source
+    assert "TowerSettlementService" not in source
     assert "tower_application.settle(" in battle_source
     assert "tower_application.settlement_result(" in battle_source
 

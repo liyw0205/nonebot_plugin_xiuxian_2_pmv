@@ -25,7 +25,7 @@ from .tower_data import tower_data
 from .tower_battle import tower_battle
 from .tower_limit import tower_limit
 from .transaction_service import normalize_weekly_purchases
-from .transaction_service import TowerSettlementService
+from .transaction_service import TowerSettlementResult
 from ...features.tower.application import TowerApplication
 from ...features.tower.repository import TowerPurchaseSqlRepository
 from ...infrastructure.ids import UUIDGenerator
@@ -35,7 +35,6 @@ from ..xiuxian_title.title_data import check_and_unlock_titles
 _player_data_manager_instance = None
 _sql_message_instance = None
 items = Items()
-_tower_settlement_service_instance = None
 tower_application = TowerApplication(
     get_paths().game_db,
     get_paths().player_db,
@@ -68,15 +67,6 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
-
-
-def _tower_settlement_service():
-    global _tower_settlement_service_instance
-    if _tower_settlement_service_instance is None:
-        _tower_settlement_service_instance = TowerSettlementService(
-            get_paths().game_db, get_paths().player_db
-        )
-    return _tower_settlement_service_instance
 
 
 # 定义命令
@@ -174,7 +164,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"tower-challenge:{event_id}:{user_id}" if event_id else ""
     if operation_id:
-        prior = _tower_settlement_service().get_result(operation_id)
+        prior_data = tower_application.settlement_result(operation_id=operation_id)
+        prior = TowerSettlementResult(**prior_data) if isinstance(prior_data, dict) else prior_data
         if prior is not None and prior.succeeded:
             if prior.challenge_succeeded:
                 msg = (
@@ -237,7 +228,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"tower-continuous:{event_id}:{user_id}:{target_floors}" if event_id else ""
     if operation_id:
-        prior = _tower_settlement_service().get_result(operation_id)
+        prior_data = tower_application.settlement_result(operation_id=operation_id)
+        prior = TowerSettlementResult(**prior_data) if isinstance(prior_data, dict) else prior_data
         if prior is not None and prior.succeeded:
             msg = (
                 f"连续挑战完成，成功通关第{prior.floor}层！共获得积分：{prior.score}点，"
