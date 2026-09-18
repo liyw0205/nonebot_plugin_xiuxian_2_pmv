@@ -41,7 +41,7 @@ from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.json_document import JsonDocumentReader
 from ...infrastructure.ids import UUIDGenerator
 
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 player_data_manager = PlayerDataManager()
 
 combat_settlement_application = CombatSettlementApplication(
@@ -59,6 +59,13 @@ runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
 map_document_reader = JsonDocumentReader()
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _combat_lifecycle_result(data):
@@ -718,7 +725,7 @@ def _get_all_in_same_node(realm, heaven, node_id):
     )
     res = []
     for uid in uids:
-        ui = sql_message.get_user_info_with_id(uid)
+        ui = _sql_message().get_user_info_with_id(uid)
         if ui:
             res.append(ui)
     return res
