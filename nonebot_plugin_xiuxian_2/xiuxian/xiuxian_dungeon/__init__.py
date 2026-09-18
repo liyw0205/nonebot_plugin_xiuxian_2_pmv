@@ -59,7 +59,7 @@ from ...features.dungeon.application import DungeonApplication
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 items = Items()
 dungeon_application = DungeonApplication(get_paths().game_db, get_paths().player_db)
 dungeon_ids = UUIDGenerator()
@@ -67,6 +67,13 @@ runtime_clock = SystemClock()
 _dungeon_explore_operation_service_instance = None
 _dungeon_team_transaction_service_instance = None
 _dungeon_team_exit_service_instance = None
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _dungeon_explore_operation_service():
@@ -142,7 +149,7 @@ def _missing_team_snapshot(team_id: str = "") -> TeamStateSnapshot:
 
 
 def _team_mutation_message(action: str, result: TeamMutationResult) -> str:
-    target_info = sql_message.get_user_info_with_id(result.target_id) or {}
+    target_info = _sql_message().get_user_info_with_id(result.target_id) or {}
     target_name = target_info.get("user_name", result.target_id or "指定用户")
     if action == "create":
         if result.status in {"applied", "duplicate"}:
@@ -180,7 +187,7 @@ def _team_mutation_message(action: str, result: TeamMutationResult) -> str:
         return messages.get(result.status, "发送组队邀请失败！")
     if action == "join":
         if result.status in {"applied", "duplicate"}:
-            leader = sql_message.get_user_info_with_id(result.leader_id) or {}
+            leader = _sql_message().get_user_info_with_id(result.leader_id) or {}
             return build_invite_response_message(
                 TeamInviteResponseResult(
                     "joined",
@@ -237,11 +244,11 @@ def _team_exit_message(action: str, result: TeamExitResult) -> str:
         if result.disbanded:
             return f"你已离开队伍【{result.team_name}】，队伍已解散。\n你进入了{TEAM_JOIN_CD_HOURS}小时组队冷却。"
         if result.new_leader_id:
-            leader = sql_message.get_user_info_with_id(result.new_leader_id) or {}
+            leader = _sql_message().get_user_info_with_id(result.new_leader_id) or {}
             return f"你已离开队伍【{result.team_name}】，队长已转让给{leader.get('user_name', result.new_leader_id)}。\n你进入了{TEAM_JOIN_CD_HOURS}小时组队冷却。"
         return f"你已离开队伍【{result.team_name}】。\n你进入了{TEAM_JOIN_CD_HOURS}小时组队冷却。"
     if action == "kick":
-        target = sql_message.get_user_info_with_id(result.target_id) or {}
+        target = _sql_message().get_user_info_with_id(result.target_id) or {}
         return f"已将成员{target.get('user_name', result.target_id)}踢出队伍。\n对方进入{TEAM_JOIN_CD_HOURS}小时组队冷却。"
     return f"队伍【{result.team_name}】已解散。\n全体成员进入{TEAM_JOIN_CD_HOURS}小时组队冷却。"
 
@@ -386,7 +393,7 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
     arg = args.extract_plain_text().strip()
     target_user_id = get_at_user_id(args)
     if not target_user_id and arg:
-        target_db_info = sql_message.get_user_info_with_name(arg)
+        target_db_info = _sql_message().get_user_info_with_name(arg)
         if target_db_info:
             target_user_id = str(target_db_info['user_id'])
     target_user_id = str(target_user_id or "")
@@ -540,7 +547,7 @@ async def kick_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
     arg = args.extract_plain_text().strip()
     target_user_id = get_at_user_id(args)
     if not target_user_id and arg:
-        target_db_info = sql_message.get_user_info_with_name(arg)
+        target_db_info = _sql_message().get_user_info_with_name(arg)
         if target_db_info:
             target_user_id = str(target_db_info['user_id'])
     target_user_id = str(target_user_id or "")
@@ -611,7 +618,7 @@ async def view_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
     view_result = build_team_view(
         team_info,
         lambda member_id: (
-            sql_message.get_user_info_with_id(member_id) or {}
+            _sql_message().get_user_info_with_id(member_id) or {}
         ).get("user_name", f"未知用户({member_id})"),
     )
     msg = build_team_view_message(view_result)
@@ -640,7 +647,7 @@ async def transfer_team_handler(bot: Bot, event: Union[GroupMessageEvent, Privat
     arg = args.extract_plain_text().strip()
     target_user_id = get_at_user_id(args)
     if not target_user_id and arg:
-        target_db_info = sql_message.get_user_info_with_name(arg)
+        target_db_info = _sql_message().get_user_info_with_name(arg)
         if target_db_info:
             target_user_id = str(target_db_info['user_id'])
     target_user_id = str(target_user_id or "")
@@ -801,9 +808,9 @@ def build_battle_rewards(
                 rewards_msg.append(f"{item_info['name']}")
 
         for item in reward_items:
-            item["expected_num"] = int(sql_message.goods_num(uid, item["id"]))
+            item["expected_num"] = int(_sql_message().goods_num(uid, item["id"]))
             item["expected_bind_num"] = int(
-                sql_message.goods_num(uid, item["id"], "bind")
+                _sql_message().goods_num(uid, item["id"], "bind")
             )
         rewards.append({
             "user_id": uid,
@@ -1212,7 +1219,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
             await explore_dungeon.finish()
         members_info = []
         for member_id in member_ids:
-            member_info = sql_message.get_user_info_with_id(member_id)
+            member_info = _sql_message().get_user_info_with_id(member_id)
             if member_info is None:
                 await reject(
                     "member_missing",
@@ -1402,9 +1409,9 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
                         "name": item_info["name"],
                         "type": item_info["type"],
                         "amount": 1,
-                        "expected_num": int(sql_message.goods_num(user_id, item_id)),
+                        "expected_num": int(_sql_message().goods_num(user_id, item_id)),
                         "expected_bind_num": int(
-                            sql_message.goods_num(user_id, item_id, "bind")
+                            _sql_message().goods_num(user_id, item_id, "bind")
                         ),
                     }
                 ]
