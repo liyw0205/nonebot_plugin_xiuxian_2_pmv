@@ -2183,6 +2183,8 @@
 
 2026-09-18 buff manager boundary audit：`xiuxian_buff.__init__` 的 `PlayerDataManager` 仍被 bank/statistics migration 与运行时读取真实使用，未做未经边界拆分的整体删除；继续扫描独立 legacy import slices。
 
+2026-09-18 rift lazy cooldown read slice：`xiuxian_rift.__init__` 的 legacy `XiuxianDateManage` 仅保留结算 cooldown read，并改为 `_sql_message_instance`/`_sql_message()` lazy holder；RiftEntry database-first generation/entry、legacy JSON projection fallback、termination/speedup/key/demon/settlement transaction ownership及 replay/conflict/rollback未改变。construction/source/architecture及 Rift regression 共 247 tests passed，compileall、inventory、diff check通过。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。

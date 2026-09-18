@@ -48,7 +48,7 @@ from .riftmake import (
     get_dxsj_info, get_boss_battle_info, get_treasure_info
 )
 
-sql_message = XiuxianDateManage()  # sql类
+_sql_message_instance = None
 _rift_entry_service_instance = None
 _rift_termination_service_instance = None
 _rift_key_event_settlement_service_instance = None
@@ -61,6 +61,13 @@ config = get_rift_config() # 获取秘境配置
 runtime_ids = UUIDGenerator()
 runtime_clock = SystemClock()
 groups = config['open']  # list
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _rift_entry_service():
@@ -787,7 +794,7 @@ async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             await complete_rift.finish()
 
         try:
-            user_cd_message = sql_message.get_user_cd(user_id)
+            user_cd_message = _sql_message().get_user_cd(user_id)
             exp_time = _rift_elapsed_minutes(user_cd_message['create_time'])
             time2 = int(rift_info["time"])
         except Exception as exc:

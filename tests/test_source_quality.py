@@ -647,6 +647,15 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("def _sql_message(", source)
         self.assertNotIn("sql_message = XiuxianDateManage()", source)
 
+    def test_rift_facade_defers_sql_manager_construction(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_rift" / "__init__.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("_sql_message_instance = None", source)
+        self.assertIn("def _sql_message(", source)
+        self.assertIn("_sql_message().get_user_cd(", source)
+        self.assertNotIn("sql_message = XiuxianDateManage()", source)
+
     def test_accessory_package_rewards_use_attached_database_transaction(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         command_source = (back_root / "__init__.py").read_text(encoding="utf-8")
