@@ -2499,6 +2499,8 @@
 
 2026-09-19 xiuxian2 handle core storage lazy construction slice：`xiuxian_utils/xiuxian2_handle.py` 延迟 module-level `XiuxianDateManage`/`PlayerDataManager` aliases，新增 getter和通用 proxy，保留 blackhouse `.conn`访问、title dynamic imports、legacy singleton identity及 shutdown close semantics；mixelixir helper reads改为同一 player getter。Core handle/blackhouse/title/world-boss regression 221 passed，singleton/proxy identity probe通过，source/architecture、compileall、inventory、diff check通过。
 
+2026-09-19 xiuxian2 handle core storage lazy construction live safety：提交 `0d1dbadb` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T174008Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
+
 2026-09-19 utils storage lazy construction live safety：提交 `0f84c726` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T171820Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
 
 ## 6. 下一步
