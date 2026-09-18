@@ -6,7 +6,16 @@ from pathlib import Path
 from datetime import datetime
 import os
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
-player_data_manager = PlayerDataManager()
+_player_data_manager_instance = None
+player_data_manager = None
+
+
+def _player_data_manager():
+    global _player_data_manager_instance, player_data_manager
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+        player_data_manager = _player_data_manager_instance
+    return _player_data_manager_instance
 
 # 世界 BOSS 每日讨伐上限（讨伐校验 / 积分信息 / 日常 共用）
 DAILY_BATTLE_COUNT = 30
@@ -24,7 +33,7 @@ class BossLimit:
 
     def _load_data(self, user_id):
         """加载数据"""
-        data = player_data_manager.get_fields(user_id, "boss")
+        data = _player_data_manager().get_fields(user_id, "boss")
         if data is None:
             self._save_data(user_id, self.default_data)
             return self.default_data
@@ -32,10 +41,10 @@ class BossLimit:
 
     def _save_data(self, user_id, data):
         """保存数据"""
-        player_data_manager.update_or_write_data(user_id, "boss", "boss_integral", data["boss_integral"])
-        player_data_manager.update_or_write_data(user_id, "boss", "boss_stone", data["boss_stone"])
-        player_data_manager.update_or_write_data(user_id, "boss", "boss_battle_count", data["boss_battle_count"])
-        player_data_manager.update_or_write_data(user_id, "boss", "weekly_purchases", data["weekly_purchases"])
+        _player_data_manager().update_or_write_data(user_id, "boss", "boss_integral", data["boss_integral"])
+        _player_data_manager().update_or_write_data(user_id, "boss", "boss_stone", data["boss_stone"])
+        _player_data_manager().update_or_write_data(user_id, "boss", "boss_battle_count", data["boss_battle_count"])
+        _player_data_manager().update_or_write_data(user_id, "boss", "weekly_purchases", data["weekly_purchases"])
 
     def get_integral(self, user_id):
         """获取用户今日已获得BOSS积分"""

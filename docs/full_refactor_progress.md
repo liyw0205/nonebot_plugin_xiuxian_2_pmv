@@ -2401,6 +2401,8 @@
 
 2026-09-18 natal data lazy construction live safety verified：remote smoke operation `refactor-natal-e71f9b93` 通过五库 backup/dry-run/readiness/reconcile/rollback/restore/旧实例恢复；独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，manifest `/srv/smoke-data/backups/20260918T125324Z` 五库完整。
 
+2026-09-18 boss limit lazy construction slice：`boss_limit` 延迟 `PlayerDataManager` 到 boss table 首次读写，并保留 `xiuxian_boss.__init__` 所需 public `player_data_manager` import alias（首次 getter后同步实例）；保留 boss daily/weekly legacy fields、reset semantics与 world-boss transaction-service ownership。Boss/world-boss/source/architecture regression共 251 tests passed，compileall、inventory、diff check通过。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。
