@@ -15,6 +15,15 @@ def test_world_events_facade_defers_attack_settlement_service_construction():
         "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events"
     )
     assert world_events._demon_attack_settlement_service_instance is None
+    source = open(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_world_events/__init__.py",
+        encoding="utf-8",
+    ).read()
+    assert "_player_data_manager_instance = None" in source
+    assert "def _player_data_manager(" in source
+    assert "player_data_manager = PlayerDataManager()" not in source
+    assert "_player_data_manager().get_fields(" in source
+    assert "_player_data_manager().update_or_write_data(" in source
 
 
 def create_db(path):

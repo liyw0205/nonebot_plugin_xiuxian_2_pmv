@@ -45,7 +45,7 @@ from .transaction_service import SpiritVeinLifecycleService
 
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 _sql_message_instance = None
-player_data_manager = PlayerDataManager()
+_player_data_manager_instance = None
 items = Items()
 _demon_claim_service_instance = None
 demon_claim_application = DemonClaimApplication(
@@ -105,6 +105,25 @@ def _spirit_vein_lifecycle_service():
 runtime_ids = UUIDGenerator()
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
+
+
+def _resolve_player_data_manager():
+    global _player_data_manager_instance
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+    return _player_data_manager_instance
+
+
+class _LazyPlayerDataManager:
+    def __getattr__(self, name):
+        return getattr(_resolve_player_data_manager(), name)
+
+
+player_data_manager = _LazyPlayerDataManager()
+
+
+def _player_data_manager():
+    return player_data_manager
 
 
 def _sql_message():
@@ -359,7 +378,7 @@ def _pick_demon_random_reward(contribution: float):
 
 
 def _load_state(event_key: str = EVENT_KEY) -> dict:
-    state = player_data_manager.get_fields(event_key, EVENT_TABLE) or {}
+    state = _player_data_manager().get_fields(event_key, EVENT_TABLE) or {}
     state.pop("user_id", None)
     state.setdefault("active", 0)
     state.setdefault("status", "idle")
@@ -400,7 +419,7 @@ def _save_state(state: dict, event_key: str = EVENT_KEY) -> None:
         "last_result": "TEXT",
     }
     for field, data_type in fields.items():
-        player_data_manager.update_or_write_data(
+        _player_data_manager().update_or_write_data(
             event_key,
             EVENT_TABLE,
             field,
