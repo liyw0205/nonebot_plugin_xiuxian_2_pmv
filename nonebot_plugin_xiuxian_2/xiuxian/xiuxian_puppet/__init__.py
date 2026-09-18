@@ -27,7 +27,16 @@ from ...features.puppet.repository import LegacyPuppetRepository
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 
-sql_message = XiuxianDateManage()  # sql类
+_sql_message_instance = None
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
+
+
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 items = Items()
 _puppet_harvest_service_instance = None
@@ -183,7 +192,7 @@ async def puppet_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 async def auto_harvest_scheduled():
     """每小时自动收取任务"""
     try:
-        enabled_users = sql_message.get_all_enabled_puppets()
+        enabled_users = _sql_message().get_all_enabled_puppets()
 
         for user_id in enabled_users:
             await check_and_harvest(user_id)
@@ -325,7 +334,7 @@ async def start_puppet_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await start_puppet.finish()
 
     # 数据库灵田傀儡 参数设置成 1
-    sql_message.set_puppet_status(user_id, 1)
+    _sql_message().set_puppet_status(user_id, 1)
 
     harvest_cost = PUPPET_CONFIG[puppet_level]['harvest_cost']
 
@@ -354,7 +363,7 @@ async def stop_puppet_handler(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await stop_puppet.finish()
 
     # 数据库灵田傀儡 参数设置成 0 关闭
-    sql_message.set_puppet_status(user_id, 0)
+    _sql_message().set_puppet_status(user_id, 0)
 
     msg = "灵田傀儡已关闭！"
     await handle_send(bot, event, msg)
@@ -410,7 +419,7 @@ async def puppet_info_handler(bot: Bot, event: GroupMessageEvent | PrivateMessag
     msg += f"灵药状态：{elixir_time}\n"
     if puppet_level > 0:
         status = "关闭"
-        puppet_status = sql_message.check_puppet_status(user_id)  # 返回 0 或 1
+        puppet_status = _sql_message().check_puppet_status(user_id)  # 返回 0 或 1
         if puppet_status == 1:
             status = "开启"
 

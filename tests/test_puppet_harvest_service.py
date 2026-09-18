@@ -21,6 +21,17 @@ LAST_HARVEST = "2026-07-10 12:00:00"
 
 
 class PuppetHarvestServiceTests(unittest.TestCase):
+    def test_puppet_facade_defers_sql_manager_construction(self):
+        source = Path(
+            "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_puppet/__init__.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("_sql_message_instance = None", source)
+        self.assertIn("def _sql_message(", source)
+        self.assertIn("_sql_message().get_all_enabled_puppets(", source)
+        self.assertIn("_sql_message().set_puppet_status(", source)
+        self.assertIn("_sql_message().check_puppet_status(", source)
+        self.assertNotIn("sql_message = XiuxianDateManage()", source)
+
     def test_puppet_facade_defers_harvest_service_construction(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_puppet
 
