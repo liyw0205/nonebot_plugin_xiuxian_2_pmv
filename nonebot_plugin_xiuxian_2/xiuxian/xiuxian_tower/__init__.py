@@ -33,7 +33,7 @@ from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_title.title_data import check_and_unlock_titles
 player_data_manager = PlayerDataManager()
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 items = Items()
 _tower_settlement_service_instance = None
 tower_application = TowerApplication(
@@ -42,6 +42,13 @@ tower_application = TowerApplication(
     repository=TowerPurchaseSqlRepository(get_paths().game_db, get_paths().player_db),
 )
 tower_ids = UUIDGenerator()
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _tower_settlement_service():
@@ -168,7 +175,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="通天塔帮助", v3="通天塔帮助")
         await tower_challenge.finish()
     if user_info['hp'] is None or user_info['hp'] == 0:
-        sql_message.update_user_hp(user_id)
+        _sql_message().update_user_hp(user_id)
 
     if user_info['hp'] <= user_info['exp'] / 10:
         time = leave_harm_time(user_id)
@@ -226,13 +233,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await tower_continuous.finish()
 
     if user_info['hp'] is None or user_info['hp'] == 0:
-        sql_message.update_user_hp(user_id)
+        _sql_message().update_user_hp(user_id)
 
     if user_info['hp'] <= user_info['exp'] / 10:
         time = leave_harm_time(user_id)
         msg = f"重伤未愈，动弹不得！距离脱离危险还需要{time}分钟！\n"
         msg += f"请道友进行闭关，或者使用药品恢复气血，不要干等，没有自动回血！！！"
-        sql_message.update_user_stamina(user_id, tower_data.config["体力消耗"]["连续爬塔"], 1)
+        _sql_message().update_user_stamina(user_id, tower_data.config["体力消耗"]["连续爬塔"], 1)
         await handle_send(bot, event, msg, md_type="通天塔", k1="闭关", v1="闭关", k2="丹药", v2="丹药背包", k3="状态", v3="我的状态")
         await tower_continuous.finish()
     
@@ -438,7 +445,7 @@ async def tower_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 生成排行榜
     rank_msg = "【通天塔排行榜】\n"
     for i, (user_id, integral) in enumerate(sorted_integral[:50], start=1):
-        user_info = sql_message.get_user_info_with_id(user_id)
+        user_info = _sql_message().get_user_info_with_id(user_id)
         rank_msg += f"第{i}位 | {user_info['user_name']} | {number_to(integral)}\n"
     
     await handle_send(bot, event, rank_msg)
@@ -462,7 +469,7 @@ async def tower_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     # 生成排行榜
     rank_msg = "【通天塔积分排行榜】\n"
     for i, (user_id, integral) in enumerate(sorted_integral[:50], start=1):
-        user_info = sql_message.get_user_info_with_id(user_id)
+        user_info = _sql_message().get_user_info_with_id(user_id)
         rank_msg += f"第{i}位 | {user_info['user_name']} | {number_to(integral)}\n"
     
     await handle_send(bot, event, rank_msg)
