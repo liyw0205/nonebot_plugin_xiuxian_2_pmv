@@ -20,10 +20,17 @@ from .transaction_service import PastLifeResetService
 from ...paths import get_paths
 from ...features.past_life.application import PastLifeApplication
 
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 _paths = get_paths()
 _past_life_reset_service_instance = None
 past_life_application = PastLifeApplication(_paths.game_db)
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _past_life_reset_service():
@@ -276,7 +283,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     rank_msg += "排名 | 道号 | 前世评分 | 最佳结局\n"
 
     for i, (uid, score) in enumerate(sorted_scores[:30], 1):
-        u_info = sql_message.get_user_info_with_id(uid)
+        u_info = _sql_message().get_user_info_with_id(uid)
         if not u_info:
             continue
         u_state = past_life_limit.get_user_state(uid)
@@ -368,13 +375,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     target_user = None
     qq = get_at_user_id(args)
     if qq:
-        target_user = sql_message.get_user_info_with_id(qq)
+        target_user = _sql_message().get_user_info_with_id(qq)
 
     # 没@就按道号
     if not target_user:
         target_name = _get_reset_target_name(text)
         if target_name:
-            target_user = sql_message.get_user_info_with_name(target_name)
+            target_user = _sql_message().get_user_info_with_name(target_name)
 
     if not target_user:
         await handle_send(bot, event, "未找到目标用户（请@或输入正确道号）")

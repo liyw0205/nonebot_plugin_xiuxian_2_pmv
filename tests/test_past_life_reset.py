@@ -22,6 +22,15 @@ from tests.test_db_backend import db_backend
 
 
 class PastLifeResetTests(unittest.TestCase):
+    def test_past_life_facade_defers_sql_manager_construction(self):
+        source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_past_life/__init__.py"
+        text = source.read_text(encoding="utf-8")
+        self.assertIn("_sql_message_instance = None", text)
+        self.assertIn("def _sql_message(", text)
+        self.assertIn("_sql_message().get_user_info_with_id(", text)
+        self.assertIn("_sql_message().get_user_info_with_name(", text)
+        self.assertNotIn("sql_message = XiuxianDateManage()", text)
+
     def test_past_life_facade_defers_reset_service_construction(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_past_life
 
