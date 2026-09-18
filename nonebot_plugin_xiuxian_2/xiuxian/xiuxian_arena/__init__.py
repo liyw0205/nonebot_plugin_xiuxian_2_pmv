@@ -18,7 +18,7 @@ from ...paths import get_paths
 
 items = Items()
 player_data_manager = PlayerDataManager()
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 
 from .arena_limit import arena_limit
 from .arena_shop import arena_shop_data
@@ -42,6 +42,13 @@ arena_application = ArenaApplication(
 )
 arena_ids = UUIDGenerator()
 runtime_clock = SystemClock()
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _arena_weekly_rank_reduction_service():
@@ -295,7 +302,7 @@ async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         opponent_id = await find_arena_opponent(user_id, operation_id)
 
     arena_info = arena_limit.get_user_arena_info(user_id)
-    challenger_player = sql_message.get_user_info_with_id(user_id)
+    challenger_player = _sql_message().get_user_info_with_id(user_id)
     challenged_at = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S.%f")
     challenge_cap = arena_limit.daily_challenges + int(
         arena_info.get("daily_extra_challenges", 0)
@@ -315,7 +322,7 @@ async def arena_challenge_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 
     if opponent_id:
         opponent_arena = arena_limit.get_user_arena_info(opponent_id)
-        opponent_player = sql_message.get_user_info_with_id(opponent_id)
+        opponent_player = _sql_message().get_user_info_with_id(opponent_id)
         if opponent_player:
             battle_messages, winner, status_list = _arena_fight(
                 user_id, opponent_id, bot.self_id, operation_id
@@ -391,7 +398,7 @@ async def arena_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             opponent_id = str(item.get("user_id", ""))
             cached_score = item.get("score", 0)
 
-            opponent_user_info = sql_message.get_user_info_with_id(opponent_id)
+            opponent_user_info = _sql_message().get_user_info_with_id(opponent_id)
             if not opponent_user_info:
                 continue
 
@@ -431,7 +438,7 @@ async def arena_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             except (TypeError, ValueError):
                 continue
 
-            opponent_user_info = sql_message.get_user_info_with_id(opponent_id)
+            opponent_user_info = _sql_message().get_user_info_with_id(opponent_id)
             if not opponent_user_info:
                 continue
 
@@ -493,7 +500,7 @@ async def arena_ranking_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     msg += "═" * 12 + "\n"
     
     for i, (user_id, score) in enumerate(ranking, 1):
-        user_info = sql_message.get_user_info_with_id(user_id)
+        user_info = _sql_message().get_user_info_with_id(user_id)
         if user_info:
             rank_icon = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
             icon = rank_icon[i-1] if i <= 10 else f"{i}."
@@ -875,7 +882,7 @@ async def find_arena_opponent(user_id, operation_id=None):
         except (TypeError, ValueError):
             continue
 
-        opponent_user_info = sql_message.get_user_info_with_id(opponent_id)
+        opponent_user_info = _sql_message().get_user_info_with_id(opponent_id)
         if not opponent_user_info:
             continue
 
@@ -940,7 +947,7 @@ async def reset_arena_daily_challenges():
             base_honor, ranking_bonus, expected_reset=arena_info,
         )
         if claimed.succeeded and total_honor > 0:
-            user_info = sql_message.get_user_info_with_id(user_id)
+            user_info = _sql_message().get_user_info_with_id(user_id)
             honor_distribution[user_info['user_name'] if user_info else user_id] = {
                 'total': total_honor,
                 'base': base_honor,
@@ -979,7 +986,7 @@ async def use_arena_challenge_ticket(bot: Bot, event: GroupMessageEvent | Privat
     user_id = user_info["user_id"]
     arena_info = arena_limit.get_user_arena_info(user_id)
     used_count = int(arena_info.get("daily_challenges_used", 0))
-    item_count = int(sql_message.goods_num(user_id, item_id))
+    item_count = int(_sql_message().goods_num(user_id, item_id))
     extra_challenges = int(arena_info.get("daily_extra_challenges", 0))
     challenge_cap = arena_limit.daily_challenges + extra_challenges
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
