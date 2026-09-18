@@ -34,7 +34,7 @@ from .transaction_service import AccessoryTransactionService
 
 items = Items()
 _sql_message_instance = None
-player_data_manager = PlayerDataManager()
+_player_data_manager_instance = None
 _accessory_transaction_service_instance = None
 runtime_ids = UUIDGenerator()
 
@@ -44,6 +44,25 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
+
+
+def _resolve_player_data_manager():
+    global _player_data_manager_instance
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+    return _player_data_manager_instance
+
+
+class _LazyPlayerDataManager:
+    def __getattr__(self, name):
+        return getattr(_resolve_player_data_manager(), name)
+
+
+player_data_manager = _LazyPlayerDataManager()
+
+
+def _player_data_manager():
+    return player_data_manager
 
 
 def _accessory_transaction_service():
@@ -742,7 +761,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         result["msg"] = f"已装备：{hit.get('name', '未知饰品')} 到 {part}"
         return True
 
-    player_data_manager.patch_doc(
+    _player_data_manager().patch_doc(
         user_id=user_id,
         table_name=TABLE,
         fields=["equipped", "bag"],
@@ -779,7 +798,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         result["msg"] = f"已卸下：{cur.get('name', '未知饰品')}"
         return True
 
-    player_data_manager.patch_doc(
+    _player_data_manager().patch_doc(
         user_id=user_id,
         table_name=TABLE,
         fields=["equipped", "bag"],

@@ -6,7 +6,26 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
 
 items = Items()
-player_data_manager = PlayerDataManager()
+_player_data_manager_instance = None
+
+
+def _resolve_player_data_manager():
+    global _player_data_manager_instance
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+    return _player_data_manager_instance
+
+
+class _LazyPlayerDataManager:
+    def __getattr__(self, name):
+        return getattr(_resolve_player_data_manager(), name)
+
+
+player_data_manager = _LazyPlayerDataManager()
+
+
+def _player_data_manager():
+    return player_data_manager
 
 def _paginate_sections(sections, page: int, per_page: int = 15):
     total_items = sum(len(rows) for _, rows in sections)
@@ -170,7 +189,7 @@ def _normalize_accessory_doc(doc: dict):
     return doc
 
 def _get_data(user_id: str):
-    doc = player_data_manager.get_doc(
+    doc = _player_data_manager().get_doc(
         user_id=user_id,
         table_name=TABLE,
         fields=["equipped", "bag"],
@@ -180,7 +199,7 @@ def _get_data(user_id: str):
 
 def _save_data(user_id: str, data: dict):
     data = _normalize_accessory_doc(data)
-    player_data_manager.save_doc(
+    _player_data_manager().save_doc(
         user_id=user_id,
         table_name=TABLE,
         data=data,
@@ -419,7 +438,7 @@ def _default_accessory_preset():
 
 def _get_accessory_preset(user_id: str, preset_idx: int):
     field = f"preset_{preset_idx}"
-    raw = player_data_manager.get_field_data(str(user_id), TABLE, field)
+    raw = _player_data_manager().get_field_data(user_id, TABLE, field)
 
     if not isinstance(raw, dict):
         raw = _default_accessory_preset()
