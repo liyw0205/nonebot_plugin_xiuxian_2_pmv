@@ -35,7 +35,14 @@ jinjie_list = [
     "永恒境"
 ]
 
-sql_message = XiuxianDateManage()  # sql类
+_sql_message_instance = None
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 def get_boss_jinjie_dict():
     CONFIGJSONPATH = get_paths().data / "境界.json"
@@ -66,7 +73,7 @@ def get_boss_exp(boss_jj):
         return None
 
 def createboss():
-    top_user_info = sql_message.get_realm_top1_user() # 改成了境界第一
+    top_user_info = _sql_message().get_realm_top1_user() # 改成了境界第一
     top_user_level = top_user_info['level']
     if len(top_user_level) == 5:
         level = top_user_level[:3] 
@@ -103,7 +110,7 @@ def create_all_bosses(max_jj: str = None) -> list:
     
     # 如果没有指定最高境界，则根据当前最高玩家境界计算
     if max_jj is None:
-        top_user_info = sql_message.get_realm_top1_user()
+        top_user_info = _sql_message().get_realm_top1_user()
         top_user_level = top_user_info['level']
         
         if len(top_user_level) == 5:
