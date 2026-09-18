@@ -2177,6 +2177,10 @@
 
 2026-09-18 training limit lazy state slice：`training_limit.py` 保留 `training_limit`/`TrainingLimit` public facade与显式 `TrainingStateService` 注入，但默认 manager、共享 `PlayerDataManager.lock` 和 `TrainingStateService` 均改为首次读取 lazy；TrainingStateService atomic state/reset/weekly purchase/replay语义及 training production handlers未改变。construction/source/architecture及 training regression 共 221 tests passed，compileall、inventory、diff check通过。
 
+2026-09-18 training limit lazy state live safety：提交 `c5e7cb2f` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T032318Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
+
+2026-09-18 buff manager boundary audit：`xiuxian_buff.__init__` 的 `PlayerDataManager` 仍被 bank/statistics migration 与运行时读取真实使用，未做未经边界拆分的整体删除；继续扫描独立 legacy import slices。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。
