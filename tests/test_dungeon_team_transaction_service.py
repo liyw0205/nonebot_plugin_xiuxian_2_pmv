@@ -18,6 +18,14 @@ class DungeonTeamTransactionServiceTests(unittest.TestCase):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dungeon as dungeon_plugin
 
         self.assertIsNone(dungeon_plugin._dungeon_team_transaction_service_instance)
+        source = Path(
+            "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dungeon/dungeon_manager.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("_player_data_manager_instance = None", source)
+        self.assertIn("def _player_data_manager(", source)
+        self.assertNotIn("player_data = PlayerDataManager()", source)
+        self.assertIn("_player_data_manager().get_fields(", source)
+        self.assertIn("_player_data_manager()._ensure_table_exists(", source)
 
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
