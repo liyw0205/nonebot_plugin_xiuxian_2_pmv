@@ -46,7 +46,7 @@ from .transaction_service import ReawakenService
 from .transaction_service import AwakenService
 
 items = Items()
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 _natal_training_service_instance = None
 _natal_effect_upgrade_service_instance = None
 _natal_engraving_service_instance = None
@@ -54,6 +54,13 @@ _natal_forget_service_instance = None
 _natal_reawaken_service_instance = None
 _natal_awaken_service_instance = None
 runtime_ids = UUIDGenerator()
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _natal_training_service():
@@ -464,7 +471,7 @@ async def natal_effect_upgrade_handler(bot: Bot, event: GroupMessageEvent | Priv
         await handle_send(bot, event, f"效果升阶成功！消耗{scripture_cost}个【神秘经书】。\n效果【{effect_name}】等级提升至 {prior.level}。\n该升阶请求已经处理，无需重复提交。",
                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="升阶", v3="本命法宝升阶")
         return
-    scripture_num = sql_message.goods_num(user_id, MYSTERIOUS_SCRIPTURE_ID)
+    scripture_num = _sql_message().goods_num(user_id, MYSTERIOUS_SCRIPTURE_ID)
     if scripture_num < scripture_cost:
         mysterious_scripture_info = items.get_data_by_item_id(MYSTERIOUS_SCRIPTURE_ID)
         await handle_send(bot, event, f"效果升阶需要消耗{scripture_cost}个【{mysterious_scripture_info['name']}】，你目前只有{scripture_num}个！",
@@ -534,7 +541,7 @@ async def natal_engrave_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
                           md_type="法宝", k1="法宝", v1="我的本命法宝", k2="升阶", v2="本命法宝升阶", k3="帮助", v3="本命法宝帮助")
         await natal_engrave.finish()
 
-    scripture_num = sql_message.goods_num(user_id, MYSTERIOUS_SCRIPTURE_ID)
+    scripture_num = _sql_message().goods_num(user_id, MYSTERIOUS_SCRIPTURE_ID)
     mysterious_scripture_info = items.get_data_by_item_id(MYSTERIOUS_SCRIPTURE_ID)
 
     if scripture_num < scripture_cost:
