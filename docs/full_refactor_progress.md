@@ -2311,6 +2311,8 @@
 
 2026-09-18 sect-member utility lazy compatibility reader slice：`sect_member_utils.py` 的 user/sect/task/name utility reads已改为 `_sql_message_instance`/`_sql_message()` lazy holder；`bind_sect_member_dependencies(sql_manager=...)` 仍优先绑定共享 manager并同步 holder，SectMembership/task-state ownership未改变。construction/source/architecture及 Sect regression共 364 tests passed，compileall、inventory、diff check通过。
 
+2026-09-18 sect-member utility lazy compatibility reader live safety：提交 `c537d4f1` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T084434Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。
