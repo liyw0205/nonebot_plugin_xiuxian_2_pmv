@@ -2179,6 +2179,8 @@
 
 2026-09-18 training limit lazy state live safety：提交 `c5e7cb2f` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T032318Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
 
+2026-09-18 training limit lazy state boundary receipt：TrainingLimit lazy holder部署验证已完成，五库 dry-run/readiness/reconcile/rollback/restore与旧实例恢复均通过；后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest为 `/srv/smoke-data/backups/20260918T032318Z`，数据库顺序为 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
+
 2026-09-18 buff manager boundary audit：`xiuxian_buff.__init__` 的 `PlayerDataManager` 仍被 bank/statistics migration 与运行时读取真实使用，未做未经边界拆分的整体删除；继续扫描独立 legacy import slices。
 
 ## 6. 下一步
