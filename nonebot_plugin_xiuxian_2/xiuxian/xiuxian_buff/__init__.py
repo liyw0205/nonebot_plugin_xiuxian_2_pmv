@@ -69,7 +69,7 @@ from .partner import (  # noqa: F401
 )
 
 cache_help = {}
-sql_message = XiuxianDateManage()  # sql类
+_sql_message_instance = None
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 player_data_manager = PlayerDataManager()
 _blessed_spot_service_instance = None
@@ -80,6 +80,13 @@ _stone_training_settlement_service_instance = None
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _blessed_spot_service():
@@ -406,19 +413,19 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
             await qc.finish()
     else:
         arg = args.extract_plain_text().strip()
-        give_info = sql_message.get_user_info_with_name(str(arg))
+        give_info = _sql_message().get_user_info_with_name(str(arg))
         give_qq = give_info['user_id'] if give_info else None
 
     # raw DB rows for concurrency checks; real_info is buff-amplified and must not seed expected_*.
-    base1 = sql_message.get_user_info_with_id(user_id)
-    base2 = sql_message.get_user_info_with_id(give_qq) if give_qq else None
-    user1 = sql_message.get_user_real_info(user_id)
-    user2 = sql_message.get_user_real_info(give_qq) if give_qq else None
+    base1 = _sql_message().get_user_info_with_id(user_id)
+    base2 = _sql_message().get_user_info_with_id(give_qq) if give_qq else None
+    user1 = _sql_message().get_user_real_info(user_id)
+    user2 = _sql_message().get_user_real_info(give_qq) if give_qq else None
 
     if base1 and (base1['hp'] is None or base1['hp'] == 0):
-        sql_message.update_user_hp(user_id)
-        base1 = sql_message.get_user_info_with_id(user_id)
-        user1 = sql_message.get_user_real_info(user_id)
+        _sql_message().update_user_hp(user_id)
+        base1 = _sql_message().get_user_info_with_id(user_id)
+        user1 = _sql_message().get_user_real_info(user_id)
 
     if not base1 or not base2 or not user1 or not user2:
         msg = "修仙界没有对方的信息，快邀请对方加入修仙界吧！"
@@ -494,12 +501,12 @@ async def reset_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if not is_type:
         await handle_send(bot, event, msg, md_type=f"{user_type}", k2="修仙帮助", v2="修仙帮助", k3="秘境帮助", v3="秘境帮助")
         await reset_exp.finish()
-    user_cd_message = sql_message.get_user_cd(user_id) or {}
+    user_cd_message = _sql_message().get_user_cd(user_id) or {}
     reset_create_time = user_cd_message.get("create_time")
     msg = "请等待一分钟生效即可！"
     await handle_send(bot, event, msg)
     await asyncio.sleep(60)
-    if sql_message.clear_user_type_if_match(user_id, user_type, reset_create_time):
+    if _sql_message().clear_user_type_if_match(user_id, user_type, reset_create_time):
         msg = "已重置修炼状态！"
         await handle_send(bot, event, msg, md_type="buff", k1="修炼", v1="修炼", k2="状态", v2="我的状态", k3="修为", v3="我的修为")
     else:
@@ -517,7 +524,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="我要修仙")
         await up_exp.finish()
     user_id = user_info['user_id']
-    user_mes = sql_message.get_user_info_with_id(user_id)  # 获取用户信息
+    user_mes = _sql_message().get_user_info_with_id(user_id)  # 获取用户信息
     level = user_mes['level']
     use_exp = user_mes['exp']
 
@@ -535,7 +542,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="重置修炼", v3="重置修炼状态")
         await up_exp.finish()
     else:
-        level_rate = sql_message.get_root_rate(user_mes['root_type'], user_id)  # 灵根倍率
+        level_rate = _sql_message().get_root_rate(user_mes['root_type'], user_id)  # 灵根倍率
         realm_rate = jsondata.level_data()[level]["spend"]  # 境界倍率
         user_buff_data = UserBuffDate(user_id)
         user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5
@@ -611,7 +618,7 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await handle_send(bot, event, msg, md_type="我要修仙")
         await stone_exp.finish()
     user_id = user_info['user_id']
-    user_mes = sql_message.get_user_info_with_id(user_id)  # 获取用户信息
+    user_mes = _sql_message().get_user_info_with_id(user_id)  # 获取用户信息
     level = user_mes['level']
     use_exp = user_mes['exp']
     use_stone = user_mes['stone']
@@ -635,7 +642,7 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await stone_exp.finish()
     stone_num = int(stone_num[0])
     # 先 settle：成功后灵石减少，前置“灵石不足”会挡住同事件重放。
-    level_rate = sql_message.get_root_rate(user_mes['root_type'], user_id)
+    level_rate = _sql_message().get_root_rate(user_mes['root_type'], user_id)
     realm_rate = jsondata.level_data()[level]["spend"]
     stone_op_id = _stone_training_operation_id(event, user_id)
     result = _stone_training_settlement_service().settle(
@@ -676,7 +683,7 @@ async def in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="buff", k1="重入仙途", v1="重入仙途", k2="存档", v2="我的修仙信息", k3="修为", v3="我的修为")
         await in_closing.finish()
     if is_type:  # 符合
-        sql_message.in_closing(user_id, user_type)
+        _sql_message().in_closing(user_id, user_type)
         msg = "进入闭关状态，如需出关，发送【出关】！"
         log_message(user_id, "[闭关] 进入闭关状态")
         update_statistics_value(user_id, "闭关次数")
@@ -712,8 +719,8 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             v3="我的修为",
         )
         await out_closing.finish()
-    user_mes = sql_message.get_user_info_with_id(user_id)
-    user_cd_message = sql_message.get_user_cd(user_id)
+    user_mes = _sql_message().get_user_info_with_id(user_id)
+    user_cd_message = _sql_message().get_user_cd(user_id)
     is_type, msg = check_user_type(user_id, 1)
     if not is_type or not user_cd_message:
         await handle_send(bot, event, msg, md_type="1", k2="修仙帮助", v2="修仙帮助", k3="闭关", v3="闭关")
@@ -728,7 +735,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     # 坏 create_time（0/空/脏数据）→ 时长 0，仍允许按 type=1 出关清状态
     create_time = normalize_cd_time_token(user_cd_message.get("create_time"))
     exp_time = elapsed_minutes_from_cd_time(user_cd_message.get("create_time"), on_error=0)
-    level_rate = sql_message.get_root_rate(user_mes["root_type"], user_id)
+    level_rate = _sql_message().get_root_rate(user_mes["root_type"], user_id)
     realm_rate = jsondata.level_data()[level]["spend"]
     user_buff_data = UserBuffDate(user_id)
     blessed_rate = user_buff_data.BuffInfo["blessed_spot"] * 0.5
@@ -800,15 +807,15 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await mind_state.finish()
 
     user_id = user_msg['user_id']
-    sql_message.update_last_check_info_time(user_id)
+    _sql_message().update_last_check_info_time(user_id)
 
-    player_data = sql_message.get_player_data(user_id)
+    player_data = _sql_message().get_player_data(user_id)
     if not player_data:
         msg = "获取用户状态信息失败！"
         await handle_send(bot, event, msg)
         await mind_state.finish()
 
-    user_info = sql_message.get_user_info_with_id(user_id)
+    user_info = _sql_message().get_user_info_with_id(user_id)
     current_status = load_player_user(user_id)
 
     base_attr = get_base_attributes(user_id)
@@ -826,7 +833,7 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     }
     current_status_display = status_map.get(current_status, "🔒 关闭")
 
-    level_rate = sql_message.get_root_rate(user_info['root_type'], user_id)
+    level_rate = _sql_message().get_root_rate(user_info['root_type'], user_id)
     realm_rate = jsondata.level_data()[user_info['level']]["spend"]
     user_buff_data = UserBuffDate(user_id)
     user_blessed_spot_data = user_buff_data.BuffInfo['blessed_spot'] * 0.5 if user_buff_data.BuffInfo else 0
@@ -916,7 +923,7 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         exp_meg = "👑 位面至高"
     else:
         is_updata_level = OtherSet().level[now_index + 1]
-        need_exp = sql_message.get_level_power(is_updata_level)
+        need_exp = _sql_message().get_level_power(is_updata_level)
         get_exp = need_exp - user_info['exp']
         if get_exp > 0:
             exp_meg = f"⏳ 还需{number_to(get_exp)}修为可突破！"
@@ -994,7 +1001,7 @@ async def my_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     try:
         user_id = user_info['user_id']
-        user_msg = sql_message.get_user_info_with_id(user_id) or user_info
+        user_msg = _sql_message().get_user_info_with_id(user_id) or user_info
         user_buff_data = UserBuffDate(user_id)
         level_name = user_msg.get('level') or user_info.get('level') or '未知'
         leveluprate = as_int_like(user_msg.get('level_up_rate', 0))
@@ -1002,7 +1009,7 @@ async def my_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         main_buff_number_buff = main_buff_data['number'] if main_buff_data is not None else 0
         main_buff_rate_buff = main_buff_data['ratebuff'] if main_buff_data is not None else 0
         main_buff_clo_exp = main_buff_data['clo_exp'] if main_buff_data is not None else 0
-        level_rate = sql_message.get_root_rate(user_info['root_type'], user_id)
+        level_rate = _sql_message().get_root_rate(user_info['root_type'], user_id)
         realm_rate = jsondata.level_data()[user_info['level']]["spend"]
         blessed = 0.0
         try:
@@ -1030,7 +1037,7 @@ async def my_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             exp_meg = "👑 位面至高"
         else:
             is_updata_level = levels[now_index + 1]
-            need_exp = as_int_like(sql_message.get_level_power(is_updata_level))
+            need_exp = as_int_like(_sql_message().get_level_power(is_updata_level))
             get_exp = need_exp - user_exp
             if get_exp > 0:
                 exp_meg = f"⏳ 还需{number_to(get_exp)}修为可突破！"
@@ -1144,7 +1151,7 @@ async def del_exp_decimal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await del_exp_decimal.finish()
     user_id = user_info['user_id']
     exp = user_info['exp']
-    sql_message.del_exp_decimal(user_id, exp)
+    _sql_message().del_exp_decimal(user_id, exp)
     msg = f"黑暗动乱暂时抑制成功！"
     await handle_send(bot, event, msg)
     await del_exp_decimal.finish()
@@ -1216,7 +1223,7 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         sect_task_msg = "⬜ 未加入宗门"
     
     # 5. 获取悬赏令次数信息
-    work_nums = sql_message.get_work_num(user_id)
+    work_nums = _sql_message().get_work_num(user_id)
     max_work_nums = count
     if work_nums <= 0:
         work_msg = "✅ 已完成"
@@ -1249,7 +1256,7 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 8. 获取宗门丹药信息
     sect_id = user_info['sect_id']
     if sect_id:
-        sect_info = sql_message.get_sect_info(sect_id)
+        sect_info = _sql_message().get_sect_info(sect_id)
         if sect_info and int(sect_info['elixir_room_level']) > 0:
             # 检查用户是否已领取今日丹药
             user_elixir_get = user_info.get('sect_elixir_get', 0)
@@ -1285,7 +1292,7 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     if rift_exists:
         # 检查用户是否在秘境中
-        user_cd_data = sql_message.get_user_cd(user_id)
+        user_cd_data = _sql_message().get_user_cd(user_id)
         user_in_rift = user_cd_data and user_cd_data['type'] == 3  # 状态3表示在秘境中
         
         # 检查用户是否已参与当前秘境
@@ -1294,7 +1301,7 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         if user_in_rift:
             # 检查是否可结算
             rift_info = read_rift_data(user_id)
-            user_cd_message = sql_message.get_user_cd(user_id)
+            user_cd_message = _sql_message().get_user_cd(user_id)
             from ..xiuxian_utils.cd_time import elapsed_minutes_from_cd_time
 
             # create_time 可能无微秒（%H:%M:%S），不能写死 .%f
