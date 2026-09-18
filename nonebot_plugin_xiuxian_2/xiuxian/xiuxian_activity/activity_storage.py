@@ -10,7 +10,14 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from .activity_config import DATE_FMT, DEFAULT_CONFIG_PATH, TIME_FMT
 from .activity_utils import _clean_text
 
-_sql_message = XiuxianDateManage()
+_sql_message_instance = None
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 BASE_DIR = get_paths().data / "activity"
@@ -253,7 +260,7 @@ def resolve_daohao(user_id: str) -> str:
     if not uid:
         return "无名修士"
     try:
-        row = _sql_message.get_user_info_with_id(uid)
+        row = _sql_message().get_user_info_with_id(uid)
         name = _clean_text(row.get("user_name") if row else "")
         if name:
             return name
@@ -278,7 +285,7 @@ def resolve_daohao_batch(user_ids: list[str]) -> dict[str, str]:
     result = {uid: resolve_daohao(uid) for uid in ids}
     try:
         placeholders = ",".join(["%s"] * len(ids))
-        rows = _sql_message._read_query(
+        rows = _sql_message()._read_query(
             f"SELECT user_id, user_name FROM user_xiuxian WHERE user_id IN ({placeholders})",
             tuple(ids),
             dict_row=True,
