@@ -21,7 +21,7 @@ from ..adapter_compat import (
 )
 from ..messaging.delivery import delivery_service
 
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, leave_harm_time, PlayerDataManager
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, leave_harm_time
 from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, number_to, check_user_type, _impersonating_users, send_help_message
 from ..xiuxian_utils.player_fight import pve_fight, resolve_final_user_statuses
 from ..xiuxian_utils import db_backend
@@ -60,7 +60,6 @@ from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 
 sql_message = XiuxianDateManage()
-player_data = PlayerDataManager()
 items = Items()
 dungeon_application = DungeonApplication(get_paths().game_db, get_paths().player_db)
 dungeon_ids = UUIDGenerator()
