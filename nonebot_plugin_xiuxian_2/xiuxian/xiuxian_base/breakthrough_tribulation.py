@@ -31,7 +31,7 @@ from .transaction_service import OrdinaryTribulationService
 from .transaction_service import PillFusionService
 from .transaction_service import TribulationStateMigrationService
 
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 _breakthrough_service_instance = None
 _pill_fusion_service_instance = None
 _ordinary_tribulation_service_instance = None
@@ -41,6 +41,13 @@ _tribulation_state_migration_service_instance = None
 runtime_ids = UUIDGenerator()
 PLAYERSDATA = get_paths().players
 tribulation_cd2 = int(XiuConfig().tribulation_cd * 60)
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _breakthrough_service():
@@ -159,14 +166,14 @@ def get_user_tribulation_info(user_id):
                 except OSError:
                     pass
                 return migration.state
-            return sql_message.get_user_tribulation_info(user_id)
+            return _sql_message().get_user_tribulation_info(user_id)
 
         try:
             legacy_path.unlink()
         except OSError:
             pass
 
-    return sql_message.get_user_tribulation_info(user_id)
+    return _sql_message().get_user_tribulation_info(user_id)
 
 def refresh_achievement_titles(user_id):
     """统计变更后自动解锁称号成就，失败不影响主流程。"""
@@ -547,7 +554,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     # 检查是否有天命丹
     has_destiny_pill = False
-    back = sql_message.get_back_msg(user_id) or []
+    back = _sql_message().get_back_msg(user_id) or []
     for item in back:
         if item['goods_id'] == 1996:  # 天命丹ID
             has_destiny_pill = True
@@ -574,7 +581,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     new_rate = success_rate if successful else min(success_rate + 10, XiuConfig().tribulation_max_rate)
     item_used = bool(not successful and has_destiny_pill)
     occurred_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
-    root_rate = sql_message.get_root_rate(user_info['root_type'], user_id)
+    root_rate = _sql_message().get_root_rate(user_info['root_type'], user_id)
     power = round(current_exp * root_rate * float(next_level_data['spend']), 0) if successful else int(user_info['power'])
     settlement = _ordinary_tribulation_service().settle(
         operation_id, user_id,
@@ -628,7 +635,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         tribulation_cd = int(tribulation_cd * 0.5)
     
     # 检查是否有天命渡劫丹
-    back = sql_message.get_back_msg(user_id) or []
+    back = _sql_message().get_back_msg(user_id) or []
     has_item = False
     for item in back:
         if item['goods_id'] == 1997:
@@ -692,7 +699,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="修仙", k1="开始", v1="开始渡劫", k2="天命", v2="天命渡劫", k3="心魔劫", v3="渡心魔劫")
         await destiny_tribulation.finish()
     
-    root_rate = sql_message.get_root_rate(user_info['root_type'], user_id)
+    root_rate = _sql_message().get_root_rate(user_info['root_type'], user_id)
     power = round(current_exp * root_rate * float(next_level_data['spend']), 0)
     settlement = _destiny_tribulation_service().settle(
         operation_id, user_id,
@@ -801,7 +808,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await heart_devil_tribulation.finish()
     
     # 检查是否有天命丹
-    back = sql_message.get_back_msg(user_id) or []
+    back = _sql_message().get_back_msg(user_id) or []
     has_destiny_pill = False
     for item in back:
         if item['goods_id'] == 1996:  # 天命丹ID
@@ -925,7 +932,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         devil_name = devil_data["name"]
         scale = devil_data["scale"]
 
-        player = sql_message.get_player_data(user_id)
+        player = _sql_message().get_player_data(user_id)
         # 生成心魔属性
         devil_info = {
             "气血": int(player['气血'] * 100),
@@ -1000,8 +1007,8 @@ async def level_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_id = user_info['user_id']
     if user_info['hp'] is None:
         # 判断用户气血是否为空
-        sql_message.update_user_hp(user_id)
-    user_msg = sql_message.get_user_info_with_id(user_id)  # 用户信息
+        _sql_message().update_user_hp(user_id)
+    user_msg = _sql_message().get_user_info_with_id(user_id)  # 用户信息
     user_leveluprate = int(user_msg['level_up_rate'])  # 用户失败次数加成
     level_cd = user_msg['level_up_cd']
     if level_cd:
@@ -1011,7 +1018,7 @@ async def level_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         if cd < XiuConfig().level_up_cd * 60:
             # 如果cd小于配置的cd，返回等待时间
             msg = f"**突破**\n---\n⏳ 冷却中，还需{XiuConfig().level_up_cd - (cd // 60)}分钟"
-            sql_message.update_user_stamina(user_id, 12, 1)
+            _sql_message().update_user_stamina(user_id, 12, 1)
             await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up.finish()
     else:
@@ -1027,7 +1034,7 @@ async def level_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await level_up.finish()
 
     level_rate = jsondata.level_rate_data()[level_name]  # 对应境界突破的概率
-    user_backs = sql_message.get_back_msg(user_id) or []  # list(back)
+    user_backs = _sql_message().get_back_msg(user_id) or []  # list(back)
     items = Items()
     pause_flag = False
     elixir_name = None
@@ -1060,8 +1067,8 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     user_id = user_info['user_id']
     if user_info['hp'] is None:
         # 判断用户气血是否为空
-        sql_message.update_user_hp(user_id)
-    user_msg = sql_message.get_user_info_with_id(user_id)  # 用户信息
+        _sql_message().update_user_hp(user_id)
+    user_msg = _sql_message().get_user_info_with_id(user_id)  # 用户信息
     level_cd = user_msg['level_up_cd']
     if level_cd:
         # 校验是否存在CD
@@ -1070,7 +1077,7 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         if cd < XiuConfig().level_up_cd * 60:
             # 如果cd小于配置的cd，返回等待时间
             msg = f"**突破**\n---\n⏳ 冷却中，还需{XiuConfig().level_up_cd - (cd // 60)}分钟"
-            sql_message.update_user_stamina(user_id, 6, 1)
+            _sql_message().update_user_stamina(user_id, 6, 1)
             await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_zj.finish()
     else:
@@ -1128,7 +1135,7 @@ async def level_up_zj_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 
     elif type(le) == list:
         # 突破成功
-        root_rate = sql_message.get_root_rate(user_msg["root_type"], user_id)
+        root_rate = _sql_message().get_root_rate(user_msg["root_type"], user_id)
         level_spend = jsondata.level_data()[le[0]]["spend"]
         result = _breakthrough_service().apply_success(
             _breakthrough_operation_id(event, "direct", user_id),
@@ -1167,9 +1174,9 @@ async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMes
     
     user_id = user_info['user_id']
     if user_info['hp'] is None:
-        sql_message.update_user_hp(user_id)
+        _sql_message().update_user_hp(user_id)
     
-    user_msg = sql_message.get_user_info_with_id(user_id)
+    user_msg = _sql_message().get_user_info_with_id(user_id)
     level_cd = user_msg['level_up_cd']
     
     # 检查突破CD
@@ -1178,7 +1185,7 @@ async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMes
         cd = OtherSet().date_diff(time_now, level_cd)
         if cd < XiuConfig().level_up_cd * 60:
             msg = f"**突破**\n---\n⏳ 冷却中，还需{XiuConfig().level_up_cd - (cd // 60)}分钟"
-            sql_message.update_user_stamina(user_id, 6, 1)
+            _sql_message().update_user_stamina(user_id, 6, 1)
             await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_lx.finish()
 
@@ -1246,7 +1253,7 @@ async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMes
     root_rate = 0.0
     level_spend = 0.0
     if success:
-        root_rate = sql_message.get_root_rate(user_msg["root_type"], user_id)
+        root_rate = _sql_message().get_root_rate(user_msg["root_type"], user_id)
         level_spend = jsondata.level_data()[final_level]["spend"]
     result = _breakthrough_service().apply_continuous(
         _breakthrough_operation_id(event, "continuous", user_id),
@@ -1291,8 +1298,8 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     user_id = user_info['user_id']
     if user_info['hp'] is None:
         # 判断用户气血是否为空
-        sql_message.update_user_hp(user_id)
-    user_msg = sql_message.get_user_info_with_id(user_id)  # 用户信息
+        _sql_message().update_user_hp(user_id)
+    user_msg = _sql_message().get_user_info_with_id(user_id)  # 用户信息
     level_cd = user_msg['level_up_cd']
     if level_cd:
         # 校验是否存在CD
@@ -1301,7 +1308,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         if cd < XiuConfig().level_up_cd * 60:
             # 如果cd小于配置的cd，返回等待时间
             msg = f"**突破**\n---\n⏳ 冷却中，还需{XiuConfig().level_up_cd - (cd // 60)}分钟"
-            sql_message.update_user_stamina(user_id, 4, 1)
+            _sql_message().update_user_stamina(user_id, 4, 1)
             await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_drjd.finish()
     else:
@@ -1324,7 +1331,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     main_rate_buff = UserBuffDate(user_id).get_user_main_buff_data()#功法突破概率提升
     number = main_rate_buff['number'] if main_rate_buff is not None else 0
     le = OtherSet().get_type(exp, level_rate + user_leveluprate + number, level_name)
-    user_backs = sql_message.get_back_msg(user_id) or []  # list(back)
+    user_backs = _sql_message().get_back_msg(user_id) or []  # list(back)
     pause_flag = False
     for back in user_backs:
         if int(back['goods_id']) == 1998:  # 检测到有对应丹药
@@ -1334,7 +1341,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
     if not pause_flag:
         msg = f"道友突破需要使用{elixir_name}，但您的背包中没有该丹药！"
-        sql_message.update_user_stamina(user_id, 4, 1)
+        _sql_message().update_user_stamina(user_id, 4, 1)
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_drjd.finish()
 
@@ -1369,7 +1376,7 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     elif type(le) == list:
         # 突破成功
         now_exp = int(int(exp) * 0.1)
-        root_rate = sql_message.get_root_rate(user_msg["root_type"], user_id)
+        root_rate = _sql_message().get_root_rate(user_msg["root_type"], user_id)
         level_spend = jsondata.level_data()[le[0]]["spend"]
         result = _breakthrough_service().apply_tribulation_success(
             _breakthrough_operation_id(event, "tribulation_gold", user_id),
@@ -1414,8 +1421,8 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     user_id = user_info['user_id']
     if user_info['hp'] is None:
         # 判断用户气血是否为空
-        sql_message.update_user_hp(user_id)
-    user_msg = sql_message.get_user_info_with_id(user_id)  # 用户信息
+        _sql_message().update_user_hp(user_id)
+    user_msg = _sql_message().get_user_info_with_id(user_id)  # 用户信息
     level_cd = user_msg['level_up_cd']
     if level_cd:
         # 校验是否存在CD
@@ -1424,7 +1431,7 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         if cd < XiuConfig().level_up_cd * 60:
             # 如果cd小于配置的cd，返回等待时间
             msg = f"**突破**\n---\n⏳ 冷却中，还需{XiuConfig().level_up_cd - (cd // 60)}分钟"
-            sql_message.update_user_stamina(user_id, 8, 1)
+            _sql_message().update_user_stamina(user_id, 8, 1)
             await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_dr.finish()
     else:
@@ -1447,7 +1454,7 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     main_rate_buff = UserBuffDate(user_id).get_user_main_buff_data()#功法突破概率提升
     number = main_rate_buff['number'] if main_rate_buff is not None else 0
     le = OtherSet().get_type(exp, level_rate + user_leveluprate + number, level_name)
-    user_backs = sql_message.get_back_msg(user_id) or []  # list(back)
+    user_backs = _sql_message().get_back_msg(user_id) or []  # list(back)
     pause_flag = False
     for back in user_backs:
         if int(back['goods_id']) == 1999:  # 检测到有对应丹药
@@ -1457,7 +1464,7 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     
     if not pause_flag:
         msg = f"道友突破需要使用{elixir_name}，但您的背包中没有该丹药！"
-        sql_message.update_user_stamina(user_id, 8, 1)
+        _sql_message().update_user_stamina(user_id, 8, 1)
         await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
         await level_up_dr.finish()
 
@@ -1489,7 +1496,7 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 
     elif type(le) == list:
         # 突破成功
-        root_rate = sql_message.get_root_rate(user_msg["root_type"], user_id)
+        root_rate = _sql_message().get_root_rate(user_msg["root_type"], user_id)
         level_spend = jsondata.level_data()[le[0]]["spend"]
         result = _breakthrough_service().apply_tribulation_success(
             _breakthrough_operation_id(event, "tribulation", user_id),
@@ -1532,9 +1539,9 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
     
     user_id = user_info['user_id']
     if user_info['hp'] is None:
-        sql_message.update_user_hp(user_id)
+        _sql_message().update_user_hp(user_id)
     
-    user_msg = sql_message.get_user_info_with_id(user_id)
+    user_msg = _sql_message().get_user_info_with_id(user_id)
     level_cd = user_msg['level_up_cd']
     
     # 检查突破CD
@@ -1543,7 +1550,7 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
         cd = OtherSet().date_diff(time_now, level_cd)
         if cd < XiuConfig().level_up_cd * 60:
             msg = f"**突破**\n---\n⏳ 冷却中，还需{XiuConfig().level_up_cd - (cd // 60)}分钟"
-            sql_message.update_user_stamina(user_id, 15, 1)
+            _sql_message().update_user_stamina(user_id, 15, 1)
             await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_dr_lx.finish()
 
@@ -1564,7 +1571,7 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
     number = main_rate_buff['number'] if main_rate_buff is not None else 0
     
     # 检查渡厄丹数量（只需要1个即可开始）
-    user_backs = sql_message.get_back_msg(user_id) or []
+    user_backs = _sql_message().get_back_msg(user_id) or []
     dr_pill_count = 0
     for back in user_backs:
         if int(back['goods_id']) == 1999:  # 渡厄丹ID
@@ -1629,7 +1636,7 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
     root_rate = 0.0
     level_spend = 0.0
     if success:
-        root_rate = sql_message.get_root_rate(user_msg["root_type"], user_id)
+        root_rate = _sql_message().get_root_rate(user_msg["root_type"], user_id)
         level_spend = jsondata.level_data()[final_level]["spend"]
     result = _breakthrough_service().apply_continuous_tribulation(
         _breakthrough_operation_id(event, "continuous_tribulation", user_id),
@@ -1679,9 +1686,9 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
     
     user_id = user_info['user_id']
     if user_info['hp'] is None:
-        sql_message.update_user_hp(user_id)
+        _sql_message().update_user_hp(user_id)
     
-    user_msg = sql_message.get_user_info_with_id(user_id)
+    user_msg = _sql_message().get_user_info_with_id(user_id)
     level_cd = user_msg['level_up_cd']
     
     # 检查突破CD
@@ -1690,7 +1697,7 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
         cd = OtherSet().date_diff(time_now, level_cd)
         if cd < XiuConfig().level_up_cd * 60:
             msg = f"**突破**\n---\n⏳ 冷却中，还需{XiuConfig().level_up_cd - (cd // 60)}分钟"
-            sql_message.update_user_stamina(user_id, 15, 1)
+            _sql_message().update_user_stamina(user_id, 15, 1)
             await handle_send(bot, event, msg, md_type="修仙", k1="直接突破", v1="直接突破", k2="渡厄", v2="渡厄突破", k3="修为", v3="我的修为")
             await level_up_drjd_lx.finish()
 
@@ -1711,7 +1718,7 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
     number = main_rate_buff['number'] if main_rate_buff is not None else 0
     
     # 检查渡厄金丹数量（只需要1个即可开始）
-    user_backs = sql_message.get_back_msg(user_id) or []
+    user_backs = _sql_message().get_back_msg(user_id) or []
     drjd_pill_count = 0
     for back in user_backs:
         if int(back['goods_id']) == 1998:  # 渡厄金丹ID
@@ -1786,7 +1793,7 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
     root_rate = 0.0
     level_spend = 0.0
     if success:
-        root_rate = sql_message.get_root_rate(user_msg["root_type"], user_id)
+        root_rate = _sql_message().get_root_rate(user_msg["root_type"], user_id)
         level_spend = jsondata.level_data()[final_level]["spend"]
     result = _breakthrough_service().apply_continuous_tribulation(
         _breakthrough_operation_id(event, "continuous_tribulation_gold", user_id),
@@ -1833,7 +1840,7 @@ async def user_leveluprate_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="我要修仙")
         await user_leveluprate.finish()
     user_id = user_info['user_id']
-    user_msg = sql_message.get_user_info_with_id(user_id)  # 用户信息
+    user_msg = _sql_message().get_user_info_with_id(user_id)  # 用户信息
     leveluprate = int(user_msg['level_up_rate'])  # 用户失败次数加成
     level_name = user_msg['level']  # 用户境界
     level_rate = jsondata.level_rate_data()[level_name]  # 

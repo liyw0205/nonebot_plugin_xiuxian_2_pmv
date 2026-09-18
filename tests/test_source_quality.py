@@ -1343,7 +1343,7 @@ class SourceQualityTests(unittest.TestCase):
         )
         self.assertLess(
             destiny.index("_destiny_tribulation_service().replay("),
-            destiny.index("sql_message.get_back_msg("),
+            destiny.index("_sql_message().get_back_msg("),
         )
         self.assertIn("_destiny_tribulation_service_instance = None", command_source)
         self.assertIn("def _destiny_tribulation_service(", command_source)
