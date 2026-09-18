@@ -21,11 +21,30 @@ avatar_switch_cmd = on_command("身外化身", priority=5, block=True)
 my_id_cmd = on_command("我的ID", aliases={"我的id", "myid", "id"}, priority=5, block=True)
 
 _sql_message_instance = None
-player_data_manager = PlayerDataManager()
+_player_data_manager_instance = None
 info_application = InfoApplication(get_paths().game_db)
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
+
+
+def _resolve_player_data_manager():
+    global _player_data_manager_instance
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+    return _player_data_manager_instance
+
+
+class _LazyPlayerDataManager:
+    def __getattr__(self, name):
+        return getattr(_resolve_player_data_manager(), name)
+
+
+player_data_manager = _LazyPlayerDataManager()
+
+
+def _player_data_manager():
+    return player_data_manager
 
 
 def _sql_message():
@@ -81,7 +100,7 @@ async def avatar_switch_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             operation_id,
             main_id,
             lambda: (
-                player_data_manager.update_or_write_data(main_id, "avatar", "active_id", str(main_id)),
+                _player_data_manager().update_or_write_data(main_id, "avatar", "active_id", str(main_id)),
                 {"status": "applied", "active_id": str(main_id)},
             )[1],
             active_id=str(main_id),
@@ -141,7 +160,7 @@ async def my_id_cmd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     impersonated_id = get_impersonating_target(real_user_id)
 
-    avatar_active_id = player_data_manager.get_field_data(real_user_id, "avatar", "active_id")
+    avatar_active_id = _player_data_manager().get_field_data(real_user_id, "avatar", "active_id")
     avatar_active_id = str(avatar_active_id) if avatar_active_id else real_user_id
 
     effective_user_id = impersonated_id if impersonated_id else avatar_active_id
@@ -176,13 +195,13 @@ def _generate_unique_avatar_id() -> str:
 
 def get_active_user_id(user_id: str) -> str:
     """获取当前激活ID（本号或化身）"""
-    active_id = player_data_manager.get_field_data(user_id, "avatar", "active_id")
+    active_id = _player_data_manager().get_field_data(user_id, "avatar", "active_id")
     return str(active_id) if active_id else str(user_id)
 
 
 def get_avatar_info(user_id: str) -> dict:
     """获取玩家化身信息（以本号ID为键）"""
-    info = player_data_manager.get_fields(user_id, "avatar")
+    info = _player_data_manager().get_fields(user_id, "avatar")
     return info if info else {}
 
 
@@ -197,10 +216,10 @@ def init_avatar_if_needed(main_id: str, *, operation_id: str | None = None) -> d
 
     op = operation_id or f"info:avatar-init:{main_id}"
     def persist_avatar():
-        player_data_manager.update_or_write_data(main_id, "avatar", "main_id", str(main_id))
-        player_data_manager.update_or_write_data(main_id, "avatar", "avatar_id", str(avatar_id))
-        player_data_manager.update_or_write_data(main_id, "avatar", "active_id", str(main_id))
-        player_data_manager.update_or_write_data(main_id, "avatar", "create_time", now_str)
+        _player_data_manager().update_or_write_data(main_id, "avatar", "main_id", str(main_id))
+        _player_data_manager().update_or_write_data(main_id, "avatar", "avatar_id", str(avatar_id))
+        _player_data_manager().update_or_write_data(main_id, "avatar", "active_id", str(main_id))
+        _player_data_manager().update_or_write_data(main_id, "avatar", "create_time", now_str)
         return {"status": "applied", "avatar_id": str(avatar_id), "active_id": str(main_id)}
 
     result = _run_info_action(
@@ -235,7 +254,7 @@ def toggle_avatar(main_id: str, *, operation_id: str | None = None) -> tuple[str
         operation_id or f"info:avatar-toggle:{main_id}:{runtime_ids.new_id()}",
         str(main_id),
         lambda: (
-            player_data_manager.update_or_write_data(main_id, "avatar", "active_id", new_active),
+            _player_data_manager().update_or_write_data(main_id, "avatar", "active_id", new_active),
             {"status": "applied", "active_id": new_active},
         )[1],
     )
