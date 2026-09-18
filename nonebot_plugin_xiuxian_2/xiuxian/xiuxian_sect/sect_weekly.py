@@ -83,16 +83,23 @@ class SectWeeklyGoalManager:
     table_name = "sect_weekly_goal"
 
     def __init__(self):
-        self.sql_message = XiuxianDateManage()
-        self.ensure_table()
+        self.sql_message = None
+        self._sql_message_instance = None
+
+    def _sql_message(self):
+        if self._sql_message_instance is None:
+            self._sql_message_instance = XiuxianDateManage()
+            self.sql_message = self._sql_message_instance
+        return self._sql_message_instance
 
     @staticmethod
     def current_week_key() -> str:
         return get_weekly_key()
 
     def ensure_table(self) -> None:
-        with self.sql_message.lock:
-            cur = self.sql_message.conn.cursor()
+        sql_message = self._sql_message()
+        with sql_message.lock:
+            cur = sql_message.conn.cursor()
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS sect_weekly_goal (
@@ -112,14 +119,14 @@ class SectWeeklyGoalManager:
                 "CREATE INDEX IF NOT EXISTS idx_sect_weekly_goal_week "
                 "ON sect_weekly_goal(week_key, goal_key, progress)"
             )
-            self.sql_message._commit_write()
+            self._sql_message()._commit_write()
 
     def ensure_goals(self, sect_id: int | str, week_key: str | None = None) -> None:
         self.ensure_table()
         week_key = week_key or self.current_week_key()
         now = _now_text()
-        with self.sql_message.lock:
-            cur = self.sql_message.conn.cursor()
+        with self._sql_message().lock:
+            cur = self._sql_message().conn.cursor()
             for goal in SECT_WEEKLY_GOALS:
                 cur.execute(
                     """
@@ -131,12 +138,12 @@ class SectWeeklyGoalManager:
                     """,
                     (int(sect_id), week_key, goal.key, goal.target, now),
                 )
-            self.sql_message._commit_write()
+            self._sql_message()._commit_write()
 
     def _get_goal_row(self, sect_id: int | str, goal_key: str, week_key: str | None = None):
         self.ensure_goals(sect_id, week_key)
         week_key = week_key or self.current_week_key()
-        return self.sql_message._read_query(
+        return self._sql_message()._read_query(
             """
             SELECT *
             FROM sect_weekly_goal
@@ -150,7 +157,7 @@ class SectWeeklyGoalManager:
     def list_goals(self, sect_id: int | str, week_key: str | None = None) -> list[dict[str, Any]]:
         self.ensure_goals(sect_id, week_key)
         week_key = week_key or self.current_week_key()
-        rows = self.sql_message._read_query(
+        rows = self._sql_message()._read_query(
             """
             SELECT *
             FROM sect_weekly_goal
@@ -206,7 +213,7 @@ class SectWeeklyGoalManager:
         meta = meta or {}
         sect_id = meta.get("sect_id")
         if not sect_id:
-            user_info = self.sql_message.get_user_info_with_id(str(user_id)) or {}
+            user_info = self._sql_message().get_user_info_with_id(str(user_id)) or {}
             sect_id = user_info.get("sect_id")
         if not sect_id:
             return []
@@ -219,8 +226,8 @@ class SectWeeklyGoalManager:
         week_key = self.current_week_key()
         now = _now_text()
         updated = []
-        with self.sql_message.lock:
-            cur = self.sql_message.conn.cursor()
+        with self._sql_message().lock:
+            cur = self._sql_message().conn.cursor()
             for goal in goals:
                 row = self._get_goal_row(sect_id, goal.key, week_key)
                 old_progress = int(row.get("progress", 0) or 0)
@@ -254,14 +261,14 @@ class SectWeeklyGoalManager:
                         "completed": old_progress < goal.target <= new_progress,
                     }
                 )
-            self.sql_message._commit_write()
+            self._sql_message()._commit_write()
         return updated
 
     def weekly_rank(self, limit: int = 10, week_key: str | None = None) -> list[dict[str, Any]]:
         self.ensure_table()
         week_key = week_key or self.current_week_key()
         limit = max(1, min(int(limit or 10), 50))
-        rows = self.sql_message._read_query(
+        rows = self._sql_message()._read_query(
             """
             SELECT
                 g.sect_id,

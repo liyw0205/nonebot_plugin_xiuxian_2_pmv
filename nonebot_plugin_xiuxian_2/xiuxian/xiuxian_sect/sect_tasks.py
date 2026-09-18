@@ -22,12 +22,19 @@ class SectTaskStateManager:
     table_name = "sect_task_state"
 
     def __init__(self):
-        self.sql_message = XiuxianDateManage()
-        self.ensure_table()
+        self.sql_message = None
+        self._sql_message_instance = None
+
+    def _sql_message(self):
+        if self._sql_message_instance is None:
+            self._sql_message_instance = XiuxianDateManage()
+            self.sql_message = self._sql_message_instance
+        return self._sql_message_instance
 
     def ensure_table(self) -> None:
-        with self.sql_message.lock:
-            cur = self.sql_message.conn.cursor()
+        sql_message = self._sql_message()
+        with sql_message.lock:
+            cur = sql_message.conn.cursor()
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS sect_task_state (
@@ -50,7 +57,7 @@ class SectTaskStateManager:
                 "CREATE INDEX IF NOT EXISTS idx_sect_task_state_sect_period "
                 "ON sect_task_state(sect_id, period, status)"
             )
-            self.sql_message._commit_write()
+            self._sql_message()._commit_write()
 
     @staticmethod
     def _period() -> str:
@@ -77,7 +84,7 @@ class SectTaskStateManager:
     def get_active_task(self, user_id: str | int) -> dict[str, Any] | None:
         self.ensure_table()
         period = self._period()
-        row = self.sql_message._read_query(
+        row = self._sql_message()._read_query(
             """
             SELECT *
             FROM sect_task_state
@@ -104,8 +111,8 @@ class SectTaskStateManager:
         period = self._period()
         now = _now_text()
 
-        with self.sql_message.lock:
-            cur = self.sql_message.conn.cursor()
+        with self._sql_message().lock:
+            cur = self._sql_message().conn.cursor()
             cur.execute(
                 """
                 INSERT INTO sect_task_state (
@@ -134,7 +141,7 @@ class SectTaskStateManager:
                     now,
                 ),
             )
-            self.sql_message._commit_write()
+            self._sql_message()._commit_write()
 
         return {
             "任务名称": task_key,
@@ -153,8 +160,8 @@ class SectTaskStateManager:
         self.ensure_table()
         period = self._period()
         now = _now_text()
-        with self.sql_message.lock:
-            cur = self.sql_message.conn.cursor()
+        with self._sql_message().lock:
+            cur = self._sql_message().conn.cursor()
             cur.execute(
                 """
                 UPDATE sect_task_state
@@ -168,18 +175,18 @@ class SectTaskStateManager:
                 """,
                 (now, now, str(user_id), period),
             )
-            self.sql_message._commit_write()
+            self._sql_message()._commit_write()
 
     def clear_task(self, user_id: str | int) -> None:
         self.ensure_table()
         period = self._period()
-        with self.sql_message.lock:
-            cur = self.sql_message.conn.cursor()
+        with self._sql_message().lock:
+            cur = self._sql_message().conn.cursor()
             cur.execute(
                 "DELETE FROM sect_task_state WHERE user_id = %s AND period = %s",
                 (str(user_id), period),
             )
-            self.sql_message._commit_write()
+            self._sql_message()._commit_write()
 
 
 sect_task_state_manager = SectTaskStateManager()
