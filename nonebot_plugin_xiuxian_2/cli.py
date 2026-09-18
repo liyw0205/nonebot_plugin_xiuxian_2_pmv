@@ -5,7 +5,7 @@ import asyncio
 import json
 
 from .bootstrap import build_runtime_context
-from .plugin import build_migrations, build_registry, startup
+from .plugin import build_migrations, build_registry, migrations_for_database, startup
 from .infrastructure.database import (
     BackupService,
     DatabaseUnitOfWork,
@@ -53,22 +53,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if report["ready"] else 1
     if args.command == "migrate":
         migrations = build_migrations()
-        game_migrations = tuple(
-            migration for migration in migrations
-            if migration.version not in {"combat_settlement.003", "combat_settlement.004", "dungeon.003", "map.003", "map.005", "map.008", "map.013", "map.015", "map.016", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005", "tianti_training.006"}
-        )
         applied: dict[str, list[str]] = {}
         pending: dict[str, list[str]] = {}
         for spec in context.database.specs():
-            if spec.key == "game_db":
-                selected = game_migrations
-            elif spec.key == "player_db":
-                selected = tuple(
-                    migration for migration in migrations
-                    if migration.version in {"platform.001", "title.001", "combat_settlement.003", "combat_settlement.004", "dungeon.003", "map.003", "map.005", "map.008", "map.013", "map.015", "map.016", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005"}
-                )
-            else:
-                selected = ()
+            selected = migrations_for_database(migrations, spec.key)
             with DatabaseUnitOfWork(spec.path) as uow:
                 runner = MigrationRunner(selected, clock=context.clock)
                 if args.dry_run:

@@ -2509,6 +2509,8 @@
 
 2026-09-19 tower replay reader cutover live safety：提交 `851e8dfd` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T212439Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
 
+2026-09-19 arena weekly rank reduction cutover slice：每周竞技场降段 scheduler从 `ArenaWeeklyRankReductionService`切到 feature-owned `ArenaWeeklyRankApplication`和 `ArenaWeeklyRankRepository`。新 repository 只使用 `DatabaseUnitOfWork`与注入 Clock，保留周标识、冻结 target、分块续跑、state conflict/user_missing、chunk rollback与独立 `last_error`记录语义；不再依赖 `xiuxian_utils.db_backend`或直接系统时钟。新增 player-only `arena.006` durable operation/target migration；`plugin.py`与 maintenance CLI共用 `migrations_for_database()`，避免 migration catalog路由漂移，验证 `arena.006`只在 player_db、platform migration在五库均可选。Weekly durability、lifecycle migration、CLI dry-run、arena/source/architecture/inventory regression 243 passed；四个不重叠全量分片合计 2333 passed、25 subtests passed（16条既有 compatibility DeprecationWarning），compileall、inventory、progress、diff check通过。当前 progress slice为 `weekly_rank_application_owned=true`、`legacy_scheduler_disabled=true`，全局仅余 legacy transaction services 与 xiuxian2_handle execution paths blockers。
+
 2026-09-19 utils storage lazy construction live safety：提交 `0f84c726` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T171820Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
 
 ## 6. 下一步

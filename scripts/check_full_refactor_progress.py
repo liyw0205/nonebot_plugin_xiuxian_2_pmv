@@ -52,6 +52,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     legacy_transaction = (PACKAGE / "xiuxian" / "xiuxian_base" / "transaction_service.py").read_text(encoding="utf-8")
     sign_effects = (PACKAGE / "features" / "sign_in" / "application_effects.py").read_text(encoding="utf-8")
     plugin = (PACKAGE / "plugin.py").read_text(encoding="utf-8")
+    arena = (PACKAGE / "xiuxian" / "xiuxian_arena" / "__init__.py").read_text(encoding="utf-8")
     return {
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,
@@ -71,6 +72,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "lottery_compatibility_fallback": "XIUXIAN_SIGN_IN_LEGACY_LOTTERY" in plugin and "LotterySettlementService" in plugin,
             "status": "cutover_with_compatibility_rollback_side_effects_retained",
         },
+        "arena": {
+            "weekly_rank_application_owned": "arena_weekly_rank_application.reduce(" in arena,
+            "legacy_scheduler_disabled": "ArenaWeeklyRankReductionService" not in arena and "_arena_weekly_rank_reduction_service" not in arena,
+            "status": "weekly_rank_cutover_with_legacy_service_retained_for_compatibility",
+        },
     }
 
 
@@ -78,17 +84,20 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
+    slices = _slice_status()
+    blockers = [
+        "legacy transaction services remain",
+        "xiuxian2_handle remains in legacy execution paths",
+    ]
+    if slices["sign_in"]["lottery_compatibility_fallback"]:
+        blockers.append("sign_in explicit lottery compatibility fallback remains")
     report = {
         "schema": 1,
         "scope": "full_refactor_phase2",
         "counts": _counts(),
-        "slices": _slice_status(),
+        "slices": slices,
         "exit_ready": False,
-        "exit_blockers": [
-            "legacy transaction services remain",
-            "xiuxian2_handle remains in legacy execution paths",
-            "sign_in explicit lottery compatibility fallback remains"
-        ],
+        "exit_blockers": blockers,
     }
     print(json.dumps(report, ensure_ascii=False, sort_keys=True, indent=None if args.json else 2))
     return 0

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import io
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -185,6 +188,15 @@ class RefactorArchitectureTests(unittest.TestCase):
                     ).fetchone(),
                     None,
                 )
+
+    def test_cli_migrate_routes_arena_weekly_rank_schema_to_player_database(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(cli_main(["migrate", "--data-dir", directory, "--dry-run"]), 0)
+            pending = json.loads(output.getvalue())["pending"]
+            self.assertIn("arena.006", pending["player_db"])
+            self.assertNotIn("arena.006", pending["game_db"])
 
     def test_trace_context_redacts_scope_and_restores_values(self) -> None:
         self.assertEqual(current_context()["operation_id"], "")

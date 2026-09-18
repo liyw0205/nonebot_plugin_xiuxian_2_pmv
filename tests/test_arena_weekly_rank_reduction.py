@@ -2,23 +2,60 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_arena.transaction_service import (
-    ArenaWeeklyRankReductionService,
+from nonebot_plugin_xiuxian_2.features.arena.weekly_rank_application import (
+    ArenaWeeklyRankApplication,
 )
 from tests.test_db_backend import db_backend
 
 
 class ArenaWeeklyRankReductionTests(unittest.TestCase):
-    def test_arena_facade_defers_weekly_reduction_service_construction(self):
+    def test_feature_application_uses_injected_clock_for_default_week_and_stamp(self):
+        class FixedClock:
+            def now(self):
+                return datetime(2026, 7, 17, 20, 0, 0, tzinfo=timezone.utc)
+
+        application = ArenaWeeklyRankApplication(self.database, clock=FixedClock())
+        result = application.reduce(chunk_size=10)
+
+        self.assertEqual(result.business_week, "2026-W29")
+        with db_backend.connection(self.database) as conn:
+            row = conn.execute(
+                "SELECT created_at,updated_at FROM arena_weekly_rank_reduction_operations "
+                "WHERE business_week=%s",
+                ("2026-W29",),
+            ).fetchone()
+        self.assertEqual(tuple(row), ("2026-07-17 20:00:00", "2026-07-17 20:00:00"))
+
+    def test_scheduler_entry_uses_arena_application_not_legacy_service(self):
+        root = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian"
+        arena_source = (root / "xiuxian_arena/__init__.py").read_text(encoding="utf-8")
+        repository_source = (
+            Path(__file__).resolve().parents[1]
+            / "nonebot_plugin_xiuxian_2/features/arena/weekly_rank_repository.py"
+        ).read_text(encoding="utf-8")
+        start = arena_source.index("async def reduce_arena_rank")
+        handler = arena_source[start:arena_source.index("async def use_arena_challenge_ticket", start)]
+        self.assertIn("arena_weekly_rank_application.reduce(", handler)
+        self.assertNotIn("_arena_weekly_rank_reduction_service().reduce(", handler)
+        self.assertNotIn("ArenaWeeklyRankReductionService", arena_source)
+        self.assertIn("DatabaseUnitOfWork", repository_source)
+        self.assertNotIn("xiuxian_utils", repository_source)
+        self.assertNotIn("db_backend", repository_source)
+        self.assertNotIn("datetime.now", repository_source)
+        self.assertNotIn("date.today", repository_source)
+
+    def test_arena_facade_uses_weekly_rank_application(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_arena
 
-        self.assertIsNone(xiuxian_arena._arena_weekly_rank_reduction_service_instance)
+        self.assertTrue(hasattr(xiuxian_arena, "arena_weekly_rank_application"))
+        self.assertFalse(hasattr(xiuxian_arena, "_arena_weekly_rank_reduction_service_instance"))
 
     def test_arena_facade_defers_sql_manager_construction(self):
         source = (
@@ -50,7 +87,8 @@ class ArenaWeeklyRankReductionTests(unittest.TestCase):
                     ("u4", 1000, "青铜", 0),
                 ),
             )
-        self.service = ArenaWeeklyRankReductionService(self.database)
+        self.service = ArenaWeeklyRankApplication(self.database)
+        self.application = self.service
 
     def tearDown(self):
         self.temp.cleanup()
@@ -62,6 +100,24 @@ class ArenaWeeklyRankReductionTests(unittest.TestCase):
             chunk_size=chunk_size,
             updated_at="2026-07-17 20:00:00",
         )
+
+    def reduce_with_application(self, week=None, steps=2, chunk_size=500):
+        return self.application.reduce(
+            week or self.business_week,
+            steps,
+            chunk_size=chunk_size,
+            updated_at="2026-07-17 20:00:00",
+        )
+
+    def test_feature_application_preserves_weekly_reduction_state_machine(self):
+        first = self.reduce_with_application(chunk_size=2)
+        completed = self.reduce_with_application(chunk_size=10)
+        duplicate = self.reduce_with_application()
+        self.assertEqual(
+            (first.task_status, completed.task_status, duplicate.status),
+            ("running", "completed", "duplicate"),
+        )
+        self.assertEqual(self.users()["u2"], (1000, "青铜", 0))
 
     def users(self):
         with db_backend.connection(self.database) as conn:
@@ -217,7 +273,7 @@ class ArenaWeeklyRankReductionTests(unittest.TestCase):
         arena_source = (root / "xiuxian_arena/__init__.py").read_text(encoding="utf-8")
         start = arena_source.index("async def reduce_arena_rank")
         handler = arena_source[start:arena_source.index("async def use_arena_challenge_ticket", start)]
-        self.assertIn("_arena_weekly_rank_reduction_service().reduce(", handler)
+        self.assertIn("arena_weekly_rank_application.reduce(", handler)
         self.assertIn("await asyncio.sleep(0)", handler)
         self.assertNotIn("arena_limit.reduce_all_users_rank(", handler)
 

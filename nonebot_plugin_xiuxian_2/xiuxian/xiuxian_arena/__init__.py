@@ -26,14 +26,13 @@ from .transaction_service import ArenaPurchaseResult
 from .transaction_service import ArenaChallengePurchaseResult
 from .transaction_service import ArenaChallengeTicketResult
 from .transaction_service import ArenaChallengeSettlementResult
-from .transaction_service import ArenaWeeklyRankReductionService
 from .transaction_service import ArenaSeasonRewardService
 from ...features.arena.application import ArenaApplication
 from ...features.arena.repository import ArenaChallengePurchaseSqlRepository
+from ...features.arena.weekly_rank_application import ArenaWeeklyRankApplication
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 
-_arena_weekly_rank_reduction_service_instance = None
 _arena_season_reward_service_instance = None
 arena_application = ArenaApplication(
     get_paths().game_db,
@@ -42,6 +41,10 @@ arena_application = ArenaApplication(
 )
 arena_ids = UUIDGenerator()
 runtime_clock = SystemClock()
+arena_weekly_rank_application = ArenaWeeklyRankApplication(
+    get_paths().player_db,
+    clock=runtime_clock,
+)
 
 
 def _sql_message():
@@ -56,13 +59,6 @@ def _player_data_manager():
     if _player_data_manager_instance is None:
         _player_data_manager_instance = PlayerDataManager()
     return _player_data_manager_instance
-
-
-def _arena_weekly_rank_reduction_service():
-    global _arena_weekly_rank_reduction_service_instance
-    if _arena_weekly_rank_reduction_service_instance is None:
-        _arena_weekly_rank_reduction_service_instance = ArenaWeeklyRankReductionService(get_paths().player_db)
-    return _arena_weekly_rank_reduction_service_instance
 
 
 def _arena_season_reward_service():
@@ -966,7 +962,7 @@ async def reset_arena_daily_challenges():
 async def reduce_arena_rank(reduce_steps=2, business_week=None, *, chunk_size=500):
     """每周竞技场统一降段"""
     while True:
-        result = _arena_weekly_rank_reduction_service().reduce(
+        result = arena_weekly_rank_application.reduce(
             business_week,
             reduce_steps,
             chunk_size=chunk_size,

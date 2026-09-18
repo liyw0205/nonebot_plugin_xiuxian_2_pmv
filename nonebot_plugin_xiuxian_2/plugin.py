@@ -54,7 +54,7 @@ from .features.rift.migrations import apply_rift
 from .features.accessory_package.manifest import FEATURE as ACCESSORY_PACKAGE_FEATURE
 from .features.accessory_package.migrations import apply_accessory_package
 from .features.arena.manifest import FEATURE as ARENA_FEATURE
-from .features.arena.migrations import apply_arena, apply_arena_challenge_purchase, apply_arena_challenge_ticket, apply_arena_purchase, apply_arena_settlement
+from .features.arena.migrations import apply_arena, apply_arena_challenge_purchase, apply_arena_challenge_ticket, apply_arena_purchase, apply_arena_settlement, apply_arena_weekly_rank_reduction
 from .features.auction.manifest import FEATURE as AUCTION_FEATURE
 from .features.auction.jobs import settle as auction_settle_job
 from .features.bank.manifest import FEATURE as BANK_FEATURE
@@ -120,6 +120,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("arena.003", "arena_purchase_operations", apply_arena_purchase),
         Migration("arena.004", "arena_challenge_ticket_operations", apply_arena_challenge_ticket),
         Migration("arena.005", "arena_challenge_settlement_operations", apply_arena_settlement),
+        Migration("arena.006", "arena_weekly_rank_reduction_operations", apply_arena_weekly_rank_reduction),
         Migration("auction.001", "auction_feature_migrations", apply_auction),
         Migration("back.001", "back_feature_migrations", apply_back),
         Migration("bank.001", "bank_feature_migrations", apply_bank),
@@ -201,6 +202,68 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("work.001", "work_feature_migrations", apply_work),
         Migration("world_events.001", "world_events_feature_migrations", apply_world_events),
     )
+
+
+_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
+    {
+        "arena.006",
+        "title.002",
+        "combat_settlement.003",
+        "combat_settlement.004",
+        "dungeon.003",
+        "map.003",
+        "map.005",
+        "map.008",
+        "map.013",
+        "map.015",
+        "map.016",
+        "tianti_settlement.002",
+        "tianti_training.003",
+        "tianti_training.004",
+        "tianti_training.005",
+        "tianti_training.006",
+    }
+)
+_PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
+    {
+        "arena.006",
+        "platform.001",
+        "title.001",
+        "title.002",
+        "combat_settlement.003",
+        "combat_settlement.004",
+        "dungeon.003",
+        "map.003",
+        "map.005",
+        "map.008",
+        "map.013",
+        "map.015",
+        "map.016",
+        "tianti_settlement.002",
+        "tianti_training.003",
+        "tianti_training.004",
+        "tianti_training.005",
+    }
+)
+
+
+def migrations_for_database(
+    migrations: tuple[Migration, ...], database_key: str
+) -> tuple[Migration, ...]:
+    """Select the shared migration catalog for one configured database."""
+    if database_key == "game_db":
+        return tuple(
+            migration
+            for migration in migrations
+            if migration.version not in _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS
+        )
+    if database_key == "player_db":
+        return tuple(
+            migration
+            for migration in migrations
+            if migration.version in _PLAYER_DATABASE_MIGRATION_VERSIONS
+        )
+    return tuple(migration for migration in migrations if migration.version == "platform.001")
 
 
 def build_registry(*, disabled: set[str] | frozenset[str] | tuple[str, ...] = ()) -> FeatureRegistry:
@@ -358,10 +421,6 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
 
     migration_runner = MigrationRunner(build_migrations(), clock=context.clock)
     context.migrations = migration_runner
-    game_migrations = tuple(
-        migration for migration in migration_runner.migrations
-        if migration.version not in {"title.002", "combat_settlement.003", "combat_settlement.004", "dungeon.003", "map.003", "map.005", "map.008", "map.013", "map.015", "map.016", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005", "tianti_training.006"}
-    )
 
     def ensure_filesystem() -> None:
         context.paths.data.mkdir(parents=True, exist_ok=True)
@@ -380,18 +439,10 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
     def ensure_migrations() -> None:
         for spec in context.database.specs():
             with DatabaseUnitOfWork(spec.path) as uow:
-                if spec.key == "game_db":
-                    runner = MigrationRunner(game_migrations, clock=context.clock)
-                elif spec.key == "player_db":
-                    runner = MigrationRunner(
-                        tuple(migration for migration in migration_runner.migrations if migration.version in {"platform.001", "title.001", "title.002", "combat_settlement.003", "combat_settlement.004", "dungeon.003", "map.003", "map.005", "map.008", "map.013", "map.015", "map.016", "tianti_settlement.002", "tianti_training.003", "tianti_training.004", "tianti_training.005"}),
-                        clock=context.clock,
-                    )
-                else:
-                    runner = MigrationRunner(
-                        tuple(migration for migration in migration_runner.migrations if migration.version == "platform.001"),
-                        clock=context.clock,
-                    )
+                runner = MigrationRunner(
+                    migrations_for_database(migration_runner.migrations, spec.key),
+                    clock=context.clock,
+                )
                 runner.apply(uow)
             if spec.key == "game_db":
                 from .features.accessory_package.attached_migrations import (
