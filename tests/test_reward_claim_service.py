@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import importlib
 from pathlib import Path
 
 import nonebot
@@ -12,6 +13,23 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_compensation.transaction_service i
     RewardClaimService,
 )
 from tests.test_db_backend import db_backend
+
+
+def test_reward_facade_defers_reward_service_construction():
+    rewards = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.reward_service"
+    )
+    assert rewards._reward_service_instance is None
+
+
+def test_reward_facade_uses_lazy_singleton_wrapper():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/reward_service.py"
+    ).read_text(encoding="utf-8")
+    assert "_reward_service_instance = None" in source
+    assert "def _reward_service()" in source
+    assert "return _reward_service().grant_reward(" in source
+    assert "reward_service = RewardService()" not in source
 
 
 class RewardClaimServiceTests(unittest.TestCase):

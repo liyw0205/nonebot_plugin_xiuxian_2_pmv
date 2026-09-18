@@ -217,7 +217,14 @@ class RewardService:
         }
 
 
-reward_service = RewardService()
+_reward_service_instance = None
+
+
+def _reward_service() -> RewardService:
+    global _reward_service_instance
+    if _reward_service_instance is None:
+        _reward_service_instance = RewardService()
+    return _reward_service_instance
 
 
 def grant_reward(
@@ -226,7 +233,7 @@ def grant_reward(
     source: str,
     meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return reward_service.grant_reward(user_id, reward, source, meta)
+    return _reward_service().grant_reward(user_id, reward, source, meta)
 
 
 def safe_grant_reward(
