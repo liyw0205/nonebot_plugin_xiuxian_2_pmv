@@ -62,7 +62,7 @@ except ImportError:
     psutil = DummyPsutil()
 
 update_manager = UpdateManager()
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 trade_manager = TradeDataManager()
 from ..xiuxian_utils.periods import format_duration_full
 from ...features.status.application import StatusApplication
@@ -71,6 +71,13 @@ from ...infrastructure.ids import UUIDGenerator
 
 status_application = StatusApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _run_status_action(action: str, operation_id: str, user_id: str, call, **payload):
@@ -204,11 +211,11 @@ async def get_bot_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     """获取Bot信息"""
     is_group = isinstance(event, GroupMessageEvent)
     group_id = str(event.group_id) if is_group else "私聊"
-    all_users = sql_message.all_users()
-    active_users = sql_message.today_active_users()
-    yesterday_active_users = sql_message.yesterday_active_users()
-    last_7days_active_users = sql_message.last_7days_active_users()
-    total_items_quantity = sql_message.total_items_quantity()
+    all_users = _sql_message().all_users()
+    active_users = _sql_message().today_active_users()
+    yesterday_active_users = _sql_message().yesterday_active_users()
+    last_7days_active_users = _sql_message().last_7days_active_users()
+    total_items_quantity = _sql_message().total_items_quantity()
     total_goods_quantity = trade_manager.total_goods_quantity()
     
     # 获取Bot运行时间, 仅在psutil可用时
