@@ -30,13 +30,20 @@ from .transaction_service import (
     DufangShareSettlementService,
 )
 
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
 player_data_manager = PlayerDataManager()
 _dufang_share_service_instance = None
 dufang_application = DufangApplication(get_paths().game_db, get_paths().player_db)
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _dufang_share_service():
@@ -260,7 +267,7 @@ async def handle_shared_event(
         return None, None
     
     # 获取当前用户信息
-    user_info = sql_message.get_user_info_with_id(user_id)
+    user_info = _sql_message().get_user_info_with_id(user_id)
     if not user_info:
         return None, None
     
@@ -290,7 +297,7 @@ async def handle_shared_event(
     
     recipients = []
     for target_id in sharing_users:
-        target_info = sql_message.get_user_info_with_id(target_id)
+        target_info = _sql_message().get_user_info_with_id(target_id)
         if not target_info:
             continue
         recipients.append((target_id, target_info.get('user_name', '未知道友')))
