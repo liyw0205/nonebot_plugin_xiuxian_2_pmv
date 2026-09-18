@@ -52,7 +52,7 @@ from .transaction_service import (
     LoveSandUseService,
     ImpartPrayerSettlementService,
 )
-sql_message = XiuxianDateManage()  # sql类
+_sql_message_instance = None
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 _impart_draw_service_instance = None
 _card_compose_service_instance = None
@@ -61,6 +61,13 @@ _love_sand_service_instance = None
 _impart_prayer_service_instance = None
 impart_application = ImpartApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _love_sand_service():
@@ -584,7 +591,7 @@ async def use_love_sand(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     current_stones = impart_data_draw["stone_num"]
     
-    item_count = sql_message.goods_num(user_id, item_id)
+    item_count = _sql_message().goods_num(user_id, item_id)
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"love-sand:{event_id}:{user_id}:{item_id}" if event_id else f"love-sand:{runtime_ids.new_id()}:{user_id}:{item_id}"
     prior = _love_sand_service().get_result(operation_id)
