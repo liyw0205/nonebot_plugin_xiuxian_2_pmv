@@ -37,6 +37,17 @@ def test_xiangyuan_facade_uses_lazy_dual_database_service():
     assert "xiangyuan_settlement_service.claim(" not in source
 
 
+def test_xiangyuan_facade_defers_sql_manager_construction():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_base/xiangyuan.py"
+    ).read_text(encoding="utf-8")
+    assert "_sql_message_instance = None" in source
+    assert "def _sql_message(" in source
+    assert "_sql_message().get_user_info_with_id(" in source
+    assert "_sql_message().goods_num(" in source
+    assert "sql_message = XiuxianDateManage()" not in source
+
+
 class XiangyuanCreateTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()

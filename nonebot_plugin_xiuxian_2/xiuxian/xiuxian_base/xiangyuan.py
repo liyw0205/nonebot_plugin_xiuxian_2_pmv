@@ -20,10 +20,17 @@ from .stone_limit import stone_limit
 from .transaction_service import XiangyuanSettlementService
 
 items = Items()
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 _xiangyuan_settlement_service_instance = None
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _xiangyuan_settlement_service():
@@ -68,7 +75,7 @@ def _xiangyuan_operation_id(event, action, user_id):
 
 def get_user_name(user_id):
     """根据用户 ID 获取道号"""
-    user_info = sql_message.get_user_info_with_id(user_id)
+    user_info = _sql_message().get_user_info_with_id(user_id)
     return user_info['user_name'] if user_info else f"未知 ({user_id})"
 
 def calculate_xiangyuan_reward(gift, is_last_receiver):
@@ -176,7 +183,7 @@ def parse_xiangyuan_content(content_str: str, user_id: int):
                 error_msg = f"禁止赠送【无上】品阶物品：{name}"
                 continue
 
-            trade_num = sql_message.goods_num(user_id, goods_id, num_type='trade')
+            trade_num = _sql_message().goods_num(user_id, goods_id, num_type='trade')
             if trade_num < qty:
                 error_msg = f"{name} 可交易数量不足，仅剩{trade_num}个"
                 continue
