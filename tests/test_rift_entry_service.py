@@ -26,6 +26,17 @@ def test_rift_facades_defer_entry_service_construction():
     assert jsondata._rift_entry_reader_instance is None
 
 
+def test_rift_make_defers_legacy_writer_construction():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_rift/riftmake.py"
+    ).read_text(encoding="utf-8")
+    assert "_sql_message_instance = None" in source
+    assert "def _sql_message(" in source
+    assert "_sql_message().update_exp(" in source
+    assert "_sql_message().update_ls(" in source
+    assert "sql_message = XiuxianDateManage()" not in source
+
+
 class RiftEntryServiceTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

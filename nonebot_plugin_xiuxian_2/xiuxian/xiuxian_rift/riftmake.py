@@ -9,10 +9,17 @@ from ..xiuxian_config import XiuConfig, convert_rank, base_rank
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 items = Items()
 skill_data = read_f()
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 NONEMSG = [
     "道友在秘境中晕头转向，等到清醒时已被秘境踢出，毫无所获！",
@@ -241,8 +248,8 @@ async def get_boss_battle_info(user_info, rift_rank, bot_id, persist=True):
         give_stone = (rift_rank + user_rank) * success_info["give"]["stone"]
         outcome["delta"].update({"exp": give_exp, "stone": give_stone})
         if persist:
-            sql_message.update_exp(user_info['user_id'], give_exp)
-            sql_message.update_ls(user_info['user_id'], give_stone, 1)
+            _sql_message().update_exp(user_info['user_id'], give_exp)
+            _sql_message().update_ls(user_info['user_id'], give_stone, 1)
         msg += f"获得了修为：{number_to(give_exp)}点，灵石：{number_to(give_stone)}枚！"
     else:  # 输了
         fail_info = STORY['战斗']['Boss战斗']["fail"]
