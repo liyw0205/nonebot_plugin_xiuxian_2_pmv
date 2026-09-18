@@ -14,7 +14,26 @@ PLAYERSDATA = get_paths().players
 MENTOR_HISTORY_LIMIT = 50
 MENTOR_BREAKTHROUGH_REWARD_LIMIT = 27
 
-player_data_manager = PlayerDataManager()
+_player_data_manager_instance = None
+
+
+def _resolve_player_data_manager():
+    global _player_data_manager_instance
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+    return _player_data_manager_instance
+
+
+class _LazyPlayerDataManager:
+    def __getattr__(self, name):
+        return getattr(_resolve_player_data_manager(), name)
+
+
+player_data_manager = _LazyPlayerDataManager()
+
+
+def _player_data_manager():
+    return player_data_manager
 
 
 def default_partner_data():
@@ -61,7 +80,7 @@ def load_partner(user_id):
     1. 不再读取对方的 partner 表，避免亲密度、绑定时间读错。
     2. 兼容历史 "None" / "null" / "" 脏数据。
     """
-    info = player_data_manager.get_fields(str(user_id), "partner")
+    info = _player_data_manager().get_fields(str(user_id), "partner")
 
     if not info:
         return default_partner_data()
@@ -113,20 +132,20 @@ def save_partner(user_id, data):
 
     affection = safe_int(affection, 0)
 
-    player_data_manager.update_or_write_data(
+    _player_data_manager().update_or_write_data(
         str(user_id), "partner", "partner_id", partner_id, data_type="TEXT"
     )
-    player_data_manager.update_or_write_data(
+    _player_data_manager().update_or_write_data(
         str(user_id), "partner", "bind_time", bind_time, data_type="TEXT"
     )
-    player_data_manager.update_or_write_data(
+    _player_data_manager().update_or_write_data(
         str(user_id), "partner", "affection", affection, data_type="INTEGER"
     )
 
 
 def load_mentor(user_id):
     """加载用户师徒数据。"""
-    info = player_data_manager.get_fields(str(user_id), "mentor")
+    info = _player_data_manager().get_fields(str(user_id), "mentor")
 
     if not info:
         return default_mentor_data()
@@ -237,37 +256,37 @@ def save_mentor(user_id, data):
         MENTOR_BREAKTHROUGH_REWARD_LIMIT,
     )
 
-    player_data_manager.update_or_write_data(
+    _player_data_manager().update_or_write_data(
         str(user_id), "mentor", "mentor_id", mentor_id, data_type="TEXT"
     )
-    player_data_manager.update_or_write_data(
+    _player_data_manager().update_or_write_data(
         str(user_id), "mentor", "apprentice_ids", apprentice_ids, data_type="TEXT"
     )
-    player_data_manager.update_or_write_data(
+    _player_data_manager().update_or_write_data(
         str(user_id), "mentor", "bind_time", bind_time, data_type="TEXT"
     )
-    player_data_manager.update_or_write_data(
+    _player_data_manager().update_or_write_data(
         str(user_id), "mentor", "mentor_cd_until", mentor_cd_until, data_type="TEXT"
     )
-    player_data_manager.update_or_write_data(
+    _player_data_manager().update_or_write_data(
         str(user_id), "mentor", "apprentice_cd_until", apprentice_cd_until, data_type="TEXT"
     )
-    player_data_manager.update_or_write_data(
+    _player_data_manager().update_or_write_data(
         str(user_id), "mentor", "mentor_rebind_cd", mentor_rebind_cd, data_type="TEXT"
     )
-    player_data_manager.update_or_write_data(
+    _player_data_manager().update_or_write_data(
         str(user_id), "mentor", "mentor_history", mentor_history, data_type="TEXT"
     )
-    player_data_manager.update_or_write_data(
+    _player_data_manager().update_or_write_data(
         str(user_id), "mentor", "mentor_protect", mentor_protect, data_type="TEXT"
     )
-    player_data_manager.update_or_write_data(
+    _player_data_manager().update_or_write_data(
         str(user_id), "mentor", "mentor_apply_time", mentor_apply_time, data_type="TEXT"
     )
-    player_data_manager.update_or_write_data(
+    _player_data_manager().update_or_write_data(
         str(user_id), "mentor", "mentor_apply_target", mentor_apply_target, data_type="TEXT"
     )
-    player_data_manager.update_or_write_data(
+    _player_data_manager().update_or_write_data(
         str(user_id), "mentor", "breakthrough_reward_count", breakthrough_reward_count, data_type="INTEGER"
     )
 
