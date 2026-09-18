@@ -2364,7 +2364,7 @@ class SourceQualityTests(unittest.TestCase):
         handler = source[start:end]
         self.assertIn("_partner_token_service().apply(", handler)
         self.assertNotIn("partner_token_service.apply(", handler)
-        self.assertIn("expected_item_count=sql_message.goods_num", handler)
+        self.assertIn("expected_item_count=_sql_message().goods_num", handler)
         self.assertIn("expected_used_count=current_count", handler)
 
     def test_partner_bind_uses_lazy_transactional_service(self) -> None:
