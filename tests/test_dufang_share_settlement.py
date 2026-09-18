@@ -29,6 +29,12 @@ class DufangShareSettlementTests(unittest.TestCase):
         self.assertIn("def _sql_message(", source)
         self.assertIn("_sql_message().get_user_info_with_id(", source)
         self.assertNotIn("sql_message = XiuxianDateManage()", source)
+        self.assertIn("_player_data_manager_instance = None", source)
+        self.assertIn("def _player_data_manager(", source)
+        self.assertNotIn("player_data_manager = PlayerDataManager()", source)
+        self.assertIn("_player_data_manager().get_field_data(", source)
+        self.assertIn("_player_data_manager().get_fields(", source)
+        self.assertIn("_player_data_manager().update_or_write_data(", source)
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

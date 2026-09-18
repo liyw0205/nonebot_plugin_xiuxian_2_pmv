@@ -34,7 +34,7 @@ _sql_message_instance = None
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
-player_data_manager = PlayerDataManager()
+_player_data_manager_instance = None
 _dufang_share_service_instance = None
 dufang_application = DufangApplication(get_paths().game_db, get_paths().player_db)
 
@@ -44,6 +44,25 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
+
+
+def _resolve_player_data_manager():
+    global _player_data_manager_instance
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+    return _player_data_manager_instance
+
+
+class _LazyPlayerDataManager:
+    def __getattr__(self, name):
+        return getattr(_resolve_player_data_manager(), name)
+
+
+player_data_manager = _LazyPlayerDataManager()
+
+
+def _player_data_manager():
+    return player_data_manager
 
 
 def _dufang_share_service():
@@ -73,7 +92,7 @@ BANNED_UNSEAL_IDS = XiuConfig().banned_unseal_ids  # 禁止鉴石的群
 
 # 加载共享用户数据
 def load_sharing_users():
-    users = player_data_manager.get_field_data("global", "unseal_sharing", "users")
+    users = _player_data_manager().get_field_data("global", "unseal_sharing", "users")
     if not users:
         return []
     if isinstance(users, list):
@@ -84,7 +103,7 @@ def load_sharing_users():
         return []
 
 def save_sharing_users(users):
-    player_data_manager.update_or_write_data("global", "unseal_sharing", "users", users, data_type="TEXT")
+    _player_data_manager().update_or_write_data("global", "unseal_sharing", "users", users, data_type="TEXT")
 
 # 添加共享用户
 def add_sharing_user(user_id):
@@ -137,7 +156,7 @@ def get_unseal_data(user_id):
         "last_update": runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 
-    row = player_data_manager.get_fields(user_id, "unseal_data")
+    row = _player_data_manager().get_fields(user_id, "unseal_data")
     if not row:
         save_unseal_data(user_id, default_data)
         return default_data
@@ -173,17 +192,17 @@ def save_unseal_data(user_id, data):
     u = data["unseal_info"]
     s = data["sharing_info"]
 
-    player_data_manager.update_or_write_data(user_id, "unseal_data", "count", int(u.get("count", 0)), data_type="INTEGER")
-    player_data_manager.update_or_write_data(user_id, "unseal_data", "total_cost", int(u.get("total_cost", 0)), data_type="INTEGER")
-    player_data_manager.update_or_write_data(user_id, "unseal_data", "profit", int(u.get("profit", 0)), data_type="INTEGER")
-    player_data_manager.update_or_write_data(user_id, "unseal_data", "loss", int(u.get("loss", 0)), data_type="INTEGER")
+    _player_data_manager().update_or_write_data(user_id, "unseal_data", "count", int(u.get("count", 0)), data_type="INTEGER")
+    _player_data_manager().update_or_write_data(user_id, "unseal_data", "total_cost", int(u.get("total_cost", 0)), data_type="INTEGER")
+    _player_data_manager().update_or_write_data(user_id, "unseal_data", "profit", int(u.get("profit", 0)), data_type="INTEGER")
+    _player_data_manager().update_or_write_data(user_id, "unseal_data", "loss", int(u.get("loss", 0)), data_type="INTEGER")
 
-    player_data_manager.update_or_write_data(user_id, "unseal_data", "shared_profit", int(s.get("shared_profit", 0)), data_type="INTEGER")
-    player_data_manager.update_or_write_data(user_id, "unseal_data", "shared_loss", int(s.get("shared_loss", 0)), data_type="INTEGER")
-    player_data_manager.update_or_write_data(user_id, "unseal_data", "received_profit", int(s.get("received_profit", 0)), data_type="INTEGER")
-    player_data_manager.update_or_write_data(user_id, "unseal_data", "received_loss", int(s.get("received_loss", 0)), data_type="INTEGER")
+    _player_data_manager().update_or_write_data(user_id, "unseal_data", "shared_profit", int(s.get("shared_profit", 0)), data_type="INTEGER")
+    _player_data_manager().update_or_write_data(user_id, "unseal_data", "shared_loss", int(s.get("shared_loss", 0)), data_type="INTEGER")
+    _player_data_manager().update_or_write_data(user_id, "unseal_data", "received_profit", int(s.get("received_profit", 0)), data_type="INTEGER")
+    _player_data_manager().update_or_write_data(user_id, "unseal_data", "received_loss", int(s.get("received_loss", 0)), data_type="INTEGER")
 
-    player_data_manager.update_or_write_data(user_id, "unseal_data", "last_update", data["last_update"], data_type="TEXT")
+    _player_data_manager().update_or_write_data(user_id, "unseal_data", "last_update", data["last_update"], data_type="TEXT")
 
 # 鉴石命令
 unseal = on_command("鉴石", priority=9, block=True)
