@@ -32,7 +32,7 @@ from ...infrastructure.ids import UUIDGenerator
 from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_title.title_data import check_and_unlock_titles
-player_data_manager = PlayerDataManager()
+_player_data_manager_instance = None
 _sql_message_instance = None
 items = Items()
 _tower_settlement_service_instance = None
@@ -42,6 +42,25 @@ tower_application = TowerApplication(
     repository=TowerPurchaseSqlRepository(get_paths().game_db, get_paths().player_db),
 )
 tower_ids = UUIDGenerator()
+
+
+def _resolve_player_data_manager():
+    global _player_data_manager_instance
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+    return _player_data_manager_instance
+
+
+class _LazyPlayerDataManager:
+    def __getattr__(self, name):
+        return getattr(_resolve_player_data_manager(), name)
+
+
+player_data_manager = _LazyPlayerDataManager()
+
+
+def _player_data_manager():
+    return player_data_manager
 
 
 def _sql_message():
@@ -437,7 +456,7 @@ async def tower_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await tower_rank.finish()
 
     # 获取所有用户的current_floor数据
-    all_user_integral = player_data_manager.get_all_field_data("tower", "current_floor")
+    all_user_integral = _player_data_manager().get_all_field_data("tower", "current_floor")
     
     # 排序数据
     sorted_integral = sorted(all_user_integral, key=lambda x: x[1], reverse=True)
@@ -461,7 +480,7 @@ async def tower_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await tower_integral_rank.finish()
 
     # 获取所有用户的score数据
-    all_user_integral = player_data_manager.get_all_field_data("tower", "score")
+    all_user_integral = _player_data_manager().get_all_field_data("tower", "score")
     
     # 排序数据
     sorted_integral = sorted(all_user_integral, key=lambda x: x[1], reverse=True)
