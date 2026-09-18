@@ -34,8 +34,15 @@ from ...paths import get_paths
 from ...features.title.application import TitleApplication
 from .title_transaction_service import TitleTransactionService
 
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 _title_transaction_service_instance = None
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 def _title_transaction_service():
     global _title_transaction_service_instance
@@ -463,7 +470,7 @@ async def title_grant_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 
     # 全服
     if target and target.lower() == "all":
-        all_users = sql_message.get_all_user_id() or []
+        all_users = _sql_message().get_all_user_id() or []
         if not all_users:
             await handle_send(bot, event, "当前没有可赠送的用户")
             return
@@ -518,9 +525,9 @@ async def title_grant_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     # 单人目标解析
     target_user = None
     if at_qq:
-        target_user = sql_message.get_user_info_with_id(at_qq)
+        target_user = _sql_message().get_user_info_with_id(at_qq)
     elif target:
-        target_user = sql_message.get_user_info_with_name(target)
+        target_user = _sql_message().get_user_info_with_name(target)
     else:
         # 默认自己
         _, me, _ = check_user(event)

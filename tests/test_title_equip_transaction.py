@@ -22,6 +22,18 @@ def test_title_facade_defers_transaction_service_construction():
     assert title._title_transaction_service_instance is None
 
 
+def test_title_facade_defers_sql_manager_construction():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py"
+    ).read_text(encoding="utf-8")
+    assert "_sql_message_instance = None" in source
+    assert "def _sql_message(" in source
+    assert "_sql_message().get_all_user_id(" in source
+    assert "_sql_message().get_user_info_with_id(" in source
+    assert "_sql_message().get_user_info_with_name(" in source
+    assert "sql_message = XiuxianDateManage()" not in source
+
+
 def test_title_entries_use_lazy_replay_and_application_write_paths():
     title_source = open(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py",
