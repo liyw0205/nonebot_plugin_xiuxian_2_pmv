@@ -34,7 +34,7 @@ from .transaction_service import DongfuFertilizeService
 from .transaction_service import InfiltrateFailureService
 from .transaction_service import InfiltrateSuccessService
 
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 player_data_manager = PlayerDataManager()
 items = Items()
 _dongfu_expansion_service_instance = None
@@ -51,6 +51,13 @@ dongfu_application = DongfuApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
 runtime_random = SystemRandom()
 runtime_clock = SystemClock()
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _dongfu_expansion_service():
@@ -523,9 +530,9 @@ def _get_slot_by_no(d: dict, slot_no: int):
 
 
 def _consume_item(uid: str, item_id: int, item_name: str, count: int = 1):
-    if _to_int(sql_message.goods_num(uid, item_id)) < count:
+    if _to_int(_sql_message().goods_num(uid, item_id)) < count:
         return False
-    sql_message.update_back_j(uid, item_id, count)
+    _sql_message().update_back_j(uid, item_id, count)
     return True
 
 
@@ -621,7 +628,7 @@ def _get_same_node_users(uid: str):
     )
     result = []
     for x in uids:
-        ui = sql_message.get_user_info_with_id(x)
+        ui = _sql_message().get_user_info_with_id(x)
         if ui:
             result.append(ui)
     return result
@@ -712,7 +719,7 @@ def _get_random_dongfu_target(my_uid: str):
         can_intrude, _ = _can_intrude(uid)
         if not can_intrude:
             continue
-        ui = sql_message.get_user_info_with_id(uid)
+        ui = _sql_message().get_user_info_with_id(uid)
         if ui:
             candidates.append(ui)
     return runtime_random.choice(candidates) if candidates else None
@@ -1357,7 +1364,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "请使用：拜访道友 道号")
         return
 
-    target = sql_message.get_user_info_with_name(tname)
+    target = _sql_message().get_user_info_with_name(tname)
     if not target:
         await handle_send(bot, event, f"未找到道友【{tname}】")
         return

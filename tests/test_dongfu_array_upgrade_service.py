@@ -8,6 +8,14 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dongfu.transaction_service import 
 from tests.test_db_backend import db_backend
 
 class DongfuArrayUpgradeServiceTests(unittest.TestCase):
+ def test_dongfu_facade_defers_sql_manager_construction(self):
+  source=Path("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py").read_text(encoding="utf-8")
+  self.assertIn("_sql_message_instance = None",source)
+  self.assertIn("def _sql_message(",source)
+  self.assertIn("_sql_message().goods_num(",source)
+  self.assertIn("_sql_message().get_user_info_with_id(",source)
+  self.assertIn("_sql_message().get_user_info_with_name(",source)
+  self.assertNotIn("sql_message = XiuxianDateManage()",source)
  def test_dongfu_facade_defers_array_upgrade_service_construction(self):
   from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dongfu
   self.assertIsNone(xiuxian_dongfu._dongfu_array_upgrade_service_instance)
