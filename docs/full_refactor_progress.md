@@ -2501,6 +2501,8 @@
 
 2026-09-19 xiuxian2 handle core storage lazy construction live safety：提交 `0d1dbadb` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T174008Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
 
+2026-09-19 sign-in lottery fallback removal slice：`plugin.py` 生命周期 wiring统一注入 `LotteryApplication`，删除 `XIUXIAN_SIGN_IN_LEGACY_LOTTERY` 默认分支与 production `LotterySettlementService` import；`xiuxian_base` 的鸿运查询/结算未迁移时返回迁移提示或 `migrations_required`，不再默认调用旧 JSON/SQL lottery service。显式 `legacy_settle` 参数仅保留在 compatibility helper作为人工 rollback边界。Lottery/sign-in/application/source/architecture regression 251 passed，production contract与未迁移 default path 2 passed，compileall、inventory、diff check通过；inventory slice状态 `lottery_compatibility_fallback=false`、`lottery_core_default_legacy=true`。
+
 2026-09-19 utils storage lazy construction live safety：提交 `0f84c726` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T171820Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
 
 ## 6. 下一步

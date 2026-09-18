@@ -150,11 +150,6 @@ qqq = XiuConfig().qqq
 tribulation_cd2 = int(XiuConfig().tribulation_cd * 60)
 
 
-def _legacy_lottery_service():
-    """Load the legacy lottery service only for an unmigrated installation."""
-    from .transaction_service import LotterySettlementService
-
-    return LotterySettlementService(get_paths().game_db)
 gfqq = on_command("官群", aliases={"交流群"}, priority=8, block=True)
 run_xiuxian = on_command("我要修仙", aliases={"开始修仙"}, priority=8, block=True)
 restart = on_command("重入仙途", priority=7, block=True)
@@ -919,10 +914,10 @@ async def hongyun_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     with DatabaseUnitOfWork(get_paths().game_db) as uow:
         migrated_lottery = LotteryRepository.schema_exists(uow)
-    if migrated_lottery:
-        snapshot = LotteryApplication(str(get_paths().game_db)).snapshot(business_date)
-    else:
-        snapshot = _legacy_lottery_service().get_snapshot(business_date)
+    if not migrated_lottery:
+        await handle_send(bot, event, "鸿运功能需要完成数据库迁移后才能使用。")
+        await hongyun.finish()
+    snapshot = LotteryApplication(str(get_paths().game_db)).snapshot(business_date)
     from ...features.sign_in.commands import format_lottery_snapshot
 
     msg = format_lottery_snapshot(snapshot, number_to)
@@ -941,7 +936,6 @@ async def handle_lottery(user_info: dict, operation_id: str):
         user_id=user_id,
         user_name=user_name,
         operation_id=operation_id,
-        legacy_settle=lambda *args, **kwargs: _legacy_lottery_service().settle(*args, **kwargs),
         application=lottery_application,
     )
 

@@ -484,16 +484,9 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 from .features.sign_in.task_effects import ApplicationSignInTaskEffects
                 from .features.sign_in.lottery_application import LotteryApplication
                 from .features.sign_in.lottery_repository import LotteryRepository
-                from .xiuxian.xiuxian_base.transaction_service import LotterySettlementService
                 lottery_application_type = LotteryApplication
 
-
-
-                legacy_lottery = os.environ.get("XIUXIAN_SIGN_IN_LEGACY_LOTTERY", "false").strip().lower() in {"1", "true", "yes", "on"}
-                lottery_service = LotterySettlementService(
-                    context.database.path("game_db"),
-                    Path(__file__).parent / "xiuxian" / "xiuxian_base" / "lottery_pool.json",
-                ) if legacy_lottery else LotteryApplication(
+                lottery_service = LotteryApplication(
                     str(context.database.path("game_db")), repository=LotteryRepository(), clock=context.clock, random_source=context.random,
                 )
                 sign_in_effects = SignInApplicationEffects(

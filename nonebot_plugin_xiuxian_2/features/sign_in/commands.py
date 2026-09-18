@@ -56,7 +56,7 @@ def settle_lottery(
     user_id: str,
     user_name: str,
     operation_id: str,
-    legacy_settle: Any,
+    legacy_settle: Any | None = None,
     application: LotteryApplication | None = None,
 ) -> Any:
     occurred_at = sign_in_clock().now()
@@ -78,6 +78,16 @@ def settle_lottery(
             user_name=user_name,
             business_date=business_date,
             occurred_at=occurred_at,
+        )
+    if legacy_settle is None:
+        from .lottery import LotterySettlement
+
+        return LotterySettlement(
+            "migrations_required",
+            operation_id,
+            user_id=user_id,
+            user_name=user_name,
+            business_date=business_date,
         )
     return legacy_settle(
         operation_id,

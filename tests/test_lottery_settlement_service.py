@@ -253,12 +253,40 @@ class LotterySettlementServiceTests(unittest.TestCase):
         self.assertIn("operation_id=sign_operation_id", sign_handler)
         self.assertIn("sign_result.succeeded", sign_handler)
         self.assertIn("settle_lottery(", lottery_handler)
-        self.assertIn("legacy_settle=", lottery_handler)
+        self.assertNotIn("legacy_settle=", lottery_handler)
+        self.assertNotIn("_legacy_lottery_service()", lottery_handler)
         self.assertNotIn("lottery_settlement_service =", source)
         self.assertNotIn("random.randint", lottery_handler)
         self.assertNotIn("update_ls", lottery_handler)
         self.assertNotIn("lottery_pool", sign_handler + lottery_handler)
         self.assertFalse((base_path / "lottery_pool.py").exists())
+        self.assertNotIn("_legacy_lottery_service", source)
+        self.assertIn("鸿运功能需要完成数据库迁移后才能使用", source)
+
+        plugin_source = (Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2/plugin.py").read_text(encoding="utf-8")
+        self.assertNotIn("XIUXIAN_SIGN_IN_LEGACY_LOTTERY", plugin_source)
+        self.assertNotIn("LotterySettlementService", plugin_source)
+        self.assertIn("lottery_service = LotteryApplication(", plugin_source)
+
+    def test_unmigrated_default_path_returns_migrations_required(self) -> None:
+        from nonebot_plugin_xiuxian_2.features.sign_in.commands import settle_lottery
+
+        called = []
+
+        def legacy_callback(*args, **kwargs):
+            called.append((args, kwargs))
+            raise AssertionError("legacy lottery fallback must be explicit")
+
+        result = settle_lottery(
+            str(Path(self.temp.name) / "unmigrated.sqlite3"),
+            user_id="u1",
+            user_name="道友一",
+            operation_id="lottery:migrations-required",
+        )
+
+        self.assertEqual(result.status, "migrations_required")
+        self.assertEqual(result.operation_id, "lottery:migrations-required")
+        self.assertFalse(called)
 
 
 if __name__ == "__main__":
