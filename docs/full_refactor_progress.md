@@ -2147,6 +2147,8 @@
 
 2026-09-18 title legacy execution live safety：提交 `fc19f896` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T022416Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
 
+2026-09-18 user-info legacy execution import slice：`xiuxian_info.user_info` 中未使用的 `PlayerDataManager` import与 module-level 实例已移除；`sql_message` 资料、排行、宗门、关系和更新时间查询保留，文本/图片信息输出与 title/buff/natal integrations未改变。construction/source/architecture及真实 source/legacy contract regression 共 190 tests passed，NoneBot初始化后的模块 import smoke通过，compileall、inventory、diff check通过。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。

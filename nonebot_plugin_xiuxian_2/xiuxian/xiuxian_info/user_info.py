@@ -13,7 +13,7 @@ from ..xiuxian_utils.utils import (
     handle_pic_send, handle_pic_msg_send,
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager, OtherSet, UserBuffDate, get_final_attributes
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate, get_final_attributes
 from ..xiuxian_utils.data_source import jsondata
 from .draw_user_info import draw_user_info_img, draw_user_info_img_with_default_bg
 from ..xiuxian_config import XiuConfig
@@ -33,7 +33,6 @@ xiuxian_message = on_command("我的修仙信息", aliases={"我的存档", "存
 xiuxian_message_img = on_command("我的修仙信息图片版", aliases={"我的存档图片版", "存档图片版", "修仙信息图片版"}, priority=23, block=True)
 
 sql_message = XiuxianDateManage()  # sql类
-player_data_manager = PlayerDataManager()
 
 async def get_user_xiuxian_info(user_id):
     """获取用户修仙信息的公共函数"""
