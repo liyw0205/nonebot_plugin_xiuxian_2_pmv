@@ -27,10 +27,17 @@ from ..xiuxian_work import resetrefreshnum
 from ..xiuxian_compensation.common import clean_all_expired
 from .job_manager import SchedulerJobManager
 
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 job_manager = SchedulerJobManager(scheduler)
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 @register_legacy_startup
@@ -86,7 +93,7 @@ async def _run_job(job_name: str, func, *args, **kwargs):
 )
 async def daily_reset_sign():
     """每日签到重置"""
-    await _run_job("每日修仙签到重置", sql_message.sign_remake)
+    await _run_job("每日修仙签到重置", _sql_message().sign_remake)
 
 
 @scheduler.scheduled_job(
@@ -101,7 +108,7 @@ async def daily_reset_sign():
 )
 async def daily_reset_beg():
     """每日奇缘重置"""
-    await _run_job("仙途奇缘重置", sql_message.beg_remake)
+    await _run_job("仙途奇缘重置", _sql_message().beg_remake)
 
 
 @scheduler.scheduled_job(
@@ -116,7 +123,7 @@ async def daily_reset_beg():
 )
 async def daily_reset_day_num():
     """每日丹药使用次数重置"""
-    await _run_job("每日丹药使用次数重置", sql_message.day_num_reset)
+    await _run_job("每日丹药使用次数重置", _sql_message().day_num_reset)
 
 
 @scheduler.scheduled_job(
@@ -131,7 +138,7 @@ async def daily_reset_day_num():
 )
 async def daily_reset_mixelixir_num():
     """每日炼丹次数重置"""
-    await _run_job("每日炼丹次数重置", sql_message.mixelixir_num_reset)
+    await _run_job("每日炼丹次数重置", _sql_message().mixelixir_num_reset)
 
 
 @scheduler.scheduled_job(
