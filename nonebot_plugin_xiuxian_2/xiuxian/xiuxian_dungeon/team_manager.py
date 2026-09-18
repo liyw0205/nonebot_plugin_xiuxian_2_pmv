@@ -12,7 +12,26 @@ from ..xiuxian_utils.utils import handle_send
 from ...paths import get_paths
 from .transaction_service import DungeonTeamTransactionService, TeamInviteSnapshot
 
-player_data = PlayerDataManager() # PlayerDataManager实例
+_player_data_manager_instance = None
+
+
+def _resolve_player_data_manager():
+    global _player_data_manager_instance
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+    return _player_data_manager_instance
+
+
+class _LazyPlayerDataManager:
+    def __getattr__(self, name):
+        return getattr(_resolve_player_data_manager(), name)
+
+
+player_data = _LazyPlayerDataManager()
+
+
+def _player_data_manager():
+    return player_data
 
 # 表名常量
 TEAM_TABLE = "teams" # 队伍信息表
@@ -126,7 +145,7 @@ def load_teams() -> Dict[str, Dict]:
     :return: 队伍ID -> 队伍信息的字典。
     """
     teams = {}
-    records = player_data.get_all_records(TEAM_TABLE)
+    records = _player_data_manager().get_all_records(TEAM_TABLE)
     for record in records:
         team_id = record.get("user_id") # 'user_id'字段在这里存储'team_id'
         if team_id:
@@ -156,7 +175,7 @@ def get_team_info(team_id: str) -> Optional[Dict]:
     :return: 队伍信息字典或None。
     """
     # PlayerDataManager.get_fields 已经处理了JSON反序列化
-    team_info = player_data.get_fields(team_id, TEAM_TABLE)
+    team_info = _player_data_manager().get_fields(team_id, TEAM_TABLE)
     if team_info:
         team_info = _normalize_team_record(team_info)
     return team_info

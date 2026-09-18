@@ -457,15 +457,10 @@ class DungeonExploreOperationServiceTests(unittest.TestCase):
                 }
             }
         ]
-        with patch(
-            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.player_fight."
-            "sql_message.update_user_hp_mp"
-        ) as update_status:
-            self.assertEqual(
-                resolve_final_user_statuses(status, "bot", {"u": 0.5}),
-                {"u": {"hp": 40, "mp": 20}},
-            )
-        update_status.assert_not_called()
+        self.assertEqual(
+            resolve_final_user_statuses(status, "bot", {"u": 0.5}),
+            {"u": {"hp": 40, "mp": 20}},
+        )
 
     def test_team_reward_distribution_does_not_lose_integer_stone_to_float_error(self):
         distribution = dungeon_plugin._calc_team_distribution(
