@@ -46,7 +46,14 @@ from ..xiuxian_tasks.task_data import record_task_progress
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate, XIUXIAN_IMPART_BUFF
 from .. import NICKNAME
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
-sql_message = XiuxianDateManage()  # sql类
+_sql_message_instance = None
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _resolve_impart_closing_user_id(event, user_info) -> str:
@@ -65,7 +72,7 @@ def _resolve_impart_closing_user_id(event, user_info) -> str:
     if original_id and original_id not in candidates:
         candidates.append(original_id)
     for uid in candidates:
-        cd = sql_message.get_user_cd(uid)
+        cd = _sql_message().get_user_cd(uid)
         if cd is not None and int(cd.get("type") or 0) == 4:
             return uid
     return active_id
@@ -275,7 +282,7 @@ async def impart_top_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     num = 0
     for i in v_impart_top:
         num += 1
-        user_info = sql_message.get_user_info_with_id(i['user_id'])
+        user_info = _sql_message().get_user_info_with_id(i['user_id'])
         user_name = user_info['user_name'] if user_info else "未知修士"
         impart_name = impart_level.get(i['impart_lv'], "未知秘境")
         msg += f"第{num}位  {user_name}\n现位于：{impart_name}（LV {i['impart_lv']}）\n"
@@ -309,7 +316,7 @@ async def impart_pk_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     for x in range(len(xu_list)):
         user_data = impart_pk.find_user_data(xu_list[x])
         if user_data:
-            name = sql_message.get_user_info_with_id(xu_list[x])['user_name']
+            name = _sql_message().get_user_info_with_id(xu_list[x])['user_name']
             msg = ""
             msg += f"编号：{user_data['number']}\n"
             msg += f"道友：{name}\n"
@@ -331,7 +338,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await impart_pk_now.finish()
     
     user_id = user_info['user_id']
-    sql_message.update_last_check_info_time(user_id)  # 更新查看修仙信息时间
+    _sql_message().update_last_check_info_time(user_id)  # 更新查看修仙信息时间
     impart_data_draw = await impart_pk_check(user_id)
     if impart_data_draw is None:
         msg = f"发生未知错误！"
@@ -492,7 +499,7 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await impart_pk_now.finish()
 
     player_1_name = user_info['user_name']
-    player_2_name = sql_message.get_user_info_with_id(player_2)['user_name']
+    player_2_name = _sql_message().get_user_info_with_id(player_2)['user_name']
     player_2_legacy = impart_pk.find_user_data(player_2)
     expected_player_2_pk_num = _impart_battle_batch_service().get_pk_num(
         player_2, player_2_legacy["pk_num"]
@@ -662,7 +669,7 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await impart_pk_exp.finish()
 
     # 计算每分钟获得的经验值
-    level_rate = sql_message.get_root_rate(user_info['root_type'], user_id)  # 灵根倍率
+    level_rate = _sql_message().get_root_rate(user_info['root_type'], user_id)  # 灵根倍率
     realm_rate = jsondata.level_data()[level]["spend"]  # 境界倍率
     user_buff_data = UserBuffDate(user_id)
     mainbuffdata = user_buff_data.get_user_main_buff_data()
@@ -1051,7 +1058,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
         await impart_pk_out_closing.finish()
     
     # 直接读 user_cd：避免 check_user_type 再映射到 active 化身导致误判
-    user_cd_message = sql_message.get_user_cd(user_id)
+    user_cd_message = _sql_message().get_user_cd(user_id)
     if user_cd_message is None or int(user_cd_message.get("type") or 0) != 4:
         is_type, msg = check_user_type(user_id, 4)
         if not is_type:
@@ -1059,7 +1066,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
             await impart_pk_out_closing.finish()
     
     # 获取用户信息和传承数据
-    user_mes = sql_message.get_user_info_with_id(user_id)
+    user_mes = _sql_message().get_user_info_with_id(user_id)
     level = user_mes['level']
     use_exp = user_mes['exp']
     
@@ -1075,7 +1082,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     user_get_exp_max = max(0, as_int_like(max_exp) - use_exp)  # 确保不为负数
 
     now_time = runtime_clock.now()
-    user_cd_message = sql_message.get_user_cd(user_id)
+    user_cd_message = _sql_message().get_user_cd(user_id)
     
     # 计算闭关时长：坏 create_time → 0 分钟，仍可出关清 type=4
     from ..xiuxian_utils.cd_time import elapsed_minutes_from_cd_time, normalize_cd_time_token
@@ -1083,7 +1090,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     exp_time = elapsed_minutes_from_cd_time(user_cd_message.get("create_time"), on_error=0)
 
     # 获取各种增益倍率
-    level_rate = sql_message.get_root_rate(user_mes['root_type'], user_id)
+    level_rate = _sql_message().get_root_rate(user_mes['root_type'], user_id)
     realm_rate = jsondata.level_data()[level]["spend"]
     user_buff_data = UserBuffDate(user_id)
     user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5 / 1.5

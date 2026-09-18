@@ -17,6 +17,18 @@ def test_impart_facade_defers_training_settlement_service_construction():
     assert impart._impart_training_settlement_service_instance is None
 
 
+def test_impart_facade_defers_sql_manager_construction():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py"
+    ).read_text(encoding="utf-8")
+    assert "_sql_message_instance = None" in source
+    assert "def _sql_message(" in source
+    assert "_sql_message().get_user_cd(" in source
+    assert "_sql_message().get_user_info_with_id(" in source
+    assert "_sql_message().update_last_check_info_time(" in source
+    assert "sql_message = XiuxianDateManage()" not in source
+
+
 def test_impart_training_handler_uses_lazy_three_database_service():
     source = Path(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py"
