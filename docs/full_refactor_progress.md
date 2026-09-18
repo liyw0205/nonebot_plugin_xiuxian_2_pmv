@@ -2403,6 +2403,8 @@
 
 2026-09-18 boss limit lazy construction slice：`boss_limit` 延迟 `PlayerDataManager` 到 boss table 首次读写，并保留 `xiuxian_boss.__init__` 所需 public `player_data_manager` import alias（首次 getter后同步实例）；保留 boss daily/weekly legacy fields、reset semantics与 world-boss transaction-service ownership。Boss/world-boss/source/architecture regression共 251 tests passed，compileall、inventory、diff check通过。
 
+2026-09-18 boss limit lazy construction live safety：提交 `c356cdcb` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T130329Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。
