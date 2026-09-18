@@ -2419,6 +2419,8 @@
 
 2026-09-18 accessory storage lazy construction live safety verified：remote smoke operation `refactor-accessory-d1a15932` 通过五库 backup/dry-run/readiness/reconcile/rollback/restore/旧实例恢复；独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，manifest `/srv/smoke-data/backups/20260918T135507Z` 五库完整。
 
+2026-09-18 bank storage lazy construction slice：`xiuxian_bank.__init__` 延迟 legacy `bankinfo` `PlayerDataManager` reader/writer，并保留 public proxy alias供 migration/test injection；modern `BankApplication`、BankDeposit/Withdrawal/Upgrade/Interest services及双库事务边界未改变。Bank/source/architecture regression共 251 passed，compileall、inventory、diff check通过。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。

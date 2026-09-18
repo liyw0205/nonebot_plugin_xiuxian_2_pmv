@@ -36,7 +36,7 @@ from ...features.bank.repository import LegacyBankRepository
 
 config = get_config()
 BANKLEVEL = config["BANKLEVEL"]
-player_data_manager = PlayerDataManager()
+_player_data_manager_instance = None
 _bank_deposit_service_instance = None
 _bank_withdrawal_service_instance = None
 _bank_upgrade_service_instance = None
@@ -49,6 +49,25 @@ bank_application = BankApplication(
 runtime_clock = SystemClock()
 runtime_ids = UUIDGenerator()
 PLAYERSDATA = get_paths().players
+
+
+def _resolve_player_data_manager():
+    global _player_data_manager_instance
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+    return _player_data_manager_instance
+
+
+class _LazyPlayerDataManager:
+    def __getattr__(self, name):
+        return getattr(_resolve_player_data_manager(), name)
+
+
+player_data_manager = _LazyPlayerDataManager()
+
+
+def _player_data_manager():
+    return player_data_manager
 
 
 def _bank_deposit_service():
@@ -531,7 +550,7 @@ def get_give_stone(bankinfo):
 def readf(user_id):
     """从动态数据库读取灵庄信息（兼容默认值）"""
     user_id = str(user_id)
-    bank_data = player_data_manager.get_fields(user_id, "bankinfo")
+    bank_data = _player_data_manager().get_fields(user_id, "bankinfo")
     if not bank_data:
         return {
             "savestone": 0,
@@ -559,7 +578,7 @@ def readf(user_id):
 def savef(user_id, data):
     """保存灵庄信息到动态数据库"""
     user_id = str(user_id)
-    player_data_manager.update_or_write_data(user_id, "bankinfo", "savestone", int(data.get("savestone", 0)), data_type="INTEGER")
-    player_data_manager.update_or_write_data(user_id, "bankinfo", "savetime", str(data.get("savetime", runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S'))), data_type="TEXT")
-    player_data_manager.update_or_write_data(user_id, "bankinfo", "banklevel", str(data.get("banklevel", "1")), data_type="TEXT")
+    _player_data_manager().update_or_write_data(user_id, "bankinfo", "savestone", int(data.get("savestone", 0)), data_type="INTEGER")
+    _player_data_manager().update_or_write_data(user_id, "bankinfo", "savetime", str(data.get("savetime", runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S'))), data_type="TEXT")
+    _player_data_manager().update_or_write_data(user_id, "bankinfo", "banklevel", str(data.get("banklevel", "1")), data_type="TEXT")
     return True
