@@ -5,7 +5,7 @@ from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
 from .transaction_service import ArenaStateService
 
 
-player_data_manager = PlayerDataManager()
+_player_data_manager_instance = None
 
 
 class ArenaLimit:
@@ -34,13 +34,27 @@ class ArenaLimit:
             "11-50": 100,
             "51-100": 50,
         }
-        self._state_service = state_service or ArenaStateService(
-            get_paths().player_db,
-            player_data_manager.lock,
-        )
+        self._state_service_override = state_service
+        self._state_service_instance = None
+
+    def _player_data_manager(self):
+        global _player_data_manager_instance
+        if _player_data_manager_instance is None:
+            _player_data_manager_instance = PlayerDataManager()
+        return _player_data_manager_instance
+
+    def _state_service(self):
+        if self._state_service_override is not None:
+            return self._state_service_override
+        if self._state_service_instance is None:
+            self._state_service_instance = ArenaStateService(
+                get_paths().player_db,
+                self._player_data_manager().lock,
+            )
+        return self._state_service_instance
 
     def get_user_arena_info(self, user_id):
-        return self._state_service.get(user_id)
+        return self._state_service().get(user_id)
 
     def get_daily_challenge_cap(self, user_id):
         arena_info = self.get_user_arena_info(user_id)
@@ -92,7 +106,7 @@ class ArenaLimit:
         return "青铜"
 
     def get_arena_ranking(self, limit=50):
-        all_users = player_data_manager.get_all_field_data(self.table_name, "score")
+        all_users = self._player_data_manager().get_all_field_data(self.table_name, "score")
         return sorted(all_users, key=lambda item: int(item[1]), reverse=True)[:limit]
 
     @staticmethod

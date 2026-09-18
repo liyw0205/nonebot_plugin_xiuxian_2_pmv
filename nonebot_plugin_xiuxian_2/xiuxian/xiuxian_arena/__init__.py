@@ -17,7 +17,7 @@ from ..xiuxian_config import XiuConfig
 from ...paths import get_paths
 
 items = Items()
-player_data_manager = PlayerDataManager()
+_player_data_manager_instance = None
 _sql_message_instance = None
 
 from .arena_limit import arena_limit
@@ -49,6 +49,13 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
+
+
+def _player_data_manager():
+    global _player_data_manager_instance
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+    return _player_data_manager_instance
 
 
 def _arena_weekly_rank_reduction_service():
@@ -422,7 +429,7 @@ async def arena_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     # 没缓存才重新生成
     if not cache_targets:
-        all_players = player_data_manager.get_all_field_data("arena", "score")
+        all_players = _player_data_manager().get_all_field_data("arena", "score")
         if not all_players:
             await handle_send(bot, event, "当前竞技场暂无其他对手。")
             await arena_view.finish()
@@ -865,7 +872,7 @@ async def find_arena_opponent(user_id, operation_id=None):
     user_score = int(user_arena_data['score'])
     
     # 获取所有玩家数据
-    all_players = player_data_manager.get_all_field_data("arena", "score")
+    all_players = _player_data_manager().get_all_field_data("arena", "score")
     if not all_players:
         return None
 
@@ -932,7 +939,7 @@ def clear_arena_opponent_cache(user_id: str):
 
 async def reset_arena_daily_challenges():
     """每日重置竞技场挑战次数并发放荣誉值奖励"""
-    all_users = player_data_manager.get_all_field_data("arena", "score")
+    all_users = _player_data_manager().get_all_field_data("arena", "score")
     honor_distribution = {}
     season_key = runtime_clock.now().strftime("%Y-%m-%d")
 
