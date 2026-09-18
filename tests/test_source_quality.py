@@ -1772,6 +1772,13 @@ class SourceQualityTests(unittest.TestCase):
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
         self.assertIn("_bank_deposit_service_instance = None", source)
         self.assertNotIn("bank_deposit_service = BankDepositService", source)
+
+    def test_bank_facade_does_not_construct_unused_legacy_sql_manager(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("XiuxianDateManage", source)
+        self.assertNotIn("sql_message =", source)
         self.assertIn("_bank_deposit_service().get_result", source)
         self.assertIn("_bank_withdrawal_service().get_result", source)
         self.assertIn("_bank_upgrade_service().get_result", source)

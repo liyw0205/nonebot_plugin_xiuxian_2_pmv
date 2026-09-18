@@ -20,7 +20,7 @@ from ..adapter_compat import (
     MessageSegment,
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
+from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
 from datetime import datetime
 from .bankconfig import get_config
 from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, send_help_message
@@ -36,7 +36,6 @@ from ...features.bank.repository import LegacyBankRepository
 
 config = get_config()
 BANKLEVEL = config["BANKLEVEL"]
-sql_message = XiuxianDateManage()  # sql类
 player_data_manager = PlayerDataManager()
 _bank_deposit_service_instance = None
 _bank_withdrawal_service_instance = None
