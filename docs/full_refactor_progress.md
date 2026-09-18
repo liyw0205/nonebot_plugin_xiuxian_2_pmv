@@ -2159,6 +2159,8 @@
 
 2026-09-18 past-life legacy execution live safety：提交 `6b03ebbd` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T024708Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
 
+2026-09-18 activity read-model boundary audit：`xiuxian_activity.activity_storage` 的 `_sql_message` 仍被道号解析与批量用户名称读取真实使用；ActivityApplication/Repository当前没有等价 read port，未强行删除该 legacy projection，记录为兼容边界并继续独立扫描。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。
