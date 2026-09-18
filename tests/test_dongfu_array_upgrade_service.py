@@ -16,6 +16,12 @@ class DongfuArrayUpgradeServiceTests(unittest.TestCase):
   self.assertIn("_sql_message().get_user_info_with_id(",source)
   self.assertIn("_sql_message().get_user_info_with_name(",source)
   self.assertNotIn("sql_message = XiuxianDateManage()",source)
+  self.assertIn("_player_data_manager_instance = None",source)
+  self.assertIn("def _player_data_manager(",source)
+  self.assertNotIn("player_data_manager = PlayerDataManager()",source)
+  self.assertIn("_player_data_manager().get_fields(",source)
+  self.assertIn("_player_data_manager().list_users_by_fields(",source)
+  self.assertIn("_player_data_manager().update_or_write_data(",source)
  def test_dongfu_facade_defers_array_upgrade_service_construction(self):
   from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dongfu
   self.assertIsNone(xiuxian_dongfu._dongfu_array_upgrade_service_instance)

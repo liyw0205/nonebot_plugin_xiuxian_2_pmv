@@ -35,7 +35,7 @@ from .transaction_service import InfiltrateFailureService
 from .transaction_service import InfiltrateSuccessService
 
 _sql_message_instance = None
-player_data_manager = PlayerDataManager()
+_player_data_manager_instance = None
 items = Items()
 _dongfu_expansion_service_instance = None
 _dongfu_plant_service_instance = None
@@ -51,6 +51,25 @@ dongfu_application = DongfuApplication(get_paths().game_db)
 runtime_ids = UUIDGenerator()
 runtime_random = SystemRandom()
 runtime_clock = SystemClock()
+
+
+def _resolve_player_data_manager():
+    global _player_data_manager_instance
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+    return _player_data_manager_instance
+
+
+class _LazyPlayerDataManager:
+    def __getattr__(self, name):
+        return getattr(_resolve_player_data_manager(), name)
+
+
+player_data_manager = _LazyPlayerDataManager()
+
+
+def _player_data_manager():
+    return player_data_manager
 
 
 def _sql_message():
@@ -537,7 +556,7 @@ def _consume_item(uid: str, item_id: int, item_name: str, count: int = 1):
 
 
 def _get_dongfu(uid: str):
-    d = player_data_manager.get_fields(str(uid), DONGFU_TABLE)
+    d = _player_data_manager().get_fields(str(uid), DONGFU_TABLE)
     default = _default_dongfu()
     changed = False
 
@@ -545,13 +564,13 @@ def _get_dongfu(uid: str):
         d = default.copy()
         changed = True
         for k, v in d.items():
-            player_data_manager.update_or_write_data(str(uid), DONGFU_TABLE, k, v)
+            _player_data_manager().update_or_write_data(str(uid), DONGFU_TABLE, k, v)
     else:
         for k, v in default.items():
             if k not in d or d.get(k) is None:
                 d[k] = v
                 changed = True
-                player_data_manager.update_or_write_data(str(uid), DONGFU_TABLE, k, v)
+                _player_data_manager().update_or_write_data(str(uid), DONGFU_TABLE, k, v)
 
     plant_before = d.get("plant_slots")
     legacy_before = (d.get("planting"), d.get("plant_seed_id"), d.get("plant_start"), d.get("plant_finish"))
@@ -570,7 +589,7 @@ def _get_dongfu(uid: str):
 def _save_dongfu(uid: str, d: dict):
     _sync_plant_fields(d)
     for k, v in d.items():
-        player_data_manager.update_or_write_data(str(uid), DONGFU_TABLE, k, v)
+        _player_data_manager().update_or_write_data(str(uid), DONGFU_TABLE, k, v)
 
 
 def _has_dongfu(uid: str):
@@ -612,7 +631,7 @@ def _roll_harvest(seed_id: int, array_lv: int):
 
 
 def _get_same_node_users(uid: str):
-    me_map = player_data_manager.get_fields(str(uid), MAP_TABLE) or {}
+    me_map = _player_data_manager().get_fields(str(uid), MAP_TABLE) or {}
     if not me_map:
         return []
     realm = me_map.get("realm")
@@ -621,7 +640,7 @@ def _get_same_node_users(uid: str):
     if not all([realm, heaven, node_id]):
         return []
 
-    uids = player_data_manager.list_users_by_fields(
+    uids = _player_data_manager().list_users_by_fields(
         MAP_TABLE,
         {"realm": realm, "heaven": heaven, "node_id": node_id},
         cache_ttl=20,
@@ -701,7 +720,7 @@ def _can_intrude(target_uid: str):
 
 def _get_random_dongfu_target(my_uid: str):
     # 仅扫已建洞府用户（SQL 等值 + 短缓存），避免全服 user_id 循环
-    candidate_ids = player_data_manager.list_users_by_fields(
+    candidate_ids = _player_data_manager().list_users_by_fields(
         DONGFU_TABLE,
         {"built": 1},
         cache_ttl=30,
@@ -710,7 +729,7 @@ def _get_random_dongfu_target(my_uid: str):
     candidates = []
     for uid in candidate_ids:
         uid = str(uid)
-        d = player_data_manager.get_fields(uid, DONGFU_TABLE) or {}
+        d = _player_data_manager().get_fields(uid, DONGFU_TABLE) or {}
         if _to_int(d.get("built")) != 1:
             continue
         _normalize_plant_slots(d)
