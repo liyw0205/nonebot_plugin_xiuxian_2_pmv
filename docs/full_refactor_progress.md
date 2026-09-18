@@ -2271,6 +2271,8 @@
 
 2026-09-18 sect-weekly lazy compatibility reader slice：`sect_weekly_commands.py` 的 sect info read与 `SectWeeklyRewardClaimService` lock依赖已改为同一 `_sql_message_instance`/`_sql_message()` lazy holder；weekly reward 双库事务、lock identity、claim replay/conflict/rollback semantics未改变。construction/source/architecture及 Sect regression共 363 tests passed，compileall、inventory、diff check通过。
 
+2026-09-18 sect-weekly lazy compatibility reader live safety：提交 `db729de8` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T070108Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。
