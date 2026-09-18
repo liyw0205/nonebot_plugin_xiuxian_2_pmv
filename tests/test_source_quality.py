@@ -588,6 +588,13 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("package_reward_operations", service_source)
 
+    def test_back_facade_does_not_construct_unused_player_manager(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_back" / "__init__.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("PlayerDataManager", source)
+        self.assertNotIn("player_data_manager =", source)
+
     def test_accessory_package_rewards_use_attached_database_transaction(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         command_source = (back_root / "__init__.py").read_text(encoding="utf-8")

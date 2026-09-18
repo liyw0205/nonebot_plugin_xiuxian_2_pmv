@@ -31,7 +31,6 @@ from ..xiuxian_utils.utils import (
 from ..xiuxian_utils.sect_utils import get_user_sect_fairyland_level as _get_user_sect_fairyland_level
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage,
-    PlayerDataManager,
     UserBuffDate,
     OtherSet,
 )
@@ -99,7 +98,6 @@ _alchemy_service_instance = None
 _skill_learning_service_instance = None
 _batch_item_use_service_instance = None
 _backpack_repair_service_instance = None
-player_data_manager = PlayerDataManager()
 runtime_ids = UUIDGenerator()
 
 
