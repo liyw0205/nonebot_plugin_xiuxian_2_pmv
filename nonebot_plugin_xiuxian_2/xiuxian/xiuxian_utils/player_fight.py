@@ -71,8 +71,15 @@ from ..xiuxian_natal_treasure.natal_config import (
 )
 
 items = Items()
-sql_message = XiuxianDateManage()  # sql类
+_sql_message_instance = None
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 async def pve_fight(user, monster, type_in=2, bot_id=0, level_ratios=None, attack_buffs=None):
@@ -445,7 +452,7 @@ def update_all_user_status(status_list, bot_id, level_ratios=None):
     for user_id, status in resolve_final_user_statuses(
         status_list, bot_id, level_ratios
     ).items():
-        sql_message.update_user_hp_mp(user_id, status["hp"], status["mp"])
+        _sql_message().update_user_hp_mp(user_id, status["hp"], status["mp"])
 
 
 def is_scarecrow_boss(boss):
