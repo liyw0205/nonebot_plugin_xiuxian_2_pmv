@@ -40,7 +40,16 @@ from .transaction_service import MixelixirRefineCostService
 from .transaction_service import MixelixirRefineRewardService
 
 
-sql_message = XiuxianDateManage()  # sql类
+_sql_message_instance = None
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
+
+
 mixelixir_application = MixelixirApplication(
     get_paths().game_db,
     get_paths().player_db,
@@ -461,7 +470,7 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         await handle_send(bot, event, msg, md_type="我要修仙")
         await mix_elixir.finish()
     user_id = user_info['user_id']
-    user_back = sql_message.get_back_msg(user_id)
+    user_back = _sql_message().get_back_msg(user_id)
     if not user_back:
         msg = "道友的背包空空如也，无法炼丹"
         await handle_send(bot, event, msg)
@@ -656,7 +665,7 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                 furnace_id = int(ldl_info.get("goods_id") or 0)
             if furnace_id <= 0:
                 # 从背包反查丹炉 id
-                user_back = sql_message.get_back_msg(user_id) or []
+                user_back = _sql_message().get_back_msg(user_id) or []
                 for back in user_back:
                     if back.get("goods_type") == "炼丹炉" and str(back.get("goods_name")) == ldl_name:
                         furnace_id = int(back["goods_id"])
@@ -828,7 +837,7 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
 async def check_yaocai_name_in_back(user_id, yaocai_name, yaocai_num):
     flag = False
     goods_id = 0
-    user_back = sql_message.get_back_msg(user_id) or []
+    user_back = _sql_message().get_back_msg(user_id) or []
     for back in user_back:
         if back['goods_type'] == '药材':
             if Items().get_data_by_item_id(back['goods_id'])['name'] == yaocai_name:
@@ -846,7 +855,7 @@ async def check_yaocai_name_in_back(user_id, yaocai_name, yaocai_num):
 async def check_ldl_name_in_back(user_id, ldl_name):
     flag = False
     goods_info = {}
-    user_back = sql_message.get_back_msg(user_id) or []
+    user_back = _sql_message().get_back_msg(user_id) or []
     for back in user_back:
         if back['goods_type'] == '炼丹炉':
             if back['goods_name'] == ldl_name:

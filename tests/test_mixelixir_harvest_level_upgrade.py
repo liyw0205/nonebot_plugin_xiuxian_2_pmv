@@ -38,6 +38,16 @@ def test_mixelixir_harvest_level_upgrade_uses_lazy_dual_database_service():
     assert "mixelixir_harvest_level_upgrade_service.upgrade(" not in handler
 
 
+def test_mixelixir_facade_defers_sql_manager_construction():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_mixelixir/__init__.py"
+    ).read_text(encoding="utf-8")
+    assert "_sql_message_instance = None" in source
+    assert "def _sql_message(" in source
+    assert source.count("_sql_message().get_back_msg(") == 4
+    assert "sql_message = XiuxianDateManage()" not in source
+
+
 class MixelixirHarvestLevelUpgradeTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
