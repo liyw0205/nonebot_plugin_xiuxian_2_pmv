@@ -25,12 +25,31 @@ from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import number_to
 
-player_data_manager = PlayerDataManager()
+_player_data_manager_instance = None
 _sql_message_instance = None
 items = Items()
 training_application = TrainingApplication(get_paths().game_db)
 runtime_clock = SystemClock()
 runtime_ids = UUIDGenerator()
+
+
+def _resolve_player_data_manager():
+    global _player_data_manager_instance
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+    return _player_data_manager_instance
+
+
+class _LazyPlayerDataManager:
+    def __getattr__(self, name):
+        return getattr(_resolve_player_data_manager(), name)
+
+
+player_data_manager = _LazyPlayerDataManager()
+
+
+def _player_data_manager():
+    return player_data_manager
 
 
 def _sql_message():
@@ -340,7 +359,7 @@ async def training_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await training_rank.finish()
 
     # 获取所有用户的completed数据
-    all_user_integral = player_data_manager.get_all_field_data("training", "completed")
+    all_user_integral = _player_data_manager().get_all_field_data("training", "completed")
     
     # 排序数据
     sorted_integral = sorted(all_user_integral, key=lambda x: x[1], reverse=True)
@@ -364,7 +383,7 @@ async def training_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMe
         await training_integral_rank.finish()
 
     # 获取所有用户的completed数据
-    all_user_integral = player_data_manager.get_all_field_data("training", "points")
+    all_user_integral = _player_data_manager().get_all_field_data("training", "points")
     
     # 排序数据
     sorted_integral = sorted(all_user_integral, key=lambda x: x[1], reverse=True)
