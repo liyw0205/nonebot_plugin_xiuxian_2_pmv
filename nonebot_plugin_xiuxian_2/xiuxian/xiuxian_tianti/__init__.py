@@ -8,7 +8,7 @@ from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEven
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, number_to, send_help_message
 from ..xiuxian_utils.sect_utils import get_user_sect_fairyland_level as _get_user_sect_fairyland_level
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
+
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_world_events import get_spirit_vein_tianti_bonus_msg
 from .tianti_data import (
@@ -34,7 +34,6 @@ from ...paths import get_paths
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 
-sql_message = XiuxianDateManage()
 tianti_manager = TiantiDataManager()
 tianti_settlement_application = TiantiSettlementApplication(
     get_paths().player_db,

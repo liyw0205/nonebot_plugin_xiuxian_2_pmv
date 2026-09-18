@@ -689,6 +689,13 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("tianti_settlement_operations", service_source)
 
+    def test_tianti_facade_does_not_construct_legacy_sql_manager(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_tianti" / "__init__.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage", source)
+        self.assertNotIn("sql_message = XiuxianDateManage()", source)
+
     def test_sect_fairyland_claim_uses_transactional_service(self) -> None:
         sect_root = SOURCE_ROOT / "xiuxian" / "xiuxian_sect"
         command_source = (sect_root / "__init__.py").read_text(encoding="utf-8")
