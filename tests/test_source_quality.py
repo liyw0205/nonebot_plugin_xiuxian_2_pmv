@@ -630,6 +630,15 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("PlayerDataManager", source)
         self.assertNotIn("player_data_manager =", source)
 
+    def test_past_life_limit_defers_player_manager_construction(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_past_life" / "past_life_limit.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("_player_data_manager_instance = None", source)
+        self.assertIn("def _player_data_manager(", source)
+        self.assertIn("_player_data_manager().get_fields(", source)
+        self.assertNotIn("player_data_manager = PlayerDataManager()", source)
+
     def test_accessory_package_rewards_use_attached_database_transaction(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         command_source = (back_root / "__init__.py").read_text(encoding="utf-8")

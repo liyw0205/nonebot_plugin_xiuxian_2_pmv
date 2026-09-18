@@ -7,7 +7,14 @@ from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
 from ...infrastructure.clock import SystemClock
 from .past_life_state import PAST_LIFE_FIELDS, new_default_state
 
-player_data_manager = PlayerDataManager()
+_player_data_manager_instance = None
+
+
+def _player_data_manager():
+    global _player_data_manager_instance
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+    return _player_data_manager_instance
 
 FIELDS = list(PAST_LIFE_FIELDS)
 
@@ -25,7 +32,7 @@ class PastLifeLimit:
 
     def get_user_state(self, user_id):
         user_id = str(user_id)
-        record = player_data_manager.get_fields(user_id, self.table_name)
+        record = _player_data_manager().get_fields(user_id, self.table_name)
         if not record:
             return self._default_state()
 

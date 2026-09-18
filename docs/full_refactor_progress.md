@@ -2161,6 +2161,8 @@
 
 2026-09-18 activity read-model boundary audit：`xiuxian_activity.activity_storage` 的 `_sql_message` 仍被道号解析与批量用户名称读取真实使用；ActivityApplication/Repository当前没有等价 read port，未强行删除该 legacy projection，记录为兼容边界并继续独立扫描。
 
+2026-09-18 past-life limit lazy read slice：`past_life_limit.py` 的 player-db `PlayerDataManager` 已改为 `_player_data_manager_instance`/`_player_data_manager()` lazy holder；`PastLifeLimit` 状态读取、刷新段 cooldown、PastLife engine integrations和既有 API未改变。construction/source/architecture及 past-life regression 共 227 tests passed，compileall、inventory、diff check通过。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。
