@@ -286,6 +286,10 @@ _trade_manager: Any = None
 _auction_repository: Any = None
 _auction_session_service: Any = None
 
+
+def _resolve_dependency(dependency: Any) -> Any:
+    return dependency() if callable(dependency) else dependency
+
 def bind_auction_service_dependencies(
     *, items: Any, sql_message: Any, trade_manager: Any, auction_repository: Any,
     auction_session_service: Any
@@ -306,14 +310,14 @@ def _auction_dependencies() -> tuple[Any, Any, Any, Any, Any]:
         or _auction_session_service is None
     ):
         raise RuntimeError("auction service dependencies are not bound")
-    session_service = (
-        _auction_session_service()
-        if callable(_auction_session_service)
-        else _auction_session_service
-    )
+    sql_message = _resolve_dependency(_sql_message)
+    trade_manager = _resolve_dependency(_trade_manager)
+    session_service = _resolve_dependency(_auction_session_service)
     if session_service is None:
         raise RuntimeError("auction session service is not bound")
-    return _items, _sql_message, _trade_manager, _auction_repository, session_service
+    if sql_message is None or trade_manager is None:
+        raise RuntimeError("auction data dependencies are not bound")
+    return _items, sql_message, trade_manager, _auction_repository, session_service
 
 def start_auction_process(bot: Optional[Bot], operation_id: str | None = None) -> bool: # bot参数可能为None
     """

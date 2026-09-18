@@ -72,8 +72,8 @@ from urllib.parse import quote
 items = Items()
 runtime_ids = UUIDGenerator()
 runtime_clock = SystemClock()
-sql_message = XiuxianDateManage()
-trade_manager = TradeDataManager()
+_sql_message_instance = None
+_trade_manager_instance = None
 xianshi_repository = TradeRepository(
     get_paths().game_db,
     max_goods_num=XiuConfig().max_goods_num,
@@ -84,6 +84,22 @@ _auction_queue_service_instance = None
 _auction_session_service_instance = None
 scheduler = require("nonebot_plugin_apscheduler").scheduler # 全局调度器，用于鬼市
 auction_scheduler = require("nonebot_plugin_apscheduler").scheduler # 独立的拍卖调度器，避免冲突
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
+
+
+def _trade_manager():
+    global _trade_manager_instance
+    if _trade_manager_instance is None:
+        _trade_manager_instance = TradeDataManager()
+    return _trade_manager_instance
+
+
 def _guishi_stone_service():
     global _guishi_stone_service_instance
     if _guishi_stone_service_instance is None:
@@ -113,8 +129,8 @@ def _auction_session_service():
         bind_auction_repository(xianshi_repository, _auction_session_service_instance)
         bind_auction_service_dependencies(
             items=items,
-            sql_message=sql_message,
-            trade_manager=trade_manager,
+            sql_message=_sql_message,
+            trade_manager=_trade_manager,
             auction_repository=xianshi_repository,
             auction_session_service=_auction_session_service_instance,
         )
@@ -133,8 +149,8 @@ def _xianshi_purchase_service():
 bind_auction_repository(xianshi_repository, _auction_session_service)
 bind_auction_service_dependencies(
     items=items,
-    sql_message=sql_message,
-    trade_manager=trade_manager,
+    sql_message=_sql_message,
+    trade_manager=_trade_manager,
     auction_repository=xianshi_repository,
     auction_session_service=_auction_session_service,
 )
@@ -380,12 +396,12 @@ def buy_xianshi_item_safely(
             "quantity": result.quantity,
             "total_cost": result.total_cost,
         }
-        sql_message._safe_log_economy_context(
+        _sql_message()._safe_log_economy_context(
             _trade_economy_context("xianshi_buy_cost", trace_id, **common_detail),
             user_id=str(buyer_id),
             stone_delta=-result.total_cost,
         )
-        sql_message._safe_log_economy_context(
+        _sql_message()._safe_log_economy_context(
             _trade_economy_context("xianshi_buy_item", trace_id, **common_detail),
             user_id=str(buyer_id),
             item_delta=[
@@ -399,7 +415,7 @@ def buy_xianshi_item_safely(
             ],
         )
         if result.seller_id != "0":
-            sql_message._safe_log_economy_context(
+            _sql_message()._safe_log_economy_context(
                 _trade_economy_context(
                     "xianshi_seller_income",
                     trace_id,
@@ -466,7 +482,7 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         return
     
     # 检查用户背包中可交易的物品数量
-    goods_num = sql_message.goods_num(str(user_info['user_id']), goods_id, num_type='trade')
+    goods_num = _sql_message().goods_num(str(user_info['user_id']), goods_id, num_type='trade')
     if goods_num <= 0:
         msg = f"背包中没有足够的 {item_name} 用于交易！"
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
@@ -563,7 +579,7 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await xianshi_auto_add.finish()
 
     # 获取背包物品
-    back_msg = sql_message.get_back_msg(user_id)
+    back_msg = _sql_message().get_back_msg(user_id)
     if not back_msg:
         msg = "💼 道友的背包空空如也！"
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆自动上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
@@ -743,7 +759,7 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆快速上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
         return
     
-    goods_num = sql_message.goods_num(str(user_info['user_id']), goods_id, num_type='trade')
+    goods_num = _sql_message().goods_num(str(user_info['user_id']), goods_id, num_type='trade')
     if goods_num <= 0:
         msg = f"背包中没有足够的 {item_name} 用于交易！"
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1="仙肆快速上架", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
@@ -1790,7 +1806,7 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await guishi_baitan.finish()
     
     # 检查订单数量限制
-    baitan_orders = trade_manager.get_guishi_orders(user_id=user_id, type="baitan")
+    baitan_orders = _trade_manager().get_guishi_orders(user_id=user_id, type="baitan")
     
     if baitan_orders and len(baitan_orders) >= MAX_BAITAN_ORDERS:
         msg = f"您的摆摊订单已达上限({MAX_BAITAN_ORDERS})，请先收摊部分订单！"
@@ -1805,7 +1821,7 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         return
     
     # 检查用户背包中可交易的物品数量
-    goods_num = sql_message.goods_num(str(user_info['user_id']), goods_id)
+    goods_num = _sql_message().goods_num(str(user_info['user_id']), goods_id)
     if goods_num <= 0:
         msg = f"背包中没有足够的 {item_name} 用于交易！"
         await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
@@ -1878,7 +1894,7 @@ async def guishi_shoutan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     user_id = user_info['user_id']
     
     # 获取用户的摆摊订单
-    baitan_orders = trade_manager.get_guishi_orders(user_id=user_id, type="baitan")
+    baitan_orders = _trade_manager().get_guishi_orders(user_id=user_id, type="baitan")
     
     if not baitan_orders:
         msg = "您当前没有摆摊订单！"
@@ -1999,8 +2015,8 @@ async def guishi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     user_id = user_info['user_id']
     
     # 获取用户的鬼市账户信息
-    stored_stone = trade_manager.get_stored_stone(user_id)
-    stored_items = trade_manager.get_stored_items(user_id)
+    stored_stone = _trade_manager().get_stored_stone(user_id)
+    stored_items = _trade_manager().get_stored_items(user_id)
     
     msg_parts = [f"【鬼市账户信息】\n"]
     msg_parts.append(f"账户余额：{number_to(stored_stone)}\n")
@@ -2013,7 +2029,7 @@ async def guishi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                 msg_parts.append(f"  {item_info['name']} x{quantity}\n")
 
     # 获取用户的求购订单
-    qiugou_orders = trade_manager.get_guishi_orders(user_id=user_id, type="qiugou")
+    qiugou_orders = _trade_manager().get_guishi_orders(user_id=user_id, type="qiugou")
     if qiugou_orders:
         msg_parts.append(f"\n☆------求购列表------☆\n")
         for order in qiugou_orders:
@@ -2021,7 +2037,7 @@ async def guishi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             msg_parts.append(f"ID:{order['id']} {order['item_name']} {number_to(order['price'])}灵石 x{order['quantity']} (待购:{unfilled_quantity})\n")
 
     # 获取用户的摆摊订单
-    baitan_orders = trade_manager.get_guishi_orders(user_id=user_id, type="baitan")
+    baitan_orders = _trade_manager().get_guishi_orders(user_id=user_id, type="baitan")
     if baitan_orders:
         msg_parts.append(f"\n☆------摆摊列表------☆\n")
         for order in baitan_orders:
@@ -2043,7 +2059,7 @@ async def clear_all_guishi_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     msg = "正在清空全服鬼市，请稍候..."
     await handle_send(bot, event, msg)
     
-    all_guishi_orders = trade_manager.get_guishi_orders() # 获取所有鬼市订单
+    all_guishi_orders = _trade_manager().get_guishi_orders() # 获取所有鬼市订单
     
     if not all_guishi_orders:
         msg = "鬼市中没有订单可供清空！"
@@ -2093,12 +2109,12 @@ async def clear_all_guishi_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     if refund_stone_summary:
         msg_parts.append("\n☆------灵石退还------☆")
         for user_id, amount in refund_stone_summary.items():
-            user_info = sql_message.get_user_info_with_id(user_id)
+            user_info = _sql_message().get_user_info_with_id(user_id)
             msg_parts.append(f"{user_info['user_name'] if user_info else user_id}: {number_to(amount)}灵石")
     if refund_item_summary:
         msg_parts.append("\n☆------物品退还------☆")
         for (user_id, item_name), quantity in refund_item_summary.items():
-            user_info = sql_message.get_user_info_with_id(user_id)
+            user_info = _sql_message().get_user_info_with_id(user_id)
             msg_parts.append(f"{user_info['user_name'] if user_info else user_id}: {item_name} x{quantity}")
 
     await handle_send(bot, event, "\n".join(msg_parts))
@@ -2111,10 +2127,10 @@ async def process_guishi_transactions(user_id: str = None) -> str:
     :return: 如果user_id指定，返回交易匹配的消息；否则返回空字符串。
     """
     if user_id: # 如果是单个用户触发，只处理该用户的求购订单
-        qiugou_orders = trade_manager.get_guishi_orders(user_id=user_id, type="qiugou")
+        qiugou_orders = _trade_manager().get_guishi_orders(user_id=user_id, type="qiugou")
         transaction_log = "开始处理您的鬼市交易...\n"
     else: # 否则处理所有求购订单
-        qiugou_orders = trade_manager.get_guishi_orders(type="qiugou")
+        qiugou_orders = _trade_manager().get_guishi_orders(type="qiugou")
         transaction_log = "开始处理鬼市交易...\n"
 
     if not qiugou_orders:
@@ -2137,7 +2153,7 @@ async def process_guishi_transactions(user_id: str = None) -> str:
             continue
         
         # 获取所有符合条件的摆摊订单（物品名称相同，价格低于或等于求购价，且非自己的摆摊）
-        baitan_orders = trade_manager.get_guishi_orders(type="baitan", name=qiugou_item_name)
+        baitan_orders = _trade_manager().get_guishi_orders(type="baitan", name=qiugou_item_name)
         
         if not baitan_orders:
             if user_id: transaction_log += f"【{qiugou_item_name}】没有匹配的摆摊订单。\n"
@@ -2167,8 +2183,8 @@ async def process_guishi_transactions(user_id: str = None) -> str:
             if not result.matched:
                 continue
 
-            qiugou_user_info = sql_message.get_user_info_with_id(result.buyer_id)
-            baitan_user_info = sql_message.get_user_info_with_id(result.seller_id)
+            qiugou_user_info = _sql_message().get_user_info_with_id(result.buyer_id)
+            baitan_user_info = _sql_message().get_user_info_with_id(result.seller_id)
             qiugou_user_name = (
                 qiugou_user_info['user_name'] if qiugou_user_info else result.buyer_id
             )
@@ -2229,7 +2245,7 @@ async def clear_expired_baitan_orders_job():
     """每天摆摊时间结束后，自动清空所有未售罄的摆摊订单，并退还未售出的物品。"""
     logger.info("开始检查并清理超时鬼市摆摊订单...")
     
-    all_baitan_orders = trade_manager.get_guishi_orders(type="baitan")
+    all_baitan_orders = _trade_manager().get_guishi_orders(type="baitan")
     if not all_baitan_orders:
         logger.info("没有鬼市摆摊订单可供清理。")
         return
@@ -2255,7 +2271,7 @@ async def clear_expired_baitan_orders_job():
         if not result.cleared:
             continue
         if result.refunded_quantity > 0:
-            user_info = sql_message.get_user_info_with_id(result.user_id)
+            user_info = _sql_message().get_user_info_with_id(result.user_id)
             user_name = user_info['user_name'] if user_info else f"用户{result.user_id}"
             user_key = f"{user_name} ({result.user_id})"
             refund_item_summary.setdefault(user_key, []).append(
@@ -2324,7 +2340,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                     lines.append("")
                     lines.append("**竞拍记录**")
                     for i, bid in enumerate(bid_records[:5]):
-                        bidder_info = sql_message.get_user_info_with_id(bid["bidder_id"])
+                        bidder_info = _sql_message().get_user_info_with_id(bid["bidder_id"])
                         bidder_name = bidder_info["user_name"] if bidder_info else str(bid["bidder_id"])
                         time_str = datetime.fromtimestamp(bid["time"]).strftime("%H:%M:%S") if bid["time"] else ""
                         lines.append(f"> {i+1}. {bidder_name}：{number_to(bid['price'])}灵石（{time_str}）")
@@ -2353,7 +2369,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                     bid_records.sort(key=lambda x: x["time"], reverse=True)
                     msg_list.append("竞拍记录：")
                     for i, bid in enumerate(bid_records[:5]):
-                        bidder_info = sql_message.get_user_info_with_id(bid["bidder_id"])
+                        bidder_info = _sql_message().get_user_info_with_id(bid["bidder_id"])
                         bidder_name = bidder_info["user_name"] if bidder_info else str(bid["bidder_id"])
                         time_str = datetime.fromtimestamp(bid["time"]).strftime("%H:%M:%S") if bid["time"] else ""
                         msg_list.append(f"{i+1}. {bidder_name} {number_to(bid['price'])}灵石 {time_str}")
@@ -2375,7 +2391,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                 f"结果：{record['status']}",
             ]
             if record["status"] == "成交":
-                winner_info = sql_message.get_user_info_with_id(record["winner_id"])
+                winner_info = _sql_message().get_user_info_with_id(record["winner_id"])
                 winner_name = winner_info["user_name"] if winner_info else str(record["winner_id"])
                 msg_list.extend([
                     f"成交价：{number_to(record['final_price'])}灵石",
@@ -2643,7 +2659,7 @@ async def auction_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             await auction_remove.finish()
     
     # 查找用户上架的该物品
-    player_items_in_queue = trade_manager.get_player_auction_items(user_id)
+    player_items_in_queue = _trade_manager().get_player_auction_items(user_id)
     item_to_remove = None
     for item in player_items_in_queue:
         if item["item_name"] == item_name: # item_name是玩家上架时的名称
@@ -2709,7 +2725,7 @@ async def my_auction_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await my_auction.finish()
     
     user_id = user_info['user_id']
-    player_auction_items = trade_manager.get_player_auction_items(user_id) # 从数据库获取玩家上架物品
+    player_auction_items = _trade_manager().get_player_auction_items(user_id) # 从数据库获取玩家上架物品
     
     if not player_auction_items:
         msg = "您当前没有上架任何拍卖物品在等待区！"
@@ -2736,7 +2752,7 @@ async def auction_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     auction_current_status = get_auction_status()
     
     # 获取等待上架的玩家物品数量
-    player_auctions_in_queue = trade_manager.get_player_auction_items()
+    player_auctions_in_queue = _trade_manager().get_player_auction_items()
     total_player_items_in_queue = len(player_auctions_in_queue)
     
     # 获取拍卖历史记录数量
@@ -2780,7 +2796,7 @@ async def auction_activity_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     auction_current_status = get_auction_status()
     current_auctions = xianshi_repository.get_current_auction() or []
     current_auctions_count = len(current_auctions)
-    waiting_auctions_count = len(trade_manager.get_player_auction_items() or [])
+    waiting_auctions_count = len(_trade_manager().get_player_auction_items() or [])
     now = runtime_clock.now()
     max_user_items = _safe_auction_int(rules.get("max_user_items"), 3)
     hot_items_limit = min(_safe_auction_int(activity_config.get("hot_items_limit"), 5), 5)
@@ -2889,7 +2905,7 @@ async def auction_end_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     msg_list = ["拍卖已结束！成交结果："]
     for result in results[:5]:  # 最多显示5条结果
         if result["status"] == "成交":
-            winner_info = sql_message.get_user_info_with_id(result["winner_id"])
+            winner_info = _sql_message().get_user_info_with_id(result["winner_id"])
             winner_name = winner_info["user_name"] if winner_info else str(result["winner_id"])
             msg_list.append(
                 f"{result['item_name']} 成交价: {number_to(result['final_price'])}灵石 "
