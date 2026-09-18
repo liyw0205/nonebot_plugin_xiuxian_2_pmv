@@ -34,11 +34,18 @@ from ..xiuxian_utils.utils import (
 items = Items()
 cache_level_help = {}
 cache_beg_help = {}
-sql_message = XiuxianDateManage()  # sql类
+_sql_message_instance = None
 beg_application = BegApplication(get_paths().game_db)
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _run_beg_action(action: str, operation_id: str, user_id: str, **payload):
@@ -103,7 +110,7 @@ async def beg_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"beg-daily:{event_id}:{user_id}" if event_id else f"beg-daily:{runtime_ids.new_id()}:{user_id}"
 
-    user_msg = sql_message.get_user_info_with_id(user_id)
+    user_msg = _sql_message().get_user_info_with_id(user_id)
     user_root = user_msg['root_type']
     sect = user_info['sect_id']
     level = user_info['level']
@@ -114,7 +121,7 @@ async def beg_stone_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     diff_time = now_time - create_time
     diff_days = diff_time.days # 距离创建账号时间的天数
     
-    sql_message.update_last_check_info_time(user_id) # 更新查看修仙信息时间
+    _sql_message().update_last_check_info_time(user_id) # 更新查看修仙信息时间
     if sect != None and user_root == "伪灵根":
         msg = f"道友已有宗门庇佑，又何必来此寻求机缘呢？"
         await handle_send(bot, event, msg)
