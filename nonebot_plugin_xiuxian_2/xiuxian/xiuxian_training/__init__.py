@@ -26,11 +26,18 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import number_to
 
 player_data_manager = PlayerDataManager()
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 items = Items()
 training_application = TrainingApplication(get_paths().game_db)
 runtime_clock = SystemClock()
 runtime_ids = UUIDGenerator()
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _run_training_action(action: str, operation_id: str, user_id: str, **payload):
@@ -99,7 +106,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     # 检查气血
     if user_info['hp'] is None or user_info['hp'] == 0:
-        sql_message.update_user_hp(user_id)
+        _sql_message().update_user_hp(user_id)
     
     if user_info['hp'] <= user_info['exp'] / 10:
         time = leave_harm_time(user_id)
@@ -341,7 +348,7 @@ async def training_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     # 生成排行榜
     rank_msg = "【历练排行榜】\n"
     for i, (user_id, integral) in enumerate(sorted_integral[:50], start=1):
-        user_info = sql_message.get_user_info_with_id(user_id)
+        user_info = _sql_message().get_user_info_with_id(user_id)
         rank_msg += f"第{i}位 | {user_info['user_name']} | {number_to(integral)}\n"
     
     await handle_send(bot, event, rank_msg)
@@ -365,7 +372,7 @@ async def training_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMe
     # 生成排行榜
     rank_msg = "【历练积分排行榜】\n"
     for i, (user_id, integral) in enumerate(sorted_integral[:50], start=1):
-        user_info = sql_message.get_user_info_with_id(user_id)
+        user_info = _sql_message().get_user_info_with_id(user_id)
         rank_msg += f"第{i}位 | {user_info['user_name']} | {number_to(integral)}\n"
     
     await handle_send(bot, event, rank_msg)
@@ -378,7 +385,7 @@ def make_choice(user_id, operation_id):
     expected_training_info["weekly_purchases"] = dict(training_info["weekly_purchases"])
     if isinstance(expected_training_info["last_time"], datetime):
         expected_training_info["last_time"] = expected_training_info["last_time"].strftime("%Y-%m-%d %H:%M:%S")
-    user_info = sql_message.get_user_info_with_id(user_id)
+    user_info = _sql_message().get_user_info_with_id(user_id)
     now = runtime_clock.now()
     
     # 记录本次历练时间
