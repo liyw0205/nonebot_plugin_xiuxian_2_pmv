@@ -66,7 +66,7 @@ from nonebot.internal.adapter import Message
 from urllib.parse import quote, unquote
 
 _sql_message_instance = None
-player_data_manager = PlayerDataManager()
+_player_data_manager_instance = None
 boss_img_path = get_paths().data / "boss_img"
 PLAYERSDATA = get_paths().players
 
@@ -76,6 +76,21 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
+
+
+def _player_data_manager():
+    global _player_data_manager_instance
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+    return _player_data_manager_instance
+
+
+class _LazyPlayerDataManager:
+    def __getattr__(self, name):
+        return getattr(_player_data_manager(), name)
+
+
+player_data_manager = _LazyPlayerDataManager()
 
 
 def _is_onebot_v11_bot(bot: Any) -> bool:
@@ -131,7 +146,7 @@ def check_user_type(user_id, need_type):
     actual_user_id = str(user_id)
 
     # 先读取身外化身当前激活ID（如果没配置则返回本号）
-    active_id = player_data_manager.get_field_data(actual_user_id, "avatar", "active_id")
+    active_id = _player_data_manager().get_field_data(actual_user_id, "avatar", "active_id")
     user_id_to_check = str(active_id) if active_id else actual_user_id
 
     # 兼容管理员伪装逻辑（优先级高于化身）
@@ -222,7 +237,7 @@ def check_user(event_or_user_id: Union[GroupMessageEvent, PrivateMessageEvent, s
         original_user_id = str(event_or_user_id.get_user_id())
 
         # 先走身外化身 active_id（没有则本号）
-        active_id = player_data_manager.get_field_data(original_user_id, "avatar", "active_id")
+        active_id = _player_data_manager().get_field_data(original_user_id, "avatar", "active_id")
         user_id_to_check = str(active_id) if active_id else original_user_id
 
         # 兼容管理员伪装（优先级高于化身）
@@ -233,7 +248,7 @@ def check_user(event_or_user_id: Union[GroupMessageEvent, PrivateMessageEvent, s
     elif isinstance(event_or_user_id, str):
         # 传入字符串时，也支持化身映射
         original_user_id = str(event_or_user_id)
-        active_id = player_data_manager.get_field_data(original_user_id, "avatar", "active_id")
+        active_id = _player_data_manager().get_field_data(original_user_id, "avatar", "active_id")
         user_id_to_check = str(active_id) if active_id else original_user_id
 
         # 字符串场景也兼容伪装
@@ -2212,9 +2227,9 @@ def get_statistics_data(user_id: str, key: str = None):
             user_id_for_stats = _impersonating_users[original_user_id]
             logger.warning(f"用户 {original_user_id} 正在伪装 {user_id_for_stats}")
         if key:
-            return player_data_manager.get_field_data(str(user_id_for_stats), "statistics", key)
+            return _player_data_manager().get_field_data(str(user_id_for_stats), "statistics", key)
         
-        stats_data = player_data_manager.get_fields(str(user_id_for_stats), "statistics")
+        stats_data = _player_data_manager().get_fields(str(user_id_for_stats), "statistics")
         del stats_data['user_id']
         return stats_data
     except Exception as e:
@@ -2232,12 +2247,12 @@ def update_statistics_value(user_id: str, key: str, value: int = None, increment
             user_id_for_stats = _impersonating_users[original_user_id]
             logger.warning(f"用户 {original_user_id} 正在伪装 {user_id_for_stats}")
 
-        stats_data = player_data_manager.get_fields(str(user_id_for_stats), "statistics")
+        stats_data = _player_data_manager().get_fields(str(user_id_for_stats), "statistics")
         if not stats_data:
             stats_data = {}
 
         if value is not None:
-            player_data_manager.update_or_write_data(
+            _player_data_manager().update_or_write_data(
                 str(user_id_for_stats), "statistics", key, int(value), data_type="INTEGER"
             )
         else:
@@ -2250,7 +2265,7 @@ def update_statistics_value(user_id: str, key: str, value: int = None, increment
             except (TypeError, ValueError):
                 current_value = 0
 
-            player_data_manager.update_or_write_data(
+            _player_data_manager().update_or_write_data(
                 str(user_id_for_stats), "statistics", key, current_value + int(increment), data_type="INTEGER"
             )
 
