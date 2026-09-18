@@ -81,21 +81,9 @@ xianshi_repository = TradeRepository(
 _xianshi_purchase_service_instance = None
 _guishi_stone_service_instance = None
 _auction_queue_service_instance = None
-auction_session_service = AuctionSessionService(
-    get_paths().game_db, get_paths().trade_db
-)
+_auction_session_service_instance = None
 scheduler = require("nonebot_plugin_apscheduler").scheduler # 全局调度器，用于鬼市
 auction_scheduler = require("nonebot_plugin_apscheduler").scheduler # 独立的拍卖调度器，避免冲突
-bind_auction_repository(xianshi_repository, auction_session_service)
-bind_auction_service_dependencies(
-    items=items,
-    sql_message=sql_message,
-    trade_manager=trade_manager,
-    auction_repository=xianshi_repository,
-    auction_session_service=auction_session_service,
-)
-
-
 def _guishi_stone_service():
     global _guishi_stone_service_instance
     if _guishi_stone_service_instance is None:
@@ -116,6 +104,23 @@ def _auction_queue_service():
     return _auction_queue_service_instance
 
 
+def _auction_session_service():
+    global _auction_session_service_instance
+    if _auction_session_service_instance is None:
+        _auction_session_service_instance = AuctionSessionService(
+            get_paths().game_db, get_paths().trade_db
+        )
+        bind_auction_repository(xianshi_repository, _auction_session_service_instance)
+        bind_auction_service_dependencies(
+            items=items,
+            sql_message=sql_message,
+            trade_manager=trade_manager,
+            auction_repository=xianshi_repository,
+            auction_session_service=_auction_session_service_instance,
+        )
+    return _auction_session_service_instance
+
+
 def _xianshi_purchase_service():
     global _xianshi_purchase_service_instance
     if _xianshi_purchase_service_instance is None:
@@ -123,6 +128,16 @@ def _xianshi_purchase_service():
             xianshi_repository
         )
     return _xianshi_purchase_service_instance
+
+
+bind_auction_repository(xianshi_repository, _auction_session_service)
+bind_auction_service_dependencies(
+    items=items,
+    sql_message=sql_message,
+    trade_manager=trade_manager,
+    auction_repository=xianshi_repository,
+    auction_session_service=_auction_session_service,
+)
 
 
 @register_legacy_startup
@@ -2827,7 +2842,7 @@ async def auction_start_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, "此功能仅限管理员使用！")
         await auction_start.finish()
     
-    if auction_session_service.get_active_session() is not None:
+    if _auction_session_service().get_active_session() is not None:
         await handle_send(bot, event, "拍卖已经在运行中！", md_type="拍卖", k1="查看", v1="拍卖查看", k2="结束", v2="结束拍卖", k3="帮助", v3="拍卖帮助")
         await auction_start.finish()
     
@@ -2857,7 +2872,7 @@ async def auction_end_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await handle_send(bot, event, "此功能仅限管理员使用！")
         await auction_end.finish()
     
-    active_session = auction_session_service.get_active_session()
+    active_session = _auction_session_service().get_active_session()
     pending_items = xianshi_repository.get_current_auction()
     if active_session is None and not pending_items:
         await handle_send(bot, event, "拍卖当前未开启！", md_type="拍卖", k1="查看", v1="拍卖查看", k2="开启", v2="开启拍卖", k3="帮助", v3="拍卖帮助")
@@ -2944,7 +2959,7 @@ async def _auto_start_auction_job_impl():
         logger.info("今日自动拍卖已开启，跳过本次调度。")
         return  # 今日已开启过，防止重复
     
-    if auction_session_service.get_active_session() is not None:
+    if _auction_session_service().get_active_session() is not None:
         logger.warning("拍卖已在运行中，自动开启任务跳过。")
         return
 
@@ -2979,7 +2994,7 @@ async def _check_auction_end_job_impl():
     if not current_auctions:
         return
 
-    session = auction_session_service.get_active_session()
+    session = _auction_session_service().get_active_session()
     if session is None:
         logger.error("拍卖库内存在拍品，但数据库场次不存在，停止自动收尾。")
         return

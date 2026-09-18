@@ -939,7 +939,7 @@ class SourceQualityTests(unittest.TestCase):
         session_source = (trade_root / "auction_session_service.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn("auction_session_service.get_active_session()", utils_source)
+        self.assertIn("session_service.get_active_session()", utils_source)
         self.assertIn("auction_sessions", session_source)
         self.assertNotIn("auction_session.json", config_source)
         self.assertNotIn("load_json_file(", config_source)

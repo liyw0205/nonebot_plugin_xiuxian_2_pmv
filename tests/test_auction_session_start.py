@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import importlib
 from pathlib import Path
 
 import nonebot
@@ -12,6 +13,26 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade.transaction_service import (
     AuctionSessionService,
 )
 from tests.test_db_backend import db_backend
+
+
+def test_trade_facade_defers_auction_session_service_construction():
+    trade = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade"
+    )
+    assert trade._auction_session_service_instance is None
+
+
+def test_auction_session_uses_lazy_game_trade_resolver():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_trade/__init__.py"
+    ).read_text(encoding="utf-8")
+    assert "_auction_session_service_instance = None" in source
+    assert "def _auction_session_service(" in source
+    assert "get_paths().game_db" in source
+    assert "get_paths().trade_db" in source
+    assert "bind_auction_repository(xianshi_repository, _auction_session_service)" in source
+    assert "auction_session_service=_auction_session_service" in source
+    assert "auction_session_service = AuctionSessionService(" not in source
 
 
 class AuctionSessionStartTests(unittest.TestCase):

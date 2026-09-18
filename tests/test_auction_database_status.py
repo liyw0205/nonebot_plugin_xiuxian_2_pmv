@@ -145,7 +145,7 @@ class AuctionDatabaseStatusTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertIn("auction_session_service.get_active_session()", utils_source)
+        self.assertIn("session_service.get_active_session()", utils_source)
         self.assertNotIn("persist_auction_status", utils_source)
         self.assertNotIn("_restore_auction_status_from_disk", utils_source)
         self.assertNotIn("set_auction_status(", service_source)

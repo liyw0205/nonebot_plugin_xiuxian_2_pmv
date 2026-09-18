@@ -17,9 +17,14 @@ def bind_auction_repository(repository: Any, session_service: Any = None) -> Non
 
 def get_auction_status() -> Dict[str, Any]:
     """Return the active database session as the auction runtime status."""
+    session_service = (
+        auction_session_service()
+        if callable(auction_session_service)
+        else auction_session_service
+    )
     session = (
-        auction_session_service.get_active_session()
-        if auction_session_service is not None
+        session_service.get_active_session()
+        if session_service is not None
         else None
     )
     if session is None:

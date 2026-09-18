@@ -20,6 +20,8 @@ def start_auction_process(bot: Any, operation_id: str | None = None) -> bool:
         from .auction_utils import auction_session_service
 
         service = auction_session_service
+    if callable(service):
+        service = service()
     if service is None:
         return False
     # Starting an already active database session is idempotent; a finished
