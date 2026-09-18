@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 import json
+import importlib
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -34,6 +35,24 @@ from nonebot_plugin_xiuxian_2.xiuxian.qq_compat import (
     QQCapabilities,
     QQCapabilityRegistry,
 )
+
+
+def test_delivery_facade_defers_message_delivery_service_construction() -> None:
+    delivery = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery"
+    )
+    assert delivery._delivery_service_instance is None
+
+
+def test_delivery_facade_uses_lazy_proxy_compatibility_boundary() -> None:
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/messaging/delivery.py"
+    ).read_text(encoding="utf-8")
+    assert "_delivery_service_instance: MessageDeliveryService | None = None" in source
+    assert "def _delivery_service()" in source
+    assert "class _LazyDeliveryService" in source
+    assert "delivery_service = _LazyDeliveryService()" in source
+    assert "delivery_service = MessageDeliveryService(" not in source
 
 
 class MessageResultTests(unittest.TestCase):

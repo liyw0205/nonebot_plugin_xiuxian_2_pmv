@@ -368,13 +368,30 @@ class MessageDeliveryService:
         )
 
 
-delivery_service = MessageDeliveryService(
-    capabilities=QQCapabilityRegistry.from_config(
-        type("CapabilityConfig", (), {
-            "xiuxian_qq_capabilities": settings.get("xiuxian_qq_capabilities", None)
-        })()
-    )
-)
+_delivery_service_instance: MessageDeliveryService | None = None
+
+
+def _delivery_service() -> MessageDeliveryService:
+    global _delivery_service_instance
+    if _delivery_service_instance is None:
+        _delivery_service_instance = MessageDeliveryService(
+            capabilities=QQCapabilityRegistry.from_config(
+                type("CapabilityConfig", (), {
+                    "xiuxian_qq_capabilities": settings.get(
+                        "xiuxian_qq_capabilities", None
+                    )
+                })()
+            )
+        )
+    return _delivery_service_instance
+
+
+class _LazyDeliveryService:
+    def __getattr__(self, name: str) -> Any:
+        return getattr(_delivery_service(), name)
+
+
+delivery_service = _LazyDeliveryService()
 
 
 __all__ = ["MessageDeliveryService", "delivery_service"]
