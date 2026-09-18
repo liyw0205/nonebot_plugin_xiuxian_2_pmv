@@ -217,3 +217,13 @@ def test_production_facade_has_no_per_field_write_bypass():
     assert "update_weekly_purchase" not in facade
     assert "BEGIN IMMEDIATE" in service
     assert "training_state_operations" in service
+
+
+def test_training_limit_defers_legacy_manager_and_state_service_construction():
+    root = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training"
+    source = (root / "training_limit.py").read_text(encoding="utf-8")
+    assert "_player_data_manager_instance = None" in source
+    assert "def _player_data_manager(" in source
+    assert "_state_service_instance = None" in source
+    assert "def _state_service(" in source
+    assert "player_data_manager = PlayerDataManager()" not in source
