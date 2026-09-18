@@ -71,7 +71,7 @@ from .partner import (  # noqa: F401
 cache_help = {}
 _sql_message_instance = None
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
-player_data_manager = PlayerDataManager()
+_player_data_manager_instance = None
 _blessed_spot_service_instance = None
 _closing_settlement_service_instance = None
 _normal_training_lifecycle_service_instance = None
@@ -80,6 +80,25 @@ _stone_training_settlement_service_instance = None
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
+
+
+def _resolve_player_data_manager():
+    global _player_data_manager_instance
+    if _player_data_manager_instance is None:
+        _player_data_manager_instance = PlayerDataManager()
+    return _player_data_manager_instance
+
+
+class _LazyPlayerDataManager:
+    def __getattr__(self, name):
+        return getattr(_resolve_player_data_manager(), name)
+
+
+player_data_manager = _LazyPlayerDataManager()
+
+
+def _player_data_manager():
+    return player_data_manager
 
 
 def _sql_message():
@@ -1482,15 +1501,15 @@ async def migrate_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         if mix_elixir_info:
             # 迁移灵田数据到数据库
             player_id_str = str(user_id)
-            player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "收取时间", mix_elixir_info.get("收取时间", ""))
-            player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "收取等级", mix_elixir_info.get("收取等级", 0))
-            player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "灵田数量", mix_elixir_info.get("灵田数量", 1))
-            player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "药材速度", mix_elixir_info.get("药材速度", 0))
-            player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "灵田傀儡", mix_elixir_info.get("灵田傀儡", 0))
-            player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "丹药控火", mix_elixir_info.get("丹药控火", 0))
-            player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "丹药耐药性", mix_elixir_info.get("丹药耐药性", 0))
-            player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "炼丹记录", json.dumps(mix_elixir_info.get("炼丹记录", {})))
-            player_data_manager.update_or_write_data(player_id_str, "mix_elixir_info", "炼丹经验", mix_elixir_info.get("炼丹经验", 0))
+            _player_data_manager().update_or_write_data(player_id_str, "mix_elixir_info", "收取时间", mix_elixir_info.get("收取时间", ""))
+            _player_data_manager().update_or_write_data(player_id_str, "mix_elixir_info", "收取等级", mix_elixir_info.get("收取等级", 0))
+            _player_data_manager().update_or_write_data(player_id_str, "mix_elixir_info", "灵田数量", mix_elixir_info.get("灵田数量", 1))
+            _player_data_manager().update_or_write_data(player_id_str, "mix_elixir_info", "药材速度", mix_elixir_info.get("药材速度", 0))
+            _player_data_manager().update_or_write_data(player_id_str, "mix_elixir_info", "灵田傀儡", mix_elixir_info.get("灵田傀儡", 0))
+            _player_data_manager().update_or_write_data(player_id_str, "mix_elixir_info", "丹药控火", mix_elixir_info.get("丹药控火", 0))
+            _player_data_manager().update_or_write_data(player_id_str, "mix_elixir_info", "丹药耐药性", mix_elixir_info.get("丹药耐药性", 0))
+            _player_data_manager().update_or_write_data(player_id_str, "mix_elixir_info", "炼丹记录", json.dumps(mix_elixir_info.get("炼丹记录", {})))
+            _player_data_manager().update_or_write_data(player_id_str, "mix_elixir_info", "炼丹经验", mix_elixir_info.get("炼丹经验", 0))
             logger.info(f"更新灵田数据: {user_id}")
         
         partner_data = load_partner2(user_id)
@@ -1500,7 +1519,7 @@ async def migrate_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         from ..xiuxian_boss.boss_limit import boss_limit
         boss_limit._load_data(user_id)
         boss_integral = load_player_user3(user_id, "boss_fight_info").get("boss_integral", 0)
-        player_data_manager.update_or_write_data(user_id, "boss", "integral", boss_integral)
+        _player_data_manager().update_or_write_data(user_id, "boss", "integral", boss_integral)
         logger.info(f"更新BOSS积分: {user_id}")
     await handle_send(bot, event, f"同步完成，共：{user_num}")
 
@@ -1514,13 +1533,13 @@ async def migrate_data2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         from ..xiuxian_training.training_limit import training_limit
         training_limit.get_user_training_info(user_id)
         progress = load_player_user3(user_id, "training_info").get("progress", 0)
-        player_data_manager.update_or_write_data(user_id, "training", "progress", progress)
+        _player_data_manager().update_or_write_data(user_id, "training", "progress", progress)
         max_progress = load_player_user3(user_id, "training_info").get("max_progress", 0)
-        player_data_manager.update_or_write_data(user_id, "training", "max_progress", max_progress)
+        _player_data_manager().update_or_write_data(user_id, "training", "max_progress", max_progress)
         completed = load_player_user3(user_id, "training_info").get("completed", 0)
-        player_data_manager.update_or_write_data(user_id, "training", "completed", completed)
+        _player_data_manager().update_or_write_data(user_id, "training", "completed", completed)
         points = load_player_user3(user_id, "training_info").get("points", 0)
-        player_data_manager.update_or_write_data(user_id, "training", "points", int(points))
+        _player_data_manager().update_or_write_data(user_id, "training", "points", int(points))
         logger.info(f"更新历练: {user_id}")
     await handle_send(bot, event, f"同步完成，共：{user_num}")
 
@@ -1534,11 +1553,11 @@ async def migrate_data3_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         from ..xiuxian_tower import tower_limit
         tower_limit.get_user_tower_info(user_id)
         current_floor = load_player_user3(user_id, "tower_info").get("current_floor", 0)
-        player_data_manager.update_or_write_data(user_id, "tower", "current_floor", current_floor)
+        _player_data_manager().update_or_write_data(user_id, "tower", "current_floor", current_floor)
         max_floor = load_player_user3(user_id, "tower_info").get("max_floor", 0)
-        player_data_manager.update_or_write_data(user_id, "tower", "max_floor", max_floor)
+        _player_data_manager().update_or_write_data(user_id, "tower", "max_floor", max_floor)
         score = load_player_user3(user_id, "tower_info").get("score", 0)
-        player_data_manager.update_or_write_data(user_id, "tower", "score", score)
+        _player_data_manager().update_or_write_data(user_id, "tower", "score", score)
         logger.info(f"更新通天塔: {user_id}")
     await handle_send(bot, event, f"同步完成，共：{user_num}")
 
@@ -1570,7 +1589,7 @@ def _migrate_statistics_data_sync(players_dir):
             if not isinstance(stats_data, dict):
                 raise TypeError("统计数据根节点必须是对象")
             for key in sorted(stats_data):
-                player_data_manager.update_or_write_data(
+                _player_data_manager().update_or_write_data(
                     user_id, "statistics", key, stats_data[key]
                 )
             sync_num += 1
@@ -1634,9 +1653,9 @@ def _migrate_bank_data_sync(players_dir):
             savetime = str(data.get("savetime", runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')))
             banklevel = str(data.get("banklevel", "1"))
 
-            player_data_manager.update_or_write_data(user_id, "bankinfo", "savestone", savestone, data_type="INTEGER")
-            player_data_manager.update_or_write_data(user_id, "bankinfo", "savetime", savetime, data_type="TEXT")
-            player_data_manager.update_or_write_data(user_id, "bankinfo", "banklevel", banklevel, data_type="TEXT")
+            _player_data_manager().update_or_write_data(user_id, "bankinfo", "savestone", savestone, data_type="INTEGER")
+            _player_data_manager().update_or_write_data(user_id, "bankinfo", "savetime", savetime, data_type="TEXT")
+            _player_data_manager().update_or_write_data(user_id, "bankinfo", "banklevel", banklevel, data_type="TEXT")
             sync_num += 1
             logger.info(f"更新灵庄数据: {user_id}")
         except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:

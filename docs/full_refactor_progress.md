@@ -2441,6 +2441,8 @@
 
 2026-09-18 partner facade lazy construction live verified：remote smoke operation `refactor-partner-facade-a57ac124` 通过五库 backup/dry-run/readiness/reconcile/rollback/restore/旧实例恢复；独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，manifest `/srv/smoke-data/backups/20260918T144948Z` 五库完整。
 
+2026-09-18 buff migration storage lazy construction slice：`xiuxian_buff.__init__` 延迟 compatibility `PlayerDataManager`，覆盖灵田、BOSS、历练、通天塔、statistics和bank JSON migration synchronizers；保留 migration 顺序、字段类型、异常计数及 public alias patch契约。BlessedSpot/Closing/NormalTraining/PvP services与其双库/单库 transaction ownership未改变。Buff migration/blessed/training/closing/partner regression共 78 passed、8 subtests passed，source/architecture共 201 passed，compileall、inventory、diff check通过。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。

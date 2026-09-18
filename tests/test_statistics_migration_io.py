@@ -17,6 +17,16 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff import (
 
 
 class StatisticsMigrationIoTests(unittest.TestCase):
+    def test_buff_facade_defers_compatibility_manager_construction(self) -> None:
+        source = (
+            Path(__file__).parents[1]
+            / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_buff/__init__.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("_player_data_manager_instance = None", source)
+        self.assertIn("def _player_data_manager(", source)
+        self.assertNotIn("player_data_manager = PlayerDataManager()", source)
+        self.assertIn("_player_data_manager().update_or_write_data(", source)
+
     def test_migration_writes_sorted_fields_and_isolates_invalid_files(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             players = Path(directory)
