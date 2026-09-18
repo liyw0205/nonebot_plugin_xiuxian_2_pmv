@@ -8,6 +8,14 @@ class T(unittest.TestCase):
   from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_pet
   self.assertIsNone(xiuxian_pet._pet_skill_replace_service_instance)
 
+ def test_pet_facade_defers_sql_manager_construction(self):
+  from pathlib import Path
+  source = Path("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_pet/__init__.py").read_text(encoding="utf-8")
+  self.assertIn("_sql_message_instance = None", source)
+  self.assertIn("def _sql_message(", source)
+  self.assertIn("_sql_message().goods_num(", source)
+  self.assertNotIn("sql_message = XiuxianDateManage()", source)
+
  def setUp(self):
   self.t=tempfile.TemporaryDirectory(); self.d=Path(self.t.name)/'d'
   with db_backend.transaction(self.d) as c: c.execute('CREATE TABLE player_pet_item(user_id TEXT,uid TEXT,skill_id TEXT,updated_at INTEGER)'); c.execute("INSERT INTO player_pet_item VALUES ('u','x','old',0)")

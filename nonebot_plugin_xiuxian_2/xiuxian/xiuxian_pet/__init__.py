@@ -71,7 +71,7 @@ from .transaction_service import PetSkillRerollService
 from .transaction_service import PetActiveSwitchService
 
 items = Items()
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 pet_application = PetApplication(get_paths().game_db, get_paths().player_db)
 runtime_ids = UUIDGenerator()
 _pet_skill_replace_service_instance = None
@@ -80,6 +80,13 @@ _pet_release_service_instance = None
 _pet_fusion_breakthrough_service_instance = None
 _pet_skill_reroll_service_instance = None
 _pet_active_switch_service_instance = None
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 pet_help = on_command("宠物帮助", aliases={"宠物系统帮助"}, priority=10, block=True)
 pet_intro_help = on_command("宠物入门帮助", aliases={"宠物获取帮助", "宠物查看帮助"}, priority=10, block=True)
@@ -1582,7 +1589,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "\n".join(lines), md_type="背包", k1="宠物", v1="我的宠物", k2="帮助", v2="宠物帮助")
         return
     if result.status == "item_missing":
-        have = sql_message.goods_num(user_id, item_id)
+        have = _sql_message().goods_num(user_id, item_id)
         await handle_send(bot, event, f"材料不足：当前仅有{have}个{item_info.get('name', item_name)}。")
         return
     if not result.succeeded:
