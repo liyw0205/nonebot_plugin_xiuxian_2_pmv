@@ -2317,6 +2317,8 @@
 
 2026-09-18 tower facade lazy compatibility reader live safety：提交 `da6b5d67` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T085133Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
 
+2026-09-18 layout lazy compatibility reader slice：`xiuxian_utils/lay_out.py` 的 stamina scheduler、Cooldown fallback profile read与 stamina deduction已改为 `_sql_message_instance`/`_sql_message()` lazy holder；cooldown state machine、admin bypass、routing与体力语义未改变。construction/source/architecture及 Layout regression共 199 tests passed，compileall、inventory、diff check通过。
+
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。

@@ -26,13 +26,20 @@ from .xiuxian2_handle import XiuxianDateManage
 from .utils import get_msg_pic, check_user, handle_send
 
 
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 ADMIN_IDS = get_driver().config.superusers
 limit_all_message = require("nonebot_plugin_apscheduler").scheduler
 limit_all_stamina = require("nonebot_plugin_apscheduler").scheduler
 
 limit_all_data: Dict[str, Any] = {}
 limit_num = 99999
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 @limit_all_message.scheduled_job(
     "interval",
@@ -60,7 +67,7 @@ def limit_all_stamina_():
     # 恢复体力
     started_at = time.monotonic()
     try:
-        updated = sql_message.update_all_users_stamina(
+        updated = _sql_message().update_all_users_stamina(
             XiuConfig().max_stamina,
             XiuConfig().stamina_recovery_points,
         )
@@ -374,7 +381,7 @@ def Cooldown(
                 logger.warning(f"获取当前体力身份失败，回退到真实ID {user_id}: {e}")
 
             if user_data is None and not checked_user:
-                user_data = sql_message.get_user_info_with_id(stamina_user_id)
+                user_data = _sql_message().get_user_info_with_id(stamina_user_id)
 
             if user_data:
                 current_stamina = int(user_data.get("user_stamina") or 0)
@@ -382,7 +389,7 @@ def Cooldown(
                     msg = "你没有足够的体力，请等待体力恢复后再试！"
                     await handle_send(bot, event, msg)
                     await matcher.finish()
-                sql_message.update_user_stamina(stamina_user_id, stamina_cost, 2)  # 减少体力
+                _sql_message().update_user_stamina(stamina_user_id, stamina_cost, 2)  # 减少体力
         if cd_time <= 0:
             return
         if running[key] <= 0:
