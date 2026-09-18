@@ -16,9 +16,16 @@ from .transaction_service import SectWeeklyRewardClaimService
 
 
 items = Items()
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 _sect_weekly_reward_service_instance = None
 runtime_ids = UUIDGenerator()
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _sect_weekly_reward_service():
@@ -27,7 +34,7 @@ def _sect_weekly_reward_service():
         _sect_weekly_reward_service_instance = SectWeeklyRewardClaimService(
             get_paths().game_db,
             get_paths().player_db,
-            sql_message.lock,
+            _sql_message().lock,
         )
     return _sect_weekly_reward_service_instance
 
@@ -126,7 +133,7 @@ async def sect_weekly_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 
     goals = sect_weekly_goal_manager.list_goals(sect_id)
     week_key = sect_weekly_goal_manager.current_week_key()
-    sect_info = sql_message.get_sect_info(sect_id) or {}
+    sect_info = _sql_message().get_sect_info(sect_id) or {}
     lines = [
         "【宗门周常】",
         f"宗门：{sect_info.get('sect_name', sect_id)}",

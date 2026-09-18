@@ -18,6 +18,17 @@ def test_sect_weekly_facade_defers_reward_claim_service_construction():
     assert weekly._sect_weekly_reward_service_instance is None
 
 
+def test_sect_weekly_facade_defers_sql_manager_construction():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_sect/sect_weekly_commands.py"
+    ).read_text(encoding="utf-8")
+    assert "_sql_message_instance = None" in source
+    assert "def _sql_message(" in source
+    assert "_sql_message().get_sect_info(" in source
+    assert "_sql_message().lock" in source
+    assert "sql_message = XiuxianDateManage()" not in source
+
+
 def test_sect_weekly_claim_uses_lazy_dual_database_service():
     source = Path(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_sect/sect_weekly_commands.py"
@@ -30,7 +41,7 @@ def test_sect_weekly_claim_uses_lazy_dual_database_service():
     assert "def _sect_weekly_reward_service(" in source
     assert "get_paths().game_db" in source
     assert "get_paths().player_db" in source
-    assert "sql_message.lock" in source
+    assert "_sql_message().lock" in source
     assert "_sect_weekly_reward_service().claim(" in handler
     assert "sect_weekly_reward_service.claim(" not in handler
 
