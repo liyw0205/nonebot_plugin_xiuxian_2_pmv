@@ -65,10 +65,17 @@ from .xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from nonebot.internal.adapter import Message
 from urllib.parse import quote, unquote
 
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 player_data_manager = PlayerDataManager()
 boss_img_path = get_paths().data / "boss_img"
 PLAYERSDATA = get_paths().players
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _is_onebot_v11_bot(bot: Any) -> bool:
@@ -132,7 +139,7 @@ def check_user_type(user_id, need_type):
         user_id_to_check = _impersonating_users[actual_user_id]
         logger.warning(f"用户 {actual_user_id} 正在伪装 {user_id_to_check}")
 
-    user_cd_message = sql_message.get_user_cd(user_id_to_check)
+    user_cd_message = _sql_message().get_user_cd(user_id_to_check)
     if user_cd_message is None:
         user_type = 0
     else:
@@ -236,7 +243,7 @@ def check_user(event_or_user_id: Union[GroupMessageEvent, PrivateMessageEvent, s
     else:
         return False, None, "传入参数类型错误！请提供event对象或用户QQ号字符串。"
 
-    user_info = sql_message.get_user_info_with_id(user_id_to_check)
+    user_info = _sql_message().get_user_info_with_id(user_id_to_check)
 
     if user_info is None:
         msg = "修仙界没有道友的信息，请输入【我要修仙】加入！"
@@ -1435,7 +1442,7 @@ async def handle_send_md(bot, event, msg: str, markdown_id=None, shell=None, tit
         if open_id and is_normal_group and XiuConfig().at_sender and at_msg:
             if original_user_id in _impersonating_users:
                 target_user_id = _impersonating_users[original_user_id]
-                target_user_info = sql_message.get_user_info_with_id(target_user_id)
+                target_user_info = _sql_message().get_user_info_with_id(target_user_id)
                 target_user_name = target_user_info['user_name'] if target_user_info else f"QQ:{target_user_id}"
                 title = f"<@{open_id}>\r(伪装[{target_user_name}])\r{title}"
             else:
@@ -1484,7 +1491,7 @@ async def handle_send_markdown(
     if open_id and is_normal_group and XiuConfig().at_sender and at_msg:
         if original_user_id in _impersonating_users:
             target_user_id = _impersonating_users[original_user_id]
-            target_user_info = sql_message.get_user_info_with_id(target_user_id)
+            target_user_info = _sql_message().get_user_info_with_id(target_user_id)
             target_user_name = target_user_info['user_name'] if target_user_info else f"ID:{target_user_id}"
             title = f"<@{open_id}>\r(伪装[{target_user_name}])\r{title}"
         else:
@@ -1596,7 +1603,7 @@ async def handle_send_native_markdown(
     if open_id and is_normal_group and XiuConfig().at_sender and at_msg:
         if original_user_id in _impersonating_users:
             target_user_id = _impersonating_users[original_user_id]
-            target_user_info = sql_message.get_user_info_with_id(target_user_id)
+            target_user_info = _sql_message().get_user_info_with_id(target_user_id)
             target_user_name = target_user_info['user_name'] if target_user_info else f"QQ:{target_user_id}"
             md_text = f"<@{open_id}>\r(伪装[{target_user_name}])\r{md_text}"
         else:
@@ -1687,7 +1694,7 @@ def check_user_md_type(md_type, event):
         logger.warning(f"用户 {original_user_id} 正在伪装 {user_id_to_check}")
 
     md_type = int(md_type)
-    user_cd_message = sql_message.get_user_cd(user_id_to_check)
+    user_cd_message = _sql_message().get_user_cd(user_id_to_check)
     if user_cd_message is None:
         user_type = 0
     else:
@@ -1746,7 +1753,7 @@ async def handle_send_md_type(bot, event, msg: str, md_type, k1, v1, k2, v2, k3,
     if open_id and is_normal_group and XiuConfig().at_sender:
         if original_user_id in _impersonating_users:
             target_user_id = _impersonating_users[original_user_id]
-            target_user_info = sql_message.get_user_info_with_id(target_user_id)
+            target_user_info = _sql_message().get_user_info_with_id(target_user_id)
             target_user_name = target_user_info['user_name'] if target_user_info else f"QQ:{target_user_id}"
             msg = f"<@{open_id}>\r(伪装[{target_user_name}])\r{msg}"
         else:
@@ -1822,7 +1829,7 @@ async def handle_send_markdown_type(bot, event, msg: str, md_type, k1, v1, k2, v
     if open_id and is_normal_group and XiuConfig().at_sender:
         if original_user_id in _impersonating_users:
             target_user_id = _impersonating_users[original_user_id]
-            target_user_info = sql_message.get_user_info_with_id(target_user_id)
+            target_user_info = _sql_message().get_user_info_with_id(target_user_id)
             target_user_name = target_user_info['user_name'] if target_user_info else f"QQ:{target_user_id}"
             msg = f"<@{open_id}>\r(伪装[{target_user_name}])\r{msg}"
         else:
@@ -1902,7 +1909,7 @@ async def handle_pic_msg_send(
             original_user_id = event.get_user_id()
             if original_user_id in _impersonating_users:
                 target_user_id = _impersonating_users[original_user_id]
-                target_user_info = sql_message.get_user_info_with_id(target_user_id)
+                target_user_info = _sql_message().get_user_info_with_id(target_user_id)
                 target_user_name = (
                     target_user_info["user_name"]
                     if target_user_info
