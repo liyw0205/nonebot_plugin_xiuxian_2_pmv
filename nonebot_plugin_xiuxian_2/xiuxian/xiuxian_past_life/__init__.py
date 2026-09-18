@@ -13,14 +13,13 @@ from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.utils import (
     check_user, handle_send, send_msg_handler, log_message, number_to, send_help_message
 )
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from .past_life_limit import past_life_limit
 from .past_life_events import past_life_engine
 from .transaction_service import PastLifeResetService
 from ...paths import get_paths
 from ...features.past_life.application import PastLifeApplication
 
-player_data_manager = PlayerDataManager()
 sql_message = XiuxianDateManage()
 _paths = get_paths()
 _past_life_reset_service_instance = None
