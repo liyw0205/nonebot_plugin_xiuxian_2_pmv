@@ -29,8 +29,15 @@ from ..xiuxian_utils.utils import (
 )
 
 items = Items()
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 _reward_claim_service_instance = None
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _reward_claim_service():
@@ -374,7 +381,7 @@ def send_reward_to_user(user_id: str, reward_items: List[Dict[str, Any]]) -> Lis
 
     for item in reward_items:
         if item["type"] == "stone":
-            sql_message.update_ls(user_id, item["quantity"], 1)
+            _sql_message().update_ls(user_id, item["quantity"], 1)
             msg_parts.append(f"获得灵石 {number_to(item['quantity'])} 枚")
             continue
 
@@ -390,7 +397,7 @@ def send_reward_to_user(user_id: str, reward_items: List[Dict[str, Any]]) -> Lis
         else:
             goods_type_item = goods_type
 
-        sql_message.send_back(
+        _sql_message().send_back(
             user_id,
             goods_id,
             goods_name,

@@ -14,7 +14,7 @@ from ...paths import get_paths
 
 from .common import (
     DATA_PATH,
-    sql_message,
+    _sql_message,
     get_item_list,
     create_item_message,
 )
@@ -164,7 +164,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "你已经填写过邀请码，不能重复填写")
         return
 
-    inviter_info = sql_message.get_user_info_with_id(inviter_id)
+    inviter_info = _sql_message().get_user_info_with_id(inviter_id)
 
     if not inviter_info:
         await handle_send(bot, event, "邀请人不存在")
@@ -209,7 +209,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, "你还没有填写邀请码")
         return
 
-    inviter_info = sql_message.get_user_info_with_id(inviter_id)
+    inviter_info = _sql_message().get_user_info_with_id(inviter_id)
 
     if not inviter_info:
         await handle_send(bot, event, "邀请人信息不存在")
