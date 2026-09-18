@@ -32,17 +32,24 @@ from ..xiuxian_title.title_data import (
 xiuxian_message = on_command("我的修仙信息", aliases={"我的存档", "存档", "修仙信息"}, priority=23, block=True)
 xiuxian_message_img = on_command("我的修仙信息图片版", aliases={"我的存档图片版", "存档图片版", "修仙信息图片版"}, priority=23, block=True)
 
-sql_message = XiuxianDateManage()  # sql类
+_sql_message_instance = None
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 async def get_user_xiuxian_info(user_id):
     """获取用户修仙信息的公共函数"""
-    user_info = sql_message.get_user_real_info(user_id)
+    user_info = _sql_message().get_user_real_info(user_id)
     user_name = user_info['user_name']
 
     user_num = user_info['id']
-    rank = sql_message.get_exp_rank(user_id)
+    rank = _sql_message().get_exp_rank(user_id)
     user_rank = int(rank[0])
-    stone = sql_message.get_stone_rank(user_id)
+    stone = _sql_message().get_stone_rank(user_id)
     user_stone = int(stone[0])
 
     if not user_name:
@@ -52,11 +59,11 @@ async def get_user_xiuxian_info(user_id):
     final_attr = get_final_attributes(user_id)
     final_atk = final_attr["final_atk"] if final_attr else user_info['atk']
 
-    level_rate = sql_message.get_root_rate(user_info['root_type'], user_id)
+    level_rate = _sql_message().get_root_rate(user_info['root_type'], user_id)
     realm_rate = jsondata.level_data()[user_info['level']]["spend"]
     sect_id = user_info['sect_id']
     if sect_id:
-        sect_info = sql_message.get_sect_info(sect_id)
+        sect_info = _sql_message().get_sect_info(sect_id)
         sectmsg = sect_info['sect_name']
         sectzw = jsondata.sect_config_data()[f"{user_info['sect_position']}"]["title"]
     else:
@@ -69,7 +76,7 @@ async def get_user_xiuxian_info(user_id):
         exp_meg = f"位面至高"
     else:
         is_updata_level = OtherSet().level[now_index + 1]
-        need_exp = sql_message.get_level_power(is_updata_level)
+        need_exp = _sql_message().get_level_power(is_updata_level)
         get_exp = need_exp - user_info['exp']
         if get_exp > 0:
             exp_meg = f"还需{number_to(get_exp)}修为可突破！"
@@ -82,7 +89,7 @@ async def get_user_xiuxian_info(user_id):
     else:
         partner_user_id = partner_data["partner_id"]
         affection = partner_data["affection"]
-        partner_info_data = sql_message.get_user_real_info(partner_user_id)
+        partner_info_data = _sql_message().get_user_real_info(partner_user_id)
         if affection >= 10000:
             affection_level = "💖 深情厚谊"
         elif affection >= 5000:
@@ -96,7 +103,7 @@ async def get_user_xiuxian_info(user_id):
     mentor_data = load_mentor(user_id)
     mentor_id = mentor_data.get("mentor_id")
     if mentor_id:
-        mentor_info_data = sql_message.get_user_real_info(mentor_id)
+        mentor_info_data = _sql_message().get_user_real_info(mentor_id)
         mentor_info = mentor_info_data["user_name"] if mentor_info_data else "数据异常"
     else:
         mentor_info = "无"
@@ -106,7 +113,7 @@ async def get_user_xiuxian_info(user_id):
         apprentice_data = load_mentor(apprentice_id)
         if str(apprentice_data.get("mentor_id")) != str(user_id):
             continue
-        apprentice_info_data = sql_message.get_user_real_info(apprentice_id)
+        apprentice_info_data = _sql_message().get_user_real_info(apprentice_id)
         if apprentice_info_data:
             apprentice_names.append(apprentice_info_data["user_name"])
     apprentice_info = "、".join(apprentice_names[:3]) if apprentice_names else "无"
@@ -147,7 +154,7 @@ async def get_user_xiuxian_info(user_id):
         armor_name = f"{user_armor_data['name']}({user_armor_data['level']})"
 
     main_rate_buff = UserBuffDate(user_id).get_user_main_buff_data()
-    sql_message.update_last_check_info_time(user_id)
+    _sql_message().update_last_check_info_time(user_id)
     leveluprate = int(user_info['level_up_rate'])
     number = main_rate_buff["number"] if main_rate_buff is not None else 0
 
