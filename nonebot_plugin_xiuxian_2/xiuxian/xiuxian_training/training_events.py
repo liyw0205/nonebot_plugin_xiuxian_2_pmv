@@ -7,8 +7,15 @@ from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 items = Items()
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 # 入世事件 - 侧重红尘历练、人际交往、宗门事务等
 # 完整入世事件组
@@ -357,7 +364,7 @@ class TrainingEvents:
         if not level_name:
             return None
 
-        users = sql_message.get_top_users_by_level(level_name, 10)
+        users = _sql_message().get_top_users_by_level(level_name, 10)
         user_id = str(user_info.get("user_id", ""))
         users = [user for user in users if str(user.get("user_id", "")) != user_id]
         if not users:
@@ -494,7 +501,7 @@ class TrainingEvents:
         # 处理物品惩罚的特殊情况
         if punish_type == "item":
             desc_template, _ = random.choice(punish_data["descriptions"])
-            back_msg = sql_message.get_back_msg(user_id)
+            back_msg = _sql_message().get_back_msg(user_id)
             
             if not back_msg:
                 amount = 500_0000
