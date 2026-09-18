@@ -20,7 +20,7 @@ from ...infrastructure.ids import UUIDGenerator
 from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
 
-sql_message = XiuxianDateManage()
+_sql_message_instance = None
 items = Items()
 tower_application = TowerApplication(
     get_paths().game_db,
@@ -28,6 +28,13 @@ tower_application = TowerApplication(
     repository=TowerPurchaseSqlRepository(get_paths().game_db, get_paths().player_db),
 )
 tower_ids = UUIDGenerator()
+
+
+def _sql_message():
+    global _sql_message_instance
+    if _sql_message_instance is None:
+        _sql_message_instance = XiuxianDateManage()
+    return _sql_message_instance
 
 
 def _tower_settlement_result(data):
@@ -147,7 +154,7 @@ class TowerBattle:
             )
             return False, msg
         # expected_* 必须用原始 DB 状态，避免 buff 放大后的 real_info 导致 concurrency 误冲突。
-        raw_user = sql_message.get_user_info_with_id(user_id) or user_info
+        raw_user = _sql_message().get_user_info_with_id(user_id) or user_info
         expected_player = {key: int(raw_user[key]) for key in ("hp", "mp", "user_stamina")}
         if expected_player["user_stamina"] < stamina_cost:
             return False, "你没有足够的体力，请等待体力恢复后再试！"

@@ -34,6 +34,16 @@ def test_tower_challenge_replay_uses_lazy_settlement_reader():
     assert "tower_application.settlement_result(" in battle_source
 
 
+def test_tower_battle_defers_sql_manager_construction():
+    battle_source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tower/tower_battle.py"
+    ).read_text(encoding="utf-8")
+    assert "_sql_message_instance = None" in battle_source
+    assert "def _sql_message(" in battle_source
+    assert "_sql_message().get_user_info_with_id(" in battle_source
+    assert "sql_message = XiuxianDateManage()" not in battle_source
+
+
 class TowerSettlementServiceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
