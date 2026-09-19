@@ -18,8 +18,7 @@ class BackApplication(LegacyApplication):
     def use_item(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("use_item", operation_id=operation_id, user_id=user_id, **kwargs)
     def change_equipment(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("change_equipment", operation_id=operation_id, user_id=user_id, **kwargs)
     def learn_skill(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("learn_skill", operation_id=operation_id, user_id=user_id, **kwargs)
-    def repair(self, *, operation_id: str, user_id: str = "system", **kwargs: Any):
-        return self.repository.invoke("repair", operation_id, user_id, **kwargs)
+    def repair(self, *, operation_id: str, user_id: str = "system", **kwargs: Any): return self._action("repair", operation_id=operation_id, user_id=user_id, **kwargs)
     def use_pet_eggs(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("use_pet_eggs", operation_id=operation_id, user_id=user_id, **kwargs)
     def alchemy(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("alchemy", operation_id=operation_id, user_id=user_id, **kwargs)
     def unbind(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("unbind", operation_id=operation_id, user_id=user_id, **kwargs)

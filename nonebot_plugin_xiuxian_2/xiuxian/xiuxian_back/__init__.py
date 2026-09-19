@@ -67,7 +67,7 @@ from .transaction_service import StoneItemRewardService
 from .transaction_service import ThreeCultivationPillService
 from .transaction_service import UnbindItemService
 from .transaction_service import BatchItemUseService
-from .transaction_service import BackpackRepairService
+from .transaction_service import BackpackRepairService, BackpackRepairResult
 from . import accessory as _accessory  # noqa: F401
 from .accessory_helpers import AFFIX_KEY_MAP, SET_BONUS, ACCESSORY_BAG_LIMIT, add_accessory_to_bag, can_add_accessories, create_accessory_instance, quality_to_cn  # noqa: F401
 from .backpack_render import (
@@ -231,6 +231,22 @@ def _backpack_repair_operation_id(event):
     if event_id:
         return f"backpack-repair:{event_id}"
     return f"backpack-repair:{runtime_ids.new_id()}"
+
+
+def _backpack_repair_result(outcome):
+    data = outcome.data or {}
+    return BackpackRepairResult(
+        status=str(data.get("status", outcome.code)),
+        operation_id=str(data.get("operation_id", outcome.operation_id)),
+        total=int(data.get("total", 0) or 0),
+        completed=int(data.get("completed", 0) or 0),
+        quantity_fixed=int(data.get("quantity_fixed", 0) or 0),
+        bind_fixed=int(data.get("bind_fixed", 0) or 0),
+        name_fixed=int(data.get("name_fixed", 0) or 0),
+        equipment_fixed=int(data.get("equipment_fixed", 0) or 0),
+        missing_definitions=int(data.get("missing_definitions", 0) or 0),
+        details=tuple(data.get("details", ()) or ()),
+    )
 
 
 def _stone_reward_operation_id(event, reward_type, user_id):
@@ -2469,20 +2485,19 @@ async def check_user_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         if isinstance(item_info, dict) and item_info.get("name")
     }
     operation_id = _backpack_repair_operation_id(event)
-    result_outcome = back_application.repair(
+    result = _backpack_repair_result(back_application.repair(
         operation_id=operation_id,
         user_id="system",
         catalog=catalog,
         max_goods_num=int(XiuConfig().max_goods_num),
         batch_size=100,
-    )
-    result = result_outcome.data
+    ))
     while result.succeeded and not result.done:
-        result = back_application.repair(
+        result = _backpack_repair_result(back_application.repair(
             operation_id=result.operation_id,
             user_id="system",
             batch_size=100,
-        ).data
+        ))
 
     if not result.succeeded:
         messages = {
