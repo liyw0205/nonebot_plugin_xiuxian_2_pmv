@@ -2541,6 +2541,8 @@
 
 2026-09-19 dungeon team create/invite/join full verification：四个不重叠全量分片合计 `2364 passed, 25 subtests passed`（16条既有 compatibility DeprecationWarning）；batch结果为 `750/8`、`486/4`、`564/4`、`564/9`，所有精确 `/tmp` basetemp已清理。最终 compileall、diff、inventory、progress、CLI和 migration routing均通过；`dungeon.004`保持 game_db-only，`dungeon.005`保持 player_db-only。该证据覆盖 feature-owned create/invite/join与未迁移 reject/leave/kick/disband/transfer compatibility paths的交叉回归。
 
+2026-09-20 dungeon team create/invite/join/reject/expire full verification：四个不重叠全量分片合计 `2367 passed, 25 subtests passed`（16条既有 compatibility DeprecationWarning）；batch结果为 `753/8`、`486/4`、`564/4`、`564/9`，所有精确 `/tmp` basetemp已清理。最终 compileall、diff、inventory、progress、CLI和 migration routing均通过；`dungeon.004`保持 game_db-only，`dungeon.005`保持 player_db-only。该证据覆盖 feature-owned create/invite/join/reject/expire与未迁移 leave/kick/disband/transfer compatibility paths的交叉回归。
+
 2026-09-19 dungeon team create/invite/join live safety：提交 `c6548949` 后在受控隔离容器执行 remote smoke；五库 migration dry-run无 pending，readiness通过，reconcile为 `clean=true/operations=0/outbox_events=0/dead_events=0`，marker写入/删除、checksum restore和旧实例重启均通过。独立核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup `/srv/smoke-data/backups/20260919T161257Z`含五库；恢复后 `dungeon.004`仅记录于 game_db，`dungeon.005`仅记录于 player_db，其余数据库均未记录。
 
 2026-09-19 utils storage lazy construction live safety：提交 `0f84c726` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T171820Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
