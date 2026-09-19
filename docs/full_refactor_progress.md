@@ -2531,6 +2531,8 @@
 
 2026-09-19 work daily refresh maintenance cutover live safety：提交 `ca3d0556` 后在受控隔离容器执行 remote smoke；五库 migration dry-run无 pending，readiness通过，reconcile为 `clean=true/operations=0/outbox_events=0/dead_events=0`，marker写入/删除、checksum restore和旧实例重启均通过。独立核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup `/srv/smoke-data/backups/20260919T143511Z`含五库；恢复后 `work.002`仅记录于 game_db，其余四库均未记录。
 
+2026-09-19 activity claim-all cutover slice：`claim_activity_rewards`固定四步协调器从 legacy `ActivityClaimAllService`切到 feature-owned `ActivityClaimAllApplication`/`ActivityClaimAllRepository`，保留 tasks/pass/boss-milestone/boss-rank固定顺序、child operation ID、step ledger、retryable failure、step progress write failure recovery、operation conflict和duplicate replay语义。`activity_reward.002`预建 activity claim-all operations/steps表并只路由 game_db；无请求时间DDL，child claim transaction boundaries保持独立。Activity claim-all/lifecycle/progress regression 222 passed，四个不重叠全量分片合计 2357 passed、25 subtests passed（16条既有 compatibility DeprecationWarning），compileall、inventory、progress、CLI、architecture和diff check通过。Progress activity_reward字段为 `claim_all_application_owned=true`、`legacy_claim_all_disabled=true`。
+
 2026-09-19 utils storage lazy construction live safety：提交 `0f84c726` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T171820Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
 
 ## 6. 下一步
