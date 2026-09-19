@@ -2559,6 +2559,8 @@
 
 2026-09-20 bank deposit/withdraw/upgrade full verification：四个不重叠全量分片合计 `2375 passed, 25 subtests passed`（16条既有 compatibility DeprecationWarning）；verified batch结果为 `759/8`、`487/4`、`565/4`、`564/9`，所有精确 `/tmp` basetemp已清理。最终 compileall、diff、inventory、progress、CLI和 migration routing均通过；`bank.002`保持 game_db-only。该证据覆盖 feature-owned deposit/withdraw/upgrade与未迁移 interest compatibility path的交叉回归。
 
+2026-09-20 bank full transaction family verification：四个不重叠全量分片合计 `2376 passed, 25 subtests passed`（16条既有 compatibility DeprecationWarning）；verified batch结果为 `759/8`、`488/4`、`565/4`、`564/9`，所有精确 `/tmp` basetemp已清理。最终 compileall、diff、inventory、progress、CLI和 migration routing均通过；`bank.002`保持 game_db-only。该证据覆盖 feature-owned deposit/withdraw/upgrade/interest，无 bank handler legacy transaction fallback。
+
 2026-09-20 bank deposit live safety：提交 `3c8eb184` 后在受控隔离容器执行 remote smoke；五库 migration dry-run无 pending，readiness通过，reconcile为 `clean=true/operations=0/outbox_events=0/dead_events=0`，marker写入/删除、checksum restore和旧实例重启均通过。独立核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup `/srv/smoke-data/backups/20260919T181120Z`含五库；恢复后 `bank.002`仅记录于 game_db，其余四库均未记录。
 
 2026-09-20 bank deposit/withdraw live safety：提交 `d58e644d` 后在受控隔离容器执行 remote smoke；五库 migration dry-run无 pending，readiness通过，reconcile为 `clean=true/operations=0/outbox_events=0/dead_events=0`，marker写入/删除、checksum restore和旧实例重启均通过。独立核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup `/srv/smoke-data/backups/20260919T183547Z`含五库；恢复后 `bank.002`仅记录于 game_db，其余四库均未记录。
