@@ -209,21 +209,25 @@ def test_operation_failure_rolls_back_week_switch(tmp_path):
 def test_production_facade_has_no_per_field_write_bypass():
     root = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training"
     facade = (root / "training_limit.py").read_text(encoding="utf-8")
-    service = (root / "transaction_service.py").read_text(encoding="utf-8")
+    repository = (Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2/features/training/state_repository.py").read_text(encoding="utf-8")
 
-    assert "TrainingStateService(" in facade
+    assert "TrainingStateApplication" in facade
+    assert "TrainingStateService" not in facade
     assert "update_or_write_data" not in facade
     assert "save_user_training_info" not in facade
     assert "update_weekly_purchase" not in facade
-    assert "BEGIN IMMEDIATE" in service
-    assert "training_state_operations" in service
+    assert "DatabaseUnitOfWork" in repository
+    assert "training_state_operations" in repository
 
 
-def test_training_limit_defers_legacy_manager_and_state_service_construction():
+def test_training_limit_defers_legacy_manager_and_feature_state_application_construction():
     root = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_training"
     source = (root / "training_limit.py").read_text(encoding="utf-8")
     assert "_player_data_manager_instance = None" in source
     assert "def _player_data_manager(" in source
-    assert "_state_service_instance = None" in source
-    assert "def _state_service(" in source
+    assert "_state_application_instance = None" in source
+    assert "def _state_application(" in source
+    assert "TrainingStateApplication(" in source
+    assert "lock=_player_data_manager().lock" in source
+    assert "TrainingStateService" not in source
     assert "player_data_manager = PlayerDataManager()" not in source

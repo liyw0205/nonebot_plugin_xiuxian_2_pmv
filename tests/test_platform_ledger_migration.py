@@ -171,6 +171,29 @@ class PlatformLedgerMigrationTests(unittest.TestCase):
             finally:
                 asyncio.run(lifecycle.shutdown())
 
+    def test_startup_routes_training_state_schema_only_to_player_database(self):
+        with tempfile.TemporaryDirectory() as directory:
+            data_dir = Path(directory) / "data"
+            copy_static_data(Path(__file__).resolve().parents[1] / "data" / "xiuxian", data_dir)
+            lifecycle, _, context = build_lifecycle(
+                build_runtime_context(data_dir=data_dir, legacy_startup=False)
+            )
+            state = asyncio.run(lifecycle.start())
+            try:
+                self.assertEqual(state.phase.value, "ready")
+                for spec in context.database.specs():
+                    with DatabaseUnitOfWork(spec.path) as uow:
+                        operation = uow.query_one(
+                            "SELECT name FROM sqlite_master WHERE type='table' "
+                            "AND name='training_state_operations'"
+                        )
+                    if spec.key == "player_db":
+                        self.assertIsNotNone(operation)
+                    else:
+                        self.assertIsNone(operation)
+            finally:
+                asyncio.run(lifecycle.shutdown())
+
 
 if __name__ == "__main__":
     unittest.main()

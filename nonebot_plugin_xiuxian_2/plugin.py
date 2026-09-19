@@ -68,7 +68,7 @@ from .features.admin_asset.migrations import apply_admin_asset
 from .features.tianti_settlement.manifest import FEATURE as TIANTI_SETTLEMENT_FEATURE
 from .features.tianti_settlement.migrations import apply_tianti_settlement, apply_tianti_settlement_operations
 from .features.tianti_training.manifest import FEATURE as TIANTI_TRAINING_FEATURE
-from .features.tianti_training.migrations import apply_tianti_breakthrough_operations, apply_tianti_item_reward_operations, apply_tianti_medicine_bath_operations, apply_tianti_player_info, apply_tianti_qiaoxue_operations, apply_tianti_training, apply_tianti_training_operations
+from .features.tianti_training.migrations import apply_tianti_breakthrough_operations, apply_tianti_item_reward_operations, apply_tianti_medicine_bath_operations, apply_tianti_player_info, apply_tianti_qiaoxue_operations, apply_tianti_training, apply_tianti_training_operations, apply_training_state
 from .features.tower.manifest import FEATURE as TOWER_FEATURE
 from .features.tower.migrations import apply_tower, apply_tower_purchase, apply_tower_settlement, apply_tower_state
 from .features.sect_fairyland.manifest import FEATURE as SECT_FAIRYLAND_FEATURE
@@ -196,6 +196,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("tianti_training.005", "tianti_qiaoxue_operations", apply_tianti_qiaoxue_operations),
         Migration("tianti_training.006", "tianti_medicine_bath_operations", apply_tianti_medicine_bath_operations),
         Migration("tianti_training.007", "tianti_item_reward_operations", apply_tianti_item_reward_operations),
+        Migration("tianti_training.008", "training_state_operations", apply_training_state),
         Migration("title.001", "title_feature_migrations", apply_title),
         Migration("title.002", "title_schema", apply_title_schema),
         Migration("tower.001", "tower_feature_migrations", apply_tower),
@@ -229,6 +230,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "tianti_training.004",
         "tianti_training.005",
         "tianti_training.006",
+        "tianti_training.008",
     }
 )
 _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
@@ -253,6 +255,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "tianti_training.003",
         "tianti_training.004",
         "tianti_training.005",
+        "tianti_training.008",
     }
 )
 
