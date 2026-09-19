@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .team_repository import DungeonTeamRepository, TeamInviteSnapshot, TeamMutationResult, TeamStateSnapshot
+from .team_repository import DungeonTeamRepository, TeamExitResult, TeamInviteSnapshot, TeamMutationResult, TeamStateSnapshot
 
 
 class DungeonTeamApplication:
@@ -30,6 +30,18 @@ class DungeonTeamApplication:
 
     def transfer(self, operation_id: str, actor_id: str, target_id: str, expected: TeamStateSnapshot | None) -> TeamMutationResult:
         return self.repository.transfer(operation_id, actor_id, target_id, expected)
+
+    def exit_operation_result(self, operation_id: str, action: str, actor_id: str, target_id: str | None = None) -> TeamExitResult | None:
+        return self.repository.exit_operation_result(operation_id, action, actor_id, target_id)
+
+    def leave(self, operation_id: str, actor_id: str, expected: TeamStateSnapshot | None, cooldown_until: str) -> TeamExitResult:
+        return self.repository.leave(operation_id, actor_id, expected, cooldown_until)
+
+    def kick(self, operation_id: str, actor_id: str, target_id: str, expected: TeamStateSnapshot | None, cooldown_until: str) -> TeamExitResult:
+        return self.repository.kick(operation_id, actor_id, target_id, expected, cooldown_until)
+
+    def disband(self, operation_id: str, actor_id: str, expected: TeamStateSnapshot | None, cooldown_until: str) -> TeamExitResult:
+        return self.repository.disband(operation_id, actor_id, expected, cooldown_until)
 
     def operation_result(self, operation_id: str, action: str = "") -> TeamMutationResult | None:
         return self.repository.operation_result(operation_id, action)
