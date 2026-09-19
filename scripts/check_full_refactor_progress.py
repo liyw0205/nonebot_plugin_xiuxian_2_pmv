@@ -75,7 +75,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "arena": {
             "weekly_rank_application_owned": "arena_weekly_rank_application.reduce(" in arena,
             "legacy_scheduler_disabled": "ArenaWeeklyRankReductionService" not in arena and "_arena_weekly_rank_reduction_service" not in arena,
-            "status": "weekly_rank_cutover_with_legacy_service_retained_for_compatibility",
+            "daily_reward_application_owned": "arena_season_reward_application.reset_daily()" in arena,
+            "legacy_daily_reward_disabled": "ArenaSeasonRewardService" not in arena and "_arena_season_reward_service" not in arena,
+            "status": "weekly_rank_and_daily_reward_cutover_with_legacy_service_retained_for_compatibility",
         },
     }
 

@@ -2,21 +2,35 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_arena.transaction_service import ArenaSeasonRewardService
+from nonebot_plugin_xiuxian_2.features.arena.season_reward_application import (
+    ArenaSeasonRewardApplication,
+)
+from nonebot_plugin_xiuxian_2.features.arena.migrations import (
+    apply_arena_season_reward,
+)
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
 
 class ArenaSeasonRewardServiceTests(unittest.TestCase):
-    def test_arena_facade_defers_season_reward_service_construction(self):
+    def test_arena_scheduler_uses_feature_season_reward_application(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_arena
 
-        self.assertIsNone(xiuxian_arena._arena_season_reward_service_instance)
+        source = Path(xiuxian_arena.__file__).read_text(encoding="utf-8")
+        start = source.index("async def reset_arena_daily_challenges")
+        handler = source[start:source.index("async def reduce_arena_rank", start)]
+        self.assertIn("arena_season_reward_application.reset_daily()", handler)
+        self.assertNotIn("_arena_season_reward_service().claim(", handler)
+        self.assertNotIn("ArenaSeasonRewardService", source)
+        self.assertNotIn("_player_data_manager().get_all_field_data", handler)
+        self.assertNotIn("arena_limit.get_user_arena_info", handler)
 
     reset = {"daily_challenges_used": 3, "daily_extra_challenges": 1, "daily_challenge_buys": 1, "last_reset_date": "old", "last_buy_date": "old"}
 
@@ -31,7 +45,9 @@ class ArenaSeasonRewardServiceTests(unittest.TestCase):
         with db_backend.transaction(self.player) as conn:
             conn.execute("CREATE TABLE arena (user_id TEXT PRIMARY KEY,score INTEGER,rank TEXT,honor_points INTEGER,total_honor_earned INTEGER,daily_challenges_used INTEGER,daily_extra_challenges INTEGER,daily_challenge_buys INTEGER,last_reset_date TEXT,last_buy_date TEXT)")
             conn.execute("INSERT INTO arena VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)", ("user", 2000, "黄金", 10, 20, 3, 1, 1, "old", "old"))
-        self.service = ArenaSeasonRewardService(self.game, self.player)
+        with DatabaseUnitOfWork(self.game) as uow:
+            apply_arena_season_reward(uow)
+        self.service = ArenaSeasonRewardApplication(self.game, self.player)
 
     def tearDown(self):
         self.temp.cleanup()
@@ -53,6 +69,17 @@ class ArenaSeasonRewardServiceTests(unittest.TestCase):
         self.assertEqual((result.status, result.honor, result.honor_points, result.total_honor_earned), ("applied", 800, 810, 820))
         self.assertEqual(self.state(), ((810, 820, 0, 0, 0, "2026-07-13", "2026-07-13"), (2, 2)))
 
+    def test_daily_reset_uses_injected_clock_and_feature_candidates(self):
+        class FixedClock:
+            def now(self):
+                return datetime(2026, 7, 13, 20, 0, tzinfo=timezone.utc)
+
+        application = ArenaSeasonRewardApplication(self.game, self.player, clock=FixedClock())
+        settled = application.reset_daily()
+
+        self.assertEqual(settled, ({"user_id": "user", "total": 800, "base": 300, "bonus": 500, "status": "applied"},))
+        self.assertEqual(self.state(), ((810, 820, 0, 0, 0, "2026-07-13", "2026-07-13"), None))
+
     def test_duplicate_conflict_and_other_operation_cannot_double_claim(self):
         first, duplicate = self.claim("same"), self.claim("same")
         conflict = self.claim("same", score=1999)
@@ -63,7 +90,6 @@ class ArenaSeasonRewardServiceTests(unittest.TestCase):
     def test_stale_snapshot_and_operation_failure_roll_back(self):
         self.assertEqual(self.claim("stale", honor=9).status, "state_changed")
         with db_backend.transaction(self.game) as conn:
-            conn.execute("CREATE TABLE arena_season_reward_operations (operation_id TEXT PRIMARY KEY,payload TEXT,season_key TEXT,user_id TEXT,honor INTEGER,honor_points INTEGER,total_honor_earned INTEGER,created_at TIMESTAMP,UNIQUE(season_key,user_id))")
             conn.execute("CREATE TRIGGER fail_reward BEFORE INSERT ON arena_season_reward_operations BEGIN SELECT RAISE(ABORT,'failed'); END")
         with self.assertRaises(db_backend.IntegrityError):
             self.claim("rollback")

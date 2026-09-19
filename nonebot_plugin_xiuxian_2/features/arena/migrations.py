@@ -41,4 +41,39 @@ def apply_arena_weekly_rank_reduction(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_arena", "apply_arena_challenge_purchase", "apply_arena_challenge_ticket", "apply_arena_purchase", "apply_arena_settlement", "apply_arena_weekly_rank_reduction"]
+def apply_arena_season_reward(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS arena_season_reward_operations ("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,season_key TEXT NOT NULL,"
+        "user_id TEXT NOT NULL,honor INTEGER NOT NULL,honor_points INTEGER NOT NULL,"
+        "total_honor_earned INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        "UNIQUE(season_key,user_id))"
+    )
+
+
+def apply_arena_daily_reward_player(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS arena ("
+        "user_id TEXT PRIMARY KEY,score INTEGER DEFAULT 1000,rank TEXT DEFAULT '青铜',"
+        "honor_points INTEGER DEFAULT 0,total_honor_earned INTEGER DEFAULT 0,"
+        "daily_challenges_used INTEGER DEFAULT 0,daily_extra_challenges INTEGER DEFAULT 0,"
+        "daily_challenge_buys INTEGER DEFAULT 0,last_reset_date TEXT DEFAULT '',"
+        "last_buy_date TEXT DEFAULT '')"
+    )
+    columns = {str(row[1]) for row in uow.execute("PRAGMA table_info(arena)").fetchall()}
+    for name, definition in {
+        "score": "INTEGER DEFAULT 1000",
+        "rank": "TEXT DEFAULT '青铜'",
+        "honor_points": "INTEGER DEFAULT 0",
+        "total_honor_earned": "INTEGER DEFAULT 0",
+        "daily_challenges_used": "INTEGER DEFAULT 0",
+        "daily_extra_challenges": "INTEGER DEFAULT 0",
+        "daily_challenge_buys": "INTEGER DEFAULT 0",
+        "last_reset_date": "TEXT DEFAULT ''",
+        "last_buy_date": "TEXT DEFAULT ''",
+    }.items():
+        if name not in columns:
+            uow.execute(f'ALTER TABLE arena ADD COLUMN "{name}" {definition}')
+
+
+__all__ = ["apply_arena", "apply_arena_challenge_purchase", "apply_arena_challenge_ticket", "apply_arena_daily_reward_player", "apply_arena_purchase", "apply_arena_season_reward", "apply_arena_settlement", "apply_arena_weekly_rank_reduction"]

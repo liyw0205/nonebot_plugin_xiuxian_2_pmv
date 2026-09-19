@@ -2513,6 +2513,8 @@
 
 2026-09-19 arena weekly rank reduction cutover live safety：受控隔离容器因先前终止导致 `/srv`丢失后，按已推送 `02824ae7` archive重建 `/srv/src`和专用 `/srv/venv`，并字节比对 `plugin.py`、weekly repository后执行 remote smoke。五库 migration dry-run无 pending，readiness通过，reconcile为 `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker写入/删除、checksum restore和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T235316Z`包含五库；`arena.006`只存在 player_db 的 schema_migrations，game_db、trade_db、impart_db、message_db均未记录该版本。
 
+2026-09-19 arena daily reward cutover slice：`daily_reset_arena`默认路径从 `ArenaSeasonRewardService`转为 feature-owned `ArenaSeasonRewardApplication.reset_daily()`；application使用注入 Clock 读取 player-db候选与名次、计算rank/position honor，并逐人调用 feature repository的 attached game/player transaction。迁移 `arena.007`预建 game-db reward operation ledger，`arena.008`只在 player-db补齐daily arena schema；snapshot、season uniqueness、inventory、honor/reset与失败回滚语义保持。Season daily contract/lifecycle/progress regression 11 passed，arena/lifecycle/CLI/source/architecture/inventory batch 245 passed；四个不重叠全量分片合计 2335 passed、25 subtests passed（16条既有 compatibility DeprecationWarning），compileall、inventory、progress、diff check通过。Progress arena字段为 `daily_reward_application_owned=true`、`legacy_daily_reward_disabled=true`。
+
 2026-09-19 utils storage lazy construction live safety：提交 `0f84c726` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T171820Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
 
 ## 6. 下一步

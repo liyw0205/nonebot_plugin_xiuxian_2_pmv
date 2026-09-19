@@ -26,14 +26,13 @@ from .transaction_service import ArenaPurchaseResult
 from .transaction_service import ArenaChallengePurchaseResult
 from .transaction_service import ArenaChallengeTicketResult
 from .transaction_service import ArenaChallengeSettlementResult
-from .transaction_service import ArenaSeasonRewardService
 from ...features.arena.application import ArenaApplication
 from ...features.arena.repository import ArenaChallengePurchaseSqlRepository
+from ...features.arena.season_reward_application import ArenaSeasonRewardApplication
 from ...features.arena.weekly_rank_application import ArenaWeeklyRankApplication
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 
-_arena_season_reward_service_instance = None
 arena_application = ArenaApplication(
     get_paths().game_db,
     get_paths().player_db,
@@ -42,6 +41,11 @@ arena_application = ArenaApplication(
 arena_ids = UUIDGenerator()
 runtime_clock = SystemClock()
 arena_weekly_rank_application = ArenaWeeklyRankApplication(
+    get_paths().player_db,
+    clock=runtime_clock,
+)
+arena_season_reward_application = ArenaSeasonRewardApplication(
+    get_paths().game_db,
     get_paths().player_db,
     clock=runtime_clock,
 )
@@ -60,12 +64,6 @@ def _player_data_manager():
         _player_data_manager_instance = PlayerDataManager()
     return _player_data_manager_instance
 
-
-def _arena_season_reward_service():
-    global _arena_season_reward_service_instance
-    if _arena_season_reward_service_instance is None:
-        _arena_season_reward_service_instance = ArenaSeasonRewardService(get_paths().game_db, get_paths().player_db)
-    return _arena_season_reward_service_instance
 
 arena_challenge = on_command("竞技场挑战", priority=10, block=True)
 arena_view = on_command("竞技场查看", priority=10, block=True)
@@ -935,28 +933,15 @@ def clear_arena_opponent_cache(user_id: str):
 
 async def reset_arena_daily_challenges():
     """每日重置竞技场挑战次数并发放荣誉值奖励"""
-    all_users = _player_data_manager().get_all_field_data("arena", "score")
-    honor_distribution = {}
-    season_key = runtime_clock.now().strftime("%Y-%m-%d")
-
-    for user_id, _ in all_users:
-        user_id = str(user_id)
-        arena_info = arena_limit.get_user_arena_info(user_id)
-        total_honor, base_honor, ranking_bonus = arena_limit.calculate_daily_honor(user_id)
-        claimed = _arena_season_reward_service().claim(
-            f"arena-season-reward:{season_key}:{user_id}", user_id, season_key,
-            int(arena_info["score"]), arena_info["rank"], arena_limit.get_user_ranking(user_id),
-            int(arena_info["honor_points"]), int(arena_info["total_honor_earned"]),
-            base_honor, ranking_bonus, expected_reset=arena_info,
-        )
-        if claimed.succeeded and total_honor > 0:
-            user_info = _sql_message().get_user_info_with_id(user_id)
-            honor_distribution[user_info['user_name'] if user_info else user_id] = {
-                'total': total_honor,
-                'base': base_honor,
-                'bonus': ranking_bonus
-            }
-    
+    settled = arena_season_reward_application.reset_daily()
+    honor_distribution = {
+        record["user_id"]: {
+            "total": record["total"],
+            "base": record["base"],
+            "bonus": record["bonus"],
+        }
+        for record in settled
+    }
     logger.opt(colors=True).info(f"<green>竞技场每日挑战次数已重置！荣誉值发放完成，共发放{len(honor_distribution)}名玩家</green>")
 
 async def reduce_arena_rank(reduce_steps=2, business_week=None, *, chunk_size=500):

@@ -54,7 +54,7 @@ from .features.rift.migrations import apply_rift
 from .features.accessory_package.manifest import FEATURE as ACCESSORY_PACKAGE_FEATURE
 from .features.accessory_package.migrations import apply_accessory_package
 from .features.arena.manifest import FEATURE as ARENA_FEATURE
-from .features.arena.migrations import apply_arena, apply_arena_challenge_purchase, apply_arena_challenge_ticket, apply_arena_purchase, apply_arena_settlement, apply_arena_weekly_rank_reduction
+from .features.arena.migrations import apply_arena, apply_arena_challenge_purchase, apply_arena_challenge_ticket, apply_arena_daily_reward_player, apply_arena_purchase, apply_arena_season_reward, apply_arena_settlement, apply_arena_weekly_rank_reduction
 from .features.auction.manifest import FEATURE as AUCTION_FEATURE
 from .features.auction.jobs import settle as auction_settle_job
 from .features.bank.manifest import FEATURE as BANK_FEATURE
@@ -121,6 +121,8 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("arena.004", "arena_challenge_ticket_operations", apply_arena_challenge_ticket),
         Migration("arena.005", "arena_challenge_settlement_operations", apply_arena_settlement),
         Migration("arena.006", "arena_weekly_rank_reduction_operations", apply_arena_weekly_rank_reduction),
+        Migration("arena.007", "arena_season_reward_operations", apply_arena_season_reward),
+        Migration("arena.008", "arena_daily_reward_player_schema", apply_arena_daily_reward_player),
         Migration("auction.001", "auction_feature_migrations", apply_auction),
         Migration("back.001", "back_feature_migrations", apply_back),
         Migration("bank.001", "bank_feature_migrations", apply_bank),
@@ -207,6 +209,7 @@ def build_migrations() -> tuple[Migration, ...]:
 _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
     {
         "arena.006",
+        "arena.008",
         "title.002",
         "combat_settlement.003",
         "combat_settlement.004",
@@ -227,6 +230,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
 _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
     {
         "arena.006",
+        "arena.008",
         "platform.001",
         "title.001",
         "title.002",
