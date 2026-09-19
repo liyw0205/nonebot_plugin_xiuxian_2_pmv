@@ -2527,6 +2527,8 @@
 
 2026-09-19 training state cutover slice：`TrainingLimit`默认 state读取从 legacy `TrainingStateService`切到 feature-owned `TrainingStateApplication`/`TrainingStateRepository`。新repository只使用 `DatabaseUnitOfWork`，application使用注入 Clock 并保留 PlayerDataManager shared lock；保留缺失用户初始化、`last_time`解析、progress/points/completed/max_progress/last_event规范化、跨年ISO-week purchase rollover、malformed weekly repair、deterministic receipt及trigger rollback语义。`tianti_training.008`只在 player_db预建 training state schema和operation receipts；无请求时间DDL、legacy DB wrapper或直接系统时钟。Training state/lifecycle/progress regression 22 passed，training/reset/source/architecture batch 232 passed；四个不重叠全量分片合计 2355 passed、25 subtests passed（16条既有 compatibility DeprecationWarning），compileall、inventory、progress、diff check通过。Progress training字段为 `state_application_owned=true`、`legacy_state_owner_disabled=true`。
 
+2026-09-19 training state cutover live safety：提交 `2c5dd059` 后在受控隔离容器执行 remote smoke；五库 migration dry-run无 pending，readiness通过，reconcile为 `clean=true/operations=0/outbox_events=0/dead_events=0`，marker写入/删除、checksum restore和旧实例重启均通过。独立核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup `/srv/smoke-data/backups/20260919T134926Z`含五库；恢复后 `tianti_training.008`仅记录于 player_db，其余四库均未记录。
+
 2026-09-19 utils storage lazy construction live safety：提交 `0f84c726` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T171820Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
 
 ## 6. 下一步
