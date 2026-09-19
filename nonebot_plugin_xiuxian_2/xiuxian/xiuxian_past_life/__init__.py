@@ -23,7 +23,7 @@ from ...features.past_life.application import PastLifeApplication
 _sql_message_instance = None
 _paths = get_paths()
 _past_life_reset_service_instance = None
-past_life_application = PastLifeApplication(_paths.game_db)
+past_life_application = PastLifeApplication(_paths.game_db, _paths.player_db)
 
 
 def _sql_message():
@@ -388,13 +388,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     operation_id = f"past-life-reset-one:{event_id}"
-    result = _run_past_life_action(
-        "reset_one", operation_id, str(target_user["user_id"]),
-        call=lambda: _past_life_reset_service().reset_one(
-            operation_id, target_user["user_id"], clear_history,
-        ),
+    outcome = past_life_application.reset_one(
+        operation_id=operation_id,
+        user_id=str(target_user["user_id"]),
         clear_history=clear_history,
     )
+    result_data = dict(outcome.data or {})
+    result_data.setdefault("status", "duplicate" if outcome.replayed else outcome.status)
+    result_data["succeeded"] = outcome.ok
+    result = _LegacyResult(result_data)
     if not result.succeeded:
         await handle_send(bot, event, "前尘重置 operation 冲突，本次未修改状态。")
         return

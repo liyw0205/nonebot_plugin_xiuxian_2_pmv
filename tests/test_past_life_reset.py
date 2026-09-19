@@ -36,6 +36,12 @@ class PastLifeResetTests(unittest.TestCase):
 
         self.assertIsNone(xiuxian_past_life._past_life_reset_service_instance)
 
+    def test_past_life_reset_one_uses_feature_application(self):
+        source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_past_life/__init__.py"
+        handler = source.read_text(encoding="utf-8").split("@reset_past_life_cmd.handle", 1)[1].split("# ═══ 工具函数", 1)[0]
+        self.assertIn("past_life_application.reset_one(", handler)
+        self.assertNotIn("_past_life_reset_service().reset_one(", handler)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
@@ -258,7 +264,8 @@ class PastLifeResetTests(unittest.TestCase):
             / "__init__.py"
         ).read_text(encoding="utf-8")
         handler = source[source.index("@reset_past_life_cmd.handle"):source.index("# ═══ 工具函数")]
-        self.assertIn("_past_life_reset_service().reset_one(", handler)
+        self.assertIn("past_life_application.reset_one(", handler)
+        self.assertNotIn("_past_life_reset_service().reset_one(", handler)
         self.assertIn("_past_life_reset_service().create_all(", handler)
         self.assertIn("_past_life_reset_service().run_batch(", handler)
         self.assertNotIn("past_life_limit.reset_", handler)

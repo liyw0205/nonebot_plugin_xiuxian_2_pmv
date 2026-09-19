@@ -61,6 +61,9 @@ class RefactorProgressTests(unittest.TestCase):
         back = slices["back"]
         self.assertTrue(back["repair_application_owned"])
         self.assertTrue(back["legacy_repair_disabled"])
+        past_life = slices["past_life"]
+        self.assertTrue(past_life["reset_one_application_owned"])
+        self.assertTrue(past_life["legacy_reset_one_disabled"])
 
 
 if __name__ == "__main__":

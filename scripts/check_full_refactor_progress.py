@@ -66,6 +66,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     world_events_facade = (PACKAGE / "xiuxian" / "xiuxian_world_events" / "__init__.py").read_text(encoding="utf-8")
     rift_facade = (PACKAGE / "xiuxian" / "xiuxian_rift" / "__init__.py").read_text(encoding="utf-8")
     back_facade = (PACKAGE / "xiuxian" / "xiuxian_back" / "__init__.py").read_text(encoding="utf-8")
+    past_life_facade = (PACKAGE / "xiuxian" / "xiuxian_past_life" / "__init__.py").read_text(encoding="utf-8")
     return {
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,
@@ -162,6 +163,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "repair_application_owned": "back_application.repair(" in back_facade,
             "legacy_repair_disabled": "_backpack_repair_service().run(" not in back_facade,
             "status": "backpack_repair_cutover_with_other_back_compatibility",
+        },
+        "past_life": {
+            "reset_one_application_owned": "past_life_application.reset_one(" in past_life_facade,
+            "legacy_reset_one_disabled": "_past_life_reset_service().reset_one(" not in past_life_facade,
+            "status": "reset_one_cutover_with_reset_all_compatibility",
         },
     }
 
