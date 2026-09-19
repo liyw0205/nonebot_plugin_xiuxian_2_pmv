@@ -22,6 +22,9 @@ class RefactorProgressTests(unittest.TestCase):
         training = slices["training"]
         self.assertTrue(training["state_application_owned"])
         self.assertTrue(training["legacy_state_owner_disabled"])
+        work = slices["work"]
+        self.assertTrue(work["daily_refresh_application_owned"])
+        self.assertTrue(work["legacy_daily_refresh_disabled"])
 
 
 if __name__ == "__main__":

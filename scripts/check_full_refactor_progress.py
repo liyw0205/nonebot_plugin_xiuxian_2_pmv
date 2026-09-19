@@ -56,6 +56,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     arena_limit = (PACKAGE / "xiuxian" / "xiuxian_arena" / "arena_limit.py").read_text(encoding="utf-8")
     tower_limit = (PACKAGE / "xiuxian" / "xiuxian_tower" / "tower_limit.py").read_text(encoding="utf-8")
     training_limit = (PACKAGE / "xiuxian" / "xiuxian_training" / "training_limit.py").read_text(encoding="utf-8")
+    work_facade = (PACKAGE / "xiuxian" / "xiuxian_work" / "__init__.py").read_text(encoding="utf-8")
     return {
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,
@@ -93,6 +94,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "state_application_owned": "TrainingStateApplication" in training_limit,
             "legacy_state_owner_disabled": "TrainingStateService" not in training_limit,
             "status": "state_cutover_with_legacy_service_retained_for_compatibility",
+        },
+        "work": {
+            "daily_refresh_application_owned": "work_daily_refresh_application.reset(" in work_facade,
+            "legacy_daily_refresh_disabled": "_work_daily_refresh_reset_service" not in work_facade,
+            "status": "daily_refresh_cutover_with_legacy_service_retained_for_compatibility",
         },
     }
 

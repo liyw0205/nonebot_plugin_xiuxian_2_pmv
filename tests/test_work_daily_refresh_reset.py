@@ -8,9 +8,11 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_work.transaction_service import (
-    WorkDailyRefreshResetService,
+from nonebot_plugin_xiuxian_2.features.work.maintenance_application import (
+    WorkDailyRefreshResetApplication,
 )
+from nonebot_plugin_xiuxian_2.features.work.migrations import apply_work_daily_refresh_reset
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
 
@@ -18,7 +20,12 @@ class WorkDailyRefreshResetTests(unittest.TestCase):
     def test_work_facade_defers_daily_refresh_reset_service_construction(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_work
 
-        self.assertIsNone(xiuxian_work._work_daily_refresh_reset_service_instance)
+        source = Path(xiuxian_work.__file__).read_text(encoding="utf-8")
+        handler = source.split("async def resetrefreshnum", 1)[1].split(
+            "async def delayed_reminder", 1
+        )[0]
+        self.assertIn("work_daily_refresh_application.reset(", handler)
+        self.assertNotIn("_work_daily_refresh_reset_service().reset(", handler)
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -31,7 +38,9 @@ class WorkDailyRefreshResetTests(unittest.TestCase):
                 "INSERT INTO user_xiuxian VALUES(%s,%s)",
                 (("u1", 0), ("u2", 2), ("u3", 5)),
             )
-        self.service = WorkDailyRefreshResetService(self.database)
+        with DatabaseUnitOfWork(self.database) as uow:
+            apply_work_daily_refresh_reset(uow)
+        self.service = WorkDailyRefreshResetApplication(self.database)
 
     def tearDown(self):
         self.temp.cleanup()
@@ -182,7 +191,8 @@ class WorkDailyRefreshResetTests(unittest.TestCase):
         handler = source.split("async def resetrefreshnum", 1)[1].split(
             "async def delayed_reminder", 1
         )[0]
-        self.assertIn("_work_daily_refresh_reset_service().reset(", handler)
+        self.assertIn("work_daily_refresh_application.reset(", handler)
+        self.assertNotIn("_work_daily_refresh_reset_service().reset(", handler)
         self.assertIn("return result", handler)
         self.assertIn("await asyncio.sleep(0)", handler)
         self.assertNotIn("sql_message.reset_work_num(", handler)

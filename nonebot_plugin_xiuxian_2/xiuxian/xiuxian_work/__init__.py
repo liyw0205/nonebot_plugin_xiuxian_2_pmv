@@ -34,11 +34,12 @@ from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.ids import UUIDGenerator
 from ...features.work.application import WorkClaimApplication, WorkSettlementApplication
+from ...features.work.maintenance_application import WorkDailyRefreshResetApplication
 from ...features.work.repository import LegacyWorkClaimRepository, LegacyWorkSettlementRepository
 from .transaction_service import WorkItemUseService
 from .transaction_service import WorkRefreshSettlementService
 from .transaction_service import WorkAbortCleanupService
-from .transaction_service import WorkDailyRefreshResetService
+
 
 work_claim_application = WorkClaimApplication(
     get_paths().game_db,
@@ -51,10 +52,13 @@ work_settlement_application = WorkSettlementApplication(
 _work_item_use_service_instance = None
 _work_refresh_service_instance = None
 _work_abort_cleanup_service_instance = None
-_work_daily_refresh_reset_service_instance = None
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
+work_daily_refresh_application = WorkDailyRefreshResetApplication(
+    get_paths().game_db,
+    clock=runtime_clock,
+)
 _sql_message_instance = None
 items = Items()
 count = 5  # 每日刷新次数
@@ -67,14 +71,6 @@ def _sql_message():
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
 
-
-def _work_daily_refresh_reset_service():
-    global _work_daily_refresh_reset_service_instance
-    if _work_daily_refresh_reset_service_instance is None:
-        _work_daily_refresh_reset_service_instance = WorkDailyRefreshResetService(
-            get_paths().game_db
-        )
-    return _work_daily_refresh_reset_service_instance
 
 
 def _work_item_use_service():
@@ -455,7 +451,7 @@ def get_work_msg(work_):
 async def resetrefreshnum():
     business_date = runtime_clock.now().date().isoformat()
     while True:
-        result = _work_daily_refresh_reset_service().reset(business_date, count)
+        result = work_daily_refresh_application.reset(business_date, count)
         if result.status == "operation_conflict":
             raise RuntimeError(f"悬赏令刷新次数重置配置冲突：{business_date}")
         if result.task_status != "running":

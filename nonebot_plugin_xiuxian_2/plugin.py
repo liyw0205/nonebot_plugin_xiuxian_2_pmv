@@ -76,7 +76,7 @@ from .features.sect_fairyland.migrations import apply_sect_fairyland
 from .features.world_events.manifest import FEATURE as WORLD_EVENTS_FEATURE
 from .features.world_events.migrations import apply_world_events
 from .features.work.manifest import FEATURE as WORK_FEATURE
-from .features.work.migrations import apply_work
+from .features.work.migrations import apply_work, apply_work_daily_refresh_reset
 from .features.mixelixir.manifest import FEATURE as MIXELIXIR_FEATURE
 from .features.mixelixir.migrations import apply_mixelixir
 from .features.puppet.manifest import FEATURE as PUPPET_FEATURE
@@ -205,6 +205,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("tower.004", "tower_state_operations", apply_tower_state),
         Migration("trade.001", "trade_feature_migrations", apply_trade),
         Migration("work.001", "work_feature_migrations", apply_work),
+        Migration("work.002", "work_daily_refresh_reset_operations", apply_work_daily_refresh_reset),
         Migration("world_events.001", "world_events_feature_migrations", apply_world_events),
     )
 
