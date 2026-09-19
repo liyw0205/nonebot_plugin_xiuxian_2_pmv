@@ -216,14 +216,15 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         expected_saved_stone = bankinfo['savestone']
         expected_saved_at = bankinfo['savetime']
         bankinfo, give_stone, timedeff = get_give_stone(bankinfo)
-        # Legacy facade call: bank_deposit_service.deposit(...)
-        deposit_outcome = bank_application.deposit(
-            operation_id=operation_id, user_id=user_id, amount=num,
-            expected_saved_stone=expected_saved_stone, expected_saved_at=expected_saved_at,
-            bank_level=bankinfo['banklevel'], interest=give_stone,
-            settled_at=bankinfo['savetime'], save_limit=max,
+        deposit_data = BankDepositApplication(get_paths().game_db).deposit(
+            operation_id=operation_id,
+            user_id=user_id,
+            amount=num,
+            interest=give_stone,
+            limit=int(max),
+            bank_level=str(bankinfo['banklevel']),
+            settled_at=str(bankinfo['savetime']),
         )
-        deposit_data = deposit_outcome.data or {}
         deposit_status = str(deposit_data.get("status", "failed"))
         deposit_interest = int(deposit_data.get("interest", 0) or 0)
         deposit_amount = int(deposit_data.get("deposited", 0) or 0)

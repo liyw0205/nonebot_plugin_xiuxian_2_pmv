@@ -1820,7 +1820,8 @@ class SourceQualityTests(unittest.TestCase):
         source = (bank_root / "__init__.py").read_text(encoding="utf-8")
         start = source.index("if mode == '存灵石'")
         handler = source[start:source.index("elif mode == '取灵石'", start)]
-        self.assertIn("bank_deposit_service.deposit(", handler)
+        self.assertIn("BankDepositApplication", handler)
+        self.assertNotIn("bank_application.deposit(", handler)
         self.assertNotIn("sql_message.update_ls(", handler)
         self.assertNotIn("savef(user_id, bankinfo)", handler)
         for status in ("stone_insufficient", "limit_exceeded", "state_changed", "user_missing"):

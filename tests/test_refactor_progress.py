@@ -31,6 +31,9 @@ class RefactorProgressTests(unittest.TestCase):
         dungeon_team = slices["dungeon_team"]
         self.assertTrue(dungeon_team["create_invite_application_owned"])
         self.assertTrue(dungeon_team["legacy_create_invite_disabled"])
+        bank = slices["bank"]
+        self.assertTrue(bank["deposit_application_owned"])
+        self.assertTrue(bank["legacy_deposit_disabled"])
 
 
 if __name__ == "__main__":
