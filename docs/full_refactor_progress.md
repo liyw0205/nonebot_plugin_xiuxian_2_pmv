@@ -2537,6 +2537,8 @@
 
 2026-09-19 dungeon team create/invite vertical slice：生产 `创建队伍`与`邀请组队`及其 operation replay 从 legacy `DungeonTeamTransactionService`切到 feature-owned `DungeonTeamApplication`/`DungeonTeamRepository`；保留 game/player边界中的 player-db团队/邀请/operation/cooldown schema、group/user/team/session检查、fixed operation payload、duplicate/conflict、pending invite expiry和事务rollback语义。`dungeon.005`只在 player_db预建 team operations/invites/team_cd，既有 `dungeon.004` game-only explore migration保持不变；join/reject/leave/kick/disband/transfer仍明确保留在legacy compatibility boundary，未冒险合并。Dungeon team/lifecycle/state/lazy/source/architecture/progress regression 235 passed，compileall、inventory、CLI、routing和diff check通过。Progress dungeon_team字段为 `create_invite_application_owned=true`、`legacy_create_invite_disabled=true`。
 
+2026-09-19 dungeon team join vertical slice：生产 `同意组队`及其 operation replay、pending invite读取和 invite consumption 从 legacy `DungeonTeamTransactionService`切到同一 feature-owned team application；保留 invite identity/group/expiry、user/team/session检查、CAS version update、first-join marker、duplicate/conflict和事务rollback语义。reject/leave/kick/disband/transfer仍保留在legacy compatibility boundary。Join-focused dungeon/lifecycle/source/progress regression 216 passed，compileall、inventory、CLI、routing和diff check通过；`dungeon.005`仍只路由 player_db。
+
 2026-09-19 utils storage lazy construction live safety：提交 `0f84c726` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T171820Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
 
 ## 6. 下一步

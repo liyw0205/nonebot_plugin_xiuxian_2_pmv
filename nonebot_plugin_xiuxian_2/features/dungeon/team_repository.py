@@ -162,6 +162,33 @@ class DungeonTeamRepository:
             uow.execute("INSERT INTO dungeon_team_invites(invite_id,team_id,inviter_id,invitee_id,group_id,expires_at,status,created_at) VALUES(?,?,?,?,?,?,?,?)", (invite_id,team_id,inviter_id,invitee_id,group_id,float(expires_at),"pending",float(now_timestamp)))
             return self._finish(uow, operation_id, "invite", payload, TeamMutationResult("applied", **base))
 
+    def join(self, operation_id: str, invite_id: str, team_id: str, inviter_id: str, user_id: str, group_id: str, now_timestamp: float) -> TeamMutationResult:
+        payload = self._json({"action":"join","invite_id":invite_id,"team_id":team_id,"inviter_id":inviter_id,"user_id":user_id,"group_id":group_id})
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            self.ensure_schema(uow)
+            old = uow.query_one("SELECT payload,result_status,team_id,result_json FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
+            if old is not None: return self._decode_mutation(old) if old["payload"] == payload else TeamMutationResult("state_changed", team_id=str(old["team_id"]))
+            invite = uow.query_one("SELECT team_id,inviter_id,invitee_id,group_id,expires_at,status,consumed_at FROM dungeon_team_invites WHERE invite_id=?", (invite_id,))
+            base = dict(team_id=team_id, invite_id=invite_id, target_id=user_id, group_id=group_id)
+            if invite is None or (str(invite["team_id"]), str(invite["inviter_id"]), str(invite["invitee_id"]), str(invite["group_id"])) != (team_id, inviter_id, user_id, group_id) or str(invite["status"]) != "pending" or invite["consumed_at"] is not None or float(invite["expires_at"]) <= float(now_timestamp):
+                return self._finish(uow, operation_id, "join", payload, TeamMutationResult("invite_invalid", **base))
+            if uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,)) is None: return self._finish(uow, operation_id, "join", payload, TeamMutationResult("user_missing", **base))
+            if self._user_team(uow, user_id): return self._finish(uow, operation_id, "join", payload, TeamMutationResult("user_has_team", **base))
+            team = uow.query_one("SELECT team_name,leader,members,max_members,version FROM teams WHERE user_id=?", (team_id,))
+            if team is None: return self._finish(uow, operation_id, "join", payload, TeamMutationResult("team_disbanded", **base))
+            members, maximum = self._members(team["members"]), max(int(team["max_members"] or 4), 1)
+            base.update(team_name=str(team["team_name"] or ""), leader_id=str(team["leader"] or ""), member_count=len(members), max_members=maximum, expires_at=float(invite["expires_at"]), version=int(team["version"] or 0))
+            if len(members) >= maximum: return self._finish(uow, operation_id, "join", payload, TeamMutationResult("team_full", **base))
+            if self._active_session(uow, user_id) or any(self._active_session(uow, member) for member in members): return self._finish(uow, operation_id, "join", payload, TeamMutationResult("session_active", **base))
+            members.append(user_id)
+            changed = uow.execute("UPDATE teams SET members=?,version=version+1 WHERE user_id=? AND version=?", (json.dumps(members), team_id, int(team["version"] or 0)))
+            if changed.rowcount != 1: return TeamMutationResult("state_changed", **base)
+            uow.execute("INSERT INTO team_cd(user_id,join_cd_until,had_first_join) VALUES(?,?,1) ON CONFLICT(user_id) DO UPDATE SET had_first_join=1", (user_id, ""))
+            uow.execute("UPDATE dungeon_team_invites SET consumed_at=CURRENT_TIMESTAMP,status='joined',resolved_operation_id=? WHERE invite_id=? AND status='pending'", (operation_id, invite_id))
+            base["member_count"] = len(members)
+            base["version"] = int(team["version"] or 0) + 1
+            return self._finish(uow, operation_id, "join", payload, TeamMutationResult("applied", **base))
+
     def pending_invite(self, user_id: str, now_timestamp: float) -> TeamInviteSnapshot | None:
         with DatabaseUnitOfWork(self.database) as uow:
             self.ensure_schema(uow)

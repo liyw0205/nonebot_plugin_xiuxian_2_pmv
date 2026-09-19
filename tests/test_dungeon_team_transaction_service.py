@@ -50,6 +50,22 @@ class DungeonTeamTransactionServiceTests(unittest.TestCase):
             invited = application.invite("invite-feature", "invite-1", "team-1", "leader", "member", "100", 160, 100)
             self.assertEqual((created.status, invited.status), ("applied", "applied"))
 
+    def test_feature_team_application_owns_join(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "player.sqlite3"
+            with db_backend.transaction(database) as conn:
+                conn.execute("CREATE TABLE user_xiuxian (user_id TEXT PRIMARY KEY)")
+                conn.executemany("INSERT INTO user_xiuxian VALUES (%s)", (("leader",), ("member",)))
+                conn.execute("CREATE TABLE player_dungeon_status (user_id TEXT PRIMARY KEY,dungeon_status TEXT)")
+                conn.executemany("INSERT INTO player_dungeon_status VALUES (%s,%s)", (("leader", "not_started"), ("member", "not_started")))
+            with DatabaseUnitOfWork(database) as uow:
+                apply_dungeon_team(uow)
+            application = DungeonTeamApplication(database)
+            application.create("create-feature", "team-1", "试炼队", "leader", "100", "now", 100)
+            application.invite("invite-feature", "invite-1", "team-1", "leader", "member", "100", 160, 100)
+            joined = application.join("join-feature", "invite-1", "team-1", "leader", "member", "100", 101)
+            self.assertEqual(joined.status, "applied")
+
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "player.sqlite3"

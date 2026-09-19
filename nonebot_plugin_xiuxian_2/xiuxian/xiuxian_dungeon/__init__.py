@@ -458,13 +458,13 @@ async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
 
     user_id = str(user_info['user_id'])
     operation_id = _team_operation_id(event, "join", user_id)
-    replay = _dungeon_team_transaction_service().operation_result(operation_id, "join")
+    replay = dungeon_team_application.operation_result(operation_id, "join")
     if replay is not None:
         await handle_send(bot, event, _team_mutation_message("join", replay), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
         await agree_team_cmd.finish()
 
     now = runtime_clock.now().timestamp()
-    invite = _dungeon_team_transaction_service().pending_invite(user_id, now)
+    invite = dungeon_team_application.pending_invite(user_id, now)
     invite_id = invite.invite_id if invite else ""
     team_id = invite.team_id if invite else ""
     inviter_id = invite.inviter_id if invite else ""
@@ -472,7 +472,7 @@ async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
     request_group_id = (
         str(event.group_id) if isinstance(event, GroupMessageEvent) else invite_group_id
     )
-    join_result = _dungeon_team_transaction_service().join(
+    join_result = dungeon_team_application.join(
         operation_id,
         invite_id,
         team_id,

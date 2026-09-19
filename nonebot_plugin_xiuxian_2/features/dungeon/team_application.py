@@ -16,6 +16,9 @@ class DungeonTeamApplication:
     def invite(self, operation_id: str, invite_id: str, team_id: str, inviter_id: str, invitee_id: str, group_id: str, expires_at: float, now_timestamp: float) -> TeamMutationResult:
         return self.repository.invite(operation_id, invite_id, team_id, inviter_id, invitee_id, group_id, expires_at, now_timestamp)
 
+    def join(self, operation_id: str, invite_id: str, team_id: str, inviter_id: str, user_id: str, group_id: str, now_timestamp: float) -> TeamMutationResult:
+        return self.repository.join(operation_id, invite_id, team_id, inviter_id, user_id, group_id, now_timestamp)
+
     def operation_result(self, operation_id: str, action: str = "") -> TeamMutationResult | None:
         return self.repository.operation_result(operation_id, action)
 
