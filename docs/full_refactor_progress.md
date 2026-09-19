@@ -2571,6 +2571,8 @@
 
 2026-09-20 map interactive/resource cutover verification：生产地图交互启动/结算与资源奖励路径已由 `MapApplication`/feature SQL repositories承载，legacy mutation calls不再出现在生产 handler；保留 game-db `map_interactive_start_operations`、`map_resource_reward_operations`与 player-db `map_interactive_actions`边界、operation replay/conflict、daily/stamina/cooldown、interactive settlement和resource rollback语义。新增 migration routing contract确认 `map.004`/`.006`只在 game_db、`map.005`只在 player_db；map resource/interactive/platform/source/architecture/progress regression 212 passed，compileall、inventory、progress、CLI和diff check通过。Progress map字段为 `interactive_application_owned=true`、`resource_application_owned=true`、`legacy_interactive_disabled=true`、`legacy_resource_disabled=true`。
 
+2026-09-20 map interactive/resource full verification：四个不重叠全量分片合计 `2377 passed, 25 subtests passed`（16条既有 compatibility DeprecationWarning）；verified batch结果为 `760/8`、`488/4`、`565/4`、`564/9`，所有精确 `/tmp` basetemp已清理。最终 compileall、diff、inventory、progress、CLI和 migration routing均通过；`map.004`/`.006`保持 game_db-only，`map.005`保持 player_db-only。
+
 2026-09-19 utils storage lazy construction live safety：提交 `0f84c726` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T171820Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
 
 ## 6. 下一步
