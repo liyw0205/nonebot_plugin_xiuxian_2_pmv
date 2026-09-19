@@ -17,8 +17,8 @@ class WorkDailyRefreshResetApplication:
         repository: WorkDailyRefreshResetRepository | None = None,
         clock: Any | None = None,
     ) -> None:
-        self.repository = repository or WorkDailyRefreshResetRepository(database)
         self.clock = clock or SystemClock()
+        self.repository = repository or WorkDailyRefreshResetRepository(database, clock=self.clock)
 
     def reset(self, business_date: Any, reset_count: int, *, chunk_size: int = 500, updated_at: str | None = None) -> WorkDailyRefreshResetResult:
         stamp = updated_at or self.clock.now().strftime("%Y-%m-%d %H:%M:%S")

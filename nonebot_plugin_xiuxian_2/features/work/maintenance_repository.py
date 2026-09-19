@@ -24,8 +24,9 @@ class WorkDailyRefreshResetResult:
 
 
 class WorkDailyRefreshResetRepository:
-    def __init__(self, database: str | Path) -> None:
+    def __init__(self, database: str | Path, *, clock: Any | None = None) -> None:
         self.database = str(database)
+        self.clock = clock
 
     @staticmethod
     def _date(value: Any) -> str:
@@ -59,7 +60,11 @@ class WorkDailyRefreshResetRepository:
     ) -> WorkDailyRefreshResetResult:
         business_date = self._date(business_date)
         reset_count, chunk_size = int(reset_count), max(1, int(chunk_size))
-        updated_at = str(updated_at or datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        if updated_at is None:
+            if self.clock is None:
+                raise ValueError("updated_at or clock is required")
+            updated_at = self.clock.now().strftime("%Y-%m-%d %H:%M:%S")
+        updated_at = str(updated_at)
         if reset_count < 0:
             raise ValueError("reset count must not be negative")
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
