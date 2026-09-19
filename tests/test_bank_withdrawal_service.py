@@ -13,6 +13,15 @@ from tests.test_db_backend import db_backend
 
 
 class BankWithdrawalServiceTests(unittest.TestCase):
+    def test_bank_facade_defaults_withdrawal_to_feature_application(self) -> None:
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_bank
+
+        source = Path(xiuxian_bank.__file__).read_text(encoding="utf-8")
+        start = source.index("elif mode == '取灵石'")
+        handler = source[start:source.index("elif mode == '升级会员'", start)]
+        self.assertIn("BankWithdrawalApplication", handler)
+        self.assertNotIn("bank_application.withdraw(", handler)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         root = Path(self.temp_dir.name)

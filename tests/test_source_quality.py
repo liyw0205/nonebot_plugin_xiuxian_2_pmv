@@ -1836,7 +1836,8 @@ class SourceQualityTests(unittest.TestCase):
         source = (bank_root / "__init__.py").read_text(encoding="utf-8")
         start = source.index("elif mode == '取灵石'")
         handler = source[start:source.index("elif mode == '升级会员'", start)]
-        self.assertIn("bank_withdrawal_service.withdraw(", handler)
+        self.assertIn("BankWithdrawalApplication", handler)
+        self.assertNotIn("bank_application.withdraw(", handler)
         self.assertNotIn("sql_message.update_ls(", handler)
         self.assertNotIn("savef(user_id, bankinfo)", handler)
         for status in ("saved_stone_insufficient", "state_changed", "user_missing"):

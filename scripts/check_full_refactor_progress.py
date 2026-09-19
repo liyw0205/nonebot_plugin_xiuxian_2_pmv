@@ -115,8 +115,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
         },
         "bank": {
             "deposit_application_owned": "BankDepositApplication" in bank_facade and "bank_application.deposit(" not in bank_facade,
+            "withdrawal_application_owned": "BankWithdrawalApplication" in bank_facade and "bank_application.withdraw(" not in bank_facade,
             "legacy_deposit_disabled": "bank_deposit_service.deposit(" not in bank_facade,
-            "status": "deposit_cutover_with_legacy_withdraw_upgrade_interest_compatibility",
+            "legacy_withdrawal_disabled": "bank_withdrawal_service.withdraw(" not in bank_facade,
+            "status": "deposit_withdrawal_cutover_with_legacy_upgrade_interest_compatibility",
         },
     }
 
