@@ -496,15 +496,15 @@ async def reject_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
     user_id = str(user_info['user_id'])
     operation_id = _team_operation_id(event, "reject", user_id)
-    replay = _dungeon_team_transaction_service().operation_result(operation_id, "reject")
+    replay = dungeon_team_application.operation_result(operation_id, "reject")
     if replay is not None:
         await handle_send(bot, event, _team_mutation_message("reject", replay), md_type="team", k1="队伍帮助", v1="队伍帮助")
         await reject_team_cmd.finish()
 
     now = runtime_clock.now().timestamp()
-    invite = _dungeon_team_transaction_service().pending_invite(user_id, now)
+    invite = dungeon_team_application.pending_invite(user_id, now)
     group_id = str(event.group_id) if isinstance(event, GroupMessageEvent) else ""
-    result = _dungeon_team_transaction_service().reject(
+    result = dungeon_team_application.reject(
         operation_id,
         invite.invite_id if invite else "",
         user_id,

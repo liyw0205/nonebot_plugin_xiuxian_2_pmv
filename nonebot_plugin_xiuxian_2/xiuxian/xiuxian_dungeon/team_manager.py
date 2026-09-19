@@ -199,7 +199,8 @@ async def expire_team_invite(user_id: str, invite_id: str, bot: Bot, event):
     invite = service.invite_by_id(invite_id)
     if invite is None or invite.invitee_id != str(user_id):
         return
-    result = service.expire(
+    from ...features.dungeon.team_application import DungeonTeamApplication
+    result = DungeonTeamApplication(get_paths().player_db).expire(
         f"dungeon-team-expire:{invite_id}", invite_id, time.time()
     )
     if result.status == "applied":

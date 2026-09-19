@@ -1132,7 +1132,7 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("_dungeon_team_exit_service().exit_operation_result(", source)
         self.assertIn("dungeon_team_application.pending_invite(", source)
         self.assertIn("dungeon_team_application.join(", source)
-        self.assertIn("_dungeon_team_transaction_service().reject(", source)
+        self.assertIn("dungeon_team_application.reject(", source)
         self.assertIn("_dungeon_team_transaction_service().transfer(", source)
         self.assertIn("_dungeon_team_transaction_service_instance = None", source)
         self.assertIn("def _dungeon_team_transaction_service(", source)

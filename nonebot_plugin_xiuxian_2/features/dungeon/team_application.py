@@ -19,6 +19,12 @@ class DungeonTeamApplication:
     def join(self, operation_id: str, invite_id: str, team_id: str, inviter_id: str, user_id: str, group_id: str, now_timestamp: float) -> TeamMutationResult:
         return self.repository.join(operation_id, invite_id, team_id, inviter_id, user_id, group_id, now_timestamp)
 
+    def reject(self, operation_id: str, invite_id: str, user_id: str, group_id: str = "", now_timestamp: float = 0) -> TeamMutationResult:
+        return self.repository.reject(operation_id, invite_id, user_id, group_id, now_timestamp)
+
+    def expire(self, operation_id: str, invite_id: str, now_timestamp: float) -> TeamMutationResult:
+        return self.repository.expire(operation_id, invite_id, now_timestamp)
+
     def operation_result(self, operation_id: str, action: str = "") -> TeamMutationResult | None:
         return self.repository.operation_result(operation_id, action)
 

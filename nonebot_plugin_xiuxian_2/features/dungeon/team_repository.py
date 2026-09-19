@@ -189,6 +189,30 @@ class DungeonTeamRepository:
             base["version"] = int(team["version"] or 0) + 1
             return self._finish(uow, operation_id, "join", payload, TeamMutationResult("applied", **base))
 
+    def _resolve_invite(self, action: str, operation_id: str, invite_id: str, user_id: str, group_id: str, now_timestamp: float) -> TeamMutationResult:
+        payload = self._json({"action":action,"invite_id":invite_id,"user_id":user_id,"group_id":group_id})
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            self.ensure_schema(uow)
+            old = uow.query_one("SELECT payload,result_status,team_id,result_json FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
+            if old is not None: return self._decode_mutation(old) if old["payload"] == payload else TeamMutationResult("state_changed", team_id=str(old["team_id"]))
+            invite = uow.query_one("SELECT team_id,inviter_id,invitee_id,group_id,expires_at,status FROM dungeon_team_invites WHERE invite_id=?", (invite_id,))
+            base = dict(invite_id=invite_id, target_id=user_id)
+            if invite is None or (action != "expire" and str(invite["invitee_id"]) != user_id): return self._finish(uow, operation_id, action, payload, TeamMutationResult("invite_invalid", **base))
+            base.update(team_id=str(invite["team_id"]), leader_id=str(invite["inviter_id"]), group_id=str(invite["group_id"]), expires_at=float(invite["expires_at"]))
+            if group_id and str(invite["group_id"]) != str(group_id): return self._finish(uow, operation_id, action, payload, TeamMutationResult("wrong_group", **base))
+            if str(invite["status"]) != "pending": return self._finish(uow, operation_id, action, payload, TeamMutationResult("invite_invalid", **base))
+            if action == "expire" and float(now_timestamp) < float(invite["expires_at"]): return self._finish(uow, operation_id, action, payload, TeamMutationResult("not_expired", **base))
+            status = "expired" if action == "expire" else "rejected"
+            changed = uow.execute("UPDATE dungeon_team_invites SET status=?,consumed_at=CURRENT_TIMESTAMP,resolved_operation_id=? WHERE invite_id=? AND status='pending'", (status, operation_id, invite_id))
+            if changed.rowcount != 1: return TeamMutationResult("state_changed", **base)
+            return self._finish(uow, operation_id, action, payload, TeamMutationResult("applied", **base))
+
+    def reject(self, operation_id: str, invite_id: str, user_id: str, group_id: str = "", now_timestamp: float = 0) -> TeamMutationResult:
+        return self._resolve_invite("reject", operation_id, invite_id, user_id, group_id, now_timestamp)
+
+    def expire(self, operation_id: str, invite_id: str, now_timestamp: float) -> TeamMutationResult:
+        return self._resolve_invite("expire", operation_id, invite_id, "", "", now_timestamp)
+
     def pending_invite(self, user_id: str, now_timestamp: float) -> TeamInviteSnapshot | None:
         with DatabaseUnitOfWork(self.database) as uow:
             self.ensure_schema(uow)
