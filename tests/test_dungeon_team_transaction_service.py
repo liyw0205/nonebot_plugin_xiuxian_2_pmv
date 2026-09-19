@@ -84,6 +84,24 @@ class DungeonTeamTransactionServiceTests(unittest.TestCase):
             expired = application.expire("expire-feature", "invite-expire", 160)
             self.assertEqual((rejected.status, expired.status), ("applied", "applied"))
 
+    def test_feature_team_application_owns_snapshot_transfer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "player.sqlite3"
+            with db_backend.transaction(database) as conn:
+                conn.execute("CREATE TABLE user_xiuxian (user_id TEXT PRIMARY KEY)")
+                conn.executemany("INSERT INTO user_xiuxian VALUES (%s)", (("leader",), ("member",)))
+                conn.execute("CREATE TABLE player_dungeon_status (user_id TEXT PRIMARY KEY,dungeon_status TEXT)")
+                conn.executemany("INSERT INTO player_dungeon_status VALUES (%s,%s)", (("leader", "not_started"), ("member", "not_started")))
+            with DatabaseUnitOfWork(database) as uow:
+                apply_dungeon_team(uow)
+            application = DungeonTeamApplication(database)
+            application.create("create-feature", "team-1", "试炼队", "leader", "100", "now", 100)
+            application.invite("invite-feature", "invite-1", "team-1", "leader", "member", "100", 160, 100)
+            application.join("join-feature", "invite-1", "team-1", "leader", "member", "100", 101)
+            snapshot = application.snapshot("team-1")
+            transferred = application.transfer("transfer-feature", "leader", "member", snapshot)
+            self.assertEqual(transferred.status, "applied")
+
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "player.sqlite3"

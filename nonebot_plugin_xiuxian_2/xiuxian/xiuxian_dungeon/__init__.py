@@ -654,7 +654,7 @@ async def transfer_team_handler(bot: Bot, event: Union[GroupMessageEvent, Privat
 
     user_id = str(user_info['user_id'])
     operation_id = _team_operation_id(event, "transfer", user_id)
-    replay = _dungeon_team_transaction_service().operation_result(
+    replay = dungeon_team_application.operation_result(
         operation_id, "transfer"
     )
     if replay is not None:
@@ -669,8 +669,8 @@ async def transfer_team_handler(bot: Bot, event: Union[GroupMessageEvent, Privat
             target_user_id = str(target_db_info['user_id'])
     target_user_id = str(target_user_id or "")
     team_id = get_user_team(user_id) or f"missing:{user_id}"
-    snapshot = _dungeon_team_transaction_service().snapshot(team_id)
-    result = _dungeon_team_transaction_service().transfer(
+    snapshot = dungeon_team_application.snapshot(team_id)
+    result = dungeon_team_application.transfer(
         operation_id,
         user_id,
         target_user_id,

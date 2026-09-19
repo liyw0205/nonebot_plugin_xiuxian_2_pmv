@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .team_repository import DungeonTeamRepository, TeamInviteSnapshot, TeamMutationResult
+from .team_repository import DungeonTeamRepository, TeamInviteSnapshot, TeamMutationResult, TeamStateSnapshot
 
 
 class DungeonTeamApplication:
@@ -24,6 +24,12 @@ class DungeonTeamApplication:
 
     def expire(self, operation_id: str, invite_id: str, now_timestamp: float) -> TeamMutationResult:
         return self.repository.expire(operation_id, invite_id, now_timestamp)
+
+    def snapshot(self, team_id: str) -> TeamStateSnapshot | None:
+        return self.repository.snapshot(team_id)
+
+    def transfer(self, operation_id: str, actor_id: str, target_id: str, expected: TeamStateSnapshot | None) -> TeamMutationResult:
+        return self.repository.transfer(operation_id, actor_id, target_id, expected)
 
     def operation_result(self, operation_id: str, action: str = "") -> TeamMutationResult | None:
         return self.repository.operation_result(operation_id, action)

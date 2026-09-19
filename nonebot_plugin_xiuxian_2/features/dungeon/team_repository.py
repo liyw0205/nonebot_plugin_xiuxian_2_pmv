@@ -38,6 +38,15 @@ class TeamInviteSnapshot:
     status: str = "pending"
 
 
+@dataclass(frozen=True)
+class TeamStateSnapshot:
+    team_id: str
+    team_name: str
+    leader_id: str
+    members: tuple[str, ...]
+    version: int = 0
+
+
 class DungeonTeamRepository:
     def __init__(self, database: str | Path) -> None:
         self.database = str(database)
@@ -137,6 +146,36 @@ class DungeonTeamRepository:
             return TeamMutationResult("state_changed", team_id=str(row["team_id"]))
         result = self._decode_mutation(row)
         return TeamMutationResult(**{**result.__dict__, "status": "duplicate" if result.status == "applied" else result.status})
+
+    def snapshot(self, team_id: str) -> TeamStateSnapshot | None:
+        with DatabaseUnitOfWork(self.database) as uow:
+            self.ensure_schema(uow)
+            row = uow.query_one("SELECT team_name,leader,members,version FROM teams WHERE user_id=?", (str(team_id),))
+        if row is None:
+            return None
+        return TeamStateSnapshot(str(team_id), str(row["team_name"] or ""), str(row["leader"] or ""), tuple(self._members(row["members"])), int(row["version"] or 0))
+
+    def transfer(self, operation_id: str, actor_id: str, target_id: str, expected: TeamStateSnapshot | None) -> TeamMutationResult:
+        if expected is None:
+            return TeamMutationResult("team_missing", target_id=str(target_id))
+        payload = self._json({"action":"transfer","team_id":expected.team_id,"actor_id":str(actor_id),"target_id":str(target_id)})
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            self.ensure_schema(uow)
+            old = uow.query_one("SELECT payload,result_status,team_id,result_json FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
+            if old is not None: return self._decode_mutation(old) if old["payload"] == payload else TeamMutationResult("state_changed", team_id=str(old["team_id"]))
+            row = uow.query_one("SELECT team_name,leader,members,version FROM teams WHERE user_id=?", (expected.team_id,))
+            base = dict(team_id=expected.team_id, team_name=expected.team_name, leader_id=expected.leader_id, member_count=len(expected.members), target_id=str(target_id), version=expected.version)
+            if row is None: return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("team_missing", **base))
+            current = TeamStateSnapshot(expected.team_id, str(row["team_name"] or ""), str(row["leader"] or ""), tuple(self._members(row["members"])), int(row["version"] or 0))
+            if current != expected: return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("state_changed", **base))
+            if actor_id != current.leader_id: return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("actor_not_leader", **base))
+            if target_id == actor_id: return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("self_target", **base))
+            if target_id not in current.members: return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("target_not_member", **base))
+            if any(self._active_session(uow, member) for member in current.members): return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("session_active", **base))
+            changed = uow.execute("UPDATE teams SET leader=?,version=version+1 WHERE user_id=? AND version=?", (target_id, current.team_id, current.version))
+            if changed.rowcount != 1: return TeamMutationResult("state_changed", **base)
+            base.update(leader_id=str(target_id), version=current.version + 1)
+            return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("applied", **base))
 
     def invite(self, operation_id: str, invite_id: str, team_id: str, inviter_id: str, invitee_id: str, group_id: str, expires_at: float, now_timestamp: float) -> TeamMutationResult:
         payload = self._json({"action":"invite","invite_id":invite_id,"team_id":team_id,"inviter_id":inviter_id,"invitee_id":invitee_id,"group_id":group_id})
