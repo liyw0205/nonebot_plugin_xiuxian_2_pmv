@@ -41,6 +41,7 @@ from ..xiuxian_buff import use_two_exp_token
 from ..xiuxian_arena import use_arena_challenge_ticket
 
 from ..xiuxian_config import XiuConfig, convert_rank, added_ranks
+from ...features.back.application import BackApplication
 from ...paths import get_paths
 from ...infrastructure.ids import UUIDGenerator
 from ..xiuxian_utils.pet_system import (
@@ -98,6 +99,7 @@ _alchemy_service_instance = None
 _skill_learning_service_instance = None
 _batch_item_use_service_instance = None
 _backpack_repair_service_instance = None
+back_application = BackApplication(get_paths().game_db, get_paths().player_db)
 runtime_ids = UUIDGenerator()
 
 
@@ -2467,17 +2469,20 @@ async def check_user_back_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         if isinstance(item_info, dict) and item_info.get("name")
     }
     operation_id = _backpack_repair_operation_id(event)
-    result = _backpack_repair_service().run(
-        operation_id,
-        catalog,
-        int(XiuConfig().max_goods_num),
+    result_outcome = back_application.repair(
+        operation_id=operation_id,
+        user_id="system",
+        catalog=catalog,
+        max_goods_num=int(XiuConfig().max_goods_num),
         batch_size=100,
     )
+    result = result_outcome.data
     while result.succeeded and not result.done:
-        result = _backpack_repair_service().run(
-            result.operation_id,
+        result = back_application.repair(
+            operation_id=result.operation_id,
+            user_id="system",
             batch_size=100,
-        )
+        ).data
 
     if not result.succeeded:
         messages = {

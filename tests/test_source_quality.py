@@ -1832,6 +1832,13 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("bank_deposit_operations", service)
 
+    def test_backpack_repair_uses_feature_application(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_back" / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("async def check_user_back_")
+        handler = source[start:]
+        self.assertIn("back_application.repair(", handler)
+        self.assertNotIn("_backpack_repair_service().run(", handler)
+
     def test_bank_withdrawal_uses_cross_database_transaction(self) -> None:
         bank_root = SOURCE_ROOT / "xiuxian" / "xiuxian_bank"
         source = (bank_root / "__init__.py").read_text(encoding="utf-8")

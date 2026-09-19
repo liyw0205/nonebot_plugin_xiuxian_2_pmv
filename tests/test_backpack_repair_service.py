@@ -218,7 +218,8 @@ class BackpackRepairServiceTests(unittest.TestCase):
             "@compare_items.handle", 1
         )[0]
 
-        self.assertIn("_backpack_repair_service().run(", handler)
+        self.assertIn("back_application.repair(", handler)
+        self.assertNotIn("_backpack_repair_service().run(", handler)
         self.assertNotIn("check_and_adjust_goods_quantity(", handler)
         self.assertNotIn("sql_message.send_back(", handler)
         self.assertNotIn("sql_message.update_back_equipment(", handler)

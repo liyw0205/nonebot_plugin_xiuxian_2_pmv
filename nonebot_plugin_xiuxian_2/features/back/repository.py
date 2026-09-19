@@ -31,6 +31,8 @@ class LegacyBackRepository:
             "accessory_package": (AccessoryPackageService, "apply"),
             "accessory": (AccessoryTransactionService, "upgrade"),
         }
+        if action == "repair":
+            return BackpackRepairService(self.database).run(operation_id, **kwargs)
         cls, method = mapping[action]
         service = cls(self.database, self.player_database) if cls in {BatchItemUseService, AccessoryPackageService, AccessoryTransactionService} else cls(self.database)
         return getattr(service, method)(operation_id, user_id, **kwargs)
