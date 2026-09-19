@@ -178,7 +178,7 @@ class DungeonMemberLeaveTests(unittest.TestCase):
         end = source.index("@kick_team_cmd.handle", start)
         handler = source[start:end]
 
-        self.assertIn("_dungeon_team_exit_service().leave(", handler)
+        self.assertIn("dungeon_team_application.leave(", handler)
         self.assertNotIn("remove_member_from_team(", handler)
         self.assertNotIn("set_team_cd(", handler)
 
