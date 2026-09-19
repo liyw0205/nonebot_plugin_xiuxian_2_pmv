@@ -35,7 +35,7 @@ from ...infrastructure.random_source import SystemRandom
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from ...features.world_events.application import DemonClaimApplication
-from ...features.world_events.repository import LegacyWorldEventClaimRepository
+from ...features.world_events.repository import WorldEventClaimSqlRepository
 from .transaction_service import DemonAttackSettlementService
 from .transaction_service import DemonClaimService
 from .transaction_service import DemonEventLifecycleService
@@ -51,7 +51,7 @@ _demon_claim_service_instance = None
 demon_claim_application = DemonClaimApplication(
     get_paths().game_db,
     get_paths().player_db,
-    repository=LegacyWorldEventClaimRepository(get_paths().game_db, get_paths().player_db),
+    repository=WorldEventClaimSqlRepository(get_paths().game_db, get_paths().player_db),
 )
 
 

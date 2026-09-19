@@ -9,7 +9,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import DemonClaimRequest, normalize_items
-from .repository import LegacyWorldEventClaimRepository, WorldEventClaimRepository
+from .repository import WorldEventClaimRepository, WorldEventClaimSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -76,7 +76,7 @@ class DemonClaimApplication:
                             return previous.replay()
                         raise ConflictError("操作正在处理中")
 
-                repository = self.repository or LegacyWorldEventClaimRepository(self.game_database, self.player_database)
+                repository = self.repository or WorldEventClaimSqlRepository(self.game_database, self.player_database)
                 raw = repository.claim(
                     request.operation_id,
                     request.event_key,
