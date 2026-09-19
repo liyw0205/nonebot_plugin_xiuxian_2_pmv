@@ -76,4 +76,37 @@ def apply_arena_daily_reward_player(uow: DatabaseUnitOfWork) -> None:
             uow.execute(f'ALTER TABLE arena ADD COLUMN "{name}" {definition}')
 
 
-__all__ = ["apply_arena", "apply_arena_challenge_purchase", "apply_arena_challenge_ticket", "apply_arena_daily_reward_player", "apply_arena_purchase", "apply_arena_season_reward", "apply_arena_settlement", "apply_arena_weekly_rank_reduction"]
+def apply_arena_state(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS arena ("
+        "user_id TEXT PRIMARY KEY,score INTEGER DEFAULT 1000,total_wins INTEGER DEFAULT 0,"
+        "total_losses INTEGER DEFAULT 0,daily_challenges_used INTEGER DEFAULT 0,"
+        "daily_extra_challenges INTEGER DEFAULT 0,daily_challenge_buys INTEGER DEFAULT 0,"
+        "last_reset_date TEXT DEFAULT '',last_buy_date TEXT DEFAULT '',"
+        "last_challenge_time TEXT DEFAULT '',win_streak INTEGER DEFAULT 0,"
+        "max_win_streak INTEGER DEFAULT 0,rank TEXT DEFAULT '青铜',honor_points INTEGER DEFAULT 0,"
+        "total_honor_earned INTEGER DEFAULT 0,weekly_purchases TEXT DEFAULT NULL)"
+    )
+    columns = {str(row[1]) for row in uow.execute("PRAGMA table_info(arena)").fetchall()}
+    definitions = {
+        "score": "INTEGER DEFAULT 1000", "total_wins": "INTEGER DEFAULT 0",
+        "total_losses": "INTEGER DEFAULT 0", "daily_challenges_used": "INTEGER DEFAULT 0",
+        "daily_extra_challenges": "INTEGER DEFAULT 0", "daily_challenge_buys": "INTEGER DEFAULT 0",
+        "last_reset_date": "TEXT DEFAULT ''", "last_buy_date": "TEXT DEFAULT ''",
+        "last_challenge_time": "TEXT DEFAULT ''", "win_streak": "INTEGER DEFAULT 0",
+        "max_win_streak": "INTEGER DEFAULT 0", "rank": "TEXT DEFAULT '青铜'",
+        "honor_points": "INTEGER DEFAULT 0", "total_honor_earned": "INTEGER DEFAULT 0",
+        "weekly_purchases": "TEXT DEFAULT NULL",
+    }
+    for name, definition in definitions.items():
+        if name not in columns:
+            uow.execute(f'ALTER TABLE arena ADD COLUMN "{name}" {definition}')
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS arena_state_operations ("
+        "operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,kind TEXT NOT NULL,"
+        "period_key TEXT NOT NULL,snapshot TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+__all__ = ["apply_arena", "apply_arena_challenge_purchase", "apply_arena_challenge_ticket", "apply_arena_daily_reward_player", "apply_arena_purchase", "apply_arena_season_reward", "apply_arena_settlement", "apply_arena_state", "apply_arena_weekly_rank_reduction"]

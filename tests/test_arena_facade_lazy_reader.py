@@ -14,8 +14,12 @@ class ArenaFacadeLazyReaderTests(unittest.TestCase):
         self.assertIn("_player_data_manager().get_all_field_data(", facade)
 
         self.assertIn("_player_data_manager_instance = None", limit)
-        self.assertIn("_state_service_instance = None", limit)
-        self.assertIn("def _state_service(", limit)
+        self.assertIn("_state_application_instance = None", limit)
+        self.assertIn("def _state_application(", limit)
+        self.assertIn("ArenaStateApplication(", limit)
+        self.assertIn("get_paths().player_db", limit)
+        self.assertIn("lock=self._player_data_manager().lock", limit)
+        self.assertNotIn("ArenaStateService", limit)
         self.assertNotIn("player_data_manager = PlayerDataManager()", limit)
         self.assertNotIn("player_data_manager.lock", limit)
 

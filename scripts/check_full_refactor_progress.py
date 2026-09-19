@@ -53,6 +53,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sign_effects = (PACKAGE / "features" / "sign_in" / "application_effects.py").read_text(encoding="utf-8")
     plugin = (PACKAGE / "plugin.py").read_text(encoding="utf-8")
     arena = (PACKAGE / "xiuxian" / "xiuxian_arena" / "__init__.py").read_text(encoding="utf-8")
+    arena_limit = (PACKAGE / "xiuxian" / "xiuxian_arena" / "arena_limit.py").read_text(encoding="utf-8")
     return {
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,
@@ -73,11 +74,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "cutover_with_compatibility_rollback_side_effects_retained",
         },
         "arena": {
+            "state_application_owned": "ArenaStateApplication" in arena_limit,
+            "legacy_state_owner_disabled": "ArenaStateService" not in arena_limit,
             "weekly_rank_application_owned": "arena_weekly_rank_application.reduce(" in arena,
             "legacy_scheduler_disabled": "ArenaWeeklyRankReductionService" not in arena and "_arena_weekly_rank_reduction_service" not in arena,
             "daily_reward_application_owned": "arena_season_reward_application.reset_daily()" in arena,
             "legacy_daily_reward_disabled": "ArenaSeasonRewardService" not in arena and "_arena_season_reward_service" not in arena,
-            "status": "weekly_rank_and_daily_reward_cutover_with_legacy_service_retained_for_compatibility",
+            "status": "state_weekly_rank_and_daily_reward_cutover_with_legacy_service_retained_for_compatibility",
         },
     }
 

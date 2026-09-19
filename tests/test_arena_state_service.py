@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import nonebot
@@ -9,10 +9,10 @@ import pytest
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_arena.transaction_service import (
-    ARENA_FIELDS,
-    ArenaStateService,
-)
+from nonebot_plugin_xiuxian_2.features.arena.migrations import apply_arena_state
+from nonebot_plugin_xiuxian_2.features.arena.state_application import ArenaStateApplication
+from nonebot_plugin_xiuxian_2.features.arena.state_repository import ARENA_FIELDS
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
 
@@ -22,6 +22,23 @@ def _operations(database: Path):
             "SELECT operation_id,kind,period_key,snapshot "
             "FROM arena_state_operations ORDER BY operation_id"
         ).fetchall()
+
+
+class FixedClock:
+    def __init__(self, today: date) -> None:
+        self._today = today
+
+    def now(self):
+        return datetime.combine(self._today, datetime.min.time(), tzinfo=timezone.utc)
+
+
+def _migrate(database: Path) -> None:
+    with DatabaseUnitOfWork(database) as uow:
+        apply_arena_state(uow)
+
+
+def _get(database: Path, today: date) -> dict:
+    return ArenaStateApplication(database, clock=FixedClock(today)).get("user")
 
 
 def _default_state(day="2026-07-14"):
@@ -46,10 +63,10 @@ def _default_state(day="2026-07-14"):
 
 def test_missing_user_is_initialized_once_with_all_fields(tmp_path):
     database = tmp_path / "player.db"
-    service = ArenaStateService(database)
+    _migrate(database)
 
-    state = service.get("user", date(2026, 7, 14))
-    duplicate = service.get("user", date(2026, 7, 14))
+    state = _get(database, date(2026, 7, 14))
+    duplicate = _get(database, date(2026, 7, 14))
 
     assert state == duplicate == _default_state()
     with db_backend.connection(database) as conn:
@@ -70,8 +87,8 @@ def test_missing_user_is_initialized_once_with_all_fields(tmp_path):
 
 def test_new_day_resets_only_purchase_allowance(tmp_path):
     database = tmp_path / "player.db"
-    service = ArenaStateService(database)
-    service.get("user", date(2026, 7, 13))
+    _migrate(database)
+    _get(database, date(2026, 7, 13))
     with db_backend.transaction(database) as conn:
         conn.execute(
             "UPDATE arena SET score=1800,total_wins=5,daily_challenges_used=7,"
@@ -84,8 +101,8 @@ def test_new_day_resets_only_purchase_allowance(tmp_path):
             ),
         )
 
-    state = service.get("user", date(2026, 7, 14))
-    duplicate = service.get("user", date(2026, 7, 14))
+    state = _get(database, date(2026, 7, 14))
+    duplicate = _get(database, date(2026, 7, 14))
 
     assert state == duplicate
     assert (
@@ -105,8 +122,8 @@ def test_new_day_resets_only_purchase_allowance(tmp_path):
 
 def test_same_iso_week_across_calendar_year_preserves_purchases(tmp_path):
     database = tmp_path / "player.db"
-    service = ArenaStateService(database)
-    service.get("user", date(2020, 12, 31))
+    _migrate(database)
+    _get(database, date(2020, 12, 31))
     weekly = {"_last_reset": "2020-12-31", "7": 2}
     with db_backend.transaction(database) as conn:
         conn.execute(
@@ -114,7 +131,7 @@ def test_same_iso_week_across_calendar_year_preserves_purchases(tmp_path):
             (json.dumps(weekly), "user"),
         )
 
-    state = service.get("user", date(2021, 1, 1))
+    state = _get(database, date(2021, 1, 1))
 
     assert state["weekly_purchases"] == weekly
     assert not any(row[1] == "week" for row in _operations(database))
@@ -122,8 +139,8 @@ def test_same_iso_week_across_calendar_year_preserves_purchases(tmp_path):
 
 def test_new_iso_week_resets_only_weekly_purchases(tmp_path):
     database = tmp_path / "player.db"
-    service = ArenaStateService(database)
-    service.get("user", date(2020, 12, 31))
+    _migrate(database)
+    _get(database, date(2020, 12, 31))
     with db_backend.transaction(database) as conn:
         conn.execute(
             "UPDATE arena SET score=1900,total_wins=8,honor_points=50,weekly_purchases=%s "
@@ -131,7 +148,7 @@ def test_new_iso_week_resets_only_weekly_purchases(tmp_path):
             (json.dumps({"_last_reset": "2020-12-31", "7": 2}), "user"),
         )
 
-    state = service.get("user", date(2021, 1, 4))
+    state = _get(database, date(2021, 1, 4))
 
     assert (state["score"], state["total_wins"], state["honor_points"]) == (1900, 8, 50)
     assert state["weekly_purchases"] == {"_last_reset": "2021-01-04"}
@@ -146,8 +163,9 @@ def test_partial_and_invalid_state_is_normalized_atomically(tmp_path):
     with db_backend.transaction(database) as conn:
         conn.execute("CREATE TABLE arena(user_id TEXT PRIMARY KEY,score TEXT,rank TEXT)")
         conn.execute("INSERT INTO arena VALUES(%s,%s,%s)", ("user", "bad", None))
+    _migrate(database)
 
-    state = ArenaStateService(database).get("user", date(2026, 7, 14))
+    state = _get(database, date(2026, 7, 14))
 
     assert state == _default_state()
     with db_backend.connection(database) as conn:
@@ -160,30 +178,24 @@ def test_partial_and_invalid_state_is_normalized_atomically(tmp_path):
 
 def test_operation_failure_rolls_back_initialization(tmp_path):
     database = tmp_path / "player.db"
+    _migrate(database)
     with db_backend.transaction(database) as conn:
-        conn.execute(
-            "CREATE TABLE arena_state_operations("
-            "operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,kind TEXT NOT NULL,"
-            "period_key TEXT NOT NULL,snapshot TEXT NOT NULL,created_at TIMESTAMP)"
-        )
         conn.execute(
             "CREATE TRIGGER fail_arena_state BEFORE INSERT ON arena_state_operations "
             "BEGIN SELECT RAISE(ABORT,'failed'); END"
         )
 
     with pytest.raises(db_backend.IntegrityError):
-        ArenaStateService(database).get("user", date(2026, 7, 14))
+        _get(database, date(2026, 7, 14))
 
     with db_backend.connection(database) as conn:
-        assert conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='arena'"
-        ).fetchone() is None
+        assert conn.execute("SELECT 1 FROM arena WHERE user_id=%s", ("user",)).fetchone() is None
 
 
 def test_operation_failure_rolls_back_day_and_week_switch(tmp_path):
     database = tmp_path / "player.db"
-    service = ArenaStateService(database)
-    service.get("user", date(2026, 7, 14))
+    _migrate(database)
+    _get(database, date(2026, 7, 14))
     previous = {"_last_reset": "2026-07-14", "1": 4}
     with db_backend.transaction(database) as conn:
         conn.execute(
@@ -197,7 +209,7 @@ def test_operation_failure_rolls_back_day_and_week_switch(tmp_path):
         )
 
     with pytest.raises(db_backend.IntegrityError):
-        service.get("user", date(2026, 7, 21))
+        _get(database, date(2026, 7, 21))
 
     with db_backend.connection(database) as conn:
         row = conn.execute(
@@ -214,15 +226,16 @@ def test_operation_failure_rolls_back_day_and_week_switch(tmp_path):
 def test_production_facade_has_no_legacy_write_bypass():
     root = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_arena"
     facade = (root / "arena_limit.py").read_text(encoding="utf-8")
-    service = (root / "transaction_service.py").read_text(encoding="utf-8")
+    repository = (Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2/features/arena/state_repository.py").read_text(encoding="utf-8")
     handler = (root / "__init__.py").read_text(encoding="utf-8")
 
-    assert "ArenaStateService(" in facade
+    assert "ArenaStateApplication" in facade
+    assert "ArenaStateService" not in facade
     assert "update_or_write_data" not in facade
     assert "update_arena_data" not in facade
     assert "update_weekly_purchase" not in facade
     assert "buy_challenge_count" not in facade
     assert "reset_daily_challenges" not in facade
-    assert "BEGIN IMMEDIATE" in service
-    assert "arena_state_operations" in service
+    assert "DatabaseUnitOfWork" in repository
+    assert "arena_state_operations" in repository
     assert 'arena_info["last_buy_date"]' in handler
