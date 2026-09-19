@@ -55,6 +55,9 @@ class RefactorProgressTests(unittest.TestCase):
         world_events = slices["world_events"]
         self.assertTrue(world_events["claim_application_owned"])
         self.assertTrue(world_events["legacy_claim_disabled"])
+        rift = slices["rift"]
+        self.assertTrue(rift["entry_application_owned"])
+        self.assertTrue(rift["legacy_entry_disabled"])
 
 
 if __name__ == "__main__":

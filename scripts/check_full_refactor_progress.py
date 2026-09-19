@@ -64,6 +64,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sect_facade = (PACKAGE / "xiuxian" / "xiuxian_sect" / "__init__.py").read_text(encoding="utf-8")
     natal_facade = (PACKAGE / "xiuxian" / "xiuxian_natal_treasure" / "__init__.py").read_text(encoding="utf-8")
     world_events_facade = (PACKAGE / "xiuxian" / "xiuxian_world_events" / "__init__.py").read_text(encoding="utf-8")
+    rift_facade = (PACKAGE / "xiuxian" / "xiuxian_rift" / "__init__.py").read_text(encoding="utf-8")
     return {
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,
@@ -150,6 +151,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "claim_application_owned": "demon_claim_application.claim(" in world_events_facade,
             "legacy_claim_disabled": "_demon_claim_service().claim(" not in world_events_facade,
             "status": "demon_claim_cutover_with_other_world_event_compatibility",
+        },
+        "rift": {
+            "entry_application_owned": "rift_application.enter(" in rift_facade,
+            "legacy_entry_disabled": "_rift_entry_service().enter(" not in rift_facade,
+            "status": "entry_cutover_with_other_rift_compatibility",
         },
     }
 

@@ -37,6 +37,8 @@ from .transaction_service import RiftKeyEventSettlementService
 from .transaction_service import RiftDemonTokenBattleSettlementService
 from .transaction_service import RiftSpeedupService
 from .transaction_service import RiftSettlementService
+from ...features.rift.application import RiftApplication
+from ...features.rift.repository import LegacyRiftRepository
 from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_map import (
     get_player_current_position,
@@ -55,6 +57,11 @@ _rift_key_event_settlement_service_instance = None
 _rift_demon_token_battle_settlement_service_instance = None
 _rift_speedup_service_instance = None
 _rift_settlement_service_instance = None
+rift_application = RiftApplication(
+    get_paths().game_db,
+    get_paths().player_db,
+    repository=LegacyRiftRepository(get_paths().game_db, get_paths().player_db),
+)
 cache_help = {}
 group_rift = {}  # dict
 config = get_rift_config() # 获取秘境配置
@@ -541,12 +548,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_id = user_info['user_id']
     event_id = _event_id(event)
     operation_id = f"rift-entry:{event_id or runtime_ids.new_id()}:{user_id}"
-    if event_id:
-        replay = _rift_entry_service().replay(operation_id, GLOBAL_RIFT_KEY)
-        if replay is not None:
-            _sync_entry_projection(user_id, replay)
-            await handle_send(bot, event, _entry_success_message(replay.rift_data))
-            await explore_rift.finish()
     is_type, msg = check_user_type(user_id, 0)  # 需要无状态的用户
     if not is_type:
         await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="秘境帮助", v3="秘境帮助")
@@ -582,17 +583,24 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             0 if str(user_id) in DRIVER.config.superusers else 6
         )
         try:
-            entry = _rift_entry_service().enter(
-                operation_id,
-                user_id,
-                GLOBAL_RIFT_KEY,
-                rift_data,
-                rift_data["time"],
+            entry_outcome = rift_application.enter(
+                operation_id=operation_id,
+                user_id=user_id,
+                rift_key=GLOBAL_RIFT_KEY,
+                rift_data=rift_data,
+                duration=rift_data["time"],
                 expected_generation_id=current_state.generation_id,
                 expected_revision=current_state.revision,
                 stamina_cost=stamina_cost,
                 expected_stamina=int(user_info.get("user_stamina", 0)),
             )
+            entry_data = entry_outcome.data or {}
+            entry_status = str(entry_data.get("status", entry_outcome.code))
+            entry = type("EntryResult", (), {"succeeded": entry_outcome.ok, "status": entry_status, "rift_data": entry_data.get("rift_data", rift_data)})()
+            if entry_outcome.replayed:
+                _sync_entry_projection(user_id, entry)
+                await handle_send(bot, event, _entry_success_message(entry.rift_data))
+                await explore_rift.finish()
         except Exception as exc:
             logger.opt(exception=exc).error("秘境进入事务执行失败")
             await handle_send(bot, event, "秘境进入失败：请求未生效。")
@@ -634,16 +642,6 @@ async def use_rift_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     user_id = user_info['user_id']
     event_id = _event_id(event)
     operation_id = f"rift-ticket-entry:{event_id or runtime_ids.new_id()}:{user_id}"
-    if event_id:
-        replay = _rift_entry_service().replay(operation_id, GLOBAL_RIFT_KEY)
-        if replay is not None:
-            _sync_entry_projection(user_id, replay)
-            await handle_send(
-                bot,
-                event,
-                _entry_success_message(replay.rift_data, bypass_position=True),
-            )
-            return
     is_type, msg = check_user_type(user_id, 0)  # 需要无状态的用户
     if not is_type:
         await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="秘境帮助", v3="秘境帮助")
@@ -658,16 +656,22 @@ async def use_rift_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 
         rift_data = build_rift_data(current_rift)
         try:
-            entry = _rift_entry_service().enter(
-                operation_id,
-                user_id,
-                GLOBAL_RIFT_KEY,
-                rift_data,
-                rift_data["time"],
-                item_id,
+            entry_outcome = rift_application.enter(
+                operation_id=operation_id,
+                user_id=user_id,
+                rift_key=GLOBAL_RIFT_KEY,
+                rift_data=rift_data,
+                duration=rift_data["time"],
+                item_id=item_id,
                 expected_generation_id=current_state.generation_id,
                 expected_revision=current_state.revision,
             )
+            entry_data = entry_outcome.data or {}
+            entry_status = str(entry_data.get("status", entry_outcome.code))
+            if entry_outcome.replayed:
+                await handle_send(bot, event, _entry_success_message(entry_data.get("rift_data", rift_data), bypass_position=True))
+                return
+            entry = type("EntryResult", (), {"succeeded": entry_outcome.ok, "status": entry_status, "rift_data": entry_data.get("rift_data", rift_data)})()
         except Exception as exc:
             logger.opt(exception=exc).error("秘藏令进入秘境事务执行失败")
             await handle_send(bot, event, "秘藏令进入失败：请求未生效。")

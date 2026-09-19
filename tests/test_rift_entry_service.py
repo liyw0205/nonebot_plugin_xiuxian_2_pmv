@@ -37,6 +37,17 @@ def test_rift_make_defers_legacy_writer_construction():
     assert "sql_message = XiuxianDateManage()" not in source
 
 
+def test_rift_entry_handlers_use_feature_application():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_rift/__init__.py"
+    ).read_text(encoding="utf-8")
+    start = source.index("async def _(bot: Bot", source.index("@explore_rift.handle"))
+    end = source.index("async def use_rift_explore", start)
+    handler = source[start:end]
+    assert "rift_application.enter(" in handler
+    assert "_rift_entry_service().enter(" not in handler
+
+
 class RiftEntryServiceTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -550,7 +561,8 @@ class RiftEntryServiceTests(unittest.TestCase):
                 "def _rift_progress_snapshot"
             )
         ]
-        self.assertIn("_rift_entry_service().enter(", handler)
+        self.assertIn("rift_application.enter(", handler)
+        self.assertNotIn("_rift_entry_service().enter(", handler)
         self.assertIn("_rift_entry_service_instance = None", source)
         self.assertIn("def _rift_entry_service(", source)
         self.assertIn("expected_generation_id=", handler)
