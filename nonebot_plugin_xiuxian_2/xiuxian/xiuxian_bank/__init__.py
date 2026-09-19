@@ -393,12 +393,14 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await bank.finish()
 
         next_level = f"{int(userlevel) + 1}"
-        # Legacy facade call: bank_upgrade_service.upgrade(...)
-        upgrade_outcome = bank_application.upgrade(
-            operation_id=operation_id, user_id=user_id, expected_level=userlevel,
-            next_level=next_level, cost=stonecost,
+        upgrade_data = BankUpgradeApplication(get_paths().game_db).upgrade(
+            operation_id=operation_id,
+            user_id=user_id,
+            expected_level=userlevel,
+            next_level=next_level,
+            cost=stonecost,
+            settled_at=runtime_clock.now().isoformat(),
         )
-        upgrade_data = upgrade_outcome.data or {}
         upgrade_status = str(upgrade_data.get("status", "failed"))
         upgrade_cost = int(upgrade_data.get("cost", 0) or 0)
         upgrade_level = str(upgrade_data.get("bank_level", userlevel))

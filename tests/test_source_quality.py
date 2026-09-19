@@ -1852,7 +1852,8 @@ class SourceQualityTests(unittest.TestCase):
         source = (bank_root / "__init__.py").read_text(encoding="utf-8")
         start = source.index("elif mode == '升级会员'")
         handler = source[start:source.index("elif mode == '信息'", start)]
-        self.assertIn("bank_upgrade_service.upgrade(", handler)
+        self.assertIn("BankUpgradeApplication", handler)
+        self.assertNotIn("bank_application.upgrade(", handler)
         self.assertNotIn("sql_message.update_ls(", handler)
         self.assertNotIn("savef(user_id, bankinfo)", handler)
         for status in ("stone_insufficient", "state_changed", "user_missing"):
