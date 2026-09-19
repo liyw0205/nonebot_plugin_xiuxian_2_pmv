@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from ...paths import get_paths
+from ...features.tower.state_application import TowerStateApplication
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
-from .transaction_service import TowerStateService
 
 
 _player_data_manager_instance = None
-_state_service_instance = None
+_state_application_instance = None
 
 
 def _player_data_manager():
@@ -16,25 +16,25 @@ def _player_data_manager():
     return _player_data_manager_instance
 
 
-def _state_service():
-    global _state_service_instance
-    if _state_service_instance is None:
-        _state_service_instance = TowerStateService(
+def _state_application():
+    global _state_application_instance
+    if _state_application_instance is None:
+        _state_application_instance = TowerStateApplication(
             get_paths().player_db,
-            _player_data_manager().lock,
+            lock=_player_data_manager().lock,
         )
-    return _state_service_instance
+    return _state_application_instance
 
 
 class TowerLimit:
     """Compatibility facade for transactional tower-state reads."""
 
-    def __init__(self, state_service: TowerStateService | None = None) -> None:
-        self._state_service_override = state_service
+    def __init__(self, state_application: TowerStateApplication | None = None) -> None:
+        self._state_application_override = state_application
 
     def get_user_tower_info(self, user_id):
-        service = self._state_service_override or _state_service()
-        return service.get(user_id)
+        state_application = self._state_application_override or _state_application()
+        return state_application.get(user_id)
 
     def get_weekly_purchases(self, user_id, item_id):
         weekly = self.get_user_tower_info(user_id)["weekly_purchases"]
