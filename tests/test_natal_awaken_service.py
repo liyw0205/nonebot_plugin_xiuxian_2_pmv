@@ -9,6 +9,8 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_natal_treasure.transaction_service import AwakenService
+from nonebot_plugin_xiuxian_2.features.natal_treasure.application import NatalTreasureApplication
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from tests.test_db_backend import db_backend
 
 
@@ -70,6 +72,25 @@ class AwakenServiceTests(unittest.TestCase):
         with self.assertRaises(db_backend.IntegrityError):
             self.awaken("rollback")
         self.assertEqual(self.state()[0], 0)
+
+    def test_feature_application_owns_awaken_replay_and_existing_state_guard(self) -> None:
+        with DatabaseUnitOfWork(self.player) as uow:
+            OperationLedger().ensure_schema(uow)
+        application = NatalTreasureApplication(self.player, self.player)
+        kwargs = {
+            "max_slots": 3,
+            "effect_configs": {1: (0.1, 0.2), 2: (0.3, 0.4)},
+            "effect_names": {1: ("一号",), 2: ("二号",)},
+            "fixed_base_effects": {2},
+            "choice_seed": 7,
+        }
+        first = application.awaken(operation_id="feature-awaken", user_id="user", **kwargs)
+        duplicate = application.awaken(operation_id="feature-awaken", user_id="user", **kwargs)
+        self.assertEqual((first.data["status"], duplicate.replayed), ("awakened", True))
+        with db_backend.transaction(self.player) as conn:
+            conn.execute("UPDATE natal_treasure SET form=3,name=%s WHERE user_id=%s", ("已有法宝", "user"))
+        guarded = application.awaken(operation_id="feature-existing", user_id="user", **kwargs)
+        self.assertEqual(guarded.data["status"], "already_awakened")
 
 
 if __name__ == "__main__":

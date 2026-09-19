@@ -62,6 +62,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
     map_facade = (PACKAGE / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
     sect_facade = (PACKAGE / "xiuxian" / "xiuxian_sect" / "__init__.py").read_text(encoding="utf-8")
+    natal_facade = (PACKAGE / "xiuxian" / "xiuxian_natal_treasure" / "__init__.py").read_text(encoding="utf-8")
     return {
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,
@@ -138,6 +139,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "economy_application_owned": all(f"sect_application.{name}(" in sect_facade for name in ("rename", "donate", "purchase")),
             "legacy_membership_disabled": all(token not in sect_facade for token in ("sect_membership_service.join", "sect_membership_service.leave_sect", "sect_membership_service.kick_member", "sect_membership_service.change_position")),
             "status": "membership_economy_cutover_with_other_sect_compatibility_paths",
+        },
+        "natal_treasure": {
+            "awaken_application_owned": "natal_treasure_application.awaken(" in natal_facade,
+            "legacy_awaken_disabled": "_natal_awaken_service().awaken(" not in natal_facade,
+            "status": "awaken_cutover_with_other_natal_mutations_compatibility",
         },
     }
 

@@ -49,6 +49,9 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(sect["membership_application_owned"])
         self.assertTrue(sect["economy_application_owned"])
         self.assertTrue(sect["legacy_membership_disabled"])
+        natal = slices["natal_treasure"]
+        self.assertTrue(natal["awaken_application_owned"])
+        self.assertTrue(natal["legacy_awaken_disabled"])
 
 
 if __name__ == "__main__":

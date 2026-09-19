@@ -1688,7 +1688,8 @@ class SourceQualityTests(unittest.TestCase):
         source = (natal_root / "__init__.py").read_text(encoding="utf-8")
         start = source.index("@natal_awaken.handle")
         handler = source[start:source.index("# 新增：独立重塑命令", start)]
-        self.assertIn("_natal_awaken_service().awaken(", handler)
+        self.assertIn("natal_treasure_application.awaken(", handler)
+        self.assertNotIn("_natal_awaken_service().awaken(", handler)
         self.assertNotIn("nt.awaken()", handler)
         for status in ("treasure_missing", "already_awakened", "state_changed"):
             self.assertIn(f'"{status}"', handler)

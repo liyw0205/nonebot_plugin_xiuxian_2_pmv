@@ -43,6 +43,7 @@ class LegacyApplication:
     success_statuses = frozenset(
         {
             "applied",
+            "awakened",
             "duplicate",
             "success",
             "succeeded",

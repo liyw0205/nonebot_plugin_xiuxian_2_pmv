@@ -13,6 +13,18 @@ from tests.test_db_backend import db_backend
 
 
 class NatalTrainingServiceTests(unittest.TestCase):
+    def test_natal_awaken_production_path_uses_feature_application(self):
+        from pathlib import Path
+
+        source = Path(
+            "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_natal_treasure/__init__.py"
+        ).read_text(encoding="utf-8")
+        start = source.index("async def natal_awaken_handler")
+        end = source.index("async def natal_reawaken_handler", start)
+        handler = source[start:end]
+        self.assertIn("natal_treasure_application.awaken(", handler)
+        self.assertNotIn("_natal_awaken_service().awaken(", handler)
+
     def test_natal_facade_defers_training_service_construction(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_natal_treasure
 

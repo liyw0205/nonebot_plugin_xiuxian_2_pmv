@@ -27,6 +27,7 @@ from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items
 from ...paths import get_paths
 from ...infrastructure.ids import UUIDGenerator
+from ...features.natal_treasure.application import NatalTreasureApplication
 
 from .natal_data import *
 from .natal_config import (
@@ -54,6 +55,10 @@ _natal_forget_service_instance = None
 _natal_reawaken_service_instance = None
 _natal_awaken_service_instance = None
 runtime_ids = UUIDGenerator()
+natal_treasure_application = NatalTreasureApplication(
+    get_paths().player_db,
+    get_paths().game_db,
+)
 
 
 def _sql_message():
@@ -154,41 +159,37 @@ async def natal_awaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
         }
         event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
         operation_id = f"natal-awaken:{event_id}:{user_id}" if event_id else f"natal-awaken:{user_id}:{runtime_ids.new_id()}"
-        prior = _natal_awaken_service().get_result(operation_id)
-        if prior is not None and prior.succeeded:
-            await handle_send(
-                bot, event,
-                f"恭喜！本命法宝觉醒成功！\n形态已固化，效果类型：{prior.effect_type}\n该觉醒请求已经处理，无需重复提交。",
-                md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="养成", v3="养成本命法宝"
-            )
-            await natal_awaken.finish()
-        awakened = _natal_awaken_service().awaken(
-            operation_id, user_id, MAX_EFFECT_SLOTS,
-            {
+        awakened = natal_treasure_application.awaken(
+            operation_id=operation_id,
+            user_id=user_id,
+            max_slots=MAX_EFFECT_SLOTS,
+            effect_configs={
                 effect_type.value: (config["min_value"], config["max_value"])
                 for effect_type, config in EFFECT_BASE_AND_GROWTH.items()
             },
-            {
+            effect_names={
                 effect_type.value: names
                 for effect_type, names in NATAL_TREASURE_NAMES.items()
             },
-            {effect_type.value for effect_type in fixed_base_effects},
-            _natal_choice_seed(operation_id),
+            fixed_base_effects={effect_type.value for effect_type in fixed_base_effects},
+            choice_seed=_natal_choice_seed(operation_id),
         )
-        if awakened.status == "duplicate":
+        awakened_data = awakened.data or {}
+        awakened_status = str(awakened_data.get("status", awakened.code))
+        if awakened.replayed or awakened_status == "duplicate":
             await handle_send(
                 bot, event,
-                f"恭喜！本命法宝觉醒成功！\n形态已固化，效果类型：{awakened.effect_type}\n该觉醒请求已经处理，无需重复提交。",
+                f"恭喜！本命法宝觉醒成功！\n形态已固化，效果类型：{awakened_data.get('effect_type', 0)}\n该觉醒请求已经处理，无需重复提交。",
                 md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="养成", v3="养成本命法宝"
             )
             await natal_awaken.finish()
-        if not awakened.succeeded:
+        if awakened_status not in {"awakened", "applied"}:
             failure_reasons = {
                 "treasure_missing": "法宝数据结构尚未准备完成",
                 "already_awakened": "本命法宝已经觉醒",
                 "state_changed": "本命法宝操作未结算：法宝当前状态已更新",
             }
-            reason = failure_reasons.get(awakened.status, "觉醒事务未能完成")
+            reason = failure_reasons.get(awakened_status, "觉醒事务未能完成")
             await handle_send(
                 bot, event, f"本命法宝觉醒失败：{reason}。",
                 md_type="法宝", k1="法宝", v1="我的本命法宝", k2="帮助", v2="本命法宝帮助", k3="觉醒", v3="觉醒本命法宝"
