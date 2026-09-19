@@ -2555,6 +2555,8 @@
 
 2026-09-20 bank deposit cutover slice：生产存灵石路径的 fallback transaction 从 legacy `BankApplication`/`BankDepositService`切到 feature-owned `BankDepositApplication`，保留 game-db `bank_accounts`/`bank_account_operations`边界、operation replay/conflict、stone/limit/user checks、interest、wallet/saved balance和rollback语义；withdraw/upgrade/interest仍明确保留compatibility boundary。Bank deposit/application/migration/source/progress regression 198 passed，四个不重叠全量分片合计 2373 passed、25 subtests passed（16条既有 compatibility DeprecationWarning），compileall、inventory、progress、CLI、routing和diff check通过。`bank.002`保持 game_db-only，Progress bank字段为 `deposit_application_owned=true`、`legacy_deposit_disabled=true`。
 
+2026-09-20 bank deposit live safety：提交 `3c8eb184` 后在受控隔离容器执行 remote smoke；五库 migration dry-run无 pending，readiness通过，reconcile为 `clean=true/operations=0/outbox_events=0/dead_events=0`，marker写入/删除、checksum restore和旧实例重启均通过。独立核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup `/srv/smoke-data/backups/20260919T181120Z`含五库；恢复后 `bank.002`仅记录于 game_db，其余四库均未记录。
+
 2026-09-19 utils storage lazy construction live safety：提交 `0f84c726` 部署到隔离容器后，五库 migration dry-run 均无 pending，readiness 通过，reconcile `clean=true/operations=0/outbox_events=0/dead_events=0`；可逆 marker 写入/删除、五库 restore 和旧实例重启均通过。独立后置核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup manifest `/srv/smoke-data/backups/20260918T171820Z` 包含 `game_db`、`player_db`、`trade_db`、`impart_db`、`message_db`。
 
 ## 6. 下一步
