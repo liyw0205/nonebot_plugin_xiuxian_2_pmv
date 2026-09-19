@@ -60,7 +60,7 @@ from .features.auction.jobs import settle as auction_settle_job
 from .features.bank.manifest import FEATURE as BANK_FEATURE
 from .features.bank.migrations import apply_bank, apply_bank_accounts
 from .features.activity_reward.manifest import FEATURE as ACTIVITY_REWARD_FEATURE
-from .features.activity_reward.migrations import apply_activity_reward
+from .features.activity_reward.migrations import apply_activity_claim_all, apply_activity_reward
 from .features.combat_settlement.manifest import FEATURE as COMBAT_SETTLEMENT_FEATURE
 from .features.combat_settlement.migrations import apply_combat_settlement, apply_combat_settlement_operations, apply_dao_battle_operations, apply_dao_battle_record
 from .features.admin_asset.manifest import FEATURE as ADMIN_ASSET_FEATURE
@@ -114,6 +114,7 @@ def build_migrations() -> tuple[Migration, ...]:
     return (
         Migration("accessory_package.001", "accessory_package_operations", apply_accessory_package),
         Migration("activity_reward.001", "activity_reward_feature_migrations", apply_activity_reward),
+        Migration("activity_reward.002", "activity_claim_all_operations", apply_activity_claim_all),
         Migration("admin_asset.001", "admin_asset_feature_migrations", apply_admin_asset),
         Migration("arena.001", "arena_feature_migrations", apply_arena),
         Migration("arena.002", "arena_challenge_purchase_operations", apply_arena_challenge_purchase),

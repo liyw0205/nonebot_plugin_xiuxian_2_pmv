@@ -68,6 +68,7 @@ from .transaction_service import ActivitySignSettlementService
 from .transaction_service import ActivityPassClaimService
 from .transaction_service import ActivityCollectExchangeService
 from .transaction_service import ActivityClaimAllService
+from ...features.activity_reward.claim_all_application import ActivityClaimAllApplication
 
 
 _point_shop_purchase_service_instance = None
@@ -76,6 +77,7 @@ _activity_sign_settlement_service_instance = None
 _activity_pass_claim_service_instance = None
 _activity_collect_exchange_service_instance = None
 _activity_claim_all_service_instance = None
+activity_claim_all_application = ActivityClaimAllApplication(DB_PATH)
 
 
 def _activity_claim_all_service():
@@ -974,7 +976,7 @@ def claim_activity_rewards(user_id: str, operation_id: str | None = None) -> tup
     operation_id = operation_id or f"activity:claim-all:{uid}:{runtime_ids.new_id()}"
     from .activity_boss import claim_boss_milestone_reward, claim_boss_rank_reward
 
-    result = _activity_claim_all_service().run(
+    result = activity_claim_all_application.run(
         operation_id,
         uid,
         {

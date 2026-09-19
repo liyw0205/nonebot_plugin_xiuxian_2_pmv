@@ -25,6 +25,9 @@ class RefactorProgressTests(unittest.TestCase):
         work = slices["work"]
         self.assertTrue(work["daily_refresh_application_owned"])
         self.assertTrue(work["legacy_daily_refresh_disabled"])
+        activity = slices["activity_reward"]
+        self.assertTrue(activity["claim_all_application_owned"])
+        self.assertTrue(activity["legacy_claim_all_disabled"])
 
 
 if __name__ == "__main__":
