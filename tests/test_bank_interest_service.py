@@ -13,6 +13,15 @@ from tests.test_db_backend import db_backend
 
 
 class BankInterestServiceTests(unittest.TestCase):
+    def test_bank_facade_defaults_interest_to_feature_application(self) -> None:
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_bank
+
+        source = Path(xiuxian_bank.__file__).read_text(encoding="utf-8")
+        start = source.index("elif mode == '结算'")
+        handler = source[start:source.index("def get_give_stone", start)]
+        self.assertIn("BankInterestApplication", handler)
+        self.assertNotIn("bank_application.settle_interest(", handler)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         root = Path(self.temp_dir.name)

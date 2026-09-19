@@ -1868,7 +1868,8 @@ class SourceQualityTests(unittest.TestCase):
         source = (bank_root / "__init__.py").read_text(encoding="utf-8")
         start = source.index("elif mode == '结算'")
         handler = source[start:source.index("def get_give_stone", start)]
-        self.assertIn("bank_interest_service.settle(", handler)
+        self.assertIn("BankInterestApplication", handler)
+        self.assertNotIn("bank_application.settle_interest(", handler)
         self.assertNotIn("sql_message.update_ls(", handler)
         self.assertNotIn("savef(user_id, bankinfo)", handler)
         for status in ("state_changed", "user_missing"):

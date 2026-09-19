@@ -35,9 +35,11 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(bank["deposit_application_owned"])
         self.assertTrue(bank["withdrawal_application_owned"])
         self.assertTrue(bank["upgrade_application_owned"])
+        self.assertTrue(bank["interest_application_owned"])
         self.assertTrue(bank["legacy_deposit_disabled"])
         self.assertTrue(bank["legacy_withdrawal_disabled"])
         self.assertTrue(bank["legacy_upgrade_disabled"])
+        self.assertTrue(bank["legacy_interest_disabled"])
 
 
 if __name__ == "__main__":

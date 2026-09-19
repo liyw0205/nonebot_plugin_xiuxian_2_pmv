@@ -509,13 +509,13 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         expected_saved_stone = bankinfo['savestone']
         expected_saved_at = bankinfo['savetime']
         bankinfo, give_stone, timedeff = get_give_stone(bankinfo)
-        # Legacy facade call: bank_interest_service.settle(...)
-        settlement_outcome = bank_application.settle_interest(
-            operation_id=operation_id, user_id=user_id,
-            expected_saved_stone=expected_saved_stone, expected_saved_at=expected_saved_at,
-            bank_level=bankinfo['banklevel'], interest=give_stone, settled_at=bankinfo['savetime'],
+        settlement_data = BankInterestApplication(get_paths().game_db).settle_interest(
+            operation_id=operation_id,
+            user_id=user_id,
+            interest=give_stone,
+            bank_level=str(bankinfo['banklevel']),
+            settled_at=str(bankinfo['savetime']),
         )
-        settlement_data = settlement_outcome.data or {}
         settlement_status = str(settlement_data.get("status", "failed"))
         settlement_interest = int(settlement_data.get("interest", 0) or 0)
         if settlement_status == "duplicate":
