@@ -58,6 +58,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     training_limit = (PACKAGE / "xiuxian" / "xiuxian_training" / "training_limit.py").read_text(encoding="utf-8")
     work_facade = (PACKAGE / "xiuxian" / "xiuxian_work" / "__init__.py").read_text(encoding="utf-8")
     activity_service = (PACKAGE / "xiuxian" / "xiuxian_activity" / "service.py").read_text(encoding="utf-8")
+    dungeon_facade = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "__init__.py").read_text(encoding="utf-8")
     return {
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,
@@ -105,6 +106,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "claim_all_application_owned": "activity_claim_all_application.run(" in activity_service,
             "legacy_claim_all_disabled": "_activity_claim_all_service().run(" not in activity_service,
             "status": "claim_all_cutover_with_legacy_service_retained_for_compatibility",
+        },
+        "dungeon_team": {
+            "create_invite_application_owned": "dungeon_team_application.create(" in dungeon_facade and "dungeon_team_application.invite(" in dungeon_facade,
+            "legacy_create_invite_disabled": "_dungeon_team_transaction_service().create(" not in dungeon_facade and "_dungeon_team_transaction_service().invite(" not in dungeon_facade,
+            "status": "create_invite_cutover_with_legacy_join_exit_compatibility",
         },
     }
 

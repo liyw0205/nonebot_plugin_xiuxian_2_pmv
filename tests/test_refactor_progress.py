@@ -28,6 +28,9 @@ class RefactorProgressTests(unittest.TestCase):
         activity = slices["activity_reward"]
         self.assertTrue(activity["claim_all_application_owned"])
         self.assertTrue(activity["legacy_claim_all_disabled"])
+        dungeon_team = slices["dungeon_team"]
+        self.assertTrue(dungeon_team["create_invite_application_owned"])
+        self.assertTrue(dungeon_team["legacy_create_invite_disabled"])
 
 
 if __name__ == "__main__":

@@ -246,6 +246,29 @@ class PlatformLedgerMigrationTests(unittest.TestCase):
             finally:
                 asyncio.run(lifecycle.shutdown())
 
+    def test_startup_routes_dungeon_team_schema_to_player_database(self):
+        with tempfile.TemporaryDirectory() as directory:
+            data_dir = Path(directory) / "data"
+            copy_static_data(Path(__file__).resolve().parents[1] / "data" / "xiuxian", data_dir)
+            lifecycle, _, context = build_lifecycle(
+                build_runtime_context(data_dir=data_dir, legacy_startup=False)
+            )
+            state = asyncio.run(lifecycle.start())
+            try:
+                self.assertEqual(state.phase.value, "ready")
+                for spec in context.database.specs():
+                    with DatabaseUnitOfWork(spec.path) as uow:
+                        operations = uow.query_one("SELECT name FROM sqlite_master WHERE type='table' AND name='dungeon_team_operations'")
+                        invites = uow.query_one("SELECT name FROM sqlite_master WHERE type='table' AND name='dungeon_team_invites'")
+                    if spec.key == "player_db":
+                        self.assertIsNotNone(operations)
+                        self.assertIsNotNone(invites)
+                    else:
+                        self.assertIsNone(operations)
+                        self.assertIsNone(invites)
+            finally:
+                asyncio.run(lifecycle.shutdown())
+
 
 if __name__ == "__main__":
     unittest.main()

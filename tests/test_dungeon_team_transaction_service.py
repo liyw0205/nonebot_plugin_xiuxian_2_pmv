@@ -10,6 +10,9 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.transaction_service import DungeonTeamTransactionService
+from nonebot_plugin_xiuxian_2.features.dungeon.team_application import DungeonTeamApplication
+from nonebot_plugin_xiuxian_2.features.dungeon.migrations import apply_dungeon_team
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
 
@@ -17,7 +20,12 @@ class DungeonTeamTransactionServiceTests(unittest.TestCase):
     def test_dungeon_facade_defers_team_transaction_service_construction(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dungeon as dungeon_plugin
 
-        self.assertIsNone(dungeon_plugin._dungeon_team_transaction_service_instance)
+        source = Path(
+            "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dungeon/__init__.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("dungeon_team_application", source)
+        self.assertNotIn("_dungeon_team_transaction_service().create(", source)
+        self.assertNotIn("_dungeon_team_transaction_service().invite(", source)
         source = Path(
             "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dungeon/dungeon_manager.py"
         ).read_text(encoding="utf-8")
@@ -26,6 +34,21 @@ class DungeonTeamTransactionServiceTests(unittest.TestCase):
         self.assertNotIn("player_data = PlayerDataManager()", source)
         self.assertIn("_player_data_manager().get_fields(", source)
         self.assertIn("_player_data_manager()._ensure_table_exists(", source)
+
+    def test_feature_team_application_owns_create_and_invite(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "player.sqlite3"
+            with db_backend.transaction(database) as conn:
+                conn.execute("CREATE TABLE user_xiuxian (user_id TEXT PRIMARY KEY)")
+                conn.executemany("INSERT INTO user_xiuxian VALUES (%s)", (("leader",), ("member",)))
+                conn.execute("CREATE TABLE player_dungeon_status (user_id TEXT PRIMARY KEY,dungeon_status TEXT)")
+                conn.executemany("INSERT INTO player_dungeon_status VALUES (%s,%s)", (("leader", "not_started"), ("member", "not_started")))
+            with DatabaseUnitOfWork(database) as uow:
+                apply_dungeon_team(uow)
+            application = DungeonTeamApplication(database)
+            created = application.create("create-feature", "team-1", "试炼队", "leader", "100", "now", 100)
+            invited = application.invite("invite-feature", "invite-1", "team-1", "leader", "member", "100", 160, 100)
+            self.assertEqual((created.status, invited.status), ("applied", "applied"))
 
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()

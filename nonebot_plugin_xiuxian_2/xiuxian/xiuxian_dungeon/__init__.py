@@ -56,12 +56,14 @@ from .transaction_service import (
 from .transaction_service import DungeonTeamExitService
 from ...paths import get_paths
 from ...features.dungeon.application import DungeonApplication
+from ...features.dungeon.team_application import DungeonTeamApplication
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 
 _sql_message_instance = None
 items = Items()
 dungeon_application = DungeonApplication(get_paths().game_db, get_paths().player_db)
+dungeon_team_application = DungeonTeamApplication(get_paths().player_db)
 dungeon_ids = UUIDGenerator()
 runtime_clock = SystemClock()
 _dungeon_explore_operation_service_instance = None
@@ -369,7 +371,7 @@ async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
     user_id = str(user_info['user_id'])
     operation_id = _team_operation_id(event, "create", user_id)
-    replay = _dungeon_team_transaction_service().operation_result(operation_id, "create")
+    replay = dungeon_team_application.operation_result(operation_id, "create")
     if replay is not None:
         await handle_send(bot, event, _team_mutation_message("create", replay), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
         await create_team_cmd.finish()
@@ -382,7 +384,7 @@ async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
     team_id = f"{group_id or 'private'}_{operation_id.rsplit(':', 2)[-2]}"
     now = runtime_clock.now()
-    result = _dungeon_team_transaction_service().create(
+    result = dungeon_team_application.create(
         operation_id, team_id, team_name, user_id, group_id,
         now.strftime("%Y-%m-%d %H:%M:%S"), now.timestamp(),
     )
@@ -400,7 +402,7 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
     user_id = str(user_info['user_id'])
     operation_id = _team_operation_id(event, "invite", user_id)
-    replay = _dungeon_team_transaction_service().operation_result(operation_id, "invite")
+    replay = dungeon_team_application.operation_result(operation_id, "invite")
     if replay is not None:
         await handle_send(bot, event, _team_mutation_message("invite", replay), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
         await invite_team_cmd.finish()
@@ -416,7 +418,7 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
     group_id = str(getattr(event, "group_id", "") or "")
     now = runtime_clock.now().timestamp()
     invite_id = f"{operation_id}:{target_user_id or 'missing'}"
-    result = _dungeon_team_transaction_service().invite(
+    result = dungeon_team_application.invite(
         operation_id,
         invite_id,
         team_id,
