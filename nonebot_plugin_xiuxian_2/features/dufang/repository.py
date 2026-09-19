@@ -13,6 +13,13 @@ class DufangRepository(ServicePort):
         self.player_database = None if player_database is None else str(player_database)
 
     def execute(self, operation_id: str, user_id: str, action: str, payload: dict[str, Any]) -> Any:
+        if str(action).casefold() == "share_settle" and self.player_database is not None:
+            from ...xiuxian.xiuxian_dufang.transaction_service import DufangShareSettlementService
+
+            return DufangShareSettlementService(self.database, self.player_database).settle(
+                operation_id, user_id, payload["event_type"], payload["title"], payload["desc"],
+                payload["effect_amount"], payload["cost_bonus_percent"], payload["recipients"], payload["settled_at"],
+            )
         if str(action).casefold() == "bet" and self.player_database is not None:
             from ...xiuxian.xiuxian_dufang.transaction_service import DufangBetService
 

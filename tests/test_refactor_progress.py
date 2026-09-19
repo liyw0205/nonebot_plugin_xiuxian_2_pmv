@@ -64,6 +64,9 @@ class RefactorProgressTests(unittest.TestCase):
         past_life = slices["past_life"]
         self.assertTrue(past_life["reset_one_application_owned"])
         self.assertTrue(past_life["legacy_reset_one_disabled"])
+        dufang = slices["dufang"]
+        self.assertTrue(dufang["share_application_owned"])
+        self.assertTrue(dufang["legacy_share_disabled"])
 
 
 if __name__ == "__main__":

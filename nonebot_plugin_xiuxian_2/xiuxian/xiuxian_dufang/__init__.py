@@ -324,15 +324,20 @@ async def handle_shared_event(
         return None, None
 
     settled_at = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S")
-    settlement = _run_dufang_action(
-        "share_settle", operation_id, user_id,
-        call=lambda: _dufang_share_service().settle(
-            operation_id, user_id, event_type, event_data["title"], event_data["desc"],
-            effect_amount, int(cost_bonus * 100), recipients, settled_at,
-        ),
-        event_type=event_type, title=event_data["title"], effect_amount=effect_amount,
-        recipients=recipients, settled_at=settled_at,
+    settlement_outcome = dufang_application.share_settle(
+        operation_id=operation_id,
+        user_id=user_id,
+        event_type=event_type,
+        title=event_data["title"],
+        desc=event_data["desc"],
+        effect_amount=effect_amount,
+        cost_bonus_percent=int(cost_bonus * 100),
+        recipients=recipients,
+        settled_at=settled_at,
     )
+    settlement = SimpleNamespace(**dict(settlement_outcome.data or {}))
+    settlement.succeeded = settlement_outcome.ok
+    settlement.status = "duplicate" if settlement_outcome.replayed else settlement_outcome.status
     if not settlement.succeeded:
         return None, None
 

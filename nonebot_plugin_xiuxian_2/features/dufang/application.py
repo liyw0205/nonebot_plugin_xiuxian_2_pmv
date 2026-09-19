@@ -39,5 +39,12 @@ class DufangApplication(MigratedFeatureApplication):
     def payout_result(self, operation_id: str):
         return self.repository.payout_result(operation_id)
 
+    def share_settle(self, *, operation_id: str, user_id: str, **kwargs):
+        return self.execute(
+            operation_id=operation_id,
+            user_id=user_id,
+            payload={"action": "share_settle", **kwargs},
+        )
+
 
 __all__ = ["DufangApplication"]

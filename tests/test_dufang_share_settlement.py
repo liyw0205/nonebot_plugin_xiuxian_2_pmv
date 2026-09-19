@@ -20,6 +20,12 @@ class DufangShareSettlementTests(unittest.TestCase):
 
         self.assertIsNone(xiuxian_dufang._dufang_share_service_instance)
 
+    def test_dufang_share_settlement_uses_feature_application(self):
+        source = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dufang/__init__.py"
+        handler = source.read_text(encoding="utf-8")
+        assert "dufang_application.share_settle(" in handler
+        assert "_dufang_share_service().settle(" not in handler
+
     def test_dufang_facade_defers_sql_manager_construction(self):
         source = (
             Path(__file__).parents[1]
@@ -241,7 +247,8 @@ class DufangShareSettlementTests(unittest.TestCase):
         handler = source.split("async def handle_shared_event", 1)[1].split(
             "# 鉴石信息", 1
         )[0]
-        self.assertIn("_dufang_share_service().settle(", handler)
+        self.assertIn("dufang_application.share_settle(", handler)
+        self.assertNotIn("_dufang_share_service().settle(", handler)
         self.assertNotIn("sql_message.update_ls(", handler)
         self.assertNotIn("save_unseal_data(", handler)
         unseal_share = source.split("# 处理共享事件", 2)[2].split(

@@ -67,6 +67,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     rift_facade = (PACKAGE / "xiuxian" / "xiuxian_rift" / "__init__.py").read_text(encoding="utf-8")
     back_facade = (PACKAGE / "xiuxian" / "xiuxian_back" / "__init__.py").read_text(encoding="utf-8")
     past_life_facade = (PACKAGE / "xiuxian" / "xiuxian_past_life" / "__init__.py").read_text(encoding="utf-8")
+    dufang_facade = (PACKAGE / "xiuxian" / "xiuxian_dufang" / "__init__.py").read_text(encoding="utf-8")
     return {
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,
@@ -168,6 +169,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "reset_one_application_owned": "past_life_application.reset_one(" in past_life_facade,
             "legacy_reset_one_disabled": "_past_life_reset_service().reset_one(" not in past_life_facade,
             "status": "reset_one_cutover_with_reset_all_compatibility",
+        },
+        "dufang": {
+            "share_application_owned": "dufang_application.share_settle(" in dufang_facade,
+            "legacy_share_disabled": "_dufang_share_service().settle(" not in dufang_facade,
+            "status": "share_settlement_cutover_with_bet_payout_compatibility",
         },
     }
 
