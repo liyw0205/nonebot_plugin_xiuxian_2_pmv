@@ -60,6 +60,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     activity_service = (PACKAGE / "xiuxian" / "xiuxian_activity" / "service.py").read_text(encoding="utf-8")
     dungeon_facade = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "__init__.py").read_text(encoding="utf-8")
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
+    map_facade = (PACKAGE / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
     return {
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,
@@ -123,6 +124,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_upgrade_disabled": "bank_upgrade_service.upgrade(" not in bank_facade,
             "legacy_interest_disabled": "bank_interest_service.settle(" not in bank_facade,
             "status": "deposit_withdrawal_upgrade_interest_cutover",
+        },
+        "map": {
+            "interactive_application_owned": "map_application.interactive_settlement(" in map_facade and "map_application.interactive_start(" in map_facade,
+            "resource_application_owned": "map_application.resource_reward(" in map_facade,
+            "legacy_interactive_disabled": "map_interactive_action_service.save_settlement(" not in map_facade and "map_interactive_action_service.start(" not in map_facade,
+            "legacy_resource_disabled": "map_resource_reward_service.settle(" not in map_facade,
+            "status": "interactive_resource_cutover_with_legacy_services_retained_for_compatibility",
         },
     }
 

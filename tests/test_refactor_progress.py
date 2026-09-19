@@ -40,6 +40,11 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(bank["legacy_withdrawal_disabled"])
         self.assertTrue(bank["legacy_upgrade_disabled"])
         self.assertTrue(bank["legacy_interest_disabled"])
+        map_slice = slices["map"]
+        self.assertTrue(map_slice["interactive_application_owned"])
+        self.assertTrue(map_slice["resource_application_owned"])
+        self.assertTrue(map_slice["legacy_interactive_disabled"])
+        self.assertTrue(map_slice["legacy_resource_disabled"])
 
 
 if __name__ == "__main__":
