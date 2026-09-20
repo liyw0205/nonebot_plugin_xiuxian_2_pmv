@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ...paths import get_paths
 from .._migrated_application import MigratedFeatureApplication
 from .repository import AdminRepository
 
@@ -27,6 +28,18 @@ class AdminApplication(MigratedFeatureApplication):
         return AdminItemBatchGrantService(self.database).grant(
             operation_id, operator_id, user_ids, item_id, item_name, item_type,
             quantity, max_goods_num, chunk_size=chunk_size,
+        )
+
+    def grant_accessory_batch(self, operation_id: str, operator_id: str, user_ids,
+                              item_id: int, item_name: str, quality: int,
+                              quantity: int, max_accessories: int, create_accessory,
+                              *, chunk_size: int = 100):
+        from ...xiuxian.xiuxian_admin.transaction_service import AdminAccessoryBatchAdjustmentService
+        return AdminAccessoryBatchAdjustmentService(
+            self.database, get_paths().player_db
+        ).grant(
+            operation_id, operator_id, user_ids, item_id, item_name, quality,
+            quantity, max_accessories, create_accessory, chunk_size=chunk_size,
         )
 
 
