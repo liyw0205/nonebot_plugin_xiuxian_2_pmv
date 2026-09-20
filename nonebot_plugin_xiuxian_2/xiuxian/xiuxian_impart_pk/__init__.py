@@ -833,14 +833,6 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     user_id = user_info['user_id']
     # 先回放：成功后次数/层数变化会挡住同事件幂等。
     op_id = _impart_operation_id(event, "explore", user_id)
-    prior = _impart_explore_settlement_service().get_result(op_id)
-    if prior is not None and prior.succeeded:
-        msg = (
-            f"探索完成（重放）。\n现位于层级：{prior.impart_lv}\n"
-            f"剩余时间：{prior.exp_day}\n该探索请求已经处理，无需重复提交。"
-        )
-        await handle_send(bot, event, msg, md_type="虚神界", k1="探索", v1="虚神界探索", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
-        await impart_pk_go.finish()
     user_data = _daily_impart_state(user_info['user_id'])
     if user_data["impart_num"] <= 0:
         msg = f"\n道友今日探索次数耗尽，需打坐调息，明日方可再探虚神界！"
