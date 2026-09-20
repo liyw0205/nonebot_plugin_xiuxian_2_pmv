@@ -28,8 +28,15 @@ def test_xianshi_purchase_handler_uses_lazy_repository_service():
     assert "_xianshi_purchase_service_instance = None" in source
     assert "def _xianshi_purchase_service(" in source
     assert "xianshi_repository" in source
-    assert "_xianshi_purchase_service().purchase(" in source
-    assert "xianshi_purchase_service.purchase(" not in source
+    assert "trade_application.purchase(" in source
+    assert "_xianshi_purchase_service().purchase(" not in source
+
+
+def test_xianshi_purchase_handler_uses_feature_application():
+    source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_trade/__init__.py"
+    text = source.read_text(encoding="utf-8")
+    assert "trade_application.purchase(" in text
+    assert "_xianshi_purchase_service().purchase(" not in text
 
 
 class TradePurchaseTests(unittest.TestCase):

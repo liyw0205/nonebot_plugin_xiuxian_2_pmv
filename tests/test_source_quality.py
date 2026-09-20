@@ -483,7 +483,8 @@ class SourceQualityTests(unittest.TestCase):
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
         command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")
         repository_source = (trade_root / "repository.py").read_text(encoding="utf-8")
-        self.assertIn("_xianshi_purchase_service().purchase(", command_source)
+        self.assertIn("trade_application.purchase(", command_source)
+        self.assertNotIn("_xianshi_purchase_service().purchase(", command_source)
         self.assertNotIn("xianshi_buy_refund", command_source)
         self.assertIn("BEGIN IMMEDIATE", repository_source)
         self.assertIn("xianshi_operations", repository_source)

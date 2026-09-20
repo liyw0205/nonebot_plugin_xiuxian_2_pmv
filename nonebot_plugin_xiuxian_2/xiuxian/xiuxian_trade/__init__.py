@@ -1,6 +1,7 @@
 import asyncio
 import re
 import time
+from types import SimpleNamespace
 from datetime import datetime, timedelta
 from nonebot import require
 from .. import DRIVER
@@ -63,6 +64,7 @@ from .transaction_service import GuishiStoneService
 from .transaction_service import AuctionQueueService
 from .transaction_service import AuctionSessionService
 from ...paths import get_paths
+from ...features.trade.application import TradeApplication
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 from ...bootstrap.legacy import register_legacy_startup
@@ -79,6 +81,7 @@ xianshi_repository = TradeRepository(
     max_goods_num=XiuConfig().max_goods_num,
 )
 _xianshi_purchase_service_instance = None
+trade_application = TradeApplication(get_paths().game_db, get_paths().trade_db)
 _guishi_stone_service_instance = None
 _auction_queue_service_instance = None
 _auction_session_service_instance = None
@@ -363,14 +366,18 @@ def buy_xianshi_item_safely(
     stamina_cost=0,
 ):
     """通过同库事务完成扣款、减库存、发货、卖家入账和幂等记录。"""
-    result = _xianshi_purchase_service().purchase(
-        buyer_id,
-        item_to_buy["id"],
-        quantity_to_buy,
-        operation_id=operation_id,
+    outcome = trade_application.purchase(
+        operation_id=operation_id or f"xianshi:{buyer_id}:{item_to_buy['id']}:{quantity_to_buy}",
+        user_id=str(buyer_id),
+        listing_id=item_to_buy["id"],
+        quantity=quantity_to_buy,
         stamina_operation_id=stamina_operation_id,
         stamina_cost=stamina_cost,
+        max_goods_num=XiuConfig().max_goods_num,
     )
+    result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
+    result.applied = result.status in {"applied", "duplicate"}
+
     messages = {
         "listing_missing": f"库存不足！{item_to_buy['name']} 已被其他道友购买。",
         "self_purchase": "不能购买自己上架的物品！",

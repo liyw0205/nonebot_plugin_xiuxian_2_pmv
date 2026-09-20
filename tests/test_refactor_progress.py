@@ -87,6 +87,9 @@ class RefactorProgressTests(unittest.TestCase):
         pet = slices["pet"]
         self.assertTrue(pet["active_switch_application_owned"])
         self.assertTrue(pet["legacy_active_switch_disabled"])
+        trade = slices["trade"]
+        self.assertTrue(trade["purchase_application_owned"])
+        self.assertTrue(trade["legacy_purchase_disabled"])
 
 
 if __name__ == "__main__":
