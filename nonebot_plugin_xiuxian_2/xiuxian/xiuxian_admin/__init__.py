@@ -271,6 +271,22 @@ def _adjust_admin_level(event, user_id, expected_state, level, power, spend, roo
     return SimpleNamespace(**data)
 
 
+def _adjust_admin_root(event, user_id, expected_state, root_id, spend, root_rate):
+    operation_id = _admin_operation_id(event, "root-change", str(user_id))
+    outcome = admin_asset_application.execute_legacy_call(
+        operation_id=operation_id,
+        user_id=str(user_id),
+        action="root_change",
+        payload={"expected_state": expected_state, "root_id": root_id, "spend": spend, "root_rate": root_rate},
+        call=lambda: _admin_root_change_service().change(
+            operation_id, str(get_user_id(event) or "unknown"), user_id,
+            expected_state, root_id, spend, root_rate,
+        ),
+    )
+    data = dict(outcome.data or {}); data.setdefault("status", outcome.status); data["succeeded"] = outcome.ok
+    return SimpleNamespace(**data)
+
+
 def _grant_admin_accessory(
     event,
     user_id: str,
@@ -909,18 +925,10 @@ async def gmm_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                 break
     else:
         new_root_rate = float(root_config[new_root_type]["type_speeds"])
-    result = _admin_root_change_service().change(
-        _admin_operation_id(event, "root-change", str(target_qq)),
-        str(get_user_id(event) or "unknown"),
-        target_qq,
-        (
-            target_user["root"], target_user["root_type"], target_user["root_level"],
-            target_user["level"], target_user["exp"], target_user["power"],
-            target_user["user_name"],
-        ),
-        root_id,
-        float(jsondata.level_data()[target_user["level"]]["spend"]),
-        new_root_rate,
+    result = _adjust_admin_root(
+        event, target_qq,
+        (target_user["root"], target_user["root_type"], target_user["root_level"], target_user["level"], target_user["exp"], target_user["power"], target_user["user_name"]),
+        root_id, float(jsondata.level_data()[target_user["level"]]["spend"]), new_root_rate,
     )
     if result.status == "state_changed":
         msg = "调整未完成：玩家属性已更新，请重新执行。"

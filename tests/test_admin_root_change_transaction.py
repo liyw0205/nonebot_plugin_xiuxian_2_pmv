@@ -17,6 +17,15 @@ def test_admin_facade_defers_root_change_service_construction():
     )
     assert admin._admin_root_change_service_instance is None
 
+def test_admin_root_change_uses_feature_application():
+    from pathlib import Path
+    source = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
+    text = source.read_text(encoding="utf-8")
+    handler = text[text.index("async def gmm_command_"):text.index("@hmll.handle")]
+    assert "_adjust_admin_root(" in handler
+    helper = text[text.index("def _adjust_admin_root("):text.index("def _grant_admin_accessory(")]
+    assert "admin_asset_application.execute_legacy_call(" in helper
+
 
 OLD = ("金灵根", "天灵根", 0, "练气境圆满", 10000, 31200, "青云")
 
@@ -97,8 +106,8 @@ def test_admin_root_change_entry_uses_lazy_service():
     ).read()
     handler = source[source.index("async def gmm_command_"):source.index("@cz.handle", source.index("async def gmm_command_"))]
     assert "_admin_root_change_service().root_values(" in handler
-    assert "_admin_root_change_service().change(" in handler
+    assert "_adjust_admin_root(" in handler
     assert "_admin_root_change_service_instance = None" in source
     assert "def _admin_root_change_service(" in source
-    assert handler.index("_admin_root_change_service().root_values(") < handler.index("_admin_root_change_service().change(")
-    assert "_admin_operation_id(event, \"root-change\", str(target_qq))" in handler
+    assert handler.index("_admin_root_change_service().root_values(") < handler.index("_adjust_admin_root(")
+    assert "_admin_operation_id(event, \"root-change\", str(user_id))" in source
