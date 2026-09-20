@@ -74,6 +74,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     puppet_facade = (PACKAGE / "xiuxian" / "xiuxian_puppet" / "__init__.py").read_text(encoding="utf-8")
     pet_facade = (PACKAGE / "xiuxian" / "xiuxian_pet" / "__init__.py").read_text(encoding="utf-8")
     trade_facade = (PACKAGE / "xiuxian" / "xiuxian_trade" / "__init__.py").read_text(encoding="utf-8")
+    boss_facade = (PACKAGE / "xiuxian" / "xiuxian_boss" / "__init__.py").read_text(encoding="utf-8")
     return {
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,
@@ -215,6 +216,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "purchase_application_owned": "trade_application.purchase(" in trade_facade,
             "legacy_purchase_disabled": "_xianshi_purchase_service().purchase(" not in trade_facade,
             "status": "xianshi_purchase_cutover_with_other_trade_compatibility",
+        },
+        "boss": {
+            "manual_spawn_application_owned": "boss_application.spawn(" in boss_facade,
+            "legacy_manual_spawn_disabled": "_world_boss_manual_spawn_service().spawn(" not in boss_facade,
+            "status": "manual_spawn_cutover_with_other_boss_compatibility",
         },
     }
 

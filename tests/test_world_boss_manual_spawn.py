@@ -1,5 +1,6 @@
 import json
 import importlib
+from pathlib import Path
 import sqlite3
 
 import nonebot
@@ -17,6 +18,12 @@ def test_boss_facade_defers_manual_spawn_service_construction():
         "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_boss"
     )
     assert world_boss._world_boss_manual_spawn_service_instance is None
+
+
+def test_world_boss_manual_spawn_uses_feature_application():
+    source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/__init__.py"
+    text = source.read_text(encoding="utf-8")
+    assert "boss_application.spawn(" in text
 
 
 OLD_BOSS = {
@@ -147,12 +154,11 @@ def test_random_and_appointed_entries_share_transaction_without_side_paths():
             "async def generate_all_bosses_task"
         )
     ]
-    assert helper.index("_world_boss_manual_spawn_service().get_result(") < helper.index(
-        "createboss_jj("
-    )
-    assert "_world_boss_manual_spawn_service().snapshot()" in helper
-    assert "expected_revision=" in helper
-    assert "_world_boss_manual_spawn_service().spawn(" in helper
+    assert helper.index("boss_application.spawn_result(") < helper.index("createboss_jj(")
+    assert "boss_application.spawn_snapshot(" in helper
+    assert "boss_application.spawn(" in helper
+    assert "_world_boss_manual_spawn_service().snapshot()" not in helper
+    assert "_world_boss_manual_spawn_service().spawn(" not in helper
     assert "_world_boss_manual_spawn_service_instance = None" in text
     assert "def _world_boss_manual_spawn_service(" in text
 

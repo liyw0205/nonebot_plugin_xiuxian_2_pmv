@@ -315,9 +315,9 @@ def _spawn_world_boss(
     boss_jj: str | None = None,
     boss_name: str | None = None,
 ):
-    result = _world_boss_manual_spawn_service().get_result(operation_id)
+    result = boss_application.spawn_result(operation_id, config_loader=get_boss_config)
     if result is not None:
-        current_bosses, _ = _world_boss_manual_spawn_service().snapshot()
+        current_bosses, _ = boss_application.spawn_snapshot(config_loader=get_boss_config)
         _sync_world_boss_cache(current_bosses)
         return result
 
@@ -325,15 +325,14 @@ def _spawn_world_boss(
     bossinfo = createboss_jj(boss_jj, boss_name)
     if bossinfo is None:
         return None
-    expected_bosses, expected_revision = _world_boss_manual_spawn_service().snapshot()
-    result = _world_boss_manual_spawn_service().spawn(
+    expected_bosses, expected_revision = boss_application.spawn_snapshot(config_loader=get_boss_config)
+    result = boss_application.spawn(
         operation_id=operation_id,
         expected_revision=expected_revision,
         expected_bosses=expected_bosses,
-        expected_config=_world_boss_manual_spawn_service().config_snapshot(
-            get_boss_config(), boss_jj
-        ),
+        expected_config=WorldBossManualSpawnService.config_snapshot(get_boss_config(), boss_jj),
         boss=bossinfo,
+        config_loader=get_boss_config,
     )
     if result.succeeded:
         _sync_world_boss_cache(result.bosses)

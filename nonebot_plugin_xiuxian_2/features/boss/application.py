@@ -92,6 +92,24 @@ class BossApplication:
     def settlement_result(self, *, operation_id: str) -> Any:
         return self._repository().settlement_result(operation_id)
 
+    def spawn_snapshot(self, *, config_loader):
+        from ...xiuxian.xiuxian_boss.transaction_service import WorldBossManualSpawnService
+        return WorldBossManualSpawnService(self.player_database, config_loader).snapshot()
+
+    def spawn_result(self, operation_id: str, *, config_loader):
+        from ...xiuxian.xiuxian_boss.transaction_service import WorldBossManualSpawnService
+        return WorldBossManualSpawnService(self.player_database, config_loader).get_result(operation_id)
+
+    def spawn(self, *, operation_id: str, expected_revision: int, expected_bosses: list[dict[str, Any]], expected_config: dict[str, Any], boss: dict[str, Any], config_loader):
+        from ...xiuxian.xiuxian_boss.transaction_service import WorldBossManualSpawnService
+        return WorldBossManualSpawnService(self.player_database, config_loader).spawn(
+            operation_id=operation_id,
+            expected_revision=expected_revision,
+            expected_bosses=expected_bosses,
+            expected_config=expected_config,
+            boss=boss,
+        )
+
     def reply(self, **kwargs: Any) -> ReplyPlan:
         action = str(kwargs.pop("action", "purchase"))
         return ReplyPlan(getattr(self, action)(**kwargs).data, reference=True)
