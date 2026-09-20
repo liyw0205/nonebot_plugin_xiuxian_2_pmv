@@ -403,12 +403,14 @@ async def blessed_spot_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     if len(arg) > 9:
         msg = f"洞天福地的名字不可大于9位,请重新命名"
     else:
-        result = _blessed_spot_service().rename(
-            _blessed_spot_operation_id(event, "rename", user_id),
-            user_id,
-            str(user_info.get("blessed_spot_name", "") or ""),
-            arg,
+        outcome = buff_application.rename(
+            operation_id=_blessed_spot_operation_id(event, "rename", user_id),
+            user_id=user_id,
+            expected_name=str(user_info.get("blessed_spot_name", "") or ""),
+            new_name=arg,
         )
+        result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
+
         if result.status == "duplicate":
             msg = f"道友的洞天福地成功改名为：{result.name}\n该改名请求已经处理，无需重复提交。"
         elif result.succeeded:

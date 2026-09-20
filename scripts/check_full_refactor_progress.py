@@ -226,7 +226,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "buff": {
             "blessed_open_application_owned": "buff_application.open(" in buff_facade,
             "legacy_blessed_open_disabled": "_blessed_spot_service().open(" not in buff_facade,
-            "status": "blessed_spot_open_cutover_with_other_buff_compatibility",
+            "blessed_rename_application_owned": "buff_application.rename(" in buff_facade,
+            "legacy_blessed_rename_disabled": "_blessed_spot_service().rename(" not in buff_facade,
+            "status": "blessed_spot_open_rename_cutover_with_other_buff_compatibility",
         },
     }
 
