@@ -52,8 +52,8 @@ def test_title_entries_use_lazy_replay_and_application_write_paths():
     ).read()
     assert "_title_transaction_service_instance = None" in title_source
     assert "def _title_transaction_service(" in title_source
-    assert "_title_transaction_service().get_result(" in title_source
-    assert "title_application.execute(" in title_source
+    assert "title_application.get_result(" in title_source
+    assert "_title_transaction_service().get_result(" not in title_source
     assert "title_transaction_service.get_result(" not in title_source
     assert "from . import _title_transaction_service" in data_source
     assert "_title_transaction_service().unlock_batch(" in data_source

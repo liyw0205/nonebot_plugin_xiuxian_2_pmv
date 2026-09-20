@@ -185,7 +185,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "title": {
             "equip_replay_application_owned": "title_application.get_result(" in title_facade,
             "legacy_equip_replay_disabled": "# 先回放：成功后 equipped 变化会挡住同事件幂等。\n    prior = _title_transaction_service().get_result(" not in title_facade,
-            "status": "equip_replay_cutover_with_unequip_unlock_compatibility",
+            "legacy_unequip_replay_disabled": "operation_id = _title_operation_id(event, \"unequip\", str(user_id))\n    prior = _title_transaction_service().get_result(" not in title_facade,
+            "status": "equip_unequip_replay_cutover_with_unlock_compatibility",
         },
     }
 

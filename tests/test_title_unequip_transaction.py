@@ -11,6 +11,13 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_title.title_transaction_service im
 from nonebot_plugin_xiuxian_2.features.title.migrations import apply_title_schema
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
+
+
+def test_title_unequip_replay_uses_feature_application():
+    source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py"
+    handler = source.read_text(encoding="utf-8").split("@title_unequip_cmd.handle", 1)[1].split("@title_check_cmd.handle", 1)[0]
+    assert "title_application.get_result(" in handler
+    assert "_title_transaction_service().get_result(" not in handler
 from tests.test_db_backend import db_backend
 
 

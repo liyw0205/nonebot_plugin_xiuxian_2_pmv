@@ -280,7 +280,7 @@ async def title_unequip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
     user_id = user_info['user_id']
     operation_id = _title_operation_id(event, "unequip", str(user_id))
-    prior = _title_transaction_service().get_result(operation_id)
+    prior = title_application.get_result(operation_id)
     if prior is not None and prior.succeeded:
         title_data = get_title_by_id(prior.title_id) or {}
         await handle_send(

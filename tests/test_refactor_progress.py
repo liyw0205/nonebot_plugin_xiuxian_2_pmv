@@ -73,6 +73,7 @@ class RefactorProgressTests(unittest.TestCase):
         title = slices["title"]
         self.assertTrue(title["equip_replay_application_owned"])
         self.assertTrue(title["legacy_equip_replay_disabled"])
+        self.assertTrue(title["legacy_unequip_replay_disabled"])
 
 
 if __name__ == "__main__":
