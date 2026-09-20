@@ -1113,30 +1113,21 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             reward = (item_id, item_name, 1)
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"dongfu-patrol:{uid}:{event_message_id or runtime_ids.new_id()}"
-    prior = _dongfu_patrol_service().get_result(operation_id)
-    if prior is not None and prior.succeeded:
-        await handle_send(
-            bot,
-            event,
-            f"洞府巡山完成。\n"
-            f"巡山护府：{prior.patrol_guard}层\n"
-            f"今日巡山：{prior.patrol_count}/{DONGFU_PATROL_DAILY_LIMIT}\n"
-            f"该巡山请求已经处理，无需重复提交。",
-        )
-        return
-
     stone_gain = runtime_random.randint(50000, 150000)
     if geomancy.get("name"):
         stone_gain = int(stone_gain * 1.2)
-    result = _run_dongfu_action(
-        "patrol", operation_id, uid,
+    outcome = dongfu_application.execute_legacy_call(
+        operation_id=operation_id,
+        user_id=str(uid),
+        action="patrol",
+        payload={"business_date": _today_str(), "stamina": DONGFU_PATROL_STAMINA, "daily_limit": DONGFU_PATROL_DAILY_LIMIT, "stone_gain": stone_gain, "reward": reward, "maximum": XiuConfig().max_goods_num},
         call=lambda: _dongfu_patrol_service().patrol(
             operation_id, uid, _today_str(), DONGFU_PATROL_STAMINA,
             DONGFU_PATROL_DAILY_LIMIT, stone_gain, reward, XiuConfig().max_goods_num,
         ),
-        business_date=_today_str(), stamina=DONGFU_PATROL_STAMINA,
-        daily_limit=DONGFU_PATROL_DAILY_LIMIT, stone_gain=stone_gain, reward=reward,
     )
+    result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
+
     if result.status == "duplicate":
         await handle_send(
             bot,

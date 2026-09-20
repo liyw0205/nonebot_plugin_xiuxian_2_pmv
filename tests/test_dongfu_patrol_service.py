@@ -12,6 +12,12 @@ from tests.test_db_backend import db_backend
 
 
 class DongfuPatrolServiceTests(unittest.TestCase):
+    def test_dongfu_patrol_uses_feature_application(self):
+        source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py"
+        text = source.read_text(encoding="utf-8")
+        handler = text[text.index('operation_id = f"dongfu-patrol:'):text.index("@dongfu_fertilize.handle")]
+        self.assertIn("dongfu_application.execute_legacy_call(", handler)
+        self.assertNotIn("_dongfu_patrol_service().get_result(", handler)
     def test_dongfu_facade_defers_patrol_service_construction(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dongfu
 
