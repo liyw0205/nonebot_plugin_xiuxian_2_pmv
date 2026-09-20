@@ -27,7 +27,10 @@ def test_impart_closing_enter_handler_uses_lazy_dual_database_service():
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py"
     ).read_text(encoding="utf-8")
     handler = source[source.index("async def impart_pk_in_closing_"):source.index("async def impart_pk_out_closing_")]
-    assert "_impart_closing_enter_service().get_result(" in handler
+    assert "_run_impart_pk_action(" in handler
+    helper = source[source.index("def _run_impart_pk_action("):source.index("@impart_pk")]
+    assert "impart_pk_application.execute_legacy_call(" in helper
+    assert "_impart_closing_enter_service().get_result(" not in handler
     assert "_impart_closing_enter_service().enter(" in handler
     assert "_impart_closing_enter_service_instance = None" in source
     assert "def _impart_closing_enter_service(" in source

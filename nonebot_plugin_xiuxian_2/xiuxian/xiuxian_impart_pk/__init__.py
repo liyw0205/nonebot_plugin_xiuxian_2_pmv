@@ -994,13 +994,8 @@ async def impart_pk_in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMess
         await handle_send(bot, event, msg, md_type="我要修仙")
         await impart_pk_in_closing.finish()
     user_id = user_info['user_id']
-    op_id = _impart_operation_id(event, "closing-enter", user_id)
     # 先回放：成功后 type=4 会挡住同事件幂等；started_at 每次不同不能进 payload。
-    prior = _impart_closing_enter_service().get_result(op_id)
-    if prior is not None and prior.succeeded:
-        msg = "进入虚神界闭关状态，如需出关，发送【虚神界出关】！\n该闭关请求已经处理，无需重复提交。"
-        await handle_send(bot, event, msg, md_type="虚神界", k1="出关", v1="虚神界出关", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
-        await impart_pk_in_closing.finish()
+    op_id = _impart_operation_id(event, "closing-enter", user_id)
     started_at = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S.%f")
     result = _run_impart_pk_action(
         "closing_enter", op_id, user_id,

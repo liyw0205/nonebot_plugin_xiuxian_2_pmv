@@ -258,7 +258,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "impart_pk": {
             "training_replay_application_owned": "def _run_impart_pk_action(" in impart_pk_facade and "impart_pk_application.execute_legacy_call(" in impart_pk_facade,
             "legacy_training_replay_disabled": "_impart_training_settlement_service().get_result(" not in impart_pk_facade,
-            "status": "training_replay_cutover_with_other_impart_pk_compatibility",
+            "closing_enter_replay_application_owned": "_impart_closing_enter_service().enter(" in impart_pk_facade and "def _run_impart_pk_action(" in impart_pk_facade,
+            "legacy_closing_enter_replay_disabled": "_impart_closing_enter_service().get_result(" not in impart_pk_facade,
+            "status": "training_closing_enter_replay_cutover_with_other_impart_pk_compatibility",
         },
     }
 
