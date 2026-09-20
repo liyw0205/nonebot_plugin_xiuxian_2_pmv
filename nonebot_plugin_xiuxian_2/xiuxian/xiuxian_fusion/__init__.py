@@ -185,7 +185,7 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
         return False, "合成数量必须是正整数！"
     # 先回放：成功后 limit/库存变化会挡住同事件幂等。
     if quantity == 1:
-        prior = _fusion_service().get_result(operation_id)
+        prior = fusion_application.apply_result(operation_id)
         if prior is not None and prior.succeeded:
             if prior.successful:
                 item_type = equipment.get('type', '物品')
@@ -283,16 +283,16 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
         if item_info and item_info['goods_type'] == "装备" and check_equipment_use_msg(user_id, int(item_id)):
             reserved_items[int(item_id)] = 1
     if quantity == 1:
-        result = _run_fusion_action(
-            "apply", operation_id, user_id,
-            call=lambda: _fusion_service().apply(
-                operation_id, user_id, int(fusion_info.get('need_stone', 0)), needed_items,
-                equipment_id, equipment['name'], equipment['type'], successful=outcomes[0],
-                protection_item_id=None if guaranteed else 20006,
-                reserved_items=reserved_items, max_goods_num=XiuConfig().max_goods_num,
-            ),
-            equipment_id=equipment_id, quantity=1,
+        outcome = fusion_application.apply(
+            operation_id=operation_id, user_id=user_id,
+            need_stone=int(fusion_info.get('need_stone', 0)), needed_items=needed_items,
+            equipment_id=equipment_id, equipment_name=equipment['name'], equipment_type=equipment['type'],
+            successful=outcomes[0], protection_item_id=None if guaranteed else 20006,
+            reserved_items=reserved_items, max_goods_num=XiuConfig().max_goods_num,
         )
+        result = SimpleNamespace(**dict(outcome.data or {}))
+        result.status = "duplicate" if outcome.replayed else outcome.status
+        result.succeeded = outcome.ok
         if result.status == "duplicate":
             if result.successful:
                 item_type = equipment.get('type', '物品')

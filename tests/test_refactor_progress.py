@@ -67,6 +67,9 @@ class RefactorProgressTests(unittest.TestCase):
         dufang = slices["dufang"]
         self.assertTrue(dufang["share_application_owned"])
         self.assertTrue(dufang["legacy_share_disabled"])
+        fusion = slices["fusion"]
+        self.assertTrue(fusion["single_application_owned"])
+        self.assertTrue(fusion["legacy_single_disabled"])
 
 
 if __name__ == "__main__":

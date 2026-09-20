@@ -22,6 +22,13 @@ def test_breakthrough_facade_defers_pill_fusion_service_construction():
     assert breakthrough._pill_fusion_service_instance is None
 
 
+def test_fusion_production_uses_feature_application():
+    source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_fusion/__init__.py"
+    text = source.read_text(encoding="utf-8")
+    assert "fusion_application.execute(" in text or "fusion_application.apply(" in text
+    assert "_fusion_service().apply(" not in text
+
+
 class PillFusionServiceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
