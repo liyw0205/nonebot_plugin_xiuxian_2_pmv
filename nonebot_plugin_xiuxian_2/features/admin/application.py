@@ -18,9 +18,16 @@ class AdminApplication(MigratedFeatureApplication):
         from ...xiuxian.xiuxian_admin.transaction_service import AdminPlayerStatusBatchResetService
         return AdminPlayerStatusBatchResetService(self.database).reset(*args, **kwargs)
 
-    def grant_item_batch(self, *args, **kwargs):
+    def grant_item_batch(
+        self, operation_id: str, operator_id: str, user_ids, item_id: int,
+        item_name: str, item_type: str, quantity: int, max_goods_num: int,
+        *, chunk_size: int = 100,
+    ):
         from ...xiuxian.xiuxian_admin.transaction_service import AdminItemBatchGrantService
-        return AdminItemBatchGrantService(self.database).grant(*args, **kwargs)
+        return AdminItemBatchGrantService(self.database).grant(
+            operation_id, operator_id, user_ids, item_id, item_name, item_type,
+            quantity, max_goods_num, chunk_size=chunk_size,
+        )
 
 
 __all__ = ["AdminApplication"]
