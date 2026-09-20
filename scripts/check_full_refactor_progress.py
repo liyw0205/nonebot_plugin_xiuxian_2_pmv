@@ -79,6 +79,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     impart_facade = (PACKAGE / "xiuxian" / "xiuxian_impart" / "__init__.py").read_text(encoding="utf-8")
     mixelixir_facade = (PACKAGE / "xiuxian" / "xiuxian_mixelixir" / "__init__.py").read_text(encoding="utf-8")
     dongfu_facade = (PACKAGE / "xiuxian" / "xiuxian_dongfu" / "__init__.py").read_text(encoding="utf-8")
+    impart_pk_facade = (PACKAGE / "xiuxian" / "xiuxian_impart_pk" / "__init__.py").read_text(encoding="utf-8")
     return {
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,
@@ -253,6 +254,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "accelerate_application_owned": "dongfu-accelerate" in dongfu_facade and "dongfu_application.execute_legacy_call(" in dongfu_facade,
             "patrol_application_owned": "dongfu-patrol" in dongfu_facade and "dongfu_application.execute_legacy_call(" in dongfu_facade,
             "status": "plant_harvest_fertilize_accelerate_patrol_cutover_with_other_dongfu_compatibility",
+        },
+        "impart_pk": {
+            "training_replay_application_owned": "def _run_impart_pk_action(" in impart_pk_facade and "impart_pk_application.execute_legacy_call(" in impart_pk_facade,
+            "legacy_training_replay_disabled": "_impart_training_settlement_service().get_result(" not in impart_pk_facade,
+            "status": "training_replay_cutover_with_other_impart_pk_compatibility",
         },
     }
 

@@ -639,15 +639,6 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     impaer_exp_time = max(1, impaer_exp_time)
     # 先回放：成功后时间/日额度变化会挡住同事件幂等。
     op_id = _impart_operation_id(event, "training", user_id)
-    prior = _impart_training_settlement_service().get_result(op_id)
-    if prior is not None and prior.succeeded:
-        msg = (
-            f"虚神界修炼结束（重放），共修炼{impaer_exp_time}分钟\n"
-            f"今日虚神界修炼收益：{number_to(prior.exp_gain)}\n"
-            f"该修炼请求已经处理，无需重复提交。"
-        )
-        await handle_send(bot, event, msg, md_type="虚神界", k1="修炼", v1="虚神界修炼", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
-        await impart_pk_exp.finish()
 
     impart_data_draw = await impart_pk_check(user_id)
     if impart_data_draw is None:
