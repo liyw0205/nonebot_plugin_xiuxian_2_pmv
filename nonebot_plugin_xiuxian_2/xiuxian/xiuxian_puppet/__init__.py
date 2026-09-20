@@ -231,9 +231,12 @@ async def check_and_harvest(user_id):
             for goods_id, amount in give_dict.items()
         ]
 
-    result = _puppet_harvest_service().harvest(
-        user_id,
-        now=runtime_clock.now(),
+    harvest_now = runtime_clock.now()
+    harvest_operation_id = f"puppet:harvest:{user_id}:{harvest_now.strftime('%Y%m%d%H%M%S')}"
+    result = puppet_application.harvest(
+        operation_id=harvest_operation_id,
+        user_id=user_id,
+        now=harvest_now,
         time_cost_hours=GETCONFIG['time_cost'],
         speed_base=GETCONFIG['加速基数'],
         harvest_costs={
@@ -241,6 +244,7 @@ async def check_and_harvest(user_id):
         },
         harvest_bonus=impart_reap_per + reap_buff,
         reward_factory=create_rewards,
+        max_goods_num=XiuConfig().max_goods_num,
     )
     if result.harvested:
         msg = '傀儡收取\n' + ''.join(

@@ -37,6 +37,12 @@ class PuppetHarvestServiceTests(unittest.TestCase):
 
         self.assertIsNone(xiuxian_puppet._puppet_harvest_service_instance)
 
+    def test_puppet_harvest_scheduler_uses_feature_application(self):
+        source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_puppet/__init__.py"
+        text = source.read_text(encoding="utf-8")
+        self.assertIn("puppet_application.harvest(", text)
+        self.assertNotIn("_puppet_harvest_service().harvest(", text)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         root = Path(self.temp_dir.name)

@@ -7,6 +7,7 @@ from typing import Any, Protocol
 class PuppetRepository(Protocol):
     def purchase(self, operation_id: str, user_id: str, stone_cost: int) -> Any: ...
     def upgrade(self, operation_id: str, user_id: str, upgrade_costs: dict[int, int], *, max_level: int) -> Any: ...
+    def harvest(self, operation_id: str, user_id: str, **kwargs: Any) -> Any: ...
 
 
 class LegacyPuppetRepository:
@@ -24,6 +25,16 @@ class LegacyPuppetRepository:
 
     def upgrade(self, *args: Any, **kwargs: Any) -> Any:
         return self._service().upgrade(*args, **kwargs)
+
+    def harvest(self, operation_id: str, user_id: str, **kwargs: Any) -> Any:
+        from ...xiuxian.xiuxian_puppet.transaction_service import PuppetHarvestService
+
+        service = PuppetHarvestService(
+            self.game_database,
+            self.player_database,
+            max_goods_num=int(kwargs.pop("max_goods_num")),
+        )
+        return service.harvest(operation_id=operation_id, user_id=user_id, **kwargs)
 
 
 __all__ = ["PuppetRepository", "LegacyPuppetRepository"]

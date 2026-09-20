@@ -71,6 +71,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     fusion_facade = (PACKAGE / "xiuxian" / "xiuxian_fusion" / "__init__.py").read_text(encoding="utf-8")
     title_facade = (PACKAGE / "xiuxian" / "xiuxian_title" / "__init__.py").read_text(encoding="utf-8")
     base_facade = (PACKAGE / "xiuxian" / "xiuxian_base" / "__init__.py").read_text(encoding="utf-8")
+    puppet_facade = (PACKAGE / "xiuxian" / "xiuxian_puppet" / "__init__.py").read_text(encoding="utf-8")
     return {
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,
@@ -197,6 +198,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "rename_application_owned": "base_application.rename(" in base_facade,
             "legacy_rename_disabled": "_player_rename_service().rename_user(" not in base_facade and "_player_rename_service().rename_root(" not in base_facade,
             "status": "rename_cutover_with_replay_compatibility",
+        },
+        "puppet": {
+            "harvest_application_owned": "puppet_application.harvest(" in puppet_facade,
+            "legacy_harvest_disabled": "_puppet_harvest_service().harvest(" not in puppet_facade,
+            "status": "harvest_cutover_with_purchase_upgrade_compatibility",
         },
     }
 

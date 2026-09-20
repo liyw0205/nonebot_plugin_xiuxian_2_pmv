@@ -71,6 +71,10 @@ class PuppetApplication:
         repository = self.repository or LegacyPuppetRepository(self.game_database, self.player_database)
         return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="puppet.upgrade", payload=request.payload(), call=lambda: repository.upgrade(request.operation_id, request.user_id, dict(request.upgrade_costs), max_level=request.max_level))
 
+    def harvest(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        repository = self.repository or LegacyPuppetRepository(self.game_database, self.player_database)
+        return repository.harvest(operation_id, user_id, **kwargs)
+
     def reply(self, **kwargs: Any) -> ReplyPlan:
         action = str(kwargs.pop("action", "purchase"))
         return ReplyPlan(getattr(self, action)(**kwargs).data, reference=True)
