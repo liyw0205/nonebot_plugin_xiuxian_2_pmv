@@ -296,21 +296,12 @@ def _grant_admin_accessory(
     quantity: int,
     target_name: str,
 ):
-    equipped, bag = _admin_accessory_adjustment_service().snapshot(user_id)
-    return _admin_accessory_adjustment_service().grant(
-        _admin_operation_id(event, "accessory-grant", user_id),
-        str(get_user_id(event) or "unknown"),
-        user_id,
-        item_id,
-        item_name,
-        quality,
-        quantity,
-        equipped,
-        bag,
-        ACCESSORY_BAG_LIMIT,
-        lambda: create_accessory_instance(item_id, quality),
-        target_name=target_name,
+    outcome = admin_asset_application.adjust_accessory(
+        operation_id=_admin_operation_id(event, "accessory-grant", user_id), operator_id=str(get_user_id(event) or "unknown"),
+        user_id=user_id, action="grant", item_id=item_id, item_name=item_name, quantity=quantity,
+        target_name=target_name, player_database=get_paths().player_db,
     )
+    return SimpleNamespace(**dict(outcome.data or {}))
 
 
 def _grant_admin_item(event, user_id, item_id, item_name, item_type, quantity, expected_quantity, max_goods_num, target_name):
@@ -343,18 +334,12 @@ def _destroy_admin_accessory(
     quantity: int,
     target_name: str,
 ):
-    equipped, bag = _admin_accessory_adjustment_service().snapshot(user_id)
-    return _admin_accessory_adjustment_service().destroy(
-        _admin_operation_id(event, "accessory-destroy", user_id),
-        str(get_user_id(event) or "unknown"),
-        user_id,
-        item_id,
-        item_name,
-        quantity,
-        equipped,
-        bag,
-        target_name=target_name,
+    outcome = admin_asset_application.adjust_accessory(
+        operation_id=_admin_operation_id(event, "accessory-destroy", user_id), operator_id=str(get_user_id(event) or "unknown"),
+        user_id=user_id, action="destroy", item_id=item_id, item_name=item_name, quantity=quantity,
+        target_name=target_name, player_database=get_paths().player_db,
     )
+    return SimpleNamespace(**dict(outcome.data or {}))
 
 
 gm_command = on_command("神秘力量", permission=SUPERUSER, priority=10, block=True)

@@ -34,8 +34,7 @@ def test_admin_accessory_helpers_use_lazy_dual_database_services():
     assert "def _admin_accessory_batch_adjustment_service(" in source
     assert "get_paths().game_db" in source
     assert "get_paths().player_db" in source
-    assert "_admin_accessory_adjustment_service().grant(" in source
-    assert "_admin_accessory_adjustment_service().destroy(" in source
+    assert "admin_asset_application.adjust_accessory(" in source
     assert "admin_accessory_adjustment_service.grant(" not in source
     assert "admin_accessory_adjustment_service.destroy(" not in source
 

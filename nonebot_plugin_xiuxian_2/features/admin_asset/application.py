@@ -110,6 +110,21 @@ class AdminAssetApplication:
         data = asdict(raw) if is_dataclass(raw) else dict(vars(raw))
         return type("AdminImpartStoneOutcome", (), {"data": data, "status": raw.status, "ok": raw.succeeded})()
 
+    def adjust_accessory(
+        self, *, operation_id: str, operator_id: str, user_id: str, action: str,
+        item_id: int, item_name: str, quantity: int, target_name: str = "",
+        player_database: str | Path,
+    ):
+        from ...xiuxian.xiuxian_admin.transaction_service import AdminAccessoryAdjustmentService
+        service = AdminAccessoryAdjustmentService(self.database, player_database)
+        equipped, bag = service.snapshot(user_id)
+        if action == "grant":
+            raw = service.grant(operation_id, operator_id, user_id, item_id, item_name, quantity, equipped, bag, target_name=target_name)
+        else:
+            raw = service.destroy(operation_id, operator_id, user_id, item_id, item_name, quantity, equipped, bag, target_name=target_name)
+        data = asdict(raw) if is_dataclass(raw) else dict(vars(raw))
+        return type("AdminAccessoryOutcome", (), {"data": data, "status": raw.status, "ok": raw.succeeded})()
+
     def grant_item(
         self,
         *,
