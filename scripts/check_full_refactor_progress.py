@@ -77,6 +77,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     boss_facade = (PACKAGE / "xiuxian" / "xiuxian_boss" / "__init__.py").read_text(encoding="utf-8")
     buff_facade = (PACKAGE / "xiuxian" / "xiuxian_buff" / "__init__.py").read_text(encoding="utf-8")
     impart_facade = (PACKAGE / "xiuxian" / "xiuxian_impart" / "__init__.py").read_text(encoding="utf-8")
+    mixelixir_facade = (PACKAGE / "xiuxian" / "xiuxian_mixelixir" / "__init__.py").read_text(encoding="utf-8")
     return {
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,
@@ -237,6 +238,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "love_sand_application_owned": "impart_application.execute_legacy_call(" in impart_facade,
             "card_compose_application_owned": "async def impart_compose_" in impart_facade and "impart_application.execute_legacy_call(" in impart_facade,
             "status": "love_sand_compose_cutover_with_other_impart_compatibility",
+        },
+        "mixelixir": {
+            "harvest_level_application_owned": "mixelixir_application.harvest_level_upgrade(" in mixelixir_facade,
+            "legacy_harvest_level_disabled": "_mixelixir_harvest_level_upgrade_service().upgrade(" not in mixelixir_facade,
+            "status": "harvest_level_upgrade_cutover_with_other_mixelixir_compatibility",
         },
     }
 

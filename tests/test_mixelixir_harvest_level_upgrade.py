@@ -33,8 +33,8 @@ def test_mixelixir_harvest_level_upgrade_uses_lazy_dual_database_service():
     assert "_mixelixir_harvest_level_upgrade_service_instance = None" in source
     assert "def _mixelixir_harvest_level_upgrade_service(" in source
     assert "get_paths().game_db, get_paths().player_db" in source
-    assert "_mixelixir_harvest_level_upgrade_service().get_result(" in handler
-    assert "_mixelixir_harvest_level_upgrade_service().upgrade(" in handler
+    assert "mixelixir_application.harvest_level_upgrade(" in handler
+    assert "_mixelixir_harvest_level_upgrade_service().upgrade(" not in handler
     assert "mixelixir_harvest_level_upgrade_service.upgrade(" not in handler
 
 

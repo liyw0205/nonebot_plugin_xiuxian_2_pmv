@@ -84,7 +84,20 @@ class MixelixirApplication:
             normalize=lambda data: {"status": data.get("status", "failed"), "reward_quantity": int(data.get("reward_quantity", 0) or 0), "granted": {"elixir": int(data.get("reward_quantity", 0) or 0)}},
         )
 
-    def reply(self, **kwargs: Any) -> ReplyPlan:
+    def harvest_level_upgrade(self, *, operation_id: str, user_id: str, current_level: int, experience: int, next_level: int, cost: int):
+        from ...xiuxian.xiuxian_mixelixir.transaction_service import MixelixirHarvestLevelUpgradeService
+        return self._execute(
+            operation_id=operation_id,
+            user_id=user_id,
+            action="mixelixir.harvest_level_upgrade",
+            payload={"current_level": current_level, "experience": experience, "next_level": next_level, "cost": cost},
+            call=lambda: MixelixirHarvestLevelUpgradeService(self.game_database, self.player_database).upgrade(operation_id, user_id, current_level, experience, next_level, cost),
+            success_statuses={"applied", "duplicate"},
+            messages={"experience_insufficient": "炼丹经验不足。", "state_changed": "炼丹数据已更新，请重新查看。"},
+            normalize=lambda data: data,
+        )
+
+    def reply(self, **kwargs: Any):
         action = str(kwargs.pop("action", "harvest"))
         return ReplyPlan(getattr(self, action)(**kwargs).data, reference=True)
 

@@ -164,12 +164,6 @@ async def mix_elixir_sqdj_up_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     now_exp = int(mix_elixir_info['炼丹经验'] or 0)
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"mixelixir-harvest-level:{event_id}:{user_id}" if event_id else f"mixelixir-harvest-level:{user_id}:{runtime_ids.new_id()}"
-    # 先回放：成功后等级达上限会挡住同事件幂等。
-    prior = _mixelixir_harvest_level_upgrade_service().get_result(operation_id)
-    if prior is not None and prior.succeeded:
-        msg = f"道友消耗炼丹经验{prior.cost}点，收取等级目前为：{prior.level}级，可以使灵田收获的药材增加{prior.level}个！\n该升级请求已经处理，无需重复提交。"
-        await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
-        await mix_elixir_sqdj_up.finish()
     if now_level >= len(SQDJCONFIG):
         msg = f"道友的收取等级已达到最高等级，无法升级了"
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
@@ -179,15 +173,16 @@ async def mix_elixir_sqdj_up_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         msg = f"下一个收取等级需要炼丹经验{next_level_cost}点，道友当前炼丹经验不足（现有{now_exp}点）。"
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")
         await mix_elixir_sqdj_up.finish()
-    upgrade = _mixelixir_harvest_level_upgrade_service().upgrade(
-        operation_id,
-        user_id,
-        now_level,
-        now_exp,
-        user_info['stone'],
-        now_level + 1,
-        next_level_cost,
+    outcome = mixelixir_application.harvest_level_upgrade(
+        operation_id=operation_id,
+        user_id=str(user_id),
+        current_level=now_level,
+        experience=now_exp,
+        next_level=now_level + 1,
+        cost=next_level_cost,
     )
+    upgrade = SimpleNamespace(**dict(outcome.data or {})); upgrade.status = outcome.status; upgrade.succeeded = outcome.ok
+
     if upgrade.status == "duplicate":
         msg = f"道友消耗炼丹经验{upgrade.cost}点，收取等级目前为：{upgrade.level}级，可以使灵田收获的药材增加{upgrade.level}个！\n该升级请求已经处理，无需重复提交。"
         await handle_send(bot, event, msg, md_type="炼丹", k1="升级", v1="升级丹药控火", k2="信息", v2="我的炼丹信息", k3="帮助", v3="炼丹帮助")

@@ -103,6 +103,9 @@ class RefactorProgressTests(unittest.TestCase):
         impart = slices["impart"]
         self.assertTrue(impart["love_sand_application_owned"])
         self.assertTrue(impart["card_compose_application_owned"])
+        mixelixir = slices["mixelixir"]
+        self.assertTrue(mixelixir["harvest_level_application_owned"])
+        self.assertTrue(mixelixir["legacy_harvest_level_disabled"])
 
 
 if __name__ == "__main__":
