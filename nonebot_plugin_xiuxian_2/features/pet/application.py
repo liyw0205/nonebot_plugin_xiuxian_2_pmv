@@ -88,6 +88,9 @@ class PetApplication:
     def hatch_result(self, *, operation_id: str) -> Any:
         return self._repository().hatch_result(operation_id)
 
+    def switch(self, *, operation_id: str, user_id: str, expected_active_uid: str, target_uid: str, travel_pet_uid: str = "") -> Any:
+        return self._repository().switch(operation_id, user_id, expected_active_uid, target_uid, travel_pet_uid)
+
     def reply(self, **kwargs: Any) -> ReplyPlan:
         action = str(kwargs.pop("action", "claim_travel"))
         result = getattr(self, action)(**kwargs)

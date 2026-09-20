@@ -1348,12 +1348,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     )
     travel_pet_uid = str((data.get("travel") or {}).get("pet_uid", ""))
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or runtime_ids.new_id())
-    result = _pet_active_switch_service().switch(
-        f"pet-active-switch:{event_id}:{user_id}",
-        user_id,
-        active.get("uid", ""),
-        uid,
-        travel_pet_uid,
+    result = pet_application.switch(
+        operation_id=f"pet-active-switch:{event_id}:{user_id}",
+        user_id=user_id,
+        expected_active_uid=active.get("uid", ""),
+        target_uid=uid,
+        travel_pet_uid=travel_pet_uid,
     )
     if result.succeeded:
         pet_name = (target or {}).get("form_name", (target or {}).get("name", "宠物"))

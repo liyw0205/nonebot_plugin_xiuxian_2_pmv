@@ -5,6 +5,7 @@ from typing import Any, Protocol
 
 
 class PetRepository(Protocol):
+    def switch(self, *args: Any, **kwargs: Any) -> Any: ...
     def travel_claim(self, *args: Any, **kwargs: Any) -> Any: ...
     def travel_start(self, *args: Any, **kwargs: Any) -> Any: ...
     def feed(self, *args: Any, **kwargs: Any) -> Any: ...
@@ -36,6 +37,11 @@ class LegacyPetRepository:
 
     def hatch_result(self, *args: Any, **kwargs: Any) -> Any:
         return self._services()[3].get_result(*args, **kwargs)
+
+    def switch(self, *args: Any, **kwargs: Any) -> Any:
+        from ...xiuxian.xiuxian_pet.transaction_service import PetActiveSwitchService
+
+        return PetActiveSwitchService(self.player_database).switch(*args, **kwargs)
 
 
 __all__ = ["PetRepository", "LegacyPetRepository"]

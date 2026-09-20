@@ -11,6 +11,11 @@ from tests.test_db_backend import db_backend
 
 
 class PetActiveSwitchServiceTest(unittest.TestCase):
+    def test_pet_active_switch_handler_uses_feature_application(self):
+        source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_pet/__init__.py"
+        text = source.read_text(encoding="utf-8")
+        self.assertIn("pet_application.switch(", text)
+        self.assertNotIn("_pet_active_switch_service().switch(", text)
     def test_pet_facade_defers_active_switch_service_construction(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_pet
 
