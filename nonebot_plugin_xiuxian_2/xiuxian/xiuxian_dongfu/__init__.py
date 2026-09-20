@@ -854,13 +854,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"dongfu-plant:{uid}:{event_message_id or runtime_ids.new_id()}"
-    # 先回放：成功后灵田占用会挡住“已有种植/种子不足”。
-    prior = _dongfu_plant_service().get_result(operation_id)
-    if prior is not None and prior.succeeded:
-        d = _get_dongfu(uid)
-        await handle_send(bot, event, f"该种植请求已经处理，无需重复提交。\n{_format_plant_slots(d)}")
-        return
-
     slots = _normalize_plant_slots(d)
     if slot_no is None:
         slot = next((s for s in slots if _to_int(s.get("seed_id")) not in SEED_CONFIG), None)
@@ -883,14 +876,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     real_minutes = max(10, int(base_minutes / speed))
     plant_start = _fmt_dt(now)
     plant_finish = _fmt_dt(now + timedelta(minutes=real_minutes))
-    result = _run_dongfu_action(
-        "plant", operation_id, uid,
+    outcome = dongfu_application.execute_legacy_call(
+        operation_id=operation_id,
+        user_id=str(uid),
+        action="plant",
+        payload={"expected_slots": expected_slots, "slot_no": _to_int(slot.get("slot")), "seed_id": seed_id, "seed_name": seed_name, "plant_start": plant_start, "plant_finish": plant_finish},
         call=lambda: _dongfu_plant_service().plant(
             operation_id, uid, expected_slots, _to_int(slot.get("slot")), seed_id, seed_name, plant_start, plant_finish,
         ),
-        expected_slots=expected_slots, slot_no=_to_int(slot.get("slot")), seed_id=seed_id,
-        seed_name=seed_name, plant_start=plant_start, plant_finish=plant_finish,
     )
+    result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
+
     if result.status == "duplicate":
         d = _get_dongfu(uid)
         await handle_send(bot, event, f"该种植请求已经处理，无需重复提交。\n{_format_plant_slots(d)}")
