@@ -12,6 +12,11 @@ from tests.test_db_backend import db_backend
 
 
 class FusionBatchTransactionTests(unittest.TestCase):
+    def test_fusion_batch_production_uses_feature_application(self) -> None:
+        source = (Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_fusion/__init__.py").read_text(encoding="utf-8")
+        handler = source[source.index("async def general_fusion("):source.index("@available_fusion.handle")]
+        self.assertIn("fusion_application.apply_batch(", handler)
+        self.assertNotIn("_fusion_service().apply_batch(", handler)
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "fusion-batch.sqlite3"

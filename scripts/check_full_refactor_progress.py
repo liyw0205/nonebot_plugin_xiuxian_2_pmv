@@ -180,7 +180,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "fusion": {
             "single_application_owned": "fusion_application.apply(" in fusion_facade,
             "legacy_single_disabled": "_fusion_service().apply(" not in fusion_facade,
-            "status": "single_fusion_cutover_with_batch_compatibility",
+            "batch_application_owned": "fusion_application.apply_batch(" in fusion_facade,
+            "legacy_batch_disabled": "_fusion_service().apply_batch(" not in fusion_facade,
+            "status": "single_batch_fusion_cutover",
         },
         "title": {
             "equip_replay_application_owned": "title_application.get_result(" in title_facade,

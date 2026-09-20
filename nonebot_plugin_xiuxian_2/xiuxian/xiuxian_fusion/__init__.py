@@ -194,7 +194,7 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
                 return False, "合成失败！幸好使用了福缘石，材料没有损失。\n该合成请求已经处理，无需重复提交。"
             return False, "合成失败！材料已消耗。\n该合成请求已经处理，无需重复提交。"
     else:
-        prior_batch = _fusion_service().get_batch_result(operation_id)
+        prior_batch = fusion_application.repository.batch_result(operation_id)
         if prior_batch is not None and prior_batch.succeeded:
             consumed_failures = prior_batch.failed_count - prior_batch.protected_count
             return prior_batch.successful_count > 0, (
@@ -320,16 +320,17 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
             return False, "合成失败！幸好使用了福缘石，材料没有损失。"
         return False, "合成失败！材料已消耗。"
 
-    result = _run_fusion_action(
-        "apply_batch", operation_id, user_id,
-        call=lambda: _fusion_service().apply_batch(
-            operation_id, user_id, int(fusion_info.get('need_stone', 0)), needed_items,
-            equipment_id, equipment['name'], equipment['type'], outcomes,
-            protection_item_id=None if guaranteed else 20006, reserved_items=reserved_items,
-            max_goods_num=XiuConfig().max_goods_num, target_limit=limit,
-        ),
-        equipment_id=equipment_id, quantity=quantity,
+    batch_outcome = fusion_application.apply_batch(
+        operation_id=operation_id, user_id=user_id,
+        need_stone=int(fusion_info.get('need_stone', 0)), needed_items=needed_items,
+        equipment_id=equipment_id, equipment_name=equipment['name'], equipment_type=equipment['type'],
+        outcomes=outcomes, protection_item_id=None if guaranteed else 20006,
+        reserved_items=reserved_items, max_goods_num=XiuConfig().max_goods_num, target_limit=limit,
     )
+    batch_data = dict(batch_outcome.data or {})
+    result = SimpleNamespace(**batch_data)
+    result.status = "duplicate" if batch_outcome.replayed else batch_outcome.status
+    result.succeeded = batch_outcome.ok
     if result.status == "duplicate":
         consumed_failures = result.failed_count - result.protected_count
         return result.successful_count > 0, (

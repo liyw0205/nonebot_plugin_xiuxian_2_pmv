@@ -16,5 +16,11 @@ class FusionApplication(MigratedFeatureApplication):
     def apply_result(self, operation_id: str):
         return self.repository.apply_result(operation_id)
 
+    def apply_batch(self, *, operation_id: str, user_id: str, **kwargs):
+        return self.execute(operation_id=operation_id, user_id=user_id, payload={"action": "apply_batch", **kwargs})
+
+    def batch_result(self, operation_id: str):
+        return self.repository.batch_result(operation_id)
+
 
 __all__ = ["FusionApplication"]
