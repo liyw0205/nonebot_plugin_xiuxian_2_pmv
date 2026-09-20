@@ -110,6 +110,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(slices["dongfu"]["plant_application_owned"])
         self.assertTrue(slices["dongfu"]["harvest_application_owned"])
         self.assertTrue(slices["dongfu"]["fertilize_application_owned"])
+        self.assertTrue(slices["dongfu"]["accelerate_application_owned"])
 
 
 if __name__ == "__main__":

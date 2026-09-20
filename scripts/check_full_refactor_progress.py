@@ -250,7 +250,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "plant_application_owned": "dongfu_application.execute_legacy_call(" in dongfu_facade,
             "harvest_application_owned": "async def _" in dongfu_facade and "dongfu_application.execute_legacy_call(" in dongfu_facade,
             "fertilize_application_owned": "dongfu-fertilize" in dongfu_facade and "dongfu_application.execute_legacy_call(" in dongfu_facade,
-            "status": "plant_harvest_fertilize_cutover_with_other_dongfu_compatibility",
+            "accelerate_application_owned": "dongfu-accelerate" in dongfu_facade and "dongfu_application.execute_legacy_call(" in dongfu_facade,
+            "status": "plant_harvest_fertilize_accelerate_cutover_with_other_dongfu_compatibility",
         },
     }
 

@@ -1267,12 +1267,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"dongfu-accelerate:{uid}:{event_message_id or runtime_ids.new_id()}"
-    prior = _dongfu_accelerate_service().get_result(operation_id)
-    if prior is not None and prior.succeeded:
-        d = _get_dongfu(uid)
-        await handle_send(bot, event, f"该催熟请求已经处理，无需重复提交。\n{_format_plant_slots(d)}")
-        return
-
     finish = _parse_dt(slot.get("plant_finish", ""))
     now = _now()
     if not finish:
@@ -1286,14 +1280,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     accelerate_minutes = DONGFU_ACCELERATE_MINUTES + _to_int(geomancy.get("accelerate_bonus"))
     new_finish = max(now, finish - timedelta(minutes=accelerate_minutes))
     expected_slots = json.dumps(_normalize_plant_slots(d), ensure_ascii=False)
-    result = _run_dongfu_action(
-        "accelerate", operation_id, uid,
+    outcome = dongfu_application.execute_legacy_call(
+        operation_id=operation_id,
+        user_id=str(uid),
+        action="accelerate",
+        payload={"expected_slots": expected_slots, "slot_no": slot_no, "accelerate_item": DONGFU_ITEM_ACCELERATE, "now": _fmt_dt(now), "new_finish": _fmt_dt(new_finish)},
         call=lambda: _dongfu_accelerate_service().accelerate(
             operation_id, uid, expected_slots, slot_no, DONGFU_ITEM_ACCELERATE, _fmt_dt(now), _fmt_dt(new_finish),
         ),
-        expected_slots=expected_slots, slot_no=slot_no, accelerate_item=DONGFU_ITEM_ACCELERATE,
-        now=_fmt_dt(now), new_finish=_fmt_dt(new_finish),
     )
+    result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
+
     if result.status == "duplicate":
         d = _get_dongfu(uid)
         await handle_send(bot, event, f"该催熟请求已经处理，无需重复提交。\n{_format_plant_slots(d)}")

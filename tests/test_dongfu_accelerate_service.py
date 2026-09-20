@@ -14,6 +14,12 @@ from tests.test_db_backend import db_backend
 
 
 class DongfuAccelerateServiceTests(unittest.TestCase):
+    def test_dongfu_accelerate_uses_feature_application(self):
+        source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py"
+        text = source.read_text(encoding="utf-8")
+        handler = text[text.index('operation_id = f"dongfu-accelerate:'):text.index("@dongfu_expand.handle")]
+        self.assertIn("dongfu_application.execute_legacy_call(", handler)
+        self.assertNotIn("_dongfu_accelerate_service().get_result(", handler)
     def test_dongfu_facade_defers_accelerate_service_construction(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dongfu
 
