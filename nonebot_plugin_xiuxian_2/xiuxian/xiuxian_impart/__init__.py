@@ -803,23 +803,19 @@ async def impart_compose_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     user_id = str(user_info["user_id"])
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"impart-compose:{event_id}:{user_id}" if event_id else f"impart-compose:{user_id}:{runtime_ids.new_id()}"
-    prior = _card_compose_service().get_result(operation_id)
-    if prior is not None and prior.succeeded:
-        await handle_send(
-            bot, event,
-            f"合成成功：{source_card}剩余{prior.source_quantity}张，{target_card}现有{prior.target_quantity}张\n"
-            f"该合成请求已经处理，无需重复提交。"
-        )
-        return
     cards = impart_data_json.data_person_list(user_id) or {}
-    result = _run_impart_action(
-        "compose", operation_id, user_id,
+    outcome = impart_application.execute_legacy_call(
+        operation_id=operation_id,
+        user_id=user_id,
+        action="compose",
+        payload={"source_card": source_card, "target_card": target_card, "quantity": 5},
         call=lambda: _card_compose_service().compose(
             operation_id, user_id, source_card, target_card, cards.get(source_card, 0),
             cards.get(target_card, 0), 5, impart_data_json.data_all_(),
         ),
-        source_card=source_card, target_card=target_card, quantity=5,
     )
+    result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
+
     messages = {"same_card": "合成材料卡与目标卡不能相同！", "card_missing": "重复卡不足5张，无法合成！", "state_changed": "卡牌操作未结算：卡牌当前状态已更新，请重新操作。"}
     if result.status == "duplicate":
         await handle_send(

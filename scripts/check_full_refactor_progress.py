@@ -235,7 +235,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
         },
         "impart": {
             "love_sand_application_owned": "impart_application.execute_legacy_call(" in impart_facade,
-            "status": "love_sand_cutover_with_other_impart_compatibility",
+            "card_compose_application_owned": "async def impart_compose_" in impart_facade and "impart_application.execute_legacy_call(" in impart_facade,
+            "status": "love_sand_compose_cutover_with_other_impart_compatibility",
         },
     }
 
