@@ -255,6 +255,22 @@ def _adjust_admin_exp(event, user_id, expected_exp, delta, target_name):
     return SimpleNamespace(**data)
 
 
+def _adjust_admin_level(event, user_id, expected_state, level, power, spend, root_rate):
+    operation_id = _admin_operation_id(event, "level-change", str(user_id))
+    outcome = admin_asset_application.execute_legacy_call(
+        operation_id=operation_id,
+        user_id=str(user_id),
+        action="level_change",
+        payload={"expected_state": expected_state, "level": level, "power": power, "spend": spend, "root_rate": root_rate},
+        call=lambda: _admin_level_change_service().change(
+            operation_id, str(get_user_id(event) or "unknown"), user_id,
+            expected_state, level, power, spend, root_rate,
+        ),
+    )
+    data = dict(outcome.data or {}); data.setdefault("status", outcome.status); data["succeeded"] = outcome.ok
+    return SimpleNamespace(**data)
+
+
 def _grant_admin_accessory(
     event,
     user_id: str,
@@ -809,19 +825,10 @@ async def zaohua_xiuxian_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         return
 
     level_config = jsondata.level_data()[level]
-    result = _admin_level_change_service().change(
-        _admin_operation_id(event, "level-change", str(target_qq)),
-        str(get_user_id(event) or "unknown"),
-        target_qq,
-        (
-            target_user["level"], target_user["exp"], target_user["hp"],
-            target_user["mp"], target_user["atk"], target_user["power"],
-            target_user["root_type"], target_user["root_level"],
-        ),
-        level,
-        int(level_config["power"]),
-        float(level_config["spend"]),
-        float(_sql_message().get_root_rate(target_user["root_type"], target_qq)),
+    result = _adjust_admin_level(
+        event, target_qq,
+        (target_user["level"], target_user["exp"], target_user["hp"], target_user["mp"], target_user["atk"], target_user["power"], target_user["root_type"], target_user["root_level"]),
+        level, int(level_config["power"]), float(level_config["spend"]), float(_sql_message().get_root_rate(target_user["root_type"], target_qq)),
     )
     if result.status == "state_changed":
         msg = "调整未完成：玩家属性已更新，请重新执行。"

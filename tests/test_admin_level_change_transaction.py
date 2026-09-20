@@ -1,4 +1,5 @@
 import sqlite3
+from pathlib import Path
 
 import nonebot
 import pytest
@@ -17,6 +18,13 @@ def test_admin_facade_defers_level_change_service_construction():
     from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_admin
 
     assert xiuxian_admin._admin_level_change_service_instance is None
+
+def test_admin_level_change_uses_feature_application(tmp_path):
+    source = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
+    text = source.read_text(encoding="utf-8")
+    handler = text[text.index("async def zaohua_xiuxian_"):text.index("@gmm_command.handle")]
+    assert "_adjust_admin_level(" in handler
+    assert "_admin_level_change_service().change(" not in handler
 
 
 def create_service(tmp_path):
