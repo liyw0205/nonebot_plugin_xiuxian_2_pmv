@@ -188,7 +188,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "equip_replay_application_owned": "title_application.get_result(" in title_facade,
             "legacy_equip_replay_disabled": "# 先回放：成功后 equipped 变化会挡住同事件幂等。\n    prior = _title_transaction_service().get_result(" not in title_facade,
             "legacy_unequip_replay_disabled": "operation_id = _title_operation_id(event, \"unequip\", str(user_id))\n    prior = _title_transaction_service().get_result(" not in title_facade,
-            "status": "equip_unequip_replay_cutover_with_unlock_compatibility",
+            "unlock_batch_application_owned": "title_application.execute(" in (PACKAGE / "xiuxian" / "xiuxian_title" / "title_data.py").read_text(encoding="utf-8"),
+            "legacy_unlock_batch_disabled": "_title_transaction_service().unlock_batch(" not in (PACKAGE / "xiuxian" / "xiuxian_title" / "title_data.py").read_text(encoding="utf-8"),
+            "status": "equip_unequip_unlock_cutover",
         },
     }
 

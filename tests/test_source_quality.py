@@ -2086,8 +2086,8 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("_title_transaction_service().get_result(", source)
         self.assertIn("title_application.execute(", source)
         self.assertNotIn("title_transaction_service.get_result(", source)
-        self.assertIn("from . import _title_transaction_service", data_source)
-        self.assertIn("_title_transaction_service().unlock_batch(", data_source)
+        self.assertIn("from . import title_application", data_source)
+        self.assertIn("title_application.execute(", data_source)
 
     def test_tower_purchase_uses_cross_database_transaction(self) -> None:
         tower_root = SOURCE_ROOT / "xiuxian" / "xiuxian_tower"

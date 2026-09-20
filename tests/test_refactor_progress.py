@@ -76,6 +76,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(title["equip_replay_application_owned"])
         self.assertTrue(title["legacy_equip_replay_disabled"])
         self.assertTrue(title["legacy_unequip_replay_disabled"])
+        self.assertTrue(title["unlock_batch_application_owned"])
+        self.assertTrue(title["legacy_unlock_batch_disabled"])
 
 
 if __name__ == "__main__":

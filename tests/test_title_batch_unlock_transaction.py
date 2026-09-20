@@ -11,6 +11,13 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_title.title_transaction_service im
 from nonebot_plugin_xiuxian_2.features.title.migrations import apply_title_schema
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
+
+
+def test_title_unlock_batch_uses_feature_application():
+    source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/title_data.py"
+    text = source.read_text(encoding="utf-8")
+    assert "title_application.execute(" in text
+    assert "_title_transaction_service().unlock_batch(" not in text
 from tests.test_db_backend import db_backend
 
 

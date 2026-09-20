@@ -55,8 +55,8 @@ def test_title_entries_use_lazy_replay_and_application_write_paths():
     assert "title_application.get_result(" in title_source
     assert "_title_transaction_service().get_result(" not in title_source
     assert "title_transaction_service.get_result(" not in title_source
-    assert "from . import _title_transaction_service" in data_source
-    assert "_title_transaction_service().unlock_batch(" in data_source
+    assert "from . import title_application" in data_source
+    assert "title_application.execute(" in data_source
 
 
 class TitleEquipTransactionTests(unittest.TestCase):
