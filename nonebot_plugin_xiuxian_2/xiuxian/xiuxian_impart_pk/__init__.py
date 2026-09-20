@@ -1032,16 +1032,8 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     
     user_id = _resolve_impart_closing_user_id(event, user_info)
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"impart-closing:{event_id}:{user_id}" if event_id else f"impart-closing:{user_id}:{runtime_ids.new_id()}"
     # 先回放：出关成功后 type!=4 会挡住同事件幂等。
-    prior = _impart_closing_settlement_service().get_result(operation_id)
-    if prior is not None and prior.succeeded:
-        msg = (
-            f"虚神界闭关结束（重放），本次闭关增加修为：{number_to(prior.exp_gain)}\n"
-            f"该出关请求已经处理，无需重复提交。"
-        )
-        await handle_send(bot, event, msg, md_type="虚神界", k1="闭关", v1="虚神界闭关", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
-        await impart_pk_out_closing.finish()
+    operation_id = f"impart-closing:{event_id}:{user_id}" if event_id else f"impart-closing:{user_id}:{runtime_ids.new_id()}"
     
     # 直接读 user_cd：避免 check_user_type 再映射到 active 化身导致误判
     user_cd_message = _sql_message().get_user_cd(user_id)
