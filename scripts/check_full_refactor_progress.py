@@ -271,7 +271,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
         },
         "admin": {
             "item_destroy_application_owned": "def _destroy_admin_item(" in admin_facade and "admin_asset_application.execute_legacy_call(" in admin_facade,
-            "status": "item_destroy_target_self_cutover_with_admin_batch_compatibility",
+            "exp_adjust_application_owned": "def _adjust_admin_exp(" in admin_facade and "admin_asset_application.execute_legacy_call(" in admin_facade,
+            "status": "item_destroy_exp_adjust_target_self_cutover_with_admin_batch_compatibility",
         },
     }
 

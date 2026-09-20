@@ -13,6 +13,12 @@ from tests.test_db_backend import db_backend
 
 
 class AdminExpAdjustmentTransactionTests(unittest.TestCase):
+    def test_admin_exp_adjustment_uses_feature_application(self):
+        source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
+        text = source.read_text(encoding="utf-8")
+        handler = text[text.index("async def adjust_exp_command_"):text.index("@zaohua_xiuxian.handle")]
+        self.assertIn("admin_asset_application.execute_legacy_call(", text)
+        self.assertNotIn("_admin_exp_adjustment_service().adjust(", handler)
     def test_admin_facade_defers_exp_adjustment_service_construction(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_admin
 
@@ -86,7 +92,9 @@ class AdminExpAdjustmentTransactionTests(unittest.TestCase):
         with open(path, encoding="utf-8") as source_file:
             text = source_file.read()
         handler = text[text.index("async def adjust_exp_command_"):text.index("@zaohua_xiuxian.handle")]
-        self.assertIn("_admin_exp_adjustment_service().adjust(", handler)
+        self.assertIn("_adjust_admin_exp(", handler)
+        helper = text[text.index("def _adjust_admin_exp("):text.index("def _grant_admin_accessory(")]
+        self.assertIn("admin_asset_application.execute_legacy_call(", helper)
         self.assertNotIn("sql_message.update_exp(", handler)
         self.assertNotIn("sql_message.update_j_exp(", handler)
 
