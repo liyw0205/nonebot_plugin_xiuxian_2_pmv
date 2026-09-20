@@ -18,5 +18,9 @@ class AdminApplication(MigratedFeatureApplication):
         from ...xiuxian.xiuxian_admin.transaction_service import AdminPlayerStatusBatchResetService
         return AdminPlayerStatusBatchResetService(self.database).reset(*args, **kwargs)
 
+    def grant_item_batch(self, *args, **kwargs):
+        from ...xiuxian.xiuxian_admin.transaction_service import AdminItemBatchGrantService
+        return AdminItemBatchGrantService(self.database).grant(*args, **kwargs)
+
 
 __all__ = ["AdminApplication"]

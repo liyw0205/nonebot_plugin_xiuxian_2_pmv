@@ -1047,7 +1047,7 @@ async def cz_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
 
             def _work():
                 return run_chunked_until_done(
-                    lambda: _admin_item_batch_grant_service().grant(
+                    lambda: admin_application.grant_item_batch(
                         operation_id,
                         operator_id,
                         users,

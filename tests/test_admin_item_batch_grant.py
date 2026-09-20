@@ -10,6 +10,12 @@ def test_admin_facade_defers_item_batch_grant_service_construction():
 
     assert xiuxian_admin._admin_item_batch_grant_service_instance is None
 
+def test_admin_item_batch_entry_uses_application():
+    source = open("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py", encoding="utf-8").read()
+    start = source.index("async def cz_")
+    handler = source[start:source.index("@hmll.handle", start)]
+    assert "admin_application.grant_item_batch(" in handler
+
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_admin.transaction_service import AdminItemBatchGrantService
 
 
