@@ -2601,7 +2601,7 @@
 
 2026-09-20 dufang share settlement live safety：提交 `40357b9f` 后在受控隔离容器执行 remote smoke；五库 migration dry-run无 pending，readiness通过，reconcile为 `clean=true/operations=0/outbox_events=0/dead_events=0`，marker写入/删除、checksum restore和旧实例重启均通过。独立核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup `/srv/smoke-data/backups/20260919T235302Z`含五库；该 smoke未触发 bet/share 业务，因此恢复后五库均无 `dufang_bets`/`dufang_share_operations`表，属于预期，不替代首次 share settlement业务运行证据。
 
-2026-09-20 fusion single-item full verification：四个不重叠全量分片合计 `2384 passed, 25 subtests passed`（16条既有 compatibility DeprecationWarning）；verified batch结果为 `762/8`、`488/4`、`568/4`、`566/9`，所有精确 `/tmp` basetemp已清理。最终 fusion behavior/source、compileall、diff、inventory、progress和CLI均通过；单件合成由 `FusionApplication.apply`承载，保留 operation replay、材料/灵石扣除、福缘石保护、背包上限和 rollback，批量合成继续作为独立 compatibility boundary。
+2026-09-20 fusion single/batch full verification：四个不重叠全量分片合计 `2387 passed, 25 subtests passed`（16条既有 compatibility DeprecationWarning）；verified batch结果为 `762/8`、`489/4`、`568/4`、`568/9`，所有精确 `/tmp` basetemp已清理。最终 fusion single/batch behavior/source、compileall、diff、inventory、progress和CLI均通过；单件与批量合成均由 `FusionApplication.apply/apply_batch`承载，保留 replay、材料/灵石扣除、福缘石保护、背包上限、counter结果和 rollback。
 
 2026-09-20 fusion single-item live safety：提交 `9f6c27e0` 后在受控隔离容器执行 remote smoke；五库 migration dry-run无 pending，readiness通过，reconcile为 `clean=true/operations=0/outbox_events=0/dead_events=0`，marker写入/删除、checksum restore和旧实例重启均通过。独立核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup `/srv/smoke-data/backups/20260920T002446Z`含五库；该 smoke未触发 fusion 业务，因此恢复后五库均无 `fusion_operations`/`fusion_batch_operations`表，属于预期，不替代首次 single fusion业务运行证据。
 
