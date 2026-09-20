@@ -954,16 +954,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"dongfu-harvest:{uid}:{event_message_id or runtime_ids.new_id()}"
-    prior = _dongfu_harvest_settlement_service().get_result(operation_id)
-    if prior is not None and prior.succeeded:
-        lines = [f"洞府收获完成，共收获{len(prior.rewards)}种产出："] if prior.rewards else ["洞府收获请求已处理。"]
-        if prior.rewards:
-            # rewards are (id, amount) only — show amounts
-            lines.extend(f"- 物品{item_id} x{amount}" for item_id, amount in prior.rewards)
-        lines.append("该收获请求已经处理，无需重复提交。")
-        await handle_send(bot, event, "\n".join(lines))
-        return
-
     snapshot = None
     raw_snapshot = d.get("harvest_settlement", "")
     if raw_snapshot:
@@ -1014,14 +1004,18 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     else:
         failed_slots = snapshot["failed_slots"]
 
-    result = _run_dongfu_action(
-        "harvest", operation_id, uid,
+    outcome = dongfu_application.execute_legacy_call(
+        operation_id=operation_id,
+        user_id=str(uid),
+        action="harvest",
+        payload={"snapshot": snapshot, "max_goods_num": XiuConfig().max_goods_num},
         call=lambda: _dongfu_harvest_settlement_service().harvest(
             operation_id, uid, snapshot["expected_slots"], snapshot["slot_numbers"],
             snapshot["items"], XiuConfig().max_goods_num, _fmt_dt(now),
         ),
-        snapshot=snapshot, max_goods_num=XiuConfig().max_goods_num,
     )
+    result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
+
     if result.status == "duplicate":
         lines = [f"洞府收获完成，共收获{len(snapshot['slot_numbers'])}块灵田："]
         if snapshot["items"]:

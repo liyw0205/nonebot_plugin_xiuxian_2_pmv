@@ -108,6 +108,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(mixelixir["harvest_level_application_owned"])
         self.assertTrue(mixelixir["legacy_harvest_level_disabled"])
         self.assertTrue(slices["dongfu"]["plant_application_owned"])
+        self.assertTrue(slices["dongfu"]["harvest_application_owned"])
 
 
 if __name__ == "__main__":
