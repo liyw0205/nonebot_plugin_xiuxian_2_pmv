@@ -120,5 +120,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(slices["impart_pk"]["legacy_closing_settlement_replay_disabled"])
         self.assertTrue(slices["impart_pk"]["explore_replay_application_owned"])
         self.assertTrue(slices["impart_pk"]["legacy_explore_replay_disabled"])
+        self.assertTrue(slices["impart_pk"]["battle_replay_application_owned"])
+        self.assertTrue(slices["impart_pk"]["legacy_battle_replay_disabled"])
 if __name__ == "__main__":
     unittest.main()
