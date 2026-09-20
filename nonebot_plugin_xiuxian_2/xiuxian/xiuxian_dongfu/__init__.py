@@ -1206,25 +1206,22 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"dongfu-fertilize:{uid}:{event_message_id or runtime_ids.new_id()}"
-    prior = _dongfu_fertilize_service().get_result(operation_id)
-    if prior is not None and prior.succeeded:
-        d = _get_dongfu(uid)
-        await handle_send(bot, event, f"该施肥请求已经处理，无需重复提交。\n{_format_plant_slots(d)}")
-        return
-
     fertilizer = _to_int(slot.get("fertilizer"))
     if fertilizer >= DONGFU_FERTILIZER_MAX:
         await handle_send(bot, event, f"{slot_no}号灵田肥力已满。")
         return
     expected_slots = json.dumps(_normalize_plant_slots(d), ensure_ascii=False)
-    result = _run_dongfu_action(
-        "fertilize", operation_id, uid,
+    outcome = dongfu_application.execute_legacy_call(
+        operation_id=operation_id,
+        user_id=str(uid),
+        action="fertilize",
+        payload={"expected_slots": expected_slots, "slot_no": slot_no, "fertilizer_id": DONGFU_ITEM_FERTILIZER, "fertilizer_max": DONGFU_FERTILIZER_MAX},
         call=lambda: _dongfu_fertilize_service().fertilize(
             operation_id, uid, expected_slots, slot_no, DONGFU_ITEM_FERTILIZER, DONGFU_FERTILIZER_MAX,
         ),
-        expected_slots=expected_slots, slot_no=slot_no,
-        fertilizer_id=DONGFU_ITEM_FERTILIZER, fertilizer_max=DONGFU_FERTILIZER_MAX,
     )
+    result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
+
     if result.status == "duplicate":
         d = _get_dongfu(uid)
         await handle_send(bot, event, f"该施肥请求已经处理，无需重复提交。\n{_format_plant_slots(d)}")
