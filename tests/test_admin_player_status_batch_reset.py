@@ -170,8 +170,9 @@ class AdminPlayerStatusBatchResetTests(unittest.TestCase):
         start = source.index("async def restate_")
         handler = source[start:source.index("@set_xiuxian.handle", start)]
         all_branch = handler[handler.index("if not args:"):handler.index("plain_args =")]
-        self.assertIn("_admin_player_status_batch_reset_service().find_running(", all_branch)
-        self.assertIn("_admin_player_status_batch_reset_service().reset(", all_branch)
+        self.assertIn("admin_application.find_player_status_batch(", all_branch)
+        self.assertIn("_batch_reset = admin_application.reset_player_status_batch", all_branch)
+        self.assertIn("admin_application.reset_player_status_batch(", handler)
         self.assertNotIn("sql_message.restate()", all_branch)
         self.assertNotIn("sql_message.update_all_users_stamina(", all_branch)
 

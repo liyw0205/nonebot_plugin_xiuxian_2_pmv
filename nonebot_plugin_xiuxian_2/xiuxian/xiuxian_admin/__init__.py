@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 from ...paths import get_paths
 from ...features.admin_asset.application import AdminAssetApplication
+from ...features.admin.application import AdminApplication
 from nonebot.typing import T_State
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
@@ -94,6 +95,7 @@ _admin_level_change_service_instance = None
 _admin_root_change_service_instance = None
 _admin_exp_adjustment_service_instance = None
 admin_asset_application = AdminAssetApplication(get_paths().game_db)
+admin_application = AdminApplication(get_paths().game_db)
 _admin_item_destroy_service_instance = None
 _admin_item_batch_grant_service_instance = None
 _admin_accessory_adjustment_service_instance = None
@@ -1447,12 +1449,10 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
     if not args:
         _batch_operator_id = str(get_user_id(event) or "unknown")
         _batch_max_stamina = XiuConfig().max_stamina
-        _batch_running = _admin_player_status_batch_reset_service().find_running(
+        _batch_running = admin_application.find_player_status_batch(
             _batch_operator_id, _batch_max_stamina
         )
-        _batch_reset = lambda *call_args, **call_kwargs: _admin_player_status_batch_reset_service().reset(
-            *call_args, **call_kwargs
-        )
+        _batch_reset = admin_application.reset_player_status_batch
     give_qq = get_at_user_id(args)
     plain_text = (args.extract_plain_text() if args is not None else "") or ""
     plain_args = plain_text.split()
@@ -1461,7 +1461,7 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         all_users = _sql_message().get_all_user_id()
         operator_id = str(get_user_id(event) or "unknown")
         max_stamina = XiuConfig().max_stamina
-        running_operation = _admin_player_status_batch_reset_service().find_running(
+        running_operation = admin_application.find_player_status_batch(
             operator_id, max_stamina
         )
         if not all_users and not running_operation:
@@ -1474,7 +1474,7 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 
         def _work():
             return run_chunked_until_done(
-                lambda: _admin_player_status_batch_reset_service().reset(
+                lambda: admin_application.reset_player_status_batch(
                     operation_id,
                     operator_id,
                     users,

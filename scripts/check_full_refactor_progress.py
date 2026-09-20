@@ -276,7 +276,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "root_change_application_owned": "def _adjust_admin_root(" in admin_facade and "admin_asset_application.execute_legacy_call(" in admin_facade,
             "impart_stone_application_owned": "admin_asset_application.adjust_impart_stone(" in admin_facade,
             "accessory_application_owned": "admin_asset_application.adjust_accessory(" in admin_facade,
-            "status": "item_destroy_exp_adjust_level_root_impart_stone_accessory_target_self_cutover_with_admin_batch_compatibility",
+            "player_status_batch_application_owned": "admin_application.reset_player_status_batch(" in admin_facade,
+            "status": "item_destroy_exp_adjust_level_root_impart_stone_accessory_player_status_batch_cutover_with_admin_batch_compatibility",
         },
     }
 
