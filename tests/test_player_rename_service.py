@@ -28,11 +28,18 @@ def test_player_rename_handlers_use_lazy_service():
     ).read_text(encoding="utf-8")
     handler = source[source.index("async def remaname_"):source.index("@run_xiuxian.handle")]
     assert "_player_rename_service().get_result(" in handler
-    assert "_player_rename_service().rename_user(" in handler
-    assert "_player_rename_service().rename_root(" in source
+    assert "base_application.rename(" in handler
+    assert "_player_rename_service().rename_user(" not in handler
+    assert "_player_rename_service().rename_root(" not in source
     assert "_player_rename_service_instance = None" in source
     assert "def _player_rename_service(" in source
     assert "player_rename_service.rename_user(" not in source
+
+
+def test_player_rename_handlers_use_feature_application():
+    source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_base/__init__.py"
+    text = source.read_text(encoding="utf-8")
+    assert "base_application.rename(" in text
 
 
 class PlayerRenameServiceTests(unittest.TestCase):

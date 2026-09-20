@@ -3,11 +3,13 @@ import random
 import asyncio
 import time
 import os
+from types import SimpleNamespace
 from datetime import datetime
 from typing import Any
 
 from nonebot.typing import T_State
 from ...paths import get_paths
+from ...features.base.application import BaseApplication
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.ids import UUIDGenerator
@@ -76,6 +78,7 @@ def configure_lottery_application(application: Any) -> None:
     lottery_application = application
 
 _player_rename_service_instance = None
+base_application = BaseApplication(get_paths().game_db, get_paths().player_db)
 _stone_gift_service_instance = None
 _stone_contest_service_instance = None
 _stone_robbery_service_instance = None
@@ -685,12 +688,8 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
             user_name = generate_daohao()
             if not _sql_message().get_user_info_with_name(user_name):
                 break
-        result = _player_rename_service().rename_user(
-            operation_id,
-            user_id,
-            user_name,
-            stone_cost=XiuConfig().remaname,
-        )
+        outcome = base_application.rename(operation_id=operation_id, user_id=user_id, rename_kind="user", new_name=user_name, stone_cost=XiuConfig().remaname)
+        result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
     else:
         # 检查名字长度（7个中文字符）
         if len(user_name) > 7:
@@ -699,12 +698,8 @@ async def remaname_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
             await remaname.finish()
             
         msg = ""
-        result = _player_rename_service().rename_user(
-            operation_id,
-            user_id,
-            user_name,
-            item_id=20011,
-        )
+        outcome = base_application.rename(operation_id=operation_id, user_id=user_id, rename_kind="user", new_name=user_name, item_id=20011)
+        result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
     if result.status == "stone_insufficient":
         msg = f"修改道号需要消耗{XiuConfig().remaname}灵石，你的灵石不足！"
     elif result.status == "item_missing":
@@ -748,12 +743,8 @@ async def root_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, msg, md_type="修仙", k1="改名", v1="灵根改名", k2="存档", v2="我的修仙信息", k3="帮助", v3="修仙帮助")
         await root_rename.finish()
 
-    result = _player_rename_service().rename_root(
-        _player_rename_operation_id(event, "root", user_id),
-        user_id,
-        root_name,
-        item_id=20025,
-    )
+    outcome = base_application.rename(operation_id=_player_rename_operation_id(event, "root", user_id), user_id=user_id, rename_kind="root", new_name=root_name, item_id=20025)
+    result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
     if result.status == "item_missing":
         msg = "修改灵根名需要消耗1个灵根改名卡！"
     elif result.status == "unchanged":
