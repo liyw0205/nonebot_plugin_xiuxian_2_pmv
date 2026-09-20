@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
 
@@ -96,6 +97,18 @@ class AdminAssetApplication:
             except Exception as exc:
                 self.ledger.record_failure(self.database, request.operation_id, self.action, payload, str(exc))
                 raise
+
+    def adjust_impart_stone(
+        self, *, operation_id: str, operator_id: str, user_id: str,
+        expected_stone: int | None, requested_delta: int, target_name: str = "",
+        impart_database: str | Path,
+    ):
+        from ...xiuxian.xiuxian_admin.transaction_service import AdminImpartStoneAdjustmentService
+        raw = AdminImpartStoneAdjustmentService(self.database, impart_database).adjust(
+            operation_id, operator_id, user_id, expected_stone, requested_delta, target_name=target_name,
+        )
+        data = asdict(raw) if is_dataclass(raw) else dict(vars(raw))
+        return type("AdminImpartStoneOutcome", (), {"data": data, "status": raw.status, "ok": raw.succeeded})()
 
     def grant_item(
         self,

@@ -695,14 +695,14 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             await handle_send(bot, event, "单人思恋结晶调整数量不能为 0")
             return
         expected_stone = _admin_impart_stone_adjustment_service().snapshot(user_id)
-        result = _admin_impart_stone_adjustment_service().adjust(
-            _admin_operation_id(event, "impart-stone-adjust", str(user_id)),
-            str(get_user_id(event) or "unknown"),
-            user_id,
-            expected_stone,
-            amount,
-            target_name=target_name,
+        outcome = admin_asset_application.adjust_impart_stone(
+            operation_id=_admin_operation_id(event, "impart-stone-adjust", str(user_id)),
+            operator_id=str(get_user_id(event) or "unknown"), user_id=user_id,
+            expected_stone=expected_stone, requested_delta=amount, target_name=target_name,
+            impart_database=get_paths().impart_db,
         )
+        result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
+
         if result.status == "state_changed":
             msg = "调整未完成：思恋结晶数量已更新，请重新执行。"
         elif result.status == "operation_conflict":

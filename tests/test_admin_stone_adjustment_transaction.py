@@ -84,11 +84,11 @@ class AdminStoneAdjustmentTransactionTests(unittest.TestCase):
         path = "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
         with open(path, encoding="utf-8") as source_file:
             text = source_file.read()
-        handler = text[text.index("async def gm_command_"):text.index("# GM加思恋结晶")]
-        single_user = handler[handler.index("else:  # 单人"):]
-        self.assertIn("admin_stone_adjustment_service.adjust(", single_user)
+        handler = text[text.index("async def ccll_command_"):text.index("@adjust_exp_command.handle")]
+        single_user = handler[handler.rfind("if amount == 0:"):]
+        self.assertIn("admin_asset_application.adjust_impart_stone(", single_user)
+        self.assertNotIn("_admin_impart_stone_adjustment_service().adjust(", single_user)
         self.assertNotIn("sql_message.update_ls(", single_user)
-        self.assertIn("_sql_message().update_ls_all(amount)", handler)
 
 
 if __name__ == "__main__":
