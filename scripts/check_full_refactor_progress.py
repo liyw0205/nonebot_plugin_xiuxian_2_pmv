@@ -228,7 +228,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_blessed_open_disabled": "_blessed_spot_service().open(" not in buff_facade,
             "blessed_rename_application_owned": "buff_application.rename(" in buff_facade,
             "legacy_blessed_rename_disabled": "_blessed_spot_service().rename(" not in buff_facade,
-            "status": "blessed_spot_open_rename_cutover_with_other_buff_compatibility",
+            "blessed_upgrade_application_owned": "buff_application.upgrade_field(" in buff_facade,
+            "legacy_blessed_upgrade_disabled": "_blessed_spot_service().upgrade_field(" not in buff_facade,
+            "status": "blessed_spot_open_rename_upgrade_cutover_with_other_buff_compatibility",
         },
     }
 

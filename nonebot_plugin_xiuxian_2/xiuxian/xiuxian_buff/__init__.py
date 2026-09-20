@@ -366,13 +366,15 @@ async def ling_tian_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         if int(user_info['stone']) < cost:
             msg = f"本次开垦需要灵石：{cost}，道友的灵石不足！"
         else:
-            result = _blessed_spot_service().upgrade_field(
-                _blessed_spot_operation_id(event, "upgrade", user_id),
-                user_id,
-                now_num,
-                cost,
-                len(LINGTIANCONFIG) + 1,
+            outcome = buff_application.upgrade_field(
+                operation_id=_blessed_spot_operation_id(event, "upgrade", user_id),
+                user_id=user_id,
+                expected_level=now_num,
+                cost=cost,
+                max_level=len(LINGTIANCONFIG) + 1,
             )
+            result = SimpleNamespace(**dict(outcome.data or {})); result.succeeded = outcome.ok
+
             if result.succeeded:
                 msg = f"道友成功消耗灵石：{result.stone_cost}，灵田数量+1,目前数量:{result.current_level}"
             else:
