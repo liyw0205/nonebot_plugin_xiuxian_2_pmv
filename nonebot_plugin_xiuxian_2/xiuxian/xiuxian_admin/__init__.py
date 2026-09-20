@@ -220,6 +220,25 @@ def _admin_operation_id(event, action: str, user_id: str) -> str:
     return f"admin-{action}:{event_id or __import__('time').time_ns()}:{user_id}"
 
 
+def _destroy_admin_item(event, user_id, goods_id, item_info, quantity, expected_quantity, target_name):
+    operation_id = _admin_operation_id(event, "item-destroy", user_id)
+    outcome = admin_asset_application.execute_legacy_call(
+        operation_id=operation_id,
+        user_id=str(user_id),
+        action="item_destroy",
+        payload={"item_id": goods_id, "quantity": quantity, "expected_quantity": expected_quantity, "target_name": target_name},
+        call=lambda: _admin_item_destroy_service().destroy(
+            operation_id, str(get_user_id(event) or "unknown"), user_id, goods_id,
+            item_info["name"], item_info.get("type", ""), quantity, expected_quantity,
+            target_name=target_name,
+        ),
+    )
+    data = dict(outcome.data or {})
+    data.setdefault("status", outcome.status)
+    data["succeeded"] = outcome.ok
+    return SimpleNamespace(**data)
+
+
 def _grant_admin_accessory(
     event,
     user_id: str,
@@ -1335,17 +1354,7 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
                 await handle_send(bot, event, f"玩家 {target} 没有 {item_info['name']}！")
                 await hmll.finish()
 
-            result = _admin_item_destroy_service().destroy(
-                _admin_operation_id(event, "item-destroy", user_id),
-                str(get_user_id(event) or "unknown"),
-                user_id,
-                goods_id,
-                item_info["name"],
-                item_info.get("type", ""),
-                quantity,
-                int(have),
-                target_name=target,
-            )
+            result = _destroy_admin_item(event, user_id, goods_id, item_info, quantity, int(have), target)
             if result.status == "state_changed":
                 msg = "调整未完成：玩家背包数量已更新，请重新执行。"
             elif result.status == "operation_conflict":
@@ -1403,17 +1412,7 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await handle_send(bot, event, f"您没有 {item_info['name']}！")
             await hmll.finish()
 
-        result = _admin_item_destroy_service().destroy(
-            _admin_operation_id(event, "item-destroy", self_user_id),
-            str(get_user_id(event) or "unknown"),
-            self_user_id,
-            goods_id,
-            item_info["name"],
-            item_info.get("type", ""),
-            quantity,
-            int(have),
-            target_name="self",
-        )
+        result = _destroy_admin_item(event, self_user_id, goods_id, item_info, quantity, int(have), "self")
         if result.status == "state_changed":
             msg = "操作未完成：背包数量已更新，请重新执行。"
         elif result.status == "operation_conflict":

@@ -14,6 +14,14 @@ from tests.test_db_backend import db_backend
 
 
 class AdminItemDestroyTransactionTests(unittest.TestCase):
+    def test_admin_item_destroy_uses_feature_application(self):
+        source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
+        text = source.read_text(encoding="utf-8")
+        handler = text[text.index("async def hmll_"):text.index("@restate.handle")]
+        assert "_destroy_admin_item(" in handler
+        helper = text[text.index("def _destroy_admin_item("):text.index("def _grant_admin_accessory(")]
+        assert "admin_asset_application.execute_legacy_call(" in helper
+        assert "_admin_item_destroy_service().destroy(" in helper
     def test_admin_facade_defers_item_destroy_service_construction(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_admin
 
@@ -108,7 +116,8 @@ class AdminItemDestroyTransactionTests(unittest.TestCase):
             Path(__file__).parents[1]
             / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
         ).read_text(encoding="utf-8")
-        self.assertGreaterEqual(source.count("_admin_item_destroy_service().destroy("), 2)
+        self.assertEqual(source.count("_destroy_admin_item("), 3)
+        self.assertEqual(source.count("_admin_item_destroy_service().destroy("), 1)
         self.assertGreaterEqual(source.count("_destroy_admin_accessory("), 3)
 
 

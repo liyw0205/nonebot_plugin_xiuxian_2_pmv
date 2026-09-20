@@ -80,6 +80,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     mixelixir_facade = (PACKAGE / "xiuxian" / "xiuxian_mixelixir" / "__init__.py").read_text(encoding="utf-8")
     dongfu_facade = (PACKAGE / "xiuxian" / "xiuxian_dongfu" / "__init__.py").read_text(encoding="utf-8")
     impart_pk_facade = (PACKAGE / "xiuxian" / "xiuxian_impart_pk" / "__init__.py").read_text(encoding="utf-8")
+    admin_facade = (PACKAGE / "xiuxian" / "xiuxian_admin" / "__init__.py").read_text(encoding="utf-8")
     return {
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,
@@ -267,6 +268,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "battle_replay_application_owned": "_impart_battle_batch_service().settle(" in impart_pk_facade and "def _run_impart_pk_action(" in impart_pk_facade,
             "legacy_battle_replay_disabled": "_impart_battle_batch_service().get_result(" not in impart_pk_facade,
             "status": "training_closing_enter_settlement_explore_battle_replay_cutover_with_other_impart_pk_compatibility",
+        },
+        "admin": {
+            "item_destroy_application_owned": "def _destroy_admin_item(" in admin_facade and "admin_asset_application.execute_legacy_call(" in admin_facade,
+            "status": "item_destroy_target_self_cutover_with_admin_batch_compatibility",
         },
     }
 
