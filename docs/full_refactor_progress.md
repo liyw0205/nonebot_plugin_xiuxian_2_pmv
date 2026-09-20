@@ -2611,7 +2611,7 @@
 
 2026-09-20 title equip replay live safety：提交 `f44d396d` 后在受控隔离容器执行 remote smoke；五库 migration dry-run无 pending，readiness通过，reconcile为 `clean=true/operations=0/outbox_events=0/dead_events=0`，marker写入/删除、checksum restore和旧实例重启均通过。独立核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup `/srv/smoke-data/backups/20260920T015027Z`含五库；恢复后 `title`及`title_transaction_operations`仅记录于 player_db，其余四库均未记录。
 
-2026-09-20 title equip/unequip replay full verification：四个不重叠全量分片合计 `2386 passed, 25 subtests passed`（16条既有 compatibility DeprecationWarning）；verified batch结果为 `762/8`、`489/4`、`568/4`、`567/9`，所有精确 `/tmp` basetemp已清理。最终 title equip/unequip/source、compileall、diff、inventory、progress和CLI均通过；装备与卸下称号 replay 查询均由 `TitleApplication.get_result`承载，保留 player-db CAS、operation ledger和旧状态兼容，unlock batch继续作为独立 compatibility boundary。
+2026-09-20 title equip/unequip/unlock full verification：四个不重叠全量分片合计 `2388 passed, 25 subtests passed`（16条既有 compatibility DeprecationWarning）；verified batch结果为 `763/8`、`489/4`、`568/4`、`568/9`，所有精确 `/tmp` basetemp已清理。最终 title equip/unequip/unlock/source、compileall、diff、inventory、progress和CLI均通过；装备与卸下称号 replay 查询及自动解锁批处理均由 `TitleApplication`承载，保留 player-db CAS、operation ledger和旧状态兼容。
 
 2026-09-20 title equip/unequip replay live safety：提交 `bc141daa` 后在受控隔离容器执行 remote smoke；五库 migration dry-run无 pending，readiness通过，reconcile为 `clean=true/operations=0/outbox_events=0/dead_events=0`，marker写入/删除、checksum restore和旧实例重启均通过。独立核验 `old_ready=yes new_closed=yes marker_removed=yes`，backup `/srv/smoke-data/backups/20260920T022638Z`含五库；恢复后 `title`及`title_transaction_operations`仅记录于 player_db，其余四库均未记录。
 
