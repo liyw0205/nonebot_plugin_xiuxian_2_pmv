@@ -93,6 +93,9 @@ class RefactorProgressTests(unittest.TestCase):
         boss = slices["boss"]
         self.assertTrue(boss["manual_spawn_application_owned"])
         self.assertTrue(boss["legacy_manual_spawn_disabled"])
+        buff = slices["buff"]
+        self.assertTrue(buff["blessed_open_application_owned"])
+        self.assertTrue(buff["legacy_blessed_open_disabled"])
 
 
 if __name__ == "__main__":

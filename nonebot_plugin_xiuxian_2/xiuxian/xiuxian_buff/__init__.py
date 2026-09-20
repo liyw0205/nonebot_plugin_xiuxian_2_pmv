@@ -3,8 +3,10 @@ import asyncio
 import re
 import json
 import sqlite3
+from types import SimpleNamespace
 from nonebot.log import logger
 from ...paths import get_paths
+from ...features.buff.application import BuffApplication
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.ids import UUIDGenerator
@@ -77,6 +79,7 @@ _closing_settlement_service_instance = None
 _normal_training_lifecycle_service_instance = None
 _normal_pvp_settlement_service_instance = None
 _stone_training_settlement_service_instance = None
+buff_application = BuffApplication(get_paths().game_db, get_paths().player_db)
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
@@ -249,13 +252,15 @@ async def blessed_spot_creat_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     default_name = f"{user_info['user_name']}道友的家"
     harvest_time = runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')
     # 先走 operation，避免已拥有洞天福地时同事件重放被前置拦截。
-    result = _blessed_spot_service().open(
-        _blessed_spot_operation_id(event, "open", user_id),
-        user_id,
-        BLESSEDSPOTCOST,
-        default_name,
-        harvest_time,
+    outcome = buff_application.open(
+        operation_id=_blessed_spot_operation_id(event, "open", user_id),
+        user_id=user_id,
+        cost=BLESSEDSPOTCOST,
+        name=default_name,
+        harvest_time=harvest_time,
     )
+    result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
+
     if result.status == "duplicate":
         msg = (
             f"恭喜道友拥有了自己的洞天福地，请收集聚灵旗来提升洞天福地的等级吧~\n"

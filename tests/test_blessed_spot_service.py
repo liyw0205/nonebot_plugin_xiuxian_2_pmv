@@ -27,7 +27,8 @@ def test_blessed_spot_handlers_use_lazy_dual_database_service():
     assert "_blessed_spot_service_instance = None" in source
     assert "def _blessed_spot_service(" in source
     assert "get_paths().game_db, get_paths().player_db" in source
-    assert "_blessed_spot_service().open(" in source
+    assert "buff_application.open(" in source
+    assert "_blessed_spot_service().open(" not in source
     assert "_blessed_spot_service().upgrade_field(" in source
     assert "_blessed_spot_service().rename(" in source
     assert "blessed_spot_service.open(" not in source
@@ -36,6 +37,11 @@ def test_blessed_spot_handlers_use_lazy_dual_database_service():
 
 
 class BlessedSpotServiceTests(unittest.TestCase):
+    def test_blessed_spot_open_handler_uses_feature_application(self):
+        source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_buff/__init__.py"
+        text = source.read_text(encoding="utf-8")
+        self.assertIn("buff_application.open(", text)
+        self.assertNotIn("_blessed_spot_service().open(", text)
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
