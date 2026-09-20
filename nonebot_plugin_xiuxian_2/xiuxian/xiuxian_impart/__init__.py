@@ -849,27 +849,23 @@ async def impart_disassemble_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     user_id = str(user_info["user_id"])
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"impart-disassemble:{event_id}:{user_id}" if event_id else f"impart-disassemble:{user_id}:{runtime_ids.new_id()}"
-    prior = _card_disassemble_service().get_result(operation_id)
-    if prior is not None and prior.succeeded:
-        await handle_send(
-            bot, event,
-            f"分解成功：{card_name}剩余{prior.card_quantity}张，思恋结晶现有{prior.stone_quantity}颗\n"
-            f"该分解请求已经处理，无需重复提交。"
-        )
-        return
     cards = impart_data_json.data_person_list(user_id) or {}
     impart_state = await impart_check(user_id)
     if impart_state is None:
         await handle_send(bot, event, "未找到传承数据！")
         return
-    result = _run_impart_action(
-        "disassemble", operation_id, user_id,
+    outcome = impart_application.execute_legacy_call(
+        operation_id=operation_id,
+        user_id=user_id,
+        action="disassemble",
+        payload={"card_name": card_name, "quantity": quantity},
         call=lambda: _card_disassemble_service().disassemble(
             operation_id, user_id, card_name, quantity, cards.get(card_name, 0),
             impart_state["stone_num"], 2, impart_data_json.data_all_(),
         ),
-        card_name=card_name, quantity=quantity,
     )
+    result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
+
     messages = {"card_missing": "卡牌不足；分解后必须至少保留1张！", "state_changed": "卡牌操作未结算：卡牌当前状态已更新，请重新操作。", "user_missing": "未找到传承数据！"}
     if result.status == "duplicate":
         await handle_send(

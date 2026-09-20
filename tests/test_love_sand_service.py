@@ -61,5 +61,12 @@ class LoveSandUseServiceTests(unittest.TestCase):
         self.assertIn("impart_application.execute_legacy_call(", handler)
         self.assertNotIn("result = _card_compose_service().compose(", handler)
 
+    def test_card_disassemble_handler_uses_feature_application(self):
+        source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart/__init__.py"
+        text = source.read_text(encoding="utf-8")
+        handler = text[text.index("async def impart_disassemble_"):]
+        self.assertIn("impart_application.execute_legacy_call(", handler)
+        self.assertNotIn("result = _card_disassemble_service().disassemble(", handler)
+
 
 if __name__ == "__main__": unittest.main()
