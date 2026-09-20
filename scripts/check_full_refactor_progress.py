@@ -69,6 +69,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     past_life_facade = (PACKAGE / "xiuxian" / "xiuxian_past_life" / "__init__.py").read_text(encoding="utf-8")
     dufang_facade = (PACKAGE / "xiuxian" / "xiuxian_dufang" / "__init__.py").read_text(encoding="utf-8")
     fusion_facade = (PACKAGE / "xiuxian" / "xiuxian_fusion" / "__init__.py").read_text(encoding="utf-8")
+    title_facade = (PACKAGE / "xiuxian" / "xiuxian_title" / "__init__.py").read_text(encoding="utf-8")
     return {
         "stone_gift": {
             "default_legacy_handler_disabled": '"送灵石" if _legacy_stone_gift_enabled' in base,
@@ -180,6 +181,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "single_application_owned": "fusion_application.apply(" in fusion_facade,
             "legacy_single_disabled": "_fusion_service().apply(" not in fusion_facade,
             "status": "single_fusion_cutover_with_batch_compatibility",
+        },
+        "title": {
+            "equip_replay_application_owned": "title_application.get_result(" in title_facade,
+            "legacy_equip_replay_disabled": "# 先回放：成功后 equipped 变化会挡住同事件幂等。\n    prior = _title_transaction_service().get_result(" not in title_facade,
+            "status": "equip_replay_cutover_with_unequip_unlock_compatibility",
         },
     }
 

@@ -34,6 +34,13 @@ def test_title_facade_defers_sql_manager_construction():
     assert "sql_message = XiuxianDateManage()" not in source
 
 
+def test_title_equip_replay_uses_feature_application():
+    source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py"
+    handler = source.read_text(encoding="utf-8").split("@title_equip_cmd.handle", 1)[1].split("@title_unequip_cmd.handle", 1)[0]
+    assert "title_application.get_result(" in handler
+    assert "_title_transaction_service().get_result(" not in handler
+
+
 def test_title_entries_use_lazy_replay_and_application_write_paths():
     title_source = open(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_title/__init__.py",

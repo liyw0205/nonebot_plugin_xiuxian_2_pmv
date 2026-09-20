@@ -238,7 +238,7 @@ async def title_equip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await title_equip_cmd.finish()
     operation_id = _title_operation_id(event, "equip", str(user_id))
     # 先回放：成功后 equipped 变化会挡住同事件幂等。
-    prior = _title_transaction_service().get_result(operation_id)
+    prior = title_application.get_result(operation_id)
     title_data = get_title_by_id(title_id) or {}
     if prior is not None and prior.succeeded:
         await handle_send(
