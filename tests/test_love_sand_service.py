@@ -47,5 +47,12 @@ class LoveSandUseServiceTests(unittest.TestCase):
         with db_backend.connection(self.game) as conn: self.assertEqual(conn.execute("SELECT goods_num FROM back").fetchone()[0], 3)
         with db_backend.connection(self.impart) as conn: self.assertEqual(conn.execute("SELECT stone_num FROM xiuxian_impart").fetchone()[0], 7)
 
+    def test_love_sand_handler_uses_feature_application(self):
+        source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart/__init__.py"
+        text = source.read_text(encoding="utf-8")
+        handler = text[text.index("async def use_love_sand"):text.index("@impart_back.handle")]
+        self.assertIn("impart_application.execute_legacy_call(", handler)
+        self.assertNotIn("result = _love_sand_service().apply(", handler)
+
 
 if __name__ == "__main__": unittest.main()

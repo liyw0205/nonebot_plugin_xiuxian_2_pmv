@@ -594,17 +594,16 @@ async def use_love_sand(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     item_count = _sql_message().goods_num(user_id, item_id)
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"love-sand:{event_id}:{user_id}:{item_id}" if event_id else f"love-sand:{runtime_ids.new_id()}:{user_id}:{item_id}"
-    prior = _love_sand_service().get_result(operation_id)
-    if prior is not None and prior.succeeded:
-        final_msg = (
-            f"获得思恋结晶 {prior.gained} 颗\n当前思恋结晶：{prior.stone_num}颗\n"
-            f"该使用请求已经处理，无需重复提交。"
-        )
-        await handle_send(bot, event, final_msg)
-        return
-    # 使用思恋流沙，随机获得思恋结晶（首次结果固化在 operation）
     total_gained = sum(random.choice([10, 20, 30]) for _ in range(quantity))
-    result = _love_sand_service().apply(operation_id, user_id, item_id, quantity, total_gained, item_count, current_stones)
+    outcome = impart_application.execute_legacy_call(
+        operation_id=operation_id,
+        user_id=str(user_id),
+        action="love_sand",
+        payload={"item_id": item_id, "quantity": quantity, "total_gained": total_gained, "item_count": item_count, "current_stones": current_stones},
+        call=lambda: _love_sand_service().apply(operation_id, user_id, item_id, quantity, total_gained, item_count, current_stones),
+    )
+    result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
+
     if result.status == "duplicate":
         final_msg = (
             f"获得思恋结晶 {result.gained} 颗\n当前思恋结晶：{result.stone_num}颗\n"

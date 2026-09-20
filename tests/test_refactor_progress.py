@@ -100,6 +100,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(buff["legacy_blessed_rename_disabled"])
         self.assertTrue(buff["blessed_upgrade_application_owned"])
         self.assertTrue(buff["legacy_blessed_upgrade_disabled"])
+        impart = slices["impart"]
+        self.assertTrue(impart["love_sand_application_owned"])
 
 
 if __name__ == "__main__":
