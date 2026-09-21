@@ -2008,6 +2008,18 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("pet_application = PetApplication(", source)
         self.assertNotIn("repository=LegacyPetRepository", source)
 
+    def test_pet_release_commands_use_feature_application(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_pet" / "__init__.py").read_text(encoding="utf-8")
+        release_start = source.index("@pet_release.handle")
+        batch_start = source.index("@pet_release_batch.handle")
+        feed_start = source.index("@pet_feed.handle")
+        release = source[release_start:batch_start]
+        batch = source[batch_start:feed_start]
+        self.assertIn("pet_application.release(", release)
+        self.assertIn("pet_application.release_batch(", batch)
+        self.assertNotIn("_pet_release_service().release(", release)
+        self.assertNotIn("_pet_release_service().release_batch(", batch)
+
     def test_illusion_choice_uses_transactional_service(self) -> None:
         illusion_root = SOURCE_ROOT / "xiuxian" / "xiuxian_Illusion"
         source = (illusion_root / "__init__.py").read_text(encoding="utf-8")

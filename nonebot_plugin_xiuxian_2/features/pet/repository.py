@@ -352,6 +352,65 @@ class PetHatchSqlRepository:
             return PetHatchResult("applied", cost, normalized, tuple(updated_meta), bag_limit)
 
 
+@dataclass(frozen=True)
+class PetReleaseResult:
+    status: str
+    refund: int = 0
+    released_uids: tuple[str, ...] = ()
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"applied", "duplicate"}
+
+
+class PetReleaseSqlRepository:
+    def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
+        self.game_database = str(game_database)
+        self.player_database = str(player_database)
+
+    def release(self, operation_id: str, user_id: str, uid: str, expected_exp: int, refund_item: int, refund_name: str, refund_type: str, refund: int, max_goods: int, expected_is_active: bool = True) -> PetReleaseResult:
+        return self.release_batch(operation_id, user_id, [{"uid": uid, "total_exp": expected_exp, "is_active": int(bool(expected_is_active))}], refund_item, refund_name, refund_type, refund, max_goods, allow_active=True)
+
+    def release_batch(self, operation_id: str, user_id: str, expected_pets: Any, refund_item: int, refund_name: str, refund_type: str, refund: int, max_goods: int, allow_active: bool = False) -> PetReleaseResult:
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        refund_item, refund, max_goods = int(refund_item), int(refund), int(max_goods)
+        pets = tuple(sorted((str(pet["uid"]), int(pet.get("total_exp", 0)), int(pet.get("is_active", 0))) for pet in expected_pets))
+        if not operation_id or not pets or len({pet[0] for pet in pets}) != len(pets) or min(refund_item, refund, max_goods) < 0:
+            raise ValueError("operation and unique pet snapshots are required")
+        payload = json.dumps([user_id, pets, refund_item, str(refund_name), str(refund_type), refund, max_goods, bool(allow_active)], ensure_ascii=True, separators=(",", ":"))
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            uow.attach_database(self.player_database, "player_data")
+            uow.execute("CREATE TABLE IF NOT EXISTS pet_release_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,refund INTEGER NOT NULL,released_uids TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            old = uow.query_one("SELECT payload,refund,released_uids FROM pet_release_operations WHERE operation_id=?", (operation_id,))
+            if old is not None:
+                return PetReleaseResult("duplicate" if str(old["payload"]) == payload else "state_changed", int(old["refund"]) if str(old["payload"]) == payload else 0, tuple(json.loads(old["released_uids"])) if str(old["payload"]) == payload else ())
+            placeholders = ",".join("?" for _ in pets)
+            uids = tuple(pet[0] for pet in pets)
+            rows = uow.query_all(f"SELECT uid,COALESCE(total_exp,0) AS total_exp,COALESCE(is_active,0) AS is_active FROM player_data.player_pet_item WHERE user_id=? AND uid IN ({placeholders})", (user_id, *uids))
+            current = tuple(sorted((str(row["uid"]), int(row["total_exp"]), int(row["is_active"])) for row in rows))
+            if current != pets:
+                return PetReleaseResult("state_changed")
+            if not allow_active and any(pet[2] for pet in pets):
+                return PetReleaseResult("active_pet")
+            active_uids = tuple(pet[0] for pet in pets if pet[2])
+            if active_uids:
+                meta = uow.query_one("SELECT active_uid FROM player_data.player_pet WHERE user_id=?", (user_id,))
+                if meta is None or str(meta["active_uid"] or "") != active_uids[0]:
+                    return PetReleaseResult("state_changed")
+            inventory = uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?", (user_id, refund_item))
+            if (int(inventory["goods_num"]) if inventory else 0) + refund > max_goods:
+                return PetReleaseResult("inventory_full")
+            deleted = uow.execute(f"DELETE FROM player_data.player_pet_item WHERE user_id=? AND uid IN ({placeholders})", (user_id, *uids)).rowcount
+            if deleted != len(pets):
+                return PetReleaseResult("state_changed")
+            if active_uids and uow.execute("UPDATE player_data.player_pet SET active_uid=NULL,active=NULL WHERE user_id=? AND active_uid=?", (user_id, active_uids[0])).rowcount != 1:
+                raise RuntimeError("active pet metadata changed")
+            if refund:
+                uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,bind_num) VALUES(?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=excluded.goods_name,goods_type=excluded.goods_type,goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.goods_num", (user_id, refund_item, str(refund_name), str(refund_type), refund, refund))
+            uow.execute("INSERT INTO pet_release_operations(operation_id,payload,refund,released_uids) VALUES(?,?,?,?)", (operation_id, payload, refund, json.dumps(uids)))
+            return PetReleaseResult("applied", refund, uids)
+
+
 class PetRepository(Protocol):
     def switch(self, *args: Any, **kwargs: Any) -> Any: ...
     def travel_claim(self, *args: Any, **kwargs: Any) -> Any: ...
@@ -392,4 +451,4 @@ class LegacyPetRepository:
         return PetActiveSwitchService(self.player_database).switch(*args, **kwargs)
 
 
-__all__ = ["PetActiveSwitchResult", "PetActiveSwitchSqlRepository", "PetFeedResult", "PetFeedSqlRepository", "PetTravelStartResult", "PetTravelStartSqlRepository", "PetTravelClaimResult", "PetTravelClaimSqlRepository", "PetHatchResult", "PetHatchSqlRepository", "PetRepository", "LegacyPetRepository"]
+__all__ = ["PetActiveSwitchResult", "PetActiveSwitchSqlRepository", "PetFeedResult", "PetFeedSqlRepository", "PetTravelStartResult", "PetTravelStartSqlRepository", "PetTravelClaimResult", "PetTravelClaimSqlRepository", "PetHatchResult", "PetHatchSqlRepository", "PetReleaseResult", "PetReleaseSqlRepository", "PetRepository", "LegacyPetRepository"]

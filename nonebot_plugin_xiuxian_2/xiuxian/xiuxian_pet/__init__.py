@@ -1404,14 +1404,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     refund_item = items.get_data_by_item_id(PET_RELEASE_REFUND_ITEM_ID) or {}
     refund_count = calc_pet_release_refund(pet, refund_item)[0]
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    release_result = _pet_release_service().release(
-        f"pet-release:{event_id or pet.get('uid', '')}:{user_id}",
-        user_id,
-        pet.get("uid", ""),
-        pet.get("total_exp", 0),
-        PET_RELEASE_REFUND_ITEM_ID,
-        refund_count,
-        XiuConfig().max_goods_num,
+    release_result = pet_application.release(
+        operation_id=f"pet-release:{event_id or pet.get('uid', '')}:{user_id}",
+        user_id=user_id,
+        uid=pet.get("uid", ""),
+        expected_exp=pet.get("total_exp", 0),
+        refund_item=PET_RELEASE_REFUND_ITEM_ID,
+        refund_name=refund_item.get("name", "一阶天地灵髓"),
+        refund_type=refund_item.get("type", "特殊道具"),
+        refund=refund_count,
+        max_goods=XiuConfig().max_goods_num,
         expected_is_active=location == "active",
     )
     if release_result.status == "inventory_full":
@@ -1459,15 +1461,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     refund_count = sum(calc_pet_release_refund(pet, refund_item)[0] for pet in pets)
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     snapshot_id = ":".join(sorted(str(pet.get("uid", "")) for pet in pets))
-    release_result = _pet_release_service().release_batch(
-        f"pet-release-batch:{event_id or snapshot_id}:{user_id}",
-        user_id,
-        [{"uid": pet.get("uid"), "total_exp": pet.get("total_exp", 0), "is_active": 0} for pet in pets],
-        PET_RELEASE_REFUND_ITEM_ID,
-        refund_item.get("name", "一阶天地灵髓"),
-        refund_item.get("type", "特殊道具"),
-        refund_count,
-        XiuConfig().max_goods_num,
+    release_result = pet_application.release_batch(
+        operation_id=f"pet-release-batch:{event_id or snapshot_id}:{user_id}",
+        user_id=user_id,
+        expected_pets=[{"uid": pet.get("uid"), "total_exp": pet.get("total_exp", 0), "is_active": 0} for pet in pets],
+        refund_item=PET_RELEASE_REFUND_ITEM_ID,
+        refund_name=refund_item.get("name", "一阶天地灵髓"),
+        refund_type=refund_item.get("type", "特殊道具"),
+        refund=refund_count,
+        max_goods=XiuConfig().max_goods_num,
     )
     if release_result.status == "inventory_full":
         await handle_send(bot, event, "背包物品已达上限，宠物未放生。")

@@ -9,7 +9,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import PetFeedRequest, PetTravelClaimRequest
-from .repository import LegacyPetRepository, PetActiveSwitchSqlRepository, PetFeedSqlRepository, PetHatchSqlRepository, PetRepository, PetTravelClaimSqlRepository, PetTravelStartSqlRepository
+from .repository import LegacyPetRepository, PetActiveSwitchSqlRepository, PetFeedSqlRepository, PetHatchSqlRepository, PetReleaseSqlRepository, PetRepository, PetTravelClaimSqlRepository, PetTravelStartSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -105,6 +105,16 @@ class PetApplication:
         if self.repository is None:
             return PetHatchSqlRepository(self.game_database, self.player_database).get_result(operation_id)
         return self.repository.hatch_result(operation_id)
+
+    def release(self, *, operation_id: str, user_id: str, uid: str, expected_exp: int, refund_item: int, refund_name: str, refund_type: str, refund: int, max_goods: int, expected_is_active: bool = True) -> Any:
+        return PetReleaseSqlRepository(self.game_database, self.player_database).release(
+            operation_id, user_id, uid, expected_exp, refund_item, refund_name, refund_type, refund, max_goods, expected_is_active
+        )
+
+    def release_batch(self, *, operation_id: str, user_id: str, expected_pets: Sequence[Mapping[str, Any]], refund_item: int, refund_name: str, refund_type: str, refund: int, max_goods: int) -> Any:
+        return PetReleaseSqlRepository(self.game_database, self.player_database).release_batch(
+            operation_id, user_id, expected_pets, refund_item, refund_name, refund_type, refund, max_goods
+        )
 
     def switch(self, *, operation_id: str, user_id: str, expected_active_uid: str, target_uid: str, travel_pet_uid: str = "") -> Any:
         repository = self.repository or PetActiveSwitchSqlRepository(self.player_database)
