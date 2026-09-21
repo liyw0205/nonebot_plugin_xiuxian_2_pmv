@@ -823,17 +823,14 @@ async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                     int(outcome.get("statistics", {}).get("秘境次数", 0)) + 1
                 )
                 outcome["message"] = f"{outcome['message']}{progress_msg}"
-                result = _rift_settlement_service().settle(
-                    operation_id,
-                    user_id,
-                    rift_info,
-                    {
+                result = rift_application.settle(
+                    operation_id=operation_id, user_id=str(user_id), rift_info=rift_info,
+                    user_state={
                         key: int(user_info.get(key, 0))
                         for key in ("stone", "exp", "hp", "mp")
                     },
-                    explore_count,
-                    outcome,
-                    XiuConfig().max_goods_num,
+                    explore_count=explore_count, outcome=outcome,
+                    max_goods_num=XiuConfig().max_goods_num,
                 )
             except Exception as exc:
                 logger.opt(exception=exc).error("秘境普通结算事务执行失败")
