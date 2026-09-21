@@ -238,8 +238,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "blessed_rename_application_owned": "buff_application.rename(" in buff_facade,
             "legacy_blessed_rename_disabled": "_blessed_spot_service().rename(" not in buff_facade,
             "blessed_upgrade_application_owned": "buff_application.upgrade_field(" in buff_facade,
+            "stone_training_application_owned": "buff_application.stone_training(" in buff_facade,
             "legacy_blessed_upgrade_disabled": "_blessed_spot_service().upgrade_field(" not in buff_facade,
-            "status": "blessed_spot_open_rename_upgrade_cutover_with_other_buff_compatibility",
+            "status": "blessed_spot_open_rename_upgrade_stone_training_cutover_with_other_buff_compatibility",
         },
         "impart": {
             "love_sand_application_owned": "impart_application.execute_legacy_call(" in impart_facade,

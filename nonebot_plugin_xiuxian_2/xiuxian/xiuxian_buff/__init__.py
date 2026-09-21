@@ -673,8 +673,8 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     level_rate = _sql_message().get_root_rate(user_mes['root_type'], user_id)
     realm_rate = jsondata.level_data()[level]["spend"]
     stone_op_id = _stone_training_operation_id(event, user_id)
-    result = _stone_training_settlement_service().settle(
-        stone_op_id, user_id,
+    result = buff_application.stone_training(
+        operation_id=stone_op_id, user_id=str(user_id),
         requested_stone=stone_num, expected_exp=use_exp, expected_stone=use_stone,
         exp_cap=max_exp, power_multiplier=level_rate * realm_rate,
     )
