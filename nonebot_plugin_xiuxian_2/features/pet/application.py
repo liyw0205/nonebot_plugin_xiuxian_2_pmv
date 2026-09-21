@@ -9,7 +9,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import PetFeedRequest, PetTravelClaimRequest
-from .repository import LegacyPetRepository, PetActiveSwitchSqlRepository, PetFeedSqlRepository, PetRepository, PetTravelClaimSqlRepository, PetTravelStartSqlRepository
+from .repository import LegacyPetRepository, PetActiveSwitchSqlRepository, PetFeedSqlRepository, PetHatchSqlRepository, PetRepository, PetTravelClaimSqlRepository, PetTravelStartSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -94,10 +94,17 @@ class PetApplication:
         if not str(operation_id).strip() or not str(user_id).strip() or min(int(expected_stone), int(cost), int(bag_limit)) < 0:
             raise ValidationError("hatch operation and values are invalid")
         payload = {"user_id": str(user_id), "cost": int(cost), "count": len(pets)}
-        return self._execute(operation_id=str(operation_id).strip(), user_id=str(user_id), action="pet.hatch", payload=payload, call=lambda: self._repository().hatch(operation_id, user_id, expected_stone, cost, expected_meta, pets, updated_meta, bag_limit))
+        if self.repository is None:
+            repository = PetHatchSqlRepository(self.game_database, self.player_database)
+            call = lambda: repository.hatch(operation_id, user_id, expected_stone, cost, expected_meta, pets, updated_meta, bag_limit)
+        else:
+            call = lambda: self.repository.hatch(operation_id, user_id, expected_stone, cost, expected_meta, pets, updated_meta, bag_limit)
+        return self._execute(operation_id=str(operation_id).strip(), user_id=str(user_id), action="pet.hatch", payload=payload, call=call)
 
     def hatch_result(self, *, operation_id: str) -> Any:
-        return self._repository().hatch_result(operation_id)
+        if self.repository is None:
+            return PetHatchSqlRepository(self.game_database, self.player_database).get_result(operation_id)
+        return self.repository.hatch_result(operation_id)
 
     def switch(self, *, operation_id: str, user_id: str, expected_active_uid: str, target_uid: str, travel_pet_uid: str = "") -> Any:
         repository = self.repository or PetActiveSwitchSqlRepository(self.player_database)

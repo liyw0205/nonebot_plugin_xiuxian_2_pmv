@@ -260,6 +260,98 @@ class PetTravelClaimSqlRepository:
             return PetTravelClaimResult("applied", stone, exp, tuple((row[0], row[3]) for row in rewards))
 
 
+@dataclass(frozen=True)
+class PetHatchResult:
+    status: str
+    cost: int = 0
+    pets: tuple = ()
+    updated_meta: tuple = ()
+    bag_limit: int = 0
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"applied", "duplicate"}
+
+
+class PetHatchSqlRepository:
+    def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
+        self.game_database = str(game_database)
+        self.player_database = str(player_database)
+
+    def get_result(self, operation_id: str) -> PetHatchResult | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        with DatabaseUnitOfWork(self.game_database) as uow:
+            uow.execute("CREATE TABLE IF NOT EXISTS pet_hatch_operations(operation_id TEXT PRIMARY KEY,payload TEXT,result_json TEXT,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            row = uow.query_one("SELECT payload,result_json FROM pet_hatch_operations WHERE operation_id=?", (operation_id,))
+        if row is None:
+            return None
+        data = json.loads(row["result_json"] or "{}")
+        return PetHatchResult("duplicate", 0, tuple((dict(pet), bool(active)) for pet, active in data.get("pets", [])), tuple(data.get("updated_meta", [])), int(data.get("bag_limit", 0) or 0))
+
+    @staticmethod
+    def _normalize_travel(value: Any) -> Any:
+        if value is None or value == "":
+            return None
+        if isinstance(value, dict):
+            return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) if value else None
+        try:
+            parsed = json.loads(str(value))
+        except (TypeError, ValueError):
+            return str(value)
+        return None if parsed is None or parsed == {} else json.dumps(parsed, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+    def hatch(self, operation_id: str, user_id: str, expected_stone: int, cost: int, expected_meta: Any, pets: Any, updated_meta: Any, bag_limit: int) -> PetHatchResult:
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        expected_stone, cost, bag_limit = int(expected_stone), int(cost), int(bag_limit)
+        normalized = tuple((dict(pet), bool(active)) for pet, active in pets)
+        if not operation_id or cost < 0 or not normalized:
+            raise ValueError("valid operation and hatch batch are required")
+        payload = json.dumps([user_id, cost, len(normalized)], ensure_ascii=True, separators=(",", ":"))
+        result_json = json.dumps({"pets": [[pet, active] for pet, active in normalized], "updated_meta": list(updated_meta), "bag_limit": bag_limit}, ensure_ascii=True, separators=(",", ":"))
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            uow.attach_database(self.player_database, "player_data")
+            uow.execute("CREATE TABLE IF NOT EXISTS pet_hatch_operations(operation_id TEXT PRIMARY KEY,payload TEXT,result_json TEXT,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(pet_hatch_operations)")}
+            if "result_json" not in columns:
+                uow.execute("ALTER TABLE pet_hatch_operations ADD COLUMN result_json TEXT")
+            old = uow.query_one("SELECT payload,result_json FROM pet_hatch_operations WHERE operation_id=?", (operation_id,))
+            if old is not None:
+                if str(old["payload"]) != payload:
+                    return PetHatchResult("state_changed")
+                data = json.loads(old["result_json"] or "{}")
+                return PetHatchResult("duplicate", cost, tuple((dict(pet), bool(active)) for pet, active in data.get("pets", [])), tuple(data.get("updated_meta", [])), int(data.get("bag_limit", bag_limit)))
+            user = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+            if user is None:
+                return PetHatchResult("user_missing")
+            if int(user["stone"] or 0) != expected_stone:
+                return PetHatchResult("state_changed")
+            if expected_stone < cost:
+                return PetHatchResult("stone_missing")
+            meta = uow.query_one("SELECT active_uid,egg_pity_count,egg_pity_no_mythic_count,travel FROM player_data.player_pet WHERE user_id=?", (user_id,))
+            expected = list(expected_meta or []) + [None] * 4
+            actual = ["" if meta is None else str(meta["active_uid"] or ""), 0 if meta is None else int(meta["egg_pity_count"] or 0), 0 if meta is None else int(meta["egg_pity_no_mythic_count"] or 0), None if meta is None else self._normalize_travel(meta["travel"])]
+            expected[0], expected[3] = str(expected[0] or ""), self._normalize_travel(expected[3])
+            if actual != expected[:4]:
+                return PetHatchResult("state_changed")
+            owned = uow.query_one("SELECT COUNT(*) AS count FROM player_data.player_pet_item WHERE user_id=?", (user_id,))
+            if int(owned["count"]) + len(normalized) > bag_limit:
+                return PetHatchResult("inventory_full")
+            now = int(time.time())
+            for pet, active in normalized:
+                skill = pet.get("skill") or ((pet.get("skills") or [{}])[0])
+                uow.execute("INSERT INTO player_data.player_pet_item(id,user_id,uid,is_active,pet_id,stars,exp,total_exp,skill_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", (f"{user_id}:{pet['uid']}", user_id, str(pet["uid"]), int(active), str(pet.get("pet_id", "")), int(pet.get("stars", 1)), int(pet.get("exp", 0)), int(pet.get("total_exp", 0)), str(skill.get("skill_id", "")) or None, now, now))
+            if uow.execute("UPDATE user_xiuxian SET stone=stone-? WHERE user_id=? AND stone=?", (cost, user_id, expected_stone)).rowcount != 1:
+                return PetHatchResult("state_changed")
+            if meta is None:
+                uow.execute("INSERT INTO player_data.player_pet(user_id,active_uid,egg_pity_count,egg_pity_no_mythic_count,travel) VALUES(?,?,?,?,NULL)", (user_id, updated_meta[0], updated_meta[1], updated_meta[2]))
+            elif uow.execute("UPDATE player_data.player_pet SET active_uid=?,egg_pity_count=?,egg_pity_no_mythic_count=? WHERE user_id=?", (*updated_meta, user_id)).rowcount != 1:
+                return PetHatchResult("state_changed")
+            uow.execute("INSERT INTO pet_hatch_operations(operation_id,payload,result_json) VALUES(?,?,?)", (operation_id, payload, result_json))
+            return PetHatchResult("applied", cost, normalized, tuple(updated_meta), bag_limit)
+
+
 class PetRepository(Protocol):
     def switch(self, *args: Any, **kwargs: Any) -> Any: ...
     def travel_claim(self, *args: Any, **kwargs: Any) -> Any: ...
@@ -300,4 +392,4 @@ class LegacyPetRepository:
         return PetActiveSwitchService(self.player_database).switch(*args, **kwargs)
 
 
-__all__ = ["PetActiveSwitchResult", "PetActiveSwitchSqlRepository", "PetFeedResult", "PetFeedSqlRepository", "PetTravelStartResult", "PetTravelStartSqlRepository", "PetTravelClaimResult", "PetTravelClaimSqlRepository", "PetRepository", "LegacyPetRepository"]
+__all__ = ["PetActiveSwitchResult", "PetActiveSwitchSqlRepository", "PetFeedResult", "PetFeedSqlRepository", "PetTravelStartResult", "PetTravelStartSqlRepository", "PetTravelClaimResult", "PetTravelClaimSqlRepository", "PetHatchResult", "PetHatchSqlRepository", "PetRepository", "LegacyPetRepository"]
