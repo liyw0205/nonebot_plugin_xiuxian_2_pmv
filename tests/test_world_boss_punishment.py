@@ -197,6 +197,6 @@ def test_single_and_all_handlers_share_service_without_direct_save():
     ]
     assert "_world_boss_punishment_service().get_result(" in helper
     assert "_world_boss_punishment_service().snapshot()" in helper
-    assert "_world_boss_punishment_service().punish(" in helper
+    assert "boss_application.execute_legacy_call(" in helper
     assert "_world_boss_punishment_service_instance = None" in source
     assert "def _world_boss_punishment_service(" in source
