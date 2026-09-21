@@ -2002,6 +2002,12 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("pet_travel_claim_operations", service)
 
+    def test_pet_default_application_does_not_construct_legacy_repository(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_pet" / "__init__.py").read_text(encoding="utf-8")
+        self.assertNotIn("LegacyPetRepository", source)
+        self.assertIn("pet_application = PetApplication(", source)
+        self.assertNotIn("repository=LegacyPetRepository", source)
+
     def test_illusion_choice_uses_transactional_service(self) -> None:
         illusion_root = SOURCE_ROOT / "xiuxian" / "xiuxian_Illusion"
         source = (illusion_root / "__init__.py").read_text(encoding="utf-8")

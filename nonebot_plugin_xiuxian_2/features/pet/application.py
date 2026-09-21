@@ -9,7 +9,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import PetFeedRequest, PetTravelClaimRequest
-from .repository import LegacyPetRepository, PetRepository
+from .repository import LegacyPetRepository, PetActiveSwitchSqlRepository, PetRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -89,7 +89,8 @@ class PetApplication:
         return self._repository().hatch_result(operation_id)
 
     def switch(self, *, operation_id: str, user_id: str, expected_active_uid: str, target_uid: str, travel_pet_uid: str = "") -> Any:
-        return self._repository().switch(operation_id, user_id, expected_active_uid, target_uid, travel_pet_uid)
+        repository = self.repository or PetActiveSwitchSqlRepository(self.player_database)
+        return repository.switch(operation_id, user_id, expected_active_uid, target_uid, travel_pet_uid)
 
     def reply(self, **kwargs: Any) -> ReplyPlan:
         action = str(kwargs.pop("action", "claim_travel"))
