@@ -2678,6 +2678,7 @@
     "bank_interest_operations",
     "bank_upgrade_operations",
     "bank_withdrawal_operations",
+    "bankinfo",
     "base64",
     "base_feature_migrations",
     "batch_pet_egg_use_operations",

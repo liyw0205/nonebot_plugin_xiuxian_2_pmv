@@ -1937,6 +1937,10 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("bank_application = BankApplication(", source)
         self.assertNotIn("repository=LegacyBankRepository", source)
 
+    def test_bank_account_info_bootstrap_receives_legacy_player_database(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
+        self.assertEqual(source.count("BankAccountInfoApplication(get_paths().game_db, player_database=get_paths().player_db)"), 5)
+
     def test_world_boss_rewards_use_cross_database_transaction(self) -> None:
         boss_root = SOURCE_ROOT / "xiuxian" / "xiuxian_boss"
         source = (boss_root / "__init__.py").read_text(encoding="utf-8")

@@ -167,7 +167,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         from ...features.bank.account_application import BankDepositApplication
         from ...features.bank.clock import bank_clock
 
-        migrated_account = BankAccountInfoApplication(get_paths().game_db).get_info(user_id=user_id)
+        migrated_account = BankAccountInfoApplication(get_paths().game_db, player_database=get_paths().player_db).get_info(user_id=user_id)
         if migrated_account.get("status") == "ok":
             result = BankDepositApplication(get_paths().game_db).deposit(
                 operation_id=operation_id,
@@ -263,7 +263,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         from ...features.bank.account_withdrawal_application import BankWithdrawalApplication
         from ...features.bank.clock import bank_clock
 
-        migrated_account = BankAccountInfoApplication(get_paths().game_db).get_info(user_id=user_id)
+        migrated_account = BankAccountInfoApplication(get_paths().game_db, player_database=get_paths().player_db).get_info(user_id=user_id)
         if migrated_account.get("status") == "ok":
             result = BankWithdrawalApplication(get_paths().game_db).withdraw(
                 operation_id=operation_id,
@@ -343,7 +343,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         from ...features.bank.account_upgrade_application import BankUpgradeApplication
         from ...features.bank.clock import bank_clock
 
-        migrated_account = BankAccountInfoApplication(get_paths().game_db).get_info(user_id=user_id)
+        migrated_account = BankAccountInfoApplication(get_paths().game_db, player_database=get_paths().player_db).get_info(user_id=user_id)
         if migrated_account.get("status") == "ok":
             userlevel = str(migrated_account["bank_level"])
             if userlevel == str(len(BANKLEVEL)):
@@ -430,7 +430,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
     elif mode == '信息':  # 查询灵庄信息
         from ...features.bank.account_info_application import BankAccountInfoApplication
 
-        new_info = BankAccountInfoApplication(get_paths().game_db).get_info(user_id=user_id)
+        new_info = BankAccountInfoApplication(get_paths().game_db, player_database=get_paths().player_db).get_info(user_id=user_id)
         if new_info.get("status") == "ok":
             msg = f'''**灵庄信息**
 ---
@@ -471,7 +471,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
         from ...features.bank.interest_rules import calculate_interest
         from ...features.bank.clock import bank_clock
 
-        migrated_account = BankAccountInfoApplication(get_paths().game_db).get_info(user_id=user_id)
+        migrated_account = BankAccountInfoApplication(get_paths().game_db, player_database=get_paths().player_db).get_info(user_id=user_id)
         if migrated_account.get("status") == "ok":
             now = bank_clock().now()
             level = str(migrated_account["bank_level"])

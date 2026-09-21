@@ -2917,3 +2917,9 @@
 2026-09-22 bank default repository isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
 
 2026-09-22 bank default repository full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2119` tests，全部通过，退出码 `0`；bank wiring source/application tests已纳入根 discovery，测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
+
+2026-09-22 bank legacy account bootstrap cutover：新增 `BankAccountBootstrapApplication`，在 game DB `bank_accounts` 缺失时从 legacy player DB `bankinfo` 幂等导入 `saved_stone/bank_level/updated_at`；`BankAccountInfoApplication` 统一先执行 bootstrap 再返回账户信息，灵庄五个入口均显式传入 legacy player DB，避免无账户时直接落入旧 transaction service。bootstrap/account-info/account transaction `13 passed`，source/bank focused `36 passed`，source/compile/architecture/inventory/diff check 通过。
+
+2026-09-22 bank legacy account bootstrap isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
+
+2026-09-22 bank legacy account bootstrap full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2121` tests，全部通过，退出码 `0`；bootstrap/account-info source tests已纳入根 discovery，测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
