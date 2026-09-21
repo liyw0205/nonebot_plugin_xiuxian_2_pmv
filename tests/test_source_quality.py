@@ -2753,7 +2753,7 @@ class SourceQualityTests(unittest.TestCase):
         helper = source[start:end]
         self.assertIn("map_application.map_status(", helper)
         self.assertIn("if data is None:", helper)
-        self.assertLess(helper.index("map_application.map_status("), helper.index("_player_data_manager().get_fields"))
+        self.assertNotIn("_player_data_manager().get_fields", helper)
 
     def test_map_status_initialization_and_repair_use_feature_writer(self) -> None:
         source = (SOURCE_ROOT / "xiuxian/xiuxian_map/__init__.py").read_text(encoding="utf-8")

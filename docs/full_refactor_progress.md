@@ -2905,3 +2905,9 @@
 2026-09-22 map explore status writer isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
 
 2026-09-22 map explore status writer full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2118` tests，全部通过，退出码 `0`；explore writer feature tests 另行通过，根 discovery 计数保持 `2118`；测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
+
+2026-09-22 map status missing-read cutover：`_get_player_map_status` 在 feature query 缺失时不再回退 `PlayerDataManager.get_fields`，直接进入 `MapApplication.save_status` 所有权的初始化路径；map status query/write/application `11 passed`，source contract `2 passed`，map movement/home/dongfu/explore/dao `22 passed`，source/compile/architecture/inventory/diff check 通过。
+
+2026-09-22 map status missing-read isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
+
+2026-09-22 map status missing-read full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2118` tests，全部通过，退出码 `0`；此前一次失败仅为历史 source contract 仍要求已删除的 `PlayerDataManager.get_fields` fallback，契约已更新并重新取得完整通过结果；测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
