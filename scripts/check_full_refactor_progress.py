@@ -254,7 +254,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "fertilize_application_owned": "dongfu-fertilize" in dongfu_facade and "dongfu_application.execute_legacy_call(" in dongfu_facade,
             "accelerate_application_owned": "dongfu-accelerate" in dongfu_facade and "dongfu_application.execute_legacy_call(" in dongfu_facade,
             "patrol_application_owned": "dongfu-patrol" in dongfu_facade and "dongfu_application.execute_legacy_call(" in dongfu_facade,
-            "status": "plant_harvest_fertilize_accelerate_patrol_cutover_with_other_dongfu_compatibility",
+            "array_upgrade_application_owned": "action=\"array_upgrade\"" in dongfu_facade and "dongfu_application.execute_legacy_call(" in dongfu_facade,
+            "status": "plant_harvest_fertilize_accelerate_patrol_array_upgrade_cutover_with_other_dongfu_compatibility",
         },
         "impart_pk": {
             "training_replay_application_owned": "def _run_impart_pk_action(" in impart_pk_facade and "impart_pk_application.execute_legacy_call(" in impart_pk_facade,

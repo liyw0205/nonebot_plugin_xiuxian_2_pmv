@@ -1413,8 +1413,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     operation_id = f"dongfu-array:{uid}:{event_message_id or runtime_ids.new_id()}"
     result = _run_dongfu_action(
         "array_upgrade", operation_id, uid,
-        call=lambda: _dongfu_array_upgrade_service().upgrade(
-            operation_id, uid, lv, next_lv, cost, DONGFU_ITEM_ARRAY_STONE, array_stone_need,
+        call=lambda: dongfu_application.execute_legacy_call(
+            operation_id=operation_id, user_id=uid, action="array_upgrade",
+            payload={"current_level": lv, "next_level": next_lv, "cost": cost, "stone_id": DONGFU_ITEM_ARRAY_STONE, "stone_need": array_stone_need},
+            call=lambda: _dongfu_array_upgrade_service().upgrade(
+                operation_id, uid, lv, next_lv, cost, DONGFU_ITEM_ARRAY_STONE, array_stone_need,
+            ),
         ),
         current_level=lv, next_level=next_lv, cost=cost,
         stone_id=DONGFU_ITEM_ARRAY_STONE, stone_need=array_stone_need,
