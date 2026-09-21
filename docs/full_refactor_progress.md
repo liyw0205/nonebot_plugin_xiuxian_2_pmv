@@ -2875,3 +2875,9 @@
 2026-09-22 map dongfu query isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
 
 2026-09-22 map dongfu query full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2116` tests，全部通过，退出码 `0`；测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
+
+2026-09-22 map nearby players query cutover：新增 `MapNearbyPlayersSqlQueryRepository` 和 `MapApplication.nearby_players`；`_get_all_in_same_node` 改为 player DB map_status join game DB user_xiuxian 的只读查询，返回 `user_id/user_name/level/power`，不再逐个调用 `PlayerDataManager.list_users_by_fields` 和 `XiuxianDateManage.get_user_info_with_id`。论道结算写入仍由 `CombatSettlementApplication` 负责。新增跨库真实 SQLite regression；nearby/dongfu/mission application `12 passed`，dao/dongfu/home/mission behavior `14 passed`，source/compile/architecture/inventory/diff check 通过。
+
+2026-09-22 map nearby players isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
+
+2026-09-22 map nearby players full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2117` tests，全部通过，退出码 `0`；此前一次失败为历史 source contract 仍要求 nearby 直接调用 legacy `XiuxianDateManage.get_user_info_with_id`，已更新为 feature query contract 后重跑通过；测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。

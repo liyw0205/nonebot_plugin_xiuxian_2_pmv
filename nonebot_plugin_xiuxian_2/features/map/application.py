@@ -5,7 +5,7 @@ from typing import Any
 
 from .._legacy_application import LegacyApplication
 from ..combat_settlement.application import CombatSettlementApplication
-from .repository import LegacyMapRepository, MapCombatLifecyclePlanSqlRepository, MapCombatLifecycleQueryRepository, MapCombatLifecycleStartSqlRepository, MapDongfuBuildSqlRepository, MapDongfuSqlQueryRepository, MapExploreSettlementSqlRepository, MapExploreStartSqlRepository, MapExploreStatusSqlQueryRepository, MapMissionClaimSqlRepository, MapMissionSqlQueryRepository, MapProjectionSqlRepository, MapSeedPurchaseSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapStatusSqlQueryRepository, MapRepository
+from .repository import LegacyMapRepository, MapCombatLifecyclePlanSqlRepository, MapCombatLifecycleQueryRepository, MapCombatLifecycleStartSqlRepository, MapDongfuBuildSqlRepository, MapDongfuSqlQueryRepository, MapExploreSettlementSqlRepository, MapExploreStartSqlRepository, MapExploreStatusSqlQueryRepository, MapMissionClaimSqlRepository, MapMissionSqlQueryRepository, MapNearbyPlayersSqlQueryRepository, MapProjectionSqlRepository, MapSeedPurchaseSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapStatusSqlQueryRepository, MapRepository
 
 
 class MapApplication(LegacyApplication):
@@ -68,6 +68,9 @@ class MapApplication(LegacyApplication):
 
     def dongfu(self, user_id: str) -> dict[str, Any] | None:
         return MapDongfuSqlQueryRepository(self.player_database).get(user_id)
+
+    def nearby_players(self, realm: str, heaven: str, node_id: str) -> list[dict[str, Any]]:
+        return MapNearbyPlayersSqlQueryRepository(self.player_database, self.game_database).list(realm, heaven, node_id)
 
     def interactive_start(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:

@@ -727,17 +727,7 @@ def _parse_map_query(map_data, text: str):
 
 
 def _get_all_in_same_node(realm, heaven, node_id):
-    uids = _player_data_manager().list_users_by_fields(
-        MAP_TABLE,
-        {"realm": realm, "heaven": heaven, "node_id": node_id},
-        cache_ttl=20,
-    )
-    res = []
-    for uid in uids:
-        ui = _sql_message().get_user_info_with_id(uid)
-        if ui:
-            res.append(ui)
-    return res
+    return map_application.nearby_players(realm, heaven, node_id)
 
 
 def _is_seed_shop_node(node_type: str):
