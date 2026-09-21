@@ -44,7 +44,7 @@ class StoneGiftRepository:
         if not value:
             return None
         row = uow.query_one(
-            "SELECT user_id, user_name FROM user_xiuxian "
+            "SELECT user_id, user_name, level FROM user_xiuxian "
             "WHERE CAST(user_id AS TEXT) = ? OR user_name = ? LIMIT 1",
             (value, value),
         )

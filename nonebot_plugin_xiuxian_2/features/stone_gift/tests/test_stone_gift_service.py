@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from ....infrastructure.database import DatabaseUnitOfWork
+from ....plugin import apply_platform_schema
 from ..application import StoneGiftApplication
 from ..migrations import apply_stone_gift
 
@@ -17,6 +18,8 @@ class StoneGiftApplicationTests(unittest.TestCase):
             uow.execute("CREATE TABLE user_xiuxian (user_id TEXT PRIMARY KEY, stone INTEGER NOT NULL)")
             uow.execute("INSERT INTO user_xiuxian VALUES (?, ?)", ("sender", 1000))
             uow.execute("INSERT INTO user_xiuxian VALUES (?, ?)", ("recipient", 100))
+            apply_platform_schema(uow)
+            apply_stone_gift(uow)
         self.application = StoneGiftApplication(self.database)
 
     def tearDown(self) -> None:

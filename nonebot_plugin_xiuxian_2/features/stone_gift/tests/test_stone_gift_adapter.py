@@ -7,7 +7,9 @@ from pathlib import Path
 from flask import Flask
 
 from ....infrastructure.database import DatabaseUnitOfWork
+from ....plugin import apply_platform_schema
 from ..application import StoneGiftApplication
+from ..migrations import apply_stone_gift
 from ..web import blueprint
 
 
@@ -19,6 +21,8 @@ class StoneGiftAdapterTests(unittest.TestCase):
                 uow.execute("CREATE TABLE user_xiuxian (user_id TEXT PRIMARY KEY, stone INTEGER NOT NULL)")
                 uow.execute("INSERT INTO user_xiuxian VALUES (?, ?)", ("sender", 1000))
                 uow.execute("INSERT INTO user_xiuxian VALUES (?, ?)", ("recipient", 100))
+                apply_platform_schema(uow)
+                apply_stone_gift(uow)
             app = Flask(__name__)
             app.secret_key = "test"
             app.register_blueprint(blueprint(StoneGiftApplication(database), permission=lambda _: True))

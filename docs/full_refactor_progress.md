@@ -2815,3 +2815,15 @@
 ## 6. 下一步
 
 继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。
+
+2026-09-21 stone-gift slice verification：真实 `送灵石` 新 adapter 的用户查询补回 `level` 字段；此前缺少该字段会让非默认境界按错误的默认日限额计算，已由真实 SQLite command boundary regression 覆盖。feature/application/adapter/source 回归 `26 passed, 2 subtests passed`，独立 Web boundary `3 passed`；测试夹具统一显式执行 platform operation ledger 与 `stone_gift` schema migration，生产请求路径仍不隐式建表。compileall、architecture、inventory、`git diff --check` 通过。
+
+2026-09-21 stone-gift isolated recovery evidence：使用一次性临时数据目录执行 `scripts/recovery_smoke.py`，完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。临时数据、receipt 和日志已清理。该证据证明隔离数据上的恢复链路安全，不替代真实正式发布周期；旧 `XIUXIAN_STONE_GIFT_LEGACY_HANDLER=true` 回滚入口和 compatibility-only service 仍保留。
+
+2026-09-21 slice execution protocol：新增 `docs/refactor_slice_execution_protocol.md`，规定每个功能必须完成 focused/静态/编译/数据恢复验收后，先清理本轮 pytest basetemp、字节码缓存和临时 receipt/log，再复核 `df/du`，之后才能进入下一个功能；明确保留 `.venv`、`.git`、`data/`、配置、数据库和备份。
+
+2026-09-21 package-reward command cutover：普通礼包的真实 NoneBot handler 已从 `BackApplication -> LegacyBackRepository -> PackageRewardService` 改为使用 lifecycle 注入的 `PackageRewardApplication`；新增 `configure_package_reward_application` wiring 和结果 DTO 适配。饰品礼包仍保持 `AccessoryPackageApplication` attached-database 边界，旧 `PackageRewardService` 仅保留 compatibility facade。package/back/accessory/source/progress 回归 `214 passed`，compileall、architecture、inventory、diff check 通过；`package_application_owned=true`。
+
+2026-09-21 package-reward isolated recovery evidence：使用一次性临时数据目录执行 `scripts/recovery_smoke.py`，完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`package_reward.001` 在迁移清单中，`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。临时数据、receipt 和日志已清理。该证据不替代真实正式发布周期；饰品礼包 namespace 迁移仍是独立边界。
+
+2026-09-21 package-reward full regression：在完成切片和恢复验证后执行 `python -m unittest discover -s tests -q`，共 `2109` tests，全部通过；全量回归完成后才进入缓存清理阶段。

@@ -584,10 +584,23 @@ class SourceQualityTests(unittest.TestCase):
         end = command_source.index("elif goods_type == \"装备\":", start)
         command = command_source[start:end]
 
-        self.assertIn("back_application.open_package(", command)
+        self.assertIn("package_reward_application.open_package(", command)
         self.assertIn("if accessory_need == 0:", command)
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("package_reward_operations", service_source)
+
+    def test_main_package_reward_handler_uses_lifecycle_application(self) -> None:
+        back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
+        command_source = (back_root / "__init__.py").read_text(encoding="utf-8")
+        handler = command_source[
+            command_source.index('if goods_type == "礼包":'):
+            command_source.index('elif goods_type == "装备":')
+        ]
+
+        self.assertIn("configure_package_reward_application", command_source)
+        self.assertIn("package_reward_application.open_package(", handler)
+        self.assertNotIn("back_application.open_package(", handler)
+        self.assertNotIn("_package_reward_service()", handler)
 
     def test_back_facade_does_not_construct_unused_player_manager(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_back" / "__init__.py").read_text(

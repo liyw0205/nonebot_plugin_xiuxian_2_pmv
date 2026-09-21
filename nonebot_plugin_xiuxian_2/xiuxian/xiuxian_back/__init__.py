@@ -58,7 +58,8 @@ from .back_util import *
 from .transaction_service import CultivationItemService
 from .transaction_service import EquipmentService
 from .transaction_service import LotteryReward, LotteryTalismanService
-from .package_reward_service import PackageReward, PackageRewardService
+from .package_reward_service import PackageOpenResult, PackageReward, PackageRewardService
+from ...features.package_reward.application import PackageRewardApplication
 from ...features.package_reward.resolver import PackageRewardResolver
 from .accessory_package_service import AccessoryPackageService
 from .transaction_service import AlchemyService
@@ -100,6 +101,7 @@ _skill_learning_service_instance = None
 _batch_item_use_service_instance = None
 _backpack_repair_service_instance = None
 back_application = BackApplication(get_paths().game_db, get_paths().player_db)
+package_reward_application: PackageRewardApplication | None = None
 runtime_ids = UUIDGenerator()
 
 
@@ -159,6 +161,39 @@ def _package_reward_service():
     if _package_reward_service_instance is None:
         _package_reward_service_instance = PackageRewardService(get_paths().game_db)
     return _package_reward_service_instance
+
+
+def configure_package_reward_application(application: PackageRewardApplication) -> None:
+    global package_reward_application
+    package_reward_application = application
+
+
+def _package_open_result(outcome, user_id, package_id, quantity, rewards):
+    if isinstance(outcome, PackageOpenResult):
+        return outcome
+    data = outcome.data or {}
+    raw = data.get("package_reward", {}) if isinstance(data, dict) else {}
+    decoded = tuple(
+        PackageReward(
+            None if item.get("item_id") is None else int(item["item_id"]),
+            str(item["name"]),
+            None if item.get("item_type") is None else str(item["item_type"]),
+            int(item["quantity"]),
+        )
+        for item in raw.get("rewards", [])
+    )
+    status = (
+        "applied" if outcome.status == "applied"
+        else "duplicate" if outcome.status == "replayed"
+        else outcome.code or outcome.status
+    )
+    return PackageOpenResult(
+        status,
+        str(raw.get("user_id", user_id)),
+        int(raw.get("package_id", package_id)),
+        int(raw.get("quantity", quantity)),
+        decoded or tuple(rewards),
+    )
 
 def _accessory_package_service():
     global _accessory_package_service_instance
@@ -1128,11 +1163,13 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 await use.finish()
                 return
 
-            result = back_application.open_package(
+            if package_reward_application is None:
+                raise RuntimeError("package reward application is not configured")
+            result = _package_open_result(package_reward_application.open_package(
                 operation_id=_package_reward_operation_id(event, user_id, goods_id),
-                user_id=str(user_id), item_id=goods_id, quantity=num,
+                user_id=str(user_id), package_id=goods_id, quantity=num,
                 rewards=fixed_rewards, max_goods_num=XiuConfig().max_goods_num,
-            )
+            ), user_id, goods_id, num, fixed_rewards)
             if result.status == "duplicate":
                 reward_msgs = []
                 for reward in result.rewards:

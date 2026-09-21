@@ -729,8 +729,10 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             pass
         else:
             from .xiuxian.xiuxian_base import configure_lottery_application, configure_sign_in_application
+            from .xiuxian.xiuxian_back import configure_package_reward_application
 
             configure_sign_in_application(context.services["sign_in"])
+            configure_package_reward_application(context.services["package_reward"])
             if lottery_application_type is not None and lottery_service is not None and isinstance(lottery_service, lottery_application_type):
                 configure_lottery_application(lottery_service)
         context.reconcile_handlers = {

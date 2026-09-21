@@ -54,6 +54,8 @@ class LegacyApplicationContractTests(unittest.TestCase):
             with DatabaseUnitOfWork(database) as uow:
                 apply_platform_schema(uow)
         if application is BackApplication:
+            with DatabaseUnitOfWork(game) as uow:
+                apply_platform_schema(uow)
             return application(game, player, repository=repository)
         if application is TradeApplication:
             return application(game, trade, repository=repository)

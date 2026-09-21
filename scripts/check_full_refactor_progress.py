@@ -184,7 +184,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "equipment_unequip_application_owned": "back_application.change_equipment(" in back_facade,
             "equipment_equip_application_owned": back_facade.count("back_application.change_equipment(") >= 2,
             "pet_egg_application_owned": "back_application.use_pet_eggs(" in back_facade,
-            "package_application_owned": "back_application.open_package(" in back_facade,
+            "package_application_owned": (
+                "package_reward_application.open_package(" in back_facade
+                and "back_application.open_package(" not in back_facade
+            ),
             "accessory_package_application_owned": "back_application.accessory_package(" in back_facade,
             "legacy_repair_disabled": "_backpack_repair_service().run(" not in back_facade,
             "status": "backpack_repair_equipment_equip_unequip_pet_egg_package_accessory_package_cutover_with_other_back_compatibility",

@@ -5,8 +5,10 @@ import unittest
 from pathlib import Path
 
 from ....infrastructure.database import DatabaseUnitOfWork
+from ....plugin import apply_platform_schema
 from ..application import PackageRewardApplication
 from ..domain import PackageReward
+from ..migrations import apply_package_reward
 
 
 class PackageRewardApplicationTests(unittest.TestCase):
@@ -20,6 +22,8 @@ class PackageRewardApplicationTests(unittest.TestCase):
             )
             uow.execute("INSERT INTO user_xiuxian VALUES (?, ?)", ("user", 100))
             uow.execute("INSERT INTO back VALUES (?, ?, ?, ?, ?, ?)", ("user", 3001, "礼包", "礼包", 2, 2))
+            apply_platform_schema(uow)
+            apply_package_reward(uow)
         self.application = PackageRewardApplication(self.database)
         self.rewards = (PackageReward(None, "灵石", None, 50), PackageReward(4001, "丹药", "丹药", 2))
 
