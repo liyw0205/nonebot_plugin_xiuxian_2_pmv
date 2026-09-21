@@ -29,7 +29,7 @@ def test_buff_pvp_handler_uses_lazy_dual_database_service():
     handler = source[source.index("async def qc_"):source.index("async def reset_exp_")]
     assert "_normal_pvp_settlement_service().replay(" in handler
     assert "_normal_pvp_settlement_service().calculate_battle(" in handler
-    assert "_normal_pvp_settlement_service().settle(" in handler
+    assert "buff_application.pvp_settle(" in handler
     assert "_normal_pvp_settlement_service_instance = None" in source
     assert "def _normal_pvp_settlement_service(" in source
     assert "get_paths().game_db, get_paths().player_db" in source

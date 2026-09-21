@@ -482,25 +482,16 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
     result, winner_id, winner_name, final = _normal_pvp_settlement_service().calculate_battle(
         base1['user_id'], base2['user_id'], bot.self_id
     )
-    settlement = _normal_pvp_settlement_service().settle(
-        operation_id,
-        base1['user_id'],
-        base2['user_id'],
-        expected_challenger_hp=base1['hp'],
-        expected_challenger_mp=base1['mp'],
-        expected_challenger_stamina=base1['user_stamina'],
-        expected_challenger_exp=base1['exp'],
-        expected_opponent_hp=base2['hp'],
-        expected_opponent_mp=base2['mp'],
-        expected_opponent_stamina=base2['user_stamina'],
-        expected_opponent_exp=base2['exp'],
-        challenger_final_hp=final[str(base1['user_id'])][0],
-        challenger_final_mp=final[str(base1['user_id'])][1],
-        opponent_final_hp=final[str(base2['user_id'])][0],
-        opponent_final_mp=final[str(base2['user_id'])][1],
-        winner_id=winner_id,
-        winner_name=winner_name,
-        battle_messages=result,
+    settlement = buff_application.pvp_settle(
+        operation_id=operation_id, user_id=str(base1['user_id']),
+        opponent_id=str(base2['user_id']),
+        expected_challenger_hp=base1['hp'], expected_challenger_mp=base1['mp'],
+        expected_challenger_stamina=base1['user_stamina'], expected_challenger_exp=base1['exp'],
+        expected_opponent_hp=base2['hp'], expected_opponent_mp=base2['mp'],
+        expected_opponent_stamina=base2['user_stamina'], expected_opponent_exp=base2['exp'],
+        challenger_final_hp=final[str(base1['user_id'])][0], challenger_final_mp=final[str(base1['user_id'])][1],
+        opponent_final_hp=final[str(base2['user_id'])][0], opponent_final_mp=final[str(base2['user_id'])][1],
+        winner_id=winner_id, winner_name=winner_name, battle_messages=result,
     )
     if settlement.succeeded:
         await send_msg_handler(bot, event, settlement.battle_messages)
