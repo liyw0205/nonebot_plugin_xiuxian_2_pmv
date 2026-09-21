@@ -66,6 +66,25 @@ class MapProjectionRepositoryTests(unittest.TestCase):
         self.assertEqual(result["date"], "2026-09-22")
         self.assertEqual(result["resource_total_count"], 0)
 
+    def test_legacy_daily_schema_missing_counts_reads_missing_values_as_zero(self):
+        with db_backend.transaction(self.database) as conn:
+            conn.execute("DROP TABLE map_daily_limit")
+            conn.execute(
+                "CREATE TABLE map_daily_limit ("
+                "user_id TEXT PRIMARY KEY,date TEXT,gather_count INTEGER,resource_total_count INTEGER)"
+            )
+            conn.execute("INSERT INTO map_daily_limit VALUES ('u','2026-09-22',2,5)")
+        self.assertEqual(
+            self.repository.daily_limit("u", "2026-09-22"),
+            {
+                "date": "2026-09-22",
+                "gather_count": 2,
+                "combat_count": 0,
+                "explore_count": 0,
+                "resource_total_count": 5,
+            },
+        )
+
     def test_cooldown_reads_whitelisted_field(self):
         self.assertEqual(
             self.repository.cooldown_until("u", "gather_cd_until"),

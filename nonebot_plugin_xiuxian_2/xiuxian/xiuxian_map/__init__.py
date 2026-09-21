@@ -469,8 +469,7 @@ def _get_daily_limit(uid: str):
 
 
 def _save_daily_limit(uid: str, d: dict):
-    for k, v in d.items():
-        _player_data_manager().update_or_write_data(uid, MAP_LIMIT_TABLE, k, v)
+    return map_application.save_daily_limit(uid, d)
 
 
 def _inc_daily_count(uid: str, key: str, n: int = 1):
@@ -504,7 +503,7 @@ def _get_cd(uid: str, cd_key: str):
 
 def _set_cd(uid: str, cd_key: str, seconds: int):
     t = runtime_clock.now().replace(tzinfo=None) + timedelta(seconds=seconds)
-    _player_data_manager().update_or_write_data(uid, MAP_CD_TABLE, cd_key, t.strftime("%Y-%m-%d %H:%M:%S"))
+    map_application.set_cooldown(uid, cd_key, t.strftime("%Y-%m-%d %H:%M:%S"))
     return t
 
 

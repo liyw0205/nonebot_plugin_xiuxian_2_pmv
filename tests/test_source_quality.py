@@ -2733,6 +2733,13 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("map_application.cooldown_until(", cooldown)
         self.assertNotIn("_player_data_manager()", cooldown)
 
+        daily_write_start = source.index("def _save_daily_limit")
+        daily_write_end = source.index("def _inc_daily_count", daily_write_start)
+        self.assertIn("map_application.save_daily_limit(", source[daily_write_start:daily_write_end])
+        cooldown_write_start = source.index("def _set_cd")
+        cooldown_write_end = source.index("def _default_map_mission", cooldown_write_start)
+        self.assertIn("map_application.set_cooldown(", source[cooldown_write_start:cooldown_write_end])
+
         explore_start = source.index("async def _start_explore")
         explore_end = source.index("async def _settle_explore", explore_start)
         explore = source[explore_start:explore_end]

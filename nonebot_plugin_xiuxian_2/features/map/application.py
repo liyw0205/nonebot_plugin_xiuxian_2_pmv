@@ -5,7 +5,7 @@ from typing import Any
 
 from .._legacy_application import LegacyApplication
 from ..combat_settlement.application import CombatSettlementApplication
-from .repository import LegacyMapRepository, MapCombatLifecyclePlanSqlRepository, MapCombatLifecycleQueryRepository, MapCombatLifecycleStartSqlRepository, MapDongfuBuildSqlRepository, MapDongfuSqlQueryRepository, MapExploreSettlementSqlRepository, MapExploreStartSqlRepository, MapExploreStatusSqlQueryRepository, MapMissionClaimSqlRepository, MapMissionSqlQueryRepository, MapNearbyPlayersSqlQueryRepository, MapProjectionSqlRepository, MapSeedPurchaseSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapStatusSqlQueryRepository, MapStatusSqlWriteRepository, MapRepository
+from .repository import LegacyMapRepository, MapCombatLifecyclePlanSqlRepository, MapCombatLifecycleQueryRepository, MapCombatLifecycleStartSqlRepository, MapDongfuBuildSqlRepository, MapDongfuSqlQueryRepository, MapExploreSettlementSqlRepository, MapExploreStartSqlRepository, MapExploreStatusSqlQueryRepository, MapMissionClaimSqlRepository, MapMissionSqlQueryRepository, MapNearbyPlayersSqlQueryRepository, MapProjectionSqlRepository, MapProjectionSqlWriteRepository, MapSeedPurchaseSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapStatusSqlQueryRepository, MapStatusSqlWriteRepository, MapRepository
 
 
 class MapApplication(LegacyApplication):
@@ -54,8 +54,14 @@ class MapApplication(LegacyApplication):
     def daily_limit(self, user_id: str, today: str) -> dict[str, int | str]:
         return MapProjectionSqlRepository(self.player_database).daily_limit(user_id, today)
 
+    def save_daily_limit(self, user_id: str, state: dict[str, Any]) -> dict[str, int | str]:
+        return MapProjectionSqlWriteRepository(self.player_database).save_daily_limit(user_id, state)
+
     def cooldown_until(self, user_id: str, field: str) -> str | None:
         return MapProjectionSqlRepository(self.player_database).cooldown_until(user_id, field)
+
+    def set_cooldown(self, user_id: str, field: str, value: str | None) -> str | None:
+        return MapProjectionSqlWriteRepository(self.player_database).set_cooldown(user_id, field, value)
 
     def map_status(self, user_id: str) -> dict[str, Any] | None:
         return MapStatusSqlQueryRepository(self.player_database).get(user_id)

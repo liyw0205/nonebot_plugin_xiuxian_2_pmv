@@ -168,8 +168,12 @@ class MapProjectionSqlRepository:
             raise ValueError("user and date are required")
         fields = ("date", "gather_count", "combat_count", "explore_count", "resource_total_count")
         with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+            columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(map_daily_limit)")}
+            if not columns:
+                raise RuntimeError("map_daily_limit schema is missing")
+            selected = ",".join(field for field in fields if field in columns)
             row = uow.query_one(
-                "SELECT date,gather_count,combat_count,explore_count,resource_total_count "
+                f"SELECT {selected} "
                 "FROM map_daily_limit WHERE user_id=?",
                 (user_id,),
             )
@@ -183,7 +187,7 @@ class MapProjectionSqlRepository:
                 return dict(zip(fields, values))
             return {
                 "date": str(row["date"]),
-                **{field: int(row[field] or 0) for field in fields[1:]},
+                **{field: int(row[field] or 0) if field in columns else 0 for field in fields[1:]},
             }
 
     def cooldown_until(self, user_id: str, field: str) -> str | None:
@@ -198,6 +202,58 @@ class MapProjectionSqlRepository:
         if row is None or row[field] in (None, ""):
             return None
         return str(row[field])
+
+
+class MapProjectionSqlWriteRepository:
+    _COOLDOWN_FIELDS = MapProjectionSqlRepository._COOLDOWN_FIELDS
+
+    def __init__(self, player_database: str | Path) -> None:
+        self.player_database = str(player_database)
+
+    def save_daily_limit(self, user_id: str, state: dict[str, Any]) -> dict[str, int | str]:
+        user_id = str(user_id).strip()
+        values = {
+            "date": str(state.get("date") or ""),
+            "gather_count": int(state.get("gather_count", 0) or 0),
+            "combat_count": int(state.get("combat_count", 0) or 0),
+            "explore_count": int(state.get("explore_count", 0) or 0),
+            "resource_total_count": int(state.get("resource_total_count", 0) or 0),
+        }
+        numeric_values = tuple(values[field] for field in ("gather_count", "combat_count", "explore_count", "resource_total_count"))
+        if not user_id or not values["date"] or min(numeric_values) < 0:
+            raise ValueError("valid daily limit state is required")
+        with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+            columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(map_daily_limit)")}
+            if not columns:
+                raise RuntimeError("map_daily_limit schema is missing")
+            for field in ("gather_count", "combat_count", "explore_count", "resource_total_count"):
+                if field not in columns:
+                    uow.execute(f'ALTER TABLE map_daily_limit ADD COLUMN "{field}" INTEGER DEFAULT 0')
+            uow.execute(
+                "INSERT INTO map_daily_limit(user_id,date,gather_count,combat_count,explore_count,resource_total_count) "
+                "VALUES(?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET date=excluded.date,"
+                "gather_count=excluded.gather_count,combat_count=excluded.combat_count,"
+                "explore_count=excluded.explore_count,resource_total_count=excluded.resource_total_count",
+                (user_id, values["date"], values["gather_count"], values["combat_count"], values["explore_count"], values["resource_total_count"]),
+            )
+        return values
+
+    def set_cooldown(self, user_id: str, field: str, value: str | None) -> str | None:
+        user_id, field = str(user_id).strip(), str(field).strip()
+        if not user_id or field not in self._COOLDOWN_FIELDS:
+            raise ValueError("valid cooldown field and user are required")
+        with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+            columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(map_cooldown)")}
+            if not columns:
+                raise RuntimeError("map_cooldown schema is missing")
+            if field not in columns:
+                uow.execute(f'ALTER TABLE map_cooldown ADD COLUMN "{field}" TEXT DEFAULT NULL')
+            uow.execute(
+                f'INSERT INTO map_cooldown(user_id,"{field}") VALUES(?,?) '
+                f'ON CONFLICT(user_id) DO UPDATE SET "{field}"=excluded."{field}"',
+                (user_id, value),
+            )
+        return None if value in (None, "") else str(value)
 
 
 class MapStatusSqlQueryRepository:
@@ -877,4 +933,4 @@ class LegacyMapRepository:
         return getattr(cls(*databases), method)(operation_id, user_id, **kwargs)
 
 
-__all__ = ["LegacyMapRepository", "MapCombatLifecyclePlanSqlRepository", "MapCombatLifecycleQueryRepository", "MapCombatLifecycleStartSqlRepository", "MapDongfuBuildSqlRepository", "MapDongfuSqlQueryRepository", "MapExploreSettlementSqlRepository", "MapExploreStartSqlRepository", "MapExploreStatusSqlQueryRepository", "MapMissionClaimSqlRepository", "MapMissionSqlQueryRepository", "MapNearbyPlayersSqlQueryRepository", "MapProjectionSqlRepository", "MapStatusSqlQueryRepository", "MapStatusSqlWriteRepository", "MapSeedPurchaseSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]
+__all__ = ["LegacyMapRepository", "MapCombatLifecyclePlanSqlRepository", "MapCombatLifecycleQueryRepository", "MapCombatLifecycleStartSqlRepository", "MapDongfuBuildSqlRepository", "MapDongfuSqlQueryRepository", "MapExploreSettlementSqlRepository", "MapExploreStartSqlRepository", "MapExploreStatusSqlQueryRepository", "MapMissionClaimSqlRepository", "MapMissionSqlQueryRepository", "MapNearbyPlayersSqlQueryRepository", "MapProjectionSqlRepository", "MapProjectionSqlWriteRepository", "MapStatusSqlQueryRepository", "MapStatusSqlWriteRepository", "MapSeedPurchaseSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]

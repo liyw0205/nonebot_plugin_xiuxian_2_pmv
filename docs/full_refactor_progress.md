@@ -2887,3 +2887,9 @@
 2026-09-22 map status writer isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
 
 2026-09-22 map status writer full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2118` tests，全部通过，退出码 `0`；测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
+
+2026-09-22 map projection writer cutover：新增 `MapProjectionSqlWriteRepository`，并通过 `MapApplication.save_daily_limit/set_cooldown` 接管 `_save_daily_limit`、`_set_cd`；daily/cooldown 写入与已有 projection query 共用 player DB 边界，未知 cooldown 字段拒绝，legacy partial schema 自动补已知列，query 对缺失计数字段归零。projection/status/application `18 passed`，source `1 passed`，map behavior `29 passed`，source/compile/architecture/inventory/diff check 通过。
+
+2026-09-22 map projection writer isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
+
+2026-09-22 map projection writer full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2118` tests，全部通过，退出码 `0`；projection writer feature tests 另行通过，根 discovery 计数保持 `2118`；测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
