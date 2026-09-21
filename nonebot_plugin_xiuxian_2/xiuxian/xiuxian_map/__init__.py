@@ -519,7 +519,7 @@ def _default_map_mission():
 
 
 def _get_map_mission(uid: str):
-    d = _player_data_manager().get_fields(str(uid), MAP_MISSION_TABLE) or {}
+    d = map_application.mission(str(uid)) or {}
     default = _default_map_mission()
 
     # 跨天重置

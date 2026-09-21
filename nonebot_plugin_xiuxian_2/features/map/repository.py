@@ -278,6 +278,30 @@ class MapExploreStatusSqlQueryRepository:
         return text
 
 
+class MapMissionSqlQueryRepository:
+    def __init__(self, player_database: str | Path) -> None:
+        self.player_database = str(player_database)
+
+    def get(self, user_id: str) -> dict[str, Any] | None:
+        user_id = str(user_id).strip()
+        if not user_id:
+            return None
+        with DatabaseUnitOfWork(self.player_database) as uow:
+            row = uow.query_one(
+                "SELECT date,mission_type,target,claimed,settlement FROM map_mission WHERE user_id=?",
+                (user_id,),
+            )
+        if row is None:
+            return None
+        return {
+            "date": str(row["date"] or ""),
+            "mission_type": str(row["mission_type"] or ""),
+            "target": int(row["target"] or 0),
+            "claimed": int(row["claimed"] or 0),
+            "settlement": str(row["settlement"] or ""),
+        }
+
+
 class MapInteractiveStartSqlRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database = str(game_database)
@@ -747,4 +771,4 @@ class LegacyMapRepository:
         return getattr(cls(*databases), method)(operation_id, user_id, **kwargs)
 
 
-__all__ = ["LegacyMapRepository", "MapCombatLifecyclePlanSqlRepository", "MapCombatLifecycleQueryRepository", "MapCombatLifecycleStartSqlRepository", "MapDongfuBuildSqlRepository", "MapExploreSettlementSqlRepository", "MapExploreStartSqlRepository", "MapExploreStatusSqlQueryRepository", "MapMissionClaimSqlRepository", "MapProjectionSqlRepository", "MapStatusSqlQueryRepository", "MapSeedPurchaseSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]
+__all__ = ["LegacyMapRepository", "MapCombatLifecyclePlanSqlRepository", "MapCombatLifecycleQueryRepository", "MapCombatLifecycleStartSqlRepository", "MapDongfuBuildSqlRepository", "MapExploreSettlementSqlRepository", "MapExploreStartSqlRepository", "MapExploreStatusSqlQueryRepository", "MapMissionClaimSqlRepository", "MapMissionSqlQueryRepository", "MapProjectionSqlRepository", "MapStatusSqlQueryRepository", "MapSeedPurchaseSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]
