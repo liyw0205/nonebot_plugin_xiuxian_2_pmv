@@ -89,6 +89,23 @@ class PetApplicationTests(unittest.TestCase):
             replay = app.feed(operation_id="pet-feed-default", user_id="u", uid="p", item_id=1, count=1, expected=(1, 2, 3), updated=(2, 4, 6))
             self.assertEqual((result.status, replay.status), ("applied", "replayed"))
 
+    def test_default_travel_start_uses_feature_repository(self):
+        with tempfile.TemporaryDirectory() as directory:
+            game = Path(directory) / "game.db"
+            player = Path(directory) / "player.db"
+            with DatabaseUnitOfWork(game) as uow:
+                apply_platform_schema(uow)
+            with DatabaseUnitOfWork(player) as uow:
+                uow.execute("CREATE TABLE player_pet(user_id TEXT PRIMARY KEY, travel TEXT)")
+                uow.execute("INSERT INTO player_pet VALUES('u',NULL)")
+                uow.execute("CREATE TABLE player_pet_item(user_id TEXT, uid TEXT, is_active INTEGER)")
+                uow.execute("INSERT INTO player_pet_item VALUES('u','p',1)")
+            app = PetApplication(game, player)
+            travel = {"pet_uid": "p", "start_at": 1}
+            result = app.start_travel(operation_id="pet-travel-default", user_id="u", pet_uid="p", expected_travel=None, travel=travel)
+            replay = app.start_travel(operation_id="pet-travel-default", user_id="u", pet_uid="p", expected_travel=None, travel=travel)
+            self.assertEqual((result.status, replay.status), ("applied", "replayed"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -151,6 +151,49 @@ class PetFeedSqlRepository:
             return PetFeedResult("applied", *updated)
 
 
+@dataclass(frozen=True)
+class PetTravelStartResult:
+    status: str
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"applied", "duplicate"}
+
+
+class PetTravelStartSqlRepository:
+    def __init__(self, database: str | Path) -> None:
+        self.database = str(database)
+
+    def start(self, operation_id: str, user_id: str, pet_uid: str, expected_travel: dict[str, Any] | None, travel: dict[str, Any]) -> PetTravelStartResult:
+        operation_id, user_id, pet_uid = str(operation_id).strip(), str(user_id), str(pet_uid)
+        if not operation_id or not user_id or not pet_uid or not isinstance(travel, dict):
+            raise ValueError("operation, user, pet and travel are required")
+        expected_json = None if expected_travel is None else json.dumps(expected_travel, ensure_ascii=False, sort_keys=True)
+        travel_json = json.dumps(travel, ensure_ascii=False, sort_keys=True)
+        payload = json.dumps([user_id, pet_uid, expected_json, travel_json], ensure_ascii=True)
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            uow.execute(
+                "CREATE TABLE IF NOT EXISTS pet_travel_start_operations("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = uow.query_one("SELECT payload FROM pet_travel_start_operations WHERE operation_id=?", (operation_id,))
+            if previous is not None:
+                return PetTravelStartResult("duplicate" if str(previous["payload"]) == payload else "state_changed")
+            meta = uow.query_one("SELECT travel FROM player_pet WHERE user_id=?", (user_id,))
+            if meta is None:
+                return PetTravelStartResult("user_missing")
+            current = None if meta["travel"] is None else json.dumps(json.loads(str(meta["travel"])), ensure_ascii=False, sort_keys=True)
+            if current != expected_json:
+                return PetTravelStartResult("state_changed")
+            pet = uow.query_one("SELECT is_active FROM player_pet_item WHERE user_id=? AND uid=?", (user_id, pet_uid))
+            if pet is None or int(pet["is_active"]) != 1:
+                return PetTravelStartResult("pet_changed")
+            if uow.execute("UPDATE player_pet SET travel=? WHERE user_id=? AND travel IS NULL", (travel_json, user_id)).rowcount != 1:
+                return PetTravelStartResult("state_changed")
+            uow.execute("INSERT INTO pet_travel_start_operations(operation_id,payload) VALUES(?,?)", (operation_id, payload))
+            return PetTravelStartResult("applied")
+
+
 class PetRepository(Protocol):
     def switch(self, *args: Any, **kwargs: Any) -> Any: ...
     def travel_claim(self, *args: Any, **kwargs: Any) -> Any: ...
@@ -191,4 +234,4 @@ class LegacyPetRepository:
         return PetActiveSwitchService(self.player_database).switch(*args, **kwargs)
 
 
-__all__ = ["PetActiveSwitchResult", "PetActiveSwitchSqlRepository", "PetFeedResult", "PetFeedSqlRepository", "PetRepository", "LegacyPetRepository"]
+__all__ = ["PetActiveSwitchResult", "PetActiveSwitchSqlRepository", "PetFeedResult", "PetFeedSqlRepository", "PetTravelStartResult", "PetTravelStartSqlRepository", "PetRepository", "LegacyPetRepository"]

@@ -2941,3 +2941,9 @@
 2026-09-22 pet feed isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
 
 2026-09-22 pet feed full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2123` tests，全部通过，退出码 `0`；feature pet repository tests另行通过，根 discovery 计数保持 `2123`，测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
+
+2026-09-22 pet travel-start feature repository cutover：新增 `PetTravelStartSqlRepository`，`PetApplication.start_travel` 默认使用 feature-owned player DB repository；保留 `LegacyPetRepository` 仅供 travel claim/hatch 等其他兼容动作。覆盖 applied、duplicate、user_missing、pet_changed、state_changed 和异常回滚；travel-start/feed/active repository/application `22 passed`，source `12 passed`，legacy pet behavior `25 passed`，source/compile/architecture/inventory/diff check 通过。
+
+2026-09-22 pet travel-start isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
+
+2026-09-22 pet travel-start full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2123` tests，全部通过，退出码 `0`；travel-start/feed/active feature tests另行通过，根 discovery 计数保持 `2123`，测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。

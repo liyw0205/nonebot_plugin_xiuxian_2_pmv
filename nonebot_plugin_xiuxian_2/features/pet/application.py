@@ -9,7 +9,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import PetFeedRequest, PetTravelClaimRequest
-from .repository import LegacyPetRepository, PetActiveSwitchSqlRepository, PetFeedSqlRepository, PetRepository
+from .repository import LegacyPetRepository, PetActiveSwitchSqlRepository, PetFeedSqlRepository, PetRepository, PetTravelStartSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -69,7 +69,8 @@ class PetApplication:
         if not str(operation_id).strip() or not str(user_id).strip() or not str(pet_uid).strip() or not isinstance(travel, Mapping):
             raise ValidationError("operation_id, user_id, pet_uid and travel are required")
         payload = {"user_id": str(user_id), "pet_uid": str(pet_uid), "expected_travel": expected_travel, "travel": dict(travel)}
-        return self._execute(operation_id=str(operation_id).strip(), user_id=str(user_id), action="pet.travel_start", payload=payload, call=lambda: self._repository().travel_start(operation_id, user_id, expected_travel, travel))
+        repository = self.repository or PetTravelStartSqlRepository(self.player_database)
+        return self._execute(operation_id=str(operation_id).strip(), user_id=str(user_id), action="pet.travel_start", payload=payload, call=lambda: repository.start(operation_id, user_id, pet_uid, expected_travel, travel))
 
     def feed(self, *, operation_id: str, user_id: str, uid: str, item_id: int, count: int, expected: Sequence[int], updated: Sequence[int]) -> OperationOutcome[dict[str, Any]]:
         try:
