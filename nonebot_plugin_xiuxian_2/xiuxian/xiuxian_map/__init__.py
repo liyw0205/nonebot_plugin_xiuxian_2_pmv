@@ -2068,7 +2068,7 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
 # 探索状态
 # =========================================
 def _get_explore_status(uid: str):
-    d = _player_data_manager().get_fields(str(uid), EXPLORE_TABLE)
+    d = map_application.explore_status(str(uid))
     if not d:
         d = {
             "running": 0,

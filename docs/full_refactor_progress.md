@@ -2857,3 +2857,9 @@
 2026-09-22 map status query isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
 
 2026-09-22 map status query full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2113` tests，全部通过，退出码 `0`；测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
+
+2026-09-22 map explore status query cutover：新增 `MapExploreStatusSqlQueryRepository` 和 `MapApplication.explore_status`；`_get_explore_status` 默认通过 feature query 读取，缺失时保留旧初始化写入，继续支持 settlement 优先、legacy JSON object `reward_plan` 兼容和 null/None 归零。补充现代 schema 无 `reward_plan` 列的真实测试，防止 query 依赖已迁除的 legacy 列；explore status/projection/status application `13 passed`，map behavior `27 passed`，source/compile/architecture/inventory/diff check 通过。
+
+2026-09-22 map explore status isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
+
+2026-09-22 map explore status full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2114` tests，全部通过，退出码 `0`；测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。

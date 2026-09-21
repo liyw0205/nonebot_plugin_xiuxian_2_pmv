@@ -229,6 +229,55 @@ class MapStatusSqlQueryRepository:
         }
 
 
+class MapExploreStatusSqlQueryRepository:
+    def __init__(self, player_database: str | Path) -> None:
+        self.player_database = str(player_database)
+
+    def get(self, user_id: str) -> dict[str, Any] | None:
+        user_id = str(user_id).strip()
+        if not user_id:
+            return None
+        with DatabaseUnitOfWork(self.player_database) as uow:
+            columns = {
+                str(row["name"])
+                for row in uow.query_all("PRAGMA table_info(map_explore_status)")
+            }
+            if not columns:
+                return None
+            legacy_field = ",reward_plan" if "reward_plan" in columns else ""
+            row = uow.query_one(
+                "SELECT running,node_type,node_name,start_time,duration_min,settlement,"
+                f"max_duration_min,interval_min{legacy_field} FROM map_explore_status WHERE user_id=?",
+                (user_id,),
+            )
+        if row is None:
+            return None
+        settlement = self._blank_snapshot(row["settlement"])
+        legacy = self._blank_snapshot(row["reward_plan"]) if "reward_plan" in columns else ""
+        if not settlement and legacy.startswith("{") and legacy.endswith("}"):
+            settlement = legacy
+        return {
+            "running": int(row["running"] or 0),
+            "node_type": str(row["node_type"] or ""),
+            "node_name": str(row["node_name"] or ""),
+            "start_time": str(row["start_time"] or ""),
+            "duration_min": int(row["duration_min"] or 0),
+            "settlement": settlement,
+            "max_duration_min": int(row["max_duration_min"] or 0),
+            "interval_min": int(row["interval_min"] or 0),
+            "reward_plan": "",
+        }
+
+    @staticmethod
+    def _blank_snapshot(value: Any) -> str:
+        if value is None:
+            return ""
+        text = str(value).strip()
+        if not text or text.lower() in {"none", "null", "undefined"}:
+            return ""
+        return text
+
+
 class MapInteractiveStartSqlRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database = str(game_database)
@@ -698,4 +747,4 @@ class LegacyMapRepository:
         return getattr(cls(*databases), method)(operation_id, user_id, **kwargs)
 
 
-__all__ = ["LegacyMapRepository", "MapCombatLifecyclePlanSqlRepository", "MapCombatLifecycleQueryRepository", "MapCombatLifecycleStartSqlRepository", "MapDongfuBuildSqlRepository", "MapExploreSettlementSqlRepository", "MapMissionClaimSqlRepository", "MapProjectionSqlRepository", "MapStatusSqlQueryRepository", "MapSeedPurchaseSqlRepository", "MapExploreStartSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]
+__all__ = ["LegacyMapRepository", "MapCombatLifecyclePlanSqlRepository", "MapCombatLifecycleQueryRepository", "MapCombatLifecycleStartSqlRepository", "MapDongfuBuildSqlRepository", "MapExploreSettlementSqlRepository", "MapExploreStartSqlRepository", "MapExploreStatusSqlQueryRepository", "MapMissionClaimSqlRepository", "MapProjectionSqlRepository", "MapStatusSqlQueryRepository", "MapSeedPurchaseSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]
