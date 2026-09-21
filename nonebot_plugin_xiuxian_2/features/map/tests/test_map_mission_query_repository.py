@@ -55,6 +55,24 @@ class MapMissionQueryRepositoryTests(unittest.TestCase):
             },
         )
 
+    def test_legacy_schema_missing_claim_fields_is_supported(self):
+        with db_backend.transaction(self.database) as conn:
+            conn.execute("DROP TABLE map_mission")
+            conn.execute(
+                "CREATE TABLE map_mission (user_id TEXT PRIMARY KEY,date TEXT,mission_type TEXT,target INTEGER)"
+            )
+            conn.execute("INSERT INTO map_mission VALUES ('u','2026-09-22','gather',5)")
+        self.assertEqual(
+            self.repository.get("u"),
+            {
+                "date": "2026-09-22",
+                "mission_type": "gather",
+                "target": 5,
+                "claimed": 0,
+                "settlement": "",
+            },
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

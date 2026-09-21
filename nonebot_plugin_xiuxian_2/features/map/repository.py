@@ -393,19 +393,54 @@ class MapMissionSqlQueryRepository:
         if not user_id:
             return None
         with DatabaseUnitOfWork(self.player_database) as uow:
+            columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(map_mission)")}
+            if not columns:
+                return None
+            selected = ",".join(field for field in ("date", "mission_type", "target", "claimed", "settlement") if field in columns)
             row = uow.query_one(
-                "SELECT date,mission_type,target,claimed,settlement FROM map_mission WHERE user_id=?",
+                f"SELECT {selected} FROM map_mission WHERE user_id=?",
                 (user_id,),
             )
         if row is None:
             return None
         return {
-            "date": str(row["date"] or ""),
-            "mission_type": str(row["mission_type"] or ""),
-            "target": int(row["target"] or 0),
-            "claimed": int(row["claimed"] or 0),
-            "settlement": str(row["settlement"] or ""),
+            "date": str(row["date"] or "") if "date" in columns else "",
+            "mission_type": str(row["mission_type"] or "") if "mission_type" in columns else "",
+            "target": int(row["target"] or 0) if "target" in columns else 0,
+            "claimed": int(row["claimed"] or 0) if "claimed" in columns else 0,
+            "settlement": str(row["settlement"] or "") if "settlement" in columns else "",
         }
+
+
+class MapMissionSqlWriteRepository:
+    def __init__(self, player_database: str | Path) -> None:
+        self.player_database = str(player_database)
+
+    def save(self, user_id: str, state: dict[str, Any]) -> dict[str, Any]:
+        user_id = str(user_id).strip()
+        values = {
+            "date": str(state.get("date") or ""),
+            "mission_type": str(state.get("mission_type") or ""),
+            "target": int(state.get("target", 0) or 0),
+            "claimed": int(state.get("claimed", 0) or 0),
+            "settlement": str(state.get("settlement") or ""),
+        }
+        if not user_id or not values["date"] or values["target"] < 0 or values["claimed"] not in (0, 1):
+            raise ValueError("valid mission state is required")
+        with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+            columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(map_mission)")}
+            if not columns:
+                raise RuntimeError("map_mission schema is missing")
+            for field, definition in (("mission_type", "TEXT"), ("target", "INTEGER DEFAULT 0"), ("claimed", "INTEGER DEFAULT 0"), ("settlement", "TEXT DEFAULT ''")):
+                if field not in columns:
+                    uow.execute(f'ALTER TABLE map_mission ADD COLUMN "{field}" {definition}')
+            uow.execute(
+                "INSERT INTO map_mission(user_id,date,mission_type,target,claimed,settlement) VALUES(?,?,?,?,?,?) "
+                "ON CONFLICT(user_id) DO UPDATE SET date=excluded.date,mission_type=excluded.mission_type,"
+                "target=excluded.target,claimed=excluded.claimed,settlement=excluded.settlement",
+                (user_id, values["date"], values["mission_type"], values["target"], values["claimed"], values["settlement"]),
+            )
+        return values
 
 
 class MapDongfuSqlQueryRepository:
@@ -933,4 +968,4 @@ class LegacyMapRepository:
         return getattr(cls(*databases), method)(operation_id, user_id, **kwargs)
 
 
-__all__ = ["LegacyMapRepository", "MapCombatLifecyclePlanSqlRepository", "MapCombatLifecycleQueryRepository", "MapCombatLifecycleStartSqlRepository", "MapDongfuBuildSqlRepository", "MapDongfuSqlQueryRepository", "MapExploreSettlementSqlRepository", "MapExploreStartSqlRepository", "MapExploreStatusSqlQueryRepository", "MapMissionClaimSqlRepository", "MapMissionSqlQueryRepository", "MapNearbyPlayersSqlQueryRepository", "MapProjectionSqlRepository", "MapProjectionSqlWriteRepository", "MapStatusSqlQueryRepository", "MapStatusSqlWriteRepository", "MapSeedPurchaseSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]
+__all__ = ["LegacyMapRepository", "MapCombatLifecyclePlanSqlRepository", "MapCombatLifecycleQueryRepository", "MapCombatLifecycleStartSqlRepository", "MapDongfuBuildSqlRepository", "MapDongfuSqlQueryRepository", "MapExploreSettlementSqlRepository", "MapExploreStartSqlRepository", "MapExploreStatusSqlQueryRepository", "MapMissionClaimSqlRepository", "MapMissionSqlQueryRepository", "MapMissionSqlWriteRepository", "MapNearbyPlayersSqlQueryRepository", "MapProjectionSqlRepository", "MapProjectionSqlWriteRepository", "MapStatusSqlQueryRepository", "MapStatusSqlWriteRepository", "MapSeedPurchaseSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]

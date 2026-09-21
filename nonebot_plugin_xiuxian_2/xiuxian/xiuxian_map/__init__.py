@@ -524,20 +524,16 @@ def _get_map_mission(uid: str):
     # 跨天重置
     if d.get("date") != _today_str():
         d = default.copy()
-        for k, v in d.items():
-            _player_data_manager().update_or_write_data(str(uid), MAP_MISSION_TABLE, k, v)
-        return d
+        return map_application.save_mission(str(uid), d)
 
     for k, v in default.items():
         if k not in d or d.get(k) is None:
             d[k] = v
-            _player_data_manager().update_or_write_data(str(uid), MAP_MISSION_TABLE, k, v)
-    return d
+    return map_application.save_mission(str(uid), d)
 
 
 def _save_map_mission(uid: str, d: dict):
-    for k, v in d.items():
-        _player_data_manager().update_or_write_data(str(uid), MAP_MISSION_TABLE, k, v)
+    return map_application.save_mission(str(uid), d)
 
 
 def _roll_new_map_mission(uid: str, *, random_source=None, clock=None):

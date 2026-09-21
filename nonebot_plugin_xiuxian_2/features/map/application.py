@@ -5,7 +5,7 @@ from typing import Any
 
 from .._legacy_application import LegacyApplication
 from ..combat_settlement.application import CombatSettlementApplication
-from .repository import LegacyMapRepository, MapCombatLifecyclePlanSqlRepository, MapCombatLifecycleQueryRepository, MapCombatLifecycleStartSqlRepository, MapDongfuBuildSqlRepository, MapDongfuSqlQueryRepository, MapExploreSettlementSqlRepository, MapExploreStartSqlRepository, MapExploreStatusSqlQueryRepository, MapMissionClaimSqlRepository, MapMissionSqlQueryRepository, MapNearbyPlayersSqlQueryRepository, MapProjectionSqlRepository, MapProjectionSqlWriteRepository, MapSeedPurchaseSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapStatusSqlQueryRepository, MapStatusSqlWriteRepository, MapRepository
+from .repository import LegacyMapRepository, MapCombatLifecyclePlanSqlRepository, MapCombatLifecycleQueryRepository, MapCombatLifecycleStartSqlRepository, MapDongfuBuildSqlRepository, MapDongfuSqlQueryRepository, MapExploreSettlementSqlRepository, MapExploreStartSqlRepository, MapExploreStatusSqlQueryRepository, MapMissionClaimSqlRepository, MapMissionSqlQueryRepository, MapMissionSqlWriteRepository, MapNearbyPlayersSqlQueryRepository, MapProjectionSqlRepository, MapProjectionSqlWriteRepository, MapSeedPurchaseSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapStatusSqlQueryRepository, MapStatusSqlWriteRepository, MapRepository
 
 
 class MapApplication(LegacyApplication):
@@ -74,6 +74,9 @@ class MapApplication(LegacyApplication):
 
     def mission(self, user_id: str) -> dict[str, Any] | None:
         return MapMissionSqlQueryRepository(self.player_database).get(user_id)
+
+    def save_mission(self, user_id: str, state: dict[str, Any]) -> dict[str, Any]:
+        return MapMissionSqlWriteRepository(self.player_database).save(user_id, state)
 
     def dongfu(self, user_id: str) -> dict[str, Any] | None:
         return MapDongfuSqlQueryRepository(self.player_database).get(user_id)

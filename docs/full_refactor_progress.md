@@ -2893,3 +2893,9 @@
 2026-09-22 map projection writer isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
 
 2026-09-22 map projection writer full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2118` tests，全部通过，退出码 `0`；projection writer feature tests 另行通过，根 discovery 计数保持 `2118`；测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
+
+2026-09-22 map mission writer cutover：新增 `MapMissionSqlWriteRepository` 和 `MapApplication.save_mission`；地图委托跨日默认初始化、缺失字段补齐和 `_save_map_mission` 统一通过 feature writer upsert，mission claim 事务保持不变。writer/query 均兼容 legacy partial `map_mission` schema，缺失 `claimed/settlement` 读取归零/空值，writer 增量补列。mission query/write/application `11 passed`，mission/explore/resource behavior `18 passed`，source/compile/architecture/inventory/diff check 通过。
+
+2026-09-22 map mission writer isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
+
+2026-09-22 map mission writer full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2118` tests，全部通过，退出码 `0`；mission writer feature tests 另行通过，根 discovery 计数保持 `2118`；测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
