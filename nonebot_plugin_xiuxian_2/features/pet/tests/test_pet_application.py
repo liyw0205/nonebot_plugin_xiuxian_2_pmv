@@ -73,6 +73,22 @@ class PetApplicationTests(unittest.TestCase):
             )
             self.assertEqual((result.status, replay.status), ("applied", "duplicate"))
 
+    def test_default_feed_uses_feature_repository(self):
+        with tempfile.TemporaryDirectory() as directory:
+            game = Path(directory) / "game.db"
+            player = Path(directory) / "player.db"
+            with DatabaseUnitOfWork(game) as uow:
+                apply_platform_schema(uow)
+                uow.execute("CREATE TABLE back(user_id TEXT, goods_id INTEGER, goods_num INTEGER, PRIMARY KEY(user_id,goods_id))")
+                uow.execute("INSERT INTO back VALUES('u',1,2)")
+            with DatabaseUnitOfWork(player) as uow:
+                uow.execute("CREATE TABLE player_pet_item(user_id TEXT, uid TEXT, stars INTEGER, exp INTEGER, total_exp INTEGER, is_active INTEGER, updated_at INTEGER, PRIMARY KEY(user_id,uid))")
+                uow.execute("INSERT INTO player_pet_item VALUES('u','p',1,2,3,1,0)")
+            app = PetApplication(game, player)
+            result = app.feed(operation_id="pet-feed-default", user_id="u", uid="p", item_id=1, count=1, expected=(1, 2, 3), updated=(2, 4, 6))
+            replay = app.feed(operation_id="pet-feed-default", user_id="u", uid="p", item_id=1, count=1, expected=(1, 2, 3), updated=(2, 4, 6))
+            self.assertEqual((result.status, replay.status), ("applied", "replayed"))
+
 
 if __name__ == "__main__":
     unittest.main()

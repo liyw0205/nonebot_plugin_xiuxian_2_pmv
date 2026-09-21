@@ -9,7 +9,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import PetFeedRequest, PetTravelClaimRequest
-from .repository import LegacyPetRepository, PetActiveSwitchSqlRepository, PetRepository
+from .repository import LegacyPetRepository, PetActiveSwitchSqlRepository, PetFeedSqlRepository, PetRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -77,7 +77,8 @@ class PetApplication:
             request.validate()
         except (TypeError, ValueError) as exc:
             raise ValidationError(str(exc)) from exc
-        return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="pet.feed", payload=request.payload(), call=lambda: self._repository().feed(request.operation_id, request.user_id, request.uid, request.item_id, request.count, request.expected, request.updated))
+        repository = self.repository or PetFeedSqlRepository(self.game_database, self.player_database)
+        return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="pet.feed", payload=request.payload(), call=lambda: repository.feed(request.operation_id, request.user_id, request.uid, request.item_id, request.count, request.expected, request.updated))
 
     def hatch(self, *, operation_id: str, user_id: str, expected_stone: int, cost: int, expected_meta: Sequence[Any], pets: Sequence[Any], updated_meta: Sequence[Any], bag_limit: int) -> OperationOutcome[dict[str, Any]]:
         if not str(operation_id).strip() or not str(user_id).strip() or min(int(expected_stone), int(cost), int(bag_limit)) < 0:
