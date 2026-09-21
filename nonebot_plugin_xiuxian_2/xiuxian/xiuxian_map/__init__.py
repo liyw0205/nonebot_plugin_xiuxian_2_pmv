@@ -465,19 +465,7 @@ def _parse_dt(s: str | None):
 
 
 def _get_daily_limit(uid: str):
-    d = _player_data_manager().get_fields(uid, MAP_LIMIT_TABLE) or {}
-    today = _today_str()
-    if d.get("date") != today:
-        d = {
-            "date": today,
-            "gather_count": 0,
-            "combat_count": 0,
-            "explore_count": 0,
-            "resource_total_count": 0,
-        }
-        for k, v in d.items():
-            _player_data_manager().update_or_write_data(uid, MAP_LIMIT_TABLE, k, v)
-    return d
+    return map_application.daily_limit(uid, _today_str())
 
 
 def _save_daily_limit(uid: str, d: dict):
@@ -510,7 +498,7 @@ def _get_reward_decay(uid: str):
 
 
 def _get_cd(uid: str, cd_key: str):
-    s = _player_data_manager().get_field_data(uid, MAP_CD_TABLE, cd_key)
+    s = map_application.cooldown_until(uid, cd_key)
     return _parse_dt(s)
 
 

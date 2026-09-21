@@ -5,7 +5,7 @@ from typing import Any
 
 from .._legacy_application import LegacyApplication
 from ..combat_settlement.application import CombatSettlementApplication
-from .repository import LegacyMapRepository, MapCombatLifecyclePlanSqlRepository, MapCombatLifecycleQueryRepository, MapCombatLifecycleStartSqlRepository, MapDongfuBuildSqlRepository, MapExploreSettlementSqlRepository, MapExploreStartSqlRepository, MapMissionClaimSqlRepository, MapSeedPurchaseSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapRepository
+from .repository import LegacyMapRepository, MapCombatLifecyclePlanSqlRepository, MapCombatLifecycleQueryRepository, MapCombatLifecycleStartSqlRepository, MapDongfuBuildSqlRepository, MapExploreSettlementSqlRepository, MapExploreStartSqlRepository, MapMissionClaimSqlRepository, MapProjectionSqlRepository, MapSeedPurchaseSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapRepository
 
 
 class MapApplication(LegacyApplication):
@@ -50,6 +50,12 @@ class MapApplication(LegacyApplication):
 
     def interactive_replay(self, operation_id: str, user_id: str, action_type: str):
         return MapInteractiveSqlQueryRepository(self.player_database, self.game_database).replay_start(operation_id, user_id, action_type)
+
+    def daily_limit(self, user_id: str, today: str) -> dict[str, int | str]:
+        return MapProjectionSqlRepository(self.player_database).daily_limit(user_id, today)
+
+    def cooldown_until(self, user_id: str, field: str) -> str | None:
+        return MapProjectionSqlRepository(self.player_database).cooldown_until(user_id, field)
 
     def interactive_start(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:

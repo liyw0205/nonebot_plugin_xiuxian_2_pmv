@@ -2718,6 +2718,21 @@ class SourceQualityTests(unittest.TestCase):
             settle.index('return self._action("combat_settle"'),
         )
 
+    def test_map_projection_helpers_use_feature_application(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian/xiuxian_map/__init__.py").read_text(encoding="utf-8")
+
+        daily_start = source.index("def _get_daily_limit")
+        daily_end = source.index("def _save_daily_limit", daily_start)
+        daily = source[daily_start:daily_end]
+        self.assertIn("map_application.daily_limit(", daily)
+        self.assertNotIn("_player_data_manager()", daily)
+
+        cooldown_start = source.index("def _get_cd")
+        cooldown_end = source.index("def _set_cd", cooldown_start)
+        cooldown = source[cooldown_start:cooldown_end]
+        self.assertIn("map_application.cooldown_until(", cooldown)
+        self.assertNotIn("_player_data_manager()", cooldown)
+
     def test_map_node_combat_uses_persistent_start_task(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_map"
         source = (root / "__init__.py").read_text(encoding="utf-8")

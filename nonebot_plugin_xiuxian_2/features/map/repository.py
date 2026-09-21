@@ -152,6 +152,54 @@ class MapInteractiveSqlQueryRepository:
         return action
 
 
+class MapProjectionSqlRepository:
+    """Read and normalize map daily limits and cooldown projections."""
+
+    _COOLDOWN_FIELDS = frozenset(
+        {"gather_cd_until", "combat_cd_until", "explore_start_cd_until"}
+    )
+
+    def __init__(self, player_database: str | Path) -> None:
+        self.player_database = str(player_database)
+
+    def daily_limit(self, user_id: str, today: str) -> dict[str, int | str]:
+        user_id, today = str(user_id).strip(), str(today).strip()
+        if not user_id or not today:
+            raise ValueError("user and date are required")
+        fields = ("date", "gather_count", "combat_count", "explore_count", "resource_total_count")
+        with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+            row = uow.query_one(
+                "SELECT date,gather_count,combat_count,explore_count,resource_total_count "
+                "FROM map_daily_limit WHERE user_id=?",
+                (user_id,),
+            )
+            if row is None or str(row["date"] or "") != today:
+                values = (today, 0, 0, 0, 0)
+                uow.execute(
+                    "INSERT INTO map_daily_limit(user_id,date,gather_count,combat_count,explore_count,resource_total_count) "
+                    "VALUES(?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET date=excluded.date,gather_count=0,combat_count=0,explore_count=0,resource_total_count=0",
+                    (user_id, *values),
+                )
+                return dict(zip(fields, values))
+            return {
+                "date": str(row["date"]),
+                **{field: int(row[field] or 0) for field in fields[1:]},
+            }
+
+    def cooldown_until(self, user_id: str, field: str) -> str | None:
+        user_id, field = str(user_id).strip(), str(field).strip()
+        if not user_id or field not in self._COOLDOWN_FIELDS:
+            raise ValueError("valid cooldown field and user are required")
+        with DatabaseUnitOfWork(self.player_database) as uow:
+            row = uow.query_one(
+                f"SELECT \"{field}\" FROM map_cooldown WHERE user_id=?",
+                (user_id,),
+            )
+        if row is None or row[field] in (None, ""):
+            return None
+        return str(row[field])
+
+
 class MapInteractiveStartSqlRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database = str(game_database)
@@ -621,4 +669,4 @@ class LegacyMapRepository:
         return getattr(cls(*databases), method)(operation_id, user_id, **kwargs)
 
 
-__all__ = ["LegacyMapRepository", "MapCombatLifecyclePlanSqlRepository", "MapCombatLifecycleQueryRepository", "MapCombatLifecycleStartSqlRepository", "MapDongfuBuildSqlRepository", "MapExploreSettlementSqlRepository", "MapMissionClaimSqlRepository", "MapSeedPurchaseSqlRepository", "MapExploreStartSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]
+__all__ = ["LegacyMapRepository", "MapCombatLifecyclePlanSqlRepository", "MapCombatLifecycleQueryRepository", "MapCombatLifecycleStartSqlRepository", "MapDongfuBuildSqlRepository", "MapExploreSettlementSqlRepository", "MapMissionClaimSqlRepository", "MapProjectionSqlRepository", "MapSeedPurchaseSqlRepository", "MapExploreStartSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]
