@@ -1132,13 +1132,10 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 await use.finish()
                 return
 
-            result = _package_reward_service().apply(
-                _package_reward_operation_id(event, user_id, goods_id),
-                user_id,
-                goods_id,
-                num,
-                fixed_rewards,
-                max_goods_num=XiuConfig().max_goods_num,
+            result = back_application.open_package(
+                operation_id=_package_reward_operation_id(event, user_id, goods_id),
+                user_id=str(user_id), item_id=goods_id, quantity=num,
+                rewards=fixed_rewards, max_goods_num=XiuConfig().max_goods_num,
             )
             if result.status == "duplicate":
                 reward_msgs = []

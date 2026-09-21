@@ -584,7 +584,7 @@ class SourceQualityTests(unittest.TestCase):
         end = command_source.index("elif goods_type == \"装备\":", start)
         command = command_source[start:end]
 
-        self.assertIn("_package_reward_service().apply(", command)
+        self.assertIn("back_application.open_package(", command)
         self.assertIn("if accessory_need == 0:", command)
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("package_reward_operations", service_source)
