@@ -2851,3 +2851,9 @@
 2026-09-22 map projection full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2112` tests，全部通过，退出码 `0`；测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
 
 2026-09-22 map projection post-cutover verification：探索启动 `expected_cooldown` 的最后一个 `PlayerDataManager.get_field_data` 读取点已改为 `MapApplication.cooldown_until`；source contract、projection/application、map behavior 和 compile/architecture/inventory 门禁再次通过。后置 recovery smoke 再次验证全量 `114` 项 migration、restore 和 reconcile clean，`operations=0`、`outbox_events=0`、`dead_events=0`。
+
+2026-09-22 map status query cutover：新增 `MapStatusSqlQueryRepository` 和 `MapApplication.map_status`；`_get_player_map_status` 优先通过 feature repository 读取完整 player-db map_status，缺失/不完整时保留旧 PlayerDataManager 初始化和 alias/repair fallback。新增真实 SQLite query regression（完整行、缺失行、visited_nodes 归一化）；status/projection/application `12 passed`，map behavior `31 passed`，source/compile/architecture/inventory/diff check 通过。
+
+2026-09-22 map status query isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
+
+2026-09-22 map status query full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2113` tests，全部通过，退出码 `0`；测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。

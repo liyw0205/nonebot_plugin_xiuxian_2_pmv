@@ -649,7 +649,9 @@ def _get_realm_heaven_order(map_data, realm: str):
 
 
 def _get_player_map_status(user_id: str, map_data: dict):
-    data = _player_data_manager().get_fields(str(user_id), MAP_TABLE)
+    data = map_application.map_status(str(user_id))
+    if data is None:
+        data = _player_data_manager().get_fields(str(user_id), MAP_TABLE)
     if data and data.get("realm") and data.get("heaven") and data.get("node_id"):
         if data.get("realm") == "仙域" and data.get("heaven") == "九天天":
             data["heaven"] = "九重天"

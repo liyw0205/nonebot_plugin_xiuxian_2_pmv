@@ -2739,6 +2739,15 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn('map_application.cooldown_until(uid, "explore_start_cd_until")', explore)
         self.assertNotIn('get_field_data(uid, MAP_CD_TABLE', explore)
 
+    def test_map_status_reads_through_feature_application_before_legacy_fallback(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian/xiuxian_map/__init__.py").read_text(encoding="utf-8")
+        start = source.index("def _get_player_map_status")
+        end = source.index("def _init_player_map_status", start)
+        helper = source[start:end]
+        self.assertIn("map_application.map_status(", helper)
+        self.assertIn("if data is None:", helper)
+        self.assertLess(helper.index("map_application.map_status("), helper.index("_player_data_manager().get_fields"))
+
     def test_map_node_combat_uses_persistent_start_task(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_map"
         source = (root / "__init__.py").read_text(encoding="utf-8")

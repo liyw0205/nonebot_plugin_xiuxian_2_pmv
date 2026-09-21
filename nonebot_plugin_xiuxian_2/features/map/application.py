@@ -5,7 +5,7 @@ from typing import Any
 
 from .._legacy_application import LegacyApplication
 from ..combat_settlement.application import CombatSettlementApplication
-from .repository import LegacyMapRepository, MapCombatLifecyclePlanSqlRepository, MapCombatLifecycleQueryRepository, MapCombatLifecycleStartSqlRepository, MapDongfuBuildSqlRepository, MapExploreSettlementSqlRepository, MapExploreStartSqlRepository, MapMissionClaimSqlRepository, MapProjectionSqlRepository, MapSeedPurchaseSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapRepository
+from .repository import LegacyMapRepository, MapCombatLifecyclePlanSqlRepository, MapCombatLifecycleQueryRepository, MapCombatLifecycleStartSqlRepository, MapDongfuBuildSqlRepository, MapExploreSettlementSqlRepository, MapExploreStartSqlRepository, MapMissionClaimSqlRepository, MapProjectionSqlRepository, MapSeedPurchaseSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapStatusSqlQueryRepository, MapRepository
 
 
 class MapApplication(LegacyApplication):
@@ -56,6 +56,9 @@ class MapApplication(LegacyApplication):
 
     def cooldown_until(self, user_id: str, field: str) -> str | None:
         return MapProjectionSqlRepository(self.player_database).cooldown_until(user_id, field)
+
+    def map_status(self, user_id: str) -> dict[str, Any] | None:
+        return MapStatusSqlQueryRepository(self.player_database).get(user_id)
 
     def interactive_start(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:

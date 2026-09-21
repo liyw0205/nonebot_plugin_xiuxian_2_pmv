@@ -200,6 +200,35 @@ class MapProjectionSqlRepository:
         return str(row[field])
 
 
+class MapStatusSqlQueryRepository:
+    def __init__(self, player_database: str | Path) -> None:
+        self.player_database = str(player_database)
+
+    def get(self, user_id: str) -> dict[str, Any] | None:
+        user_id = str(user_id).strip()
+        if not user_id:
+            return None
+        with DatabaseUnitOfWork(self.player_database) as uow:
+            row = uow.query_one(
+                "SELECT realm,heaven,node_id,visited_nodes FROM map_status WHERE user_id=?",
+                (user_id,),
+            )
+        if row is None or not all(str(row[field] or "") for field in ("realm", "heaven", "node_id")):
+            return None
+        visited = row["visited_nodes"]
+        try:
+            visited = json.loads(visited) if isinstance(visited, str) else visited
+        except json.JSONDecodeError:
+            visited = []
+        return {
+            "user_id": user_id,
+            "realm": str(row["realm"]),
+            "heaven": str(row["heaven"]),
+            "node_id": str(row["node_id"]),
+            "visited_nodes": [str(item) for item in visited] if isinstance(visited, list) else [],
+        }
+
+
 class MapInteractiveStartSqlRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database = str(game_database)
@@ -669,4 +698,4 @@ class LegacyMapRepository:
         return getattr(cls(*databases), method)(operation_id, user_id, **kwargs)
 
 
-__all__ = ["LegacyMapRepository", "MapCombatLifecyclePlanSqlRepository", "MapCombatLifecycleQueryRepository", "MapCombatLifecycleStartSqlRepository", "MapDongfuBuildSqlRepository", "MapExploreSettlementSqlRepository", "MapMissionClaimSqlRepository", "MapProjectionSqlRepository", "MapSeedPurchaseSqlRepository", "MapExploreStartSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]
+__all__ = ["LegacyMapRepository", "MapCombatLifecyclePlanSqlRepository", "MapCombatLifecycleQueryRepository", "MapCombatLifecycleStartSqlRepository", "MapDongfuBuildSqlRepository", "MapExploreSettlementSqlRepository", "MapMissionClaimSqlRepository", "MapProjectionSqlRepository", "MapStatusSqlQueryRepository", "MapSeedPurchaseSqlRepository", "MapExploreStartSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]
