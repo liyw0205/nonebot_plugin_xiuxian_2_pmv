@@ -863,7 +863,8 @@ class SourceQualityTests(unittest.TestCase):
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         command_source = (back_root / "__init__.py").read_text(encoding="utf-8")
         service_source = (back_root / "equipment_service.py").read_text(encoding="utf-8")
-        self.assertGreaterEqual(command_source.count("_equipment_service().change("), 2)
+        self.assertGreaterEqual(command_source.count("_equipment_service().change("), 1)
+        self.assertIn("back_application.change_equipment(", command_source)
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("equipment_operations", service_source)
 
@@ -1841,6 +1842,11 @@ class SourceQualityTests(unittest.TestCase):
         handler = source[start:]
         self.assertIn("back_application.repair(", handler)
         self.assertNotIn("_backpack_repair_service().run(", handler)
+
+    def test_back_equipment_change_uses_feature_application(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_back" / "__init__.py").read_text(encoding="utf-8")
+        handler = source[source.index("async def no_use_zb_"):source.index("async def use_")]
+        self.assertIn("back_application.change_equipment(", handler)
 
     def test_bank_withdrawal_uses_cross_database_transaction(self) -> None:
         bank_root = SOURCE_ROOT / "xiuxian" / "xiuxian_bank"

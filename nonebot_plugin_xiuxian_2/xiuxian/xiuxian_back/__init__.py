@@ -890,12 +890,9 @@ async def no_use_zb_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     if goods_type == "装备":
         if check_equipment_use_msg(user_id, goods_id): # 检查装备是否在使用中
             item_type = items.get_data_by_item_id(goods_id)["item_type"]
-            result = _equipment_service().change(
-                _equipment_operation_id(event, "unequip", goods_id),
-                user_id,
-                goods_id,
-                item_type,
-                equip=False,
+            result = back_application.change_equipment(
+                operation_id=_equipment_operation_id(event, "unequip", goods_id),
+                user_id=str(user_id), goods_id=goods_id, item_type=item_type, equip=False,
             )
             msg = (
                 f"成功卸载装备{arg}！"
