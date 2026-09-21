@@ -1122,11 +1122,12 @@ async def _use_rift_speedup(
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"rift-speedup:{event_id or runtime_ids.new_id()}:{user_id}"
     try:
-        result = _rift_speedup_service().apply(
-            operation_id,
-            user_id,
-            item_id,
-            remaining_ratio=remaining_ratio,
+        result = rift_application.execute_legacy_call(
+            operation_id=operation_id, user_id=str(user_id), action="speedup",
+            payload={"item_id": item_id, "remaining_ratio": remaining_ratio},
+            call=lambda: _rift_speedup_service().apply(
+                operation_id, user_id, item_id, remaining_ratio=remaining_ratio,
+            ),
         )
     except Exception as exc:
         logger.opt(exception=exc).error("秘境加速事务执行失败")
