@@ -1619,6 +1619,12 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("mixelixir_harvest_operations", service)
 
+    def test_mixelixir_default_application_does_not_construct_legacy_repository(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_mixelixir" / "__init__.py").read_text(encoding="utf-8")
+        self.assertNotIn("LegacyMixelixirRepository", source)
+        self.assertIn("mixelixir_application = MixelixirApplication(", source)
+        self.assertNotIn("repository=LegacyMixelixirRepository", source)
+
     def test_natal_treasure_training_uses_transactional_service(self) -> None:
         natal_root = SOURCE_ROOT / "xiuxian" / "xiuxian_natal_treasure"
         source = (natal_root / "__init__.py").read_text(encoding="utf-8")

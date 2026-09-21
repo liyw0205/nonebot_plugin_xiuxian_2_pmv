@@ -4,6 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from ....infrastructure.database import DatabaseUnitOfWork
+from ....plugin import apply_platform_schema
 from ..application import MixelixirApplication
 
 
@@ -23,6 +25,8 @@ class _Repository:
 class MixelixirApplicationTests(unittest.TestCase):
     def test_harvest_and_settlement_are_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:
+            with DatabaseUnitOfWork(Path(directory) / "game.db") as uow:
+                apply_platform_schema(uow)
             repository = _Repository()
             app = MixelixirApplication(Path(directory) / "game.db", Path(directory) / "player.db", repository=repository)
             harvest_kwargs = {"operation_id": "harvest-1", "user_id": "u", "expected_last_time": "old", "harvested_at": "new", "rewards": ((1, "草", 2),), "max_goods_num": 99}

@@ -33,7 +33,7 @@ from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.ids import UUIDGenerator
 from ...features.mixelixir.application import MixelixirApplication
-from ...features.mixelixir.repository import LegacyMixelixirRepository
+
 from .transaction_service import MixelixirHarvestLevelUpgradeService
 from .transaction_service import MixelixirRecipeService
 from .transaction_service import MixelixirRefineCostService
@@ -53,10 +53,6 @@ def _sql_message():
 mixelixir_application = MixelixirApplication(
     get_paths().game_db,
     get_paths().player_db,
-    repository=LegacyMixelixirRepository(
-        get_paths().game_db,
-        get_paths().player_db,
-    ),
 )
 _mixelixir_harvest_level_upgrade_service_instance = None
 _mixelixir_recipe_service_instance = None
