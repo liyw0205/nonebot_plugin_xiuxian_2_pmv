@@ -588,9 +588,9 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         operation_id = _normal_training_operation_id(event, user_id)
         if user_info['root_type'] == '伪灵根':
             give_stone_num = int(runtime_random.randint(10000, 300000) * exp_rate)
-            start_result = _normal_training_lifecycle_service().start(
-                operation_id, user_id, kind="mining", expected_exp=use_exp,
-                expected_stone=int(user_mes['stone']), reward=give_stone_num,
+            start_result = buff_application.training_start(
+                operation_id=operation_id, user_id=str(user_id), kind="mining",
+                expected_exp=use_exp, expected_stone=int(user_mes['stone']), reward=give_stone_num,
                 exp_cap=max_exp, power_multiplier=level_rate * realm_rate,
             )
             if start_result.status not in {"started", "duplicate"}:
@@ -600,7 +600,9 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await handle_send(bot, event, msg)
             await asyncio.sleep(60)
             iso = runtime_clock.now().isocalendar()
-            result = _normal_training_lifecycle_service().complete(operation_id, task_period=f"{iso.year}-W{iso.week:02d}")
+            result = buff_application.training_complete(
+                operation_id=operation_id, user_id=str(user_id), task_period=f"{iso.year}-W{iso.week:02d}"
+            )
             if not result.succeeded:
                 await up_exp.finish()
             msg = f"挖矿结束，增加灵石：{result.stone_gain}"
@@ -609,9 +611,9 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await up_exp.finish()
         else:
             exp, spirit_vein_msg = _apply_spirit_vein_exp_bonus(exp, user_get_exp_max)
-            start_result = _normal_training_lifecycle_service().start(
-                operation_id, user_id, kind="cultivation", expected_exp=use_exp,
-                expected_stone=int(user_mes['stone']), reward=exp,
+            start_result = buff_application.training_start(
+                operation_id=operation_id, user_id=str(user_id), kind="cultivation",
+                expected_exp=use_exp, expected_stone=int(user_mes['stone']), reward=exp,
                 exp_cap=max_exp, power_multiplier=level_rate * realm_rate,
             )
             if start_result.status not in {"started", "duplicate"}:

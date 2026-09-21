@@ -27,8 +27,8 @@ def test_buff_training_handler_uses_lazy_dual_database_service():
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_buff/__init__.py"
     ).read_text(encoding="utf-8")
     handler = source[source.index("async def up_exp_"):source.index("async def stone_exp_")]
-    assert "_normal_training_lifecycle_service().start(" in handler
-    assert "_normal_training_lifecycle_service().complete(" in handler
+    assert "buff_application.training_start(" in handler
+    assert "buff_application.training_complete(" in handler
     assert "_normal_training_lifecycle_service_instance = None" in source
     assert "def _normal_training_lifecycle_service(" in source
     assert "get_paths().game_db, get_paths().player_db" in source

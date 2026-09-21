@@ -140,6 +140,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(slices["boss"]["daily_limit_application_owned"])
         self.assertTrue(slices["boss"]["punishment_application_owned"])
         self.assertTrue(slices["buff"]["stone_training_application_owned"])
+        self.assertTrue(slices["buff"]["training_lifecycle_application_owned"])
         self.assertTrue(slices["dongfu"]["array_upgrade_application_owned"])
 if __name__ == "__main__":
     unittest.main()
