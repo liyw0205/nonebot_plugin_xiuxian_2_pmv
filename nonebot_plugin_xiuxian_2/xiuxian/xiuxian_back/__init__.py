@@ -1189,12 +1189,9 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
             msg = f"道友实力不足使用{goods_info['name']}\n请提升至：{required_rank_name}{lh_msg}"
         else:
             item_type = goods_info["item_type"]
-            result = _equipment_service().change(
-                _equipment_operation_id(event, "equip", goods_id),
-                user_id,
-                goods_id,
-                item_type,
-                equip=True,
+            result = back_application.change_equipment(
+                operation_id=_equipment_operation_id(event, "equip", goods_id),
+                user_id=str(user_id), goods_id=goods_id, item_type=item_type, equip=True,
             )
             if result.status == "duplicate":
                 msg = f"成功装备 {item_name}！\n该换装请求已经处理，无需重复提交。"
