@@ -2696,6 +2696,27 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("return self.interactive_settlement(", finish)
         self.assertNotIn('return self._action("interactive_finish"', finish)
 
+    def test_map_combat_settle_uses_combat_settlement_application(self) -> None:
+        source = (SOURCE_ROOT / "features/map/application.py").read_text(encoding="utf-8")
+
+        self.assertIn("from ..combat_settlement.application import CombatSettlementApplication", source)
+        init_start = source.index("    def __init__(")
+        init_end = source.index("    def _action(", init_start)
+        initialization = source[init_start:init_end]
+        self.assertIn("CombatSettlementApplication(", initialization)
+
+        start = source.index("    def combat_settle(")
+        end = source.index("    def explore_start(", start)
+        settle = source[start:end]
+
+        self.assertIn("if self._explicit_repository is None:", settle)
+        self.assertIn("_combat_settlement_application.settle(", settle)
+        self.assertIn('return self._action("combat_settle"', settle)
+        self.assertLess(
+            settle.index("_combat_settlement_application.settle("),
+            settle.index('return self._action("combat_settle"'),
+        )
+
     def test_map_node_combat_uses_persistent_start_task(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_map"
         source = (root / "__init__.py").read_text(encoding="utf-8")

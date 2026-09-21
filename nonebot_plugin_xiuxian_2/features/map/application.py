@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from .._legacy_application import LegacyApplication
+from ..combat_settlement.application import CombatSettlementApplication
 from .repository import LegacyMapRepository, MapCombatLifecyclePlanSqlRepository, MapCombatLifecycleQueryRepository, MapCombatLifecycleStartSqlRepository, MapDongfuBuildSqlRepository, MapExploreSettlementSqlRepository, MapExploreStartSqlRepository, MapMissionClaimSqlRepository, MapSeedPurchaseSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapRepository
 
 
@@ -13,6 +14,10 @@ class MapApplication(LegacyApplication):
         self._explicit_repository = repository
         self.game_database = str(game_database)
         self.player_database = str(player_database)
+        self._combat_settlement_application = CombatSettlementApplication(
+            self.game_database,
+            self.player_database,
+        )
 
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):
         return self._execute(operation_id=operation_id, user_id=user_id, action=f"map.{action}", payload={"user_id": user_id, **kwargs}, call=lambda: self.repository.invoke(action, operation_id, user_id, **kwargs))
@@ -97,7 +102,14 @@ class MapApplication(LegacyApplication):
         if self._explicit_repository is None:
             return self._execute(operation_id=operation_id,user_id=user_id,action="map.combat_start",payload={"user_id":user_id,**kwargs},call=lambda:MapCombatLifecycleStartSqlRepository(self.game_database,self.player_database).start(operation_id,user_id,**kwargs))
         return self._action("combat_start",operation_id=operation_id,user_id=user_id,**kwargs)
-    def combat_settle(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("combat_settle", operation_id=operation_id, user_id=user_id, **kwargs)
+    def combat_settle(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        if self._explicit_repository is None:
+            return self._combat_settlement_application.settle(
+                operation_id=operation_id,
+                user_id=user_id,
+                **kwargs,
+            )
+        return self._action("combat_settle", operation_id=operation_id, user_id=user_id, **kwargs)
     def explore_start(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:
             return self._execute(operation_id=operation_id, user_id=user_id, action="map.explore_start", payload={"user_id": user_id, **kwargs}, call=lambda: MapExploreStartSqlRepository(self.game_database, self.player_database).start(operation_id, user_id, **kwargs))

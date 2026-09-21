@@ -2833,3 +2833,7 @@
 2026-09-21 map interactive finish isolated recovery evidence：使用一次性临时数据目录执行 `scripts/recovery_smoke.py`，完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；map migrations `map.001`-`map.016` 路由保持既有 game/player ownership，`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。临时数据、receipt 和日志已清理；未执行真实玩家交互或奖励写入。
 
 2026-09-21 map interactive finish full regression：全量 `python -m unittest discover -s tests -q` 共 `2110` tests，全部通过；全量回归完成后才进入缓存清理阶段。
+
+2026-09-21 map combat settlement cutover：`MapApplication.combat_settle` 默认路径改为持有并调用 `CombatSettlementApplication.settle`，不再经 `LegacyMapRepository -> MapCombatSettlementService`；显式注入旧 `MapRepository` 的 compatibility 分支保留。节点战斗 NoneBot 主路径原已使用 `combat_settlement_application`，本切片补齐 map Web action 的同一 application ownership。新增 MapApplication delegation 回归；combat settlement application/legacy lifecycle 回归 `13 passed`，source contract `2 passed`，application 组合 `6 passed`，compileall、architecture、inventory、diff check 通过。
+
+2026-09-22 map combat settlement full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，避免 legacy startup 的外网资源下载和真实 Web listener 端口副作用；生产默认配置未修改。完整 `python -m unittest discover -s tests -q` 共 `2111` tests，全部通过；退出码 `0`。此前未隔离环境的回归分别因资源下载和 Web 监听器阻塞，均未计入通过证据。

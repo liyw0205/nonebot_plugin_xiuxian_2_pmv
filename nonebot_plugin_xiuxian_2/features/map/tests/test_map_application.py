@@ -12,6 +12,15 @@ class Repo:
     def invoke(self, action, *args, **kwargs): return {"status": "applied", "action": action}
 
 
+class CombatApplication:
+    def __init__(self):
+        self.kwargs = None
+
+    def settle(self, **kwargs):
+        self.kwargs = kwargs
+        return "combat-settlement"
+
+
 class MapApplicationTest(unittest.TestCase):
     def test_move_uses_operation_ledger(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -71,6 +80,25 @@ class MapApplicationTest(unittest.TestCase):
                     ("action-1",),
                 )
             self.assertEqual(json.loads(row["settlement_json"]), settlement)
+
+    def test_combat_settle_delegates_to_combat_feature_application(self):
+        with tempfile.TemporaryDirectory() as directory:
+            application = MapApplication(Path(directory) / "game.db", Path(directory) / "player.db")
+            combat = CombatApplication()
+            application._combat_settlement_application = combat
+            values = {
+                "operation_id": "combat-1",
+                "user_id": "u",
+                "expected_daily": {"date": "2026-09-21", "combat_count": 1},
+                "snapshot": '{"task_id":"combat-1"}',
+                "daily_limit": 4,
+                "stone": 10,
+                "items": ({"id": 1, "name": "材料", "type": "材料", "amount": 2},),
+                "max_goods_num": 99,
+            }
+
+            self.assertEqual(application.combat_settle(**values), "combat-settlement")
+            self.assertEqual(combat.kwargs, values)
 
 
 if __name__ == "__main__": unittest.main()
