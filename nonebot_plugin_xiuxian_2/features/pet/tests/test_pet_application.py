@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -104,6 +105,27 @@ class PetApplicationTests(unittest.TestCase):
             travel = {"pet_uid": "p", "start_at": 1}
             result = app.start_travel(operation_id="pet-travel-default", user_id="u", pet_uid="p", expected_travel=None, travel=travel)
             replay = app.start_travel(operation_id="pet-travel-default", user_id="u", pet_uid="p", expected_travel=None, travel=travel)
+            self.assertEqual((result.status, replay.status), ("applied", "replayed"))
+
+    def test_default_travel_claim_uses_feature_repository(self):
+        with tempfile.TemporaryDirectory() as directory:
+            game = Path(directory) / "game.db"
+            player = Path(directory) / "player.db"
+            travel = {"pet_uid": "p", "start_at": 1, "end_at": 2}
+            with DatabaseUnitOfWork(game) as uow:
+                apply_platform_schema(uow)
+                uow.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY, stone INTEGER, exp INTEGER)")
+                uow.execute("INSERT INTO user_xiuxian VALUES('u',100,200)")
+                uow.execute("CREATE TABLE back(user_id TEXT, goods_id INTEGER, goods_name TEXT, goods_type TEXT, goods_num INTEGER, bind_num INTEGER, PRIMARY KEY(user_id,goods_id))")
+            with DatabaseUnitOfWork(player) as uow:
+                uow.execute("CREATE TABLE player_pet_item(user_id TEXT, uid TEXT, total_exp INTEGER)")
+                uow.execute("INSERT INTO player_pet_item VALUES('u','p',0)")
+                uow.execute("CREATE TABLE player_pet(user_id TEXT PRIMARY KEY, travel TEXT)")
+                uow.execute("INSERT INTO player_pet VALUES('u',?)", (json.dumps(travel),))
+            app = PetApplication(game, player)
+            rewards = ({"id": 1, "name": "item", "type": "type", "amount": 2},)
+            result = app.claim_travel(operation_id="pet-claim-default", user_id="u", expected_travel=travel, stone=10, exp=20, items=rewards, max_goods_num=99)
+            replay = app.claim_travel(operation_id="pet-claim-default", user_id="u", expected_travel=travel, stone=10, exp=20, items=rewards, max_goods_num=99)
             self.assertEqual((result.status, replay.status), ("applied", "replayed"))
 
 

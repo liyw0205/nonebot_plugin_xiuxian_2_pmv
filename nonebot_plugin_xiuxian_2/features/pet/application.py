@@ -9,7 +9,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import PetFeedRequest, PetTravelClaimRequest
-from .repository import LegacyPetRepository, PetActiveSwitchSqlRepository, PetFeedSqlRepository, PetRepository, PetTravelStartSqlRepository
+from .repository import LegacyPetRepository, PetActiveSwitchSqlRepository, PetFeedSqlRepository, PetRepository, PetTravelClaimSqlRepository, PetTravelStartSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -63,14 +63,23 @@ class PetApplication:
             request.validate()
         except (TypeError, ValueError) as exc:
             raise ValidationError(str(exc)) from exc
-        return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="pet.travel_claim", payload=request.payload(), call=lambda: self._repository().travel_claim(request.operation_id, request.user_id, request.expected_travel, request.stone, request.exp, request.items, request.max_goods_num))
+        if self.repository is None:
+            repository = PetTravelClaimSqlRepository(self.game_database, self.player_database)
+            call = lambda: repository.claim(request.operation_id, request.user_id, request.expected_travel, request.stone, request.exp, request.items, request.max_goods_num)
+        else:
+            call = lambda: self.repository.travel_claim(request.operation_id, request.user_id, request.expected_travel, request.stone, request.exp, request.items, request.max_goods_num)
+        return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="pet.travel_claim", payload=request.payload(), call=call)
 
     def start_travel(self, *, operation_id: str, user_id: str, pet_uid: str, expected_travel: Mapping[str, Any] | None, travel: Mapping[str, Any]) -> OperationOutcome[dict[str, Any]]:
         if not str(operation_id).strip() or not str(user_id).strip() or not str(pet_uid).strip() or not isinstance(travel, Mapping):
             raise ValidationError("operation_id, user_id, pet_uid and travel are required")
         payload = {"user_id": str(user_id), "pet_uid": str(pet_uid), "expected_travel": expected_travel, "travel": dict(travel)}
-        repository = self.repository or PetTravelStartSqlRepository(self.player_database)
-        return self._execute(operation_id=str(operation_id).strip(), user_id=str(user_id), action="pet.travel_start", payload=payload, call=lambda: repository.start(operation_id, user_id, pet_uid, expected_travel, travel))
+        if self.repository is None:
+            repository = PetTravelStartSqlRepository(self.player_database)
+            call = lambda: repository.start(operation_id, user_id, pet_uid, expected_travel, travel)
+        else:
+            call = lambda: self.repository.travel_start(operation_id, user_id, expected_travel, travel)
+        return self._execute(operation_id=str(operation_id).strip(), user_id=str(user_id), action="pet.travel_start", payload=payload, call=call)
 
     def feed(self, *, operation_id: str, user_id: str, uid: str, item_id: int, count: int, expected: Sequence[int], updated: Sequence[int]) -> OperationOutcome[dict[str, Any]]:
         try:

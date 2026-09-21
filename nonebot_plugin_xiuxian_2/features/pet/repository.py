@@ -194,6 +194,72 @@ class PetTravelStartSqlRepository:
             return PetTravelStartResult("applied")
 
 
+@dataclass(frozen=True)
+class PetTravelClaimResult:
+    status: str
+    stone: int = 0
+    exp: int = 0
+    items: tuple[tuple[int, int], ...] = ()
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"applied", "duplicate"}
+
+
+class PetTravelClaimSqlRepository:
+    def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
+        self.game_database = str(game_database)
+        self.player_database = str(player_database)
+
+    def claim(self, operation_id: str, user_id: str, expected_travel: dict[str, Any], stone: int, exp: int, items: Any, max_goods_num: int) -> PetTravelClaimResult:
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        stone, exp, max_goods_num = int(stone), int(exp), int(max_goods_num)
+        rewards = tuple(
+            (int(item["id"]), str(item["name"]), str(item["type"]), int(item["amount"]))
+            for item in items
+            if int(item.get("id", 0)) > 0 and int(item.get("amount", 0)) > 0
+        )
+        if not operation_id or not isinstance(expected_travel, dict) or min(stone, exp, max_goods_num) < 0:
+            raise ValueError("valid operation, travel and rewards are required")
+        travel_json = json.dumps(expected_travel, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        payload = json.dumps([user_id, expected_travel, stone, exp, rewards, max_goods_num], ensure_ascii=True, sort_keys=True)
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            uow.attach_database(self.player_database, "player_data")
+            uow.execute(
+                "CREATE TABLE IF NOT EXISTS pet_travel_claim_operations("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            previous = uow.query_one("SELECT payload FROM pet_travel_claim_operations WHERE operation_id=?", (operation_id,))
+            if previous is not None:
+                return PetTravelClaimResult("duplicate" if str(previous["payload"]) == payload else "state_changed", stone if str(previous["payload"]) == payload else 0, exp if str(previous["payload"]) == payload else 0, tuple((row[0], row[3]) for row in rewards) if str(previous["payload"]) == payload else ())
+            if uow.query_one("SELECT 1 AS present FROM user_xiuxian WHERE user_id=?", (user_id,)) is None:
+                return PetTravelClaimResult("user_missing")
+            meta = uow.query_one("SELECT travel FROM player_data.player_pet WHERE user_id=?", (user_id,))
+            if meta is None:
+                return PetTravelClaimResult("state_changed")
+            current = None if meta["travel"] is None else json.dumps(json.loads(str(meta["travel"])), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            if current != travel_json:
+                return PetTravelClaimResult("state_changed")
+            pet_uid = str(expected_travel.get("pet_uid", ""))
+            if uow.query_one("SELECT 1 AS present FROM player_data.player_pet_item WHERE user_id=? AND uid=?", (user_id, pet_uid)) is None:
+                return PetTravelClaimResult("pet_missing")
+            for item_id, _, _, amount in rewards:
+                inventory = uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
+                if (int(inventory["goods_num"]) if inventory else 0) + amount > max_goods_num:
+                    return PetTravelClaimResult("inventory_full")
+            if uow.execute("UPDATE player_data.player_pet SET travel=NULL WHERE user_id=? AND travel=?", (user_id, meta["travel"])).rowcount != 1:
+                return PetTravelClaimResult("state_changed")
+            uow.execute("UPDATE user_xiuxian SET stone=COALESCE(stone,0)+?,exp=COALESCE(exp,0)+? WHERE user_id=?", (stone, exp, user_id))
+            for item_id, name, item_type, amount in rewards:
+                uow.execute(
+                    "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,bind_num) VALUES(?,?,?,?,?,?) "
+                    "ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=excluded.goods_name,goods_type=excluded.goods_type,goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.goods_num",
+                    (user_id, item_id, name, item_type, amount, amount),
+                )
+            uow.execute("INSERT INTO pet_travel_claim_operations(operation_id,payload) VALUES(?,?)", (operation_id, payload))
+            return PetTravelClaimResult("applied", stone, exp, tuple((row[0], row[3]) for row in rewards))
+
+
 class PetRepository(Protocol):
     def switch(self, *args: Any, **kwargs: Any) -> Any: ...
     def travel_claim(self, *args: Any, **kwargs: Any) -> Any: ...
@@ -234,4 +300,4 @@ class LegacyPetRepository:
         return PetActiveSwitchService(self.player_database).switch(*args, **kwargs)
 
 
-__all__ = ["PetActiveSwitchResult", "PetActiveSwitchSqlRepository", "PetFeedResult", "PetFeedSqlRepository", "PetTravelStartResult", "PetTravelStartSqlRepository", "PetRepository", "LegacyPetRepository"]
+__all__ = ["PetActiveSwitchResult", "PetActiveSwitchSqlRepository", "PetFeedResult", "PetFeedSqlRepository", "PetTravelStartResult", "PetTravelStartSqlRepository", "PetTravelClaimResult", "PetTravelClaimSqlRepository", "PetRepository", "LegacyPetRepository"]
