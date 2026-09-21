@@ -258,20 +258,19 @@ async def natal_reawaken_handler(bot: Bot, event: GroupMessageEvent | PrivateMes
     }
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"natal-reawaken:{event_id}:{user_id}" if event_id else f"natal-reawaken:{user_id}:{runtime_ids.new_id()}"
-    reawakened = _natal_reawaken_service().reawaken(
-        operation_id, user_id, MYSTERIOUS_SCRIPTURE_ID,
-        mysterious_scripture_info["name"], mysterious_scripture_info["type"],
-        scripture_cost_for_reawaken, MAX_EFFECT_SLOTS, XiuConfig().max_goods_num,
-        {
-            effect_type.value: (config["min_value"], config["max_value"])
-            for effect_type, config in EFFECT_BASE_AND_GROWTH.items()
-        },
-        {
-            effect_type.value: names
-            for effect_type, names in NATAL_TREASURE_NAMES.items()
-        },
-        {effect_type.value for effect_type in fixed_base_effects},
-        _natal_choice_seed(operation_id),
+    reawakened = natal_treasure_application.reawaken(
+        operation_id=operation_id,
+        user_id=user_id,
+        scripture_id=MYSTERIOUS_SCRIPTURE_ID,
+        scripture_name=mysterious_scripture_info["name"],
+        scripture_type=mysterious_scripture_info["type"],
+        scripture_cost=scripture_cost_for_reawaken,
+        max_slots=MAX_EFFECT_SLOTS,
+        max_goods_num=XiuConfig().max_goods_num,
+        effect_configs={effect_type.value: (config["min_value"], config["max_value"]) for effect_type, config in EFFECT_BASE_AND_GROWTH.items()},
+        effect_names={effect_type.value: names for effect_type, names in NATAL_TREASURE_NAMES.items()},
+        fixed_base_effects={effect_type.value for effect_type in fixed_base_effects},
+        choice_seed=_natal_choice_seed(operation_id),
     )
     if not reawakened.succeeded:
         failure_reasons = {

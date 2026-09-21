@@ -5,6 +5,7 @@ from typing import Any
 
 from .._legacy_application import LegacyApplication
 from .awaken_repository import NatalAwakenSqlRepository
+from .reawaken_repository import NatalReawakenSqlRepository
 from .repository import LegacyNatalTreasureRepository, NatalTreasureRepository
 
 
@@ -21,7 +22,10 @@ class NatalTreasureApplication(LegacyApplication):
         if self._explicit_awaken_repository is not None:
             return self._action("awaken", operation_id=operation_id, user_id=user_id, **kwargs)
         return self._execute(operation_id=operation_id, user_id=user_id, action="natal_treasure.awaken", payload={"user_id": user_id, **kwargs}, call=lambda: NatalAwakenSqlRepository(self.player_database).awaken(operation_id, user_id, **kwargs))
-    def reawaken(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("reawaken", operation_id=operation_id, user_id=user_id, **kwargs)
+    def reawaken(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        if self._explicit_awaken_repository is not None:
+            return self._action("reawaken", operation_id=operation_id, user_id=user_id, **kwargs)
+        return self._execute(operation_id=operation_id, user_id=user_id, action="natal_treasure.reawaken", payload={"user_id": user_id, **kwargs}, call=lambda: NatalReawakenSqlRepository(self.game_database, self.player_database).reawaken(operation_id, user_id, **kwargs))
     def train(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("train", operation_id=operation_id, user_id=user_id, **kwargs)
     def upgrade(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("upgrade", operation_id=operation_id, user_id=user_id, **kwargs)
     def engrave(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("engrave", operation_id=operation_id, user_id=user_id, **kwargs)
