@@ -411,6 +411,50 @@ class PetReleaseSqlRepository:
             return PetReleaseResult("applied", refund, uids)
 
 
+@dataclass(frozen=True)
+class PetFusionBreakthroughResult:
+    status: str
+    stars: int = 0
+    exp: int = 0
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"applied", "duplicate"}
+
+
+class PetFusionBreakthroughSqlRepository:
+    def __init__(self, database: str | Path) -> None:
+        self.database = str(database)
+
+    def breakthrough(self, operation_id: str, user_id: str, expected_main: Any, expected_materials: Any, updated_stars: int, updated_exp: int, skill_offer: Any = None) -> PetFusionBreakthroughResult:
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        main = tuple(expected_main)
+        materials = tuple(sorted(tuple(row) for row in expected_materials))
+        updated_stars, updated_exp = int(updated_stars), int(updated_exp)
+        if not operation_id or len(main) != 7 or not materials or any(len(row) != 7 for row in materials):
+            raise ValueError("operation, main snapshot and materials are required")
+        payload = json.dumps([user_id, main, materials, updated_stars, updated_exp, skill_offer], ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            uow.execute("CREATE TABLE IF NOT EXISTS pet_fusion_breakthrough_operations(operation_id TEXT PRIMARY KEY,payload TEXT,stars INTEGER,exp INTEGER,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            old = uow.query_one("SELECT payload,stars,exp FROM pet_fusion_breakthrough_operations WHERE operation_id=?", (operation_id,))
+            if old is not None:
+                return PetFusionBreakthroughResult("duplicate" if str(old["payload"]) == payload else "state_changed", int(old["stars"]) if str(old["payload"]) == payload else 0, int(old["exp"]) if str(old["payload"]) == payload else 0)
+            current = uow.query_one("SELECT uid,pet_id,stars,exp,total_exp,COALESCE(skill_id,''),is_active FROM player_pet_item WHERE user_id=? AND uid=?", (user_id, str(main[0])))
+            if current is None or tuple(current.values()) != main or int(current["is_active"]) != 1:
+                return PetFusionBreakthroughResult("state_changed")
+            placeholders = ",".join("?" for _ in materials)
+            uids = tuple(str(row[0]) for row in materials)
+            rows = uow.query_all(f"SELECT uid,pet_id,stars,exp,total_exp,COALESCE(skill_id,''),is_active FROM player_pet_item WHERE user_id=? AND uid IN ({placeholders})", (user_id, *uids))
+            if tuple(sorted(tuple(row.values()) for row in rows)) != materials or any(int(row["is_active"]) for row in rows):
+                return PetFusionBreakthroughResult("state_changed")
+            if uow.execute(f"DELETE FROM player_pet_item WHERE user_id=? AND uid IN ({placeholders})", (user_id, *uids)).rowcount != len(materials):
+                return PetFusionBreakthroughResult("state_changed")
+            if uow.execute("UPDATE player_pet_item SET stars=?,exp=? WHERE user_id=? AND uid=? AND stars=? AND exp=? AND is_active=1", (updated_stars, updated_exp, user_id, str(main[0]), int(main[2]), int(main[3]))).rowcount != 1:
+                return PetFusionBreakthroughResult("state_changed")
+            uow.execute("INSERT INTO pet_fusion_breakthrough_operations(operation_id,payload,stars,exp) VALUES(?,?,?,?)", (operation_id, payload, updated_stars, updated_exp))
+            return PetFusionBreakthroughResult("applied", updated_stars, updated_exp)
+
+
 class PetRepository(Protocol):
     def switch(self, *args: Any, **kwargs: Any) -> Any: ...
     def travel_claim(self, *args: Any, **kwargs: Any) -> Any: ...
@@ -451,4 +495,4 @@ class LegacyPetRepository:
         return PetActiveSwitchService(self.player_database).switch(*args, **kwargs)
 
 
-__all__ = ["PetActiveSwitchResult", "PetActiveSwitchSqlRepository", "PetFeedResult", "PetFeedSqlRepository", "PetTravelStartResult", "PetTravelStartSqlRepository", "PetTravelClaimResult", "PetTravelClaimSqlRepository", "PetHatchResult", "PetHatchSqlRepository", "PetReleaseResult", "PetReleaseSqlRepository", "PetRepository", "LegacyPetRepository"]
+__all__ = ["PetActiveSwitchResult", "PetActiveSwitchSqlRepository", "PetFeedResult", "PetFeedSqlRepository", "PetTravelStartResult", "PetTravelStartSqlRepository", "PetTravelClaimResult", "PetTravelClaimSqlRepository", "PetHatchResult", "PetHatchSqlRepository", "PetReleaseResult", "PetReleaseSqlRepository", "PetFusionBreakthroughResult", "PetFusionBreakthroughSqlRepository", "PetRepository", "LegacyPetRepository"]

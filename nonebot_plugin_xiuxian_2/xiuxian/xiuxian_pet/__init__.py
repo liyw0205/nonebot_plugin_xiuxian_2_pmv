@@ -1672,14 +1672,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     ok, result_msg, pet, skill_offer, consumed = prepare_pet_fusion(user_id, tokens, operation_id)
     if ok:
         current = get_pet_doc(user_id).get("active")
-        result = _pet_fusion_breakthrough_service().breakthrough(
-            operation_id,
-            user_id,
-            _pet_transaction_snapshot(current, True),
-            [_pet_transaction_snapshot(material, False) for material in consumed],
-            int(pet.get("stars", 1)),
-            int(pet.get("exp", 0)),
-            skill_offer,
+        result = pet_application.fusion_breakthrough(
+            operation_id=operation_id,
+            user_id=user_id,
+            expected_main=_pet_transaction_snapshot(current, True),
+            expected_materials=[_pet_transaction_snapshot(material, False) for material in consumed],
+            updated_stars=int(pet.get("stars", 1)),
+            updated_exp=int(pet.get("exp", 0)),
+            skill_offer=skill_offer,
         )
         if not result.succeeded:
             result_msg = "宠物融合未完成：宠物状态已更新，请重新融合。"

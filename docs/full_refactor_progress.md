@@ -2965,3 +2965,9 @@
 2026-09-22 pet release isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
 
 2026-09-22 pet release full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2124` tests，全部通过，退出码 `0`；release/hatch/claim/start/feed/active feature tests另行通过，根 discovery 计数为 `2124`，测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
+
+2026-09-22 pet fusion feature repository cutover：新增 `PetFusionBreakthroughSqlRepository`，新增 `PetApplication.fusion_breakthrough`，宠物融合 matcher 默认改用 feature repository，旧 `PetFusionBreakthroughService` 仅保留兼容；覆盖 applied、duplicate、state_changed 和异常回滚，保留主宠/材料七元组快照及材料删除边界。fusion/release/hatch/application `14 passed`，source `10 passed`，legacy fusion/release/hatch behavior `15 passed`，source/compile/architecture/inventory/diff check 通过。
+
+2026-09-22 pet fusion isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
+
+2026-09-22 pet fusion full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2125` tests，全部通过，退出码 `0`；fusion/release/hatch/claim/start/feed/active feature tests另行通过，根 discovery 计数为 `2125`，测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
