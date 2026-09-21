@@ -209,13 +209,17 @@ class MapStatusSqlQueryRepository:
         if not user_id:
             return None
         with DatabaseUnitOfWork(self.player_database) as uow:
+            columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(map_status)")}
+            if not columns:
+                return None
+            visited_field = ",visited_nodes" if "visited_nodes" in columns else ""
             row = uow.query_one(
-                "SELECT realm,heaven,node_id,visited_nodes FROM map_status WHERE user_id=?",
+                f"SELECT realm,heaven,node_id{visited_field} FROM map_status WHERE user_id=?",
                 (user_id,),
             )
         if row is None or not all(str(row[field] or "") for field in ("realm", "heaven", "node_id")):
             return None
-        visited = row["visited_nodes"]
+        visited = row["visited_nodes"] if "visited_nodes" in columns else []
         try:
             visited = json.loads(visited) if isinstance(visited, str) else visited
         except json.JSONDecodeError:
@@ -227,6 +231,52 @@ class MapStatusSqlQueryRepository:
             "node_id": str(row["node_id"]),
             "visited_nodes": [str(item) for item in visited] if isinstance(visited, list) else [],
         }
+
+
+class MapStatusSqlWriteRepository:
+    def __init__(self, player_database: str | Path) -> None:
+        self.player_database = str(player_database)
+
+    def upsert(
+        self,
+        user_id: str,
+        realm: str,
+        heaven: str,
+        node_id: str,
+        visited_nodes: list[str],
+    ) -> dict[str, Any]:
+        user_id = str(user_id).strip()
+        if not user_id or not all(str(value).strip() for value in (realm, heaven, node_id)):
+            raise ValueError("valid map status is required")
+        with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+            columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(map_status)")}
+            if not columns:
+                raise RuntimeError("map_status schema is missing")
+            if "visited_nodes" not in columns:
+                uow.execute("ALTER TABLE map_status ADD COLUMN visited_nodes TEXT DEFAULT '[]'")
+            current = uow.query_one("SELECT visited_nodes FROM map_status WHERE user_id=?", (user_id,))
+            merged = self._merge_visited(current["visited_nodes"] if current else [], visited_nodes)
+            uow.execute(
+                "INSERT INTO map_status(user_id,realm,heaven,node_id,visited_nodes) VALUES(?,?,?,?,?) "
+                "ON CONFLICT(user_id) DO UPDATE SET realm=excluded.realm,heaven=excluded.heaven,"
+                "node_id=excluded.node_id,visited_nodes=excluded.visited_nodes",
+                (user_id, str(realm), str(heaven), str(node_id), json.dumps(merged, ensure_ascii=False)),
+            )
+        return {"realm": str(realm), "heaven": str(heaven), "node_id": str(node_id), "visited_nodes": merged}
+
+    @staticmethod
+    def _merge_visited(current: Any, incoming: list[str]) -> list[str]:
+        try:
+            current = json.loads(current) if isinstance(current, str) else current
+        except json.JSONDecodeError:
+            current = []
+        values = current if isinstance(current, list) else []
+        values = [str(value) for value in values]
+        for value in incoming:
+            value = str(value)
+            if value and value not in values:
+                values.append(value)
+        return values
 
 
 class MapExploreStatusSqlQueryRepository:
@@ -827,4 +877,4 @@ class LegacyMapRepository:
         return getattr(cls(*databases), method)(operation_id, user_id, **kwargs)
 
 
-__all__ = ["LegacyMapRepository", "MapCombatLifecyclePlanSqlRepository", "MapCombatLifecycleQueryRepository", "MapCombatLifecycleStartSqlRepository", "MapDongfuBuildSqlRepository", "MapDongfuSqlQueryRepository", "MapExploreSettlementSqlRepository", "MapExploreStartSqlRepository", "MapExploreStatusSqlQueryRepository", "MapMissionClaimSqlRepository", "MapMissionSqlQueryRepository", "MapNearbyPlayersSqlQueryRepository", "MapProjectionSqlRepository", "MapStatusSqlQueryRepository", "MapSeedPurchaseSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]
+__all__ = ["LegacyMapRepository", "MapCombatLifecyclePlanSqlRepository", "MapCombatLifecycleQueryRepository", "MapCombatLifecycleStartSqlRepository", "MapDongfuBuildSqlRepository", "MapDongfuSqlQueryRepository", "MapExploreSettlementSqlRepository", "MapExploreStartSqlRepository", "MapExploreStatusSqlQueryRepository", "MapMissionClaimSqlRepository", "MapMissionSqlQueryRepository", "MapNearbyPlayersSqlQueryRepository", "MapProjectionSqlRepository", "MapStatusSqlQueryRepository", "MapStatusSqlWriteRepository", "MapSeedPurchaseSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]

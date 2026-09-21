@@ -2881,3 +2881,9 @@
 2026-09-22 map nearby players isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
 
 2026-09-22 map nearby players full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2117` tests，全部通过，退出码 `0`；此前一次失败为历史 source contract 仍要求 nearby 直接调用 legacy `XiuxianDateManage.get_user_info_with_id`，已更新为 feature query contract 后重跑通过；测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
+
+2026-09-22 map status writer cutover：新增 `MapStatusSqlWriteRepository` 和 `MapApplication.save_status`；地图状态初始化、旧别名/非法节点修复统一通过 feature writer 单事务 upsert，删除无调用的 `_save_map_status`，移动/回府既有事务路径保持不变。writer 支持已存在的 modern/legacy `map_status` schema，legacy 表自动补 `visited_nodes`，query 对缺失列返回空 visited，避免依赖 core schema 创建。status query/write/application `11 passed`，map movement/home/dongfu/explore `18 passed`，source/compile/architecture/inventory/diff check 通过。
+
+2026-09-22 map status writer isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
+
+2026-09-22 map status writer full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2118` tests，全部通过，退出码 `0`；测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。

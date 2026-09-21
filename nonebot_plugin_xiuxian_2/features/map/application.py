@@ -5,7 +5,7 @@ from typing import Any
 
 from .._legacy_application import LegacyApplication
 from ..combat_settlement.application import CombatSettlementApplication
-from .repository import LegacyMapRepository, MapCombatLifecyclePlanSqlRepository, MapCombatLifecycleQueryRepository, MapCombatLifecycleStartSqlRepository, MapDongfuBuildSqlRepository, MapDongfuSqlQueryRepository, MapExploreSettlementSqlRepository, MapExploreStartSqlRepository, MapExploreStatusSqlQueryRepository, MapMissionClaimSqlRepository, MapMissionSqlQueryRepository, MapNearbyPlayersSqlQueryRepository, MapProjectionSqlRepository, MapSeedPurchaseSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapStatusSqlQueryRepository, MapRepository
+from .repository import LegacyMapRepository, MapCombatLifecyclePlanSqlRepository, MapCombatLifecycleQueryRepository, MapCombatLifecycleStartSqlRepository, MapDongfuBuildSqlRepository, MapDongfuSqlQueryRepository, MapExploreSettlementSqlRepository, MapExploreStartSqlRepository, MapExploreStatusSqlQueryRepository, MapMissionClaimSqlRepository, MapMissionSqlQueryRepository, MapNearbyPlayersSqlQueryRepository, MapProjectionSqlRepository, MapSeedPurchaseSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapStatusSqlQueryRepository, MapStatusSqlWriteRepository, MapRepository
 
 
 class MapApplication(LegacyApplication):
@@ -59,6 +59,9 @@ class MapApplication(LegacyApplication):
 
     def map_status(self, user_id: str) -> dict[str, Any] | None:
         return MapStatusSqlQueryRepository(self.player_database).get(user_id)
+
+    def save_status(self, user_id: str, realm: str, heaven: str, node_id: str, visited_nodes: list[str]) -> dict[str, Any]:
+        return MapStatusSqlWriteRepository(self.player_database).upsert(user_id, realm, heaven, node_id, visited_nodes)
 
     def explore_status(self, user_id: str) -> dict[str, Any] | None:
         return MapExploreStatusSqlQueryRepository(self.player_database).get(user_id)

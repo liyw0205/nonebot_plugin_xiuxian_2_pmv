@@ -655,7 +655,9 @@ def _get_player_map_status(user_id: str, map_data: dict):
     if data and data.get("realm") and data.get("heaven") and data.get("node_id"):
         if data.get("realm") == "仙域" and data.get("heaven") == "九天天":
             data["heaven"] = "九重天"
-            _player_data_manager().update_or_write_data(str(user_id), MAP_TABLE, "heaven", "九重天")
+            data = map_application.save_status(
+                str(user_id), data["realm"], "九重天", data["node_id"], data.get("visited_nodes", [])
+            )
         realm = data.get("realm")
         if realm not in _all_realms(map_data):
             return _init_player_map_status(user_id, map_data)
@@ -663,18 +665,24 @@ def _get_player_map_status(user_id: str, map_data: dict):
         heaven = _resolve_heaven_alias(map_data, realm, data.get("heaven"))
         if heaven != data.get("heaven"):
             data["heaven"] = heaven
-            _player_data_manager().update_or_write_data(str(user_id), MAP_TABLE, "heaven", heaven)
+            data = map_application.save_status(
+                str(user_id), data["realm"], heaven, data["node_id"], data.get("visited_nodes", [])
+            )
 
         if heaven not in map_data[realm]["heavens"]:
             order = _get_realm_heaven_order(map_data, realm)
             heaven = order[0]
             data["heaven"] = heaven
-            _player_data_manager().update_or_write_data(str(user_id), MAP_TABLE, "heaven", heaven)
+            data = map_application.save_status(
+                str(user_id), data["realm"], heaven, data["node_id"], data.get("visited_nodes", [])
+            )
 
         if not _find_node_by_id(map_data, realm, heaven, data.get("node_id")):
             node = _nodes(map_data, realm, heaven)[0]
             data["node_id"] = node["id"]
-            _player_data_manager().update_or_write_data(str(user_id), MAP_TABLE, "node_id", node["id"])
+            data = map_application.save_status(
+                str(user_id), data["realm"], data["heaven"], node["id"], data.get("visited_nodes", [])
+            )
 
         return data
     return _init_player_map_status(user_id, map_data)
@@ -692,20 +700,9 @@ def _init_player_map_status(user_id: str, map_data: dict, *, random_source=None)
         "node_id": node["id"],
         "visited_nodes": [node["id"]],
     }
-    for k, v in init_data.items():
-        _player_data_manager().update_or_write_data(str(user_id), MAP_TABLE, k, v)
-    return init_data
-
-
-def _save_map_status(uid: str, realm: str, heaven: str, node_id: str):
-    _player_data_manager().update_or_write_data(uid, MAP_TABLE, "realm", realm)
-    _player_data_manager().update_or_write_data(uid, MAP_TABLE, "heaven", heaven)
-    _player_data_manager().update_or_write_data(uid, MAP_TABLE, "node_id", node_id)
-
-    visited = _player_data_manager().get_field_data(uid, MAP_TABLE, "visited_nodes") or []
-    if node_id not in visited:
-        visited.append(node_id)
-        _player_data_manager().update_or_write_data(uid, MAP_TABLE, "visited_nodes", visited)
+    return map_application.save_status(
+        str(user_id), init_data["realm"], init_data["heaven"], init_data["node_id"], init_data["visited_nodes"]
+    )
 
 
 def _parse_map_query(map_data, text: str):

@@ -2748,6 +2748,14 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("if data is None:", helper)
         self.assertLess(helper.index("map_application.map_status("), helper.index("_player_data_manager().get_fields"))
 
+    def test_map_status_initialization_and_repair_use_feature_writer(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian/xiuxian_map/__init__.py").read_text(encoding="utf-8")
+        start = source.index("def _get_player_map_status")
+        end = source.index("def _parse_map_query", start)
+        helpers = source[start:end]
+        self.assertGreaterEqual(helpers.count("map_application.save_status("), 5)
+        self.assertNotIn("def _save_map_status", helpers)
+
     def test_map_explore_status_reads_through_feature_application(self) -> None:
         source = (SOURCE_ROOT / "xiuxian/xiuxian_map/__init__.py").read_text(encoding="utf-8")
         start = source.index("def _get_explore_status")

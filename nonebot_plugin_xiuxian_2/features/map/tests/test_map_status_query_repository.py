@@ -46,6 +46,16 @@ class MapStatusQueryRepositoryTests(unittest.TestCase):
         result = self.repository.get("u")
         self.assertEqual(result["visited_nodes"], [])
 
+    def test_legacy_schema_without_visited_nodes_is_supported(self):
+        with db_backend.transaction(self.database) as conn:
+            conn.execute("DROP TABLE map_status")
+            conn.execute(
+                "CREATE TABLE map_status (user_id TEXT PRIMARY KEY,realm TEXT,heaven TEXT,node_id TEXT)"
+            )
+            conn.execute("INSERT INTO map_status VALUES ('u','凡界','一重天','n1')")
+        result = self.repository.get("u")
+        self.assertEqual(result["visited_nodes"], [])
+
 
 if __name__ == "__main__":
     unittest.main()
