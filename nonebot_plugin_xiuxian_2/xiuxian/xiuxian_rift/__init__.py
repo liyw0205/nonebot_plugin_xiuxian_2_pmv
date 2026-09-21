@@ -38,7 +38,7 @@ from .transaction_service import RiftDemonTokenBattleSettlementService
 from .transaction_service import RiftSpeedupService
 from .transaction_service import RiftSettlementService
 from ...features.rift.application import RiftApplication
-from ...features.rift.repository import LegacyRiftRepository
+
 from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_map import (
     get_player_current_position,
@@ -60,7 +60,6 @@ _rift_settlement_service_instance = None
 rift_application = RiftApplication(
     get_paths().game_db,
     get_paths().player_db,
-    repository=LegacyRiftRepository(get_paths().game_db, get_paths().player_db),
 )
 cache_help = {}
 group_rift = {}  # dict

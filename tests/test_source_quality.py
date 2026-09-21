@@ -2036,6 +2036,12 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("pet_application.skill_reroll(", handler)
         self.assertNotIn("_pet_skill_reroll_service().reroll(", handler)
 
+    def test_rift_default_application_does_not_construct_legacy_repository(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_rift" / "__init__.py").read_text(encoding="utf-8")
+        self.assertNotIn("LegacyRiftRepository", source)
+        self.assertIn("rift_application = RiftApplication(", source)
+        self.assertNotIn("repository=LegacyRiftRepository", source)
+
     def test_illusion_choice_uses_transactional_service(self) -> None:
         illusion_root = SOURCE_ROOT / "xiuxian" / "xiuxian_Illusion"
         source = (illusion_root / "__init__.py").read_text(encoding="utf-8")
