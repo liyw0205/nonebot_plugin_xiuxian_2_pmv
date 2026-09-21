@@ -2686,6 +2686,16 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("SET status='completed'", reward)
         self.assertIn("gather_cd_until=EXCLUDED.gather_cd_until", reward)
 
+    def test_map_interactive_finish_reuses_feature_settlement_application(self) -> None:
+        source = (SOURCE_ROOT / "features/map/application.py").read_text(encoding="utf-8")
+
+        start = source.index("    def interactive_finish(")
+        end = source.index("    def combat_pending(", start)
+        finish = source[start:end]
+
+        self.assertIn("return self.interactive_settlement(", finish)
+        self.assertNotIn('return self._action("interactive_finish"', finish)
+
     def test_map_node_combat_uses_persistent_start_task(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_map"
         source = (root / "__init__.py").read_text(encoding="utf-8")

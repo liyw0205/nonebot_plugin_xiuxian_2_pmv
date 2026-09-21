@@ -2827,3 +2827,9 @@
 2026-09-21 package-reward isolated recovery evidence：使用一次性临时数据目录执行 `scripts/recovery_smoke.py`，完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`package_reward.001` 在迁移清单中，`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。临时数据、receipt 和日志已清理。该证据不替代真实正式发布周期；饰品礼包 namespace 迁移仍是独立边界。
 
 2026-09-21 package-reward full regression：在完成切片和恢复验证后执行 `python -m unittest discover -s tests -q`，共 `2109` tests，全部通过；全量回归完成后才进入缓存清理阶段。
+
+2026-09-21 map interactive finish cutover：`MapApplication.interactive_finish` 不再通过 `LegacyMapRepository -> MapInteractiveActionService.save_settlement` 执行，统一委托已完成的 feature-owned `interactive_settlement` / `MapInteractiveSettlementSqlRepository`；NoneBot start/failure/settlement/resource 主路径保持不变，Web `interactive_finish` 复用同一 player-db settlement snapshot 和 operation ledger。新增真实 application replay/写入测试；map interactive/resource/lifecycle 回归 `53 passed`，source/progress `202 passed`，application `2 passed`，compileall、architecture、inventory、diff check 通过。
+
+2026-09-21 map interactive finish isolated recovery evidence：使用一次性临时数据目录执行 `scripts/recovery_smoke.py`，完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；map migrations `map.001`-`map.016` 路由保持既有 game/player ownership，`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。临时数据、receipt 和日志已清理；未执行真实玩家交互或奖励写入。
+
+2026-09-21 map interactive finish full regression：全量 `python -m unittest discover -s tests -q` 共 `2110` tests，全部通过；全量回归完成后才进入缓存清理阶段。
