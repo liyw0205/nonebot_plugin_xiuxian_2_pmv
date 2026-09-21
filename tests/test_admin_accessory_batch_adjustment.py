@@ -231,7 +231,8 @@ class AdminAccessoryBatchAdjustmentTests(unittest.TestCase):
             / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
         ).read_text(encoding="utf-8")
         self.assertIn("admin_application.grant_accessory_batch(", source)
-        self.assertIn("_admin_accessory_batch_adjustment_service().destroy(", source)
+        self.assertIn("admin_application.destroy_accessory_batch(", source)
+        self.assertIn("admin_application.destroy_accessory_batch(", source)
         self.assertGreaterEqual(
             source.count("_admin_accessory_batch_adjustment_service().find_running("), 2
         )

@@ -41,6 +41,16 @@ class AdminApplication(MigratedFeatureApplication):
             operation_id, operator_id, user_ids, item_id, item_name, quality,
             quantity, max_accessories, create_accessory, chunk_size=chunk_size,
         )
+    def destroy_accessory_batch(self, operation_id: str, operator_id: str, user_ids,
+                                item_id: int, item_name: str, quantity: int,
+                                *, chunk_size: int = 100):
+        from ...xiuxian.xiuxian_admin.transaction_service import AdminAccessoryBatchAdjustmentService
+        return AdminAccessoryBatchAdjustmentService(
+            self.database, get_paths().player_db
+        ).destroy(
+            operation_id, operator_id, user_ids, item_id, item_name, quantity,
+            chunk_size=chunk_size,
+        )
 
 
 __all__ = ["AdminApplication"]

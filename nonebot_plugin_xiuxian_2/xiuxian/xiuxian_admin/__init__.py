@@ -1257,7 +1257,7 @@ async def hmll_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
 
             def _work():
                 return run_chunked_until_done(
-                    lambda: _admin_accessory_batch_adjustment_service().destroy(
+                    lambda: admin_application.destroy_accessory_batch(
                         operation_id,
                         operator_id,
                         users,
