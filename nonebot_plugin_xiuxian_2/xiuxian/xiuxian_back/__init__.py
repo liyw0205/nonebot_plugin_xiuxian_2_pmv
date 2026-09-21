@@ -1036,15 +1036,11 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 await use.finish()
                 return
 
-            result = _accessory_package_service().apply(
-                _package_reward_operation_id(event, user_id, goods_id),
-                user_id,
-                goods_id,
-                num,
-                fixed_rewards,
-                accessory_instances,
-                max_goods_num=XiuConfig().max_goods_num,
-                accessory_limit=ACCESSORY_BAG_LIMIT,
+            result = back_application.accessory_package(
+                operation_id=_package_reward_operation_id(event, user_id, goods_id),
+                user_id=str(user_id), item_id=goods_id, quantity=num,
+                rewards=fixed_rewards, accessories=accessory_instances,
+                max_goods_num=XiuConfig().max_goods_num, accessory_limit=ACCESSORY_BAG_LIMIT,
             )
             if result.status == "duplicate":
                 reward_msgs = []
