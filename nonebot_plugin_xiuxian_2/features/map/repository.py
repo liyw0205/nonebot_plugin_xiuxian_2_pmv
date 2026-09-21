@@ -384,6 +384,54 @@ class MapExploreStatusSqlQueryRepository:
         return text
 
 
+class MapExploreStatusSqlWriteRepository:
+    def __init__(self, player_database: str | Path) -> None:
+        self.player_database = str(player_database)
+
+    def save(self, user_id: str, state: dict[str, Any]) -> dict[str, Any]:
+        user_id = str(user_id).strip()
+        fields = ("running", "node_type", "node_name", "start_time", "duration_min", "settlement", "max_duration_min", "interval_min")
+        values = {
+            "running": int(state.get("running", 0) or 0),
+            "node_type": str(state.get("node_type") or ""),
+            "node_name": str(state.get("node_name") or ""),
+            "start_time": str(state.get("start_time") or ""),
+            "duration_min": int(state.get("duration_min", 0) or 0),
+            "settlement": str(state.get("settlement") or ""),
+            "max_duration_min": int(state.get("max_duration_min", 0) or 0),
+            "interval_min": int(state.get("interval_min", 0) or 0),
+        }
+        if not user_id or values["running"] not in (0, 1) or min(values[key] for key in ("duration_min", "max_duration_min", "interval_min")) < 0:
+            raise ValueError("valid exploration status is required")
+        with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+            columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(map_explore_status)")}
+            if not columns:
+                raise RuntimeError("map_explore_status schema is missing")
+            definitions = {
+                "running": "INTEGER DEFAULT 0", "node_type": "TEXT DEFAULT ''", "node_name": "TEXT DEFAULT ''",
+                "start_time": "TEXT DEFAULT ''", "duration_min": "INTEGER DEFAULT 0", "settlement": "TEXT DEFAULT ''",
+                "max_duration_min": "INTEGER DEFAULT 0", "interval_min": "INTEGER DEFAULT 0",
+            }
+            for field, definition in definitions.items():
+                if field not in columns:
+                    uow.execute(f'ALTER TABLE map_explore_status ADD COLUMN "{field}" {definition}')
+            if "reward_plan" in columns:
+                uow.execute(
+                    "INSERT INTO map_explore_status(user_id,running,node_type,node_name,start_time,duration_min,settlement,max_duration_min,interval_min,reward_plan) "
+                    "VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET running=excluded.running,node_type=excluded.node_type,node_name=excluded.node_name,"
+                    "start_time=excluded.start_time,duration_min=excluded.duration_min,settlement=excluded.settlement,max_duration_min=excluded.max_duration_min,interval_min=excluded.interval_min,reward_plan=''",
+                    (user_id, *(values[field] for field in fields), ""),
+                )
+            else:
+                uow.execute(
+                    "INSERT INTO map_explore_status(user_id,running,node_type,node_name,start_time,duration_min,settlement,max_duration_min,interval_min) "
+                    "VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET running=excluded.running,node_type=excluded.node_type,node_name=excluded.node_name,"
+                    "start_time=excluded.start_time,duration_min=excluded.duration_min,settlement=excluded.settlement,max_duration_min=excluded.max_duration_min,interval_min=excluded.interval_min",
+                    (user_id, *(values[field] for field in fields)),
+                )
+        return values
+
+
 class MapMissionSqlQueryRepository:
     def __init__(self, player_database: str | Path) -> None:
         self.player_database = str(player_database)
@@ -968,4 +1016,4 @@ class LegacyMapRepository:
         return getattr(cls(*databases), method)(operation_id, user_id, **kwargs)
 
 
-__all__ = ["LegacyMapRepository", "MapCombatLifecyclePlanSqlRepository", "MapCombatLifecycleQueryRepository", "MapCombatLifecycleStartSqlRepository", "MapDongfuBuildSqlRepository", "MapDongfuSqlQueryRepository", "MapExploreSettlementSqlRepository", "MapExploreStartSqlRepository", "MapExploreStatusSqlQueryRepository", "MapMissionClaimSqlRepository", "MapMissionSqlQueryRepository", "MapMissionSqlWriteRepository", "MapNearbyPlayersSqlQueryRepository", "MapProjectionSqlRepository", "MapProjectionSqlWriteRepository", "MapStatusSqlQueryRepository", "MapStatusSqlWriteRepository", "MapSeedPurchaseSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]
+__all__ = ["LegacyMapRepository", "MapCombatLifecyclePlanSqlRepository", "MapCombatLifecycleQueryRepository", "MapCombatLifecycleStartSqlRepository", "MapDongfuBuildSqlRepository", "MapDongfuSqlQueryRepository", "MapExploreSettlementSqlRepository", "MapExploreStartSqlRepository", "MapExploreStatusSqlQueryRepository", "MapExploreStatusSqlWriteRepository", "MapMissionClaimSqlRepository", "MapMissionSqlQueryRepository", "MapMissionSqlWriteRepository", "MapNearbyPlayersSqlQueryRepository", "MapProjectionSqlRepository", "MapProjectionSqlWriteRepository", "MapStatusSqlQueryRepository", "MapStatusSqlWriteRepository", "MapSeedPurchaseSqlRepository", "MapHomeReturnSqlRepository", "MapInteractiveFailureSqlRepository", "MapInteractiveSettlementSqlRepository", "MapInteractiveSqlQueryRepository", "MapInteractiveStartSqlRepository", "MapMovementSqlRepository", "MapResourceRewardSqlRepository", "MapRepository"]

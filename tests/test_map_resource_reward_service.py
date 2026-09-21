@@ -26,7 +26,7 @@ class MapResourceRewardServiceTests(unittest.TestCase):
         self.assertIn("def _player_data_manager(", source)
         self.assertNotIn("player_data_manager = PlayerDataManager()", source)
         self.assertIn("_player_data_manager().get_fields(", source)
-        self.assertIn("_player_data_manager().update_or_write_data(", source)
+        self.assertIn("map_application.save_explore_status(", source)
 
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()

@@ -2771,6 +2771,10 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("map_application.explore_status(", helper)
         self.assertNotIn("_player_data_manager().get_fields", helper)
 
+        write_start = source.index("def _save_explore_status")
+        write_end = source.index("# =========================================\n# 探索事件流", write_start)
+        self.assertIn("map_application.save_explore_status(", source[write_start:write_end])
+
     def test_map_mission_reads_through_feature_application(self) -> None:
         source = (SOURCE_ROOT / "xiuxian/xiuxian_map/__init__.py").read_text(encoding="utf-8")
         start = source.index("def _get_map_mission")

@@ -2062,8 +2062,7 @@ def _get_explore_status(uid: str):
             "max_duration_min": 0,
             "interval_min": 0,
         }
-        for k, v in d.items():
-            _player_data_manager().update_or_write_data(str(uid), EXPLORE_TABLE, k, v)
+        return map_application.save_explore_status(str(uid), d)
     else:
         from .explore_schema import _blank_snapshot
 
@@ -2076,26 +2075,17 @@ def _get_explore_status(uid: str):
             if legacy.startswith("{") and legacy.endswith("}"):
                 snapshot = legacy
         d["settlement"] = snapshot
-        # 清掉脏 reward_plan，避免下次再次污染
-        if _blank_snapshot(d.get("reward_plan")) != str(d.get("reward_plan") or "").strip() or str(
-            d.get("reward_plan") or ""
-        ).strip().lower() in {"none", "null"}:
-            try:
-                _player_data_manager().update_or_write_data(str(uid), EXPLORE_TABLE, "reward_plan", "")
-            except Exception:
-                pass
-    return d
+        d.pop("reward_plan", None)
+        return map_application.save_explore_status(str(uid), d)
 
 
 def _save_explore_status(uid: str, d: dict):
     from .explore_schema import _blank_snapshot
 
-    for k, v in d.items():
-        if k == "reward_plan":
-            continue
-        if k == "settlement":
-            v = _blank_snapshot(v)
-        _player_data_manager().update_or_write_data(str(uid), EXPLORE_TABLE, k, v)
+    state = {key: value for key, value in d.items() if key != "reward_plan"}
+    if "settlement" in state:
+        state["settlement"] = _blank_snapshot(state["settlement"])
+    return map_application.save_explore_status(str(uid), state)
 
 
 # =========================================
