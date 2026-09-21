@@ -1931,6 +1931,12 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("_bank_upgrade_service().get_result", source)
         self.assertIn("_bank_interest_service().get_result", source)
 
+    def test_bank_default_application_does_not_construct_legacy_repository(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
+        self.assertNotIn("LegacyBankRepository", source)
+        self.assertIn("bank_application = BankApplication(", source)
+        self.assertNotIn("repository=LegacyBankRepository", source)
+
     def test_world_boss_rewards_use_cross_database_transaction(self) -> None:
         boss_root = SOURCE_ROOT / "xiuxian" / "xiuxian_boss"
         source = (boss_root / "__init__.py").read_text(encoding="utf-8")

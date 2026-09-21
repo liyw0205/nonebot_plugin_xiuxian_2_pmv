@@ -2911,3 +2911,9 @@
 2026-09-22 map status missing-read isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
 
 2026-09-22 map status missing-read full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2118` tests，全部通过，退出码 `0`；此前一次失败仅为历史 source contract 仍要求已删除的 `PlayerDataManager.get_fields` fallback，契约已更新并重新取得完整通过结果；测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
+
+2026-09-22 bank default repository wiring cutover：`xiuxian_bank` 的 `BankApplication` 不再显式构造 `LegacyBankRepository`，默认 facade 不再创建旧 bank transaction services；已迁移账户的四个 `BankAccount*Application` handler 路径保持不变，`_bank_*_service` 仅作为显式 replay compatibility。bank application/account `10 passed`，source/bank focused `35 passed`，source/compile/architecture/inventory/diff check 通过。
+
+2026-09-22 bank default repository isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
+
+2026-09-22 bank default repository full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2119` tests，全部通过，退出码 `0`；bank wiring source/application tests已纳入根 discovery，测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。

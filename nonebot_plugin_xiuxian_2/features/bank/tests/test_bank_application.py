@@ -3,6 +3,8 @@ from __future__ import annotations
 import tempfile
 import unittest
 
+from ....infrastructure.database import DatabaseUnitOfWork
+from ....plugin import apply_platform_schema
 from ..application import BankApplication
 
 
@@ -14,6 +16,8 @@ class _Repository:
 class BankApplicationTest(unittest.TestCase):
     def test_replays_same_operation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
+            with DatabaseUnitOfWork(f"{directory}/game.db") as uow:
+                apply_platform_schema(uow)
             app = BankApplication(f"{directory}/game.db", f"{directory}/player.db", repository=_Repository())
             request = {
                 "operation_id": "op-1",

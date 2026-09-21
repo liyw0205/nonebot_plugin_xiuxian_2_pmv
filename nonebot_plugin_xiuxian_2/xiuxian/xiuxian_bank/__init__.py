@@ -32,7 +32,7 @@ from .transaction_service import (
     BankInterestService,
 )
 from ...features.bank.application import BankApplication
-from ...features.bank.repository import LegacyBankRepository
+
 
 config = get_config()
 BANKLEVEL = config["BANKLEVEL"]
@@ -44,7 +44,6 @@ _bank_interest_service_instance = None
 bank_application = BankApplication(
     get_paths().game_db,
     get_paths().player_db,
-    repository=LegacyBankRepository(get_paths().game_db, get_paths().player_db),
 )
 runtime_clock = SystemClock()
 runtime_ids = UUIDGenerator()
