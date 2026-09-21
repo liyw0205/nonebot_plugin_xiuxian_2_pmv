@@ -35,7 +35,7 @@ def test_admin_impart_stone_helpers_use_lazy_dual_database_services():
     assert "get_paths().game_db" in source
     assert "get_paths().impart_db" in source
     assert "admin_asset_application.adjust_impart_stone(" in source
-    assert "_admin_impart_stone_batch_adjustment_service().adjust(" in source
+    assert "admin_application.adjust_impart_stone_batch(" in source
     assert "admin_impart_stone_adjustment_service.adjust(" not in source
     assert "admin_impart_stone_batch_adjustment_service.adjust(" not in source
 
@@ -183,7 +183,8 @@ class AdminImpartStoneAdjustmentTests(unittest.TestCase):
         handler = source[start:source.index("@adjust_exp_command.handle", start)]
         self.assertIn("admin_asset_application.adjust_impart_stone(", handler)
         self.assertNotIn("xiuxian_impart.update_stone_num(", handler)
-        self.assertIn("_admin_impart_stone_batch_adjustment_service().adjust(", handler)
+        self.assertIn("admin_application.adjust_impart_stone_batch(", handler)
+        self.assertIn("admin_application.adjust_impart_stone_batch(", handler)
 
 
 if __name__ == "__main__":

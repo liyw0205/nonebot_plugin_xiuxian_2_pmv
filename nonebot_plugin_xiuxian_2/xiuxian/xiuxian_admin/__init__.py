@@ -651,7 +651,7 @@ async def ccll_command_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
         def _work():
             return run_chunked_until_done(
-                lambda: _admin_impart_stone_batch_adjustment_service().adjust(
+                lambda: admin_application.adjust_impart_stone_batch(
                     operation_id, operator_id, users, amount
                 )
             )
