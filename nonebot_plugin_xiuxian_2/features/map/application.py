@@ -10,7 +10,7 @@ from .repository import LegacyMapRepository, MapCombatLifecyclePlanSqlRepository
 
 class MapApplication(LegacyApplication):
     def __init__(self, game_database: str | Path, player_database: str | Path, *, repository: MapRepository | None = None) -> None:
-        super().__init__(game_database, repository=repository or LegacyMapRepository(game_database, player_database), feature="map")
+        super().__init__(game_database, repository=repository, feature="map")
         self._explicit_repository = repository
         self.game_database = str(game_database)
         self.player_database = str(player_database)

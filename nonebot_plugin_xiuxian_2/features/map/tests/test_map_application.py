@@ -31,6 +31,31 @@ class MapApplicationTest(unittest.TestCase):
             app = MapApplication(game, player, repository=Repo())
             self.assertTrue(app.move(operation_id="map-1", user_id="u").ok)
 
+    def test_default_application_does_not_construct_legacy_repository(self):
+        with tempfile.TemporaryDirectory() as directory:
+            game = Path(directory) / "game.db"
+            player = Path(directory) / "player.db"
+            with DatabaseUnitOfWork(game) as uow:
+                apply_platform_schema(uow)
+                uow.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY, user_stamina INTEGER)")
+                uow.execute("INSERT INTO user_xiuxian VALUES('u', 20)")
+                uow.execute("CREATE TABLE map_movement_operations(operation_id TEXT PRIMARY KEY, payload TEXT, stamina INTEGER)")
+            with DatabaseUnitOfWork(player) as uow:
+                uow.execute("CREATE TABLE map_status(user_id TEXT PRIMARY KEY, realm TEXT, heaven TEXT, node_id TEXT, visited_nodes TEXT)")
+                uow.execute("INSERT INTO map_status VALUES('u', '凡界', '一重天', 'n1', '[\"n1\"]')")
+
+            application = MapApplication(game, player)
+            result = application.move(
+                operation_id="move-default",
+                user_id="u",
+                expected_position={"realm": "凡界", "heaven": "一重天", "node_id": "n1"},
+                target_position={"realm": "凡界", "heaven": "一重天", "node_id": "n2"},
+                expected_stamina=20,
+                cost=5,
+            )
+
+            self.assertTrue(result.ok)
+
     def test_interactive_finish_uses_feature_settlement_repository(self):
         with tempfile.TemporaryDirectory() as directory:
             game = Path(directory) / "game.db"

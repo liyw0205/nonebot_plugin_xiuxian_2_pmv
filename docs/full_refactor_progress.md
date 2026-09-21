@@ -2837,3 +2837,9 @@
 2026-09-21 map combat settlement cutover：`MapApplication.combat_settle` 默认路径改为持有并调用 `CombatSettlementApplication.settle`，不再经 `LegacyMapRepository -> MapCombatSettlementService`；显式注入旧 `MapRepository` 的 compatibility 分支保留。节点战斗 NoneBot 主路径原已使用 `combat_settlement_application`，本切片补齐 map Web action 的同一 application ownership。新增 MapApplication delegation 回归；combat settlement application/legacy lifecycle 回归 `13 passed`，source contract `2 passed`，application 组合 `6 passed`，compileall、architecture、inventory、diff check 通过。
 
 2026-09-22 map combat settlement full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，避免 legacy startup 的外网资源下载和真实 Web listener 端口副作用；生产默认配置未修改。完整 `python -m unittest discover -s tests -q` 共 `2111` tests，全部通过；退出码 `0`。此前未隔离环境的回归分别因资源下载和 Web 监听器阻塞，均未计入通过证据。
+
+2026-09-22 map default repository wiring cutover：`MapApplication` 默认构造不再实例化 `LegacyMapRepository`；已迁移的 move/interactive/combat/explore/mission/resource/seed/dongfu/home actions 继续按默认 feature SQL application/repository 路径执行，显式注入 `MapRepository` 的 compatibility 分支保留。新增默认 move 真实 SQLite application 测试，验证 operation ledger 与 movement repository 可用；MapApplication `4 passed`，map focused `49 passed`，source/platform/progress `25 passed`，compileall、architecture、inventory、diff check 通过。
+
+2026-09-22 map default repository wiring isolated recovery evidence：一次性临时数据目录执行 recovery smoke，完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。临时数据、receipt 和日志在本轮结束清理。
+
+2026-09-22 map default repository wiring full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2111` tests，全部通过，退出码 `0`；独立 feature application tests `4 passed` 已另行验证。测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。

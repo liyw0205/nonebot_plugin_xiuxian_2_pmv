@@ -2700,6 +2700,7 @@ class SourceQualityTests(unittest.TestCase):
         source = (SOURCE_ROOT / "features/map/application.py").read_text(encoding="utf-8")
 
         self.assertIn("from ..combat_settlement.application import CombatSettlementApplication", source)
+        self.assertNotIn("repository or LegacyMapRepository(", source)
         init_start = source.index("    def __init__(")
         init_end = source.index("    def _action(", init_start)
         initialization = source[init_start:init_end]
