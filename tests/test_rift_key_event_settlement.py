@@ -12,6 +12,10 @@ from tests.test_db_backend import db_backend
 
 
 class RiftKeyEventSettlementTests(unittest.TestCase):
+    def test_key_event_handler_uses_feature_application(self):
+        source = Path("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_rift/__init__.py").read_text(encoding="utf-8")
+        handler = source[source.index("async def use_rift_key"):source.index("async def use_rift_boss")]
+        self.assertIn("rift_application.event_settle(", handler)
     def test_rift_facade_defers_key_event_service_construction(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_rift
 

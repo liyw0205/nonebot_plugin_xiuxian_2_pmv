@@ -979,13 +979,12 @@ async def use_rift_key(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             int(outcome.get("statistics", {}).get("秘境次数", 0)) + 1
         )
         outcome["message"] = f"{outcome['message']}{progress_msg}"
-        result = _rift_key_event_settlement_service().settle(
-            operation_id, user_id, item_id, rift_info,
-            {
-                key: int(user_info.get(key, 0))
-                for key in ("stone", "exp", "hp", "mp")
-            },
-            explore_count, outcome, XiuConfig().max_goods_num,
+        result = rift_application.event_settle(
+            operation_id=operation_id, user_id=str(user_id), item_id=item_id,
+            rift_info=rift_info,
+            user_state={key: int(user_info.get(key, 0)) for key in ("stone", "exp", "hp", "mp")},
+            explore_count=explore_count, outcome=outcome,
+            max_goods_num=XiuConfig().max_goods_num,
         )
     except Exception as exc:
         logger.opt(exception=exc).error("秘境钥匙结算事务执行失败")

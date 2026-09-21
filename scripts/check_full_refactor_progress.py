@@ -175,8 +175,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "entry_application_owned": "rift_application.enter(" in rift_facade,
             "speedup_application_owned": "action=\"speedup\"" in rift_facade and "rift_application.execute_legacy_call(" in rift_facade,
             "settlement_application_owned": "rift_application.settle(" in rift_facade,
+            "key_event_application_owned": "rift_application.event_settle(" in rift_facade,
             "legacy_entry_disabled": "_rift_entry_service().enter(" not in rift_facade,
-            "status": "entry_speedup_settlement_cutover_with_other_rift_compatibility",
+            "status": "entry_key_event_speedup_settlement_cutover_with_other_rift_compatibility",
         },
         "back": {
             "repair_application_owned": "back_application.repair(" in back_facade,
