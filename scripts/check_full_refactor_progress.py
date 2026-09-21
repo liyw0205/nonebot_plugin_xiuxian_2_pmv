@@ -241,7 +241,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "love_sand_application_owned": "impart_application.execute_legacy_call(" in impart_facade,
             "card_compose_application_owned": "async def impart_compose_" in impart_facade and "impart_application.execute_legacy_call(" in impart_facade,
             "card_disassemble_application_owned": "async def impart_disassemble_" in impart_facade and "impart_application.execute_legacy_call(" in impart_facade,
-            "status": "love_sand_compose_disassemble_cutover_with_other_impart_compatibility",
+            "prayer_application_owned": "action=\"prayer_settle\"" in impart_facade and "impart_application.execute_legacy_call(" in impart_facade,
+            "status": "love_sand_compose_disassemble_prayer_cutover_with_other_impart_compatibility",
         },
         "mixelixir": {
             "harvest_level_application_owned": "mixelixir_application.harvest_level_upgrade(" in mixelixir_facade,
