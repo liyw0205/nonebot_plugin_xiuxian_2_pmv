@@ -1,4 +1,5 @@
 import random
+from types import SimpleNamespace
 import asyncio
 from datetime import datetime
 from pathlib import Path
@@ -357,13 +358,7 @@ async def natal_upgrade_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
         return
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"natal-train:{event_id}:{user_id}" if event_id else f"natal-train:{user_id}:{runtime_ids.new_id()}"
-    # 先回放：成功后等级/经验满会挡住同事件幂等。
-    prior = _natal_training_service().get_result(operation_id)
-    if prior is not None and prior.succeeded:
-        final_msg = f"**本命法宝养成**\n---\n消耗灵石\n> {number_to(prior.stone_cost)}\n法宝经验\n> +{prior.exp_added}（当前 {prior.exp}/{prior.max_exp}）\n该养成请求已经处理，无需重复提交。"
-        await handle_send(bot, event, final_msg,
-                          md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="升阶", v3="本命法宝升阶")
-        return
+
     nt = NatalTreasure(user_id)
 
     if not nt.exists():
@@ -407,13 +402,15 @@ async def natal_upgrade_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
         await handle_send(bot, event, f"你本次最多只能再增加{remaining_exp_needed}点经验达到当前等级上限，已为你调整为{exp_to_add}点。",
                           md_type="法宝", k1="养成", v1="养成本命法宝", k2="升阶", v2="本命法宝升阶", k3="法宝", v3="我的本命法宝")
 
-    training = _natal_training_service().train(
-        operation_id, user_id, exp_to_add,
+    training_outcome = natal_treasure_application.train(
+        operation_id=operation_id, user_id=user_id, requested_exp=exp_to_add,
         base_cost=1_000_000, growth_rate=0.5,
         max_level=nt.max_treasure_level,
         max_exp_base=MAX_EXP_BASE,
         max_exp_growth=MAX_EXP_GROWTH_PER_LEVEL,
     )
+    training_data = training_outcome.data or {}
+    training = SimpleNamespace(**training_data, status=training_outcome.status, succeeded=training_outcome.ok)
     if training.status == "stone_insufficient":
         msg = f"本次养成{training.exp_added}点经验需要{number_to(training.stone_cost)}灵石，你灵石不足！"
         await handle_send(bot, event, msg,
