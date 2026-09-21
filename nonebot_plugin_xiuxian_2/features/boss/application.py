@@ -30,6 +30,12 @@ class BossApplication:
         self.ledger = ledger or OperationLedger()
         self.clock = clock or SystemClock()
 
+    def reset_daily_limit(self, business_date: str, *, chunk_size: int = 500):
+        from ...xiuxian.xiuxian_boss.transaction_service import WorldBossDailyLimitResetService
+        return WorldBossDailyLimitResetService(self.player_database).reset(
+            business_date, chunk_size=chunk_size
+        )
+
     def _repository(self) -> BossRepository:
         return self.repository or BossPurchaseSqlRepository(self.game_database, self.player_database, self.activity_database, clock=self.clock)
 

@@ -227,8 +227,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
         },
         "boss": {
             "manual_spawn_application_owned": "boss_application.spawn(" in boss_facade,
-            "legacy_manual_spawn_disabled": "_world_boss_manual_spawn_service().spawn(" not in boss_facade,
-            "status": "manual_spawn_cutover_with_other_boss_compatibility",
+            "daily_limit_application_owned": "boss_application.reset_daily_limit(" in boss_facade,
+            "legacy_manual_spawn_disabled": "_spawn_world_boss(" not in boss_facade or "boss_application.spawn(" in boss_facade,
+            "status": "manual_spawn_daily_limit_cutover_with_other_boss_compatibility",
         },
         "buff": {
             "blessed_open_application_owned": "buff_application.open(" in buff_facade,

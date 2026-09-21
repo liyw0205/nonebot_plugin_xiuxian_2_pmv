@@ -172,7 +172,7 @@ def test_scheduler_and_admin_entries_share_resumable_daily_service():
             "@boss_help.handle"
         )
     ]
-    assert "_world_boss_daily_limit_reset_service().reset(" in reset_entry
+    assert "boss_application.reset_daily_limit(" in reset_entry
     assert "await asyncio.sleep(0)" in reset_entry
     assert "boss_limit.reset_limits(" not in reset_entry
 

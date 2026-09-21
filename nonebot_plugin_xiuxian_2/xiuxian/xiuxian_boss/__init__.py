@@ -369,9 +369,8 @@ async def save_boss_():
 async def set_boss_limits_reset(business_date=None, *, chunk_size=500):
     business_date = business_date or runtime_clock.now().date().isoformat()
     while True:
-        result = _world_boss_daily_limit_reset_service().reset(
-            business_date,
-            chunk_size=chunk_size,
+        result = boss_application.reset_daily_limit(
+            business_date, chunk_size=chunk_size
         )
         if result.task_status != "running":
             logger.opt(colors=True).info(
