@@ -1516,14 +1516,10 @@ async def restate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await handle_send(bot, event, "目标玩家已不存在")
             await restate.finish()
         try:
-            result = _admin_player_status_reset_service().reset(
+            result = admin_application.reset_player_status(
                 _admin_operation_id(event, "player-status-reset", str(give_qq)),
-                str(get_user_id(event) or "unknown"),
-                give_qq,
-                expected_state,
-                XiuConfig().max_stamina,
-                target_name=nick_name or str(give_qq),
-                force=True,
+                str(get_user_id(event) or "unknown"), give_qq, expected_state,
+                XiuConfig().max_stamina, target_name=nick_name or str(give_qq), force=True,
             )
         except Exception as e:
             logger.opt(exception=e).error(f"重置状态失败 user={give_qq}")

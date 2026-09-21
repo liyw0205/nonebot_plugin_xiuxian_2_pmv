@@ -132,7 +132,7 @@ class AdminPlayerStatusResetTests(unittest.TestCase):
         start = source.index("async def restate_")
         handler = source[start:source.index("@set_xiuxian.handle", start)]
         single = handler[handler.index("if give_qq:"):]
-        self.assertIn("_admin_player_status_reset_service().reset(", single)
+        self.assertIn("admin_application.reset_player_status(", single)
         self.assertNotIn("sql_message.restate(give_qq)", single)
         self.assertNotIn("sql_message.update_user_stamina(give_qq", single)
 
