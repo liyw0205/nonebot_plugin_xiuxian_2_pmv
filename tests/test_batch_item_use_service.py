@@ -18,6 +18,11 @@ class BatchItemUseServiceTests(unittest.TestCase):
 
         self.assertIsNone(xiuxian_back._batch_item_use_service_instance)
 
+    def test_pet_egg_entry_uses_feature_application(self):
+        source = Path("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_back/__init__.py").read_text(encoding="utf-8")
+        handler = source[source.index("async def use_pet_egg_item"):source.index("async def use_pet_eggs") if "async def use_pet_eggs" in source else len(source)]
+        self.assertIn("back_application.use_pet_eggs(", handler)
+
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         root = Path(self.temp_dir.name)

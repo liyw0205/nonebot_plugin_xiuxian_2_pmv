@@ -179,8 +179,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "repair_application_owned": "back_application.repair(" in back_facade,
             "equipment_unequip_application_owned": "back_application.change_equipment(" in back_facade,
             "equipment_equip_application_owned": back_facade.count("back_application.change_equipment(") >= 2,
+            "pet_egg_application_owned": "back_application.use_pet_eggs(" in back_facade,
             "legacy_repair_disabled": "_backpack_repair_service().run(" not in back_facade,
-            "status": "backpack_repair_equipment_equip_unequip_cutover_with_other_back_compatibility",
+            "status": "backpack_repair_equipment_equip_unequip_pet_egg_cutover_with_other_back_compatibility",
         },
         "past_life": {
             "reset_one_application_owned": "past_life_application.reset_one(" in past_life_facade,
