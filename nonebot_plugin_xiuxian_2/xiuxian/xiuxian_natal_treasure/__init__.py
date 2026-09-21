@@ -479,10 +479,11 @@ async def natal_effect_upgrade_handler(bot: Bot, event: GroupMessageEvent | Priv
                           md_type="法宝", k1="升阶", v1="本命法宝升阶", k2="法宝", v2="我的本命法宝", k3="觉醒", v3="觉醒本命法宝")
         return
 
-    upgrade = _natal_effect_upgrade_service().upgrade(
-        operation_id, user_id, MYSTERIOUS_SCRIPTURE_ID, scripture_cost,
-        MAX_EFFECT_SLOTS, nt.max_effect_level_all_effects,
-        _natal_choice_seed(operation_id),
+    upgrade = natal_application.upgrade(
+        operation_id=operation_id, user_id=str(user_id), item_id=MYSTERIOUS_SCRIPTURE_ID,
+        scripture_cost=scripture_cost, max_effect_slots=MAX_EFFECT_SLOTS,
+        max_effect_level=nt.max_effect_level_all_effects,
+        choice_seed=_natal_choice_seed(operation_id),
     )
     if upgrade.status == "duplicate" or upgrade.succeeded:
         nt._natal_data_cache = None
