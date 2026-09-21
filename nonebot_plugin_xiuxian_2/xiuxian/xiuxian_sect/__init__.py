@@ -428,7 +428,7 @@ async def resetusertask():
         int(level): room_config["level_up_cost"]["建设度"]
         for level, room_config in config["宗门丹房参数"]["elixir_room_level"].items()
     }
-    result = _sect_daily_reset_maintenance_service().settle(
+    result = sect_application.reset_daily_maintenance(
         runtime_clock.now().date().isoformat(), maintenance_costs
     )
     if result.status == "operation_conflict":

@@ -50,6 +50,10 @@ class SectApplication:
         payload = {"user_id": str(user_id), "sect_id": int(sect_id), "stone": int(stone), "materials": int(materials)}
         return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.donate", payload=payload, call=lambda: self._repository().donate(operation_id, user_id, sect_id, stone, materials))
 
+    def reset_daily_maintenance(self, business_date: str, maintenance_costs: Mapping[int, int]):
+        from ...xiuxian.xiuxian_sect.transaction_service import SectDailyResetMaintenanceService
+        return SectDailyResetMaintenanceService(self.database).settle(business_date, maintenance_costs)
+
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):
             try:

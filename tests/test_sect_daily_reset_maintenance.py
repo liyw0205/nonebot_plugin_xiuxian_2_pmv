@@ -137,7 +137,7 @@ class SectDailyResetMaintenanceTests(unittest.TestCase):
         handler = source[source.index("async def resetusertask") : source.index(
             "async def auto_handle_inactive_sect_owners"
         )]
-        self.assertIn("_sect_daily_reset_maintenance_service().settle", handler)
+        self.assertIn("sect_application.reset_daily_maintenance(", handler)
         self.assertIn("_sect_daily_reset_maintenance_service_instance = None", source)
         self.assertIn("def _sect_daily_reset_maintenance_service(", source)
         self.assertNotIn("sect_task_reset()", handler)

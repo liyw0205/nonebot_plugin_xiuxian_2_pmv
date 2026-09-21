@@ -155,8 +155,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "sect": {
             "membership_application_owned": all(f"sect_application.{name}(" in sect_facade for name in ("join", "leave", "kick", "change_position")),
             "economy_application_owned": all(f"sect_application.{name}(" in sect_facade for name in ("rename", "donate", "purchase")),
+            "daily_maintenance_application_owned": "sect_application.reset_daily_maintenance(" in sect_facade,
             "legacy_membership_disabled": all(token not in sect_facade for token in ("sect_membership_service.join", "sect_membership_service.leave_sect", "sect_membership_service.kick_member", "sect_membership_service.change_position")),
-            "status": "membership_economy_cutover_with_other_sect_compatibility_paths",
+            "status": "membership_economy_daily_maintenance_cutover_with_other_sect_compatibility_paths",
         },
         "natal_treasure": {
             "awaken_application_owned": "natal_treasure_application.awaken(" in natal_facade,
