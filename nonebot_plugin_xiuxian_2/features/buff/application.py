@@ -20,6 +20,7 @@ class BuffApplication(LegacyApplication):
     def training_start(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("training_start", operation_id=operation_id, user_id=user_id, **kwargs)
     def training_complete(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("training_complete", operation_id=operation_id, user_id=user_id, **kwargs)
     def stone_training(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("stone_training", operation_id=operation_id, user_id=user_id, **kwargs)
+    def closing_settle(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("closing_settle", operation_id=operation_id, user_id=user_id, **kwargs)
     def pvp_settle(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("pvp_settle", operation_id=operation_id, user_id=user_id, **kwargs)
 
 

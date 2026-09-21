@@ -24,6 +24,7 @@ class LegacyBuffRepository:
             "training_start": (NormalTrainingLifecycleService, "start", (self.game_database, self.player_database)),
             "training_complete": (NormalTrainingLifecycleService, "complete", (self.game_database,)),
             "stone_training": (StoneTrainingSettlementService, "settle", (self.game_database, self.player_database)),
+            "closing_settle": (ClosingSettlementService, "settle", (self.game_database,)),
             "pvp_settle": (NormalPvpSettlementService, "settle", (self.game_database, self.player_database)),
         }
         cls, method, databases = mapping[action]

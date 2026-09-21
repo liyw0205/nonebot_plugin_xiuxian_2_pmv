@@ -793,9 +793,10 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     new_atk = int(new_exp / 10)
     new_power = int(new_exp * level_rate * realm_rate)
     try:
-        result = _closing_settlement_service().settle(
-            closing_operation_id,
-            user_id, create_time, exp, stone_cost, new_hp, new_mp, new_atk, new_power,
+        result = buff_application.closing_settle(
+            operation_id=closing_operation_id, user_id=str(user_id),
+            create_time=create_time, exp_gain=exp, stone_cost=stone_cost,
+            new_hp=new_hp, new_mp=new_mp, new_atk=new_atk, new_power=new_power,
         )
     except Exception:
         await handle_send(bot, event, "出关结算失败：结算过程异常。")

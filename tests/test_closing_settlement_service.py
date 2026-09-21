@@ -22,7 +22,7 @@ def test_buff_closing_handler_uses_lazy_game_database_service():
     ).read_text(encoding="utf-8")
     handler = source[source.index("async def out_closing_"):]
     assert "_closing_settlement_service().get_result(" in handler
-    assert "_closing_settlement_service().settle(" in handler
+    assert "buff_application.closing_settle(" in handler
     assert "_closing_settlement_service_instance = None" in source
     assert "def _closing_settlement_service(" in source
     assert "get_paths().game_db" in source
