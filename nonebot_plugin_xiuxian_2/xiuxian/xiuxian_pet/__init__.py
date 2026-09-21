@@ -1732,15 +1732,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if not current_pet:
         await handle_send(bot, event, "未找到可启明的宠物，请检查宠物UID。")
         return
-    result = _pet_skill_reroll_service().reroll(
-        operation_id,
-        user_id,
-        _pet_transaction_snapshot(
+    result = pet_application.skill_reroll(
+        operation_id=operation_id,
+        user_id=user_id,
+        expected_pet=_pet_transaction_snapshot(
             current_pet,
             get_pet_doc(user_id).get("active", {}).get("uid") == current_pet.get("uid"),
         ),
-        str(new_skill.get("skill_id", "")),
-        QIMING_STONE_ID,
+        new_skill_id=str(new_skill.get("skill_id", "")),
+        item_id=QIMING_STONE_ID,
     )
     if not result.succeeded:
         messages = {

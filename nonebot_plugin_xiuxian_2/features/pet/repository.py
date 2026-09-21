@@ -455,6 +455,47 @@ class PetFusionBreakthroughSqlRepository:
             return PetFusionBreakthroughResult("applied", updated_stars, updated_exp)
 
 
+@dataclass(frozen=True)
+class PetSkillRerollResult:
+    status: str
+    skill_id: str = ""
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"applied", "duplicate"}
+
+
+class PetSkillRerollSqlRepository:
+    def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
+        self.game_database = str(game_database)
+        self.player_database = str(player_database)
+
+    def reroll(self, operation_id: str, user_id: str, expected_pet: Any, new_skill_id: str, item_id: int) -> PetSkillRerollResult:
+        operation_id, user_id, new_skill_id = str(operation_id).strip(), str(user_id), str(new_skill_id)
+        expected_pet, item_id = tuple(expected_pet), int(item_id)
+        if not operation_id or len(expected_pet) != 7 or not new_skill_id:
+            raise ValueError("operation, pet snapshot and new skill are required")
+        payload = json.dumps([user_id, expected_pet, new_skill_id, item_id], ensure_ascii=True, separators=(",", ":"))
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            uow.attach_database(self.player_database, "player_data")
+            uow.execute("CREATE TABLE IF NOT EXISTS pet_skill_reroll_operations(operation_id TEXT PRIMARY KEY,payload TEXT,skill_id TEXT,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            old = uow.query_one("SELECT payload,skill_id FROM pet_skill_reroll_operations WHERE operation_id=?", (operation_id,))
+            if old is not None:
+                return PetSkillRerollResult("duplicate" if str(old["payload"]) == payload else "state_changed", str(old["skill_id"]) if str(old["payload"]) == payload else "")
+            pet = uow.query_one("SELECT uid,pet_id,stars,exp,total_exp,COALESCE(skill_id,'') AS skill_id,is_active FROM player_data.player_pet_item WHERE user_id=? AND uid=?", (user_id, str(expected_pet[0])))
+            if pet is None or tuple(pet.values()) != expected_pet:
+                return PetSkillRerollResult("state_changed")
+            item = uow.query_one("SELECT goods_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
+            if item is None or int(item["goods_num"]) < 1:
+                return PetSkillRerollResult("item_missing")
+            if uow.execute("UPDATE back SET goods_num=goods_num-1 WHERE user_id=? AND goods_id=? AND goods_num>=1", (user_id, item_id)).rowcount != 1:
+                return PetSkillRerollResult("state_changed")
+            if uow.execute("UPDATE player_data.player_pet_item SET skill_id=? WHERE user_id=? AND uid=? AND COALESCE(skill_id,'')=?", (new_skill_id, user_id, str(expected_pet[0]), str(expected_pet[5]))).rowcount != 1:
+                return PetSkillRerollResult("state_changed")
+            uow.execute("INSERT INTO pet_skill_reroll_operations(operation_id,payload,skill_id) VALUES(?,?,?)", (operation_id, payload, new_skill_id))
+            return PetSkillRerollResult("applied", new_skill_id)
+
+
 class PetRepository(Protocol):
     def switch(self, *args: Any, **kwargs: Any) -> Any: ...
     def travel_claim(self, *args: Any, **kwargs: Any) -> Any: ...
@@ -495,4 +536,4 @@ class LegacyPetRepository:
         return PetActiveSwitchService(self.player_database).switch(*args, **kwargs)
 
 
-__all__ = ["PetActiveSwitchResult", "PetActiveSwitchSqlRepository", "PetFeedResult", "PetFeedSqlRepository", "PetTravelStartResult", "PetTravelStartSqlRepository", "PetTravelClaimResult", "PetTravelClaimSqlRepository", "PetHatchResult", "PetHatchSqlRepository", "PetReleaseResult", "PetReleaseSqlRepository", "PetFusionBreakthroughResult", "PetFusionBreakthroughSqlRepository", "PetRepository", "LegacyPetRepository"]
+__all__ = ["PetActiveSwitchResult", "PetActiveSwitchSqlRepository", "PetFeedResult", "PetFeedSqlRepository", "PetTravelStartResult", "PetTravelStartSqlRepository", "PetTravelClaimResult", "PetTravelClaimSqlRepository", "PetHatchResult", "PetHatchSqlRepository", "PetReleaseResult", "PetReleaseSqlRepository", "PetFusionBreakthroughResult", "PetFusionBreakthroughSqlRepository", "PetSkillRerollResult", "PetSkillRerollSqlRepository", "PetRepository", "LegacyPetRepository"]

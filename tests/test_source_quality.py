@@ -2028,6 +2028,14 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("pet_application.fusion_breakthrough(", handler)
         self.assertNotIn("_pet_fusion_breakthrough_service().breakthrough(", handler)
 
+    def test_pet_skill_reroll_command_uses_feature_application(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_pet" / "__init__.py").read_text(encoding="utf-8")
+        start = source.index("@pet_reroll_skill.handle")
+        end = source.index("@pet_replace_skill.handle", start)
+        handler = source[start:end]
+        self.assertIn("pet_application.skill_reroll(", handler)
+        self.assertNotIn("_pet_skill_reroll_service().reroll(", handler)
+
     def test_illusion_choice_uses_transactional_service(self) -> None:
         illusion_root = SOURCE_ROOT / "xiuxian" / "xiuxian_Illusion"
         source = (illusion_root / "__init__.py").read_text(encoding="utf-8")

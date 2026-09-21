@@ -9,7 +9,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import PetFeedRequest, PetTravelClaimRequest
-from .repository import LegacyPetRepository, PetActiveSwitchSqlRepository, PetFeedSqlRepository, PetFusionBreakthroughSqlRepository, PetHatchSqlRepository, PetReleaseSqlRepository, PetRepository, PetTravelClaimSqlRepository, PetTravelStartSqlRepository
+from .repository import LegacyPetRepository, PetActiveSwitchSqlRepository, PetFeedSqlRepository, PetFusionBreakthroughSqlRepository, PetHatchSqlRepository, PetReleaseSqlRepository, PetRepository, PetSkillRerollSqlRepository, PetTravelClaimSqlRepository, PetTravelStartSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -119,6 +119,11 @@ class PetApplication:
     def fusion_breakthrough(self, *, operation_id: str, user_id: str, expected_main: Sequence[Any], expected_materials: Sequence[Sequence[Any]], updated_stars: int, updated_exp: int, skill_offer: Any = None) -> Any:
         return PetFusionBreakthroughSqlRepository(self.player_database).breakthrough(
             operation_id, user_id, expected_main, expected_materials, updated_stars, updated_exp, skill_offer
+        )
+
+    def skill_reroll(self, *, operation_id: str, user_id: str, expected_pet: Sequence[Any], new_skill_id: str, item_id: int) -> Any:
+        return PetSkillRerollSqlRepository(self.game_database, self.player_database).reroll(
+            operation_id, user_id, expected_pet, new_skill_id, item_id
         )
 
     def switch(self, *, operation_id: str, user_id: str, expected_active_uid: str, target_uid: str, travel_pet_uid: str = "") -> Any:
