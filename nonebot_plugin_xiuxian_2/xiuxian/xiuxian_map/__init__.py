@@ -921,7 +921,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     map_data = _load_map_data()
     status = _get_player_map_status(user_id, map_data)
 
-    dongfu_data = _player_data_manager().get_fields(user_id, DONGFU_TABLE) or {}
+    dongfu_data = map_application.dongfu(user_id) or {}
     if int(dongfu_data.get("built", 0)) == 1:
         await handle_send(bot, event, f"你已建立洞府：{dongfu_data.get('node_name', '未知节点')}，无需重复建设。")
         return
