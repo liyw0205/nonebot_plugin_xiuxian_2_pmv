@@ -2015,7 +2015,7 @@ class SourceQualityTests(unittest.TestCase):
         start = source.index("async def attack_demon_invasion_")
         handler = source[start:source.index("async def claim_demon_reward_", start)]
         self.assertIn("_demon_attack_settlement_service().get_result(", handler)
-        self.assertIn("_demon_attack_settlement_service().settle(", handler)
+        self.assertIn("demon_attack_application.settle(", handler)
         self.assertIn("_demon_attack_settlement_service_instance = None", source)
         self.assertIn("def _demon_attack_settlement_service(", source)
         self.assertNotIn("demon_attack_settlement_service.settle(", handler)

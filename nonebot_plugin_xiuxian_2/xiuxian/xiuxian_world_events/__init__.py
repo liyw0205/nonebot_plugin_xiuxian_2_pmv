@@ -35,6 +35,7 @@ from ...infrastructure.random_source import SystemRandom
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from ...features.world_events.application import DemonClaimApplication
+from ...features.world_events.attack_application import DemonAttackApplication
 from ...features.world_events.repository import WorldEventClaimSqlRepository
 from .transaction_service import DemonAttackSettlementService
 from .transaction_service import DemonClaimService
@@ -62,6 +63,7 @@ def _demon_claim_service():
             get_paths().game_db, get_paths().player_db
         )
     return _demon_claim_service_instance
+demon_attack_application = DemonAttackApplication(get_paths().player_db)
 _demon_attack_settlement_service_instance = None
 _demon_event_lifecycle_service_instance = None
 _demon_wave_refresh_service_instance = None
@@ -1438,13 +1440,13 @@ async def attack_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMes
     total_contribution = 0.0
     attack_duplicate_after_fight = False
     with _state_lock:
-        settlement = _demon_attack_settlement_service().settle(
-            operation_id, EVENT_KEY, user_id, user_info.get("user_name", user_id), realm,
-            total_damage, event_snapshot, expected_boss_snapshot, participants_snapshot,
-            attack_limit=DEMON_ATTACK_LIMIT,
-            real_hp_multiplier=BOSS_REAL_HP_MULTIPLIER,
-            max_damage_ratio=MAX_SINGLE_DAMAGE_RATIO,
-            max_pursuit_ratio=MAX_PURSUIT_DAMAGE_RATIO,
+        settlement = demon_attack_application.settle(
+            operation_id=operation_id, user_id=str(user_id), event_key=EVENT_KEY,
+            user_name=user_info.get("user_name", user_id), realm=realm,
+            total_damage=total_damage, expected_event=event_snapshot,
+            expected_boss=expected_boss_snapshot, expected_participants=participants_snapshot,
+            attack_limit=DEMON_ATTACK_LIMIT, real_hp_multiplier=BOSS_REAL_HP_MULTIPLIER,
+            max_damage_ratio=MAX_SINGLE_DAMAGE_RATIO, max_pursuit_ratio=MAX_PURSUIT_DAMAGE_RATIO,
         )
     if settlement.status == "duplicate":
         msg = (

@@ -166,8 +166,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
         },
         "world_events": {
             "claim_application_owned": "demon_claim_application.claim(" in world_events_facade,
+            "attack_application_owned": "demon_attack_application.settle(" in world_events_facade,
             "legacy_claim_disabled": "_demon_claim_service().claim(" not in world_events_facade,
-            "status": "demon_claim_cutover_with_other_world_event_compatibility",
+            "status": "demon_claim_attack_settlement_cutover_with_other_world_event_compatibility",
         },
         "rift": {
             "entry_application_owned": "rift_application.enter(" in rift_facade,

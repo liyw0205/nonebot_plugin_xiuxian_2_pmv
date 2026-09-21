@@ -110,7 +110,7 @@ def test_real_entry_uses_transaction_service_without_old_side_paths():
     with open(source, encoding="utf-8") as source_file:
         text = source_file.read()
     handler = text[text.index("async def attack_demon_invasion_"):text.index("async def claim_demon_reward_")]
-    assert "_demon_attack_settlement_service().settle(" in handler
+    assert "demon_attack_application.settle(" in handler
     assert "_demon_attack_settlement_service().get_result(" in handler
     post_battle = handler[handler.index("result, victor, bossinfo_new, status_list"):]
     assert "_save_state(state)" not in post_battle
