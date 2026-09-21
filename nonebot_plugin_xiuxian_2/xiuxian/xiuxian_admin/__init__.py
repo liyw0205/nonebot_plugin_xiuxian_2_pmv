@@ -1850,12 +1850,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     expected_banned = _admin_blackhouse_status_service().snapshot(str(target_user_id))
-    result = _admin_blackhouse_status_service().set_banned(
+    result = admin_application.set_blackhouse_status(
         _admin_operation_id(event, "blackhouse-ban", str(target_user_id)),
-        str(get_user_id(event) or "unknown"),
-        str(target_user_id),
-        expected_banned,
-        True,
+        str(get_user_id(event) or "unknown"), str(target_user_id), expected_banned, True
     )
     status = result.status
     if status == "user_missing":
@@ -1895,12 +1892,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     expected_banned = _admin_blackhouse_status_service().snapshot(str(target_user_id))
-    result = _admin_blackhouse_status_service().set_banned(
+    result = admin_application.set_blackhouse_status(
         _admin_operation_id(event, "blackhouse-unban", str(target_user_id)),
-        str(get_user_id(event) or "unknown"),
-        str(target_user_id),
-        expected_banned,
-        False,
+        str(get_user_id(event) or "unknown"), str(target_user_id), expected_banned, False
     )
     status = result.status
     if status == "user_missing":

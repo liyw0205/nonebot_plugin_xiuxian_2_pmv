@@ -145,7 +145,7 @@ class AdminBlackhouseStatusTests(unittest.TestCase):
             / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
         ).read_text(encoding="utf-8")
         self.assertGreaterEqual(
-            source.count("_admin_blackhouse_status_service().set_banned("), 2
+            source.count("admin_application.set_blackhouse_status("), 2
         )
         self.assertNotIn("sql_message.ban_user(", source)
         self.assertNotIn("sql_message.unban_user(", source)

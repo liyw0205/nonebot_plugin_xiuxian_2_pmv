@@ -280,7 +280,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "item_batch_application_owned": "admin_application.grant_item_batch(" in admin_facade,
             "accessory_batch_application_owned": "admin_application.grant_accessory_batch(" in admin_facade,
             "impart_stone_batch_application_owned": "admin_application.adjust_impart_stone_batch(" in admin_facade,
-            "status": "item_destroy_exp_adjust_level_root_impart_stone_accessory_player_status_batch_item_batch_accessory_batch_impart_stone_batch_cutover_with_admin_batch_compatibility",
+            "blackhouse_application_owned": "admin_application.set_blackhouse_status(" in admin_facade,
+            "status": "item_destroy_exp_adjust_level_root_impart_stone_accessory_player_status_batch_item_batch_accessory_batch_impart_stone_batch_blackhouse_cutover_with_admin_batch_compatibility",
         },
     }
 

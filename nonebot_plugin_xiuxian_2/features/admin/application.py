@@ -57,6 +57,9 @@ class AdminApplication(MigratedFeatureApplication):
         return AdminImpartStoneBatchAdjustmentService(
             self.database, get_paths().impart_db
         ).adjust(operation_id, operator_id, user_ids, requested_delta, chunk_size=chunk_size)
+    def set_blackhouse_status(self, *args, **kwargs):
+        from ...xiuxian.xiuxian_admin.transaction_service import AdminBlackhouseStatusService
+        return AdminBlackhouseStatusService(self.database).set_banned(*args, **kwargs)
 
 
 __all__ = ["AdminApplication"]
