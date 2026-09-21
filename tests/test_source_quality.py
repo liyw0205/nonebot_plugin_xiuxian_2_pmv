@@ -2733,6 +2733,12 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("map_application.cooldown_until(", cooldown)
         self.assertNotIn("_player_data_manager()", cooldown)
 
+        explore_start = source.index("async def _start_explore")
+        explore_end = source.index("async def _settle_explore", explore_start)
+        explore = source[explore_start:explore_end]
+        self.assertIn('map_application.cooldown_until(uid, "explore_start_cd_until")', explore)
+        self.assertNotIn('get_field_data(uid, MAP_CD_TABLE', explore)
+
     def test_map_node_combat_uses_persistent_start_task(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_map"
         source = (root / "__init__.py").read_text(encoding="utf-8")

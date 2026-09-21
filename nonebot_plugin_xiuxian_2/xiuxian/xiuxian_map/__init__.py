@@ -2242,7 +2242,7 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         }.items()
     }
     expected_daily = _get_daily_limit(uid)
-    expected_cooldown = _player_data_manager().get_field_data(uid, MAP_CD_TABLE, "explore_start_cd_until")
+    expected_cooldown = map_application.cooldown_until(uid, "explore_start_cd_until")
     cooldown_until = (start_at + timedelta(seconds=EXPLORE_START_COOLDOWN_SEC)).strftime("%Y-%m-%d %H:%M:%S")
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     try:
