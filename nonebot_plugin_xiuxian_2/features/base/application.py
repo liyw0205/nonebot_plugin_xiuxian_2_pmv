@@ -4,13 +4,13 @@ from pathlib import Path
 from typing import Any
 
 from .._legacy_application import LegacyApplication
-from .repository import BaseRepository, LegacyBaseRepository
+from .repository import BaseRepository
 from .rename_repository import BaseRenameSqlRepository
 
 
 class BaseApplication(LegacyApplication):
     def __init__(self, game_database: str | Path, player_database: str | Path, *, repository: BaseRepository | None = None) -> None:
-        super().__init__(game_database, repository=repository or LegacyBaseRepository(game_database, player_database), feature="base")
+        super().__init__(game_database, repository=repository, feature="base")
 
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):
         return self._execute(operation_id=operation_id, user_id=user_id, action=f"base.{action}", payload={"user_id": user_id, **kwargs}, call=lambda: self.repository.invoke(action, operation_id, user_id, **kwargs))

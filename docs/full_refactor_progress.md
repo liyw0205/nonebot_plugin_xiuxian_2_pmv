@@ -3181,3 +3181,7 @@
 2026-09-22 base rename isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
 
 2026-09-22 sign-in progress contract repair：`check_full_refactor_progress.py`的lottery默认路径检查原先寻找已不存在的`if legacy_lottery else LotteryApplication(`模式，导致真实已切换的`context.legacy_startup`分支被误报；检查器现在验证实际`LotteryApplication`存在且`LotterySettlementService`不在plugin默认路径。progress contract `2 passed`，compile/diff check通过。
+
+2026-09-22 base application wiring maintenance：`BaseApplication`不再默认构造`LegacyBaseRepository`；生产rename默认使用已完成的`BaseRenameSqlRepository`，其他base通用actions保持显式repository兼容。source/base focused `211 pytest/1 unittest`，compile/inventory/diff check通过。
+
+2026-09-22 base application wiring isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
