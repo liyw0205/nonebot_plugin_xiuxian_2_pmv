@@ -9,7 +9,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import PetFeedRequest, PetTravelClaimRequest
-from .repository import LegacyPetRepository, PetActiveSwitchSqlRepository, PetFeedSqlRepository, PetFusionBreakthroughSqlRepository, PetHatchSqlRepository, PetReleaseSqlRepository, PetRepository, PetSkillRerollSqlRepository, PetTravelClaimSqlRepository, PetTravelStartSqlRepository
+from .repository import PetActiveSwitchSqlRepository, PetFeedSqlRepository, PetFusionBreakthroughSqlRepository, PetHatchSqlRepository, PetReleaseSqlRepository, PetRepository, PetSkillRerollSqlRepository, PetTravelClaimSqlRepository, PetTravelStartSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -27,8 +27,6 @@ class PetApplication:
         self.repository = repository
         self.ledger = ledger or OperationLedger()
 
-    def _repository(self) -> PetRepository:
-        return self.repository or LegacyPetRepository(self.game_database, self.player_database)
 
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):
