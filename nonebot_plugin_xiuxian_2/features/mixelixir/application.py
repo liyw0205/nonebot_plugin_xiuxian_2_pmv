@@ -13,6 +13,7 @@ from .repository import LegacyMixelixirRepository, MixelixirRepository
 from .harvest_repository import MixelixirHarvestSqlRepository
 from .settlement_repository import MixelixirSettlementSqlRepository
 from .harvest_level_upgrade_repository import MixelixirHarvestLevelUpgradeSqlRepository
+from .fire_control_upgrade_repository import MixelixirFireControlUpgradeSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -96,6 +97,16 @@ class MixelixirApplication:
             action="mixelixir.harvest_level_upgrade",
             payload={"current_level": current_level, "experience": experience, "next_level": next_level, "cost": cost},
             call=lambda: (MixelixirHarvestLevelUpgradeSqlRepository(self.game_database, self.player_database) if self._explicit_repository is None else MixelixirHarvestLevelUpgradeService(self.game_database, self.player_database)).upgrade(operation_id, user_id, current_level, experience, expected_stone=0, next_level=next_level, cost=cost) if self._explicit_repository is None else MixelixirHarvestLevelUpgradeService(self.game_database, self.player_database).upgrade(operation_id, user_id, current_level, experience, 0, next_level, cost),
+            success_statuses={"applied", "duplicate"},
+            messages={"experience_insufficient": "炼丹经验不足。", "state_changed": "炼丹数据已更新，请重新查看。"},
+            normalize=lambda data: data,
+        )
+
+    def fire_control_upgrade(self, *, operation_id: str, user_id: str, current_level: int, experience: int, expected_stone: int, next_level: int, cost: int):
+        return self._execute(
+            operation_id=operation_id, user_id=user_id, action="mixelixir.fire_control_upgrade",
+            payload={"current_level": current_level, "experience": experience, "next_level": next_level, "cost": cost},
+            call=lambda: MixelixirFireControlUpgradeSqlRepository(self.game_database, self.player_database).upgrade(operation_id, user_id, current_level, experience, expected_stone, next_level, cost),
             success_statuses={"applied", "duplicate"},
             messages={"experience_insufficient": "炼丹经验不足。", "state_changed": "炼丹数据已更新，请重新查看。"},
             normalize=lambda data: data,
