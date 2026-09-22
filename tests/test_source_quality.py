@@ -198,6 +198,12 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("puppet_operations", service_source)
 
+    def test_puppet_default_application_does_not_construct_legacy_repository(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_puppet" / "__init__.py").read_text(encoding="utf-8")
+        self.assertIn("puppet_application = PuppetApplication(", source)
+        self.assertNotIn("LegacyPuppetRepository", source)
+        self.assertNotIn("repository=LegacyPuppetRepository", source)
+
     def test_daily_dungeon_reset_scheduler_prevents_overlapping_runs(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_dungeon" / "__init__.py"

@@ -23,7 +23,7 @@ from .transaction_service import (
     PuppetOperation,
 )
 from ...features.puppet.application import PuppetApplication
-from ...features.puppet.repository import LegacyPuppetRepository
+
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 
@@ -43,7 +43,6 @@ _puppet_harvest_service_instance = None
 puppet_application = PuppetApplication(
     get_paths().game_db,
     get_paths().player_db,
-    repository=LegacyPuppetRepository(get_paths().game_db, get_paths().player_db),
 )
 runtime_ids = UUIDGenerator()
 runtime_clock = SystemClock()
