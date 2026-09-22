@@ -1657,7 +1657,8 @@ class SourceQualityTests(unittest.TestCase):
         source = (natal_root / "__init__.py").read_text(encoding="utf-8")
         start = source.index("@natal_engrave.handle")
         handler = source[start:source.index("# 定义遗忘道纹命令", start)]
-        self.assertIn("_natal_engraving_service().engrave(", handler)
+        self.assertIn("natal_treasure_application.engrave(", handler)
+        self.assertNotIn("_natal_engraving_service().engrave(", handler)
         self.assertNotIn("nt.engrave_effect(", handler)
         self.assertNotIn("sql_message.update_back_j(", handler)
         for status in (

@@ -8,6 +8,7 @@ from .awaken_repository import NatalAwakenSqlRepository
 from .reawaken_repository import NatalReawakenSqlRepository
 from .training_repository import NatalTrainingSqlRepository
 from .effect_upgrade_repository import NatalEffectUpgradeSqlRepository
+from .engraving_repository import NatalEngravingSqlRepository
 from .repository import LegacyNatalTreasureRepository, NatalTreasureRepository
 
 
@@ -32,7 +33,8 @@ class NatalTreasureApplication(LegacyApplication):
         return self._execute(operation_id=operation_id, user_id=user_id, action="natal_treasure.train", payload={"user_id": user_id, **kwargs}, call=lambda: NatalTrainingSqlRepository(self.game_database, self.player_database).train(operation_id, user_id, **kwargs))
     def upgrade(self, *, operation_id: str, user_id: str, **kwargs: Any):
         return self._execute(operation_id=operation_id, user_id=user_id, action="natal_treasure.upgrade", payload={"user_id": user_id, **kwargs}, call=lambda: NatalEffectUpgradeSqlRepository(self.game_database, self.player_database).upgrade(operation_id, user_id, **kwargs))
-    def engrave(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("engrave", operation_id=operation_id, user_id=user_id, **kwargs)
+    def engrave(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        return self._execute(operation_id=operation_id, user_id=user_id, action="natal_treasure.engrave", payload={"user_id": user_id, **kwargs}, call=lambda: NatalEngravingSqlRepository(self.game_database, self.player_database).engrave(operation_id, user_id, **kwargs))
     def forget(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("forget", operation_id=operation_id, user_id=user_id, **kwargs)
 
 

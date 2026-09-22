@@ -513,13 +513,7 @@ async def natal_engrave_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
     scripture_cost = MYSTERIOUS_SCRIPTURE_COST_ENGRAVE
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"natal-engrave:{event_id}:{user_id}" if event_id else f"natal-engrave:{user_id}:{runtime_ids.new_id()}"
-    # 先回放：成功后槽位已满会挡住同事件幂等。
-    prior = _natal_engraving_service().get_result(operation_id)
-    if prior is not None and prior.succeeded:
-        effect_name = EFFECT_NAME_MAP.get(NatalEffectType(prior.effect_type), "未知效果")
-        await handle_send(bot, event, f"铭刻道纹成功！消耗{scripture_cost}个【神秘经书】。\n成功铭刻道纹：【{effect_name}】，等级1。\n该铭刻请求已经处理，无需重复提交。",
-                          md_type="法宝", k1="法宝", v1="我的本命法宝", k2="养成", v2="养成本命法宝", k3="升阶", v3="本命法宝升阶")
-        await natal_engrave.finish()
+
     nt = NatalTreasure(user_id)
 
     if not nt.exists():
@@ -556,12 +550,15 @@ async def natal_engrave_handler(bot: Bot, event: GroupMessageEvent | PrivateMess
         effect_type.value: (config["min_value"], config["max_value"])
         for effect_type, config in EFFECT_BASE_AND_GROWTH.items()
     }
-    engraving = _natal_engraving_service().engrave(
-        operation_id, user_id, MYSTERIOUS_SCRIPTURE_ID, scripture_cost,
-        MAX_EFFECT_SLOTS, effect_configs,
-        {effect_type.value for effect_type in fixed_base_effects},
-        _natal_choice_seed(operation_id),
+    engraving_outcome = natal_treasure_application.engrave(
+        operation_id=operation_id, user_id=user_id, scripture_id=MYSTERIOUS_SCRIPTURE_ID,
+        scripture_cost=scripture_cost, max_slots=MAX_EFFECT_SLOTS,
+        effect_configs=effect_configs,
+        fixed_base_effects={effect_type.value for effect_type in fixed_base_effects},
+        choice_seed=_natal_choice_seed(operation_id),
     )
+    engraving_data = engraving_outcome.data or {}
+    engraving = SimpleNamespace(**engraving_data, status=engraving_outcome.status, succeeded=engraving_outcome.ok)
     if engraving.status == "duplicate" or engraving.succeeded:
         nt._natal_data_cache = None
         effect_name = EFFECT_NAME_MAP.get(NatalEffectType(engraving.effect_type), "未知效果")
