@@ -3292,9 +3292,11 @@
 
 2026-09-23 compensation normal-claim full evidence：完整回归`2144 tests OK`。
 
-2026-09-23 dongfu visit-reward isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+2026-09-23 dongfu array-upgrade isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
 
-2026-09-23 dongfu visit-reward full evidence：完整回归`2144 tests OK`。
+2026-09-23 dongfu array-upgrade full evidence：完整回归`2144 tests OK`。
+
+2026-09-23 dongfu array-upgrade feature-owned cutover：新增`DongfuArrayUpgradeSqlRepository`、`DongfuApplication.array_upgrade`并将阵法升级handler从通用legacy action切换到application路径；双库原子校验阵法等级快照、灵石/阵石扣除和幂等记录，保留duplicate/user_missing/dongfu_missing/state_changed/stone_insufficient/item_insufficient和rollback。focused `222 tests`，compile/inventory/diff通过。
 
 2026-09-23 dongfu visit-reward feature-owned cutover：新增`DongfuVisitRewardSqlRepository`、`DongfuApplication.visit_reward`并将拜访奖励handler从通用legacy action切换到application路径；双库原子校验访客/目标洞府状态、灵石增益和幂等记录，保留duplicate/user_missing/dongfu_changed/state_changed和rollback。focused `215 tests`，compile/inventory/diff通过。
 

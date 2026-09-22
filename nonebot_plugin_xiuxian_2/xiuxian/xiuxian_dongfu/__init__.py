@@ -1407,17 +1407,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     array_stone_need = max(0, next_lv - 3 - _to_int(geomancy.get("array_stone_reduce")))
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"dongfu-array:{uid}:{event_message_id or runtime_ids.new_id()}"
-    result = _run_dongfu_action(
-        "array_upgrade", operation_id, uid,
-        call=lambda: dongfu_application.execute_legacy_call(
-            operation_id=operation_id, user_id=uid, action="array_upgrade",
-            payload={"current_level": lv, "next_level": next_lv, "cost": cost, "stone_id": DONGFU_ITEM_ARRAY_STONE, "stone_need": array_stone_need},
-            call=lambda: _dongfu_array_upgrade_service().upgrade(
-                operation_id, uid, lv, next_lv, cost, DONGFU_ITEM_ARRAY_STONE, array_stone_need,
-            ),
-        ),
-        current_level=lv, next_level=next_lv, cost=cost,
-        stone_id=DONGFU_ITEM_ARRAY_STONE, stone_need=array_stone_need,
+    result = dongfu_application.array_upgrade(
+        operation_id=operation_id,
+        user_id=uid,
+        expected_level=lv,
+        next_level=next_lv,
+        stone_cost=cost,
+        item_id=DONGFU_ITEM_ARRAY_STONE,
+        item_cost=array_stone_need,
     )
     if result.status == "stone_insufficient":
         await handle_send(bot, event, f"升级阵法需要{number_to(cost)}灵石。")

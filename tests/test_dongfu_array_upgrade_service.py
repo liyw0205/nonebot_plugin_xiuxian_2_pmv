@@ -29,7 +29,7 @@ class DongfuArrayUpgradeServiceTests(unittest.TestCase):
  def test_dongfu_array_upgrade_uses_feature_application(self):
   source=Path("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py").read_text(encoding="utf-8")
   handler=source[source.index("operation_id = f\"dongfu-array:"):source.index("@infiltrate_dongfu.handle")]
-  assert "dongfu_application.execute_legacy_call(" in handler
+  assert "dongfu_application.array_upgrade(" in handler
 
  def setUp(self):
   self.temp_dir=tempfile.TemporaryDirectory(); root=Path(self.temp_dir.name); self.game,self.player=root/"game.sqlite3",root/"player.sqlite3"
