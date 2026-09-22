@@ -3168,4 +3168,8 @@
 
 2026-09-22 trade web validation repair：trade通用Web blueprint对空/缺少`listing_id`或`quantity`的purchase payload此前触发`KeyError`并返回500；`TradeApplication.purchase`现在抛出`ValidationError`，恢复标准4xx契约。Web contract单测通过，source/purchase focused `211 passed`。
 
-2026-09-22 trade web validation recovery evidence：修复后重新执行一次性临时数据目录 recovery smoke，`114` migrations、restore和reconcile clean，`operations=0`、`outbox_events=0`、`dead_events=0`。
+2026-09-22 trade web validation recovery evidence：修复后重新执行一次性临时数据目录 recovery smoke，`114` migrations、restore和reconcile clean，`operations=0`、outbox_events=0、dead_events=0`。
+
+2026-09-22 trade application fixture repair：feature trade application replay测试补齐正式`apply_platform_schema`夹具，创建`operation_ledger`后真实验证显式repository `duplicate/replayed`路径；feature unittest `1 passed`，source/purchase focused `211 passed`，compile/diff check通过。
+
+2026-09-22 trade fixture repair isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
