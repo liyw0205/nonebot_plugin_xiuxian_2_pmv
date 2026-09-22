@@ -3228,4 +3228,6 @@
 
 2026-09-23 boss punishment contract repair：生产切换后更新boss source quality/progress契约和sign-in旧lottery断言，使静态验收验证application-owned路径；最终完整回归`2143 tests OK`，focused `217 passed`及progress contract通过。
 
+2026-09-23 remaining legacy execution blockers：继续扫描`execute_legacy_call`残余路径后确认，Past Life reset-all是跨game/player持久化批处理（create/run_batch和历史清除）；Compensation claim同时更新灵石、背包、claim counter并兼容旧JSON定义；Impart prayer是game+impart双库事务，包含祈愿石扣减、卡片增量、bonus刷新和幂等；Status version update包含外部版本更新/备份副作用。当前均无足够小且不复制旧规则的feature-owned边界，记录pending并继续保留显式兼容路径。
+
 2026-09-23 sign-in lottery audit contract repair：进度检查器的`lottery_core_default_legacy`布尔谓词与字段语义相反，真实plugin已使用`LotteryApplication`且未使用`LotterySettlementService`却被报告为`true`；修正谓词并新增审计回归，当前`lottery_core_default_legacy=false`、`lottery_compatibility_fallback=false`，progress contract `2 passed`，compile/inventory/diff check通过。
