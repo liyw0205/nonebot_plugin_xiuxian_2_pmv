@@ -10,6 +10,7 @@ from ...infrastructure.observability import trace_context
 from .domain import ActivityClaimRequest
 from .repository import ActivityRewardRepository, LegacyActivityRewardRepository
 from .schemas import ActivityClaimResult
+from .claim_all_application import ActivityClaimAllApplication
 
 
 class ActivityRewardApplication:
@@ -36,8 +37,21 @@ class ActivityRewardApplication:
                         if previous is not None:
                             return previous.replay()
                         raise ConflictError("操作正在处理中")
-                repository = self.repository or LegacyActivityRewardRepository("")
-                raw = repository.claim_all(request.operation_id, request.user_id)
+                if self.repository is None:
+                    from ...xiuxian.xiuxian_activity.service import claim_activity_tasks, claim_activity_pass_rewards
+                    from ...xiuxian.xiuxian_activity.activity_boss import claim_boss_milestone_reward, claim_boss_rank_reward
+                    raw = ActivityClaimAllApplication(self.database).run(
+                        request.operation_id,
+                        request.user_id,
+                        {
+                            "tasks": lambda child_id: claim_activity_tasks(request.user_id, operation_id=child_id),
+                            "pass": lambda child_id: claim_activity_pass_rewards(request.user_id, operation_id=child_id),
+                            "boss_milestone": lambda child_id: claim_boss_milestone_reward(request.user_id, operation_id=child_id),
+                            "boss_rank": lambda child_id: claim_boss_rank_reward(request.user_id, operation_id=child_id),
+                        },
+                    )
+                else:
+                    raw = self.repository.claim_all(request.operation_id, request.user_id)
                 if isinstance(raw, tuple):
                     ok, text = bool(raw[0]), str(raw[1] or "")
                 elif isinstance(raw, dict):

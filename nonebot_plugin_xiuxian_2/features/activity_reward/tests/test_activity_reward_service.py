@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 
 from ..application import ActivityRewardApplication
+from ....infrastructure.database import DatabaseUnitOfWork
+from ....plugin import apply_platform_schema
 
 
 class _FakeRepository:
@@ -15,8 +17,11 @@ class _FakeRepository:
 class ActivityRewardServiceTests(unittest.TestCase):
     def test_application_returns_structured_result(self):
         with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "game.db"
+            with DatabaseUnitOfWork(database) as uow:
+                apply_platform_schema(uow)
             result = ActivityRewardApplication(
-                Path(directory) / "game.db", repository=_FakeRepository()
+                database, repository=_FakeRepository()
             ).claim_all(operation_id="activity-feature-1", user_id="u")
         self.assertTrue(result.ok)
         self.assertEqual(result.data["user_id"], "u")

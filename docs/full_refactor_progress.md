@@ -3185,3 +3185,7 @@
 2026-09-22 base application wiring maintenance：`BaseApplication`不再默认构造`LegacyBaseRepository`；生产rename默认使用已完成的`BaseRenameSqlRepository`，其他base通用actions保持显式repository兼容。source/base focused `211 pytest/1 unittest`，compile/inventory/diff check通过。
 
 2026-09-22 base application wiring isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-22 activity reward default cutover：`ActivityRewardApplication`默认路径改用已完成的`ActivityClaimAllApplication`及四阶段claim-all runners，显式旧`ActivityRewardRepository`注入保留；同步补齐feature replay测试的正式`operation_ledger`夹具。focused `1 unittest/211 pytest`，compile/inventory/diff check通过。
+
+2026-09-22 activity reward isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
