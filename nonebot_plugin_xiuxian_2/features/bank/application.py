@@ -13,6 +13,7 @@ from .repository import BankRepository, LegacyBankRepository
 from .account_application import BankDepositApplication
 from .account_withdrawal_application import BankWithdrawalApplication
 from .account_upgrade_application import BankUpgradeApplication
+from .account_interest_application import BankInterestApplication
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -113,8 +114,16 @@ class BankApplication:
             request.validate()
         except (TypeError, ValueError) as exc:
             raise ValidationError(str(exc)) from exc
-        repository = self.repository or LegacyBankRepository(self.game_database, self.player_database)
-        return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="bank.interest", payload=request.payload(), call=lambda: repository.settle_interest(request.operation_id, request.user_id, request.expected_saved_stone, request.expected_saved_at, request.bank_level, request.interest, request.settled_at), messages={"state_changed": "灵庄结息失败：账户当前状态已更新。", "user_missing": "未找到修仙数据。"})
+        if self.repository is None:
+            call = lambda: BankInterestApplication(self.game_database).settle_interest(
+                operation_id=request.operation_id, user_id=request.user_id,
+                interest=request.interest, bank_level=request.bank_level,
+                settled_at=request.settled_at,
+            )
+        else:
+            repository = self.repository
+            call = lambda: repository.settle_interest(request.operation_id, request.user_id, request.expected_saved_stone, request.expected_saved_at, request.bank_level, request.interest, request.settled_at)
+        return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="bank.interest", payload=request.payload(), call=call, messages={"state_changed": "灵庄结息失败：账户当前状态已更新。", "user_missing": "未找到修仙数据。"})
 
     def reply(self, **kwargs: Any) -> ReplyPlan:
         action = str(kwargs.pop("action", "settle_interest"))
