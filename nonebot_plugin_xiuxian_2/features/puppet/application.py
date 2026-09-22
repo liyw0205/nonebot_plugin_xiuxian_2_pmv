@@ -11,6 +11,7 @@ from ...infrastructure.observability import trace_context
 from .domain import PuppetPurchaseRequest, PuppetUpgradeRequest
 from .repository import LegacyPuppetRepository, PuppetRepository
 from .purchase_repository import PuppetPurchaseSqlRepository
+from .harvest_repository import PuppetHarvestSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -83,8 +84,10 @@ class PuppetApplication:
         return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="puppet.upgrade", payload=request.payload(), call=call)
 
     def harvest(self, *, operation_id: str, user_id: str, **kwargs: Any):
-        repository = self.repository or LegacyPuppetRepository(self.game_database, self.player_database)
-        return repository.harvest(operation_id, user_id, **kwargs)
+        if self.repository is not None:
+            return self.repository.harvest(operation_id, user_id, **kwargs)
+        repository = PuppetHarvestSqlRepository(self.game_database, self.player_database, max_goods_num=kwargs.pop("max_goods_num"))
+        return repository.harvest(user_id, operation_id=operation_id, **kwargs)
 
     def reply(self, **kwargs: Any) -> ReplyPlan:
         action = str(kwargs.pop("action", "purchase"))

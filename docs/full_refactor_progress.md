@@ -3082,6 +3082,10 @@
 
 2026-09-22 mixelixir fire-control isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
 
+2026-09-22 puppet harvest feature-owned cutover：`PuppetApplication.harvest` 默认路径改用新增 `PuppetHarvestSqlRepository`，通过 `DatabaseUnitOfWork` 主 game DB + attached player DB 原子计算成熟度、扣除灵石、发放药材、推进收取时间并写幂等记录；显式 `PuppetRepository` 注入保留兼容，purchase/upgrade未扩大改动。focused `11 pytest`，compile/inventory/diff check通过。
+
+2026-09-22 puppet harvest isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
+
 2026-09-22 buff blessed-spot rename feature-owned cutover：`BuffApplication.rename` 默认路径改用新增 `BlessedSpotRenameSqlRepository`，通过 `DatabaseUnitOfWork` 执行名称乐观锁和 `blessed_spot_operations` 幂等记录；显式 `BuffRepository` 注入保留兼容，open/upgrade未扩大改动。新增真实临时数据库 regression 验证 `applied/duplicate/state_changed/blessed_spot_missing`，buff rename/source focused `12 passed`，compile/architecture/inventory/diff check 通过。
 
 2026-09-22 buff blessed-spot rename isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
