@@ -49,7 +49,11 @@ class AuctionBidApplication:
                         return previous.replay()
                     raise ConflictError("操作正在处理中")
             try:
-                repository = self.repository or LegacyTradeRepository(self.database)
+                if self.repository is None:
+                    from ...xiuxian.xiuxian_trade.repository import TradeRepository
+                    repository = TradeRepository(self.database, max_goods_num=1000)
+                else:
+                    repository = self.repository
                 result = repository.place_auction_bid(
                     request.operation_id,
                     request.auction_id,
