@@ -11,6 +11,7 @@ from ...infrastructure.observability import trace_context
 from .domain import BankDepositRequest, BankInterestRequest, BankUpgradeRequest, BankWithdrawalRequest
 from .repository import BankRepository, LegacyBankRepository
 from .account_application import BankDepositApplication
+from .account_withdrawal_application import BankWithdrawalApplication
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -77,8 +78,16 @@ class BankApplication:
             request.validate()
         except (TypeError, ValueError) as exc:
             raise ValidationError(str(exc)) from exc
-        repository = self.repository or LegacyBankRepository(self.game_database, self.player_database)
-        return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="bank.withdraw", payload=request.payload(), call=lambda: repository.withdraw(request.operation_id, request.user_id, request.amount, request.expected_saved_stone, request.expected_saved_at, request.bank_level, request.interest, request.settled_at), messages={"saved_stone_insufficient": "灵庄存款不足，取款未结算。", "state_changed": "灵庄操作失败：账户当前状态已更新。", "user_missing": "未找到修仙数据。"})
+        if self.repository is None:
+            call = lambda: BankWithdrawalApplication(self.game_database).withdraw(
+                operation_id=request.operation_id, user_id=request.user_id,
+                amount=request.amount, interest=request.interest,
+                bank_level=request.bank_level, settled_at=request.settled_at,
+            )
+        else:
+            repository = self.repository
+            call = lambda: repository.withdraw(request.operation_id, request.user_id, request.amount, request.expected_saved_stone, request.expected_saved_at, request.bank_level, request.interest, request.settled_at)
+        return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="bank.withdraw", payload=request.payload(), call=call, messages={"saved_stone_insufficient": "灵庄存款不足，取款未结算。", "state_changed": "灵庄操作失败：账户当前状态已更新。", "user_missing": "未找到修仙数据。"})
 
     def upgrade(self, *, operation_id: str, user_id: str, expected_level: str, next_level: str, cost: int) -> OperationOutcome[dict[str, Any]]:
         try:
