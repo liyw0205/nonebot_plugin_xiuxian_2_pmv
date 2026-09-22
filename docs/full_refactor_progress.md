@@ -3161,3 +3161,11 @@
 2026-09-22 mixelixir application wiring maintenance：`MixelixirApplication`不再默认构造`LegacyMixelixirRepository`；harvest/settle等已迁移动作继续默认使用feature-owned SQL repositories，显式legacy repository注入仍可用。source/feature focused `9 passed`，compile/inventory/diff check通过。
 
 2026-09-22 mixelixir application wiring isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-22 trade application wiring maintenance：`TradeApplication`不再默认构造`LegacyTradeFeatureRepository`；生产purchase默认继续直接使用feature-owned `TradeRepository`，显式通用repository注入保留，并补齐默认purchase所需数据库路径属性。source/purchase focused `211 passed`，compile/inventory/diff check通过。feature application legacy replay测试仍需其旧fixture显式创建`operation_ledger`，该独立夹具问题未伪报为本slice通过。
+
+2026-09-22 trade application wiring isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-22 trade web validation repair：trade通用Web blueprint对空/缺少`listing_id`或`quantity`的purchase payload此前触发`KeyError`并返回500；`TradeApplication.purchase`现在抛出`ValidationError`，恢复标准4xx契约。Web contract单测通过，source/purchase focused `211 passed`。
+
+2026-09-22 trade web validation recovery evidence：修复后重新执行一次性临时数据目录 recovery smoke，`114` migrations、restore和reconcile clean，`operations=0`、`outbox_events=0`、`dead_events=0`。

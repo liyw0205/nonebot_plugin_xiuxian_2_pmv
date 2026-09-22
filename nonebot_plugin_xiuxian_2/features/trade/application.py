@@ -4,13 +4,16 @@ from pathlib import Path
 from typing import Any
 
 from .._legacy_application import LegacyApplication
-from .repository import LegacyTradeFeatureRepository, TradeFeatureRepository
+from ...core.errors import ValidationError
+from .repository import TradeFeatureRepository
 
 
 
 class TradeApplication(LegacyApplication):
     def __init__(self, game_database: str | Path, trade_database: str | Path, *, repository: TradeFeatureRepository | None = None) -> None:
-        super().__init__(game_database, repository=repository or LegacyTradeFeatureRepository(game_database, trade_database), feature="trade")
+        self.game_database = str(game_database)
+        self.trade_database = str(trade_database)
+        super().__init__(game_database, repository=repository, feature="trade")
 
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):
         return self._execute(operation_id=operation_id, user_id=user_id, action=f"trade.{action}", payload={"user_id": user_id, **kwargs}, call=lambda: self.repository.invoke(action, operation_id, user_id, **kwargs))
@@ -25,8 +28,10 @@ class TradeApplication(LegacyApplication):
         if self.repository is not None:
             return self._action("purchase", operation_id=operation_id, user_id=user_id, **kwargs)
         max_goods_num = int(kwargs.pop("max_goods_num", 1) or 1)
-        listing_id = kwargs.pop("listing_id")
-        quantity = kwargs.pop("quantity")
+        listing_id = kwargs.pop("listing_id", None)
+        quantity = kwargs.pop("quantity", None)
+        if listing_id is None or quantity is None:
+            raise ValidationError("listing_id and quantity are required")
         from ...xiuxian.xiuxian_trade.repository import TradeRepository
 
         return self._execute(
