@@ -3292,6 +3292,10 @@
 
 2026-09-23 compensation normal-claim full evidence：完整回归`2144 tests OK`。
 
+2026-09-23 dongfu patrol isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-23 dongfu patrol full evidence：完整回归`2144 tests OK`。
+
 2026-09-23 dongfu accelerate isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
 
 2026-09-23 dongfu accelerate full evidence：完整回归`2144 tests OK`。
@@ -3299,6 +3303,8 @@
 2026-09-23 dongfu fertilize isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
 
 2026-09-23 dongfu fertilize full evidence：完整回归`2144 tests OK`。
+
+2026-09-23 dongfu patrol feature-owned cutover：新增`DongfuPatrolSqlRepository`、`DongfuApplication.patrol`并将巡山handler从`execute_legacy_call`切换到application路径；双库原子校验体力、每日次数、护府层数、灵石/物品奖励和幂等记录，保留duplicate/user_missing/stamina_insufficient/daily_limit/inventory_full/state_changed和rollback。focused `228 tests`，compile/inventory/diff通过。
 
 2026-09-23 dongfu fertilize feature-owned cutover：新增`DongfuFertilizeSqlRepository`、`DongfuApplication.fertilize`并将施肥handler从`execute_legacy_call`切换到application路径；双库原子校验洞府slots快照、扣除五色灵壤、增加fertilizer并写幂等记录，保留duplicate/state_changed/dongfu_missing/plot_empty/fertilizer_full/item_insufficient和rollback。focused `222 tests`，compile/inventory/diff通过。
 

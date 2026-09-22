@@ -1116,17 +1116,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     stone_gain = runtime_random.randint(50000, 150000)
     if geomancy.get("name"):
         stone_gain = int(stone_gain * 1.2)
-    outcome = dongfu_application.execute_legacy_call(
+    result = dongfu_application.patrol(
         operation_id=operation_id,
         user_id=str(uid),
-        action="patrol",
-        payload={"business_date": _today_str(), "stamina": DONGFU_PATROL_STAMINA, "daily_limit": DONGFU_PATROL_DAILY_LIMIT, "stone_gain": stone_gain, "reward": reward, "maximum": XiuConfig().max_goods_num},
-        call=lambda: _dongfu_patrol_service().patrol(
-            operation_id, uid, _today_str(), DONGFU_PATROL_STAMINA,
-            DONGFU_PATROL_DAILY_LIMIT, stone_gain, reward, XiuConfig().max_goods_num,
-        ),
+        day=_today_str(),
+        stamina_cost=DONGFU_PATROL_STAMINA,
+        daily_limit=DONGFU_PATROL_DAILY_LIMIT,
+        stone_gain=stone_gain,
+        reward=reward,
+        max_goods_num=XiuConfig().max_goods_num,
     )
-    result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
 
     if result.status == "duplicate":
         await handle_send(

@@ -3,13 +3,13 @@ from pathlib import Path
 from .._service_port import ServicePort
 from .accelerate_repository import DongfuAccelerateSqlRepository
 from .fertilize_repository import DongfuFertilizeSqlRepository
+from .patrol_repository import DongfuPatrolSqlRepository
 
 class DongfuRepository(ServicePort):
     def __init__(self,database:str|Path,player_database:str|Path|None=None)->None:
         super().__init__('dongfu','nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dongfu'); self.database=str(database); self.player_database=str(player_database or database)
-    def accelerate(self,operation_id,user_id,expected_slots,slot_no,item_id,now,new_finish):
-        return DongfuAccelerateSqlRepository(self.database,self.player_database).accelerate(operation_id,user_id,expected_slots,slot_no,item_id,now,new_finish)
-    def fertilize(self,operation_id,user_id,expected_slots,slot_no,item_id,fertilizer_max):
-        return DongfuFertilizeSqlRepository(self.database,self.player_database).fertilize(operation_id,user_id,expected_slots,slot_no,item_id,fertilizer_max)
+    def accelerate(self,operation_id,user_id,expected_slots,slot_no,item_id,now,new_finish): return DongfuAccelerateSqlRepository(self.database,self.player_database).accelerate(operation_id,user_id,expected_slots,slot_no,item_id,now,new_finish)
+    def fertilize(self,operation_id,user_id,expected_slots,slot_no,item_id,fertilizer_max): return DongfuFertilizeSqlRepository(self.database,self.player_database).fertilize(operation_id,user_id,expected_slots,slot_no,item_id,fertilizer_max)
+    def patrol(self,operation_id,user_id,day,stamina_cost,daily_limit,stone_gain,reward,max_goods_num): return DongfuPatrolSqlRepository(self.database,self.player_database).patrol(operation_id,user_id,day,stamina_cost,daily_limit,stone_gain,reward,max_goods_num)
 
 __all__=['DongfuRepository']
