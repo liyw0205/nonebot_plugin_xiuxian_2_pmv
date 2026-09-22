@@ -3196,4 +3196,8 @@
 
 2026-09-22 rift speedup contract repair：speedup完成application切换后，更新旧source contract和进度检查器，使其验证`rift_application.speedup`且禁止`execute_legacy_call`；旧full回归中的2个失败均为过时静态断言，修正后当前权威完整回归`2142 tests OK`。
 
+2026-09-22 buff training-start feature-owned cutover：`BuffApplication.training_start`默认路径改用新增`NormalTrainingStartSqlRepository`，单库原子校验修炼经验/灵石和闲置`user_cd`、创建`normal_training_operations`幂等记录并启动任务；显式通用repository兼容保留，training_complete未扩大改动。focused `1 unittest/209 pytest`，compile/inventory/diff check通过。
+
+2026-09-22 buff training-start isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
 2026-09-22 back default wiring pending blocker：`BackApplication`仍有`use_item/change_equipment/learn_skill/repair/use_pet_eggs/alchemy/unbind`等真实handler调用旧通用repository，不能仅移除默认`LegacyBackRepository`构造；已撤销临时source测试，未做不完整切换，记录为独立pending。

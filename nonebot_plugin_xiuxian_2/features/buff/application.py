@@ -8,6 +8,7 @@ from .._legacy_application import LegacyApplication
 from .repository import BuffRepository, LegacyBuffRepository
 from .rename_repository import BlessedSpotRenameSqlRepository
 from .upgrade_repository import BlessedSpotUpgradeSqlRepository
+from .training_start_repository import NormalTrainingStartSqlRepository
 
 
 class BuffApplication(LegacyApplication):
@@ -33,7 +34,10 @@ class BuffApplication(LegacyApplication):
             repository = BlessedSpotRenameSqlRepository(self.game_database)
             return self._execute(operation_id=operation_id, user_id=user_id, action="buff.rename", payload={"user_id": user_id, **kwargs}, call=lambda: repository.rename(operation_id, user_id, kwargs["expected_name"], kwargs["new_name"]))
         return self._action("rename", operation_id=operation_id, user_id=user_id, **kwargs)
-    def training_start(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("training_start", operation_id=operation_id, user_id=user_id, **kwargs)
+    def training_start(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        if self._explicit_repository is None:
+            return self._execute(operation_id=operation_id, user_id=user_id, action="buff.training_start", payload={"user_id": user_id, **kwargs}, call=lambda: NormalTrainingStartSqlRepository(self.game_database).start(operation_id, user_id, kwargs["kind"], kwargs["expected_exp"], kwargs["expected_stone"], kwargs["reward"], kwargs["exp_cap"], kwargs["power_multiplier"], kwargs.get("duration_seconds", 60)))
+        return self._action("training_start", operation_id=operation_id, user_id=user_id, **kwargs)
     def training_complete(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("training_complete", operation_id=operation_id, user_id=user_id, **kwargs)
     def stone_training(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("stone_training", operation_id=operation_id, user_id=user_id, **kwargs)
     def closing_settle(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("closing_settle", operation_id=operation_id, user_id=user_id, **kwargs)
