@@ -3296,6 +3296,10 @@
 
 2026-09-23 compensation redeem-code full evidence：完整回归`2144 tests OK`。
 
+2026-09-23 compensation redeem-code final contract evidence：P2架构误报修复后的权威full重新通过`2144 tests OK`，P0-P6 completion audit保持全绿，P7仍要求真实release-cycle证据。
+
+2026-09-23 architecture P2 contract repair：`check_operation_id_on_asset_writes`新增只读方法名识别，避免`has_claimed/get_used_count`等查询被误判为缺少operation_id；修复后P0-P6 completion audit全部ready，P7仍按设计要求真实release-cycle证据。
+
 2026-09-23 compensation redeem-code feature-owned cutover：复用`CompensationRewardClaimSqlRepository`的limited claim/has_claimed/get_used_count能力，兑换码handler移除默认`RewardClaimService`调用；保留usage_limit、legacy baseline、exhausted、duplicate和原子发奖。focused `218 tests`，compile/inventory/diff通过。
 
 2026-09-23 impart card-disassemble feature-owned cutover：新增`ImpartCardDisassembleSqlRepository`、`ImpartApplication.disassemble`并将分解handler从`execute_legacy_call`切换到application路径；单库原子保留至少一张卡、增加结晶、刷新bonus并写operation幂等记录，保留user_missing/card_missing/state_changed/duplicate和rollback。focused `20 unittest/209 pytest`，compile/inventory/diff通过。
