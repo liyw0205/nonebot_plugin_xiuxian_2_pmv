@@ -17,6 +17,7 @@ from .impart_stone_repository import AdminImpartStoneSqlRepository
 from .item_destroy_repository import AdminItemDestroySqlRepository
 from .exp_repository import AdminExpAdjustmentSqlRepository
 from .level_repository import AdminLevelChangeSqlRepository
+from .root_repository import AdminRootChangeSqlRepository
 
 
 class AdminAssetApplication:
@@ -221,6 +222,11 @@ class AdminAssetApplication:
         raw = AdminLevelChangeSqlRepository(self.database).change(operation_id, operator_id, user_id, expected_snapshot, new_level, new_exp, level_spend, root_rate, target_name=target_name)
         data = asdict(raw)
         return type("AdminLevelChangeOutcome", (), {"data": data, "status": raw.status, "ok": raw.succeeded})()
+
+    def change_root(self, *, operation_id: str, operator_id: str, user_id: str, expected_snapshot, root_id: int, level_spend: float, new_root_rate: float, target_name: str = ""):
+        raw = AdminRootChangeSqlRepository(self.database).change(operation_id, operator_id, user_id, expected_snapshot, root_id, level_spend, new_root_rate, target_name=target_name)
+        data = asdict(raw)
+        return type("AdminRootChangeOutcome", (), {"data": data, "status": raw.status, "ok": raw.succeeded})()
 
     def reply(self, **kwargs: Any) -> ReplyPlan:
         outcome = self.adjust_stone(**kwargs)

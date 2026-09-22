@@ -2188,7 +2188,7 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("_admin_root_change_service_instance = None", source)
         self.assertIn("def _admin_root_change_service(", source)
         self.assertIn("_admin_root_change_service().root_values(", source)
-        self.assertIn("_admin_root_change_service().change(", source)
+        self.assertIn("admin_asset_application.change_root(", source)
         self.assertNotIn("admin_root_change_service.change(", source)
 
     def test_title_transaction_uses_lazy_replay_service(self) -> None:

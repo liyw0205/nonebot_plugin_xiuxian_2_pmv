@@ -24,7 +24,7 @@ def test_admin_root_change_uses_feature_application():
     handler = text[text.index("async def gmm_command_"):text.index("@hmll.handle")]
     assert "_adjust_admin_root(" in handler
     helper = text[text.index("def _adjust_admin_root("):text.index("def _grant_admin_accessory(")]
-    assert "admin_asset_application.execute_legacy_call(" in helper
+    assert "admin_asset_application.change_root(" in helper
 
 
 OLD = ("金灵根", "天灵根", 0, "练气境圆满", 10000, 31200, "青云")

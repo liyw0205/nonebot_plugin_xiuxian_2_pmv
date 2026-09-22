@@ -255,18 +255,12 @@ def _adjust_admin_level(event, user_id, expected_state, level, power, spend, roo
 
 def _adjust_admin_root(event, user_id, expected_state, root_id, spend, root_rate):
     operation_id = _admin_operation_id(event, "root-change", str(user_id))
-    outcome = admin_asset_application.execute_legacy_call(
-        operation_id=operation_id,
-        user_id=str(user_id),
-        action="root_change",
-        payload={"expected_state": expected_state, "root_id": root_id, "spend": spend, "root_rate": root_rate},
-        call=lambda: _admin_root_change_service().change(
-            operation_id, str(get_user_id(event) or "unknown"), user_id,
-            expected_state, root_id, spend, root_rate,
-        ),
+    outcome = admin_asset_application.change_root(
+        operation_id=operation_id, operator_id=str(get_user_id(event) or "unknown"),
+        user_id=str(user_id), expected_snapshot=expected_state, root_id=root_id,
+        level_spend=spend, new_root_rate=root_rate,
     )
-    data = dict(outcome.data or {}); data.setdefault("status", outcome.status); data["succeeded"] = outcome.ok
-    return SimpleNamespace(**data)
+    return SimpleNamespace(**dict(outcome.data or {}), status=outcome.status, succeeded=outcome.ok)
 
 
 def _grant_admin_accessory(

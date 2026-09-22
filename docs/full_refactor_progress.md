@@ -3248,4 +3248,10 @@
 
 2026-09-23 admin level-change full evidence：完整回归`2143 tests OK`。
 
+2026-09-23 admin root-change feature-owned cutover：新增`AdminRootChangeSqlRepository`，实际管理员灵根调整handler改用`AdminAssetApplication.change_root`；单库原子校验7字段玩家快照、保留root 1-9映射及root 9用户名派生、重算战力并写幂等记录。focused `3 unittest/209 pytest`，compile/inventory/diff通过。
+
+2026-09-23 admin root-change isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-23 admin root-change full evidence：完整回归`2144 tests OK`。
+
 2026-09-23 sign-in lottery audit contract repair：进度检查器的`lottery_core_default_legacy`布尔谓词与字段语义相反，真实plugin已使用`LotteryApplication`且未使用`LotterySettlementService`却被报告为`true`；修正谓词并新增审计回归，当前`lottery_core_default_legacy=false`、`lottery_compatibility_fallback=false`，progress contract `2 passed`，compile/inventory/diff check通过。
