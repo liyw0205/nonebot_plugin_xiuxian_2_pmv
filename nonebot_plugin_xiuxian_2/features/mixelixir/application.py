@@ -10,6 +10,7 @@ from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import HarvestRequest, SettlementRequest, normalize_rewards
 from .repository import LegacyMixelixirRepository, MixelixirRepository
+from .harvest_repository import MixelixirHarvestSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -25,6 +26,7 @@ class MixelixirApplication:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
         self.repository = repository
+        self._explicit_repository = repository
         self.ledger = ledger or OperationLedger()
 
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call, success_statuses: set[str], messages: Mapping[str, str], normalize):
@@ -64,7 +66,7 @@ class MixelixirApplication:
             raise ValidationError(str(exc)) from exc
         return self._execute(
             operation_id=request.operation_id, user_id=request.user_id, action="mixelixir.harvest", payload=request.payload(),
-            call=lambda: self._repository().harvest(request.operation_id, request.user_id, request.expected_last_time, request.harvested_at, request.rewards, max_goods_num=request.max_goods_num),
+            call=lambda: (MixelixirHarvestSqlRepository(self.game_database, self.player_database) if self._explicit_repository is None else self._repository()).harvest(request.operation_id, request.user_id, request.expected_last_time, request.harvested_at, request.rewards, max_goods_num=request.max_goods_num),
             success_statuses={"applied", "duplicate"},
             messages={"state_changed": "药材未发放：灵田状态已更新，请重新收取。", "user_missing": "未找到修仙数据。"},
             normalize=lambda data: {"status": data.get("status", "failed"), "harvested_at": str(data.get("harvested_at", request.harvested_at)), "rewards": data.get("rewards", []), "granted": {"herbs": data.get("rewards", [])}},
