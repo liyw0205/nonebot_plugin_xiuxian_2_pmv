@@ -3194,6 +3194,4 @@
 
 2026-09-22 rift speedup isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
 
-2026-09-22 rift speedup feature-owned cutover：`RiftApplication.speedup`默认路径改用新增`RiftSpeedupSqlRepository`，实际秘境加速handler从`execute_legacy_call`切换到application；单库原子校验active rift/user_cd、消耗加速券、更新duration和幂等记录，显式通用repository兼容保留。focused `1 unittest/210 pytest`，compile/inventory/diff check通过。
-
-2026-09-22 rift speedup isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+2026-09-22 rift speedup contract repair：speedup完成application切换后，更新旧source contract和进度检查器，使其验证`rift_application.speedup`且禁止`execute_legacy_call`；旧full回归中的2个失败均为过时静态断言，修正后当前权威完整回归`2142 tests OK`。
