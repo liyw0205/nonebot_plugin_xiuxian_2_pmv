@@ -8,5 +8,7 @@ class DongfuApplication(MigratedFeatureApplication):
         super().__init__(database,feature='dongfu',repository=repository or DongfuRepository(database,player_database))
     def accelerate(self,*,operation_id,user_id,expected_slots,slot_no,item_id,now,new_finish):
         return self.repository.accelerate(operation_id,user_id,expected_slots,slot_no,item_id,now,new_finish)
+    def fertilize(self,*,operation_id,user_id,expected_slots,slot_no,item_id,fertilizer_max):
+        return self.repository.fertilize(operation_id,user_id,expected_slots,slot_no,item_id,fertilizer_max)
 
 __all__=['DongfuApplication']

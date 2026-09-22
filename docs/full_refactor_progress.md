@@ -3296,6 +3296,12 @@
 
 2026-09-23 dongfu accelerate full evidence：完整回归`2144 tests OK`。
 
+2026-09-23 dongfu fertilize isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-23 dongfu fertilize full evidence：完整回归`2144 tests OK`。
+
+2026-09-23 dongfu fertilize feature-owned cutover：新增`DongfuFertilizeSqlRepository`、`DongfuApplication.fertilize`并将施肥handler从`execute_legacy_call`切换到application路径；双库原子校验洞府slots快照、扣除五色灵壤、增加fertilizer并写幂等记录，保留duplicate/state_changed/dongfu_missing/plot_empty/fertilizer_full/item_insufficient和rollback。focused `222 tests`，compile/inventory/diff通过。
+
 2026-09-23 compensation redeem-code final contract evidence：P2架构误报修复后的权威full重新通过`2144 tests OK`，P0-P6 completion audit保持全绿，P7仍要求真实release-cycle证据。
 
 2026-09-23 compensation redeem-code isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
