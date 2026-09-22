@@ -10,6 +10,7 @@ from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import BankDepositRequest, BankInterestRequest, BankUpgradeRequest, BankWithdrawalRequest
 from .repository import BankRepository, LegacyBankRepository
+from .account_application import BankDepositApplication
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -59,8 +60,16 @@ class BankApplication:
             request.validate()
         except (TypeError, ValueError) as exc:
             raise ValidationError(str(exc)) from exc
-        repository = self.repository or LegacyBankRepository(self.game_database, self.player_database)
-        return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="bank.deposit", payload=request.payload(), call=lambda: repository.deposit(request.operation_id, request.user_id, request.amount, request.expected_saved_stone, request.expected_saved_at, request.bank_level, request.interest, request.settled_at, request.save_limit), messages={"stone_insufficient": "灵石不足，存款未结算。", "limit_exceeded": "超过灵庄存储上限，存款未结算。", "state_changed": "灵庄操作失败：账户当前状态已更新。", "user_missing": "未找到修仙数据。"})
+        if self.repository is None:
+            call = lambda: BankDepositApplication(self.game_database).deposit(
+                operation_id=request.operation_id, user_id=request.user_id,
+                amount=request.amount, interest=request.interest, limit=request.save_limit,
+                bank_level=request.bank_level, settled_at=request.settled_at,
+            )
+        else:
+            repository = self.repository
+            call = lambda: repository.deposit(request.operation_id, request.user_id, request.amount, request.expected_saved_stone, request.expected_saved_at, request.bank_level, request.interest, request.settled_at, request.save_limit)
+        return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="bank.deposit", payload=request.payload(), call=call, messages={"stone_insufficient": "灵石不足，存款未结算。", "limit_exceeded": "超过灵庄存储上限，存款未结算。", "state_changed": "灵庄操作失败：账户当前状态已更新。", "user_missing": "未找到修仙数据。"})
 
     def withdraw(self, *, operation_id: str, user_id: str, amount: int, expected_saved_stone: int, expected_saved_at: str, bank_level: str, interest: int, settled_at: str) -> OperationOutcome[dict[str, Any]]:
         try:

@@ -3037,3 +3037,9 @@
 2026-09-22 trade purchase isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
 
 2026-09-22 trade purchase full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2132` tests，全部通过，退出码 `0`；trade purchase/source/architecture contract tests另行通过，根 discovery 计数为 `2132`，测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
+
+2026-09-22 bank deposit feature-owned cutover：`BankApplication.deposit` 默认路径改用既有 `BankDepositApplication`/`BankAccountRepository` 新账户表事务；显式 `BankRepository` 注入保留兼容，withdraw/upgrade/interest尚未扩大改动。新增默认 facade 临时数据库 regression 验证 `applied/replayed`，bank deposit/source focused `28 passed`，compile/architecture/inventory/diff check 通过。
+
+2026-09-22 bank deposit isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
+
+2026-09-22 bank deposit full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2133` tests，全部通过，退出码 `0`；bank deposit/source/application tests另行通过，根 discovery 计数为 `2133`，测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
