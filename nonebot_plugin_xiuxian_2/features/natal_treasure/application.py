@@ -15,7 +15,7 @@ from .repository import LegacyNatalTreasureRepository, NatalTreasureRepository
 
 class NatalTreasureApplication(LegacyApplication):
     def __init__(self, player_database: str | Path, game_database: str | Path, *, repository: NatalTreasureRepository | None = None) -> None:
-        super().__init__(game_database, repository=repository or LegacyNatalTreasureRepository(player_database, game_database), feature="natal_treasure")
+        super().__init__(game_database, repository=repository, feature="natal_treasure")
         self.player_database = str(player_database)
         self._explicit_awaken_repository = repository
 

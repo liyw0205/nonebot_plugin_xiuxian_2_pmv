@@ -3149,3 +3149,7 @@
 2026-09-22 admin source contract maintenance：新增 source contract，锁定 `AdminAssetApplication` 的 stone/item默认路径分别使用 `AdminStoneSqlRepository` 与 `AdminItemSqlRepository`，禁止回退到默认 `LegacyAdminStoneRepository`/`LegacyAdminItemRepository`；contract `4 passed`。admin accessory/auction settlement因跨库装备/拍卖session orchestration边界复杂，暂作为独立阻塞候选，未做不完整迁移。
 
 2026-09-22 activity claim-all source contract maintenance：新增 source contract，锁定生产activity claim-all handler继续使用已完成的 `activity_claim_all_application.run`，禁止回退到旧 claim-all service；contract `8 passed`。`ActivityRewardApplication`仍作为兼容facade保留，未扩大旧编排迁移。
+
+2026-09-22 natal application wiring maintenance：`NatalTreasureApplication`不再默认构造未使用的`LegacyNatalTreasureRepository`，五个主要mutation入口继续使用已完成的feature-owned repositories；显式兼容repository注入保留。source/focused contract `12 passed`。
+
+2026-09-22 natal application wiring isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
