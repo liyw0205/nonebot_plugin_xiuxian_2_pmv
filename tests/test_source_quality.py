@@ -1118,11 +1118,12 @@ class SourceQualityTests(unittest.TestCase):
         claim_body = common_source.split("async def claim_normal_reward", 1)[1].split(
             "\ndef delete_record", 1
         )[0]
-        self.assertIn("_reward_claim_service().claim(", claim_body)
+        self.assertIn("_compensation_application(", claim_body)
+        self.assertIn(".claim_reward(", claim_body)
         self.assertIn("_reward_claim_service_instance = None", common_source)
         self.assertIn("def _reward_claim_service(", common_source)
         self.assertNotIn("send_reward_to_user(", claim_body)
-        self.assertNotIn("mark_claimed(", claim_body)
+        self.assertNotIn("_reward_claim_service().claim(", claim_body)
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("reward_claims", service_source)
 

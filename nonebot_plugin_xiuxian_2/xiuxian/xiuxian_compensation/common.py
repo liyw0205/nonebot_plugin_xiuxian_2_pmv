@@ -74,6 +74,15 @@ DATA_CONFIG = {
 }
 
 _compensation_definition_service_instance = None
+_compensation_application_instance = None
+
+
+def _compensation_application(database=None):
+    global _compensation_application_instance
+    database = database or getattr(_compensation_definition_service(), "_database", None) or get_paths().game_db
+    if _compensation_application_instance is None or str(_compensation_application_instance.database) != str(database):
+        _compensation_application_instance = CompensationApplication(database)
+    return _compensation_application_instance
 
 
 def _compensation_definition_service():
@@ -645,24 +654,20 @@ async def claim_normal_reward(
     # 先 claim：成功后 has_claimed 会挡住同事件重放。
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"compensation:claim:{event_id or runtime_ids.new_id()}:{user_id}:{config['type_key']}:{record_id}"
-    result = _run_compensation_action(
-        "reward_claim",
-        operation_id,
-        user_id,
-        lambda: _reward_claim_service().claim(
-            config["type_key"],
-            record_id,
-            user_id,
-            record["items"],
-            expected_definition_version=(
-                record.get("_definition_version")
-                if config["type_key"] == "补偿"
-                else None
-            ),
-        ),
-        database=getattr(_reward_claim_service(), "_database", None),
+    result = _compensation_application(
+        getattr(_compensation_definition_service(), "_database", None)
+    ).claim_reward(
+        operation_id=operation_id,
         reward_type=config["type_key"],
         record_id=record_id,
+        user_id=user_id,
+        reward_items=record["items"],
+        max_goods_num=XiuConfig().max_goods_num,
+        expected_definition_version=(
+            record.get("_definition_version")
+            if config["type_key"] == "补偿"
+            else None
+        ),
     )
     if result.status == "duplicate":
         reward_msg = format_reward_delivery(record["items"])
