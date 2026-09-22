@@ -3206,6 +3206,10 @@
 
 2026-09-23 buff closing-settle feature-owned cutover：`BuffApplication.closing_settle`默认路径改用新增`ClosingSettlementSqlRepository`，单库原子校验`user_cd`创建时间、灵石余额，更新修为/灵根属性并清理关闭状态、写幂等记录；显式通用repository兼容保留。focused `1 unittest/209 pytest`，compile/inventory/diff check通过。
 
+2026-09-23 buff stone-training feature-owned cutover：`BuffApplication.stone_training`默认路径改用新增`StoneTrainingSqlRepository`，game DB原子校验经验/灵石快照、计算可用修为、更新power并写幂等记录；显式通用repository兼容保留。focused `1 unittest/209 pytest`，compile/inventory/diff check通过。
+
+2026-09-23 buff stone-training isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
 2026-09-23 buff closing-settle isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
 
 2026-09-22 back default wiring pending blocker：`BackApplication`仍有`use_item/change_equipment/learn_skill/repair/use_pet_eggs/alchemy/unbind`等真实handler调用旧通用repository，不能仅移除默认`LegacyBackRepository`构造；已撤销临时source测试，未做不完整切换，记录为独立pending。
