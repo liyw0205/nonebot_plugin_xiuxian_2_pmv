@@ -3172,4 +3172,6 @@
 
 2026-09-22 trade application fixture repair：feature trade application replay测试补齐正式`apply_platform_schema`夹具，创建`operation_ledger`后真实验证显式repository `duplicate/replayed`路径；feature unittest `1 passed`，source/purchase focused `211 passed`，compile/diff check通过。
 
+2026-09-22 sect fairyland pending blocker：尝试抽取`SectFairylandSqlRepository`前置红灯后，确认旧`FairylandClaimService`依赖`TiantiDataManager`动态默认字段/清洗、`grant_tianti_settle_minutes`领域规则和动态宗门claim列；当前没有已完成的feature-owned Tianti profile writer可直接复用。未修改生产代码，移除临时红灯测试，记录为独立pending并跳转下一slice。
+
 2026-09-22 trade fixture repair isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
