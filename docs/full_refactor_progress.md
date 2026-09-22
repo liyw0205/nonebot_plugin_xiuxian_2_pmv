@@ -3145,3 +3145,5 @@
 2026-09-22 admin impart-stone feature-owned cutover：`AdminAssetApplication.adjust_impart_stone` 默认路径改用新增 `AdminImpartStoneSqlRepository`，通过 game/impart 双库 `DatabaseUnitOfWork` 原子校验灵石、更新两侧余额并写幂等结果；显式旧 admin service不再作为默认路径。focused `7 unittest/12 pytest`，compile/inventory/diff check通过。
 
 2026-09-22 admin impart-stone isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-22 admin source contract maintenance：新增 source contract，锁定 `AdminAssetApplication` 的 stone/item默认路径分别使用 `AdminStoneSqlRepository` 与 `AdminItemSqlRepository`，禁止回退到默认 `LegacyAdminStoneRepository`/`LegacyAdminItemRepository`；contract `4 passed`。admin accessory/auction settlement因跨库装备/拍卖session orchestration边界复杂，暂作为独立阻塞候选，未做不完整迁移。
