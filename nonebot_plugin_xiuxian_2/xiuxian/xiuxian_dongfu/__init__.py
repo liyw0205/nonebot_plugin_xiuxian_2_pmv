@@ -47,7 +47,7 @@ _dongfu_fertilize_service_instance = None
 _dongfu_infiltrate_failure_service_instance = None
 _dongfu_infiltrate_success_service_instance = None
 _dongfu_harvest_settlement_service_instance = None
-dongfu_application = DongfuApplication(get_paths().game_db)
+dongfu_application = DongfuApplication(get_paths().game_db, get_paths().player_db)
 runtime_ids = UUIDGenerator()
 runtime_random = SystemRandom()
 runtime_clock = SystemClock()
@@ -1271,16 +1271,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     accelerate_minutes = DONGFU_ACCELERATE_MINUTES + _to_int(geomancy.get("accelerate_bonus"))
     new_finish = max(now, finish - timedelta(minutes=accelerate_minutes))
     expected_slots = json.dumps(_normalize_plant_slots(d), ensure_ascii=False)
-    outcome = dongfu_application.execute_legacy_call(
+    result = dongfu_application.accelerate(
         operation_id=operation_id,
         user_id=str(uid),
-        action="accelerate",
-        payload={"expected_slots": expected_slots, "slot_no": slot_no, "accelerate_item": DONGFU_ITEM_ACCELERATE, "now": _fmt_dt(now), "new_finish": _fmt_dt(new_finish)},
-        call=lambda: _dongfu_accelerate_service().accelerate(
-            operation_id, uid, expected_slots, slot_no, DONGFU_ITEM_ACCELERATE, _fmt_dt(now), _fmt_dt(new_finish),
-        ),
+        expected_slots=expected_slots,
+        slot_no=slot_no,
+        item_id=DONGFU_ITEM_ACCELERATE,
+        now=_fmt_dt(now),
+        new_finish=_fmt_dt(new_finish),
     )
-    result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
 
     if result.status == "duplicate":
         d = _get_dongfu(uid)

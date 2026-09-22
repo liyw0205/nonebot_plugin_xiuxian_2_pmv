@@ -3292,13 +3292,19 @@
 
 2026-09-23 compensation normal-claim full evidence：完整回归`2144 tests OK`。
 
-2026-09-23 compensation redeem-code isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。兑换码首次完整回归因架构检查器对只读`has_claimed`的误报失败，修复P2规则后已重新取得权威full证据。
+2026-09-23 dongfu accelerate isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
 
-2026-09-23 compensation redeem-code full evidence：完整回归`2144 tests OK`。
+2026-09-23 dongfu accelerate full evidence：完整回归`2144 tests OK`。
 
 2026-09-23 compensation redeem-code final contract evidence：P2架构误报修复后的权威full重新通过`2144 tests OK`，P0-P6 completion audit保持全绿，P7仍要求真实release-cycle证据。
 
+2026-09-23 compensation redeem-code isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-23 compensation redeem-code full evidence：完整回归`2144 tests OK`。
+
 2026-09-23 architecture P2 contract repair：`check_operation_id_on_asset_writes`新增只读方法名识别，避免`has_claimed/get_used_count`等查询被误判为缺少operation_id；修复后P0-P6 completion audit全部ready，P7仍按设计要求真实release-cycle证据。
+
+2026-09-23 dongfu accelerate feature-owned cutover：新增`DongfuAccelerateSqlRepository`、`DongfuApplication.accelerate`并将催熟handler从`execute_legacy_call`切换到application路径；双库原子校验洞府slots快照、扣除灵息露、更新成熟时间和legacy投影并写幂等记录，保留duplicate/state_changed/dongfu_missing/plot_empty/already_mature/item_insufficient和rollback。focused `216 tests`，compile/inventory/diff通过。
 
 2026-09-23 compensation redeem-code feature-owned cutover：复用`CompensationRewardClaimSqlRepository`的limited claim/has_claimed/get_used_count能力，兑换码handler移除默认`RewardClaimService`调用；保留usage_limit、legacy baseline、exhausted、duplicate和原子发奖。focused `218 tests`，compile/inventory/diff通过。
 
