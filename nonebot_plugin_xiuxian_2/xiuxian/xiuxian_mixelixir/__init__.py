@@ -662,9 +662,8 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                     if event_id
                     else f"mixelixir-reward-recover:{user_id}:{ready_task_id}:{runtime_ids.new_id()}"
                 )
-                claimed = _mixelixir_refine_reward_service().claim(
-                    claim_operation, user_id, ready_task_id, XiuConfig().max_goods_num
-                )
+                claimed_outcome = mixelixir_application.refine_reward(operation_id=claim_operation, user_id=user_id, task_id=ready_task_id, max_goods_num=XiuConfig().max_goods_num)
+                claimed = SimpleNamespace(**dict(claimed_outcome.data or {})); claimed.status = claimed_outcome.status; claimed.succeeded = claimed_outcome.ok
                 if claimed.succeeded:
                     msg = (
                         f"**炼丹结果**\n---\n✅ 补领成功\n"
@@ -748,9 +747,8 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                             if event_id
                             else f"mixelixir-reward-recover:{user_id}:{ready_task_id}:{runtime_ids.new_id()}"
                         )
-                        claimed = _mixelixir_refine_reward_service().claim(
-                            claim_operation, user_id, ready_task_id, XiuConfig().max_goods_num
-                        )
+                        claimed_outcome = mixelixir_application.refine_reward(operation_id=claim_operation, user_id=user_id, task_id=ready_task_id, max_goods_num=XiuConfig().max_goods_num)
+                        claimed = SimpleNamespace(**dict(claimed_outcome.data or {})); claimed.status = claimed_outcome.status; claimed.succeeded = claimed_outcome.ok
                         if claimed.succeeded:
                             msg = (
                                 f"恭喜道友成功炼成丹药：{claimed.reward_name}{claimed.reward_quantity}枚\n"
