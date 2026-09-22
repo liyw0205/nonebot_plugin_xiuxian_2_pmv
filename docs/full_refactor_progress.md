@@ -3062,6 +3062,8 @@
 
 2026-09-22 auction bid full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2141` tests，全部通过，退出码 `0`；auction bid/source/application tests另行通过，根 discovery 计数为 `2141`，测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
 
+2026-09-22 auction bid authoritative full regression：当前工作树 auction bid cutover 完成后，在隔离环境 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false PYTHONDONTWRITEBYTECODE=1` 下重新执行完整 `python -m unittest discover -s tests -q`，实际执行 `2141` tests，全部通过，退出码 `0`；该结果覆盖当前切换版本，旧的 `2112` 后台结果不作为本 slice 证据。
+
 2026-09-22 auction bid feature-owned cutover：`AuctionBidApplication.place_bid` 默认路径改为直接使用成熟 `TradeRepository.place_auction_bid` 事务，显式 `AuctionBidRepository` 注入保留兼容；新默认临时数据库 regression 验证 `applied/replayed`，auction bid/source focused `216 passed`，compile/architecture/inventory/diff check 通过。
 
 2026-09-22 auction bid isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
