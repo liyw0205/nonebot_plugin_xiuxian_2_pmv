@@ -3094,6 +3094,10 @@
 
 2026-09-22 work settlement isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
 
+2026-09-22 mixelixir refine-cost feature-owned cutover：炼丹任务扣材入口默认改用新增 `MixelixirRefineCostSqlRepository`，通过单库 `DatabaseUnitOfWork` 原子校验配方快照、扣除药材、创建可领取 refine task 并写幂等记录；显式旧服务兼容保留，reward claim未扩大改动。focused `4 unittest/6 pytest`，compile/inventory/diff check通过。
+
+2026-09-22 mixelixir refine-cost isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
+
 2026-09-22 buff blessed-spot rename feature-owned cutover：`BuffApplication.rename` 默认路径改用新增 `BlessedSpotRenameSqlRepository`，通过 `DatabaseUnitOfWork` 执行名称乐观锁和 `blessed_spot_operations` 幂等记录；显式 `BuffRepository` 注入保留兼容，open/upgrade未扩大改动。新增真实临时数据库 regression 验证 `applied/duplicate/state_changed/blessed_spot_missing`，buff rename/source focused `12 passed`，compile/architecture/inventory/diff check 通过。
 
 2026-09-22 buff blessed-spot rename isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。

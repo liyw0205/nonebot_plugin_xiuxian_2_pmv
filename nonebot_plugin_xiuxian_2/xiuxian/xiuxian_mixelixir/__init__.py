@@ -721,20 +721,8 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                 updated_mix_state["炼丹经验"] = int(updated_mix_state["炼丹经验"] or 0) + exp_gain
 
                 operation_id = f"mixelixir-cost:{event_id}:{user_id}" if event_id else f"mixelixir-cost:{user_id}:{runtime_ids.new_id()}"
-                started = _mixelixir_refine_cost_service().start(
-                    operation_id,
-                    user_id,
-                    "custom",
-                    recipe_key,
-                    int(user_info.get("mixelixir_num", 0) or 0),
-                    num,
-                    expected_mix_state,
-                    updated_mix_state,
-                    materials=material_counts,
-                    furnace_id=furnace_id,
-                    reward_id=int(id),
-                    reward_name=str(goods_info["name"]),
-                )
+                outcome = mixelixir_application.refine_cost(operation_id=operation_id, user_id=user_id, recipe_set_id="custom", daily_count=int(user_info.get("mixelixir_num", 0) or 0), expected_snapshot=expected_mix_state, updated_mix_state=updated_mix_state, max_goods_num=XiuConfig().max_goods_num)
+                started = SimpleNamespace(**dict(outcome.data or {})); started.status = outcome.status; started.succeeded = outcome.ok; started.task_id = str(getattr(started, "task_id", ""))
                 if started.status == "duplicate":
                     claim_operation = f"mixelixir-reward:{event_id}:{user_id}" if event_id else f"mixelixir-reward:{user_id}:{runtime_ids.new_id()}"
                     claimed = _mixelixir_refine_reward_service().claim(
