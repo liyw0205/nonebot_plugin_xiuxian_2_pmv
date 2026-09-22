@@ -3179,3 +3179,5 @@
 2026-09-22 base rename feature-owned cutover：`BaseApplication.rename` 默认路径改用新增`BaseRenameSqlRepository`，单库原子处理用户/灵根改名、唯一性、灵石/改名卡扣除和`player_rename_operations`幂等记录；显式通用repository注入保留，其他base actions未扩大改动。focused `1 unittest/210 pytest`，compile/inventory/diff check通过。
 
 2026-09-22 base rename isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-22 sign-in progress contract repair：`check_full_refactor_progress.py`的lottery默认路径检查原先寻找已不存在的`if legacy_lottery else LotteryApplication(`模式，导致真实已切换的`context.legacy_startup`分支被误报；检查器现在验证实际`LotteryApplication`存在且`LotterySettlementService`不在plugin默认路径。progress contract `2 passed`，compile/diff check通过。
