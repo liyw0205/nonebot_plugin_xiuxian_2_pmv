@@ -15,6 +15,7 @@ from .stone_repository import AdminStoneSqlRepository
 from .item_repository import AdminItemSqlRepository
 from .impart_stone_repository import AdminImpartStoneSqlRepository
 from .item_destroy_repository import AdminItemDestroySqlRepository
+from .exp_repository import AdminExpAdjustmentSqlRepository
 
 
 class AdminAssetApplication:
@@ -209,6 +210,11 @@ class AdminAssetApplication:
         raw = AdminItemDestroySqlRepository(self.database).destroy(operation_id, operator_id, user_id, item_id, item_name, item_type, quantity, expected_quantity, target_name=target_name)
         data = asdict(raw)
         return type("AdminItemDestroyOutcome", (), {"data": data, "status": raw.status, "ok": raw.succeeded})()
+
+    def adjust_exp(self, *, operation_id: str, operator_id: str, user_id: str, expected_exp: int, requested_delta: int, target_name: str = ""):
+        raw = AdminExpAdjustmentSqlRepository(self.database).adjust(operation_id, operator_id, user_id, expected_exp, requested_delta, target_name=target_name)
+        data = asdict(raw)
+        return type("AdminExpAdjustmentOutcome", (), {"data": data, "status": raw.status, "ok": raw.succeeded})()
 
     def reply(self, **kwargs: Any) -> ReplyPlan:
         outcome = self.adjust_stone(**kwargs)

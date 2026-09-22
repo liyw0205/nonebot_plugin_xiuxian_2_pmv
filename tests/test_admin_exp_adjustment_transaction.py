@@ -17,7 +17,7 @@ class AdminExpAdjustmentTransactionTests(unittest.TestCase):
         source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
         text = source.read_text(encoding="utf-8")
         handler = text[text.index("async def adjust_exp_command_"):text.index("@zaohua_xiuxian.handle")]
-        self.assertIn("admin_asset_application.execute_legacy_call(", text)
+        self.assertIn("admin_asset_application.adjust_exp(", text)
         self.assertNotIn("_admin_exp_adjustment_service().adjust(", handler)
     def test_admin_facade_defers_exp_adjustment_service_construction(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_admin

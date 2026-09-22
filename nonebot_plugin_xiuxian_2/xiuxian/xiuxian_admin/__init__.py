@@ -235,18 +235,12 @@ def _destroy_admin_item(event, user_id, goods_id, item_info, quantity, expected_
 
 def _adjust_admin_exp(event, user_id, expected_exp, delta, target_name):
     operation_id = _admin_operation_id(event, "exp-adjust", str(user_id))
-    outcome = admin_asset_application.execute_legacy_call(
-        operation_id=operation_id,
-        user_id=str(user_id),
-        action="exp_adjust",
-        payload={"expected_exp": expected_exp, "delta": delta, "target_name": target_name},
-        call=lambda: _admin_exp_adjustment_service().adjust(
-            operation_id, str(get_user_id(event) or "unknown"), user_id,
-            expected_exp, delta, target_name=target_name,
-        ),
+    outcome = admin_asset_application.adjust_exp(
+        operation_id=operation_id, operator_id=str(get_user_id(event) or "unknown"),
+        user_id=str(user_id), expected_exp=expected_exp, requested_delta=delta,
+        target_name=target_name,
     )
-    data = dict(outcome.data or {}); data.setdefault("status", outcome.status); data["succeeded"] = outcome.ok
-    return SimpleNamespace(**data)
+    return SimpleNamespace(**dict(outcome.data or {}), status=outcome.status, succeeded=outcome.ok)
 
 
 def _adjust_admin_level(event, user_id, expected_state, level, power, spend, root_rate):
