@@ -161,7 +161,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
         },
         "natal_treasure": {
             "awaken_application_owned": "natal_treasure_application.awaken(" in natal_facade,
-            "effect_upgrade_application_owned": "natal_application.upgrade(" in natal_facade,
+            "effect_upgrade_application_owned": "natal_treasure_application.upgrade(" in natal_facade,
             "legacy_awaken_disabled": "_natal_awaken_service().awaken(" not in natal_facade,
             "status": "awaken_effect_upgrade_cutover_with_other_natal_mutations_compatibility",
         },

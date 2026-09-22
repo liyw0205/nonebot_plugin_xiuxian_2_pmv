@@ -1644,7 +1644,7 @@ class SourceQualityTests(unittest.TestCase):
         source = (natal_root / "__init__.py").read_text(encoding="utf-8")
         start = source.index("@natal_effect_upgrade.handle")
         handler = source[start:source.index("# 定义铭刻道纹命令", start)]
-        self.assertIn("natal_application.upgrade(", handler)
+        self.assertIn("natal_treasure_application.upgrade(", handler)
         self.assertNotIn("nt.upgrade_single_effect_level(", handler)
         self.assertNotIn("sql_message.update_back_j(", handler)
         service = (natal_root / "effect_upgrade_service.py").read_text(encoding="utf-8")

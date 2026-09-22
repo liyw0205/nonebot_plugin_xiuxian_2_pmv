@@ -462,12 +462,7 @@ async def natal_effect_upgrade_handler(bot: Bot, event: GroupMessageEvent | Priv
     scripture_cost = 1
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"natal-effect-upgrade:{event_id}:{user_id}" if event_id else f"natal-effect-upgrade:{user_id}:{runtime_ids.new_id()}"
-    prior = _natal_effect_upgrade_service().get_result(operation_id)
-    if prior is not None and prior.succeeded:
-        effect_name = EFFECT_NAME_MAP.get(NatalEffectType(prior.effect_type), "未知效果")
-        await handle_send(bot, event, f"效果升阶成功！消耗{scripture_cost}个【神秘经书】。\n效果【{effect_name}】等级提升至 {prior.level}。\n该升阶请求已经处理，无需重复提交。",
-                          md_type="法宝", k1="法宝", v1="我的本命法宝", k2="铭刻", v2="铭刻道纹", k3="升阶", v3="本命法宝升阶")
-        return
+
     scripture_num = _sql_message().goods_num(user_id, MYSTERIOUS_SCRIPTURE_ID)
     if scripture_num < scripture_cost:
         mysterious_scripture_info = items.get_data_by_item_id(MYSTERIOUS_SCRIPTURE_ID)
@@ -475,12 +470,14 @@ async def natal_effect_upgrade_handler(bot: Bot, event: GroupMessageEvent | Priv
                           md_type="法宝", k1="升阶", v1="本命法宝升阶", k2="法宝", v2="我的本命法宝", k3="觉醒", v3="觉醒本命法宝")
         return
 
-    upgrade = natal_application.upgrade(
+    upgrade_outcome = natal_treasure_application.upgrade(
         operation_id=operation_id, user_id=str(user_id), item_id=MYSTERIOUS_SCRIPTURE_ID,
         scripture_cost=scripture_cost, max_effect_slots=MAX_EFFECT_SLOTS,
         max_effect_level=nt.max_effect_level_all_effects,
         choice_seed=_natal_choice_seed(operation_id),
     )
+    upgrade_data = upgrade_outcome.data or {}
+    upgrade = SimpleNamespace(**upgrade_data, status=upgrade_outcome.status, succeeded=upgrade_outcome.ok)
     if upgrade.status == "duplicate" or upgrade.succeeded:
         nt._natal_data_cache = None
         effect_name = EFFECT_NAME_MAP.get(NatalEffectType(upgrade.effect_type), "未知效果")
