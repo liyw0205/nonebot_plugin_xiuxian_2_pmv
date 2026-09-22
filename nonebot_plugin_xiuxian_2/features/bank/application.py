@@ -12,6 +12,7 @@ from .domain import BankDepositRequest, BankInterestRequest, BankUpgradeRequest,
 from .repository import BankRepository, LegacyBankRepository
 from .account_application import BankDepositApplication
 from .account_withdrawal_application import BankWithdrawalApplication
+from .account_upgrade_application import BankUpgradeApplication
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -95,8 +96,16 @@ class BankApplication:
             request.validate()
         except (TypeError, ValueError) as exc:
             raise ValidationError(str(exc)) from exc
-        repository = self.repository or LegacyBankRepository(self.game_database, self.player_database)
-        return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="bank.upgrade", payload=request.payload(), call=lambda: repository.upgrade(request.operation_id, request.user_id, request.expected_level, request.next_level, request.cost), messages={"stone_insufficient": "灵石不足，会员升级未结算。", "state_changed": "灵庄会员升级失败：账户当前状态已更新。", "user_missing": "未找到修仙数据。"})
+        if self.repository is None:
+            call = lambda: BankUpgradeApplication(self.game_database).upgrade(
+                operation_id=request.operation_id, user_id=request.user_id,
+                expected_level=request.expected_level, next_level=request.next_level,
+                cost=request.cost, settled_at="",
+            )
+        else:
+            repository = self.repository
+            call = lambda: repository.upgrade(request.operation_id, request.user_id, request.expected_level, request.next_level, request.cost)
+        return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="bank.upgrade", payload=request.payload(), call=call, messages={"stone_insufficient": "灵石不足，会员升级未结算。", "state_changed": "灵庄会员升级失败：账户当前状态已更新。", "user_missing": "未找到修仙数据。"})
 
     def settle_interest(self, *, operation_id: str, user_id: str, expected_saved_stone: int, expected_saved_at: str, bank_level: str, interest: int, settled_at: str) -> OperationOutcome[dict[str, Any]]:
         try:
