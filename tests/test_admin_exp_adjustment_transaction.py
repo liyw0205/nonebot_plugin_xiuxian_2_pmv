@@ -94,7 +94,7 @@ class AdminExpAdjustmentTransactionTests(unittest.TestCase):
         handler = text[text.index("async def adjust_exp_command_"):text.index("@zaohua_xiuxian.handle")]
         self.assertIn("_adjust_admin_exp(", handler)
         helper = text[text.index("def _adjust_admin_exp("):text.index("def _grant_admin_accessory(")]
-        self.assertIn("admin_asset_application.execute_legacy_call(", helper)
+        self.assertIn("admin_asset_application.adjust_exp(", helper)
         self.assertNotIn("sql_message.update_exp(", handler)
         self.assertNotIn("sql_message.update_j_exp(", handler)
 
