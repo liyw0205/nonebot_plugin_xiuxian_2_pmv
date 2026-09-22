@@ -3217,3 +3217,7 @@
 2026-09-23 sect daily maintenance isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
 
 2026-09-22 back default wiring pending blocker：`BackApplication`仍有`use_item/change_equipment/learn_skill/repair/use_pet_eggs/alchemy/unbind`等真实handler调用旧通用repository，不能仅移除默认`LegacyBackRepository`构造；已撤销临时source测试，未做不完整切换，记录为独立pending。
+
+2026-09-23 admin accessory pending blocker：`AdminAssetApplication.adjust_accessory`的真实边界同时涉及game用户存在性、player数据库`player_accessory`的equipped/bag JSON快照、装备UID/quality/name完整性、库存上限、幂等操作记录和`economy_log`；当前没有可复用的feature-owned accessory repository。直接保留`AdminAccessoryAdjustmentService`调用不满足底层重构，直接复制旧事务规则会产生双实现，记录为pending并跳转独立slice。
+
+2026-09-23 sign-in lottery audit contract repair：进度检查器的`lottery_core_default_legacy`布尔谓词与字段语义相反，真实plugin已使用`LotteryApplication`且未使用`LotterySettlementService`却被报告为`true`；修正谓词并新增审计回归，当前`lottery_core_default_legacy=false`、`lottery_compatibility_fallback=false`，progress contract `2 passed`，compile/inventory/diff check通过。
