@@ -3025,3 +3025,9 @@
 2026-09-22 sect isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
 
 2026-09-22 sect full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2129` tests，全部通过，退出码 `0`；sect source/lazy/transaction tests另行通过，根 discovery 计数为 `2129`，测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
+
+2026-09-22 work default repository wiring：移除 `xiuxian_work` module-level `LegacyWorkClaimRepository` 与 `LegacyWorkSettlementRepository` 显式注入，两个 Work Application 保留显式 repository compatibility fallback；悬赏令接取/结算入口继续通过 feature applications，未改变 work operation protocol。work source/facade/claim/settlement `217 passed`，source/compile/architecture/inventory/diff check 通过。
+
+2026-09-22 work isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
+
+2026-09-22 work full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2130` tests，全部通过，退出码 `0`；work source/facade/claim/settlement tests另行通过，根 discovery 计数为 `2130`，测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。

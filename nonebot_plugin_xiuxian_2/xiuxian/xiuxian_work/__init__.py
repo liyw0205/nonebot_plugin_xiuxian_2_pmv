@@ -35,7 +35,7 @@ from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.ids import UUIDGenerator
 from ...features.work.application import WorkClaimApplication, WorkSettlementApplication
 from ...features.work.maintenance_application import WorkDailyRefreshResetApplication
-from ...features.work.repository import LegacyWorkClaimRepository, LegacyWorkSettlementRepository
+
 from .transaction_service import WorkItemUseService
 from .transaction_service import WorkRefreshSettlementService
 from .transaction_service import WorkAbortCleanupService
@@ -43,11 +43,9 @@ from .transaction_service import WorkAbortCleanupService
 
 work_claim_application = WorkClaimApplication(
     get_paths().game_db,
-    repository=LegacyWorkClaimRepository(get_paths().game_db),
 )
 work_settlement_application = WorkSettlementApplication(
     get_paths().game_db,
-    repository=LegacyWorkSettlementRepository(get_paths().game_db),
 )
 _work_item_use_service_instance = None
 _work_refresh_service_instance = None
