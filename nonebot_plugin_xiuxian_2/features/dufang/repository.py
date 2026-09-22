@@ -5,6 +5,7 @@ from typing import Any
 
 from .._service_port import ServicePort
 from .payout_repository import DufangPayoutSqlRepository
+from .bet_repository import DufangBetSqlRepository
 
 
 class DufangRepository(ServicePort):
@@ -22,9 +23,7 @@ class DufangRepository(ServicePort):
                 payload["effect_amount"], payload["cost_bonus_percent"], payload["recipients"], payload["settled_at"],
             )
         if str(action).casefold() == "bet" and self.player_database is not None:
-            from ...xiuxian.xiuxian_dufang.transaction_service import DufangBetService
-
-            return DufangBetService(self.database, self.player_database).place(
+            return DufangBetSqlRepository(self.database, self.player_database).place(
                 operation_id,
                 user_id,
                 payload["cost"],
