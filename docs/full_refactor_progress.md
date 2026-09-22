@@ -3090,6 +3090,10 @@
 
 2026-09-22 work claim isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
 
+2026-09-22 work settlement feature-owned cutover：`WorkSettlementApplication.settle` 默认路径改用新增 `WorkSettlementSqlRepository`，通过 `DatabaseUnitOfWork` 单库原子校验任务状态、结算经验、发放可选物品、重置 `user_cd` 并写幂等结果；显式旧 `WorkSettlementRepository` 注入保留兼容。focused `1 unittest/7 pytest`，compile/inventory/diff check通过。
+
+2026-09-22 work settlement isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
+
 2026-09-22 buff blessed-spot rename feature-owned cutover：`BuffApplication.rename` 默认路径改用新增 `BlessedSpotRenameSqlRepository`，通过 `DatabaseUnitOfWork` 执行名称乐观锁和 `blessed_spot_operations` 幂等记录；显式 `BuffRepository` 注入保留兼容，open/upgrade未扩大改动。新增真实临时数据库 regression 验证 `applied/duplicate/state_changed/blessed_spot_missing`，buff rename/source focused `12 passed`，compile/architecture/inventory/diff check 通过。
 
 2026-09-22 buff blessed-spot rename isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
