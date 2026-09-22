@@ -6,6 +6,7 @@ from .._service_port import ServicePort
 from .love_sand_repository import LoveSandSqlRepository
 from .prayer_repository import ImpartPrayerSqlRepository
 from .compose_repository import ImpartCardComposeSqlRepository
+from .disassemble_repository import ImpartCardDisassembleSqlRepository
 
 
 class ImpartRepository(ServicePort):
@@ -21,6 +22,9 @@ class ImpartRepository(ServicePort):
 
     def compose(self, operation_id, user_id, source_card, target_card, expected_source_quantity, expected_target_quantity, cost, card_definitions):
         return ImpartCardComposeSqlRepository(self.database).compose(operation_id, user_id, source_card, target_card, expected_source_quantity, expected_target_quantity, cost, card_definitions)
+
+    def disassemble(self, operation_id, user_id, card_name, quantity, expected_card_quantity, expected_stone_quantity, reward_per_card, card_definitions):
+        return ImpartCardDisassembleSqlRepository(self.database).disassemble(operation_id, user_id, card_name, quantity, expected_card_quantity, expected_stone_quantity, reward_per_card, card_definitions)
 
 
 __all__ = ["ImpartRepository"]

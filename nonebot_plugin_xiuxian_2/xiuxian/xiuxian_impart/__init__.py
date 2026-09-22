@@ -849,17 +849,16 @@ async def impart_disassemble_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     if impart_state is None:
         await handle_send(bot, event, "未找到传承数据！")
         return
-    outcome = impart_application.execute_legacy_call(
+    result = impart_application.disassemble(
         operation_id=operation_id,
         user_id=user_id,
-        action="disassemble",
-        payload={"card_name": card_name, "quantity": quantity},
-        call=lambda: _card_disassemble_service().disassemble(
-            operation_id, user_id, card_name, quantity, cards.get(card_name, 0),
-            impart_state["stone_num"], 2, impart_data_json.data_all_(),
-        ),
+        card_name=card_name,
+        quantity=quantity,
+        expected_card_quantity=cards.get(card_name, 0),
+        expected_stone_quantity=impart_state["stone_num"],
+        reward_per_card=2,
+        card_definitions=impart_data_json.data_all_(),
     )
-    result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
 
     messages = {"card_missing": "卡牌不足；分解后必须至少保留1张！", "state_changed": "卡牌操作未结算：卡牌当前状态已更新，请重新操作。", "user_missing": "未找到传承数据！"}
     if result.status == "duplicate":

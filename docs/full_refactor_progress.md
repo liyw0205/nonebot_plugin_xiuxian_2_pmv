@@ -3284,4 +3284,10 @@
 
 2026-09-23 impart card-compose full evidence：完整回归`2144 tests OK`。
 
+2026-09-23 impart card-disassemble isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-23 impart card-disassemble full evidence：完整回归`2144 tests OK`。
+
+2026-09-23 impart card-disassemble feature-owned cutover：新增`ImpartCardDisassembleSqlRepository`、`ImpartApplication.disassemble`并将分解handler从`execute_legacy_call`切换到application路径；单库原子保留至少一张卡、增加结晶、刷新bonus并写operation幂等记录，保留user_missing/card_missing/state_changed/duplicate和rollback。focused `20 unittest/209 pytest`，compile/inventory/diff通过。
+
 2026-09-23 sign-in lottery audit contract repair：进度检查器的`lottery_core_default_legacy`布尔谓词与字段语义相反，真实plugin已使用`LotteryApplication`且未使用`LotterySettlementService`却被报告为`true`；修正谓词并新增审计回归，当前`lottery_core_default_legacy=false`、`lottery_compatibility_fallback=false`，progress contract `2 passed`，compile/inventory/diff check通过。

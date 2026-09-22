@@ -19,5 +19,7 @@ class ImpartApplication(MigratedFeatureApplication):
     def compose(self, *, operation_id: str, user_id: str, source_card: str, target_card: str, expected_source_quantity: int, expected_target_quantity: int, cost: int, card_definitions):
         return self.repository.compose(operation_id, user_id, source_card, target_card, expected_source_quantity, expected_target_quantity, cost, card_definitions)
 
+    def disassemble(self, *, operation_id: str, user_id: str, card_name: str, quantity: int, expected_card_quantity: int, expected_stone_quantity: int, reward_per_card: int, card_definitions):
+        return self.repository.disassemble(operation_id, user_id, card_name, quantity, expected_card_quantity, expected_stone_quantity, reward_per_card, card_definitions)
 
 __all__ = ["ImpartApplication"]
