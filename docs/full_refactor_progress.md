@@ -3230,4 +3230,6 @@
 
 2026-09-23 remaining legacy execution blockers：继续扫描`execute_legacy_call`残余路径后确认，Past Life reset-all是跨game/player持久化批处理（create/run_batch和历史清除）；Compensation claim同时更新灵石、背包、claim counter并兼容旧JSON定义；Impart prayer是game+impart双库事务，包含祈愿石扣减、卡片增量、bonus刷新和幂等；Status version update包含外部版本更新/备份副作用。当前均无足够小且不复制旧规则的feature-owned边界，记录pending并继续保留显式兼容路径。
 
+2026-09-23 admin audit gap：进度检查器当前将admin item destroy/exp/level/root等标记为application-owned，但真实handler仍通过`admin_asset_application.execute_legacy_call`调用旧service，且`AdminAssetApplication`没有对应专用方法/repository；该flag不能作为真实切换证据，已记录为待修正的审计/迁移缺口，未做未经验证的入口替换。
+
 2026-09-23 sign-in lottery audit contract repair：进度检查器的`lottery_core_default_legacy`布尔谓词与字段语义相反，真实plugin已使用`LotteryApplication`且未使用`LotterySettlementService`却被报告为`true`；修正谓词并新增审计回归，当前`lottery_core_default_legacy=false`、`lottery_compatibility_fallback=false`，progress contract `2 passed`，compile/inventory/diff check通过。
