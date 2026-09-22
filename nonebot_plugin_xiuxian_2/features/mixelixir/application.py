@@ -9,7 +9,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import HarvestRequest, SettlementRequest, normalize_rewards
-from .repository import LegacyMixelixirRepository, MixelixirRepository
+from .repository import MixelixirRepository
 from .harvest_repository import MixelixirHarvestSqlRepository
 from .settlement_repository import MixelixirSettlementSqlRepository
 from .harvest_level_upgrade_repository import MixelixirHarvestLevelUpgradeSqlRepository
@@ -61,7 +61,9 @@ class MixelixirApplication:
                 raise
 
     def _repository(self) -> MixelixirRepository:
-        return self.repository or LegacyMixelixirRepository(self.game_database, self.player_database)
+        if self.repository is None:
+            raise RuntimeError("legacy mixelixir repository requires explicit injection")
+        return self.repository
 
     def harvest(self, *, operation_id: str, user_id: str, expected_last_time: str, harvested_at: str, rewards: Any, max_goods_num: int) -> OperationOutcome[dict[str, Any]]:
         try:

@@ -3157,3 +3157,7 @@
 2026-09-22 pet application wiring maintenance：`PetApplication`移除已无生产调用的`_repository()`通用legacy构造及对应导入；active/feed/travel/hatch/release/fusion/reroll入口继续使用feature-owned SQL repositories，显式repository兼容路径保留。source/feature focused `7 passed`，compile/inventory/diff check通过。
 
 2026-09-22 pet application wiring isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-22 mixelixir application wiring maintenance：`MixelixirApplication`不再默认构造`LegacyMixelixirRepository`；harvest/settle等已迁移动作继续默认使用feature-owned SQL repositories，显式legacy repository注入仍可用。source/feature focused `9 passed`，compile/inventory/diff check通过。
+
+2026-09-22 mixelixir application wiring isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
