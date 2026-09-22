@@ -3242,4 +3242,10 @@
 
 2026-09-23 admin exp-adjust contract/full evidence：修正管理员经验调整source契约为`AdminAssetApplication.adjust_exp`后，完整回归`2143 tests OK`；focused `8 unittest/210 pytest`、compile/inventory/diff和recovery证据均通过。
 
+2026-09-23 admin level-change feature-owned cutover：新增`AdminLevelChangeSqlRepository`，实际管理员境界调整handler改用`AdminAssetApplication.change_level`；单库原子校验8字段玩家状态快照、更新境界/修为/气血/灵力/攻击/战力并写幂等记录，保留user_missing/state_changed/replay/conflict。focused `1 unittest/210 pytest`，compile/inventory/diff check通过。
+
+2026-09-23 admin level-change isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-23 admin level-change full evidence：完整回归`2143 tests OK`。
+
 2026-09-23 sign-in lottery audit contract repair：进度检查器的`lottery_core_default_legacy`布尔谓词与字段语义相反，真实plugin已使用`LotteryApplication`且未使用`LotterySettlementService`却被报告为`true`；修正谓词并新增审计回归，当前`lottery_core_default_legacy=false`、`lottery_compatibility_fallback=false`，progress contract `2 passed`，compile/inventory/diff check通过。
