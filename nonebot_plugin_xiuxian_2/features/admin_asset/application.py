@@ -12,6 +12,7 @@ from .domain import ItemGrantRequest, StoneAdjustmentRequest
 from .repository import AdminItemRepository, AdminStoneRepository, LegacyAdminItemRepository, LegacyAdminStoneRepository
 from .schemas import ItemGrantResult, StoneAdjustmentResult
 from .stone_repository import AdminStoneSqlRepository
+from .item_repository import AdminItemSqlRepository
 
 
 class AdminAssetApplication:
@@ -160,7 +161,7 @@ class AdminAssetApplication:
                         if previous is not None:
                             return previous.replay()
                         raise ConflictError("操作正在处理中")
-                repository = self.item_repository or LegacyAdminItemRepository(self.database)
+                repository = self.item_repository or AdminItemSqlRepository(self.database)
                 raw = repository.grant(
                     request.operation_id, request.operator_id, request.user_id, request.item_id,
                     request.item_name, request.item_type, request.quantity,
