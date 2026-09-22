@@ -3141,3 +3141,7 @@
 2026-09-22 admin item feature-owned cutover：`AdminAssetApplication.grant_item` 默认路径改用新增 `AdminItemSqlRepository`，通过单库 `DatabaseUnitOfWork` 原子校验库存快照、库存上限、发放物品并写幂等结果；显式旧 admin repository注入保留兼容。focused `9 unittest/14 pytest`，compile/inventory/diff check通过。
 
 2026-09-22 admin item isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-22 admin impart-stone feature-owned cutover：`AdminAssetApplication.adjust_impart_stone` 默认路径改用新增 `AdminImpartStoneSqlRepository`，通过 game/impart 双库 `DatabaseUnitOfWork` 原子校验灵石、更新两侧余额并写幂等结果；显式旧 admin service不再作为默认路径。focused `7 unittest/12 pytest`，compile/inventory/diff check通过。
+
+2026-09-22 admin impart-stone isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。

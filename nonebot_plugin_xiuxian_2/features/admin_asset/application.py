@@ -13,6 +13,7 @@ from .repository import AdminItemRepository, AdminStoneRepository, LegacyAdminIt
 from .schemas import ItemGrantResult, StoneAdjustmentResult
 from .stone_repository import AdminStoneSqlRepository
 from .item_repository import AdminItemSqlRepository
+from .impart_stone_repository import AdminImpartStoneSqlRepository
 
 
 class AdminAssetApplication:
@@ -105,10 +106,7 @@ class AdminAssetApplication:
         expected_stone: int | None, requested_delta: int, target_name: str = "",
         impart_database: str | Path,
     ):
-        from ...xiuxian.xiuxian_admin.transaction_service import AdminImpartStoneAdjustmentService
-        raw = AdminImpartStoneAdjustmentService(self.database, impart_database).adjust(
-            operation_id, operator_id, user_id, expected_stone, requested_delta, target_name=target_name,
-        )
+        raw = AdminImpartStoneSqlRepository(self.database, impart_database).adjust(operation_id, operator_id, user_id, int(expected_stone or 0), requested_delta, target_name=target_name)
         data = asdict(raw) if is_dataclass(raw) else dict(vars(raw))
         return type("AdminImpartStoneOutcome", (), {"data": data, "status": raw.status, "ok": raw.succeeded})()
 
