@@ -3058,6 +3058,12 @@
 
 2026-09-22 puppet upgrade full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2139` tests，全部通过，退出码 `0`；puppet upgrade/source/application tests另行通过，根 discovery 计数为 `2139`，测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
 
+2026-09-22 back package full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2140` tests，全部通过，退出码 `0`；back package/source/application tests另行通过，根 discovery 计数为 `2140`，测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
+
+2026-09-22 back package default cutover：`BackApplication.open_package` 默认路径改用 `PackageRewardApplication` 原子礼包事务；显式 `BackRepository` 注入保留兼容，其他背包 action未扩大改动。新增默认临时数据库 regression 验证 `applied/replayed`，back/package/source focused `13 passed`，compile/architecture/inventory/diff check 通过。
+
+2026-09-22 back package isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
+
 2026-09-22 puppet upgrade feature-owned cutover：`PuppetApplication.upgrade` 默认路径复用 `PuppetPurchaseSqlRepository.upgrade` 的 `DatabaseUnitOfWork` 主 game DB + attached player DB 原子事务；显式 `PuppetRepository` 注入保留兼容，harvest未扩大改动。新增默认 application regression 验证 `applied/replayed`，puppet upgrade/source focused `11 passed`，compile/architecture/inventory/diff check 通过。
 
 2026-09-22 puppet upgrade isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
