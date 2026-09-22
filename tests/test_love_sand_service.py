@@ -51,8 +51,7 @@ class LoveSandUseServiceTests(unittest.TestCase):
         source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart/__init__.py"
         text = source.read_text(encoding="utf-8")
         handler = text[text.index("async def use_love_sand"):text.index("@impart_back.handle")]
-        self.assertIn("impart_application.execute_legacy_call(", handler)
-        self.assertNotIn("result = _love_sand_service().apply(", handler)
+        self.assertIn("impart_application.love_sand(", handler)
 
     def test_card_compose_handler_uses_feature_application(self):
         source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart/__init__.py"

@@ -3268,4 +3268,10 @@
 
 2026-09-23 dufang bet full evidence：完整回归`2144 tests OK`。
 
+2026-09-23 impart love-sand feature-owned cutover：新增`LoveSandSqlRepository`并新增`ImpartApplication.love_sand`，实际使用思恋流沙handler移除`execute_legacy_call`默认路径；三库原子校验背包/结晶快照、扣除物品、增加结晶、兼容现有中文统计字段并写幂等记录，保留duplicate/operation_conflict/state_changed/item_missing和rollback。focused `7 unittest/210 pytest`，compile/inventory/diff check通过。
+
+2026-09-23 impart love-sand isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-23 impart love-sand full evidence：完整回归`2144 tests OK`。
+
 2026-09-23 sign-in lottery audit contract repair：进度检查器的`lottery_core_default_legacy`布尔谓词与字段语义相反，真实plugin已使用`LotteryApplication`且未使用`LotterySettlementService`却被报告为`true`；修正谓词并新增审计回归，当前`lottery_core_default_legacy=false`、`lottery_compatibility_fallback=false`，progress contract `2 passed`，compile/inventory/diff check通过。

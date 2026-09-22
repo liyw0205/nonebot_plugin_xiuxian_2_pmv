@@ -595,14 +595,12 @@ async def use_love_sand(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"love-sand:{event_id}:{user_id}:{item_id}" if event_id else f"love-sand:{runtime_ids.new_id()}:{user_id}:{item_id}"
     total_gained = sum(random.choice([10, 20, 30]) for _ in range(quantity))
-    outcome = impart_application.execute_legacy_call(
-        operation_id=operation_id,
-        user_id=str(user_id),
-        action="love_sand",
-        payload={"item_id": item_id, "quantity": quantity, "total_gained": total_gained, "item_count": item_count, "current_stones": current_stones},
-        call=lambda: _love_sand_service().apply(operation_id, user_id, item_id, quantity, total_gained, item_count, current_stones),
+    result = impart_application.love_sand(
+        operation_id=operation_id, user_id=str(user_id),
+        game_database=get_paths().game_db, player_database=get_paths().player_db,
+        item_id=item_id, quantity=quantity, gained=total_gained,
+        expected_item_count=item_count, expected_stone_num=current_stones,
     )
-    result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
 
     if result.status == "duplicate":
         final_msg = (
