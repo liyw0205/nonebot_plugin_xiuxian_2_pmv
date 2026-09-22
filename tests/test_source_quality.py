@@ -838,6 +838,12 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("sect_fairyland_claim_operations", service_source)
 
+    def test_sect_fairyland_default_application_does_not_construct_legacy_repository(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_sect" / "__init__.py").read_text(encoding="utf-8")
+        self.assertIn("sect_fairyland_application = SectFairylandApplication(", source)
+        self.assertNotIn("LegacySectFairylandRepository", source)
+        self.assertNotIn("repository=LegacySectFairylandRepository", source)
+
     def test_admin_xianshi_removal_uses_atomic_repository_flow(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
         command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")

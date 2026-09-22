@@ -81,7 +81,7 @@ from .transaction_service import SectCloseJoinService
 from .transaction_service import SectDisbandService
 from .transaction_service import SectDailyResetMaintenanceService
 from ...features.sect_fairyland.application import SectFairylandApplication
-from ...features.sect_fairyland.repository import LegacySectFairylandRepository
+
 from ...features.sect.application import SectApplication
 from ...features.sect.repository import SectRenameSqlRepository
 from ...infrastructure.ids import UUIDGenerator
@@ -100,7 +100,6 @@ runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 sect_fairyland_application = SectFairylandApplication(
     get_paths().player_db,
-    repository=LegacySectFairylandRepository(get_paths().player_db),
 )
 _sect_close_mountain_service_instance = None
 _sect_owner_inherit_service_instance = None
