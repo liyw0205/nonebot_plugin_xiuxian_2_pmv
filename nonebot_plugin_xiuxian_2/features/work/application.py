@@ -15,6 +15,7 @@ from .repository import (
     WorkClaimRepository,
     WorkSettlementRepository,
 )
+from .claim_repository import WorkClaimSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -61,7 +62,7 @@ class WorkClaimApplication:
                         if previous is not None:
                             return previous.replay()
                         raise ConflictError("操作正在处理中")
-                repository = self.repository or LegacyWorkClaimRepository(self.database)
+                repository = self.repository or WorkClaimSqlRepository(self.database)
                 raw = repository.claim(
                     request.operation_id, request.user_id, request.expected_count,
                     request.expected_offer, request.task_index, request.started_at,
