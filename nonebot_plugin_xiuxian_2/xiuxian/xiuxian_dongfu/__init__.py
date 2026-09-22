@@ -1369,10 +1369,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     gain = runtime_random.randint(10000, 50000)
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"dongfu-visit:{uid}:{event_message_id or runtime_ids.new_id()}"
-    result = _run_dongfu_action(
-        "visit", operation_id, uid,
-        call=lambda: _dongfu_visit_reward_service().reward(operation_id, uid, tid, gain),
-        target_user_id=tid, gain=gain,
+    result = dongfu_application.visit_reward(
+        operation_id=operation_id,
+        user_id=uid,
+        visitor_id=uid,
+        target_id=tid,
+        gain=gain,
     )
     if not result.succeeded:
         await handle_send(bot, event, "洞府操作未结算：洞府当前状态已更新，请稍后重试。")

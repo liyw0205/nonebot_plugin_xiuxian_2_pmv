@@ -9,5 +9,6 @@ class DongfuApplication(MigratedFeatureApplication):
     def fertilize(self,**kwargs): return self.repository.fertilize(**kwargs)
     def patrol(self,**kwargs): return self.repository.patrol(**kwargs)
     def harvest(self,**kwargs): return self.repository.harvest(**kwargs)
+    def visit_reward(self,*,operation_id,user_id,visitor_id,target_id,gain): return self.repository.visit_reward(operation_id,visitor_id,target_id,gain)
 
 __all__=['DongfuApplication']
