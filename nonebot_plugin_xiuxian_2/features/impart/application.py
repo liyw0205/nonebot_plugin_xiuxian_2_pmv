@@ -16,5 +16,8 @@ class ImpartApplication(MigratedFeatureApplication):
     def prayer_settle(self, *, operation_id: str, user_id: str, game_database: str, item_id: int, quantity: int, cards, card_definitions):
         return self.repository.prayer(game_database, operation_id, user_id, item_id, quantity, cards, card_definitions)
 
+    def compose(self, *, operation_id: str, user_id: str, source_card: str, target_card: str, expected_source_quantity: int, expected_target_quantity: int, cost: int, card_definitions):
+        return self.repository.compose(operation_id, user_id, source_card, target_card, expected_source_quantity, expected_target_quantity, cost, card_definitions)
+
 
 __all__ = ["ImpartApplication"]

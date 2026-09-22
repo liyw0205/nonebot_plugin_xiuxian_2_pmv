@@ -5,6 +5,7 @@ from pathlib import Path
 from .._service_port import ServicePort
 from .love_sand_repository import LoveSandSqlRepository
 from .prayer_repository import ImpartPrayerSqlRepository
+from .compose_repository import ImpartCardComposeSqlRepository
 
 
 class ImpartRepository(ServicePort):
@@ -17,6 +18,9 @@ class ImpartRepository(ServicePort):
 
     def prayer(self, game_database, operation_id, user_id, item_id, quantity, cards, card_definitions):
         return ImpartPrayerSqlRepository(game_database, self.database).settle(operation_id, user_id, item_id, quantity, cards, card_definitions)
+
+    def compose(self, operation_id, user_id, source_card, target_card, expected_source_quantity, expected_target_quantity, cost, card_definitions):
+        return ImpartCardComposeSqlRepository(self.database).compose(operation_id, user_id, source_card, target_card, expected_source_quantity, expected_target_quantity, cost, card_definitions)
 
 
 __all__ = ["ImpartRepository"]

@@ -20,11 +20,17 @@ def calculate_card_bonuses(cards: dict[str, int], definitions: dict[str, dict[st
     return bonuses
 
 
-def refresh_card_bonuses(connection, user_id: str, definitions: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def refresh_card_bonuses(
+    connection,
+    user_id: str,
+    definitions: dict[str, dict[str, Any]],
+    schema: str = "impart_data",
+) -> dict[str, Any]:
+    safe_schema = "".join(char if char.isalnum() or char == "_" else "_" for char in schema)
     cards = {
         str(row["card_name"]): int(row["quantity"])
         for row in connection.execute(
-            "SELECT card_name,quantity FROM impart_data.impart_cards WHERE user_id=?",
+            f"SELECT card_name,quantity FROM {safe_schema}.impart_cards WHERE user_id=?",
             (str(user_id),),
         ).fetchall()
     }
@@ -32,7 +38,7 @@ def refresh_card_bonuses(connection, user_id: str, definitions: dict[str, dict[s
     assignments = ",".join(f'"{field}"=?' for field in BONUS_FIELDS)
     values = [bonuses[field] for field in BONUS_FIELDS]
     updated = connection.execute(
-        f"UPDATE impart_data.xiuxian_impart SET {assignments} WHERE user_id=?",
+        f"UPDATE {safe_schema}.xiuxian_impart SET {assignments} WHERE user_id=?",
         (*values, str(user_id)),
     )
     if updated.rowcount != 1:

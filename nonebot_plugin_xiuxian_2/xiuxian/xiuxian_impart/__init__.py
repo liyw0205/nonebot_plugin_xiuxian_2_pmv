@@ -799,17 +799,17 @@ async def impart_compose_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"impart-compose:{event_id}:{user_id}" if event_id else f"impart-compose:{user_id}:{runtime_ids.new_id()}"
     cards = impart_data_json.data_person_list(user_id) or {}
-    outcome = impart_application.execute_legacy_call(
+    outcome = impart_application.compose(
         operation_id=operation_id,
         user_id=user_id,
-        action="compose",
-        payload={"source_card": source_card, "target_card": target_card, "quantity": 5},
-        call=lambda: _card_compose_service().compose(
-            operation_id, user_id, source_card, target_card, cards.get(source_card, 0),
-            cards.get(target_card, 0), 5, impart_data_json.data_all_(),
-        ),
+        source_card=source_card,
+        target_card=target_card,
+        expected_source_quantity=cards.get(source_card, 0),
+        expected_target_quantity=cards.get(target_card, 0),
+        cost=5,
+        card_definitions=impart_data_json.data_all_(),
     )
-    result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
+    result = outcome
 
     messages = {"same_card": "合成材料卡与目标卡不能相同！", "card_missing": "重复卡不足5张，无法合成！", "state_changed": "卡牌操作未结算：卡牌当前状态已更新，请重新操作。"}
     if result.status == "duplicate":
