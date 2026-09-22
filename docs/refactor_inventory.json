@@ -2637,6 +2637,7 @@
     "admin_player_status_reset_operations",
     "admin_root_change_operations",
     "admin_stone_adjustment_operations",
+    "admin_stone_operations",
     "admin_training_reset_operations",
     "admin_training_reset_targets",
     "aiohttp",
