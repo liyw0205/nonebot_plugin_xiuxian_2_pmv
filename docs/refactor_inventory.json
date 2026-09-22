@@ -2872,6 +2872,7 @@
     "mentor_transmission_operations",
     "message",
     "messages",
+    "mix_elixir_info",
     "mixelixir_feature_migrations",
     "mixelixir_fire_control_upgrade_operations",
     "mixelixir_harvest_level_upgrade_operations",
