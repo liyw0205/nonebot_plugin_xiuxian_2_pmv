@@ -15,7 +15,7 @@ class RiftSpeedupSettlementTests(unittest.TestCase):
     def test_rift_speedup_handler_uses_feature_application(self):
         source = Path("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_rift/__init__.py").read_text(encoding="utf-8")
         handler = source[source.index("async def _use_rift_speedup"):]
-        self.assertIn("rift_application.execute_legacy_call(", handler)
+        self.assertIn("rift_application.speedup(", handler)
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "game.db"
