@@ -3031,3 +3031,9 @@
 2026-09-22 work isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
 
 2026-09-22 work full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2130` tests，全部通过，退出码 `0`；work source/facade/claim/settlement tests另行通过，根 discovery 计数为 `2130`，测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
+
+2026-09-22 trade purchase feature-owned cutover：`TradeApplication.purchase` 默认路径改用现有 feature-owned `TradeRepository.purchase_xianshi_item` 原子事务；显式注入 `TradeFeatureRepository` 仍保留兼容，deposit/withdraw/auction 等其他 action未扩大改动。新增临时双库/ledger regression 验证默认购买 `applied` 与重复请求 `replayed`，trade purchase/source focused `37 passed`，compile/architecture/inventory/diff check 通过。
+
+2026-09-22 trade purchase isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
+
+2026-09-22 trade purchase full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2132` tests，全部通过，退出码 `0`；trade purchase/source/architecture contract tests另行通过，根 discovery 计数为 `2132`，测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
