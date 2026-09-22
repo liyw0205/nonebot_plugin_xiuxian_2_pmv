@@ -3175,3 +3175,7 @@
 2026-09-22 sect fairyland pending blocker：尝试抽取`SectFairylandSqlRepository`前置红灯后，确认旧`FairylandClaimService`依赖`TiantiDataManager`动态默认字段/清洗、`grant_tianti_settle_minutes`领域规则和动态宗门claim列；当前没有已完成的feature-owned Tianti profile writer可直接复用。未修改生产代码，移除临时红灯测试，记录为独立pending并跳转下一slice。
 
 2026-09-22 trade fixture repair isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-22 base rename feature-owned cutover：`BaseApplication.rename` 默认路径改用新增`BaseRenameSqlRepository`，单库原子处理用户/灵根改名、唯一性、灵石/改名卡扣除和`player_rename_operations`幂等记录；显式通用repository注入保留，其他base actions未扩大改动。focused `1 unittest/210 pytest`，compile/inventory/diff check通过。
+
+2026-09-22 base rename isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
