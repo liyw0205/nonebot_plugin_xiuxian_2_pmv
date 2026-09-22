@@ -18,7 +18,7 @@ class DongfuHarvestSettlementTests(unittest.TestCase):
         source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py"
         text = source.read_text(encoding="utf-8")
         handler = text[text.index('operation_id = f"dongfu-harvest:'):text.index("@dongfu_geomancy.handle")]
-        self.assertIn("dongfu_application.execute_legacy_call(", handler)
+        self.assertIn("dongfu_application.harvest(", handler)
         self.assertNotIn("_dongfu_harvest_settlement_service().get_result(", handler)
     def test_dongfu_facade_defers_harvest_service_construction(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dongfu

@@ -3296,13 +3296,23 @@
 
 2026-09-23 dongfu patrol full evidence：完整回归`2144 tests OK`。
 
+2026-09-23 dongfu fertilize isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-23 dongfu fertilize full evidence：完整回归`2144 tests OK`。
+
+2026-09-23 dongfu harvest feature-owned cutover：新增`DongfuHarvestSqlRepository`、`DongfuApplication.harvest`并将收获最终结算handler从`execute_legacy_call`切换到application路径；双库原子校验成熟slots快照、奖励容量、清空作物、legacy投影和聚合奖励幂等记录，保留duplicate/user_missing/dongfu_missing/not_mature/inventory_full/state_changed和rollback。focused `234 tests`，compile/inventory/diff通过。
+
+2026-09-23 dongfu harvest isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-23 dongfu harvest full evidence：完整回归`2144 tests OK`。
+
 2026-09-23 dongfu accelerate isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
 
 2026-09-23 dongfu accelerate full evidence：完整回归`2144 tests OK`。
 
-2026-09-23 dongfu fertilize isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+2026-09-23 dongfu harvest isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
 
-2026-09-23 dongfu fertilize full evidence：完整回归`2144 tests OK`。
+2026-09-23 dongfu harvest full evidence：完整回归`2144 tests OK`。
 
 2026-09-23 dongfu patrol feature-owned cutover：新增`DongfuPatrolSqlRepository`、`DongfuApplication.patrol`并将巡山handler从`execute_legacy_call`切换到application路径；双库原子校验体力、每日次数、护府层数、灵石/物品奖励和幂等记录，保留duplicate/user_missing/stamina_insufficient/daily_limit/inventory_full/state_changed和rollback。focused `228 tests`，compile/inventory/diff通过。
 

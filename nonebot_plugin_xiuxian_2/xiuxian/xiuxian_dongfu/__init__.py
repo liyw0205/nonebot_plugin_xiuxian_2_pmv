@@ -1004,17 +1004,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     else:
         failed_slots = snapshot["failed_slots"]
 
-    outcome = dongfu_application.execute_legacy_call(
+    result = dongfu_application.harvest(
         operation_id=operation_id,
         user_id=str(uid),
-        action="harvest",
-        payload={"snapshot": snapshot, "max_goods_num": XiuConfig().max_goods_num},
-        call=lambda: _dongfu_harvest_settlement_service().harvest(
-            operation_id, uid, snapshot["expected_slots"], snapshot["slot_numbers"],
-            snapshot["items"], XiuConfig().max_goods_num, _fmt_dt(now),
-        ),
+        expected_slots=snapshot["expected_slots"],
+        slot_numbers=snapshot["slot_numbers"],
+        rewards=snapshot["items"],
+        max_goods_num=XiuConfig().max_goods_num,
+        settled_at=_fmt_dt(now),
     )
-    result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
 
     if result.status == "duplicate":
         lines = [f"洞府收获完成，共收获{len(snapshot['slot_numbers'])}块灵田："]
