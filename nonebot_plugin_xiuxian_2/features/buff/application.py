@@ -10,6 +10,7 @@ from .rename_repository import BlessedSpotRenameSqlRepository
 from .upgrade_repository import BlessedSpotUpgradeSqlRepository
 from .training_start_repository import NormalTrainingStartSqlRepository
 from .training_complete_repository import NormalTrainingCompleteSqlRepository
+from .closing_repository import ClosingSettlementSqlRepository
 
 
 class BuffApplication(LegacyApplication):
@@ -44,7 +45,10 @@ class BuffApplication(LegacyApplication):
             return self._execute(operation_id=operation_id, user_id=user_id, action="buff.training_complete", payload={"user_id": user_id, **kwargs}, call=lambda: NormalTrainingCompleteSqlRepository(self.game_database, self.player_database).complete(operation_id, kwargs["task_period"]))
         return self._action("training_complete", operation_id=operation_id, user_id=user_id, **kwargs)
     def stone_training(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("stone_training", operation_id=operation_id, user_id=user_id, **kwargs)
-    def closing_settle(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("closing_settle", operation_id=operation_id, user_id=user_id, **kwargs)
+    def closing_settle(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        if self._explicit_repository is None:
+            return self._execute(operation_id=operation_id, user_id=user_id, action="buff.closing_settle", payload={"user_id": user_id, **kwargs}, call=lambda: ClosingSettlementSqlRepository(self.game_database).settle(operation_id, user_id, kwargs["expected_create_time"], kwargs["exp_gain"], kwargs["stone_cost"], kwargs["new_hp"], kwargs["new_mp"], kwargs["new_atk"], kwargs["new_power"]))
+        return self._action("closing_settle", operation_id=operation_id, user_id=user_id, **kwargs)
     def pvp_settle(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("pvp_settle", operation_id=operation_id, user_id=user_id, **kwargs)
 
 
