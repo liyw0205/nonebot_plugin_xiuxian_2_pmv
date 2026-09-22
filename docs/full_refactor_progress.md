@@ -3232,4 +3232,8 @@
 
 2026-09-23 admin audit gap：进度检查器当前将admin item destroy/exp/level/root等标记为application-owned，但真实handler仍通过`admin_asset_application.execute_legacy_call`调用旧service，且`AdminAssetApplication`没有对应专用方法/repository；该flag不能作为真实切换证据，已记录为待修正的审计/迁移缺口，未做未经验证的入口替换。
 
+2026-09-23 admin item-destroy feature-owned cutover：新增`AdminItemDestroySqlRepository`，实际管理员物品销毁handler改用`AdminAssetApplication.destroy_item`；单库原子校验back数量/bind快照、更新库存、写`economy_log`和`admin_item_destroy_operations`幂等记录，保留user_missing/item_missing/state_changed/replay/conflict。focused `8 unittest/210 pytest`，compile/inventory/diff check通过。
+
+2026-09-23 admin item-destroy isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
 2026-09-23 sign-in lottery audit contract repair：进度检查器的`lottery_core_default_legacy`布尔谓词与字段语义相反，真实plugin已使用`LotteryApplication`且未使用`LotterySettlementService`却被报告为`true`；修正谓词并新增审计回归，当前`lottery_core_default_legacy=false`、`lottery_compatibility_fallback=false`，progress contract `2 passed`，compile/inventory/diff check通过。

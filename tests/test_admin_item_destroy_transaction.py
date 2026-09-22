@@ -20,8 +20,8 @@ class AdminItemDestroyTransactionTests(unittest.TestCase):
         handler = text[text.index("async def hmll_"):text.index("@restate.handle")]
         assert "_destroy_admin_item(" in handler
         helper = text[text.index("def _destroy_admin_item("):text.index("def _grant_admin_accessory(")]
-        assert "admin_asset_application.execute_legacy_call(" in helper
-        assert "_admin_item_destroy_service().destroy(" in helper
+        assert "admin_asset_application.destroy_item(" in helper
+        assert "_admin_item_destroy_service().destroy(" not in helper
     def test_admin_facade_defers_item_destroy_service_construction(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_admin
 
@@ -117,7 +117,7 @@ class AdminItemDestroyTransactionTests(unittest.TestCase):
             / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_admin/__init__.py"
         ).read_text(encoding="utf-8")
         self.assertEqual(source.count("_destroy_admin_item("), 3)
-        self.assertEqual(source.count("_admin_item_destroy_service().destroy("), 1)
+        self.assertEqual(source.count("admin_asset_application.destroy_item("), 1)
         self.assertGreaterEqual(source.count("_destroy_admin_accessory("), 3)
 
 

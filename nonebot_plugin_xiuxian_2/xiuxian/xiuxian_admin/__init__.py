@@ -224,21 +224,13 @@ def _admin_operation_id(event, action: str, user_id: str) -> str:
 
 def _destroy_admin_item(event, user_id, goods_id, item_info, quantity, expected_quantity, target_name):
     operation_id = _admin_operation_id(event, "item-destroy", user_id)
-    outcome = admin_asset_application.execute_legacy_call(
-        operation_id=operation_id,
-        user_id=str(user_id),
-        action="item_destroy",
-        payload={"item_id": goods_id, "quantity": quantity, "expected_quantity": expected_quantity, "target_name": target_name},
-        call=lambda: _admin_item_destroy_service().destroy(
-            operation_id, str(get_user_id(event) or "unknown"), user_id, goods_id,
-            item_info["name"], item_info.get("type", ""), quantity, expected_quantity,
-            target_name=target_name,
-        ),
+    outcome = admin_asset_application.destroy_item(
+        operation_id=operation_id, operator_id=str(get_user_id(event) or "unknown"),
+        user_id=str(user_id), item_id=goods_id, item_name=item_info["name"],
+        item_type=item_info.get("type", ""), quantity=quantity,
+        expected_quantity=expected_quantity, target_name=target_name,
     )
-    data = dict(outcome.data or {})
-    data.setdefault("status", outcome.status)
-    data["succeeded"] = outcome.ok
-    return SimpleNamespace(**data)
+    return SimpleNamespace(**dict(outcome.data or {}), status=outcome.status, succeeded=outcome.ok)
 
 
 def _adjust_admin_exp(event, user_id, expected_exp, delta, target_name):

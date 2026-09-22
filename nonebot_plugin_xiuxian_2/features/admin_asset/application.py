@@ -14,6 +14,7 @@ from .schemas import ItemGrantResult, StoneAdjustmentResult
 from .stone_repository import AdminStoneSqlRepository
 from .item_repository import AdminItemSqlRepository
 from .impart_stone_repository import AdminImpartStoneSqlRepository
+from .item_destroy_repository import AdminItemDestroySqlRepository
 
 
 class AdminAssetApplication:
@@ -203,6 +204,11 @@ class AdminAssetApplication:
             except Exception as exc:
                 self.ledger.record_failure(self.database, request.operation_id, action, payload, str(exc))
                 raise
+
+    def destroy_item(self, *, operation_id: str, operator_id: str, user_id: str, item_id: int, item_name: str, item_type: str, quantity: int, expected_quantity: int, target_name: str = ""):
+        raw = AdminItemDestroySqlRepository(self.database).destroy(operation_id, operator_id, user_id, item_id, item_name, item_type, quantity, expected_quantity, target_name=target_name)
+        data = asdict(raw)
+        return type("AdminItemDestroyOutcome", (), {"data": data, "status": raw.status, "ok": raw.succeeded})()
 
     def reply(self, **kwargs: Any) -> ReplyPlan:
         outcome = self.adjust_stone(**kwargs)
