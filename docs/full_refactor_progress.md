@@ -3256,4 +3256,10 @@
 
 2026-09-23 admin root-change contract repair：修正root/source和exp/source旧`execute_legacy_call`断言，progress/admin contracts现在验证真实application-owned入口；root slice最终focused/compile/inventory/diff/recovery/full全部通过。
 
+2026-09-23 dufang payout feature-owned cutover：新增`DufangPayoutSqlRepository`，复用已有`DufangApplication.payout`入口并移除repository对旧`DufangPayoutService`的默认委托；跨game/player事务校验pending bet、结算钱包与unseal统计、更新bet状态并写幂等记录，保留replay/state_changed/user_missing和rollback。focused `4 unittest/210 pytest`，compile/inventory/diff check通过。
+
+2026-09-23 dufang payout isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-23 dufang payout full evidence：完整回归`2144 tests OK`。
+
 2026-09-23 sign-in lottery audit contract repair：进度检查器的`lottery_core_default_legacy`布尔谓词与字段语义相反，真实plugin已使用`LotteryApplication`且未使用`LotterySettlementService`却被报告为`true`；修正谓词并新增审计回归，当前`lottery_core_default_legacy=false`、`lottery_compatibility_fallback=false`，progress contract `2 passed`，compile/inventory/diff check通过。

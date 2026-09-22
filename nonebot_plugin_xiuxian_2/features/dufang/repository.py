@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from .._service_port import ServicePort
+from .payout_repository import DufangPayoutSqlRepository
 
 
 class DufangRepository(ServicePort):
@@ -30,9 +31,7 @@ class DufangRepository(ServicePort):
                 payload["placed_at"],
             )
         if str(action).casefold() == "payout" and self.player_database is not None:
-            from ...xiuxian.xiuxian_dufang.transaction_service import DufangPayoutService
-
-            return DufangPayoutService(self.database, self.player_database).settle(
+            return DufangPayoutSqlRepository(self.database, self.player_database).settle(
                 operation_id,
                 payload["bet_id"],
                 user_id,
@@ -46,9 +45,7 @@ class DufangRepository(ServicePort):
     def payout_result(self, operation_id: str) -> Any:
         if self.player_database is None:
             return None
-        from ...xiuxian.xiuxian_dufang.transaction_service import DufangPayoutService
-
-        return DufangPayoutService(self.database, self.player_database).get_result(operation_id)
+        return DufangPayoutSqlRepository(self.database, self.player_database).get_result(operation_id)
 
 
 __all__ = ["DufangRepository"]
