@@ -2165,9 +2165,9 @@ class SourceQualityTests(unittest.TestCase):
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_boss"
         source = (root / "__init__.py").read_text(encoding="utf-8")
         helper = source[source.index("def _punish_world_bosses"):source.index("async def boss_delete_")]
-        self.assertIn("_world_boss_punishment_service().get_result(", helper)
-        self.assertIn("_world_boss_punishment_service().snapshot(", helper)
-        self.assertIn("_world_boss_punishment_service().punish(", helper)
+        self.assertIn("boss_application.punishment_result(", helper)
+        self.assertIn("boss_application.punishment_snapshot(", helper)
+        self.assertIn("boss_application.punish(", helper)
         self.assertIn("_world_boss_punishment_service_instance = None", source)
         self.assertIn("def _world_boss_punishment_service(", source)
         self.assertNotIn("world_boss_punishment_service.punish(", helper)

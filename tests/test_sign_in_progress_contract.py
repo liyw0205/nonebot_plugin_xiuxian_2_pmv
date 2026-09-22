@@ -13,5 +13,5 @@ class SignInProgressContractTests(unittest.TestCase):
             text=True,
         )
         data = json.loads(result.stdout)
-        self.assertTrue(data["slices"]["sign_in"]["lottery_core_default_legacy"])
+        self.assertFalse(data["slices"]["sign_in"]["lottery_core_default_legacy"])
         self.assertFalse(data["slices"]["sign_in"]["lottery_compatibility_fallback"])

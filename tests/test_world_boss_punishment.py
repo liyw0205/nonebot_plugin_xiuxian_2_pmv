@@ -195,8 +195,8 @@ def test_single_and_all_handlers_share_service_without_direct_save():
     helper = source[
         source.index("def _punish_world_bosses(") : source.index("async def boss_delete_(")
     ]
-    assert "_world_boss_punishment_service().get_result(" in helper
-    assert "_world_boss_punishment_service().snapshot()" in helper
-    assert "boss_application.execute_legacy_call(" in helper
+    assert "boss_application.punishment_result(" in helper
+    assert "boss_application.punishment_snapshot(" in helper
+    assert "boss_application.punish(" in helper
     assert "_world_boss_punishment_service_instance = None" in source
     assert "def _world_boss_punishment_service(" in source

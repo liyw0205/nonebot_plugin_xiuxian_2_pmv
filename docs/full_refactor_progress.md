@@ -3221,3 +3221,11 @@
 2026-09-23 admin accessory pending blocker：`AdminAssetApplication.adjust_accessory`的真实边界同时涉及game用户存在性、player数据库`player_accessory`的equipped/bag JSON快照、装备UID/quality/name完整性、库存上限、幂等操作记录和`economy_log`；当前没有可复用的feature-owned accessory repository。直接保留`AdminAccessoryAdjustmentService`调用不满足底层重构，直接复制旧事务规则会产生双实现，记录为pending并跳转独立slice。
 
 2026-09-23 sign-in lottery audit contract repair：进度检查器的`lottery_core_default_legacy`布尔谓词与字段语义相反，真实plugin已使用`LotteryApplication`且未使用`LotterySettlementService`却被报告为`true`；修正谓词并新增审计回归，当前`lottery_core_default_legacy=false`、`lottery_compatibility_fallback=false`，progress contract `2 passed`，compile/inventory/diff check通过。
+
+2026-09-23 boss punishment feature-owned cutover：世界BOSS单个/全部惩罚默认路径改用新增`WorldBossPunishmentSqlRepository`，实际handler从`boss_application.execute_legacy_call`切换到application；保留revision+boss snapshot乐观锁、single/all目标校验、operation replay/conflict和世界BOSS状态更新。focused `1 unittest/217 pytest`，compile/inventory/diff check通过。
+
+2026-09-23 boss punishment isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-23 boss punishment contract repair：生产切换后更新boss source quality/progress契约和sign-in旧lottery断言，使静态验收验证application-owned路径；最终完整回归`2143 tests OK`，focused `217 passed`及progress contract通过。
+
+2026-09-23 sign-in lottery audit contract repair：进度检查器的`lottery_core_default_legacy`布尔谓词与字段语义相反，真实plugin已使用`LotteryApplication`且未使用`LotterySettlementService`却被报告为`true`；修正谓词并新增审计回归，当前`lottery_core_default_legacy=false`、`lottery_compatibility_fallback=false`，progress contract `2 passed`，compile/inventory/diff check通过。

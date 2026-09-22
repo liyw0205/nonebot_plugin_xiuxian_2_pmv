@@ -11,6 +11,7 @@ from ...infrastructure.clock import SystemClock
 from ...infrastructure.observability import trace_context
 from .domain import BossPurchaseRequest, BossSettlementRequest
 from .repository import BossPurchaseSqlRepository, BossRepository
+from .punishment_repository import WorldBossPunishmentSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -115,6 +116,15 @@ class BossApplication:
             expected_config=expected_config,
             boss=boss,
         )
+
+    def punishment_snapshot(self):
+        return WorldBossPunishmentSqlRepository(self.player_database).snapshot()
+
+    def punishment_result(self, operation_id: str):
+        return WorldBossPunishmentSqlRepository(self.player_database).get_result(operation_id)
+
+    def punish(self, *, operation_id: str, action: str, expected_revision: int, expected_bosses: list[dict[str, Any]], boss_number: int | None = None):
+        return WorldBossPunishmentSqlRepository(self.player_database).punish(operation_id, action, expected_revision, expected_bosses, boss_number)
 
     def reply(self, **kwargs: Any) -> ReplyPlan:
         action = str(kwargs.pop("action", "purchase"))

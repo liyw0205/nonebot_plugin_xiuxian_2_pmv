@@ -291,21 +291,17 @@ def _punish_world_bosses(
     action: str,
     boss_number: int | None = None,
 ):
-    result = _world_boss_punishment_service().get_result(operation_id)
+    result = boss_application.punishment_result(operation_id)
     if result is not None:
-        current_bosses, _ = _world_boss_punishment_service().snapshot()
+        current_bosses, _ = boss_application.punishment_snapshot()
         _sync_world_boss_cache(current_bosses)
         return result
 
-    expected_bosses, expected_revision = _world_boss_punishment_service().snapshot()
-    result = boss_application.execute_legacy_call(
-        operation_id=operation_id, user_id="system", action="punishment",
-        payload={"action": action, "boss_number": boss_number, "expected_revision": expected_revision},
-        call=lambda: _world_boss_punishment_service().punish(
-            operation_id=operation_id, action=action,
-            expected_revision=expected_revision, expected_bosses=expected_bosses,
-            boss_number=boss_number,
-        ),
+    expected_bosses, expected_revision = boss_application.punishment_snapshot()
+    result = boss_application.punish(
+        operation_id=operation_id, action=action,
+        expected_revision=expected_revision, expected_bosses=expected_bosses,
+        boss_number=boss_number,
     )
     if result.succeeded:
         _sync_world_boss_cache(result.bosses)
