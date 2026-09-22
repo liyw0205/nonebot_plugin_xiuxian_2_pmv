@@ -11,6 +11,7 @@ from ...infrastructure.observability import trace_context
 from .domain import HarvestRequest, SettlementRequest, normalize_rewards
 from .repository import LegacyMixelixirRepository, MixelixirRepository
 from .harvest_repository import MixelixirHarvestSqlRepository
+from .settlement_repository import MixelixirSettlementSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -80,7 +81,7 @@ class MixelixirApplication:
             raise ValidationError(str(exc)) from exc
         return self._execute(
             operation_id=request.operation_id, user_id=request.user_id, action="mixelixir.settle", payload=request.payload(),
-            call=lambda: self._repository().settle(request.operation_id, request.user_id, request.materials, request.reward_id, request.reward_name, request.reward_quantity, max_goods_num=request.max_goods_num),
+            call=lambda: (MixelixirSettlementSqlRepository(self.game_database) if self._explicit_repository is None else self._repository()).settle(request.operation_id, request.user_id, request.materials, request.reward_id, request.reward_name, request.reward_quantity, max_goods_num=request.max_goods_num),
             success_statuses={"applied", "duplicate"},
             messages={"item_insufficient": "药材数量不足，本次未消耗药材。", "state_changed": "炼丹数据已更新，请重新提交。", "user_missing": "未找到修仙数据。"},
             normalize=lambda data: {"status": data.get("status", "failed"), "reward_quantity": int(data.get("reward_quantity", 0) or 0), "granted": {"elixir": int(data.get("reward_quantity", 0) or 0)}},
