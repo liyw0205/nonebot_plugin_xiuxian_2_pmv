@@ -513,19 +513,16 @@ async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or runtime_ids.new_id())
     operation_id = f"impart-prayer:{event_id}:{user_id}:{item_id}"
-    result = _impart_prayer_service().replay(operation_id, user_id, item_id, quantity)
-    if result is not None and result.succeeded:
-        # fall through to existing message builder using result fields
-        pass
-    if result is None:
-        drawn_cards = [random.choice(img_list) for _ in range(quantity)]
-        result = _run_impart_action(
-            "prayer_settle", operation_id, user_id,
-            call=lambda: _impart_prayer_service().settle(
-                operation_id, user_id, item_id, quantity, drawn_cards, impart_data_json.data_all_(),
-            ),
-            item_id=item_id, quantity=quantity, cards=drawn_cards,
-        )
+    drawn_cards = [random.choice(img_list) for _ in range(quantity)]
+    result = impart_application.prayer_settle(
+        operation_id=operation_id,
+        user_id=user_id,
+        game_database=get_paths().game_db,
+        item_id=item_id,
+        quantity=quantity,
+        cards=drawn_cards,
+        card_definitions=impart_data_json.data_all_(),
+    )
     if result.status == "item_missing":
         await handle_send(bot, event, "祈愿石数量不足，未进行祈愿。")
         return

@@ -142,7 +142,7 @@ class ImpartPrayerSettlementTests(unittest.TestCase):
         handler = impart_source.split("async def use_wishing_stone", 1)[1].split(
             "async def use_love_sand", 1
         )[0]
-        self.assertIn("_run_impart_action(\n            \"prayer_settle\"", handler)
+        self.assertIn("impart_application.prayer_settle(", handler)
         self.assertNotIn("result = _impart_prayer_service().settle(", handler)
         self.assertNotIn("data_person_add_batch(", handler)
         self.assertNotIn("update_back_j(", handler)

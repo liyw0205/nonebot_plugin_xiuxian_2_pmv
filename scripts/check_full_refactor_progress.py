@@ -258,10 +258,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "blessed_spot_open_rename_upgrade_stone_training_lifecycle_closing_settlement_pvp_cutover_with_other_buff_compatibility",
         },
         "impart": {
-            "love_sand_application_owned": "impart_application.execute_legacy_call(" in impart_facade,
+            "love_sand_application_owned": "impart_application.love_sand(" in impart_facade,
             "card_compose_application_owned": "async def impart_compose_" in impart_facade and "impart_application.execute_legacy_call(" in impart_facade,
             "card_disassemble_application_owned": "async def impart_disassemble_" in impart_facade and "impart_application.execute_legacy_call(" in impart_facade,
-            "prayer_application_owned": "_run_impart_action(\n            \"prayer_settle\"" in impart_facade and "impart_application.execute_legacy_call(" in impart_facade,
+            "prayer_application_owned": "impart_application.prayer_settle(" in impart_facade,
             "status": "love_sand_compose_disassemble_prayer_cutover_with_other_impart_compatibility",
         },
         "mixelixir": {
