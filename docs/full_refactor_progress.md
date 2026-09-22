@@ -3292,7 +3292,11 @@
 
 2026-09-23 compensation normal-claim full evidence：完整回归`2144 tests OK`。
 
-2026-09-23 compensation normal-claim feature-owned cutover：新增`CompensationRewardClaimSqlRepository`、`CompensationApplication.claim_reward`和惰性application构造；普通补偿领取handler移除默认`RewardClaimService`/`execute_legacy_call`路径，保留定义版本校验、重复领取、使用上限、灵石/背包原子发奖和claim记录。focused `211 tests`，compile/inventory/diff通过。
+2026-09-23 compensation redeem-code isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。兑换码首次完整回归因架构检查器对只读`has_claimed`的误报失败，修复P2规则后已重新取得权威full证据。
+
+2026-09-23 compensation redeem-code full evidence：完整回归`2144 tests OK`。
+
+2026-09-23 compensation redeem-code feature-owned cutover：复用`CompensationRewardClaimSqlRepository`的limited claim/has_claimed/get_used_count能力，兑换码handler移除默认`RewardClaimService`调用；保留usage_limit、legacy baseline、exhausted、duplicate和原子发奖。focused `218 tests`，compile/inventory/diff通过。
 
 2026-09-23 impart card-disassemble feature-owned cutover：新增`ImpartCardDisassembleSqlRepository`、`ImpartApplication.disassemble`并将分解handler从`execute_legacy_call`切换到application路径；单库原子保留至少一张卡、增加结晶、刷新bonus并写operation幂等记录，保留user_missing/card_missing/state_changed/duplicate和rollback。focused `20 unittest/209 pytest`，compile/inventory/diff通过。
 

@@ -19,6 +19,8 @@ class CompensationRepository(ServicePort):
         user_id,
         reward_items,
         max_goods_num,
+        usage_limit=0,
+        legacy_used_count=0,
         expected_definition_version=None,
     ):
         return CompensationRewardClaimSqlRepository(self.database, max_goods_num).claim(
@@ -27,7 +29,19 @@ class CompensationRepository(ServicePort):
             record_id,
             user_id,
             reward_items,
+            usage_limit=usage_limit,
+            legacy_used_count=legacy_used_count,
             expected_definition_version=expected_definition_version,
+        )
+
+    def has_claimed(self, reward_type, record_id, user_id) -> bool:
+        return CompensationRewardClaimSqlRepository(self.database, 0).has_claimed(
+            reward_type, record_id, user_id
+        )
+
+    def get_used_count(self, reward_type, record_id) -> int:
+        return CompensationRewardClaimSqlRepository(self.database, 0).get_used_count(
+            reward_type, record_id
         )
 
 

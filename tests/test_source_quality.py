@@ -1140,9 +1140,9 @@ class SourceQualityTests(unittest.TestCase):
     def test_redeem_code_uses_transactional_limited_claim(self) -> None:
         compensation_root = SOURCE_ROOT / "xiuxian" / "xiuxian_compensation"
         source = (compensation_root / "redeem_code.py").read_text(encoding="utf-8")
-        self.assertIn("_reward_claim_service().claim(", source)
-        self.assertIn("_reward_claim_service().has_claimed(", source)
-        self.assertIn("_reward_claim_service().get_used_count(", source)
+        self.assertIn("_compensation_application().claim_reward(", source)
+        self.assertIn("_compensation_application().has_claimed(", source)
+        self.assertNotIn("_reward_claim_service().claim(", source)
         self.assertIn("usage_limit=usage_limit", source)
         self.assertNotIn("send_reward_to_user(", source)
         self.assertNotIn("mark_claimed(", source)

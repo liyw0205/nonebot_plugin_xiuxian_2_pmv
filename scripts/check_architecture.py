@@ -187,7 +187,8 @@ def check_operation_id_on_asset_writes() -> list[str]:
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or node.name.startswith("_"):
                 continue
             names = {argument.arg for argument in node.args.args + node.args.kwonlyargs}
-            if any(token in node.name.casefold() for token in ("claim", "purchase", "grant", "settle", "transfer", "withdraw", "deposit")) and "operation_id" not in names:
+            read_only_name = node.name.startswith(("get_", "has_", "is_", "read_", "list_"))
+            if any(token in node.name.casefold() for token in ("claim", "purchase", "grant", "settle", "transfer", "withdraw", "deposit")) and not read_only_name and "operation_id" not in names:
                 errors.append(f"{path.relative_to(ROOT)}:{node.lineno} mutating method lacks operation_id: {node.name}")
     return errors
 
