@@ -10,6 +10,7 @@ from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import PuppetPurchaseRequest, PuppetUpgradeRequest
 from .repository import LegacyPuppetRepository, PuppetRepository
+from .purchase_repository import PuppetPurchaseSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -59,8 +60,12 @@ class PuppetApplication:
             request.validate()
         except (TypeError, ValueError) as exc:
             raise ValidationError(str(exc)) from exc
-        repository = self.repository or LegacyPuppetRepository(self.game_database, self.player_database)
-        return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="puppet.purchase", payload=request.payload(), call=lambda: repository.purchase(request.operation_id, request.user_id, request.stone_cost))
+        if self.repository is None:
+            call = lambda: PuppetPurchaseSqlRepository(self.game_database, self.player_database).purchase(request.operation_id, request.user_id, request.stone_cost)
+        else:
+            repository = self.repository
+            call = lambda: repository.purchase(request.operation_id, request.user_id, request.stone_cost)
+        return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="puppet.purchase", payload=request.payload(), call=call)
 
     def upgrade(self, *, operation_id: str, user_id: str, upgrade_costs: Mapping[int, int], max_level: int) -> OperationOutcome[dict[str, Any]]:
         try:
