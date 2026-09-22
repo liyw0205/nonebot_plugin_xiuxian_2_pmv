@@ -3056,6 +3056,12 @@
 
 2026-09-22 puppet purchase full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2138` tests，全部通过，退出码 `0`；puppet purchase/source/application tests另行通过，根 discovery 计数为 `2138`，测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
 
+2026-09-22 puppet upgrade full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2139` tests，全部通过，退出码 `0`；puppet upgrade/source/application tests另行通过，根 discovery 计数为 `2139`，测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
+
+2026-09-22 puppet upgrade feature-owned cutover：`PuppetApplication.upgrade` 默认路径复用 `PuppetPurchaseSqlRepository.upgrade` 的 `DatabaseUnitOfWork` 主 game DB + attached player DB 原子事务；显式 `PuppetRepository` 注入保留兼容，harvest未扩大改动。新增默认 application regression 验证 `applied/replayed`，puppet upgrade/source focused `11 passed`，compile/architecture/inventory/diff check 通过。
+
+2026-09-22 puppet upgrade isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
+
 2026-09-22 puppet purchase feature-owned cutover：`PuppetApplication.purchase` 默认路径改用新增 `PuppetPurchaseSqlRepository`，使用 `DatabaseUnitOfWork` 主 game DB + attached player DB 原子更新；显式 `PuppetRepository` 注入保留兼容，upgrade/harvest未扩大改动。新增默认 application/临时双库 regression 验证 `applied/replayed`，puppet purchase/source focused `10 passed`，compile/architecture/inventory/diff check 通过。
 
 2026-09-22 puppet purchase isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。

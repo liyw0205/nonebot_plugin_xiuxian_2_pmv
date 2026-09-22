@@ -41,3 +41,12 @@ class PuppetPurchaseRepositoryTests(unittest.TestCase):
             first = repository.purchase("p1", "u", 50)
             duplicate = repository.purchase("p1", "u", 50)
             self.assertEqual((first.status, duplicate.status), ("purchased", "duplicate"))
+
+    def test_application_upgrade_uses_feature_repository(self):
+        with tempfile.TemporaryDirectory() as temp:
+            game, player = make_databases(Path(temp))
+            app = PuppetApplication(game, player)
+            app.purchase(operation_id="p0", user_id="u", stone_cost=10)
+            outcome = app.upgrade(operation_id="p1", user_id="u", upgrade_costs={1: 20, 2: 30}, max_level=3)
+            replay = app.upgrade(operation_id="p1", user_id="u", upgrade_costs={1: 20, 2: 30}, max_level=3)
+            self.assertEqual((outcome.status, replay.status), ("applied", "replayed"))

@@ -73,8 +73,14 @@ class PuppetApplication:
             request.validate()
         except (TypeError, ValueError) as exc:
             raise ValidationError(str(exc)) from exc
-        repository = self.repository or LegacyPuppetRepository(self.game_database, self.player_database)
-        return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="puppet.upgrade", payload=request.payload(), call=lambda: repository.upgrade(request.operation_id, request.user_id, dict(request.upgrade_costs), max_level=request.max_level))
+        if self.repository is None:
+            call = lambda: PuppetPurchaseSqlRepository(self.game_database, self.player_database).upgrade(
+                request.operation_id, request.user_id, dict(request.upgrade_costs), max_level=request.max_level
+            )
+        else:
+            repository = self.repository
+            call = lambda: repository.upgrade(request.operation_id, request.user_id, dict(request.upgrade_costs), max_level=request.max_level)
+        return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="puppet.upgrade", payload=request.payload(), call=call)
 
     def harvest(self, *, operation_id: str, user_id: str, **kwargs: Any):
         repository = self.repository or LegacyPuppetRepository(self.game_database, self.player_database)
