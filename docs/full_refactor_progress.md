@@ -3064,6 +3064,8 @@
 
 2026-09-22 buff blessed-spot rename authoritative full regression：buff rename实现与web validation修正后，在隔离环境 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false PYTHONDONTWRITEBYTECODE=1` 下重新执行完整 `python -m unittest discover -s tests -q`，实际执行 `2141` tests，全部通过，退出码 `0`；feature package rename focused tests和web contract focused tests另行通过，根 discovery不递归收集feature test，旧的失败回归不作为证据。
 
+2026-09-22 buff blessed-spot upgrade authoritative full regression：upgrade repository修正 `DatabaseUnitOfWork` attached player DB 在提交前不可显式 DETACH 的 SQLite 事务问题，并补齐空 payload web validation；在隔离环境 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false PYTHONDONTWRITEBYTECODE=1` 下完整回归实际执行 `2141` tests，全部通过，退出码 `0`；upgrade/rename focused和web contract focused均通过。
+
 2026-09-22 buff blessed-spot rename feature-owned cutover：`BuffApplication.rename` 默认路径改用新增 `BlessedSpotRenameSqlRepository`，通过 `DatabaseUnitOfWork` 执行名称乐观锁和 `blessed_spot_operations` 幂等记录；显式 `BuffRepository` 注入保留兼容，open/upgrade未扩大改动。新增真实临时数据库 regression 验证 `applied/duplicate/state_changed/blessed_spot_missing`，buff rename/source focused `12 passed`，compile/architecture/inventory/diff check 通过。
 
 2026-09-22 buff blessed-spot rename isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。

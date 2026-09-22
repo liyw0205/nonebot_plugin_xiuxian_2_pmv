@@ -7,6 +7,7 @@ from ...core.errors import ValidationError
 from .._legacy_application import LegacyApplication
 from .repository import BuffRepository, LegacyBuffRepository
 from .rename_repository import BlessedSpotRenameSqlRepository
+from .upgrade_repository import BlessedSpotUpgradeSqlRepository
 
 
 class BuffApplication(LegacyApplication):
@@ -18,7 +19,13 @@ class BuffApplication(LegacyApplication):
         return self._execute(operation_id=operation_id, user_id=user_id, action=f"buff.{action}", payload={"user_id": user_id, **kwargs}, call=lambda: self.repository.invoke(action, operation_id, user_id, **kwargs))
 
     def open(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("open", operation_id=operation_id, user_id=user_id, **kwargs)
-    def upgrade_field(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("upgrade_field", operation_id=operation_id, user_id=user_id, **kwargs)
+    def upgrade_field(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        if self._explicit_repository is None:
+            if "expected_level" not in kwargs or "stone_cost" not in kwargs:
+                raise ValidationError("expected_level and stone_cost are required")
+            repository = BlessedSpotUpgradeSqlRepository(self.game_database, self.player_database)
+            return self._execute(operation_id=operation_id, user_id=user_id, action="buff.upgrade_field", payload={"user_id": user_id, **kwargs}, call=lambda: repository.upgrade(operation_id, user_id, kwargs["expected_level"], kwargs["stone_cost"], kwargs.get("max_level", 10)))
+        return self._action("upgrade_field", operation_id=operation_id, user_id=user_id, **kwargs)
     def rename(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:
             if "expected_name" not in kwargs or "new_name" not in kwargs:
