@@ -3131,3 +3131,7 @@
 2026-09-22 bank upgrade feature-owned cutover：`BankApplication.upgrade` 默认路径改用既有 `BankUpgradeApplication`/`BankAccountRepository` 新账户表事务；显式 `BankRepository` 注入保留兼容，interest尚未扩大改动。新增默认 facade 临时数据库 regression 验证 `applied/replayed`，bank upgrade/source focused `29 passed`，compile/architecture/inventory/diff check 通过。
 
 2026-09-22 bank upgrade isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
+
+2026-09-22 admin stone feature-owned cutover：`AdminAssetApplication.adjust_stone` 默认路径改用新增 `AdminStoneSqlRepository`，通过单库 `DatabaseUnitOfWork` 原子校验余额快照、调整灵石并写幂等结果；显式旧 admin repository注入保留兼容。focused `10 unittest/19 pytest`，compile/inventory/diff check通过。
+
+2026-09-22 admin stone isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。

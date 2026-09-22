@@ -11,6 +11,7 @@ from ...infrastructure.observability import trace_context
 from .domain import ItemGrantRequest, StoneAdjustmentRequest
 from .repository import AdminItemRepository, AdminStoneRepository, LegacyAdminItemRepository, LegacyAdminStoneRepository
 from .schemas import ItemGrantResult, StoneAdjustmentResult
+from .stone_repository import AdminStoneSqlRepository
 
 
 class AdminAssetApplication:
@@ -52,7 +53,7 @@ class AdminAssetApplication:
                         if previous is not None:
                             return previous.replay()
                         raise ConflictError("操作正在处理中")
-                repository = self.repository or LegacyAdminStoneRepository(self.database)
+                repository = self.repository or AdminStoneSqlRepository(self.database)
                 raw = repository.adjust(
                     request.operation_id, request.operator_id, request.user_id,
                     request.expected_stone, request.requested_delta,
