@@ -623,12 +623,14 @@ async def natal_forget_handler(bot: Bot, event: GroupMessageEvent | PrivateMessa
     mysterious_scripture_info = items.get_data_by_item_id(MYSTERIOUS_SCRIPTURE_ID)
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"natal-forget:{event_id}:{user_id}" if event_id else f"natal-forget:{user_id}:{runtime_ids.new_id()}"
-    forgotten = _natal_forget_service().forget(
-        operation_id, user_id, effect_type_to_forget.value,
-        MYSTERIOUS_SCRIPTURE_ID, mysterious_scripture_info["name"],
-        mysterious_scripture_info["type"], scripture_cost,
-        MAX_EFFECT_SLOTS, XiuConfig().max_goods_num,
+    forgotten_outcome = natal_treasure_application.forget(
+        operation_id=operation_id, user_id=user_id, effect_type=effect_type_to_forget.value,
+        scripture_id=MYSTERIOUS_SCRIPTURE_ID, scripture_name=mysterious_scripture_info["name"],
+        scripture_type=mysterious_scripture_info["type"], scripture_cost=scripture_cost,
+        max_slots=MAX_EFFECT_SLOTS, max_goods_num=XiuConfig().max_goods_num,
     )
+    forgotten_data = forgotten_outcome.data or {}
+    forgotten = SimpleNamespace(**forgotten_data, status=forgotten_outcome.status, succeeded=forgotten_outcome.ok)
 
     if forgotten.succeeded:
         nt._natal_data_cache = None
