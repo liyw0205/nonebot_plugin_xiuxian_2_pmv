@@ -3429,3 +3429,9 @@
 2026-09-23 dungeon reset full evidence：当前HEAD完整回归`2148 tests OK`；Dungeon reset/team剩余兼容边界及全局legacy blockers仍明确开放。
 
 2026-09-23 remaining-boundary review：Fusion general/batch production handlers already call `fusion_application.apply/apply_batch`; remaining `_run_fusion_action` is an unused compatibility wrapper, so no duplicate migration was made. Info avatar remains a complex PlayerDataManager JSON boundary: main/avatar ID generation, unique lookup, create_time, active_id switching and restore share one mutable projection; no standalone feature-owned writer exists. Compensation normal claim is already directly `CompensationApplication.claim_reward` with versioned definition snapshot; remaining definition deletion/legacy JSON cleanup is not a safe thin slice. These paths remain explicitly open.
+
+2026-09-23 sect close-mountain feature-owned cutover：新增`SectCloseMountainSqlRepository`与`SectApplication.close_mountain`，自动不活跃宗主处理和手动确认封闭山门默认改走feature repository；单库原子保留owner/sect快照、expected_sect_id、closed/join_open/sect_owner、owner降为长老、operation replay和rollback语义，旧`SectCloseMountainService`仅保留显式兼容。无新增migration；focused `217 tests`，compile/inventory/diff通过。
+
+2026-09-23 sect close-mountain isolated recovery evidence：一次性临时数据目录完成backup、restore dry-run、restore、全量`114`项migration和reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`，临时目录已删除。
+
+2026-09-23 sect close-mountain full evidence：当前HEAD完整回归`2149 tests OK`；Sect owner inheritance/disband/open-close join and fairyland remain separate compatibility boundaries。

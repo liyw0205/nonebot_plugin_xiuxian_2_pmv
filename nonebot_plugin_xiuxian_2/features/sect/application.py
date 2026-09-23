@@ -11,6 +11,7 @@ from ...infrastructure.clock import SystemClock
 from ...infrastructure.observability import trace_context
 from .repository import SectRenameSqlRepository, SectRepository
 from .daily_maintenance_repository import SectDailyMaintenanceSqlRepository
+from .close_mountain_repository import SectCloseMountainSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -53,6 +54,9 @@ class SectApplication:
 
     def reset_daily_maintenance(self, business_date: str, maintenance_costs: Mapping[int, int]):
         return SectDailyMaintenanceSqlRepository(self.database).settle(business_date, dict(maintenance_costs))
+
+    def close_mountain(self, operation_id: str, actor_id: str, *, owner_position: int = 0, former_owner_position: int = 2, expected_sect_id: int | None = None):
+        return SectCloseMountainSqlRepository(self.database).close(operation_id, actor_id, owner_position=owner_position, former_owner_position=former_owner_position, expected_sect_id=expected_sect_id)
 
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):

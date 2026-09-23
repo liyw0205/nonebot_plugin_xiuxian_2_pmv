@@ -629,7 +629,7 @@ async def auto_handle_inactive_sect_owners():
                     
                 logger.info(f"检测到不活跃宗主：{user_info['user_name']} 已离线 {offline_days} 天")
                 
-                result = _sect_close_mountain_service().close(
+                result = sect_application.close_mountain(
                     f"sect:auto-close:{maintenance_key}:{sect_id}:{owner_id}",
                     owner_id,
                     expected_sect_id=sect_id,
@@ -3253,7 +3253,7 @@ async def sect_close_mountain2_confirm(bot: Bot, event: GroupMessageEvent | Priv
     owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
     
     if sect_position == owner_position:
-        result = _sect_close_mountain_service().close(
+        result = sect_application.close_mountain(
             _sect_operation_id(event, "close_mountain", sect_id),
             user_info['user_id'],
             owner_position=owner_position,

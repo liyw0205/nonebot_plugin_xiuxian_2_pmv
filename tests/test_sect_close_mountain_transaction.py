@@ -123,8 +123,8 @@ class SectCloseMountainServiceTests(unittest.TestCase):
         auto_handler = source[auto_start:auto_end]
         manual_handler = source[manual_start:manual_end]
 
-        self.assertIn("_sect_close_mountain_service().close(", auto_handler)
-        self.assertIn("_sect_close_mountain_service().close(", manual_handler)
+        self.assertIn("sect_application.close_mountain(", auto_handler)
+        self.assertIn("sect_application.close_mountain(", manual_handler)
         self.assertIn("_sect_close_mountain_service_instance = None", source)
         self.assertIn("def _sect_close_mountain_service(", source)
         for old_call in (
