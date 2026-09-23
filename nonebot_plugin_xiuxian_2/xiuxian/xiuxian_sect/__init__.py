@@ -1317,7 +1317,7 @@ async def sect_mainbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessage
                         fail_count += 1
 
                 sql = set_sect_list(mainbuffidlist)
-                result = _sect_membership_service().apply_buff_search(
+                result = sect_application.apply_buff_search(
                     _sect_operation_id(event, "mainbuff_search", sect_id),
                     user_info["user_id"],
                     sect_id,
@@ -1414,7 +1414,7 @@ async def sect_secbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                         fail_count += 1
 
                 sql = set_sect_list(secbuffidlist)
-                result = _sect_membership_service().apply_buff_search(
+                result = sect_application.apply_buff_search(
                     _sect_operation_id(event, "secbuff_search", sect_id),
                     user_info["user_id"],
                     sect_id,
