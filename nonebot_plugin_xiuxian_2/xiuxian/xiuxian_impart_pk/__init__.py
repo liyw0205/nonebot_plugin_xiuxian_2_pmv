@@ -984,9 +984,9 @@ async def impart_pk_in_closing_(bot: Bot, event: GroupMessageEvent | PrivateMess
     # 先回放：成功后 type=4 会挡住同事件幂等；started_at 每次不同不能进 payload。
     op_id = _impart_operation_id(event, "closing-enter", user_id)
     started_at = runtime_clock.now().strftime("%Y-%m-%d %H:%M:%S.%f")
-    result = _run_impart_pk_action(
-        "closing_enter", op_id, user_id,
-        call=lambda: _impart_closing_enter_service().enter(op_id, user_id, started_at),
+    result = impart_pk_application.closing_enter(
+        operation_id=op_id,
+        user_id=user_id,
         started_at=started_at,
     )
     if result.status == "ineligible":

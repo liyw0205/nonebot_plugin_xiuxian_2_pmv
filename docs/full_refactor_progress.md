@@ -3296,9 +3296,15 @@
 
 2026-09-23 dongfu expansion full evidence：完整回归`2145 tests OK`。
 
+2026-09-23 impart-pk closing-enter isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-23 impart-pk closing-enter full evidence：完整回归`2145 tests OK`。
+
 2026-09-23 impart-pk training isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
 
 2026-09-23 impart-pk training full evidence：完整回归`2145 tests OK`。
+
+2026-09-23 impart-pk closing-enter feature-owned cutover：新增双库`ImpartClosingEnterSqlRepository`、`ImpartPkApplication.closing_enter`并将虚神界闭关进入handler从`execute_legacy_call`切换到application路径；原子校验root_type/cooldown，设置user_cd、entry统计和幂等operation，保留duplicate/operation_conflict/user_missing/ineligible/busy/state_changed和rollback。focused `218 tests`，compile/inventory/diff通过。
 
 2026-09-23 impart-pk training P2 contract repair：将application mutator改为显式`operation_id`/`user_id`签名，修复架构检查器对`**kwargs`的误报；P0-P6 completion audit全部ready，P7仍需真实release-cycle证据。
 

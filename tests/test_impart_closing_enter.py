@@ -29,9 +29,8 @@ def test_impart_closing_enter_handler_uses_lazy_dual_database_service():
     handler = source[source.index("async def impart_pk_in_closing_"):source.index("async def impart_pk_out_closing_")]
     assert "_run_impart_pk_action(" in handler
     helper = source[source.index("def _run_impart_pk_action("):source.index("@impart_pk")]
-    assert "impart_pk_application.execute_legacy_call(" in helper
-    assert "_impart_closing_enter_service().get_result(" not in handler
-    assert "_impart_closing_enter_service().enter(" in handler
+    assert "impart_pk_application.closing_enter(" in handler
+    assert "_impart_closing_enter_service().enter(" not in handler
     assert "_impart_closing_enter_service_instance = None" in source
     assert "def _impart_closing_enter_service(" in source
     assert "get_paths().game_db, get_paths().player_db" in source
