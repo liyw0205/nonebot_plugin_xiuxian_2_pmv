@@ -487,7 +487,7 @@ class DungeonExploreOperationServiceTests(unittest.TestCase):
             handler.index("dungeon_manager.trigger_event"),
         )
         self.assertIn("dungeon_application.prepare", handler)
-        self.assertIn("_dungeon_explore_operation_service().settle", handler)
+        self.assertIn("dungeon_application.settle", handler)
         self.assertIn("dungeon_application.resolve_rejection", handler)
         self.assertIn("type_in=0", handler)
         self.assertNotIn("dungeon_session_service.enter", handler)
@@ -510,9 +510,22 @@ class DungeonExploreOperationServiceTests(unittest.TestCase):
                 application = SimpleNamespace(
                     replay=Mock(return_value={
                         "status": replay.status,
-                        "phase": replay.phase,
+                        "phase": phase,
+                        "result_status": "applied" if phase == "completed" else "",
                         "response": replay.response,
-                    })
+                        "plan": {},
+                        "current_layer": 0,
+                        "dungeon_status": "",
+                    }),
+                    settle=Mock(return_value={
+                        "status": "applied",
+                        "phase": "completed",
+                        "result_status": "applied",
+                        "response": response,
+                        "plan": {},
+                        "current_layer": 1,
+                        "dungeon_status": "exploring",
+                    }),
                 )
                 operation_service = SimpleNamespace(settle=Mock(return_value=resumed))
                 sent_response = AsyncMock()
@@ -551,9 +564,9 @@ class DungeonExploreOperationServiceTests(unittest.TestCase):
                 sent_response.assert_awaited_once_with(bot, event, response)
                 sent_error.assert_not_awaited()
                 if phase == "prepared":
-                    operation_service.settle.assert_called_once()
+                    application.settle.assert_called_once()
                 else:
-                    operation_service.settle.assert_not_called()
+                    application.settle.assert_not_called()
 
 
 if __name__ == "__main__":

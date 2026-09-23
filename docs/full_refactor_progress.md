@@ -3415,3 +3415,9 @@
 2026-09-23 remaining complex-boundary review：Dufang share settlement confirmed as resumable chunked batch rather than a safe single-recipient slice；事务冻结recipients/event、逐recipient progress、source/target missing和zero-balance分支、game/player统计、economy_log及每chunk提交，继续保留为complex blocker，未用facade伪装迁移完成。其他剩余复杂路径仍包括Compensation definition/JSON兼容、Past Life reset-all/final settlement、Info avatar JSON状态、Impart PK终局奖励、Dongfu infiltration、Fusion兼容和Status外部版本更新。
 
 2026-09-23 sign-in lottery audit contract repair：进度检查器的`lottery_core_default_legacy`布尔谓词与字段语义相反，真实plugin已使用`LotteryApplication`且未使用`LotterySettlementService`却被报告为`true`；修正谓词并新增审计回归，当前`lottery_core_default_legacy=false`、`lottery_compatibility_fallback=false`，progress contract `2 passed`，compile/inventory/diff check通过。
+
+2026-09-23 dungeon explore settlement feature-owned cutover：`DungeonSessionSqlRepository.settle`不再惰性导入`DungeonExploreOperationService`，真实副本探索恢复/结算handler改用`dungeon_application.settle`；feature repository在game_db主库attach player_db中完整保留prepared operation身份冲突、队伍快照、成员hp/mp/stone/exp与user_cd快照、背包绑定/容量校验、reset generation ABA保护、多人奖励、层推进、completed replay和异常回滚。复用既有`dungeon.004` schema，无新增migration；新增行为测试覆盖success/replay、snapshot conflict、inventory_full、trigger rollback，Dungeon focused `250 tests`、本轮最终focused `235 tests`，compile/inventory/diff通过。
+
+2026-09-23 dungeon explore settlement isolated recovery evidence：一次性临时数据目录完成backup、restore dry-run、restore、全量`114`项migration和reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`，临时目录已删除。
+
+2026-09-23 dungeon explore settlement full evidence：当前HEAD完整回归`2146 tests OK`；remaining Dungeon reset/team legacy compatibility and other global blockers remain explicitly open。

@@ -1156,9 +1156,11 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         await explore_dungeon.finish()
     if replay.phase == "prepared":
         try:
-            resumed = _dungeon_explore_operation_service().settle(
-                operation_id, user_id, XiuConfig().max_goods_num
-            )
+            resumed = DungeonExploreOperationResult(**dungeon_application.settle(
+                operation_id=operation_id,
+                user_id=user_id,
+                max_goods_num=XiuConfig().max_goods_num,
+            ))
         except Exception:
             logger.exception("恢复副本探索 operation 失败")
             await handle_send(bot, event, "副本探索结算失败：处理过程异常。")
@@ -1473,9 +1475,11 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         prepared = DungeonExploreOperationResult(**prepared_data)
         settled = None
         if prepared.status != "operation_conflict" and prepared.phase != "completed":
-            settled = _dungeon_explore_operation_service().settle(
-                operation_id, user_id, XiuConfig().max_goods_num
-            )
+            settled = DungeonExploreOperationResult(**dungeon_application.settle(
+                operation_id=operation_id,
+                user_id=user_id,
+                max_goods_num=XiuConfig().max_goods_num,
+            ))
     except Exception:
         logger.exception("副本探索事务结算失败")
         await handle_send(bot, event, "副本探索结算失败：处理过程异常。")

@@ -133,6 +133,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "dungeon_team": {
             "create_invite_application_owned": "dungeon_team_application.create(" in dungeon_facade and "dungeon_team_application.invite(" in dungeon_facade,
             "legacy_create_invite_disabled": "_dungeon_team_transaction_service().create(" not in dungeon_facade and "_dungeon_team_transaction_service().invite(" not in dungeon_facade,
+            "explore_settlement_application_owned": "dungeon_application.settle(" in dungeon_facade and "_dungeon_explore_operation_service().settle(" not in dungeon_facade,
             "status": "create_invite_cutover_with_legacy_join_exit_compatibility",
         },
         "bank": {

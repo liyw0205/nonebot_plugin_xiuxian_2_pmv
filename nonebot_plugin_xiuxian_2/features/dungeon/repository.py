@@ -112,6 +112,12 @@ class DungeonPurchaseSqlRepository(LegacyDungeonRepository):
 
 
 class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
+    _STATUS_INTEGER_FIELDS = {"current_layer", "total_layers", "reset_generation"}
+    _STATUS_FIELDS = (
+        "dungeon_id", "dungeon_name", "dungeon_status", "current_layer",
+        "total_layers", "last_reset_date", "reset_generation", "reset_operation_id",
+    )
+
     def prepare(self, operation_id: str, user_id: str, plan: dict[str, Any]) -> dict[str, Any]:
         operation_id,user_id=str(operation_id).strip(),str(user_id);plan=dict(plan)
         if not operation_id or not plan: raise ValueError("operation and plan required")
@@ -141,6 +147,147 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
             try:return json.loads(str(value or "{}"))
             except (TypeError,ValueError):return {}
         phase=str(row["phase"] or "");return {"status":"duplicate" if phase=="completed" else phase,"phase":phase,"result_status":str(row["result_status"] or ""),"response":load(row["result_json"]),"plan":load(row["prepared_json"]),"current_layer":int(row["current_layer"] or 0),"dungeon_status":str(row["dungeon_status"] or "")}
+
+    @classmethod
+    def _normalize_status(cls, value: dict[str, Any]) -> dict[str, Any]:
+        return {
+            key: int(raw or 0) if key in cls._STATUS_INTEGER_FIELDS else str(raw or "")
+            for key, raw in value.items()
+            if key in cls._STATUS_FIELDS
+        }
+
+    @staticmethod
+    def _members(value: Any) -> list[str]:
+        try:
+            value = json.loads(value or "[]") if isinstance(value, str) else value
+        except (TypeError, ValueError, json.JSONDecodeError):
+            value = []
+        return [str(item) for item in value] if isinstance(value, list) else []
+
+    @classmethod
+    def _current_team(cls, uow: DatabaseUnitOfWork, user_id: str) -> dict[str, Any] | None:
+        table = uow.query_one("SELECT 1 AS present FROM player_data.sqlite_master WHERE type='table' AND name='teams'")
+        if table is None:
+            return None
+        columns = {str(row["name"]) for row in uow.query_all("PRAGMA player_data.table_info(teams)")}
+        selected = ["user_id", "leader", "members"]
+        if "version" in columns:
+            selected.append("version")
+        for row in uow.query_all("SELECT " + ",".join(selected) + " FROM player_data.teams"):
+            members = cls._members(row["members"])
+            if str(row["leader"]) != user_id and user_id not in members:
+                continue
+            result = {"team_id": str(row["user_id"]), "leader": str(row["leader"]), "members": members}
+            if "version" in columns:
+                result["version"] = int(row["version"] or 0)
+            return result
+        return None
+
+    @staticmethod
+    def _explore_conflict(uow: DatabaseUnitOfWork, operation_id: str, status: str, plan: dict[str, Any]) -> dict[str, Any]:
+        expected = plan.get("expected_status") if isinstance(plan.get("expected_status"), dict) else {}
+        response = {"battle_messages": [], "message": "探索未结算：状态已被其他操作改动，请重新发起。"}
+        if status == "team_changed":
+            response["message"] = "探索未结算：队伍已解散或成员变动，请重新组队发起。"
+        elif status == "user_missing":
+            response["message"] = "探索未结算：队伍成员数据已不存在，请重新发起探索。"
+        elif status == "inventory_full":
+            response["message"] = "背包中该物品数量已达上限，本次探索未结算。"
+        uow.execute(
+            "UPDATE dungeon_explore_operations SET phase='completed',result_status=?,result_json=?,current_layer=?,dungeon_status=?,updated_at=CURRENT_TIMESTAMP WHERE operation_id=? AND phase='prepared'",
+            (status, json.dumps(response, ensure_ascii=True, sort_keys=True), int(expected.get("current_layer", 0) or 0), str(expected.get("dungeon_status", "") or ""), operation_id),
+        )
+        return {"status": "applied", "phase": "completed", "result_status": status, "response": response, "plan": None, "current_layer": int(expected.get("current_layer", 0) or 0), "dungeon_status": str(expected.get("dungeon_status", "") or "")}
+
+    def settle(self, operation_id: str, user_id: str, max_goods_num: int) -> dict[str, Any]:
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        max_goods_num = int(max_goods_num)
+        if not operation_id or max_goods_num < 0:
+            raise ValueError("valid operation and inventory limit are required")
+        identity = json.dumps({"action": "explore", "user_id": user_id}, ensure_ascii=True, sort_keys=True)
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            uow.attach_database(self.player_database, "player_data")
+            row = self._explore_row(uow, operation_id)
+            if row is None:
+                return {"status": "missing", "phase": "", "result_status": "", "response": {}, "plan": {}, "current_layer": 0, "dungeon_status": ""}
+            if str(row["request_identity"]) != identity:
+                return {"status": "operation_conflict", "phase": "", "result_status": "", "response": {}, "plan": {}, "current_layer": 0, "dungeon_status": ""}
+            if str(row["phase"]) == "completed":
+                return self._explore_result(row, identity)
+            if str(row["phase"]) != "prepared":
+                return {"status": "invalid_phase", "phase": str(row["phase"]), "result_status": "", "response": {}, "plan": {}, "current_layer": 0, "dungeon_status": ""}
+            plan = json.loads(str(row["prepared_json"] or "{}"))
+            if not isinstance(plan, dict) or not isinstance(plan.get("members"), list) or not plan["members"]:
+                return {"status": "invalid_plan", "phase": "prepared", "result_status": "", "response": {}, "plan": plan if isinstance(plan, dict) else {}, "current_layer": 0, "dungeon_status": ""}
+            expected_status = self._normalize_status(plan.get("expected_status", {}))
+            status_columns = {str(item["name"]) for item in uow.query_all("PRAGMA player_data.table_info(player_dungeon_status)")}
+            required = set(self._STATUS_FIELDS) & status_columns
+            if not expected_status or not required.issubset(expected_status) or any(key not in status_columns for key in expected_status):
+                return self._explore_conflict(uow, operation_id, "state_changed", plan)
+            selected = list(expected_status)
+            status_row = uow.query_one("SELECT " + ",".join(selected) + " FROM player_data.player_dungeon_status WHERE user_id=?", (user_id,))
+            current_status = self._normalize_status(status_row or {})
+            if current_status != expected_status:
+                return self._explore_conflict(uow, operation_id, "state_changed", plan)
+            expected_team = plan.get("team")
+            current_team = self._current_team(uow, user_id)
+            if expected_team is None:
+                team_matches = current_team is None
+            else:
+                normalized_team = {"team_id": str(expected_team.get("team_id", "")), "leader": str(expected_team.get("leader", "")), "members": self._members(expected_team.get("members", []))}
+                if "version" in expected_team:
+                    normalized_team["version"] = int(expected_team.get("version", 0) or 0)
+                team_matches = current_team == normalized_team
+            if not team_matches:
+                return self._explore_conflict(uow, operation_id, "team_changed", plan)
+            inventory_rows: list[tuple[str, dict[str, Any], int, int]] = []
+            seen: set[str] = set()
+            for member in plan["members"]:
+                member_id = str(member.get("user_id", ""))
+                if not member_id or member_id in seen:
+                    return {"status": "invalid_plan", "phase": "prepared", "result_status": "", "response": {}, "plan": plan, "current_layer": 0, "dungeon_status": ""}
+                seen.add(member_id)
+                expected = member.get("expected", {})
+                user = uow.query_one("SELECT hp,mp,stone,exp FROM user_xiuxian WHERE user_id=?", (member_id,))
+                if user is None:
+                    return self._explore_conflict(uow, operation_id, "user_missing", plan)
+                current_resources = {key: int(user[key] or 0) for key in ("hp", "mp", "stone", "exp")}
+                expected_resources = {key: int(expected.get(key, 0) or 0) for key in current_resources}
+                final_hp, final_mp = int(member.get("final_hp", expected_resources["hp"])), int(member.get("final_mp", expected_resources["mp"]))
+                if final_hp < 1 or final_mp < 0:
+                    return {"status": "invalid_plan", "phase": "prepared", "result_status": "", "response": {}, "plan": plan, "current_layer": 0, "dungeon_status": ""}
+                cd = uow.query_one("SELECT COALESCE(type,0) AS type FROM user_cd WHERE user_id=? ORDER BY rowid DESC LIMIT 1", (member_id,))
+                if current_resources != expected_resources or int(cd["type"] if cd else 0) != int(expected.get("cd_type", 0) or 0):
+                    return self._explore_conflict(uow, operation_id, "state_changed", plan)
+                for item in member.get("items", []):
+                    item_id, amount = int(item.get("id", 0)), int(item.get("amount", 0))
+                    if item_id <= 0 or amount <= 0:
+                        return {"status": "invalid_plan", "phase": "prepared", "result_status": "", "response": {}, "plan": plan, "current_layer": 0, "dungeon_status": ""}
+                    inventory = uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num,COALESCE(bind_num,0) AS bind_num FROM back WHERE user_id=? AND goods_id=?", (member_id, item_id))
+                    goods_num, bind_num = (int(inventory["goods_num"]), int(inventory["bind_num"])) if inventory else (0, 0)
+                    if goods_num < 0 or bind_num < 0 or bind_num > goods_num or goods_num != int(item.get("expected_num", 0) or 0) or bind_num != int(item.get("expected_bind_num", 0) or 0):
+                        return self._explore_conflict(uow, operation_id, "state_changed", plan)
+                    if goods_num + amount > max_goods_num:
+                        return self._explore_conflict(uow, operation_id, "inventory_full", plan)
+                    inventory_rows.append((member_id, item, goods_num, bind_num))
+            now = SystemClock().now().isoformat()
+            for member in plan["members"]:
+                member_id = str(member["user_id"])
+                uow.execute("UPDATE user_xiuxian SET hp=?,mp=?,stone=COALESCE(stone,0)+?,exp=COALESCE(exp,0)+? WHERE user_id=?", (int(member.get("final_hp", member["expected"]["hp"])), int(member.get("final_mp", member["expected"]["mp"])), int(member.get("stone_delta", 0)), int(member.get("exp_delta", 0)), member_id))
+                for item in member.get("items", []):
+                    amount = int(item["amount"])
+                    uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time", (member_id, int(item["id"]), str(item["name"]), str(item["type"]), amount, now, now, amount))
+            current_layer = int(expected_status.get("current_layer", 0))
+            total_layers = int(expected_status.get("total_layers", current_layer))
+            final_layer = total_layers if bool(plan.get("complete")) else min(current_layer + 1, total_layers) if bool(plan.get("advance")) else current_layer
+            final_status = "completed" if final_layer >= total_layers else "exploring"
+            where = " AND ".join(f"{column}=?" for column in selected)
+            updated = uow.execute("UPDATE player_data.player_dungeon_status SET current_layer=?,dungeon_status=? WHERE user_id=? AND " + where, (final_layer, final_status, user_id, *(expected_status[column] for column in selected)))
+            if updated.rowcount != 1:
+                return self._explore_conflict(uow, operation_id, "state_changed", plan)
+            response = plan.get("response", {}) if isinstance(plan.get("response"), dict) else {}
+            uow.execute("UPDATE dungeon_explore_operations SET phase='completed',result_status='applied',result_json=?,current_layer=?,dungeon_status=?,updated_at=CURRENT_TIMESTAMP WHERE operation_id=? AND phase='prepared'", (json.dumps(response, ensure_ascii=True, sort_keys=True), final_layer, final_status, operation_id))
+            return {"status": "applied", "phase": "completed", "result_status": "applied", "response": response, "plan": None, "current_layer": final_layer, "dungeon_status": final_status}
 
     def replay(self, operation_id: str, user_id: str) -> dict[str, Any]:
         identity = json.dumps({"action":"explore","user_id":str(user_id)}, ensure_ascii=True, sort_keys=True)
