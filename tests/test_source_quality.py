@@ -1232,7 +1232,7 @@ class SourceQualityTests(unittest.TestCase):
         service_source = (sect_root / "membership_service.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn("_sect_membership_service().upgrade_fairyland(", command_source)
+        self.assertIn("sect_application.upgrade_fairyland(", command_source)
         self.assertIn("sect_fairyland_operations", service_source)
         self.assertIn("BEGIN IMMEDIATE", service_source)
 

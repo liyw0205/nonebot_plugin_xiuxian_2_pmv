@@ -800,7 +800,7 @@ async def sect_fairyland_upgrade_(bot: Bot, event: GroupMessageEvent | PrivateMe
         await handle_send(bot, event, f"宗门资材不足，还需{number_to(lack)}资材。", md_type="宗门", k1="捐献", v1="宗门捐献", k2="炼体堂", v2="宗门炼体堂", k3="宗门", v3="我的宗门")
         await sect_fairyland_upgrade.finish()
 
-    result = _sect_membership_service().upgrade_fairyland(
+    result = sect_application.upgrade_fairyland(
         _sect_operation_id(event, "fairyland_upgrade", sect_id),
         user_info["user_id"],
         sect_id,

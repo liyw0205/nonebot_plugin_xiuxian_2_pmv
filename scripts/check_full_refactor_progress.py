@@ -166,6 +166,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "disband_application_owned": sect_facade.count("sect_application.disband_inactive(") >= 3,
             "owner_transfer_application_owned": "sect_application.transfer_owner(" in sect_facade,
             "scheduled_grant_application_owned": "sect_application.grant_scheduled_materials(" in sect_facade,
+            "fairyland_upgrade_application_owned": "sect_application.upgrade_fairyland(" in sect_facade,
             "legacy_membership_disabled": all(token not in sect_facade for token in ("sect_membership_service.join", "sect_membership_service.leave_sect", "sect_membership_service.kick_member", "sect_membership_service.change_position")),
             "status": "membership_economy_daily_maintenance_cutover_with_other_sect_compatibility_paths",
         },
