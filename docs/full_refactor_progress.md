@@ -3326,6 +3326,12 @@
 
 2026-09-23 past-life start full evidence：完整回归`2145 tests OK`。
 
+2026-09-23 past-life choice isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-23 past-life choice full evidence：完整回归`2145 tests OK`。
+
+2026-09-23 past-life choice feature-owned cutover：新增`PastLifeChoiceSqlRepository`并将非终局choice advance默认切换到`PastLifeApplication.choice`；真实下沉player状态快照校验、不可变运行字段、stage/revision推进和operation response幂等，终局奖励结算继续保留兼容边界。focused `228 tests`，compile/inventory/diff通过。
+
 2026-09-23 past-life start feature-owned cutover：新增独立`PastLifeStartSqlRepository`并将新人生start handler默认切换到`PastLifeApplication.start`；真实下沉player past_life schema、冻结计划、revision、冷却、统计和operation幂等，保留显式旧测试注入兼容但不作为默认执行路径。focused `218 tests`，compile/inventory/diff通过；修复feature导入NoneBot初始化和PRAGMA name-row兼容。
 
 2026-09-23 impart-pk project-join feature-owned cutover：新增player单库`ImpartProjectJoinSqlRepository`、`ImpartPkApplication.project_join`并将投影虚神界handler从`execute_legacy_call`切换到application路径；原子保留legacy成员一次性导入、capacity竞争、pk_num初始化、投影统计和幂等operation，保留duplicate/operation_conflict/already_joined/capacity_full和rollback。focused `233 tests`，compile/inventory/diff通过。

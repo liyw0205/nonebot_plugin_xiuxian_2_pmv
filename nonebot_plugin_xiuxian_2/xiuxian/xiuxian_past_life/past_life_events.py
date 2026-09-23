@@ -625,14 +625,19 @@ class PastLifeEngine:
             for i, c in enumerate(next_event["choices"], 1):
                 next_msg += f"\n[{i}] {c['text']}"
             response = {"message": next_msg, "is_end": False, "ending": None}
-            settlement = _past_life_choice_service().advance(
-                operation_id,
-                user_id,
-                choice_idx,
-                expected_state,
-                state,
-                response,
-            )
+            if _past_life_choice_service_instance is not None:
+                settlement = _past_life_choice_service_instance.advance(
+                    operation_id, user_id, choice_idx, expected_state, state, response
+                )
+            else:
+                settlement = _past_life_application.choice(
+                    operation_id=operation_id,
+                    user_id=user_id,
+                    choice_idx=choice_idx,
+                    expected_state=expected_state,
+                    final_state=state,
+                    response=response,
+                )
             if not settlement.succeeded:
                 return {
                     "message": "前尘事件未完成：进度已更新，请重新查看前尘。",

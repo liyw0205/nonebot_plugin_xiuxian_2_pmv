@@ -2913,6 +2913,7 @@
     "partner_token_operations",
     "partner_two_exp_usage",
     "partner_unbind_operations",
+    "past_life",
     "past_life_choice_operations",
     "past_life_feature_migrations",
     "past_life_final_operations",
