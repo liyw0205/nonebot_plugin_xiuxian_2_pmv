@@ -2505,7 +2505,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_S
             await handle_send(bot, event, msg, md_type="宗门", k1="创建", v1="创建宗门", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             # 继续创建流程（不return，走后续统一创建）
         else:
-            refresh = _sect_membership_service().charge_name_refresh(
+            refresh = sect_application.charge_name_refresh(
                 _sect_operation_id(event, "name_refresh", user_id),
                 user_id,
                 stone_cost,

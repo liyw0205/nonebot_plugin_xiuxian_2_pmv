@@ -23,6 +23,7 @@ from .buff_search_repository import SectBuffSearchSqlRepository
 from .practice_repository import SectPracticeSqlRepository
 from .task_settlement_repository import SectTaskSettlementSqlRepository
 from .creation_repository import SectCreationSqlRepository
+from .name_refresh_repository import SectNameRefreshSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -120,6 +121,9 @@ class SectApplication:
 
     def create_sect(self, operation_id: str, user_id: str, sect_name: str, stone_cost: int, owner_position: int):
         return SectMutationResult(SectCreationSqlRepository(self.database).create(operation_id, user_id, sect_name, stone_cost, owner_position))
+
+    def charge_name_refresh(self, operation_id: str, user_id: str, stone_cost: int):
+        return SectMutationResult(SectNameRefreshSqlRepository(self.database).charge(operation_id, user_id, stone_cost))
 
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):

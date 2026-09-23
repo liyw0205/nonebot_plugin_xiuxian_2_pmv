@@ -172,6 +172,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "practice_application_owned": sect_facade.count("sect_application.upgrade_practice(") >= 3,
             "task_settlement_application_owned": sect_facade.count("sect_application.settle_task(") >= 2,
             "creation_application_owned": sect_facade.count("sect_application.create_sect(") >= 2,
+            "name_refresh_application_owned": "sect_application.charge_name_refresh(" in sect_facade,
             "legacy_membership_disabled": all(token not in sect_facade for token in ("sect_membership_service.join", "sect_membership_service.leave_sect", "sect_membership_service.kick_member", "sect_membership_service.change_position")),
             "status": "membership_economy_daily_maintenance_cutover_with_other_sect_compatibility_paths",
         },
