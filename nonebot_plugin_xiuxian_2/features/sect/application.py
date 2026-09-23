@@ -14,6 +14,7 @@ from .daily_maintenance_repository import SectDailyMaintenanceSqlRepository
 from .close_mountain_repository import SectCloseMountainSqlRepository
 from .owner_inherit_repository import SectOwnerInheritSqlRepository
 from .join_state_repository import SectJoinStateSqlRepository
+from .disband_repository import SectDisbandSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -84,6 +85,9 @@ class SectApplication:
 
     def close_join(self, operation_id: str, actor_id: str, *, owner_position: int = 0, expected_sect_id: int | None = None):
         return SectMutationResult(SectJoinStateSqlRepository(self.database).close(operation_id, actor_id, owner_position=owner_position, expected_sect_id=expected_sect_id))
+
+    def disband_inactive(self, operation_id: str, sect_id: int, reason: str, *, expected_sect_name: str, expected_owner_id: str | None, expected_closed: bool, expected_member_ids, expected_active_candidate_ids, checked_at, inactivity_days: int):
+        return SectMutationResult(SectDisbandSqlRepository(self.database).disband_inactive(operation_id, sect_id, reason, expected_sect_name=expected_sect_name, expected_owner_id=expected_owner_id, expected_closed=expected_closed, expected_member_ids=expected_member_ids, expected_active_candidate_ids=expected_active_candidate_ids, checked_at=checked_at, inactivity_days=inactivity_days))
 
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):

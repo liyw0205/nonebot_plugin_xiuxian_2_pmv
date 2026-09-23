@@ -163,6 +163,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "close_mountain_application_owned": sect_facade.count("sect_application.close_mountain(") >= 2,
             "owner_inherit_application_owned": "sect_application.inherit_owner(" in sect_facade,
             "join_state_application_owned": "sect_application.open_join(" in sect_facade and "sect_application.close_join(" in sect_facade,
+            "disband_application_owned": sect_facade.count("sect_application.disband_inactive(") >= 3,
             "legacy_membership_disabled": all(token not in sect_facade for token in ("sect_membership_service.join", "sect_membership_service.leave_sect", "sect_membership_service.kick_member", "sect_membership_service.change_position")),
             "status": "membership_economy_daily_maintenance_cutover_with_other_sect_compatibility_paths",
         },

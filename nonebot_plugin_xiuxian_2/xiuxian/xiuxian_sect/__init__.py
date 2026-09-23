@@ -490,7 +490,7 @@ async def auto_handle_inactive_sect_owners():
                     
                     if not members:
                         logger.info("宗门没有成员，执行解散操作")
-                        disbanded = _sect_disband_service().disband_inactive(
+                        disbanded = sect_application.disband_inactive(
                             f"sect:auto-disband:{maintenance_key}:{sect_id}:empty",
                             sect_id,
                             "empty",
@@ -528,7 +528,7 @@ async def auto_handle_inactive_sect_owners():
                     
                     if not active_candidates:
                         logger.info("没有活跃的继承人，执行解散操作")
-                        disbanded = _sect_disband_service().disband_inactive(
+                        disbanded = sect_application.disband_inactive(
                             f"sect:auto-disband:{maintenance_key}:{sect_id}:no-successor",
                             sect_id,
                             "no_active_successor",
@@ -604,7 +604,7 @@ async def auto_handle_inactive_sect_owners():
                 # 检查宗门成员数量
                 if len(members) == 1:
                     logger.info("宗门只有宗主一人，执行解散操作")
-                    disbanded = _sect_disband_service().disband_inactive(
+                    disbanded = sect_application.disband_inactive(
                         f"sect:auto-disband:{maintenance_key}:{sect_id}:sole-owner",
                         sect_id,
                         "inactive_sole_owner",
