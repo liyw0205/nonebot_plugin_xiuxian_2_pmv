@@ -22,9 +22,23 @@ if str(ROOT) not in sys.path:
 # into JSON tooling.
 with redirect_stdout(sys.stderr):
     from nonebot_plugin_xiuxian_2.bootstrap import build_runtime_context
-    from nonebot_plugin_xiuxian_2.infrastructure.database import BackupService, DatabaseUnitOfWork, MigrationRunner, ReconcileService
+    from nonebot_plugin_xiuxian_2.infrastructure.database import (
+        BackupService,
+        DatabaseUnitOfWork,
+        MigrationRunner,
+        ReconcileService,
+    )
+    from nonebot_plugin_xiuxian_2.infrastructure.database.attached_uow import (
+        AttachedDatabaseUnitOfWork,
+    )
     from nonebot_plugin_xiuxian_2.infrastructure.filesystem import atomic_write
-    from nonebot_plugin_xiuxian_2.plugin import build_migrations
+    from nonebot_plugin_xiuxian_2.plugin import build_migrations, migrations_for_database
+    from nonebot_plugin_xiuxian_2.features.accessory_package.attached_migrations import (
+        ATTACHED_OPERATION_VERSION,
+        ATTACHED_SCHEMA_VERSION,
+        apply_attached_player_accessory,
+        apply_attached_player_accessory_operations,
+    )
     from nonebot_plugin_xiuxian_2.features.daily_fortune.repository import DailyFortuneRepository
 
 
@@ -33,6 +47,43 @@ def _non_empty_data_dir(value: str) -> str:
     if not str(value).strip():
         raise argparse.ArgumentTypeError("--data-dir must be a non-empty path")
     return value
+
+
+def _apply_catalog_migrations(context) -> tuple[dict[str, list[str]], dict[str, list[str]], list[str]]:
+    """Mirror startup migration routing for every catalogued SQLite database."""
+    catalog = build_migrations()
+    applied_by_database: dict[str, list[str]] = {}
+    migrations_by_database: dict[str, list[str]] = {}
+    for spec in context.database.specs():
+        selected = migrations_for_database(catalog, spec.key)
+        with DatabaseUnitOfWork(spec.path) as uow:
+            runner = MigrationRunner(selected, clock=context.clock)
+            applied_by_database[spec.key] = runner.apply(uow)
+            migrations_by_database[spec.key] = [
+                str(row["version"])
+                for row in uow.query_all("SELECT version FROM schema_migrations ORDER BY version")
+            ]
+
+    player_database = context.database.path("player_db")
+    with AttachedDatabaseUnitOfWork(
+        context.database.path("game_db"),
+        attachments={"player_data": player_database},
+        immediate=True,
+    ) as attached_uow:
+        attached_versions = [
+            version
+            for version, changed in (
+                (ATTACHED_SCHEMA_VERSION, apply_attached_player_accessory(attached_uow, clock=context.clock)),
+                (
+                    ATTACHED_OPERATION_VERSION,
+                    apply_attached_player_accessory_operations(
+                        attached_uow, clock=context.clock
+                    ),
+                ),
+            )
+            if changed
+        ]
+    return applied_by_database, migrations_by_database, attached_versions
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -44,17 +95,24 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     context = build_runtime_context(data_dir=args.data_dir)
-    with DatabaseUnitOfWork(context.database.path("game_db")) as uow:
-        DailyFortuneRepository().ensure_schema(uow)
+    # Create every catalogued database before backup so a rehearsal covers the
+    # same five files that a normal startup owns.
+    for spec in context.database.specs():
+        with DatabaseUnitOfWork(spec.path) as uow:
+            if spec.key == "game_db":
+                DailyFortuneRepository().ensure_schema(uow)
     backup = BackupService(context.database, extra_files={"config": context.paths.config_file}).create(context.paths.backups)
     dry_run = BackupService(context.database, extra_files={"config": context.paths.config_file}).restore(backup, dry_run=True)
     restored = BackupService(context.database, extra_files={"config": context.paths.config_file}).restore(backup)
+    applied_by_database, migrations_by_database, attached_migrations = _apply_catalog_migrations(context)
     with DatabaseUnitOfWork(context.database.path("game_db")) as uow:
-        runner = MigrationRunner(build_migrations())
-        applied = runner.apply(uow)
-        migration_rows = uow.query_all("SELECT version FROM schema_migrations ORDER BY version")
-        migrations = [str(row["version"]) for row in migration_rows]
         report = ReconcileService().inspect(uow)
+    migrations = sorted(
+        {version for versions in migrations_by_database.values() for version in versions}
+    )
+    applied = sorted(
+        {version for versions in applied_by_database.values() for version in versions}
+    )
     result = {
         "schema": 1,
         "created_at": context.clock.now().isoformat(),
@@ -66,6 +124,9 @@ def main(argv: list[str] | None = None) -> int:
         "restore": restored["restored"],
         "migrations": migrations,
         "applied_migrations": applied,
+        "migrations_by_database": migrations_by_database,
+        "applied_migrations_by_database": applied_by_database,
+        "attached_migrations": attached_migrations,
         "reconcile": report.to_dict(),
     }
     if args.evidence:

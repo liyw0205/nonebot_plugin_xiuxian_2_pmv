@@ -46,7 +46,7 @@ from .features.base.migrations import apply_base
 from .features.back.manifest import FEATURE as BACK_FEATURE
 from .features.back.migrations import apply_back
 from .features.trade.manifest import FEATURE as TRADE_FEATURE
-from .features.trade.migrations import apply_trade
+from .features.trade.migrations import apply_trade, apply_trade_guishi_deposit, apply_trade_guishi_schema
 from .features.map.manifest import FEATURE as MAP_FEATURE
 from .features.map.migrations import apply_map, apply_map_combat_plan, apply_map_combat_player, apply_map_combat_start, apply_map_dongfu_build, apply_map_dongfu_player, apply_map_explore_player, apply_map_explore_settlement, apply_map_explore_start, apply_map_home_return, apply_map_interactive_player, apply_map_interactive_start, apply_map_mission_claim, apply_map_movement, apply_map_resource_reward, apply_map_seed_purchase
 from .features.rift.manifest import FEATURE as RIFT_FEATURE
@@ -213,6 +213,8 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("tower.003", "tower_settlement_operations", apply_tower_settlement),
         Migration("tower.004", "tower_state_operations", apply_tower_state),
         Migration("trade.001", "trade_feature_migrations", apply_trade),
+        Migration("trade.002", "trade_guishi_deposit_operations", apply_trade_guishi_deposit),
+        Migration("trade.003", "guishi_info", apply_trade_guishi_schema),
         Migration("work.001", "work_feature_migrations", apply_work),
         Migration("work.002", "work_daily_refresh_reset_operations", apply_work_daily_refresh_reset),
         Migration("world_events.001", "world_events_feature_migrations", apply_world_events),
@@ -240,8 +242,8 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "tianti_training.003",
         "tianti_training.004",
         "tianti_training.005",
-        "tianti_training.006",
         "tianti_training.008",
+        "trade.003",
     }
 )
 _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
@@ -270,6 +272,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "tianti_training.008",
     }
 )
+_TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"platform.001", "trade.003"})
 
 
 def migrations_for_database(
@@ -287,6 +290,12 @@ def migrations_for_database(
             migration
             for migration in migrations
             if migration.version in _PLAYER_DATABASE_MIGRATION_VERSIONS
+        )
+    if database_key == "trade_db":
+        return tuple(
+            migration
+            for migration in migrations
+            if migration.version in _TRADE_DATABASE_MIGRATION_VERSIONS
         )
     return tuple(migration for migration in migrations if migration.version == "platform.001")
 

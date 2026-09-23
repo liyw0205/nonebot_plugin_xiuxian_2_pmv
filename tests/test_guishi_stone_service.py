@@ -22,17 +22,19 @@ def test_trade_facade_defers_guishi_stone_service_construction():
     assert trade._guishi_stone_service_instance is None
 
 
-def test_guishi_stone_handler_uses_lazy_game_trade_service():
+def test_guishi_deposit_handler_uses_feature_repository():
     source = Path(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_trade/__init__.py"
     ).read_text(encoding="utf-8")
+    start = source.index("async def guishi_deposit_")
+    deposit_handler = source[start : source.index("@guishi_withdraw.handle", start)]
+    assert "trade_application.guishi_deposit(" in deposit_handler
+    assert "_guishi_stone_service().deposit(" not in deposit_handler
+    assert "GuishiDepositSqlRepository.STORED_CAP" in deposit_handler
+    assert "GuishiDepositSqlRepository.OP_AMOUNT_CAP" in deposit_handler
     assert "_guishi_stone_service_instance = None" in source
     assert "def _guishi_stone_service(" in source
-    assert "get_paths().game_db" in source
-    assert "get_paths().trade_db" in source
-    assert "_guishi_stone_service().deposit(" in source
     assert "_guishi_stone_service().withdraw(" in source
-    assert "guishi_stone_service.deposit(" not in source
     assert "guishi_stone_service.withdraw(" not in source
 
 

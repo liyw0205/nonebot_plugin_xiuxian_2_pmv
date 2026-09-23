@@ -5,6 +5,7 @@ from typing import Any
 
 from .._legacy_application import LegacyApplication
 from ...core.errors import ValidationError
+from .guishi_deposit_repository import GuishiDepositSqlRepository
 from .repository import TradeFeatureRepository
 
 
@@ -13,12 +14,37 @@ class TradeApplication(LegacyApplication):
     def __init__(self, game_database: str | Path, trade_database: str | Path, *, repository: TradeFeatureRepository | None = None) -> None:
         self.game_database = str(game_database)
         self.trade_database = str(trade_database)
+        self.guishi_deposit_repository = GuishiDepositSqlRepository(
+            self.game_database, self.trade_database
+        )
         super().__init__(game_database, repository=repository, feature="trade")
 
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):
         return self._execute(operation_id=operation_id, user_id=user_id, action=f"trade.{action}", payload={"user_id": user_id, **kwargs}, call=lambda: self.repository.invoke(action, operation_id, user_id, **kwargs))
 
-    def deposit(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("deposit", operation_id=operation_id, user_id=user_id, **kwargs)
+    def deposit(self, *, operation_id: str, user_id: str, amount: int, **kwargs: Any):
+        if self.repository is not None:
+            return self._action(
+                "deposit",
+                operation_id=operation_id,
+                user_id=user_id,
+                amount=amount,
+                **kwargs,
+            )
+        return self._execute(
+            operation_id=operation_id,
+            user_id=user_id,
+            action="trade.deposit",
+            payload={"user_id": user_id, "amount": amount},
+            call=lambda: self.guishi_deposit(
+                operation_id=operation_id, user_id=user_id, amount=amount
+            ),
+        )
+
+    def guishi_deposit(self, *, operation_id: str, user_id: str, amount: int):
+        return self.guishi_deposit_repository.deposit(
+            operation_id=operation_id, user_id=user_id, amount=amount
+        )
     def withdraw(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("withdraw", operation_id=operation_id, user_id=user_id, **kwargs)
     def enqueue(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("enqueue", operation_id=operation_id, user_id=user_id, **kwargs)
     def dequeue(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("dequeue", operation_id=operation_id, user_id=user_id, **kwargs)

@@ -535,23 +535,26 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", repository_source)
         self.assertIn("xianshi_operations", repository_source)
 
-    def test_guishi_stone_transfer_uses_transactional_service(self) -> None:
+    def test_guishi_deposit_uses_feature_repository(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
         command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")
-        service_source = (trade_root / "guishi_stone_service.py").read_text(
+        repository_source = (
+            SOURCE_ROOT / "features" / "trade" / "guishi_deposit_repository.py"
+        ).read_text(
             encoding="utf-8"
         )
         start = command_source.index("async def guishi_deposit_(")
         end = command_source.index("@guishi_take_item.handle", start)
         command = command_source[start:end]
 
-        self.assertIn("_guishi_stone_service().deposit(", command)
+        self.assertIn("trade_application.guishi_deposit(", command)
+        self.assertNotIn("_guishi_stone_service().deposit(", command)
         self.assertIn("_guishi_stone_service().withdraw(", command)
         self.assertNotIn("sql_message.try_update_ls(", command)
         self.assertNotIn("trade_manager.try_update_stored_stone(", command)
-        self.assertIn("ATTACH DATABASE", service_source)
-        self.assertIn("BEGIN IMMEDIATE", service_source)
-        self.assertIn("guishi_stone_operations", service_source)
+        self.assertIn("attach_database", repository_source)
+        self.assertIn("immediate=True", repository_source)
+        self.assertIn("trade_guishi_deposit_operations", repository_source)
 
     def test_auction_queue_uses_transactional_service(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"

@@ -6,4 +6,20 @@ def apply_trade(uow: DatabaseUnitOfWork) -> None:
     uow.execute("INSERT OR IGNORE INTO trade_feature_migrations(version) VALUES ('trade.001')")
 
 
-__all__ = ["apply_trade"]
+def apply_trade_guishi_deposit(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS trade_guishi_deposit_operations ("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,user_id TEXT NOT NULL,"
+        "amount INTEGER NOT NULL,stored_balance INTEGER NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+def apply_trade_guishi_schema(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS guishi_info ("
+        "user_id TEXT PRIMARY KEY,stored_stone INTEGER DEFAULT 0,items TEXT DEFAULT '{}')"
+    )
+
+
+__all__ = ["apply_trade", "apply_trade_guishi_deposit", "apply_trade_guishi_schema"]

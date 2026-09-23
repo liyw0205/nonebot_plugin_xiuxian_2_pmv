@@ -4,9 +4,12 @@ import json
 import hashlib
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 
 from nonebot_plugin_xiuxian_2.compatibility.release_gate import CompatibilityReleaseGate
+from nonebot_plugin_xiuxian_2.plugin import build_migrations
 from scripts.check_compatibility_release import _parser as release_parser
 from scripts.recovery_smoke import main as recovery_main
 
@@ -26,6 +29,37 @@ class CompatibilityReleaseGateTests(unittest.TestCase):
             release_parser().parse_args(["--data-dir", "", "begin", "--release", "v1.1.0"])
         with self.assertRaises(SystemExit):
             recovery_main(["--data-dir", ""])
+
+    def test_recovery_smoke_restores_and_migrates_every_catalog_database(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = StringIO()
+            with redirect_stdout(output):
+                status = recovery_main(["--data-dir", directory])
+
+            receipt = json.loads(output.getvalue())
+            database_keys = {"game_db", "player_db", "trade_db", "impart_db", "message_db"}
+            self.assertEqual(status, 0)
+            self.assertEqual(set(receipt["restore_dry_run"]), database_keys)
+            self.assertEqual(set(receipt["restore"]), database_keys)
+            self.assertEqual(set(receipt["migrations_by_database"]), database_keys)
+            self.assertEqual(
+                set(receipt["migrations"]),
+                {migration.version for migration in build_migrations()},
+            )
+            self.assertIn("trade.002", receipt["migrations_by_database"]["game_db"])
+            self.assertNotIn("trade.003", receipt["migrations_by_database"]["game_db"])
+            self.assertIn("trade.003", receipt["migrations_by_database"]["trade_db"])
+            self.assertNotIn("trade.002", receipt["migrations_by_database"]["trade_db"])
+            self.assertIn(
+                "tianti_training.006", receipt["migrations_by_database"]["game_db"]
+            )
+            self.assertEqual(
+                set(receipt["attached_migrations"]),
+                {
+                    "accessory_package.player_data.001",
+                    "accessory_package.player_data.002",
+                },
+            )
 
     def test_release_ids_must_be_semver_and_later(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

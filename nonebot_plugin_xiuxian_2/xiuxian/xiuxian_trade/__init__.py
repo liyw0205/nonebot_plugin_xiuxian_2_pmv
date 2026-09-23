@@ -65,6 +65,7 @@ from .transaction_service import AuctionQueueService
 from .transaction_service import AuctionSessionService
 from ...paths import get_paths
 from ...features.trade.application import TradeApplication
+from ...features.trade.guishi_deposit_repository import GuishiDepositSqlRepository
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 from ...bootstrap.legacy import register_legacy_startup
@@ -1512,25 +1513,25 @@ async def guishi_deposit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_deposit.finish()
     
-    result = _guishi_stone_service().deposit(
-        _guishi_stone_operation_id(event, "deposit", user_id),
-        user_id,
-        amount,
+    result = trade_application.guishi_deposit(
+        operation_id=_guishi_stone_operation_id(event, "deposit", user_id),
+        user_id=user_id,
+        amount=amount,
     )
     if result.status == "stone_insufficient":
         msg = "灵石不足，存入失败！"
         await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_deposit.finish()
     if result.status == "stored_cap_exceeded":
-        room = max(0, GuishiStoneService.STORED_CAP - int(result.stored_balance or 0))
+        room = max(0, GuishiDepositSqlRepository.STORED_CAP - int(result.stored_balance or 0))
         msg = (
-            f"鬼市账户最多可存{number_to(GuishiStoneService.STORED_CAP)}灵石；"
+            f"鬼市账户最多可存{number_to(GuishiDepositSqlRepository.STORED_CAP)}灵石；"
             f"当前已存{number_to(result.stored_balance)}，本次最多还可存{number_to(room)}。"
         )
         await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_deposit.finish()
     if result.status == "amount_capped":
-        msg = f"单次存入不可超过{number_to(GuishiStoneService.OP_AMOUNT_CAP)}灵石。"
+        msg = f"单次存入不可超过{number_to(GuishiDepositSqlRepository.OP_AMOUNT_CAP)}灵石。"
         await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_deposit.finish()
     if not result.succeeded:

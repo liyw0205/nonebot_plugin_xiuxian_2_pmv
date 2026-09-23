@@ -2814,7 +2814,62 @@
 
 ## 6. 下一步
 
-继续在真实部署数据上执行 stone-gift dry-run/reconcile/恢复；随后扫描并处理下一个独立 legacy execution/import slice。若该切片遇到旧数据兼容阻塞，继续处理不依赖它的 player/economy 小切片，不把 facade 或静态 manifest 计入完成。
+### 6.1 当前权威状态（2026-09-24）
+
+本节以 `scripts/refactor_completion_audit.py` 和
+`scripts/check_full_refactor_progress.py` 的当前输出为准；前文及下方的日期记录仅保留当时的实施证据，不应被当作当前待办状态。
+
+- 架构/交付基础门禁 P0-P6 已就绪；P7 仍未就绪，缺少一次真实发布周期的
+  `--data-dir`、当前 release 和发布证据。隔离 recovery smoke 不能替代 P7。
+- 全面底层重构尚未达到退出条件：仍有 33 个
+  `xiuxian/*/transaction_service.py`（48,229 行）以及
+  `xiuxian2_handle.py`（180,302 bytes）的旧执行路径。它们不能因已有 facade、
+  application 或静态标记而计作完成。
+- 已切换的功能仍可能保留显式 compatibility/rollback adapter；只有默认真实
+  handler/route/scheduler 已改走 feature-owned application，且旧实现不再承载该
+  用例，才可逐项从遗留服务移除。
+- `recovery_smoke.py` 在 2026-09-24 修复为五库按路由迁移前，旧脚本只对
+  `game_db` 应用完整目录。因此此前没有独立五库回执的隔离 smoke 只能作为单库
+  恢复演练，不能用于跨库切片或 P7 的最终证据；后续统一以五库 receipt 为准。
+
+### 6.2 优先目标
+
+1. 收尾当前 `trade_guishi_deposit` 切片：重新生成并检查 inventory，执行
+   architecture/progress/diff 门禁，清理本轮字节码、pytest cache、SQLite sidecar
+   和临时 recovery 目录，再提交并推送。此项不再扩大行为范围。
+2. 迁移 `鬼市取灵石`：真实入口仍在
+   `xiuxian_trade/__init__.py::guishi_withdraw_`，默认调用
+   `GuishiStoneService.withdraw`。单独建立 feature-owned withdraw application/
+   repository，将周末策略和动态手续费作为注入 Clock 下的规则，保留存款上限、
+   旧 operation 回放兼容、payload conflict、余额/CAS 拒绝，以及 game/trade 双库
+   的单事务回滚；命令和 Web withdraw 必须收敛到同一 use case。
+3. 完成交易域其余真实路径：按“求购/摆摊创建和撤销 -> 撮合与过期清理 -> 取回
+   寄存物品 -> 拍卖排队和场次生命周期”拆分。拍卖结算已迁移不代表队列、场次和
+   鬼市订单已迁移；每次只切一个可独立回滚的资产状态转换。
+4. 清零已迁移域的 compatibility 余额：优先处理仍由旧 service 承载的高频资产
+   路径，包括签到后置 effects、背包通用物品/礼包余项、宠物、任务/修炼、洞府和
+   地图未覆盖动作、宗门、竞技场/副本、世界事件、Boss 与拍卖。先用真实入口
+   调用图确定一个动作，再迁移，不按文件或目录整体宣布完成。
+5. 单列处理复杂批处理和外部状态：赌坊投注/派奖与分块分红、全服批处理、跨库
+   补偿、JSON/凭据状态、scheduler 和外部版本更新必须保留冻结快照、分块进度、
+   子操作 replay、失败续跑和 reconcile；不能为追赶进度改成 facade 或一次性大
+   事务。
+6. 最终退出：完成所有默认入口的逐项切换并删除/隔离对应旧实现，使 legacy
+   `transaction_service` 与 `xiuxian2_handle` 不再在完成切片的执行图中出现；
+   随后完成一次真实发布、备份、迁移、恢复和 reconcile，补齐 P7 证据。
+
+### 6.3 每个目标的完成定义与资源约束
+
+每个切片必须具备真实 handler/route/scheduler 切换、feature-owned
+application/repository、显式 DTO/Clock/RandomSource/IdGenerator 边界、operation
+replay/conflict、CAS/状态变化拒绝、跨库原子回滚、迁移路由和恢复证据。完成前运行
+focused tests、根目录 `tests/` 隔离回归、compileall、architecture/progress/inventory
+和 `git diff --check`；之后才提交/推送并进入下一项。
+
+测试和 recovery 只使用精确的临时目录，启用 `PYTHONDONTWRITEBYTECODE=1` 与
+`pytest -p no:cacheprovider`；每轮完成后删除工作树 `__pycache__`、`.pytest_cache`、
+`.pyc`、SQLite `-wal/-shm/-journal` sidecar、临时 receipt/log 和 recovery 目录，并
+复核磁盘/RAM。不得删除 `.venv`、`.git`、`data/`、配置、数据库或备份。
 
 2026-09-21 stone-gift slice verification：真实 `送灵石` 新 adapter 的用户查询补回 `level` 字段；此前缺少该字段会让非默认境界按错误的默认日限额计算，已由真实 SQLite command boundary regression 覆盖。feature/application/adapter/source 回归 `26 passed, 2 subtests passed`，独立 Web boundary `3 passed`；测试夹具统一显式执行 platform operation ledger 与 `stone_gift` schema migration，生产请求路径仍不隐式建表。compileall、architecture、inventory、`git diff --check` 通过。
 
@@ -3525,3 +3580,9 @@
 2026-09-24 dongfu failed infiltration feature-owned cutover：新增`DongfuInfiltrateFailureSqlRepository`、`dongfu.003`和 application/repository 边界；`潜入洞府`被侦测且失败的真实 handler 默认直接调用`dongfu_application.infiltrate_failure`，不再经`_run_dongfu_action`、`execute_legacy_call`或`_dongfu_infiltrate_failure_service().settle`。保留用户/双方洞府状态、每日次数、巡山护府消耗、REAL 下限灵石扣除、operation replay/conflict、rowcount 状态变化拒绝及 operation trigger 异常的跨库 rollback。新增 repository 测试覆盖成功/回放冲突、次数限制、operation 写入失败、资产 rowcount 失败回滚和 application 默认路径；`5 passed`，完整隔离回归`2504 passed`。
 
 2026-09-24 dongfu failed infiltration isolated recovery evidence：一次性临时数据目录 recovery smoke 已完成 backup、restore dry-run、restore、全量`117`项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`，临时目录已清理。
+
+2026-09-24 trade Guishi deposit feature-owned cutover：新增`GuishiDepositSqlRepository`和`TradeApplication.guishi_deposit`，真实`鬼市存灵石` handler 默认不再调用`_guishi_stone_service().deposit`。新的 game DB `trade.002` operation 表使用 canonical payload 保留 completed/duplicate/operation_conflict，并兼容读取历史`guishi_stone_operations`回放；trade DB `trade.003`只建立`guishi_info`投影。单一`BEGIN IMMEDIATE`事务附加trade DB，原子保留玩家灵石扣除、鬼市余额、单次与总额上限、余额不足、operation trigger异常的跨库rollback。`鬼市取灵石`手续费和周末规则继续作为独立兼容切片。focused repository/source/progress suite `229 passed, 2 subtests passed`，根目录完整隔离回归`2510 passed, 16 warnings, 25 subtests passed`。
+
+2026-09-24 recovery smoke catalog routing repair：修复`recovery_smoke.py`此前只对`game_db`应用完整迁移目录的问题。新演练显式创建、backup、restore dry-run、restore五库，并以`migrations_for_database()`分别应用 schema；同时执行 player attached accessory migrations。receipt 记录`migrations_by_database`和`applied_migrations_by_database`，使`trade.002`仅在game DB、`trade.003`仅在trade DB可验证。修复同时发现并更正 game DB `tianti_training.006` 的遗漏路由；回归断言五库迁移并集等于完整 catalog。此前缺少五库 receipt 的历史隔离 smoke 不再作为跨库/P7最终证据。
+
+2026-09-24 trade Guishi deposit isolated recovery evidence：一次性临时五库目录 recovery smoke 已完成backup、restore dry-run、restore、全量`119`项migration和reconcile；`trade.002`/`trade.003`均已应用且按game/trade database路由，`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。临时数据和receipt将在提交前清理；该证据不替代真实正式发布周期。
