@@ -1852,17 +1852,16 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     if quantity > goods_num: # 实际可上架数量不能超过背包现有数量
         quantity = goods_num
         
-    result = xianshi_repository.create_guishi_baitan_order(
-        get_paths().trade_db,
-        user_id,
-        goods_id,
-        item_name,
-        price,
-        quantity,
-        max_orders=MAX_BAITAN_ORDERS,
+    result = trade_application.guishi_baitan(
         operation_id=_guishi_order_operation_id(
             event, "baitan", user_id, goods_id, price, quantity
         ),
+        user_id=user_id,
+        item_id=goods_id,
+        item_name=item_name,
+        price=price,
+        quantity=quantity,
+        max_orders=MAX_BAITAN_ORDERS,
     )
     if result.status == "limit_reached":
         msg = f"您的摆摊订单已达上限({MAX_BAITAN_ORDERS})，请先收摊部分订单！"

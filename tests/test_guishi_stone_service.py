@@ -48,6 +48,12 @@ def test_guishi_stone_handlers_use_feature_repositories():
     ]
     assert "trade_application.guishi_qiugou(" in qiugou_handler
     assert "xianshi_repository.create_guishi_qiugou_order(" not in qiugou_handler
+    baitan_start = source.index("async def guishi_baitan_")
+    baitan_handler = source[
+        baitan_start : source.index("@guishi_shoutan.handle", baitan_start)
+    ]
+    assert "trade_application.guishi_baitan(" in baitan_handler
+    assert "xianshi_repository.create_guishi_baitan_order(" not in baitan_handler
 
 
 class GuishiStoneServiceTests(unittest.TestCase):

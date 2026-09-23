@@ -2828,17 +2828,17 @@
 - 已切换的功能仍可能保留显式 compatibility/rollback adapter；只有默认真实
   handler/route/scheduler 已改走 feature-owned application，且旧实现不再承载该
   用例，才可逐项从遗留服务移除。
-- 交易域当前已完成仙肆购买、鬼市存灵石、鬼市取灵石和鬼市求购创建；摆摊创建、
-  求购撤销、撮合与过期清理、取回寄存物品、拍卖排队/场次生命周期仍未迁移。
+- 交易域当前已完成仙肆购买、鬼市存灵石、鬼市取灵石、鬼市求购创建和鬼市摆摊创建；
+  求购/摆摊撤销、撮合与过期清理、取回寄存物品、拍卖排队/场次生命周期仍未迁移。
 - `recovery_smoke.py` 在 2026-09-24 修复为五库按路由迁移前，旧脚本只对
   `game_db` 应用完整目录。因此此前没有独立五库回执的隔离 smoke 只能作为单库
   恢复演练，不能用于跨库切片或 P7 的最终证据；后续统一以五库 receipt 为准。
 
 ### 6.2 优先目标
 
-1. 进入 `trade_guishi_baitan_create` 切片：只迁移摆摊创建的资产状态转换，保留库存
-   CAS、订单上限、operation replay/conflict、订单 ID 冲突重试和异常回滚；完成后再按
-   同一门禁闭环提交并推送。
+1. 进入 `trade_guishi_order_cancel` 切片：先分别迁移求购/摆摊撤销的资产状态转换，保留
+   未成交数量、灵石/库存退回、订单所有权、operation replay/conflict 和异常回滚；完成后
+   再按同一门禁闭环提交并推送。
 2. 完成交易域其余真实路径：按“求购/摆摊创建和撤销 -> 撮合与过期清理 -> 取回
    寄存物品 -> 拍卖排队和场次生命周期”拆分。拍卖结算已迁移不代表队列、场次和
    鬼市订单已迁移；每次只切一个可独立回滚的资产状态转换。
@@ -3596,3 +3596,14 @@ trade DB。聚焦行为/source/progress 回归、compileall、architecture、inv
 根目录隔离回归（2527 passed）和五库 recovery smoke 均通过；`trade.002/.004` 只在 game DB，
 `trade.003/.005` 只在 trade DB，reconcile clean。求购撤销、撮合、过期清理和取回寄存物品不在
 本切片范围。
+
+2026-09-24 trade Guishi sell-order creation slice：`鬼市摆摊`真实 handler 已改为调用
+`TradeApplication.guishi_baitan`/`GuishiBaitanSqlRepository`。repository 在 game DB
+`BEGIN IMMEDIATE` 主事务附加 trade DB，原子检查摆摊上限、按 `goods_num - state` 校验可交易
+库存、CAS 扣减 `goods_num` 并钳制 `bind_num`，再插入 `guishi_item` 和
+`guishi_order_create_operations`；保留历史 numeric 订单 ID、JSON list payload、operation
+conflict、订单 ID 冲突重试、注入 Clock 的 `update_time` 和跨库异常回滚。focused
+trade/source/progress `233 passed, 2 subtests passed`，根目录隔离回归 `2532 passed, 16 warnings,
+25 subtests passed`；compileall、architecture、inventory、diff check、五库 recovery（121 项，
+trade.002/.004 仅 game DB，trade.003/.005 仅 trade DB，reconcile clean）均通过。求购/摆摊撤销、
+撮合、过期清理和取回寄存物品不在本切片范围。

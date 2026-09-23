@@ -7,6 +7,7 @@ from .._legacy_application import LegacyApplication
 from ...core.errors import ValidationError
 from ...infrastructure.clock import SystemClock
 from .guishi_deposit_repository import GuishiDepositSqlRepository
+from .guishi_baitan_repository import GuishiBaitanSqlRepository
 from .guishi_stone_rules import withdrawal_is_open
 from .guishi_withdraw_repository import GuishiWithdrawSqlRepository
 from .guishi_qiugou_repository import GuishiQiugouSqlRepository
@@ -28,6 +29,9 @@ class TradeApplication(LegacyApplication):
         self.clock = clock or SystemClock()
         self.guishi_deposit_repository = GuishiDepositSqlRepository(
             self.game_database, self.trade_database
+        )
+        self.guishi_baitan_repository = GuishiBaitanSqlRepository(
+            self.game_database, self.trade_database, clock=self.clock
         )
         self.guishi_withdraw_repository = GuishiWithdrawSqlRepository(
             self.game_database, self.trade_database
@@ -103,6 +107,27 @@ class TradeApplication(LegacyApplication):
         max_orders: int,
     ):
         return self.guishi_qiugou_repository.create(
+            operation_id=operation_id,
+            user_id=user_id,
+            item_id=item_id,
+            item_name=item_name,
+            price=price,
+            quantity=quantity,
+            max_orders=max_orders,
+        )
+
+    def guishi_baitan(
+        self,
+        *,
+        operation_id: str,
+        user_id: str,
+        item_id: int,
+        item_name: str,
+        price: int,
+        quantity: int,
+        max_orders: int,
+    ):
+        return self.guishi_baitan_repository.create(
             operation_id=operation_id,
             user_id=user_id,
             item_id=item_id,
