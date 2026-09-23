@@ -341,19 +341,17 @@ def toggle_auto_checkin(
     idx = account_index(accounts, acc)
     for i, row in enumerate(accounts):
         if i == idx - 1:
-            cur = bool(row.get("auto_checkin"))
-            row["auto_checkin"] = not cur
-            ok, message = _run_entertainment_write(
-                "newapi_auto_checkin",
-                op_id,
-                str(qq_id),
-                lambda: (save_accounts(qq_id, accounts), {"status": "applied", "message": f"账号 {idx}（站点用户 {acc.get('api_user_id')}）自动签到{'已开启' if not cur else '已关闭'}"})[1],
-                **payload,
+            outcome = entertainment_application.toggle_auto_checkin(
+                operation_id=op_id,
+                user_id=str(qq_id),
+                state_path=_path_for_qq(qq_id),
+                index=idx,
             )
-            if not ok:
-                return False, message or "操作失败"
-            state = "已开启" if row["auto_checkin"] else "已关闭"
-            return True, message or f"账号 {idx}（站点用户 {acc.get('api_user_id')}）自动签到{state}"
+            if not outcome.ok:
+                return False, str(outcome.message or "操作失败")
+            enabled = bool((outcome.data or {}).get("enabled"))
+            state = "已开启" if enabled else "已关闭"
+            return True, f"账号 {idx}（站点用户 {acc.get('api_user_id')}）自动签到{state}"
     return False, "未找到账号"
 
 

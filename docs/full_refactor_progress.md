@@ -3330,6 +3330,12 @@
 
 2026-09-23 past-life choice full evidence：完整回归`2145 tests OK`。
 
+2026-09-23 entertainment NewAPI auto-checkin isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-23 entertainment NewAPI auto-checkin full evidence：完整回归`2146 tests OK`。
+
+2026-09-23 entertainment NewAPI auto-checkin feature-owned cutover：新增feature-owned JSON状态repository和`EntertainmentApplication.toggle_auto_checkin`，有效账号序号默认路径移除`execute_legacy_call`，保留无账号/非法输入兼容拒绝分支；不触碰外部站点请求、不回显密钥。focused `212 tests`，compile/inventory/diff通过；当前full `2146 tests OK`。
+
 2026-09-23 past-life reset-one isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
 
 2026-09-23 past-life reset-one full evidence：完整回归`2146 tests OK`。
