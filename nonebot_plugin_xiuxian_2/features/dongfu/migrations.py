@@ -14,4 +14,16 @@ def apply_dongfu_infiltrate_success(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_dongfu", "apply_dongfu_infiltrate_success"]
+def apply_dongfu_infiltrate_failure(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS dongfu_infiltrate_failure_operations ("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,infiltrate_left INTEGER NOT NULL,"
+        "intrude_left INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+__all__ = [
+    "apply_dongfu",
+    "apply_dongfu_infiltrate_success",
+    "apply_dongfu_infiltrate_failure",
+]

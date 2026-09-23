@@ -3521,3 +3521,7 @@
 2026-09-24 dongfu successful infiltration feature-owned cutover：新增`DongfuInfiltrateSuccessSqlRepository`、`dongfu.002`和 application/repository 边界；`潜入洞府`成功结算 handler 默认直接调用`dongfu_application.infiltrate_success`，不再调用`_dongfu_infiltrate_success_service().settle`。保留玩家/目标洞府快照、每日次数、巡山护府消耗、奖励合并与背包容量校验、灵石/背包写入、operation replay/conflict，以及操作表触发器异常时的跨库 rollback；失败潜入结算仍是独立兼容路径。repository/legacy/source/progress focused suite `10 passed`，完整隔离回归`2498 passed`。
 
 2026-09-24 dongfu successful infiltration isolated recovery evidence：一次性临时数据目录 recovery smoke 已完成 backup、restore dry-run、restore、全量`116`项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`，临时目录已清理。
+
+2026-09-24 dongfu failed infiltration feature-owned cutover：新增`DongfuInfiltrateFailureSqlRepository`、`dongfu.003`和 application/repository 边界；`潜入洞府`被侦测且失败的真实 handler 默认直接调用`dongfu_application.infiltrate_failure`，不再经`_run_dongfu_action`、`execute_legacy_call`或`_dongfu_infiltrate_failure_service().settle`。保留用户/双方洞府状态、每日次数、巡山护府消耗、REAL 下限灵石扣除、operation replay/conflict、rowcount 状态变化拒绝及 operation trigger 异常的跨库 rollback。新增 repository 测试覆盖成功/回放冲突、次数限制、operation 写入失败、资产 rowcount 失败回滚和 application 默认路径；`5 passed`，完整隔离回归`2504 passed`。
+
+2026-09-24 dongfu failed infiltration isolated recovery evidence：一次性临时数据目录 recovery smoke 已完成 backup、restore dry-run、restore、全量`117`项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`，临时目录已清理。

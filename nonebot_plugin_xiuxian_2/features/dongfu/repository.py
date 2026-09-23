@@ -10,6 +10,7 @@ from .array_repository import DongfuArrayUpgradeSqlRepository
 from .plant_repository import DongfuPlantSqlRepository
 from .expansion_repository import DongfuExpansionSqlRepository
 from .infiltrate_success_repository import DongfuInfiltrateSuccessSqlRepository
+from .infiltrate_failure_repository import DongfuInfiltrateFailureSqlRepository
 
 class DongfuRepository(ServicePort):
     def __init__(self,database:str|Path,player_database:str|Path|None=None)->None: super().__init__('dongfu','nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dongfu'); self.database=str(database); self.player_database=str(player_database or database)
@@ -22,5 +23,6 @@ class DongfuRepository(ServicePort):
     def plant(self,*a,**k): return DongfuPlantSqlRepository(self.database,self.player_database).plant(*a,**k)
     def expand(self,*a,**k): return DongfuExpansionSqlRepository(self.database,self.player_database).expand(*a,**k)
     def infiltrate_success(self,*a,**k): return DongfuInfiltrateSuccessSqlRepository(self.database,self.player_database).settle(*a,**k)
+    def infiltrate_failure(self,*a,**k): return DongfuInfiltrateFailureSqlRepository(self.database,self.player_database).settle(*a,**k)
 
 __all__=['DongfuRepository']

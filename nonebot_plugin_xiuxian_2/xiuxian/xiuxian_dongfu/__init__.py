@@ -1513,15 +1513,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         loss_stone = runtime_random.randint(50000, 200000) * max(1, array_lv)
         event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
         operation_id = f"dongfu-infiltrate-failure:{my_uid}:{event_message_id or runtime_ids.new_id()}"
-        result = _run_dongfu_action(
-            "infiltrate_failure", operation_id, my_uid,
-            call=lambda: _dongfu_infiltrate_failure_service().settle(
-                operation_id, my_uid, target_uid, _today_str(),
-                _get_infiltrate_count_field(is_random_mode), _get_infiltrate_limit(is_random_mode),
-                INFILTRATE_DAILY_LIMIT, loss_stone, guarded,
-            ),
-            target_user_id=target_uid, business_date=_today_str(), loss_stone=loss_stone,
-            guarded=guarded,
+        result = dongfu_application.infiltrate_failure(
+            operation_id=operation_id,
+            visitor_id=my_uid,
+            target_id=target_uid,
+            day=_today_str(),
+            mode_field=_get_infiltrate_count_field(is_random_mode),
+            mode_limit=_get_infiltrate_limit(is_random_mode),
+            target_limit=INFILTRATE_DAILY_LIMIT,
+            loss=loss_stone,
+            consume_guard=guarded,
         )
         if not result.succeeded:
             await handle_send(bot, event, "潜入未结算：潜入进度当前状态已更新，请稍后重试。")

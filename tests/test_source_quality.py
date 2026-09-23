@@ -208,14 +208,40 @@ class SourceQualityTests(unittest.TestCase):
         facade = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_dongfu" / "__init__.py"
         ).read_text(encoding="utf-8")
+        handler_start = facade.index('operation_id = f"dongfu-infiltrate-success:')
+        handler = facade[
+            handler_start : facade.index(
+                'if result.status == "inventory_full":', handler_start
+            )
+        ]
         repository = (
             SOURCE_ROOT
             / "features"
             / "dongfu"
             / "infiltrate_success_repository.py"
         ).read_text(encoding="utf-8")
-        self.assertIn("dongfu_application.infiltrate_success(", facade)
-        self.assertNotIn("_dongfu_infiltrate_success_service().settle(", facade)
+        self.assertIn("dongfu_application.infiltrate_success(", handler)
+        self.assertNotIn("_dongfu_infiltrate_success_service().settle(", handler)
+        self.assertNotIn("_run_dongfu_action(", handler)
+        self.assertNotIn("transaction_service", repository)
+
+    def test_dongfu_infiltrate_failure_handler_uses_feature_repository(self) -> None:
+        facade = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_dongfu" / "__init__.py"
+        ).read_text(encoding="utf-8")
+        handler_start = facade.index('operation_id = f"dongfu-infiltrate-failure:')
+        handler = facade[
+            handler_start : facade.index("    stealth_penalty =", handler_start)
+        ]
+        repository = (
+            SOURCE_ROOT
+            / "features"
+            / "dongfu"
+            / "infiltrate_failure_repository.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("dongfu_application.infiltrate_failure(", handler)
+        self.assertNotIn("_dongfu_infiltrate_failure_service().settle(", handler)
+        self.assertNotIn("_run_dongfu_action(", handler)
         self.assertNotIn("transaction_service", repository)
 
     def test_daily_dungeon_reset_scheduler_prevents_overlapping_runs(self) -> None:

@@ -13,4 +13,5 @@ class DongfuApplication(MigratedFeatureApplication):
     def plant(self,**kwargs): return self.repository.plant(**kwargs)
     def expand(self,**kwargs): return self.repository.expand(**kwargs)
     def infiltrate_success(self,**kwargs): return self.repository.infiltrate_success(**kwargs)
+    def infiltrate_failure(self,**kwargs): return self.repository.infiltrate_failure(**kwargs)
 __all__=['DongfuApplication']

@@ -85,7 +85,10 @@ from .features.boss.manifest import FEATURE as BOSS_FEATURE
 from .features.boss.migrations import apply_boss, apply_boss_purchase, apply_boss_settlement
 from .features.dungeon.manifest import FEATURE as DUNGEON_FEATURE
 from .features.dungeon.migrations import apply_dungeon, apply_dungeon_explore, apply_dungeon_purchase, apply_dungeon_session, apply_dungeon_team
-from .features.dongfu.migrations import apply_dongfu_infiltrate_success
+from .features.dongfu.migrations import (
+    apply_dongfu_infiltrate_failure,
+    apply_dongfu_infiltrate_success,
+)
 from .features.auction.migrations import apply_auction, apply_auction_settlement
 from .features._legacy_migrated import (
     APPLICATIONS as LEGACY_MIGRATED_APPLICATIONS,
@@ -143,6 +146,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("combat_settlement.004", "dao_battle_record", apply_dao_battle_record),
         Migration("daily_fortune.001", "daily_fortune_claims", apply_daily_fortune),
         Migration("dongfu.002", "dongfu_infiltrate_success_operations", apply_dongfu_infiltrate_success),
+        Migration("dongfu.003", "dongfu_infiltrate_failure_operations", apply_dongfu_infiltrate_failure),
         Migration("dungeon.001", "dungeon_feature_migrations", apply_dungeon),
         Migration("dungeon.002", "dungeon_purchase_operations", apply_dungeon_purchase),
         Migration("dungeon.003", "dungeon_session_operations", apply_dungeon_session),

@@ -83,6 +83,17 @@ def _slice_status() -> dict[str, dict[str, object]]:
     impart_facade = (PACKAGE / "xiuxian" / "xiuxian_impart" / "__init__.py").read_text(encoding="utf-8")
     mixelixir_facade = (PACKAGE / "xiuxian" / "xiuxian_mixelixir" / "__init__.py").read_text(encoding="utf-8")
     dongfu_facade = (PACKAGE / "xiuxian" / "xiuxian_dongfu" / "__init__.py").read_text(encoding="utf-8")
+    dongfu_success_handler = dongfu_facade[
+        dongfu_facade.index('operation_id = f"dongfu-infiltrate-success:') : dongfu_facade.index(
+            'if result.status == "inventory_full":',
+            dongfu_facade.index('operation_id = f"dongfu-infiltrate-success:'),
+        )
+    ]
+    dongfu_failure_handler = dongfu_facade[
+        dongfu_facade.index('operation_id = f"dongfu-infiltrate-failure:') : dongfu_facade.index(
+            "    stealth_penalty =", dongfu_facade.index('operation_id = f"dongfu-infiltrate-failure:')
+        )
+    ]
     impart_pk_facade = (PACKAGE / "xiuxian" / "xiuxian_impart_pk" / "__init__.py").read_text(encoding="utf-8")
     admin_facade = (PACKAGE / "xiuxian" / "xiuxian_admin" / "__init__.py").read_text(encoding="utf-8")
     return {
@@ -318,9 +329,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "accelerate_application_owned": "dongfu_application.accelerate(" in dongfu_facade,
             "patrol_application_owned": "dongfu_application.patrol(" in dongfu_facade,
             "array_upgrade_application_owned": "dongfu_application.array_upgrade(" in dongfu_facade,
-            "infiltrate_success_application_owned": "dongfu_application.infiltrate_success(" in dongfu_facade,
-            "legacy_infiltrate_success_disabled": "_dongfu_infiltrate_success_service().settle(" not in dongfu_facade,
-            "status": "plant_harvest_fertilize_accelerate_patrol_array_upgrade_infiltrate_success_cutover_with_other_dongfu_compatibility",
+            "infiltrate_success_application_owned": "dongfu_application.infiltrate_success(" in dongfu_success_handler,
+            "legacy_infiltrate_success_disabled": "_dongfu_infiltrate_success_service().settle(" not in dongfu_success_handler and "_run_dongfu_action(" not in dongfu_success_handler,
+            "infiltrate_failure_application_owned": "dongfu_application.infiltrate_failure(" in dongfu_failure_handler,
+            "legacy_infiltrate_failure_disabled": "_dongfu_infiltrate_failure_service().settle(" not in dongfu_failure_handler and "_run_dongfu_action(" not in dongfu_failure_handler,
+            "status": "plant_harvest_fertilize_accelerate_patrol_array_upgrade_infiltrate_success_infiltrate_failure_cutover_with_other_dongfu_compatibility",
         },
         "impart_pk": {
             "project_join_application_owned": "impart_pk_application.project_join(" in impart_pk_facade,
