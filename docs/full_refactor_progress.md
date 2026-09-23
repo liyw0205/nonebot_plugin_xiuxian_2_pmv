@@ -3330,7 +3330,7 @@
 
 2026-09-23 past-life choice full evidence：完整回归`2145 tests OK`。
 
-2026-09-23 past-life choice feature-owned cutover：新增`PastLifeChoiceSqlRepository`并将非终局choice advance默认切换到`PastLifeApplication.choice`；真实下沉player状态快照校验、不可变运行字段、stage/revision推进和operation response幂等，终局奖励结算继续保留兼容边界。focused `228 tests`，compile/inventory/diff通过。
+2026-09-23 past-life audit contract repair：进度检查器拆分`past_life_events.py`与命令`__init__.py`证据源，start/choice不再因读取错误文件被误报false；P0-P6 completion audit恢复全绿，剩余false仅为3个预期sign-in兼容状态。
 
 2026-09-23 past-life start feature-owned cutover：新增独立`PastLifeStartSqlRepository`并将新人生start handler默认切换到`PastLifeApplication.start`；真实下沉player past_life schema、冻结计划、revision、冷却、统计和operation幂等，保留显式旧测试注入兼容但不作为默认执行路径。focused `218 tests`，compile/inventory/diff通过；修复feature导入NoneBot初始化和PRAGMA name-row兼容。
 

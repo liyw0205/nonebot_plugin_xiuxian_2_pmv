@@ -66,7 +66,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
     world_events_facade = (PACKAGE / "xiuxian" / "xiuxian_world_events" / "__init__.py").read_text(encoding="utf-8")
     rift_facade = (PACKAGE / "xiuxian" / "xiuxian_rift" / "__init__.py").read_text(encoding="utf-8")
     back_facade = (PACKAGE / "xiuxian" / "xiuxian_back" / "__init__.py").read_text(encoding="utf-8")
-    past_life_facade = (PACKAGE / "xiuxian" / "xiuxian_past_life" / "__init__.py").read_text(encoding="utf-8")
+    past_life_events_facade = (PACKAGE / "xiuxian" / "xiuxian_past_life" / "past_life_events.py").read_text(encoding="utf-8")
+    past_life_command_facade = (PACKAGE / "xiuxian" / "xiuxian_past_life" / "__init__.py").read_text(encoding="utf-8")
     dufang_facade = (PACKAGE / "xiuxian" / "xiuxian_dufang" / "__init__.py").read_text(encoding="utf-8")
     fusion_facade = (PACKAGE / "xiuxian" / "xiuxian_fusion" / "__init__.py").read_text(encoding="utf-8")
     title_facade = (PACKAGE / "xiuxian" / "xiuxian_title" / "__init__.py").read_text(encoding="utf-8")
@@ -193,10 +194,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "backpack_repair_equipment_equip_unequip_pet_egg_package_accessory_package_cutover_with_other_back_compatibility",
         },
         "past_life": {
-            "choice_application_owned": "_past_life_application.choice(" in past_life_facade,
-            "start_application_owned": "_past_life_application.start(" in past_life_facade,
-            "reset_one_application_owned": "past_life_application.reset_one(" in past_life_facade,
-            "legacy_reset_one_disabled": "_past_life_reset_service().reset_one(" not in past_life_facade,
+            "choice_application_owned": "_past_life_application.choice(" in past_life_events_facade,
+            "start_application_owned": "_past_life_application.start(" in past_life_events_facade,
+            "reset_one_application_owned": "past_life_application.reset_one(" in past_life_command_facade,
+            "legacy_reset_one_disabled": "_past_life_reset_service().reset_one(" not in past_life_command_facade,
             "status": "reset_one_cutover_with_reset_all_compatibility",
         },
         "dufang": {
