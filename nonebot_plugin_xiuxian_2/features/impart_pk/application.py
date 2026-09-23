@@ -7,4 +7,5 @@ class ImpartPkApplication(MigratedFeatureApplication):
     def training_settle(self, *, operation_id: str, user_id: str, **kwargs): return self.repository.training_settle(operation_id=operation_id,user_id=user_id,**kwargs)
     def closing_enter(self, *, operation_id: str, user_id: str, started_at: str): return self.repository.closing_enter(operation_id=operation_id,user_id=user_id,started_at=started_at)
     def closing_settle(self, *, operation_id: str, user_id: str, **kwargs): return self.repository.closing_settle(operation_id=operation_id,user_id=user_id,**kwargs)
+    def explore_settle(self, *, operation_id: str, user_id: str, **kwargs): return self.repository.explore_settle(operation_id=operation_id,user_id=user_id,**kwargs)
 __all__=['ImpartPkApplication']

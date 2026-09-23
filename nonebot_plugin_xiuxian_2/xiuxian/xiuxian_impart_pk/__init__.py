@@ -930,16 +930,16 @@ async def impart_pk_go_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         case "up_rate":
             impart_lv = min(impart_lv + impart_rate, 30)
 
-    result = _run_impart_pk_action(
-        "explore_settle", op_id, user_id,
-        call=lambda: _impart_explore_settlement_service().settle(
-            op_id, user_id, event_type=msg_type,
-            expected_exp_day=int(impart_data_draw['exp_day']),
-            expected_impart_lv=int(impart_data_draw['impart_lv']),
-            expected_impart_num=int(user_data['impart_num']), time_cost=impart_time,
-            new_impart_lv=impart_lv, legacy_state=user_data,
-        ),
-        event_type=msg_type, time_cost=impart_time, new_level=impart_lv,
+    result = impart_pk_application.explore_settle(
+        operation_id=op_id,
+        user_id=user_id,
+        event_type=msg_type,
+        expected_exp_day=int(impart_data_draw['exp_day']),
+        expected_impart_lv=int(impart_data_draw['impart_lv']),
+        expected_impart_num=int(user_data['impart_num']),
+        time_cost=impart_time,
+        new_impart_lv=impart_lv,
+        legacy_state=user_data,
     )
     if result.status == "duplicate":
         msg = (

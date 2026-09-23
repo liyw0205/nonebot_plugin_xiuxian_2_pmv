@@ -4,6 +4,7 @@ from .._service_port import ServicePort
 from .training_repository import ImpartTrainingSqlRepository
 from .closing_enter_repository import ImpartClosingEnterSqlRepository
 from .closing_settlement_repository import ImpartClosingSettlementSqlRepository
+from .explore_repository import ImpartExploreSqlRepository
 
 class ImpartPkRepository(ServicePort):
     def __init__(self,database:str|Path,impart_database:str|Path|None=None,player_database:str|Path|None=None)->None:
@@ -11,4 +12,5 @@ class ImpartPkRepository(ServicePort):
     def training_settle(self,*,operation_id,user_id,**kwargs): return ImpartTrainingSqlRepository(self.database,self.impart_database,self.player_database).settle(operation_id,user_id,**kwargs)
     def closing_enter(self,*,operation_id,user_id,started_at): return ImpartClosingEnterSqlRepository(self.database,self.player_database).enter(operation_id,user_id,started_at)
     def closing_settle(self,*,operation_id,user_id,**kwargs): return ImpartClosingSettlementSqlRepository(self.database,self.impart_database,self.player_database).settle(operation_id,user_id,**kwargs)
+    def explore_settle(self,*,operation_id,user_id,**kwargs): return ImpartExploreSqlRepository(self.database,self.impart_database,self.player_database).settle(operation_id,user_id,**kwargs)
 __all__=['ImpartPkRepository']
