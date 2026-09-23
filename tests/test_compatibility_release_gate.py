@@ -49,9 +49,11 @@ class CompatibilityReleaseGateTests(unittest.TestCase):
             self.assertIn("trade.002", receipt["migrations_by_database"]["game_db"])
             self.assertNotIn("trade.003", receipt["migrations_by_database"]["game_db"])
             self.assertIn("trade.004", receipt["migrations_by_database"]["game_db"])
+            self.assertNotIn("trade.005", receipt["migrations_by_database"]["game_db"])
             self.assertIn("trade.003", receipt["migrations_by_database"]["trade_db"])
             self.assertNotIn("trade.002", receipt["migrations_by_database"]["trade_db"])
             self.assertNotIn("trade.004", receipt["migrations_by_database"]["trade_db"])
+            self.assertIn("trade.005", receipt["migrations_by_database"]["trade_db"])
             self.assertIn(
                 "tianti_training.006", receipt["migrations_by_database"]["game_db"]
             )

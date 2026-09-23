@@ -9,6 +9,7 @@ from ...infrastructure.clock import SystemClock
 from .guishi_deposit_repository import GuishiDepositSqlRepository
 from .guishi_stone_rules import withdrawal_is_open
 from .guishi_withdraw_repository import GuishiWithdrawSqlRepository
+from .guishi_qiugou_repository import GuishiQiugouSqlRepository
 from .repository import TradeFeatureRepository
 
 
@@ -31,6 +32,7 @@ class TradeApplication(LegacyApplication):
         self.guishi_withdraw_repository = GuishiWithdrawSqlRepository(
             self.game_database, self.trade_database
         )
+        self.guishi_qiugou_repository = GuishiQiugouSqlRepository(self.trade_database)
         super().__init__(game_database, repository=repository, feature="trade")
 
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):
@@ -87,6 +89,27 @@ class TradeApplication(LegacyApplication):
             user_id=user_id,
             amount=amount,
             withdrawal_open=withdrawal_is_open(self.clock.now()),
+        )
+
+    def guishi_qiugou(
+        self,
+        *,
+        operation_id: str,
+        user_id: str,
+        item_id: int,
+        item_name: str,
+        price: int,
+        quantity: int,
+        max_orders: int,
+    ):
+        return self.guishi_qiugou_repository.create(
+            operation_id=operation_id,
+            user_id=user_id,
+            item_id=item_id,
+            item_name=item_name,
+            price=price,
+            quantity=quantity,
+            max_orders=max_orders,
         )
 
     def enqueue(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("enqueue", operation_id=operation_id, user_id=user_id, **kwargs)

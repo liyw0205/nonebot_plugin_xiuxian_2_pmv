@@ -31,9 +31,19 @@ def apply_trade_guishi_withdraw(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_trade_guishi_qiugou(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS guishi_order_create_operations ("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,order_id TEXT NOT NULL,"
+        "order_type TEXT NOT NULL,amount INTEGER NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
 __all__ = [
     "apply_trade",
     "apply_trade_guishi_deposit",
     "apply_trade_guishi_schema",
     "apply_trade_guishi_withdraw",
+    "apply_trade_guishi_qiugou",
 ]

@@ -2828,15 +2828,17 @@
 - 已切换的功能仍可能保留显式 compatibility/rollback adapter；只有默认真实
   handler/route/scheduler 已改走 feature-owned application，且旧实现不再承载该
   用例，才可逐项从遗留服务移除。
+- 交易域当前已完成仙肆购买、鬼市存灵石、鬼市取灵石和鬼市求购创建；摆摊创建、
+  求购撤销、撮合与过期清理、取回寄存物品、拍卖排队/场次生命周期仍未迁移。
 - `recovery_smoke.py` 在 2026-09-24 修复为五库按路由迁移前，旧脚本只对
   `game_db` 应用完整目录。因此此前没有独立五库回执的隔离 smoke 只能作为单库
   恢复演练，不能用于跨库切片或 P7 的最终证据；后续统一以五库 receipt 为准。
 
 ### 6.2 优先目标
 
-1. 收尾当前 `trade_guishi_withdraw` 切片：重新生成并检查 inventory，执行
-   architecture/progress/diff 门禁，清理本轮字节码、pytest cache、SQLite sidecar
-   和临时 recovery 目录，再提交并推送。此项不再扩大行为范围。
+1. 进入 `trade_guishi_baitan_create` 切片：只迁移摆摊创建的资产状态转换，保留库存
+   CAS、订单上限、operation replay/conflict、订单 ID 冲突重试和异常回滚；完成后再按
+   同一门禁闭环提交并推送。
 2. 完成交易域其余真实路径：按“求购/摆摊创建和撤销 -> 撮合与过期清理 -> 取回
    寄存物品 -> 拍卖排队和场次生命周期”拆分。拍卖结算已迁移不代表队列、场次和
    鬼市订单已迁移；每次只切一个可独立回滚的资产状态转换。
@@ -3584,3 +3586,13 @@ focused tests、根目录 `tests/` 隔离回归、compileall、architecture/prog
 2026-09-24 trade Guishi withdraw feature-owned cutover：新增`GuishiWithdrawSqlRepository`、`guishi_stone_rules`和`trade.004`，真实`鬼市取灵石` handler 默认不再调用`GuishiStoneService.withdraw`；命令与 Web withdraw 共用`TradeApplication`的取出 use case。注入`Clock`负责周末开放判断，纯规则保留历史动态手续费；game DB operation 表使用 canonical payload 保留 completed/duplicate/operation_conflict，并兼容读取历史`guishi_stone_operations`回放。单一`BEGIN IMMEDIATE`事务附加trade DB，原子保留余额扣除、玩家到账、脏余额钳制、CAS拒绝、operation trigger异常回滚；focused trade/source/progress suite `238 passed, 2 subtests passed`，根目录完整隔离回归`2521 passed, 16 warnings, 25 subtests passed`。
 
 2026-09-24 trade Guishi withdraw isolated recovery evidence：一次性临时五库目录 recovery smoke 已完成 backup、restore dry-run、restore、全量`120`项 migration 和 reconcile；`trade.002`/`trade.004` 均仅在 game DB，`trade.003` 仅在 trade DB，`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。临时数据和 receipt 在提交前清理；该证据不替代真实正式发布周期。
+
+2026-09-24 trade Guishi buy-order creation slice：`鬼市求购`真实 handler 已改为调用
+`TradeApplication.guishi_qiugou`/`GuishiQiugouSqlRepository`，在 trade DB 的
+`BEGIN IMMEDIATE` 事务内原子检查订单上限、冻结 `guishi_info.stored_stone`、插入
+`guishi_item` 并记录 `guishi_order_create_operations`。保留历史 numeric 订单 ID、JSON
+list payload replay、operation conflict、订单 ID 冲突重试和异常回滚；`trade.005` 只路由到
+trade DB。聚焦行为/source/progress 回归、compileall、architecture、inventory、diff check、
+根目录隔离回归（2527 passed）和五库 recovery smoke 均通过；`trade.002/.004` 只在 game DB，
+`trade.003/.005` 只在 trade DB，reconcile clean。求购撤销、撮合、过期清理和取回寄存物品不在
+本切片范围。

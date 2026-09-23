@@ -42,6 +42,12 @@ def test_guishi_stone_handlers_use_feature_repositories():
     assert "_guishi_stone_service_instance = None" in source
     assert "def _guishi_stone_service(" in source
     assert "guishi_stone_service.withdraw(" not in source
+    qiugou_start = source.index("async def guishi_qiugou_")
+    qiugou_handler = source[
+        qiugou_start : source.index("@guishi_cancel_qiugou.handle", qiugou_start)
+    ]
+    assert "trade_application.guishi_qiugou(" in qiugou_handler
+    assert "xianshi_repository.create_guishi_qiugou_order(" not in qiugou_handler
 
 
 class GuishiStoneServiceTests(unittest.TestCase):

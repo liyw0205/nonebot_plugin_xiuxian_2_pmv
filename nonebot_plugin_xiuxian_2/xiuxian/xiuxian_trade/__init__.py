@@ -1677,17 +1677,16 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, forbid_reason, md_type="交易", k1="求购", v1="鬼市求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_qiugou.finish()
 
-    result = xianshi_repository.create_guishi_qiugou_order(
-        get_paths().trade_db,
-        user_id,
-        goods_id,
-        item_name,
-        price,
-        quantity,
-        max_orders=MAX_QIUGOU_ORDERS,
+    result = trade_application.guishi_qiugou(
         operation_id=_guishi_order_operation_id(
             event, "qiugou", user_id, goods_id, price, quantity
         ),
+        user_id=user_id,
+        item_id=goods_id,
+        item_name=item_name,
+        price=price,
+        quantity=quantity,
+        max_orders=MAX_QIUGOU_ORDERS,
     )
     if result.status == "limit_reached":
         msg = f"您的求购订单已达上限({MAX_QIUGOU_ORDERS})，请明日再来！"

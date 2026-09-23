@@ -551,6 +551,8 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("_guishi_stone_service().deposit(", command)
         self.assertIn("trade_application.guishi_withdraw(", command)
         self.assertNotIn("_guishi_stone_service().withdraw(", command)
+        self.assertIn("trade_application.guishi_qiugou(", command)
+        self.assertNotIn("xianshi_repository.create_guishi_qiugou_order(", command)
         self.assertNotIn("sql_message.try_update_ls(", command)
         self.assertNotIn("trade_manager.try_update_stored_stone(", command)
         self.assertIn("attach_database", repository_source)
