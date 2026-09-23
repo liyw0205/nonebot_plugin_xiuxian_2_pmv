@@ -425,14 +425,13 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
                     xu_world.del_xu_world(user_id)
                 break
 
-        settlement = _run_impart_pk_action(
-            "battle_settle", operation_id, user_id,
-            call=lambda: _impart_battle_batch_service().settle(
-                operation_id, user_id, expected_player_1_pk_num,
-                total_wins, total_losses, player_1_stones,
-            ),
-            expected_pk_num=expected_player_1_pk_num, wins=total_wins,
-            losses=total_losses, stones=player_1_stones,
+        settlement = impart_pk_application.battle_settle(
+            operation_id=operation_id,
+            user_id=user_id,
+            expected_challenger_pk_num=expected_player_1_pk_num,
+            challenger_wins=total_wins,
+            challenger_losses=total_losses,
+            challenger_stones=player_1_stones,
         )
         if settlement.status == "duplicate":
             msg = f"**对决结束**（重放）\n---\n剩余对决次数\n> {settlement.challenger_pk_num}\n该对决请求已经处理，无需重复提交。"
@@ -564,15 +563,18 @@ async def impart_pk_now_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"impart-battle:{event_id}:{player_1}:{player_2}" if event_id else f"impart-battle:{player_1}:{player_2}:{runtime_ids.new_id()}"
-    settlement = _run_impart_pk_action(
-        "battle_settle_pair", operation_id, player_1,
-        call=lambda: _impart_battle_batch_service().settle(
-            operation_id, player_1, expected_player_1_pk_num, player_1_wins,
-            player_2_wins, player_1_stones, player_2, expected_player_2_pk_num,
-            player_2_wins, player_1_wins, player_2_stones,
-        ),
-        opponent_id=player_2, expected_pk_num=expected_player_1_pk_num,
-        opponent_pk_num=expected_player_2_pk_num,
+    settlement = impart_pk_application.battle_settle(
+        operation_id=operation_id,
+        user_id=player_1,
+        expected_challenger_pk_num=expected_player_1_pk_num,
+        challenger_wins=player_1_wins,
+        challenger_losses=player_2_wins,
+        challenger_stones=player_1_stones,
+        opponent_id=player_2,
+        expected_opponent_pk_num=expected_player_2_pk_num,
+        opponent_wins=player_2_wins,
+        opponent_losses=player_1_wins,
+        opponent_stones=player_2_stones,
     )
     if settlement.status == "duplicate":
         msg = f"**对决结束**（重放）\n---\n剩余对决次数\n> {settlement.challenger_pk_num}\n该对决请求已经处理，无需重复提交。"

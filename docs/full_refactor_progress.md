@@ -3314,6 +3314,12 @@
 
 2026-09-23 impart-pk explore full evidence：完整回归`2145 tests OK`。
 
+2026-09-23 impart-pk battle-batch isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-23 impart-pk battle-batch full evidence：完整回归`2145 tests OK`。
+
+2026-09-23 impart-pk battle-batch feature-owned cutover：新增双库`ImpartBattleBatchSqlRepository`、`ImpartPkApplication.battle_settle`并将单人/双人对决结算handler从`execute_legacy_call`切换到application路径；原子校验双方pk_num快照、胜负/灵石结果、impart状态和幂等operation，保留duplicate/operation_conflict/user_missing/state_changed和rollback。focused `227 tests`，compile/inventory/diff通过。
+
 2026-09-23 impart-pk explore feature-owned cutover：新增三库`ImpartExploreSqlRepository`、`ImpartPkApplication.explore_settle`并将虚神界探索结算handler从`execute_legacy_call`切换到application路径；原子校验exp_day/level/daily次数快照，更新探索消耗、层级、次数和幂等operation，保留duplicate/operation_conflict/state_changed/time_insufficient和rollback。focused `224 tests`，compile/inventory/diff通过。
 
 2026-09-23 impart-pk closing-enter feature-owned cutover：新增双库`ImpartClosingEnterSqlRepository`、`ImpartPkApplication.closing_enter`并将虚神界闭关进入handler从`execute_legacy_call`切换到application路径；原子校验root_type/cooldown，设置user_cd、entry统计和幂等operation，保留duplicate/operation_conflict/user_missing/ineligible/busy/state_changed和rollback。focused `218 tests`，compile/inventory/diff通过。

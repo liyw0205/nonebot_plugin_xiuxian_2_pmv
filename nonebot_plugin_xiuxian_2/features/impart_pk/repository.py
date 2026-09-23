@@ -5,6 +5,7 @@ from .training_repository import ImpartTrainingSqlRepository
 from .closing_enter_repository import ImpartClosingEnterSqlRepository
 from .closing_settlement_repository import ImpartClosingSettlementSqlRepository
 from .explore_repository import ImpartExploreSqlRepository
+from .battle_repository import ImpartBattleBatchSqlRepository
 
 class ImpartPkRepository(ServicePort):
     def __init__(self,database:str|Path,impart_database:str|Path|None=None,player_database:str|Path|None=None)->None:
@@ -13,4 +14,5 @@ class ImpartPkRepository(ServicePort):
     def closing_enter(self,*,operation_id,user_id,started_at): return ImpartClosingEnterSqlRepository(self.database,self.player_database).enter(operation_id,user_id,started_at)
     def closing_settle(self,*,operation_id,user_id,**kwargs): return ImpartClosingSettlementSqlRepository(self.database,self.impart_database,self.player_database).settle(operation_id,user_id,**kwargs)
     def explore_settle(self,*,operation_id,user_id,**kwargs): return ImpartExploreSqlRepository(self.database,self.impart_database,self.player_database).settle(operation_id,user_id,**kwargs)
+    def battle_settle(self,*,operation_id,user_id,**kwargs): return ImpartBattleBatchSqlRepository(self.impart_database,self.player_database).settle(operation_id,user_id,**kwargs)
 __all__=['ImpartPkRepository']

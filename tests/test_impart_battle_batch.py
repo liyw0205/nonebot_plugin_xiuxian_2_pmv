@@ -24,9 +24,8 @@ def test_impart_battle_handler_uses_lazy_dual_database_service():
     assert "_impart_battle_batch_service().get_pk_num(" in handler
     assert "_run_impart_pk_action(" in handler
     helper = source[source.index("def _run_impart_pk_action("):source.index("@impart_pk")]
-    assert "impart_pk_application.execute_legacy_call(" in helper
-    assert "_impart_battle_batch_service().get_result(" not in handler
-    assert "_impart_battle_batch_service().settle(" in handler
+    assert "impart_pk_application.battle_settle(" in helper
+    assert "_impart_battle_batch_service().settle(" not in handler
     assert "_impart_battle_batch_service_instance = None" in source
     assert "def _impart_battle_batch_service(" in source
     assert "get_paths().impart_db, get_paths().player_db" in source
