@@ -1067,10 +1067,8 @@ class SourceQualityTests(unittest.TestCase):
     def test_sect_owner_transfer_uses_transactional_service(self) -> None:
         sect_root = SOURCE_ROOT / "xiuxian" / "xiuxian_sect"
         command_source = (sect_root / "__init__.py").read_text(encoding="utf-8")
-        service_source = (sect_root / "membership_service.py").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("_sect_membership_service().transfer_owner(", command_source)
+        self.assertIn("sect_application.transfer_owner(", command_source)
+        service_source = (sect_root / "transaction_service.py").read_text(encoding="utf-8")
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("sect_operations", service_source)
 

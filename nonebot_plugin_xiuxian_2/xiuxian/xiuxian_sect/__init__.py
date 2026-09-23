@@ -2284,7 +2284,7 @@ async def sect_owner_change_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             await handle_send(bot, event, msg)
             await sect_owner_change.finish()
         else:
-            result = _sect_membership_service().transfer_owner(
+            result = sect_application.transfer_owner(
                 _sect_operation_id(event, "transfer_owner", give_qq),
                 user_id,
                 give_qq,

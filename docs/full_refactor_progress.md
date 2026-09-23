@@ -3453,3 +3453,9 @@
 2026-09-23 sect inactive-disband isolated recovery evidence：一次性临时数据目录完成backup、restore dry-run、restore、全量`114`项migration和reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`，临时目录已删除。
 
 2026-09-23 sect inactive-disband full evidence：当前HEAD完整回归`2153 tests OK`；Sect fairyland and other remaining transaction boundaries remain explicitly open。
+
+2026-09-23 sect owner-transfer feature-owned cutover：新增`SectOwnerTransferSqlRepository`与`SectApplication.transfer_owner`，宗主传位handler默认改走feature repository；单库原子保留actor/target/sect membership和position快照、owner/target CAS、self/target/not-owner冲突、operation replay和rollback，旧membership service仅作显式兼容。无新增migration；focused/source `211 tests`，compile/inventory/diff通过。
+
+2026-09-23 sect owner-transfer isolated recovery evidence：一次性临时数据目录完成backup、restore dry-run、restore、全量`114`项migration和reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`，临时目录已删除。
+
+2026-09-23 sect owner-transfer full evidence：当前HEAD完整回归`2154 tests OK`；Sect fairyland and remaining membership/maintenance boundaries remain explicitly open。
