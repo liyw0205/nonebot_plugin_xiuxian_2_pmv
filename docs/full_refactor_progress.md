@@ -3511,3 +3511,5 @@
 2026-09-24 entertainment account-delete isolated recovery evidence：一次性临时数据目录完成backup、restore dry-run、restore、全量`114`项migration和reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`，临时目录已删除。
 
 2026-09-24 entertainment account-delete full evidence：当前HEAD完整回归`2162 tests OK`；NewAPI bind and broader legacy execution boundaries remain explicitly open。
+
+2026-09-24 past-life reset-all feature-owned cutover：新增`PastLifeResetSqlRepository.reset_all_create/reset_all_batch/find_pending_all`与`PastLifeApplication`边界；全服重置handler默认不再调用`PastLifeResetService.create_all/run_batch/find_pending_all`。保留冻结用户快照、分块提交、revision CAS、冲突/缺失统计、operation replay、异常回滚与`last_error`续跑语义，并兼容既有`past_life_reset_operations`表结构；旧service仅作显式rollback/test compatibility。focused reset/source contract `14 passed`，完整隔离回归`2486 passed`（`XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false`、`XIUXIAN_WEB_STATUS=false`），compileall、progress、inventory、architecture、diff check均通过。

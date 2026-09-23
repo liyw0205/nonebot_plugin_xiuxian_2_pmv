@@ -24,7 +24,8 @@ def test_admin_level_change_uses_feature_application(tmp_path):
     text = source.read_text(encoding="utf-8")
     handler = text[text.index("async def zaohua_xiuxian_"):text.index("@gmm_command.handle")]
     assert "_adjust_admin_level(" in handler
-    assert "admin_asset_application.change_level(" in handler
+    helper = text[text.index("def _adjust_admin_level("):text.index("def _adjust_admin_root(")]
+    assert "admin_asset_application.change_level(" in helper
 
 
 def create_service(tmp_path):

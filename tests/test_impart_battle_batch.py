@@ -22,9 +22,8 @@ def test_impart_battle_handler_uses_lazy_dual_database_service():
     ).read_text(encoding="utf-8")
     handler = source[source.index("async def impart_pk_now_"):source.index("async def impart_pk_exp_")]
     assert "_impart_battle_batch_service().get_pk_num(" in handler
-    assert "_run_impart_pk_action(" in handler
-    helper = source[source.index("def _run_impart_pk_action("):source.index("@impart_pk")]
-    assert "impart_pk_application.battle_settle(" in helper
+    assert "impart_pk_application.battle_settle(" in handler
+    assert "_run_impart_pk_action(" not in handler
     assert "_impart_battle_batch_service().settle(" not in handler
     assert "_impart_battle_batch_service_instance = None" in source
     assert "def _impart_battle_batch_service(" in source

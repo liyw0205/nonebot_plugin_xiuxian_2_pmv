@@ -266,8 +266,11 @@ class PastLifeResetTests(unittest.TestCase):
         handler = source[source.index("@reset_past_life_cmd.handle"):source.index("# ═══ 工具函数")]
         self.assertIn("past_life_application.reset_one(", handler)
         self.assertNotIn("_past_life_reset_service().reset_one(", handler)
-        self.assertIn("_past_life_reset_service().create_all(", handler)
-        self.assertIn("_past_life_reset_service().run_batch(", handler)
+        self.assertIn("past_life_application.reset_all_create(", handler)
+        self.assertIn("past_life_application.reset_all_batch(", handler)
+        self.assertIn("past_life_application.reset_all_pending(", handler)
+        self.assertNotIn("_past_life_reset_service().create_all(", handler)
+        self.assertNotIn("_past_life_reset_service().run_batch(", handler)
         self.assertNotIn("past_life_limit.reset_", handler)
 
 

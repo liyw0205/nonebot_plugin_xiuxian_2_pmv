@@ -10,5 +10,8 @@ class PastLifeRepository(ServicePort):
     def start(self,*,operation_id,user_id,**kwargs): return PastLifeStartSqlRepository(self.database,self.player_database).start(operation_id,user_id,**kwargs)
     def choice(self,*,operation_id,user_id,choice_idx,expected_state,final_state,response): return PastLifeChoiceSqlRepository(self.database,self.player_database).advance(operation_id,user_id,choice_idx,expected_state,final_state,response)
     def reset_one(self,*,operation_id,user_id,clear_history=False): return PastLifeResetSqlRepository(self.database,self.player_database).reset_one(operation_id,user_id,clear_history)
+    def reset_all_create(self,*,operation_id,clear_history=False): return PastLifeResetSqlRepository(self.database,self.player_database).reset_all_create(operation_id,clear_history)
+    def reset_all_batch(self,*,operation_id,batch_size=500): return PastLifeResetSqlRepository(self.database,self.player_database).reset_all_batch(operation_id,batch_size=batch_size)
+    def reset_all_pending(self): return PastLifeResetSqlRepository(self.database,self.player_database).find_pending_all()
     def final_settle(self,*,operation_id,user_id,**kwargs): return PastLifeFinalSettlementSqlRepository(self.database,self.player_database).settle(operation_id,user_id,**kwargs)
 __all__=['PastLifeRepository']

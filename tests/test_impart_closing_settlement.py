@@ -21,9 +21,8 @@ def test_impart_closing_handler_uses_lazy_three_database_service():
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_impart_pk/__init__.py"
     ).read_text(encoding="utf-8")
     handler = source[source.index("async def impart_pk_out_closing_"):]
-    assert "_run_impart_pk_action(" in handler
-    helper = source[source.index("def _run_impart_pk_action("):source.index("@impart_pk")]
     assert "impart_pk_application.closing_settle(" in handler
+    assert "_run_impart_pk_action(" not in handler
     assert "_impart_closing_settlement_service().settle(" not in handler
     assert "_impart_closing_settlement_service_instance = None" in source
     assert "def _impart_closing_settlement_service(" in source

@@ -220,7 +220,17 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "start_application_owned": "_past_life_application.start(" in past_life_events_facade,
             "reset_one_application_owned": "past_life_application.reset_one(" in past_life_command_facade,
             "legacy_reset_one_disabled": "_past_life_reset_service().reset_one(" not in past_life_command_facade,
-            "status": "reset_one_cutover_with_reset_all_compatibility",
+            "reset_all_application_owned": (
+                "past_life_application.reset_all_create(" in past_life_command_facade
+                and "past_life_application.reset_all_batch(" in past_life_command_facade
+                and "past_life_application.reset_all_pending(" in past_life_command_facade
+            ),
+            "legacy_reset_all_disabled": (
+                "_past_life_reset_service().create_all(" not in past_life_command_facade
+                and "_past_life_reset_service().run_batch(" not in past_life_command_facade
+                and "_past_life_reset_service().find_pending_all(" not in past_life_command_facade
+            ),
+            "status": "reset_one_and_reset_all_cutover_with_legacy_service_retained_for_compatibility",
         },
         "dufang": {
             "share_application_owned": "dufang_application.share_settle(" in dufang_facade,
