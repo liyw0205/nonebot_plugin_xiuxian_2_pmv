@@ -3513,3 +3513,7 @@
 2026-09-24 entertainment account-delete full evidence：当前HEAD完整回归`2162 tests OK`；NewAPI bind and broader legacy execution boundaries remain explicitly open。
 
 2026-09-24 past-life reset-all feature-owned cutover：新增`PastLifeResetSqlRepository.reset_all_create/reset_all_batch/find_pending_all`与`PastLifeApplication`边界；全服重置handler默认不再调用`PastLifeResetService.create_all/run_batch/find_pending_all`。保留冻结用户快照、分块提交、revision CAS、冲突/缺失统计、operation replay、异常回滚与`last_error`续跑语义，并兼容既有`past_life_reset_operations`表结构；旧service仅作显式rollback/test compatibility。focused reset/source contract `14 passed`，完整隔离回归`2486 passed`（`XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false`、`XIUXIAN_WEB_STATUS=false`），compileall、progress、inventory、architecture、diff check均通过。
+
+2026-09-24 auction session settlement feature-owned cutover：新增`AuctionSettlementSqlRepository`和`auction.002`，`AuctionSettlementApplication`及 plugin scheduler 默认不再注入`LegacyAuctionSettlementRepository`。新 repository 在 game DB immediate transaction 中保留 active session、finish operation replay/conflict、拍品类型解析、买家/卖家校验、背包容量、成交收款/失败退款、流拍退回、history、session 状态和触发器异常的整场 rollback；旧 adapter 仅保留显式兼容。新增 repository/application/source/progress focused suite，完整隔离回归`2493 passed`。
+
+2026-09-24 auction session settlement isolated recovery evidence：一次性临时数据目录 recovery smoke 已完成 backup、restore dry-run、restore、全量`115`项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`，临时目录已清理。

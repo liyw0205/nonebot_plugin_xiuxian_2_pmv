@@ -77,6 +77,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     puppet_facade = (PACKAGE / "xiuxian" / "xiuxian_puppet" / "__init__.py").read_text(encoding="utf-8")
     pet_facade = (PACKAGE / "xiuxian" / "xiuxian_pet" / "__init__.py").read_text(encoding="utf-8")
     trade_facade = (PACKAGE / "xiuxian" / "xiuxian_trade" / "__init__.py").read_text(encoding="utf-8")
+    auction_settlement = (PACKAGE / "features" / "auction" / "settlement.py").read_text(encoding="utf-8")
     boss_facade = (PACKAGE / "xiuxian" / "xiuxian_boss" / "__init__.py").read_text(encoding="utf-8")
     buff_facade = (PACKAGE / "xiuxian" / "xiuxian_buff" / "__init__.py").read_text(encoding="utf-8")
     impart_facade = (PACKAGE / "xiuxian" / "xiuxian_impart" / "__init__.py").read_text(encoding="utf-8")
@@ -271,6 +272,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "purchase_application_owned": "trade_application.purchase(" in trade_facade,
             "legacy_purchase_disabled": "_xianshi_purchase_service().purchase(" not in trade_facade,
             "status": "xianshi_purchase_cutover_with_other_trade_compatibility",
+        },
+        "auction": {
+            "settlement_application_owned": "AuctionSettlementSqlRepository" in auction_settlement,
+            "legacy_settlement_disabled": "repository=LegacyAuctionSettlementRepository(" not in plugin,
+            "status": "session_settlement_feature_owned_with_explicit_legacy_adapter",
         },
         "boss": {
             "manual_spawn_application_owned": "boss_application.spawn(" in boss_facade,

@@ -21,7 +21,7 @@ FEATURE = FeatureManifest(
             idempotency_key="auction.settle:{scheduled_at}",
         ),
     ),
-    migration_version="auction.001",
+    migration_version="auction.002",
     test_tag="auction",
 )
 

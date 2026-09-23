@@ -1096,6 +1096,17 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("save_json_file(", config_source)
         self.assertNotIn("persist_auction_status", utils_source)
 
+    def test_auction_settlement_default_path_is_feature_owned(self) -> None:
+        auction_root = SOURCE_ROOT / "features" / "auction"
+        settlement_source = (auction_root / "settlement.py").read_text(encoding="utf-8")
+        repository_source = (auction_root / "settlement_repository.py").read_text(encoding="utf-8")
+        plugin_source = (SOURCE_ROOT / "plugin.py").read_text(encoding="utf-8")
+        self.assertIn("AuctionSettlementSqlRepository", settlement_source)
+        self.assertIn("self.repository = repository or AuctionSettlementSqlRepository", settlement_source)
+        self.assertIn("DatabaseUnitOfWork(self.database, immediate=True)", repository_source)
+        self.assertNotIn("transaction_service", repository_source)
+        self.assertNotIn("repository=LegacyAuctionSettlementRepository(", plugin_source)
+
     def test_auction_background_jobs_use_observable_boundary(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
         command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")

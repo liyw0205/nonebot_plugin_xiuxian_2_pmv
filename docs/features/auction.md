@@ -16,11 +16,11 @@
 
 ## 数据模型与迁移
 
-历史拍卖表继续由 `TradeRepository` 维护，`auction_feature_migrations` 记录新边界版本 `auction.001`；统一 `operation_ledger` 和 `operation_audit` 记录应用层结果。
+拍卖会话、当前拍品、历史和结算 operation 表由 `auction.002` 迁移创建；`auction_feature_migrations` 保留边界版本标记。统一 `operation_ledger` 和 `operation_audit` 记录应用层结果。
 
 ## 事务与失败回滚
 
-旧仓储在自身数据库事务中完成资产和拍卖状态变更。应用层先登记操作号，业务拒绝写入 rejected 审计，异常写入 failed；仓储异常不会返回成功结果。
+`AuctionSettlementSqlRepository` 在 game DB 的 `BEGIN IMMEDIATE` 事务中完成资产、背包、历史和拍卖状态变更。应用层先登记操作号，业务拒绝写入 rejected 审计，异常写入 failed；仓储异常不会返回成功结果。
 
 ## 定时任务
 
@@ -40,4 +40,4 @@
 
 ## 灰度开关、回滚和已知限制
 
-关闭灰度后旧竞价入口继续工作。结算的详细 SQLite 算法仍由 `LegacyAuctionSettlementRepository` 承载，完成一个发布周期的兼容命中观测后再删除旧仓储。
+关闭灰度后旧竞价入口继续工作。`LegacyAuctionSettlementRepository` 仅保留给显式兼容调用，生产 scheduler/application 默认使用 feature-owned SQL repository。

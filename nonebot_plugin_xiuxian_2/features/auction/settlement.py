@@ -1,8 +1,7 @@
 """Application boundary for auction session settlement.
 
-The legacy repository still owns the detailed SQLite settlement algorithm.  It
-is injected behind a small protocol so the operation ledger, audit record and
-manual/job adapters are independent of that implementation.
+The feature-owned repository is the production default.  The legacy adapter
+remains available only for explicit compatibility injection.
 """
 
 from __future__ import annotations
@@ -15,6 +14,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.database.ledger import OperationRecord
 from ...infrastructure.observability import trace_context
+from .settlement_repository import AuctionSettlementSqlRepository
 
 
 class AuctionSettlementRepository(Protocol):
@@ -87,7 +87,7 @@ class AuctionSettlementApplication:
         ledger: OperationLedger | None = None,
     ) -> None:
         self.database = str(database)
-        self.repository = repository
+        self.repository = repository or AuctionSettlementSqlRepository(self.database)
         self.ledger = ledger or OperationLedger()
 
     def lookup(self, operation_id: str) -> dict[str, Any] | None:
@@ -137,8 +137,7 @@ class AuctionSettlementApplication:
                         if previous is not None:
                             return previous.replay()
                         raise ConflictError("操作正在处理中")
-                repository = self.repository or LegacyAuctionSettlementRepository(self.database, self.database)
-                raw = repository.settle_active(
+                raw = self.repository.settle_active(
                     operation_id,
                     end_time=end_time,
                     fee_rate=fee_rate,

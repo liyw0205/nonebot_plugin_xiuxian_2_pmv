@@ -92,6 +92,9 @@ class RefactorProgressTests(unittest.TestCase):
         trade = slices["trade"]
         self.assertTrue(trade["purchase_application_owned"])
         self.assertTrue(trade["legacy_purchase_disabled"])
+        auction = slices["auction"]
+        self.assertTrue(auction["settlement_application_owned"])
+        self.assertTrue(auction["legacy_settlement_disabled"])
         boss = slices["boss"]
         self.assertTrue(boss["manual_spawn_application_owned"])
         self.assertTrue(boss["legacy_manual_spawn_disabled"])

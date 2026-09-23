@@ -85,7 +85,7 @@ from .features.boss.manifest import FEATURE as BOSS_FEATURE
 from .features.boss.migrations import apply_boss, apply_boss_purchase, apply_boss_settlement
 from .features.dungeon.manifest import FEATURE as DUNGEON_FEATURE
 from .features.dungeon.migrations import apply_dungeon, apply_dungeon_explore, apply_dungeon_purchase, apply_dungeon_session, apply_dungeon_team
-from .features.auction.migrations import apply_auction
+from .features.auction.migrations import apply_auction, apply_auction_settlement
 from .features._legacy_migrated import (
     APPLICATIONS as LEGACY_MIGRATED_APPLICATIONS,
     FEATURES as LEGACY_MIGRATED_FEATURES,
@@ -126,6 +126,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("arena.008", "arena_daily_reward_player_schema", apply_arena_daily_reward_player),
         Migration("arena.009", "arena_state_operations", apply_arena_state),
         Migration("auction.001", "auction_feature_migrations", apply_auction),
+        Migration("auction.002", "auction_session_settlement_schema", apply_auction_settlement),
         Migration("back.001", "back_feature_migrations", apply_back),
         Migration("bank.001", "bank_feature_migrations", apply_bank),
         Migration("bank.002", "bank_accounts", apply_bank_accounts),
@@ -492,7 +493,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.accessory_package.application import AccessoryPackageApplication
         from .features.arena.application import ArenaApplication
         from .features.auction.application import AuctionBidApplication
-        from .features.auction.settlement import AuctionSettlementApplication, LegacyAuctionSettlementRepository
+        from .features.auction.settlement import AuctionSettlementApplication
         from .features.bank.application import BankApplication
         from .features.bank.repository import LegacyBankRepository
         from .features.activity_reward.application import ActivityRewardApplication
@@ -597,10 +598,6 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             "auction": AuctionBidApplication(str(context.database.path("game_db"))),
             "auction_settlement": AuctionSettlementApplication(
                 str(context.database.path("game_db")),
-                repository=LegacyAuctionSettlementRepository(
-                    str(context.database.path("game_db")),
-                    str(context.database.path("trade_db")),
-                ),
             ),
             "bank": BankApplication(
                 str(context.database.path("game_db")),
