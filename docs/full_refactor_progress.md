@@ -3517,3 +3517,7 @@
 2026-09-24 auction session settlement feature-owned cutover：新增`AuctionSettlementSqlRepository`和`auction.002`，`AuctionSettlementApplication`及 plugin scheduler 默认不再注入`LegacyAuctionSettlementRepository`。新 repository 在 game DB immediate transaction 中保留 active session、finish operation replay/conflict、拍品类型解析、买家/卖家校验、背包容量、成交收款/失败退款、流拍退回、history、session 状态和触发器异常的整场 rollback；旧 adapter 仅保留显式兼容。新增 repository/application/source/progress focused suite，完整隔离回归`2493 passed`。
 
 2026-09-24 auction session settlement isolated recovery evidence：一次性临时数据目录 recovery smoke 已完成 backup、restore dry-run、restore、全量`115`项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`，临时目录已清理。
+
+2026-09-24 dongfu successful infiltration feature-owned cutover：新增`DongfuInfiltrateSuccessSqlRepository`、`dongfu.002`和 application/repository 边界；`潜入洞府`成功结算 handler 默认直接调用`dongfu_application.infiltrate_success`，不再调用`_dongfu_infiltrate_success_service().settle`。保留玩家/目标洞府快照、每日次数、巡山护府消耗、奖励合并与背包容量校验、灵石/背包写入、operation replay/conflict，以及操作表触发器异常时的跨库 rollback；失败潜入结算仍是独立兼容路径。repository/legacy/source/progress focused suite `10 passed`，完整隔离回归`2498 passed`。
+
+2026-09-24 dongfu successful infiltration isolated recovery evidence：一次性临时数据目录 recovery smoke 已完成 backup、restore dry-run、restore、全量`116`项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`，临时目录已清理。

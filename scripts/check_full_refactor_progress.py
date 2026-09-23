@@ -318,7 +318,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "accelerate_application_owned": "dongfu_application.accelerate(" in dongfu_facade,
             "patrol_application_owned": "dongfu_application.patrol(" in dongfu_facade,
             "array_upgrade_application_owned": "dongfu_application.array_upgrade(" in dongfu_facade,
-            "status": "plant_harvest_fertilize_accelerate_patrol_array_upgrade_cutover_with_other_dongfu_compatibility",
+            "infiltrate_success_application_owned": "dongfu_application.infiltrate_success(" in dongfu_facade,
+            "legacy_infiltrate_success_disabled": "_dongfu_infiltrate_success_service().settle(" not in dongfu_facade,
+            "status": "plant_harvest_fertilize_accelerate_patrol_array_upgrade_infiltrate_success_cutover_with_other_dongfu_compatibility",
         },
         "impart_pk": {
             "project_join_application_owned": "impart_pk_application.project_join(" in impart_pk_facade,

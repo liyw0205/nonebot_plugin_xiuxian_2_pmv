@@ -204,6 +204,20 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("LegacyPuppetRepository", source)
         self.assertNotIn("repository=LegacyPuppetRepository", source)
 
+    def test_dongfu_infiltrate_success_handler_uses_feature_repository(self) -> None:
+        facade = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_dongfu" / "__init__.py"
+        ).read_text(encoding="utf-8")
+        repository = (
+            SOURCE_ROOT
+            / "features"
+            / "dongfu"
+            / "infiltrate_success_repository.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("dongfu_application.infiltrate_success(", facade)
+        self.assertNotIn("_dongfu_infiltrate_success_service().settle(", facade)
+        self.assertNotIn("transaction_service", repository)
+
     def test_daily_dungeon_reset_scheduler_prevents_overlapping_runs(self) -> None:
         source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_dungeon" / "__init__.py"

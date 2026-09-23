@@ -1567,17 +1567,21 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     expected_slots = json.dumps(_normalize_plant_slots(td), ensure_ascii=False)
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"dongfu-infiltrate-success:{my_uid}:{event_message_id or runtime_ids.new_id()}"
-    result = _run_dongfu_action(
-        "infiltrate_success", operation_id, my_uid,
-        call=lambda: _dongfu_infiltrate_success_service().settle(
-            operation_id, my_uid, target_uid, _today_str(),
-            _get_infiltrate_count_field(is_random_mode), _get_infiltrate_limit(is_random_mode),
-            INFILTRATE_DAILY_LIMIT, expected_slots, _to_int(target_slot.get("slot")),
-            new_finish, reward_rows, stone_gain, guarded, XiuConfig().max_goods_num,
-        ),
-        target_user_id=target_uid, business_date=_today_str(), expected_slots=expected_slots,
-        slot_no=_to_int(target_slot.get("slot")), new_finish=new_finish,
-        rewards=reward_rows, stone_gain=stone_gain, guarded=guarded,
+    result = dongfu_application.infiltrate_success(
+        operation_id=operation_id,
+        visitor_id=my_uid,
+        target_id=target_uid,
+        day=_today_str(),
+        mode_field=_get_infiltrate_count_field(is_random_mode),
+        mode_limit=_get_infiltrate_limit(is_random_mode),
+        target_limit=INFILTRATE_DAILY_LIMIT,
+        expected_slots=expected_slots,
+        slot_no=_to_int(target_slot.get("slot")),
+        new_finish=new_finish,
+        rewards=reward_rows,
+        stone=stone_gain,
+        consume_guard=guarded,
+        max_goods_num=XiuConfig().max_goods_num,
     )
     if result.status == "inventory_full":
         await handle_send(bot, event, "背包空间不足，潜入所得无法结算。")
