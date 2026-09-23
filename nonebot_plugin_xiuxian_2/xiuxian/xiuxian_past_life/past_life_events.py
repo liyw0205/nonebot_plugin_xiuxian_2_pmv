@@ -18,13 +18,14 @@ from ..xiuxian_utils.data_source import jsondata
 from ...paths import get_paths
 from .transaction_service import PastLifeChoiceService
 from .transaction_service import PastLifeFinalSettlementService
-from .transaction_service import PastLifeStartService
+from ...features.past_life.application import PastLifeApplication
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 
 _sql_message_instance = None
 items = Items()
 _paths = get_paths()
 _past_life_final_settlement_service_instance = None
+_past_life_application = PastLifeApplication(_paths.game_db, _paths.player_db)
 _past_life_start_service_instance = None
 _past_life_choice_service_instance = None
 
@@ -330,20 +331,36 @@ class PastLifeEngine:
             birth_scenario,
             first_event,
         )
-        result = _past_life_start_service().start(
-            operation_id,
-            user_id,
-            past_life_limit.get_user_state(user_id),
-            alloc=alloc,
-            accumulated=accumulated,
-            talent=talent_info["name"],
-            birth_scenario=birth_scenario,
-            event_indices=event_indices,
-            event_snapshots=event_snapshots,
-            first_stage_message=message,
-            choices_count=len(first_event["choices"]),
-            refresh_slot_start=past_life_limit.get_refresh_slot_start(now),
-        )
+        if _past_life_start_service_instance is not None:
+            result = _past_life_start_service_instance.start(
+                operation_id,
+                user_id,
+                past_life_limit.get_user_state(user_id),
+                alloc=alloc,
+                accumulated=accumulated,
+                talent=talent_info["name"],
+                birth_scenario=birth_scenario,
+                event_indices=event_indices,
+                event_snapshots=event_snapshots,
+                first_stage_message=message,
+                choices_count=len(first_event["choices"]),
+                refresh_slot_start=past_life_limit.get_refresh_slot_start(now),
+            )
+        else:
+            result = _past_life_application.start(
+                operation_id=operation_id,
+                user_id=user_id,
+                expected_state=past_life_limit.get_user_state(user_id),
+                alloc=alloc,
+                accumulated=accumulated,
+                talent=talent_info["name"],
+                birth_scenario=birth_scenario,
+                event_indices=event_indices,
+                event_snapshots=event_snapshots,
+                first_stage_message=message,
+                choices_count=len(first_event["choices"]),
+                refresh_slot_start=past_life_limit.get_refresh_slot_start(now),
+            )
         if result.succeeded:
             return {
                 "status": result.status,

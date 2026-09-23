@@ -193,6 +193,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "backpack_repair_equipment_equip_unequip_pet_egg_package_accessory_package_cutover_with_other_back_compatibility",
         },
         "past_life": {
+            "start_application_owned": "_past_life_application.start(" in past_life_facade,
             "reset_one_application_owned": "past_life_application.reset_one(" in past_life_facade,
             "legacy_reset_one_disabled": "_past_life_reset_service().reset_one(" not in past_life_facade,
             "status": "reset_one_cutover_with_reset_all_compatibility",
