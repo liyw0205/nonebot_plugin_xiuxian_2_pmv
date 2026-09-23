@@ -3336,6 +3336,8 @@
 
 2026-09-23 compensation redeem-code feature-owned cutover：复用`CompensationRewardClaimSqlRepository`的limited claim/has_claimed/get_used_count能力，兑换码handler移除默认`RewardClaimService`调用；保留usage_limit、legacy baseline、exhausted、duplicate和原子发奖。focused `218 tests`，compile/inventory/diff通过。
 
-2026-09-23 impart card-disassemble feature-owned cutover：新增`ImpartCardDisassembleSqlRepository`、`ImpartApplication.disassemble`并将分解handler从`execute_legacy_call`切换到application路径；单库原子保留至少一张卡、增加结晶、刷新bonus并写operation幂等记录，保留user_missing/card_missing/state_changed/duplicate和rollback。focused `20 unittest/209 pytest`，compile/inventory/diff通过。
+2026-09-23 impart card-disassemble feature-owned cutover：新增`ImpartCardDisassembleSqlRepository`、`ImpartApplication.disassemble`并将分解handler从`execute_legacy_call`切换到application路径；单库原子保留至少一张卡、增加结晶、刷新bonus并写operation幂等记录，保留user_missing/card_missing/state_changed/duplicate和rollback。focused `20 unittest/209 pytest`，compile/inventory/diff check通过。
+
+2026-09-23 remaining legacy execution scan：完成Dongfu plant/harvest/visit/array/patrol/fertilize/accelerate单次边界后，剩余`execute_legacy_call`集中于已确认复杂路径：Compensation definition/JSON兼容、Past Life reset-all跨库批处理、Info avatar JSON状态、Impart PK战斗、Dongfu infiltration、Dufang share批量结算、Fusion兼容和Status外部版本更新。当前未复制不完整规则；这些路径保留为下一阶段blocker/候选。
 
 2026-09-23 sign-in lottery audit contract repair：进度检查器的`lottery_core_default_legacy`布尔谓词与字段语义相反，真实plugin已使用`LotteryApplication`且未使用`LotterySettlementService`却被报告为`true`；修正谓词并新增审计回归，当前`lottery_core_default_legacy=false`、`lottery_compatibility_fallback=false`，progress contract `2 passed`，compile/inventory/diff check通过。
