@@ -2427,7 +2427,7 @@ async def create_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             (k for k, v in jsondata.sect_config_data().items() if v.get("title") == "宗主"),
             0
         )
-        creation = _sect_membership_service().create_sect(
+        creation = sect_application.create_sect(
             _sect_operation_id(event, "create", user_id),
             user_id,
             sect_name,
@@ -2546,7 +2546,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_S
         (k for k, v in jsondata.sect_config_data().items() if v.get("title") == "宗主"),
         0
     )
-    creation = _sect_membership_service().create_sect(
+    creation = sect_application.create_sect(
         _sect_operation_id(event, "create", user_id),
         user_id,
         sect_name,

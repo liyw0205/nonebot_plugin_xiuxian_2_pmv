@@ -22,6 +22,7 @@ from .elixir_room_repository import SectElixirRoomSqlRepository
 from .buff_search_repository import SectBuffSearchSqlRepository
 from .practice_repository import SectPracticeSqlRepository
 from .task_settlement_repository import SectTaskSettlementSqlRepository
+from .creation_repository import SectCreationSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -116,6 +117,9 @@ class SectApplication:
 
     def settle_task(self, operation_id: str, user_id: str, sect_id: int, period: str, cost_type: str, cost: int, exp_reward: int, sect_reward: int, expected_task_key=None, expected_task_data=None):
         return SectMutationResult(SectTaskSettlementSqlRepository(self.database).settle(operation_id, user_id, sect_id, period, cost_type, cost, exp_reward, sect_reward, expected_task_key, expected_task_data))
+
+    def create_sect(self, operation_id: str, user_id: str, sect_name: str, stone_cost: int, owner_position: int):
+        return SectMutationResult(SectCreationSqlRepository(self.database).create(operation_id, user_id, sect_name, stone_cost, owner_position))
 
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):
