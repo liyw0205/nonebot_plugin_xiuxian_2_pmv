@@ -17,6 +17,8 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import convert_rank
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
 from .transaction_service import DungeonResetService
+from ...features.dungeon.application import DungeonApplication
+from ...features.dungeon.reset_repository import DungeonResetSqlRepository
 
 item_s = Items()
 _player_data_manager_instance = None
@@ -163,6 +165,14 @@ class DungeonTemplate:
 class DungeonManager:
     """副本管理器"""
 
+    def _reset_application(self):
+        application = getattr(self, "dungeon_application", None)
+        if application is not None:
+            return application
+        # Explicitly constructed legacy test/rollback objects may only expose
+        # reset_service; normal runtime construction always sets the application.
+        return getattr(self, "reset_service")
+
     _instance = None
     _has_init = False
     _lock = threading.RLock()
@@ -237,7 +247,8 @@ class DungeonManager:
 
             self.dungeon_templates = self._load_dungeon_templates()
             self._init_dungeon_tables()
-            self.reset_service = DungeonResetService(get_paths().player_db)
+            self._legacy_reset_service = DungeonResetService(get_paths().player_db)
+            self.dungeon_application = DungeonApplication(get_paths().game_db, get_paths().player_db)
 
             self.current_dungeon: Optional[DungeonTemplate] = None
             self._load_or_init_today_dungeon()
@@ -343,7 +354,9 @@ class DungeonManager:
             return None
         operation = None
         operation_id = str(global_state.get("reset_operation_id") or "")
-        operation_reader = getattr(self.reset_service, "operation_result", None)
+        operation_reader = getattr(self._reset_application(), "reset_operation_result", None)
+        if operation_reader is None:
+            operation_reader = getattr(self._reset_application(), "operation_result", None)
         if operation_id and callable(operation_reader):
             operation = operation_reader(operation_id)
         snapshot = dict(operation.dungeon_snapshot) if operation is not None else {}
@@ -407,7 +420,7 @@ class DungeonManager:
                 return
 
             result = self.reset_dungeon(
-                DungeonResetService.automatic_operation_id(current_date),
+                DungeonResetSqlRepository.automatic_operation_id(current_date),
                 source="crossday",
             )
             logger.info(
@@ -432,7 +445,7 @@ class DungeonManager:
             if global_state.get("date") != current_date:
                 logger.info("检测到跨天，自动刷新今日副本")
                 self.reset_dungeon(
-                    DungeonResetService.automatic_operation_id(current_date),
+                    DungeonResetSqlRepository.automatic_operation_id(current_date),
                     source="crossday",
                 )
                 return
@@ -463,11 +476,11 @@ class DungeonManager:
             source = str(source).lower()
             if operation_id is None:
                 operation_id = (
-                    DungeonResetService.automatic_operation_id(current_date)
+                    DungeonResetSqlRepository.automatic_operation_id(current_date)
                     if source in {"daily", "crossday"}
                     else f"dungeon-reset:manual:{self.ids.new_id()}"
                 )
-            result = self.reset_service.reset(
+            result = self._reset_application().reset(
                 operation_id,
                 current_date,
                 source,
@@ -527,7 +540,7 @@ class DungeonManager:
 
         if self.current_dungeon is None:
             raise RuntimeError("current dungeon is unavailable")
-        return self.reset_service.ensure_player_status(
+        return self._reset_application().ensure_player_status(
             str(user_id), self._template_snapshot(self.current_dungeon)
         )
 
@@ -538,7 +551,7 @@ class DungeonManager:
         """
         if self.current_dungeon is None:
             raise RuntimeError("current dungeon is unavailable")
-        result = self.reset_service.reset(
+        result = self._reset_application().reset(
             f"dungeon-reset:clear:{self.ids.new_id()}",
             self._get_current_date(),
             "manual",

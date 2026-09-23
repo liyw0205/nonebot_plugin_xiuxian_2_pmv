@@ -3421,3 +3421,9 @@
 2026-09-23 dungeon explore settlement isolated recovery evidence：一次性临时数据目录完成backup、restore dry-run、restore、全量`114`项migration和reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`，临时目录已删除。
 
 2026-09-23 dungeon explore settlement full evidence：当前HEAD完整回归`2146 tests OK`；remaining Dungeon reset/team legacy compatibility and other global blockers remain explicitly open。
+
+2026-09-23 dungeon reset feature-owned cutover：新增`DungeonResetSqlRepository`和`DungeonApplication.reset/reset_operation_result/ensure_player_status`，`DungeonManager`默认reset、自动daily/crossday operation-id、全局发布快照、批量player状态重置和player generation初始化改走feature application；保留显式旧service对象仅作rollback/test compatibility。完整保留automatic daily/crossday同日合并、operation replay/conflict、generation、snapshot、manual reset和异常回滚语义；复用现有dungeon schema，无新增migration。reset pytest `11 passed`，focused/application/source `211 tests`，compile/inventory/diff通过。
+
+2026-09-23 dungeon reset isolated recovery evidence：一次性临时数据目录完成backup、restore dry-run、restore、全量`114`项migration和reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`，临时目录已删除。
+
+2026-09-23 dungeon reset full evidence：当前HEAD完整回归`2148 tests OK`；Dungeon reset/team剩余兼容边界及全局legacy blockers仍明确开放。

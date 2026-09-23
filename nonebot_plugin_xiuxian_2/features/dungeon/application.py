@@ -10,6 +10,7 @@ from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import DungeonPurchaseRequest
 from .repository import DungeonRepository, DungeonSessionSqlRepository
+from .reset_repository import DungeonResetSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -73,6 +74,15 @@ class DungeonApplication:
 
     def session_transition(self, *, operation_id: str, user_id: str, expected: Mapping[str, Any], dungeon: Mapping[str, Any], action: str) -> Any:
         return self._repository().session_transition(operation_id, user_id, dict(expected), dict(dungeon), action)
+
+    def reset(self, operation_id: str, business_date: Any, source: str, dungeon_factory: Any) -> dict[str, Any]:
+        return DungeonResetSqlRepository(self.player_database, clock=SystemClock()).reset(operation_id, business_date, source, dungeon_factory)
+
+    def reset_operation_result(self, operation_id: str) -> dict[str, Any] | None:
+        return DungeonResetSqlRepository(self.player_database).operation_result(operation_id)
+
+    def ensure_player_status(self, user_id: str, fallback_snapshot: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        return DungeonResetSqlRepository(self.player_database).ensure_player_status(user_id, fallback_snapshot)
 
     def replay(self, *, operation_id: str, user_id: str) -> Any:
         return self._repository().replay(operation_id, user_id)
