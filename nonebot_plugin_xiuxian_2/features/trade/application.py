@@ -6,6 +6,7 @@ from typing import Any
 from .._legacy_application import LegacyApplication
 from ...core.errors import ValidationError
 from ...infrastructure.clock import SystemClock
+from .guishi_cancel_repository import GuishiOrderCancelSqlRepository
 from .guishi_deposit_repository import GuishiDepositSqlRepository
 from .guishi_baitan_repository import GuishiBaitanSqlRepository
 from .guishi_stone_rules import withdrawal_is_open
@@ -31,6 +32,9 @@ class TradeApplication(LegacyApplication):
             self.game_database, self.trade_database
         )
         self.guishi_baitan_repository = GuishiBaitanSqlRepository(
+            self.game_database, self.trade_database, clock=self.clock
+        )
+        self.guishi_order_cancel_repository = GuishiOrderCancelSqlRepository(
             self.game_database, self.trade_database, clock=self.clock
         )
         self.guishi_withdraw_repository = GuishiWithdrawSqlRepository(
@@ -135,6 +139,36 @@ class TradeApplication(LegacyApplication):
             price=price,
             quantity=quantity,
             max_orders=max_orders,
+        )
+
+    def guishi_cancel_qiugou(
+        self,
+        *,
+        operation_id: str,
+        user_id: str,
+        order_id: str,
+    ):
+        return self.guishi_order_cancel_repository.cancel_qiugou(
+            operation_id=operation_id,
+            user_id=user_id,
+            order_id=order_id,
+        )
+
+    def guishi_cancel_baitan(
+        self,
+        *,
+        operation_id: str,
+        user_id: str,
+        order_id: str,
+        goods_type: str,
+        max_goods_num: int,
+    ):
+        return self.guishi_order_cancel_repository.cancel_baitan(
+            operation_id=operation_id,
+            user_id=user_id,
+            order_id=order_id,
+            goods_type=goods_type,
+            max_goods_num=max_goods_num,
         )
 
     def enqueue(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("enqueue", operation_id=operation_id, user_id=user_id, **kwargs)

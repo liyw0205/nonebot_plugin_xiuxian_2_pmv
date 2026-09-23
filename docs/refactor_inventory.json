@@ -2778,6 +2778,7 @@
     "guishi_info",
     "guishi_item",
     "guishi_match_operations",
+    "guishi_order_cancel_operations",
     "guishi_order_create_operations",
     "guishi_stone_operations",
     "guishi_take_item_operations",

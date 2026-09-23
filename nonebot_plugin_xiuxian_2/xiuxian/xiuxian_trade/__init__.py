@@ -343,6 +343,15 @@ def _guishi_order_operation_id(event, order_type, user_id, item_id, price, quant
     return f"guishi-order:{order_type}:{user_id}:{item_id}:{price}:{quantity}:{runtime_ids.new_id()}"
 
 
+def _guishi_cancel_operation_id(event, order_type, user_id, order_id):
+    event_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    if event_id:
+        return f"guishi-cancel:{order_type}:{event_id}:{user_id}:{order_id}"
+    return f"guishi-cancel:{order_type}:{user_id}:{order_id}:{runtime_ids.new_id()}"
+
+
 def _auction_queue_operation_id(event, action, user_id, item_id):
     event_id = str(
         getattr(event, "message_id", "") or getattr(event, "id", "") or ""
@@ -1738,12 +1747,14 @@ async def guishi_cancel_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMess
         await handle_send(bot, event, msg, md_type="交易", k1="取消求购", v1="鬼市取消求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_cancel_qiugou.finish()
     
-    result = xianshi_repository.clear_guishi_qiugou_order(
-        get_paths().trade_db,
-        order_id,
-        expected_user_id=user_id,
+    result = trade_application.guishi_cancel_qiugou(
+        operation_id=_guishi_cancel_operation_id(
+            event, "qiugou", user_id, order_id
+        ),
+        user_id=user_id,
+        order_id=order_id,
     )
-    if not result.cleared:
+    if not result.cancelled:
         msg = f"未找到您的ID为 {order_id} 的求购订单！"
         await handle_send(bot, event, msg, md_type="交易", k1="取消求购", v1="鬼市取消求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_cancel_qiugou.finish()
@@ -1919,13 +1930,19 @@ async def guishi_shoutan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         if not item_info:
             logger.warning(f"鬼市摆摊订单 {order['id']} 的物品不存在，已保留订单")
             continue
-        result = xianshi_repository.clear_expired_guishi_order(
-            get_paths().trade_db,
-            order['id'],
-            item_info['type'],
-            expected_user_id=user_id,
+        result = trade_application.guishi_cancel_baitan(
+            operation_id=_guishi_cancel_operation_id(
+                event, "baitan", user_id, order["id"]
+            ),
+            user_id=user_id,
+            order_id=order["id"],
+            goods_type=item_info["type"],
+            max_goods_num=XiuConfig().max_goods_num,
         )
-        if not result.cleared:
+        if result.status == "inventory_full":
+            logger.warning(f"鬼市摆摊订单 {order['id']} 退回失败：背包已满")
+            continue
+        if not result.cancelled:
             continue
         if result.refunded_quantity:
             refunded_items_summary[result.item_name] = (

@@ -54,6 +54,20 @@ def test_guishi_stone_handlers_use_feature_repositories():
     ]
     assert "trade_application.guishi_baitan(" in baitan_handler
     assert "xianshi_repository.create_guishi_baitan_order(" not in baitan_handler
+    cancel_qiugou_start = source.index("async def guishi_cancel_qiugou_")
+    cancel_qiugou_handler = source[
+        cancel_qiugou_start : source.index("@guishi_baitan.handle", cancel_qiugou_start)
+    ]
+    assert "trade_application.guishi_cancel_qiugou(" in cancel_qiugou_handler
+    assert "xianshi_repository.clear_guishi_qiugou_order(" not in cancel_qiugou_handler
+    assert "result.cancelled" in cancel_qiugou_handler
+    assert "result.cleared" not in cancel_qiugou_handler
+    shoutan_start = source.index("async def guishi_shoutan_")
+    shoutan_handler = source[
+        shoutan_start : source.index("@guishi_take_item.handle", shoutan_start)
+    ]
+    assert "trade_application.guishi_cancel_baitan(" in shoutan_handler
+    assert "xianshi_repository.clear_expired_guishi_order(" not in shoutan_handler
 
 
 class GuishiStoneServiceTests(unittest.TestCase):

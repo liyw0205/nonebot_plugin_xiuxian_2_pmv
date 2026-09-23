@@ -40,10 +40,22 @@ def apply_trade_guishi_qiugou(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_trade_guishi_order_cancel(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS guishi_order_cancel_operations ("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,order_id TEXT NOT NULL,"
+        "order_type TEXT NOT NULL,user_id TEXT NOT NULL,goods_id INTEGER NOT NULL,"
+        "item_name TEXT NOT NULL,goods_type TEXT NOT NULL,"
+        "refunded_quantity INTEGER NOT NULL,refunded_stone INTEGER NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
 __all__ = [
     "apply_trade",
     "apply_trade_guishi_deposit",
     "apply_trade_guishi_schema",
     "apply_trade_guishi_withdraw",
     "apply_trade_guishi_qiugou",
+    "apply_trade_guishi_order_cancel",
 ]

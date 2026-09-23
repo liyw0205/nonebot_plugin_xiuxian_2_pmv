@@ -555,6 +555,18 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("xianshi_repository.create_guishi_qiugou_order(", command)
         self.assertIn("trade_application.guishi_baitan(", command)
         self.assertNotIn("xianshi_repository.create_guishi_baitan_order(", command)
+        cancel_qiugou_start = command_source.index("async def guishi_cancel_qiugou_")
+        cancel_qiugou = command_source[
+            cancel_qiugou_start : command_source.index("@guishi_baitan.handle", cancel_qiugou_start)
+        ]
+        self.assertIn("trade_application.guishi_cancel_qiugou(", cancel_qiugou)
+        self.assertNotIn("xianshi_repository.clear_guishi_qiugou_order(", cancel_qiugou)
+        shoutan_start = command_source.index("async def guishi_shoutan_")
+        shoutan = command_source[
+            shoutan_start : command_source.index("@guishi_take_item.handle", shoutan_start)
+        ]
+        self.assertIn("trade_application.guishi_cancel_baitan(", shoutan)
+        self.assertNotIn("xianshi_repository.clear_expired_guishi_order(", shoutan)
         self.assertNotIn("sql_message.try_update_ls(", command)
         self.assertNotIn("trade_manager.try_update_stored_stone(", command)
         self.assertIn("attach_database", repository_source)
