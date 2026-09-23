@@ -3330,6 +3330,12 @@
 
 2026-09-23 past-life choice full evidence：完整回归`2145 tests OK`。
 
+2026-09-23 past-life reset-one isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-23 past-life reset-one full evidence：完整回归`2146 tests OK`。
+
+2026-09-23 past-life reset-one feature-owned cutover：新增`PastLifeResetSqlRepository`、`PastLifeApplication.reset_one`，修复管理员单用户重置handler的真实运行入口缺失；双库原子重置状态、revision、历史保留/清空和operation幂等，reset-all批处理继续保留兼容边界。focused `222 tests`，compile/inventory/diff通过；当前full `2146 tests OK`。
+
 2026-09-23 past-life audit contract repair：进度检查器拆分`past_life_events.py`与命令`__init__.py`证据源，start/choice不再因读取错误文件被误报false；P0-P6 completion audit恢复全绿，剩余false仅为3个预期sign-in兼容状态。
 
 2026-09-23 past-life start feature-owned cutover：新增独立`PastLifeStartSqlRepository`并将新人生start handler默认切换到`PastLifeApplication.start`；真实下沉player past_life schema、冻结计划、revision、冷却、统计和operation幂等，保留显式旧测试注入兼容但不作为默认执行路径。focused `218 tests`，compile/inventory/diff通过；修复feature导入NoneBot初始化和PRAGMA name-row兼容。
