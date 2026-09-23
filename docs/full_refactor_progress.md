@@ -3441,3 +3441,9 @@
 2026-09-23 sect owner-inherit isolated recovery evidence：一次性临时数据目录完成backup、restore dry-run、restore、全量`114`项migration和reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`，临时目录已删除。
 
 2026-09-23 sect owner-inherit full evidence：当前HEAD完整回归`2150 tests OK`；Sect disband/open-close join and fairyland remain separate compatibility boundaries。
+
+2026-09-23 sect join-state feature-owned cutover：新增`SectJoinStateSqlRepository`与`SectApplication.open_join/close_join`，手动开放/关闭宗门加入handler默认改走feature repository；单库原子保留owner/position、expected_sect_id、closed/join_open状态、operation replay/conflict和CAS rollback，旧`SectOpenJoinService/SectCloseJoinService`仅作显式兼容。无新增migration；focused `222 tests`，compile/inventory/diff通过。
+
+2026-09-23 sect join-state isolated recovery evidence：一次性临时数据目录完成backup、restore dry-run、restore、全量`114`项migration和reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`，临时目录已删除。
+
+2026-09-23 sect join-state full evidence：当前HEAD完整回归`2152 tests OK`；Sect disband and fairyland remain separate compatibility boundaries。

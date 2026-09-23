@@ -83,7 +83,7 @@ class SectCloseJoinServiceTests(unittest.TestCase):
         start = source.index("async def sect_close_join_")
         end = source.index("@sect_open_join.handle", start)
         handler = source[start:end]
-        self.assertIn("_sect_close_join_service().close(", handler)
+        self.assertIn("sect_application.close_join(", handler)
         self.assertIn("_sect_close_join_service_instance = None", source)
         self.assertIn("def _sect_close_join_service(", source)
         self.assertNotIn("sql_message.update_sect_join_status(", handler)

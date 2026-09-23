@@ -2964,6 +2964,7 @@
     "running",
     "schema_migrations",
     "season_rank",
+    "sect_",
     "sect_buff_search_operations",
     "sect_close_join_operations",
     "sect_close_mountain_operations",

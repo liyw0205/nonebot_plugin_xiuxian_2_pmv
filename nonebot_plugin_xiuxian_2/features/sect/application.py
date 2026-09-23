@@ -13,6 +13,7 @@ from .repository import SectRenameSqlRepository, SectRepository
 from .daily_maintenance_repository import SectDailyMaintenanceSqlRepository
 from .close_mountain_repository import SectCloseMountainSqlRepository
 from .owner_inherit_repository import SectOwnerInheritSqlRepository
+from .join_state_repository import SectJoinStateSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -77,6 +78,12 @@ class SectApplication:
 
     def inherit_owner(self, operation_id: str, actor_id: str, *, expected_sect_id: int | None = None, eligible_positions=(1, 2, 6, 7), eligible_user_ids=None, owner_position: int = 0):
         return SectMutationResult(SectOwnerInheritSqlRepository(self.database).inherit(operation_id, actor_id, expected_sect_id=expected_sect_id, eligible_positions=eligible_positions, eligible_user_ids=eligible_user_ids, owner_position=owner_position))
+
+    def open_join(self, operation_id: str, actor_id: str, *, owner_position: int = 0, expected_sect_id: int | None = None):
+        return SectMutationResult(SectJoinStateSqlRepository(self.database).open(operation_id, actor_id, owner_position=owner_position, expected_sect_id=expected_sect_id))
+
+    def close_join(self, operation_id: str, actor_id: str, *, owner_position: int = 0, expected_sect_id: int | None = None):
+        return SectMutationResult(SectJoinStateSqlRepository(self.database).close(operation_id, actor_id, owner_position=owner_position, expected_sect_id=expected_sect_id))
 
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):

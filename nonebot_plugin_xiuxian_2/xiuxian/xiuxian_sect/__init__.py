@@ -3146,7 +3146,7 @@ async def sect_close_join_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
     owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
 
-    result = _sect_close_join_service().close(
+    result = sect_application.close_join(
         _sect_operation_id(event, "close_join", sect_id),
         user_info['user_id'],
         owner_position=owner_position,
@@ -3184,7 +3184,7 @@ async def sect_open_join_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
     owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
 
-    result = _sect_open_join_service().open(
+    result = sect_application.open_join(
         _sect_operation_id(event, "open_join", sect_id),
         user_info['user_id'],
         owner_position=owner_position,

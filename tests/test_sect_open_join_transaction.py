@@ -83,7 +83,7 @@ class SectOpenJoinServiceTests(unittest.TestCase):
         start = source.index("async def sect_open_join_")
         end = source.index("@sect_close_mountain.handle", start)
         handler = source[start:end]
-        self.assertIn("_sect_open_join_service().open(", handler)
+        self.assertIn("sect_application.open_join(", handler)
         self.assertIn("_sect_open_join_service_instance = None", source)
         self.assertIn("def _sect_open_join_service(", source)
         self.assertNotIn("sql_message.update_sect_join_status(", handler)
