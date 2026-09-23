@@ -1304,7 +1304,7 @@ class SourceQualityTests(unittest.TestCase):
         service_source = (sect_root / "membership_service.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn("_sect_membership_service().upgrade_practice(", command_source)
+        self.assertIn("sect_application.upgrade_practice(", command_source)
         self.assertIn('"health_practice_upgrade"', command_source)
         self.assertIn('"mana_practice_upgrade"', command_source)
         self.assertIn("sect_practice_operations", service_source)

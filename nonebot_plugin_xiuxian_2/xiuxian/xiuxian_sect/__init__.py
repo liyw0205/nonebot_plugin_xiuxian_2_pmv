@@ -1602,7 +1602,7 @@ async def upatkpractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级攻击修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await upatkpractice.finish()
 
-        result = _sect_membership_service().upgrade_practice(
+        result = sect_application.upgrade_practice(
             _sect_operation_id(event, "attack_practice_upgrade", sect_id),
             user_id,
             sect_id,
@@ -1689,7 +1689,7 @@ async def uphppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级元血修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await uphppractice.finish()
 
-        result = _sect_membership_service().upgrade_practice(
+        result = sect_application.upgrade_practice(
             _sect_operation_id(event, "health_practice_upgrade", sect_id),
             user_id,
             sect_id,
@@ -1776,7 +1776,7 @@ async def upmppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级灵海修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await upmppractice.finish()
 
-        result = _sect_membership_service().upgrade_practice(
+        result = sect_application.upgrade_practice(
             _sect_operation_id(event, "mana_practice_upgrade", sect_id),
             user_id,
             sect_id,
