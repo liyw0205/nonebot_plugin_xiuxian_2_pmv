@@ -9,4 +9,6 @@ class PastLifeApplication(MigratedFeatureApplication):
     def choice(self,*,operation_id,user_id,choice_idx,expected_state,final_state,response): return self.repository.choice(operation_id=operation_id,user_id=user_id,choice_idx=choice_idx,expected_state=expected_state,final_state=final_state,response=response)
     def reset_one(self,*,operation_id,user_id,clear_history=False):
         outcome=self.repository.reset_one(operation_id=operation_id,user_id=user_id,clear_history=clear_history); return SimpleNamespace(status=outcome.status,data=outcome.data,replayed=outcome.status=='duplicate',ok=outcome.succeeded)
+    def final_settle(self,*,operation_id,user_id,**kwargs):
+        outcome=self.repository.final_settle(operation_id=operation_id,user_id=user_id,**kwargs); return SimpleNamespace(status=outcome.status,rewards=outcome.rewards,succeeded=outcome.succeeded)
 __all__=['PastLifeApplication']

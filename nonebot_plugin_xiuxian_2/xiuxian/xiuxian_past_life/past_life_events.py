@@ -775,6 +775,20 @@ class PastLifeEngine:
                 sort_keys=True, separators=(",", ":")
             ).encode("utf-8")).hexdigest()[:24]
             operation_id = f"past-life-choice:{user_id}:{fingerprint}"
+        if _past_life_final_settlement_service_instance is None:
+            return _past_life_application.final_settle(
+                operation_id=operation_id,
+                user_id=user_id,
+                expected_state=expected_state,
+                final_state=state,
+                ending_name=ending["name"],
+                score=state["total_score"],
+                exp_reward=plan["exp"],
+                stone_reward=plan["stone"],
+                achievement_points=plan["points"],
+                item_reward=plan.get("item"),
+                choice_response=response,
+            )
         return _past_life_final_settlement_service().settle(
             operation_id, user_id, expected_state, state, ending["name"], state["total_score"],
             plan["exp"], plan["stone"], plan["points"], plan.get("item"),

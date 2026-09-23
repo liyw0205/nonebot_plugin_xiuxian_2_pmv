@@ -194,6 +194,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "backpack_repair_equipment_equip_unequip_pet_egg_package_accessory_package_cutover_with_other_back_compatibility",
         },
         "past_life": {
+            "final_settlement_application_owned": "_past_life_application.final_settle(" in past_life_events_facade,
             "choice_application_owned": "_past_life_application.choice(" in past_life_events_facade,
             "start_application_owned": "_past_life_application.start(" in past_life_events_facade,
             "reset_one_application_owned": "past_life_application.reset_one(" in past_life_command_facade,
