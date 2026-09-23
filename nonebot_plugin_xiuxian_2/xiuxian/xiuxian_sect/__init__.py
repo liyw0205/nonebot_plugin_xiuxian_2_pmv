@@ -946,7 +946,7 @@ async def sect_elixir_room_make_(bot: Bot, event: GroupMessageEvent | PrivateMes
                 await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_elixir_room_make.finish()
             else:
-                result = _sect_membership_service().upgrade_elixir_room(
+                result = sect_application.upgrade_elixir_room(
                     _sect_operation_id(event, "elixir_room_upgrade", sect_id),
                     user_info["user_id"],
                     sect_id,

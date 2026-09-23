@@ -1243,7 +1243,7 @@ class SourceQualityTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn(
-            "_sect_membership_service().upgrade_elixir_room(", command_source
+            "sect_application.upgrade_elixir_room(", command_source
         )
         self.assertIn('"elixir_room_upgrade"', command_source)
         self.assertIn("sect_elixir_room_operations", service_source)

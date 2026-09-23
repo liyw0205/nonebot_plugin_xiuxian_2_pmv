@@ -3469,3 +3469,9 @@
 2026-09-23 sect fairyland upgrade isolated recovery evidence：一次性临时数据目录完成backup、restore dry-run、restore、全量`114`项migration和reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`，临时目录已删除。
 
 2026-09-23 sect fairyland upgrade full evidence：当前HEAD完整回归`2156 tests OK`；Sect remaining elixir/buff/practice/membership boundaries remain explicitly open。
+
+2026-09-23 sect elixir-room upgrade feature-owned cutover：新增`SectElixirRoomSqlRepository`与`SectApplication.upgrade_elixir_room`，宗门丹房建设handler默认改走feature repository；保留owner/membership/expected level、stone/scale balance、CAS asset扣减、operation replay和rollback。无新增migration；focused `217 tests`，compile/inventory/diff通过。
+
+2026-09-23 sect elixir-room upgrade isolated recovery evidence：一次性临时数据目录完成backup、restore dry-run、restore、全量`114`项migration和reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`，临时目录已删除。
+
+2026-09-23 sect elixir-room upgrade full evidence：当前HEAD完整回归`2157 tests OK`；Sect remaining buff/practice/membership boundaries remain explicitly open。

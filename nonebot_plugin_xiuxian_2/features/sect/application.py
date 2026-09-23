@@ -18,6 +18,7 @@ from .disband_repository import SectDisbandSqlRepository
 from .owner_transfer_repository import SectOwnerTransferSqlRepository
 from .scheduled_material_repository import SectScheduledMaterialSqlRepository
 from .fairyland_repository import SectFairylandSqlRepository
+from .elixir_room_repository import SectElixirRoomSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -100,6 +101,9 @@ class SectApplication:
 
     def upgrade_fairyland(self, operation_id: str, actor_id: str, sect_id: int, expected_level: int, next_level: int, stone_cost: int, materials_cost: int, *, owner_position: int = 0):
         return SectMutationResult(SectFairylandSqlRepository(self.database).upgrade(operation_id, actor_id, sect_id, expected_level, next_level, stone_cost, materials_cost, owner_position=owner_position))
+
+    def upgrade_elixir_room(self, operation_id: str, actor_id: str, sect_id: int, expected_level: int, next_level: int, stone_cost: int, scale_cost: int, *, owner_position: int = 0):
+        return SectMutationResult(SectElixirRoomSqlRepository(self.database).upgrade(operation_id, actor_id, sect_id, expected_level, next_level, stone_cost, scale_cost, owner_position=owner_position))
 
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):
