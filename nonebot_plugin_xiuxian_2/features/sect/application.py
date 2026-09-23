@@ -21,6 +21,7 @@ from .fairyland_repository import SectFairylandSqlRepository
 from .elixir_room_repository import SectElixirRoomSqlRepository
 from .buff_search_repository import SectBuffSearchSqlRepository
 from .practice_repository import SectPracticeSqlRepository
+from .task_settlement_repository import SectTaskSettlementSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -112,6 +113,9 @@ class SectApplication:
 
     def upgrade_practice(self, operation_id: str, user_id: str, sect_id: int, practice_type: str, expected_level: int, next_level: int, stone_cost: int, materials_cost: int):
         return SectMutationResult(SectPracticeSqlRepository(self.database).upgrade(operation_id, user_id, sect_id, practice_type, expected_level, next_level, stone_cost, materials_cost))
+
+    def settle_task(self, operation_id: str, user_id: str, sect_id: int, period: str, cost_type: str, cost: int, exp_reward: int, sect_reward: int, expected_task_key=None, expected_task_data=None):
+        return SectMutationResult(SectTaskSettlementSqlRepository(self.database).settle(operation_id, user_id, sect_id, period, cost_type, cost, exp_reward, sect_reward, expected_task_key, expected_task_data))
 
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):

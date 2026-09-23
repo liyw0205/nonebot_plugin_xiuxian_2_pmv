@@ -3487,3 +3487,9 @@
 2026-09-23 sect practice-upgrade isolated recovery evidence：一次性临时数据目录完成backup、restore dry-run、restore、全量`114`项migration和reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`，临时目录已删除。
 
 2026-09-23 sect practice-upgrade full evidence：当前HEAD完整回归`2159 tests OK`；Sect remaining membership/task/elixir-claim boundaries remain explicitly open。
+
+2026-09-23 sect task-settlement feature-owned cutover：新增`SectTaskSettlementSqlRepository`与`SectApplication.settle_task`，hp/stone两条宗门任务完成handler默认改走feature repository；保留task/user/sect快照、cost type、资产余额、exp/contribution/sect asset更新、task completion、operation replay/conflict、注入clock和rollback。无新增migration；focused `218 tests`，compile/inventory/diff通过。
+
+2026-09-23 sect task-settlement isolated recovery evidence：一次性临时数据目录完成backup、restore dry-run、restore、全量`114`项migration和reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`，临时目录已删除。
+
+2026-09-23 sect task-settlement full evidence：当前HEAD完整回归`2160 tests OK`；Sect remaining membership/create/name-refresh/elixir-claim boundaries remain explicitly open。

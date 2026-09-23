@@ -2124,7 +2124,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             task_operation_id = _sect_operation_id(
                 event, "task_complete", user_id
             )
-            settlement = _sect_membership_service().settle_task(
+            settlement = sect_application.settle_task(
                 task_operation_id,
                 user_id,
                 sect_id,
@@ -2207,7 +2207,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             task_operation_id = _sect_operation_id(
                 event, "task_complete", user_id
             )
-            settlement = _sect_membership_service().settle_task(
+            settlement = sect_application.settle_task(
                 task_operation_id,
                 user_id,
                 sect_id,
