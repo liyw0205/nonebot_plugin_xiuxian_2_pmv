@@ -280,6 +280,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "plant_harvest_fertilize_accelerate_patrol_array_upgrade_cutover_with_other_dongfu_compatibility",
         },
         "impart_pk": {
+            "project_join_application_owned": "impart_pk_application.project_join(" in impart_pk_facade,
             "training_replay_application_owned": "impart_pk_application.training_settle(" in impart_pk_facade,
             "legacy_training_replay_disabled": "_impart_training_settlement_service().get_result(" not in impart_pk_facade,
             "closing_enter_replay_application_owned": "impart_pk_application.closing_enter(" in impart_pk_facade,

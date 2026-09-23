@@ -30,8 +30,8 @@ def test_impart_project_binding_and_handler_are_lazy():
     ).read_text(encoding="utf-8")
     handler = source[source.index("async def impart_pk_project_"):source.index("async def impart_top_")]
     assert "xu_world.bind_service(_impart_project_join_service)" in source
-    assert "_impart_project_join_service().join(" in handler
-    assert "impart_project_join_service.join(" not in handler
+    assert "impart_pk_application.project_join(" in handler
+    assert "_impart_project_join_service().join(" not in handler
     assert "def _bound_service(self):" in world_source
     assert "if callable(self.service):" in world_source
 

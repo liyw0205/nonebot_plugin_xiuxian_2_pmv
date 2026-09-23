@@ -233,13 +233,11 @@ async def impart_pk_project_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     # 加入虚神界
     legacy_state = impart_pk.find_user_data(user_id)
     operation_id = _impart_operation_id(event, "project", user_id)
-    result = _run_impart_pk_action(
-        "project_join", operation_id, user_id,
-        call=lambda: _impart_project_join_service().join(
-            operation_id, user_id, legacy_pk_num=legacy_state["pk_num"],
-            legacy_members=xu_world.data.keys(),
-        ),
+    result = impart_pk_application.project_join(
+        operation_id=operation_id,
+        user_id=user_id,
         legacy_pk_num=legacy_state["pk_num"],
+        legacy_members=xu_world.data.keys(),
     )
     if result.status in {"applied", "duplicate"}:
         msg = "加入虚神界成功！"
