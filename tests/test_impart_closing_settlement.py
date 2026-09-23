@@ -23,9 +23,8 @@ def test_impart_closing_handler_uses_lazy_three_database_service():
     handler = source[source.index("async def impart_pk_out_closing_"):]
     assert "_run_impart_pk_action(" in handler
     helper = source[source.index("def _run_impart_pk_action("):source.index("@impart_pk")]
-    assert "impart_pk_application.execute_legacy_call(" in helper
-    assert "_impart_closing_settlement_service().get_result(" not in handler
-    assert "_impart_closing_settlement_service().settle(" in handler
+    assert "impart_pk_application.closing_settle(" in handler
+    assert "_impart_closing_settlement_service().settle(" not in handler
     assert "_impart_closing_settlement_service_instance = None" in source
     assert "def _impart_closing_settlement_service(" in source
     assert "get_paths().game_db, get_paths().impart_db, get_paths().player_db" in source

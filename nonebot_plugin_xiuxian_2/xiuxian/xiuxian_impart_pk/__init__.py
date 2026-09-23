@@ -1116,14 +1116,19 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
         user_id, int(use_exp / 10 * exp_time), int(use_exp / 5 * exp_time)
     )
     new_power = as_int_like(round((use_exp + total_exp) * level_rate * realm_rate))
-    settlement = _run_impart_pk_action(
-        "closing_settle", operation_id, user_id,
-        call=lambda: _impart_closing_settlement_service().settle(
-            operation_id, user_id, create_time_token, use_exp, available_exp_day,
-            total_exp, int(exp_day_cost), exp_time, result_hp_mp[0], result_hp_mp[1],
-            int(result_hp_mp[2] / 10), new_power,
-        ),
-        exp_gain=total_exp, exp_time=exp_time, new_power=new_power,
+    settlement = impart_pk_application.closing_settle(
+        operation_id=operation_id,
+        user_id=user_id,
+        expected_create_time=create_time_token,
+        expected_exp=use_exp,
+        expected_exp_day=available_exp_day,
+        exp_gain=total_exp,
+        blessing_cost=int(exp_day_cost),
+        closing_minutes=exp_time,
+        hp=result_hp_mp[0],
+        mp=result_hp_mp[1],
+        atk=int(result_hp_mp[2] / 10),
+        power=new_power,
     )
     if settlement.status == "duplicate":
         msg = (
