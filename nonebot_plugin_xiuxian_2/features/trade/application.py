@@ -5,16 +5,30 @@ from typing import Any
 
 from .._legacy_application import LegacyApplication
 from ...core.errors import ValidationError
+from ...infrastructure.clock import SystemClock
 from .guishi_deposit_repository import GuishiDepositSqlRepository
+from .guishi_stone_rules import withdrawal_is_open
+from .guishi_withdraw_repository import GuishiWithdrawSqlRepository
 from .repository import TradeFeatureRepository
 
 
 
 class TradeApplication(LegacyApplication):
-    def __init__(self, game_database: str | Path, trade_database: str | Path, *, repository: TradeFeatureRepository | None = None) -> None:
+    def __init__(
+        self,
+        game_database: str | Path,
+        trade_database: str | Path,
+        *,
+        repository: TradeFeatureRepository | None = None,
+        clock: Any | None = None,
+    ) -> None:
         self.game_database = str(game_database)
         self.trade_database = str(trade_database)
+        self.clock = clock or SystemClock()
         self.guishi_deposit_repository = GuishiDepositSqlRepository(
+            self.game_database, self.trade_database
+        )
+        self.guishi_withdraw_repository = GuishiWithdrawSqlRepository(
             self.game_database, self.trade_database
         )
         super().__init__(game_database, repository=repository, feature="trade")
@@ -45,7 +59,36 @@ class TradeApplication(LegacyApplication):
         return self.guishi_deposit_repository.deposit(
             operation_id=operation_id, user_id=user_id, amount=amount
         )
-    def withdraw(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("withdraw", operation_id=operation_id, user_id=user_id, **kwargs)
+
+    def withdraw(
+        self, *, operation_id: str, user_id: str, amount: int, **kwargs: Any
+    ):
+        if self.repository is not None:
+            return self._action(
+                "withdraw",
+                operation_id=operation_id,
+                user_id=user_id,
+                amount=amount,
+                **kwargs,
+            )
+        return self._execute(
+            operation_id=operation_id,
+            user_id=user_id,
+            action="trade.withdraw",
+            payload={"user_id": user_id, "amount": amount},
+            call=lambda: self.guishi_withdraw(
+                operation_id=operation_id, user_id=user_id, amount=amount
+            ),
+        )
+
+    def guishi_withdraw(self, *, operation_id: str, user_id: str, amount: int):
+        return self.guishi_withdraw_repository.withdraw(
+            operation_id=operation_id,
+            user_id=user_id,
+            amount=amount,
+            withdrawal_open=withdrawal_is_open(self.clock.now()),
+        )
+
     def enqueue(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("enqueue", operation_id=operation_id, user_id=user_id, **kwargs)
     def dequeue(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("dequeue", operation_id=operation_id, user_id=user_id, **kwargs)
     def session_start(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("session_start", operation_id=operation_id, user_id=user_id, **kwargs)

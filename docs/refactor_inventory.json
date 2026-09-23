@@ -3057,6 +3057,7 @@
     "tower_state_operations",
     "trade_feature_migrations",
     "trade_guishi_deposit_operations",
+    "trade_guishi_withdraw_operations",
     "trade_migrations",
     "training",
     "training_completion_operations",

@@ -66,6 +66,7 @@ from .transaction_service import AuctionSessionService
 from ...paths import get_paths
 from ...features.trade.application import TradeApplication
 from ...features.trade.guishi_deposit_repository import GuishiDepositSqlRepository
+from ...features.trade.guishi_withdraw_repository import GuishiWithdrawSqlRepository
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 from ...bootstrap.legacy import register_legacy_startup
@@ -82,7 +83,11 @@ xianshi_repository = TradeRepository(
     max_goods_num=XiuConfig().max_goods_num,
 )
 _xianshi_purchase_service_instance = None
-trade_application = TradeApplication(get_paths().game_db, get_paths().trade_db)
+trade_application = TradeApplication(
+    get_paths().game_db,
+    get_paths().trade_db,
+    clock=runtime_clock,
+)
 _guishi_stone_service_instance = None
 _auction_queue_service_instance = None
 _auction_session_service_instance = None
@@ -1567,13 +1572,6 @@ async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, msg, md_type="我要修仙")
         await guishi_withdraw.finish()
     
-    # 检查是否是周末
-    today = runtime_clock.now().weekday()
-    if today not in [5, 6]:  # 5 是周六，6 是周日
-        msg = "鬼市取灵石功能仅在周六和周日开放！"
-        await handle_send(bot, event, msg)
-        await guishi_withdraw.finish()
-    
     user_id = user_info['user_id']
     amount_str = args.extract_plain_text().strip()
     
@@ -1588,22 +1586,27 @@ async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_withdraw.finish()
     
-    result = _guishi_stone_service().withdraw(
-        _guishi_stone_operation_id(event, "withdraw", user_id),
-        user_id,
-        amount,
+    result = trade_application.guishi_withdraw(
+        operation_id=_guishi_stone_operation_id(event, "withdraw", user_id),
+        user_id=user_id,
+        amount=amount,
     )
+    if result.status == "weekend_closed":
+        msg = "鬼市取灵石功能仅在周六和周日开放！"
+        await handle_send(bot, event, msg)
+        await guishi_withdraw.finish()
     if result.status == "stored_insufficient":
         msg = f"鬼市账户余额不足！当前余额 {number_to(result.stored_balance)} 灵石"
         await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_withdraw.finish()
     if result.status == "amount_capped":
-        msg = f"单次取出不可超过{number_to(GuishiStoneService.OP_AMOUNT_CAP)}灵石。"
+        msg = f"单次取出不可超过{number_to(GuishiWithdrawSqlRepository.OP_AMOUNT_CAP)}灵石。"
         await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_withdraw.finish()
     if not result.succeeded:
         status_msg = {
             "user_missing": "未找到修仙数据，取出未结算。",
+            "weekend_closed": "鬼市取灵石功能仅在周六和周日开放！",
             "stored_insufficient": "鬼市账户余额不足。",
             "amount_capped": "单次取出数量过大。",
             "state_changed": "取出时账户数据被其他操作改动，未结算，请重试。",

@@ -82,6 +82,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "@guishi_withdraw.handle", trade_facade.index("async def guishi_deposit_")
         )
     ]
+    trade_withdraw_handler = trade_facade[
+        trade_facade.index("async def guishi_withdraw_") : trade_facade.index(
+            "@guishi_qiugou.handle", trade_facade.index("async def guishi_withdraw_")
+        )
+    ]
     auction_settlement = (PACKAGE / "features" / "auction" / "settlement.py").read_text(encoding="utf-8")
     boss_facade = (PACKAGE / "xiuxian" / "xiuxian_boss" / "__init__.py").read_text(encoding="utf-8")
     buff_facade = (PACKAGE / "xiuxian" / "xiuxian_buff" / "__init__.py").read_text(encoding="utf-8")
@@ -289,7 +294,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_purchase_disabled": "_xianshi_purchase_service().purchase(" not in trade_facade,
             "guishi_deposit_application_owned": "trade_application.guishi_deposit(" in trade_deposit_handler,
             "legacy_guishi_deposit_disabled": "_guishi_stone_service().deposit(" not in trade_deposit_handler,
-            "status": "xianshi_purchase_guishi_deposit_cutover_with_other_trade_compatibility",
+            "guishi_withdraw_application_owned": "trade_application.guishi_withdraw(" in trade_withdraw_handler,
+            "legacy_guishi_withdraw_disabled": "_guishi_stone_service().withdraw(" not in trade_withdraw_handler,
+            "status": "xianshi_purchase_guishi_deposit_withdraw_cutover_with_other_trade_compatibility",
         },
         "auction": {
             "settlement_application_owned": "AuctionSettlementSqlRepository" in auction_settlement,

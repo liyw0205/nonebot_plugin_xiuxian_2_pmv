@@ -46,7 +46,12 @@ from .features.base.migrations import apply_base
 from .features.back.manifest import FEATURE as BACK_FEATURE
 from .features.back.migrations import apply_back
 from .features.trade.manifest import FEATURE as TRADE_FEATURE
-from .features.trade.migrations import apply_trade, apply_trade_guishi_deposit, apply_trade_guishi_schema
+from .features.trade.migrations import (
+    apply_trade,
+    apply_trade_guishi_deposit,
+    apply_trade_guishi_schema,
+    apply_trade_guishi_withdraw,
+)
 from .features.map.manifest import FEATURE as MAP_FEATURE
 from .features.map.migrations import apply_map, apply_map_combat_plan, apply_map_combat_player, apply_map_combat_start, apply_map_dongfu_build, apply_map_dongfu_player, apply_map_explore_player, apply_map_explore_settlement, apply_map_explore_start, apply_map_home_return, apply_map_interactive_player, apply_map_interactive_start, apply_map_mission_claim, apply_map_movement, apply_map_resource_reward, apply_map_seed_purchase
 from .features.rift.manifest import FEATURE as RIFT_FEATURE
@@ -215,6 +220,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("trade.001", "trade_feature_migrations", apply_trade),
         Migration("trade.002", "trade_guishi_deposit_operations", apply_trade_guishi_deposit),
         Migration("trade.003", "guishi_info", apply_trade_guishi_schema),
+        Migration("trade.004", "trade_guishi_withdraw_operations", apply_trade_guishi_withdraw),
         Migration("work.001", "work_feature_migrations", apply_work),
         Migration("work.002", "work_daily_refresh_reset_operations", apply_work_daily_refresh_reset),
         Migration("world_events.001", "world_events_feature_migrations", apply_world_events),
@@ -707,7 +713,11 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             "buff": BuffApplication(str(context.database.path("game_db")), str(context.database.path("player_db"))),
             "base": BaseApplication(str(context.database.path("game_db")), str(context.database.path("player_db"))),
             "back": BackApplication(str(context.database.path("game_db")), str(context.database.path("player_db"))),
-            "trade": TradeApplication(str(context.database.path("game_db")), str(context.database.path("trade_db"))),
+            "trade": TradeApplication(
+                str(context.database.path("game_db")),
+                str(context.database.path("trade_db")),
+                clock=context.clock,
+            ),
             "map": MapApplication(str(context.database.path("game_db")), str(context.database.path("player_db"))),
             "rift": RiftApplication(str(context.database.path("game_db")), str(context.database.path("player_db"))),
         })

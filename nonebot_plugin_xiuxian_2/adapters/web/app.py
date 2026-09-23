@@ -409,7 +409,11 @@ def create_app(
         app.register_blueprint(back_blueprint(back, permission=has_permission))
     if any(feature.key == "trade" for feature in registry.features):
         from ...features.trade.application import TradeApplication
-        trade = (context.services or {}).get("trade") or TradeApplication(str(context.database.path("game_db")), str(context.database.path("trade_db")))
+        trade = (context.services or {}).get("trade") or TradeApplication(
+            str(context.database.path("game_db")),
+            str(context.database.path("trade_db")),
+            clock=context.clock,
+        )
         app.register_blueprint(trade_blueprint(trade, permission=has_permission))
     if any(feature.key == "map" for feature in registry.features):
         from ...features.map.application import MapApplication
