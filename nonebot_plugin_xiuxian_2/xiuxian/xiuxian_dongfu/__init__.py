@@ -876,16 +876,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     real_minutes = max(10, int(base_minutes / speed))
     plant_start = _fmt_dt(now)
     plant_finish = _fmt_dt(now + timedelta(minutes=real_minutes))
-    outcome = dongfu_application.execute_legacy_call(
+    result = dongfu_application.plant(
         operation_id=operation_id,
         user_id=str(uid),
-        action="plant",
-        payload={"expected_slots": expected_slots, "slot_no": _to_int(slot.get("slot")), "seed_id": seed_id, "seed_name": seed_name, "plant_start": plant_start, "plant_finish": plant_finish},
-        call=lambda: _dongfu_plant_service().plant(
-            operation_id, uid, expected_slots, _to_int(slot.get("slot")), seed_id, seed_name, plant_start, plant_finish,
-        ),
+        expected_slots=expected_slots,
+        slot_no=_to_int(slot.get("slot")),
+        seed_id=seed_id,
+        seed_name=seed_name,
+        plant_start=plant_start,
+        plant_finish=plant_finish,
     )
-    result = SimpleNamespace(**dict(outcome.data or {})); result.status = outcome.status; result.succeeded = outcome.ok
 
     if result.status == "duplicate":
         d = _get_dongfu(uid)

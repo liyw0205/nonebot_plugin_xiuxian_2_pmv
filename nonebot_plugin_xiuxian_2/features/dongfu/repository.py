@@ -7,14 +7,16 @@ from .patrol_repository import DongfuPatrolSqlRepository
 from .harvest_repository import DongfuHarvestSqlRepository
 from .visit_reward_repository import DongfuVisitRewardSqlRepository
 from .array_repository import DongfuArrayUpgradeSqlRepository
+from .plant_repository import DongfuPlantSqlRepository
 
 class DongfuRepository(ServicePort):
     def __init__(self,database:str|Path,player_database:str|Path|None=None)->None: super().__init__('dongfu','nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dongfu'); self.database=str(database); self.player_database=str(player_database or database)
-    def accelerate(self,*args,**kwargs): return DongfuAccelerateSqlRepository(self.database,self.player_database).accelerate(*args,**kwargs)
-    def fertilize(self,*args,**kwargs): return DongfuFertilizeSqlRepository(self.database,self.player_database).fertilize(*args,**kwargs)
-    def patrol(self,*args,**kwargs): return DongfuPatrolSqlRepository(self.database,self.player_database).patrol(*args,**kwargs)
-    def harvest(self,*args,**kwargs): return DongfuHarvestSqlRepository(self.database,self.player_database).harvest(*args,**kwargs)
+    def accelerate(self,*a,**k): return DongfuAccelerateSqlRepository(self.database,self.player_database).accelerate(*a,**k)
+    def fertilize(self,*a,**k): return DongfuFertilizeSqlRepository(self.database,self.player_database).fertilize(*a,**k)
+    def patrol(self,*a,**k): return DongfuPatrolSqlRepository(self.database,self.player_database).patrol(*a,**k)
+    def harvest(self,*a,**k): return DongfuHarvestSqlRepository(self.database,self.player_database).harvest(*a,**k)
     def visit_reward(self,operation_id,visitor_id,target_id,gain): return DongfuVisitRewardSqlRepository(self.database,self.player_database).reward(operation_id,visitor_id,target_id,gain)
-    def array_upgrade(self,*args,**kwargs): return DongfuArrayUpgradeSqlRepository(self.database,self.player_database).upgrade(*args,**kwargs)
+    def array_upgrade(self,*a,**k): return DongfuArrayUpgradeSqlRepository(self.database,self.player_database).upgrade(*a,**k)
+    def plant(self,*a,**k): return DongfuPlantSqlRepository(self.database,self.player_database).plant(*a,**k)
 
 __all__=['DongfuRepository']

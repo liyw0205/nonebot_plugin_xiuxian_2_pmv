@@ -10,4 +10,5 @@ class DongfuApplication(MigratedFeatureApplication):
     def harvest(self,**kwargs): return self.repository.harvest(**kwargs)
     def visit_reward(self,*,operation_id,user_id,visitor_id,target_id,gain): return self.repository.visit_reward(operation_id,visitor_id,target_id,gain)
     def array_upgrade(self,**kwargs): return self.repository.array_upgrade(**kwargs)
+    def plant(self,**kwargs): return self.repository.plant(**kwargs)
 __all__=['DongfuApplication']
