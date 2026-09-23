@@ -84,7 +84,7 @@ _impart_closing_settlement_service_instance = None
 _impart_battle_batch_service_instance = None
 _impart_closing_enter_service_instance = None
 _impart_project_join_service_instance = None
-impart_pk_application = ImpartPkApplication(get_paths().game_db)
+impart_pk_application = ImpartPkApplication(get_paths().game_db, get_paths().impart_db, get_paths().player_db)
 runtime_ids = UUIDGenerator()
 runtime_random = SystemRandom()
 runtime_clock = SystemClock()
@@ -697,17 +697,17 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="虚神界", k1="修炼", v1="虚神界修炼", k2="信息", v2="虚神界信息", k3="帮助", v3="虚神界帮助")
         await impart_pk_exp.finish()
 
-    result = _run_impart_pk_action(
-        "training_settle", op_id, user_id,
-        call=lambda: _impart_training_settlement_service().settle(
-            op_id, user_id, expected_exp=current_exp,
-            expected_exp_day=int(impart_data_draw['exp_day']),
-            expected_daily={key: user_data[key] for key in ("exp_used", "exp_count", "exp_load", "exp_gain")},
-            exp_cost=exp_cost_time, exp_gain=exp, exp_load_gain=actual_exp_load,
-            power=min(SQLITE_MAX_INT, int(round((current_exp + exp) * level_rate * realm_rate))),
-            legacy_state=user_data,
-        ),
-        expected_exp=current_exp, exp_cost=exp_cost_time, exp_gain=exp,
+    result = impart_pk_application.training_settle(
+        operation_id=op_id,
+        user_id=user_id,
+        expected_exp=current_exp,
+        expected_exp_day=int(impart_data_draw['exp_day']),
+        expected_daily={key: user_data[key] for key in ("exp_used", "exp_count", "exp_load", "exp_gain")},
+        exp_cost=exp_cost_time,
+        exp_gain=exp,
+        exp_load_gain=actual_exp_load,
+        power=min(SQLITE_MAX_INT, int(round((current_exp + exp) * level_rate * realm_rate))),
+        legacy_state=user_data,
     )
     if result.status == "duplicate":
         msg = (

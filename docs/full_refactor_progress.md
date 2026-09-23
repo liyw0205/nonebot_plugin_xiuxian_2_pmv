@@ -3296,6 +3296,14 @@
 
 2026-09-23 dongfu expansion full evidence：完整回归`2145 tests OK`。
 
+2026-09-23 impart-pk training isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-23 impart-pk training full evidence：完整回归`2145 tests OK`。
+
+2026-09-23 impart-pk training P2 contract repair：将application mutator改为显式`operation_id`/`user_id`签名，修复架构检查器对`**kwargs`的误报；P0-P6 completion audit全部ready，P7仍需真实release-cycle证据。
+
+2026-09-23 impart-pk training feature-owned cutover：新增三库`ImpartTrainingSqlRepository`、`ImpartPkApplication.training_settle`并将虚神界修炼handler从`execute_legacy_call`切换到application路径；原子校验game exp、impart exp_day、player daily snapshot，更新power/统计和幂等operation，保留duplicate/operation_conflict/state_changed/time_insufficient和rollback。focused `213 tests`，compile/inventory/diff通过。
+
 2026-09-23 dongfu plant isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
 
 2026-09-23 dongfu plant full evidence：完整回归`2145 tests OK`。
