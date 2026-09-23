@@ -127,8 +127,8 @@ class SectOwnerInheritServiceTests(unittest.TestCase):
         auto_handler = source[auto_start:auto_end]
         manual_handler = source[manual_start:manual_end]
 
-        self.assertIn("_sect_owner_inherit_service().inherit(", auto_handler)
-        self.assertIn("_sect_owner_inherit_service().inherit(", manual_handler)
+        self.assertIn("sect_application.inherit_owner(", auto_handler)
+        self.assertIn("sect_application.inherit_owner(", manual_handler)
         self.assertIn("_sect_owner_inherit_service_instance = None", source)
         self.assertIn("def _sect_owner_inherit_service(", source)
         for old_call in (

@@ -12,6 +12,7 @@ from ...infrastructure.observability import trace_context
 from .repository import SectRenameSqlRepository, SectRepository
 from .daily_maintenance_repository import SectDailyMaintenanceSqlRepository
 from .close_mountain_repository import SectCloseMountainSqlRepository
+from .owner_inherit_repository import SectOwnerInheritSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -20,6 +21,22 @@ def _data(raw: Any) -> dict[str, Any]:
     if isinstance(raw, Mapping):
         return dict(raw)
     return dict(vars(raw))
+
+
+class SectMutationResult(dict):
+    @property
+    def status(self) -> str:
+        return str(self.get("status", ""))
+
+    @property
+    def applied(self) -> bool:
+        return self.status in {"closed", "inherited", "duplicate"}
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return self[name]
+        except KeyError as exc:
+            raise AttributeError(name) from exc
 
 
 class SectApplication:
@@ -56,7 +73,10 @@ class SectApplication:
         return SectDailyMaintenanceSqlRepository(self.database).settle(business_date, dict(maintenance_costs))
 
     def close_mountain(self, operation_id: str, actor_id: str, *, owner_position: int = 0, former_owner_position: int = 2, expected_sect_id: int | None = None):
-        return SectCloseMountainSqlRepository(self.database).close(operation_id, actor_id, owner_position=owner_position, former_owner_position=former_owner_position, expected_sect_id=expected_sect_id)
+        return SectMutationResult(SectCloseMountainSqlRepository(self.database).close(operation_id, actor_id, owner_position=owner_position, former_owner_position=former_owner_position, expected_sect_id=expected_sect_id))
+
+    def inherit_owner(self, operation_id: str, actor_id: str, *, expected_sect_id: int | None = None, eligible_positions=(1, 2, 6, 7), eligible_user_ids=None, owner_position: int = 0):
+        return SectMutationResult(SectOwnerInheritSqlRepository(self.database).inherit(operation_id, actor_id, expected_sect_id=expected_sect_id, eligible_positions=eligible_positions, eligible_user_ids=eligible_user_ids, owner_position=owner_position))
 
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):

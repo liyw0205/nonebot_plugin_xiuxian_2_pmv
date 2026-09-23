@@ -551,7 +551,7 @@ async def auto_handle_inactive_sect_owners():
                     new_owner = active_candidates[0]
                     logger.info(f"选定继承人：{new_owner['user_name']}")
                     
-                    result = _sect_owner_inherit_service().inherit(
+                    result = sect_application.inherit_owner(
                         f"sect:auto-inherit:{maintenance_key}:{sect_id}:{new_owner['user_id']}",
                         new_owner['user_id'],
                         expected_sect_id=sect_id,
@@ -3311,7 +3311,7 @@ async def sect_inherit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, msg, md_type="宗门", k1="继承", v1="继承宗主", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_inherit.finish()
     
-    result = _sect_owner_inherit_service().inherit(
+    result = sect_application.inherit_owner(
         _sect_operation_id(event, "inherit_owner", sect_id),
         user_info['user_id'],
         expected_sect_id=sect_id,
