@@ -3459,3 +3459,7 @@
 2026-09-23 sect owner-transfer isolated recovery evidence：一次性临时数据目录完成backup、restore dry-run、restore、全量`114`项migration和reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`，临时目录已删除。
 
 2026-09-23 sect owner-transfer full evidence：当前HEAD完整回归`2154 tests OK`；Sect fairyland and remaining membership/maintenance boundaries remain explicitly open。
+
+2026-09-23 sect scheduled-material grant feature-owned cutover：新增`SectScheduledMaterialSqlRepository`与`SectApplication.grant_scheduled_materials(operation_id, sect_id, multiplier)`，scheduler发放路径默认改走feature repository；保留grant key/sect幂等、inactive/missing拒绝、事务内scale/power读取、materials/combat_power更新和rollback。无新增migration；focused `217 tests`初轮通过，completion P0-P6恢复全绿。
+
+2026-09-23 sect scheduled-material grant isolated recovery evidence：一次性临时数据目录完成backup、restore dry-run、restore、全量`114`项migration和reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`，临时目录已删除。

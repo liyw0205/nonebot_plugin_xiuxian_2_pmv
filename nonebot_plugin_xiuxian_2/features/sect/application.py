@@ -16,6 +16,7 @@ from .owner_inherit_repository import SectOwnerInheritSqlRepository
 from .join_state_repository import SectJoinStateSqlRepository
 from .disband_repository import SectDisbandSqlRepository
 from .owner_transfer_repository import SectOwnerTransferSqlRepository
+from .scheduled_material_repository import SectScheduledMaterialSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -92,6 +93,9 @@ class SectApplication:
 
     def transfer_owner(self, operation_id: str, actor_id: str, target_id: str, *, owner_position: int = 0, former_owner_position: int | None = None):
         return SectMutationResult(SectOwnerTransferSqlRepository(self.database).transfer(operation_id, actor_id, target_id, owner_position=owner_position, former_owner_position=former_owner_position))
+
+    def grant_scheduled_materials(self, operation_id: str, sect_id: int, multiplier: int):
+        return SectMutationResult(SectScheduledMaterialSqlRepository(self.database).grant(operation_id, sect_id, multiplier))
 
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):

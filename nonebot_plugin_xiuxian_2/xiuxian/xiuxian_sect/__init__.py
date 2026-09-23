@@ -410,10 +410,10 @@ async def materialsupdate_():
     all_sects = _sql_message().get_all_sects_id_scale()
     granted = 0
     for s in all_sects:
-        result = _sect_membership_service().grant_scheduled_materials(
-            grant_key,
-            s[0],
-            config["发放宗门资材"]["倍率"],
+        result = sect_application.grant_scheduled_materials(
+            operation_id=grant_key,
+            sect_id=s[0],
+            multiplier=config["发放宗门资材"]["倍率"],
         )
         granted += int(result.applied)
 
