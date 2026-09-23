@@ -13,5 +13,8 @@ class EntertainmentApplication(MigratedFeatureApplication):
     def toggle_auto_checkin(self, *, operation_id: str, user_id: str, state_path: str | Path, index: int):
         return self.execute(operation_id=operation_id, user_id=user_id, payload={"action": "toggle_auto_checkin", "state_path": str(state_path), "index": int(index)})
 
+    def delete_accounts(self, *, operation_id: str, user_id: str, state_path: str | Path, indices):
+        return self.execute(operation_id=operation_id, user_id=user_id, payload={"action": "delete_accounts", "state_path": str(state_path), "indices": indices})
+
 
 __all__ = ["EntertainmentApplication"]

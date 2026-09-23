@@ -3505,3 +3505,9 @@
 2026-09-23 sect name-refresh isolated recovery evidence：一次性临时数据目录完成backup、restore dry-run、restore、全量`114`项migration和reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`，临时目录已删除。
 
 2026-09-23 sect name-refresh full evidence：当前HEAD完整回归`2162 tests OK`；Sect remaining elixir-claim/membership and broader global legacy boundaries remain explicitly open。
+
+2026-09-24 entertainment NewAPI account-delete feature-owned cutover：新增`EntertainmentRepository.delete_accounts`与`EntertainmentApplication.delete_accounts`，NewAPI全量/指定账号删除路径默认改走feature-owned atomic JSON writer；保留空账户/非法序号拒绝、指定序号删除、secret字段原样保留、operation ledger replay和rollback；绑定路径继续保留credential compatibility，未触碰外部站点。focused `5 tests` plus source contract，compile/inventory/diff通过。
+
+2026-09-24 entertainment account-delete isolated recovery evidence：一次性临时数据目录完成backup、restore dry-run、restore、全量`114`项migration和reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`，临时目录已删除。
+
+2026-09-24 entertainment account-delete full evidence：当前HEAD完整回归`2162 tests OK`；NewAPI bind and broader legacy execution boundaries remain explicitly open。

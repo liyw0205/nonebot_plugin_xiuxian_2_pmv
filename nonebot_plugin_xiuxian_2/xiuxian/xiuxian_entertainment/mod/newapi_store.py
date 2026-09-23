@@ -159,60 +159,23 @@ def delete_accounts(
     *,
     operation_id: str | None = None,
 ) -> tuple[bool, str]:
-    requested = "all" if indices is None else sorted({int(index) for index in indices})
-    op_id = operation_id or f"entertainment:newapi-delete:{qq_id}:{requested}:{runtime_ids.new_id()}"
-    payload = {"indices": requested}
     accounts = load_accounts(qq_id)
-    if not accounts:
-        message = "当前没有已绑定的 NewAPI 账号"
-        ok, replay_message = _run_entertainment_write(
-            "newapi_delete",
-            op_id,
-            str(qq_id),
-            lambda: {"status": "rejected", "message": message},
-            **payload,
-        )
-        return (True, replay_message) if ok else (False, replay_message or message)
-
-    if indices is None:
-        n = len(accounts)
-        success_message = f"已删除全部 {n} 个绑定"
-        ok, message = _run_entertainment_write(
-            "newapi_delete",
-            op_id,
-            str(qq_id),
-            lambda: (save_accounts(qq_id, []), {"status": "applied", "message": success_message})[1],
-            **payload,
-        )
-        if not ok:
-            return False, message or "删除失败"
-        return True, message or success_message
-
-    to_remove = sorted({i for i in requested if 1 <= i <= len(accounts)}, reverse=True)
-    if not to_remove:
-        invalid = f"序号无效，当前共 {len(accounts)} 个账号（1～{len(accounts)}）"
-        ok, message = _run_entertainment_write(
-            "newapi_delete",
-            op_id,
-            str(qq_id),
-            lambda: {"status": "rejected", "message": invalid},
-            **payload,
-        )
-        return (True, message or invalid) if ok else (False, message or invalid)
-
-    for i in to_remove:
-        accounts.pop(i - 1)
-    success_message = f"已删除 {len(to_remove)} 个绑定，剩余 {len(accounts)} 个"
-    ok, message = _run_entertainment_write(
-        "newapi_delete",
-        op_id,
-        str(qq_id),
-        lambda: (save_accounts(qq_id, accounts), {"status": "applied", "message": success_message})[1],
-        **payload,
+    requested = None if indices is None else sorted({int(index) for index in indices})
+    op_id = operation_id or f"entertainment:newapi-delete:{qq_id}:{requested or 'all'}:{runtime_ids.new_id()}"
+    outcome = entertainment_application.delete_accounts(
+        operation_id=op_id,
+        user_id=str(qq_id),
+        state_path=_path_for_qq(qq_id),
+        indices=requested,
     )
-    if not ok:
-        return False, message or "删除失败"
-    return True, message or success_message
+    data = dict(outcome.data or {})
+    if outcome.ok:
+        if requested is None:
+            message = f"已删除全部 {data.get('removed', len(accounts))} 个绑定"
+        else:
+            message = f"已删除 {data.get('removed', 0)} 个绑定，剩余 {data.get('remaining', 0)} 个"
+        return True, str(outcome.message or message)
+    return False, str(outcome.message or data.get("message") or "删除失败")
 
 
 def resolve_targets(qq_id: str, index_text: str) -> tuple[list[dict[str, Any]] | None, str | None]:

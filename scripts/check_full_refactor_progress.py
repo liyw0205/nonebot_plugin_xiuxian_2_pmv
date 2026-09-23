@@ -63,6 +63,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
     map_facade = (PACKAGE / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
     sect_facade = (PACKAGE / "xiuxian" / "xiuxian_sect" / "__init__.py").read_text(encoding="utf-8")
+    entertainment_facade = (PACKAGE / "xiuxian" / "xiuxian_entertainment" / "mod" / "newapi_store.py").read_text(encoding="utf-8")
     natal_facade = (PACKAGE / "xiuxian" / "xiuxian_natal_treasure" / "__init__.py").read_text(encoding="utf-8")
     world_events_facade = (PACKAGE / "xiuxian" / "xiuxian_world_events" / "__init__.py").read_text(encoding="utf-8")
     rift_facade = (PACKAGE / "xiuxian" / "xiuxian_rift" / "__init__.py").read_text(encoding="utf-8")
@@ -101,6 +102,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "lottery_core_default_legacy": "LotteryApplication(" not in plugin or "LotterySettlementService" in plugin,
             "lottery_compatibility_fallback": "XIUXIAN_SIGN_IN_LEGACY_LOTTERY" in plugin and "LotterySettlementService" in plugin,
             "status": "cutover_with_compatibility_rollback_side_effects_retained",
+        },
+        "entertainment": {
+            "account_delete_application_owned": "entertainment_application.delete_accounts(" in entertainment_facade and "_run_entertainment_write(" not in entertainment_facade[entertainment_facade.index("def delete_accounts("):entertainment_facade.index("def resolve_targets(")],
+            "status": "auto-checkin and account-delete local JSON paths cut over; bind remains credential compatibility",
         },
         "arena": {
             "state_application_owned": "ArenaStateApplication" in arena_limit,
