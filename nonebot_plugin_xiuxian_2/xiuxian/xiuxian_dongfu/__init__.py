@@ -1310,15 +1310,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     operation_id = _dongfu_expansion_operation_id(event, uid)
-    result = _run_dongfu_action(
-        "expand", operation_id, uid,
-        call=lambda: _dongfu_expansion_service().expand(
-            operation_id, uid, deed_id=DONGFU_ITEM_DEED,
-            base_plot_count=DONGFU_PLOT_COUNT, max_plot_count=DONGFU_PLOT_MAX,
-            stone_cost_per_level=20000000,
-        ),
-        deed_id=DONGFU_ITEM_DEED, base_plot_count=DONGFU_PLOT_COUNT,
-        max_plot_count=DONGFU_PLOT_MAX, stone_cost_per_level=20000000,
+    result = dongfu_application.expand(
+        operation_id=operation_id,
+        user_id=uid,
+        deed_id=DONGFU_ITEM_DEED,
+        base_plot_count=DONGFU_PLOT_COUNT,
+        max_plot_count=DONGFU_PLOT_MAX,
+        stone_cost_per_level=20000000,
     )
     if result.status == "deed_insufficient":
         await handle_send(bot, event, f"扩建至{result.previous_count + 1}块灵田需要【洞府地契】x{result.deed_cost}。可通过地图探索获得。")

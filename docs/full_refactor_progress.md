@@ -3292,9 +3292,15 @@
 
 2026-09-23 compensation normal-claim full evidence：完整回归`2144 tests OK`。
 
+2026-09-23 dongfu expansion isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
+
+2026-09-23 dongfu expansion full evidence：完整回归`2145 tests OK`。
+
 2026-09-23 dongfu plant isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`。
 
-2026-09-23 dongfu plant full evidence：完整回归`2144 tests OK`。
+2026-09-23 dongfu plant full evidence：完整回归`2145 tests OK`。
+
+2026-09-23 dongfu expansion feature-owned cutover：新增`DongfuExpansionSqlRepository`、`DongfuApplication.expand`并将灵田扩建handler从通用legacy action切换到application路径；双库原子校验plot_count快照、洞府地契/灵石扣除、上限和幂等记录，保留duplicate/user_missing/dongfu_missing/max_plots/deed_insufficient/stone_insufficient/deed_changed/stone_changed/dongfu_changed和rollback。focused `248 tests`，compile/inventory/diff通过；当前full `2145 tests OK`。
 
 2026-09-23 dongfu plant feature-owned cutover：新增`DongfuPlantSqlRepository`、`DongfuApplication.plant`并将播种handler从`execute_legacy_call`切换到application路径；双库原子校验slots快照、种子扣除、占位状态、legacy投影和幂等记录，保留duplicate/dongfu_missing/plot_occupied/seed_insufficient/state_changed和rollback。focused `222 tests`，compile/inventory/diff通过。
 

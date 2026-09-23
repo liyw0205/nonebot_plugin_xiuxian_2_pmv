@@ -8,6 +8,7 @@ from .harvest_repository import DongfuHarvestSqlRepository
 from .visit_reward_repository import DongfuVisitRewardSqlRepository
 from .array_repository import DongfuArrayUpgradeSqlRepository
 from .plant_repository import DongfuPlantSqlRepository
+from .expansion_repository import DongfuExpansionSqlRepository
 
 class DongfuRepository(ServicePort):
     def __init__(self,database:str|Path,player_database:str|Path|None=None)->None: super().__init__('dongfu','nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dongfu'); self.database=str(database); self.player_database=str(player_database or database)
@@ -18,5 +19,6 @@ class DongfuRepository(ServicePort):
     def visit_reward(self,operation_id,visitor_id,target_id,gain): return DongfuVisitRewardSqlRepository(self.database,self.player_database).reward(operation_id,visitor_id,target_id,gain)
     def array_upgrade(self,*a,**k): return DongfuArrayUpgradeSqlRepository(self.database,self.player_database).upgrade(*a,**k)
     def plant(self,*a,**k): return DongfuPlantSqlRepository(self.database,self.player_database).plant(*a,**k)
+    def expand(self,*a,**k): return DongfuExpansionSqlRepository(self.database,self.player_database).expand(*a,**k)
 
 __all__=['DongfuRepository']

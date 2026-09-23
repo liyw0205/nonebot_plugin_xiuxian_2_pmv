@@ -20,6 +20,10 @@ class DongfuExpansionServiceTests(unittest.TestCase):
 
         self.assertIsNone(xiuxian_dongfu._dongfu_expansion_service_instance)
 
+    def test_dongfu_expansion_uses_feature_application(self):
+        source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py"
+        self.assertIn("dongfu_application.expand(", source.read_text(encoding="utf-8"))
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         root = Path(self.temp_dir.name)

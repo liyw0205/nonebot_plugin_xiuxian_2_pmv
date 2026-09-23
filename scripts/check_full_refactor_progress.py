@@ -270,6 +270,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "harvest_level_upgrade_cutover_with_other_mixelixir_compatibility",
         },
         "dongfu": {
+            "expansion_application_owned": "dongfu_application.expand(" in dongfu_facade,
             "plant_application_owned": "dongfu_application.plant(" in dongfu_facade,
             "harvest_application_owned": "dongfu_application.harvest(" in dongfu_facade,
             "fertilize_application_owned": "dongfu_application.fertilize(" in dongfu_facade,
