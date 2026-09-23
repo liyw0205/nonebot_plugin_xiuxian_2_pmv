@@ -3427,3 +3427,5 @@
 2026-09-23 dungeon reset isolated recovery evidence：一次性临时数据目录完成backup、restore dry-run、restore、全量`114`项migration和reconcile；`clean=true`、operations=0、outbox_events=0、dead_events=0`，临时目录已删除。
 
 2026-09-23 dungeon reset full evidence：当前HEAD完整回归`2148 tests OK`；Dungeon reset/team剩余兼容边界及全局legacy blockers仍明确开放。
+
+2026-09-23 remaining-boundary review：Fusion general/batch production handlers already call `fusion_application.apply/apply_batch`; remaining `_run_fusion_action` is an unused compatibility wrapper, so no duplicate migration was made. Info avatar remains a complex PlayerDataManager JSON boundary: main/avatar ID generation, unique lookup, create_time, active_id switching and restore share one mutable projection; no standalone feature-owned writer exists. Compensation normal claim is already directly `CompensationApplication.claim_reward` with versioned definition snapshot; remaining definition deletion/legacy JSON cleanup is not a safe thin slice. These paths remain explicitly open.
