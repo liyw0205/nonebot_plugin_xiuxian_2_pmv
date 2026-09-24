@@ -540,7 +540,13 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("xianshi_buy_refund", command_source)
         self.assertIn("BEGIN IMMEDIATE", repository_source)
         self.assertIn("xianshi_operations", repository_source)
-        self.assertIn("purchase_xianshi_item(", feature_repository_source)
+        self.assertIn("XianshiPurchaseSqlRepository", feature_repository_source)
+        purchase_repository_source = (
+            SOURCE_ROOT / "features" / "trade" / "xianshi_purchase_repository.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("class XianshiPurchaseSqlRepository", purchase_repository_source)
+        self.assertIn("DatabaseUnitOfWork(self.database, immediate=True)", purchase_repository_source)
+        self.assertNotIn("xiuxian_trade.repository", purchase_repository_source)
         self.assertNotIn("XianshiPurchaseService", feature_repository_source)
         self.assertNotIn("class XianshiPurchaseService", legacy_transaction_source)
         self.assertIn("GuishiDepositSqlRepository(", feature_repository_source)

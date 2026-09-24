@@ -3920,3 +3920,17 @@ NoneBot trade facade 通过 `_auction_bid_repository()` 惰性绑定该 feature-
 路径不变；新增 source contract 防止旧交易仓储回流。该项完成后，拍卖剩余目标只包括真实发布
 周期 P7 证据、其他交易兼容入口的逐项清理，以及全仓 33 个旧 transaction service 和
 `xiuxian2_handle` 的最终退出审计。
+
+2026-09-25 xianshi purchase feature-owned cutover：`TradeApplication.purchase` 默认路径不再
+导入旧 `xiuxian_trade.repository.TradeRepository`，改由新增
+`features/trade/xianshi_purchase_repository.py::XianshiPurchaseSqlRepository` 承载仙肆购买。
+新增 game DB migration `trade.013`，启动时创建/补齐 `xianshi_item`、`xianshi_operations` 与
+`xianshi_stamina_operations`，请求路径不再隐式 DDL；显式 `LegacyTradeFeatureRepository` 也
+改为调用该 feature repository，旧 `TradeRepository.purchase_xianshi_item` 仅保留在明确的
+compatibility rollback wrapper。买家/卖家灵石、库存容量、无限库存、快速购买体力、重复操作、
+参数冲突和异常回滚语义均保持。新增真实启动 schema/application 回归；聚焦 trade/source/progress
+`239 passed`，顶层 `tests/` 全量 `2626 passed, 16 warnings, 25 subtests`；compileall、
+architecture、inventory、progress 和 `git diff --check` 通过。五库 recovery 完成全量 `135`
+项 migration，`trade.013` 仅路由 game DB，restore/reconcile clean，operations/outbox/dead events
+均为 `0`。下一阶段继续检查其余交易兼容路径，再进入签到副作用、背包/宠物/任务等未完成切片；
+P7 真实正式发布周期仍未补齐。

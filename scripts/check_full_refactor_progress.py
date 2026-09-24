@@ -84,6 +84,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     trade_xianshi_transactions = (PACKAGE / "features" / "trade" / "xianshi_listing_repository.py").read_text(encoding="utf-8")
     trade_plan_xianshi_transactions = (PACKAGE / "features" / "trade" / "xianshi_plan_listing_repository.py").read_text(encoding="utf-8")
     trade_xianshi_removal_transactions = (PACKAGE / "features" / "trade" / "xianshi_removal_repository.py").read_text(encoding="utf-8")
+    trade_xianshi_purchase_transactions = (PACKAGE / "features" / "trade" / "xianshi_purchase_repository.py").read_text(encoding="utf-8")
     trade_feature_repository = (PACKAGE / "features" / "trade" / "repository.py").read_text(encoding="utf-8")
     legacy_trade_auction_compatibility = (PACKAGE / "compatibility" / "legacy_trade_auction_sessions.py").read_text(encoding="utf-8")
     trade_auction_transactions = (PACKAGE / "xiuxian" / "xiuxian_trade" / "transaction_service.py").read_text(encoding="utf-8")
@@ -401,7 +402,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_xianshi_clear_disabled": "xianshi_repository.clear_all_xianshi_listings(" not in xianshi_clear_handler,
             "purchase_application_owned": "trade_application.purchase(" in trade_facade,
             "legacy_purchase_disabled": "_xianshi_purchase_service().purchase(" not in trade_facade,
-            "purchase_compatibility_repository_direct": "purchase_xianshi_item(" in trade_feature_repository and "XianshiPurchaseService" not in trade_feature_repository,
+            "purchase_default_repository_direct": "self.xianshi_purchase_repository.purchase(" in trade_application_source and "xiuxian.xiuxian_trade.repository" not in trade_application_source,
+            "purchase_compatibility_repository_direct": "XianshiPurchaseSqlRepository" in trade_feature_repository and ".purchase(" in trade_feature_repository and "XianshiPurchaseService" not in trade_feature_repository,
+            "purchase_repository_feature_owned": "class XianshiPurchaseSqlRepository" in trade_xianshi_purchase_transactions and "DatabaseUnitOfWork(self.database, immediate=True)" in trade_xianshi_purchase_transactions,
             "guishi_compatibility_repository_direct": "GuishiDepositSqlRepository(" in trade_feature_repository and "GuishiWithdrawSqlRepository(" in trade_feature_repository and "GuishiStoneService" not in trade_feature_repository,
             "guishi_legacy_service_isolated": "class GuishiStoneService" not in trade_auction_transactions and "class LegacyGuishiStoneService" in trade_legacy_guishi_compatibility,
             "guishi_legacy_getter_removed": "_guishi_stone_service" not in trade_facade and "GuishiStoneService" not in trade_facade,

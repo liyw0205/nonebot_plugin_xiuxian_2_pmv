@@ -59,6 +59,7 @@ from .features.trade.migrations import (
     apply_trade_xianshi_listing,
     apply_trade_xianshi_plan_listing,
     apply_trade_xianshi_removal,
+    apply_trade_xianshi_purchase,
 )
 from .features.map.manifest import FEATURE as MAP_FEATURE
 from .features.map.migrations import apply_map, apply_map_combat_plan, apply_map_combat_player, apply_map_combat_start, apply_map_dongfu_build, apply_map_dongfu_player, apply_map_explore_player, apply_map_explore_settlement, apply_map_explore_start, apply_map_home_return, apply_map_interactive_player, apply_map_interactive_start, apply_map_mission_claim, apply_map_movement, apply_map_resource_reward, apply_map_seed_purchase
@@ -252,6 +253,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("trade.010", "xianshi_listing_operations", apply_trade_xianshi_listing),
         Migration("trade.011", "xianshi_plan_listing_operations", apply_trade_xianshi_plan_listing),
         Migration("trade.012", "xianshi_removal_operations", apply_trade_xianshi_removal),
+        Migration("trade.013", "xianshi_operations", apply_trade_xianshi_purchase),
         Migration("work.001", "work_feature_migrations", apply_work),
         Migration("work.002", "work_daily_refresh_reset_operations", apply_work_daily_refresh_reset),
         Migration("world_events.001", "world_events_feature_migrations", apply_world_events),

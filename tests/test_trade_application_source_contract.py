@@ -42,3 +42,19 @@ def test_legacy_auction_bid_adapter_uses_feature_repository_without_old_trade_re
     assert "xiuxian.xiuxian_trade.repository" not in source
     assert "TradeRepository(" not in source
     assert "auction_repository=_auction_bid_repository" in trade_facade
+
+
+def test_xianshi_purchase_default_and_compatibility_paths_are_feature_owned():
+    root = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2"
+    application = (root / "features/trade/application.py").read_text(encoding="utf-8")
+    repository = (root / "features/trade/repository.py").read_text(encoding="utf-8")
+    purchase = (root / "features/trade/xianshi_purchase_repository.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "self.xianshi_purchase_repository.purchase(" in application
+    assert "xiuxian.xiuxian_trade.repository" not in application
+    assert "XianshiPurchaseSqlRepository" in repository
+    assert "TradeRepository" not in repository
+    assert "class XianshiPurchaseSqlRepository" in purchase
+    assert "DatabaseUnitOfWork(self.database, immediate=True)" in purchase

@@ -145,6 +145,41 @@ def apply_trade_xianshi_removal(uow: DatabaseUnitOfWork) -> None:
     uow.execute("INSERT OR IGNORE INTO trade_feature_migrations(version) VALUES ('trade.012')")
 
 
+def apply_trade_xianshi_purchase(uow: DatabaseUnitOfWork) -> None:
+    """Prepare Xianshi purchase tables before request-time transactions."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS xianshi_item ("
+        "id TEXT PRIMARY KEY,user_id TEXT,goods_id INTEGER,name TEXT,type TEXT,"
+        "price INTEGER,quantity INTEGER)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS xianshi_operations ("
+        "operation_id TEXT PRIMARY KEY,listing_id TEXT NOT NULL,buyer_id TEXT NOT NULL,"
+        "seller_id TEXT NOT NULL,goods_id INTEGER NOT NULL,name TEXT NOT NULL,"
+        "goods_type TEXT NOT NULL,quantity INTEGER NOT NULL,total_cost INTEGER NOT NULL,"
+        "stamina_operation_id TEXT NOT NULL DEFAULT '',stamina_cost INTEGER NOT NULL DEFAULT 0,"
+        "stamina_charged INTEGER NOT NULL DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    columns = {
+        str(row[1])
+        for row in uow.execute("PRAGMA table_info(xianshi_operations)").fetchall()
+    }
+    for name, definition in (
+        ("stamina_operation_id", "TEXT NOT NULL DEFAULT ''"),
+        ("stamina_cost", "INTEGER NOT NULL DEFAULT 0"),
+        ("stamina_charged", "INTEGER NOT NULL DEFAULT 0"),
+    ):
+        if name not in columns:
+            uow.execute(f"ALTER TABLE xianshi_operations ADD COLUMN {name} {definition}")
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS xianshi_stamina_operations ("
+        "operation_id TEXT PRIMARY KEY,buyer_id TEXT NOT NULL,stamina_cost INTEGER NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    uow.execute("CREATE TABLE IF NOT EXISTS trade_feature_migrations(version TEXT PRIMARY KEY)")
+    uow.execute("INSERT OR IGNORE INTO trade_feature_migrations(version) VALUES ('trade.013')")
+
+
 __all__ = [
     "apply_trade",
     "apply_trade_guishi_deposit",
@@ -158,4 +193,5 @@ __all__ = [
     "apply_trade_xianshi_listing",
     "apply_trade_xianshi_plan_listing",
     "apply_trade_xianshi_removal",
+    "apply_trade_xianshi_purchase",
 ]

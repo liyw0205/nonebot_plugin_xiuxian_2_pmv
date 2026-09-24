@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Protocol
 
+from .xianshi_purchase_repository import XianshiPurchaseSqlRepository
+
 
 class TradeFeatureRepository(Protocol):
     def invoke(self, action: str, operation_id: str, user_id: str, **kwargs: Any) -> Any: ...
@@ -65,13 +67,13 @@ class LegacyTradeFeatureRepository:
             return LegacyTradeAuctionSessionAdapter(
                 self.game_database, self.trade_database
             ).invoke(action, operation_id, **kwargs)
-        from ...xiuxian.xiuxian_trade.repository import TradeRepository
         max_goods_num = int(kwargs.pop("max_goods_num", 1) or 1)
-        return TradeRepository(self.game_database, max_goods_num=max_goods_num).purchase_xianshi_item(
-            operation_id,
-            str(user_id),
-            kwargs.pop("listing_id"),
-            kwargs.pop("quantity"),
+        return XianshiPurchaseSqlRepository(self.game_database).purchase(
+            operation_id=operation_id,
+            buyer_id=str(user_id),
+            listing_id=kwargs.pop("listing_id"),
+            quantity=kwargs.pop("quantity"),
+            max_goods_num=max_goods_num,
             **kwargs,
         )
 

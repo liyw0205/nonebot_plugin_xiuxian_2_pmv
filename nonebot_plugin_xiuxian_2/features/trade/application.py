@@ -23,6 +23,7 @@ from .guishi_take_repository import GuishiStoredItemTakeSqlRepository
 from .xianshi_listing_repository import XianshiListingSqlRepository
 from .xianshi_plan_listing_repository import XianshiPlanListingSqlRepository
 from .xianshi_removal_repository import XianshiRemovalSqlRepository
+from .xianshi_purchase_repository import XianshiPurchaseSqlRepository
 from .repository import TradeFeatureRepository
 
 
@@ -91,6 +92,9 @@ class TradeApplication(LegacyApplication):
             self.game_database, clock=self.clock, ids=self.ids
         )
         self.xianshi_removal_repository = XianshiRemovalSqlRepository(
+            self.game_database, clock=self.clock
+        )
+        self.xianshi_purchase_repository = XianshiPurchaseSqlRepository(
             self.game_database, clock=self.clock
         )
         super().__init__(game_database, repository=repository, feature="trade")
@@ -446,15 +450,14 @@ class TradeApplication(LegacyApplication):
         quantity = kwargs.pop("quantity", None)
         if listing_id is None or quantity is None:
             raise ValidationError("listing_id and quantity are required")
-        from ...xiuxian.xiuxian_trade.repository import TradeRepository
-
         return self._execute(
             operation_id=operation_id,
             user_id=user_id,
             action="trade.purchase",
             payload={"user_id": user_id, "listing_id": listing_id, "quantity": quantity, **kwargs},
-            call=lambda: TradeRepository(self.game_database, max_goods_num=max_goods_num).purchase_xianshi_item(
+            call=lambda: self.xianshi_purchase_repository.purchase(
                 operation_id, user_id, listing_id, quantity,
+                max_goods_num=max_goods_num,
                 stamina_operation_id=kwargs.get("stamina_operation_id"),
                 stamina_cost=int(kwargs.get("stamina_cost", 0) or 0),
             ),
