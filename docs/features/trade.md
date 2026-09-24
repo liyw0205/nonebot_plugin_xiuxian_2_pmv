@@ -7,9 +7,14 @@ feature-owned use case 结算。存取操作记录在 game DB 的
 在 trade DB 的 `guishi_order_create_operations`，撤销操作记录在
 `guishi_order_cancel_operations`；鬼市余额和订单投影保留在 trade DB 的
 `guishi_info`/`guishi_item`。启动迁移 `trade.002`/`trade.003`/`trade.004`/`trade.005`/
-`trade.006`
+`trade.006`/`trade.010`
 按数据库路由建立 schema。取出规则由注入 `Clock` 的 application 决定周末开放窗口，
 并保留历史动态手续费公式。
+
+普通 `仙肆上架` 也已通过 `TradeApplication` 结算。game DB immediate transaction 原子校验并扣除
+手续费、减少可交易库存、逐件创建 listing 并写入 `xianshi_listing_operations`；`trade.010`
+只路由到 game DB，并为历史 operation 表补齐 `stamina_cost` 列。自动、快速和系统上架仍由兼容
+路径处理，不属于本次切换。
 ## 用户流程
 鬼市存取、求购/摆摊创建与撤销、上架/撤回、场次开始/收尾和现世购买统一提交操作号。
 ## 命令与别名
@@ -19,7 +24,8 @@ feature-owned use case 结算。存取操作记录在 game DB 的
 ## 数据模型与迁移
 `trade.001` 保留 feature 基线；`trade.002`/`trade.004` 在 game DB 创建鬼市存入/
 取出 operation 表；`trade.003` 只在 trade DB 创建或补齐 `guishi_info`；`trade.005`/
-`trade.006` 只在 trade DB 创建求购创建/订单撤销 operation 表。生产请求路径不隐式建表。
+`trade.006` 只在 trade DB 创建求购创建/订单撤销 operation 表；`trade.010` 只在 game DB 创建或
+升级仙肆上架 operation 表。生产请求路径不隐式建表。
 ## 事务与失败回滚
 鬼市存取使用 game DB 主事务附加 trade DB，玩家钱包、余额投影和 operation
 写入要么全部提交、要么全部回滚。已迁移操作均保留 canonical payload replay/conflict
@@ -41,7 +47,8 @@ Web/命令不直接连接 trade_db。
 跨库失败和恢复重试。
 ## 灰度开关、回滚和已知限制
 已完成的鬼市存取、求购/摆摊创建和撤销入口没有隐式回退；旧 `GuishiStoneService` 仅保留给尚未
-迁移的交易兼容路径。拍卖策略、订单后续生命周期和寄存物品处理仍由兼容服务提供。
+迁移的交易兼容路径。普通仙肆上架已切换，自动、快速和系统上架仍由兼容路径处理。拍卖策略、
+订单后续生命周期和寄存物品处理仍由兼容服务提供。
 
 ## Manifest 清单
 - `route: POST /api/v1/trade/deposit`

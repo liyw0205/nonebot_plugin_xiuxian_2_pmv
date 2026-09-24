@@ -77,6 +77,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     puppet_facade = (PACKAGE / "xiuxian" / "xiuxian_puppet" / "__init__.py").read_text(encoding="utf-8")
     pet_facade = (PACKAGE / "xiuxian" / "xiuxian_pet" / "__init__.py").read_text(encoding="utf-8")
     trade_facade = (PACKAGE / "xiuxian" / "xiuxian_trade" / "__init__.py").read_text(encoding="utf-8")
+    trade_xianshi_transactions = (PACKAGE / "features" / "trade" / "xianshi_listing_repository.py").read_text(encoding="utf-8")
     trade_auction_transactions = (PACKAGE / "xiuxian" / "xiuxian_trade" / "transaction_service.py").read_text(encoding="utf-8")
     trade_deposit_handler = trade_facade[
         trade_facade.index("async def guishi_deposit_") : trade_facade.index(
@@ -116,6 +117,27 @@ def _slice_status() -> dict[str, dict[str, object]]:
     trade_take_handler = trade_facade[
         trade_facade.index("async def guishi_take_item_(") : trade_facade.index(
             "@guishi_info.handle", trade_facade.index("async def guishi_take_item_(")
+        )
+    ]
+    xianshi_listing_handler = trade_facade[
+        trade_facade.index("async def xian_shop_add_(") : trade_facade.index(
+            "@xianshi_auto_add.handle", trade_facade.index("async def xian_shop_add_(")
+        )
+    ]
+    xianshi_auto_listing_handler = trade_facade[
+        trade_facade.index("async def xianshi_auto_add_(") : trade_facade.index(
+            "@xianshi_fast_add.handle", trade_facade.index("async def xianshi_auto_add_(")
+        )
+    ]
+    xianshi_fast_listing_handler = trade_facade[
+        trade_facade.index("async def xianshi_fast_add_(") : trade_facade.index(
+            "@xiuxian_shop_view.handle", trade_facade.index("async def xianshi_fast_add_(")
+        )
+    ]
+    xianshi_system_listing_handler = trade_facade[
+        trade_facade.index("async def xian_shop_added_by_admin_(") : trade_facade.index(
+            "@xian_shop_remove_by_admin.handle",
+            trade_facade.index("async def xian_shop_added_by_admin_("),
         )
     ]
     auction_settlement = (PACKAGE / "features" / "auction" / "settlement.py").read_text(encoding="utf-8")
@@ -329,6 +351,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "active_switch_cutover_with_other_pet_compatibility",
         },
         "trade": {
+            "xianshi_listing_application_owned": "trade_application.xianshi_list_items(" in xianshi_listing_handler and "class XianshiListingSqlRepository" in trade_xianshi_transactions,
+            "xianshi_auto_listing_compatibility": "xianshi_repository.add_xianshi_plan_items(" in xianshi_auto_listing_handler,
+            "xianshi_fast_listing_compatibility": "xianshi_repository.add_xianshi_items(" in xianshi_fast_listing_handler,
+            "xianshi_system_listing_compatibility": "xianshi_repository.add_xianshi_item(" in xianshi_system_listing_handler,
             "purchase_application_owned": "trade_application.purchase(" in trade_facade,
             "legacy_purchase_disabled": "_xianshi_purchase_service().purchase(" not in trade_facade,
             "guishi_deposit_application_owned": "trade_application.guishi_deposit(" in trade_deposit_handler,
@@ -349,7 +375,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_guishi_expired_cleanup_disabled": "xianshi_repository.clear_expired_guishi_order(" not in trade_expired_job,
             "guishi_take_application_owned": "trade_application.guishi_take_stored_item(" in trade_take_handler,
             "legacy_guishi_take_disabled": "xianshi_repository.take_guishi_stored_item(" not in trade_take_handler,
-            "status": "xianshi_purchase_guishi_deposit_withdraw_qiugou_baitan_create_cancel_matching_expired_cleanup_take_cutover_with_other_trade_compatibility",
+            "status": "xianshi_purchase_and_ordinary_listing_cutover_with_auto_fast_system_listing_and_other_trade_compatibility",
         },
         "auction": {
             "bid_application_owned": "AuctionBidSqlRepository" in auction_bid and "bid_application.place_bid(" in trade_auction_transactions and "auction_bid_application=_auction_bid_application" in trade_facade,

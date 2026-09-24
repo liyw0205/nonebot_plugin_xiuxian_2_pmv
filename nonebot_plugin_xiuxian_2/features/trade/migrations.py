@@ -78,6 +78,28 @@ def apply_trade_guishi_take_item(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_trade_xianshi_listing(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS xianshi_listing_operations ("
+        "operation_id TEXT PRIMARY KEY,seller_id TEXT NOT NULL,goods_id INTEGER NOT NULL,"
+        "name TEXT NOT NULL,goods_type TEXT NOT NULL,price INTEGER NOT NULL,"
+        "requested_quantity INTEGER NOT NULL,listed_quantity INTEGER NOT NULL,"
+        "fee_charged INTEGER NOT NULL,stamina_cost INTEGER NOT NULL DEFAULT 0,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    columns = {
+        str(row[1])
+        for row in uow.execute("PRAGMA table_info(xianshi_listing_operations)").fetchall()
+    }
+    if "stamina_cost" not in columns:
+        uow.execute(
+            "ALTER TABLE xianshi_listing_operations "
+            "ADD COLUMN stamina_cost INTEGER NOT NULL DEFAULT 0"
+        )
+    uow.execute("CREATE TABLE IF NOT EXISTS trade_feature_migrations (version TEXT PRIMARY KEY)")
+    uow.execute("INSERT OR IGNORE INTO trade_feature_migrations(version) VALUES ('trade.010')")
+
+
 __all__ = [
     "apply_trade",
     "apply_trade_guishi_deposit",
@@ -88,4 +110,5 @@ __all__ = [
     "apply_trade_guishi_match",
     "apply_trade_guishi_expired_cleanup",
     "apply_trade_guishi_take_item",
+    "apply_trade_xianshi_listing",
 ]

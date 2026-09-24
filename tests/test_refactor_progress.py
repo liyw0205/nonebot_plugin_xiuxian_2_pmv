@@ -90,6 +90,10 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(pet["active_switch_application_owned"])
         self.assertTrue(pet["legacy_active_switch_disabled"])
         trade = slices["trade"]
+        self.assertTrue(trade["xianshi_listing_application_owned"])
+        self.assertTrue(trade["xianshi_auto_listing_compatibility"])
+        self.assertTrue(trade["xianshi_fast_listing_compatibility"])
+        self.assertTrue(trade["xianshi_system_listing_compatibility"])
         self.assertTrue(trade["purchase_application_owned"])
         self.assertTrue(trade["legacy_purchase_disabled"])
         self.assertTrue(trade["guishi_deposit_application_owned"])

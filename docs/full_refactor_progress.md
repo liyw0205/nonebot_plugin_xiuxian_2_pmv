@@ -3681,3 +3681,18 @@ auction/source/progress 回归 `229 passed`，顶层全量回归 `2556 passed, 1
 compileall、架构检查、inventory、progress 和 diff check 均通过。隔离五库 recovery 应用完整
 migration catalog（含 `auction.005`，game DB only）和 attached accessory migrations；
 restore/dry-run 五库成功，reconcile clean，operations/outbox/dead events 均为 0。
+
+2026-09-24 trade ordinary Xianshi listing feature-owned cutover：新增
+`XianshiListingSqlRepository` 和 `TradeApplication.xianshi_list_items`，普通 `仙肆上架`
+handler 改走 game DB immediate UoW，原子校验并扣除手续费、减少可交易库存、逐件创建 listing
+及写入 operation；canonical operation ID 保留 replay/conflict，注入 Clock/ID generator。
+新增 game DB `trade.010`，并兼容补齐历史 `stamina_cost` 列。自动、快速和系统上架仍走兼容路径，
+进度门禁与交易文档已明确区分。聚焦 xianshi/source/progress `236 passed`，根目录全量回归
+`2562 passed, 16 warnings, 25 subtests`；compileall、architecture、inventory、progress 和
+diff check 均通过。
+
+2026-09-24 trade ordinary Xianshi listing isolated recovery evidence：一次性五库 recovery smoke
+完成 backup、restore dry-run、restore、全量 `129` 项 migration 和 reconcile；`trade.010` 只路由
+到 `game_db`，五库 migration 数量为 game `103`、player `22`、trade `7`、impart `1`、message `1`；
+`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。临时数据和 receipt 在提交前清理；
+该证据不替代真实正式发布周期。

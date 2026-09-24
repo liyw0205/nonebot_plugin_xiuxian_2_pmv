@@ -90,6 +90,7 @@ trade_application = TradeApplication(
     get_paths().game_db,
     get_paths().trade_db,
     clock=runtime_clock,
+    ids=runtime_ids,
 )
 _guishi_stone_service_instance = None
 _auction_queue_application_instance = None
@@ -580,9 +581,14 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     operation_id = _xianshi_listing_operation_id(
         event, user_id, goods_id, price, quantity
     )
-    result = xianshi_repository.add_xianshi_items(
-        operation_id, user_id, goods_id, item_name, goods_info['type'], price,
-        quantity, fee_charged=total_fee, consume_assets=True,
+    result = trade_application.xianshi_list_items(
+        operation_id=operation_id,
+        seller_id=str(user_id),
+        goods_id=goods_id,
+        name=item_name,
+        goods_type=goods_info['type'],
+        price=price,
+        quantity=quantity,
     )
     if result.status in {"stone_insufficient", "stock_insufficient"}:
         msg = f"灵石或可交易的 {item_name} 数量不足，上架失败！"

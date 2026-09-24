@@ -645,21 +645,31 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("immediate=True", repository)
         self.assertIn("guishi_expired_order_operations", repository)
 
-    def test_xianshi_listing_uses_batch_transaction_service(self) -> None:
+    def test_ordinary_xianshi_listing_uses_feature_service(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
         command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")
-        repository_source = (trade_root / "repository.py").read_text(encoding="utf-8")
-        for name in ("async def xian_shop_add_(", "async def xianshi_fast_add_("):
-            start = command_source.index(name)
-            end = command_source.index("@", start + 1)
-            command = command_source[start:end]
-            self.assertIn("xianshi_repository.add_xianshi_items(", command)
-            self.assertNotIn("xianshi_repository.add_xianshi_item(", command)
-            self.assertIn("consume_assets=True", command)
-            self.assertNotIn("spend_stone_and_consume_trade_items(", command)
-            self.assertNotIn("sql_message.send_back(", command)
-        self.assertIn("BEGIN IMMEDIATE", repository_source)
-        self.assertIn("xianshi_listing_operations", repository_source)
+        listing_repository = (
+            SOURCE_ROOT / "features" / "trade" / "xianshi_listing_repository.py"
+        ).read_text(encoding="utf-8")
+        ordinary_start = command_source.index("async def xian_shop_add_(")
+        ordinary = command_source[
+            ordinary_start : command_source.index(
+                "@xianshi_auto_add.handle", ordinary_start
+            )
+        ]
+        self.assertIn("trade_application.xianshi_list_items(", ordinary)
+        self.assertNotIn("xianshi_repository.add_xianshi_items(", ordinary)
+
+        fast_start = command_source.index("async def xianshi_fast_add_(")
+        fast = command_source[
+            fast_start : command_source.index("@xiuxian_shop_view.handle", fast_start)
+        ]
+        self.assertIn("xianshi_repository.add_xianshi_items(", fast)
+        self.assertIn("consume_assets=True", fast)
+        self.assertNotIn("spend_stone_and_consume_trade_items(", fast)
+        self.assertNotIn("sql_message.send_back(", fast)
+        self.assertIn("immediate=True", listing_repository)
+        self.assertIn("xianshi_listing_operations", listing_repository)
 
     def test_xianshi_auto_listing_uses_plan_transaction_service(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"

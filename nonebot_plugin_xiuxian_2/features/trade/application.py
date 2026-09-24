@@ -6,6 +6,7 @@ from typing import Any
 from .._legacy_application import LegacyApplication
 from ...core.errors import ValidationError
 from ...infrastructure.clock import SystemClock
+from ...infrastructure.ids import UUIDGenerator
 from .guishi_cancel_repository import GuishiOrderCancelSqlRepository
 from .guishi_deposit_repository import GuishiDepositSqlRepository
 from .guishi_baitan_repository import GuishiBaitanSqlRepository
@@ -15,6 +16,7 @@ from .guishi_qiugou_repository import GuishiQiugouSqlRepository
 from .guishi_match_repository import GuishiOrderMatchSqlRepository
 from .guishi_expired_repository import GuishiExpiredOrderSqlRepository
 from .guishi_take_repository import GuishiStoredItemTakeSqlRepository
+from .xianshi_listing_repository import XianshiListingSqlRepository
 from .repository import TradeFeatureRepository
 
 
@@ -27,10 +29,12 @@ class TradeApplication(LegacyApplication):
         *,
         repository: TradeFeatureRepository | None = None,
         clock: Any | None = None,
+        ids: Any | None = None,
     ) -> None:
         self.game_database = str(game_database)
         self.trade_database = str(trade_database)
         self.clock = clock or SystemClock()
+        self.ids = ids or UUIDGenerator()
         self.guishi_deposit_repository = GuishiDepositSqlRepository(
             self.game_database, self.trade_database
         )
@@ -51,7 +55,25 @@ class TradeApplication(LegacyApplication):
         self.guishi_stored_item_take_repository = GuishiStoredItemTakeSqlRepository(
             self.game_database, self.trade_database, clock=self.clock
         )
+        self.xianshi_listing_repository = XianshiListingSqlRepository(
+            self.game_database, clock=self.clock, ids=self.ids
+        )
         super().__init__(game_database, repository=repository, feature="trade")
+
+    def xianshi_list_items(
+        self,
+        *,
+        operation_id: str,
+        seller_id: str,
+        goods_id: int,
+        name: str,
+        goods_type: str,
+        price: int,
+        quantity: int,
+    ):
+        return self.xianshi_listing_repository.list_items(
+            operation_id, seller_id, goods_id, name, goods_type, price, quantity
+        )
 
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):
         return self._execute(operation_id=operation_id, user_id=user_id, action=f"trade.{action}", payload={"user_id": user_id, **kwargs}, call=lambda: self.repository.invoke(action, operation_id, user_id, **kwargs))
