@@ -6,4 +6,13 @@ def apply_back(uow: DatabaseUnitOfWork) -> None:
     uow.execute("INSERT OR IGNORE INTO back_feature_migrations(version) VALUES ('back.001')")
 
 
-__all__ = ["apply_back"]
+def apply_alchemy(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS alchemy_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,user_id TEXT NOT NULL,"
+        "reward_stone INTEGER NOT NULL,consumed TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+__all__ = ["apply_alchemy", "apply_back"]

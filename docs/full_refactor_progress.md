@@ -2845,6 +2845,10 @@
   本轮补齐 `sign_in.effects` outbox。副作用事件与签到资产事务同库提交，统计/任务投影
   失败后由请求重放或 `reconcile` 续跑，投影仍按 operation ID 幂等。`LegacySignInEffects`
   仅保留显式旧安装回滚，不属于默认执行图。
+- 背包炼金的单次、快速回血丹和快速类型/品阶三个真实 handler 已切换到
+  `BackApplication.alchemy -> AlchemyApplication -> AlchemySqlRepository`；旧
+  `AlchemyService` 仅保留显式兼容回滚。`back.002` 在 game DB 启动迁移创建幂等表，
+  请求路径不再执行 DDL。
 
 ### 6.2 优先目标
 
@@ -3964,3 +3968,13 @@ feature-owned `LegacyTradeRepository` 的 bid adapter；旧 trade DB 到 game DB
  lottery/source/progress 聚焦回归通过；隔离五库 recovery 已完成 135 项迁移、backup/restore
  dry-run/restore，`reconcile.clean=true` 且 operations/outbox/dead events 均为 0，临时目录与缓存已清理。
  该回执仍不替代真实正式发布周期，P7 证据未补齐。
+
+2026-09-25 back alchemy feature-owned cutover：新增 `AlchemyApplication` 与
+`AlchemySqlRepository`，复用既有 `alchemy_operations` 记录 operation payload、重复请求/冲突、
+保留已装备数量、批量扣除和灵石入账的单库原子语义。`goods_re_root`、快速回血丹和快速类型/品阶
+炼金全部经 lifecycle 注入的 `BackApplication`；`configure_back_application` 仅在真实 driver 启动时
+绑定，旧 `_alchemy_service().apply` 不再出现在默认 handler。新增 `back.002` 启动迁移和缺表拒绝
+测试；back/application/source/progress/wiring 聚焦 `243 passed`，顶层 `tests/` 全量 `2639 passed,
+16 warnings, 25 subtests`。五库 recovery 完成 `136` 项迁移，`back.002` 仅在 game DB，backup/restore
+dry-run/restore 与 reconcile clean（operations/outbox/dead events 均为 0）；临时数据和缓存已清理。
+旧 `AlchemyService` 仍为显式兼容回滚，P7 正式发布证据仍未补齐。

@@ -168,6 +168,11 @@ def configure_package_reward_application(application: PackageRewardApplication) 
     package_reward_application = application
 
 
+def configure_back_application(application: BackApplication) -> None:
+    global back_application
+    back_application = application
+
+
 def _package_open_result(outcome, user_id, package_id, quantity, rewards):
     if isinstance(outcome, PackageOpenResult):
         return outcome
@@ -662,11 +667,11 @@ async def goods_re_root_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await goods_re_root.finish()
 
     # 先走 alchemy operation，避免成功后数量归零挡住同事件重放。
-    alchemy_result = _alchemy_service().apply(
-        _alchemy_operation_id(event, user_id, "single"),
-        user_id,
-        price,
-        [(goods_id, num)],
+    alchemy_result = back_application.alchemy(
+        operation_id=_alchemy_operation_id(event, user_id, "single"),
+        user_id=user_id,
+        reward_stone=price,
+        consume_items=[(goods_id, num)],
     )
     if alchemy_result.status == "duplicate":
         msg = (
@@ -753,11 +758,11 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             consume_items.append((elixir['id'], elixir['num']))
             results.append(f"{elixir['name']} x{elixir['num']} → {number_to(total_price)}灵石")
 
-        alchemy_result = _alchemy_service().apply(
-            _alchemy_operation_id(event, user_id, "fast-hp"),
-            user_id,
-            total_stone,
-            consume_items,
+        alchemy_result = back_application.alchemy(
+            operation_id=_alchemy_operation_id(event, user_id, "fast-hp"),
+            user_id=user_id,
+            reward_stone=total_stone,
+            consume_items=consume_items,
         )
         if not alchemy_result.succeeded:
             msg = "快速炼金失败，背包数量发生变化，请重试！"
@@ -866,11 +871,11 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         
         result_msg.append(f"{item['name']} x{item['available_num']}{status_info} → {number_to(total_price)}灵石")
 
-    alchemy_result = _alchemy_service().apply(
-        _alchemy_operation_id(event, user_id, f"fast-{item_type}-{rank_name}"),
-        user_id,
-        total_stone,
-        consume_items,
+    alchemy_result = back_application.alchemy(
+        operation_id=_alchemy_operation_id(event, user_id, f"fast-{item_type}-{rank_name}"),
+        user_id=user_id,
+        reward_stone=total_stone,
+        consume_items=consume_items,
     )
     if not alchemy_result.succeeded:
         msg = "快速炼金失败，背包数量发生变化，请重试！"

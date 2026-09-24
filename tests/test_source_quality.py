@@ -1051,22 +1051,26 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("stone_item_reward_operations", service_source)
 
-    def test_alchemy_uses_transactional_service(self) -> None:
+    def test_alchemy_uses_feature_application(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         command_source = (back_root / "__init__.py").read_text(encoding="utf-8")
-        service_source = (back_root / "transaction_service.py").read_text(encoding="utf-8")
+        repository_source = (SOURCE_ROOT / "features" / "back" / "alchemy_repository.py").read_text(encoding="utf-8")
         single_start = command_source.index("async def goods_re_root_(")
         single_handler = command_source[single_start:command_source.index("@fast_alchemy.handle", single_start)]
         fast_start = command_source.index("async def fast_alchemy_(")
         fast_handler = command_source[fast_start:command_source.index("async def use_item_", fast_start)]
 
         self.assertGreaterEqual(
-            (single_handler + fast_handler).count("_alchemy_service().apply("), 3
+            (single_handler + fast_handler).count("back_application.alchemy("), 3
+        )
+        self.assertEqual(
+            (single_handler + fast_handler).count("operation_id=_alchemy_operation_id("), 3
         )
         self.assertNotIn("alchemy_service.apply(", command_source)
         self.assertNotIn("sql_message.update_ls(", single_handler + fast_handler)
-        self.assertIn("BEGIN IMMEDIATE", service_source)
-        self.assertIn("alchemy_operations", service_source)
+        self.assertIn("configure_back_application", command_source)
+        self.assertIn("immediate=True", repository_source)
+        self.assertIn("alchemy_operations", repository_source)
 
     def test_skill_learning_uses_transactional_service(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"

@@ -44,7 +44,7 @@ from .features.buff.migrations import apply_buff
 from .features.base.manifest import FEATURE as BASE_FEATURE
 from .features.base.migrations import apply_base
 from .features.back.manifest import FEATURE as BACK_FEATURE
-from .features.back.migrations import apply_back
+from .features.back.migrations import apply_alchemy, apply_back
 from .features.trade.manifest import FEATURE as TRADE_FEATURE
 from .features.trade.migrations import (
     apply_trade,
@@ -161,6 +161,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("auction.007", "auction_settlement_game_effect_receipts", apply_auction_settlement_game_effects),
         Migration("auction.008", "auction_settlement_statistics_projection", apply_auction_settlement_statistics),
         Migration("back.001", "back_feature_migrations", apply_back),
+        Migration("back.002", "alchemy_operations", apply_alchemy),
         Migration("bank.001", "bank_feature_migrations", apply_bank),
         Migration("bank.002", "bank_accounts", apply_bank_accounts),
         Migration("base.001", "base_feature_migrations", apply_base),
@@ -802,9 +803,10 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             pass
         else:
             from .xiuxian.xiuxian_base import configure_lottery_application, configure_sign_in_application
-            from .xiuxian.xiuxian_back import configure_package_reward_application
+            from .xiuxian.xiuxian_back import configure_back_application, configure_package_reward_application
 
             configure_sign_in_application(context.services["sign_in"])
+            configure_back_application(context.services["back"])
             configure_package_reward_application(context.services["package_reward"])
             if lottery_application_type is not None and lottery_service is not None and isinstance(lottery_service, lottery_application_type):
                 configure_lottery_application(lottery_service)

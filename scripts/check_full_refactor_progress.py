@@ -325,6 +325,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "entry_key_event_speedup_settlement_cutover_with_other_rift_compatibility",
         },
         "back": {
+            "alchemy_application_owned": back_facade.count("back_application.alchemy(") >= 3,
+            "legacy_alchemy_disabled": "_alchemy_service().apply(" not in back_facade,
             "repair_application_owned": "back_application.repair(" in back_facade,
             "equipment_unequip_application_owned": "back_application.change_equipment(" in back_facade,
             "equipment_equip_application_owned": back_facade.count("back_application.change_equipment(") >= 2,
@@ -335,7 +337,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "accessory_package_application_owned": "back_application.accessory_package(" in back_facade,
             "legacy_repair_disabled": "_backpack_repair_service().run(" not in back_facade,
-            "status": "backpack_repair_equipment_equip_unequip_pet_egg_package_accessory_package_cutover_with_other_back_compatibility",
+            "status": "alchemy_repair_equipment_equip_unequip_pet_egg_package_accessory_package_cutover_with_other_back_compatibility",
         },
         "past_life": {
             "final_settlement_application_owned": "_past_life_application.final_settle(" in past_life_events_facade,

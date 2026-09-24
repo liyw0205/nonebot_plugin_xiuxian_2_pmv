@@ -60,6 +60,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(rift["entry_application_owned"])
         self.assertTrue(rift["legacy_entry_disabled"])
         back = slices["back"]
+        self.assertTrue(back["alchemy_application_owned"])
+        self.assertTrue(back["legacy_alchemy_disabled"])
         self.assertTrue(back["repair_application_owned"])
         self.assertTrue(back["legacy_repair_disabled"])
         past_life = slices["past_life"]
