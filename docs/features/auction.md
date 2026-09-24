@@ -24,7 +24,9 @@
 
 `AuctionSettlementSqlRepository` 在 game DB 的 `BEGIN IMMEDIATE` 事务中完成资产、背包、历史和拍卖状态变更。应用层先登记操作号，业务拒绝写入 rejected 审计，异常写入 failed；仓储异常不会返回成功结果。
 
-`AuctionQueueSqlRepository` 在 game DB immediate UoW 中附加 trade DB；排队扣除可交易库存、队列插入和 operation 记录同事务提交，下架的背包返还、队列删除和 operation 记录同事务提交。场次开始仍走兼容 `AuctionSessionService`，会在后续切片迁移。
+`AuctionQueueSqlRepository` 在 game DB immediate UoW 中附加 trade DB；排队扣除可交易库存、队列插入和 operation 记录同事务提交，下架的背包返还、队列删除和 operation 记录同事务提交。
+
+`AuctionSessionStartSqlRepository` 在同一跨库事务中将等待区项目装入当前场次、创建 session 和 start operation，再清空等待区。管理员和自动开场的默认路径由 `AuctionSessionStartApplication` 提供时钟、随机源和稳定 replay；旧 `AuctionSessionService` 仅为兼容委托。结束流程走 `AuctionSettlementApplication`，replay 不重复写统计/游戏事件。
 
 ## 定时任务
 

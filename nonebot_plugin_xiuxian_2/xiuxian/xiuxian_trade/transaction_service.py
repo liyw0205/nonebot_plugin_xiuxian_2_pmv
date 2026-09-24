@@ -285,6 +285,8 @@ _sql_message: Any = None
 _trade_manager: Any = None
 _auction_repository: Any = None
 _auction_session_service: Any = None
+_auction_session_start_application: Any = None
+_auction_settlement_application: Any = None
 
 
 def _resolve_dependency(dependency: Any) -> Any:
@@ -292,14 +294,18 @@ def _resolve_dependency(dependency: Any) -> Any:
 
 def bind_auction_service_dependencies(
     *, items: Any, sql_message: Any, trade_manager: Any, auction_repository: Any,
-    auction_session_service: Any
+    auction_session_service: Any, auction_session_start_application: Any = None,
+    auction_settlement_application: Any = None,
 ) -> None:
     global _items, _sql_message, _trade_manager, _auction_repository, _auction_session_service
+    global _auction_session_start_application, _auction_settlement_application
     _items = items
     _sql_message = sql_message
     _trade_manager = trade_manager
     _auction_repository = auction_repository
     _auction_session_service = auction_session_service
+    _auction_session_start_application = auction_session_start_application
+    _auction_settlement_application = auction_settlement_application
 
 def _auction_dependencies() -> tuple[Any, Any, Any, Any, Any]:
     if (
@@ -326,32 +332,45 @@ def start_auction_process(bot: Optional[Bot], operation_id: str | None = None) -
     """
     _, _, _, _, session_service = _auction_dependencies()
     operation_id = operation_id or f"auction-start:{runtime_ids.new_id()}"
-    previous = session_service.get_start_operation(operation_id)
-    if previous is not None:
-        active_session = session_service.get_active_session()
-        return bool(
-            active_session
-            and active_session["session_id"] == previous.session_id
-        )
     system_items_config = auction_config.get_system_items() # 从内置配置获取系统物品
-
     schedule_config = auction_config.get_auction_schedule()
-
-    # 随机选择5个系统拍卖品
-    selected_system_items_names = runtime_random.sample(list(system_items_config.keys()), min(5, len(system_items_config)))
-    selected_system_items = [
-        {"item_id": system_items_config[name]["id"],
-         "name": name,
-         "start_price": system_items_config[name]["start_price"]
-        } for name in selected_system_items_names
-    ]
-    now_dt = runtime_clock.now()
-    end_time_dt = now_dt + timedelta(hours=schedule_config["duration_hours"])
-    session_id = f"auction:{now_dt.strftime('%Y%m%d%H%M%S')}:{operation_id[-12:]}"
-    result = session_service.start(
-        operation_id, session_id, start_time=now_dt.timestamp(),
-        end_time=end_time_dt.timestamp(), system_items=selected_system_items,
+    start_application = (
+        _resolve_dependency(_auction_session_start_application)
+        if _auction_session_start_application is not None
+        else None
     )
+    if start_application is not None:
+        result = start_application.start(
+            operation_id,
+            system_items_config=system_items_config,
+            duration_hours=schedule_config["duration_hours"],
+        )
+    else:
+        previous = session_service.get_start_operation(operation_id)
+        if previous is not None:
+            active_session = session_service.get_active_session()
+            return bool(active_session and active_session["session_id"] == previous.session_id)
+        selected_names = runtime_random.sample(
+            list(system_items_config), min(5, len(system_items_config))
+        )
+        selected_system_items = [
+            {
+                "item_id": system_items_config[name]["id"],
+                "name": name,
+                "start_price": system_items_config[name]["start_price"],
+            }
+            for name in selected_names
+        ]
+        now = runtime_clock.now()
+        end_time = now + timedelta(hours=schedule_config["duration_hours"])
+        session_id = f"auction:{now.strftime('%Y%m%d%H%M%S')}:{operation_id[-12:]}"
+        result = session_service.start(
+            operation_id,
+            session_id,
+            start_time=now.timestamp(),
+            end_time=end_time.timestamp(),
+            system_items=selected_system_items,
+        )
     if not result.succeeded:
         logger.warning(f"拍卖开启失败：{result.status}")
         return False
@@ -376,16 +395,43 @@ async def end_auction_process(
         info = items.get_data_by_item_id(item["item_id"])
         if info:
             item_types[int(item["item_id"])] = str(info["type"])
-    result = session_service.finish(
-        operation_id or f"auction-finish:{session['session_id']}",
-        session["session_id"], end_time=runtime_clock.now().timestamp(),
-        fee_rate=auction_config.get_auction_rules()["fee_rate"],
-        item_types=item_types,
+    stable_operation_id = operation_id or f"auction-finish:{session['session_id']}"
+    end_time = runtime_clock.now().timestamp()
+    fee_rate = auction_config.get_auction_rules()["fee_rate"]
+    settlement_application = (
+        _resolve_dependency(_auction_settlement_application)
+        if _auction_settlement_application is not None
+        else None
     )
-    if not result.succeeded:
-        raise ValueError(f"auction session settlement blocked: status={result.status}")
-    auction_results = [dict(record) for record in result.results]
+    settlement_replayed = False
+    if settlement_application is not None:
+        outcome = settlement_application.settle_active(
+            operation_id=stable_operation_id,
+            end_time=end_time,
+            fee_rate=fee_rate,
+            item_types=item_types,
+        )
+        if not outcome.ok:
+            raise ValueError(
+                f"auction session settlement blocked: status={outcome.code}"
+            )
+        auction_results = [dict(record) for record in (outcome.data or {}).get("results", ())]
+        settlement_replayed = outcome.replayed
+    else:
+        result = session_service.finish(
+            stable_operation_id,
+            session["session_id"],
+            end_time=end_time,
+            fee_rate=fee_rate,
+            item_types=item_types,
+        )
+        if not result.succeeded:
+            raise ValueError(f"auction session settlement blocked: status={result.status}")
+        auction_results = [dict(record) for record in result.results]
+        settlement_replayed = result.status == "duplicate"
     for settlement in auction_results:
+        if settlement_replayed:
+            continue
         trace_id = f"trade:auction:{settlement['auction_id']}"
         if settlement["final_price"] is not None:
             record_trade_event(
@@ -788,36 +834,32 @@ class AuctionSessionService:
         return digest[:8]
 
     def get_active_session(self) -> dict[str, Any] | None:
-        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
-            self._ensure_schema(conn)
-            row = conn.execute(
-                "SELECT session_id, start_time, end_time, items_count "
-                "FROM auction_sessions WHERE status='active'"
-            ).fetchone()
-            if row is None:
-                return None
-            return {
-                "session_id": str(row[0]),
-                "start_time": float(row[1]),
-                "end_time": float(row[2]),
-                "items_count": int(row[3]),
-            }
+        from ...features.auction.session_start_repository import (
+            AuctionSessionStartSqlRepository,
+        )
+
+        return AuctionSessionStartSqlRepository(
+            self._game_database, self._trade_database
+        ).get_active_session()
 
     def get_start_operation(self, operation_id: str) -> AuctionSessionStartResult | None:
-        with self._lock, closing(db_backend.connect(self._game_database)) as conn:
-            self._ensure_schema(conn)
-            row = conn.execute(
-                "SELECT result FROM auction_session_operations "
-                "WHERE operation_id=%s AND action='start'", (str(operation_id),)
-            ).fetchone()
-            if row is None:
-                return None
-            value = json.loads(row[0])
-            return AuctionSessionStartResult(
-                "duplicate", str(operation_id), str(value["session_id"]),
-                float(value["start_time"]), float(value["end_time"]),
-                int(value["items_count"]),
-            )
+        from ...features.auction.session_start_repository import (
+            AuctionSessionStartSqlRepository,
+        )
+
+        result = AuctionSessionStartSqlRepository(
+            self._game_database, self._trade_database
+        ).get_start_operation(operation_id)
+        if result is None:
+            return None
+        return AuctionSessionStartResult(
+            result.status,
+            result.operation_id,
+            result.session_id,
+            result.start_time,
+            result.end_time,
+            result.items_count,
+        )
 
     def start(
         self,
@@ -828,102 +870,27 @@ class AuctionSessionService:
         end_time: float,
         system_items: list[dict[str, Any]],
     ) -> AuctionSessionStartResult:
-        operation_id = str(operation_id).strip()
-        session_id = str(session_id).strip()
-        if not operation_id or not session_id:
-            raise ValueError("operation_id and session_id must not be empty")
-        normalized_system = [
-            {
-                "item_id": int(item["item_id"]),
-                "name": str(item["name"]),
-                "start_price": int(item["start_price"]),
-            }
-            for item in system_items
-        ]
-        payload = self._payload(
-            {
-                "session_id": session_id,
-                "start_time": float(start_time),
-                "end_time": float(end_time),
-                "system_items": normalized_system,
-            }
+        from ...features.auction.session_start_repository import (
+            AuctionSessionStartSqlRepository,
         )
-        with self._lock, closing(self._connect()) as conn:
-            try:
-                conn.execute("BEGIN IMMEDIATE")
-                self._ensure_schema(conn, include_trade=True)
-                previous = self._read_operation(conn, operation_id, "start", payload)
-                if previous is not None:
-                    conn.rollback()
-                    if previous[0] == "state_changed":
-                        return AuctionSessionStartResult("state_changed", operation_id)
-                    value = previous[1]
-                    return AuctionSessionStartResult(
-                        "duplicate", operation_id, str(value["session_id"]),
-                        float(value["start_time"]), float(value["end_time"]),
-                        int(value["items_count"]),
-                    )
-                if conn.execute(
-                    "SELECT 1 FROM auction_sessions WHERE status='active'"
-                ).fetchone() or conn.execute("SELECT 1 FROM auction_current LIMIT 1").fetchone():
-                    conn.rollback()
-                    return AuctionSessionStartResult("already_active", operation_id)
 
-                queue = conn.execute(
-                    "SELECT user_id, item_id, item_name, start_price, user_name "
-                    "FROM auction_trade.auction_player_upload ORDER BY user_id, item_id"
-                ).fetchall()
-                all_items = list(normalized_system)
-                all_items.extend(
-                    {
-                        "item_id": int(row[1]), "name": str(row[2]),
-                        "start_price": int(row[3]), "seller_id": str(row[0]),
-                        "seller_name": str(row[4]),
-                    }
-                    for row in queue
-                )
-                if not all_items:
-                    conn.rollback()
-                    return AuctionSessionStartResult("empty", operation_id)
-
-                for index, item in enumerate(all_items):
-                    conn.execute(
-                        """
-                        INSERT INTO auction_current (
-                            id, item_id, name, start_price, current_price,
-                            seller_id, seller_name, bids, bid_times,
-                            is_system, last_bid_time
-                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,'{}','{}',%s,%s)
-                        """,
-                        (
-                            self._auction_id(session_id, index), item["item_id"], item["name"],
-                            item["start_price"], item["start_price"],
-                            item.get("seller_id", "0"), item.get("seller_name", "系统"),
-                            0 if "seller_id" in item else 1, float(start_time),
-                        ),
-                    )
-                conn.execute("DELETE FROM auction_trade.auction_player_upload")
-                count = len(all_items)
-                conn.execute(
-                    "INSERT INTO auction_sessions (session_id,status,start_time,end_time,items_count,"
-                    "start_operation_id,created_at) VALUES (%s,'active',%s,%s,%s,%s,CURRENT_TIMESTAMP)",
-                    (session_id, float(start_time), float(end_time), count, operation_id),
-                )
-                result = {
-                    "session_id": session_id, "start_time": float(start_time),
-                    "end_time": float(end_time), "items_count": count,
-                }
-                conn.execute(
-                    "INSERT INTO auction_session_operations (operation_id,action,payload,result) VALUES (%s,'start',%s,%s)",
-                    (operation_id, payload, self._payload(result)),
-                )
-                conn.commit()
-                return AuctionSessionStartResult(
-                    "started", operation_id, session_id, float(start_time), float(end_time), count
-                )
-            except Exception:
-                conn.rollback()
-                raise
+        result = AuctionSessionStartSqlRepository(
+            self._game_database, self._trade_database
+        ).start(
+            operation_id,
+            session_id,
+            start_time=start_time,
+            end_time=end_time,
+            system_items=system_items,
+        )
+        return AuctionSessionStartResult(
+            result.status,
+            result.operation_id,
+            result.session_id,
+            result.start_time,
+            result.end_time,
+            result.items_count,
+        )
 
     def finish(
         self,

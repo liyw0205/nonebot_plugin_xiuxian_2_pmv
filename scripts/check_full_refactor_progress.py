@@ -77,6 +77,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     puppet_facade = (PACKAGE / "xiuxian" / "xiuxian_puppet" / "__init__.py").read_text(encoding="utf-8")
     pet_facade = (PACKAGE / "xiuxian" / "xiuxian_pet" / "__init__.py").read_text(encoding="utf-8")
     trade_facade = (PACKAGE / "xiuxian" / "xiuxian_trade" / "__init__.py").read_text(encoding="utf-8")
+    trade_auction_transactions = (PACKAGE / "xiuxian" / "xiuxian_trade" / "transaction_service.py").read_text(encoding="utf-8")
     trade_deposit_handler = trade_facade[
         trade_facade.index("async def guishi_deposit_") : trade_facade.index(
             "@guishi_withdraw.handle", trade_facade.index("async def guishi_deposit_")
@@ -119,6 +120,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     ]
     auction_settlement = (PACKAGE / "features" / "auction" / "settlement.py").read_text(encoding="utf-8")
     auction_queue = (PACKAGE / "features" / "auction" / "queue_application.py").read_text(encoding="utf-8")
+    auction_start = (PACKAGE / "features" / "auction" / "session_start_application.py").read_text(encoding="utf-8")
     auction_queue_handlers = trade_facade[
         trade_facade.index("async def auction_add_(") : trade_facade.index(
             "@my_auction.handle", trade_facade.index("async def auction_add_(")
@@ -351,9 +353,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "auction": {
             "queue_application_owned": "AuctionQueueSqlRepository" in auction_queue,
             "legacy_queue_disabled": "_auction_queue_service().enqueue(" not in auction_queue_handlers and "_auction_queue_service().dequeue(" not in auction_queue_handlers,
+            "session_start_application_owned": "AuctionSessionStartSqlRepository" in auction_start and "auction_session_start_application=_auction_session_start_application" in trade_facade and "start_application.start(" in trade_auction_transactions,
+            "session_start_uses_settlement_application": "settlement_application.settle_active(" in trade_auction_transactions and "auction_settlement_application=_auction_settlement_application" in trade_facade,
             "settlement_application_owned": "AuctionSettlementSqlRepository" in auction_settlement,
             "legacy_settlement_disabled": "repository=LegacyAuctionSettlementRepository(" not in plugin,
-            "status": "queue_enqueue_dequeue_and_session_settlement_feature_owned_with_session_start_compatibility",
+            "status": "queue_session_start_and_settlement_feature_owned_with_explicit_session_service_compatibility",
         },
         "boss": {
             "manual_spawn_application_owned": "boss_application.spawn(" in boss_facade,

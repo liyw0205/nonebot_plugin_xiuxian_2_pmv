@@ -16,6 +16,12 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade import auction_utils
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade.transaction_service import (
     AuctionSessionService,
 )
+from nonebot_plugin_xiuxian_2.features.auction.migrations import (
+    apply_auction_player_queue,
+    apply_auction_queue_operations,
+    apply_auction_settlement,
+)
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
 
@@ -25,15 +31,11 @@ class AuctionDatabaseStatusTests(unittest.TestCase):
         root = Path(self.temp_dir.name)
         self.game = root / "game.sqlite3"
         self.trade = root / "trade.sqlite3"
-        with db_backend.transaction(self.game):
-            pass
-        with db_backend.transaction(self.trade) as conn:
-            conn.execute(
-                "CREATE TABLE auction_player_upload ("
-                "user_id TEXT NOT NULL, item_id INTEGER NOT NULL, "
-                "item_name TEXT NOT NULL, start_price INTEGER NOT NULL, "
-                "user_name TEXT NOT NULL, PRIMARY KEY(user_id,item_id))"
-            )
+        with DatabaseUnitOfWork(self.game) as uow:
+            apply_auction_settlement(uow)
+            apply_auction_queue_operations(uow)
+        with DatabaseUnitOfWork(self.trade) as uow:
+            apply_auction_player_queue(uow)
         self.service = AuctionSessionService(self.game, self.trade, 99)
         self.service_patch = patch.object(
             auction_utils, "auction_session_service", self.service

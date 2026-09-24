@@ -65,6 +65,8 @@ from .transaction_service import AuctionSessionService
 from ...paths import get_paths
 from ...features.trade.application import TradeApplication
 from ...features.auction.queue_application import AuctionQueueApplication
+from ...features.auction.session_start_application import AuctionSessionStartApplication
+from ...features.auction.settlement import AuctionSettlementApplication
 from ...features.trade.guishi_deposit_repository import GuishiDepositSqlRepository
 from ...features.trade.guishi_withdraw_repository import GuishiWithdrawSqlRepository
 from ...infrastructure.ids import UUIDGenerator
@@ -91,6 +93,8 @@ trade_application = TradeApplication(
 _guishi_stone_service_instance = None
 _auction_queue_application_instance = None
 _auction_session_service_instance = None
+_auction_session_start_application_instance = None
+_auction_settlement_application_instance = None
 scheduler = require("nonebot_plugin_apscheduler").scheduler # 全局调度器，用于鬼市
 auction_scheduler = require("nonebot_plugin_apscheduler").scheduler # 独立的拍卖调度器，避免冲突
 
@@ -142,8 +146,31 @@ def _auction_session_service():
             trade_manager=_trade_manager,
             auction_repository=xianshi_repository,
             auction_session_service=_auction_session_service_instance,
+            auction_session_start_application=_auction_session_start_application,
+            auction_settlement_application=_auction_settlement_application,
         )
     return _auction_session_service_instance
+
+
+def _auction_session_start_application():
+    global _auction_session_start_application_instance
+    if _auction_session_start_application_instance is None:
+        _auction_session_start_application_instance = AuctionSessionStartApplication(
+            get_paths().game_db,
+            get_paths().trade_db,
+            clock=runtime_clock,
+            random_source=runtime_random,
+        )
+    return _auction_session_start_application_instance
+
+
+def _auction_settlement_application():
+    global _auction_settlement_application_instance
+    if _auction_settlement_application_instance is None:
+        _auction_settlement_application_instance = AuctionSettlementApplication(
+            get_paths().game_db
+        )
+    return _auction_settlement_application_instance
 
 
 def _xianshi_purchase_service():
@@ -162,6 +189,8 @@ bind_auction_service_dependencies(
     trade_manager=_trade_manager,
     auction_repository=xianshi_repository,
     auction_session_service=_auction_session_service,
+    auction_session_start_application=_auction_session_start_application,
+    auction_settlement_application=_auction_settlement_application,
 )
 
 

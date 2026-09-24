@@ -12,6 +12,12 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade.transaction_service import (
     AuctionSessionService,
 )
+from nonebot_plugin_xiuxian_2.features.auction.migrations import (
+    apply_auction_player_queue,
+    apply_auction_queue_operations,
+    apply_auction_settlement,
+)
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
 
@@ -32,10 +38,13 @@ class AuctionSessionFinishTests(unittest.TestCase):
             conn.execute("INSERT INTO user_xiuxian VALUES (%s,%s,%s)", ("winner", "买家", 1000))
             conn.execute("INSERT INTO user_xiuxian VALUES (%s,%s,%s)", ("loser", "落败者", 500))
         with db_backend.transaction(self.trade) as conn:
-            conn.execute(
-                "CREATE TABLE auction_player_upload (user_id TEXT,item_id INTEGER,item_name TEXT,"
-                "start_price INTEGER,user_name TEXT,PRIMARY KEY(user_id,item_id))"
-            )
+            pass
+        with DatabaseUnitOfWork(self.game) as uow:
+            apply_auction_settlement(uow)
+            apply_auction_queue_operations(uow)
+        with DatabaseUnitOfWork(self.trade) as uow:
+            apply_auction_player_queue(uow)
+        with db_backend.transaction(self.trade) as conn:
             conn.execute("INSERT INTO auction_player_upload VALUES (%s,%s,%s,%s,%s)", ("seller", 1001, "玩家法器", 600, "卖家"))
         self.service = AuctionSessionService(self.game, self.trade, 99)
         self.service.start("start", "session", start_time=100, end_time=200, system_items=[])
