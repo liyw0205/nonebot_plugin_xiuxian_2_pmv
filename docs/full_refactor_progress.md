@@ -2822,7 +2822,7 @@
 - 架构/交付基础门禁 P0-P6 已就绪；P7 仍未就绪，缺少一次真实发布周期的
   `--data-dir`、当前 release 和发布证据。隔离 recovery smoke 不能替代 P7。
 - 全面底层重构尚未达到退出条件：仍有 33 个
-  `xiuxian/*/transaction_service.py`（48,229 行）以及
+  `xiuxian/*/transaction_service.py`（47,777 行）以及
   `xiuxian2_handle.py`（180,302 bytes）的旧执行路径。它们不能因已有 facade、
   application 或静态标记而计作完成。
 - 已切换的功能仍可能保留显式 compatibility/rollback adapter；只有默认真实
@@ -2833,7 +2833,10 @@
   拍卖竞价现在通过稳定 outbox event 分发；player DB 统计投影按 operation ID 持久化去重，
   用户 JSON 日志也带 event marker 并通过 player DB 写锁串行化。NoneBot/Web runtime 与 CLI
   共用竞价 effects handler；结算后的日志/统计/game-event 也已接入 application-owned outbox，
-  不能据此将交易兼容层或拍卖完整切片标为完成。
+  不能据此将交易兼容层或拍卖完整切片标为完成。trade Web manifest 仍公开
+  `enqueue/dequeue/session_start/session_finish`；默认 `TradeApplication` 未注入 repository，
+  这些 `_action` 目前会进入 `repository.invoke` 空引用。`LegacyTradeFeatureRepository` 的
+  `session_start/session_finish` 仍派发到旧 `AuctionSessionService`，其中 finish 保留直接结算事务。
 - `recovery_smoke.py` 在 2026-09-24 修复为五库按路由迁移前，旧脚本只对
   `game_db` 应用完整目录。因此此前没有独立五库回执的隔离 smoke 只能作为单库
   恢复演练，不能用于跨库切片或 P7 的最终证据；后续统一以五库 receipt 为准。
@@ -2855,18 +2858,23 @@
    排行和 economy log 均按 event ID 幂等。NoneBot/Web/CLI 共用 compatibility effects handler，
    Web reconcile 与 `reconcile --apply` 可执行补偿；旧 `end_auction_process` 默认只负责调用
    application 并返回结算 DTO，不再二次写 effects。真实发布周期证据仍属于 P7。
-3. **下一步清理交易兼容余额**：检查 `transaction_service.py` 及仙肆/鬼市剩余 handler 的真实调用图，
-   切片迁出仍旧的撤架以外流程、展示查询和 scheduler。每次只迁一个资产转换；兼容 repository
-   仅在真实调用归零且回滚证据满足后移除。
-4. 清零已迁移域的 compatibility 余额：优先处理仍由旧 service 承载的高频资产
+3. **下一步修复拍卖 Web 兼容边界**：先为上述四个公开 action 增加真实 Web 回归，逐个确认
+   权限、payload、operation/replay 和预期响应；让支持的 action 走 feature-owned queue/session-start/
+   settlement application，或在确认不支持后从 Web route/manifest 同步移除。重点切走
+   `session_finish` 到 `AuctionSettlementApplication`，然后将仅剩的 `AuctionSessionService`/queue
+   shim 隔离为 rollback-only compatibility；不得让默认 Web 路由访问空 repository。
+4. **继续清理交易兼容余额**：检查 `transaction_service.py` 及仙肆/鬼市剩余 handler 的真实调用图，
+   切片迁出展示查询和 scheduler。每次只迁一个资产转换；兼容 repository 仅在真实调用归零且回滚
+   证据满足后移除。
+5. 清零已迁移域的 compatibility 余额：优先处理仍由旧 service 承载的高频资产
    路径，包括签到后置 effects、背包通用物品/礼包余项、宠物、任务/修炼、洞府和
    地图未覆盖动作、宗门、竞技场/副本、世界事件、Boss 与拍卖。先用真实入口
    调用图确定一个动作，再迁移，不按文件或目录整体宣布完成。
-5. 单列处理复杂批处理和外部状态：赌坊投注/派奖与分块分红、全服批处理、跨库
+6. 单列处理复杂批处理和外部状态：赌坊投注/派奖与分块分红、全服批处理、跨库
    补偿、JSON/凭据状态、scheduler 和外部版本更新必须保留冻结快照、分块进度、
    子操作 replay、失败续跑和 reconcile；不能为追赶进度改成 facade 或一次性大
    事务。
-6. 最终退出：完成所有默认入口的逐项切换并删除/隔离对应旧实现，使 legacy
+7. 最终退出：完成所有默认入口的逐项切换并删除/隔离对应旧实现，使 legacy
    `transaction_service` 与 `xiuxian2_handle` 不再在完成切片的执行图中出现；
    随后完成一次真实发布、备份、迁移、恢复和 reconcile，补齐 P7 证据。
 
