@@ -587,6 +587,7 @@ async def place_auction_bid(bot: Bot, user_id: str, user_name: str, auction_id: 
             expected_price=old_current_price,
             expected_bids=old_bids,
             bid_time=runtime_clock.now().timestamp(),
+            item_name=str(item.get("name", auction_id)),
         )
         bid_status = str((outcome.data or {}).get("status", outcome.code or outcome.status))
         bid_replayed = bool(outcome.replayed)
@@ -610,14 +611,13 @@ async def place_auction_bid(bot: Bot, user_id: str, user_name: str, auction_id: 
         return False, "不可竞拍自身上架之物。"
     if bid_status not in {"bid", "duplicate"}:
         return False, "竞拍未成立，请刷新列表后重试。"
-    if not bid_replayed:
+    if bid_application is None and not bid_replayed:
         record_trade_event(
             user_id,
             "拍卖竞拍",
             f"竞拍{item['name']}，出价{number_to(bid_price)}灵石，拍卖ID:{auction_id}",
             {"拍卖出价次数": 1, "拍卖出价灵石": bid_price},
         )
-
     msg_list = [
         f"【竞拍成功】",
         f"拍品：{item['name']}",

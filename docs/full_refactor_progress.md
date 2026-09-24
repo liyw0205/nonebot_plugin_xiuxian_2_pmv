@@ -2828,28 +2828,38 @@
 - 已切换的功能仍可能保留显式 compatibility/rollback adapter；只有默认真实
   handler/route/scheduler 已改走 feature-owned application，且旧实现不再承载该
   用例，才可逐项从遗留服务移除。
-- 交易域当前已完成仙肆购买、上架/撤架、鬼市存灵石、鬼市取灵石、鬼市求购/摆摊创建、
-  求购/摆摊撤销、求购/摆摊撮合、过期清理、寄存物品取回、拍卖等待区上架/下架、场次开始/
-  队列交接和结算。接下来审计拍卖竞价后的统计/展示副作用及其他交易兼容路径，再回到其他
-  高频资产域。
+- 交易域已完成仙肆普通/自动/快速/系统上架、撤架和购买，鬼市存取灵石、订单创建/撤销/
+  撮合/过期清理、寄存物品取回，以及拍卖等待区、场次开始、竞价核心资产事务和结算核心。
+  拍卖竞价统计已从旧事务编排移到显式 post-commit effects port；当前仍是旧统计适配器，
+  结算后的日志/统计/game-event 分发也仍在兼容编排，不能算拍卖完整迁移。
 - `recovery_smoke.py` 在 2026-09-24 修复为五库按路由迁移前，旧脚本只对
   `game_db` 应用完整目录。因此此前没有独立五库回执的隔离 smoke 只能作为单库
   恢复演练，不能用于跨库切片或 P7 的最终证据；后续统一以五库 receipt 为准。
 
 ### 6.2 优先目标
 
-1. 审计交易域其余真实路径：鬼市创建/撤销、撮合/过期清理、寄存物品取回，以及仙肆
-   上架/撤架、拍卖队列/场次开始/结算均已 feature-owned；下一步按真实入口追踪竞价
-   后统计、展示和通知副作用中仍由兼容 service 承载的部分，每次切一个资产转换。
-2. 清零已迁移域的 compatibility 余额：优先处理仍由旧 service 承载的高频资产
+1. **收口拍卖竞价**：`AuctionBidApplication` 的竞价资产事务已 feature-owned，真实
+   NoneBot 入口经 facade 进入 application。已将统计/日志抽为 effects port，并允许
+   `operation_ledger=started` 时以同 operation ID 重放 repository，修复“资产已提交、ledger
+   未完成”的恢复窗口。仍需把 legacy statistics sink 改为具备持久化幂等键的投影，并增加
+   outbox/reconcile 证据；Web/独立 application 默认 no-op effects 也需明确产品口径。
+2. **收口拍卖结算副作用**：`AuctionSettlementApplication` 已持有成交/流拍资产事务、history
+   和 session 状态，但结算后的玩家日志、统计与 `safe_record_game_event` 仍由旧
+   `transaction_service.end_auction_process` 分发。目标为 application-owned effects/outbox，
+   对 winner/seller/seller-miss 每个 event 使用稳定 operation/event ID，验证 duplicate/restart
+   不重发、失败可 reconcile；NoneBot 展示文本继续由 adapter 消费结算 DTO。
+3. **清理交易兼容余额**：检查 `transaction_service.py` 及仙肆/鬼市剩余 handler 的真实调用图，
+   切片迁出仍旧的撤架以外流程、展示查询和 scheduler。每次只迁一个资产转换；兼容 repository
+   仅在真实调用归零且回滚证据满足后移除。
+4. 清零已迁移域的 compatibility 余额：优先处理仍由旧 service 承载的高频资产
    路径，包括签到后置 effects、背包通用物品/礼包余项、宠物、任务/修炼、洞府和
    地图未覆盖动作、宗门、竞技场/副本、世界事件、Boss 与拍卖。先用真实入口
    调用图确定一个动作，再迁移，不按文件或目录整体宣布完成。
-3. 单列处理复杂批处理和外部状态：赌坊投注/派奖与分块分红、全服批处理、跨库
+5. 单列处理复杂批处理和外部状态：赌坊投注/派奖与分块分红、全服批处理、跨库
    补偿、JSON/凭据状态、scheduler 和外部版本更新必须保留冻结快照、分块进度、
    子操作 replay、失败续跑和 reconcile；不能为追赶进度改成 facade 或一次性大
    事务。
-4. 最终退出：完成所有默认入口的逐项切换并删除/隔离对应旧实现，使 legacy
+6. 最终退出：完成所有默认入口的逐项切换并删除/隔离对应旧实现，使 legacy
    `transaction_service` 与 `xiuxian2_handle` 不再在完成切片的执行图中出现；
    随后完成一次真实发布、备份、迁移、恢复和 reconcile，补齐 P7 证据。
 
@@ -3755,3 +3765,15 @@ backup、restore dry-run、restore、全量 `131` 项 migration 和 reconcile；
 `game_db`，五库 migration 数量为 game `105`、player `22`、trade `7`、impart `1`、message `1`；
 `clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。临时数据和 receipt 在提交前清理；
 该证据不替代真实正式发布周期。
+
+2026-09-24 auction bid effects/recovery boundary：新增 `AuctionBidEffects` port 与旧统计
+adapter，真实 NoneBot facade 注入 adapter；旧 `place_auction_bid` 编排不再直接写成功竞价统计，
+只有 application 不可用时的明确兼容 fallback 保留旧写入。`AuctionBidApplication` 在 ledger
+仍为 `started` 时会用相同 operation ID 重放幂等 repository，修复资产事务已提交但 ledger 尚未
+finish 的恢复窗口；repository `duplicate` 被标记为 replayed，防止相同 operation 并发重入重复
+统计。auction/application/source/progress 聚焦回归 `252 passed`，compileall、architecture、
+inventory、progress 和 diff check 通过。一次性五库 recovery restore/dry-run 覆盖完整 `131` 项
+migration，game/player/trade/impart/message 分别 `105/22/7/1/1`，`auction.005` 仅路由到
+game_db、attached player migrations `2` 项，reconcile clean；临时数据、receipt、pytest basetemp
+与 bytecode/cache 清理后不保留。结算日志/统计/game-event effects 仍待迁移；本地统计 sink 的
+持久化幂等与 outbox/reconcile 也仍是竞价后续目标。

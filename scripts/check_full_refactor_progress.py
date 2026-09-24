@@ -159,6 +159,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
     ]
     auction_settlement = (PACKAGE / "features" / "auction" / "settlement.py").read_text(encoding="utf-8")
     auction_bid = (PACKAGE / "features" / "auction" / "bid_repository.py").read_text(encoding="utf-8")
+    auction_bid_application = (PACKAGE / "features" / "auction" / "application.py").read_text(encoding="utf-8")
+    auction_bid_effects = (PACKAGE / "features" / "auction" / "bid_effects.py").read_text(encoding="utf-8")
     auction_queue = (PACKAGE / "features" / "auction" / "queue_application.py").read_text(encoding="utf-8")
     auction_start = (PACKAGE / "features" / "auction" / "session_start_application.py").read_text(encoding="utf-8")
     auction_queue_handlers = trade_facade[
@@ -405,13 +407,15 @@ def _slice_status() -> dict[str, dict[str, object]]:
         },
         "auction": {
             "bid_application_owned": "AuctionBidSqlRepository" in auction_bid and "bid_application.place_bid(" in trade_auction_transactions and "auction_bid_application=_auction_bid_application" in trade_facade,
+            "bid_effects_owned": "AuctionBidEffects" in auction_bid_application and "self.effects.on_bid(" in auction_bid_application and "class LegacyAuctionBidEffects" in auction_bid_effects and "if replayed:" in auction_bid_effects and "LegacyAuctionBidEffects(record_trade_event)" in trade_facade and "if bid_application is None and not bid_replayed:" in trade_auction_transactions,
+            "bid_started_operation_recoverable": 'elif existing.status != "started"' in auction_bid_application and 'self.repository.place_auction_bid(' in auction_bid_application,
             "queue_application_owned": "AuctionQueueSqlRepository" in auction_queue,
             "legacy_queue_disabled": "_auction_queue_service().enqueue(" not in auction_queue_handlers and "_auction_queue_service().dequeue(" not in auction_queue_handlers,
             "session_start_application_owned": "AuctionSessionStartSqlRepository" in auction_start and "auction_session_start_application=_auction_session_start_application" in trade_facade and "start_application.start(" in trade_auction_transactions,
             "session_start_uses_settlement_application": "settlement_application.settle_active(" in trade_auction_transactions and "auction_settlement_application=_auction_settlement_application" in trade_facade,
             "settlement_application_owned": "AuctionSettlementSqlRepository" in auction_settlement,
             "legacy_settlement_disabled": "repository=LegacyAuctionSettlementRepository(" not in plugin,
-            "status": "bid_queue_session_start_and_settlement_feature_owned_with_explicit_compatibility_fallbacks",
+            "status": "bid_asset_transaction_feature_owned_with_effects_and_started_recovery; settlement_notifications_and_compatibility_cleanup_pending",
         },
         "boss": {
             "manual_spawn_application_owned": "boss_application.spawn(" in boss_facade,
