@@ -74,6 +74,25 @@ class AuctionQueryApplicationTests(unittest.TestCase):
         )
         self.assertEqual(application.count_auction_history(), 3)
 
+    def test_recent_deals_are_filtered_and_bounded_in_sql(self) -> None:
+        with DatabaseUnitOfWork(self.database) as uow:
+            uow.executemany(
+                "INSERT INTO auction_history(auction_id,item_name,status,end_time,start_time,final_price) "
+                "VALUES(?,?,?,?,?,?)",
+                (
+                    ("a", "old deal", "成交", 10, 1, 100),
+                    ("a", "new deal", "成交", 20, 11, 200),
+                    ("b", "unsold", "流拍", 30, 21, None),
+                ),
+            )
+
+        application = AuctionQueryApplication(self.database)
+
+        self.assertEqual(
+            [row["item_name"] for row in application.get_recent_auction_deals(1)],
+            ["new deal"],
+        )
+
     def test_missing_database_or_tables_read_empty_without_schema_creation(self) -> None:
         missing = Path(self.temp.name) / "missing.db"
         self.assertEqual(AuctionQueryApplication(missing).get_current_auction(), [])
@@ -142,6 +161,22 @@ class AuctionQueryEntryPointTests(unittest.TestCase):
             self.assertNotIn("_trade_manager().get_player_auction_items", handler)
         self.assertNotIn("xianshi_repository.get_current_auction", auction_end)
         self.assertNotIn("xianshi_repository.get_current_auction", end_job)
+
+    def test_remaining_trade_reads_use_query_application(self) -> None:
+        trade_root = (
+            Path(__file__).resolve().parents[1]
+            / "nonebot_plugin_xiuxian_2"
+            / "xiuxian"
+            / "xiuxian_trade"
+        )
+        transaction_source = (trade_root / "transaction_service.py").read_text(
+            encoding="utf-8"
+        )
+        utils_source = (trade_root / "auction_utils.py").read_text(encoding="utf-8")
+        self.assertEqual(transaction_source.count("_auction_query().get_current_auction"), 3)
+        self.assertNotIn("auction_repository.get_current_auction", transaction_source)
+        self.assertNotIn("auction_repository.get_auction_history", utils_source)
+        self.assertIn("get_recent_auction_deals", utils_source)
 
 
 if __name__ == "__main__":

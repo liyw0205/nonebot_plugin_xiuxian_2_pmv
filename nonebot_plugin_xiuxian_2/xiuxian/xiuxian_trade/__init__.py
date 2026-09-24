@@ -49,6 +49,7 @@ from .auction_utils import (
     _format_recent_auction_deals,
     _format_user_auction_quota,
     bind_auction_repository,
+    bind_auction_query_application,
 )
 from .transaction_service import (
     bind_auction_service_dependencies,
@@ -134,6 +135,7 @@ def _auction_session_service():
             get_paths().game_db, get_paths().trade_db
         )
         bind_auction_repository(xianshi_repository, _auction_session_service_instance)
+        bind_auction_query_application(_auction_query_application)
         bind_auction_service_dependencies(
             items=items,
             sql_message=_sql_message,
@@ -143,6 +145,7 @@ def _auction_session_service():
             auction_bid_application=_auction_bid_application,
             auction_session_start_application=_auction_session_start_application,
             auction_settlement_application=_auction_settlement_application,
+            auction_query_application=_auction_query_application,
         )
     return _auction_session_service_instance
 
@@ -187,6 +190,7 @@ def _auction_query_application():
 
 
 bind_auction_repository(xianshi_repository, _auction_session_service)
+bind_auction_query_application(_auction_query_application)
 bind_auction_service_dependencies(
     items=items,
     sql_message=_sql_message,
@@ -196,6 +200,7 @@ bind_auction_service_dependencies(
     auction_bid_application=_auction_bid_application,
     auction_session_start_application=_auction_session_start_application,
     auction_settlement_application=_auction_settlement_application,
+    auction_query_application=_auction_query_application,
 )
 
 

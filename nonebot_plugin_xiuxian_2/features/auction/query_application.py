@@ -24,6 +24,9 @@ class AuctionQueryApplication:
     def get_auction_history(self, auction_id: str | None = None) -> list[dict[str, Any]]:
         return self.repository.get_auction_history(auction_id)
 
+    def get_recent_auction_deals(self, limit: int = 5) -> list[dict[str, Any]]:
+        return self.repository.get_recent_auction_deals(limit)
+
     def count_auction_history(self) -> int:
         return self.repository.count_auction_history()
 

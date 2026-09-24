@@ -7,12 +7,21 @@ from ..xiuxian_utils.utils import check_user, number_to
 
 auction_repository: Any = None
 auction_session_service: Any = None
+auction_query_application: Any = None
 
 
-def bind_auction_repository(repository: Any, session_service: Any = None) -> None:
-    global auction_repository, auction_session_service
+def bind_auction_repository(
+    repository: Any, session_service: Any = None, query_application: Any = None
+) -> None:
+    global auction_repository, auction_session_service, auction_query_application
     auction_repository = repository
     auction_session_service = session_service
+    auction_query_application = query_application
+
+
+def bind_auction_query_application(application: Any) -> None:
+    global auction_query_application
+    auction_query_application = application
 
 
 def get_auction_status() -> Dict[str, Any]:
@@ -139,7 +148,19 @@ def _format_hot_auction_items(current_auctions: List[Dict[str, Any]], limit: int
 
 def _format_recent_auction_deals(limit: int = 5) -> List[str]:
     try:
-        history_records = auction_repository.get_auction_history() or []
+        query_application = (
+            auction_query_application()
+            if callable(auction_query_application)
+            else auction_query_application
+        )
+        if query_application is None:
+            return ["最近成交记录暂不可用。"]
+        recent_query = getattr(query_application, "get_recent_auction_deals", None)
+        history_records = (
+            recent_query(limit)
+            if callable(recent_query)
+            else query_application.get_auction_history()
+        ) or []
     except Exception as e:
         logger.warning(f"读取拍卖成交记录失败: {e}")
         return ["最近成交记录暂不可用。"]

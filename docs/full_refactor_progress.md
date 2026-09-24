@@ -3879,3 +3879,13 @@ inventory、progress 与 diff check 均通过。隔离五库 recovery 完成 bac
 收尾 job 改由 `AuctionQueryApplication.count_current_auctions()` 判断是否有拍品并记录数量，避免
 把整张 current/queue/history 表载入内存。所有新查询用 `DatabaseUnitOfWork(read_only=True)`；没有
 新 schema/migration，竞价、上架/下架原子事务及结算入口不变。
+
+2026-09-25 auction transaction query boundary：`end_auction_process`、重启对账和竞价前拍品读取均
+改由注入的 `AuctionQueryApplication` 提供，交易服务不再直接调用旧 `auction_repository` 查询；最近
+成交展示使用 feature-owned `get_recent_auction_deals(limit)`，在 SQL 层按成交状态和 `end_time DESC`
+过滤并限制行数，避免历史表增长造成 RAM 峰值。保留旧绑定参数的兼容形状，写入竞价/结算原子事务
+未改变。新增查询边界、缺表只读和限量结果测试；顶层 `tests/` 全量 `2620 passed, 16 warnings`，
+源代码/进度/架构门禁 `228 passed`。隔离五库 recovery 完成 backup、restore dry-run、restore、
+全量 `134` 项 migration 和 reconcile，`clean=true`、operations/outbox/dead events 均为 0；编译、
+临时 pytest/字节码缓存会在提交前清理。整体重构仍受 33 个旧 transaction service、`xiuxian2_handle`
+和真实正式发布周期 P7 证据阻塞。

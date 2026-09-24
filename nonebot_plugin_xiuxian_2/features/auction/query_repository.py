@@ -14,6 +14,8 @@ class AuctionQueryRepository(Protocol):
 
     def get_auction_history(self, auction_id: str | None = None) -> list[dict[str, Any]]: ...
 
+    def get_recent_auction_deals(self, limit: int = 5) -> list[dict[str, Any]]: ...
+
     def count_auction_history(self) -> int: ...
 
 
@@ -80,6 +82,22 @@ class AuctionQuerySqlRepository:
             return uow.query_all(
                 "SELECT * FROM auction_history WHERE auction_id=? ORDER BY end_time DESC",
                 (str(auction_id),),
+            )
+
+    def get_recent_auction_deals(self, limit: int = 5) -> list[dict[str, Any]]:
+        if not self.database.is_file():
+            return []
+        limit = max(int(limit), 0)
+        if limit == 0:
+            return []
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not self._table_exists(uow, "auction_history"):
+                return []
+            return uow.query_all(
+                "SELECT * FROM auction_history "
+                "WHERE status=? AND final_price IS NOT NULL "
+                "ORDER BY end_time DESC LIMIT ?",
+                ("成交", limit),
             )
 
     def count_auction_history(self) -> int:

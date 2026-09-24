@@ -18,6 +18,10 @@
 
 拍卖会话、当前拍品、历史和结算 operation 表由 `auction.002` 迁移创建；`auction.003` 在 game DB 创建排队 operation 表，`auction.004` 在 trade DB 创建玩家等待区表，`auction.005` 在 game DB 创建竞价 operation 表。`auction_feature_migrations` 保留边界版本标记。
 
+展示、调度 guard、重启对账和竞价前拍品读取统一经过 `AuctionQueryApplication` 的只读查询；查询
+不会在请求期创建表。最近成交使用 SQL `LIMIT`，避免为了展示少量记录载入整张历史表；缺失数据库
+或旧表时返回空结果。
+
 `拍卖上架`/`拍卖下架` 使用 `AuctionQueueApplication`；等待区操作由 feature-owned repository 执行。`auction.003` 与 `auction.004` 必须按 database route 分别应用。
 
 ## 事务与失败回滚

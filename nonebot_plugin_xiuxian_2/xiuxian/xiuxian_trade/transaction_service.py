@@ -38,6 +38,7 @@ _auction_session_service: Any = None
 _auction_bid_application: Any = None
 _auction_session_start_application: Any = None
 _auction_settlement_application: Any = None
+_auction_query_application: Any = None
 
 
 def _resolve_dependency(dependency: Any) -> Any:
@@ -48,9 +49,11 @@ def bind_auction_service_dependencies(
     auction_session_service: Any, auction_bid_application: Any = None,
     auction_session_start_application: Any = None,
     auction_settlement_application: Any = None,
+    auction_query_application: Any = None,
 ) -> None:
     global _items, _sql_message, _trade_manager, _auction_repository, _auction_session_service
     global _auction_bid_application, _auction_session_start_application, _auction_settlement_application
+    global _auction_query_application
     _items = items
     _sql_message = sql_message
     _trade_manager = trade_manager
@@ -59,6 +62,7 @@ def bind_auction_service_dependencies(
     _auction_bid_application = auction_bid_application
     _auction_session_start_application = auction_session_start_application
     _auction_settlement_application = auction_settlement_application
+    _auction_query_application = auction_query_application
 
 def _auction_dependencies() -> tuple[Any, Any, Any, Any, Any]:
     if (
@@ -77,6 +81,13 @@ def _auction_dependencies() -> tuple[Any, Any, Any, Any, Any]:
     if sql_message is None or trade_manager is None:
         raise RuntimeError("auction data dependencies are not bound")
     return _items, sql_message, trade_manager, _auction_repository, session_service
+
+
+def _auction_query() -> Any:
+    application = _resolve_dependency(_auction_query_application)
+    if application is None:
+        raise RuntimeError("auction query application is not bound")
+    return application
 
 def start_auction_process(bot: Optional[Bot], operation_id: str | None = None) -> bool: # bot参数可能为None
     """
@@ -136,8 +147,8 @@ async def end_auction_process(
     bot: Optional[Bot], operation_id: str | None = None
 ) -> List[Dict[str, Any]]: # bot参数可能为None
     """Atomically settle every item in the active database auction session."""
-    items, _, _, auction_repository, session_service = _auction_dependencies()
-    current_auctions = auction_repository.get_current_auction()
+    items, _, _, _, session_service = _auction_dependencies()
+    current_auctions = _auction_query().get_current_auction()
     if not current_auctions:
         return []
     session = session_service.get_active_session()
@@ -235,8 +246,8 @@ async def reconcile_auction_after_restart() -> None:
     重启后对账：数据库场次未到结束时间则继续本场，否则收尾结算。
     不向群里发公告。
     """
-    _, _, _, auction_repository, session_service = _auction_dependencies()
-    current_auctions = auction_repository.get_current_auction()
+    _, _, _, _, session_service = _auction_dependencies()
+    current_auctions = _auction_query().get_current_auction()
     if not current_auctions:
         return
     session = session_service.get_active_session()
@@ -262,12 +273,12 @@ async def place_auction_bid(bot: Bot, user_id: str, user_name: str, auction_id: 
     """
     用户参与拍卖竞拍。
     """
-    _, sql_message, _, auction_repository, _ = _auction_dependencies()
+    _, sql_message, _, _, _ = _auction_dependencies()
     auction_current_status = get_auction_status()
     if not auction_current_status["active"]:
         return False, "拍卖尚未开启。"
 
-    item = auction_repository.get_current_auction(auction_id)
+    item = _auction_query().get_current_auction(auction_id)
     if not item:
         return False, "未找到该拍品，编号有误或已结拍。"
 
