@@ -12,31 +12,30 @@ nonebot.init()
 from tests.test_db_backend import db_backend
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade.repository import TradeRepository
+from nonebot_plugin_xiuxian_2.features.trade.repository import LegacyTradeFeatureRepository
 
 
-def test_trade_facade_defers_xianshi_purchase_service_construction():
+def test_trade_facade_has_no_xianshi_purchase_compatibility_service():
     trade = importlib.import_module(
         "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade"
     )
-    assert trade._xianshi_purchase_service_instance is None
+    assert not hasattr(trade, "_xianshi_purchase_service_instance")
 
 
-def test_xianshi_purchase_handler_uses_lazy_repository_service():
+def test_xianshi_purchase_handler_uses_feature_application():
     source = Path(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_trade/__init__.py"
     ).read_text(encoding="utf-8")
-    assert "_xianshi_purchase_service_instance = None" in source
-    assert "def _xianshi_purchase_service(" in source
-    assert "xianshi_repository" in source
     assert "trade_application.purchase(" in source
     assert "_xianshi_purchase_service().purchase(" not in source
 
 
-def test_xianshi_purchase_handler_uses_feature_application():
+def test_xianshi_purchase_handler_has_no_legacy_service_import():
     source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_trade/__init__.py"
     text = source.read_text(encoding="utf-8")
     assert "trade_application.purchase(" in text
     assert "_xianshi_purchase_service().purchase(" not in text
+    assert "XianshiPurchaseService" not in text
 
 
 class TradePurchaseTests(unittest.TestCase):
@@ -125,6 +124,21 @@ class TradePurchaseTests(unittest.TestCase):
                 ("buyer", 1001),
             ),
             2,
+        )
+
+    def test_legacy_feature_repository_uses_feature_trade_repository_directly(self) -> None:
+        result = LegacyTradeFeatureRepository(self.database, self.database).invoke(
+            "purchase",
+            "compat-purchase-1",
+            "buyer",
+            listing_id=self.listing_id,
+            quantity=1,
+            max_goods_num=99,
+        )
+        self.assertTrue(result.applied)
+        self.assertEqual(
+            self.scalar("SELECT stone FROM user_xiuxian WHERE user_id=%s", ("buyer",)),
+            800,
         )
 
     def test_repeated_operation_does_not_charge_or_deliver_twice(self) -> None:

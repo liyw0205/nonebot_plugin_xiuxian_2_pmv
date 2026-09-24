@@ -34,9 +34,14 @@ class LegacyTradeFeatureRepository:
             method = "start" if action == "session_start" else "finish"
             return getattr(AuctionSessionService(self.game_database, self.trade_database, int(kwargs.pop("max_goods_num", 1))), method)(operation_id, **kwargs)
         from ...xiuxian.xiuxian_trade.repository import TradeRepository
-        from ...xiuxian.xiuxian_trade.transaction_service import XianshiPurchaseService
         max_goods_num = int(kwargs.pop("max_goods_num", 1) or 1)
-        return XianshiPurchaseService(TradeRepository(self.game_database, max_goods_num=max_goods_num)).purchase(user_id, kwargs.pop("listing_id"), kwargs.pop("quantity"), operation_id=operation_id, **kwargs)
+        return TradeRepository(self.game_database, max_goods_num=max_goods_num).purchase_xianshi_item(
+            operation_id,
+            str(user_id),
+            kwargs.pop("listing_id"),
+            kwargs.pop("quantity"),
+            **kwargs,
+        )
 
 
 __all__ = ["LegacyTradeFeatureRepository", "TradeFeatureRepository"]

@@ -529,11 +529,20 @@ class SourceQualityTests(unittest.TestCase):
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
         command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")
         repository_source = (trade_root / "repository.py").read_text(encoding="utf-8")
+        feature_repository_source = (
+            SOURCE_ROOT / "features" / "trade" / "repository.py"
+        ).read_text(encoding="utf-8")
+        legacy_transaction_source = (trade_root / "transaction_service.py").read_text(
+            encoding="utf-8"
+        )
         self.assertIn("trade_application.purchase(", command_source)
         self.assertNotIn("_xianshi_purchase_service().purchase(", command_source)
         self.assertNotIn("xianshi_buy_refund", command_source)
         self.assertIn("BEGIN IMMEDIATE", repository_source)
         self.assertIn("xianshi_operations", repository_source)
+        self.assertIn("purchase_xianshi_item(", feature_repository_source)
+        self.assertNotIn("XianshiPurchaseService", feature_repository_source)
+        self.assertNotIn("class XianshiPurchaseService", legacy_transaction_source)
 
     def test_guishi_deposit_uses_feature_repository(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"

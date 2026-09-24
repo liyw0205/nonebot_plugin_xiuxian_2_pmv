@@ -104,6 +104,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(trade["xianshi_clear_application_owned"])
         self.assertTrue(trade["legacy_xianshi_clear_disabled"])
         self.assertTrue(trade["purchase_application_owned"])
+        self.assertTrue(trade["purchase_compatibility_repository_direct"])
         self.assertTrue(trade["legacy_purchase_disabled"])
         self.assertTrue(trade["guishi_deposit_application_owned"])
         self.assertTrue(trade["legacy_guishi_deposit_disabled"])

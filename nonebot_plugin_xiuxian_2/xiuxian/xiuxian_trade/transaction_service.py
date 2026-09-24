@@ -5,8 +5,6 @@ from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import RLock
-from uuid import uuid4
-from .repository import TradeRepository, XianshiPurchase
 from ..xiuxian_utils import db_backend
 import random
 import time
@@ -32,30 +30,6 @@ from ...infrastructure.ids import UUIDGenerator
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
-
-class XianshiPurchaseService:
-    def __init__(self, repository: TradeRepository) -> None:
-        self._repository = repository
-
-    def purchase(
-        self,
-        buyer_id,
-        listing_id,
-        quantity,
-        *,
-        operation_id: str | None = None,
-        stamina_operation_id: str | None = None,
-        stamina_cost: int = 0,
-    ) -> XianshiPurchase:
-        operation_id = operation_id or f"xianshi:{listing_id}:{buyer_id}:{uuid4().hex}"
-        return self._repository.purchase_xianshi_item(
-            operation_id,
-            str(buyer_id),
-            str(listing_id),
-            quantity,
-            stamina_operation_id=stamina_operation_id,
-            stamina_cost=stamina_cost,
-        )
 
 @dataclass(frozen=True)
 class GuishiStoneResult:
@@ -1085,7 +1059,6 @@ class AuctionSessionService:
         )
 
 __all__ = [
-    "XianshiPurchaseService",
     "GuishiStoneResult",
     "GuishiStoneService",
     "AuctionQueueResult",

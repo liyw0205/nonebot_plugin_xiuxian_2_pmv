@@ -80,6 +80,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     trade_xianshi_transactions = (PACKAGE / "features" / "trade" / "xianshi_listing_repository.py").read_text(encoding="utf-8")
     trade_plan_xianshi_transactions = (PACKAGE / "features" / "trade" / "xianshi_plan_listing_repository.py").read_text(encoding="utf-8")
     trade_xianshi_removal_transactions = (PACKAGE / "features" / "trade" / "xianshi_removal_repository.py").read_text(encoding="utf-8")
+    trade_feature_repository = (PACKAGE / "features" / "trade" / "repository.py").read_text(encoding="utf-8")
     trade_auction_transactions = (PACKAGE / "xiuxian" / "xiuxian_trade" / "transaction_service.py").read_text(encoding="utf-8")
     trade_deposit_handler = trade_facade[
         trade_facade.index("async def guishi_deposit_") : trade_facade.index(
@@ -391,6 +392,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_xianshi_clear_disabled": "xianshi_repository.clear_all_xianshi_listings(" not in xianshi_clear_handler,
             "purchase_application_owned": "trade_application.purchase(" in trade_facade,
             "legacy_purchase_disabled": "_xianshi_purchase_service().purchase(" not in trade_facade,
+            "purchase_compatibility_repository_direct": "purchase_xianshi_item(" in trade_feature_repository and "XianshiPurchaseService" not in trade_feature_repository,
             "guishi_deposit_application_owned": "trade_application.guishi_deposit(" in trade_deposit_handler,
             "legacy_guishi_deposit_disabled": "_guishi_stone_service().deposit(" not in trade_deposit_handler,
             "guishi_withdraw_application_owned": "trade_application.guishi_withdraw(" in trade_withdraw_handler,

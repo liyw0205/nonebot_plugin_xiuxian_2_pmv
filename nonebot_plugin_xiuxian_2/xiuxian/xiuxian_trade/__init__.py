@@ -59,7 +59,6 @@ from .transaction_service import (
 )
 from .auction_jobs import run_auction_job
 from .repository import TradeRepository
-from .transaction_service import XianshiPurchaseService
 from .transaction_service import GuishiStoneService
 from .transaction_service import AuctionSessionService
 from ...paths import get_paths
@@ -87,7 +86,6 @@ xianshi_repository = TradeRepository(
     get_paths().game_db,
     max_goods_num=XiuConfig().max_goods_num,
 )
-_xianshi_purchase_service_instance = None
 trade_application = TradeApplication(
     get_paths().game_db,
     get_paths().trade_db,
@@ -188,15 +186,6 @@ def _auction_settlement_application():
             effects=LegacyAuctionSettlementEffects(get_paths().player_db),
         )
     return _auction_settlement_application_instance
-
-
-def _xianshi_purchase_service():
-    global _xianshi_purchase_service_instance
-    if _xianshi_purchase_service_instance is None:
-        _xianshi_purchase_service_instance = XianshiPurchaseService(
-            xianshi_repository
-        )
-    return _xianshi_purchase_service_instance
 
 
 bind_auction_repository(xianshi_repository, _auction_session_service)

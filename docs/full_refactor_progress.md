@@ -3813,3 +3813,16 @@ outbox。新增 migration `auction.007`（game）与 `auction.008`（player）�
 restore、reconcile 均 clean，operations/outbox/dead events 均为 0。结算/竞价聚焦回归 `52 passed`，
 根目录全量回归 `2602 passed, 25 subtests, 16 warnings`；compileall、architecture、progress、
 inventory、diff check 均通过。真实发布周期证据仍属于 P7；下一阶段转入交易兼容余额清理。
+
+2026-09-24 xianshi purchase compatibility balance cleanup：真实仙肆购买 handler 已由
+`TradeApplication.purchase` 承载；继续清理调用图后发现 `features/trade/repository.py` 的显式
+compatibility fallback 仍绕回 `transaction_service.XianshiPurchaseService` 包装类。该 fallback
+现在直接调用 feature-owned `TradeRepository.purchase_xianshi_item`，旧包装移到明确的
+`compatibility/legacy_xianshi_purchase.py` rollback-only 模块；默认 trade facade 删除无用 getter
+和 import，`transaction_service.py` 减少 27 行，核心交易事务未改变。新增 compatibility repository
+regression；trade/source/progress 聚焦 `225 passed`，根目录全量 `2605 passed, 25 subtests,
+16 warnings`，compileall、architecture、inventory、diff check 通过。隔离五库 recovery 完成
+backup、restore dry-run、restore、134 项 catalog migration 和 reconcile，game/player/trade/impart/
+message 为 `107/24/7/1/1`，`clean=true`、operations/outbox/dead events 均为 0。真实发布周期证据
+仍属于 P7；下一目标继续检查交易兼容的 Guishi stone、auction session/queue 与 scheduler/query
+边界。
