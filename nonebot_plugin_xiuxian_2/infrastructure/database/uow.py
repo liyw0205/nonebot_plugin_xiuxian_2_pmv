@@ -10,22 +10,40 @@ from typing import Any, Mapping
 class DatabaseUnitOfWork:
     """SQLite transaction with explicit commit/rollback semantics."""
 
-    def __init__(self, database: str | Path, *, timeout: float = 30, immediate: bool = False) -> None:
+    def __init__(
+        self,
+        database: str | Path,
+        *,
+        timeout: float = 30,
+        immediate: bool = False,
+        read_only: bool = False,
+    ) -> None:
         self.database = Path(database)
         self.timeout = timeout
         self.immediate = bool(immediate)
+        self.read_only = bool(read_only)
         self.connection: sqlite3.Connection | None = None
         self._attached_schemas: set[str] = set()
 
     def __enter__(self) -> "DatabaseUnitOfWork":
-        self.database.parent.mkdir(parents=True, exist_ok=True)
-        self.connection = sqlite3.connect(self.database, timeout=self.timeout)
+        if self.read_only:
+            self.connection = sqlite3.connect(
+                f"{self.database.resolve().as_uri()}?mode=ro",
+                timeout=self.timeout,
+                uri=True,
+            )
+        else:
+            self.database.parent.mkdir(parents=True, exist_ok=True)
+            self.connection = sqlite3.connect(self.database, timeout=self.timeout)
         try:
             self.connection.row_factory = sqlite3.Row
-            self.connection.execute("PRAGMA journal_mode=WAL")
+            if not self.read_only:
+                self.connection.execute("PRAGMA journal_mode=WAL")
             self.connection.execute("PRAGMA busy_timeout=30000")
             self.connection.execute("PRAGMA foreign_keys=ON")
-            self.connection.execute("BEGIN IMMEDIATE" if self.immediate else "BEGIN")
+            self.connection.execute(
+                "BEGIN IMMEDIATE" if self.immediate and not self.read_only else "BEGIN"
+            )
         except Exception:
             # Exceptions raised while entering a context do not trigger
             # __exit__, so close the partially initialized connection here.

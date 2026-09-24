@@ -68,6 +68,7 @@ from ...compatibility.auction_bid_effects import LegacyAuctionBidEffects
 from ...compatibility.auction_settlement_effects import LegacyAuctionSettlementEffects
 from ...features.auction.session_start_application import AuctionSessionStartApplication
 from ...features.auction.settlement import AuctionSettlementApplication
+from ...features.auction.query_application import AuctionQueryApplication
 from ...features.trade.guishi_deposit_repository import GuishiDepositSqlRepository
 from ...features.trade.guishi_withdraw_repository import GuishiWithdrawSqlRepository
 from ...infrastructure.ids import UUIDGenerator
@@ -96,6 +97,7 @@ _auction_session_service_instance = None
 _auction_bid_application_instance = None
 _auction_session_start_application_instance = None
 _auction_settlement_application_instance = None
+_auction_query_application_instance = None
 scheduler = require("nonebot_plugin_apscheduler").scheduler # 全局调度器，用于鬼市
 auction_scheduler = require("nonebot_plugin_apscheduler").scheduler # 独立的拍卖调度器，避免冲突
 
@@ -175,6 +177,13 @@ def _auction_settlement_application():
             effects=LegacyAuctionSettlementEffects(get_paths().player_db),
         )
     return _auction_settlement_application_instance
+
+
+def _auction_query_application():
+    global _auction_query_application_instance
+    if _auction_query_application_instance is None:
+        _auction_query_application_instance = AuctionQueryApplication(get_paths().game_db)
+    return _auction_query_application_instance
 
 
 bind_auction_repository(xianshi_repository, _auction_session_service)
@@ -2389,7 +2398,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
     # 指定编号 → 详情
     if auction_id:
-        item = xianshi_repository.get_current_auction(auction_id)
+        item = _auction_query_application().get_current_auction(auction_id)
 
         if item:
             name = str(item.get("name") or "未知")
@@ -2460,7 +2469,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                 )
             await auction_view.finish()
 
-        history_record_list = xianshi_repository.get_auction_history(auction_id)
+        history_record_list = _auction_query_application().get_auction_history(auction_id)
         if history_record_list:
             record = history_record_list[0]
             msg_list = [
@@ -2493,7 +2502,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await auction_view.finish()
 
     # 列表
-    current_auctions_list = xianshi_repository.get_current_auction()
+    current_auctions_list = _auction_query_application().get_current_auction()
     auction_current_status = get_auction_status()
 
     if not current_auctions_list:
@@ -2834,7 +2843,7 @@ async def auction_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     total_player_items_in_queue = len(player_auctions_in_queue)
     
     # 获取拍卖历史记录数量
-    auction_history_count = len(xianshi_repository.get_auction_history())
+    auction_history_count = _auction_query_application().count_auction_history()
     
     msg_list = [
         "【拍卖信息】",
@@ -2872,7 +2881,7 @@ async def auction_activity_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     rules = auction_config.get_auction_rules()
     activity_config = auction_config.get_auction_activity_config()
     auction_current_status = get_auction_status()
-    current_auctions = xianshi_repository.get_current_auction() or []
+    current_auctions = _auction_query_application().get_current_auction() or []
     current_auctions_count = len(current_auctions)
     waiting_auctions_count = len(_trade_manager().get_player_auction_items() or [])
     now = runtime_clock.now()

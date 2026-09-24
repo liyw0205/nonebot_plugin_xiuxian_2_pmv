@@ -2865,9 +2865,10 @@
    真实 Flask 回归覆盖 payload、CSRF、operation replay、队列资产变化、结算 effects 单次分发。
    旧 `AuctionSessionService` 已移到 `compatibility/legacy_trade_auction_sessions.py`，只从显式注入的
    rollback repository 延迟加载；本切片不新增 migration。
-4. **继续清理交易兼容余额**：检查 `transaction_service.py` 及仙肆/鬼市剩余 handler 的真实调用图，
-   切片迁出展示查询和 scheduler。每次只迁一个资产转换；兼容 repository 仅在真实调用归零且回滚
-   证据满足后移除。
+4. **继续清理交易兼容余额**：拍卖查看、拍卖信息、活动展示的当前拍品/历史查询已迁至
+   `AuctionQueryApplication` 与无 DDL 的只读 repository。待迁目标是 `my_auction` 等个人查询及
+   scheduler 的拍品状态读取，再独立评估其与场次/结算的边界。检查仙肆/鬼市剩余 handler 的真实
+   调用图，每次只迁一个资产转换；兼容 repository 仅在真实调用归零且回滚证据满足后移除。
 5. 清零已迁移域的 compatibility 余额：优先处理仍由旧 service 承载的高频资产
    路径，包括签到后置 effects、背包通用物品/礼包余项、宠物、任务/修炼、洞府和
    地图未覆盖动作、宗门、竞技场/副本、世界事件、Boss 与拍卖。先用真实入口
@@ -3861,3 +3862,15 @@ progress、inventory、diff check 均通过。隔离五库 recovery
 `compatibility/legacy_trade_auction_sessions.py`，只由显式注入回滚路径加载，未再作为默认 Web 调用。
 trade/auction Web 测试通过；本切片无 schema 变化，五库 recovery
 仍需作为发布前核验，真实发布周期证据仍属于 P7。
+
+2026-09-24 auction display query slice：拍卖查看（列表/编号详情/历史详情）、拍卖信息及拍卖活动
+展示改由 `AuctionQueryApplication` 查询 game DB 的既有 `auction_current`/`auction_history` 表。
+`AuctionQuerySqlRepository` 使用 SQLite `mode=ro` 且不执行 DDL；历史总数使用 `COUNT(*)` 而非将全表
+载入内存。缺少数据库或旧表时返回空列表/None/0，保留 bids/bid_times JSON 解码回退、`is_system`
+转换及历史 `end_time DESC` 顺序。该只读切片不新增 schema/migration，
+不触碰竞价、结算、调度或个人拍卖命令；余下 `my_auction`、手动结束/结束 scheduler、周期检查和
+自动开场读取仍通过旧 repository，故交易/拍卖兼容余额并未清零。聚焦 source/progress/query 回归
+`217 passed`，本轮根目录 `tests/` 全量回归 `2616 passed, 16 warnings`；compileall、architecture、
+inventory、progress 与 diff check 均通过。隔离五库 recovery 完成 backup、restore dry-run、restore、
+全量 `134` 项 catalog migration 和 reconcile，`clean=true`、operations/outbox/dead events 均为 0；
+临时数据、receipt、basetemp 与字节码缓存均清理。

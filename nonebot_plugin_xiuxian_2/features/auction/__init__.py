@@ -6,6 +6,8 @@ from .bid_effects import AuctionBidEffects, NullAuctionBidEffects
 from .settlement_effects import AuctionSettlementEffects, NullAuctionSettlementEffects
 from .settlement import AuctionSettlementApplication
 from .settlement_repository import AuctionSettlementResult, AuctionSettlementSqlRepository
+from .query_application import AuctionQueryApplication
+from .query_repository import AuctionQuerySqlRepository
 
 __all__ = [
     "AuctionBidApplication",
@@ -17,4 +19,6 @@ __all__ = [
     "AuctionSettlementApplication",
     "AuctionSettlementResult",
     "AuctionSettlementSqlRepository",
+    "AuctionQueryApplication",
+    "AuctionQuerySqlRepository",
 ]

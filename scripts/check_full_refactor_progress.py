@@ -176,6 +176,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
     cli_source = (PACKAGE / "cli.py").read_text(encoding="utf-8")
     auction_queue = (PACKAGE / "features" / "auction" / "queue_application.py").read_text(encoding="utf-8")
     auction_start = (PACKAGE / "features" / "auction" / "session_start_application.py").read_text(encoding="utf-8")
+    auction_query = (PACKAGE / "features" / "auction" / "query_application.py").read_text(encoding="utf-8")
+    auction_query_repository = (PACKAGE / "features" / "auction" / "query_repository.py").read_text(encoding="utf-8")
     auction_queue_handlers = trade_facade[
         trade_facade.index("async def auction_add_(") : trade_facade.index(
             "@my_auction.handle", trade_facade.index("async def auction_add_(")
@@ -459,7 +461,15 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 )
             ),
             "legacy_trade_auction_session_isolated": "AuctionSessionService" not in trade_feature_repository and "LegacyTradeAuctionSessionAdapter" in trade_feature_repository and "AuctionSessionService" in legacy_trade_auction_compatibility,
-            "status": "bid_and_settlement_effects_owned_with_outbox_reconcile; trade_web_auction_actions_application_owned; legacy_session_service_isolated; other_trade_compatibility_cleanup_pending",
+            "display_queries_application_owned": "AuctionQuerySqlRepository" in auction_query and "AuctionQuerySqlRepository" in auction_query_repository and all(
+                token in trade_facade for token in (
+                    "_auction_query_application().get_current_auction(auction_id)",
+                    "_auction_query_application().get_auction_history(auction_id)",
+                    "_auction_query_application().get_current_auction()",
+                )
+            ) and "_auction_query_application().count_auction_history()" in trade_facade and "xianshi_repository.get_current_auction(auction_id)" not in trade_facade and "xianshi_repository.get_auction_history(auction_id)" not in trade_facade,
+            "display_query_repository_does_not_own_ddl": "CREATE TABLE" not in auction_query_repository and "ensure_schema" not in auction_query_repository and "read_only=True" in auction_query_repository and "read_only: bool = False" in (PACKAGE / "infrastructure" / "database" / "uow.py").read_text(encoding="utf-8"),
+            "status": "bid_and_settlement_effects_owned_with_outbox_reconcile; trade_web_auction_actions_application_owned; display_queries_application_owned; legacy_session_service_isolated; scheduler_and_personal_query_compatibility_pending",
         },
         "boss": {
             "manual_spawn_application_owned": "boss_application.spawn(" in boss_facade,
