@@ -48,11 +48,12 @@ class SignInApplicationEffects(SignInEffects):
                 message = f"🎉恭喜道友获得{prize_names[settled.prize_tier]}！\n中奖号码：{settled.lottery_number}\n获得奖池的{settled.prize}灵石！🎉"
             else:
                 message = "本次签到未中奖，奖池继续累积~"
-        if replayed:
-            return message + "\n该签到请求已经处理，无需重复提交。"
+        # The event is replay-safe at each projection boundary.  A replay must
+        # still attempt every projection so a partial failure can be repaired by
+        # the outbox reconciler; repositories deduplicate by operation_id.
         self.statistics.record(user_id=str(user_id), operation_id=f"statistics:{operation_id}", event_key="修仙签到", occurred_at=now)
         self.tasks.record(user_id=str(user_id), operation_id=operation_id)
-        return message
+        return message + ("\n该签到请求已经处理，无需重复提交。" if replayed else "")
 
 
 __all__ = ["SignInApplicationEffects"]

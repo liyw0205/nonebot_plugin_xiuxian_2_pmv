@@ -16,6 +16,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(arena["daily_reward_application_owned"])
         self.assertTrue(arena["legacy_daily_reward_disabled"])
         self.assertFalse(slices["sign_in"]["lottery_compatibility_fallback"])
+        self.assertTrue(slices["sign_in"]["effects_outbox_reconcile_owned"])
         tower = slices["tower"]
         self.assertTrue(tower["state_application_owned"])
         self.assertTrue(tower["legacy_state_owner_disabled"])

@@ -2822,7 +2822,7 @@
 - 架构/交付基础门禁 P0-P6 已就绪；P7 仍未就绪，缺少一次真实发布周期的
   `--data-dir`、当前 release 和发布证据。隔离 recovery smoke 不能替代 P7。
 - 全面底层重构尚未达到退出条件：仍有 33 个
-  `xiuxian/*/transaction_service.py`（47,777 行）以及
+  `xiuxian/*/transaction_service.py`（47,428 行）以及
   `xiuxian2_handle.py`（180,302 bytes）的旧执行路径。它们不能因已有 facade、
   application 或静态标记而计作完成。
 - 已切换的功能仍可能保留显式 compatibility/rollback adapter；只有默认真实
@@ -2841,6 +2841,10 @@
 - `recovery_smoke.py` 在 2026-09-24 修复为五库按路由迁移前，旧脚本只对
   `game_db` 应用完整目录。因此此前没有独立五库回执的隔离 smoke 只能作为单库
   恢复演练，不能用于跨库切片或 P7 的最终证据；后续统一以五库 receipt 为准。
+- 签到默认资产、lottery、statistics 和 task 路径已由 feature-owned application 承载；
+  本轮补齐 `sign_in.effects` outbox。副作用事件与签到资产事务同库提交，统计/任务投影
+  失败后由请求重放或 `reconcile` 续跑，投影仍按 operation ID 幂等。`LegacySignInEffects`
+  仅保留显式旧安装回滚，不属于默认执行图。
 
 ### 6.2 优先目标
 
@@ -2871,7 +2875,7 @@
    处理旧拍卖 session/竞价 fallback 的显式兼容 adapter；检查仙肆/鬼市剩余 handler 的真实调用图，
    每次只迁一个资产转换，兼容 repository 仅在真实调用归零且回滚证据满足后移除。
 5. 清零已迁移域的 compatibility 余额：优先处理仍由旧 service 承载的高频资产
-   路径，包括签到后置 effects、背包通用物品/礼包余项、宠物、任务/修炼、洞府和
+   路径，包括签到显式旧安装回滚、背包通用物品/礼包余项、宠物、任务/修炼、洞府和
    地图未覆盖动作、宗门、竞技场/副本、世界事件、Boss 与拍卖。先用真实入口
    调用图确定一个动作，再迁移，不按文件或目录整体宣布完成。
 6. 单列处理复杂批处理和外部状态：赌坊投注/派奖与分块分红、全服批处理、跨库
@@ -3951,3 +3955,10 @@ feature-owned `LegacyTradeRepository` 的 bid adapter；旧 trade DB 到 game DB
 延迟导入旧仓储，避免命令、查询和 feature application 的默认执行图加载旧交易 SQL；重复初始化仍由旧迁移标记保证幂等。
 新增临时双库导入回归和 source contract。聚焦交易/拍卖回归 41 项，顶层 `tests/` 全量 `2633 passed, 16 warnings,
 25 subtests`；旧投影迁移语义未改变。下一阶段进入已迁移域的下一个兼容余额，继续按真实调用图拆分并保留可回滚边界。
+
+2026-09-25 sign-in effects outbox recovery：`SignInApplication` 为非空 effects 在签到资产事务中写入
+ `sign_in.effects` outbox；提交后统一由 `reconcile_outbox_event` 调用 lottery/statistics/task effects，失败事件
+ 标记为 pending 并可由相同 operation 重放或统一 `reconcile` 续跑。`SignInApplicationEffects` 不再因 replay
+ 跳过未完成的统计/任务投影，各 feature repository 继续按 operation ID 去重；Null effects 不产生无人处理的
+ outbox 事件，`LegacySignInEffects` 仍只作为显式回滚适配器。新增副作用失败续跑测试；签到 effects、wiring、
+ lottery/source/progress 聚焦回归通过，下一步仍需真实五库 recovery 与提交前缓存清理，P7 正式发布证据未补齐。

@@ -62,6 +62,39 @@ class SignInEffectsBoundaryTests(unittest.TestCase):
             self.assertEqual(result.code, "user_missing")
             effects.on_signed.assert_not_called()
 
+    def test_failed_effects_are_retried_from_persisted_outbox(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "sign.db"
+            with DatabaseUnitOfWork(database) as uow:
+                uow.execute("CREATE TABLE user_xiuxian (user_id TEXT, is_sign INTEGER, stone INTEGER)")
+                uow.execute("INSERT INTO user_xiuxian VALUES (?, ?, ?)", ("u1", 0, 0))
+                apply_platform_schema(uow)
+                apply_sign_in(uow)
+            effects = Mock()
+            effects.on_signed.side_effect = [RuntimeError("projection unavailable"), "recovered"]
+            app = SignInApplication(database, random_source=FixedRandom(), clock=FixedClock(), effects=effects)
+
+            first = app.claim(user_id="u1", operation_id="sign-retry", lower_limit=10, upper_limit=20)
+            with DatabaseUnitOfWork(database) as uow:
+                pending = uow.query_one(
+                    "SELECT status, attempts FROM domain_outbox WHERE event_id=?",
+                    ("sign-retry:sign_in.claim",),
+                )
+            retry = app.claim(user_id="u1", operation_id="sign-retry", lower_limit=10, upper_limit=20)
+            with DatabaseUnitOfWork(database) as uow:
+                sent = uow.query_one(
+                    "SELECT status, attempts FROM domain_outbox WHERE event_id=?",
+                    ("sign-retry:sign_in.claim",),
+                )
+
+            self.assertTrue(first.ok)
+            self.assertIn("稍后补偿", first.message or "")
+            self.assertEqual((pending["status"], int(pending["attempts"])), ("pending", 1))
+            self.assertTrue(retry.replayed)
+            self.assertEqual(retry.message, "recovered")
+            self.assertEqual((sent["status"], int(sent["attempts"])), ("sent", 1))
+            self.assertEqual(effects.on_signed.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

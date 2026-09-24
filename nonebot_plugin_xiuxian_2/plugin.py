@@ -813,6 +813,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         }
         context.outbox_handlers = {
             "accessory_package.open": context.services["accessory_package"].reconcile,
+            "sign_in.effects": context.services["sign_in"].reconcile_outbox_event,
             "auction.bid.effects": context.services["auction"].reconcile_outbox_event,
             "auction.settlement.effects": context.services["auction_settlement"].reconcile_outbox_event,
         }

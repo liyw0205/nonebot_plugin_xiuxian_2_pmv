@@ -51,6 +51,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     web = (PACKAGE / "adapters" / "web" / "api.py").read_text(encoding="utf-8")
     legacy_transaction = (PACKAGE / "xiuxian" / "xiuxian_base" / "transaction_service.py").read_text(encoding="utf-8")
     sign_effects = (PACKAGE / "features" / "sign_in" / "application_effects.py").read_text(encoding="utf-8")
+    sign_application = (PACKAGE / "features" / "sign_in" / "application.py").read_text(encoding="utf-8")
     plugin = (PACKAGE / "plugin.py").read_text(encoding="utf-8")
     arena = (PACKAGE / "xiuxian" / "xiuxian_arena" / "__init__.py").read_text(encoding="utf-8")
     arena_limit = (PACKAGE / "xiuxian" / "xiuxian_arena" / "arena_limit.py").read_text(encoding="utf-8")
@@ -219,6 +220,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "web_application_path": "create_sign_in_blueprint" in web and "application.claim" in web,
             "old_service_removed": "class SignInService" not in legacy_transaction and (PACKAGE / "compatibility" / "legacy_sign_in.py").is_file(),
             "effects_application_owned": "SignInApplicationEffects" in sign_effects and "SignInApplicationEffects(" in plugin,
+            "effects_outbox_reconcile_owned": '"sign_in.effects"' in plugin and "reconcile_outbox_event" in sign_application,
             "task_core_legacy": "SignInTaskEffects(record_task_progress)" in plugin,
             "lottery_core_default_legacy": "LotteryApplication(" not in plugin or "LotterySettlementService" in plugin,
             "lottery_compatibility_fallback": "XIUXIAN_SIGN_IN_LEGACY_LOTTERY" in plugin and "LotterySettlementService" in plugin,
