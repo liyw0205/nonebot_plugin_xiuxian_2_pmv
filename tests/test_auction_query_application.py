@@ -178,6 +178,17 @@ class AuctionQueryEntryPointTests(unittest.TestCase):
         self.assertNotIn("auction_repository.get_auction_history", utils_source)
         self.assertIn("get_recent_auction_deals", utils_source)
 
+    def test_default_session_binding_uses_feature_application(self) -> None:
+        source = (
+            Path(__file__).resolve().parents[1]
+            / "nonebot_plugin_xiuxian_2"
+            / "xiuxian"
+            / "xiuxian_trade"
+            / "__init__.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("_auction_session_service_instance = AuctionSessionService(", source)
+        self.assertIn("return _auction_session_start_application()", source)
+
 
 if __name__ == "__main__":
     unittest.main()

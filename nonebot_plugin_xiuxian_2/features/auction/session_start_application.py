@@ -27,6 +27,12 @@ class AuctionSessionStartApplication:
         self.clock = clock or SystemClock()
         self.random_source = random_source or SystemRandom()
 
+    def get_active_session(self) -> dict[str, Any] | None:
+        return self.repository.get_active_session()
+
+    def get_start_operation(self, operation_id: str) -> AuctionSessionStartResult | None:
+        return self.repository.get_start_operation(operation_id)
+
     def start(
         self,
         operation_id: str,

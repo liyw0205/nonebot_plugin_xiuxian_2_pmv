@@ -60,7 +60,6 @@ from .transaction_service import (
 )
 from .auction_jobs import run_auction_job
 from .repository import TradeRepository
-from .transaction_service import AuctionSessionService
 from ...paths import get_paths
 from ...features.trade.application import TradeApplication
 from ...features.auction.queue_application import AuctionQueueApplication
@@ -129,25 +128,7 @@ def _auction_queue_application():
 
 
 def _auction_session_service():
-    global _auction_session_service_instance
-    if _auction_session_service_instance is None:
-        _auction_session_service_instance = AuctionSessionService(
-            get_paths().game_db, get_paths().trade_db
-        )
-        bind_auction_repository(xianshi_repository, _auction_session_service_instance)
-        bind_auction_query_application(_auction_query_application)
-        bind_auction_service_dependencies(
-            items=items,
-            sql_message=_sql_message,
-            trade_manager=_trade_manager,
-            auction_repository=xianshi_repository,
-            auction_session_service=_auction_session_service_instance,
-            auction_bid_application=_auction_bid_application,
-            auction_session_start_application=_auction_session_start_application,
-            auction_settlement_application=_auction_settlement_application,
-            auction_query_application=_auction_query_application,
-        )
-    return _auction_session_service_instance
+    return _auction_session_start_application()
 
 
 def _auction_session_start_application():

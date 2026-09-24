@@ -51,7 +51,9 @@ class AuctionSessionStartSqlRepository:
         )
 
     def get_active_session(self) -> dict[str, Any] | None:
-        with DatabaseUnitOfWork(self.game_database) as uow:
+        if not Path(self.game_database).is_file():
+            return None
+        with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
             exists = uow.query_one(
                 "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name=?",
                 ("auction_sessions",),
@@ -72,7 +74,9 @@ class AuctionSessionStartSqlRepository:
         }
 
     def get_start_operation(self, operation_id: str) -> AuctionSessionStartResult | None:
-        with DatabaseUnitOfWork(self.game_database) as uow:
+        if not Path(self.game_database).is_file():
+            return None
+        with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
             exists = uow.query_one(
                 "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name=?",
                 ("auction_session_operations",),

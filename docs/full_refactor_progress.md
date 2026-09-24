@@ -2814,7 +2814,7 @@
 
 ## 6. 下一步
 
-### 6.1 当前权威状态（2026-09-24）
+### 6.1 当前权威状态（2026-09-25）
 
 本节以 `scripts/refactor_completion_audit.py` 和
 `scripts/check_full_refactor_progress.py` 的当前输出为准；前文及下方的日期记录仅保留当时的实施证据，不应被当作当前待办状态。
@@ -2833,10 +2833,11 @@
   拍卖竞价现在通过稳定 outbox event 分发；player DB 统计投影按 operation ID 持久化去重，
   用户 JSON 日志也带 event marker 并通过 player DB 写锁串行化。NoneBot/Web runtime 与 CLI
   共用竞价 effects handler；结算后的日志/统计/game-event 也已接入 application-owned outbox，
-  不能据此将交易兼容层或拍卖完整切片标为完成。trade Web manifest 仍公开
-  `enqueue/dequeue/session_start/session_finish`；默认 `TradeApplication` 未注入 repository，
-  这些 `_action` 目前会进入 `repository.invoke` 空引用。`LegacyTradeFeatureRepository` 的
-  `session_start/session_finish` 仍派发到旧 `AuctionSessionService`，其中 finish 保留直接结算事务。
+ 不能据此将交易兼容层或拍卖完整切片标为完成。trade Web manifest 仍公开
+ `enqueue/dequeue/session_start/session_finish`；默认 `TradeApplication` 已直接编排 feature-owned
+ queue/session-start/settlement application，旧 `LegacyTradeFeatureRepository` 只保留显式 rollback
+ 注入路径。默认 NoneBot/scheduler session 查询也已改由 `AuctionSessionStartApplication` 提供，旧
+ `AuctionSessionService` 不再在默认启动路径实例化。
 - `recovery_smoke.py` 在 2026-09-24 修复为五库按路由迁移前，旧脚本只对
   `game_db` 应用完整目录。因此此前没有独立五库回执的隔离 smoke 只能作为单库
   恢复演练，不能用于跨库切片或 P7 的最终证据；后续统一以五库 receipt 为准。
@@ -2865,10 +2866,10 @@
    真实 Flask 回归覆盖 payload、CSRF、operation replay、队列资产变化、结算 effects 单次分发。
    旧 `AuctionSessionService` 已移到 `compatibility/legacy_trade_auction_sessions.py`，只从显式注入的
    rollback repository 延迟加载；本切片不新增 migration。
-4. **继续清理交易兼容余额**：拍卖查看、拍卖信息、活动展示的当前拍品/历史查询已迁至
-   `AuctionQueryApplication` 与无 DDL 的只读 repository。待迁目标是 `my_auction` 等个人查询及
-   scheduler 的拍品状态读取，再独立评估其与场次/结算的边界。检查仙肆/鬼市剩余 handler 的真实
-   调用图，每次只迁一个资产转换；兼容 repository 仅在真实调用归零且回滚证据满足后移除。
+4. **继续清理交易兼容余额**：拍卖查看、拍卖信息、活动展示、个人等待区、scheduler、重启对账
+   和竞价前拍品查询均已迁至 feature-owned application 与无 DDL 的只读 repository。下一步是
+   处理旧拍卖 session/竞价 fallback 的显式兼容 adapter；检查仙肆/鬼市剩余 handler 的真实调用图，
+   每次只迁一个资产转换，兼容 repository 仅在真实调用归零且回滚证据满足后移除。
 5. 清零已迁移域的 compatibility 余额：优先处理仍由旧 service 承载的高频资产
    路径，包括签到后置 effects、背包通用物品/礼包余项、宠物、任务/修炼、洞府和
    地图未覆盖动作、宗门、竞技场/副本、世界事件、Boss 与拍卖。先用真实入口
@@ -3889,3 +3890,10 @@ inventory、progress 与 diff check 均通过。隔离五库 recovery 完成 bac
 全量 `134` 项 migration 和 reconcile，`clean=true`、operations/outbox/dead events 均为 0；编译、
 临时 pytest/字节码缓存会在提交前清理。整体重构仍受 33 个旧 transaction service、`xiuxian2_handle`
 和真实正式发布周期 P7 证据阻塞。
+
+2026-09-25 auction default session binding cutover：默认 NoneBot、scheduler、状态和交易服务
+resolver 不再实例化旧 `AuctionSessionService`，统一复用 `AuctionSessionStartApplication` 的
+feature-owned active-session/start-operation 只读查询；旧 session service 仅由显式兼容适配器和历史
+测试加载。session 查询对不存在数据库返回空结果且不创建 schema。新增默认 wiring/source 边界和
+缺库回归；auction/session/source/progress/architecture 聚焦 `227 passed`，本切片 focused `28 passed`。
+写入、结算和 rollback adapter 语义未改变，下一阶段继续清理显式 auction write/session fallback。

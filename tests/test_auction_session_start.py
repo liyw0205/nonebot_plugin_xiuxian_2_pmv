@@ -41,6 +41,7 @@ def test_auction_session_uses_lazy_game_trade_resolver():
     assert "get_paths().game_db" in source
     assert "get_paths().trade_db" in source
     assert "bind_auction_repository(xianshi_repository, _auction_session_service)" in source
+    assert "return _auction_session_start_application()" in source
     assert "auction_session_service=_auction_session_service" in source
     assert "auction_session_start_application=_auction_session_start_application" in source
     assert "def _auction_session_start_application(" in source
