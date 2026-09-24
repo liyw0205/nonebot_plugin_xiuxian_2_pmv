@@ -5414,7 +5414,7 @@
         "POST"
       ],
       "path": "/api/v1/trade/session_finish",
-      "permission": "user"
+      "permission": "admin"
     },
     {
       "feature": "trade",
@@ -5422,7 +5422,7 @@
         "POST"
       ],
       "path": "/api/v1/trade/session_start",
-      "permission": "user"
+      "permission": "admin"
     },
     {
       "feature": "trade",

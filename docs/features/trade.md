@@ -22,7 +22,16 @@ feature-owned use case 结算。存取操作记录在 game DB 的
 ## 命令与别名
 `交易`、`寄售`、`鬼市`。
 ## Web API
-`POST /api/v1/trade/{deposit,withdraw,enqueue,dequeue,session_start,session_finish,purchase}`，权限 `user`。
+`POST /api/v1/trade/{deposit,withdraw,enqueue,dequeue,purchase}` 要求 `user`；`session_start` 和
+`session_finish` 要求 `admin`。所有写请求需提供 CSRF token，以及 `Idempotency-Key` header 或
+payload 中的 `operation_id`。
+
+- `enqueue` 接收 `item_id`、`item_name`、`start_price`、`user_name`；每人上架数由服务端限制。
+- `dequeue` 接收 `item_id`、`item_type`。
+- `session_start` 接收 `system_items_config`、`duration_hours`，可选 `system_item_count`（默认 5）；
+  管理员配置仅用于此次开场，不写入持久配置。
+- `session_finish` 可接收 `end_time`、`fee_rate`、`item_types`；缺省结束时间取注入的 Clock，手续费率默认 0.2。
+  结算委托给 `AuctionSettlementApplication`，统计与日志由其 outbox effects 处理。
 ## 数据模型与迁移
 `trade.001` 保留 feature 基线；`trade.002`/`trade.004` 在 game DB 创建鬼市存入/
 取出 operation 表；`trade.003` 只在 trade DB 创建或补齐 `guishi_info`；`trade.005`/
@@ -38,7 +47,9 @@ game DB 创建或升级仙肆普通、自动、快速、系统上架 operation �
 保留 `goods_num - state` 可交易量、`bind_num` 下限、库存 CAS 和历史 numeric 订单 ID。
 求购撤销在 trade DB 原子退回未成交冻结灵石并删除订单；摆摊收摊在 game DB 主事务附加
 trade DB，按背包上限原子退回未售库存、删除订单并记录 operation。求购/摆摊撮合、过期清理和
-寄存物品取回，以及拍卖竞价、等待区、场次开始/交接与结算均已切换到 feature application。
+寄存物品取回，以及拍卖竞价、等待区、场次开始/交接与结算均已切换到 feature application。trade Web
+队列与场次 route 也直接使用这些 application；旧 `AuctionSessionService` 已移入
+`compatibility/legacy_trade_auction_sessions.py`，仅供显式注入的 rollback repository 使用。
 ## 定时任务
 场次调度继续由兼容 scheduler 管理。
 ## 配置项
@@ -59,6 +70,6 @@ Web/命令不直接连接 trade_db。
 - `route: POST /api/v1/trade/withdraw`
 - `route: POST /api/v1/trade/enqueue`
 - `route: POST /api/v1/trade/dequeue`
-- `route: POST /api/v1/trade/session_start`
-- `route: POST /api/v1/trade/session_finish`
+- `route: POST /api/v1/trade/session_start`（admin）
+- `route: POST /api/v1/trade/session_finish`（admin）
 - `route: POST /api/v1/trade/purchase`

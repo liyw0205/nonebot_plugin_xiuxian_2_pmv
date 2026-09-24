@@ -77,10 +77,15 @@ def _slice_status() -> dict[str, dict[str, object]]:
     puppet_facade = (PACKAGE / "xiuxian" / "xiuxian_puppet" / "__init__.py").read_text(encoding="utf-8")
     pet_facade = (PACKAGE / "xiuxian" / "xiuxian_pet" / "__init__.py").read_text(encoding="utf-8")
     trade_facade = (PACKAGE / "xiuxian" / "xiuxian_trade" / "__init__.py").read_text(encoding="utf-8")
+    trade_application_source = (PACKAGE / "features" / "trade" / "application.py").read_text(encoding="utf-8")
+    trade_manifest_source = (PACKAGE / "features" / "trade" / "manifest.py").read_text(encoding="utf-8")
+    trade_web_source = (PACKAGE / "features" / "trade" / "web.py").read_text(encoding="utf-8")
+    trade_web_test_source = (ROOT / "tests" / "test_trade_auction_web.py").read_text(encoding="utf-8")
     trade_xianshi_transactions = (PACKAGE / "features" / "trade" / "xianshi_listing_repository.py").read_text(encoding="utf-8")
     trade_plan_xianshi_transactions = (PACKAGE / "features" / "trade" / "xianshi_plan_listing_repository.py").read_text(encoding="utf-8")
     trade_xianshi_removal_transactions = (PACKAGE / "features" / "trade" / "xianshi_removal_repository.py").read_text(encoding="utf-8")
     trade_feature_repository = (PACKAGE / "features" / "trade" / "repository.py").read_text(encoding="utf-8")
+    legacy_trade_auction_compatibility = (PACKAGE / "compatibility" / "legacy_trade_auction_sessions.py").read_text(encoding="utf-8")
     trade_auction_transactions = (PACKAGE / "xiuxian" / "xiuxian_trade" / "transaction_service.py").read_text(encoding="utf-8")
     trade_legacy_guishi_compatibility = (PACKAGE / "compatibility" / "legacy_guishi_stone.py").read_text(encoding="utf-8")
     trade_deposit_handler = trade_facade[
@@ -433,7 +438,28 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "settlement_started_operation_recoverable": "recover_started_operation = True" in auction_settlement and 'status != "duplicate" or recover_started_operation' in auction_settlement,
             "settlement_compat_effects_disabled": "if settlement_application is not None:\n        logger.info(\"拍卖已结束，结算及副作用事件已提交！\")\n        return auction_results" in trade_auction_transactions,
             "legacy_settlement_disabled": "repository=LegacyAuctionSettlementRepository(" not in plugin,
-            "status": "bid_and_settlement_effects_owned_with_outbox_reconcile; legacy_trade_compatibility_cleanup_pending",
+            "trade_web_actions_application_owned": all(
+                f"self.auction_{application}" in trade_application_source
+                for application in ("queue", "session_start", "settlement")
+            ) and all(
+                f"self.auction_{application}." in trade_application_source
+                for application in ("queue", "session_start", "settlement")
+            ),
+            "trade_web_finish_uses_settlement_ledger_directly": "if action == \"session_finish\" and self.repository is None:" in trade_application_source and "return self.auction_settlement.settle_active(" in trade_application_source,
+            "trade_web_session_routes_admin": '"session_start": "admin"' in trade_web_source and '"session_finish": "admin"' in trade_web_source and '"admin" if action in {"session_start", "session_finish"}' in trade_manifest_source,
+            "trade_web_real_route_replay_and_effects_covered": all(
+                token in trade_web_test_source
+                for token in (
+                    "/api/v1/trade/enqueue",
+                    "/api/v1/trade/dequeue",
+                    "/api/v1/trade/session_start",
+                    "/api/v1/trade/session_finish",
+                    "finish_replay",
+                    "self.effects.events",
+                )
+            ),
+            "legacy_trade_auction_session_isolated": "AuctionSessionService" not in trade_feature_repository and "LegacyTradeAuctionSessionAdapter" in trade_feature_repository and "AuctionSessionService" in legacy_trade_auction_compatibility,
+            "status": "bid_and_settlement_effects_owned_with_outbox_reconcile; trade_web_auction_actions_application_owned; legacy_session_service_isolated; other_trade_compatibility_cleanup_pending",
         },
         "boss": {
             "manual_spawn_application_owned": "boss_application.spawn(" in boss_facade,

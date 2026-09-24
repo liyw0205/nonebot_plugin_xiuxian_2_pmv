@@ -7,6 +7,10 @@ from .._legacy_application import LegacyApplication
 from ...core.errors import ValidationError
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.ids import UUIDGenerator
+from ...infrastructure.random_source import SystemRandom
+from ..auction.queue_application import AuctionQueueApplication
+from ..auction.session_start_application import AuctionSessionStartApplication
+from ..auction.settlement import AuctionSettlementApplication
 from .guishi_cancel_repository import GuishiOrderCancelSqlRepository
 from .guishi_deposit_repository import GuishiDepositSqlRepository
 from .guishi_baitan_repository import GuishiBaitanSqlRepository
@@ -32,11 +36,34 @@ class TradeApplication(LegacyApplication):
         repository: TradeFeatureRepository | None = None,
         clock: Any | None = None,
         ids: Any | None = None,
+        random_source: Any | None = None,
+        auction_queue: Any | None = None,
+        auction_session_start: Any | None = None,
+        auction_settlement: Any | None = None,
+        auction_max_goods_num: int = 1000,
+        auction_max_user_items: int = 3,
     ) -> None:
         self.game_database = str(game_database)
         self.trade_database = str(trade_database)
         self.clock = clock or SystemClock()
         self.ids = ids or UUIDGenerator()
+        self.random_source = random_source or SystemRandom()
+        self.auction_max_user_items = max(int(auction_max_user_items), 1)
+        self.auction_queue = auction_queue or AuctionQueueApplication(
+            self.game_database,
+            self.trade_database,
+            auction_max_goods_num,
+            clock=self.clock,
+        )
+        self.auction_session_start = auction_session_start or AuctionSessionStartApplication(
+            self.game_database,
+            self.trade_database,
+            clock=self.clock,
+            random_source=self.random_source,
+        )
+        self.auction_settlement = auction_settlement or AuctionSettlementApplication(
+            self.game_database
+        )
         self.guishi_deposit_repository = GuishiDepositSqlRepository(
             self.game_database, self.trade_database
         )
@@ -149,8 +176,89 @@ class TradeApplication(LegacyApplication):
             operation_id, max_goods_num=max_goods_num
         )
 
+    @staticmethod
+    def _take_action_arguments(
+        action: str,
+        kwargs: dict[str, Any],
+        allowed: set[str],
+        *,
+        required: set[str] | None = None,
+    ) -> dict[str, Any]:
+        unexpected = set(kwargs) - allowed
+        if unexpected:
+            raise TypeError(f"unexpected {action} arguments: {', '.join(sorted(unexpected))}")
+        missing = (required or set()) - set(kwargs)
+        if missing:
+            raise TypeError(f"missing {action} arguments: {', '.join(sorted(missing))}")
+        return kwargs
+
+    def _invoke_auction_action(
+        self, action: str, operation_id: str, user_id: str, kwargs: dict[str, Any]
+    ):
+        if action == "enqueue":
+            values = self._take_action_arguments(
+                action,
+                kwargs,
+                {"item_id", "item_name", "start_price", "user_name"},
+                required={"item_id", "item_name", "start_price", "user_name"},
+            )
+            return self.auction_queue.enqueue(
+                operation_id,
+                user_id,
+                values["item_id"],
+                values["item_name"],
+                values["start_price"],
+                values["user_name"],
+                max_user_items=self.auction_max_user_items,
+            )
+        if action == "dequeue":
+            values = self._take_action_arguments(
+                action, kwargs, {"item_id", "item_type"}, required={"item_id", "item_type"}
+            )
+            return self.auction_queue.dequeue(
+                operation_id, user_id, values["item_id"], values["item_type"]
+            )
+        if action == "session_start":
+            values = self._take_action_arguments(
+                action,
+                kwargs,
+                {"system_items_config", "duration_hours", "system_item_count"},
+                required={"system_items_config", "duration_hours"},
+            )
+            return self.auction_session_start.start(
+                operation_id,
+                system_items_config=values["system_items_config"],
+                duration_hours=values["duration_hours"],
+                system_item_count=values.get("system_item_count", 5),
+            )
+        raise ValueError(f"unsupported trade action: {action}")
+
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):
-        return self._execute(operation_id=operation_id, user_id=user_id, action=f"trade.{action}", payload={"user_id": user_id, **kwargs}, call=lambda: self.repository.invoke(action, operation_id, user_id, **kwargs))
+        if action == "session_finish" and self.repository is None:
+            values = self._take_action_arguments(
+                action, dict(kwargs), {"end_time", "fee_rate", "item_types"}
+            )
+            if not str(user_id).strip():
+                raise ValidationError("user_id is required")
+            return self.auction_settlement.settle_active(
+                operation_id=operation_id,
+                end_time=values.get("end_time", self.clock.now().timestamp()),
+                fee_rate=values.get("fee_rate", 0.2),
+                item_types=values.get("item_types", {}),
+            )
+
+        def invoke():
+            if self.repository is not None:
+                return self.repository.invoke(action, operation_id, user_id, **kwargs)
+            return self._invoke_auction_action(action, operation_id, user_id, dict(kwargs))
+
+        return self._execute(
+            operation_id=operation_id,
+            user_id=user_id,
+            action=f"trade.{action}",
+            payload={"user_id": user_id, **kwargs},
+            call=invoke,
+        )
 
     def deposit(self, *, operation_id: str, user_id: str, amount: int, **kwargs: Any):
         if self.repository is not None:

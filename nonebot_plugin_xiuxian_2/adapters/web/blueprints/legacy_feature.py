@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Mapping
+
 from flask import Blueprint, request
 
 from ....core.errors import DomainError
@@ -7,7 +9,14 @@ from ..api import api_error, api_success
 from ._common import guard
 
 
-def create_blueprint(feature: str, application, actions: tuple[str, ...], permission) -> Blueprint:
+def create_blueprint(
+    feature: str,
+    application,
+    actions: tuple[str, ...],
+    permission,
+    *,
+    action_permissions: Mapping[str, str] | None = None,
+) -> Blueprint:
     router = Blueprint(feature, __name__)
 
     def invoke(action: str):
@@ -23,10 +32,11 @@ def create_blueprint(feature: str, application, actions: tuple[str, ...], permis
         return api_success(outcome.to_dict(), status=200 if outcome.ok else 409)
 
     for action in actions:
+        required_permission = (action_permissions or {}).get(action, "user")
         router.add_url_rule(
             f"/api/v1/{feature.replace('_', '-')}/{action}",
             endpoint=f"{feature}_{action}",
-            view_func=guard("user", permission, write=True)(lambda action=action: invoke(action)),
+            view_func=guard(required_permission, permission, write=True)(lambda action=action: invoke(action)),
             methods=["POST"],
         )
     return router

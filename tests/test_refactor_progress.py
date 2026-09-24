@@ -143,6 +143,11 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(auction["settlement_started_operation_recoverable"])
         self.assertTrue(auction["settlement_compat_effects_disabled"])
         self.assertTrue(auction["legacy_settlement_disabled"])
+        self.assertTrue(auction["trade_web_actions_application_owned"])
+        self.assertTrue(auction["trade_web_finish_uses_settlement_ledger_directly"])
+        self.assertTrue(auction["trade_web_session_routes_admin"])
+        self.assertTrue(auction["trade_web_real_route_replay_and_effects_covered"])
+        self.assertTrue(auction["legacy_trade_auction_session_isolated"])
         boss = slices["boss"]
         self.assertTrue(boss["manual_spawn_application_owned"])
         self.assertTrue(boss["legacy_manual_spawn_disabled"])

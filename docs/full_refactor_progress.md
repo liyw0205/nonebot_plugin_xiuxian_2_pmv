@@ -2858,11 +2858,13 @@
    排行和 economy log 均按 event ID 幂等。NoneBot/Web/CLI 共用 compatibility effects handler，
    Web reconcile 与 `reconcile --apply` 可执行补偿；旧 `end_auction_process` 默认只负责调用
    application 并返回结算 DTO，不再二次写 effects。真实发布周期证据仍属于 P7。
-3. **下一步修复拍卖 Web 兼容边界**：先为上述四个公开 action 增加真实 Web 回归，逐个确认
-   权限、payload、operation/replay 和预期响应；让支持的 action 走 feature-owned queue/session-start/
-   settlement application，或在确认不支持后从 Web route/manifest 同步移除。重点切走
-   `session_finish` 到 `AuctionSettlementApplication`，然后将仅剩的 `AuctionSessionService`/queue
-   shim 隔离为 rollback-only compatibility；不得让默认 Web 路由访问空 repository。
+3. **拍卖 Web 兼容边界已修复（2026-09-24）**：四个公开 action 保留原 URL；默认
+   `TradeApplication` 直接编排 feature-owned queue、session-start 和 settlement application，不再
+   访问空 `repository`；结算直接返回 `AuctionSettlementApplication` outcome，由其 ledger/outbox 管理
+   补偿重放。场次开始/收尾 route 和 manifest 均要求管理员；queue route 保持用户权限。
+   真实 Flask 回归覆盖 payload、CSRF、operation replay、队列资产变化、结算 effects 单次分发。
+   旧 `AuctionSessionService` 已移到 `compatibility/legacy_trade_auction_sessions.py`，只从显式注入的
+   rollback repository 延迟加载；本切片不新增 migration。
 4. **继续清理交易兼容余额**：检查 `transaction_service.py` 及仙肆/鬼市剩余 handler 的真实调用图，
    切片迁出展示查询和 scheduler。每次只迁一个资产转换；兼容 repository 仅在真实调用归零且回滚
    证据满足后移除。
@@ -3850,3 +3852,12 @@ progress、inventory、diff check 均通过。隔离五库 recovery
 到 game DB，`.003`/`.005`/`.006`/`.007`/`.008` 仅路由到 trade DB，reconcile
 `clean=true`、operations/outbox/dead events 均为 0。临时恢复数据、测试目录与编译缓存会在提交前
 清理；真实发布周期证据仍属于 P7。
+
+2026-09-24 auction Web compatibility boundary：默认 `TradeApplication` 的 `enqueue/dequeue` 现在调用
+`AuctionQueueApplication`，`session_start` 调用 `AuctionSessionStartApplication`，`session_finish` 直接返回
+运行时注入 effects 的 `AuctionSettlementApplication` outcome，由 settlement ledger/outbox 管理重放。
+四条真实 Flask route 回归覆盖 payload、CSRF、重放、队列资产变化和结算 outbox effects 单次分发。
+场次管理 route/manifest 权限从 `user` 修正为 `admin`；旧 session service 移入
+`compatibility/legacy_trade_auction_sessions.py`，只由显式注入回滚路径加载，未再作为默认 Web 调用。
+trade/auction Web 测试通过；本切片无 schema 变化，五库 recovery
+仍需作为发布前核验，真实发布周期证据仍属于 P7。
