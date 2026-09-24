@@ -9,6 +9,8 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade.repository import TradeRepository
+from nonebot_plugin_xiuxian_2.features.trade.migrations import apply_trade_guishi_take_item
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
 
@@ -34,6 +36,8 @@ class GuishiTakeStoredItemTests(unittest.TestCase):
                 )
                 """
             )
+        with DatabaseUnitOfWork(self.game_database) as uow:
+            apply_trade_guishi_take_item(uow)
         with db_backend.transaction(self.trade_database) as conn:
             conn.execute(
                 """

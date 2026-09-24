@@ -2829,7 +2829,7 @@
   handler/route/scheduler 已改走 feature-owned application，且旧实现不再承载该
   用例，才可逐项从遗留服务移除。
 - 交易域当前已完成仙肆购买、鬼市存灵石、鬼市取灵石、鬼市求购/摆摊创建、求购/摆摊撤销、
-  求购/摆摊撮合和过期清理；取回寄存物品、拍卖排队/场次生命周期仍未迁移。
+  求购/摆摊撮合、过期清理和寄存物品取回。下一切片先迁移拍卖排队/撤队，再迁移场次开始/结束生命周期。
 - `recovery_smoke.py` 在 2026-09-24 修复为五库按路由迁移前，旧脚本只对
   `game_db` 应用完整目录。因此此前没有独立五库回执的隔离 smoke 只能作为单库
   恢复演练，不能用于跨库切片或 P7 的最终证据；后续统一以五库 receipt 为准。
@@ -3635,3 +3635,15 @@ canonical operation replay/conflict、历史结果 duplicate、触发器异常�
 隐式创建 `guishi_match_operations`。新增撮合 application/repository/source/progress 测试，
 聚焦 trade/source/progress 回归 `236 passed`；`trade.007` 仅路由到 trade DB；过期清理已由
 后续 `trade.008` 切片接管，取回寄存物品仍未迁移。
+
+2026-09-24 trade Guishi stored-item take feature-owned cutover：新增
+`GuishiStoredItemTakeSqlRepository`、`TradeApplication.guishi_take_stored_item` 和
+`trade.009`。旧 operation ledger 实际位于 game DB，因此 migration 仅路由至 game DB；
+repository 在 game DB immediate UoW 附加 trade DB，原子清除 `guishi_info.items` 中对应
+暂存、按 `max_goods_num` 校验背包、发放等量绑定物品并写入 ledger。保留无 payload 历史
+操作行 replay，冲突 operation ID 明确拒绝，注入 Clock；command 已切换，旧
+`TradeRepository` 方法降为不含 SQL/DDL 的兼容委托。operation trigger 异常、满包、重放和
+冲突均有测试；聚焦回归 `224 passed`，顶层全量回归 `2552 passed, 16 warnings, 25 subtests`。
+`compileall`、架构检查、进度检查和 inventory `--check` 均通过。五库 recovery 共应用 125 项
+migration，`trade.009` 只出现在 `game_db` 路由；restore/dry-run 成功，reconcile clean，
+operations/outbox/dead_events 均为 0。

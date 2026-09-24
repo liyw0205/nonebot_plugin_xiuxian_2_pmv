@@ -55,6 +55,7 @@ from .features.trade.migrations import (
     apply_trade_guishi_order_cancel,
     apply_trade_guishi_match,
     apply_trade_guishi_expired_cleanup,
+    apply_trade_guishi_take_item,
 )
 from .features.map.manifest import FEATURE as MAP_FEATURE
 from .features.map.migrations import apply_map, apply_map_combat_plan, apply_map_combat_player, apply_map_combat_start, apply_map_dongfu_build, apply_map_dongfu_player, apply_map_explore_player, apply_map_explore_settlement, apply_map_explore_start, apply_map_home_return, apply_map_interactive_player, apply_map_interactive_start, apply_map_mission_claim, apply_map_movement, apply_map_resource_reward, apply_map_seed_purchase
@@ -229,6 +230,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("trade.006", "guishi_order_cancel_operations", apply_trade_guishi_order_cancel),
         Migration("trade.007", "guishi_match_operations", apply_trade_guishi_match),
         Migration("trade.008", "guishi_expired_order_operations", apply_trade_guishi_expired_cleanup),
+        Migration("trade.009", "guishi_take_item_operations", apply_trade_guishi_take_item),
         Migration("work.001", "work_feature_migrations", apply_work),
         Migration("work.002", "work_daily_refresh_reset_operations", apply_work_daily_refresh_reset),
         Migration("world_events.001", "world_events_feature_migrations", apply_world_events),

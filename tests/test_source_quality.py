@@ -596,17 +596,26 @@ class SourceQualityTests(unittest.TestCase):
     def test_guishi_take_item_uses_atomic_repository_flow(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
         command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")
-        repository_source = (trade_root / "repository.py").read_text(encoding="utf-8")
+        repository_source = (
+            SOURCE_ROOT / "features" / "trade" / "guishi_take_repository.py"
+        ).read_text(encoding="utf-8")
         start = command_source.index("async def guishi_take_item_(")
         end = command_source.index("@guishi_info.handle", start)
         command = command_source[start:end]
 
-        self.assertIn("xianshi_repository.take_guishi_stored_item(", command)
+        self.assertIn("trade_application.guishi_take_stored_item(", command)
+        self.assertNotIn("xianshi_repository.take_guishi_stored_item(", command)
         self.assertNotIn("trade_manager.remove_stored_item(", command)
         self.assertNotIn("sql_message.send_back(", command)
-        self.assertIn("ATTACH DATABASE", repository_source)
-        self.assertIn("BEGIN IMMEDIATE", repository_source)
+        self.assertIn("attach_database", repository_source)
+        self.assertIn("immediate=True", repository_source)
         self.assertIn("guishi_take_item_operations", repository_source)
+        legacy_repository = (trade_root / "repository.py").read_text(encoding="utf-8")
+        take_start = legacy_repository.index("    def take_guishi_stored_item(")
+        take_end = legacy_repository.index("    def create_guishi_qiugou_order(", take_start)
+        compatibility_method = legacy_repository[take_start:take_end]
+        self.assertIn("GuishiStoredItemTakeSqlRepository", compatibility_method)
+        self.assertNotIn("CREATE TABLE", compatibility_method)
 
     def test_guishi_expired_cleanup_uses_feature_application(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"

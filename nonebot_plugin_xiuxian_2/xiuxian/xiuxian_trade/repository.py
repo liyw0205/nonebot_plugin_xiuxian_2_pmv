@@ -1355,115 +1355,28 @@ class TradeRepository:
         item_name,
         goods_type,
     ) -> GuishiStoredItemTake:
-        operation_id = str(operation_id).strip()
-        trade_database = Path(trade_database)
-        user_id = str(user_id)
-        goods_id = int(goods_id)
-        item_name = str(item_name)
-        goods_type = str(goods_type)
-        if not operation_id:
-            raise ValueError("operation_id must not be empty")
+        from ...features.trade.guishi_take_repository import (
+            GuishiStoredItemTakeSqlRepository,
+        )
 
-        with self._lock, closing(db_backend.connect(self._database)) as conn:
-            conn.execute("ATTACH DATABASE %s AS guishi_trade", (str(trade_database),))
-            try:
-                conn.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS guishi_take_item_operations (
-                        operation_id TEXT PRIMARY KEY,
-                        user_id TEXT NOT NULL,
-                        goods_id INTEGER NOT NULL,
-                        item_name TEXT NOT NULL,
-                        goods_type TEXT NOT NULL,
-                        quantity INTEGER NOT NULL,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                    """
-                )
-                conn.execute("BEGIN IMMEDIATE")
-                previous = conn.execute(
-                    "SELECT user_id, goods_id, item_name, goods_type, quantity "
-                    "FROM guishi_take_item_operations WHERE operation_id=%s",
-                    (operation_id,),
-                ).fetchone()
-                if previous is not None:
-                    conn.rollback()
-                    prev_user, prev_goods, prev_name, prev_type, prev_qty = previous
-                    if (
-                        str(prev_user) != user_id
-                        or int(prev_goods) != goods_id
-                        or str(prev_name) != item_name
-                        or str(prev_type) != goods_type
-                    ):
-                        return GuishiStoredItemTake("state_changed", user_id, goods_id)
-                    return GuishiStoredItemTake(
-                        "duplicate",
-                        user_id,
-                        goods_id,
-                        str(prev_name),
-                        str(prev_type),
-                        int(prev_qty),
-                    )
-
-                stored_stone, stored_items = self._guishi_info(conn, user_id)
-                quantity = int(stored_items.get(str(goods_id), 0))
-                if quantity <= 0:
-                    conn.rollback()
-                    return GuishiStoredItemTake("item_missing", user_id, goods_id)
-
-                inventory = conn.execute(
-                    "SELECT COALESCE(goods_num, 0) FROM back WHERE user_id=%s AND goods_id=%s",
-                    (user_id, goods_id),
-                ).fetchone()
-                current_quantity = int(inventory[0]) if inventory else 0
-                if current_quantity + quantity > self._max_goods_num:
-                    conn.rollback()
-                    return GuishiStoredItemTake(
-                        "inventory_full", user_id, goods_id, item_name, goods_type, quantity
-                    )
-
-                del stored_items[str(goods_id)]
-                self._save_guishi_info(conn, user_id, stored_stone, stored_items)
-                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
-                conn.execute(
-                    """
-                    INSERT INTO back (
-                        user_id, goods_id, goods_name, goods_type, goods_num,
-                        create_time, update_time, bind_num
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (user_id, goods_id) DO UPDATE
-                    SET goods_name=EXCLUDED.goods_name,
-                        goods_type=EXCLUDED.goods_type,
-                        goods_num=back.goods_num+EXCLUDED.goods_num,
-                        bind_num=back.bind_num+EXCLUDED.bind_num,
-                        update_time=EXCLUDED.update_time
-                    """,
-                    (
-                        user_id,
-                        goods_id,
-                        item_name,
-                        goods_type,
-                        quantity,
-                        now,
-                        now,
-                        quantity,
-                    ),
-                )
-                conn.execute(
-                    "INSERT INTO guishi_take_item_operations "
-                    "(operation_id, user_id, goods_id, item_name, goods_type, quantity) "
-                    "VALUES (%s, %s, %s, %s, %s, %s)",
-                    (operation_id, user_id, goods_id, item_name, goods_type, quantity),
-                )
-                conn.commit()
-                return GuishiStoredItemTake(
-                    "taken", user_id, goods_id, item_name, goods_type, quantity
-                )
-            except Exception:
-                conn.rollback()
-                raise
-            finally:
-                conn.execute("DETACH DATABASE guishi_trade")
+        result = GuishiStoredItemTakeSqlRepository(
+            self._database, trade_database
+        ).take(
+            operation_id=operation_id,
+            user_id=user_id,
+            goods_id=goods_id,
+            item_name=item_name,
+            goods_type=goods_type,
+            max_goods_num=self._max_goods_num,
+        )
+        return GuishiStoredItemTake(
+            result.status,
+            result.user_id,
+            result.goods_id,
+            result.item_name,
+            result.goods_type,
+            result.quantity,
+        )
 
     def create_guishi_qiugou_order(
         self,

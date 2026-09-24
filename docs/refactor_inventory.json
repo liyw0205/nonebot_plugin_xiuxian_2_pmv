@@ -2693,6 +2693,7 @@
     "boss_limit",
     "boss_purchase_operations",
     "boss_reward_operations",
+    "bound",
     "breakthrough_rate_item_operations",
     "buff_feature_migrations",
     "buffinfo",

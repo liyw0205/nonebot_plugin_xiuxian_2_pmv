@@ -112,6 +112,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "@auction_view.handle", trade_facade.index("async def clear_expired_baitan_orders_job")
         )
     ]
+    trade_take_handler = trade_facade[
+        trade_facade.index("async def guishi_take_item_(") : trade_facade.index(
+            "@guishi_info.handle", trade_facade.index("async def guishi_take_item_(")
+        )
+    ]
     auction_settlement = (PACKAGE / "features" / "auction" / "settlement.py").read_text(encoding="utf-8")
     boss_facade = (PACKAGE / "xiuxian" / "xiuxian_boss" / "__init__.py").read_text(encoding="utf-8")
     buff_facade = (PACKAGE / "xiuxian" / "xiuxian_buff" / "__init__.py").read_text(encoding="utf-8")
@@ -333,7 +338,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_guishi_matching_disabled": "xianshi_repository.match_guishi_orders(" not in trade_facade[trade_facade.index("async def process_guishi_transactions"):trade_facade.index("@scheduler.scheduled_job", trade_facade.index("async def process_guishi_transactions"))],
             "guishi_expired_cleanup_application_owned": "trade_application.guishi_clear_expired_baitan(" in trade_expired_job,
             "legacy_guishi_expired_cleanup_disabled": "xianshi_repository.clear_expired_guishi_order(" not in trade_expired_job,
-            "status": "xianshi_purchase_guishi_deposit_withdraw_qiugou_baitan_create_cancel_matching_expired_cleanup_cutover_with_other_trade_compatibility",
+            "guishi_take_application_owned": "trade_application.guishi_take_stored_item(" in trade_take_handler,
+            "legacy_guishi_take_disabled": "xianshi_repository.take_guishi_stored_item(" not in trade_take_handler,
+            "status": "xianshi_purchase_guishi_deposit_withdraw_qiugou_baitan_create_cancel_matching_expired_cleanup_take_cutover_with_other_trade_compatibility",
         },
         "auction": {
             "settlement_application_owned": "AuctionSettlementSqlRepository" in auction_settlement,

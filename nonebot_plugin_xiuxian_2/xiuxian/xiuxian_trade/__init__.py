@@ -2001,13 +2001,13 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_take_item.finish()
     
-    result = xianshi_repository.take_guishi_stored_item(
-        _guishi_take_item_operation_id(event, user_id, goods_id),
-        get_paths().trade_db,
-        user_id,
-        goods_id,
-        item_info['name'],
-        item_info['type'],
+    result = trade_application.guishi_take_stored_item(
+        operation_id=_guishi_take_item_operation_id(event, user_id, goods_id),
+        user_id=user_id,
+        goods_id=goods_id,
+        item_name=item_info['name'],
+        goods_type=item_info['type'],
+        max_goods_num=XiuConfig().max_goods_num,
     )
     if result.status == "item_missing":
         msg = f"您没有暂存物品 {goods_name}！"
@@ -2018,7 +2018,7 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_take_item.finish()
     if not result.succeeded:
-        msg = {"item_insufficient":"物品数量不足，暂存未结算。","inventory_full":"背包已满，无法取回。","state_changed":"鬼市暂存未完成：背包或暂存状态已更新。","user_missing":"未找到修仙数据。"}.get(result.status, f"鬼市暂存未结算（{result.status}），请重试。")
+        msg = {"item_insufficient":"物品数量不足，暂存未结算。","inventory_full":"背包已满，无法取回。","state_changed":"鬼市暂存未完成：背包或暂存状态已更新。","operation_conflict":"鬼市取物请求冲突，请重新操作。","user_missing":"未找到修仙数据。"}.get(result.status, f"鬼市暂存未结算（{result.status}），请重试。")
         await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_take_item.finish()
 

@@ -14,6 +14,7 @@ from .guishi_withdraw_repository import GuishiWithdrawSqlRepository
 from .guishi_qiugou_repository import GuishiQiugouSqlRepository
 from .guishi_match_repository import GuishiOrderMatchSqlRepository
 from .guishi_expired_repository import GuishiExpiredOrderSqlRepository
+from .guishi_take_repository import GuishiStoredItemTakeSqlRepository
 from .repository import TradeFeatureRepository
 
 
@@ -45,6 +46,9 @@ class TradeApplication(LegacyApplication):
         self.guishi_qiugou_repository = GuishiQiugouSqlRepository(self.trade_database)
         self.guishi_order_match_repository = GuishiOrderMatchSqlRepository(self.trade_database)
         self.guishi_expired_order_repository = GuishiExpiredOrderSqlRepository(
+            self.game_database, self.trade_database, clock=self.clock
+        )
+        self.guishi_stored_item_take_repository = GuishiStoredItemTakeSqlRepository(
             self.game_database, self.trade_database, clock=self.clock
         )
         super().__init__(game_database, repository=repository, feature="trade")
@@ -205,6 +209,25 @@ class TradeApplication(LegacyApplication):
             goods_type=goods_type,
             max_goods_num=max_goods_num,
             expected_user_id=expected_user_id,
+        )
+
+    def guishi_take_stored_item(
+        self,
+        *,
+        operation_id: str,
+        user_id: str,
+        goods_id: int,
+        item_name: str,
+        goods_type: str,
+        max_goods_num: int,
+    ):
+        return self.guishi_stored_item_take_repository.take(
+            operation_id=operation_id,
+            user_id=user_id,
+            goods_id=goods_id,
+            item_name=item_name,
+            goods_type=goods_type,
+            max_goods_num=max_goods_num,
         )
 
     def enqueue(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("enqueue", operation_id=operation_id, user_id=user_id, **kwargs)
