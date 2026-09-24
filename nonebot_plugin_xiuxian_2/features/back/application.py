@@ -8,6 +8,7 @@ from .repository import BackRepository, LegacyBackRepository
 from ..package_reward.application import PackageRewardApplication
 from .alchemy_application import AlchemyApplication
 from .cultivation_item_application import CultivationItemApplication
+from .skill_learning_application import SkillLearningApplication
 from .unbind_application import UnbindApplication
 
 
@@ -16,6 +17,7 @@ class BackApplication(LegacyApplication):
         self._explicit_repository = repository
         self.alchemy_application = AlchemyApplication(database)
         self.cultivation_item_application = CultivationItemApplication(database)
+        self.skill_learning_application = SkillLearningApplication(database)
         self.unbind_application = UnbindApplication(database)
         super().__init__(database, repository=repository or LegacyBackRepository(database, player_database), feature="back")
 
@@ -28,7 +30,10 @@ class BackApplication(LegacyApplication):
         return self._action("open_package", operation_id=operation_id, user_id=user_id, **kwargs)
     def use_item(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("use_item", operation_id=operation_id, user_id=user_id, **kwargs)
     def change_equipment(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("change_equipment", operation_id=operation_id, user_id=user_id, **kwargs)
-    def learn_skill(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("learn_skill", operation_id=operation_id, user_id=user_id, **kwargs)
+    def learn_skill(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        if self._explicit_repository is None:
+            return self.skill_learning_application.learn(operation_id, user_id, **kwargs)
+        return self._action("learn_skill", operation_id=operation_id, user_id=user_id, **kwargs)
     def repair(self, *, operation_id: str, user_id: str = "system", **kwargs: Any): return self._action("repair", operation_id=operation_id, user_id=user_id, **kwargs)
     def use_pet_eggs(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("use_pet_eggs", operation_id=operation_id, user_id=user_id, **kwargs)
     def cultivation_item(self, *, operation_id: str, user_id: str, **kwargs: Any):

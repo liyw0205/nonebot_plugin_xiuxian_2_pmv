@@ -34,4 +34,13 @@ def apply_cultivation_item(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_alchemy", "apply_back", "apply_cultivation_item", "apply_unbind"]
+def apply_skill_learning(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS skill_learning_operations("
+        "operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,skill_item_id INTEGER NOT NULL,"
+        "skill_type TEXT NOT NULL,previous_item_id INTEGER NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+__all__ = ["apply_alchemy", "apply_back", "apply_cultivation_item", "apply_skill_learning", "apply_unbind"]

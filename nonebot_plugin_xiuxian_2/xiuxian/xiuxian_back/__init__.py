@@ -1400,11 +1400,11 @@ async def confirm_use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await confirm_use.finish()
     data = confirm_use_cache[str(user_id)]
     gid, name, s_type = data['goods_id'], data['item_name'], data['skill_type']
-    result = _skill_learning_service().learn(
-        _skill_learning_operation_id(event, data['invite_id'], user_id, gid),
-        user_id,
-        gid,
-        s_type,
+    result = back_application.learn_skill(
+        operation_id=_skill_learning_operation_id(event, data['invite_id'], user_id, gid),
+        user_id=user_id,
+        skill_item_id=gid,
+        skill_type=s_type,
     )
     if result.status == "item_missing":
         msg = f"背包中已无 {name}！"

@@ -1075,18 +1075,19 @@ class SourceQualityTests(unittest.TestCase):
     def test_skill_learning_uses_transactional_service(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         command_source = (back_root / "__init__.py").read_text(encoding="utf-8")
-        service_source = (back_root / "skill_learning_service.py").read_text(
+        repository_source = (SOURCE_ROOT / "features" / "back" / "skill_learning_repository.py").read_text(
             encoding="utf-8"
         )
         start = command_source.index("async def confirm_use_(")
         end = command_source.index("@use_item.handle", start)
         command = command_source[start:end]
 
-        self.assertIn("_skill_learning_service().learn(", command)
+        self.assertIn("back_application.learn_skill(", command)
+        self.assertIn("operation_id=_skill_learning_operation_id(", command)
         self.assertNotIn("sql_message.update_back_j(", command)
         self.assertNotIn("updata_user_", command)
-        self.assertIn("BEGIN IMMEDIATE", service_source)
-        self.assertIn("skill_learning_operations", service_source)
+        self.assertIn("immediate=True", repository_source)
+        self.assertIn("skill_learning_operations", repository_source)
 
     def test_cultivation_item_use_is_atomic_and_idempotent(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
