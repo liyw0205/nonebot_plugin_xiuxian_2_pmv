@@ -653,7 +653,7 @@ PR 描述必须包含：影响 feature、数据迁移、兼容入口、权限变
 
 - 组合根在 `filesystem -> database -> migrations -> repositories -> jobs -> web -> ready` 阶段执行真实 wiring；`install_driver_hooks` 对同一 NoneBot driver 幂等。
 - 所有新适配器路由、平台配置和兼容调度任务均有 manifest；架构脚本会用 Flask `url_map` 反查未声明端点。
-- 启动、CLI 迁移和恢复演练共用 `plugin.build_migrations()` 的完整迁移清单（当前 136 项）；新 adapter 模板禁止页面级可执行内联脚本，旧模板仅作为兼容资产保留一个发布周期。
+- 启动、CLI 迁移和恢复演练共用 `plugin.build_migrations()` 的完整迁移清单（当前 137 项）；新 adapter 模板禁止页面级可执行内联脚本，旧模板仅作为兼容资产保留一个发布周期。
 - `operation_ledger` 同时写入 `operation_audit`；异常在业务事务回滚后以 `failed` 记录，`ReconcileService.run` 支持重试和 dead 事件可见性。
 - `BackupService` 和 `scripts/recovery_smoke.py` 提供带 SHA-256 manifest 的备份、校验和恢复演练；`--evidence` 回执可由兼容周期 gate 校验；CLI 提供 `manifest/health/migrate/reconcile/backup/restore`，其中 `migrate --dry-run` 只读预览待执行版本。
 - `scripts/remote_smoke.sh` 提供受控远端后端冒烟；必须显式提供远端项目/数据目录、停机/启动、可逆写和回滚 hook，缺少安全前置条件时拒绝执行，不复制 SSH wrapper 凭据。

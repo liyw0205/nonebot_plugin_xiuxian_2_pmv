@@ -2849,6 +2849,9 @@
   `BackApplication.alchemy -> AlchemyApplication -> AlchemySqlRepository`；旧
   `AlchemyService` 仅保留显式兼容回滚。`back.002` 在 game DB 启动迁移创建幂等表，
   请求路径不再执行 DDL。
+- 背包解绑符真实 handler 已切换到 `BackApplication.unbind -> UnbindApplication ->
+  UnbindSqlRepository`；旧 `UnbindItemService` 仅保留显式兼容回滚。`back.003` 在 game DB
+  启动迁移创建幂等表，请求路径不再执行 DDL；数量截断、重复请求和事务回滚语义保持不变。
 
 ### 6.2 优先目标
 
@@ -3978,3 +3981,12 @@ feature-owned `LegacyTradeRepository` 的 bid adapter；旧 trade DB 到 game DB
 16 warnings, 25 subtests`。五库 recovery 完成 `136` 项迁移，`back.002` 仅在 game DB，backup/restore
 dry-run/restore 与 reconcile clean（operations/outbox/dead events 均为 0）；临时数据和缓存已清理。
 旧 `AlchemyService` 仍为显式兼容回滚，P7 正式发布证据仍未补齐。
+
+2026-09-25 back unbind feature-owned cutover：新增 `UnbindApplication` 与
+`UnbindSqlRepository`，解绑符消费和目标物品 bound 数量减少均在 game DB immediate transaction
+中完成，复用 `unbind_item_operations` 的重复请求语义和数量截断；真实 `use_unbind_charm`
+handler 已改走生命周期注入的 `BackApplication`，旧 `_unbind_item_service().apply` 不再属于默认
+执行图。新增 `back.003` 启动迁移、缺表拒绝和成功/重复/目标缺失测试；聚焦回归 `222 passed`，
+顶层 `tests/` 全量 `2642 passed, 16 warnings, 25 subtests`。五库 recovery 完成 `137` 项迁移，
+路由为 game/player/trade/impart/message `109/24/7/1/1`，attached accessory 两项，backup/restore
+dry-run/restore 与 reconcile clean（operations/outbox/dead events 均为 0）；临时数据和缓存已清理。

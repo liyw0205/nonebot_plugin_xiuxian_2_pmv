@@ -44,7 +44,7 @@ from .features.buff.migrations import apply_buff
 from .features.base.manifest import FEATURE as BASE_FEATURE
 from .features.base.migrations import apply_base
 from .features.back.manifest import FEATURE as BACK_FEATURE
-from .features.back.migrations import apply_alchemy, apply_back
+from .features.back.migrations import apply_alchemy, apply_back, apply_unbind
 from .features.trade.manifest import FEATURE as TRADE_FEATURE
 from .features.trade.migrations import (
     apply_trade,
@@ -162,6 +162,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("auction.008", "auction_settlement_statistics_projection", apply_auction_settlement_statistics),
         Migration("back.001", "back_feature_migrations", apply_back),
         Migration("back.002", "alchemy_operations", apply_alchemy),
+        Migration("back.003", "unbind_item_operations", apply_unbind),
         Migration("bank.001", "bank_feature_migrations", apply_bank),
         Migration("bank.002", "bank_accounts", apply_bank_accounts),
         Migration("base.001", "base_feature_migrations", apply_base),

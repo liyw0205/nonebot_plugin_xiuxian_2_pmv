@@ -1684,12 +1684,12 @@ async def use_unbind_charm(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, msg)
         return
 
-    result = _unbind_item_service().apply(
-        _cultivation_item_operation_id(event, user_id, item_id),
-        user_id,
-        item_id,
-        target_goods_id,
-        num,
+    result = back_application.unbind(
+        operation_id=_cultivation_item_operation_id(event, user_id, item_id),
+        user_id=user_id,
+        charm_item_id=item_id,
+        target_item_id=target_goods_id,
+        requested_quantity=num,
     )
     if result.succeeded:
         msg = f"成功使用解绑符，解除了 {target_item_name} 的 {result.quantity} 个绑定状态！"

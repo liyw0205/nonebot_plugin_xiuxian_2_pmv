@@ -15,4 +15,13 @@ def apply_alchemy(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_alchemy", "apply_back"]
+def apply_unbind(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS unbind_item_operations("
+        "operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,charm_item_id INTEGER NOT NULL,"
+        "target_item_id INTEGER NOT NULL,quantity INTEGER NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+__all__ = ["apply_alchemy", "apply_back", "apply_unbind"]
