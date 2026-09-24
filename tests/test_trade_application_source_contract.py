@@ -29,3 +29,16 @@ def test_legacy_settlement_adapter_uses_feature_repository_without_old_dependenc
     assert "AuctionSettlementSqlRepository" in source
     assert "_auction_dependencies" not in source
     assert "transaction_service" not in source
+
+
+def test_legacy_auction_bid_adapter_uses_feature_repository_without_old_trade_repository():
+    root = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2"
+    source = (root / "features/auction/repository.py").read_text(encoding="utf-8")
+    trade_facade = (root / "xiuxian/xiuxian_trade/__init__.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "AuctionBidSqlRepository" in source
+    assert "xiuxian.xiuxian_trade.repository" not in source
+    assert "TradeRepository(" not in source
+    assert "auction_repository=_auction_bid_repository" in trade_facade

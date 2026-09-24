@@ -64,6 +64,7 @@ from ...paths import get_paths
 from ...features.trade.application import TradeApplication
 from ...features.auction.queue_application import AuctionQueueApplication
 from ...features.auction.application import AuctionBidApplication
+from ...features.auction.repository import LegacyTradeRepository
 from ...compatibility.auction_bid_effects import LegacyAuctionBidEffects
 from ...compatibility.auction_settlement_effects import LegacyAuctionSettlementEffects
 from ...features.auction.session_start_application import AuctionSessionStartApplication
@@ -95,6 +96,7 @@ trade_application = TradeApplication(
 _auction_queue_application_instance = None
 _auction_session_service_instance = None
 _auction_bid_application_instance = None
+_auction_bid_repository_instance = None
 _auction_session_start_application_instance = None
 _auction_settlement_application_instance = None
 _auction_query_application_instance = None
@@ -153,6 +155,16 @@ def _auction_bid_application():
     return _auction_bid_application_instance
 
 
+def _auction_bid_repository():
+    """Resolve the explicit bid rollback path without loading legacy trade SQL."""
+    global _auction_bid_repository_instance
+    if _auction_bid_repository_instance is None:
+        _auction_bid_repository_instance = LegacyTradeRepository(
+            str(get_paths().game_db)
+        )
+    return _auction_bid_repository_instance
+
+
 def _auction_settlement_application():
     global _auction_settlement_application_instance
     if _auction_settlement_application_instance is None:
@@ -176,7 +188,7 @@ bind_auction_service_dependencies(
     items=items,
     sql_message=_sql_message,
     trade_manager=_trade_manager,
-    auction_repository=xianshi_repository,
+    auction_repository=_auction_bid_repository,
     auction_session_service=_auction_session_service,
     auction_bid_application=_auction_bid_application,
     auction_session_start_application=_auction_session_start_application,

@@ -3911,3 +3911,12 @@ backup、restore dry-run、restore、全量 `134` 项 migration，`reconcile cle
 operations/outbox/dead events 均为 `0`；临时 recovery、receipt、pytest 和 bytecode/cache
 已清理。全局 `exit_ready=false` 仍由其余旧 transaction services、`xiuxian2_handle` 与 P7
 真实发布证据阻塞。
+
+2026-09-25 auction bid explicit fallback cleanup：竞价 application 缺失时的显式 rollback
+适配器 `features/auction/repository.py::LegacyTradeRepository` 改为直接调用
+`AuctionBidSqlRepository`，不再导入或实例化旧 `xiuxian_trade.repository.TradeRepository`；
+NoneBot trade facade 通过 `_auction_bid_repository()` 惰性绑定该 feature-owned repository。
+默认 `AuctionBidApplication`、竞价资产事务、operation replay/conflict、outbox 和 effects
+路径不变；新增 source contract 防止旧交易仓储回流。该项完成后，拍卖剩余目标只包括真实发布
+周期 P7 证据、其他交易兼容入口的逐项清理，以及全仓 33 个旧 transaction service 和
+`xiuxian2_handle` 的最终退出审计。

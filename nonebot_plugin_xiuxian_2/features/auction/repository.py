@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Protocol, Mapping
 
+from .bid_repository import AuctionBidSqlRepository
+
 
 class AuctionBidRepository(Protocol):
     def place_auction_bid(
@@ -17,12 +19,16 @@ class AuctionBidRepository(Protocol):
 
 
 class LegacyTradeRepository:
-    """Temporary adapter around the historical auction repository."""
+    """Rollback adapter backed by the feature-owned bid repository.
+
+    The historical name is retained for callers that explicitly inject the
+    compatibility repository.  Even that path must not re-enter the legacy
+    trade repository, otherwise a missing application binding silently brings
+    the old auction transaction graph back into production.
+    """
 
     def __init__(self, database: str) -> None:
-        from ...xiuxian.xiuxian_trade.repository import TradeRepository
-
-        self._repository = TradeRepository(database)
+        self._repository = AuctionBidSqlRepository(database)
 
     def place_auction_bid(self, *args: Any, **kwargs: Any) -> Any:
         return self._repository.place_auction_bid(*args, **kwargs)

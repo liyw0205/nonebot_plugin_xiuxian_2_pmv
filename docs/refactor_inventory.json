@@ -2949,6 +2949,7 @@
     "player_pet_item",
     "player_rename_operations",
     "ports",
+    "production",
     "puppet_feature_migrations",
     "puppet_harvest_operations",
     "puppet_operations",
