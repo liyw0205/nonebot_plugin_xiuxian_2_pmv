@@ -13,9 +13,7 @@ class LegacyTradeFeatureRepository:
         self.game_database, self.trade_database = str(game_database), str(trade_database)
 
     def invoke(self, action: str, operation_id: str, user_id: str, **kwargs: Any) -> Any:
-        from ...xiuxian.xiuxian_trade.transaction_service import (
-            AuctionSessionService, GuishiStoneService,
-        )
+        from ...xiuxian.xiuxian_trade.transaction_service import AuctionSessionService
         if action in {"enqueue", "dequeue"}:
             from ..auction.queue_application import AuctionQueueApplication
 
@@ -29,7 +27,37 @@ class LegacyTradeFeatureRepository:
                 operation_id, user_id, **kwargs
             )
         if action in {"deposit", "withdraw"}:
-            return getattr(GuishiStoneService(self.game_database, self.trade_database), action)(operation_id, user_id, **kwargs)
+            if action == "deposit":
+                from .guishi_deposit_repository import GuishiDepositSqlRepository
+
+                amount = kwargs.pop("amount")
+                if kwargs:
+                    raise TypeError(
+                        f"unexpected deposit arguments: {', '.join(sorted(kwargs))}"
+                    )
+                return GuishiDepositSqlRepository(
+                    self.game_database, self.trade_database
+                ).deposit(
+                    operation_id=operation_id,
+                    user_id=user_id,
+                    amount=amount,
+                )
+            from .guishi_withdraw_repository import GuishiWithdrawSqlRepository
+
+            amount = kwargs.pop("amount")
+            withdrawal_open = kwargs.pop("withdrawal_open", True)
+            if kwargs:
+                raise TypeError(
+                    f"unexpected withdraw arguments: {', '.join(sorted(kwargs))}"
+                )
+            return GuishiWithdrawSqlRepository(
+                self.game_database, self.trade_database
+            ).withdraw(
+                operation_id=operation_id,
+                user_id=user_id,
+                amount=amount,
+                withdrawal_open=withdrawal_open,
+            )
         if action in {"session_start", "session_finish"}:
             method = "start" if action == "session_start" else "finish"
             return getattr(AuctionSessionService(self.game_database, self.trade_database, int(kwargs.pop("max_goods_num", 1))), method)(operation_id, **kwargs)

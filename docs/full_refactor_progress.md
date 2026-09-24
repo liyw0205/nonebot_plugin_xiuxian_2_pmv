@@ -3826,3 +3826,19 @@ backup、restore dry-run、restore、134 项 catalog migration 和 reconcile，g
 message 为 `107/24/7/1/1`，`clean=true`、operations/outbox/dead events 均为 0。真实发布周期证据
 仍属于 P7；下一目标继续检查交易兼容的 Guishi stone、auction session/queue 与 scheduler/query
 边界。
+
+2026-09-24 Guishi stone compatibility balance cleanup：真实存取 handler 已由
+`TradeApplication.guishi_deposit/guishi_withdraw` 承载；`LegacyTradeFeatureRepository` 原先仍绕回
+`transaction_service.GuishiStoneService`，兼有请求期 DDL。兼容 repository 现直接调用
+`GuishiDepositSqlRepository`/`GuishiWithdrawSqlRepository`，保留 withdrawal flag 显式传入，默认值
+维持旧兼容入口不做周末拦截；真正 command/Web 周末策略仍由 application Clock 负责。旧 SQL/DDL
+service 移到 `compatibility/legacy_guishi_stone.py` rollback-only 模块，稳定 shim 保留显式旧入口；
+`transaction_service.py` 和 trade facade 移除旧 service、无用 getter/import。增加 feature compatibility
+repository 的 deposit replay、withdraw fee、跨账本余额测试及 progress/source 门禁。验证和 recovery
+全量 `tests/` 回归 `2606 passed, 25 subtests, 16 warnings`；其后补充的 legacy shim 与未知参数
+断言纳入最终 trade/source/progress 聚焦回归 `239 passed, 2 subtests passed`。compileall、architecture、
+progress、inventory、diff check 均通过。隔离五库 recovery
+完成 backup、restore dry-run、restore 和全量 `134` 项 migration catalog；`trade.002`/`.004` 仅路由
+到 game DB，`.003`/`.005`/`.006`/`.007`/`.008` 仅路由到 trade DB，reconcile
+`clean=true`、operations/outbox/dead events 均为 0。临时恢复数据、测试目录与编译缓存会在提交前
+清理；真实发布周期证据仍属于 P7。

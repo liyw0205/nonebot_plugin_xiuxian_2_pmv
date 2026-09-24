@@ -543,6 +543,18 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("purchase_xianshi_item(", feature_repository_source)
         self.assertNotIn("XianshiPurchaseService", feature_repository_source)
         self.assertNotIn("class XianshiPurchaseService", legacy_transaction_source)
+        self.assertIn("GuishiDepositSqlRepository(", feature_repository_source)
+        self.assertIn("GuishiWithdrawSqlRepository(", feature_repository_source)
+        self.assertNotIn("GuishiStoneService", feature_repository_source)
+        self.assertNotIn("class GuishiStoneService", legacy_transaction_source)
+        rollback_source = (
+            SOURCE_ROOT / "compatibility" / "legacy_guishi_stone.py"
+        ).read_text(encoding="utf-8")
+        compatibility_shim = (trade_root / "guishi_stone_service.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("class LegacyGuishiStoneService", rollback_source)
+        self.assertIn("LegacyGuishiStoneService as GuishiStoneService", compatibility_shim)
 
     def test_guishi_deposit_uses_feature_repository(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"

@@ -59,7 +59,6 @@ from .transaction_service import (
 )
 from .auction_jobs import run_auction_job
 from .repository import TradeRepository
-from .transaction_service import GuishiStoneService
 from .transaction_service import AuctionSessionService
 from ...paths import get_paths
 from ...features.trade.application import TradeApplication
@@ -92,7 +91,6 @@ trade_application = TradeApplication(
     clock=runtime_clock,
     ids=runtime_ids,
 )
-_guishi_stone_service_instance = None
 _auction_queue_application_instance = None
 _auction_session_service_instance = None
 _auction_bid_application_instance = None
@@ -114,15 +112,6 @@ def _trade_manager():
     if _trade_manager_instance is None:
         _trade_manager_instance = TradeDataManager()
     return _trade_manager_instance
-
-
-def _guishi_stone_service():
-    global _guishi_stone_service_instance
-    if _guishi_stone_service_instance is None:
-        _guishi_stone_service_instance = GuishiStoneService(
-            get_paths().game_db, get_paths().trade_db
-        )
-    return _guishi_stone_service_instance
 
 
 def _auction_queue_application():

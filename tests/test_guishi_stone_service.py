@@ -9,17 +9,33 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade.transaction_service import (
-    GuishiStoneService,
+from nonebot_plugin_xiuxian_2.compatibility.legacy_guishi_stone import (
+    LegacyGuishiStoneService as GuishiStoneService,
 )
+from nonebot_plugin_xiuxian_2.features.trade.repository import LegacyTradeFeatureRepository
+from nonebot_plugin_xiuxian_2.features.trade.migrations import (
+    apply_trade_guishi_deposit,
+    apply_trade_guishi_schema,
+    apply_trade_guishi_withdraw,
+)
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
 
-def test_trade_facade_defers_guishi_stone_service_construction():
+def test_trade_facade_has_no_guishi_stone_service_getter():
     trade = importlib.import_module(
         "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade"
     )
-    assert trade._guishi_stone_service_instance is None
+    assert not hasattr(trade, "_guishi_stone_service_instance")
+    assert not hasattr(trade, "_guishi_stone_service")
+
+
+def test_legacy_guishi_stone_shim_keeps_explicit_rollback_service():
+    from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade.guishi_stone_service import (
+        GuishiStoneService as ShimService,
+    )
+
+    assert ShimService is GuishiStoneService
 
 
 def test_guishi_stone_handlers_use_feature_repositories():
@@ -39,8 +55,8 @@ def test_guishi_stone_handlers_use_feature_repositories():
     assert "trade_application.guishi_withdraw(" in withdraw_handler
     assert "_guishi_stone_service().withdraw(" not in withdraw_handler
     assert "GuishiWithdrawSqlRepository.OP_AMOUNT_CAP" in withdraw_handler
-    assert "_guishi_stone_service_instance = None" in source
-    assert "def _guishi_stone_service(" in source
+    assert "_guishi_stone_service_instance" not in source
+    assert "def _guishi_stone_service(" not in source
     assert "guishi_stone_service.withdraw(" not in source
     qiugou_start = source.index("async def guishi_qiugou_")
     qiugou_handler = source[
@@ -86,6 +102,11 @@ class GuishiStoneServiceTests(unittest.TestCase):
                 "CREATE TABLE guishi_info (user_id TEXT PRIMARY KEY, "
                 "stored_stone INTEGER DEFAULT 0, items TEXT DEFAULT '{}')"
             )
+        with DatabaseUnitOfWork(self.game_database) as uow:
+            apply_trade_guishi_deposit(uow)
+            apply_trade_guishi_withdraw(uow)
+        with DatabaseUnitOfWork(self.trade_database) as uow:
+            apply_trade_guishi_schema(uow)
         self.service = GuishiStoneService(self.game_database, self.trade_database)
 
     def tearDown(self) -> None:
@@ -201,6 +222,32 @@ class GuishiStoneServiceTests(unittest.TestCase):
         self.assertEqual(wd.status, "completed")
         _, stored2 = self.balances()
         self.assertEqual(stored2, GuishiStoneService.STORED_CAP - 100)
+
+    def test_compatibility_repository_uses_feature_stone_repositories(self) -> None:
+        repository = LegacyTradeFeatureRepository(
+            self.game_database, self.trade_database
+        )
+        deposit = repository.invoke(
+            "deposit", "feature-deposit", "user", amount=300
+        )
+        replay = repository.invoke(
+            "deposit", "feature-deposit", "user", amount=300
+        )
+        withdraw = repository.invoke(
+            "withdraw", "feature-withdraw", "user", amount=100
+        )
+
+        self.assertEqual(
+            (deposit.status, replay.status, withdraw.status),
+            ("completed", "duplicate", "completed"),
+        )
+        self.assertEqual(
+            (withdraw.operation_type, withdraw.fee, withdraw.actual_amount),
+            ("withdraw", 20, 80),
+        )
+        self.assertEqual(self.balances(), (780, 200))
+        with self.assertRaisesRegex(TypeError, "unexpected deposit arguments"):
+            repository.invoke("deposit", "bad-args", "user", amount=1, extra=True)
 
 
 if __name__ == "__main__":

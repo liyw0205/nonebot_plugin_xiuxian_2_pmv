@@ -1,6 +1,8 @@
-"""Stable facade for cross-database Guishi stone transfers."""
+"""Stable facade for explicit rollback of cross-database Guishi transfers."""
 
-from .transaction_service import GuishiStoneService
+from ...compatibility.legacy_guishi_stone import (
+    LegacyGuishiStoneService as GuishiStoneService,
+)
 
 # The implementation uses ATTACH DATABASE and BEGIN IMMEDIATE.
 OPERATION_TABLE = "guishi_stone_operations"
