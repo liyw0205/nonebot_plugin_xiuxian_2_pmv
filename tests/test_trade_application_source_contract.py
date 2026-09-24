@@ -74,3 +74,16 @@ def test_xianshi_queries_are_feature_owned_and_read_only():
     assert "CREATE TABLE" not in repository
     assert facade.count("xianshi_repository.get_xianshi_items(") == 0
     assert facade.count("trade_application.xianshi_get_items(") >= 5
+
+
+def test_trade_facade_keeps_legacy_schema_import_explicit_and_out_of_runtime_graph():
+    root = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2"
+    facade = (root / "xiuxian/xiuxian_trade/__init__.py").read_text(encoding="utf-8")
+    adapter = (root / "compatibility/legacy_xianshi_schema.py").read_text(encoding="utf-8")
+
+    assert "from .repository import TradeRepository" not in facade
+    assert "xianshi_repository = TradeRepository(" not in facade
+    assert "LegacyXianshiSchemaAdapter" in facade
+    assert "LegacyXianshiSchemaAdapter" in adapter
+    assert "from ..xiuxian.xiuxian_trade.repository import TradeRepository" in adapter
+    assert "bind_auction_repository(_auction_bid_repository, _auction_session_service)" in facade

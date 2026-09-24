@@ -3944,3 +3944,10 @@ P7 真实正式发布周期仍未补齐。
 progress、inventory、diff check 及隔离五库 recovery（135 项 migration、restore/reconcile clean）均通过。
 该切片不新增 migration，仙肆写入/购买事务语义不变。全局仍由 33 个旧 transaction service、
 `xiuxian2_handle` 和真实正式发布周期 P7 证据阻塞，下一步继续审计其他交易兼容入口。
+
+2026-09-25 trade legacy schema import isolation：交易 facade 移除模块级 `TradeRepository` 实例，拍卖兼容绑定改用
+feature-owned `LegacyTradeRepository` 的 bid adapter；旧 trade DB 到 game DB 的仙肆/拍卖投影导入保留为显式
+`compatibility/legacy_xianshi_schema.py::LegacyXianshiSchemaAdapter` 启动迁移。该适配器仅在 lifecycle startup
+延迟导入旧仓储，避免命令、查询和 feature application 的默认执行图加载旧交易 SQL；重复初始化仍由旧迁移标记保证幂等。
+新增临时双库导入回归和 source contract。聚焦交易/拍卖回归 41 项，顶层 `tests/` 全量 `2633 passed, 16 warnings,
+25 subtests`；旧投影迁移语义未改变。下一阶段进入已迁移域的下一个兼容余额，继续按真实调用图拆分并保留可回滚边界。

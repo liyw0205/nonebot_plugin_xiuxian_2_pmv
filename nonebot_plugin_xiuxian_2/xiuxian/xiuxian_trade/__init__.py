@@ -59,7 +59,6 @@ from .transaction_service import (
     place_auction_bid,
 )
 from .auction_jobs import run_auction_job
-from .repository import TradeRepository
 from ...paths import get_paths
 from ...features.trade.application import TradeApplication
 from ...features.auction.queue_application import AuctionQueueApplication
@@ -67,6 +66,7 @@ from ...features.auction.application import AuctionBidApplication
 from ...features.auction.repository import LegacyTradeRepository
 from ...compatibility.auction_bid_effects import LegacyAuctionBidEffects
 from ...compatibility.auction_settlement_effects import LegacyAuctionSettlementEffects
+from ...compatibility.legacy_xianshi_schema import LegacyXianshiSchemaAdapter
 from ...features.auction.session_start_application import AuctionSessionStartApplication
 from ...features.auction.settlement import AuctionSettlementApplication
 from ...features.auction.query_application import AuctionQueryApplication
@@ -83,10 +83,6 @@ runtime_ids = UUIDGenerator()
 runtime_clock = SystemClock()
 _sql_message_instance = None
 _trade_manager_instance = None
-xianshi_repository = TradeRepository(
-    get_paths().game_db,
-    max_goods_num=XiuConfig().max_goods_num,
-)
 trade_application = TradeApplication(
     get_paths().game_db,
     get_paths().trade_db,
@@ -182,7 +178,7 @@ def _auction_query_application():
     return _auction_query_application_instance
 
 
-bind_auction_repository(xianshi_repository, _auction_session_service)
+bind_auction_repository(_auction_bid_repository, _auction_session_service)
 bind_auction_query_application(_auction_query_application)
 bind_auction_service_dependencies(
     items=items,
@@ -199,7 +195,10 @@ bind_auction_service_dependencies(
 
 @register_legacy_startup
 async def initialize_xianshi_repository():
-    xianshi_repository.initialize(get_paths().trade_db)
+    LegacyXianshiSchemaAdapter(
+        get_paths().game_db,
+        max_goods_num=XiuConfig().max_goods_num,
+    ).initialize(get_paths().trade_db)
 
 
 # === 全局常量配置 ===
