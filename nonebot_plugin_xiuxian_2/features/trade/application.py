@@ -17,6 +17,7 @@ from .guishi_match_repository import GuishiOrderMatchSqlRepository
 from .guishi_expired_repository import GuishiExpiredOrderSqlRepository
 from .guishi_take_repository import GuishiStoredItemTakeSqlRepository
 from .xianshi_listing_repository import XianshiListingSqlRepository
+from .xianshi_plan_listing_repository import XianshiPlanListingSqlRepository
 from .repository import TradeFeatureRepository
 
 
@@ -58,6 +59,9 @@ class TradeApplication(LegacyApplication):
         self.xianshi_listing_repository = XianshiListingSqlRepository(
             self.game_database, clock=self.clock, ids=self.ids
         )
+        self.xianshi_plan_listing_repository = XianshiPlanListingSqlRepository(
+            self.game_database, clock=self.clock, ids=self.ids
+        )
         super().__init__(game_database, repository=repository, feature="trade")
 
     def xianshi_list_items(
@@ -73,6 +77,21 @@ class TradeApplication(LegacyApplication):
     ):
         return self.xianshi_listing_repository.list_items(
             operation_id, seller_id, goods_id, name, goods_type, price, quantity
+        )
+
+    def xianshi_list_plan(
+        self,
+        *,
+        operation_id: str,
+        seller_id: str,
+        listing_plan: list[dict[str, Any]],
+        stamina_cost: int,
+    ):
+        return self.xianshi_plan_listing_repository.list_plan(
+            operation_id,
+            seller_id,
+            listing_plan,
+            stamina_cost=stamina_cost,
         )
 
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):

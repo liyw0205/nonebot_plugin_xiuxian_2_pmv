@@ -759,9 +759,11 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     operation_id = _xianshi_listing_operation_id(
         event, user_id, 0, total_fees_to_deduct, len(listing_plan), "auto"
     )
-    result = xianshi_repository.add_xianshi_plan_items(
-        operation_id, user_id, listing_plan,
-        fee_charged=total_fees_to_deduct, consume_assets=True, stamina_cost=30,
+    result = trade_application.xianshi_list_plan(
+        operation_id=operation_id,
+        seller_id=str(user_id),
+        listing_plan=listing_plan,
+        stamina_cost=30,
     )
     if result.status == "stamina_insufficient":
         msg = "体力不足，自动上架需要30点体力！"

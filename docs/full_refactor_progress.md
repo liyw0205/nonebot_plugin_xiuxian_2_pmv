@@ -3696,3 +3696,18 @@ diff check 均通过。
 到 `game_db`，五库 migration 数量为 game `103`、player `22`、trade `7`、impart `1`、message `1`；
 `clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。临时数据和 receipt 在提交前清理；
 该证据不替代真实正式发布周期。
+
+2026-09-24 trade automatic Xianshi listing feature-owned cutover：新增
+`XianshiPlanListingSqlRepository` 和 `TradeApplication.xianshi_list_plan`，自动上架 handler
+改走 game DB immediate UoW；在任何资产写入前统一校验 30 点体力、整份手续费和各 goods ID 的
+聚合可交易库存，然后原子扣减、逐件建 listing 并记录 plan operation。canonical plan replay/
+conflict、注入 Clock/ID generator 和历史 operation 表 `stamina_cost` 升级均保留；新增 game DB
+`trade.011`，请求路径不再隐式建表。快速和系统上架仍走兼容路径。聚焦 xianshi/source/progress
+`242 passed`，根目录全量回归 `2570 passed, 16 warnings, 25 subtests`；compileall、architecture、
+inventory、progress 和 diff check 均通过。
+
+2026-09-24 trade automatic Xianshi listing isolated recovery evidence：一次性五库 recovery smoke
+完成 backup、restore dry-run、restore、全量 `130` 项 migration 和 reconcile；`trade.011` 只路由
+到 `game_db`，五库 migration 数量为 game `104`、player `22`、trade `7`、impart `1`、message `1`；
+`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。临时数据和 receipt 在提交前清理；
+该证据不替代真实正式发布周期。

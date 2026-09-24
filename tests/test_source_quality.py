@@ -671,20 +671,22 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("immediate=True", listing_repository)
         self.assertIn("xianshi_listing_operations", listing_repository)
 
-    def test_xianshi_auto_listing_uses_plan_transaction_service(self) -> None:
+    def test_xianshi_auto_listing_uses_feature_plan_service(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
         command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")
-        repository_source = (trade_root / "repository.py").read_text(encoding="utf-8")
+        repository_source = (
+            SOURCE_ROOT / "features" / "trade" / "xianshi_plan_listing_repository.py"
+        ).read_text(encoding="utf-8")
         start = command_source.index("async def xianshi_auto_add_(")
         end = command_source.index("@xianshi_fast_add.handle", start)
         command = command_source[start:end]
 
-        self.assertIn("xianshi_repository.add_xianshi_plan_items(", command)
-        self.assertNotIn("xianshi_repository.add_xianshi_item(", command)
-        self.assertIn("consume_assets=True", command)
+        self.assertIn("trade_application.xianshi_list_plan(", command)
+        self.assertNotIn("xianshi_repository.add_xianshi_plan_items(", command)
+        self.assertIn("stamina_cost=30", command)
         self.assertNotIn("spend_stone_and_consume_trade_items(", command)
         self.assertNotIn("sql_message.send_back(", command)
-        self.assertIn("BEGIN IMMEDIATE", repository_source)
+        self.assertIn("immediate=True", repository_source)
         self.assertIn("xianshi_plan_listing_operations", repository_source)
 
     def test_main_database_package_rewards_use_transactional_service(self) -> None:
