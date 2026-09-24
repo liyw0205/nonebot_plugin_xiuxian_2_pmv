@@ -66,7 +66,7 @@ from ...paths import get_paths
 from ...features.trade.application import TradeApplication
 from ...features.auction.queue_application import AuctionQueueApplication
 from ...features.auction.application import AuctionBidApplication
-from ...features.auction.bid_effects import LegacyAuctionBidEffects
+from ...compatibility.auction_bid_effects import LegacyAuctionBidEffects
 from ...features.auction.session_start_application import AuctionSessionStartApplication
 from ...features.auction.settlement import AuctionSettlementApplication
 from ...features.trade.guishi_deposit_repository import GuishiDepositSqlRepository
@@ -174,7 +174,7 @@ def _auction_bid_application():
     if _auction_bid_application_instance is None:
         _auction_bid_application_instance = AuctionBidApplication(
             get_paths().game_db,
-            effects=LegacyAuctionBidEffects(record_trade_event),
+            effects=LegacyAuctionBidEffects(get_paths().player_db),
         )
     return _auction_bid_application_instance
 

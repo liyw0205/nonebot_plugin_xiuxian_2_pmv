@@ -2660,6 +2660,7 @@
     "asdict",
     "asyncio",
     "auction_bid_operations",
+    "auction_bid_statistics_events",
     "auction_current",
     "auction_feature_migrations",
     "auction_history",

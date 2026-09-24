@@ -253,8 +253,12 @@ def create_app(
     if any(feature.key == "auction" for feature in registry.features):
         from ...features.auction.application import AuctionBidApplication
         from ...features.auction.settlement import AuctionSettlementApplication
+        from ...compatibility.auction_bid_effects import LegacyAuctionBidEffects
 
-        auction = (context.services or {}).get("auction") or AuctionBidApplication(str(context.database.path("game_db")))
+        auction = (context.services or {}).get("auction") or AuctionBidApplication(
+            str(context.database.path("game_db")),
+            effects=LegacyAuctionBidEffects(str(context.database.path("player_db"))),
+        )
         settlement = (context.services or {}).get("auction_settlement") or AuctionSettlementApplication(
             str(context.database.path("game_db"))
         )

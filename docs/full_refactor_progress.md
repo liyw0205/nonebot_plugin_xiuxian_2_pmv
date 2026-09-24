@@ -2829,21 +2829,25 @@
   handler/route/scheduler 已改走 feature-owned application，且旧实现不再承载该
   用例，才可逐项从遗留服务移除。
 - 交易域已完成仙肆普通/自动/快速/系统上架、撤架和购买，鬼市存取灵石、订单创建/撤销/
-  撮合/过期清理、寄存物品取回，以及拍卖等待区、场次开始、竞价核心资产事务和结算核心。
-  拍卖竞价统计已从旧事务编排移到显式 post-commit effects port；当前仍是旧统计适配器，
-  结算后的日志/统计/game-event 分发也仍在兼容编排，不能算拍卖完整迁移。
+  撮合/过期清理、寄存物品取回，以及拍卖等待区、场次开始、竞价资产事务和结算核心。
+  拍卖竞价现在通过稳定 outbox event 分发；player DB 统计投影按 operation ID 持久化去重，
+  用户 JSON 日志也带 event marker 并通过 player DB 写锁串行化。NoneBot/Web runtime 与 CLI
+  共用 effects handler；结算后的日志/统计/game-event 分发仍在旧编排，不能算拍卖完整迁移。
 - `recovery_smoke.py` 在 2026-09-24 修复为五库按路由迁移前，旧脚本只对
   `game_db` 应用完整目录。因此此前没有独立五库回执的隔离 smoke 只能作为单库
   恢复演练，不能用于跨库切片或 P7 的最终证据；后续统一以五库 receipt 为准。
 
 ### 6.2 优先目标
 
-1. **收口拍卖竞价**：`AuctionBidApplication` 的竞价资产事务已 feature-owned，真实
-   NoneBot 入口经 facade 进入 application。已将统计/日志抽为 effects port，并允许
-   `operation_ledger=started` 时以同 operation ID 重放 repository，修复“资产已提交、ledger
-   未完成”的恢复窗口。仍需把 legacy statistics sink 改为具备持久化幂等键的投影，并增加
-   outbox/reconcile 证据；Web/独立 application 默认 no-op effects 也需明确产品口径。
-2. **收口拍卖结算副作用**：`AuctionSettlementApplication` 已持有成交/流拍资产事务、history
+1. **拍卖竞价 effects 已收口**：竞价资产事务仍由 `AuctionBidApplication` 承载；成功 ledger
+   结果与 `auction.bid.effects` outbox event 同事务提交，started operation 可重放 repository
+   并补发缺失事件。player DB 的 `auction_bid_statistics_events` 与统计增量原子提交；用户日志
+   在原 JSON 格式内持久化 event ID，并以 player DB immediate transaction 序列化文件重放。
+   Web/NoneBot 注入同一 compatibility effects，Web reconcile POST 与 `reconcile --apply` 可运行
+   handler；默认独立 application 仍保留显式 Null effects。旧版已 applied 且没有 outbox 的 ledger
+   不自动补发，避免把无法判别是否执行过的历史统计重复计数；新版 started 恢复和新成功事务会补齐
+   outbox。真实发布周期证据仍属于 P7。
+2. **下一步收口拍卖结算副作用**：`AuctionSettlementApplication` 已持有成交/流拍资产事务、history
    和 session 状态，但结算后的玩家日志、统计与 `safe_record_game_event` 仍由旧
    `transaction_service.end_auction_process` 分发。目标为 application-owned effects/outbox，
    对 winner/seller/seller-miss 每个 event 使用稳定 operation/event ID，验证 duplicate/restart
@@ -3777,3 +3781,20 @@ migration，game/player/trade/impart/message 分别 `105/22/7/1/1`，`auction.00
 game_db、attached player migrations `2` 项，reconcile clean；临时数据、receipt、pytest basetemp
 与 bytecode/cache 清理后不保留。结算日志/统计/game-event effects 仍待迁移；本地统计 sink 的
 持久化幂等与 outbox/reconcile 也仍是竞价后续目标。
+
+2026-09-24 auction bid outbox/statistics closure：新增 `auction.bid.effects` 稳定 outbox event；竞价
+成功 outcome 与 event 在 game DB 同一事务提交，`started` 恢复以 repository duplicate 结果补齐
+event。player DB 新增 `auction_bid_statistics_events`，统计 event claim 与 `statistics` 增量同事务、
+按 operation/key 去重；用户 JSON log 使用稳定 event marker、原格式兼容写入，并在 player DB
+immediate transaction 锁内原子替换。旧已 applied ledger 若没有 outbox 则不自动补发，因为无法判定
+其历史统计是否已执行；避免部署时重复计数。Web 与 NoneBot composition 注入同一 effects；Web
+reconcile POST 和 `reconcile --apply` 可分发 event。新增 direct Web bid、Web reconcile、投影幂等/冲突、
+sink 重放、legacy applied ledger、安全恢复和 migration routing 覆盖。auction/application/platform/
+inventory/progress focused 回归 `29 passed`；根目录 `tests/` 全量 `2592 passed, 16 warnings,
+25 subtests`。compileall、architecture、progress、inventory、diff check 均通过。
+
+2026-09-24 auction bid effects isolated five-db recovery：`scripts/recovery_smoke.py` 在专用
+`/tmp/auction-bid-effects-recovery` 完成五库 backup、restore dry-run、restore、全量 132 项 catalog
+migration 和 reconcile；game/player/trade/impart/message 分别应用 `105/23/7/1/1` 项，`auction.006`
+只路由到 player DB；attached accessory migrations 2 项；`clean=true`、operations/outbox/dead_events
+均为 0。临时测试/recovery/compile cache 已在提交前清理；该隔离证据不替代真实发布周期 P7。

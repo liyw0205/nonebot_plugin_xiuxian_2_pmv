@@ -22,6 +22,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--data-dir")
     parser.add_argument("--backup")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--apply", action="store_true", help="执行可识别的 reconcile handlers")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5888)
     args = parser.parse_args(argv)
@@ -81,7 +82,28 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, ensure_ascii=False, default=str))
         return 0
     with DatabaseUnitOfWork(context.database.path("game_db")) as uow:
-        report = ReconcileService().inspect(uow)
+        if args.apply:
+            from .compatibility.auction_bid_effects import LegacyAuctionBidEffects
+            from .features.accessory_package.application import AccessoryPackageApplication
+            from .features.auction.application import AuctionBidApplication
+
+            game_db = context.database.path("game_db")
+            player_db = context.database.path("player_db")
+            accessory = AccessoryPackageApplication(game_db, player_db)
+            auction = AuctionBidApplication(
+                game_db,
+                effects=LegacyAuctionBidEffects(player_db),
+            )
+            report = ReconcileService().run(
+                uow,
+                handlers={
+                    "accessory_package.open": accessory.reconcile,
+                    "auction.bid.effects": auction.reconcile_outbox_event,
+                },
+                operation_handlers={"accessory_package.open": accessory.reconcile},
+            )
+        else:
+            report = ReconcileService().inspect(uow)
     print(json.dumps(report.to_dict(), ensure_ascii=False, default=str))
     return 0 if report.clean else 1
 

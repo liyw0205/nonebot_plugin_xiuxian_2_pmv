@@ -36,8 +36,8 @@
 
 ## 当前切片
 
-`stone_gift`：默认 NoneBot/Web 入口已经切到新 application。本轮补齐真实命令等级字段回归和测试 migration fixture，完成 feature/application/adapter/source 回归；隔离数据目录的 backup/recovery 证据仍需在进度台账中记录。该切片未完成前不得开始下一个功能。
+`auction bid effects`：竞价资产 application 已有 feature-owned repository；当前收口稳定 outbox event、player DB operation-id 统计投影、可重放日志 sink，以及 Web/NoneBot/CLI reconcile handler。完成本切片和隔离五库 recovery 后，下一目标按进度台账进入拍卖结算后置副作用。
 
 ## 下一切片选择
 
-当前切片清理并复核磁盘后，重新运行进度审计，从真实 legacy execution/import 路径中选择一个独立边界。不得把 facade、静态 manifest 或仅测试通过视为切片完成。
+当前切片清理并复核磁盘后，进入 `docs/full_refactor_progress.md` 的 6.2 目标 2。不得把 facade、静态 manifest 或仅测试通过视为切片完成。

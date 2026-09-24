@@ -161,6 +161,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     auction_bid = (PACKAGE / "features" / "auction" / "bid_repository.py").read_text(encoding="utf-8")
     auction_bid_application = (PACKAGE / "features" / "auction" / "application.py").read_text(encoding="utf-8")
     auction_bid_effects = (PACKAGE / "features" / "auction" / "bid_effects.py").read_text(encoding="utf-8")
+    auction_bid_statistics = (PACKAGE / "features" / "auction" / "bid_statistics.py").read_text(encoding="utf-8")
+    auction_compat_effects = (PACKAGE / "compatibility" / "auction_bid_effects.py").read_text(encoding="utf-8")
+    web_app_source = (PACKAGE / "adapters" / "web" / "app.py").read_text(encoding="utf-8")
     auction_queue = (PACKAGE / "features" / "auction" / "queue_application.py").read_text(encoding="utf-8")
     auction_start = (PACKAGE / "features" / "auction" / "session_start_application.py").read_text(encoding="utf-8")
     auction_queue_handlers = trade_facade[
@@ -407,7 +410,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
         },
         "auction": {
             "bid_application_owned": "AuctionBidSqlRepository" in auction_bid and "bid_application.place_bid(" in trade_auction_transactions and "auction_bid_application=_auction_bid_application" in trade_facade,
-            "bid_effects_owned": "AuctionBidEffects" in auction_bid_application and "self.effects.on_bid(" in auction_bid_application and "class LegacyAuctionBidEffects" in auction_bid_effects and "if replayed:" in auction_bid_effects and "LegacyAuctionBidEffects(record_trade_event)" in trade_facade and "if bid_application is None and not bid_replayed:" in trade_auction_transactions,
+            "bid_effects_owned": "AuctionBidEffects" in auction_bid_application and "self.effects.on_bid(" in auction_bid_application and "self.outbox.append(" in auction_bid_application and "auction_bid_statistics_events" in auction_bid_statistics and "class LegacyAuctionBidEffects" in auction_compat_effects and "log_auction_bid_once" in auction_compat_effects and "LegacyAuctionBidEffects(get_paths().player_db)" in trade_facade and "LegacyAuctionBidEffects(str(context.database.path(\"player_db\")))" in web_app_source and "if bid_application is None and not bid_replayed:" in trade_auction_transactions,
+            "bid_outbox_reconcile_owned": '"auction.bid.effects": context.services["auction"].reconcile_outbox_event' in plugin and 'handlers=getattr(context, "outbox_handlers", None)' in (PACKAGE / "adapters" / "web" / "blueprints" / "database.py").read_text(encoding="utf-8"),
             "bid_started_operation_recoverable": 'elif existing.status != "started"' in auction_bid_application and 'self.repository.place_auction_bid(' in auction_bid_application,
             "queue_application_owned": "AuctionQueueSqlRepository" in auction_queue,
             "legacy_queue_disabled": "_auction_queue_service().enqueue(" not in auction_queue_handlers and "_auction_queue_service().dequeue(" not in auction_queue_handlers,
@@ -415,7 +419,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "session_start_uses_settlement_application": "settlement_application.settle_active(" in trade_auction_transactions and "auction_settlement_application=_auction_settlement_application" in trade_facade,
             "settlement_application_owned": "AuctionSettlementSqlRepository" in auction_settlement,
             "legacy_settlement_disabled": "repository=LegacyAuctionSettlementRepository(" not in plugin,
-            "status": "bid_asset_transaction_feature_owned_with_effects_and_started_recovery; settlement_notifications_and_compatibility_cleanup_pending",
+            "status": "bid_asset_and_post_commit_effects_owned_with_outbox_reconcile; settlement_notifications_and_compatibility_cleanup_pending",
         },
         "boss": {
             "manual_spawn_application_owned": "boss_application.spawn(" in boss_facade,

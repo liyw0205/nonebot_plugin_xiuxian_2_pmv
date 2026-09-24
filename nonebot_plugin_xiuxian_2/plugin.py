@@ -108,6 +108,7 @@ from .features.auction.migrations import (
     apply_auction_queue_operations,
     apply_auction_player_queue,
     apply_auction_bid_operations,
+    apply_auction_bid_statistics,
 )
 from .features._legacy_migrated import (
     APPLICATIONS as LEGACY_MIGRATED_APPLICATIONS,
@@ -153,6 +154,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("auction.003", "auction_queue_operations", apply_auction_queue_operations),
         Migration("auction.004", "auction_player_upload", apply_auction_player_queue),
         Migration("auction.005", "auction_bid_operations", apply_auction_bid_operations),
+        Migration("auction.006", "auction_bid_statistics_projection", apply_auction_bid_statistics),
         Migration("back.001", "back_feature_migrations", apply_back),
         Migration("bank.001", "bank_feature_migrations", apply_bank),
         Migration("bank.002", "bank_accounts", apply_bank_accounts),
@@ -280,6 +282,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "trade.007",
         "trade.008",
         "auction.004",
+        "auction.006",
     }
 )
 _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
@@ -287,6 +290,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "arena.006",
         "arena.008",
         "arena.009",
+        "auction.006",
         "tower.004",
         "platform.001",
         "title.001",
@@ -544,6 +548,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.accessory_package.application import AccessoryPackageApplication
         from .features.arena.application import ArenaApplication
         from .features.auction.application import AuctionBidApplication
+        from .compatibility.auction_bid_effects import LegacyAuctionBidEffects
         from .features.auction.settlement import AuctionSettlementApplication
         from .features.bank.application import BankApplication
         from .features.bank.repository import LegacyBankRepository
@@ -646,7 +651,10 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 str(context.database.path("player_db")),
                 clock=context.clock,
             ),
-            "auction": AuctionBidApplication(str(context.database.path("game_db"))),
+            "auction": AuctionBidApplication(
+                str(context.database.path("game_db")),
+                effects=LegacyAuctionBidEffects(str(context.database.path("player_db"))),
+            ),
             "auction_settlement": AuctionSettlementApplication(
                 str(context.database.path("game_db")),
             ),
@@ -789,6 +797,10 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 configure_lottery_application(lottery_service)
         context.reconcile_handlers = {
             "accessory_package.open": context.services["accessory_package"].reconcile,
+        }
+        context.outbox_handlers = {
+            "accessory_package.open": context.services["accessory_package"].reconcile,
+            "auction.bid.effects": context.services["auction"].reconcile_outbox_event,
         }
         phase_state["repositories"] = True
 

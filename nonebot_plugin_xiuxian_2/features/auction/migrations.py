@@ -75,10 +75,28 @@ def apply_auction_bid_operations(uow: DatabaseUnitOfWork) -> None:
     uow.execute("INSERT OR IGNORE INTO auction_feature_migrations(version) VALUES ('auction.005')")
 
 
+def apply_auction_bid_statistics(uow: DatabaseUnitOfWork) -> None:
+    """Prepare the player-db statistics projection and its replay ledger."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS statistics (user_id TEXT PRIMARY KEY)"
+    )
+    columns = {str(row[1]) for row in uow.execute("PRAGMA table_info(statistics)").fetchall()}
+    for name in ("拍卖出价次数", "拍卖出价灵石"):
+        if name not in columns:
+            uow.execute(f'ALTER TABLE statistics ADD COLUMN "{name}" INTEGER DEFAULT 0')
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS auction_bid_statistics_events ("
+        "operation_id TEXT NOT NULL,event_key TEXT NOT NULL,user_id TEXT NOT NULL,"
+        "increment INTEGER NOT NULL,created_at TEXT NOT NULL,"
+        "PRIMARY KEY(operation_id,event_key))"
+    )
+
+
 __all__ = [
     "apply_auction",
     "apply_auction_settlement",
     "apply_auction_queue_operations",
     "apply_auction_player_queue",
     "apply_auction_bid_operations",
+    "apply_auction_bid_statistics",
 ]

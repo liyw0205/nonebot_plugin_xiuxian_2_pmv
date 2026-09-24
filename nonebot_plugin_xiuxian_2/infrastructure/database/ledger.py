@@ -256,6 +256,9 @@ class OutboxStore:
             (self._now(), max(1, min(int(limit), 1000))),
         )
 
+    def get(self, uow: DatabaseUnitOfWork, event_id: str) -> Mapping[str, Any] | None:
+        return uow.query_one("SELECT * FROM domain_outbox WHERE event_id = ?", (str(event_id),))
+
     def mark_sent(self, uow: DatabaseUnitOfWork, event_id: str) -> None:
         uow.execute("UPDATE domain_outbox SET status = 'sent', updated_at = ? WHERE event_id = ?", (self._now(), event_id))
 

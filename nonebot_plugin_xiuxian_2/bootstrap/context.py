@@ -32,6 +32,7 @@ class RuntimeContext:
     services: Any = None
     config_service: Any = None
     reconcile_handlers: Any = None
+    outbox_handlers: Any = None
     # Explicit data directories are normally used by tests and maintenance
     # commands.  They must not unexpectedly execute legacy resource download
     # hooks; the real NoneBot entry point opts in explicitly.

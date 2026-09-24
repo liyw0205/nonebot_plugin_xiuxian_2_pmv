@@ -66,6 +66,7 @@ def create_blueprint(*, context=None, permission=None) -> Blueprint:
         with DatabaseUnitOfWork(database) as uow:
             report = ReconcileService().run(
                 uow,
+                handlers=getattr(context, "outbox_handlers", None),
                 operation_handlers=getattr(context, "reconcile_handlers", None),
             )
         return api_success(report.to_dict())

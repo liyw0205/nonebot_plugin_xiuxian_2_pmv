@@ -126,6 +126,7 @@ class RefactorProgressTests(unittest.TestCase):
         auction = slices["auction"]
         self.assertTrue(auction["bid_application_owned"])
         self.assertTrue(auction["bid_effects_owned"])
+        self.assertTrue(auction["bid_outbox_reconcile_owned"])
         self.assertTrue(auction["bid_started_operation_recoverable"])
         self.assertTrue(auction["queue_application_owned"])
         self.assertTrue(auction["legacy_queue_disabled"])

@@ -238,6 +238,9 @@ class PlayerDataManager:
                     # 同表位置类查询整体失效
                     self._field_list_cache.pop(key, None)
 
+    def invalidate_field_list_cache(self, table_name=None, field=None) -> None:
+        self._invalidate_field_list_cache(table_name, field)
+
     def update_all_records(self, table_name, field, value, data_type='TEXT'):
         """
         更新指定表中所有记录的某个字段的值

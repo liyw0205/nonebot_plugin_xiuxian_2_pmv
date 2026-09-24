@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import json
 from pathlib import Path
 from typing import Any, Mapping
 
 from ...core.errors import ConflictError, DomainError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
-from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
+from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger, OutboxStore
 from ...infrastructure.observability import trace_context
 from .domain import AuctionBidRequest
 from .bid_repository import AuctionBidSqlRepository
@@ -17,6 +18,7 @@ from .schemas import AuctionBidResult
 
 class AuctionBidApplication:
     action = "auction.bid"
+    effects_event = "auction.bid.effects"
 
     def __init__(
         self,
@@ -24,38 +26,76 @@ class AuctionBidApplication:
         *,
         repository: AuctionBidRepository | None = None,
         ledger: OperationLedger | None = None,
+        outbox: OutboxStore | None = None,
         effects: AuctionBidEffects | None = None,
     ) -> None:
         self.database = str(database)
         self.repository = repository or AuctionBidSqlRepository(self.database)
         self.ledger = ledger or OperationLedger()
+        self.outbox = outbox or OutboxStore()
         self.effects = effects or NullAuctionBidEffects()
 
-    def _apply_effects(
-        self,
-        outcome: OperationOutcome[dict[str, Any]],
-        *,
-        auction_id: str,
-        bidder_id: str,
-        item_name: str,
-        bid_price: int,
-    ) -> OperationOutcome[dict[str, Any]]:
+    def _apply_effects(self, outcome: OperationOutcome[dict[str, Any]]) -> OperationOutcome[dict[str, Any]]:
         if not outcome.ok:
             return outcome
+        event_id = f"{outcome.operation_id}:{self.action}"
         try:
-            self.effects.on_bid(
-                operation_id=outcome.operation_id,
-                auction_id=auction_id,
-                bidder_id=bidder_id,
-                item_name=item_name,
-                bid_price=bid_price,
-                replayed=outcome.replayed,
-            )
+            with DatabaseUnitOfWork(self.database) as uow:
+                row = self.outbox.get(uow, event_id)
+            if row is None:
+                # Applied rows created before the outbox cutover cannot reveal
+                # whether their legacy projection already ran.
+                return outcome
+            if str(row["status"]) != "sent":
+                payload = json.loads(str(row["payload_json"]))
+                self.reconcile_outbox_event({"payload": payload, "replayed": outcome.replayed})
+                with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                    self.outbox.mark_sent(uow, event_id)
         except Exception:
+            with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                self.outbox.mark_failed(uow, event_id)
             # The bid and its ledger are already durable.  A projection/log
             # failure must not make a retry debit the bidder a second time.
             return replace(outcome, message="竞价资产已结算，统计稍后补偿。")
         return outcome
+
+    def reconcile_outbox_event(self, record: Mapping[str, Any]) -> None:
+        payload = record.get("payload") or {}
+        self.effects.on_bid(
+            operation_id=str(payload["operation_id"]),
+            auction_id=str(payload["auction_id"]),
+            bidder_id=str(payload["bidder_id"]),
+            item_name=str(payload.get("item_name", "")),
+            bid_price=int(payload["bid_price"]),
+            replayed=bool(record.get("replayed", True)),
+            occurred_at=str(payload["occurred_at"]),
+        )
+
+    def _append_effect_event(self, uow: DatabaseUnitOfWork, outcome: OperationOutcome[Any], request: AuctionBidRequest, item_name: str) -> None:
+        if not outcome.ok:
+            return
+        event_id = f"{outcome.operation_id}:{self.action}"
+        event_name = str(item_name)
+        if not event_name and uow.query_one(
+            "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='auction_current'"
+        ):
+            row = uow.query_one("SELECT name FROM auction_current WHERE id=?", (request.auction_id,))
+            event_name = str(row["name"]) if row else request.auction_id
+        self.outbox.append(
+            uow,
+            event_id=event_id,
+            aggregate_type="auction",
+            aggregate_id=request.auction_id,
+            event_type=self.effects_event,
+            payload={
+                "operation_id": outcome.operation_id,
+                "auction_id": request.auction_id,
+                "bidder_id": request.bidder_id,
+                "item_name": event_name,
+                "bid_price": int((outcome.data or {}).get("bid_price", request.bid_price)),
+                "occurred_at": outcome.occurred_at or self.ledger.clock.now().isoformat(),
+            },
+        )
 
     def place_bid(
         self,
@@ -105,15 +145,10 @@ class AuctionBidApplication:
                 outcome = self._to_outcome(request, result)
                 with DatabaseUnitOfWork(self.database, immediate=True) as uow:
                     self.ledger.finish(uow, outcome)
+                    self._append_effect_event(uow, outcome, request, str(item_name))
             else:
                 outcome = replayed_outcome
-        return self._apply_effects(
-            outcome,
-            auction_id=request.auction_id,
-            bidder_id=request.bidder_id,
-            item_name=str(item_name),
-            bid_price=request.bid_price,
-        )
+        return self._apply_effects(outcome)
 
     def _to_outcome(self, request: AuctionBidRequest, result: Any) -> OperationOutcome[dict[str, Any]]:
         status = str(getattr(result, "status", "failed"))
@@ -135,9 +170,10 @@ class AuctionBidApplication:
                 consumed={"stone": data["debit"]},
                 granted={"refund": data["refunded_amount"]},
                 audit_category="auction_bid",
+                clock=self.ledger.clock,
             )
             return replace(outcome, replayed=True) if status == "duplicate" else outcome
-        return OperationOutcome.rejected(request.operation_id, self.action, f"竞拍未结算：{status}", code=status, data=data, audit_category="auction_bid")
+        return OperationOutcome.rejected(request.operation_id, self.action, f"竞拍未结算：{status}", code=status, data=data, audit_category="auction_bid", clock=self.ledger.clock)
 
     def reply(self, **kwargs: Any) -> ReplyPlan:
         outcome = self.place_bid(**kwargs)

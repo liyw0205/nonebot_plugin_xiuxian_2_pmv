@@ -85,6 +85,15 @@ def _player_data_manager():
     return _player_data_manager_instance
 
 
+def invalidate_player_data_cache(table_name: str, fields) -> None:
+    """Invalidate process-local projections after feature-owned SQL writes."""
+    manager = _player_data_manager_instance
+    if manager is None:
+        return
+    for field in fields:
+        manager.invalidate_field_list_cache(table_name, str(field))
+
+
 class _LazyPlayerDataManager:
     def __getattr__(self, name):
         return getattr(_player_data_manager(), name)
@@ -2176,13 +2185,14 @@ def get_logs(user_id: str, date_str: str = None, page: int = 1, per_page: int = 
             "error": f"获取日志失败: {str(e)}"
         }
 
-def clean_old_logs(keep_days=10):
+def clean_old_logs(keep_days=10, *, players_dir=None):
     """
     清理旧日志文件，保留指定天数内的日志
     """
     try:
         current_time = datetime.now()
-        log_dirs = PLAYERSDATA.rglob("*/logs")
+        log_root = Path(players_dir) if players_dir is not None else PLAYERSDATA
+        log_dirs = log_root.rglob("*/logs")
 
         for log_dir in log_dirs:
             log_files = list(log_dir.glob("*.log"))
