@@ -65,6 +65,7 @@ from .transaction_service import AuctionSessionService
 from ...paths import get_paths
 from ...features.trade.application import TradeApplication
 from ...features.auction.queue_application import AuctionQueueApplication
+from ...features.auction.application import AuctionBidApplication
 from ...features.auction.session_start_application import AuctionSessionStartApplication
 from ...features.auction.settlement import AuctionSettlementApplication
 from ...features.trade.guishi_deposit_repository import GuishiDepositSqlRepository
@@ -93,6 +94,7 @@ trade_application = TradeApplication(
 _guishi_stone_service_instance = None
 _auction_queue_application_instance = None
 _auction_session_service_instance = None
+_auction_bid_application_instance = None
 _auction_session_start_application_instance = None
 _auction_settlement_application_instance = None
 scheduler = require("nonebot_plugin_apscheduler").scheduler # 全局调度器，用于鬼市
@@ -146,6 +148,7 @@ def _auction_session_service():
             trade_manager=_trade_manager,
             auction_repository=xianshi_repository,
             auction_session_service=_auction_session_service_instance,
+            auction_bid_application=_auction_bid_application,
             auction_session_start_application=_auction_session_start_application,
             auction_settlement_application=_auction_settlement_application,
         )
@@ -162,6 +165,15 @@ def _auction_session_start_application():
             random_source=runtime_random,
         )
     return _auction_session_start_application_instance
+
+
+def _auction_bid_application():
+    global _auction_bid_application_instance
+    if _auction_bid_application_instance is None:
+        _auction_bid_application_instance = AuctionBidApplication(
+            get_paths().game_db,
+        )
+    return _auction_bid_application_instance
 
 
 def _auction_settlement_application():
@@ -189,6 +201,7 @@ bind_auction_service_dependencies(
     trade_manager=_trade_manager,
     auction_repository=xianshi_repository,
     auction_session_service=_auction_session_service,
+    auction_bid_application=_auction_bid_application,
     auction_session_start_application=_auction_session_start_application,
     auction_settlement_application=_auction_settlement_application,
 )

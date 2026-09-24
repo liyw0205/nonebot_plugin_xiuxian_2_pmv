@@ -1207,6 +1207,7 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("repository=LegacyAuctionSettlementRepository(", plugin_source)
         start_repository = (auction_root / "session_start_repository.py").read_text(encoding="utf-8")
         start_application = (auction_root / "session_start_application.py").read_text(encoding="utf-8")
+        bid_repository = (auction_root / "bid_repository.py").read_text(encoding="utf-8")
         self.assertIn("AuctionSessionStartSqlRepository", start_application)
         self.assertIn("attach_database", start_repository)
         self.assertIn("immediate=True", start_repository)
@@ -1214,6 +1215,10 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("start_application.start(", trade_source)
         self.assertIn("settlement_application.settle_active(", trade_source)
         self.assertIn("auction_settlement_application=_auction_settlement_application", trade_facade)
+        self.assertIn("AuctionBidSqlRepository", bid_repository)
+        self.assertIn("bid_application.place_bid(", trade_source)
+        self.assertIn("auction_bid_application=_auction_bid_application", trade_facade)
+        self.assertIn("if not bid_replayed:", trade_source)
 
     def test_auction_background_jobs_use_observable_boundary(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"

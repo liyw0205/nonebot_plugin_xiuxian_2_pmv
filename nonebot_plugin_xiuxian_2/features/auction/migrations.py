@@ -65,9 +65,20 @@ def apply_auction_player_queue(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_auction_bid_operations(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS auction_bid_operations ("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,auction_id TEXT,bidder_id TEXT,"
+        "bid_price INTEGER,debit INTEGER,refunded_bidder TEXT,refunded_amount INTEGER)"
+    )
+    uow.execute("CREATE TABLE IF NOT EXISTS auction_feature_migrations (version TEXT PRIMARY KEY)")
+    uow.execute("INSERT OR IGNORE INTO auction_feature_migrations(version) VALUES ('auction.005')")
+
+
 __all__ = [
     "apply_auction",
     "apply_auction_settlement",
     "apply_auction_queue_operations",
     "apply_auction_player_queue",
+    "apply_auction_bid_operations",
 ]

@@ -8,7 +8,8 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import AuctionBidRequest
-from .repository import AuctionBidRepository, LegacyTradeRepository
+from .bid_repository import AuctionBidSqlRepository
+from .repository import AuctionBidRepository
 from .schemas import AuctionBidResult
 
 
@@ -17,7 +18,7 @@ class AuctionBidApplication:
 
     def __init__(self, database: str | Path, *, repository: AuctionBidRepository | None = None, ledger: OperationLedger | None = None) -> None:
         self.database = str(database)
-        self.repository = repository
+        self.repository = repository or AuctionBidSqlRepository(self.database)
         self.ledger = ledger or OperationLedger()
 
     def place_bid(
@@ -49,12 +50,7 @@ class AuctionBidApplication:
                         return previous.replay()
                     raise ConflictError("操作正在处理中")
             try:
-                if self.repository is None:
-                    from ...xiuxian.xiuxian_trade.repository import TradeRepository
-                    repository = TradeRepository(self.database, max_goods_num=1000)
-                else:
-                    repository = self.repository
-                result = repository.place_auction_bid(
+                result = self.repository.place_auction_bid(
                     request.operation_id,
                     request.auction_id,
                     request.bidder_id,

@@ -29,7 +29,6 @@ class AuctionBidRequest:
             "bid_price": self.bid_price,
             "expected_price": self.expected_price,
             "expected_bids": dict(self.expected_bids),
-            "bid_time": self.bid_time,
         }
 
 

@@ -111,6 +111,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(trade["guishi_take_application_owned"])
         self.assertTrue(trade["legacy_guishi_take_disabled"])
         auction = slices["auction"]
+        self.assertTrue(auction["bid_application_owned"])
         self.assertTrue(auction["queue_application_owned"])
         self.assertTrue(auction["legacy_queue_disabled"])
         self.assertTrue(auction["session_start_application_owned"])

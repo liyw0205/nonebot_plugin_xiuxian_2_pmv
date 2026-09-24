@@ -2,7 +2,7 @@
 
 ## 用户流程
 
-竞拍适配器提交拍卖号、预期价格和预期竞价快照。应用层通过 operation ledger 防止重复扣款，再调用兼容仓储完成扣款、前一竞价退款和当前拍卖更新。
+竞拍适配器提交拍卖号、预期价格和预期竞价快照。应用层通过 operation ledger 防止重复扣款，再由 `AuctionBidSqlRepository` 原子完成扣款、前一竞价退款和当前拍卖更新。
 
 ## 命令与别名
 
@@ -16,7 +16,7 @@
 
 ## 数据模型与迁移
 
-拍卖会话、当前拍品、历史和结算 operation 表由 `auction.002` 迁移创建；`auction.003` 在 game DB 创建排队 operation 表，`auction.004` 在 trade DB 创建玩家等待区表。`auction_feature_migrations` 保留边界版本标记。
+拍卖会话、当前拍品、历史和结算 operation 表由 `auction.002` 迁移创建；`auction.003` 在 game DB 创建排队 operation 表，`auction.004` 在 trade DB 创建玩家等待区表，`auction.005` 在 game DB 创建竞价 operation 表。`auction_feature_migrations` 保留边界版本标记。
 
 `拍卖上架`/`拍卖下架` 使用 `AuctionQueueApplication`；等待区操作由 feature-owned repository 执行。`auction.003` 与 `auction.004` 必须按 database route 分别应用。
 
@@ -27,6 +27,8 @@
 `AuctionQueueSqlRepository` 在 game DB immediate UoW 中附加 trade DB；排队扣除可交易库存、队列插入和 operation 记录同事务提交，下架的背包返还、队列删除和 operation 记录同事务提交。
 
 `AuctionSessionStartSqlRepository` 在同一跨库事务中将等待区项目装入当前场次、创建 session 和 start operation，再清空等待区。管理员和自动开场的默认路径由 `AuctionSessionStartApplication` 提供时钟、随机源和稳定 replay；旧 `AuctionSessionService` 仅为兼容委托。结束流程走 `AuctionSettlementApplication`，replay 不重复写统计/游戏事件。
+
+`AuctionBidSqlRepository` 在 game DB 的 immediate UoW 中校验预期价格/竞价快照，锁定出价者灵石、退还上一位领先者并写入竞价 operation；application replay 不重复写交易统计。
 
 ## 定时任务
 

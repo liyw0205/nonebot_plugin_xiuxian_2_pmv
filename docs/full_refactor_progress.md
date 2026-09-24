@@ -3671,3 +3671,13 @@ compileall、架构检查、inventory、progress 和 diff check 均通过。隔�
 migration catalog（127 项）与 attached accessory migrations；restore/dry-run 五库成功，
 reconcile clean，operations/outbox/dead events 均为 0。全仓退出门禁仍为 `exit_ready=false`，
 剩余阻塞是旧 transaction services 与 `xiuxian2_handle` 遗留执行路径。
+
+2026-09-24 auction bid feature-owned cutover：新增 `AuctionBidSqlRepository` 和
+`auction.005` game DB migration；竞价 application 默认不再构造旧 `TradeRepository`，在
+immediate UoW 中校验预期价格/竞价快照、扣除出价者灵石、退还前一领先者并写入竞价 operation。
+真实 NoneBot `拍卖竞拍` 入口经兼容解析器进入 `AuctionBidApplication`，Web route 继续直达同一
+application；重放不重复写交易统计，未绑定 application 时保留旧 repository fallback。聚焦
+auction/source/progress 回归 `229 passed`，顶层全量回归 `2556 passed, 16 warnings, 25 subtests`；
+compileall、架构检查、inventory、progress 和 diff check 均通过。隔离五库 recovery 应用完整
+migration catalog（含 `auction.005`，game DB only）和 attached accessory migrations；
+restore/dry-run 五库成功，reconcile clean，operations/outbox/dead events 均为 0。

@@ -285,6 +285,7 @@ _sql_message: Any = None
 _trade_manager: Any = None
 _auction_repository: Any = None
 _auction_session_service: Any = None
+_auction_bid_application: Any = None
 _auction_session_start_application: Any = None
 _auction_settlement_application: Any = None
 
@@ -294,16 +295,18 @@ def _resolve_dependency(dependency: Any) -> Any:
 
 def bind_auction_service_dependencies(
     *, items: Any, sql_message: Any, trade_manager: Any, auction_repository: Any,
-    auction_session_service: Any, auction_session_start_application: Any = None,
+    auction_session_service: Any, auction_bid_application: Any = None,
+    auction_session_start_application: Any = None,
     auction_settlement_application: Any = None,
 ) -> None:
     global _items, _sql_message, _trade_manager, _auction_repository, _auction_session_service
-    global _auction_session_start_application, _auction_settlement_application
+    global _auction_bid_application, _auction_session_start_application, _auction_settlement_application
     _items = items
     _sql_message = sql_message
     _trade_manager = trade_manager
     _auction_repository = auction_repository
     _auction_session_service = auction_session_service
+    _auction_bid_application = auction_bid_application
     _auction_session_start_application = auction_session_start_application
     _auction_settlement_application = auction_settlement_application
 
@@ -570,28 +573,50 @@ async def place_auction_bid(bot: Bot, user_id: str, user_name: str, auction_id: 
 
     trace_id = f"trade:auction:{auction_id}"
     operation_id = f"auction-bid:{auction_id}:{user_id}:{bid_price}:{old_current_price}"
-    bid_result = auction_repository.place_auction_bid(
-        operation_id, auction_id, user_id, bid_price,
-        old_current_price, old_bids, time.time(),
+    bid_application = (
+        _resolve_dependency(_auction_bid_application)
+        if _auction_bid_application is not None
+        else None
     )
-    if bid_result.status == "stone_insufficient":
+    if bid_application is not None:
+        outcome = bid_application.place_bid(
+            operation_id=operation_id,
+            auction_id=auction_id,
+            bidder_id=user_id,
+            bid_price=bid_price,
+            expected_price=old_current_price,
+            expected_bids=old_bids,
+            bid_time=runtime_clock.now().timestamp(),
+        )
+        bid_status = str((outcome.data or {}).get("status", outcome.code or outcome.status))
+        bid_replayed = bool(outcome.replayed)
+        bid_result = None
+    else:
+        bid_result = auction_repository.place_auction_bid(
+            operation_id, auction_id, user_id, bid_price,
+            old_current_price, old_bids, time.time(),
+        )
+        bid_status = bid_result.status
+        bid_replayed = bid_status == "duplicate"
+    if bid_status == "stone_insufficient":
         return False, "灵石不足，竞拍未成立。"
-    if bid_result.status == "bid_too_low":
+    if bid_status == "bid_too_low":
         return False, "出价已低于当前价，请先【拍卖查看】确认后再出。"
-    if bid_result.status == "state_changed":
+    if bid_status == "state_changed":
         return False, "拍品价格已更新，请重新查看后再出价。"
-    if bid_result.status == "auction_missing":
+    if bid_status == "auction_missing":
         return False, "该拍品已结拍或不存在。"
-    if bid_result.status == "self_bid":
+    if bid_status == "self_bid":
         return False, "不可竞拍自身上架之物。"
-    if not bid_result.succeeded:
+    if bid_status not in {"bid", "duplicate"}:
         return False, "竞拍未成立，请刷新列表后重试。"
-    record_trade_event(
-        user_id,
-        "拍卖竞拍",
-        f"竞拍{item['name']}，出价{number_to(bid_price)}灵石，拍卖ID:{auction_id}",
-        {"拍卖出价次数": 1, "拍卖出价灵石": bid_price}
-    )
+    if not bid_replayed:
+        record_trade_event(
+            user_id,
+            "拍卖竞拍",
+            f"竞拍{item['name']}，出价{number_to(bid_price)}灵石，拍卖ID:{auction_id}",
+            {"拍卖出价次数": 1, "拍卖出价灵石": bid_price},
+        )
 
     msg_list = [
         f"【竞拍成功】",

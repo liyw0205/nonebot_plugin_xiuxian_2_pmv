@@ -119,6 +119,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
         )
     ]
     auction_settlement = (PACKAGE / "features" / "auction" / "settlement.py").read_text(encoding="utf-8")
+    auction_bid = (PACKAGE / "features" / "auction" / "bid_repository.py").read_text(encoding="utf-8")
     auction_queue = (PACKAGE / "features" / "auction" / "queue_application.py").read_text(encoding="utf-8")
     auction_start = (PACKAGE / "features" / "auction" / "session_start_application.py").read_text(encoding="utf-8")
     auction_queue_handlers = trade_facade[
@@ -351,13 +352,14 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "xianshi_purchase_guishi_deposit_withdraw_qiugou_baitan_create_cancel_matching_expired_cleanup_take_cutover_with_other_trade_compatibility",
         },
         "auction": {
+            "bid_application_owned": "AuctionBidSqlRepository" in auction_bid and "bid_application.place_bid(" in trade_auction_transactions and "auction_bid_application=_auction_bid_application" in trade_facade,
             "queue_application_owned": "AuctionQueueSqlRepository" in auction_queue,
             "legacy_queue_disabled": "_auction_queue_service().enqueue(" not in auction_queue_handlers and "_auction_queue_service().dequeue(" not in auction_queue_handlers,
             "session_start_application_owned": "AuctionSessionStartSqlRepository" in auction_start and "auction_session_start_application=_auction_session_start_application" in trade_facade and "start_application.start(" in trade_auction_transactions,
             "session_start_uses_settlement_application": "settlement_application.settle_active(" in trade_auction_transactions and "auction_settlement_application=_auction_settlement_application" in trade_facade,
             "settlement_application_owned": "AuctionSettlementSqlRepository" in auction_settlement,
             "legacy_settlement_disabled": "repository=LegacyAuctionSettlementRepository(" not in plugin,
-            "status": "queue_session_start_and_settlement_feature_owned_with_explicit_session_service_compatibility",
+            "status": "bid_queue_session_start_and_settlement_feature_owned_with_explicit_compatibility_fallbacks",
         },
         "boss": {
             "manual_spawn_application_owned": "boss_application.spawn(" in boss_facade,
