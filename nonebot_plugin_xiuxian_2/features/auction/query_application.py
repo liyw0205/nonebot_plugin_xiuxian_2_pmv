@@ -18,6 +18,9 @@ class AuctionQueryApplication:
     def get_current_auction(self, auction_id: str | None = None) -> Any:
         return self.repository.get_current_auction(auction_id)
 
+    def count_current_auctions(self) -> int:
+        return self.repository.count_current_auctions()
+
     def get_auction_history(self, auction_id: str | None = None) -> list[dict[str, Any]]:
         return self.repository.get_auction_history(auction_id)
 

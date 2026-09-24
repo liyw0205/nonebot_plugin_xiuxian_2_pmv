@@ -10,6 +10,8 @@ from ...infrastructure.database import DatabaseUnitOfWork
 class AuctionQueryRepository(Protocol):
     def get_current_auction(self, auction_id: str | None = None) -> Any: ...
 
+    def count_current_auctions(self) -> int: ...
+
     def get_auction_history(self, auction_id: str | None = None) -> list[dict[str, Any]]: ...
 
     def count_auction_history(self) -> int: ...
@@ -55,6 +57,15 @@ class AuctionQuerySqlRepository:
                 "SELECT * FROM auction_current WHERE id=?", (str(auction_id),)
             )
             return self._auction_row(row) if row else None
+
+    def count_current_auctions(self) -> int:
+        if not self.database.is_file():
+            return 0
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not self._table_exists(uow, "auction_current"):
+                return 0
+            row = uow.query_one("SELECT COUNT(*) AS total FROM auction_current")
+            return int(row["total"]) if row else 0
 
     def get_auction_history(self, auction_id: str | None = None) -> list[dict[str, Any]]:
         if not self.database.is_file():

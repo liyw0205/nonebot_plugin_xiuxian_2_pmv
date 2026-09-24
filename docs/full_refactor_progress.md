@@ -3868,9 +3868,14 @@ trade/auction Web 测试通过；本切片无 schema 变化，五库 recovery
 `AuctionQuerySqlRepository` 使用 SQLite `mode=ro` 且不执行 DDL；历史总数使用 `COUNT(*)` 而非将全表
 载入内存。缺少数据库或旧表时返回空列表/None/0，保留 bids/bid_times JSON 解码回退、`is_system`
 转换及历史 `end_time DESC` 顺序。该只读切片不新增 schema/migration，
-不触碰竞价、结算、调度或个人拍卖命令；余下 `my_auction`、手动结束/结束 scheduler、周期检查和
-自动开场读取仍通过旧 repository，故交易/拍卖兼容余额并未清零。聚焦 source/progress/query 回归
+不触碰竞价或结算。该提交当时尚未迁移等待区/调度查询，后续边界见紧随记录。聚焦 source/progress/query 回归
 `217 passed`，本轮根目录 `tests/` 全量回归 `2616 passed, 16 warnings`；compileall、architecture、
 inventory、progress 与 diff check 均通过。隔离五库 recovery 完成 backup、restore dry-run、restore、
 全量 `134` 项 catalog migration 和 reconcile，`clean=true`、operations/outbox/dead events 均为 0；
 临时数据、receipt、basetemp 与字节码缓存均清理。
+
+2026-09-24 auction queue/scheduler query follow-up：等待区个人列表和下架前按名称查找改走
+`AuctionQueueApplication`；信息/活动页用 `COUNT(*)` 统计等待区数量。拍卖结束 guard 与 5 分钟
+收尾 job 改由 `AuctionQueryApplication.count_current_auctions()` 判断是否有拍品并记录数量，避免
+把整张 current/queue/history 表载入内存。所有新查询用 `DatabaseUnitOfWork(read_only=True)`；没有
+新 schema/migration，竞价、上架/下架原子事务及结算入口不变。

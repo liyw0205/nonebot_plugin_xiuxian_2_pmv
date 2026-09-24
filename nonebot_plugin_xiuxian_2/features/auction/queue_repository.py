@@ -43,6 +43,48 @@ class AuctionQueueSqlRepository:
         self.max_goods_num = max(int(max_goods_num), 1)
         self.clock = clock or SystemClock()
 
+    def get_player_items(self, user_id: str | None = None) -> list[dict[str, Any]]:
+        database = Path(self.trade_database)
+        if not database.is_file():
+            return []
+        with DatabaseUnitOfWork(database, read_only=True) as uow:
+            if uow.query_one(
+                "SELECT 1 AS present FROM sqlite_master WHERE type='table' "
+                "AND name='auction_player_upload'"
+            ) is None:
+                return []
+            if user_id is None:
+                return uow.query_all(
+                    "SELECT user_id,item_id,item_name,start_price,user_name "
+                    "FROM auction_player_upload"
+                )
+            return uow.query_all(
+                "SELECT user_id,item_id,item_name,start_price,user_name "
+                "FROM auction_player_upload WHERE user_id=?",
+                (str(user_id),),
+            )
+
+    def count_player_items(self, user_id: str | None = None) -> int:
+        database = Path(self.trade_database)
+        if not database.is_file():
+            return 0
+        with DatabaseUnitOfWork(database, read_only=True) as uow:
+            if uow.query_one(
+                "SELECT 1 AS present FROM sqlite_master WHERE type='table' "
+                "AND name='auction_player_upload'"
+            ) is None:
+                return 0
+            if user_id is None:
+                row = uow.query_one(
+                    "SELECT COUNT(*) AS total FROM auction_player_upload"
+                )
+            else:
+                row = uow.query_one(
+                    "SELECT COUNT(*) AS total FROM auction_player_upload WHERE user_id=?",
+                    (str(user_id),),
+                )
+            return int(row["total"]) if row else 0
+
     @staticmethod
     def _from_row(status: str, action: str, row) -> AuctionQueueResult:
         return AuctionQueueResult(

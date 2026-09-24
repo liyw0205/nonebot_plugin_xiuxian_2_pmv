@@ -133,6 +133,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(auction["bid_outbox_reconcile_owned"])
         self.assertTrue(auction["bid_started_operation_recoverable"])
         self.assertTrue(auction["queue_application_owned"])
+        self.assertTrue(auction["queue_display_queries_application_owned"])
         self.assertTrue(auction["legacy_queue_disabled"])
         self.assertTrue(auction["session_start_application_owned"])
         self.assertTrue(auction["session_start_uses_settlement_application"])
@@ -150,6 +151,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(auction["legacy_trade_auction_session_isolated"])
         self.assertTrue(auction["display_queries_application_owned"])
         self.assertTrue(auction["display_query_repository_does_not_own_ddl"])
+        self.assertTrue(auction["scheduler_query_application_owned"])
         boss = slices["boss"]
         self.assertTrue(boss["manual_spawn_application_owned"])
         self.assertTrue(boss["legacy_manual_spawn_disabled"])

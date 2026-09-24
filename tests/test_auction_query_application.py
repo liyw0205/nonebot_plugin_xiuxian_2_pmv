@@ -49,6 +49,7 @@ class AuctionQueryApplicationTests(unittest.TestCase):
         self.assertEqual(application.get_current_auction("a1")["bids"], {"u": 200})
         rows = application.get_current_auction()
         self.assertEqual([row["id"] for row in rows], ["a1", "a2"])
+        self.assertEqual(application.count_current_auctions(), 2)
         self.assertEqual(rows[1]["bids"], {})
         self.assertEqual(rows[1]["bid_times"], {})
         self.assertFalse(rows[1]["is_system"])
@@ -118,15 +119,29 @@ class AuctionQueryEntryPointTests(unittest.TestCase):
         }
 
         view = functions["auction_view_"]
+        removal = functions["auction_remove_"]
+        my_auction = functions["my_auction_"]
         info = functions["auction_info_"]
         activity = functions["auction_activity_"]
+        auction_end = functions["auction_end_"]
+        end_job = functions["_check_auction_end_job_impl"]
         self.assertIn("_auction_query_application().get_current_auction", view)
         self.assertIn("_auction_query_application().get_auction_history", view)
         self.assertIn("_auction_query_application().count_auction_history", info)
         self.assertIn("_auction_query_application().get_current_auction", activity)
+        self.assertIn("_auction_queue_application().get_player_items", removal)
+        self.assertIn("_auction_queue_application().get_player_items", my_auction)
+        self.assertIn("_auction_queue_application().count_player_items", info)
+        self.assertIn("_auction_queue_application().count_player_items", activity)
+        self.assertIn("_auction_query_application().count_current_auctions", auction_end)
+        self.assertIn("_auction_query_application().count_current_auctions", end_job)
         for handler in (view, info, activity):
             self.assertNotIn("xianshi_repository.get_current_auction", handler)
             self.assertNotIn("xianshi_repository.get_auction_history", handler)
+        for handler in (removal, my_auction, info, activity):
+            self.assertNotIn("_trade_manager().get_player_auction_items", handler)
+        self.assertNotIn("xianshi_repository.get_current_auction", auction_end)
+        self.assertNotIn("xianshi_repository.get_current_auction", end_job)
 
 
 if __name__ == "__main__":

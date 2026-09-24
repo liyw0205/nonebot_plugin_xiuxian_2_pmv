@@ -2746,7 +2746,7 @@ async def auction_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             await auction_remove.finish()
     
     # 查找用户上架的该物品
-    player_items_in_queue = _trade_manager().get_player_auction_items(user_id)
+    player_items_in_queue = _auction_queue_application().get_player_items(user_id)
     item_to_remove = None
     for item in player_items_in_queue:
         if item["item_name"] == item_name: # item_name是玩家上架时的名称
@@ -2812,7 +2812,7 @@ async def my_auction_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await my_auction.finish()
     
     user_id = user_info['user_id']
-    player_auction_items = _trade_manager().get_player_auction_items(user_id) # 从数据库获取玩家上架物品
+    player_auction_items = _auction_queue_application().get_player_items(user_id)
     
     if not player_auction_items:
         msg = "您当前没有上架任何拍卖物品在等待区！"
@@ -2839,8 +2839,7 @@ async def auction_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     auction_current_status = get_auction_status()
     
     # 获取等待上架的玩家物品数量
-    player_auctions_in_queue = _trade_manager().get_player_auction_items()
-    total_player_items_in_queue = len(player_auctions_in_queue)
+    total_player_items_in_queue = _auction_queue_application().count_player_items()
     
     # 获取拍卖历史记录数量
     auction_history_count = _auction_query_application().count_auction_history()
@@ -2883,7 +2882,7 @@ async def auction_activity_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     auction_current_status = get_auction_status()
     current_auctions = _auction_query_application().get_current_auction() or []
     current_auctions_count = len(current_auctions)
-    waiting_auctions_count = len(_trade_manager().get_player_auction_items() or [])
+    waiting_auctions_count = _auction_queue_application().count_player_items()
     now = runtime_clock.now()
     max_user_items = _safe_auction_int(rules.get("max_user_items"), 3)
     hot_items_limit = min(_safe_auction_int(activity_config.get("hot_items_limit"), 5), 5)
@@ -2976,8 +2975,8 @@ async def auction_end_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await auction_end.finish()
     
     active_session = _auction_session_service().get_active_session()
-    pending_items = xianshi_repository.get_current_auction()
-    if active_session is None and not pending_items:
+    pending_item_count = _auction_query_application().count_current_auctions()
+    if active_session is None and pending_item_count == 0:
         await handle_send(bot, event, "拍卖当前未开启！", md_type="拍卖", k1="查看", v1="拍卖查看", k2="开启", v2="开启拍卖", k3="帮助", v3="拍卖帮助")
         await auction_end.finish()
     
@@ -3093,8 +3092,8 @@ async def check_auction_end_job():
 
 
 async def _check_auction_end_job_impl():
-    current_auctions = xianshi_repository.get_current_auction()
-    if not current_auctions:
+    current_auction_count = _auction_query_application().count_current_auctions()
+    if current_auction_count == 0:
         return
 
     session = _auction_session_service().get_active_session()
@@ -3103,7 +3102,7 @@ async def _check_auction_end_job_impl():
         return
     now_dt = runtime_clock.now()
     end_dt = datetime.fromtimestamp(session["end_time"])
-    n = len(current_auctions)
+    n = current_auction_count
 
     if now_dt >= end_dt:
         logger.info(f"拍卖到点收尾，拍品 {n} 件，开始结算。")

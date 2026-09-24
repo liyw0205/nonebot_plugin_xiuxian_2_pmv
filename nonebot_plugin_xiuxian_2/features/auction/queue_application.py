@@ -23,6 +23,12 @@ class AuctionQueueApplication:
     def get_operation(self, operation_id: str, action: str, user_id: str, item_id: int):
         return self.repository.get_operation(operation_id, action, user_id, item_id)
 
+    def get_player_items(self, user_id: str | None = None) -> list[dict[str, Any]]:
+        return self.repository.get_player_items(user_id)
+
+    def count_player_items(self, user_id: str | None = None) -> int:
+        return self.repository.count_player_items(user_id)
+
     def enqueue(
         self,
         operation_id: str,

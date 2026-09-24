@@ -40,6 +40,9 @@ def test_auction_queue_handlers_use_lazy_game_trade_service():
     assert "_auction_queue_application().enqueue(" in source
     assert "_auction_queue_application().dequeue(" in source
     assert "_auction_queue_application().get_operation(" in source
+    assert "_auction_queue_application().get_player_items(" in source
+    assert "_auction_queue_application().count_player_items(" in source
+    assert "_trade_manager().get_player_auction_items(" not in source
     assert "auction_queue_service.enqueue(" not in source
     assert "auction_queue_service.dequeue(" not in source
 
@@ -120,6 +123,53 @@ class AuctionQueueServiceTests(unittest.TestCase):
         self.assertEqual(self.inventory(), (2, 1))
         self.assertEqual(self.queue_count(), 1)
         self.assertEqual(self.operation_count(), 1)
+
+    def test_player_queue_query_preserves_legacy_shape_and_counts_without_loading(self) -> None:
+        self.enqueue()
+        with DatabaseUnitOfWork(self.trade_database) as uow:
+            uow.execute(
+                "INSERT INTO auction_player_upload VALUES(?,?,?,?,?)",
+                ("another-user", 2002, "另一件法器", 700000, "其他道友"),
+            )
+
+        own_items = self.application.get_player_items("user")
+        all_items = self.application.get_player_items()
+
+        self.assertEqual(
+            own_items,
+            [{
+                "user_id": "user",
+                "item_id": 1001,
+                "item_name": "测试法器",
+                "start_price": 600000,
+                "user_name": "测试道友",
+            }],
+        )
+        self.assertEqual(len(all_items), 2)
+        self.assertEqual(self.application.count_player_items(), 2)
+        self.assertEqual(self.application.count_player_items("user"), 1)
+
+    def test_player_queue_query_handles_missing_database_and_table_without_ddl(self) -> None:
+        missing_database = Path(self.temp_dir.name) / "missing-trade.sqlite3"
+        missing_table = Path(self.temp_dir.name) / "empty-trade.sqlite3"
+        with DatabaseUnitOfWork(missing_table):
+            pass
+
+        missing_app = AuctionQueueApplication(
+            self.game_database, missing_database, max_goods_num=99
+        )
+        empty_app = AuctionQueueApplication(
+            self.game_database, missing_table, max_goods_num=99
+        )
+
+        self.assertEqual(missing_app.get_player_items(), [])
+        self.assertEqual(missing_app.count_player_items(), 0)
+        self.assertFalse(missing_database.exists())
+        self.assertEqual(empty_app.get_player_items(), [])
+        self.assertEqual(empty_app.count_player_items(), 0)
+        with DatabaseUnitOfWork(missing_table, read_only=True) as uow:
+            tables = uow.query_all("SELECT name FROM sqlite_master WHERE type='table'")
+        self.assertEqual(tables, [])
 
     def test_dequeue_removes_queue_row_and_returns_bound_item(self) -> None:
         self.enqueue()
