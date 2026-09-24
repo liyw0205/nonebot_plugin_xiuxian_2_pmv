@@ -2832,7 +2832,8 @@
   撮合/过期清理、寄存物品取回，以及拍卖等待区、场次开始、竞价资产事务和结算核心。
   拍卖竞价现在通过稳定 outbox event 分发；player DB 统计投影按 operation ID 持久化去重，
   用户 JSON 日志也带 event marker 并通过 player DB 写锁串行化。NoneBot/Web runtime 与 CLI
-  共用 effects handler；结算后的日志/统计/game-event 分发仍在旧编排，不能算拍卖完整迁移。
+  共用竞价 effects handler；结算后的日志/统计/game-event 也已接入 application-owned outbox，
+  不能据此将交易兼容层或拍卖完整切片标为完成。
 - `recovery_smoke.py` 在 2026-09-24 修复为五库按路由迁移前，旧脚本只对
   `game_db` 应用完整目录。因此此前没有独立五库回执的隔离 smoke 只能作为单库
   恢复演练，不能用于跨库切片或 P7 的最终证据；后续统一以五库 receipt 为准。
@@ -2847,12 +2848,14 @@
    handler；默认独立 application 仍保留显式 Null effects。旧版已 applied 且没有 outbox 的 ledger
    不自动补发，避免把无法判别是否执行过的历史统计重复计数；新版 started 恢复和新成功事务会补齐
    outbox。真实发布周期证据仍属于 P7。
-2. **下一步收口拍卖结算副作用**：`AuctionSettlementApplication` 已持有成交/流拍资产事务、history
-   和 session 状态，但结算后的玩家日志、统计与 `safe_record_game_event` 仍由旧
-   `transaction_service.end_auction_process` 分发。目标为 application-owned effects/outbox，
-   对 winner/seller/seller-miss 每个 event 使用稳定 operation/event ID，验证 duplicate/restart
-   不重发、失败可 reconcile；NoneBot 展示文本继续由 adapter 消费结算 DTO。
-3. **清理交易兼容余额**：检查 `transaction_service.py` 及仙肆/鬼市剩余 handler 的真实调用图，
+2. **拍卖结算 effects 已收口**：`AuctionSettlementApplication` 在 game DB 同事务提交结算 ledger
+   outcome 和 `auction.settlement.effects` outbox；`started` operation 可借 repository duplicate
+   结果恢复，历史 duplicate 且没有 started ledger 的结果不补发，避免重复历史统计。每个拍品的
+   winner/seller/seller-miss 使用稳定 event ID；player DB 统计、JSON 日志、game-event 统计、赛季
+   排行和 economy log 均按 event ID 幂等。NoneBot/Web/CLI 共用 compatibility effects handler，
+   Web reconcile 与 `reconcile --apply` 可执行补偿；旧 `end_auction_process` 默认只负责调用
+   application 并返回结算 DTO，不再二次写 effects。真实发布周期证据仍属于 P7。
+3. **下一步清理交易兼容余额**：检查 `transaction_service.py` 及仙肆/鬼市剩余 handler 的真实调用图，
    切片迁出仍旧的撤架以外流程、展示查询和 scheduler。每次只迁一个资产转换；兼容 repository
    仅在真实调用归零且回滚证据满足后移除。
 4. 清零已迁移域的 compatibility 余额：优先处理仍由旧 service 承载的高频资产
@@ -3798,3 +3801,15 @@ inventory/progress focused 回归 `29 passed`；根目录 `tests/` 全量 `2592 
 migration 和 reconcile；game/player/trade/impart/message 分别应用 `105/23/7/1/1` 项，`auction.006`
 只路由到 player DB；attached accessory migrations 2 项；`clean=true`、operations/outbox/dead_events
 均为 0。临时测试/recovery/compile cache 已在提交前清理；该隔离证据不替代真实发布周期 P7。
+
+2026-09-24 auction settlement effects closure：`AuctionSettlementApplication` 将成交/流拍结算结果和
+`auction.settlement.effects` outbox 在 game DB 同一事务提交；`started` operation 可用 repository
+duplicate 结果恢复，历史 duplicate 且没有 started ledger 的记录不补发。winner/seller/seller-miss
+按 operation、拍品和角色生成稳定 event ID；player DB 统计、JSON 日志、game-event economy log、
+season rank 均按 event ID 幂等，并覆盖 payload conflict。旧 `end_auction_process` 默认不再二次分发
+结算副作用；NoneBot/Web/CLI 共用 effects handler，Web reconcile 和 `reconcile --apply` 可补偿失败
+outbox。新增 migration `auction.007`（game）与 `auction.008`（player），并完成五库 recovery：
+全量 `134` 项 catalog，game/player/trade/impart/message 分别 `107/24/7/1/1`，restore dry-run、
+restore、reconcile 均 clean，operations/outbox/dead events 均为 0。结算/竞价聚焦回归 `52 passed`，
+根目录全量回归 `2602 passed, 25 subtests, 16 warnings`；compileall、architecture、progress、
+inventory、diff check 均通过。真实发布周期证据仍属于 P7；下一阶段转入交易兼容余额清理。

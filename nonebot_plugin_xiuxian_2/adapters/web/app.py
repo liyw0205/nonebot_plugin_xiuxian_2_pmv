@@ -254,13 +254,15 @@ def create_app(
         from ...features.auction.application import AuctionBidApplication
         from ...features.auction.settlement import AuctionSettlementApplication
         from ...compatibility.auction_bid_effects import LegacyAuctionBidEffects
+        from ...compatibility.auction_settlement_effects import LegacyAuctionSettlementEffects
 
         auction = (context.services or {}).get("auction") or AuctionBidApplication(
             str(context.database.path("game_db")),
             effects=LegacyAuctionBidEffects(str(context.database.path("player_db"))),
         )
         settlement = (context.services or {}).get("auction_settlement") or AuctionSettlementApplication(
-            str(context.database.path("game_db"))
+            str(context.database.path("game_db")),
+            effects=LegacyAuctionSettlementEffects(str(context.database.path("player_db"))),
         )
         app.register_blueprint(
             auction_blueprint(
@@ -271,6 +273,10 @@ def create_app(
                 ids=context.ids,
             )
         )
+        outbox_handlers = dict(getattr(context, "outbox_handlers", None) or {})
+        outbox_handlers.setdefault("auction.bid.effects", auction.reconcile_outbox_event)
+        outbox_handlers.setdefault("auction.settlement.effects", settlement.reconcile_outbox_event)
+        context.outbox_handlers = outbox_handlers
     if any(feature.key == "bank" for feature in registry.features):
         from ...features.bank.application import BankApplication
 

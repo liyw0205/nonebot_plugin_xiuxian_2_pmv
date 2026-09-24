@@ -158,12 +158,15 @@ def _slice_status() -> dict[str, dict[str, object]]:
         )
     ]
     auction_settlement = (PACKAGE / "features" / "auction" / "settlement.py").read_text(encoding="utf-8")
+    auction_settlement_statistics = (PACKAGE / "features" / "auction" / "settlement_statistics.py").read_text(encoding="utf-8")
+    auction_settlement_compat = (PACKAGE / "compatibility" / "auction_settlement_effects.py").read_text(encoding="utf-8")
     auction_bid = (PACKAGE / "features" / "auction" / "bid_repository.py").read_text(encoding="utf-8")
     auction_bid_application = (PACKAGE / "features" / "auction" / "application.py").read_text(encoding="utf-8")
     auction_bid_effects = (PACKAGE / "features" / "auction" / "bid_effects.py").read_text(encoding="utf-8")
     auction_bid_statistics = (PACKAGE / "features" / "auction" / "bid_statistics.py").read_text(encoding="utf-8")
     auction_compat_effects = (PACKAGE / "compatibility" / "auction_bid_effects.py").read_text(encoding="utf-8")
     web_app_source = (PACKAGE / "adapters" / "web" / "app.py").read_text(encoding="utf-8")
+    cli_source = (PACKAGE / "cli.py").read_text(encoding="utf-8")
     auction_queue = (PACKAGE / "features" / "auction" / "queue_application.py").read_text(encoding="utf-8")
     auction_start = (PACKAGE / "features" / "auction" / "session_start_application.py").read_text(encoding="utf-8")
     auction_queue_handlers = trade_facade[
@@ -418,8 +421,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "session_start_application_owned": "AuctionSessionStartSqlRepository" in auction_start and "auction_session_start_application=_auction_session_start_application" in trade_facade and "start_application.start(" in trade_auction_transactions,
             "session_start_uses_settlement_application": "settlement_application.settle_active(" in trade_auction_transactions and "auction_settlement_application=_auction_settlement_application" in trade_facade,
             "settlement_application_owned": "AuctionSettlementSqlRepository" in auction_settlement,
+            "settlement_effects_owned": "AuctionSettlementEffects" in auction_settlement and "self.effects.on_settlement(" in auction_settlement and "self.outbox.append(" in auction_settlement and "recover_started_operation" in auction_settlement and "auction_settlement_statistics_events" in auction_settlement_statistics and "safe_record_game_event" in auction_settlement_compat,
+            "settlement_outbox_reconcile_owned": '"auction.settlement.effects": context.services["auction_settlement"].reconcile_outbox_event' in plugin and '"auction.settlement.effects": settlement.reconcile_outbox_event' in cli_source and 'outbox_handlers.setdefault("auction.settlement.effects", settlement.reconcile_outbox_event)' in web_app_source,
+            "settlement_projection_ids_idempotent": "log_auction_event_once" in auction_settlement_compat and "skip_statistics\": True" in auction_settlement_compat and "season_rank_event_receipts" in (PACKAGE / "xiuxian" / "xiuxian_utils" / "season_rank_service.py").read_text(encoding="utf-8") and "event_id" in (PACKAGE / "xiuxian" / "xiuxian_utils" / "economy_log.py").read_text(encoding="utf-8"),
+            "settlement_started_operation_recoverable": "recover_started_operation = True" in auction_settlement and 'status != "duplicate" or recover_started_operation' in auction_settlement,
+            "settlement_compat_effects_disabled": "if settlement_application is not None:\n        logger.info(\"拍卖已结束，结算及副作用事件已提交！\")\n        return auction_results" in trade_auction_transactions,
             "legacy_settlement_disabled": "repository=LegacyAuctionSettlementRepository(" not in plugin,
-            "status": "bid_asset_and_post_commit_effects_owned_with_outbox_reconcile; settlement_notifications_and_compatibility_cleanup_pending",
+            "status": "bid_and_settlement_effects_owned_with_outbox_reconcile; legacy_trade_compatibility_cleanup_pending",
         },
         "boss": {
             "manual_spawn_application_owned": "boss_application.spawn(" in boss_facade,

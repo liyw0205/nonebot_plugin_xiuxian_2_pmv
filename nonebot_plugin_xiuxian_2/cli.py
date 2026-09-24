@@ -86,6 +86,8 @@ def main(argv: list[str] | None = None) -> int:
             from .compatibility.auction_bid_effects import LegacyAuctionBidEffects
             from .features.accessory_package.application import AccessoryPackageApplication
             from .features.auction.application import AuctionBidApplication
+            from .features.auction.settlement import AuctionSettlementApplication
+            from .compatibility.auction_settlement_effects import LegacyAuctionSettlementEffects
 
             game_db = context.database.path("game_db")
             player_db = context.database.path("player_db")
@@ -94,11 +96,16 @@ def main(argv: list[str] | None = None) -> int:
                 game_db,
                 effects=LegacyAuctionBidEffects(player_db),
             )
+            settlement = AuctionSettlementApplication(
+                game_db,
+                effects=LegacyAuctionSettlementEffects(player_db),
+            )
             report = ReconcileService().run(
                 uow,
                 handlers={
                     "accessory_package.open": accessory.reconcile,
                     "auction.bid.effects": auction.reconcile_outbox_event,
+                    "auction.settlement.effects": settlement.reconcile_outbox_event,
                 },
                 operation_handlers={"accessory_package.open": accessory.reconcile},
             )

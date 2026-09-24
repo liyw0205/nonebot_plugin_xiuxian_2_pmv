@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import date, datetime
 from typing import Any, Iterable
 
@@ -13,6 +15,7 @@ from .json_store import safe_json_loads as _json_loads
 from .periods import get_season_key
 from .season_service import build_season_rank_key, normalize_season_mode
 from .xiuxian2_handle import XiuxianDateManage
+from ...infrastructure.database import DatabaseUnitOfWork
 
 _sql_message_instance = None
 
@@ -141,6 +144,7 @@ def add_season_rank_score(
     user_id: str | int | None = None,
     sect_id: str | int | None = None,
     extra: dict[str, Any] | None = None,
+    event_id: str | None = None,
     now: SeasonNow = None,
 ) -> dict[str, Any] | None:
     score_value = _to_int(score)
@@ -159,6 +163,68 @@ def add_season_rank_score(
     rank_key, normalized_mode, period_key = _build_rank_identity(rank_type_text, mode, now)
     extra_text = _json_dumps(extra, {})
     updated_at = _now_text()
+
+    if event_id:
+        from ...paths import get_paths
+
+        event_payload = json.dumps(
+            {
+                "rank_key": rank_key,
+                "rank_type": rank_type_text,
+                "score": score_value,
+                "user_id": user_id_text,
+                "sect_id": sect_id_int,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        payload_hash = hashlib.sha256(event_payload.encode("utf-8")).hexdigest()
+        with DatabaseUnitOfWork(get_paths().game_db, immediate=True) as uow:
+            receipt = uow.query_one(
+                "SELECT payload_hash FROM season_rank_event_receipts WHERE event_id=?",
+                (str(event_id),),
+            )
+            if receipt is not None:
+                if str(receipt["payload_hash"]) != payload_hash:
+                    raise ValueError(f"season score event payload conflict: {event_id}")
+                return {
+                    "rank_key": rank_key,
+                    "mode": normalized_mode,
+                    "period_key": period_key,
+                    "rank_type": rank_type_text,
+                    "user_id": user_id_text,
+                    "sect_id": sect_id_int,
+                    "score": score_value,
+                    "replayed": True,
+                }
+            cursor = uow.execute(
+                "UPDATE season_rank SET score=CAST(COALESCE(score,0) AS REAL)+CAST(? AS REAL),"
+                "extra=?,updated_at=? WHERE rank_key=? AND user_id=? AND sect_id=?",
+                (score_value, extra_text, updated_at, rank_key, user_id_text, sect_id_int),
+            )
+            if cursor.rowcount <= 0:
+                uow.execute(
+                    "INSERT INTO season_rank(rank_key,mode,period_key,rank_type,user_id,sect_id,"
+                    "score,extra,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                    (
+                        rank_key, normalized_mode, period_key, rank_type_text,
+                        user_id_text, sect_id_int, score_value, extra_text, updated_at,
+                    ),
+                )
+            uow.execute(
+                "INSERT INTO season_rank_event_receipts(event_id,payload_hash,created_at) VALUES(?,?,?)",
+                (str(event_id), payload_hash, updated_at),
+            )
+        return {
+            "rank_key": rank_key,
+            "mode": normalized_mode,
+            "period_key": period_key,
+            "rank_type": rank_type_text,
+            "user_id": user_id_text,
+            "sect_id": sect_id_int,
+            "score": score_value,
+        }
 
     with _sql_message().lock:
         cur = _sql_message().conn.cursor()
@@ -388,6 +454,9 @@ def record_event_season_scores(
     event_key: str,
     amount: int = 1,
     meta: dict[str, Any] | None = None,
+    *,
+    idempotency_key: str | None = None,
+    now: SeasonNow = None,
 ) -> list[dict[str, Any]]:
     meta = meta or {}
     if meta.get("skip_season_rank") is True:
@@ -432,10 +501,14 @@ def record_event_season_scores(
                     user_id=item_user_id,
                     sect_id=item_sect_id,
                     extra=extra,
+                    event_id=(f"{idempotency_key}:{_build_rank_identity(rank_type, mode, now)[0]}" if idempotency_key else None),
+                    now=now,
                 )
                 if entry:
                     entries.append(entry)
             except Exception as exc:
+                if idempotency_key:
+                    raise
                 _log_warning(
                     f"记录赛季积分失败：user_id={user_id}, event={event_key_text}, "
                     f"rank_type={rank_type}, mode={mode}, error={exc}"

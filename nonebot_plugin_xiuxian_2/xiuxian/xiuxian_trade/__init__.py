@@ -67,6 +67,7 @@ from ...features.trade.application import TradeApplication
 from ...features.auction.queue_application import AuctionQueueApplication
 from ...features.auction.application import AuctionBidApplication
 from ...compatibility.auction_bid_effects import LegacyAuctionBidEffects
+from ...compatibility.auction_settlement_effects import LegacyAuctionSettlementEffects
 from ...features.auction.session_start_application import AuctionSessionStartApplication
 from ...features.auction.settlement import AuctionSettlementApplication
 from ...features.trade.guishi_deposit_repository import GuishiDepositSqlRepository
@@ -183,7 +184,8 @@ def _auction_settlement_application():
     global _auction_settlement_application_instance
     if _auction_settlement_application_instance is None:
         _auction_settlement_application_instance = AuctionSettlementApplication(
-            get_paths().game_db
+            get_paths().game_db,
+            effects=LegacyAuctionSettlementEffects(get_paths().player_db),
         )
     return _auction_settlement_application_instance
 

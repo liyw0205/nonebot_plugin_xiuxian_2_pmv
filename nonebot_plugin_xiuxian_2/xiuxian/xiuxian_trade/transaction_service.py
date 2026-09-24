@@ -432,6 +432,9 @@ async def end_auction_process(
             raise ValueError(f"auction session settlement blocked: status={result.status}")
         auction_results = [dict(record) for record in result.results]
         settlement_replayed = result.status == "duplicate"
+    if settlement_application is not None:
+        logger.info("拍卖已结束，结算及副作用事件已提交！")
+        return auction_results
     for settlement in auction_results:
         if settlement_replayed:
             continue

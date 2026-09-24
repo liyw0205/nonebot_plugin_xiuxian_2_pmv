@@ -13,7 +13,7 @@ from ..infrastructure.database import DatabaseUnitOfWork
 from ..infrastructure.filesystem import atomic_write
 
 
-def log_auction_bid_once(
+def log_auction_event_once(
     *, user_id: str, message: str, event_id: str, occurred_at: str,
     players_dir: str | Path | None = None,
 ) -> bool:
@@ -68,7 +68,7 @@ class LegacyAuctionBidEffects:
         self,
         player_database: str | Path,
         *,
-        log_writer: Callable[..., Any] = log_auction_bid_once,
+        log_writer: Callable[..., Any] = log_auction_event_once,
         statistics: AuctionBidStatisticsRepository | None = None,
     ) -> None:
         self.statistics = statistics or AuctionBidStatisticsRepository(player_database)
@@ -118,4 +118,7 @@ class LegacyAuctionBidEffects:
         )
 
 
-__all__ = ["LegacyAuctionBidEffects", "log_auction_bid_once"]
+log_auction_bid_once = log_auction_event_once
+
+
+__all__ = ["LegacyAuctionBidEffects", "log_auction_event_once", "log_auction_bid_once"]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 try:
@@ -156,12 +157,16 @@ def _check_titles(user_id: str, meta: dict[str, Any]) -> list[str]:
     try:
         from ..xiuxian_title.title_data import check_and_unlock_titles
     except Exception:
+        if meta.get("require_effects") is True:
+            raise
         return []
 
     try:
         unlocked = check_and_unlock_titles(user_id)
         return unlocked if isinstance(unlocked, list) else []
     except Exception as exc:
+        if meta.get("require_effects") is True:
+            raise
         _log_warning(f"检查称号成就失败：user_id={user_id}, error={exc}")
         return []
 
@@ -198,12 +203,25 @@ def _record_season_rank_progress(
     try:
         from .season_rank_service import record_event_season_scores
     except Exception as exc:
+        if meta.get("require_effects") is True:
+            raise
         _log_warning(f"加载赛季积分入口失败：{exc}")
         return []
 
     try:
-        return record_event_season_scores(user_id, event_key, amount, meta)
+        occurred_at = meta.get("occurred_at")
+        event_time = datetime.fromisoformat(str(occurred_at)) if occurred_at else None
+        return record_event_season_scores(
+            user_id,
+            event_key,
+            amount,
+            meta,
+            idempotency_key=str(meta["event_id"]) if meta.get("event_id") else None,
+            now=event_time,
+        )
     except Exception as exc:
+        if meta.get("require_effects") is True:
+            raise
         _log_warning(f"记录赛季积分失败：user_id={user_id}, event={event_key}, error={exc}")
         return []
 
@@ -249,8 +267,11 @@ def record_game_event(
             action=str(meta.get("action") or "event"),
             detail={"event_key": event_key, "amount": amount, **dict(meta.get("detail") or {})},
             trace_id=meta.get("trace_id"),
+            event_id=str(meta["event_id"]) if meta.get("event_id") else None,
             **economy_delta,
         )
+        if meta.get("require_effects") is True and not result["economy_log_id"]:
+            raise RuntimeError("economy event projection was not persisted")
 
     return result
 
@@ -264,6 +285,8 @@ def safe_record_game_event(
     try:
         return record_game_event(user_id, event_key, amount, meta)
     except Exception as exc:
+        if meta and meta.get("require_effects") is True:
+            raise
         _log_warning(f"记录玩法事件失败：user_id={user_id}, event={event_key}, error={exc}")
         return {
             "user_id": str(user_id),

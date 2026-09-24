@@ -133,6 +133,11 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(auction["session_start_application_owned"])
         self.assertTrue(auction["session_start_uses_settlement_application"])
         self.assertTrue(auction["settlement_application_owned"])
+        self.assertTrue(auction["settlement_effects_owned"])
+        self.assertTrue(auction["settlement_outbox_reconcile_owned"])
+        self.assertTrue(auction["settlement_projection_ids_idempotent"])
+        self.assertTrue(auction["settlement_started_operation_recoverable"])
+        self.assertTrue(auction["settlement_compat_effects_disabled"])
         self.assertTrue(auction["legacy_settlement_disabled"])
         boss = slices["boss"]
         self.assertTrue(boss["manual_spawn_application_owned"])

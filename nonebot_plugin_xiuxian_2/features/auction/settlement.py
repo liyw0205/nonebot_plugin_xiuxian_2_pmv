@@ -6,14 +6,17 @@ remains available only for explicit compatibility injection.
 
 from __future__ import annotations
 
+import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Mapping, Protocol
 
 from ...core.errors import ConflictError, DomainError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
-from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
+from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger, OutboxStore
 from ...infrastructure.database.ledger import OperationRecord
 from ...infrastructure.observability import trace_context
+from .settlement_effects import AuctionSettlementEffects, NullAuctionSettlementEffects
 from .settlement_repository import AuctionSettlementSqlRepository
 
 
@@ -78,6 +81,7 @@ class LegacyAuctionSettlementRepository:
 
 class AuctionSettlementApplication:
     action = "auction.settle"
+    effects_event = "auction.settlement.effects"
 
     def __init__(
         self,
@@ -85,10 +89,86 @@ class AuctionSettlementApplication:
         *,
         repository: AuctionSettlementRepository | None = None,
         ledger: OperationLedger | None = None,
+        outbox: OutboxStore | None = None,
+        effects: AuctionSettlementEffects | None = None,
     ) -> None:
         self.database = str(database)
         self.repository = repository or AuctionSettlementSqlRepository(self.database)
         self.ledger = ledger or OperationLedger()
+        self.outbox = outbox or OutboxStore()
+        self.effects = effects or NullAuctionSettlementEffects()
+
+    @staticmethod
+    def _event_id(operation_id: str, settlement: Mapping[str, Any], event_key: str) -> str:
+        auction_id = str(settlement.get("auction_id", ""))
+        return f"{operation_id}:auction.settlement:{auction_id}:{event_key}"
+
+    @staticmethod
+    def _effect_keys(settlement: Mapping[str, Any]) -> tuple[str, ...]:
+        seller_id = str(settlement.get("seller_id", "0"))
+        if settlement.get("final_price") is not None:
+            return ("winner", "seller") if seller_id != "0" else ("winner",)
+        return ("seller_miss",) if seller_id != "0" else ()
+
+    def _append_effect_events(self, uow: DatabaseUnitOfWork, outcome: OperationOutcome[Any]) -> None:
+        if not outcome.ok:
+            return
+        data = outcome.data if isinstance(outcome.data, Mapping) else {}
+        occurred_at = outcome.occurred_at or self.ledger.clock.now().isoformat()
+        for settlement in data.get("results", ()):
+            record = dict(settlement)
+            for event_key in self._effect_keys(record):
+                event_id = self._event_id(outcome.operation_id, record, event_key)
+                self.outbox.append(
+                    uow,
+                    event_id=event_id,
+                    aggregate_type="auction",
+                    aggregate_id=str(record.get("auction_id", "")),
+                    event_type=self.effects_event,
+                    payload={
+                        "event_id": event_id,
+                        "operation_id": outcome.operation_id,
+                        "event_key": event_key,
+                        "settlement": record,
+                        "occurred_at": occurred_at,
+                    },
+                )
+
+    def _apply_effects(self, outcome: OperationOutcome[dict[str, Any]]) -> OperationOutcome[dict[str, Any]]:
+        if not outcome.ok:
+            return outcome
+        data = outcome.data or {}
+        event_id: str | None = None
+        try:
+            for settlement in data.get("results", ()):
+                record = dict(settlement)
+                for event_key in self._effect_keys(record):
+                    event_id = self._event_id(outcome.operation_id, record, event_key)
+                    with DatabaseUnitOfWork(self.database) as uow:
+                        row = self.outbox.get(uow, event_id)
+                    if row is None or str(row["status"]) == "sent":
+                        continue
+                    payload = json.loads(str(row["payload_json"]))
+                    self.reconcile_outbox_event({"payload": payload, "replayed": outcome.replayed})
+                    with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                        self.outbox.mark_sent(uow, event_id)
+        except Exception:
+            if event_id is not None:
+                with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                    self.outbox.mark_failed(uow, event_id)
+            return replace(outcome, message="拍卖结算已完成，日志与统计稍后补偿。")
+        return outcome
+
+    def reconcile_outbox_event(self, record: Mapping[str, Any]) -> None:
+        payload = record.get("payload") or {}
+        self.effects.on_settlement(
+            event_id=str(payload["event_id"]),
+            event_key=str(payload["event_key"]),
+            operation_id=str(payload["operation_id"]),
+            settlement=dict(payload["settlement"]),
+            occurred_at=str(payload["occurred_at"]),
+            replayed=bool(record.get("replayed", True)),
+        )
 
     def lookup(self, operation_id: str) -> dict[str, Any] | None:
         with DatabaseUnitOfWork(self.database) as uow:
@@ -130,13 +210,25 @@ class AuctionSettlementApplication:
         }
         with trace_context(operation_id=operation_id, user_scope="auction"):
             try:
+                replayed_outcome: OperationOutcome[dict[str, Any]] | None = None
+                recover_started_operation = False
                 with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                    before_begin = self.ledger.get(uow, operation_id, self.action)
                     existing = self.ledger.begin(uow, operation_id, self.action, payload)
                     if existing is not None:
                         previous = existing.outcome()
                         if previous is not None:
-                            return previous.replay()
-                        raise ConflictError("操作正在处理中")
+                            replayed_outcome = previous.replay()
+                        elif existing.status != "started":
+                            raise ConflictError("操作正在处理中")
+                        else:
+                            recover_started_operation = True
+                    elif before_begin is not None:
+                        recover_started_operation = before_begin.status in {
+                            "started", "failed", "needs_reconcile"
+                        }
+                if replayed_outcome is not None:
+                    return self._apply_effects(replayed_outcome)
                 raw = self.repository.settle_active(
                     operation_id,
                     end_time=end_time,
@@ -156,7 +248,10 @@ class AuctionSettlementApplication:
                         data=data,
                         granted={"settled_items": len(results)},
                         audit_category="auction_settlement",
+                        clock=self.ledger.clock,
                     )
+                    if status == "duplicate":
+                        outcome = replace(outcome, replayed=True)
                 else:
                     outcome = OperationOutcome.rejected(
                         operation_id,
@@ -165,10 +260,13 @@ class AuctionSettlementApplication:
                         code=status,
                         data=data,
                         audit_category="auction_settlement",
+                        clock=self.ledger.clock,
                     )
                 with DatabaseUnitOfWork(self.database, immediate=True) as uow:
                     self.ledger.finish(uow, outcome)
-                return outcome
+                    if status != "duplicate" or recover_started_operation:
+                        self._append_effect_events(uow, outcome)
+                return self._apply_effects(outcome)
             except DomainError:
                 raise
             except Exception as exc:
