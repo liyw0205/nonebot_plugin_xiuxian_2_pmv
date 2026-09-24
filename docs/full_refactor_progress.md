@@ -3897,3 +3897,17 @@ feature-owned active-session/start-operation 只读查询；旧 session service 
 测试加载。session 查询对不存在数据库返回空结果且不创建 schema。新增默认 wiring/source 边界和
 缺库回归；auction/session/source/progress/architecture 聚焦 `227 passed`，本切片 focused `28 passed`。
 写入、结算和 rollback adapter 语义未改变，下一阶段继续清理显式 auction write/session fallback。
+
+2026-09-25 auction explicit compatibility adapter cleanup：旧 `AuctionSessionService` 的完整场次
+实现从 `xiuxian_trade/transaction_service.py` 移出，`compatibility/legacy_trade_auction_sessions.py`
+保留相同 start/finish/get/read DTO 契约，但改为调用 `AuctionSessionStartSqlRepository` 与
+`AuctionSettlementSqlRepository`；`LegacyTradeAuctionSessionAdapter` 不再反向导入旧事务服务。
+`LegacyAuctionSettlementRepository` 同样不再调用 `_auction_dependencies`，显式兼容结算直接复用
+feature-owned settlement repository。默认 NoneBot/Web/scheduler 路径不变，显式 rollback 入口仍可用；
+新增 source/progress 门禁覆盖“兼容可用、旧执行体隔离、无旧依赖”。focused/source/progress
+回归 `237 passed`，顶层 `tests/` 全量 `2623 passed, 25 subtests, 16 warnings`；compileall、
+architecture、inventory、progress 和 `git diff --check` 均通过。隔离五库 recovery 完成
+backup、restore dry-run、restore、全量 `134` 项 migration，`reconcile clean=true` 且
+operations/outbox/dead events 均为 `0`；临时 recovery、receipt、pytest 和 bytecode/cache
+已清理。全局 `exit_ready=false` 仍由其余旧 transaction services、`xiuxian2_handle` 与 P7
+真实发布证据阻塞。

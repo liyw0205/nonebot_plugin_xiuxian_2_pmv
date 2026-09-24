@@ -11,7 +11,21 @@ def test_legacy_auction_session_service_is_confined_to_rollback_adapter():
     root = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2"
     repository = (root / "features/trade/repository.py").read_text(encoding="utf-8")
     compatibility = (root / "compatibility/legacy_trade_auction_sessions.py").read_text(encoding="utf-8")
+    transaction_service = (root / "xiuxian/xiuxian_trade/transaction_service.py").read_text(encoding="utf-8")
 
     assert "AuctionSessionService" not in repository
     assert "LegacyTradeAuctionSessionAdapter" in repository
     assert "AuctionSessionService" in compatibility
+    assert "AuctionSessionStartSqlRepository" in compatibility
+    assert "AuctionSettlementSqlRepository" in compatibility
+    assert "transaction_service" not in compatibility
+    assert "class AuctionSessionService" not in transaction_service
+
+
+def test_legacy_settlement_adapter_uses_feature_repository_without_old_dependencies():
+    root = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2"
+    source = (root / "features/auction/settlement.py").read_text(encoding="utf-8")
+
+    assert "AuctionSettlementSqlRepository" in source
+    assert "_auction_dependencies" not in source
+    assert "transaction_service" not in source

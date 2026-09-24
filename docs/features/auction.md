@@ -30,7 +30,7 @@
 
 `AuctionQueueSqlRepository` 在 game DB immediate UoW 中附加 trade DB；排队扣除可交易库存、队列插入和 operation 记录同事务提交，下架的背包返还、队列删除和 operation 记录同事务提交。
 
-`AuctionSessionStartSqlRepository` 在同一跨库事务中将等待区项目装入当前场次、创建 session 和 start operation，再清空等待区。管理员和自动开场的默认路径由 `AuctionSessionStartApplication` 提供时钟、随机源和稳定 replay；旧 `AuctionSessionService` 仅为兼容委托。结束流程走 `AuctionSettlementApplication`，replay 不重复写统计/游戏事件。
+`AuctionSessionStartSqlRepository` 在同一跨库事务中将等待区项目装入当前场次、创建 session 和 start operation，再清空等待区。管理员和自动开场的默认路径由 `AuctionSessionStartApplication` 提供时钟、随机源和稳定 replay；旧 `AuctionSessionService` 仅为显式兼容 DTO 委托，同样复用 feature-owned start/settlement repositories。结束流程走 `AuctionSettlementApplication`，replay 不重复写统计/游戏事件。
 
 `AuctionBidSqlRepository` 在 game DB 的 immediate UoW 中校验预期价格/竞价快照，锁定出价者灵石、退还上一位领先者并写入竞价 operation；application replay 不重复写交易统计。
 
@@ -52,4 +52,4 @@
 
 ## 灰度开关、回滚和已知限制
 
-关闭灰度后旧竞价入口继续工作。`LegacyAuctionSettlementRepository` 仅保留给显式兼容调用，生产 scheduler/application 默认使用 feature-owned SQL repository。
+关闭灰度后旧竞价入口继续工作。`LegacyAuctionSettlementRepository` 仅保留给显式兼容调用，并直接复用 feature-owned SQL repository；生产 scheduler/application 默认使用 `AuctionSettlementApplication`。

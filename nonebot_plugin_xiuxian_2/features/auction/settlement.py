@@ -32,7 +32,12 @@ class AuctionSettlementRepository(Protocol):
 
 
 class LegacyAuctionSettlementRepository:
-    """Lazy bridge to the historical auction session service."""
+    """Explicit rollback adapter backed by the feature settlement repository.
+
+    The class name remains for callers that still inject the historical
+    repository contract.  It must not pull the old transaction service into
+    the runtime graph.
+    """
 
     def __init__(self, database: str | Path, trade_database: str | Path) -> None:
         self.database = str(database)
@@ -47,36 +52,22 @@ class LegacyAuctionSettlementRepository:
         item_types: Mapping[int, str],
     ) -> Any:
         # Import only when a real settlement is requested.  Health/manifest
-        # commands must remain usable without importing the legacy matcher.
+        # commands must remain usable without importing item JSON/config data.
         try:
-            from ...xiuxian.xiuxian_trade.transaction_service import _auction_dependencies
-
-            _items, _sql, _trade, repository, sessions = _auction_dependencies()
+            from .settlement_repository import AuctionSettlementSqlRepository
         except (ImportError, RuntimeError, ValueError, OSError):
-            # The isolated web factory intentionally does not load legacy
-            # matchers.  Importing the legacy package can also touch its
-            # configured JSON data directory and raise FileNotFoundError when
-            # a test or maintenance context uses an empty isolated directory.
-            # Expose a deterministic not-ready result instead of turning an
-            # otherwise valid admin request into an opaque 500.
+            # An isolated maintenance context may not have the feature module
+            # or configured data directory available.  Keep the old adapter's
+            # deterministic not-ready contract in that case.
             return {"status": "not_ready", "results": ()}
-        active = sessions.get_active_session()
-        if active is None:
-            return {"status": "empty", "results": ()}
-        current = repository.get_current_auction() or []
-        resolved_types = dict(item_types)
-        if not resolved_types:
-            for item in current:
-                info = _items.get_data_by_item_id(item.get("item_id"))
-                if info:
-                    resolved_types[int(item["item_id"])] = str(info["type"])
-        return sessions.finish(
+
+        result = AuctionSettlementSqlRepository(self.database).settle_active(
             operation_id,
-            str(active["session_id"]),
             end_time=float(end_time),
             fee_rate=float(fee_rate),
-            item_types=resolved_types,
+            item_types=item_types,
         )
+        return result
 
 
 class AuctionSettlementApplication:

@@ -86,6 +86,15 @@ class AuctionSessionFinishTests(unittest.TestCase):
             self.assertEqual(conn.execute("SELECT stone FROM user_xiuxian WHERE user_id='seller'").fetchone()[0], 810)
             self.assertEqual(conn.execute("SELECT goods_num FROM back WHERE user_id='winner'").fetchone()[0], 1)
 
+    def test_finish_replay_with_another_session_id_is_rejected(self) -> None:
+        first = self.finish()
+        conflict = self.service.finish(
+            "finish", "other-session", end_time=300, fee_rate=0.1,
+            item_types={1001: "装备"},
+        )
+        self.assertEqual(first.status, "settled")
+        self.assertEqual(conflict.status, "state_changed")
+
     def test_operation_failure_rolls_back_whole_session(self) -> None:
         with db_backend.transaction(self.game) as conn:
             conn.execute(

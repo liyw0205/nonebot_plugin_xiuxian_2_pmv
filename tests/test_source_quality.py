@@ -617,7 +617,7 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("immediate=True", repository_source)
         self.assertIn("auction_queue_operations", repository_source)
         service_start = legacy_source.index("class AuctionQueueService:")
-        service_end = legacy_source.index("class AuctionSessionStartResult:", service_start)
+        service_end = legacy_source.index("__all__", service_start)
         compatibility_service = legacy_source[service_start:service_end]
         self.assertIn("AuctionQueueSqlRepository", compatibility_service)
         self.assertNotIn("CREATE TABLE", compatibility_service)

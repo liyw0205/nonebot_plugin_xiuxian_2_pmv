@@ -87,6 +87,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     trade_feature_repository = (PACKAGE / "features" / "trade" / "repository.py").read_text(encoding="utf-8")
     legacy_trade_auction_compatibility = (PACKAGE / "compatibility" / "legacy_trade_auction_sessions.py").read_text(encoding="utf-8")
     trade_auction_transactions = (PACKAGE / "xiuxian" / "xiuxian_trade" / "transaction_service.py").read_text(encoding="utf-8")
+    auction_settlement_source = (PACKAGE / "features" / "auction" / "settlement.py").read_text(encoding="utf-8")
     trade_legacy_guishi_compatibility = (PACKAGE / "compatibility" / "legacy_guishi_stone.py").read_text(encoding="utf-8")
     trade_deposit_handler = trade_facade[
         trade_facade.index("async def guishi_deposit_") : trade_facade.index(
@@ -462,6 +463,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 )
             ),
             "legacy_trade_auction_session_isolated": "AuctionSessionService" not in trade_feature_repository and "LegacyTradeAuctionSessionAdapter" in trade_feature_repository and "AuctionSessionService" in legacy_trade_auction_compatibility,
+            "legacy_trade_auction_session_feature_owned": "AuctionSessionStartSqlRepository" in legacy_trade_auction_compatibility and "AuctionSettlementSqlRepository" in legacy_trade_auction_compatibility and "transaction_service" not in legacy_trade_auction_compatibility and "class AuctionSessionService" not in trade_auction_transactions,
+            "legacy_settlement_adapter_feature_owned": "AuctionSettlementSqlRepository" in auction_settlement_source and "_auction_dependencies" not in auction_settlement_source and "transaction_service" not in auction_settlement_source,
             "display_queries_application_owned": "AuctionQuerySqlRepository" in auction_query and "AuctionQuerySqlRepository" in auction_query_repository and all(
                 token in trade_facade for token in (
                     "_auction_query_application().get_current_auction(auction_id)",
@@ -471,7 +474,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ) and "_auction_query_application().count_auction_history()" in trade_facade and "xianshi_repository.get_current_auction(auction_id)" not in trade_facade and "xianshi_repository.get_auction_history(auction_id)" not in trade_facade,
             "display_query_repository_does_not_own_ddl": "CREATE TABLE" not in auction_query_repository and "ensure_schema" not in auction_query_repository and "read_only=True" in auction_query_repository and "read_only: bool = False" in (PACKAGE / "infrastructure" / "database" / "uow.py").read_text(encoding="utf-8"),
             "scheduler_query_application_owned": "_auction_query_application().count_current_auctions()" in trade_facade and "xianshi_repository.get_current_auction()" not in trade_facade,
-            "status": "bid_and_settlement_effects_owned_with_outbox_reconcile; trade_web_auction_actions_application_owned; display_queue_and_scheduler_queries_application_owned; legacy_session_service_isolated; auction_write_and_session_compatibility_pending",
+            "status": "bid_and_settlement_effects_owned_with_outbox_reconcile; trade_web_auction_actions_application_owned; display_queue_and_scheduler_queries_application_owned; explicit_auction_rollback_adapters_feature_owned",
         },
         "boss": {
             "manual_spawn_application_owned": "boss_application.spawn(" in boss_facade,

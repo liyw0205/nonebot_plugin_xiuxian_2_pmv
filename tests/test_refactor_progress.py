@@ -149,6 +149,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(auction["trade_web_session_routes_admin"])
         self.assertTrue(auction["trade_web_real_route_replay_and_effects_covered"])
         self.assertTrue(auction["legacy_trade_auction_session_isolated"])
+        self.assertTrue(auction["legacy_trade_auction_session_feature_owned"])
+        self.assertTrue(auction["legacy_settlement_adapter_feature_owned"])
         self.assertTrue(auction["display_queries_application_owned"])
         self.assertTrue(auction["display_query_repository_does_not_own_ddl"])
         self.assertTrue(auction["scheduler_query_application_owned"])

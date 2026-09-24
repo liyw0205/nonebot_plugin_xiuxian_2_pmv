@@ -49,7 +49,8 @@ game DB 创建或升级仙肆普通、自动、快速、系统上架 operation �
 trade DB，按背包上限原子退回未售库存、删除订单并记录 operation。求购/摆摊撮合、过期清理和
 寄存物品取回，以及拍卖竞价、等待区、场次开始/交接与结算均已切换到 feature application。trade Web
 队列与场次 route 也直接使用这些 application；旧 `AuctionSessionService` 已移入
-`compatibility/legacy_trade_auction_sessions.py`，仅供显式注入的 rollback repository 使用。
+`compatibility/legacy_trade_auction_sessions.py`，仅供显式注入的 rollback repository 使用，且内部复用
+feature-owned session/settlement repositories。
 ## 定时任务
 场次调度继续由兼容 scheduler 管理。
 ## 配置项

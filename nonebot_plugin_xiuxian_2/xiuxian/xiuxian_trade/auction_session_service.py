@@ -1,6 +1,6 @@
 """Stable facade for database-authoritative auction sessions."""
 
-from .transaction_service import AuctionSessionService
+from ...compatibility.legacy_trade_auction_sessions import AuctionSessionService
 
 # BEGIN IMMEDIATE protects auction session state and replay operations.
 OPERATION_TABLE = "auction_session_operations"
