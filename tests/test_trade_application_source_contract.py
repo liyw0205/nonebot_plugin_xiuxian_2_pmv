@@ -58,3 +58,19 @@ def test_xianshi_purchase_default_and_compatibility_paths_are_feature_owned():
     assert "TradeRepository" not in repository
     assert "class XianshiPurchaseSqlRepository" in purchase
     assert "DatabaseUnitOfWork(self.database, immediate=True)" in purchase
+
+
+def test_xianshi_queries_are_feature_owned_and_read_only():
+    root = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2"
+    application = (root / "features/trade/application.py").read_text(encoding="utf-8")
+    repository = (root / "features/trade/xianshi_query_repository.py").read_text(
+        encoding="utf-8"
+    )
+    facade = (root / "xiuxian/xiuxian_trade/__init__.py").read_text(encoding="utf-8")
+
+    assert "XianshiQuerySqlRepository" in application
+    assert "self.xianshi_query_repository.get_items(" in application
+    assert "DatabaseUnitOfWork(self.database, read_only=True)" in repository
+    assert "CREATE TABLE" not in repository
+    assert facade.count("xianshi_repository.get_xianshi_items(") == 0
+    assert facade.count("trade_application.xianshi_get_items(") >= 5

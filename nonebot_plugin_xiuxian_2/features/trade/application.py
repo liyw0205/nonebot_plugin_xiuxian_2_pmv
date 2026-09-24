@@ -24,6 +24,7 @@ from .xianshi_listing_repository import XianshiListingSqlRepository
 from .xianshi_plan_listing_repository import XianshiPlanListingSqlRepository
 from .xianshi_removal_repository import XianshiRemovalSqlRepository
 from .xianshi_purchase_repository import XianshiPurchaseSqlRepository
+from .xianshi_query_repository import XianshiQueryRepository, XianshiQuerySqlRepository
 from .repository import TradeFeatureRepository
 
 
@@ -43,6 +44,7 @@ class TradeApplication(LegacyApplication):
         auction_settlement: Any | None = None,
         auction_max_goods_num: int = 1000,
         auction_max_user_items: int = 3,
+        xianshi_query_repository: XianshiQueryRepository | None = None,
     ) -> None:
         self.game_database = str(game_database)
         self.trade_database = str(trade_database)
@@ -97,7 +99,25 @@ class TradeApplication(LegacyApplication):
         self.xianshi_purchase_repository = XianshiPurchaseSqlRepository(
             self.game_database, clock=self.clock
         )
+        self.xianshi_query_repository = xianshi_query_repository or XianshiQuerySqlRepository(
+            self.game_database
+        )
         super().__init__(game_database, repository=repository, feature="trade")
+
+    def xianshi_get_items(
+        self,
+        *,
+        user_id: str | None = None,
+        goods_type: str | None = None,
+        listing_id: str | None = None,
+        name: str | None = None,
+    ) -> list[dict[str, Any]]:
+        return self.xianshi_query_repository.get_items(
+            user_id=user_id,
+            goods_type=goods_type,
+            listing_id=listing_id,
+            name=name,
+        )
 
     def xianshi_list_items(
         self,

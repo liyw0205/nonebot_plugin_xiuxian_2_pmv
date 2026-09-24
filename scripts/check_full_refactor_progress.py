@@ -85,6 +85,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     trade_plan_xianshi_transactions = (PACKAGE / "features" / "trade" / "xianshi_plan_listing_repository.py").read_text(encoding="utf-8")
     trade_xianshi_removal_transactions = (PACKAGE / "features" / "trade" / "xianshi_removal_repository.py").read_text(encoding="utf-8")
     trade_xianshi_purchase_transactions = (PACKAGE / "features" / "trade" / "xianshi_purchase_repository.py").read_text(encoding="utf-8")
+    trade_xianshi_query_repository = (PACKAGE / "features" / "trade" / "xianshi_query_repository.py").read_text(encoding="utf-8")
     trade_feature_repository = (PACKAGE / "features" / "trade" / "repository.py").read_text(encoding="utf-8")
     legacy_trade_auction_compatibility = (PACKAGE / "compatibility" / "legacy_trade_auction_sessions.py").read_text(encoding="utf-8")
     trade_auction_transactions = (PACKAGE / "xiuxian" / "xiuxian_trade" / "transaction_service.py").read_text(encoding="utf-8")
@@ -405,6 +406,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "purchase_default_repository_direct": "self.xianshi_purchase_repository.purchase(" in trade_application_source and "xiuxian.xiuxian_trade.repository" not in trade_application_source,
             "purchase_compatibility_repository_direct": "XianshiPurchaseSqlRepository" in trade_feature_repository and ".purchase(" in trade_feature_repository and "XianshiPurchaseService" not in trade_feature_repository,
             "purchase_repository_feature_owned": "class XianshiPurchaseSqlRepository" in trade_xianshi_purchase_transactions and "DatabaseUnitOfWork(self.database, immediate=True)" in trade_xianshi_purchase_transactions,
+            "xianshi_query_application_owned": "trade_application.xianshi_get_items(" in trade_facade and "XianshiQuerySqlRepository" in trade_application_source,
+            "xianshi_query_repository_read_only": "DatabaseUnitOfWork(self.database, read_only=True)" in trade_xianshi_query_repository and "CREATE TABLE" not in trade_xianshi_query_repository,
+            "legacy_xianshi_query_disabled": "xianshi_repository.get_xianshi_items(" not in trade_facade,
             "guishi_compatibility_repository_direct": "GuishiDepositSqlRepository(" in trade_feature_repository and "GuishiWithdrawSqlRepository(" in trade_feature_repository and "GuishiStoneService" not in trade_feature_repository,
             "guishi_legacy_service_isolated": "class GuishiStoneService" not in trade_auction_transactions and "class LegacyGuishiStoneService" in trade_legacy_guishi_compatibility,
             "guishi_legacy_getter_removed": "_guishi_stone_service" not in trade_facade and "GuishiStoneService" not in trade_facade,
@@ -426,7 +430,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_guishi_expired_cleanup_disabled": "xianshi_repository.clear_expired_guishi_order(" not in trade_expired_job,
             "guishi_take_application_owned": "trade_application.guishi_take_stored_item(" in trade_take_handler,
             "legacy_guishi_take_disabled": "xianshi_repository.take_guishi_stored_item(" not in trade_take_handler,
-            "status": "xianshi_purchase_listing_removal_and_guishi_stone_cutover_with_other_trade_compatibility",
+            "status": "xianshi_query_purchase_listing_removal_and_guishi_stone_cutover_with_other_trade_compatibility",
         },
         "auction": {
             "bid_application_owned": "AuctionBidSqlRepository" in auction_bid and "bid_application.place_bid(" in trade_auction_transactions and "auction_bid_application=_auction_bid_application" in trade_facade,

@@ -3934,3 +3934,13 @@ architecture、inventory、progress 和 `git diff --check` 通过。五库 recov
 项 migration，`trade.013` 仅路由 game DB，restore/reconcile clean，operations/outbox/dead events
 均为 `0`。下一阶段继续检查其余交易兼容路径，再进入签到副作用、背包/宠物/任务等未完成切片；
 P7 真实正式发布周期仍未补齐。
+
+2026-09-25 xianshi read-only query cutover：仙肆最低价、分类展示、我的仙肆、按 ID 购买前查询和快速购买候选
+列表改由 `TradeApplication.xianshi_get_items` 统一读取 game DB。新增
+`features/trade/xianshi_query_repository.py::XianshiQuerySqlRepository`，使用
+`DatabaseUnitOfWork(read_only=True)`，缺失数据库/表返回空列表且不执行 DDL；命令层不再调用旧
+`TradeRepository.get_xianshi_items`。新增过滤、旧字段形状、缺库不建表和只读连接测试；聚焦查询/source
+测试 32 项通过，顶层 `tests/` 全量 `2631 passed, 16 warnings, 25 subtests`；compile、architecture、
+progress、inventory、diff check 及隔离五库 recovery（135 项 migration、restore/reconcile clean）均通过。
+该切片不新增 migration，仙肆写入/购买事务语义不变。全局仍由 33 个旧 transaction service、
+`xiuxian2_handle` 和真实正式发布周期 P7 证据阻塞，下一步继续审计其他交易兼容入口。

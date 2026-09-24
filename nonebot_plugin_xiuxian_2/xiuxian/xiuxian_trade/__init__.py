@@ -295,7 +295,7 @@ AUCTION_ACTIVITY_BUTTONS = {
 # 获取仙肆物品的最低价格
 def get_xianshi_min_price(item_name: str) -> int | None:
     """获取仙肆中指定物品的最低价格"""
-    items_in_xianshi = xianshi_repository.get_xianshi_items(name=item_name)
+    items_in_xianshi = trade_application.xianshi_get_items(name=item_name)
     if not items_in_xianshi:
         return None
     return min(item['price'] for item in items_in_xianshi)
@@ -955,7 +955,7 @@ async def xiuxian_shop_view_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await handle_send(bot, event, msg, md_type="交易", k1="技能", v1="仙肆查看 技能", k2="装备", v2="仙肆查看 装备", k3="药材", v3="仙肆查看 药材", k4="丹药", v4="仙肆查看 丹药")
         await xiuxian_shop_view.finish()
     
-    type_items = xianshi_repository.get_xianshi_items(type=item_type)
+    type_items = trade_application.xianshi_get_items(goods_type=item_type)
     
     if not type_items:
         msg = f"仙肆中暂无{item_type}类物品！"
@@ -1077,7 +1077,7 @@ async def my_xian_shop_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     user_id = user_info['user_id']
     
-    user_items = xianshi_repository.get_xianshi_items(user_id=user_id)
+    user_items = trade_application.xianshi_get_items(user_id=user_id)
 
     if not user_items:
         msg = "您在仙肆中没有上架任何物品！"
@@ -1196,7 +1196,7 @@ async def xian_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
 
     operation_id = _xianshi_operation_id(event, xianshi_id)
     # 先走 operation：挂单售罄后同事件重放仍须回放首次结果，不能被“未找到”前置拦截。
-    item_list = xianshi_repository.get_xianshi_items(id=xianshi_id)
+    item_list = trade_application.xianshi_get_items(listing_id=xianshi_id)
     item_to_buy = item_list[0] if item_list else {
         "id": xianshi_id,
         "name": f"仙肆ID {xianshi_id}",
@@ -1283,7 +1283,7 @@ async def xianshi_fast_buy_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         quantities = quantities[:len(goods_names)]
 
     # 获取所有仙肆中的物品
-    all_xianshi_items = xianshi_repository.get_xianshi_items()
+    all_xianshi_items = trade_application.xianshi_get_items()
     if not all_xianshi_items:
         msg = "仙肆中没有物品可供购买！"
         await handle_send(bot, event, msg, md_type="交易", k1="购买", v1="仙肆快速购买", k2="查看", v2="仙肆查看", k3="我的", v3="我的仙肆")
