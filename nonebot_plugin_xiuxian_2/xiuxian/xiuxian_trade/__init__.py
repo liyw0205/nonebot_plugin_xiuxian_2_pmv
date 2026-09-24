@@ -61,10 +61,10 @@ from .auction_jobs import run_auction_job
 from .repository import TradeRepository
 from .transaction_service import XianshiPurchaseService
 from .transaction_service import GuishiStoneService
-from .transaction_service import AuctionQueueService
 from .transaction_service import AuctionSessionService
 from ...paths import get_paths
 from ...features.trade.application import TradeApplication
+from ...features.auction.queue_application import AuctionQueueApplication
 from ...features.trade.guishi_deposit_repository import GuishiDepositSqlRepository
 from ...features.trade.guishi_withdraw_repository import GuishiWithdrawSqlRepository
 from ...infrastructure.ids import UUIDGenerator
@@ -89,7 +89,7 @@ trade_application = TradeApplication(
     clock=runtime_clock,
 )
 _guishi_stone_service_instance = None
-_auction_queue_service_instance = None
+_auction_queue_application_instance = None
 _auction_session_service_instance = None
 scheduler = require("nonebot_plugin_apscheduler").scheduler # 全局调度器，用于鬼市
 auction_scheduler = require("nonebot_plugin_apscheduler").scheduler # 独立的拍卖调度器，避免冲突
@@ -118,15 +118,15 @@ def _guishi_stone_service():
     return _guishi_stone_service_instance
 
 
-def _auction_queue_service():
-    global _auction_queue_service_instance
-    if _auction_queue_service_instance is None:
-        _auction_queue_service_instance = AuctionQueueService(
+def _auction_queue_application():
+    global _auction_queue_application_instance
+    if _auction_queue_application_instance is None:
+        _auction_queue_application_instance = AuctionQueueApplication(
             get_paths().game_db,
             get_paths().trade_db,
             XiuConfig().max_goods_num,
         )
-    return _auction_queue_service_instance
+    return _auction_queue_application_instance
 
 
 def _auction_session_service():
@@ -2612,7 +2612,7 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await auction_add.finish()
 
     auction_rules = auction_config.get_auction_rules()
-    result = _auction_queue_service().enqueue(
+    result = _auction_queue_application().enqueue(
         _auction_queue_operation_id(event, "enqueue", user_id, goods_id),
         user_id,
         goods_id,
@@ -2684,7 +2684,7 @@ async def auction_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         operation_id = _auction_queue_operation_id(
             event, "dequeue", user_id, goods_id
         )
-        previous = _auction_queue_service().get_operation(
+        previous = _auction_queue_application().get_operation(
             operation_id, "dequeue", user_id, goods_id
         )
         if previous is not None and previous.succeeded:
@@ -2713,7 +2713,7 @@ async def auction_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     operation_id = _auction_queue_operation_id(
         event, "dequeue", user_id, item_to_remove["item_id"]
     )
-    result = _auction_queue_service().dequeue(
+    result = _auction_queue_application().dequeue(
         operation_id,
         user_id,
         item_to_remove["item_id"],

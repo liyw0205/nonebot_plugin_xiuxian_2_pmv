@@ -14,12 +14,22 @@ class LegacyTradeFeatureRepository:
 
     def invoke(self, action: str, operation_id: str, user_id: str, **kwargs: Any) -> Any:
         from ...xiuxian.xiuxian_trade.transaction_service import (
-            AuctionQueueService, AuctionSessionService, GuishiStoneService,
+            AuctionSessionService, GuishiStoneService,
         )
+        if action in {"enqueue", "dequeue"}:
+            from ..auction.queue_application import AuctionQueueApplication
+
+            max_goods_num = int(kwargs.pop("max_goods_num", 1))
+            application = AuctionQueueApplication(
+                self.game_database,
+                self.trade_database,
+                max_goods_num,
+            )
+            return getattr(application, action)(
+                operation_id, user_id, **kwargs
+            )
         if action in {"deposit", "withdraw"}:
             return getattr(GuishiStoneService(self.game_database, self.trade_database), action)(operation_id, user_id, **kwargs)
-        if action in {"enqueue", "dequeue"}:
-            return getattr(AuctionQueueService(self.game_database, self.trade_database, int(kwargs.pop("max_goods_num", 1))), action)(operation_id, user_id, **kwargs)
         if action in {"session_start", "session_finish"}:
             method = "start" if action == "session_start" else "finish"
             return getattr(AuctionSessionService(self.game_database, self.trade_database, int(kwargs.pop("max_goods_num", 1))), method)(operation_id, **kwargs)

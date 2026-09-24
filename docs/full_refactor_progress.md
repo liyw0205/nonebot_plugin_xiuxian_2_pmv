@@ -2829,16 +2829,17 @@
   handler/route/scheduler 已改走 feature-owned application，且旧实现不再承载该
   用例，才可逐项从遗留服务移除。
 - 交易域当前已完成仙肆购买、鬼市存灵石、鬼市取灵石、鬼市求购/摆摊创建、求购/摆摊撤销、
-  求购/摆摊撮合、过期清理和寄存物品取回。下一切片先迁移拍卖排队/撤队，再迁移场次开始/结束生命周期。
+  求购/摆摊撮合、过期清理、寄存物品取回和拍卖等待区上架/下架。拍卖结算也已 feature-owned；
+  下一切片是拍卖场次开始与队列交接，之后再清理剩余交易兼容路径。
 - `recovery_smoke.py` 在 2026-09-24 修复为五库按路由迁移前，旧脚本只对
   `game_db` 应用完整目录。因此此前没有独立五库回执的隔离 smoke 只能作为单库
   恢复演练，不能用于跨库切片或 P7 的最终证据；后续统一以五库 receipt 为准。
 
 ### 6.2 优先目标
 
-1. 完成交易域其余真实路径：按“求购/摆摊创建和撤销 -> 撮合与过期清理 -> 取回
-   寄存物品 -> 拍卖排队和场次生命周期”拆分。拍卖结算已迁移不代表队列、场次和
-   鬼市订单已迁移；每次只切一个可独立回滚的资产状态转换。
+1. 完成交易域其余真实路径：鬼市创建/撤销、撮合/过期清理、寄存物品取回和拍卖
+   等待区上架/下架均已 feature-owned；下一步只切拍卖场次开始与队列交接。场次结算
+   已迁移，但开始流程仍依赖旧 `AuctionSessionService`，不可因此宣布 auction 完成。
 2. 清零已迁移域的 compatibility 余额：优先处理仍由旧 service 承载的高频资产
    路径，包括签到后置 effects、背包通用物品/礼包余项、宠物、任务/修炼、洞府和
    地图未覆盖动作、宗门、竞技场/副本、世界事件、Boss 与拍卖。先用真实入口
@@ -3647,3 +3648,14 @@ repository 在 game DB immediate UoW 附加 trade DB，原子清除 `guishi_info
 `compileall`、架构检查、进度检查和 inventory `--check` 均通过。五库 recovery 共应用 125 项
 migration，`trade.009` 只出现在 `game_db` 路由；restore/dry-run 成功，reconcile clean，
 operations/outbox/dead_events 均为 0。
+
+2026-09-24 auction queue enqueue/dequeue feature-owned cutover：新增
+`AuctionQueueSqlRepository`、`AuctionQueueApplication`、game DB `auction.003` operation
+ledger migration 和 trade DB `auction.004` queue schema migration。真实 `拍卖上架`/
+`拍卖下架` 指令已切到新 application；game DB immediate UoW 附加 trade DB，原子扣除未绑定、
+未装备库存并加入等待区，撤队则原子退回绑定物品并删除队列项。旧
+`AuctionQueueService` 保留为无 SQL/DDL 的兼容委托；下一阶段迁移场次开始和队列交接。
+聚焦 queue/source/progress 回归 `225 passed`，顶层全量回归 `2554 passed, 16 warnings, 25 subtests`；
+`compileall`、架构检查、进度检查和 inventory export 均通过。五库 recovery 共 127 项 migration，
+`auction.003` 仅路由到 `game_db`、`auction.004` 仅路由到 `trade_db`；restore/dry-run 五库成功，
+reconcile clean，operations/outbox/dead_events 均为 0。

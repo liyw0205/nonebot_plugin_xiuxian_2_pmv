@@ -118,6 +118,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
         )
     ]
     auction_settlement = (PACKAGE / "features" / "auction" / "settlement.py").read_text(encoding="utf-8")
+    auction_queue = (PACKAGE / "features" / "auction" / "queue_application.py").read_text(encoding="utf-8")
+    auction_queue_handlers = trade_facade[
+        trade_facade.index("async def auction_add_(") : trade_facade.index(
+            "@my_auction.handle", trade_facade.index("async def auction_add_(")
+        )
+    ]
     boss_facade = (PACKAGE / "xiuxian" / "xiuxian_boss" / "__init__.py").read_text(encoding="utf-8")
     buff_facade = (PACKAGE / "xiuxian" / "xiuxian_buff" / "__init__.py").read_text(encoding="utf-8")
     impart_facade = (PACKAGE / "xiuxian" / "xiuxian_impart" / "__init__.py").read_text(encoding="utf-8")
@@ -343,9 +349,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "xianshi_purchase_guishi_deposit_withdraw_qiugou_baitan_create_cancel_matching_expired_cleanup_take_cutover_with_other_trade_compatibility",
         },
         "auction": {
+            "queue_application_owned": "AuctionQueueSqlRepository" in auction_queue,
+            "legacy_queue_disabled": "_auction_queue_service().enqueue(" not in auction_queue_handlers and "_auction_queue_service().dequeue(" not in auction_queue_handlers,
             "settlement_application_owned": "AuctionSettlementSqlRepository" in auction_settlement,
             "legacy_settlement_disabled": "repository=LegacyAuctionSettlementRepository(" not in plugin,
-            "status": "session_settlement_feature_owned_with_explicit_legacy_adapter",
+            "status": "queue_enqueue_dequeue_and_session_settlement_feature_owned_with_session_start_compatibility",
         },
         "boss": {
             "manual_spawn_application_owned": "boss_application.spawn(" in boss_facade,

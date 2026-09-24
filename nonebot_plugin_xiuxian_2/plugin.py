@@ -99,7 +99,12 @@ from .features.dongfu.migrations import (
     apply_dongfu_infiltrate_failure,
     apply_dongfu_infiltrate_success,
 )
-from .features.auction.migrations import apply_auction, apply_auction_settlement
+from .features.auction.migrations import (
+    apply_auction,
+    apply_auction_settlement,
+    apply_auction_queue_operations,
+    apply_auction_player_queue,
+)
 from .features._legacy_migrated import (
     APPLICATIONS as LEGACY_MIGRATED_APPLICATIONS,
     FEATURES as LEGACY_MIGRATED_FEATURES,
@@ -141,6 +146,8 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("arena.009", "arena_state_operations", apply_arena_state),
         Migration("auction.001", "auction_feature_migrations", apply_auction),
         Migration("auction.002", "auction_session_settlement_schema", apply_auction_settlement),
+        Migration("auction.003", "auction_queue_operations", apply_auction_queue_operations),
+        Migration("auction.004", "auction_player_upload", apply_auction_player_queue),
         Migration("back.001", "back_feature_migrations", apply_back),
         Migration("bank.001", "bank_feature_migrations", apply_bank),
         Migration("bank.002", "bank_accounts", apply_bank_accounts),
@@ -264,6 +271,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "trade.006",
         "trade.007",
         "trade.008",
+        "auction.004",
     }
 )
 _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
@@ -292,7 +300,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "tianti_training.008",
     }
 )
-_TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008"})
+_TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "auction.004"})
 
 
 def migrations_for_database(

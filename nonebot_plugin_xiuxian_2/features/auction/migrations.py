@@ -48,4 +48,26 @@ def apply_auction_settlement(uow: DatabaseUnitOfWork) -> None:
     uow.execute("INSERT OR IGNORE INTO auction_feature_migrations(version) VALUES ('auction.002')")
 
 
-__all__ = ["apply_auction", "apply_auction_settlement"]
+def apply_auction_queue_operations(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS auction_queue_operations ("
+        "operation_id TEXT PRIMARY KEY,action TEXT NOT NULL,user_id TEXT NOT NULL,"
+        "item_id INTEGER NOT NULL,item_name TEXT NOT NULL,start_price INTEGER NOT NULL,"
+        "user_name TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+def apply_auction_player_queue(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS auction_player_upload ("
+        "user_id TEXT NOT NULL,item_id INTEGER NOT NULL,item_name TEXT NOT NULL,"
+        "start_price INTEGER NOT NULL,user_name TEXT NOT NULL,PRIMARY KEY(user_id,item_id))"
+    )
+
+
+__all__ = [
+    "apply_auction",
+    "apply_auction_settlement",
+    "apply_auction_queue_operations",
+    "apply_auction_player_queue",
+]

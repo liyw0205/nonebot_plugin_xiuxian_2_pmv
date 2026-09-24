@@ -16,11 +16,15 @@
 
 ## 数据模型与迁移
 
-拍卖会话、当前拍品、历史和结算 operation 表由 `auction.002` 迁移创建；`auction_feature_migrations` 保留边界版本标记。统一 `operation_ledger` 和 `operation_audit` 记录应用层结果。
+拍卖会话、当前拍品、历史和结算 operation 表由 `auction.002` 迁移创建；`auction.003` 在 game DB 创建排队 operation 表，`auction.004` 在 trade DB 创建玩家等待区表。`auction_feature_migrations` 保留边界版本标记。
+
+`拍卖上架`/`拍卖下架` 使用 `AuctionQueueApplication`；等待区操作由 feature-owned repository 执行。`auction.003` 与 `auction.004` 必须按 database route 分别应用。
 
 ## 事务与失败回滚
 
 `AuctionSettlementSqlRepository` 在 game DB 的 `BEGIN IMMEDIATE` 事务中完成资产、背包、历史和拍卖状态变更。应用层先登记操作号，业务拒绝写入 rejected 审计，异常写入 failed；仓储异常不会返回成功结果。
+
+`AuctionQueueSqlRepository` 在 game DB immediate UoW 中附加 trade DB；排队扣除可交易库存、队列插入和 operation 记录同事务提交，下架的背包返还、队列删除和 operation 记录同事务提交。场次开始仍走兼容 `AuctionSessionService`，会在后续切片迁移。
 
 ## 定时任务
 
@@ -36,7 +40,7 @@
 
 ## 测试与手工验收
 
-覆盖成功、重复操作、状态冲突、余额不足和仓储异常回滚；Web client 检查 CSRF、权限和统一响应。
+覆盖成功、重复操作、库存/背包上限、状态冲突、跨库写入失败回滚和 migration route；Web client 检查 CSRF、权限和统一响应。
 
 ## 灰度开关、回滚和已知限制
 

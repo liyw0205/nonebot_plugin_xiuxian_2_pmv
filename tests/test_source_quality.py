@@ -576,22 +576,31 @@ class SourceQualityTests(unittest.TestCase):
     def test_auction_queue_uses_transactional_service(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
         command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")
-        service_source = (trade_root / "auction_queue_service.py").read_text(
-            encoding="utf-8"
-        )
+        repository_source = (
+            SOURCE_ROOT / "features" / "auction" / "queue_repository.py"
+        ).read_text(encoding="utf-8")
+        legacy_source = (trade_root / "transaction_service.py").read_text(encoding="utf-8")
         start = command_source.index("async def auction_add_(")
         end = command_source.index("@my_auction.handle", start)
         command = command_source[start:end]
 
-        self.assertIn("_auction_queue_service().enqueue(", command)
-        self.assertIn("_auction_queue_service().dequeue(", command)
+        self.assertIn("_auction_queue_application().enqueue(", command)
+        self.assertIn("_auction_queue_application().dequeue(", command)
+        self.assertNotIn("_auction_queue_service().enqueue(", command)
+        self.assertNotIn("_auction_queue_service().dequeue(", command)
         self.assertNotIn("sql_message.consume_trade_item(", command)
         self.assertNotIn("trade_manager.add_player_auction_item(", command)
         self.assertNotIn("trade_manager.claim_player_auction_item(", command)
         self.assertNotIn("sql_message.send_back(", command)
-        self.assertIn("ATTACH DATABASE", service_source)
-        self.assertIn("BEGIN IMMEDIATE", service_source)
-        self.assertIn("auction_queue_operations", service_source)
+        self.assertIn("attach_database", repository_source)
+        self.assertIn("immediate=True", repository_source)
+        self.assertIn("auction_queue_operations", repository_source)
+        service_start = legacy_source.index("class AuctionQueueService:")
+        service_end = legacy_source.index("class AuctionSessionStartResult:", service_start)
+        compatibility_service = legacy_source[service_start:service_end]
+        self.assertIn("AuctionQueueSqlRepository", compatibility_service)
+        self.assertNotIn("CREATE TABLE", compatibility_service)
+        self.assertNotIn("ATTACH DATABASE", compatibility_service)
 
     def test_guishi_take_item_uses_atomic_repository_flow(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"

@@ -12,6 +12,13 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade.transaction_service import (
     AuctionQueueService,
 )
+from nonebot_plugin_xiuxian_2.features.auction.queue_application import AuctionQueueApplication
+from nonebot_plugin_xiuxian_2.features.auction.migrations import (
+    apply_auction_player_queue,
+    apply_auction_queue_operations,
+)
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.plugin import build_migrations, migrations_for_database
 from tests.test_db_backend import db_backend
 
 
@@ -19,20 +26,20 @@ def test_trade_facade_defers_auction_queue_service_construction():
     trade = importlib.import_module(
         "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade"
     )
-    assert trade._auction_queue_service_instance is None
+    assert trade._auction_queue_application_instance is None
 
 
 def test_auction_queue_handlers_use_lazy_game_trade_service():
     source = Path(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_trade/__init__.py"
     ).read_text(encoding="utf-8")
-    assert "_auction_queue_service_instance = None" in source
-    assert "def _auction_queue_service(" in source
+    assert "_auction_queue_application_instance = None" in source
+    assert "def _auction_queue_application(" in source
     assert "get_paths().game_db" in source
     assert "get_paths().trade_db" in source
-    assert "_auction_queue_service().enqueue(" in source
-    assert "_auction_queue_service().dequeue(" in source
-    assert "_auction_queue_service().get_operation(" in source
+    assert "_auction_queue_application().enqueue(" in source
+    assert "_auction_queue_application().dequeue(" in source
+    assert "_auction_queue_application().get_operation(" in source
     assert "auction_queue_service.enqueue(" not in source
     assert "auction_queue_service.dequeue(" not in source
 
@@ -58,17 +65,11 @@ class AuctionQueueServiceTests(unittest.TestCase):
                 "INSERT INTO back VALUES (%s, %s, %s, %s, %s, NULL, NULL, %s, %s)",
                 ("user", 1001, "测试法器", "装备", 3, 1, 0),
             )
-        with db_backend.transaction(self.trade_database) as conn:
-            conn.execute(
-                """
-                CREATE TABLE auction_player_upload (
-                    user_id TEXT NOT NULL, item_id INTEGER NOT NULL,
-                    item_name TEXT NOT NULL, start_price INTEGER NOT NULL,
-                    user_name TEXT NOT NULL, PRIMARY KEY (user_id, item_id)
-                )
-                """
-            )
-        self.service = AuctionQueueService(
+        with DatabaseUnitOfWork(self.game_database) as uow:
+            apply_auction_queue_operations(uow)
+        with DatabaseUnitOfWork(self.trade_database) as uow:
+            apply_auction_player_queue(uow)
+        self.application = AuctionQueueApplication(
             self.game_database, self.trade_database, max_goods_num=99
         )
 
@@ -102,7 +103,7 @@ class AuctionQueueServiceTests(unittest.TestCase):
             )
 
     def enqueue(self, operation_id="enqueue-1"):
-        return self.service.enqueue(
+        return self.application.enqueue(
             operation_id,
             "user",
             1001,
@@ -122,7 +123,7 @@ class AuctionQueueServiceTests(unittest.TestCase):
 
     def test_dequeue_removes_queue_row_and_returns_bound_item(self) -> None:
         self.enqueue()
-        result = self.service.dequeue("dequeue-1", "user", 1001, "装备")
+        result = self.application.dequeue("dequeue-1", "user", 1001, "装备")
 
         self.assertEqual(result.status, "completed")
         self.assertEqual(self.inventory(), (3, 2))
@@ -137,8 +138,8 @@ class AuctionQueueServiceTests(unittest.TestCase):
         self.assertEqual(self.inventory(), (2, 1))
         self.assertEqual(self.queue_count(), 1)
 
-        first = self.service.dequeue("dequeue-repeat", "user", 1001, "装备")
-        second = self.service.dequeue("dequeue-repeat", "user", 1001, "装备")
+        first = self.application.dequeue("dequeue-repeat", "user", 1001, "装备")
+        second = self.application.dequeue("dequeue-repeat", "user", 1001, "装备")
         self.assertEqual((first.status, second.status), ("completed", "duplicate"))
         self.assertEqual(self.inventory(), (3, 2))
         self.assertEqual(self.queue_count(), 0)
@@ -180,7 +181,7 @@ class AuctionQueueServiceTests(unittest.TestCase):
                 "BEGIN SELECT RAISE(ABORT, 'operation failed'); END"
             )
         with self.assertRaises(db_backend.IntegrityError):
-            self.service.dequeue("dequeue-fail", "user", 1001, "装备")
+            self.application.dequeue("dequeue-fail", "user", 1001, "装备")
 
         self.assertEqual(self.inventory(), (2, 1))
         self.assertEqual(self.queue_count(), 1)
@@ -193,11 +194,30 @@ class AuctionQueueServiceTests(unittest.TestCase):
                 "UPDATE back SET goods_num=%s WHERE user_id=%s AND goods_id=%s",
                 (99, "user", 1001),
             )
-        result = self.service.dequeue("dequeue-full", "user", 1001, "装备")
+        result = self.application.dequeue("dequeue-full", "user", 1001, "装备")
 
         self.assertEqual(result.status, "inventory_full")
         self.assertEqual(self.queue_count(), 1)
         self.assertEqual(self.operation_count(), 1)
+
+    def test_legacy_service_delegates_to_feature_repository(self) -> None:
+        result = AuctionQueueService(
+            self.game_database, self.trade_database, max_goods_num=99
+        ).enqueue(
+            "legacy-enqueue", "user", 1001, "测试法器", 600000, "测试道友",
+            max_user_items=3,
+        )
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(self.inventory(), (2, 1))
+
+    def test_queue_schema_migrations_follow_their_database_owners(self) -> None:
+        migrations = build_migrations()
+        game = {item.version for item in migrations_for_database(migrations, "game_db")}
+        trade = {item.version for item in migrations_for_database(migrations, "trade_db")}
+        self.assertIn("auction.003", game)
+        self.assertNotIn("auction.003", trade)
+        self.assertIn("auction.004", trade)
+        self.assertNotIn("auction.004", game)
 
 
 if __name__ == "__main__":
