@@ -1501,7 +1501,19 @@ async def xian_shop_added_by_admin_(bot: Bot, event: GroupMessageEvent | Private
     
     # 上架物品
     try:
-        xianshi_repository.add_xianshi_item(0, goods_id, goods_name, goods_type, price, quantity) # user_id=0表示系统物品
+        operation_id = _xianshi_listing_operation_id(
+            event, 0, goods_id, price, quantity, "system"
+        )
+        result = trade_application.xianshi_list_system_item(
+            operation_id=operation_id,
+            goods_id=goods_id,
+            name=goods_name,
+            goods_type=goods_type,
+            price=price,
+            quantity=quantity,
+        )
+        if not result.succeeded:
+            raise RuntimeError(f"unexpected system xianshi listing status: {result.status}")
         if quantity == -1:
             quantity_msg = "无限"
         else:

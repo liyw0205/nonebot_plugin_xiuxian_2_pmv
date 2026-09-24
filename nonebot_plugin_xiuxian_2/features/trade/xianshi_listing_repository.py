@@ -224,5 +224,85 @@ class XianshiListingSqlRepository:
                 price, quantity, quantity, fee, stamina_cost,
             )
 
+    def list_system_item(
+        self,
+        operation_id: str,
+        goods_id: int,
+        name: str,
+        goods_type: str,
+        price: int,
+        quantity: int,
+    ) -> XianshiListingResult:
+        operation_id = str(operation_id).strip()
+        goods_id, price, quantity = int(goods_id), int(price), int(quantity)
+        name, goods_type = str(name), str(goods_type)
+        if not operation_id:
+            raise ValueError("operation_id must not be empty")
+
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            previous = uow.query_one(
+                "SELECT seller_id,goods_id,name,goods_type,price,requested_quantity,"
+                "listed_quantity,fee_charged,stamina_cost FROM xianshi_listing_operations "
+                "WHERE operation_id=?",
+                (operation_id,),
+            )
+            if previous is not None:
+                same_request = (
+                    str(previous["seller_id"]) == "0"
+                    and int(previous["goods_id"]) == goods_id
+                    and str(previous["name"]) == name
+                    and str(previous["goods_type"]) == goods_type
+                    and int(previous["price"]) == price
+                    and int(previous["requested_quantity"]) == quantity
+                    and int(previous["stamina_cost"] or 0) == 0
+                )
+                if not same_request:
+                    return self._result(
+                        "state_changed", operation_id, "0", goods_id, name,
+                        goods_type, price, quantity,
+                    )
+                return self._result(
+                    "duplicate", operation_id, "0", goods_id, name, goods_type,
+                    price, quantity, int(previous["listed_quantity"]),
+                    int(previous["fee_charged"]),
+                )
+
+            for _attempt in range(20):
+                listing_id = self._listing_id(self.ids.new_id())
+                exists = uow.query_one(
+                    "SELECT 1 AS present FROM xianshi_item WHERE id=?", (listing_id,)
+                )
+                if exists is not None:
+                    continue
+                uow.execute(
+                    "INSERT INTO xianshi_item(id,user_id,goods_id,name,type,price,quantity) "
+                    "VALUES(?,?,?,?,?,?,?)",
+                    (listing_id, "0", goods_id, name, goods_type, price, quantity),
+                )
+                break
+            else:
+                raise RuntimeError("failed to allocate system xianshi listing id")
+
+            uow.execute(
+                "INSERT INTO xianshi_listing_operations "
+                "(operation_id,seller_id,goods_id,name,goods_type,price,requested_quantity,"
+                "listed_quantity,fee_charged,stamina_cost) VALUES(?,?,?,?,?,?,?,?,?,0)",
+                (
+                    operation_id,
+                    "0",
+                    goods_id,
+                    name,
+                    goods_type,
+                    price,
+                    quantity,
+                    quantity,
+                    0,
+                ),
+            )
+            return self._result(
+                "listed", operation_id, "0", goods_id, name, goods_type, price,
+                quantity, quantity, 0,
+            )
+
 
 __all__ = ["XianshiListingResult", "XianshiListingSqlRepository"]

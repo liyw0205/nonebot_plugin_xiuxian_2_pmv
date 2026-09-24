@@ -73,6 +73,16 @@ class XianshiListingFeatureTests(unittest.TestCase):
             stamina_cost=stamina_cost,
         )
 
+    def list_system_item(self, operation_id, *, price=600000, quantity=-1):
+        return self.application.xianshi_list_system_item(
+            operation_id=operation_id,
+            goods_id=1001,
+            name="法器",
+            goods_type="装备",
+            price=price,
+            quantity=quantity,
+        )
+
     def scalar(self, query):
         with db_backend.connection(self.database) as conn:
             return conn.execute(query).fetchone()[0]
@@ -175,6 +185,42 @@ class XianshiListingFeatureTests(unittest.TestCase):
         self.assertEqual(self.scalar("SELECT stone FROM user_xiuxian"), 119999)
         self.assertEqual(self.scalar("SELECT goods_num FROM back"), 5)
         self.assertEqual(self.scalar("SELECT COUNT(*) FROM xianshi_item"), 0)
+
+    def test_system_listing_preserves_unlimited_and_fixed_quantities_with_replay(self):
+        unlimited = self.list_system_item("system-unlimited")
+        replay = self.list_system_item("system-unlimited")
+        conflict = self.list_system_item("system-unlimited", price=700000)
+        fixed = self.list_system_item("system-fixed", quantity=8)
+
+        self.assertEqual(
+            (unlimited.status, replay.status, conflict.status, fixed.status),
+            ("listed", "duplicate", "state_changed", "listed"),
+        )
+        with db_backend.connection(self.database) as conn:
+            rows = conn.execute(
+                "SELECT user_id,quantity,price FROM xianshi_item"
+            ).fetchall()
+        self.assertEqual(
+            {tuple(row) for row in rows},
+            {("0", -1, 600000), ("0", 8, 600000)},
+        )
+        self.assertEqual(self.scalar("SELECT COUNT(*) FROM xianshi_listing_operations"), 2)
+        self.assertEqual(self.scalar("SELECT stone FROM user_xiuxian"), 1000000)
+        self.assertEqual(self.scalar("SELECT goods_num FROM back"), 5)
+
+    def test_system_operation_failure_rolls_back_listing(self):
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "CREATE TRIGGER fail_system_operation "
+                "BEFORE INSERT ON xianshi_listing_operations "
+                "BEGIN SELECT RAISE(ABORT,'operation failed'); END"
+            )
+
+        with self.assertRaises(db_backend.IntegrityError):
+            self.list_system_item("system-fail")
+
+        self.assertEqual(self.scalar("SELECT COUNT(*) FROM xianshi_item"), 0)
+        self.assertEqual(self.scalar("SELECT COUNT(*) FROM xianshi_listing_operations"), 0)
 
     def test_migration_upgrades_historical_operation_table(self):
         other = Path(self.temp.name) / "old.db"

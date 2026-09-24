@@ -3726,3 +3726,17 @@ backup、restore dry-run、restore、全量 `130` 项 migration 和 reconcile；
 路由到 `game_db`，`trade.003`/`.005`/`.006`/`.007`/`.008` 仅路由到 `trade_db`；五库 migration
 数量为 game `104`、player `22`、trade `7`、impart `1`、message `1`；`clean=true`、`operations=0`、
 `outbox_events=0`、`dead_events=0`。临时数据和 receipt 在提交前清理；该证据不替代真实正式发布周期。
+
+2026-09-24 trade system Xianshi listing feature-owned cutover：系统上架 handler 改走
+`TradeApplication.xianshi_list_system_item` 和既有 `XianshiListingSqlRepository`，在 game DB
+immediate UoW 中原子创建 listing 与 operation；保留 `quantity=-1` 无限量、指定数量、不扣玩家资产，
+以及 canonical operation replay/conflict。复用 `trade.010`，无新增 migration，生产请求不隐式建表。
+聚焦 xianshi/source/progress 回归 `226 passed`；根目录全量回归 `2576 passed, 16 warnings,
+25 subtests`；architecture、inventory、progress、compileall 和 diff check 均通过。全仓
+`exit_ready=false` 的阻塞仍为旧 transaction services 与 `xiuxian2_handle` 遗留执行路径。
+
+2026-09-24 trade system Xianshi listing isolated recovery evidence：一次性五库 recovery smoke 完成
+backup、restore dry-run、restore、全量 `130` 项 migration 和 reconcile；`trade.010`/`trade.011` 仅
+路由到 `game_db`，五库 migration 数量为 game `104`、player `22`、trade `7`、impart `1`、message `1`；
+`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。临时数据和 receipt 在提交前清理；
+该证据不替代真实正式发布周期。
