@@ -3961,4 +3961,6 @@ feature-owned `LegacyTradeRepository` 的 bid adapter；旧 trade DB 到 game DB
  标记为 pending 并可由相同 operation 重放或统一 `reconcile` 续跑。`SignInApplicationEffects` 不再因 replay
  跳过未完成的统计/任务投影，各 feature repository 继续按 operation ID 去重；Null effects 不产生无人处理的
  outbox 事件，`LegacySignInEffects` 仍只作为显式回滚适配器。新增副作用失败续跑测试；签到 effects、wiring、
- lottery/source/progress 聚焦回归通过，下一步仍需真实五库 recovery 与提交前缓存清理，P7 正式发布证据未补齐。
+ lottery/source/progress 聚焦回归通过；隔离五库 recovery 已完成 135 项迁移、backup/restore
+ dry-run/restore，`reconcile.clean=true` 且 operations/outbox/dead events 均为 0，临时目录与缓存已清理。
+ 该回执仍不替代真实正式发布周期，P7 证据未补齐。
