@@ -59,6 +59,16 @@ def apply_trade_guishi_match(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_trade_guishi_expired_cleanup(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS guishi_expired_order_operations ("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,order_id TEXT NOT NULL,"
+        "user_id TEXT NOT NULL,goods_id INTEGER NOT NULL,item_name TEXT NOT NULL,"
+        "goods_type TEXT NOT NULL,refunded_quantity INTEGER NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
 __all__ = [
     "apply_trade",
     "apply_trade_guishi_deposit",
@@ -67,4 +77,5 @@ __all__ = [
     "apply_trade_guishi_qiugou",
     "apply_trade_guishi_order_cancel",
     "apply_trade_guishi_match",
+    "apply_trade_guishi_expired_cleanup",
 ]

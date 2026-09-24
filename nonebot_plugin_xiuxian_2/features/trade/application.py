@@ -13,6 +13,7 @@ from .guishi_stone_rules import withdrawal_is_open
 from .guishi_withdraw_repository import GuishiWithdrawSqlRepository
 from .guishi_qiugou_repository import GuishiQiugouSqlRepository
 from .guishi_match_repository import GuishiOrderMatchSqlRepository
+from .guishi_expired_repository import GuishiExpiredOrderSqlRepository
 from .repository import TradeFeatureRepository
 
 
@@ -43,6 +44,9 @@ class TradeApplication(LegacyApplication):
         )
         self.guishi_qiugou_repository = GuishiQiugouSqlRepository(self.trade_database)
         self.guishi_order_match_repository = GuishiOrderMatchSqlRepository(self.trade_database)
+        self.guishi_expired_order_repository = GuishiExpiredOrderSqlRepository(
+            self.game_database, self.trade_database, clock=self.clock
+        )
         super().__init__(game_database, repository=repository, feature="trade")
 
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):
@@ -184,6 +188,23 @@ class TradeApplication(LegacyApplication):
             operation_id=operation_id,
             qiugou_order_id=qiugou_order_id,
             baitan_order_id=baitan_order_id,
+        )
+
+    def guishi_clear_expired_baitan(
+        self,
+        *,
+        operation_id: str,
+        order_id: str,
+        goods_type: str,
+        max_goods_num: int,
+        expected_user_id: str | None = None,
+    ):
+        return self.guishi_expired_order_repository.clear_baitan(
+            operation_id=operation_id,
+            order_id=order_id,
+            goods_type=goods_type,
+            max_goods_num=max_goods_num,
+            expected_user_id=expected_user_id,
         )
 
     def enqueue(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("enqueue", operation_id=operation_id, user_id=user_id, **kwargs)

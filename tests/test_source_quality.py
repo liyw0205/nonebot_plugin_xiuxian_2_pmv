@@ -608,6 +608,25 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", repository_source)
         self.assertIn("guishi_take_item_operations", repository_source)
 
+    def test_guishi_expired_cleanup_uses_feature_application(self) -> None:
+        trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
+        command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")
+        job_start = command_source.index("async def clear_expired_baitan_orders_job")
+        job = command_source[job_start : command_source.index("@auction_view.handle", job_start)]
+        clear_start = command_source.index("async def clear_all_guishi_")
+        clear_all = command_source[
+            clear_start : command_source.index("async def process_guishi_transactions", clear_start)
+        ]
+        repository = (
+            SOURCE_ROOT / "features" / "trade" / "guishi_expired_repository.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("trade_application.guishi_clear_expired_baitan(", job)
+        self.assertIn("trade_application.guishi_clear_expired_baitan(", clear_all)
+        self.assertNotIn("xianshi_repository.clear_expired_guishi_order(", job)
+        self.assertNotIn("xianshi_repository.clear_expired_guishi_order(", clear_all)
+        self.assertIn("immediate=True", repository)
+        self.assertIn("guishi_expired_order_operations", repository)
+
     def test_xianshi_listing_uses_batch_transaction_service(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
         command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")

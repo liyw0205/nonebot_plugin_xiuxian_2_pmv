@@ -352,6 +352,10 @@ def _guishi_cancel_operation_id(event, order_type, user_id, order_id):
     return f"guishi-cancel:{order_type}:{user_id}:{order_id}:{runtime_ids.new_id()}"
 
 
+def _guishi_expired_operation_id(order_id):
+    return f"guishi-expire:baitan:{str(order_id).strip()}"
+
+
 def _auction_queue_operation_id(event, action, user_id, item_id):
     event_id = str(
         getattr(event, "message_id", "") or getattr(event, "id", "") or ""
@@ -2098,11 +2102,12 @@ async def clear_all_guishi_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     
     for order in all_guishi_orders:
         if order['item_type'] == "qiugou": # 求购订单，退还灵石
-            result = xianshi_repository.clear_guishi_qiugou_order(
-                get_paths().trade_db,
-                order['id'],
+            result = trade_application.guishi_cancel_qiugou(
+                operation_id=f"guishi-clear-all:qiugou:{order['id']}",
+                user_id=order['user_id'],
+                order_id=order['id'],
             )
-            if not result.cleared:
+            if not result.cancelled:
                 continue
             if result.refunded_stone:
                 refund_stone_summary[result.user_id] = (
@@ -2113,10 +2118,12 @@ async def clear_all_guishi_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
             if not item_info:
                 logger.warning(f"鬼市摆摊订单 {order['id']} 的物品不存在，已保留订单")
                 continue
-            result = xianshi_repository.clear_expired_guishi_order(
-                get_paths().trade_db,
-                order['id'],
-                item_info['type'],
+            result = trade_application.guishi_clear_expired_baitan(
+                operation_id=_guishi_expired_operation_id(order['id']),
+                order_id=order['id'],
+                goods_type=item_info['type'],
+                max_goods_num=XiuConfig().max_goods_num,
+                expected_user_id=order['user_id'],
             )
             if not result.cleared:
                 continue
@@ -2283,10 +2290,12 @@ async def clear_expired_baitan_orders_job():
         if not item_info:
             logger.warning(f"鬼市摆摊订单 {order['id']} 的物品不存在，已保留订单")
             continue
-        result = xianshi_repository.clear_expired_guishi_order(
-            get_paths().trade_db,
-            order['id'],
-            item_info['type'],
+        result = trade_application.guishi_clear_expired_baitan(
+            operation_id=_guishi_expired_operation_id(order['id']),
+            order_id=order['id'],
+            goods_type=item_info['type'],
+            max_goods_num=XiuConfig().max_goods_num,
+            expected_user_id=order['user_id'],
         )
         if result.status == "inventory_full":
             logger.warning(

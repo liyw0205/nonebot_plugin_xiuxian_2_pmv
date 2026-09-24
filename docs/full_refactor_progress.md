@@ -2828,8 +2828,8 @@
 - 已切换的功能仍可能保留显式 compatibility/rollback adapter；只有默认真实
   handler/route/scheduler 已改走 feature-owned application，且旧实现不再承载该
   用例，才可逐项从遗留服务移除。
-- 交易域当前已完成仙肆购买、鬼市存灵石、鬼市取灵石、鬼市求购/摆摊创建、求购/摆摊撤销和
-  求购/摆摊撮合；过期清理、取回寄存物品、拍卖排队/场次生命周期仍未迁移。
+- 交易域当前已完成仙肆购买、鬼市存灵石、鬼市取灵石、鬼市求购/摆摊创建、求购/摆摊撤销、
+  求购/摆摊撮合和过期清理；取回寄存物品、拍卖排队/场次生命周期仍未迁移。
 - `recovery_smoke.py` 在 2026-09-24 修复为五库按路由迁移前，旧脚本只对
   `game_db` 应用完整目录。因此此前没有独立五库回执的隔离 smoke 只能作为单库
   恢复演练，不能用于跨库切片或 P7 的最终证据；后续统一以五库 receipt 为准。
@@ -3617,6 +3617,15 @@ trade/source/progress `228 passed`，根目录隔离回归 `2538 passed, 16 warn
 `clean=true`、operations/outbox/dead events 均为 0。撮合、过期清理和取回寄存物品不在
 本切片范围。
 
+2026-09-24 trade Guishi expired-order cleanup feature-owned cutover：新增
+`GuishiExpiredOrderSqlRepository`、`TradeApplication.guishi_clear_expired_baitan` 和
+trade DB `trade.008` 操作表。定时摆摊过期任务及管理员清空鬼市路径默认改走新 application；
+repository 在 game DB `BEGIN IMMEDIATE` 主事务附加 trade DB，按未售数量原子退回背包并删除
+摆摊订单，背包满时保留订单供下次重试。支持 canonical operation replay/conflict、固定
+operation ID、所有权/订单类型校验、触发器异常跨库回滚；请求路径不再隐式创建过期操作表。
+新增过期清理 application/repository/source/progress 测试，聚焦回归 `227 passed`；
+`trade.008` 仅路由到 trade DB，下一阶段进入寄存物品取回。
+
 2026-09-24 trade Guishi order-matching feature-owned cutover：新增
 `GuishiOrderMatchSqlRepository`、`TradeApplication.guishi_match` 和 trade DB
 `trade.007` 撮合 operation 表。`process_guishi_transactions` 及自动调度默认改走新
@@ -3624,5 +3633,5 @@ application；repository 在 trade DB `BEGIN IMMEDIATE` 中校验订单类型、
 自交易和未成交数量，原子更新买方寄存物品、卖方灵石、部分成交数量及完成订单删除。保留
 canonical operation replay/conflict、历史结果 duplicate、触发器异常整体回滚；请求路径不再
 隐式创建 `guishi_match_operations`。新增撮合 application/repository/source/progress 测试，
-聚焦 trade/source/progress 回归 `235 passed`；`trade.007` 仅路由到 trade DB，后续仍需完成
-过期清理和取回寄存物品切片。
+聚焦 trade/source/progress 回归 `236 passed`；`trade.007` 仅路由到 trade DB；过期清理已由
+后续 `trade.008` 切片接管，取回寄存物品仍未迁移。

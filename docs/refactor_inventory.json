@@ -2775,6 +2775,7 @@
     "fusion_feature_migrations",
     "fusion_operations",
     "game_data",
+    "guishi_expired_order_operations",
     "guishi_info",
     "guishi_item",
     "guishi_match_operations",
