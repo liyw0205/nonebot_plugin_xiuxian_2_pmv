@@ -32,7 +32,8 @@ class XianshiListingFeatureTests(unittest.TestCase):
         self.database = Path(self.temp.name) / "game.db"
         with db_backend.transaction(self.database) as conn:
             conn.execute(
-                "CREATE TABLE user_xiuxian (user_id TEXT PRIMARY KEY,stone INTEGER NOT NULL)"
+                "CREATE TABLE user_xiuxian (user_id TEXT PRIMARY KEY,stone INTEGER NOT NULL,"
+                "user_stamina INTEGER NOT NULL DEFAULT 100)"
             )
             conn.execute(
                 "CREATE TABLE back (user_id TEXT,goods_id INTEGER,goods_num INTEGER,"
@@ -43,7 +44,7 @@ class XianshiListingFeatureTests(unittest.TestCase):
                 "CREATE TABLE xianshi_item (id TEXT PRIMARY KEY,user_id TEXT,goods_id INTEGER,"
                 "name TEXT,type TEXT,price INTEGER,quantity INTEGER)"
             )
-            conn.execute("INSERT INTO user_xiuxian VALUES ('seller',1000000)")
+            conn.execute("INSERT INTO user_xiuxian VALUES ('seller',1000000,100)")
             conn.execute("INSERT INTO back(user_id,goods_id,goods_num) VALUES('seller',1001,5)")
         with DatabaseUnitOfWork(self.database) as uow:
             apply_trade_xianshi_listing(uow)
@@ -58,7 +59,9 @@ class XianshiListingFeatureTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def list_items(self, operation_id="list-1", *, price=600000, quantity=2):
+    def list_items(
+        self, operation_id="list-1", *, price=600000, quantity=2, stamina_cost=0
+    ):
         return self.application.xianshi_list_items(
             operation_id=operation_id,
             seller_id="seller",
@@ -67,6 +70,7 @@ class XianshiListingFeatureTests(unittest.TestCase):
             goods_type="装备",
             price=price,
             quantity=quantity,
+            stamina_cost=stamina_cost,
         )
 
     def scalar(self, query):
@@ -115,6 +119,62 @@ class XianshiListingFeatureTests(unittest.TestCase):
         self.assertEqual(self.scalar("SELECT stone FROM user_xiuxian WHERE user_id='seller'"), 1000000)
         self.assertEqual(self.scalar("SELECT goods_num FROM back WHERE user_id='seller'"), 5)
         self.assertEqual(self.scalar("SELECT COUNT(*) FROM xianshi_listing_operations"), 0)
+
+    def test_fast_listing_charges_stamina_and_replays_without_double_charge(self):
+        first = self.list_items("fast-list-1", stamina_cost=10)
+        replay = self.list_items("fast-list-1", stamina_cost=10)
+        conflict = self.list_items("fast-list-1", stamina_cost=0)
+
+        self.assertEqual(
+            (first.status, replay.status, conflict.status),
+            ("listed", "duplicate", "state_changed"),
+        )
+        self.assertEqual((first.stamina_charged, replay.stamina_charged), (10, 10))
+        self.assertEqual(self.scalar("SELECT user_stamina FROM user_xiuxian"), 90)
+        self.assertEqual(self.scalar("SELECT stone FROM user_xiuxian"), 880000)
+        self.assertEqual(self.scalar("SELECT goods_num FROM back"), 3)
+        self.assertEqual(self.scalar("SELECT COUNT(*) FROM xianshi_item"), 2)
+
+    def test_fast_stamina_shortfall_leaves_all_assets_unchanged(self):
+        with db_backend.transaction(self.database) as conn:
+            conn.execute("UPDATE user_xiuxian SET user_stamina=9")
+
+        result = self.list_items("fast-list-short", stamina_cost=10)
+
+        self.assertEqual(result.status, "stamina_insufficient")
+        self.assertEqual(self.scalar("SELECT user_stamina FROM user_xiuxian"), 9)
+        self.assertEqual(self.scalar("SELECT stone FROM user_xiuxian"), 1000000)
+        self.assertEqual(self.scalar("SELECT goods_num FROM back"), 5)
+        self.assertEqual(self.scalar("SELECT COUNT(*) FROM xianshi_item"), 0)
+
+    def test_fast_operation_failure_rolls_back_stamina_and_other_assets(self):
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "CREATE TRIGGER fail_fast_operation "
+                "BEFORE INSERT ON xianshi_listing_operations "
+                "BEGIN SELECT RAISE(ABORT,'operation failed'); END"
+            )
+
+        with self.assertRaises(db_backend.IntegrityError):
+            self.list_items("fast-list-fail", stamina_cost=10)
+
+        self.assertEqual(self.scalar("SELECT user_stamina FROM user_xiuxian"), 100)
+        self.assertEqual(self.scalar("SELECT stone FROM user_xiuxian"), 1000000)
+        self.assertEqual(self.scalar("SELECT goods_num FROM back"), 5)
+        self.assertEqual(self.scalar("SELECT COUNT(*) FROM xianshi_item"), 0)
+        self.assertEqual(self.scalar("SELECT COUNT(*) FROM xianshi_listing_operations"), 0)
+
+    def test_fast_stone_shortfall_does_not_consume_stamina_or_stock(self):
+        with db_backend.transaction(self.database) as conn:
+            conn.execute("UPDATE user_xiuxian SET stone=119999")
+
+        result = self.list_items("fast-list-no-stone", stamina_cost=10)
+
+        self.assertEqual(result.status, "stone_insufficient")
+        self.assertEqual(self.scalar("SELECT user_stamina FROM user_xiuxian"), 100)
+        self.assertEqual(self.scalar("SELECT stone FROM user_xiuxian"), 119999)
+        self.assertEqual(self.scalar("SELECT goods_num FROM back"), 5)
+        self.assertEqual(self.scalar("SELECT COUNT(*) FROM xianshi_item"), 0)
 
     def test_migration_upgrades_historical_operation_table(self):
         other = Path(self.temp.name) / "old.db"

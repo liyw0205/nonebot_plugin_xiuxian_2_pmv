@@ -3711,3 +3711,18 @@ inventory、progress 和 diff check 均通过。
 到 `game_db`，五库 migration 数量为 game `104`、player `22`、trade `7`、impart `1`、message `1`；
 `clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。临时数据和 receipt 在提交前清理；
 该证据不替代真实正式发布周期。
+
+2026-09-24 trade fast Xianshi listing feature-owned cutover：扩展
+`XianshiListingSqlRepository`/`TradeApplication.xianshi_list_items` 支持 stamina cost，真实
+`仙肆快速上架` handler 改走 feature transaction；默认普通上架仍不扣体力，快速上架在同一
+game DB immediate UoW 原子校验并扣除 10 点体力、手续费和库存，operation ledger 写入实际
+`stamina_cost`。复用 `trade.010`，没有新增 migration；历史 `applied/duplicate/state_changed`
+语义和旧 repository 兼容测试保留。系统上架仍在兼容路径。聚焦 xianshi/source/progress
+`254 passed`，根目录全量回归 `2574 passed, 16 warnings, 25 subtests`；compileall、architecture、
+inventory、progress 和 diff check 均通过。
+
+2026-09-24 trade fast Xianshi listing isolated recovery evidence：一次性五库 recovery smoke 完成
+backup、restore dry-run、restore、全量 `130` 项 migration 和 reconcile；`trade.010`/`trade.011` 仅
+路由到 `game_db`，`trade.003`/`.005`/`.006`/`.007`/`.008` 仅路由到 `trade_db`；五库 migration
+数量为 game `104`、player `22`、trade `7`、impart `1`、message `1`；`clean=true`、`operations=0`、
+`outbox_events=0`、`dead_events=0`。临时数据和 receipt 在提交前清理；该证据不替代真实正式发布周期。

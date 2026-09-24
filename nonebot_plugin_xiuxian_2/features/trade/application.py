@@ -74,9 +74,17 @@ class TradeApplication(LegacyApplication):
         goods_type: str,
         price: int,
         quantity: int,
+        stamina_cost: int = 0,
     ):
         return self.xianshi_listing_repository.list_items(
-            operation_id, seller_id, goods_id, name, goods_type, price, quantity
+            operation_id,
+            seller_id,
+            goods_id,
+            name,
+            goods_type,
+            price,
+            quantity,
+            stamina_cost=stamina_cost,
         )
 
     def xianshi_list_plan(

@@ -355,7 +355,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "xianshi_listing_application_owned": "trade_application.xianshi_list_items(" in xianshi_listing_handler and "class XianshiListingSqlRepository" in trade_xianshi_transactions,
             "xianshi_auto_listing_application_owned": "trade_application.xianshi_list_plan(" in xianshi_auto_listing_handler and "class XianshiPlanListingSqlRepository" in trade_plan_xianshi_transactions,
             "legacy_xianshi_auto_listing_disabled": "xianshi_repository.add_xianshi_plan_items(" not in xianshi_auto_listing_handler,
-            "xianshi_fast_listing_compatibility": "xianshi_repository.add_xianshi_items(" in xianshi_fast_listing_handler,
+            "xianshi_fast_listing_application_owned": "trade_application.xianshi_list_items(" in xianshi_fast_listing_handler and "class XianshiListingSqlRepository" in trade_xianshi_transactions,
+            "legacy_xianshi_fast_listing_disabled": "xianshi_repository.add_xianshi_items(" not in xianshi_fast_listing_handler,
             "xianshi_system_listing_compatibility": "xianshi_repository.add_xianshi_item(" in xianshi_system_listing_handler,
             "purchase_application_owned": "trade_application.purchase(" in trade_facade,
             "legacy_purchase_disabled": "_xianshi_purchase_service().purchase(" not in trade_facade,
@@ -377,7 +378,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_guishi_expired_cleanup_disabled": "xianshi_repository.clear_expired_guishi_order(" not in trade_expired_job,
             "guishi_take_application_owned": "trade_application.guishi_take_stored_item(" in trade_take_handler,
             "legacy_guishi_take_disabled": "xianshi_repository.take_guishi_stored_item(" not in trade_take_handler,
-            "status": "xianshi_purchase_ordinary_and_auto_listing_cutover_with_fast_system_listing_and_other_trade_compatibility",
+            "status": "xianshi_purchase_ordinary_auto_and_fast_listing_cutover_with_system_listing_and_other_trade_compatibility",
         },
         "auction": {
             "bid_application_owned": "AuctionBidSqlRepository" in auction_bid and "bid_application.place_bid(" in trade_auction_transactions and "auction_bid_application=_auction_bid_application" in trade_facade,

@@ -884,9 +884,15 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     operation_id = _xianshi_listing_operation_id(
         event, user_id, goods_id, price, quantity, "fast"
     )
-    result = xianshi_repository.add_xianshi_items(
-        operation_id, user_id, goods_id, item_name, goods_info['type'], price,
-        quantity, fee_charged=single_fee, consume_assets=True, stamina_cost=10,
+    result = trade_application.xianshi_list_items(
+        operation_id=operation_id,
+        seller_id=str(user_id),
+        goods_id=goods_id,
+        name=item_name,
+        goods_type=goods_info['type'],
+        price=price,
+        quantity=quantity,
+        stamina_cost=10,
     )
     if result.status == "stamina_insufficient":
         msg = "体力不足，快速上架需要10点体力！"

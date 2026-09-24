@@ -21,6 +21,7 @@ class XianshiListingResult:
     requested_quantity: int
     listed_quantity: int = 0
     fee_charged: int = 0
+    stamina_charged: int = 0
 
     @property
     def succeeded(self) -> bool:
@@ -69,10 +70,11 @@ class XianshiListingSqlRepository:
         quantity: int,
         listed_quantity: int = 0,
         fee_charged: int = 0,
+        stamina_charged: int = 0,
     ) -> XianshiListingResult:
         return XianshiListingResult(
             status, operation_id, seller_id, goods_id, name, goods_type, price,
-            quantity, listed_quantity, fee_charged,
+            quantity, listed_quantity, fee_charged, stamina_charged,
         )
 
     def list_items(
@@ -84,14 +86,19 @@ class XianshiListingSqlRepository:
         goods_type: str,
         price: int,
         quantity: int,
+        *,
+        stamina_cost: int = 0,
     ) -> XianshiListingResult:
         operation_id, seller_id = str(operation_id).strip(), str(seller_id)
         goods_id, price, quantity = int(goods_id), int(price), int(quantity)
+        stamina_cost = int(stamina_cost)
         name, goods_type = str(name), str(goods_type)
         if not operation_id or not seller_id:
             raise ValueError("operation_id and seller_id are required")
         if goods_id <= 0 or price <= 0 or quantity <= 0:
             raise ValueError("goods_id, price and quantity must be positive")
+        if stamina_cost < 0:
+            raise ValueError("stamina_cost must not be negative")
         fee = self._fee(price * quantity)
 
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
@@ -109,7 +116,7 @@ class XianshiListingSqlRepository:
                     and str(previous["goods_type"]) == goods_type
                     and int(previous["price"]) == price
                     and int(previous["requested_quantity"]) == quantity
-                    and int(previous["stamina_cost"] or 0) == 0
+                    and int(previous["stamina_cost"] or 0) == stamina_cost
                 )
                 if not same_request:
                     return self._result(
@@ -119,16 +126,24 @@ class XianshiListingSqlRepository:
                 return self._result(
                     "duplicate", operation_id, seller_id, goods_id, name,
                     goods_type, price, quantity, int(previous["listed_quantity"]),
-                    int(previous["fee_charged"]),
+                    int(previous["fee_charged"]), int(previous["stamina_cost"] or 0),
                 )
 
+            player_columns = "COALESCE(stone,0) AS stone"
+            if stamina_cost:
+                player_columns += ",COALESCE(user_stamina,0) AS stamina"
             player = uow.query_one(
-                "SELECT COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id=?",
+                f"SELECT {player_columns} FROM user_xiuxian WHERE user_id=?",
                 (seller_id,),
             )
             if player is None:
                 return self._result(
                     "player_missing", operation_id, seller_id, goods_id, name,
+                    goods_type, price, quantity,
+                )
+            if stamina_cost and int(player["stamina"] or 0) < stamina_cost:
+                return self._result(
+                    "stamina_insufficient", operation_id, seller_id, goods_id, name,
                     goods_type, price, quantity,
                 )
             if float(player["stone"] or 0) < fee:
@@ -147,6 +162,14 @@ class XianshiListingSqlRepository:
                     goods_type, price, quantity,
                 )
             now = self.clock.now()
+            if stamina_cost:
+                stamina = uow.execute(
+                    "UPDATE user_xiuxian SET user_stamina=COALESCE(user_stamina,0)-? "
+                    "WHERE user_id=? AND COALESCE(user_stamina,0)>=?",
+                    (stamina_cost, seller_id, stamina_cost),
+                )
+                if stamina.rowcount != 1:
+                    raise RuntimeError("xianshi listing stamina snapshot changed")
             changed_stone = uow.execute(
                 "UPDATE user_xiuxian SET stone=CAST(COALESCE(stone,0) AS REAL)-CAST(? AS REAL) "
                 "WHERE user_id=? AND COALESCE(stone,0)>=?",
@@ -190,15 +213,15 @@ class XianshiListingSqlRepository:
             uow.execute(
                 "INSERT INTO xianshi_listing_operations "
                 "(operation_id,seller_id,goods_id,name,goods_type,price,requested_quantity,"
-                "listed_quantity,fee_charged,stamina_cost) VALUES(?,?,?,?,?,?,?,?,?,0)",
+                "listed_quantity,fee_charged,stamina_cost) VALUES(?,?,?,?,?,?,?,?,?,?)",
                 (
                     operation_id, seller_id, goods_id, name, goods_type, price,
-                    quantity, quantity, fee,
+                    quantity, quantity, fee, stamina_cost,
                 ),
             )
             return self._result(
                 "listed", operation_id, seller_id, goods_id, name, goods_type,
-                price, quantity, quantity, fee,
+                price, quantity, quantity, fee, stamina_cost,
             )
 
 

@@ -645,7 +645,7 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("immediate=True", repository)
         self.assertIn("guishi_expired_order_operations", repository)
 
-    def test_ordinary_xianshi_listing_uses_feature_service(self) -> None:
+    def test_ordinary_and_fast_xianshi_listing_use_feature_service(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
         command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")
         listing_repository = (
@@ -664,8 +664,9 @@ class SourceQualityTests(unittest.TestCase):
         fast = command_source[
             fast_start : command_source.index("@xiuxian_shop_view.handle", fast_start)
         ]
-        self.assertIn("xianshi_repository.add_xianshi_items(", fast)
-        self.assertIn("consume_assets=True", fast)
+        self.assertIn("trade_application.xianshi_list_items(", fast)
+        self.assertNotIn("xianshi_repository.add_xianshi_items(", fast)
+        self.assertIn("stamina_cost=10", fast)
         self.assertNotIn("spend_stone_and_consume_trade_items(", fast)
         self.assertNotIn("sql_message.send_back(", fast)
         self.assertIn("immediate=True", listing_repository)
