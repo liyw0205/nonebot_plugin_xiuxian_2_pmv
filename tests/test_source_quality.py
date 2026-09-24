@@ -1092,7 +1092,7 @@ class SourceQualityTests(unittest.TestCase):
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         command_source = (back_root / "__init__.py").read_text(encoding="utf-8")
         utility_source = (back_root / "back_util.py").read_text(encoding="utf-8")
-        service_source = (back_root / "cultivation_item_service.py").read_text(
+        repository_source = (SOURCE_ROOT / "features" / "back" / "cultivation_item_repository.py").read_text(
             encoding="utf-8"
         )
         start = command_source.index('elif goods_type == "神物"')
@@ -1100,19 +1100,19 @@ class SourceQualityTests(unittest.TestCase):
         command = command_source[start:end]
         growth_branch = command[command.index("                exp = goods_info['buff'] * num"):]
 
-        self.assertIn("_cultivation_item_service().apply(", growth_branch)
+        self.assertIn("back_application.cultivation_item(", growth_branch)
         self.assertNotIn("sql_message.update_exp(", growth_branch)
         self.assertNotIn("sql_message.update_user_attribute(", growth_branch)
         self.assertNotIn("sql_message.update_back_j(", growth_branch)
         elixir_start = utility_source.index('elif goods_info[\'buff_type\'] == "exp_up"')
         elixir_end = utility_source.index("    else:\n        msg =", elixir_start)
         elixir_branch = utility_source[elixir_start:elixir_end]
-        self.assertIn("_cultivation_item_service().apply(", elixir_branch)
+        self.assertIn("_cultivation_item_application().apply(", elixir_branch)
         self.assertNotIn("sql_message.update_exp(", elixir_branch)
         self.assertNotIn("sql_message.update_user_attribute(", elixir_branch)
         self.assertNotIn("sql_message.update_back_j(", elixir_branch)
-        self.assertIn("BEGIN IMMEDIATE", service_source)
-        self.assertIn("cultivation_item_operations", service_source)
+        self.assertIn("immediate=True", repository_source)
+        self.assertIn("cultivation_item_operations", repository_source)
 
     def test_three_cultivation_pill_use_is_atomic_and_idempotent(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"

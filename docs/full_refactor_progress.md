@@ -3990,3 +3990,12 @@ handler 已改走生命周期注入的 `BackApplication`，旧 `_unbind_item_ser
 顶层 `tests/` 全量 `2642 passed, 16 warnings, 25 subtests`。五库 recovery 完成 `137` 项迁移，
 路由为 game/player/trade/impart/message `109/24/7/1/1`，attached accessory 两项，backup/restore
 dry-run/restore 与 reconcile clean（operations/outbox/dead events 均为 0）；临时数据和缓存已清理。
+
+2026-09-25 back cultivation-item feature-owned cutover：修炼物品的神物入口与丹药 `exp_up`
+入口统一切换到 `BackApplication.cultivation_item -> CultivationItemApplication ->
+CultivationItemSqlRepository`；旧 `CultivationItemService` 仅保留显式兼容回滚。`back.004` 在
+game DB 启动迁移创建幂等表，请求路径不再执行 DDL；经验、气血、灵力、攻击、power、耐药计数、绑定
+数量扣除和重复请求语义保持原子一致。聚焦回归 `223 passed`，顶层 `tests/` 全量 `2645 passed,
+16 warnings, 25 subtests`。五库 recovery 完成 `138` 项迁移，`back.004` 仅路由到 game DB，
+attached accessory 两项，backup/restore dry-run/restore 与 reconcile clean（operations/outbox/dead
+events 均为 0）；临时数据和缓存已清理。

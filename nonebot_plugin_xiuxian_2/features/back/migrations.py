@@ -24,4 +24,14 @@ def apply_unbind(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_alchemy", "apply_back", "apply_unbind"]
+def apply_cultivation_item(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS cultivation_item_operations("
+        "operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,item_id INTEGER NOT NULL,"
+        "quantity INTEGER NOT NULL,exp_gain INTEGER NOT NULL,hp_gain INTEGER NOT NULL,"
+        "mp_gain INTEGER NOT NULL,atk_gain INTEGER NOT NULL,power_multiplier REAL NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+__all__ = ["apply_alchemy", "apply_back", "apply_cultivation_item", "apply_unbind"]

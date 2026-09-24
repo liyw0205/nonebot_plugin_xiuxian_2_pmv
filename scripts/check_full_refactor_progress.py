@@ -69,6 +69,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     world_events_facade = (PACKAGE / "xiuxian" / "xiuxian_world_events" / "__init__.py").read_text(encoding="utf-8")
     rift_facade = (PACKAGE / "xiuxian" / "xiuxian_rift" / "__init__.py").read_text(encoding="utf-8")
     back_facade = (PACKAGE / "xiuxian" / "xiuxian_back" / "__init__.py").read_text(encoding="utf-8")
+    back_util_facade = (PACKAGE / "xiuxian" / "xiuxian_back" / "back_util.py").read_text(encoding="utf-8")
     past_life_events_facade = (PACKAGE / "xiuxian" / "xiuxian_past_life" / "past_life_events.py").read_text(encoding="utf-8")
     past_life_command_facade = (PACKAGE / "xiuxian" / "xiuxian_past_life" / "__init__.py").read_text(encoding="utf-8")
     dufang_facade = (PACKAGE / "xiuxian" / "xiuxian_dufang" / "__init__.py").read_text(encoding="utf-8")
@@ -325,6 +326,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "entry_key_event_speedup_settlement_cutover_with_other_rift_compatibility",
         },
         "back": {
+            "cultivation_item_application_owned": "back_application.cultivation_item(" in back_facade and "_cultivation_item_application().apply(" in back_util_facade,
+            "legacy_cultivation_item_disabled": "_cultivation_item_service().apply(" not in back_facade and "_cultivation_item_service().apply(" not in back_util_facade,
             "alchemy_application_owned": back_facade.count("back_application.alchemy(") >= 3,
             "legacy_alchemy_disabled": "_alchemy_service().apply(" not in back_facade,
             "unbind_application_owned": "back_application.unbind(" in back_facade,
@@ -339,7 +342,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "accessory_package_application_owned": "back_application.accessory_package(" in back_facade,
             "legacy_repair_disabled": "_backpack_repair_service().run(" not in back_facade,
-            "status": "alchemy_unbind_repair_equipment_equip_unequip_pet_egg_package_accessory_package_cutover_with_other_back_compatibility",
+            "status": "cultivation_item_alchemy_unbind_repair_equipment_equip_unequip_pet_egg_package_accessory_package_cutover_with_other_back_compatibility",
         },
         "past_life": {
             "final_settlement_application_owned": "_past_life_application.final_settle(" in past_life_events_facade,

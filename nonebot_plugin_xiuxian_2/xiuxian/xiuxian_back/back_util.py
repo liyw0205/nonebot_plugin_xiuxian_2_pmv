@@ -25,6 +25,7 @@ from nonebot.log import logger
 items = Items()
 _sql_message_instance = None
 _cultivation_item_service_instance = None
+_cultivation_item_application_instance = None
 _breakthrough_rate_item_service_instance = None
 _recovery_item_service_instance = None
 _permanent_atk_item_service_instance = None
@@ -43,6 +44,20 @@ def _cultivation_item_service():
     if _cultivation_item_service_instance is None:
         _cultivation_item_service_instance = CultivationItemService(get_paths().game_db)
     return _cultivation_item_service_instance
+
+
+def _cultivation_item_application():
+    global _cultivation_item_application_instance
+    if _cultivation_item_application_instance is None:
+        from ...features.back.cultivation_item_application import CultivationItemApplication
+
+        _cultivation_item_application_instance = CultivationItemApplication(get_paths().game_db)
+    return _cultivation_item_application_instance
+
+
+def configure_cultivation_item_application(application) -> None:
+    global _cultivation_item_application_instance
+    _cultivation_item_application_instance = application
 
 def _blessed_flag_replace_service():
     global _blessed_flag_replace_service_instance
@@ -1122,7 +1137,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
             exp = goods_info['buff'] * num
             root_rate = _sql_message().get_root_rate(user_info['root_type'], user_id)
             level_spend = jsondata.level_data()[user_info['level']]["spend"]
-            result = _cultivation_item_service().apply(
+            result = _cultivation_item_application().apply(
                 operation_id or f"elixir-exp:{user_id}:{goods_id}:{datetime.now().timestamp()}",
                 user_id,
                 goods_id,

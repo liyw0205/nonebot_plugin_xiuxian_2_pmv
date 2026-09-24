@@ -171,6 +171,7 @@ def configure_package_reward_application(application: PackageRewardApplication) 
 def configure_back_application(application: BackApplication) -> None:
     global back_application
     back_application = application
+    configure_cultivation_item_application(application.cultivation_item_application)
 
 
 def _package_open_result(outcome, user_id, package_id, quantity, rewards):
@@ -1339,12 +1340,12 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 exp = goods_info['buff'] * num
                 root_rate = _sql_message().get_root_rate(user_info_full['root_type'], user_id)
                 level_spend = jsondata.level_data()[user_info_full['level']]["spend"]
-                result = _cultivation_item_service().apply(
-                    _cultivation_item_operation_id(event, user_id, goods_id),
-                    user_id,
-                    goods_id,
-                    num,
-                    exp,
+                result = back_application.cultivation_item(
+                    operation_id=_cultivation_item_operation_id(event, user_id, goods_id),
+                    user_id=user_id,
+                    item_id=goods_id,
+                    quantity=num,
+                    exp_gain=exp,
                     hp_gain=int(exp / 2),
                     mp_gain=exp,
                     atk_gain=int(exp / 10),
