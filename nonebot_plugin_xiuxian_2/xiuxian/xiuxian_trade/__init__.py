@@ -1151,11 +1151,12 @@ async def xian_shop_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await xian_shop_remove.finish()
 
     item_name = item_name.strip()
-    result = xianshi_repository.remove_xianshi_by_name(
-        _xianshi_name_removal_operation_id(event, user_id, item_name, quantity),
-        user_id,
-        item_name,
-        quantity,
+    result = trade_application.xianshi_remove_by_name(
+        operation_id=_xianshi_name_removal_operation_id(event, user_id, item_name, quantity),
+        seller_id=user_id,
+        item_name=item_name,
+        quantity=quantity,
+        max_goods_num=XiuConfig().max_goods_num,
     )
     if result.status == "listing_missing":
         await handle_send(bot, event, f"您在仙肆未上架可下架的【{item_name}】！", md_type="交易", k1="下架", v1=f"仙肆下架 {item_name}", k2="上架", v2="仙肆上架", k3="我的", v3="我的仙肆")
@@ -1431,8 +1432,9 @@ async def xian_shop_off_all_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     msg = "正在清空全服仙肆，请稍候..."
     await handle_send(bot, event, msg)
     
-    result = xianshi_repository.clear_all_xianshi_listings(
-        _xianshi_clear_operation_id(event)
+    result = trade_application.xianshi_clear_all(
+        operation_id=_xianshi_clear_operation_id(event),
+        max_goods_num=XiuConfig().max_goods_num,
     )
     if result.status == "empty":
         msg = "仙肆已经是空的，没有物品被下架！"
@@ -1546,18 +1548,10 @@ async def xian_shop_remove_by_admin_(bot: Bot, event: GroupMessageEvent | Privat
     
     xianshi_id = args[0]
     
-    # 查找物品
-    item_list = xianshi_repository.get_xianshi_items(id=xianshi_id)
-    
-    if not item_list:
-        msg = f"未找到仙肆ID为 {xianshi_id} 的物品！"
-        await handle_send(bot, event, msg)
-        await xian_shop_remove_by_admin.finish()
-    
-    item_to_remove = item_list[0]
-    
-    result = xianshi_repository.remove_xianshi_listing(
-        _xianshi_removal_operation_id(event, xianshi_id), xianshi_id
+    result = trade_application.xianshi_remove_listing(
+        operation_id=_xianshi_removal_operation_id(event, xianshi_id),
+        listing_id=xianshi_id,
+        max_goods_num=XiuConfig().max_goods_num,
     )
     if result.status == "inventory_full":
         await handle_send(bot, event, "用户背包空间不足，无法下架并退还物品！")

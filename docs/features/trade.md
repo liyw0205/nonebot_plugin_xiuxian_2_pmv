@@ -27,7 +27,8 @@ feature-owned use case 结算。存取操作记录在 game DB 的
 `trade.001` 保留 feature 基线；`trade.002`/`trade.004` 在 game DB 创建鬼市存入/
 取出 operation 表；`trade.003` 只在 trade DB 创建或补齐 `guishi_info`；`trade.005`/
 `trade.006` 只在 trade DB 创建求购创建/订单撤销 operation 表；`trade.010`/`trade.011` 只在
-game DB 创建或升级仙肆普通、自动、快速和系统上架 operation 表。生产请求路径不隐式建表。
+game DB 创建或升级仙肆普通、自动、快速、系统上架 operation 表，`trade.012` 只在 game DB
+创建仙肆撤架 operation 表。生产请求路径不隐式建表。
 ## 事务与失败回滚
 鬼市存取使用 game DB 主事务附加 trade DB，玩家钱包、余额投影和 operation
 写入要么全部提交、要么全部回滚。已迁移操作均保留 canonical payload replay/conflict

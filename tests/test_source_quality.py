@@ -977,44 +977,26 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("LegacyBaseRepository", source)
         self.assertNotIn("repository=LegacyBaseRepository", source)
 
-    def test_admin_xianshi_removal_uses_atomic_repository_flow(self) -> None:
+    def test_xianshi_removal_uses_feature_application_flow(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
         command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")
-        repository_source = (trade_root / "repository.py").read_text(encoding="utf-8")
-        start = command_source.index("async def xian_shop_remove_by_admin_")
-        end = command_source.index("# --- 鬼市命令处理 ---", start)
-        command = command_source[start:end]
+        repository_source = (SOURCE_ROOT / "features" / "trade" / "xianshi_removal_repository.py").read_text(encoding="utf-8")
+        admin_start = command_source.index("async def xian_shop_remove_by_admin_")
+        admin = command_source[admin_start : command_source.index("# --- 鬼市命令处理 ---", admin_start)]
+        clear_start = command_source.index("async def xian_shop_off_all_")
+        clear = command_source[clear_start : command_source.index("@xian_shop_added_by_admin.handle", clear_start)]
+        user_start = command_source.index("async def xian_shop_remove_")
+        user = command_source[user_start : command_source.index("@xian_buy.handle", user_start)]
 
-        self.assertIn("xianshi_repository.remove_xianshi_listing(", command)
-        self.assertNotIn("remove_xianshi_all_item(", command)
-        self.assertNotIn("sql_message.send_back(", command)
-        self.assertIn("BEGIN IMMEDIATE", repository_source)
+        self.assertIn("trade_application.xianshi_remove_listing(", admin)
+        self.assertIn("trade_application.xianshi_clear_all(", clear)
+        self.assertIn("trade_application.xianshi_remove_by_name(", user)
+        self.assertNotIn("xianshi_repository.remove_xianshi_listing(", admin)
+        self.assertNotIn("xianshi_repository.clear_all_xianshi_listings(", clear)
+        self.assertNotIn("xianshi_repository.remove_xianshi_by_name(", user)
+        self.assertIn("immediate=True", repository_source)
         self.assertIn("xianshi_removal_operations", repository_source)
-
-    def test_admin_xianshi_clear_uses_atomic_repository_flow(self) -> None:
-        trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
-        command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")
-        repository_source = (trade_root / "repository.py").read_text(encoding="utf-8")
-        start = command_source.index("async def xian_shop_off_all_")
-        end = command_source.index("@xian_shop_added_by_admin.handle", start)
-        command = command_source[start:end]
-
-        self.assertIn("xianshi_repository.clear_all_xianshi_listings(", command)
-        self.assertNotIn("remove_xianshi_all_item(", command)
-        self.assertNotIn("sql_message.send_back(", command)
         self.assertIn("xianshi_clear_operations", repository_source)
-
-    def test_user_xianshi_removal_uses_atomic_repository_flow(self) -> None:
-        trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
-        command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")
-        repository_source = (trade_root / "repository.py").read_text(encoding="utf-8")
-        start = command_source.index("async def xian_shop_remove_")
-        end = command_source.index("@xian_buy.handle", start)
-        command = command_source[start:end]
-
-        self.assertIn("xianshi_repository.remove_xianshi_by_name(", command)
-        self.assertNotIn("remove_xianshi_item(", command)
-        self.assertNotIn("sql_message.send_back(", command)
         self.assertIn("xianshi_name_removal_operations", repository_source)
 
     def test_equipment_change_uses_transactional_service(self) -> None:

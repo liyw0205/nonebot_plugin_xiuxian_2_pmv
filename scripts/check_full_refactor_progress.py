@@ -79,6 +79,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     trade_facade = (PACKAGE / "xiuxian" / "xiuxian_trade" / "__init__.py").read_text(encoding="utf-8")
     trade_xianshi_transactions = (PACKAGE / "features" / "trade" / "xianshi_listing_repository.py").read_text(encoding="utf-8")
     trade_plan_xianshi_transactions = (PACKAGE / "features" / "trade" / "xianshi_plan_listing_repository.py").read_text(encoding="utf-8")
+    trade_xianshi_removal_transactions = (PACKAGE / "features" / "trade" / "xianshi_removal_repository.py").read_text(encoding="utf-8")
     trade_auction_transactions = (PACKAGE / "xiuxian" / "xiuxian_trade" / "transaction_service.py").read_text(encoding="utf-8")
     trade_deposit_handler = trade_facade[
         trade_facade.index("async def guishi_deposit_") : trade_facade.index(
@@ -139,6 +140,21 @@ def _slice_status() -> dict[str, dict[str, object]]:
         trade_facade.index("async def xian_shop_added_by_admin_(") : trade_facade.index(
             "@xian_shop_remove_by_admin.handle",
             trade_facade.index("async def xian_shop_added_by_admin_("),
+        )
+    ]
+    xianshi_name_removal_handler = trade_facade[
+        trade_facade.index("async def xian_shop_remove_(") : trade_facade.index(
+            "@xian_buy.handle", trade_facade.index("async def xian_shop_remove_(")
+        )
+    ]
+    xianshi_clear_handler = trade_facade[
+        trade_facade.index("async def xian_shop_off_all_(") : trade_facade.index(
+            "@xian_shop_added_by_admin.handle", trade_facade.index("async def xian_shop_off_all_(")
+        )
+    ]
+    xianshi_admin_removal_handler = trade_facade[
+        trade_facade.index("async def xian_shop_remove_by_admin_(") : trade_facade.index(
+            "# --- 鬼市命令处理 ---", trade_facade.index("async def xian_shop_remove_by_admin_(")
         )
     ]
     auction_settlement = (PACKAGE / "features" / "auction" / "settlement.py").read_text(encoding="utf-8")
@@ -359,6 +375,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_xianshi_fast_listing_disabled": "xianshi_repository.add_xianshi_items(" not in xianshi_fast_listing_handler,
             "xianshi_system_listing_application_owned": "trade_application.xianshi_list_system_item(" in xianshi_system_listing_handler and "def list_system_item(" in trade_xianshi_transactions,
             "legacy_xianshi_system_listing_disabled": "xianshi_repository.add_xianshi_item(" not in xianshi_system_listing_handler,
+            "xianshi_name_removal_application_owned": "trade_application.xianshi_remove_by_name(" in xianshi_name_removal_handler and "class XianshiRemovalSqlRepository" in trade_xianshi_removal_transactions,
+            "legacy_xianshi_name_removal_disabled": "xianshi_repository.remove_xianshi_by_name(" not in xianshi_name_removal_handler,
+            "xianshi_admin_removal_application_owned": "trade_application.xianshi_remove_listing(" in xianshi_admin_removal_handler,
+            "legacy_xianshi_admin_removal_disabled": "xianshi_repository.remove_xianshi_listing(" not in xianshi_admin_removal_handler,
+            "xianshi_clear_application_owned": "trade_application.xianshi_clear_all(" in xianshi_clear_handler,
+            "legacy_xianshi_clear_disabled": "xianshi_repository.clear_all_xianshi_listings(" not in xianshi_clear_handler,
             "purchase_application_owned": "trade_application.purchase(" in trade_facade,
             "legacy_purchase_disabled": "_xianshi_purchase_service().purchase(" not in trade_facade,
             "guishi_deposit_application_owned": "trade_application.guishi_deposit(" in trade_deposit_handler,
@@ -379,7 +401,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_guishi_expired_cleanup_disabled": "xianshi_repository.clear_expired_guishi_order(" not in trade_expired_job,
             "guishi_take_application_owned": "trade_application.guishi_take_stored_item(" in trade_take_handler,
             "legacy_guishi_take_disabled": "xianshi_repository.take_guishi_stored_item(" not in trade_take_handler,
-            "status": "xianshi_purchase_ordinary_auto_fast_and_system_listing_cutover_with_other_trade_compatibility",
+            "status": "xianshi_purchase_listing_and_removal_cutover_with_other_trade_compatibility",
         },
         "auction": {
             "bid_application_owned": "AuctionBidSqlRepository" in auction_bid and "bid_application.place_bid(" in trade_auction_transactions and "auction_bid_application=_auction_bid_application" in trade_facade,

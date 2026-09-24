@@ -123,6 +123,28 @@ def apply_trade_xianshi_plan_listing(uow: DatabaseUnitOfWork) -> None:
     uow.execute("INSERT OR IGNORE INTO trade_feature_migrations(version) VALUES ('trade.011')")
 
 
+def apply_trade_xianshi_removal(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS xianshi_removal_operations ("
+        "operation_id TEXT PRIMARY KEY,listing_id TEXT NOT NULL,seller_id TEXT NOT NULL,"
+        "goods_id INTEGER NOT NULL,name TEXT NOT NULL,goods_type TEXT NOT NULL,"
+        "refunded_quantity INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS xianshi_clear_operations ("
+        "operation_id TEXT PRIMARY KEY,listing_count INTEGER NOT NULL,"
+        "refunded_quantity INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS xianshi_name_removal_operations ("
+        "operation_id TEXT PRIMARY KEY,seller_id TEXT NOT NULL,item_name TEXT NOT NULL,"
+        "requested_quantity INTEGER NOT NULL,removed_quantity INTEGER NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    uow.execute("CREATE TABLE IF NOT EXISTS trade_feature_migrations (version TEXT PRIMARY KEY)")
+    uow.execute("INSERT OR IGNORE INTO trade_feature_migrations(version) VALUES ('trade.012')")
+
+
 __all__ = [
     "apply_trade",
     "apply_trade_guishi_deposit",
@@ -135,4 +157,5 @@ __all__ = [
     "apply_trade_guishi_take_item",
     "apply_trade_xianshi_listing",
     "apply_trade_xianshi_plan_listing",
+    "apply_trade_xianshi_removal",
 ]

@@ -2828,18 +2828,19 @@
 - 已切换的功能仍可能保留显式 compatibility/rollback adapter；只有默认真实
   handler/route/scheduler 已改走 feature-owned application，且旧实现不再承载该
   用例，才可逐项从遗留服务移除。
-- 交易域当前已完成仙肆购买、鬼市存灵石、鬼市取灵石、鬼市求购/摆摊创建、求购/摆摊撤销、
-  求购/摆摊撮合、过期清理、寄存物品取回、拍卖等待区上架/下架、场次开始/队列交接和结算。
-  接下来审计仙肆其余真实入口及剩余交易兼容路径，再回到其他高频资产域。
+- 交易域当前已完成仙肆购买、上架/撤架、鬼市存灵石、鬼市取灵石、鬼市求购/摆摊创建、
+  求购/摆摊撤销、求购/摆摊撮合、过期清理、寄存物品取回、拍卖等待区上架/下架、场次开始/
+  队列交接和结算。接下来审计拍卖竞价后的统计/展示副作用及其他交易兼容路径，再回到其他
+  高频资产域。
 - `recovery_smoke.py` 在 2026-09-24 修复为五库按路由迁移前，旧脚本只对
   `game_db` 应用完整目录。因此此前没有独立五库回执的隔离 smoke 只能作为单库
   恢复演练，不能用于跨库切片或 P7 的最终证据；后续统一以五库 receipt 为准。
 
 ### 6.2 优先目标
 
-1. 审计交易域其余真实路径：鬼市创建/撤销、撮合/过期清理、寄存物品取回，以及拍卖
-   队列/场次开始/结算均已 feature-owned；下一步按真实入口追踪仙肆上架/撤架、竞价
-   与拍卖统计副作用中仍由兼容 service 承载的部分，每次切一个资产转换。
+1. 审计交易域其余真实路径：鬼市创建/撤销、撮合/过期清理、寄存物品取回，以及仙肆
+   上架/撤架、拍卖队列/场次开始/结算均已 feature-owned；下一步按真实入口追踪竞价
+   后统计、展示和通知副作用中仍由兼容 service 承载的部分，每次切一个资产转换。
 2. 清零已迁移域的 compatibility 余额：优先处理仍由旧 service 承载的高频资产
    路径，包括签到后置 effects、背包通用物品/礼包余项、宠物、任务/修炼、洞府和
    地图未覆盖动作、宗门、竞技场/副本、世界事件、Boss 与拍卖。先用真实入口
@@ -3738,5 +3739,19 @@ immediate UoW 中原子创建 listing 与 operation；保留 `quantity=-1` 无�
 2026-09-24 trade system Xianshi listing isolated recovery evidence：一次性五库 recovery smoke 完成
 backup、restore dry-run、restore、全量 `130` 项 migration 和 reconcile；`trade.010`/`trade.011` 仅
 路由到 `game_db`，五库 migration 数量为 game `104`、player `22`、trade `7`、impart `1`、message `1`；
+`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。临时数据和 receipt 在提交前清理；
+该证据不替代真实正式发布周期。
+
+2026-09-24 trade Xianshi removal feature-owned cutover：新增 `XianshiRemovalSqlRepository`、
+`TradeApplication.xianshi_remove_listing`/`xianshi_remove_by_name`/`xianshi_clear_all` 和 game DB
+`trade.012`。用户按名称撤架、管理员单条撤架及全服清空均改走 immediate UoW；保留按价格顺序
+消耗有限库存、系统/无限量不退款、背包容量预检、全量退款回滚及 canonical operation
+replay/conflict。三张撤架 operation 表由启动迁移创建，生产请求不再隐式 DDL；旧
+`TradeRepository` 仅保留显式兼容入口。聚焦 trade/xianshi/source/progress 回归 `220 passed`，
+交易相关回归 `55 passed`；compileall、architecture、inventory、progress 和 diff check 均通过。
+
+2026-09-24 trade Xianshi removal isolated recovery evidence：一次性五库 recovery smoke 完成
+backup、restore dry-run、restore、全量 `131` 项 migration 和 reconcile；`trade.012` 仅路由到
+`game_db`，五库 migration 数量为 game `105`、player `22`、trade `7`、impart `1`、message `1`；
 `clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。临时数据和 receipt 在提交前清理；
 该证据不替代真实正式发布周期。

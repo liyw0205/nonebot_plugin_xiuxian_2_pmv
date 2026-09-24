@@ -18,6 +18,7 @@ from .guishi_expired_repository import GuishiExpiredOrderSqlRepository
 from .guishi_take_repository import GuishiStoredItemTakeSqlRepository
 from .xianshi_listing_repository import XianshiListingSqlRepository
 from .xianshi_plan_listing_repository import XianshiPlanListingSqlRepository
+from .xianshi_removal_repository import XianshiRemovalSqlRepository
 from .repository import TradeFeatureRepository
 
 
@@ -61,6 +62,9 @@ class TradeApplication(LegacyApplication):
         )
         self.xianshi_plan_listing_repository = XianshiPlanListingSqlRepository(
             self.game_database, clock=self.clock, ids=self.ids
+        )
+        self.xianshi_removal_repository = XianshiRemovalSqlRepository(
+            self.game_database, clock=self.clock
         )
         super().__init__(game_database, repository=repository, feature="trade")
 
@@ -114,6 +118,35 @@ class TradeApplication(LegacyApplication):
             seller_id,
             listing_plan,
             stamina_cost=stamina_cost,
+        )
+
+    def xianshi_remove_listing(
+        self, *, operation_id: str, listing_id: str, max_goods_num: int
+    ):
+        return self.xianshi_removal_repository.remove_listing(
+            operation_id, listing_id, max_goods_num=max_goods_num
+        )
+
+    def xianshi_remove_by_name(
+        self,
+        *,
+        operation_id: str,
+        seller_id: str,
+        item_name: str,
+        quantity: int,
+        max_goods_num: int,
+    ):
+        return self.xianshi_removal_repository.remove_by_name(
+            operation_id,
+            seller_id,
+            item_name,
+            quantity,
+            max_goods_num=max_goods_num,
+        )
+
+    def xianshi_clear_all(self, *, operation_id: str, max_goods_num: int):
+        return self.xianshi_removal_repository.clear_all(
+            operation_id, max_goods_num=max_goods_num
         )
 
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):
