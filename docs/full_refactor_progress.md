@@ -2828,29 +2828,26 @@
 - 已切换的功能仍可能保留显式 compatibility/rollback adapter；只有默认真实
   handler/route/scheduler 已改走 feature-owned application，且旧实现不再承载该
   用例，才可逐项从遗留服务移除。
-- 交易域当前已完成仙肆购买、鬼市存灵石、鬼市取灵石、鬼市求购/摆摊创建和求购/摆摊撤销；
-  撮合与过期清理、取回寄存物品、拍卖排队/场次生命周期仍未迁移。
+- 交易域当前已完成仙肆购买、鬼市存灵石、鬼市取灵石、鬼市求购/摆摊创建、求购/摆摊撤销和
+  求购/摆摊撮合；过期清理、取回寄存物品、拍卖排队/场次生命周期仍未迁移。
 - `recovery_smoke.py` 在 2026-09-24 修复为五库按路由迁移前，旧脚本只对
   `game_db` 应用完整目录。因此此前没有独立五库回执的隔离 smoke 只能作为单库
   恢复演练，不能用于跨库切片或 P7 的最终证据；后续统一以五库 receipt 为准。
 
 ### 6.2 优先目标
 
-1. 进入 `trade_guishi_order_matching` 切片：迁移求购/摆摊撮合的资产状态转换，保留
-   买卖双方所有权、未成交数量、灵石/物品结算、operation replay/conflict 和跨库异常回滚；
-   完成后再按同一门禁闭环提交并推送。
-2. 完成交易域其余真实路径：按“求购/摆摊创建和撤销 -> 撮合与过期清理 -> 取回
+1. 完成交易域其余真实路径：按“求购/摆摊创建和撤销 -> 撮合与过期清理 -> 取回
    寄存物品 -> 拍卖排队和场次生命周期”拆分。拍卖结算已迁移不代表队列、场次和
    鬼市订单已迁移；每次只切一个可独立回滚的资产状态转换。
-3. 清零已迁移域的 compatibility 余额：优先处理仍由旧 service 承载的高频资产
+2. 清零已迁移域的 compatibility 余额：优先处理仍由旧 service 承载的高频资产
    路径，包括签到后置 effects、背包通用物品/礼包余项、宠物、任务/修炼、洞府和
    地图未覆盖动作、宗门、竞技场/副本、世界事件、Boss 与拍卖。先用真实入口
    调用图确定一个动作，再迁移，不按文件或目录整体宣布完成。
-4. 单列处理复杂批处理和外部状态：赌坊投注/派奖与分块分红、全服批处理、跨库
+3. 单列处理复杂批处理和外部状态：赌坊投注/派奖与分块分红、全服批处理、跨库
    补偿、JSON/凭据状态、scheduler 和外部版本更新必须保留冻结快照、分块进度、
    子操作 replay、失败续跑和 reconcile；不能为追赶进度改成 facade 或一次性大
    事务。
-5. 最终退出：完成所有默认入口的逐项切换并删除/隔离对应旧实现，使 legacy
+4. 最终退出：完成所有默认入口的逐项切换并删除/隔离对应旧实现，使 legacy
    `transaction_service` 与 `xiuxian2_handle` 不再在完成切片的执行图中出现；
    随后完成一次真实发布、备份、迁移、恢复和 reconcile，补齐 P7 证据。
 
@@ -3619,3 +3616,13 @@ trade/source/progress `228 passed`，根目录隔离回归 `2538 passed, 16 warn
 五库 recovery smoke 覆盖 `122` 项 migration，`trade.006` 仅在 trade DB，
 `clean=true`、operations/outbox/dead events 均为 0。撮合、过期清理和取回寄存物品不在
 本切片范围。
+
+2026-09-24 trade Guishi order-matching feature-owned cutover：新增
+`GuishiOrderMatchSqlRepository`、`TradeApplication.guishi_match` 和 trade DB
+`trade.007` 撮合 operation 表。`process_guishi_transactions` 及自动调度默认改走新
+application；repository 在 trade DB `BEGIN IMMEDIATE` 中校验订单类型、商品名称、价格、
+自交易和未成交数量，原子更新买方寄存物品、卖方灵石、部分成交数量及完成订单删除。保留
+canonical operation replay/conflict、历史结果 duplicate、触发器异常整体回滚；请求路径不再
+隐式创建 `guishi_match_operations`。新增撮合 application/repository/source/progress 测试，
+聚焦 trade/source/progress 回归 `235 passed`；`trade.007` 仅路由到 trade DB，后续仍需完成
+过期清理和取回寄存物品切片。

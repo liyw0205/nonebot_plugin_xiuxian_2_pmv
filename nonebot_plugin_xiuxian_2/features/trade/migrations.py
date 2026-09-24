@@ -51,6 +51,14 @@ def apply_trade_guishi_order_cancel(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_trade_guishi_match(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS guishi_match_operations ("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
 __all__ = [
     "apply_trade",
     "apply_trade_guishi_deposit",
@@ -58,4 +66,5 @@ __all__ = [
     "apply_trade_guishi_withdraw",
     "apply_trade_guishi_qiugou",
     "apply_trade_guishi_order_cancel",
+    "apply_trade_guishi_match",
 ]

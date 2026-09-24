@@ -12,6 +12,7 @@ from .guishi_baitan_repository import GuishiBaitanSqlRepository
 from .guishi_stone_rules import withdrawal_is_open
 from .guishi_withdraw_repository import GuishiWithdrawSqlRepository
 from .guishi_qiugou_repository import GuishiQiugouSqlRepository
+from .guishi_match_repository import GuishiOrderMatchSqlRepository
 from .repository import TradeFeatureRepository
 
 
@@ -41,6 +42,7 @@ class TradeApplication(LegacyApplication):
             self.game_database, self.trade_database
         )
         self.guishi_qiugou_repository = GuishiQiugouSqlRepository(self.trade_database)
+        self.guishi_order_match_repository = GuishiOrderMatchSqlRepository(self.trade_database)
         super().__init__(game_database, repository=repository, feature="trade")
 
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):
@@ -169,6 +171,19 @@ class TradeApplication(LegacyApplication):
             order_id=order_id,
             goods_type=goods_type,
             max_goods_num=max_goods_num,
+        )
+
+    def guishi_match(
+        self,
+        *,
+        operation_id: str,
+        qiugou_order_id: str,
+        baitan_order_id: str,
+    ):
+        return self.guishi_order_match_repository.match(
+            operation_id=operation_id,
+            qiugou_order_id=qiugou_order_id,
+            baitan_order_id=baitan_order_id,
         )
 
     def enqueue(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("enqueue", operation_id=operation_id, user_id=user_id, **kwargs)

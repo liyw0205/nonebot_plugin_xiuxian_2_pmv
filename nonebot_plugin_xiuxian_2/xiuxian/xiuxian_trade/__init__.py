@@ -2196,11 +2196,10 @@ async def process_guishi_transactions(user_id: str = None) -> str:
         
         for baitan_order in available_baitan_orders:
             baitan_order_id = baitan_order['id']
-            result = xianshi_repository.match_guishi_orders(
-                get_paths().trade_db,
-                qiugou_order_id,
-                baitan_order_id,
+            result = trade_application.guishi_match(
                 operation_id=f"guishi-match:{qiugou_order_id}:{baitan_order_id}",
+                qiugou_order_id=qiugou_order_id,
+                baitan_order_id=baitan_order_id,
             )
             if result.status == "qiugou_completed":
                 if user_id:

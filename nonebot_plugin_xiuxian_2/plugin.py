@@ -53,6 +53,7 @@ from .features.trade.migrations import (
     apply_trade_guishi_withdraw,
     apply_trade_guishi_qiugou,
     apply_trade_guishi_order_cancel,
+    apply_trade_guishi_match,
 )
 from .features.map.manifest import FEATURE as MAP_FEATURE
 from .features.map.migrations import apply_map, apply_map_combat_plan, apply_map_combat_player, apply_map_combat_start, apply_map_dongfu_build, apply_map_dongfu_player, apply_map_explore_player, apply_map_explore_settlement, apply_map_explore_start, apply_map_home_return, apply_map_interactive_player, apply_map_interactive_start, apply_map_mission_claim, apply_map_movement, apply_map_resource_reward, apply_map_seed_purchase
@@ -225,6 +226,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("trade.004", "trade_guishi_withdraw_operations", apply_trade_guishi_withdraw),
         Migration("trade.005", "guishi_order_create_operations", apply_trade_guishi_qiugou),
         Migration("trade.006", "guishi_order_cancel_operations", apply_trade_guishi_order_cancel),
+        Migration("trade.007", "guishi_match_operations", apply_trade_guishi_match),
         Migration("work.001", "work_feature_migrations", apply_work),
         Migration("work.002", "work_daily_refresh_reset_operations", apply_work_daily_refresh_reset),
         Migration("world_events.001", "world_events_feature_migrations", apply_world_events),
@@ -256,6 +258,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "trade.003",
         "trade.005",
         "trade.006",
+        "trade.007",
     }
 )
 _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
@@ -284,7 +287,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "tianti_training.008",
     }
 )
-_TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"platform.001", "trade.003", "trade.005", "trade.006"})
+_TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"platform.001", "trade.003", "trade.005", "trade.006", "trade.007"})
 
 
 def migrations_for_database(

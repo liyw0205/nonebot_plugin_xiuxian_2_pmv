@@ -324,7 +324,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_guishi_cancel_qiugou_disabled": "xianshi_repository.clear_guishi_qiugou_order(" not in trade_cancel_qiugou_handler,
             "guishi_cancel_baitan_application_owned": "trade_application.guishi_cancel_baitan(" in trade_cancel_baitan_handler,
             "legacy_guishi_cancel_baitan_disabled": "xianshi_repository.clear_expired_guishi_order(" not in trade_cancel_baitan_handler,
-            "status": "xianshi_purchase_guishi_deposit_withdraw_qiugou_baitan_create_cancel_cutover_with_other_trade_compatibility",
+            "guishi_matching_application_owned": "trade_application.guishi_match(" in trade_facade and "xianshi_repository.match_guishi_orders(" not in trade_facade[trade_facade.index("async def process_guishi_transactions"):trade_facade.index("@scheduler.scheduled_job", trade_facade.index("async def process_guishi_transactions"))],
+            "legacy_guishi_matching_disabled": "xianshi_repository.match_guishi_orders(" not in trade_facade[trade_facade.index("async def process_guishi_transactions"):trade_facade.index("@scheduler.scheduled_job", trade_facade.index("async def process_guishi_transactions"))],
+            "status": "xianshi_purchase_guishi_deposit_withdraw_qiugou_baitan_create_cancel_matching_cutover_with_other_trade_compatibility",
         },
         "auction": {
             "settlement_application_owned": "AuctionSettlementSqlRepository" in auction_settlement,
