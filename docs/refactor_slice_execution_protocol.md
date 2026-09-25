@@ -156,3 +156,9 @@ compileall、architecture、inventory、diff check 与五库 recovery 通过；�
 副本、世界事件和 Boss handler；追捕令 `20015` 的随机 offer 仍由旧领域逻辑生成，不能把既有扣除/快照边界解释成 work 领域整体完成。
 已切换的 partner cultivation、partner token、背包通用 item-use Web、宠物蛋、饰品礼包、炼丹两阶段领取、斩妖令、祈愿石、挑战券事务、
 love-sand schema 边界、Rift speedup 和 Rift world-generation schema 边界不重复迁移。
+
+`rift damage-event outcome`：真实 `_roll_rift_event` 的掉血事件改经
+`RiftApplication.roll_damage_event -> RiftDamageEventResolver`；resolver 只接收显式 battle config、经验计算器、数字格式化器和 RandomSource，
+返回可持久化的 delta/message DTO，不读取或写入用户状态。旧 `get_dxsj_info` 仅保留兼容适配，Boss/宝物随机与资产解析不在本片迁移。
+damage domain/application/source 与 Rift 回归 `122 passed`，compileall、architecture、progress、inventory、diff check 均通过；无新增 migration。
+下一片继续审计 Boss battle outcome 的战斗资产 provider，避免把 `Boss_fight` 或宝物 `Items` 读取误算成 feature-owned。

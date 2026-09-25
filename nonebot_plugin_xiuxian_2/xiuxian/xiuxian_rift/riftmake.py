@@ -8,6 +8,7 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig, convert_rank, base_rank
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
+from ...features.rift.domain import RiftDamageEventResolver
 
 _sql_message_instance = None
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
@@ -259,42 +260,13 @@ async def get_boss_battle_info(user_info, rift_rank, bot_id, persist=True):
 
 
 def get_dxsj_info(rift_type, user_info):
-    """Roll a damage event without persisting it."""
-    msg = None
-    outcome = {"delta": {}}
-    battle_data = STORY['战斗']
-    cost_type = get_dict_type_rate(battle_data[rift_type]['cost'])
-    value = random.choice(battle_data[rift_type]['cost'][cost_type]['value'])
-    if cost_type == "exp":
-        exp = percent_exp_reward(
-            user_info['exp'],
-            float(value),
-            user_info.get('level'),
-            apply_rank_suppress=False,
-            anchor="gap",
-        )
-        nowhp = user_info['hp'] - (exp / 2) if (user_info['hp'] - (exp / 2)) > 0 else 1
-        nowmp = user_info['mp'] - exp if (user_info['mp'] - exp) > 0 else 1
-        outcome["delta"] = {
-            "exp": -exp,
-            "hp": int(nowhp) - int(user_info['hp']),
-            "mp": int(nowmp) - int(user_info['mp']),
-        }
-
-        msg = random.choice(battle_data[rift_type]['desc']).format(f"修为减少了：{number_to(exp)}点！")
-    elif cost_type == "hp":
-        cost_hp = int((user_info['exp'] / 2) * value)
-        now_hp = user_info['hp'] - cost_hp
-        if now_hp < 0:
-            now_hp = 1
-        outcome["delta"] = {"hp": int(now_hp) - int(user_info['hp'])}
-        msg = random.choice(battle_data[rift_type]['desc']).format(f"气血减少了：{number_to(cost_hp)}点！")
-    elif cost_type == "stone":
-        cost_stone = value
-        outcome["delta"] = {"stone": -int(cost_stone)}
-        msg = random.choice(battle_data[rift_type]['desc']).format(f"灵石减少了：{number_to(cost_stone)}枚！")
-    outcome["message"] = msg
-    return msg, outcome
+    """Compatibility adapter for the feature-owned damage event resolver."""
+    event = RiftDamageEventResolver(
+        battle_config=STORY['战斗'],
+        exp_reward=percent_exp_reward,
+        format_number=number_to,
+    ).roll(rift_type, user_info, random_source=random)
+    return event.message, event.as_outcome()
 
 
 def get_treasure_info(user_info, rift_rank):

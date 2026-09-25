@@ -80,8 +80,14 @@ def _slice_status() -> dict[str, dict[str, object]]:
     natal_facade = (PACKAGE / "xiuxian" / "xiuxian_natal_treasure" / "__init__.py").read_text(encoding="utf-8")
     world_events_facade = (PACKAGE / "xiuxian" / "xiuxian_world_events" / "__init__.py").read_text(encoding="utf-8")
     rift_facade = (PACKAGE / "xiuxian" / "xiuxian_rift" / "__init__.py").read_text(encoding="utf-8")
+    rift_event_handler = rift_facade[
+        rift_facade.index("async def _roll_rift_event") : rift_facade.index(
+            "async def _roll_rift_boss_event", rift_facade.index("async def _roll_rift_event")
+        )
+    ]
     rift_jsondata = (PACKAGE / "xiuxian" / "xiuxian_rift" / "jsondata.py").read_text(encoding="utf-8")
     rift_application = (PACKAGE / "features" / "rift" / "application.py").read_text(encoding="utf-8")
+    rift_domain = (PACKAGE / "features" / "rift" / "domain.py").read_text(encoding="utf-8")
     rift_cooldown_repository = (PACKAGE / "features" / "rift" / "cooldown_repository.py").read_text(encoding="utf-8")
     rift_generation_repository = (PACKAGE / "features" / "rift" / "generation_repository.py").read_text(encoding="utf-8")
     rift_key_event_repository = (PACKAGE / "features" / "rift" / "key_event_repository.py").read_text(encoding="utf-8")
@@ -394,7 +400,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "cooldown_read_projection_repository_owned": "RiftCooldownSqlRepository" in rift_application and "self.cooldown_repository.read" in rift_application,
             "cooldown_read_request_path_has_no_ddl": "CREATE TABLE" not in rift_cooldown_repository and "ALTER TABLE" not in rift_cooldown_repository,
             "legacy_cooldown_read_disabled": "get_user_cd(" not in rift_facade and "XiuxianDateManage" not in rift_facade,
-            "status": "world_generation_termination_key_event_settlement_entry_speedup_demon_token_cutover_with_remaining_rift_compatibility",
+            "damage_event_application_owned": "rift_application.roll_damage_event(" in rift_event_handler,
+            "damage_event_resolver_owned": "class RiftDamageEventResolver" in rift_domain and "RiftDamageEventResolver" in rift_application,
+            "damage_event_is_persistence_free": "update_exp" not in rift_domain and "update_ls" not in rift_domain,
+            "legacy_damage_event_disabled": "get_dxsj_info(" not in rift_event_handler,
+            "status": "world_generation_termination_key_event_settlement_entry_speedup_demon_token_damage_event_cutover_with_remaining_rift_compatibility",
         },
         "back": {
             "cultivation_item_application_owned": "back_application.cultivation_item(" in back_facade and "_cultivation_item_application().apply(" in back_util_facade,

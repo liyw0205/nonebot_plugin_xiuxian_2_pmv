@@ -4360,3 +4360,11 @@ migration dry-run 和 reconcile clean（operations/outbox/dead events 均为 `0`
 reconcile clean（operations/outbox/dead events 均为 `0`）。本轮 pytest basetemp、recovery 数据、receipt 和独立字节码缓存已删除，磁盘仍约
 `24 GB` 可用、可用 RAM 约 `1.3 GB`；保留 `.venv`、`.git`、`data/`、运行数据库/备份和用户原有 Boss JSON 改动。下一步按 6.2 目标 5
 审计一个独立的 Rift 故事/资产只读边界，再决定是否将随机 outcome 生成移入 feature-owned domain；不把惰性 adapter cleanup 或 facade 存在解释为底层迁移完成。
+
+2026-09-26 rift damage-event outcome cutover：真实 `_roll_rift_event` 的掉血事件改经
+`RiftApplication.roll_damage_event -> RiftDamageEventResolver`；resolver 通过显式 battle config、经验计算器、数字格式化器和 RandomSource
+生成纯 `delta/message` outcome，不读取或写入用户状态，实际资产提交继续由既有 settlement/key-event/demon-token repositories 负责。旧
+`get_dxsj_info` 仅保留兼容适配；Boss 战斗、宝物生成和 `Items`/技能资产读取仍未迁移，不能宣称 Rift 故事/资产边界完成。新增 domain/application/source
+回归后 Rift 聚焦回归 `122 passed`；compileall、architecture、progress、inventory `--check` 与 `git diff --check` 通过，无新增 migration。
+隔离五库 recovery 仍需在本片验收阶段完成；专用 pytest basetemp 与 compileall 字节码缓存会在 recovery 后清理。下一步审计 Boss battle outcome 的
+战斗资产 provider，保持 `Boss_fight` 兼容实现为显式边界。

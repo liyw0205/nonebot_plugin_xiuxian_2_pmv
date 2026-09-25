@@ -6,6 +6,7 @@ from typing import Any
 from .._legacy_application import LegacyApplication
 from .demon_token_repository import RiftDemonTokenBattleSqlRepository
 from .cooldown_repository import RiftCooldownSqlRepository
+from .domain import RiftDamageEventResolver
 from .entry_repository import RiftEntrySqlRepository
 from .generation_repository import RiftGenerationSqlRepository
 from .key_event_repository import RiftKeyEventSqlRepository
@@ -27,6 +28,7 @@ class RiftApplication(LegacyApplication):
         settlement_repository: Any | None = None,
         entry_repository: Any | None = None,
         cooldown_repository: Any | None = None,
+        damage_event_resolver: RiftDamageEventResolver | None = None,
         clock: Any | None = None,
     ) -> None:
         self.game_database = str(game_database)
@@ -44,6 +46,7 @@ class RiftApplication(LegacyApplication):
         )
         self.entry_repository = entry_repository or RiftEntrySqlRepository(game_database)
         self.cooldown_repository = cooldown_repository or RiftCooldownSqlRepository(game_database)
+        self.damage_event_resolver = damage_event_resolver
 
     @property
     def legacy_repository(self):
@@ -103,6 +106,21 @@ class RiftApplication(LegacyApplication):
 
     def read_cooldown(self, user_id: str):
         return self.cooldown_repository.read(user_id)
+
+    def roll_damage_event(
+        self,
+        event_type: str,
+        user_info: dict[str, Any],
+        *,
+        random_source: Any,
+    ) -> dict[str, Any]:
+        if self.damage_event_resolver is None:
+            raise RuntimeError("rift damage event resolver is not configured")
+        return self.damage_event_resolver.roll(
+            event_type,
+            user_info,
+            random_source=random_source,
+        ).as_outcome()
 
     def bootstrap_world(self, *, rift_key: str, legacy_snapshot: dict[str, Any]):
         return RiftGenerationSqlRepository(self.database).bootstrap(
