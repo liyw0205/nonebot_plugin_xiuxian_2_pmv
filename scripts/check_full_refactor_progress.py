@@ -409,7 +409,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "pet": {
             "active_switch_application_owned": "pet_application.switch(" in pet_facade,
             "legacy_active_switch_disabled": "_pet_active_switch_service().switch(" not in pet_facade,
-            "status": "active_switch_cutover_with_other_pet_compatibility",
+            "skill_replace_application_owned": "pet_application.skill_replace(" in pet_facade,
+            "legacy_skill_replace_disabled": "_pet_skill_replace_service().replace(" not in pet_facade,
+            "status": "active_switch_and_skill_replace_cutover_with_other_pet_compatibility",
         },
         "trade": {
             "xianshi_listing_application_owned": "trade_application.xianshi_list_items(" in xianshi_listing_handler and "class XianshiListingSqlRepository" in trade_xianshi_transactions,

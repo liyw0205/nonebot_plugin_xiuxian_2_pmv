@@ -493,6 +493,62 @@ class PetSkillRerollSqlRepository:
             return PetSkillRerollResult("applied", new_skill_id)
 
 
+@dataclass(frozen=True)
+class PetSkillReplaceResult:
+    status: str
+    skill_id: str = ""
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"applied", "duplicate"}
+
+
+class PetSkillReplaceSqlRepository:
+    def __init__(self, database: str | Path, *, clock: Any | None = None) -> None:
+        self.database = str(database)
+        self.clock = clock or SystemClock()
+
+    def replace(self, operation_id: str, user_id: str, uid: str, expected_skill_id: str, new_skill_id: str) -> PetSkillReplaceResult:
+        operation_id = str(operation_id).strip()
+        user_id, uid = str(user_id), str(uid).strip()
+        expected_skill_id, new_skill_id = str(expected_skill_id), str(new_skill_id).strip()
+        if not operation_id or not user_id or not uid or not new_skill_id:
+            raise ValueError("operation, user, pet and replacement skill are required")
+        payload = json.dumps(
+            [user_id, uid, expected_skill_id, new_skill_id],
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            old = uow.query_one(
+                "SELECT payload,skill_id FROM pet_skill_replace_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            if old is not None:
+                return PetSkillReplaceResult(
+                    "duplicate" if str(old["payload"]) == payload else "state_changed",
+                    str(old["skill_id"]) if str(old["payload"]) == payload else "",
+                )
+            pet = uow.query_one(
+                "SELECT COALESCE(skill_id,'') AS skill_id FROM player_pet_item WHERE user_id=? AND uid=?",
+                (user_id, uid),
+            )
+            if pet is None or str(pet["skill_id"] or "") != expected_skill_id:
+                return PetSkillReplaceResult("state_changed")
+            changed = uow.execute(
+                "UPDATE player_pet_item SET skill_id=?,updated_at=? "
+                "WHERE user_id=? AND uid=? AND COALESCE(skill_id,'')=?",
+                (new_skill_id, int(self.clock.now().timestamp()), user_id, uid, expected_skill_id),
+            )
+            if changed.rowcount != 1:
+                return PetSkillReplaceResult("state_changed")
+            uow.execute(
+                "INSERT INTO pet_skill_replace_operations(operation_id,payload,skill_id) VALUES(?,?,?)",
+                (operation_id, payload, new_skill_id),
+            )
+            return PetSkillReplaceResult("applied", new_skill_id)
+
+
 class PetRepository(Protocol):
     def switch(self, *args: Any, **kwargs: Any) -> Any: ...
     def travel_claim(self, *args: Any, **kwargs: Any) -> Any: ...
@@ -533,4 +589,4 @@ class LegacyPetRepository:
         return PetActiveSwitchService(self.player_database).switch(*args, **kwargs)
 
 
-__all__ = ["PetActiveSwitchResult", "PetActiveSwitchSqlRepository", "PetFeedResult", "PetFeedSqlRepository", "PetTravelStartResult", "PetTravelStartSqlRepository", "PetTravelClaimResult", "PetTravelClaimSqlRepository", "PetHatchResult", "PetHatchSqlRepository", "PetReleaseResult", "PetReleaseSqlRepository", "PetFusionBreakthroughResult", "PetFusionBreakthroughSqlRepository", "PetSkillRerollResult", "PetSkillRerollSqlRepository", "PetRepository", "LegacyPetRepository"]
+__all__ = ["PetActiveSwitchResult", "PetActiveSwitchSqlRepository", "PetFeedResult", "PetFeedSqlRepository", "PetTravelStartResult", "PetTravelStartSqlRepository", "PetTravelClaimResult", "PetTravelClaimSqlRepository", "PetHatchResult", "PetHatchSqlRepository", "PetReleaseResult", "PetReleaseSqlRepository", "PetFusionBreakthroughResult", "PetFusionBreakthroughSqlRepository", "PetSkillRerollResult", "PetSkillRerollSqlRepository", "PetSkillReplaceResult", "PetSkillReplaceSqlRepository", "PetRepository", "LegacyPetRepository"]

@@ -36,10 +36,10 @@
 
 ## 当前切片
 
-`pet hatch`：砸蛋 handler 默认调用 `PetApplication.hatch`，结果在命令边界适配为既有
-`PetHatchResult`；`pet.002` 在 game DB 负责 `pet_hatch_operations`，repository 不再请求时建表，
-兼容 `PetHatchService` 只保留显式回滚入口。完成本切片后，需先清理缓存并复核磁盘，再进入下一项宠物/背包旧 service 边界。
+`pet skill replacement`：替换技能 handler 默认调用 `PetApplication.skill_replace`，
+`pet.003` 在 player DB 负责 `pet_skill_replace_operations`，repository 使用技能快照 CAS 和 operation replay，
+不在请求时建表；兼容 `PetSkillReplaceService` 只保留显式回滚入口。完成本切片后，需先清理缓存并复核磁盘，再进入背包通用物品批处理边界。
 
 ## 下一切片选择
 
-当前切片清理并复核磁盘后，进入 `docs/full_refactor_progress.md` 的 6.2 目标 5，按真实调用图选择下一个仍由旧 service 承载的动作。不得把 facade、静态 manifest 或仅测试通过视为切片完成。
+当前切片清理并复核磁盘后，进入 `docs/full_refactor_progress.md` 的 6.2 目标 5，处理背包通用物品批处理的真实 handler。不得把 facade、静态 manifest 或仅测试通过视为切片完成。

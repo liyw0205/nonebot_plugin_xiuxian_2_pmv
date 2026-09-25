@@ -109,6 +109,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(puppet["legacy_harvest_disabled"])
         pet = slices["pet"]
         self.assertTrue(pet["active_switch_application_owned"])
+        self.assertTrue(pet["skill_replace_application_owned"])
+        self.assertTrue(pet["legacy_skill_replace_disabled"])
         self.assertTrue(pet["legacy_active_switch_disabled"])
         trade = slices["trade"]
         self.assertTrue(trade["xianshi_listing_application_owned"])

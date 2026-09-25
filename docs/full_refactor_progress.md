@@ -3080,6 +3080,13 @@ restore、按路由 migration 和 reconcile；当前目录共应用 `150` 项 mi
 attached accessory 两项，`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。回执和临时目录已清理，
 未触碰仓库 `data/`、数据库或备份；本轮结束检查磁盘约剩 `24G`，RAM available 约 `1.3G`。
 
+2026-09-25 pet skill-replace feature-owned cutover：`替换宠物技能` handler 已从惰性
+`PetSkillReplaceService` 切换到 `PetApplication.skill_replace -> PetSkillReplaceSqlRepository`；旧 service
+仅保留显式兼容入口。新增 `pet.003` player DB migration 创建 `pet_skill_replace_operations`，repository
+使用技能快照 CAS、operation replay/conflict 和注入 Clock，请求路径不再执行 DDL。新增成功/duplicate/
+state_changed、缺表门禁、迁移路由和 handler source 回归；宠物 skill-replace/application/source focused
+`20 passed`，`compileall`、architecture、inventory、`git diff --check` 已通过。下一步按协议进入背包通用物品批处理。
+
 2026-09-22 rift default repository wiring：移除 `xiuxian_rift` module-level `LegacyRiftRepository` 显式注入，`RiftApplication` 保留显式 repository compatibility fallback；真实入口继续通过 `RiftApplication` 调用，未改变 entry/termination/settlement/key/speedup/demon-token 业务协议。rift source `2 passed`，legacy rift behavior `58 passed`，source/compile/architecture/inventory/diff check 通过。
 
 2026-09-22 rift isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。

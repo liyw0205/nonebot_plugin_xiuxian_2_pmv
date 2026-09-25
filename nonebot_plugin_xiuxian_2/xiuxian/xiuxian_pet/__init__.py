@@ -1825,7 +1825,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     new_skill_id = str(pending["skill"].get("skill_id", ""))
     old_skill_id = str((current_pet or {}).get("skill", {}).get("skill_id", ""))
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or runtime_ids.new_id())
-    result = _pet_skill_replace_service().replace(f"pet-skill-replace:{event_id}:{user_id}", user_id, pending["uid"], old_skill_id, new_skill_id)
+    result = pet_application.skill_replace(
+        operation_id=f"pet-skill-replace:{event_id}:{user_id}",
+        user_id=user_id,
+        uid=pending["uid"],
+        expected_skill_id=old_skill_id,
+        new_skill_id=new_skill_id,
+    )
     PET_SKILL_REPLACE_CACHE.pop(user_id, None)
     if not result.succeeded:
         await handle_send(bot, event, "替换失败：未找到对应宠物，或技能类型不匹配。")

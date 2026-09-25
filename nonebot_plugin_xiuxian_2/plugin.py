@@ -34,7 +34,7 @@ from .features.stone_gift.migrations import apply_stone_gift, apply_stone_gift_l
 from .features.package_reward.manifest import FEATURE as PACKAGE_REWARD_FEATURE
 from .features.package_reward.migrations import apply_package_reward
 from .features.pet.manifest import FEATURE as PET_FEATURE
-from .features.pet.migrations import apply_pet, apply_pet_hatch
+from .features.pet.migrations import apply_pet, apply_pet_hatch, apply_pet_skill_replace
 from .features.sect.manifest import FEATURE as SECT_FEATURE
 from .features.sect.migrations import apply_sect, apply_sect_rename, apply_sect_join, apply_sect_removal, apply_sect_position, apply_sect_donation, apply_sect_shop, apply_sect_mainbuff, apply_sect_secbuff, apply_sect_elixir
 from .features.natal_treasure.manifest import FEATURE as NATAL_TREASURE_FEATURE
@@ -221,6 +221,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("package_reward.001", "package_reward_operations", apply_package_reward),
         Migration("pet.001", "pet_feature_migrations", apply_pet),
         Migration("pet.002", "pet_hatch_operations", apply_pet_hatch),
+        Migration("pet.003", "pet_skill_replace_operations", apply_pet_skill_replace),
         Migration("platform.001", "operation_ledger_outbox", apply_platform_schema),
         Migration("puppet.001", "puppet_feature_migrations", apply_puppet),
         Migration("rift.001", "rift_feature_migrations", apply_rift),
@@ -305,6 +306,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "auction.004",
         "auction.006",
         "auction.008",
+        "pet.003",
     }
 )
 _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
@@ -333,6 +335,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "tianti_training.004",
         "tianti_training.005",
         "tianti_training.008",
+        "pet.003",
     }
 )
 _TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "auction.004"})

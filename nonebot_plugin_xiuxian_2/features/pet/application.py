@@ -9,7 +9,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import PetFeedRequest, PetTravelClaimRequest
-from .repository import PetActiveSwitchSqlRepository, PetFeedSqlRepository, PetFusionBreakthroughSqlRepository, PetHatchSqlRepository, PetReleaseSqlRepository, PetRepository, PetSkillRerollSqlRepository, PetTravelClaimSqlRepository, PetTravelStartSqlRepository
+from .repository import PetActiveSwitchSqlRepository, PetFeedSqlRepository, PetFusionBreakthroughSqlRepository, PetHatchSqlRepository, PetReleaseSqlRepository, PetRepository, PetSkillReplaceSqlRepository, PetSkillRerollSqlRepository, PetTravelClaimSqlRepository, PetTravelStartSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -123,6 +123,11 @@ class PetApplication:
     def skill_reroll(self, *, operation_id: str, user_id: str, expected_pet: Sequence[Any], new_skill_id: str, item_id: int) -> Any:
         return PetSkillRerollSqlRepository(self.game_database, self.player_database).reroll(
             operation_id, user_id, expected_pet, new_skill_id, item_id
+        )
+
+    def skill_replace(self, *, operation_id: str, user_id: str, uid: str, expected_skill_id: str, new_skill_id: str) -> Any:
+        return PetSkillReplaceSqlRepository(self.player_database, clock=self.clock).replace(
+            operation_id, user_id, uid, expected_skill_id, new_skill_id
         )
 
     def switch(self, *, operation_id: str, user_id: str, expected_active_uid: str, target_uid: str, travel_pet_uid: str = "") -> Any:

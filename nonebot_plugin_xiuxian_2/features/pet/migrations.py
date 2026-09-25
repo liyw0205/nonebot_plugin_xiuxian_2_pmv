@@ -17,4 +17,12 @@ def apply_pet_hatch(uow: DatabaseUnitOfWork) -> None:
         uow.execute("ALTER TABLE pet_hatch_operations ADD COLUMN result_json TEXT")
 
 
-__all__ = ["apply_pet", "apply_pet_hatch"]
+def apply_pet_skill_replace(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS pet_skill_replace_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,skill_id TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+__all__ = ["apply_pet", "apply_pet_hatch", "apply_pet_skill_replace"]
