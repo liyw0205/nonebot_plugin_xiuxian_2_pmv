@@ -4452,3 +4452,5 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-09-26 accessory rule-table boundary：新增纯数据模块 `xiuxian_utils/accessory_rules.py`，集中维护饰品词条映射和套装奖励；`calc_accessory_effects` 与旧 accessory helper 均直接读取该模块，不再为规则常量导入整个 `xiuxian_back` facade。规则值、饰品计算结果和旧 facade 导出保持兼容，未改变 JSON schema、存储写入或套装公式。新增 source contract 与运行回归；下一步继续审计属性公式内部的兼容读取，并清理剩余不必要的缓存/全局构造。
 
 2026-09-26 rift battle import connection cleanup：移除 `player_fight.py` 与 `riftmake.py` 中未使用的模块级 `XIUXIAN_IMPART_BUFF()` 构造及导入；秘境 Boss 的传承读取继续使用既有显式只读 provider，其他旧战斗调用行为不变。该片避免仅导入战斗模块就打开并校验 `xiuxian_impart.db`，不改变数据库 schema、战斗公式或兼容 API。新增导入边界回归；下一步继续处理 `xiuxian2_handle` 中仍保留的兼容单例和属性公式读取。
+
+2026-09-26 lazy impart compatibility reader：`xiuxian2_handle.py` 的旧 `xiuxian_impart` 别名改为惰性 proxy，只有未注入 `impart_provider` 的旧属性计算真正访问时才构造 `XIUXIAN_IMPART_BUFF`；Rift 的显式只读 provider 路径不会打开兼容写入连接。保留原别名方法调用和数据库 schema，不改变属性公式或写入行为。新增 source contract；下一步继续盘点 `xiuxian2_handle` 及其他 facade 的剩余模块级数据库/资产构造。

@@ -4050,7 +4050,16 @@ async def impart_check(user_id):
     else:
         return XIUXIAN_IMPART_BUFF().get_user_impart_info_with_id(user_id)
     
-xiuxian_impart = XIUXIAN_IMPART_BUFF()
+def _xiuxian_impart():
+    return XIUXIAN_IMPART_BUFF()
+
+
+class _LazyImpartProxy:
+    def __getattr__(self, name):
+        return getattr(_xiuxian_impart(), name)
+
+
+xiuxian_impart = _LazyImpartProxy()
 
 from .buff_data import BuffJsonDate, UserBuffDate
 
