@@ -54,9 +54,9 @@ from .riftmake import (
     STORY, Rift, get_rift_type, get_story_type, NONEMSG, get_battle_type,
     TREASUREMSG, TREASUREMSG_1, TREASUREMSG_2, TREASUREMSG_3, TREASUREMSG_4,
     TREASUREMSG_5, get_armor, get_main_info, get_rift_battle_player_assets,
-    get_rift_battle_boss_skill_provider, ignore_rift_battle_boss_status_update,
-    get_sec_info, get_sub_info, get_weapon,
-    items,
+    get_rift_battle_boss_skill_provider, get_rift_treasure_item_data,
+    ignore_rift_battle_boss_status_update, get_sec_info, get_sub_info,
+    get_weapon,
 )
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 
@@ -98,7 +98,7 @@ rift_application = RiftApplication(
         main_provider=get_main_info,
         secondary_provider=get_sec_info,
         sub_provider=get_sub_info,
-        item_lookup=items.get_data_by_item_id,
+        item_lookup=get_rift_treasure_item_data,
         format_number=number_to,
     ),
     clock=runtime_clock,

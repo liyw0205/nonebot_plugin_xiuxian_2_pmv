@@ -28,7 +28,22 @@ from ...features.rift.domain import (
 
 _sql_message_instance = None
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
-items = Items()
+_items_instance = None
+
+
+def _items():
+    global _items_instance
+    if _items_instance is None:
+        _items_instance = Items()
+    return _items_instance
+
+
+class _LazyItemsProxy:
+    def __getattr__(self, name):
+        return getattr(_items(), name)
+
+
+items = _LazyItemsProxy()
 skill_data = read_f()
 
 _RIFT_BATTLE_ITEM_SOURCES = (
@@ -76,6 +91,11 @@ def get_rift_battle_item_data(item_id):
         result["item_type"] = item_type
         return result
     return None
+
+
+def get_rift_treasure_item_data(item_id):
+    """Keep the legacy treasure lookup lazy until a treasure is actually rolled."""
+    return _items().get_data_by_item_id(item_id)
 
 
 def get_rift_battle_boss_skill_data():
@@ -577,7 +597,7 @@ def _treasure_resolver() -> RiftTreasureResolver:
         main_provider=get_main_info,
         secondary_provider=get_sec_info,
         sub_provider=get_sub_info,
-        item_lookup=items.get_data_by_item_id,
+        item_lookup=get_rift_treasure_item_data,
         format_number=number_to,
     )
 

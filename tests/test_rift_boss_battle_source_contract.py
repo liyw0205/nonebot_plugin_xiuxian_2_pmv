@@ -134,6 +134,18 @@ def test_rift_boss_item_provider_is_on_demand_and_cache_free():
     assert "items.get_data_by_item_id" not in provider
 
 
+def test_rift_boss_import_path_keeps_legacy_items_lazy():
+    paths = (
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/player_fight.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/xiuxian2_handle.py",
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_rift/riftmake.py",
+    )
+    for filename in paths:
+        source = Path(filename).read_text(encoding="utf-8")
+        assert "\nitems = Items()\n" not in source
+        assert "_items_instance" in source
+
+
 def test_rift_boss_player_snapshot_wires_read_only_natal_provider():
     source = Path(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_rift/riftmake.py"

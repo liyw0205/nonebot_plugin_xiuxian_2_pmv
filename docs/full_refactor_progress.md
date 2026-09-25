@@ -4446,3 +4446,5 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-09-26 rift Boss status-writeback isolation：Rift Boss resolver 注入 `ignore_rift_battle_boss_status_update`，秘境战斗不再修改本地 Boss 快照；结算只消费 `status_list` 生成玩家 HP/MP delta，仍固定 `type_in=0`，不会触发玩家状态写回。世界 Boss、塔和地图等旧 `Boss_fight` 调用继续使用原状态更新 fallback。本片新增状态快照不变测试和进度门禁，下一步处理 Boss 战斗剩余兼容资产读取。
 
 2026-09-26 rift Boss item read provider：新增 `get_rift_battle_item_data`，仅按需读取 BuffInfo 战斗所需的主功法、辅修功法、神通、身法、瞳术、法器和防具 JSON，并复现旧 `Items` 的 `item_type/type/rank/level` 归一化；不构造或读取全局 `ITEMS_CACHE`，不写回文件，也不保留文件级缓存。旧 `Items` 查询仍保留给宝物等其他兼容路径；Boss 玩家快照和最终属性计算已切换该 provider。新增命中、缺失、重读和 source/inventory 门禁，下一步审计属性公式内部仍存在的旧兼容读取。
+
+2026-09-26 rift Boss lazy Items construction：`player_fight`、`xiuxian2_handle` 和 `riftmake` 的模块级 `Items()` 改为惰性 getter/proxy；Rift treasure 的兼容 item lookup 也改为调用时构造，Rift 模块导入不会提前加载全量物品 JSON。旧调用访问 proxy 时仍保持单例行为，未删除其他玩法的 Items 兼容路径。新增导入边界 source contract 与进度门禁，下一步审计属性公式及其他非 Boss 兼容资产读取。

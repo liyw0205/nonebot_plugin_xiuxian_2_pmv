@@ -4573,6 +4573,7 @@ def number_count(num):
 
 _sql_message_instance = None
 _player_data_manager_instance = None
+_items_instance = None
 
 
 def _sql_message():
@@ -4587,6 +4588,13 @@ def _player_data_manager():
     if _player_data_manager_instance is None:
         _player_data_manager_instance = PlayerDataManager()
     return _player_data_manager_instance
+
+
+def _items():
+    global _items_instance
+    if _items_instance is None:
+        _items_instance = Items()
+    return _items_instance
 
 
 class _LazyManagerProxy:
@@ -4604,7 +4612,7 @@ class _LazyManagerProxy:
 
 
 sql_message = _LazyManagerProxy(_sql_message)  # sql类
-items = Items()
+items = _LazyManagerProxy(_items)
 trade_manager = TradeDataManager()
 player_data_manager = _LazyManagerProxy(_player_data_manager)
 

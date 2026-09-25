@@ -70,7 +70,22 @@ from ..xiuxian_natal_treasure.natal_config import (
     HEALING_BLOCK_DURATION_MAX
 )
 
-items = Items()
+_items_instance = None
+
+
+def _items():
+    global _items_instance
+    if _items_instance is None:
+        _items_instance = Items()
+    return _items_instance
+
+
+class _LazyItemsProxy:
+    def __getattr__(self, name):
+        return getattr(_items(), name)
+
+
+items = _LazyItemsProxy()
 _sql_message_instance = None
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 
