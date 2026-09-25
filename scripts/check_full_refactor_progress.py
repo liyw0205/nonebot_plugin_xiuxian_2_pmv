@@ -58,6 +58,14 @@ def _slice_status() -> dict[str, dict[str, object]]:
     tower_limit = (PACKAGE / "xiuxian" / "xiuxian_tower" / "tower_limit.py").read_text(encoding="utf-8")
     training_limit = (PACKAGE / "xiuxian" / "xiuxian_training" / "training_limit.py").read_text(encoding="utf-8")
     work_facade = (PACKAGE / "xiuxian" / "xiuxian_work" / "__init__.py").read_text(encoding="utf-8")
+    work_accelerate_handler = work_facade[
+        work_facade.index("async def use_work_order") : work_facade.index(
+            "async def use_work_capture_order", work_facade.index("async def use_work_order")
+        )
+    ]
+    work_capture_handler = work_facade[
+        work_facade.index("async def use_work_capture_order") :
+    ]
     activity_service = (PACKAGE / "xiuxian" / "xiuxian_activity" / "service.py").read_text(encoding="utf-8")
     dungeon_facade = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "__init__.py").read_text(encoding="utf-8")
     dungeon_manager = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "dungeon_manager.py").read_text(encoding="utf-8")
@@ -258,7 +266,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "work": {
             "daily_refresh_application_owned": "work_daily_refresh_application.reset(" in work_facade,
             "legacy_daily_refresh_disabled": "_work_daily_refresh_reset_service" not in work_facade,
-            "status": "daily_refresh_cutover_with_legacy_service_retained_for_compatibility",
+            "item_accelerate_application_owned": "work_item_use_application.accelerate(" in work_accelerate_handler,
+            "legacy_item_accelerate_disabled": "_work_item_use_service().accelerate(" not in work_accelerate_handler,
+            "item_use_migration_registered": 'Migration("work.003", "work_item_use_operations", apply_work_item_use)' in plugin,
+            "capture_compatibility_retained": "_work_item_use_service().capture(" in work_capture_handler,
+            "status": "daily_refresh_and_accelerate_cutover_with_capture_compatibility",
         },
         "activity_reward": {
             "claim_all_application_owned": "activity_claim_all_application.run(" in activity_service,

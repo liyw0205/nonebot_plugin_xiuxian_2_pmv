@@ -34,6 +34,7 @@ from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.ids import UUIDGenerator
 from ...features.work.application import WorkClaimApplication, WorkSettlementApplication
+from ...features.work.work_item_use_application import WorkItemUseApplication
 from ...features.work.maintenance_application import WorkDailyRefreshResetApplication
 
 from .transaction_service import WorkItemUseService
@@ -47,6 +48,7 @@ work_claim_application = WorkClaimApplication(
 work_settlement_application = WorkSettlementApplication(
     get_paths().game_db,
 )
+work_item_use_application = WorkItemUseApplication(get_paths().game_db)
 _work_item_use_service_instance = None
 _work_refresh_service_instance = None
 _work_abort_cleanup_service_instance = None
@@ -901,7 +903,7 @@ async def use_work_order(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
         operation_id = f"work-item-accelerate:{user_id}:{event_message_id or runtime_ids.new_id()}"
         item_count = _sql_message().goods_num(user_id, item_id)
-        result = _work_item_use_service().accelerate(
+        result = work_item_use_application.accelerate(
             operation_id,
             user_id,
             item_id,

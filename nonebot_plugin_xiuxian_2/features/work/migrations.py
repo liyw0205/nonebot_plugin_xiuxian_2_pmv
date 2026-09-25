@@ -21,4 +21,13 @@ def apply_work_daily_refresh_reset(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_work", "apply_work_daily_refresh_reset"]
+def apply_work_item_use(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS work_item_use_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,action TEXT NOT NULL,"
+        "item_remaining INTEGER NOT NULL,result_snapshot TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+__all__ = ["apply_work", "apply_work_daily_refresh_reset", "apply_work_item_use"]

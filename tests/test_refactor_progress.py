@@ -26,6 +26,10 @@ class RefactorProgressTests(unittest.TestCase):
         work = slices["work"]
         self.assertTrue(work["daily_refresh_application_owned"])
         self.assertTrue(work["legacy_daily_refresh_disabled"])
+        self.assertTrue(work["item_accelerate_application_owned"])
+        self.assertTrue(work["legacy_item_accelerate_disabled"])
+        self.assertTrue(work["item_use_migration_registered"])
+        self.assertTrue(work["capture_compatibility_retained"])
         activity = slices["activity_reward"]
         self.assertTrue(activity["claim_all_application_owned"])
         self.assertTrue(activity["legacy_claim_all_disabled"])

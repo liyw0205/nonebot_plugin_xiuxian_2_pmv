@@ -4183,3 +4183,16 @@ progress 和 `git diff --check` 通过。隔离五库 recovery 完成 `158` 项�
 六项 readiness、migrate dry-run（五库 pending 为空）和 reconcile clean 均通过，operations/outbox/dead events
 为 `0`。本片 pytest basetemp、recovery 数据、receipt 和生成的 `__pycache__`/compile cache 已清理；`.venv`、
 `.git`、`data/`、运行数据库和备份保留。未启动根目录全量测试，以保持 RAM 峰值和磁盘产物受控。
+
+2026-09-25 work item accelerate feature-owned cutover：真实 `道具使用` matcher 对特殊道具 `20014` 的悬赏加速分派改为
+`WorkItemUseApplication -> WorkItemUseSqlRepository`；旧 `WorkItemUseService.accelerate` 不再进入默认入口，`capture`
+随机生成/快照路径仍保留旧 service。repository 对工作类型、开始时间、任务名称及背包数量做快照校验，在 game DB 同一
+事务扣除一个道具、同步减少 `bind_num`、将 `user_cd.create_time` 置为立即可结算并写入原兼容 ledger 格式；重复操作可回放
+旧 service 写入结果，冲突/快照过期不改资产，写 ledger 失败或库存 CAS 未更新会回滚工作与背包状态。新增 `work.003`
+game DB 启动 migration，请求路径无 DDL；增加 migration game-only 路由检查、真实注册 matcher 回归及进度契约。
+Work/application/旧 service/source/progress/inventory 聚焦 `256 passed`；compileall、architecture、inventory、progress、
+`git diff --check` 均通过。隔离 recovery 完成 `159` 项 migration，五库路由计数
+`game/player/trade/impart/message = 127/28/7/1/1`；backup/restore dry-run/restore、五库 migration dry-run（pending 均为空）、
+health 六项 readiness 全绿、reconcile `clean=true` 且 operations/outbox/dead_events 均为 `0`。本轮 pytest basetemp、恢复数据、
+receipt 与 compileall 字节码缓存在提交前清理；`.venv`、`.git`、`data/`、运行数据库与备份保留。根目录全量测试未运行，避免在
+可用 RAM 约 1.4 GB 且历史 suite 有无关 startup hang 的情况下耗尽资源。
