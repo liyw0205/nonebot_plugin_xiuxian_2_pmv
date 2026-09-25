@@ -5,9 +5,11 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift.transaction_service import RiftSpeedupService
 from tests.test_db_backend import db_backend
 class T(unittest.TestCase):
- def test_rift_facade_defers_speedup_service_construction(self):
+ def test_rift_facade_does_not_construct_speedup_legacy_service(self):
   from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_rift
-  self.assertIsNone(xiuxian_rift._rift_speedup_service_instance)
+  source = Path(xiuxian_rift.__file__).read_text(encoding="utf-8")
+  self.assertNotIn("RiftSpeedupService", source)
+  self.assertNotIn("_rift_speedup_service", source)
 
  def setUp(self):
   self.t=tempfile.TemporaryDirectory();self.d=Path(self.t.name)/'d';

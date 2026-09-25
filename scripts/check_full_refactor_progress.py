@@ -367,6 +367,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "speedup_default_repository_owned": "repository=repository" in rift_application and "if self.repository is None" in rift_application and "RiftSpeedupSqlRepository(self.database).apply" in rift_application,
             "speedup_migrations_registered": "rift.004" in plugin and "apply_rift_speedup_operations" in plugin and "rift_speedup_operations" in rift_migrations,
             "speedup_request_path_has_no_ddl": "CREATE TABLE" not in rift_speedup_repository and "ALTER TABLE" not in rift_speedup_repository and "schema_missing" in rift_speedup_repository,
+            "legacy_speedup_getter_disabled": "RiftSpeedupService" not in rift_facade and "_rift_speedup_service" not in rift_facade,
             "generation_application_owned": all(token in rift_facade for token in ("rift_application.generate(", "rift_application.current_world(", "rift_application.bootstrap_world(")),
             "legacy_generation_disabled": "_rift_entry_service()" not in rift_facade and "RiftEntryService" not in rift_facade,
             "generation_migrations_registered": "rift.005" in plugin and "apply_rift_world_generation" in plugin and "rift_world_state" in rift_migrations and "rift_generation_operations" in rift_migrations,

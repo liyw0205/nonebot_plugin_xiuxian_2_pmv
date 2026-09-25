@@ -21,6 +21,7 @@ NoneBot handler 预滚；资产、探索次数、统计和奖励结算经 `RiftA
 加速默认经 `RiftSpeedupSqlRepository` 原子消耗加速券、缩短秘境与冷却时间，并保留旧 payload replay；
 缺少 `rift.004` 时返回 `schema_missing`，请求不建表。世界生成使用稳定 operation ID、递增 revision 与旧 payload replay；
 缺少 `rift.005` 时拒绝生成，generation/current-world/bootstrap 请求路径均不建表。
+真实 facade 不再导入或惰性构造 `RiftSpeedupService`；旧 service 仅保留在显式 compatibility repository。
 秘境终止经 `RiftApplication -> RiftTerminationSqlRepository` 原子结束 active entry、释放 cooldown 并记录旧格式 replay payload；
 缺少 `rift.006` 时返回 `schema_missing`，终止和 replay 请求路径不建表。
 秘境钥匙事件经 `RiftApplication -> RiftKeyEventSqlRepository` 在 attached game/player UoW 内原子扣除钥匙、结算预滚事件、更新探索次数/统计和奖励；

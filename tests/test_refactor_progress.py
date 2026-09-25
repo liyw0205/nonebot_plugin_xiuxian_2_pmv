@@ -71,6 +71,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(rift["speedup_default_repository_owned"])
         self.assertTrue(rift["speedup_migrations_registered"])
         self.assertTrue(rift["speedup_request_path_has_no_ddl"])
+        self.assertTrue(rift["legacy_speedup_getter_disabled"])
         self.assertTrue(rift["generation_application_owned"])
         self.assertTrue(rift["legacy_generation_disabled"])
         self.assertTrue(rift["generation_migrations_registered"])

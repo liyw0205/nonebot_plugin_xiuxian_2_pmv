@@ -141,10 +141,15 @@ inventory、diff check 与五库 recovery 均通过，recovery `172` 项、路�
 architecture、inventory、diff check 与五库 recovery 均通过；无新增 migration，recovery 仍 `172` 项、路由 `137/31/7/1/1`、reconcile clean。专用产物已清理；
 下一步审计 Rift 残留 speedup legacy getter/只读投影边界。
 
+`rift speedup legacy-construction cleanup`：真实 facade 移除未调用的 `RiftSpeedupService` import、instance 和 lazy getter；handler 继续经
+`RiftApplication.speedup -> RiftSpeedupSqlRepository`，显式 compatibility repository 保留。speedup/Rift/source/progress 聚焦 `118 passed`，
+compileall、architecture、inventory、diff check 与五库 recovery 通过；无新增 migration，recovery `172` 项、路由 `137/31/7/1/1`、reconcile clean。
+专用产物已清理；下一步审计 Rift 显式 compatibility repository 与故事/资产只读边界。
+
 ## 当前切片与下一切片选择
 
-最近完成 `rift cooldown read projection`：entry 写入、active 读取和 cooldown 读取分别统一接到
-`RiftApplication -> RiftEntrySqlRepository` / `RiftEntrySqlRepository.read_entry` / `RiftCooldownSqlRepository`，旧 entry service 与 SQL manager 只保留显式兼容对照；剩余 speedup legacy getter/只读投影边界仍是
+最近完成 `rift speedup legacy-construction cleanup`：entry 写入、active 读取、cooldown 读取和 speedup handler 分别统一接到
+`RiftApplication -> RiftEntrySqlRepository` / `RiftEntrySqlRepository.read_entry` / `RiftCooldownSqlRepository` / `RiftSpeedupSqlRepository`，旧 entry service、SQL manager 与 speedup getter 已从真实 facade 移除；剩余显式 compatibility repository 与故事/资产只读边界仍是
 分开的路径。下一步在本轮缓存清理与磁盘复核后，回到
 `docs/full_refactor_progress.md` 的 6.2 目标 5，只读审计一个剩余真实 Rift handler 的 composition、请求期 schema 写入与 transaction owner，
 再选择单动作切片；不要将 facade 调用或静态路由当成底层 cutover。更广范围仍需按 6.2 逐个审计特殊道具、宠物、任务/修炼、洞府、地图、宗门、

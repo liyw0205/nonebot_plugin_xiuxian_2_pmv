@@ -4342,3 +4342,11 @@ cooldown/application/source 与 Rift 全聚焦回归 `117 passed`（含 progress
 diff check 通过。隔离五库 recovery 完成 `172` 项迁移，路由 `game/player/trade/impart/message = 137/31/7/1/1`，无新增 migration；
 backup/restore dry-run/restore、readiness、migration dry-run 和 reconcile clean（operations/outbox/dead events 均为 `0`）。本轮测试/recovery/receipt/字节码缓存已清理，
 保留 `.venv`、`.git`、`data/`、运行数据库/备份和用户原有 Boss JSON 改动。下一步审计 Rift 中残留的 speedup legacy getter/只读投影边界，不将 Rift 整体宣告完成。
+
+2026-09-26 rift speedup legacy-construction cleanup：真实 `xiuxian_rift` facade 已移除未调用的
+`RiftSpeedupService` import、module-level instance 和 lazy getter；加速 handler 继续经
+`RiftApplication.speedup -> RiftSpeedupSqlRepository`，通用 `features/rift/repository.py` 的显式 compatibility adapter 保留不变。
+speedup/source/progress 与 Rift 全聚焦回归 `118 passed`；compileall、architecture、inventory、diff check 通过。无新增 migration，
+隔离五库 recovery 完成 `172` 项迁移，路由 `game/player/trade/impart/message = 137/31/7/1/1`，backup/restore dry-run/restore、readiness、
+migration dry-run 和 reconcile clean（operations/outbox/dead events 均为 `0`）。本轮测试/recovery/receipt/字节码缓存已清理，保留 `.venv`、`.git`、
+`data/`、运行数据库/备份和用户原有 Boss JSON 改动。Rift 剩余兼容边界转为显式 repository/旧 JSON 与故事/资产逻辑，不将 Rift 整体宣告完成。

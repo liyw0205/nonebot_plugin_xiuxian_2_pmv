@@ -31,7 +31,6 @@ from ..xiuxian_utils.utils import (
 )
 from .riftconfig import get_rift_config
 from .jsondata import save_rift_data, read_rift_data
-from .transaction_service import RiftSpeedupService
 from ...features.rift.application import RiftApplication
 
 from ..xiuxian_config import XiuConfig, convert_rank
@@ -45,7 +44,6 @@ from .riftmake import (
     get_dxsj_info, get_boss_battle_info, get_treasure_info
 )
 
-_rift_speedup_service_instance = None
 runtime_clock = SystemClock()
 rift_application = RiftApplication(
     get_paths().game_db,
@@ -57,13 +55,6 @@ group_rift = {}  # dict
 config = get_rift_config() # 获取秘境配置
 runtime_ids = UUIDGenerator()
 groups = config['open']  # list
-
-
-def _rift_speedup_service():
-    global _rift_speedup_service_instance
-    if _rift_speedup_service_instance is None:
-        _rift_speedup_service_instance = RiftSpeedupService(get_paths().game_db)
-    return _rift_speedup_service_instance
 
 
 def _event_id(event) -> str:
