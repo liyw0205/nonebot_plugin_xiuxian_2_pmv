@@ -109,6 +109,37 @@ def test_rift_boss_skill_provider_degrades_for_missing_or_invalid_json(tmp_path)
         assert riftmake.get_rift_battle_boss_skill_data() == {}
 
 
+def test_boss_buff_generation_uses_injected_random_source():
+    class FixedRandom:
+        def __init__(self):
+            self.calls = []
+
+        def choice(self, values):
+            self.calls.append("choice")
+            return values[0]
+
+        def randint(self, start, end):
+            self.calls.append("randint")
+            return start
+
+        def uniform(self, start, end):
+            self.calls.append("uniform")
+            return start
+
+    class NoGlobalRandom:
+        def __getattr__(self, name):
+            raise AssertionError(f"global random used: {name}")
+
+    source = FixedRandom()
+    with patch.object(player_fight, "random", NoGlobalRandom()):
+        result = player_fight.generate_boss_buff(
+            {"jj": "练气境"}, random_source=source
+        )
+
+    assert result
+    assert source.calls
+
+
 def test_rift_natal_provider_reads_awakened_row_without_schema_mutation(tmp_path):
     database = tmp_path / "player.db"
     with sqlite3.connect(database) as connection:

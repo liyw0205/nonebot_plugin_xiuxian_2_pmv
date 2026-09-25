@@ -98,6 +98,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(rift["cooldown_read_request_path_has_no_ddl"])
         self.assertTrue(rift["legacy_cooldown_read_disabled"])
         self.assertTrue(rift["boss_battle_engine_provider_wired"])
+        self.assertTrue(rift["boss_battle_buff_random_source_wired"])
         self.assertTrue(rift["boss_battle_skill_provider_read_only"])
         back = slices["back"]
         self.assertTrue(back["cultivation_item_application_owned"])

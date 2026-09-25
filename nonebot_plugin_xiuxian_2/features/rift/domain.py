@@ -200,6 +200,7 @@ class RiftBossBattleResolver:
             runner_kwargs["boss_attribute_provider"] = self.boss_attribute_provider
         if self.boss_buff_provider is not None:
             runner_kwargs["boss_buff_provider"] = self.boss_buff_provider
+            runner_kwargs["boss_buff_random_source"] = random_source
         if self.boss_skill_provider is not None:
             runner_kwargs["boss_skill_provider"] = self.boss_skill_provider
         if self.boss_status_updater is not None:

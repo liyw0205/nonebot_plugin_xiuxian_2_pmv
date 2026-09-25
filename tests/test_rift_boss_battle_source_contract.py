@@ -49,10 +49,12 @@ def test_rift_boss_engine_dependencies_are_explicitly_injected():
     ).read_text(encoding="utf-8")
     assert "boss_attribute_provider=None" in battle
     assert "boss_buff_provider=None" in battle
+    assert "boss_buff_random_source=None" in battle
     assert "boss_skill_provider=None" in battle
     assert "boss_status_updater=None" in battle
     assert 'runner_kwargs["boss_attribute_provider"] = self.boss_attribute_provider' in resolver
     assert 'runner_kwargs["boss_buff_provider"] = self.boss_buff_provider' in resolver
+    assert 'runner_kwargs["boss_buff_random_source"] = random_source' in resolver
     assert 'runner_kwargs["boss_skill_provider"] = self.boss_skill_provider' in resolver
     assert 'runner_kwargs["boss_status_updater"] = self.boss_status_updater' in resolver
     assert "boss_attribute_provider=get_boss_attributes" in facade
@@ -75,6 +77,18 @@ def test_rift_boss_skill_asset_provider_avoids_legacy_global_cache():
     assert "skill_data = skill_data_provider() or {}" in battle
     assert "skill_path.open" in provider
     assert "skill_data_cache" not in provider
+
+
+def test_rift_boss_buff_generation_accepts_an_explicit_random_source():
+    battle = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/player_fight.py"
+    ).read_text(encoding="utf-8")
+    provider = battle[battle.index("def generate_boss_buff"):battle.index("def load_json_file", battle.index("def generate_boss_buff"))]
+    assert "def generate_boss_buff(boss, *, random_source=None)" in provider
+    assert "rng = random_source or random" in provider
+    assert "random.choice" not in provider
+    assert "random.randint" not in provider
+    assert "random.uniform" not in provider
 
 
 def test_rift_boss_player_snapshot_wires_item_lookup_provider():

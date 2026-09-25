@@ -75,15 +75,17 @@ class RiftBossBattleTests(unittest.IsolatedAsyncioTestCase):
         resolver.boss_skill_provider = providers["boss_skill_provider"]
         resolver.boss_status_updater = providers["boss_status_updater"]
 
+        random_source = FixedRandom()
         await resolver.roll(
             {"user_id": "u", "exp": 100, "hp": 100, "mp": 50, "level": "练气境"},
             2,
             "bot",
-            random_source=FixedRandom(),
+            random_source=random_source,
         )
 
         for name, provider in providers.items():
             self.assertIs(provider, calls[0][1][name])
+        self.assertIs(random_source, calls[0][1]["boss_buff_random_source"])
 
     async def test_application_uses_the_feature_resolver(self):
         calls = []

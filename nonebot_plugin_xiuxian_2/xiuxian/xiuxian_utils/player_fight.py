@@ -155,6 +155,7 @@ async def Boss_fight(
     player_data=None,
     boss_attribute_provider=None,
     boss_buff_provider=None,
+    boss_buff_random_source=None,
     boss_skill_provider=None,
     boss_status_updater=None,
 ):
@@ -179,7 +180,14 @@ async def Boss_fight(
     apply_player_buffs(player1, player1_data)
 
     if not is_scarecrow:
-        boss1.start_skills.extend(boss_buff_provider(boss))
+        if boss_buff_provider is generate_boss_buff and boss_buff_random_source is not None:
+            boss_buffs = boss_buff_provider(
+                boss,
+                random_source=boss_buff_random_source,
+            )
+        else:
+            boss_buffs = boss_buff_provider(boss)
+        boss1.start_skills.extend(boss_buffs)
         boss_skill_provider(boss1, [14501, 14502])
 
     battle = BattleSystem([player1], [boss1], bot_id)
@@ -531,7 +539,8 @@ def get_boss_attributes(boss, bot_id):
     return buffs
 
 
-def generate_boss_buff(boss):
+def generate_boss_buff(boss, *, random_source=None):
+    rng = random_source or random
     boss_buff = {
         'boss_zs': 0,
         'boss_hx': 0,
@@ -583,7 +592,7 @@ def generate_boss_buff(boss):
         candidates = [(attr, value_options[idx]) for idx, attr in enumerate(attr_names) if attr not in excluded_attrs]
         if not candidates:
             candidates = list(zip(attr_names, value_options))
-        selected_attr, val = random.choice(candidates)
+        selected_attr, val = rng.choice(candidates)
         final_val = val() if callable(val) else val
         boss_buff[selected_attr] = final_val
         return selected_attr
@@ -593,21 +602,21 @@ def generate_boss_buff(boss):
     if boss_level == "祭道境" or current_rank_val < get_rank_val('祭道境初期'):
         cfg = {'js': 0.05, 'cj': (25, 50), 'g1': [1, 0.7, 2, 1], 'g2': [0.7, 0.7, 1.5, 1]}
     elif get_rank_val('至尊境初期') < current_rank_val < get_rank_val('斩我境圆满'):
-        cfg = {'js': (50, 55), 'cj': (15, 30), 'g1': [0.3, 0.1, 0.5, lambda: random.randint(5, 100) / 100], 'g2': [0.3, 0.3, 0.5, lambda: random.randint(5, 100) / 100]}
+        cfg = {'js': (50, 55), 'cj': (15, 30), 'g1': [0.3, 0.1, 0.5, lambda: rng.randint(5, 100) / 100], 'g2': [0.3, 0.3, 0.5, lambda: rng.randint(5, 100) / 100]}
     elif get_rank_val('微光境初期') < current_rank_val < get_rank_val('遁一境圆满'):
-        cfg = {'js': (40, 45), 'cj': (20, 40), 'g1': [0.4, 0.2, 0.7, lambda: random.randint(10, 100) / 100], 'g2': [0.4, 0.4, 0.7, lambda: random.randint(10, 100) / 100]}
+        cfg = {'js': (40, 45), 'cj': (20, 40), 'g1': [0.4, 0.2, 0.7, lambda: rng.randint(10, 100) / 100], 'g2': [0.4, 0.4, 0.7, lambda: rng.randint(10, 100) / 100]}
     elif get_rank_val('星芒境初期') < current_rank_val < get_rank_val('至尊境圆满'):
-        cfg = {'js': (30, 35), 'cj': (20, 40), 'g1': [0.6, 0.35, 1.1, lambda: random.randint(30, 100) / 100], 'g2': [0.5, 0.5, 0.9, lambda: random.randint(30, 100) / 100]}
+        cfg = {'js': (30, 35), 'cj': (20, 40), 'g1': [0.6, 0.35, 1.1, lambda: rng.randint(30, 100) / 100], 'g2': [0.5, 0.5, 0.9, lambda: rng.randint(30, 100) / 100]}
     elif get_rank_val('月华境初期') < current_rank_val < get_rank_val('微光境圆满'):
-        cfg = {'js': (20, 25), 'cj': (20, 40), 'g1': [0.7, 0.45, 1.3, lambda: random.randint(40, 100) / 100], 'g2': [0.55, 0.6, 1.0, lambda: random.randint(40, 100) / 100]}
+        cfg = {'js': (20, 25), 'cj': (20, 40), 'g1': [0.7, 0.45, 1.3, lambda: rng.randint(40, 100) / 100], 'g2': [0.55, 0.6, 1.0, lambda: rng.randint(40, 100) / 100]}
     elif get_rank_val('耀日境初期') < current_rank_val < get_rank_val('星芒境圆满'):
-        cfg = {'js': (10, 15), 'cj': (25, 45), 'g1': [0.85, 0.5, 1.5, lambda: random.randint(50, 100) / 100], 'g2': [0.6, 0.65, 1.1, lambda: random.randint(50, 100) / 100]}
+        cfg = {'js': (10, 15), 'cj': (25, 45), 'g1': [0.85, 0.5, 1.5, lambda: rng.randint(50, 100) / 100], 'g2': [0.6, 0.65, 1.1, lambda: rng.randint(50, 100) / 100]}
     elif get_rank_val('祭道境初期') < current_rank_val < get_rank_val('月华境圆满'):
-        cfg = {'js': 0.1, 'cj': (25, 45), 'g1': [0.9, 0.6, 1.7, lambda: random.randint(60, 100) / 100], 'g2': [0.62, 0.67, 1.2, lambda: random.randint(60, 100) / 100]}
+        cfg = {'js': 0.1, 'cj': (25, 45), 'g1': [0.9, 0.6, 1.7, lambda: rng.randint(60, 100) / 100], 'g2': [0.62, 0.67, 1.2, lambda: rng.randint(60, 100) / 100]}
 
     if cfg:
-        boss_buff['boss_js'] = random.randint(*cfg['js']) / 100 if isinstance(cfg['js'], tuple) else cfg['js']
-        boss_buff['boss_cj'] = random.randint(*cfg['cj']) / 100
+        boss_buff['boss_js'] = rng.randint(*cfg['js']) / 100 if isinstance(cfg['js'], tuple) else cfg['js']
+        boss_buff['boss_cj'] = rng.randint(*cfg['cj']) / 100
         g1_selected = apply_random_group(['boss_zs', 'boss_hx', 'boss_bs', 'boss_xx'], cfg['g1'])
         g2_exclusions = {
             'boss_zs': {'boss_jg'},
@@ -619,18 +628,18 @@ def generate_boss_buff(boss):
         boss_buff['boss_js'] = 1.0
         boss_buff['boss_cj'] = 0
 
-    boss_buff['boss_sb'] = int((1 - boss_buff['boss_js']) * 100 * random.uniform(0.1, 0.5))
+    boss_buff['boss_sb'] = int((1 - boss_buff['boss_js']) * 100 * rng.uniform(0.1, 0.5))
     boss_buff['boss_js'] = 1 - boss_buff['boss_js']
 
     extra_candidates = [
-        ("boss_jl", random.randint(1, 5)),
-        ("boss_hd", random.uniform(0.15, 0.35)),
-        ("boss_zs_boss", random.uniform(0.15, 0.25)),
-        ("boss_sz", random.uniform(0.01, 0.05)),
-        ("boss_jian_su", random.uniform(0.08, 0.22)),
-        ("boss_jia_su", random.uniform(0.08, 0.22)),
+        ("boss_jl", rng.randint(1, 5)),
+        ("boss_hd", rng.uniform(0.15, 0.35)),
+        ("boss_zs_boss", rng.uniform(0.15, 0.25)),
+        ("boss_sz", rng.uniform(0.01, 0.05)),
+        ("boss_jian_su", rng.uniform(0.08, 0.22)),
+        ("boss_jia_su", rng.uniform(0.08, 0.22)),
     ]
-    chosen_key, chosen_val = random.choice(extra_candidates)
+    chosen_key, chosen_val = rng.choice(extra_candidates)
     boss_buff[chosen_key] = chosen_val
 
     result = []

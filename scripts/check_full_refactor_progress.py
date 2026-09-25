@@ -442,6 +442,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                     'runner_kwargs["boss_status_updater"] = self.boss_status_updater',
                 )
             ),
+            "boss_battle_buff_random_source_wired": 'runner_kwargs["boss_buff_random_source"] = random_source' in rift_domain and "boss_buff_random_source=None" in rift_player_fight and "random_source=boss_buff_random_source" in rift_player_fight and "rng = random_source or random" in rift_player_fight,
             "boss_battle_skill_provider_read_only": "def get_rift_battle_boss_skill_data" in rift_make and "skill_path.open" in rift_make and "skill_data_cache" not in rift_make[rift_make.index("def get_rift_battle_boss_skill_data"):rift_make.index("async def get_boss_battle_info", rift_make.index("def get_rift_battle_boss_skill_data"))],
             "boss_battle_legacy_asset_provider_explicit": "def get_rift_battle_player_assets" in rift_make and "get_players_attributes(" in rift_make and "item_provider=items.get_data_by_item_id" in rift_make,
             "boss_battle_item_provider_wired": "item_provider=items.get_data_by_item_id" in rift_make and "item_data = item_provider(item_id)" in rift_player_fight,
@@ -463,7 +464,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "treasure_resolver_owned": "class RiftTreasureResolver" in rift_domain and "RiftTreasureResolver" in rift_application,
             "treasure_is_persistence_free": "update_exp" not in rift_domain and "update_ls" not in rift_domain and "update_ls" not in rift_application,
             "legacy_treasure_disabled": "get_treasure_info(" not in rift_event_handler,
-            "status": "world_generation_termination_key_event_settlement_entry_speedup_demon_token_damage_event_boss_battle_asset_boundary_engine_provider_boundary_skill_provider_boundary_treasure_cutover_with_natal_impart_buff_info_accessory_tianti_and_base_provider_boundaries_and_remaining_rift_compatibility",
+            "status": "world_generation_termination_key_event_settlement_entry_speedup_demon_token_damage_event_boss_battle_asset_boundary_engine_provider_boundary_skill_provider_boundary_buff_random_source_boundary_treasure_cutover_with_natal_impart_buff_info_accessory_tianti_and_base_provider_boundaries_and_remaining_rift_compatibility",
         },
         "back": {
             "cultivation_item_application_owned": "back_application.cultivation_item(" in back_facade and "_cultivation_item_application().apply(" in back_util_facade,
