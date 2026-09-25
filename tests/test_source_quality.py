@@ -2668,14 +2668,16 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("_partner_protection_service().get_status(", source)
         self.assertNotIn("partner_protection_service.set_status(", source)
 
-    def test_partner_token_uses_transactional_service(self) -> None:
+    def test_partner_token_uses_feature_application(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_buff"
         source = (root / "partner.py").read_text(encoding="utf-8")
         start = source.index("async def use_two_exp_token")
         end = source.index("@bind_partner.handle", start)
         handler = source[start:end]
-        self.assertIn("_partner_token_service().apply(", handler)
-        self.assertNotIn("partner_token_service.apply(", handler)
+        self.assertIn("_partner_token_application().apply(", handler)
+        self.assertIn("_partner_token_application_instance = None", source)
+        self.assertNotIn("PartnerTokenUseService", source)
+        self.assertNotIn("_partner_token_service().apply(", handler)
         self.assertIn("expected_item_count=_sql_message().goods_num", handler)
         self.assertIn("expected_used_count=current_count", handler)
 

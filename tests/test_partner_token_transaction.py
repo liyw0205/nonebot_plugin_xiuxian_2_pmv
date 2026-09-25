@@ -11,10 +11,10 @@ from tests.test_db_backend import db_backend
 
 
 class PartnerTokenUseTests(unittest.TestCase):
-    def test_partner_facade_defers_token_service_construction(self):
+    def test_partner_facade_defers_token_application_construction(self):
         from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff import partner
 
-        self.assertIsNone(partner._partner_token_service_instance)
+        self.assertIsNone(partner._partner_token_application_instance)
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

@@ -34,12 +34,18 @@
 - `.env`、配置文件、数据库、备份和任何运行态目录
 - 无法确认所有权或用途的 `/tmp` 内容
 
-## 当前切片
+## 最近完成切片
 
-`pet skill replacement`：替换技能 handler 默认调用 `PetApplication.skill_replace`，
-`pet.003` 在 player DB 负责 `pet_skill_replace_operations`，repository 使用技能快照 CAS 和 operation replay，
-不在请求时建表；兼容 `PetSkillReplaceService` 只保留显式回滚入口。完成本切片后，需先清理缓存并复核磁盘，再进入背包通用物品批处理边界。
+`buff partner-token`：`道具使用 双修令牌` 默认 handler 调用
+`PartnerTokenUseApplication -> PartnerTokenUseSqlRepository`；`buff.002` 在 game DB 创建 operation 表，
+`buff.003` 在 player DB 创建次数 projection，跨库写入使用 attached UoW，不在请求时建表。旧
+`PartnerTokenUseService` 保留作兼容对照，但不再被默认 handler 调用。聚焦测试 `10 passed`，五库 recovery
+`154` 项、readiness 六项全绿；恢复数据、receipt 和缓存均已清理。
 
 ## 下一切片选择
 
-当前切片清理并复核磁盘后，进入 `docs/full_refactor_progress.md` 的 6.2 目标 5，处理背包通用物品批处理的真实 handler。不得把 facade、静态 manifest 或仅测试通过视为切片完成。
+清理并复核磁盘后，回到 `docs/full_refactor_progress.md` 的 6.2 目标 5，优先评估
+`xiuxian_buff/partner.py` 道侣双修结算 handler 对 `PartnerCultivationService.apply` 的真实默认调用；保留
+随机结果预滚、双方修为/属性、affection、次数与保护状态快照、operation replay 和跨库回滚语义。不得把
+惰性 facade、静态 manifest 或仅测试通过视为切片完成。背包通用 item-use Web、宠物蛋和饰品礼包的真实
+入口已有独立 application 边界，不应重复迁移；NoneBot 特殊道具效果仍需按领域逐个审计。

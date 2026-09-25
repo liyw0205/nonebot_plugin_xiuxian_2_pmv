@@ -4140,3 +4140,14 @@ progress/inventory 和 `git diff --check` 均通过。五库 recovery 完成 `15
 `game/player/trade/impart/message = 123/25/7/1/1`，`back.016` 仅路由到 game DB；backup/restore
 dry-run/restore、reconcile 均通过，`clean=true` 且 operations/outbox/dead_events 均为 `0`。临时
 recovery 数据、receipt、pytest cache、`.pyc` 和 `__pycache__` 在提交前清理。
+
+2026-09-25 buff partner-token feature-owned cutover：`道具使用 双修令牌` 默认 handler 已从
+`PartnerTokenUseService` 切换到 `PartnerTokenUseApplication -> PartnerTokenUseSqlRepository`；保留令牌
+数量截断、道侣次数 CAS、库存绑定数扣除、operation replay/conflict 和 game/player 附加事务回滚。新增
+`buff.002` game DB `partner_token_operations` 与 `buff.003` player DB `partner_two_exp_usage` 启动迁移，
+请求路径不再建表；旧 service 保留为兼容对照，没有真实默认 handler 引用。application/兼容/source/progress
+聚焦 `10 passed`，compileall、architecture、inventory、progress、`git diff --check` 通过。五库 recovery
+完成 `154` 项迁移，路由 `game/player/trade/impart/message = 124/26/7/1/1`，`.002` 仅 game、`.003`
+仅 player；backup/restore dry-run/restore、reconcile clean（operations/outbox/dead_events 均为 `0`）及
+隔离启动 health readiness 六项全绿。recovery 数据、receipt 与测试/字节码缓存已清理；剩余道侣双修结算
+仍直接调用 `PartnerCultivationService`，作为下一条独立边界评估，不与本切片合并。

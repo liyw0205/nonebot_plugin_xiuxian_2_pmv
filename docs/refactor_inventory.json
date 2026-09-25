@@ -2720,6 +2720,7 @@
     "cultivation_item_operations",
     "cultivation_reset_operations",
     "curl_cffi",
+    "daily",
     "daily_fortune_claims",
     "dao_record",
     "dataclasses",

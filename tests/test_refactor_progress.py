@@ -234,6 +234,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(slices["buff"]["training_lifecycle_application_owned"])
         self.assertTrue(slices["buff"]["closing_settlement_application_owned"])
         self.assertTrue(slices["buff"]["pvp_application_owned"])
+        self.assertTrue(slices["buff"]["partner_token_application_owned"])
+        self.assertTrue(slices["buff"]["legacy_partner_token_disabled"])
         self.assertTrue(slices["back"]["equipment_unequip_application_owned"])
         self.assertTrue(slices["back"]["equipment_equip_application_owned"])
         self.assertTrue(slices["back"]["pet_egg_application_owned"])

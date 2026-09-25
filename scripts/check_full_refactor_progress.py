@@ -65,6 +65,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     map_facade = (PACKAGE / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
     sect_facade = (PACKAGE / "xiuxian" / "xiuxian_sect" / "__init__.py").read_text(encoding="utf-8")
     entertainment_facade = (PACKAGE / "xiuxian" / "xiuxian_entertainment" / "mod" / "newapi_store.py").read_text(encoding="utf-8")
+    partner_facade = (PACKAGE / "xiuxian" / "xiuxian_buff" / "partner.py").read_text(encoding="utf-8")
     natal_facade = (PACKAGE / "xiuxian" / "xiuxian_natal_treasure" / "__init__.py").read_text(encoding="utf-8")
     world_events_facade = (PACKAGE / "xiuxian" / "xiuxian_world_events" / "__init__.py").read_text(encoding="utf-8")
     rift_facade = (PACKAGE / "xiuxian" / "xiuxian_rift" / "__init__.py").read_text(encoding="utf-8")
@@ -534,8 +535,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "training_lifecycle_application_owned": "buff_application.training_start(" in buff_facade and "buff_application.training_complete(" in buff_facade,
             "closing_settlement_application_owned": "buff_application.closing_settle(" in buff_facade,
             "pvp_application_owned": "buff_application.pvp_settle(" in buff_facade,
+            "partner_token_application_owned": (
+                "_partner_token_application().apply(" in partner_facade
+                and "PartnerTokenUseApplication" in partner_facade
+            ),
+            "legacy_partner_token_disabled": "_partner_token_service().apply(" not in partner_facade,
             "legacy_blessed_upgrade_disabled": "_blessed_spot_service().upgrade_field(" not in buff_facade,
-            "status": "blessed_spot_open_rename_upgrade_stone_training_lifecycle_closing_settlement_pvp_cutover_with_other_buff_compatibility",
+            "status": "blessed_spot_open_rename_upgrade_stone_training_lifecycle_closing_settlement_pvp_partner_token_cutover_with_other_buff_compatibility",
         },
         "impart": {
             "love_sand_application_owned": "impart_application.love_sand(" in impart_facade,

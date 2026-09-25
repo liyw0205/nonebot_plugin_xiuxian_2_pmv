@@ -40,7 +40,7 @@ from .features.sect.migrations import apply_sect, apply_sect_rename, apply_sect_
 from .features.natal_treasure.manifest import FEATURE as NATAL_TREASURE_FEATURE
 from .features.natal_treasure.migrations import apply_natal_treasure
 from .features.buff.manifest import FEATURE as BUFF_FEATURE
-from .features.buff.migrations import apply_buff
+from .features.buff.migrations import apply_buff, apply_partner_token_operations, apply_partner_token_usage
 from .features.base.manifest import FEATURE as BASE_FEATURE
 from .features.base.migrations import apply_base
 from .features.back.manifest import FEATURE as BACK_FEATURE
@@ -184,6 +184,8 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("boss.002", "boss_purchase_operations", apply_boss_purchase),
         Migration("boss.003", "world_boss_battle_operations", apply_boss_settlement),
         Migration("buff.001", "buff_feature_migrations", apply_buff),
+        Migration("buff.002", "partner_token_operations", apply_partner_token_operations),
+        Migration("buff.003", "partner_two_exp_usage", apply_partner_token_usage),
         Migration("combat_settlement.001", "combat_settlement_feature_migrations", apply_combat_settlement),
         Migration("combat_settlement.002", "map_combat_settlement_operations", apply_combat_settlement_operations),
         Migration("combat_settlement.003", "map_dao_battle_operations", apply_dao_battle_operations),
@@ -308,6 +310,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "auction.006",
         "auction.008",
         "pet.003",
+        "buff.003",
     }
 )
 _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
@@ -337,6 +340,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "tianti_training.005",
         "tianti_training.008",
         "pet.003",
+        "buff.003",
     }
 )
 _TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "auction.004"})

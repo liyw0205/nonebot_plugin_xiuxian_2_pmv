@@ -39,7 +39,7 @@ from .transaction_service import PartnerBreakthroughService
 from .transaction_service import PartnerCultivationService
 from .transaction_service import PartnerInviteService
 from .transaction_service import PartnerProtectionService
-from .transaction_service import PartnerTokenUseService
+from ...features.buff.partner_token_application import PartnerTokenUseApplication
 from .transaction_service import PartnerBindService
 from .transaction_service import PartnerUnbindService
 from .partner_storage import (
@@ -74,7 +74,7 @@ _sql_message_instance = None
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 _player_data_manager_instance = None
 _partner_cultivation_service_instance = None
-_partner_token_service_instance = None
+_partner_token_application_instance = None
 _partner_bind_service_instance = None
 _partner_unbind_service_instance = None
 _partner_breakthrough_service_instance = None
@@ -148,13 +148,13 @@ MENTOR_TITLE_IDS = {
 }
 
 
-def _partner_token_service():
-    global _partner_token_service_instance
-    if _partner_token_service_instance is None:
-        _partner_token_service_instance = PartnerTokenUseService(
+def _partner_token_application():
+    global _partner_token_application_instance
+    if _partner_token_application_instance is None:
+        _partner_token_application_instance = PartnerTokenUseApplication(
             get_paths().game_db, get_paths().player_db
         )
-    return _partner_token_service_instance
+    return _partner_token_application_instance
 
 
 def _partner_invite_service():
@@ -1129,7 +1129,7 @@ async def use_two_exp_token(bot, event, item_id, num):
     
     current_count = two_exp_cd.find_user(user_id)
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    result = _partner_token_service().apply(
+    result = _partner_token_application().apply(
         f"partner-token:{user_id}:{event_id or runtime_ids.new_id()}", user_id, item_id,
         requested_count=num, expected_item_count=_sql_message().goods_num(user_id, item_id),
         expected_used_count=current_count,
