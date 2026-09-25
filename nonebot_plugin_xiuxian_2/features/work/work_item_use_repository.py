@@ -21,7 +21,7 @@ class WorkItemUseResult:
 
 
 class WorkItemUseSqlRepository:
-    """Atomically consume an acceleration order and finish the active work timer."""
+    """Atomically apply work-item effects and preserve their operation result."""
 
     def __init__(self, database: str | Path) -> None:
         self.database = str(database)
@@ -35,17 +35,62 @@ class WorkItemUseSqlRepository:
         expected_work: Mapping[str, object],
         accelerated_at: str,
     ) -> WorkItemUseResult:
+        return self._apply(
+            operation_id,
+            user_id,
+            item_id,
+            expected_item_count,
+            "accelerate",
+            dict(expected_work),
+            {"accelerated_at": str(accelerated_at)},
+        )
+
+    def capture(
+        self,
+        operation_id: str,
+        user_id: str,
+        item_id: int,
+        expected_item_count: int,
+        expected_work_type: int,
+        new_offer: Mapping[str, object],
+        reward_multiplier: int | None = None,
+    ) -> WorkItemUseResult:
+        result: dict[str, object] = {"offer": dict(new_offer)}
+        if reward_multiplier is not None:
+            result["reward_multiplier"] = int(reward_multiplier)
+        return self._apply(
+            operation_id,
+            user_id,
+            item_id,
+            expected_item_count,
+            "capture",
+            {"type": int(expected_work_type)},
+            result,
+        )
+
+    def _apply(
+        self,
+        operation_id: str,
+        user_id: str,
+        item_id: int,
+        expected_item_count: int,
+        action: str,
+        expected: Mapping[str, object],
+        result: Mapping[str, object],
+    ) -> WorkItemUseResult:
         operation_id = str(operation_id).strip()
         user_id = str(user_id)
         item_id = int(item_id)
         expected_item_count = int(expected_item_count)
-        expected = dict(expected_work)
-        result = {"accelerated_at": str(accelerated_at)}
+        expected = dict(expected)
+        result = dict(result)
+        if action not in {"accelerate", "capture"}:
+            raise ValueError("unsupported work item action")
         if not operation_id or expected_item_count <= 0:
             raise ValueError("valid operation and item snapshot are required")
 
         payload = json.dumps(
-            [user_id, item_id, expected_item_count, "accelerate", expected, result],
+            [user_id, item_id, expected_item_count, action, expected, result],
             ensure_ascii=True,
             sort_keys=True,
             separators=(",", ":"),
@@ -60,7 +105,7 @@ class WorkItemUseSqlRepository:
                 (operation_id,),
             )
             if previous is not None:
-                if str(previous["payload"]) != payload:
+                if not self._payload_matches(previous["payload"], payload, action):
                     return WorkItemUseResult("operation_conflict")
                 return WorkItemUseResult(
                     "duplicate",
@@ -86,31 +131,45 @@ class WorkItemUseSqlRepository:
             if int(item["goods_num"]) != expected_item_count:
                 return WorkItemUseResult("state_changed")
 
-            actual_work = {
-                "type": int(work["type"]),
-                "create_time": str(work["create_time"]),
-                "scheduled_time": str(work["scheduled_time"]),
-            }
-            normalized_expected = {
-                "type": int(expected.get("type", 0)),
-                "create_time": str(expected.get("create_time")),
-                "scheduled_time": str(expected.get("scheduled_time")),
-            }
-            if actual_work != normalized_expected or actual_work["type"] != 2:
-                return WorkItemUseResult("state_changed")
+            if action == "accelerate":
+                actual_work = {
+                    "type": int(work["type"]),
+                    "create_time": str(work["create_time"]),
+                    "scheduled_time": str(work["scheduled_time"]),
+                }
+                normalized_expected = {
+                    "type": int(expected.get("type", 0)),
+                    "create_time": str(expected.get("create_time")),
+                    "scheduled_time": str(expected.get("scheduled_time")),
+                }
+                if actual_work != normalized_expected or actual_work["type"] != 2:
+                    return WorkItemUseResult("state_changed")
 
-            updated_work = uow.execute(
-                "UPDATE user_cd SET create_time=? WHERE user_id=? AND type=2 "
-                "AND create_time=? AND scheduled_time=?",
-                (
-                    result["accelerated_at"],
-                    user_id,
-                    work["create_time"],
-                    work["scheduled_time"],
-                ),
-            )
-            if updated_work.rowcount != 1:
-                return WorkItemUseResult("state_changed")
+                updated_work = uow.execute(
+                    "UPDATE user_cd SET create_time=? WHERE user_id=? AND type=2 "
+                    "AND create_time=? AND scheduled_time=?",
+                    (
+                        result["accelerated_at"],
+                        user_id,
+                        work["create_time"],
+                        work["scheduled_time"],
+                    ),
+                )
+                if updated_work.rowcount != 1:
+                    return WorkItemUseResult("state_changed")
+            else:
+                if int(work["type"]) != int(expected["type"]) or int(work["type"]) != 0:
+                    return WorkItemUseResult("state_changed")
+                offer = dict(result["offer"])
+                uow.execute(
+                    "INSERT INTO work_offer_snapshots(user_id,snapshot,updated_at) VALUES(?,?,?) "
+                    "ON CONFLICT(user_id) DO UPDATE SET snapshot=excluded.snapshot,updated_at=excluded.updated_at",
+                    (
+                        user_id,
+                        json.dumps(offer, ensure_ascii=True, sort_keys=True),
+                        str(offer.get("refresh_time", "")),
+                    ),
+                )
 
             remaining = expected_item_count - 1
             bind_remaining = min(max(0, int(item["bind_num"] or 0) - 1), remaining)
@@ -127,9 +186,20 @@ class WorkItemUseSqlRepository:
                 "INSERT INTO work_item_use_operations "
                 "(operation_id,payload,action,item_remaining,result_snapshot) "
                 "VALUES(?,?,?,?,?)",
-                (operation_id, payload, "accelerate", remaining, result_json),
+                (operation_id, payload, action, remaining, result_json),
             )
-            return WorkItemUseResult("applied", "accelerate", remaining, result)
+            return WorkItemUseResult("applied", action, remaining, result)
+
+    @staticmethod
+    def _payload_matches(stored: object, expected: str, action: str) -> bool:
+        if action != "capture":
+            return str(stored) == expected
+        try:
+            previous = json.loads(str(stored))
+            current = json.loads(expected)
+        except (TypeError, ValueError):
+            return False
+        return isinstance(previous, list) and isinstance(current, list) and previous[:5] == current[:5]
 
 
 __all__ = ["WorkItemUseResult", "WorkItemUseSqlRepository"]

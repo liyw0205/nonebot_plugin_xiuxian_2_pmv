@@ -30,4 +30,17 @@ def apply_work_item_use(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_work", "apply_work_daily_refresh_reset", "apply_work_item_use"]
+def apply_work_offer_snapshots(uow: DatabaseUnitOfWork) -> None:
+    """Ensure the legacy-compatible offer projection without replacing rows."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS work_offer_snapshots("
+        "user_id TEXT PRIMARY KEY,snapshot TEXT NOT NULL,updated_at TEXT NOT NULL)"
+    )
+
+
+__all__ = [
+    "apply_work",
+    "apply_work_daily_refresh_reset",
+    "apply_work_item_use",
+    "apply_work_offer_snapshots",
+]

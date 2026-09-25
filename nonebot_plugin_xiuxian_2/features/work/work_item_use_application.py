@@ -7,7 +7,7 @@ from .work_item_use_repository import WorkItemUseResult, WorkItemUseSqlRepositor
 
 
 class WorkItemUseApplication:
-    """Application boundary for accelerating an accepted work order."""
+    """Application boundary for acceleration and capture work items."""
 
     def __init__(
         self,
@@ -33,6 +33,26 @@ class WorkItemUseApplication:
             expected_item_count,
             expected_work,
             accelerated_at,
+        )
+
+    def capture(
+        self,
+        operation_id: str,
+        user_id: str,
+        item_id: int,
+        expected_item_count: int,
+        expected_work_type: int,
+        new_offer: Mapping[str, object],
+        reward_multiplier: int | None = None,
+    ) -> WorkItemUseResult:
+        return self.repository.capture(
+            operation_id,
+            user_id,
+            item_id,
+            expected_item_count,
+            expected_work_type,
+            new_offer,
+            reward_multiplier,
         )
 
 

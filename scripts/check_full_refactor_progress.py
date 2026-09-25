@@ -268,9 +268,14 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_daily_refresh_disabled": "_work_daily_refresh_reset_service" not in work_facade,
             "item_accelerate_application_owned": "work_item_use_application.accelerate(" in work_accelerate_handler,
             "legacy_item_accelerate_disabled": "_work_item_use_service().accelerate(" not in work_accelerate_handler,
-            "item_use_migration_registered": 'Migration("work.003", "work_item_use_operations", apply_work_item_use)' in plugin,
-            "capture_compatibility_retained": "_work_item_use_service().capture(" in work_capture_handler,
-            "status": "daily_refresh_and_accelerate_cutover_with_capture_compatibility",
+            "capture_application_owned": "work_item_use_application.capture(" in work_capture_handler,
+            "legacy_item_capture_disabled": "_work_item_use_service().capture(" not in work_capture_handler,
+            "capture_json_projection_only": "savef(user_id, work_data, sync_snapshot=False)" in work_capture_handler,
+            "item_use_migrations_registered": (
+                'Migration("work.003", "work_item_use_operations", apply_work_item_use)' in plugin
+                and 'Migration("work.004", "work_offer_snapshots", apply_work_offer_snapshots)' in plugin
+            ),
+            "status": "daily_refresh_accelerate_and_capture_cutover_with_other_work_compatibility",
         },
         "activity_reward": {
             "claim_all_application_owned": "activity_claim_all_application.run(" in activity_service,

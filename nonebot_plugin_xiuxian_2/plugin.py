@@ -96,7 +96,12 @@ from .features.sect_fairyland.migrations import apply_sect_fairyland
 from .features.world_events.manifest import FEATURE as WORLD_EVENTS_FEATURE
 from .features.world_events.migrations import apply_world_events
 from .features.work.manifest import FEATURE as WORK_FEATURE
-from .features.work.migrations import apply_work, apply_work_daily_refresh_reset, apply_work_item_use
+from .features.work.migrations import (
+    apply_work,
+    apply_work_daily_refresh_reset,
+    apply_work_item_use,
+    apply_work_offer_snapshots,
+)
 from .features.mixelixir.manifest import FEATURE as MIXELIXIR_FEATURE
 from .features.mixelixir.migrations import (
     apply_mixelixir,
@@ -290,6 +295,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("work.001", "work_feature_migrations", apply_work),
         Migration("work.002", "work_daily_refresh_reset_operations", apply_work_daily_refresh_reset),
         Migration("work.003", "work_item_use_operations", apply_work_item_use),
+        Migration("work.004", "work_offer_snapshots", apply_work_offer_snapshots),
         Migration("world_events.001", "world_events_feature_migrations", apply_world_events),
     )
 

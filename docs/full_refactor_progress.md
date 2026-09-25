@@ -4196,3 +4196,16 @@ Work/application/旧 service/source/progress/inventory 聚焦 `256 passed`；com
 health 六项 readiness 全绿、reconcile `clean=true` 且 operations/outbox/dead_events 均为 `0`。本轮 pytest basetemp、恢复数据、
 receipt 与 compileall 字节码缓存在提交前清理；`.venv`、`.git`、`data/`、运行数据库与备份保留。根目录全量测试未运行，避免在
 可用 RAM 约 1.4 GB 且历史 suite 有无关 startup hang 的情况下耗尽资源。
+
+2026-09-25 work item capture feature-owned cutover：真实注册的 `道具使用` matcher 对追捕令 `20015` 的随机 offer
+生成仍由旧领域逻辑预滚，但扣除与持久化现统一经 `WorkItemUseApplication -> WorkItemUseSqlRepository`；
+`work.004` 在 game DB 启动时以 `CREATE TABLE IF NOT EXISTS` 建立兼容 offer snapshot 表并保留已有行。
+repository 在一个事务中校验工作状态和库存、扣除一个追捕令、持久化 offer、首次奖励倍率与 operation 结果；同 operation 的随机重抽
+返回首次 offer 和倍率，冲突/状态变化不改资产，写 ledger 失败则快照和库存一并回滚。handler 成功后只更新旧 JSON 展示投影，
+不再由旧 service 写 snapshot；`WorkItemUseService.capture` 留作显式兼容对照。application/旧 service/真实注册 matcher/
+progress/source-quality 聚焦 `235 passed`；compileall、architecture、inventory、progress 与 `git diff --check` 通过。
+隔离五库 recovery 完成 `160` 项 migration，路由为 `game/player/trade/impart/message = 128/28/7/1/1`，
+`work.004` 仅路由到 game DB；backup/restore dry-run/restore、五库 migration dry-run（pending 均为空）、health 六项 readiness
+全绿、reconcile `clean=true` 且 operations/outbox/dead_events 均为 `0`。本轮 pytest basetemp、recovery 数据、receipt 与
+compileall 字节码缓存清理后复核磁盘；`.venv`、`.git`、`data/`、运行数据库和备份保留。根目录全量测试未运行，避免无关
+旧测试 hang 和 RAM 峰值风险。下一步仅在清理复核后，按 6.2 目标 5 对剩余真实入口做单项审计并选择下一片。

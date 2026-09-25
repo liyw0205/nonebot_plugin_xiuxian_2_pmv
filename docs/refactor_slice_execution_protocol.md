@@ -66,6 +66,15 @@ focused/source/progress/architecture/inventory 回归 `255 passed, 4 subtests`�
 `PartnerTokenUseService` 保留作兼容对照，但不再被默认 handler 调用。聚焦测试 `10 passed`，五库 recovery
 `154` 项、readiness 六项全绿；恢复数据、receipt 和缓存均已清理。
 
+`work item capture`：真实注册 `道具使用` matcher 的 `20015` 追捕令扣除和 offer 持久化改经
+`WorkItemUseApplication -> WorkItemUseSqlRepository`；随机 offer 与首次奖励倍率写入 game DB 并与背包扣减、幂等结果同事务提交，
+同 operation 重放返回首个 offer 和倍率。新增 `work.004`，以 `CREATE TABLE IF NOT EXISTS` 建立兼容 snapshot 表并保留已有行；
+成功后旧 JSON 只作展示投影，旧 service 留作兼容对照。聚焦 application/旧 service/真实注册 matcher/source/progress 测试
+`235 passed`；compileall、architecture、inventory、progress 和 diff check 通过。隔离五库 recovery 完成 `160` 项 migration，
+路由 `128/28/7/1/1`，`work.004` 仅 game DB；backup/restore dry-run/restore、五库 migration dry-run（pending 为空）、
+health 六项全绿和 reconcile clean 均通过，operations/outbox/dead events 为 `0`。本轮临时测试、recovery、receipt 和字节码缓存
+清理并复核后，下一步只做 6.2 目标 5 的单项真实入口审计。
+
 ## 下一切片选择
 
-清理并复核磁盘后，回到 `docs/full_refactor_progress.md` 的 6.2 目标 5，继续审计真实入口调用图。悬赏令加速已切换；优先把追捕令 `20015` 的随机 offer 快照动作作为单独候选评估，再核实其他 NoneBot 特殊道具、宠物、任务/修炼、洞府、地图、宗门、竞技场/副本、世界事件和 Boss handler。不可按目录整体迁移或把惰性 facade、静态 manifest、仅测试通过视为完成。已切换的 partner cultivation、partner token、背包通用 item-use Web、宠物蛋、饰品礼包和炼丹两阶段领取不重复迁移。
+清理并复核磁盘后，回到 `docs/full_refactor_progress.md` 的 6.2 目标 5，对尚未 feature-owned 的真实 NoneBot 特殊道具效果逐项审计 handler、service 和状态写入，再决定是否切片。追捕令 `20015` 已切换，但随机 offer 仍由旧领域逻辑生成；不能把本次 application 边界扩大解释成 work 领域整体完成。随后再核实宠物、任务/修炼、洞府、地图、宗门、竞技场/副本、世界事件和 Boss handler。不可按目录整体迁移或把惰性 facade、静态 manifest、仅测试通过视为完成。已切换的 partner cultivation、partner token、背包通用 item-use Web、宠物蛋、饰品礼包和炼丹两阶段领取不重复迁移。

@@ -37,7 +37,6 @@ from ...features.work.application import WorkClaimApplication, WorkSettlementApp
 from ...features.work.work_item_use_application import WorkItemUseApplication
 from ...features.work.maintenance_application import WorkDailyRefreshResetApplication
 
-from .transaction_service import WorkItemUseService
 from .transaction_service import WorkRefreshSettlementService
 from .transaction_service import WorkAbortCleanupService
 
@@ -49,7 +48,6 @@ work_settlement_application = WorkSettlementApplication(
     get_paths().game_db,
 )
 work_item_use_application = WorkItemUseApplication(get_paths().game_db)
-_work_item_use_service_instance = None
 _work_refresh_service_instance = None
 _work_abort_cleanup_service_instance = None
 runtime_clock = SystemClock()
@@ -71,13 +69,6 @@ def _sql_message():
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
 
-
-
-def _work_item_use_service():
-    global _work_item_use_service_instance
-    if _work_item_use_service_instance is None:
-        _work_item_use_service_instance = WorkItemUseService(get_paths().game_db)
-    return _work_item_use_service_instance
 
 
 def _work_refresh_service():
@@ -976,13 +967,14 @@ async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMes
     operation_id = f"work-item-capture:{user_id}:{event_message_id or runtime_ids.new_id()}"
     item_count = _sql_message().goods_num(user_id, item_id)
     user_cd = _sql_message().get_user_cd(user_id)
-    result = _work_item_use_service().capture(
+    result = work_item_use_application.capture(
         operation_id,
         user_id,
         item_id,
         item_count,
         int(user_cd["type"] or 0),
         work_data,
+        reward_multiplier,
     )
     if result.status == "item_missing":
         await handle_send(bot, event, result_card("悬赏令", kind="fail", summary="背包中的追捕令数量不足。"), **nav_kwargs("work", md_type="悬赏令", extra=[("背包","我的背包")]))
@@ -991,7 +983,7 @@ async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMes
         await handle_send(bot, event, result_card("悬赏令", kind="warn", summary="悬赏信息已更新，请重新查看悬赏后再操作。"), **nav_kwargs("work", md_type="悬赏令"))
         return
     work_data = dict(result.result_snapshot["offer"])
-    savef(user_id, work_data)
+    savef(user_id, work_data, sync_snapshot=False)
     
     # 更新work_msg显示数据
     updated_work_msg = []
@@ -1008,7 +1000,11 @@ async def use_work_capture_order(bot: Bot, event: GroupMessageEvent | PrivateMes
     
     # 生成显示消息
     msg = generate_work_message(updated_work_msg, _sql_message().get_work_num(user_id))
-    msg2 = f"※使用追捕令效果：所有悬赏修为奖励提升{reward_multiplier}倍！"
+    applied_multiplier = result.result_snapshot.get("reward_multiplier")
+    if applied_multiplier is None:
+        msg2 = "※使用追捕令效果：悬赏信息已更新。"
+    else:
+        msg2 = f"※使用追捕令效果：所有悬赏修为奖励提升{int(applied_multiplier)}倍！"
     
     await handle_send(bot, event, msg2)
     await send_work_message(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3", k4="刷新", v4="悬赏令确认刷新")

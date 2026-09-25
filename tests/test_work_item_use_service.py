@@ -13,10 +13,11 @@ from tests.test_db_backend import db_backend
 
 
 class WorkItemUseServiceTests(unittest.TestCase):
-    def test_work_facade_defers_item_use_service_construction(self):
+    def test_work_facade_no_longer_wires_legacy_item_use_service(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_work
 
-        self.assertIsNone(xiuxian_work._work_item_use_service_instance)
+        self.assertFalse(hasattr(xiuxian_work, "_work_item_use_service"))
+        self.assertTrue(hasattr(xiuxian_work, "work_item_use_application"))
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

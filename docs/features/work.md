@@ -18,12 +18,12 @@
 
 ## 数据模型与迁移
 
-`work.001` 写入功能迁移标记；`work.003` 在 game DB 创建 `work_item_use_operations`。
-悬赏令加速道具经 `WorkItemUseApplication -> WorkItemUseSqlRepository` 原子扣除一个道具并将已接取悬赏的开始时间置为立即可结算，按库存数量和 `user_cd` 工作快照拒绝过期请求。`work.002` 负责每日刷新重置；接取/结算兼容仓储维护 `work_claim_operations`、`work_active_snapshots` 与结算操作表，历史 JSON 仅作为读取投影。追捕令刷新仍由 `WorkItemUseService.capture` 兼容执行。
+`work.001` 写入功能迁移标记；`work.003` 在 game DB 创建 `work_item_use_operations`，`work.004` 用 `CREATE TABLE IF NOT EXISTS` 建立兼容现有数据的 `work_offer_snapshots`。
+悬赏令加速道具与追捕令都经 `WorkItemUseApplication -> WorkItemUseSqlRepository`；加速原子扣除一个道具并将已接取悬赏的开始时间置为立即可结算，追捕令原子扣除道具并保存随机 offer 与首次奖励倍率。两种动作都按库存快照校验，捕获令重放返回首次保存的 offer 和倍率。`work.002` 负责每日刷新重置；接取/结算兼容仓储维护 `work_claim_operations`、`work_active_snapshots` 与结算操作表，历史 JSON 仅作为兼容读取/展示投影。
 
 ## 事务与失败回滚
 
-接取、结算 application 在 `game_db.operation_ledger` 记录请求；加速 repository 以一个 `BEGIN IMMEDIATE` 事务校验用户、道具库存、绑定数量和悬赏快照，并一并更新 `user_cd.create_time`、背包与 operation 结果。重放返回固定快照，操作号冲突和状态变化不修改资产，异常完整回滚。加速请求路径不建表；`capture` 的随机悬赏生成和 offer 快照仍使用旧 service，尚未迁移。
+接取、结算 application 在 `game_db.operation_ledger` 记录请求；物品 repository 以一个 `BEGIN IMMEDIATE` 事务校验用户、道具库存和工作状态，再原子更新背包、`user_cd.create_time` 或 offer 快照及 operation 结果。追捕令随机结果与倍率只在首次请求持久化，随机重抽不破坏同 operation 重放；随后仅更新旧 JSON 展示投影。操作号冲突和状态变化不修改资产，异常完整回滚。两个物品动作请求路径均不建表；work.004 保留已存在的快照行。
 
 ## 定时任务
 
@@ -42,6 +42,7 @@
 - `python -m unittest nonebot_plugin_xiuxian_2.features.work.tests.test_work_application -q`
 - `python -m unittest tests.test_work_claim_service tests.test_work_settlement_service tests.test_source_quality -q`
 - `python -m pytest -p no:cacheprovider tests/test_work_item_use_application.py tests/test_work_item_use_service.py`
+- 已注册的 `道具使用 追捕令` matcher 应扣除一个追捕令并保留首次生成的 offer。
 - 重复提交相同操作号不应重复改变悬赏状态。
 
 ## 灰度开关、回滚和已知限制
