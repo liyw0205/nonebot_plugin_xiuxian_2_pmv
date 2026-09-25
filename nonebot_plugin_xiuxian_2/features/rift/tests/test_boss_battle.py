@@ -12,11 +12,17 @@ class FixedRandom:
 
 
 class RiftBossBattleTests(unittest.IsolatedAsyncioTestCase):
-    def _resolver(self, calls):
+    def _resolver(self, calls, *, with_assets=False):
         async def battle_runner(*args, **kwargs):
             calls.append((args, kwargs))
             return ["battle"], "群友赢了", args[1], [{"player": {"user_id": "u", "hp": 80, "mp": 35}}]
 
+        resolver_kwargs = {}
+        if with_assets:
+            resolver_kwargs["player_asset_provider"] = lambda user_id: {
+                "属性": {"user_id": user_id},
+                "其他": {},
+            }
         return RiftBossBattleResolver(
             boss_config={
                 "Boss数据": {"name": ["墨蛟"], "hp": [1.0], "mp": 2, "atk": [0.1]},
@@ -29,6 +35,7 @@ class RiftBossBattleTests(unittest.IsolatedAsyncioTestCase):
             max_exp_factor=1.0,
             exp_reward=lambda *_args, **_kwargs: 50,
             format_number=str,
+            **resolver_kwargs,
         )
 
     async def test_roll_returns_reward_and_combat_delta_without_persistence(self):
@@ -43,6 +50,16 @@ class RiftBossBattleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual({"hp": -20, "mp": -15, "exp": 50, "stone": 400}, event.outcome["delta"])
         self.assertEqual("击败墨蛟获得了修为：50点，灵石：400枚！", event.message)
         self.assertEqual(0, calls[0][1]["type_in"])
+
+    async def test_asset_provider_is_passed_as_a_snapshot_to_the_runner(self):
+        calls = []
+        await self._resolver(calls, with_assets=True).roll(
+            {"user_id": "u", "exp": 100, "hp": 100, "mp": 50, "level": "练气境"},
+            2,
+            "bot",
+            random_source=FixedRandom(),
+        )
+        self.assertEqual("u", calls[0][1]["player_data"]["属性"]["user_id"])
 
     async def test_application_uses_the_feature_resolver(self):
         calls = []

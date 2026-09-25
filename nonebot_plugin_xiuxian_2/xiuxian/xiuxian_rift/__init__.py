@@ -49,8 +49,8 @@ from . import jsondata
 from .riftmake import (
     STORY, Rift, get_rift_type, get_story_type, NONEMSG, get_battle_type,
     TREASUREMSG, TREASUREMSG_1, TREASUREMSG_2, TREASUREMSG_3, TREASUREMSG_4,
-    TREASUREMSG_5, get_armor, get_main_info, get_sec_info, get_sub_info,
-    get_weapon, items,
+    TREASUREMSG_5, get_armor, get_main_info, get_rift_battle_player_assets,
+    get_sec_info, get_sub_info, get_weapon, items,
 )
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 
@@ -66,6 +66,7 @@ rift_application = RiftApplication(
     boss_battle_resolver=RiftBossBattleResolver(
         boss_config=STORY['战斗']['Boss战斗'],
         battle_runner=Boss_fight,
+        player_asset_provider=get_rift_battle_player_assets,
         rank_score=lambda level: convert_rank(level)[0],
         level_power=lambda level: jsondata.level_data()[level]["power"],
         max_exp_factor=XiuConfig().closing_exp_upper_limit * 0.1,

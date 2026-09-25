@@ -93,6 +93,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
     rift_jsondata = (PACKAGE / "xiuxian" / "xiuxian_rift" / "jsondata.py").read_text(encoding="utf-8")
     rift_application = (PACKAGE / "features" / "rift" / "application.py").read_text(encoding="utf-8")
     rift_domain = (PACKAGE / "features" / "rift" / "domain.py").read_text(encoding="utf-8")
+    rift_make = (PACKAGE / "xiuxian" / "xiuxian_rift" / "riftmake.py").read_text(encoding="utf-8")
+    rift_player_fight = (PACKAGE / "xiuxian" / "xiuxian_utils" / "player_fight.py").read_text(encoding="utf-8")
     rift_cooldown_repository = (PACKAGE / "features" / "rift" / "cooldown_repository.py").read_text(encoding="utf-8")
     rift_generation_repository = (PACKAGE / "features" / "rift" / "generation_repository.py").read_text(encoding="utf-8")
     rift_key_event_repository = (PACKAGE / "features" / "rift" / "key_event_repository.py").read_text(encoding="utf-8")
@@ -413,11 +415,14 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "boss_battle_resolver_owned": "class RiftBossBattleResolver" in rift_domain and "RiftBossBattleResolver" in rift_application,
             "boss_battle_is_persistence_free": "update_exp" not in rift_domain and "update_ls" not in rift_domain and "battle_mode=0" in rift_application,
             "legacy_boss_battle_disabled": all("get_boss_battle_info(" not in handler for handler in (rift_event_handler, rift_boss_handler)),
+            "boss_battle_asset_provider_wired": "player_asset_provider=get_rift_battle_player_assets" in rift_facade and "player_asset_provider=get_rift_battle_player_assets" in rift_make,
+            "boss_battle_asset_snapshot_boundary": "class RiftBossBattleAssetProvider" in rift_domain and "runner_kwargs[\"player_data\"] = player_data" in rift_domain and "player1_data = player_data if" in rift_player_fight,
+            "boss_battle_legacy_asset_provider_explicit": "def get_rift_battle_player_assets" in rift_make and "get_players_attributes(user_id)" in rift_make,
             "treasure_application_owned": "rift_application.roll_treasure(" in rift_event_handler,
             "treasure_resolver_owned": "class RiftTreasureResolver" in rift_domain and "RiftTreasureResolver" in rift_application,
             "treasure_is_persistence_free": "update_exp" not in rift_domain and "update_ls" not in rift_domain and "update_ls" not in rift_application,
             "legacy_treasure_disabled": "get_treasure_info(" not in rift_event_handler,
-            "status": "world_generation_termination_key_event_settlement_entry_speedup_demon_token_damage_event_boss_battle_treasure_cutover_with_remaining_rift_compatibility",
+            "status": "world_generation_termination_key_event_settlement_entry_speedup_demon_token_damage_event_boss_battle_asset_boundary_treasure_cutover_with_remaining_rift_compatibility",
         },
         "back": {
             "cultivation_item_application_owned": "back_application.cultivation_item(" in back_facade and "_cultivation_item_application().apply(" in back_util_facade,

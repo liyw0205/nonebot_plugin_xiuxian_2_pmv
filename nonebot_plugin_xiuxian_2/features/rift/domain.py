@@ -127,6 +127,10 @@ class RiftBossBattleEvent:
     victory: bool
 
 
+class RiftBossBattleAssetProvider(Protocol):
+    def __call__(self, user_id: Any) -> Mapping[str, Any]: ...
+
+
 class RiftBossBattleResolver:
     """Run a Rift Boss battle and return only its settlement outcome."""
 
@@ -140,6 +144,7 @@ class RiftBossBattleResolver:
         max_exp_factor: float,
         exp_reward: Callable[..., int],
         format_number: Callable[[Any], str],
+        player_asset_provider: RiftBossBattleAssetProvider | None = None,
     ) -> None:
         self.boss_config = boss_config
         self.battle_runner = battle_runner
@@ -148,6 +153,7 @@ class RiftBossBattleResolver:
         self.max_exp_factor = float(max_exp_factor)
         self.exp_reward = exp_reward
         self.format_number = format_number
+        self.player_asset_provider = player_asset_provider
 
     async def roll(
         self,
@@ -172,12 +178,18 @@ class RiftBossBattleResolver:
             "jj": "遁一境",
             "stone": 1,
         }
+        runner_kwargs: dict[str, Any] = {
+            "type_in": int(battle_mode),
+            "bot_id": bot_id,
+            "return_status": True,
+        }
+        if self.player_asset_provider is not None:
+            player_data = self.player_asset_provider(user_info["user_id"])
+            if not isinstance(player_data, Mapping):
+                raise ValueError("rift Boss player asset provider returned invalid data")
+            runner_kwargs["player_data"] = player_data
         result, victor, _, status_list = await self.battle_runner(
-            user_info["user_id"],
-            boss_info,
-            type_in=int(battle_mode),
-            bot_id=bot_id,
-            return_status=True,
+            user_info["user_id"], boss_info, **runner_kwargs
         )
         final_hp, final_mp = int(user_info["hp"]), int(user_info["mp"])
         for status in status_list:
@@ -355,6 +367,7 @@ class RiftTreasureResolver:
 
 
 __all__ = [
+    "RiftBossBattleAssetProvider",
     "RiftBossBattleEvent",
     "RiftBossBattleResolver",
     "RiftDamageEvent",
