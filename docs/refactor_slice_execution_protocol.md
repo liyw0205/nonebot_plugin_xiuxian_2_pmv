@@ -126,11 +126,17 @@ Clock，在 attached game/player UoW 内校验时间窗口、资源/快照/探�
 diff check 与五库 recovery；recovery 共 `171` 项 migration，路由 `136/31/7/1/1`，`rift.008` 仅 game，reconcile clean。专用测试/recovery/receipt/
 字节码缓存已清理，约 `24 GB` 磁盘可用、`1.3 GB` RAM 可用；下一步审计剩余 Rift entry/兼容只读边界。
 
+`rift entry`：真实普通进入和秘藏令进入改走 `RiftApplication -> RiftEntrySqlRepository`；game DB 单事务校验 world generation/revision、参与者、
+体力、秘藏令和 cooldown，更新 entry/world participants/revision/count 并写入旧 replay payload。新增 game-only `rift.009`，启动时预建/补齐 entry
+schema，请求路径不建表/补列；重复、world 冲突、资源不足和晚期 SQL 失败均保持幂等/回滚。聚焦回归 `109 passed`，完成 compileall、architecture、
+progress、inventory、diff check 与五库 recovery；recovery 共 `172` 项 migration，路由 `137/31/7/1/1`，`rift.009` 仅 game，reconcile clean。专用
+测试/recovery/receipt/字节码缓存已清理，约 `24 GB` 磁盘可用、`1.3 GB` RAM 可用；下一步审计 Rift 剩余兼容只读边界。
+
 ## 当前切片与下一切片选择
 
-最近完成 `rift ordinary settlement feature-owned cutover`：普通秘境结算 replay 与事件结算统一接到
-`RiftApplication -> RiftSettlementSqlRepository`，新增 game-only `rift.008` 并移除真实 handler 对旧 settlement service 的依赖；玩家 entry 读取和
-剩余兼容只读边界仍是分开的路径。下一步在本轮缓存清理与磁盘复核后，回到
+最近完成 `rift entry feature-owned cutover`：秘境普通/秘藏令进入统一接到
+`RiftApplication -> RiftEntrySqlRepository`，新增 game-only `rift.009` 并移除真实 handler 对旧 entry service 的依赖；剩余兼容只读边界仍是
+分开的路径。下一步在本轮缓存清理与磁盘复核后，回到
 `docs/full_refactor_progress.md` 的 6.2 目标 5，只读审计一个剩余真实 Rift handler 的 composition、请求期 schema 写入与 transaction owner，
 再选择单动作切片；不要将 facade 调用或静态路由当成底层 cutover。更广范围仍需按 6.2 逐个审计特殊道具、宠物、任务/修炼、洞府、地图、宗门、
 副本、世界事件和 Boss handler；追捕令 `20015` 的随机 offer 仍由旧领域逻辑生成，不能把既有扣除/快照边界解释成 work 领域整体完成。

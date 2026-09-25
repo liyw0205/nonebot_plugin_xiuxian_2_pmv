@@ -87,6 +87,9 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(rift["legacy_settlement_disabled"])
         self.assertTrue(rift["settlement_migrations_registered"])
         self.assertTrue(rift["settlement_request_path_has_no_ddl"])
+        self.assertTrue(rift["entry_default_repository_owned"])
+        self.assertTrue(rift["entry_migrations_registered"])
+        self.assertTrue(rift["entry_request_path_has_no_ddl"])
         back = slices["back"]
         self.assertTrue(back["cultivation_item_application_owned"])
         self.assertTrue(back["legacy_cultivation_item_disabled"])

@@ -96,6 +96,48 @@ def apply_rift_settlement_operations(uow: DatabaseUnitOfWork) -> None:
         )
 
 
+def apply_rift_entry_schema(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS rift_entries("
+        "user_id TEXT PRIMARY KEY,rift_key TEXT NOT NULL DEFAULT '',"
+        "rift_data TEXT NOT NULL DEFAULT '{}',status TEXT NOT NULL DEFAULT 'active',"
+        "duration INTEGER NOT NULL DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        "generation_id TEXT NOT NULL DEFAULT '')"
+    )
+    entry_columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(rift_entries)")}
+    entry_additions = {
+        "rift_key": "TEXT NOT NULL DEFAULT ''",
+        "rift_data": "TEXT NOT NULL DEFAULT '{}'",
+        "status": "TEXT NOT NULL DEFAULT 'active'",
+        "duration": "INTEGER NOT NULL DEFAULT 0",
+        "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+        "generation_id": "TEXT NOT NULL DEFAULT ''",
+    }
+    for column, definition in entry_additions.items():
+        if column not in entry_columns:
+            uow.execute(f"ALTER TABLE rift_entries ADD COLUMN {column} {definition}")
+
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS rift_entry_counts("
+        "user_id TEXT PRIMARY KEY,entry_count INTEGER NOT NULL DEFAULT 0)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS rift_entry_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,entry_count INTEGER NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,generation_id TEXT NOT NULL DEFAULT '',"
+        "rift_data TEXT NOT NULL DEFAULT '{}',global_revision INTEGER NOT NULL DEFAULT 0)"
+    )
+    operation_columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(rift_entry_operations)")}
+    operation_additions = {
+        "generation_id": "TEXT NOT NULL DEFAULT ''",
+        "rift_data": "TEXT NOT NULL DEFAULT '{}'",
+        "global_revision": "INTEGER NOT NULL DEFAULT 0",
+    }
+    for column, definition in operation_additions.items():
+        if column not in operation_columns:
+            uow.execute(f"ALTER TABLE rift_entry_operations ADD COLUMN {column} {definition}")
+
+
 __all__ = [
     "apply_rift",
     "apply_rift_demon_token_operations",
@@ -105,4 +147,5 @@ __all__ = [
     "apply_rift_termination_operations",
     "apply_rift_key_event_operations",
     "apply_rift_settlement_operations",
+    "apply_rift_entry_schema",
 ]

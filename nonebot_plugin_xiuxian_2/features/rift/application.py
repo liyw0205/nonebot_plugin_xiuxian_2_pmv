@@ -5,6 +5,7 @@ from typing import Any
 
 from .._legacy_application import LegacyApplication
 from .demon_token_repository import RiftDemonTokenBattleSqlRepository
+from .entry_repository import RiftEntrySqlRepository
 from .generation_repository import RiftGenerationSqlRepository
 from .key_event_repository import RiftKeyEventSqlRepository
 from .repository import LegacyRiftRepository, RiftRepository
@@ -23,6 +24,7 @@ class RiftApplication(LegacyApplication):
         demon_token_repository: Any | None = None,
         key_event_repository: Any | None = None,
         settlement_repository: Any | None = None,
+        entry_repository: Any | None = None,
         clock: Any | None = None,
     ) -> None:
         self.game_database = str(game_database)
@@ -42,6 +44,7 @@ class RiftApplication(LegacyApplication):
         self.settlement_repository = settlement_repository or RiftSettlementSqlRepository(
             game_database, player_database, clock=clock
         )
+        self.entry_repository = entry_repository or RiftEntrySqlRepository(game_database)
 
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):
         repository = self.repository or self.legacy_repository
@@ -93,7 +96,28 @@ class RiftApplication(LegacyApplication):
             rift_key, legacy_snapshot
         )
 
-    def enter(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("enter", operation_id=operation_id, user_id=user_id, **kwargs)
+    def enter(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        if self.repository is not None:
+            return self._action("enter", operation_id=operation_id, user_id=user_id, **kwargs)
+        ticket_id = kwargs.get("ticket_id", kwargs.get("item_id", 0))
+        return self._execute(
+            operation_id=operation_id,
+            user_id=user_id,
+            action="rift.enter",
+            payload={"user_id": user_id, **kwargs, "ticket_id": ticket_id},
+            call=lambda: self.entry_repository.enter(
+                operation_id,
+                user_id,
+                kwargs["rift_key"],
+                kwargs["rift_data"],
+                kwargs["duration"],
+                ticket_id,
+                expected_generation_id=kwargs["expected_generation_id"],
+                expected_revision=kwargs["expected_revision"],
+                stamina_cost=kwargs.get("stamina_cost", 0),
+                expected_stamina=kwargs.get("expected_stamina"),
+            ),
+        )
     def terminate(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self.repository is not None:
             return self._action("terminate", operation_id=operation_id, user_id=user_id, **kwargs)

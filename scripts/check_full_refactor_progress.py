@@ -84,6 +84,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     rift_generation_repository = (PACKAGE / "features" / "rift" / "generation_repository.py").read_text(encoding="utf-8")
     rift_key_event_repository = (PACKAGE / "features" / "rift" / "key_event_repository.py").read_text(encoding="utf-8")
     rift_settlement_repository = (PACKAGE / "features" / "rift" / "settlement_repository.py").read_text(encoding="utf-8")
+    rift_entry_repository = (PACKAGE / "features" / "rift" / "entry_repository.py").read_text(encoding="utf-8")
     rift_termination_repository = (PACKAGE / "features" / "rift" / "termination_repository.py").read_text(encoding="utf-8")
     rift_speedup_repository = (PACKAGE / "features" / "rift" / "speedup_repository.py").read_text(encoding="utf-8")
     rift_migrations = (PACKAGE / "features" / "rift" / "migrations.py").read_text(encoding="utf-8")
@@ -380,6 +381,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_settlement_disabled": "_rift_settlement_service()" not in rift_facade and "RiftSettlementService" not in rift_facade,
             "settlement_migrations_registered": "rift.008" in plugin and "apply_rift_settlement_operations" in plugin and "rift_settlement_operations" in rift_migrations,
             "settlement_request_path_has_no_ddl": "CREATE TABLE" not in rift_settlement_repository and "ALTER TABLE" not in rift_settlement_repository,
+            "entry_default_repository_owned": "RiftEntrySqlRepository" in rift_application and "self.entry_repository.enter" in rift_application,
+            "entry_migrations_registered": "rift.009" in plugin and "apply_rift_entry_schema" in plugin and all(token in rift_migrations for token in ("rift_entries", "rift_entry_counts", "rift_entry_operations")),
+            "entry_request_path_has_no_ddl": "CREATE TABLE" not in rift_entry_repository and "ALTER TABLE" not in rift_entry_repository,
             "legacy_entry_disabled": "_rift_entry_service().enter(" not in rift_facade,
             "status": "world_generation_termination_key_event_settlement_entry_speedup_demon_token_cutover_with_remaining_rift_compatibility",
         },

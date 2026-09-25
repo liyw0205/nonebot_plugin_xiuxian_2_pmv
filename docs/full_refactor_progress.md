@@ -4313,3 +4313,15 @@ architecture、progress、inventory `--check` 与 `git diff --check` 通过。�
 health 六项 readiness 全绿，reconcile `clean=true` 且 operations/outbox/dead_events 均为 `0`。未运行根目录全量回归或真实 live/P7；专用
 pytest/recovery/receipt 与 compileall 缓存已清理，复核约 `24 GB` 磁盘可用、`1.3 GB` RAM 可用，保留 `.venv`、`.git`、`data/`、运行数据库/备份
 和用户原有 Boss JSON 改动。下一步进入 Rift 剩余 entry/只读兼容边界，不将 Rift 整体宣告完成。
+
+2026-09-25 rift entry feature-owned cutover：真实 `探索秘境` 与 `秘藏令` entry handler 的进入事务改经
+`RiftApplication -> RiftEntrySqlRepository`；repository 在 game DB 单事务内校验 generation/revision、参与者、active entry、cooldown、
+秘藏令和体力快照，原子更新 entry、world participants/revision、冷却、entry count 与旧格式 replay payload。新增 game-only `rift.009`，
+启动时预建 entry/count/operation 表并补齐历史 `generation_id`、`rift_data`、`global_revision` 列；请求路径无 DDL，缺迁移返回 `schema_missing`，
+重复、world 冲突、体力/秘藏令不足和晚期 SQL 异常保持幂等或全状态回滚；旧 `RiftEntryService.enter` 不再位于默认 application 执行图。
+entry repository/application、普通/秘藏令进入、revision 合并、历史补列、缺迁移和回滚聚焦回归共 `109 passed`；compileall、architecture、progress、
+inventory `--check` 与 `git diff --check` 通过。隔离五库 recovery 完成 `172` 项 migration，路由
+`game/player/trade/impart/message = 137/31/7/1/1`，`rift.009` 仅 game；五库 backup/restore dry-run/restore、migration dry-run（pending 均为空）、
+health 六项 readiness 全绿，reconcile `clean=true` 且 operations/outbox/dead_events 均为 `0`。未运行根目录全量回归或真实 live/P7；专用
+pytest/recovery/receipt 与 compileall 缓存已清理，复核约 `24 GB` 磁盘可用、`1.3 GB` RAM 可用，保留 `.venv`、`.git`、`data/`、运行数据库/备份
+和用户原有 Boss JSON 改动。下一步审计 Rift 剩余兼容只读路径，不将 Rift 整体宣告完成。
