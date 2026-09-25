@@ -17,8 +17,8 @@ class ImpartRepository(ServicePort):
     def love_sand(self, game_database, player_database, operation_id, user_id, item_id, quantity, gained, expected_item_count, expected_stone_num):
         return LoveSandSqlRepository(game_database, self.database, player_database).apply(operation_id, user_id, item_id, quantity, gained, expected_item_count, expected_stone_num)
 
-    def prayer(self, game_database, operation_id, user_id, item_id, quantity, cards, card_definitions):
-        return ImpartPrayerSqlRepository(game_database, self.database).settle(operation_id, user_id, item_id, quantity, cards, card_definitions)
+    def prayer(self, game_database, player_database, operation_id, user_id, item_id, quantity, cards, card_definitions):
+        return ImpartPrayerSqlRepository(game_database, self.database, player_database).settle(operation_id, user_id, item_id, quantity, cards, card_definitions)
 
     def compose(self, operation_id, user_id, source_card, target_card, expected_source_quantity, expected_target_quantity, cost, card_definitions):
         return ImpartCardComposeSqlRepository(self.database).compose(operation_id, user_id, source_card, target_card, expected_source_quantity, expected_target_quantity, cost, card_definitions)

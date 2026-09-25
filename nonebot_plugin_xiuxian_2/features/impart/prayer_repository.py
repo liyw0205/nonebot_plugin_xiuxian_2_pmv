@@ -8,6 +8,7 @@ from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from .card_bonus import refresh_card_bonuses
+from .migrations import PRAYER_STATISTICS_COLUMNS
 
 
 @dataclass(frozen=True)
@@ -24,9 +25,10 @@ class ImpartPrayerResult:
 
 
 class ImpartPrayerSqlRepository:
-    def __init__(self, game_database: str | Path, impart_database: str | Path) -> None:
+    def __init__(self, game_database: str | Path, impart_database: str | Path, player_database: str | Path) -> None:
         self.game_database = str(game_database)
         self.impart_database = str(impart_database)
+        self.player_database = str(player_database)
 
     @staticmethod
     def _result_from_row(status: str, row: Any) -> ImpartPrayerResult:
@@ -62,16 +64,26 @@ class ImpartPrayerSqlRepository:
             or any(not card or card not in definitions for card in cards)
         ):
             raise ValueError("invalid prayer request")
+        if not all(
+            Path(database).is_file()
+            for database in (self.game_database, self.impart_database, self.player_database)
+        ):
+            return ImpartPrayerResult("schema_missing")
 
         identity = json.dumps([user_id, item_id, quantity], ensure_ascii=True, separators=(",", ":"))
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.impart_database, "impart_data")
-            uow.execute(
-                "CREATE TABLE IF NOT EXISTS impart_prayer_operations("
-                "operation_id TEXT PRIMARY KEY,identity_json TEXT NOT NULL,cards_json TEXT NOT NULL,"
-                "new_cards_json TEXT NOT NULL,card_counts_json TEXT NOT NULL,item_remaining INTEGER NOT NULL,"
-                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-            )
+            uow.attach_database(self.player_database, "player_data")
+            if uow.query_one(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='impart_prayer_operations'"
+            ) is None:
+                return ImpartPrayerResult("schema_missing")
+            player_columns = {
+                str(row[1])
+                for row in uow.execute("PRAGMA player_data.table_info(statistics)").fetchall()
+            }
+            if not {"user_id", *PRAYER_STATISTICS_COLUMNS}.issubset(player_columns):
+                return ImpartPrayerResult("schema_missing")
             previous = uow.query_one(
                 "SELECT identity_json,cards_json,new_cards_json,card_counts_json,item_remaining "
                 "FROM impart_prayer_operations WHERE operation_id=?",
@@ -138,6 +150,19 @@ class ImpartPrayerSqlRepository:
                 for card_name, amount in increments.items()
             )
             refresh_card_bonuses(uow.connection, user_id, definitions)
+
+            deltas = (quantity, len(new_cards), len(cards) - len(new_cards))
+            stat_fields = ",".join(f'"{column}"' for column in PRAYER_STATISTICS_COLUMNS)
+            stat_values = ",".join("?" for _ in deltas)
+            stat_updates = ",".join(
+                f'"{column}"=COALESCE("{column}",0)+excluded."{column}"'
+                for column in PRAYER_STATISTICS_COLUMNS
+            )
+            uow.execute(
+                f"INSERT INTO player_data.statistics(user_id,{stat_fields}) VALUES(?,{stat_values}) "
+                f"ON CONFLICT(user_id) DO UPDATE SET {stat_updates}",
+                (user_id, *deltas),
+            )
 
             uow.execute(
                 "INSERT INTO impart_prayer_operations("

@@ -4221,3 +4221,15 @@ operation payload，已存在的旧记录可原样 replay。新增 game DB `rift
 migrate dry-run 五库 pending 均为空，health 六项 readiness 全绿，reconcile `clean=true` 且 operations/outbox/dead_events 均为 `0`。
 根目录全量回归未运行，以控制 RAM 峰值并避开既有无关 startup hang。指定 pytest basetemp、recovery 数据、receipt 和字节码缓存清理并复核后，
 `.venv`、`.git`、`data/`、运行数据库与备份保留；用户原有 Boss JSON 改动未纳入本片。
+
+2026-09-25 impart prayer feature-owned transaction completion：真实祈愿石 `20005` handler 仍在 adapter 预滚卡片，但结算使用
+`ImpartApplication.prayer_settle -> ImpartPrayerSqlRepository`，并将全局 `ImpartRepository` 正确指向实际 `xiuxian_impart.db`（application ledger 仍在 game DB）；
+同一 attached game/impart/player UoW 原子扣除祈愿石、增加卡片、刷新加成、
+累加 `祈愿石使用`/`传承新卡`/`传承重复卡` 统计并保存 replay 结果；重复请求回放首次卡片批次，不重复累计统计。请求时创建 replay 表的 DDL 已移除，新增
+game DB `impart.002` 和 player DB `impart.003` 启动迁移；提交后只失效 player statistics 缓存并记录日志。真实 handler/source、repository 成功回放与统计、
+统计写入故障跨库回滚、migration 路由、progress、architecture、Impart feature repository/application 与 compose/disassemble 兼容回归聚焦 `39 passed`（1 条既有兼容 service deprecation warning）；inventory export `--check` 和 `git diff --check` 通过。
+隔离五库 recovery 完成 backup、restore dry-run、restore 和全量 `169` 项 migration，路由
+`game/player/trade/impart/message = 130/30/7/1/1`；`impart.002` 仅 game、`impart.003` 仅 player，reconcile `clean=true` 且
+operations/outbox/dead_events 均为 `0`。本片未做真实 live/P7 验证和根目录全量回归；隔离测试数据库由 fixture 自动清理，专属 recovery 数据/receipt
+已删除，pytest 禁用 cache provider 与字节码生成，未清理无关 `/tmp`、`.venv`、`.git`、`data/` 或用户既有运行数据。斩妖令切片单独提交为 `689341f9` 并已推送；
+本祈愿石切片仍未提交，Boss JSON 用户改动仍保持未暂存。

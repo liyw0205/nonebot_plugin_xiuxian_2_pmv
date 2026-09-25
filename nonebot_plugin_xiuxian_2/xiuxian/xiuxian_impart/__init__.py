@@ -28,6 +28,7 @@ from ..xiuxian_utils.utils import (
     send_msg_handler,
     handle_pic_send,
     update_statistics_value,
+    invalidate_player_data_cache,
     send_help_message,
     log_message
 )
@@ -59,7 +60,10 @@ _card_compose_service_instance = None
 _card_disassemble_service_instance = None
 _love_sand_service_instance = None
 _impart_prayer_service_instance = None
-impart_application = ImpartApplication(get_paths().game_db)
+impart_application = ImpartApplication(
+    get_paths().game_db,
+    impart_database=get_paths().impart_db,
+)
 runtime_ids = UUIDGenerator()
 
 
@@ -518,6 +522,7 @@ async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         operation_id=operation_id,
         user_id=user_id,
         game_database=get_paths().game_db,
+        player_database=get_paths().player_db,
         item_id=item_id,
         quantity=quantity,
         cards=drawn_cards,
@@ -549,9 +554,7 @@ async def use_wishing_stone(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         more_duplicates_msg = f"\n(还有{total_duplicates - duplicate_display_limit}张重复卡未显示)"
 
     if result.status == "applied":
-        update_statistics_value(user_id, "祈愿石使用", increment=quantity)
-        update_statistics_value(user_id, "传承新卡", increment=total_new_cards)
-        update_statistics_value(user_id, "传承重复卡", increment=total_duplicates)
+        invalidate_player_data_cache("statistics", ("祈愿石使用", "传承新卡", "传承重复卡"))
         log_message(
             user_id,
             f"[祈愿石] 使用{quantity}颗，获得新卡{total_new_cards}张，重复{total_duplicates}张"

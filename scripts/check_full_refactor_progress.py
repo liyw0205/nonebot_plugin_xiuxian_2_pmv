@@ -206,6 +206,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
     boss_facade = (PACKAGE / "xiuxian" / "xiuxian_boss" / "__init__.py").read_text(encoding="utf-8")
     buff_facade = (PACKAGE / "xiuxian" / "xiuxian_buff" / "__init__.py").read_text(encoding="utf-8")
     impart_facade = (PACKAGE / "xiuxian" / "xiuxian_impart" / "__init__.py").read_text(encoding="utf-8")
+    impart_prayer_repository = (PACKAGE / "features" / "impart" / "prayer_repository.py").read_text(encoding="utf-8")
+    impart_migrations = (PACKAGE / "features" / "impart" / "migrations.py").read_text(encoding="utf-8")
+    impart_prayer_handler = impart_facade[
+        impart_facade.index("async def use_wishing_stone") : impart_facade.index(
+            "async def use_love_sand", impart_facade.index("async def use_wishing_stone")
+        )
+    ]
     mixelixir_facade = (PACKAGE / "xiuxian" / "xiuxian_mixelixir" / "__init__.py").read_text(encoding="utf-8")
     dongfu_facade = (PACKAGE / "xiuxian" / "xiuxian_dongfu" / "__init__.py").read_text(encoding="utf-8")
     dongfu_success_handler = dongfu_facade[
@@ -593,6 +600,20 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "card_compose_application_owned": "impart_application.compose(" in impart_facade,
             "card_disassemble_application_owned": "impart_application.disassemble(" in impart_facade,
             "prayer_application_owned": "impart_application.prayer_settle(" in impart_facade,
+            "prayer_stats_transaction_owned": (
+                "impart_database=get_paths().impart_db" in impart_facade
+                and "player_database=get_paths().player_db" in impart_prayer_handler
+                and 'update_statistics_value(user_id, "祈愿石使用"' not in impart_prayer_handler
+                and 'invalidate_player_data_cache("statistics"' in impart_prayer_handler
+                and all(f'"{field}"' in impart_migrations for field in ("祈愿石使用", "传承新卡", "传承重复卡"))
+            ),
+            "prayer_request_path_has_no_ddl": "CREATE TABLE" not in impart_prayer_repository,
+            "prayer_schema_migrations_owned": (
+                'Migration("impart.002", "impart_prayer_operations"' in plugin
+                and 'Migration("impart.003", "impart_prayer_player_statistics"' in plugin
+                and "def apply_impart_prayer_operations(" in impart_migrations
+                and "def apply_impart_prayer_player_statistics(" in impart_migrations
+            ),
             "status": "love_sand_compose_disassemble_prayer_cutover_with_other_impart_compatibility",
         },
         "mixelixir": {

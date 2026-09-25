@@ -19,6 +19,10 @@ from .features.daily_fortune.manifest import FEATURE as DAILY_FORTUNE_FEATURE
 from .features.daily_fortune.migrations import apply_daily_fortune
 from .features.illusion.manifest import FEATURE as ILLUSION_FEATURE
 from .features.illusion.migrations import apply_illusion
+from .features.impart.migrations import (
+    apply_impart_prayer_operations,
+    apply_impart_prayer_player_statistics,
+)
 from .features.interactive.manifest import FEATURE as INTERACTIVE_FEATURE
 from .features.interactive.migrations import apply_interactive
 from .features.beg.manifest import FEATURE as BEG_FEATURE
@@ -216,6 +220,8 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("dungeon.004", "dungeon_explore_operations", apply_dungeon_explore),
         Migration("dungeon.005", "dungeon_team_operations", apply_dungeon_team),
         Migration("illusion.001", "illusion_feature_migrations", apply_illusion),
+        Migration("impart.002", "impart_prayer_operations", apply_impart_prayer_operations),
+        Migration("impart.003", "impart_prayer_player_statistics", apply_impart_prayer_player_statistics),
         Migration("interactive.001", "interactive_feature_migrations", apply_interactive),
         *(Migration(version, f"{version.replace('.', '_')}_migrations", migration) for version, migration in LEGACY_MIGRATIONS),
         Migration("lottery.001", "lottery_feature_migrations", apply_lottery),
@@ -336,6 +342,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "buff.003",
         "buff.005",
         "mixelixir.003",
+        "impart.003",
         "rift.003",
     }
 )
@@ -369,6 +376,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "buff.003",
         "buff.005",
         "mixelixir.003",
+        "impart.003",
         "rift.003",
     }
 )

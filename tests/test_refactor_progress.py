@@ -207,6 +207,9 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(impart["love_sand_application_owned"])
         self.assertTrue(impart["card_compose_application_owned"])
         self.assertTrue(impart["card_disassemble_application_owned"])
+        self.assertTrue(impart["prayer_stats_transaction_owned"])
+        self.assertTrue(impart["prayer_request_path_has_no_ddl"])
+        self.assertTrue(impart["prayer_schema_migrations_owned"])
         mixelixir = slices["mixelixir"]
         self.assertTrue(mixelixir["harvest_level_application_owned"])
         self.assertTrue(mixelixir["legacy_harvest_level_disabled"])

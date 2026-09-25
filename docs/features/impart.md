@@ -10,10 +10,10 @@ The historical package owns command names during the compatibility release. New 
 No new HTTP route is exposed in this migration slice. Existing URLs remain served by the legacy web adapter.
 
 ## 数据模型与迁移
-Migration `legacy.impart.001` records the slice in `game_db`; the feature-owned repository and explicit service port now own the operation boundary while legacy tables remain the compatibility data source.
+`legacy.impart.001` records the feature boundary in `game_db`. The application ledger stays in `game_db`, while `ImpartRepository` is wired to the actual `xiuxian_impart.db`. `impart.002` creates the prayer replay table in `game_db`, while `impart.003` prepares the three prayer statistics columns in `player_db`. The `20005` use handler keeps random card selection at the adapter boundary; `ImpartPrayerSqlRepository` atomically consumes the item, updates cards and bonuses, increments those statistics, and records replay state across the attached game/impart/player databases. Legacy tables remain the compatibility data source.
 
 ## 事务与失败回滚
-Mutating calls carry an `operation_id` and are recorded in the operation ledger. Disable the feature flag or restore the pre-migration backup to roll back.
+Prayer requests carry an `operation_id`; item consumption, card changes, player statistics, and replay data commit or roll back together. Replays return the first result without incrementing statistics again. The request path does not create or alter schema. Disable the feature flag or restore the pre-migration backup to roll back.
 
 ## 定时任务
 No new scheduled jobs. Legacy jobs stay registered through the compatibility scheduler.

@@ -11,6 +11,7 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart.transaction_service import (
     ImpartPrayerSettlementService,
 )
+from nonebot_plugin_xiuxian_2.plugin import build_migrations, migrations_for_database
 from tests.test_db_backend import db_backend
 
 
@@ -22,10 +23,23 @@ BONUS_COLUMNS = (
 
 
 class ImpartPrayerSettlementTests(unittest.TestCase):
+    def test_prayer_migrations_are_routed_to_game_and_player_databases(self):
+        migrations = build_migrations()
+        routed = {
+            key: {migration.version for migration in migrations_for_database(migrations, key)}
+            for key in ("game_db", "player_db", "trade_db", "impart_db", "message_db")
+        }
+        self.assertIn("impart.002", routed["game_db"])
+        self.assertIn("impart.003", routed["player_db"])
+        self.assertNotIn("impart.002", routed["player_db"])
+        self.assertNotIn("impart.003", routed["game_db"])
+
     def test_impart_facade_defers_prayer_service_construction(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_impart
 
         self.assertIsNone(xiuxian_impart._impart_prayer_service_instance)
+        self.assertEqual(Path(xiuxian_impart.impart_application.repository.database).name, "xiuxian_impart.db")
+        self.assertEqual(Path(xiuxian_impart.impart_application.database).name, "xiuxian.db")
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -143,6 +157,9 @@ class ImpartPrayerSettlementTests(unittest.TestCase):
             "async def use_love_sand", 1
         )[0]
         self.assertIn("impart_application.prayer_settle(", handler)
+        self.assertIn("player_database=get_paths().player_db", handler)
+        self.assertNotIn('update_statistics_value(user_id, "祈愿石使用"', handler)
+        self.assertIn('invalidate_player_data_cache("statistics"', handler)
         self.assertNotIn("result = _impart_prayer_service().settle(", handler)
         self.assertNotIn("data_person_add_batch(", handler)
         self.assertNotIn("update_back_j(", handler)
