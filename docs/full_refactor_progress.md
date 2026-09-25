@@ -4289,3 +4289,15 @@ backup/restore dry-run/restore、migration dry-run（pending 均为空）、heal
 operations/outbox/dead_events 均为 `0`。未运行根目录全量回归或真实 live/P7；专用 pytest/recovery/receipt 与 compileall 缓存已清理，
 保留 `.venv`、`.git`、`data/`、运行数据库/备份和用户原有 Boss JSON 改动。下一步仍按 6.2 目标 5 只读审计一个剩余真实 Rift action，
 不要将 Rift 整体宣告完成。
+
+2026-09-25 rift key-event feature-owned cutover：真实 `秘境钥匙` handler 的 replay 与事件结算改经
+`RiftApplication -> RiftKeyEventSqlRepository`；repository 复用已验证的 key-event 旧 payload，在 attached game/player UoW 内校验
+active entry、用户资源、探索次数和钥匙快照，原子扣除钥匙、提交预滚事件奖励、更新探索次数/统计、结束 entry 并释放 cooldown。
+新增 game-only `rift.007` operation migration；缺少 migration 或 player `rift.003` schema 时返回 `schema_missing`，请求/replay 路径不建表，
+同 operation 可回放，快照/资源/库存冲突和晚期 SQL 异常均保持全状态回滚；旧 `RiftKeyEventSettlementService` 从真实 facade 路径移除。
+key-event repository/application、旧 payload replay、缺迁移、冲突、跨库回滚、migration routing 和 progress/source 回归共 `100 passed`；compileall、
+architecture、progress、inventory `--check` 与 `git diff --check` 通过。隔离五库 recovery 完成 `170` 项 migration，路由
+`game/player/trade/impart/message = 135/31/7/1/1`，`rift.007` 仅 game；五库 backup/restore dry-run/restore、migration dry-run（pending 均为空）、
+health 六项 readiness 全绿，reconcile `clean=true` 且 operations/outbox/dead_events 均为 `0`。未运行根目录全量回归或真实 live/P7；专用
+pytest/recovery/receipt 与 compileall 缓存已清理，复核约 `24 GB` 磁盘可用、`1.2 GB` RAM 可用，保留 `.venv`、`.git`、`data/`、运行数据库/备份
+和用户原有 Boss JSON 改动。下一步仍按 6.2 目标 5 审计 `秘境结算`，不要将 Rift 整体宣告完成。

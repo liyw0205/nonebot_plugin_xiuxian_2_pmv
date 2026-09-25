@@ -16,10 +16,10 @@ class RiftKeyEventSettlementTests(unittest.TestCase):
         source = Path("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_rift/__init__.py").read_text(encoding="utf-8")
         handler = source[source.index("async def use_rift_key"):source.index("async def use_rift_boss")]
         self.assertIn("rift_application.event_settle(", handler)
-    def test_rift_facade_defers_key_event_service_construction(self):
+    def test_rift_facade_removes_legacy_key_event_service(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_rift
 
-        self.assertIsNone(xiuxian_rift._rift_key_event_settlement_service_instance)
+        self.assertFalse(hasattr(xiuxian_rift, "_rift_key_event_settlement_service_instance"))
 
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()

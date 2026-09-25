@@ -2969,6 +2969,7 @@
     "rift_entry_operations",
     "rift_feature_migrations",
     "rift_generation_operations",
+    "rift_key_event_operations",
     "rift_settlement_operations",
     "rift_speedup_operations",
     "rift_termination_operations",

@@ -113,11 +113,18 @@ game DB 单事务内校验 active entry、秘境快照与 cooldown，原子终�
 inventory、diff check 和五库 recovery 全部通过；recovery 共 `169` 项 migration，路由 `134/31/7/1/1`，`rift.006` 仅 game，reconcile clean。
 专用测试/recovery/receipt/字节码缓存已清理，约 `24 GB` 磁盘可用、`1.3 GB` RAM 可用；`.venv`、`.git`、`data/`、运行数据库/备份及 Boss JSON 保留。
 
+`rift key-event`：真实 `秘境钥匙` handler 的 replay/事件结算改走 `RiftApplication -> RiftKeyEventSqlRepository`；attached game/player UoW
+原子校验并扣除钥匙、提交预滚事件和奖励、更新探索次数/统计、结束 entry 与 cooldown，沿用旧 operation payload。新增 game-only `rift.007`，
+缺迁移或 player schema 返回 `schema_missing`，请求/replay 不执行 DDL；重复、快照冲突、库存不足和晚期 SQL 失败均保持幂等/回滚语义。
+聚焦回归 `100 passed`、compileall、architecture、progress、inventory、diff check 和五库 recovery 全部通过；recovery 共 `170` 项 migration，
+路由 `135/31/7/1/1`，`rift.007` 仅 game，reconcile clean。专用测试/recovery/receipt/字节码缓存已清理，约 `24 GB` 磁盘可用、
+`1.2 GB` RAM 可用；`.venv`、`.git`、`data/`、运行数据库/备份及 Boss JSON 保留。下一片为 `秘境结算`。
+
 ## 当前切片与下一切片选择
 
-最近完成 `rift world generation and startup-schema boundary`：手动/定时生成、startup/shutdown 读取及历史 JSON 首次导入统一接到
-`RiftApplication -> RiftGenerationSqlRepository`，新增 game-only `rift.005` 并移除世界路径对旧 entry service 的依赖；玩家 entry 读取和
-termination、key event、普通 settlement 等仍是分开的兼容边界。下一步在本轮缓存清理与磁盘复核后，回到
+最近完成 `rift key-event feature-owned cutover`：秘境钥匙 replay 与事件结算统一接到
+`RiftApplication -> RiftKeyEventSqlRepository`，新增 game-only `rift.007` 并移除真实 handler 对旧 key-event service 的依赖；玩家 entry 读取和
+普通 settlement 等仍是分开的兼容边界。下一步在本轮缓存清理与磁盘复核后，回到
 `docs/full_refactor_progress.md` 的 6.2 目标 5，只读审计一个剩余真实 Rift handler 的 composition、请求期 schema 写入与 transaction owner，
 再选择单动作切片；不要将 facade 调用或静态路由当成底层 cutover。更广范围仍需按 6.2 逐个审计特殊道具、宠物、任务/修炼、洞府、地图、宗门、
 副本、世界事件和 Boss handler；追捕令 `20015` 的随机 offer 仍由旧领域逻辑生成，不能把既有扣除/快照边界解释成 work 领域整体完成。

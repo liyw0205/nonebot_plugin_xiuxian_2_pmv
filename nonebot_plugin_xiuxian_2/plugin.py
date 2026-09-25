@@ -76,7 +76,7 @@ from .features.trade.migrations import (
 from .features.map.manifest import FEATURE as MAP_FEATURE
 from .features.map.migrations import apply_map, apply_map_combat_plan, apply_map_combat_player, apply_map_combat_start, apply_map_dongfu_build, apply_map_dongfu_player, apply_map_explore_player, apply_map_explore_settlement, apply_map_explore_start, apply_map_home_return, apply_map_interactive_player, apply_map_interactive_start, apply_map_mission_claim, apply_map_movement, apply_map_resource_reward, apply_map_seed_purchase
 from .features.rift.manifest import FEATURE as RIFT_FEATURE
-from .features.rift.migrations import apply_rift, apply_rift_demon_token_operations, apply_rift_demon_token_player_schema, apply_rift_speedup_operations, apply_rift_world_generation, apply_rift_termination_operations
+from .features.rift.migrations import apply_rift, apply_rift_demon_token_operations, apply_rift_demon_token_player_schema, apply_rift_speedup_operations, apply_rift_world_generation, apply_rift_termination_operations, apply_rift_key_event_operations
 from .features.accessory_package.manifest import FEATURE as ACCESSORY_PACKAGE_FEATURE
 from .features.accessory_package.migrations import apply_accessory_package
 from .features.arena.manifest import FEATURE as ARENA_FEATURE
@@ -262,6 +262,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("rift.004", "rift_speedup_operations", apply_rift_speedup_operations),
         Migration("rift.005", "rift_world_generation", apply_rift_world_generation),
         Migration("rift.006", "rift_termination_operations", apply_rift_termination_operations),
+        Migration("rift.007", "rift_key_event_operations", apply_rift_key_event_operations),
         Migration("sect.001", "sect_feature_migrations", apply_sect),
         Migration("sect.002", "sect_rename_operations", apply_sect_rename),
         Migration("sect.003", "sect_member_join_operations", apply_sect_join),

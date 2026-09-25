@@ -32,7 +32,6 @@ from ..xiuxian_utils.utils import (
 )
 from .riftconfig import get_rift_config
 from .jsondata import save_rift_data, read_rift_data
-from .transaction_service import RiftKeyEventSettlementService
 from .transaction_service import RiftSpeedupService
 from .transaction_service import RiftSettlementService
 from ...features.rift.application import RiftApplication
@@ -49,7 +48,6 @@ from .riftmake import (
 )
 
 _sql_message_instance = None
-_rift_key_event_settlement_service_instance = None
 _rift_speedup_service_instance = None
 _rift_settlement_service_instance = None
 runtime_clock = SystemClock()
@@ -70,15 +68,6 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
-
-
-def _rift_key_event_settlement_service():
-    global _rift_key_event_settlement_service_instance
-    if _rift_key_event_settlement_service_instance is None:
-        _rift_key_event_settlement_service_instance = RiftKeyEventSettlementService(
-            get_paths().game_db, get_paths().player_db
-        )
-    return _rift_key_event_settlement_service_instance
 
 
 def _rift_speedup_service():
@@ -951,7 +940,7 @@ async def use_rift_key(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     event_id = _event_id(event)
     operation_id = f"rift-key-event:{event_id or runtime_ids.new_id()}:{user_id}"
     if event_id:
-        replay = _rift_key_event_settlement_service().replay(operation_id)
+        replay = rift_application.replay_key_event(operation_id=operation_id)
         if replay is not None:
             await handle_send(bot, event, replay.message)
             return

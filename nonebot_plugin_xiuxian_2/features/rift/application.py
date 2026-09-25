@@ -6,6 +6,7 @@ from typing import Any
 from .._legacy_application import LegacyApplication
 from .demon_token_repository import RiftDemonTokenBattleSqlRepository
 from .generation_repository import RiftGenerationSqlRepository
+from .key_event_repository import RiftKeyEventSqlRepository
 from .repository import LegacyRiftRepository, RiftRepository
 from .speedup_repository import RiftSpeedupSqlRepository
 from .termination_repository import RiftTerminationSqlRepository
@@ -19,6 +20,7 @@ class RiftApplication(LegacyApplication):
         *,
         repository: RiftRepository | None = None,
         demon_token_repository: Any | None = None,
+        key_event_repository: Any | None = None,
         clock: Any | None = None,
     ) -> None:
         self.game_database = str(game_database)
@@ -30,6 +32,9 @@ class RiftApplication(LegacyApplication):
             else LegacyRiftRepository(game_database, player_database)
         )
         self.demon_token_repository = demon_token_repository or RiftDemonTokenBattleSqlRepository(
+            game_database, player_database, clock=clock
+        )
+        self.key_event_repository = key_event_repository or RiftKeyEventSqlRepository(
             game_database, player_database, clock=clock
         )
 
@@ -101,7 +106,22 @@ class RiftApplication(LegacyApplication):
     def replay_termination(self, *, operation_id: str, user_id: str):
         return RiftTerminationSqlRepository(self.database).replay(operation_id, user_id)
 
-    def event_settle(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("event_settle", operation_id=operation_id, user_id=user_id, **kwargs)
+    def event_settle(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        if self.repository is not None:
+            return self._action("event_settle", operation_id=operation_id, user_id=user_id, **kwargs)
+        return self.key_event_repository.settle(
+            operation_id,
+            user_id,
+            kwargs["item_id"],
+            kwargs["expected_rift"],
+            kwargs["expected_user"],
+            kwargs["expected_explore_count"],
+            kwargs["outcome"],
+            kwargs["max_goods_num"],
+        )
+
+    def replay_key_event(self, *, operation_id: str):
+        return self.key_event_repository.replay(operation_id)
     def speedup(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self.repository is None:
             return self._execute(operation_id=operation_id, user_id=user_id, action="rift.speedup", payload={"user_id": user_id, **kwargs}, call=lambda: RiftSpeedupSqlRepository(self.database).apply(operation_id, user_id, kwargs["item_id"], kwargs.get("expected_rift"), kwargs.get("expected_cd"), kwargs["remaining_ratio"]))
