@@ -30,6 +30,8 @@ NoneBot handler 预滚；资产、探索次数、统计和奖励结算经 `RiftA
 秘境进入经 `RiftApplication -> RiftEntrySqlRepository` 校验 generation/revision、参与者、体力和秘藏令快照，在 game DB 单事务内更新 world participants、
 entry、cooldown、entry count 和 replay；缺少 `rift.009` 时返回 `schema_missing`，entry 请求不建表或补列。
 玩家 active entry 只读查询经 `RiftEntrySqlRepository.read_entry` 使用 read-only UoW；表或历史列缺失时不执行 DDL，才回退旧玩家 JSON 投影。
+秘境结算前置 cooldown 读取经 `RiftApplication.read_cooldown -> RiftCooldownSqlRepository` 的 read-only UoW；缺表/缺列只返回空，
+不再构造 `XiuxianDateManage` 或调用 `get_user_cd`。
 ## 定时任务
 世界生成继续由兼容 scheduler 触发。
 ## 配置项

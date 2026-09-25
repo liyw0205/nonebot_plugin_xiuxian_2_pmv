@@ -72,6 +72,15 @@ def test_rift_entry_handlers_use_feature_application():
     assert "_rift_entry_service().enter(" not in handler
 
 
+def test_rift_settlement_reads_cooldown_through_feature_projection():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_rift/__init__.py"
+    ).read_text(encoding="utf-8")
+    assert "rift_application.read_cooldown(" in source
+    assert "get_user_cd(" not in source
+    assert "XiuxianDateManage" not in source
+
+
 class RiftEntryServiceTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

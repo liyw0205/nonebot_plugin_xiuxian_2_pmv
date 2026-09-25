@@ -82,6 +82,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     rift_facade = (PACKAGE / "xiuxian" / "xiuxian_rift" / "__init__.py").read_text(encoding="utf-8")
     rift_jsondata = (PACKAGE / "xiuxian" / "xiuxian_rift" / "jsondata.py").read_text(encoding="utf-8")
     rift_application = (PACKAGE / "features" / "rift" / "application.py").read_text(encoding="utf-8")
+    rift_cooldown_repository = (PACKAGE / "features" / "rift" / "cooldown_repository.py").read_text(encoding="utf-8")
     rift_generation_repository = (PACKAGE / "features" / "rift" / "generation_repository.py").read_text(encoding="utf-8")
     rift_key_event_repository = (PACKAGE / "features" / "rift" / "key_event_repository.py").read_text(encoding="utf-8")
     rift_settlement_repository = (PACKAGE / "features" / "rift" / "settlement_repository.py").read_text(encoding="utf-8")
@@ -389,6 +390,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "entry_read_projection_repository_owned": "RiftEntrySqlRepository" in rift_jsondata and "read_entry" in rift_jsondata,
             "entry_read_projection_has_no_ddl": "CREATE TABLE" not in rift_jsondata and "ALTER TABLE" not in rift_jsondata,
             "legacy_entry_read_disabled": "RiftEntryService" not in rift_jsondata,
+            "cooldown_read_projection_repository_owned": "RiftCooldownSqlRepository" in rift_application and "self.cooldown_repository.read" in rift_application,
+            "cooldown_read_request_path_has_no_ddl": "CREATE TABLE" not in rift_cooldown_repository and "ALTER TABLE" not in rift_cooldown_repository,
+            "legacy_cooldown_read_disabled": "get_user_cd(" not in rift_facade and "XiuxianDateManage" not in rift_facade,
             "status": "world_generation_termination_key_event_settlement_entry_speedup_demon_token_cutover_with_remaining_rift_compatibility",
         },
         "back": {

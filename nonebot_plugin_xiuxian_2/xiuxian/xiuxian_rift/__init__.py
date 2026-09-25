@@ -24,7 +24,6 @@ from ...bootstrap.legacy import register_legacy_shutdown, register_legacy_startu
 from ..xiuxian_utils.lay_out import assign_bot, assign_bot_group, Cooldown
 from nonebot.log import logger
 from ..xiuxian_utils import db_backend
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ..xiuxian_utils.utils import (
     check_user, check_user_type,
     send_msg_handler, get_msg_pic, log_message, handle_send,
@@ -46,7 +45,6 @@ from .riftmake import (
     get_dxsj_info, get_boss_battle_info, get_treasure_info
 )
 
-_sql_message_instance = None
 _rift_speedup_service_instance = None
 runtime_clock = SystemClock()
 rift_application = RiftApplication(
@@ -59,13 +57,6 @@ group_rift = {}  # dict
 config = get_rift_config() # 获取秘境配置
 runtime_ids = UUIDGenerator()
 groups = config['open']  # list
-
-
-def _sql_message():
-    global _sql_message_instance
-    if _sql_message_instance is None:
-        _sql_message_instance = XiuxianDateManage()
-    return _sql_message_instance
 
 
 def _rift_speedup_service():
@@ -776,7 +767,7 @@ async def complete_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             await complete_rift.finish()
 
         try:
-            user_cd_message = _sql_message().get_user_cd(user_id)
+            user_cd_message = rift_application.read_cooldown(user_id)
             exp_time = _rift_elapsed_minutes(user_cd_message['create_time'])
             time2 = int(rift_info["time"])
         except Exception as exc:

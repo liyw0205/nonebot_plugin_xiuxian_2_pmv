@@ -4334,3 +4334,11 @@ progress/source contract 聚焦回归 `113 passed`（含 progress contract 后�
 完成 `172` 项迁移，路由 `game/player/trade/impart/message = 137/31/7/1/1`，`rift.009` 仅 game；backup/restore dry-run/restore、
 readiness、migration dry-run 和 reconcile clean（operations/outbox/dead events 均为 `0`）。本轮测试/recovery/receipt/字节码缓存已清理，
 保留 `.venv`、`.git`、`data/`、运行数据库/备份和用户原有 Boss JSON 改动。下一步继续审计 Rift 的 cooldown 只读边界，不将 Rift 整体宣告完成。
+
+2026-09-26 rift cooldown read projection：真实 `秘境结算` handler 的 cooldown 前置读取改经
+`RiftApplication.read_cooldown -> RiftCooldownSqlRepository` read-only UoW，移除 `xiuxian_rift` facade 对
+`XiuxianDateManage.get_user_cd` 的依赖；缺表、缺列、用户不存在均为只读 compatibility miss，不在请求路径插入用户或执行 DDL。
+cooldown/application/source 与 Rift 全聚焦回归 `117 passed`（含 progress contract 为 `118 passed`）；compileall、architecture、progress、inventory、
+diff check 通过。隔离五库 recovery 完成 `172` 项迁移，路由 `game/player/trade/impart/message = 137/31/7/1/1`，无新增 migration；
+backup/restore dry-run/restore、readiness、migration dry-run 和 reconcile clean（operations/outbox/dead events 均为 `0`）。本轮测试/recovery/receipt/字节码缓存已清理，
+保留 `.venv`、`.git`、`data/`、运行数据库/备份和用户原有 Boss JSON 改动。下一步审计 Rift 中残留的 speedup legacy getter/只读投影边界，不将 Rift 整体宣告完成。

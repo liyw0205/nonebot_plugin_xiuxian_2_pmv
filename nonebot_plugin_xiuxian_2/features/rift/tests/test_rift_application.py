@@ -18,6 +18,11 @@ class Repo:
         return SimpleNamespace(status="applied", explore_count=4, message="fixed")
 
 
+class CooldownRepo:
+    def read(self, user_id):
+        return {"type": 3, "create_time": "started", "scheduled_time": "60"}
+
+
 class RiftApplicationTest(unittest.TestCase):
     def test_enter_is_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -49,6 +54,10 @@ class RiftApplicationTest(unittest.TestCase):
             )
             self.assertEqual((result.status, result.explore_count, result.message), ("applied", 4, "fixed"))
             self.assertIsNone(app.replay_demon_token_battle(operation_id="boss-2"))
+
+    def test_read_cooldown_uses_injected_projection_repository(self):
+        app = RiftApplication("/tmp/rift-game.db", "/tmp/rift-player.db", cooldown_repository=CooldownRepo())
+        self.assertEqual(app.read_cooldown("u")["create_time"], "started")
 
 
 if __name__ == "__main__": unittest.main()
