@@ -36,8 +36,10 @@
 
 ## 当前切片
 
-`auction bid effects`：竞价资产 application 已有 feature-owned repository；当前收口稳定 outbox event、player DB operation-id 统计投影、可重放日志 sink，以及 Web/NoneBot/CLI reconcile handler。完成本切片和隔离五库 recovery 后，下一目标按进度台账进入拍卖结算后置副作用。
+`pet hatch`：砸蛋 handler 默认调用 `PetApplication.hatch`，结果在命令边界适配为既有
+`PetHatchResult`；`pet.002` 在 game DB 负责 `pet_hatch_operations`，repository 不再请求时建表，
+兼容 `PetHatchService` 只保留显式回滚入口。完成本切片后，需先清理缓存并复核磁盘，再进入下一项宠物/背包旧 service 边界。
 
 ## 下一切片选择
 
-当前切片清理并复核磁盘后，进入 `docs/full_refactor_progress.md` 的 6.2 目标 2。不得把 facade、静态 manifest 或仅测试通过视为切片完成。
+当前切片清理并复核磁盘后，进入 `docs/full_refactor_progress.md` 的 6.2 目标 5，按真实调用图选择下一个仍由旧 service 承载的动作。不得把 facade、静态 manifest 或仅测试通过视为切片完成。

@@ -2,7 +2,7 @@
 
 ## 用户流程
 
-宠物游历派遣、游历领取、喂食和砸蛋四项资产动作通过 `PetApplication` 统一处理。旧命令通过兼容门面转发，保留原有结果对象和提示语。
+宠物游历派遣、游历领取、喂食和砸蛋四项资产动作通过 `PetApplication` 统一处理。砸蛋命令默认直接调用 feature application，兼容门面只保留显式回滚入口；结果适配仍保留原有字段和提示语。
 
 ## 命令与别名
 
@@ -22,11 +22,11 @@
 
 ## 数据模型与迁移
 
-`pet.001` 在 `game_db` 创建 `pet_feature_migrations`。宠物历史表和跨库操作表继续由兼容 repository 管理。
+`pet.001` 在 `game_db` 创建 `pet_feature_migrations`；`pet.002` 在 `game_db` 创建 `pet_hatch_operations`。孵化 repository 只使用已迁移 schema，不在请求路径建表；宠物历史表仍由既有 player 数据边界管理。
 
 ## 事务与失败回滚
 
-application 先登记 operation ledger，再调用历史事务服务；重复请求只重放首次结果，宠物快照、背包和灵石不匹配时返回拒绝且不修改资产。
+application 先登记 operation ledger，再调用 feature-owned hatch repository；重复请求只重放首次结果，宠物快照、背包和灵石不匹配时返回拒绝且不修改资产。缺少 `pet.002` 时请求失败并保持 schema 不变。
 
 ## 配置项与回滚
 

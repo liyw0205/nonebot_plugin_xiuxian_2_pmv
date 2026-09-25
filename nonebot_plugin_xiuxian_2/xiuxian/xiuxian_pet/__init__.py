@@ -62,6 +62,8 @@ from ..xiuxian_utils.utils import (
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from ...paths import get_paths
 from ...features.pet.application import PetApplication
+from ...features.pet.repository import PetHatchResult
+from ...core.result import OperationOutcome
 from ...infrastructure.ids import UUIDGenerator
 from .transaction_service import PetSkillReplaceService
 from ...compatibility.pet import PetHatchService
@@ -127,6 +129,34 @@ def _pet_hatch_service():
             get_paths().game_db, get_paths().player_db
         )
     return _pet_hatch_service_instance
+
+
+def _pet_hatch_result_from_outcome(
+    outcome: OperationOutcome,
+    *,
+    fallback_cost: int,
+    fallback_pets: list,
+    fallback_meta: list,
+    fallback_bag_limit: int,
+) -> PetHatchResult:
+    """Keep the command's legacy result shape at the transport boundary."""
+    data = outcome.data if isinstance(outcome.data, dict) else {}
+    status = str(data.get("status", outcome.code or outcome.status))
+    if outcome.replayed and status in {"applied", "duplicate", "replayed"}:
+        status = "duplicate"
+    pets = data.get("pets", fallback_pets)
+    if not isinstance(pets, (list, tuple)):
+        pets = fallback_pets
+    updated_meta = data.get("updated_meta", fallback_meta)
+    if not isinstance(updated_meta, (list, tuple)):
+        updated_meta = fallback_meta
+    return PetHatchResult(
+        status,
+        int(data.get("cost", fallback_cost) or 0),
+        tuple(pets),
+        tuple(updated_meta),
+        int(data.get("bag_limit", fallback_bag_limit) or 0),
+    )
 
 
 def _pet_release_service():
@@ -1215,16 +1245,27 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     new_rows = [(p, str(p.get("uid")) == str((working.get("active") or {}).get("uid", ""))) for p in ([working.get("active")] + working.get("bag", [])) if p and str(p.get("uid")) not in original_uids]
     expected_meta = [str((data.get("active") or {}).get("uid", "")), int(data.get("egg_pity_count", 0)), int(data.get("egg_pity_no_mythic_count", 0)), data.get("travel")]
     updated_meta = [str((working.get("active") or {}).get("uid", "")), pity_count, no_mythic_count]
-    hatched = _pet_hatch_service().hatch(
-        operation_id,
-        user_id,
-        int(user_info.get("stone", 0)),
-        total_cost,
-        expected_meta,
-        new_rows,
-        updated_meta,
-        PET_BAG_LIMIT,
+    hatch_outcome = pet_application.hatch(
+        operation_id=operation_id,
+        user_id=user_id,
+        expected_stone=int(user_info.get("stone", 0)),
+        cost=total_cost,
+        expected_meta=expected_meta,
+        pets=new_rows,
+        updated_meta=updated_meta,
+        bag_limit=PET_BAG_LIMIT,
     )
+    hatched = _pet_hatch_result_from_outcome(
+        hatch_outcome,
+        fallback_cost=total_cost,
+        fallback_pets=new_rows,
+        fallback_meta=updated_meta,
+        fallback_bag_limit=PET_BAG_LIMIT,
+    )
+    if hatch_outcome.replayed:
+        stored = pet_application.hatch_result(operation_id=operation_id)
+        if stored is not None:
+            hatched = stored
     if hatched.status == "duplicate":
         # same-process race: rebuild from stored result
         prior = hatched

@@ -34,7 +34,7 @@ from .features.stone_gift.migrations import apply_stone_gift, apply_stone_gift_l
 from .features.package_reward.manifest import FEATURE as PACKAGE_REWARD_FEATURE
 from .features.package_reward.migrations import apply_package_reward
 from .features.pet.manifest import FEATURE as PET_FEATURE
-from .features.pet.migrations import apply_pet
+from .features.pet.migrations import apply_pet, apply_pet_hatch
 from .features.sect.manifest import FEATURE as SECT_FEATURE
 from .features.sect.migrations import apply_sect, apply_sect_rename, apply_sect_join, apply_sect_removal, apply_sect_position, apply_sect_donation, apply_sect_shop, apply_sect_mainbuff, apply_sect_secbuff, apply_sect_elixir
 from .features.natal_treasure.manifest import FEATURE as NATAL_TREASURE_FEATURE
@@ -220,6 +220,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("natal_treasure.001", "natal_treasure_feature_migrations", apply_natal_treasure),
         Migration("package_reward.001", "package_reward_operations", apply_package_reward),
         Migration("pet.001", "pet_feature_migrations", apply_pet),
+        Migration("pet.002", "pet_hatch_operations", apply_pet_hatch),
         Migration("platform.001", "operation_ledger_outbox", apply_platform_schema),
         Migration("puppet.001", "puppet_feature_migrations", apply_puppet),
         Migration("rift.001", "rift_feature_migrations", apply_rift),
@@ -596,7 +597,6 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.boss.application import BossApplication
         from .features.dungeon.application import DungeonApplication
         from .features.pet.application import PetApplication
-        from .features.pet.repository import LegacyPetRepository
         from .features.sect.application import SectApplication
         from .features.natal_treasure.application import NatalTreasureApplication
         from .features.buff.application import BuffApplication
@@ -760,10 +760,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             "pet": PetApplication(
                 str(context.database.path("game_db")),
                 str(context.database.path("player_db")),
-                repository=LegacyPetRepository(
-                    str(context.database.path("game_db")),
-                    str(context.database.path("player_db")),
-                ),
+                clock=context.clock,
             ),
             "sect": SectApplication(
                 str(context.database.path("game_db")),

@@ -21,11 +21,12 @@ def _data(raw: Any) -> dict[str, Any]:
 
 
 class PetApplication:
-    def __init__(self, game_database: str | Path, player_database: str | Path, *, repository: PetRepository | None = None, ledger: OperationLedger | None = None) -> None:
+    def __init__(self, game_database: str | Path, player_database: str | Path, *, repository: PetRepository | None = None, ledger: OperationLedger | None = None, clock: Any | None = None) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
         self.repository = repository
         self.ledger = ledger or OperationLedger()
+        self.clock = clock
 
 
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
@@ -93,7 +94,7 @@ class PetApplication:
             raise ValidationError("hatch operation and values are invalid")
         payload = {"user_id": str(user_id), "cost": int(cost), "count": len(pets)}
         if self.repository is None:
-            repository = PetHatchSqlRepository(self.game_database, self.player_database)
+            repository = PetHatchSqlRepository(self.game_database, self.player_database, clock=self.clock)
             call = lambda: repository.hatch(operation_id, user_id, expected_stone, cost, expected_meta, pets, updated_meta, bag_limit)
         else:
             call = lambda: self.repository.hatch(operation_id, user_id, expected_stone, cost, expected_meta, pets, updated_meta, bag_limit)
@@ -101,7 +102,7 @@ class PetApplication:
 
     def hatch_result(self, *, operation_id: str) -> Any:
         if self.repository is None:
-            return PetHatchSqlRepository(self.game_database, self.player_database).get_result(operation_id)
+            return PetHatchSqlRepository(self.game_database, self.player_database, clock=self.clock).get_result(operation_id)
         return self.repository.hatch_result(operation_id)
 
     def release(self, *, operation_id: str, user_id: str, uid: str, expected_exp: int, refund_item: int, refund_name: str, refund_type: str, refund: int, max_goods: int, expected_is_active: bool = True) -> Any:

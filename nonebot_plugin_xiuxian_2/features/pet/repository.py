@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork
 
 
@@ -274,16 +275,16 @@ class PetHatchResult:
 
 
 class PetHatchSqlRepository:
-    def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
+    def __init__(self, game_database: str | Path, player_database: str | Path, *, clock: Any | None = None) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
+        self.clock = clock or SystemClock()
 
     def get_result(self, operation_id: str) -> PetHatchResult | None:
         operation_id = str(operation_id).strip()
         if not operation_id:
             return None
         with DatabaseUnitOfWork(self.game_database) as uow:
-            uow.execute("CREATE TABLE IF NOT EXISTS pet_hatch_operations(operation_id TEXT PRIMARY KEY,payload TEXT,result_json TEXT,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
             row = uow.query_one("SELECT payload,result_json FROM pet_hatch_operations WHERE operation_id=?", (operation_id,))
         if row is None:
             return None
@@ -312,10 +313,6 @@ class PetHatchSqlRepository:
         result_json = json.dumps({"pets": [[pet, active] for pet, active in normalized], "updated_meta": list(updated_meta), "bag_limit": bag_limit}, ensure_ascii=True, separators=(",", ":"))
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
-            uow.execute("CREATE TABLE IF NOT EXISTS pet_hatch_operations(operation_id TEXT PRIMARY KEY,payload TEXT,result_json TEXT,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
-            columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(pet_hatch_operations)")}
-            if "result_json" not in columns:
-                uow.execute("ALTER TABLE pet_hatch_operations ADD COLUMN result_json TEXT")
             old = uow.query_one("SELECT payload,result_json FROM pet_hatch_operations WHERE operation_id=?", (operation_id,))
             if old is not None:
                 if str(old["payload"]) != payload:
@@ -338,7 +335,7 @@ class PetHatchSqlRepository:
             owned = uow.query_one("SELECT COUNT(*) AS count FROM player_data.player_pet_item WHERE user_id=?", (user_id,))
             if int(owned["count"]) + len(normalized) > bag_limit:
                 return PetHatchResult("inventory_full")
-            now = int(time.time())
+            now = int(self.clock.now().timestamp())
             for pet, active in normalized:
                 skill = pet.get("skill") or ((pet.get("skills") or [{}])[0])
                 uow.execute("INSERT INTO player_data.player_pet_item(id,user_id,uid,is_active,pet_id,stars,exp,total_exp,skill_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", (f"{user_id}:{pet['uid']}", user_id, str(pet["uid"]), int(active), str(pet.get("pet_id", "")), int(pet.get("stars", 1)), int(pet.get("exp", 0)), int(pet.get("total_exp", 0)), str(skill.get("skill_id", "")) or None, now, now))

@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 
 from ..repository import PetHatchSqlRepository
+from ..migrations import apply_pet_hatch
 from ....infrastructure.database import DatabaseUnitOfWork
 
 
@@ -13,6 +14,7 @@ class PetHatchSqlRepositoryTests(unittest.TestCase):
         self.game = root / "game.db"
         self.player = root / "player.db"
         with DatabaseUnitOfWork(self.game) as uow:
+            apply_pet_hatch(uow)
             uow.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY, stone INTEGER)")
             uow.execute("INSERT INTO user_xiuxian VALUES('u',100)")
         with DatabaseUnitOfWork(self.player) as uow:

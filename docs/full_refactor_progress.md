@@ -3068,6 +3068,18 @@ focused tests、根目录 `tests/` 隔离回归、compileall、architecture/prog
 
 2026-09-22 pet skill-reroll full regression：在测试环境显式设置 `XIUXIAN_AUTO_DOWNLOAD_RESOURCES=false XIUXIAN_WEB_STATUS=false`，完整 `python -m unittest discover -s tests -q` 实际执行 `2126` tests，全部通过，退出码 `0`；reroll/fusion/release/hatch/claim/start/feed/active feature tests另行通过，根 discovery 计数为 `2126`，测试环境变量仅用于隔离资源下载和 Web listener 副作用，生产默认配置未修改。
 
+2026-09-25 pet hatch default handler cutover：`砸蛋` handler 已从惰性 `PetHatchService` 切换到
+`PetApplication.hatch`，在命令边界将 `OperationOutcome` 适配为既有 `PetHatchResult`；已完成结果仍由
+`PetApplication.hatch_result` 回放，旧 service 仅保留显式兼容入口。新增 `pet.002` game DB migration
+创建 `pet_hatch_operations`，孵化 repository 移除请求路径建表/补列并使用注入 Clock；迁移缺失时明确失败，
+不会静默创建 schema。新增 handler source、migration routing、缺表门禁和隔离 SQLite 回归，宠物 focused
+`53 passed`（本切片新增/相关门禁 `15 passed`），`compileall`、architecture、inventory、`git diff --check` 全部通过。
+
+2026-09-25 pet hatch isolated recovery evidence：使用一次性 `/tmp` 数据目录执行五库 backup、restore dry-run、
+restore、按路由 migration 和 reconcile；当前目录共应用 `150` 项 migration，`pet.002` 仅在 `game_db`，
+attached accessory 两项，`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。回执和临时目录已清理，
+未触碰仓库 `data/`、数据库或备份；本轮结束检查磁盘约剩 `24G`，RAM available 约 `1.3G`。
+
 2026-09-22 rift default repository wiring：移除 `xiuxian_rift` module-level `LegacyRiftRepository` 显式注入，`RiftApplication` 保留显式 repository compatibility fallback；真实入口继续通过 `RiftApplication` 调用，未改变 entry/termination/settlement/key/speedup/demon-token 业务协议。rift source `2 passed`，legacy rift behavior `58 passed`，source/compile/architecture/inventory/diff check 通过。
 
 2026-09-22 rift isolated recovery evidence：一次性临时数据目录 recovery smoke 完成 backup、restore dry-run、restore、全量 `114` 项 migration 和 reconcile；`clean=true`、`operations=0`、`outbox_events=0`、`dead_events=0`。
