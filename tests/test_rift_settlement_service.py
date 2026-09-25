@@ -20,10 +20,10 @@ class RiftSettlementServiceTests(unittest.TestCase):
         source = Path("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_rift/__init__.py").read_text(encoding="utf-8")
         handler = source[source.index("async def complete_rift"):source.index("async def _use_rift_speedup")]
         self.assertIn("rift_application.settle(", handler)
-    def test_rift_facade_defers_settlement_service_construction(self):
+    def test_rift_facade_removes_legacy_settlement_service(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_rift
 
-        self.assertIsNone(xiuxian_rift._rift_settlement_service_instance)
+        self.assertFalse(hasattr(xiuxian_rift, "_rift_settlement_service_instance"))
 
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()

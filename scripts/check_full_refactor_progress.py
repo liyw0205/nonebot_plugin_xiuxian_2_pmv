@@ -83,6 +83,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     rift_application = (PACKAGE / "features" / "rift" / "application.py").read_text(encoding="utf-8")
     rift_generation_repository = (PACKAGE / "features" / "rift" / "generation_repository.py").read_text(encoding="utf-8")
     rift_key_event_repository = (PACKAGE / "features" / "rift" / "key_event_repository.py").read_text(encoding="utf-8")
+    rift_settlement_repository = (PACKAGE / "features" / "rift" / "settlement_repository.py").read_text(encoding="utf-8")
     rift_termination_repository = (PACKAGE / "features" / "rift" / "termination_repository.py").read_text(encoding="utf-8")
     rift_speedup_repository = (PACKAGE / "features" / "rift" / "speedup_repository.py").read_text(encoding="utf-8")
     rift_migrations = (PACKAGE / "features" / "rift" / "migrations.py").read_text(encoding="utf-8")
@@ -375,8 +376,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_key_event_disabled": "_rift_key_event_settlement_service()" not in rift_facade and "RiftKeyEventSettlementService" not in rift_facade,
             "key_event_migrations_registered": "rift.007" in plugin and "apply_rift_key_event_operations" in plugin and "rift_key_event_operations" in rift_migrations,
             "key_event_request_path_has_no_ddl": "CREATE TABLE" not in rift_key_event_repository and "ALTER TABLE" not in rift_key_event_repository,
+            "settlement_default_repository_owned": "RiftSettlementSqlRepository" in rift_application and "self.settlement_repository.settle" in rift_application,
+            "legacy_settlement_disabled": "_rift_settlement_service()" not in rift_facade and "RiftSettlementService" not in rift_facade,
+            "settlement_migrations_registered": "rift.008" in plugin and "apply_rift_settlement_operations" in plugin and "rift_settlement_operations" in rift_migrations,
+            "settlement_request_path_has_no_ddl": "CREATE TABLE" not in rift_settlement_repository and "ALTER TABLE" not in rift_settlement_repository,
             "legacy_entry_disabled": "_rift_entry_service().enter(" not in rift_facade,
-            "status": "world_generation_termination_key_event_entry_speedup_settlement_demon_token_cutover_with_remaining_rift_compatibility",
+            "status": "world_generation_termination_key_event_settlement_entry_speedup_demon_token_cutover_with_remaining_rift_compatibility",
         },
         "back": {
             "cultivation_item_application_owned": "back_application.cultivation_item(" in back_facade and "_cultivation_item_application().apply(" in back_util_facade,

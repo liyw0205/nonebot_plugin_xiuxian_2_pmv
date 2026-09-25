@@ -81,6 +81,21 @@ def apply_rift_key_event_operations(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_rift_settlement_operations(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS rift_settlement_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
+        "explore_count INTEGER NOT NULL,message TEXT NOT NULL DEFAULT '',"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(rift_settlement_operations)")}
+    if "message" not in columns:
+        uow.execute(
+            "ALTER TABLE rift_settlement_operations "
+            "ADD COLUMN message TEXT NOT NULL DEFAULT ''"
+        )
+
+
 __all__ = [
     "apply_rift",
     "apply_rift_demon_token_operations",
@@ -89,4 +104,5 @@ __all__ = [
     "apply_rift_world_generation",
     "apply_rift_termination_operations",
     "apply_rift_key_event_operations",
+    "apply_rift_settlement_operations",
 ]

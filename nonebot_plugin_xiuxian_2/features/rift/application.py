@@ -10,6 +10,7 @@ from .key_event_repository import RiftKeyEventSqlRepository
 from .repository import LegacyRiftRepository, RiftRepository
 from .speedup_repository import RiftSpeedupSqlRepository
 from .termination_repository import RiftTerminationSqlRepository
+from .settlement_repository import RiftSettlementSqlRepository
 
 
 class RiftApplication(LegacyApplication):
@@ -21,6 +22,7 @@ class RiftApplication(LegacyApplication):
         repository: RiftRepository | None = None,
         demon_token_repository: Any | None = None,
         key_event_repository: Any | None = None,
+        settlement_repository: Any | None = None,
         clock: Any | None = None,
     ) -> None:
         self.game_database = str(game_database)
@@ -35,6 +37,9 @@ class RiftApplication(LegacyApplication):
             game_database, player_database, clock=clock
         )
         self.key_event_repository = key_event_repository or RiftKeyEventSqlRepository(
+            game_database, player_database, clock=clock
+        )
+        self.settlement_repository = settlement_repository or RiftSettlementSqlRepository(
             game_database, player_database, clock=clock
         )
 
@@ -126,7 +131,21 @@ class RiftApplication(LegacyApplication):
         if self.repository is None:
             return self._execute(operation_id=operation_id, user_id=user_id, action="rift.speedup", payload={"user_id": user_id, **kwargs}, call=lambda: RiftSpeedupSqlRepository(self.database).apply(operation_id, user_id, kwargs["item_id"], kwargs.get("expected_rift"), kwargs.get("expected_cd"), kwargs["remaining_ratio"]))
         return self._action("speedup", operation_id=operation_id, user_id=user_id, **kwargs)
-    def settle(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("settle", operation_id=operation_id, user_id=user_id, **kwargs)
+    def settle(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        if self.repository is not None:
+            return self._action("settle", operation_id=operation_id, user_id=user_id, **kwargs)
+        return self.settlement_repository.settle(
+            operation_id,
+            user_id,
+            kwargs["rift_info"],
+            kwargs["user_state"],
+            kwargs["explore_count"],
+            kwargs["outcome"],
+            kwargs["max_goods_num"],
+        )
+
+    def replay_settlement(self, *, operation_id: str):
+        return self.settlement_repository.replay(operation_id)
 
     def replay_demon_token_battle(self, *, operation_id: str):
         return self.demon_token_repository.replay(operation_id)

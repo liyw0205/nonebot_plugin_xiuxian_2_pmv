@@ -4301,3 +4301,15 @@ architecture、progress、inventory `--check` 与 `git diff --check` 通过。�
 health 六项 readiness 全绿，reconcile `clean=true` 且 operations/outbox/dead_events 均为 `0`。未运行根目录全量回归或真实 live/P7；专用
 pytest/recovery/receipt 与 compileall 缓存已清理，复核约 `24 GB` 磁盘可用、`1.2 GB` RAM 可用，保留 `.venv`、`.git`、`data/`、运行数据库/备份
 和用户原有 Boss JSON 改动。下一步仍按 6.2 目标 5 审计 `秘境结算`，不要将 Rift 整体宣告完成。
+
+2026-09-25 rift ordinary settlement feature-owned cutover：真实 `秘境结算` handler 的 replay 与普通事件结算改经
+`RiftApplication -> RiftSettlementSqlRepository`；repository 注入 Clock，在 attached game/player UoW 内校验 active entry、秘境快照、用户资源、
+探索次数以及 `create_time/scheduled_time` 结算窗口，原子提交预滚奖励/统计、探索次数、entry 状态、cooldown 和旧格式 settlement payload。
+新增 game-only `rift.008`，启动时预建 operation 表并为历史表补缺失 `message` 列；请求/replay 路径不建表或补列，缺 migration/player schema 返回
+`schema_missing`，重复、未到时间、库存/快照冲突和晚期 SQL 异常均保持幂等或全状态回滚；旧 `RiftSettlementService` 从真实 facade 路径移除。
+settlement repository/application、Clock 时间窗口、旧 payload replay、缺迁移、历史补列、冲突和跨库回滚聚焦回归共 `104 passed`；compileall、
+architecture、progress、inventory `--check` 与 `git diff --check` 通过。隔离五库 recovery 完成 `171` 项 migration，路由
+`game/player/trade/impart/message = 136/31/7/1/1`，`rift.008` 仅 game；五库 backup/restore dry-run/restore、migration dry-run（pending 均为空）、
+health 六项 readiness 全绿，reconcile `clean=true` 且 operations/outbox/dead_events 均为 `0`。未运行根目录全量回归或真实 live/P7；专用
+pytest/recovery/receipt 与 compileall 缓存已清理，复核约 `24 GB` 磁盘可用、`1.3 GB` RAM 可用，保留 `.venv`、`.git`、`data/`、运行数据库/备份
+和用户原有 Boss JSON 改动。下一步进入 Rift 剩余 entry/只读兼容边界，不将 Rift 整体宣告完成。
