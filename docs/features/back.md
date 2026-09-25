@@ -6,7 +6,8 @@
 ## Web API
 `POST /api/v1/back/{open_package,use_item,change_equipment,learn_skill,repair,use_pet_eggs,alchemy,unbind}`，权限 `user`。
 ## 数据模型与迁移
-迁移 `back.001`；历史背包字段通过兼容服务读取。
+迁移 `back.001` 至 `back.012`；聚灵旗替换 operation 位于 game DB，player DB 仅作为显式 attached
+事务参与方；历史背包字段通过兼容服务读取。
 ## 事务与失败回滚
 操作 ledger、审计和异常重试由应用层统一提供。
 ## 定时任务

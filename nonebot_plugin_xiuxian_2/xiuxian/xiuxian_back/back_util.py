@@ -33,6 +33,7 @@ _recovery_item_service_instance = None
 _permanent_atk_item_application_instance = None
 _permanent_atk_item_service_instance = None
 _blessed_flag_replace_service_instance = None
+_blessed_flag_replace_application_instance = None
 ADDED_RANKS = get_added_ranks()
 
 
@@ -111,6 +112,22 @@ def _blessed_flag_replace_service():
             get_paths().game_db, get_paths().player_db
         )
     return _blessed_flag_replace_service_instance
+
+
+def _blessed_flag_replace_application():
+    global _blessed_flag_replace_application_instance
+    if _blessed_flag_replace_application_instance is None:
+        from ...features.back.blessed_flag_replace_application import BlessedFlagReplaceApplication
+
+        _blessed_flag_replace_application_instance = BlessedFlagReplaceApplication(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _blessed_flag_replace_application_instance
+
+
+def configure_blessed_flag_replace_application(application) -> None:
+    global _blessed_flag_replace_application_instance
+    _blessed_flag_replace_application_instance = application
 
 def _breakthrough_rate_item_service():
     global _breakthrough_rate_item_service_instance
@@ -1204,15 +1221,20 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
     return msg
 
 
+def get_use_jlq_msg(user_id, goods_id, operation_id=None):
+    """Use a blessed-spot flag through the feature-owned application."""
     user_info = _sql_message().get_user_info_with_id(user_id)
     if user_info['blessed_spot_flag'] == 0:
         return "道友还未拥有洞天福地，无法使用该物品"
     item_info = items.get_data_by_item_id(goods_id)
     user_buff_data = UserBuffDate(user_id).BuffInfo
     mix_elixir_info = get_player_info(user_id, "mix_elixir_info") or {}
-    result = _blessed_flag_replace_service().replace(
-        f"blessed-flag:{user_id}:{goods_id}:{datetime.now().timestamp()}",
-        user_id, goods_id, item_info['level'], item_info['药材速度'],
+    result = _blessed_flag_replace_application().replace(
+        operation_id or f"blessed-flag:{user_id}:{goods_id}:{datetime.now().timestamp()}",
+        user_id,
+        goods_id,
+        item_info['level'],
+        item_info['药材速度'],
         expected_level=int(user_buff_data['blessed_spot']),
         expected_herb_speed=int(mix_elixir_info.get('药材速度', 0) or 0),
         expected_quantity=_sql_message().goods_num(user_id, goods_id),

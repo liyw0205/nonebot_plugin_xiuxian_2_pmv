@@ -4056,6 +4056,19 @@ DDL；`hp_mp`、`full`、`stamina` 三种模式的状态上限、攻击/体力�
 迁移，路由为 game/player/trade/impart/message `116/24/7/1/1`，`back.010` 仅路由到 game DB，
 reconcile clean（operations/outbox/dead events 均为 0）；临时数据和缓存已清理。
 
+2026-09-25 back blessed-flag feature-owned cutover：聚灵旗替换真实入口补齐为
+`back_util.get_use_jlq_msg -> BlessedFlagReplaceApplication -> BlessedFlagReplaceSqlRepository`；旧
+`BlessedFlagReplaceService` 仅保留显式兼容测试/回滚。新增 `back.012` game DB 启动迁移，跨 game/player
+库事务使用显式 attached UoW，请求路径不再执行 DDL；洞天存在性、等级与药材速度快照、库存/绑定数扣除、
+重复请求、payload 冲突、缺失状态和异常回滚语义保持一致。此前聚灵旗代码位于丹药函数返回后的不可达区域，
+现恢复为独立可调用函数并接入生命周期注入。新增 application/repository、缺表不建表、跨库回滚、迁移路由
+和 wiring 回归；聚焦背包/门禁共 `268` 项，顶层 `tests/` 全量 `2687 passed, 16 warnings, 25 subtests`。
+五库 recovery 完成 `146` 项迁移，game/player/trade/impart/message 路由为 `118/24/7/1/1`，
+`back.012` 仅路由到 game DB；backup、restore dry-run/restore、reconcile 均通过，
+`clean=true` 且 operations/outbox/dead_events 均为 `0`。临时 recovery 数据、pytest cache、`.pyc`
+和 `__pycache__` 已清理。整体重构仍由其余旧 transaction service、`xiuxian2_handle` 与真实正式发布
+周期 P7 证据阻塞。
+
 2026-09-25 back permanent-atk-item feature-owned cutover：永久攻击丹真实调用路径已切换到
 `back_util.check_use_elixir -> PermanentAtkItemApplication -> PermanentAtkItemSqlRepository`；旧
 `PermanentAtkItemService` 仅保留显式兼容回滚。`back.011` 在 game DB 启动迁移创建幂等表，请求路径不再

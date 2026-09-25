@@ -101,4 +101,12 @@ def apply_permanent_atk_item(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_alchemy", "apply_back", "apply_breakthrough_rate_item", "apply_cultivation_item", "apply_lottery_talisman", "apply_permanent_atk_item", "apply_recovery_item", "apply_skill_learning", "apply_stone_reward", "apply_three_cultivation_pill", "apply_unbind"]
+def apply_blessed_flag_replace(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS blessed_flag_replace_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+__all__ = ["apply_alchemy", "apply_back", "apply_blessed_flag_replace", "apply_breakthrough_rate_item", "apply_cultivation_item", "apply_lottery_talisman", "apply_permanent_atk_item", "apply_recovery_item", "apply_skill_learning", "apply_stone_reward", "apply_three_cultivation_pill", "apply_unbind"]

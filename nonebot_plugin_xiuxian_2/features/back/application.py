@@ -16,6 +16,7 @@ from .breakthrough_rate_item_application import BreakthroughRateItemApplication
 from .recovery_item_application import RecoveryItemApplication
 from .permanent_atk_item_application import PermanentAtkItemApplication
 from .unbind_application import UnbindApplication
+from .blessed_flag_replace_application import BlessedFlagReplaceApplication
 
 
 class BackApplication(LegacyApplication):
@@ -31,6 +32,7 @@ class BackApplication(LegacyApplication):
         self.recovery_item_application = RecoveryItemApplication(database)
         self.permanent_atk_item_application = PermanentAtkItemApplication(database)
         self.unbind_application = UnbindApplication(database)
+        self.blessed_flag_replace_application = BlessedFlagReplaceApplication(database, player_database or database)
         super().__init__(database, repository=repository or LegacyBackRepository(database, player_database), feature="back")
 
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):
@@ -84,6 +86,10 @@ class BackApplication(LegacyApplication):
         if self._explicit_repository is None:
             return self.unbind_application.apply(operation_id, user_id, **kwargs)
         return self._action("unbind", operation_id=operation_id, user_id=user_id, **kwargs)
+    def blessed_flag_replace(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        if self._explicit_repository is None:
+            return self.blessed_flag_replace_application.replace(operation_id, user_id, **kwargs)
+        return self._action("blessed_flag_replace", operation_id=operation_id, user_id=user_id, **kwargs)
 
 
 
