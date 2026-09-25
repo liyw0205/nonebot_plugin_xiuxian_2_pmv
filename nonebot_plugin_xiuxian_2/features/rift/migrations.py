@@ -64,10 +64,19 @@ def apply_rift_world_generation(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_rift_termination_operations(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS rift_termination_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
 __all__ = [
     "apply_rift",
     "apply_rift_demon_token_operations",
     "apply_rift_demon_token_player_schema",
     "apply_rift_speedup_operations",
     "apply_rift_world_generation",
+    "apply_rift_termination_operations",
 ]

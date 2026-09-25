@@ -106,6 +106,13 @@ diff check 通过。五库 recovery 完成 `164` 项 migration，路由 `130/30/
 迁移创建/补齐 replay 表；repository 缺迁移时返回 `schema_missing`，请求路径不建表/补列，旧 compact/rich payload 均兼容。
 默认 composition、缺迁移拒绝、compact/rich 旧 payload replay、绑定数量不变量、无绑定列兼容、事务回滚和路由聚焦测试通过；未运行根目录全量回归或真实 live/P7。
 
+`rift termination`：真实 `秘境终止` handler 的 replay/终止结算改走 `RiftApplication -> RiftTerminationSqlRepository`；repository 在
+game DB 单事务内校验 active entry、秘境快照与 cooldown，原子终止 entry、释放 cooldown 并保留旧 `user_id + rift_plan` replay payload。
+新增 game-only `rift.006`，缺 migration 返回 `schema_missing`，请求/replay 路径不执行 DDL；重复请求回放首次结果，用户/快照冲突、未激活和晚期 SQL
+异常均不改变资产或状态，旧 `RiftTerminationService` 不再位于真实 facade 路径。Rift 聚焦回归 `98 passed`，compileall、architecture、progress、
+inventory、diff check 和五库 recovery 全部通过；recovery 共 `169` 项 migration，路由 `134/31/7/1/1`，`rift.006` 仅 game，reconcile clean。
+专用测试/recovery/receipt/字节码缓存已清理，约 `24 GB` 磁盘可用、`1.3 GB` RAM 可用；`.venv`、`.git`、`data/`、运行数据库/备份及 Boss JSON 保留。
+
 ## 当前切片与下一切片选择
 
 最近完成 `rift world generation and startup-schema boundary`：手动/定时生成、startup/shutdown 读取及历史 JSON 首次导入统一接到

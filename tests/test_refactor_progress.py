@@ -75,6 +75,10 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(rift["legacy_generation_disabled"])
         self.assertTrue(rift["generation_migrations_registered"])
         self.assertTrue(rift["generation_request_path_has_no_ddl"])
+        self.assertTrue(rift["termination_application_owned"])
+        self.assertTrue(rift["legacy_termination_disabled"])
+        self.assertTrue(rift["termination_migrations_registered"])
+        self.assertTrue(rift["termination_request_path_has_no_ddl"])
         back = slices["back"]
         self.assertTrue(back["cultivation_item_application_owned"])
         self.assertTrue(back["legacy_cultivation_item_disabled"])

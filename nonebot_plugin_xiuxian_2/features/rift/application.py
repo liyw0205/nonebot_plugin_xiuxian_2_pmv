@@ -8,6 +8,7 @@ from .demon_token_repository import RiftDemonTokenBattleSqlRepository
 from .generation_repository import RiftGenerationSqlRepository
 from .repository import LegacyRiftRepository, RiftRepository
 from .speedup_repository import RiftSpeedupSqlRepository
+from .termination_repository import RiftTerminationSqlRepository
 
 
 class RiftApplication(LegacyApplication):
@@ -83,7 +84,23 @@ class RiftApplication(LegacyApplication):
         )
 
     def enter(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("enter", operation_id=operation_id, user_id=user_id, **kwargs)
-    def terminate(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("terminate", operation_id=operation_id, user_id=user_id, **kwargs)
+    def terminate(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        if self.repository is not None:
+            return self._action("terminate", operation_id=operation_id, user_id=user_id, **kwargs)
+        repository = RiftTerminationSqlRepository(self.database)
+        return self._execute(
+            operation_id=operation_id,
+            user_id=user_id,
+            action="rift.terminate",
+            payload={"user_id": user_id, **kwargs},
+            call=lambda: repository.terminate(
+                operation_id, user_id, kwargs["rift_data"]
+            ),
+        )
+
+    def replay_termination(self, *, operation_id: str, user_id: str):
+        return RiftTerminationSqlRepository(self.database).replay(operation_id, user_id)
+
     def event_settle(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("event_settle", operation_id=operation_id, user_id=user_id, **kwargs)
     def speedup(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self.repository is None:

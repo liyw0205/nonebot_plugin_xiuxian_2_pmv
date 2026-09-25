@@ -32,7 +32,6 @@ from ..xiuxian_utils.utils import (
 )
 from .riftconfig import get_rift_config
 from .jsondata import save_rift_data, read_rift_data
-from .transaction_service import RiftTerminationService
 from .transaction_service import RiftKeyEventSettlementService
 from .transaction_service import RiftSpeedupService
 from .transaction_service import RiftSettlementService
@@ -50,7 +49,6 @@ from .riftmake import (
 )
 
 _sql_message_instance = None
-_rift_termination_service_instance = None
 _rift_key_event_settlement_service_instance = None
 _rift_speedup_service_instance = None
 _rift_settlement_service_instance = None
@@ -72,13 +70,6 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
-
-
-def _rift_termination_service():
-    global _rift_termination_service_instance
-    if _rift_termination_service_instance is None:
-        _rift_termination_service_instance = RiftTerminationService(get_paths().game_db)
-    return _rift_termination_service_instance
 
 
 def _rift_key_event_settlement_service():
@@ -212,6 +203,15 @@ def _generation_outcome(outcome):
     return SimpleNamespace(
         status="duplicate" if outcome.replayed else data.get("status", outcome.code),
         state=state,
+        succeeded=outcome.ok,
+    )
+
+
+def _termination_outcome(outcome):
+    data = dict(outcome.data or {})
+    return SimpleNamespace(
+        status="duplicate" if outcome.replayed else data.get("status", outcome.code),
+        rift_name=str(data.get("rift_name", "")),
         succeeded=outcome.ok,
     )
 
@@ -889,7 +889,9 @@ async def break_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     event_id = _event_id(event)
     operation_id = f"rift-termination:{event_id or runtime_ids.new_id()}:{user_id}"
     if event_id:
-        replay = _rift_termination_service().replay(operation_id, user_id)
+        replay = rift_application.replay_termination(
+            operation_id=operation_id, user_id=user_id
+        )
         if replay is not None and replay.succeeded:
             await handle_send(
                 bot,
@@ -914,8 +916,12 @@ async def break_rift_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await break_rift.finish()
 
         try:
-            result = _rift_termination_service().terminate(
-                operation_id, user_id, rift_info
+            result = _termination_outcome(
+                rift_application.terminate(
+                    operation_id=operation_id,
+                    user_id=user_id,
+                    rift_data=rift_info,
+                )
             )
         except Exception as exc:
             logger.opt(exception=exc).error("秘境终止事务执行失败")

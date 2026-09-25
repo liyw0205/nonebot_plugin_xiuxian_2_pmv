@@ -4277,3 +4277,15 @@ compileall、architecture、progress、inventory `--check`、`git diff --check` 
 health 六项 readiness 全绿，reconcile `clean=true` 且 operations/outbox/dead_events 均为 `0`。未运行根目录全量回归或真实 live/P7；测试禁用 pytest cache provider
 和字节码生成，专属 basetemp、recovery 数据/receipt、compileall 字节码缓存已清理并复核磁盘/RAM；`.venv`、`.git`、`data/`、运行数据库、备份
 和用户原有 Boss JSON 改动保留。
+
+2026-09-25 rift termination feature-owned cutover：真实 `秘境终止` handler 的 replay 与终止结算改经
+`RiftApplication -> RiftTerminationSqlRepository`；repository 在 game DB 单事务内校验 active entry、秘境快照和 cooldown，原子标记
+entry 为 terminated、释放 `user_cd` 并写入旧格式 `user_id + rift_plan` replay payload。同 operation 可回放，用户或快照冲突不改状态，
+缺少启动迁移时返回 `schema_missing`，请求/replay 路径不建表；旧 `RiftTerminationService` 从真实 facade 路径移除，仅保留历史兼容实现。
+新增 game-only `rift.006` 终止 operation 表；termination repository/application、真实 handler、旧 payload replay、冲突/未激活、事务回滚、
+无 DDL 和 migration routing 聚焦回归 `98 passed`，compileall、architecture、progress、inventory `--check` 与 `git diff --check` 通过。
+隔离五库 recovery 完成 `169` 项 migration，路由 `game/player/trade/impart/message = 134/31/7/1/1`，`rift.006` 仅 game；五库
+backup/restore dry-run/restore、migration dry-run（pending 均为空）、health 六项 readiness 全绿，reconcile `clean=true` 且
+operations/outbox/dead_events 均为 `0`。未运行根目录全量回归或真实 live/P7；专用 pytest/recovery/receipt 与 compileall 缓存已清理，
+保留 `.venv`、`.git`、`data/`、运行数据库/备份和用户原有 Boss JSON 改动。下一步仍按 6.2 目标 5 只读审计一个剩余真实 Rift action，
+不要将 Rift 整体宣告完成。
