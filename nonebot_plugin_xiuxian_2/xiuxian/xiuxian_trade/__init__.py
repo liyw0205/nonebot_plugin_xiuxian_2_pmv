@@ -53,7 +53,6 @@ from .auction_utils import (
 )
 from .transaction_service import (
     bind_auction_service_dependencies,
-    start_auction_process,
     end_auction_process,
     reconcile_auction_after_restart,
     place_auction_bid,
@@ -74,6 +73,7 @@ from ...features.trade.guishi_deposit_repository import GuishiDepositSqlReposito
 from ...features.trade.guishi_withdraw_repository import GuishiWithdrawSqlRepository
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
+from ...infrastructure.random_source import SystemRandom
 from ...bootstrap.legacy import register_legacy_startup
 from urllib.parse import quote
 
@@ -81,6 +81,7 @@ from urllib.parse import quote
 items = Items()
 runtime_ids = UUIDGenerator()
 runtime_clock = SystemClock()
+runtime_random = SystemRandom()
 _sql_message_instance = None
 _trade_manager_instance = None
 trade_application = TradeApplication(
@@ -176,6 +177,26 @@ def _auction_query_application():
     if _auction_query_application_instance is None:
         _auction_query_application_instance = AuctionQueryApplication(get_paths().game_db)
     return _auction_query_application_instance
+
+
+def _start_auction_with_application(operation_id: str) -> bool:
+    """Start an auction through the feature application on the default path."""
+    system_items_config = auction_config.get_system_items()
+    schedule_config = auction_config.get_auction_schedule()
+    result = _auction_session_start_application().start(
+        operation_id,
+        system_items_config=system_items_config,
+        duration_hours=schedule_config["duration_hours"],
+    )
+    if not result.succeeded:
+        logger.warning(f"拍卖开启失败：{result.status}")
+        return False
+    current_date = runtime_clock.now().strftime("%Y-%m-%d")
+    auction_config.set_auction_config_value(
+        "schedule", current_date, "last_auto_start_date"
+    )
+    logger.info(f"拍卖已开启，共 {result.items_count} 件物品参与拍卖！")
+    return True
 
 
 bind_auction_repository(_auction_bid_repository, _auction_session_service)
@@ -2949,7 +2970,9 @@ async def auction_start_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     auction_config.update_schedule({"enabled": True})
     
     # 开启拍卖
-    success = start_auction_process(bot, _auction_session_operation_id(event, "start"))
+    success = _start_auction_with_application(
+        _auction_session_operation_id(event, "start")
+    )
     if not success:
         await handle_send(bot, event, "开启拍卖失败或没有物品可供拍卖！", md_type="拍卖", k1="查看", v1="拍卖查看", k2="结束", v2="结束拍卖", k3="帮助", v3="拍卖帮助")
         await auction_start.finish()
@@ -3064,9 +3087,9 @@ async def _auto_start_auction_job_impl():
 
     logger.info("开始执行自动拍卖开启任务...")
     
-    success = start_auction_process(
-        None, f"auction-session:auto-start:{current_date}"
-    )  # 传入None表示不需要Bot实例发送消息
+    success = _start_auction_with_application(
+        f"auction-session:auto-start:{current_date}"
+    )
     if success:
         # 获取最新的拍卖状态以得到准确的结束时间
         current_auction_status = get_auction_status()
