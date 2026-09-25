@@ -9,6 +9,7 @@ from ..package_reward.application import PackageRewardApplication
 from .alchemy_application import AlchemyApplication
 from .cultivation_item_application import CultivationItemApplication
 from .skill_learning_application import SkillLearningApplication
+from .lottery_talisman_application import LotteryTalismanApplication
 from .unbind_application import UnbindApplication
 
 
@@ -18,6 +19,7 @@ class BackApplication(LegacyApplication):
         self.alchemy_application = AlchemyApplication(database)
         self.cultivation_item_application = CultivationItemApplication(database)
         self.skill_learning_application = SkillLearningApplication(database)
+        self.lottery_talisman_application = LotteryTalismanApplication(database)
         self.unbind_application = UnbindApplication(database)
         super().__init__(database, repository=repository or LegacyBackRepository(database, player_database), feature="back")
 
@@ -40,6 +42,10 @@ class BackApplication(LegacyApplication):
         if self._explicit_repository is None:
             return self.cultivation_item_application.apply(operation_id, user_id, **kwargs)
         return self._action("cultivation_item", operation_id=operation_id, user_id=user_id, **kwargs)
+    def lottery_talisman(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        if self._explicit_repository is None:
+            return self.lottery_talisman_application.apply(operation_id, user_id, **kwargs)
+        return self._action("lottery_talisman", operation_id=operation_id, user_id=user_id, **kwargs)
     def alchemy(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:
             return self.alchemy_application.apply(operation_id, user_id, **kwargs)

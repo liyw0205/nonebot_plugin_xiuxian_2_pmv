@@ -42,6 +42,7 @@ from ..xiuxian_arena import use_arena_challenge_ticket
 
 from ..xiuxian_config import XiuConfig, convert_rank, added_ranks
 from ...features.back.application import BackApplication
+from ...features.back.lottery_talisman_application import LotteryReward
 from ...paths import get_paths
 from ...infrastructure.ids import UUIDGenerator
 from ..xiuxian_utils.pet_system import (
@@ -57,7 +58,7 @@ from ..xiuxian_utils.pet_system import (
 from .back_util import *
 from .transaction_service import CultivationItemService
 from .transaction_service import EquipmentService
-from .transaction_service import LotteryReward, LotteryTalismanService
+from .transaction_service import LotteryTalismanService
 from .package_reward_service import PackageOpenResult, PackageReward, PackageRewardService
 from ...features.package_reward.application import PackageRewardApplication
 from ...features.package_reward.resolver import PackageRewardResolver
@@ -1624,12 +1625,12 @@ async def use_lottery_talisman(bot: Bot, event: GroupMessageEvent | PrivateMessa
                     LotteryReward(rank_id, item_info["name"], item_info["type"], 1)
                 )
 
-    result = _lottery_talisman_service().apply(
-        _lottery_talisman_operation_id(event, user_id, item_id),
-        user_id,
-        item_id,
-        num,
-        rewards,
+    result = back_application.lottery_talisman(
+        operation_id=_lottery_talisman_operation_id(event, user_id, item_id),
+        user_id=user_id,
+        talisman_id=item_id,
+        quantity=num,
+        rewards=rewards,
         max_goods_num=XiuConfig().max_goods_num,
     )
     if not result.succeeded:

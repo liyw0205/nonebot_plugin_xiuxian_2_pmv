@@ -4007,3 +4007,12 @@ game DB 启动迁移创建幂等表，请求路径不再执行 DDL；经验、�
 16 warnings, 25 subtests`。五库 recovery 完成 `138` 项迁移，`back.004` 仅路由到 game DB，
 attached accessory 两项，backup/restore dry-run/restore 与 reconcile clean（operations/outbox/dead
 events 均为 0）；临时数据和缓存已清理。
+
+2026-09-25 back lottery-talisman feature-owned cutover：灵签宝箓真实 handler 已切换到
+`BackApplication.lottery_talisman -> LotteryTalismanApplication -> LotteryTalismanSqlRepository`；
+随机奖励仍由 handler 预滚，旧 `LotteryTalismanService` 仅保留显式兼容回滚。`back.006` 在 game DB
+启动迁移创建幂等表，请求路径不再执行 DDL；符数量扣除、奖励合并/绑定上限、空奖励和重复请求语义
+保持原子一致。聚焦回归 `228 passed`，顶层 `tests/` 全量 `2652 passed, 16 warnings, 25 subtests`。
+五库 recovery 完成 `140` 项迁移，路由为 game/player/trade/impart/message `110/24/7/1/1`，
+`back.006` 仅路由到 game DB，attached accessory 两项，backup/restore dry-run/restore 与
+reconcile clean（operations/outbox/dead events 均为 0）；临时数据和缓存已清理。

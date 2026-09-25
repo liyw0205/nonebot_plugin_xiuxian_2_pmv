@@ -1115,6 +1115,22 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("immediate=True", repository_source)
         self.assertIn("cultivation_item_operations", repository_source)
 
+    def test_lottery_talisman_use_is_atomic_and_idempotent(self) -> None:
+        back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
+        command_source = (back_root / "__init__.py").read_text(encoding="utf-8")
+        repository_source = (SOURCE_ROOT / "features" / "back" / "lottery_talisman_repository.py").read_text(
+            encoding="utf-8"
+        )
+        start = command_source.index("async def use_lottery_talisman(")
+        end = command_source.index("async def use_unbind_charm", start)
+        command = command_source[start:end]
+
+        self.assertIn("back_application.lottery_talisman(", command)
+        self.assertIn("operation_id=_lottery_talisman_operation_id(", command)
+        self.assertNotIn("sql_message.update_back_j(", command)
+        self.assertIn("immediate=True", repository_source)
+        self.assertIn("lottery_talisman_operations", repository_source)
+
     def test_three_cultivation_pill_use_is_atomic_and_idempotent(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         command_source = (back_root / "__init__.py").read_text(encoding="utf-8")
