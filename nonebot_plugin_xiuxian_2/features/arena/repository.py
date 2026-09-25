@@ -40,10 +40,6 @@ class LegacyArenaRepository:
     def settle(self, *args: Any, **kwargs: Any) -> Any:
         return self._services()[2].settle(*args, **kwargs)
 
-    def use_challenge_ticket(self, *args: Any, **kwargs: Any) -> Any:
-        from ...xiuxian.xiuxian_arena.transaction_service import ArenaChallengeTicketService
-        return ArenaChallengeTicketService(self.game_database, self.player_database).use(*args, **kwargs)
-
     def settlement_result(self, operation_id: str, challenger_id: str) -> Any:
         from ...xiuxian.xiuxian_arena.transaction_service import ArenaChallengeSettlementService
         return ArenaChallengeSettlementService(self.game_database, self.player_database).get_result(operation_id, challenger_id)

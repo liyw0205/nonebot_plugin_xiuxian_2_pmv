@@ -4231,5 +4231,14 @@ game DB `impart.002` 和 player DB `impart.003` 启动迁移；提交后只失�
 隔离五库 recovery 完成 backup、restore dry-run、restore 和全量 `169` 项 migration，路由
 `game/player/trade/impart/message = 130/30/7/1/1`；`impart.002` 仅 game、`impart.003` 仅 player，reconcile `clean=true` 且
 operations/outbox/dead_events 均为 `0`。本片未做真实 live/P7 验证和根目录全量回归；隔离测试数据库由 fixture 自动清理，专属 recovery 数据/receipt
-已删除，pytest 禁用 cache provider 与字节码生成，未清理无关 `/tmp`、`.venv`、`.git`、`data/` 或用户既有运行数据。斩妖令切片单独提交为 `689341f9` 并已推送；
-本祈愿石切片仍未提交，Boss JSON 用户改动仍保持未暂存。
+已删除，pytest 禁用 cache provider 与字节码生成，未清理无关 `/tmp`、`.venv`、`.git`、`data/` 或用户既有运行数据。斩妖令切片单独提交为 `689341f9`，祈愿石切片提交为 `89a74849`，均已推送；Boss JSON 用户改动保持未暂存。
+
+2026-09-25 arena challenge-ticket dead legacy service removal：默认 `竞技场挑战券` matcher 已走
+`ArenaApplication.use_challenge_ticket -> ArenaChallengePurchaseSqlRepository.use_challenge_ticket`，确认旧
+`ArenaChallengeTicketService` 仅剩旧测试与 `LegacyArenaRepository` 被 SQL 子类覆盖的回退；删除旧 service（约 180 行）和死回退，
+保留供 adapter 结果转换使用的 DTO。game DB 启动 migration `arena.004` 保持不变，请求路径没有 DDL。入口、repository、
+application replay 与 SQL 事务回归 `11 passed`；同时修正 arena application 测试 fixture，显式执行 startup operation-ledger schema。
+触及模块 compileall、architecture、progress、inventory `--check` 和 `git diff --check` 通过。隔离五库 recovery 完成 backup、
+restore dry-run/restore 与全量 `164` 项 migration，路由 `game/player/trade/impart/message = 130/30/7/1/1`；reconcile
+`clean=true` 且 operations/outbox/dead_events 均为 `0`。未运行根目录全量套件或真实 live/P7 验证；恢复数据/receipt、pytest basetemp
+和字节码缓存已清理，保留 `.venv`、`.git`、`data/`、运行数据库、备份及用户原有 Boss JSON 改动。
