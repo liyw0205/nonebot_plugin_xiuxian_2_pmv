@@ -4238,7 +4238,13 @@ def get_base_attributes(user_id: str | int) -> dict | None:
     }
 
 
-def get_final_attributes(user_id: str | int, ratio: float = 1.0, include_current: bool = True) -> dict | None:
+def get_final_attributes(
+    user_id: str | int,
+    ratio: float = 1.0,
+    include_current: bool = True,
+    *,
+    impart_provider=None,
+) -> dict | None:
     """获取buff加成后的最终属性（统一口径）"""
     base = get_base_attributes(user_id)
     if not base:
@@ -4253,7 +4259,8 @@ def get_final_attributes(user_id: str | int, ratio: float = 1.0, include_current
     weapon = user_buff.get_user_weapon_data() or {}
     armor = user_buff.get_user_armor_buff_data() or {}
 
-    impart = xiuxian_impart.get_user_impart_info_with_id(user_id) or {}
+    impart_provider = impart_provider or xiuxian_impart.get_user_impart_info_with_id
+    impart = impart_provider(user_id) or {}
 
     # 主功法
     main_hp = float(main.get("hpbuff", 0))

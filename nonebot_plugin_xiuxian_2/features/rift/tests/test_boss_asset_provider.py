@@ -133,3 +133,47 @@ def test_rift_natal_provider_returns_none_for_unawakened_or_missing_table(tmp_pa
         assert connection.execute(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table'"
         ).fetchone()[0] == 0
+
+
+def test_rift_attribute_provider_injects_read_only_impart_provider():
+    final = {"user_id": "u", "final_atk": 10}
+    with patch.object(riftmake, "get_final_attributes", return_value=final) as calculate:
+        result = riftmake.get_rift_battle_final_attributes(
+            "u", ratio=0.5, include_current=True
+        )
+
+    assert result is final
+    calculate.assert_called_once_with(
+        "u",
+        ratio=0.5,
+        include_current=True,
+        impart_provider=riftmake.get_rift_battle_impart_data,
+    )
+
+
+def test_rift_impart_provider_reads_existing_row_without_creating_user(tmp_path):
+    database = tmp_path / "xiuxian_impart.db"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "CREATE TABLE xiuxian_impart (user_id TEXT PRIMARY KEY, impart_atk_per REAL, boss_atk REAL)"
+        )
+        connection.execute(
+            "INSERT INTO xiuxian_impart VALUES (?, ?, ?)", ("u", 0.25, 0.4)
+        )
+        before = connection.execute(
+            "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
+        ).fetchall()
+
+    paths = SimpleNamespace(impart_db=database)
+    with patch.object(riftmake, "get_paths", return_value=paths):
+        result = riftmake.get_rift_battle_impart_data("u")
+        missing = riftmake.get_rift_battle_impart_data("missing")
+
+    with sqlite3.connect(database) as connection:
+        after = connection.execute(
+            "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
+        ).fetchall()
+    assert result["impart_atk_per"] == 0.25
+    assert result["boss_atk"] == 0.4
+    assert missing is None
+    assert before == after

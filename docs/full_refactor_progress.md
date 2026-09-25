@@ -4410,3 +4410,9 @@ compileall、architecture、progress、inventory `--check` 与 `git diff --check
 `get_players_attributes` 保留旧 `NatalTreasure` fallback，故本片只建立可验证的本命法宝只读 provider 边界，不宣称底层本命法宝资产迁移完成；
 Rift/Boss asset/source 聚焦测试覆盖 provider 透传、已觉醒读取、未觉醒/缺表兼容和 schema 不变性。下一步审计
 `get_final_attributes` 内部残留的 buff/传承读取，继续拆分真正的只读 provider。
+
+2026-09-26 rift Boss impart read provider：`get_final_attributes` 增加可选 `impart_provider`，Rift
+Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_data`，从既有
+`xiuxian_impart.db.xiuxian_impart` 只读读取传承属性；缺表、缺用户和只读错误返回空兼容结果，不创建用户、不补字段。
+默认其他调用仍使用旧 `XIUXIAN_IMPART_BUFF` fallback。本片只拆出传承查询边界，属性公式、BuffInfo、功法/装备、饰品与炼体读取仍未迁移；
+新增 provider 透传、只读行读取和 schema 不变测试，下一步继续审计 `UserBuffDate`/BuffInfo 读取边界。

@@ -95,6 +95,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     rift_domain = (PACKAGE / "features" / "rift" / "domain.py").read_text(encoding="utf-8")
     rift_make = (PACKAGE / "xiuxian" / "xiuxian_rift" / "riftmake.py").read_text(encoding="utf-8")
     rift_player_fight = (PACKAGE / "xiuxian" / "xiuxian_utils" / "player_fight.py").read_text(encoding="utf-8")
+    rift_attributes = (PACKAGE / "xiuxian" / "xiuxian_utils" / "xiuxian2_handle.py").read_text(encoding="utf-8")
     rift_cooldown_repository = (PACKAGE / "features" / "rift" / "cooldown_repository.py").read_text(encoding="utf-8")
     rift_generation_repository = (PACKAGE / "features" / "rift" / "generation_repository.py").read_text(encoding="utf-8")
     rift_key_event_repository = (PACKAGE / "features" / "rift" / "key_event_repository.py").read_text(encoding="utf-8")
@@ -420,14 +421,16 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "boss_battle_legacy_asset_provider_explicit": "def get_rift_battle_player_assets" in rift_make and "get_players_attributes(" in rift_make and "item_provider=items.get_data_by_item_id" in rift_make,
             "boss_battle_item_provider_wired": "item_provider=items.get_data_by_item_id" in rift_make and "item_data = item_provider(item_id)" in rift_player_fight,
             "boss_battle_pet_provider_wired": "pet_provider=get_user_pet_for_battle" in rift_make and "buffs[\"宠物\"] = pet_provider(user_id)" in rift_player_fight,
-            "boss_battle_attribute_provider_wired": "attribute_provider=get_final_attributes" in rift_make and "final_attr = attribute_provider(user_id, ratio=ratio, include_current=True)" in rift_player_fight,
+            "boss_battle_attribute_provider_wired": "attribute_provider=get_rift_battle_final_attributes" in rift_make and "final_attr = attribute_provider(user_id, ratio=ratio, include_current=True)" in rift_player_fight,
             "boss_battle_natal_provider_wired": "natal_provider=get_rift_battle_natal_data" in rift_make and "natal_data = natal_provider(user_id)" in rift_player_fight,
             "boss_battle_natal_provider_read_only": "def get_rift_battle_natal_data" in rift_make and "DatabaseUnitOfWork(database, read_only=True)" in rift_make and "CREATE TABLE" not in rift_make[rift_make.index("def get_rift_battle_natal_data"):rift_make.index("async def get_boss_battle_info", rift_make.index("def get_rift_battle_natal_data"))],
+            "boss_battle_impart_provider_wired": "impart_provider=get_rift_battle_impart_data" in rift_make and "impart_provider=None" in rift_attributes and "impart = impart_provider(user_id) or {}" in rift_attributes,
+            "boss_battle_impart_provider_read_only": "def get_rift_battle_impart_data" in rift_make and "DatabaseUnitOfWork(database, read_only=True)" in rift_make and "CREATE TABLE" not in rift_make[rift_make.index("def get_rift_battle_impart_data"):rift_make.index("def get_rift_battle_final_attributes", rift_make.index("def get_rift_battle_impart_data"))],
             "treasure_application_owned": "rift_application.roll_treasure(" in rift_event_handler,
             "treasure_resolver_owned": "class RiftTreasureResolver" in rift_domain and "RiftTreasureResolver" in rift_application,
             "treasure_is_persistence_free": "update_exp" not in rift_domain and "update_ls" not in rift_domain and "update_ls" not in rift_application,
             "legacy_treasure_disabled": "get_treasure_info(" not in rift_event_handler,
-            "status": "world_generation_termination_key_event_settlement_entry_speedup_demon_token_damage_event_boss_battle_asset_boundary_treasure_cutover_with_natal_provider_boundary_and_remaining_rift_compatibility",
+            "status": "world_generation_termination_key_event_settlement_entry_speedup_demon_token_damage_event_boss_battle_asset_boundary_treasure_cutover_with_natal_and_impart_provider_boundaries_and_remaining_rift_compatibility",
         },
         "back": {
             "cultivation_item_application_owned": "back_application.cultivation_item(" in back_facade and "_cultivation_item_application().apply(" in back_util_facade,

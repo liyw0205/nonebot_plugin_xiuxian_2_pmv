@@ -230,7 +230,7 @@ def get_rift_battle_player_assets(user_id):
         user_id,
         item_provider=items.get_data_by_item_id,
         pet_provider=get_user_pet_for_battle,
-        attribute_provider=get_final_attributes,
+        attribute_provider=get_rift_battle_final_attributes,
         natal_provider=get_rift_battle_natal_data,
     )
 
@@ -268,6 +268,42 @@ def get_rift_battle_natal_data(user_id):
             except (TypeError, ValueError):
                 pass
     return result
+
+
+def get_rift_battle_impart_data(user_id):
+    """Read an existing impart row without creating users or repairing schema."""
+    database = get_paths().impart_db
+    if not database.exists():
+        return None
+    try:
+        with DatabaseUnitOfWork(database, read_only=True) as uow:
+            table = uow.query_one(
+                "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='xiuxian_impart'"
+            )
+            if table is None:
+                return None
+            columns = {
+                str(row["name"])
+                for row in uow.query_all("PRAGMA table_info(xiuxian_impart)")
+            }
+            if "user_id" not in columns:
+                return None
+            row = uow.query_one(
+                "SELECT * FROM xiuxian_impart WHERE user_id=?", (str(user_id),)
+            )
+    except (OSError, ValueError, sqlite3.Error):
+        return None
+    return dict(row) if row is not None else None
+
+
+def get_rift_battle_final_attributes(user_id, *, ratio, include_current):
+    """Calculate battle attributes with an explicit read-only impart provider."""
+    return get_final_attributes(
+        user_id,
+        ratio=ratio,
+        include_current=include_current,
+        impart_provider=get_rift_battle_impart_data,
+    )
 
 
 async def get_boss_battle_info(user_info, rift_rank, bot_id, persist=True):
