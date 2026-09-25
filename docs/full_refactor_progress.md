@@ -4086,4 +4086,14 @@ game/player/trade/impart/message `117/24/7/1/1`，`back.011` 仅路由到 game D
 测试 `227 passed`，顶层 `tests/` 全量 `2693 passed, 16 warnings, 25 subtests`。五库 recovery
 完成 `147` 项迁移，`back.013` 仅路由到 game DB；backup/restore dry-run/restore、reconcile 均通过，
 `clean=true` 且 operations/outbox/dead_events 均为 `0`。临时 recovery 数据、pytest cache、`.pyc`
-和 `__pycache__` 已清理。`repair` 仍经兼容 `BackpackRepairService`，后续继续处理背包动作切片。
+和 `__pycache__` 已清理。背包修复随后由 `back.014` 独立切片接管，旧服务仅保留显式兼容包装。
+
+2026-09-25 back backpack-repair feature-owned cutover：管理员背包检测默认路径已切换到
+`BackApplication.repair -> BackpackRepairApplication -> BackpackRepairSqlRepository`；旧
+`BackpackRepairService` 仅保留显式兼容包装。新增 `back.014` game DB 启动迁移创建
+`backpack_repair_tasks`，默认请求路径不再执行 DDL；批量游标、目录/容量快照、数量/绑定/名称/装备修复、
+缺失定义、重复请求、operation conflict 和异常回滚语义保持一致。新增 application/repository、wiring、
+缺表拒绝、迁移路由和 source/progress 回归；repair/application/source 聚焦 `224 passed`。五库 recovery
+完成 `148` 项迁移，`back.014` 仅路由到 game DB；backup/restore dry-run/restore、reconcile 均通过，
+`clean=true` 且 operations/outbox/dead_events 均为 `0`。临时 recovery 数据、pytest cache、`.pyc`
+和 `__pycache__` 已清理。背包动作剩余重点为宠物蛋、通用物品批处理及 accessory 兼容边界。

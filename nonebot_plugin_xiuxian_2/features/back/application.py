@@ -18,6 +18,7 @@ from .permanent_atk_item_application import PermanentAtkItemApplication
 from .unbind_application import UnbindApplication
 from .blessed_flag_replace_application import BlessedFlagReplaceApplication
 from .equipment_application import EquipmentApplication
+from .repair_application import BackpackRepairApplication
 
 
 class BackApplication(LegacyApplication):
@@ -35,6 +36,7 @@ class BackApplication(LegacyApplication):
         self.unbind_application = UnbindApplication(database)
         self.blessed_flag_replace_application = BlessedFlagReplaceApplication(database, player_database or database)
         self.equipment_application = EquipmentApplication(database)
+        self.repair_application = BackpackRepairApplication(database)
         super().__init__(database, repository=repository or LegacyBackRepository(database, player_database), feature="back")
 
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):
@@ -53,7 +55,10 @@ class BackApplication(LegacyApplication):
         if self._explicit_repository is None:
             return self.skill_learning_application.learn(operation_id, user_id, **kwargs)
         return self._action("learn_skill", operation_id=operation_id, user_id=user_id, **kwargs)
-    def repair(self, *, operation_id: str, user_id: str = "system", **kwargs: Any): return self._action("repair", operation_id=operation_id, user_id=user_id, **kwargs)
+    def repair(self, *, operation_id: str, user_id: str = "system", **kwargs: Any):
+        if self._explicit_repository is None:
+            return self.repair_application.run(operation_id, **kwargs)
+        return self._action("repair", operation_id=operation_id, user_id=user_id, **kwargs)
     def use_pet_eggs(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("use_pet_eggs", operation_id=operation_id, user_id=user_id, **kwargs)
     def cultivation_item(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:
