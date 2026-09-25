@@ -49,9 +49,25 @@ def apply_rift_speedup_operations(uow: DatabaseUnitOfWork) -> None:
         uow.execute("ALTER TABLE rift_speedup_operations ADD COLUMN create_time TEXT")
 
 
+def apply_rift_world_generation(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS rift_world_state("
+        "rift_key TEXT PRIMARY KEY,generation_id TEXT NOT NULL,"
+        "rift_data TEXT NOT NULL,participants TEXT NOT NULL,revision INTEGER NOT NULL,"
+        "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS rift_generation_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,rift_key TEXT NOT NULL,"
+        "generation_id TEXT NOT NULL,rift_data TEXT NOT NULL,revision INTEGER NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
 __all__ = [
     "apply_rift",
     "apply_rift_demon_token_operations",
     "apply_rift_demon_token_player_schema",
     "apply_rift_speedup_operations",
+    "apply_rift_world_generation",
 ]

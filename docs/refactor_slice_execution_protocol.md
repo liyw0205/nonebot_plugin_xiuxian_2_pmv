@@ -108,11 +108,11 @@ diff check 通过。五库 recovery 完成 `164` 项 migration，路由 `130/30/
 
 ## 当前切片与下一切片选择
 
-最近完成 `rift speedup default-repository and startup-schema boundary`：默认加速转至 feature SQL repository，新增 game-only
-`rift.004` 并移除请求期 DDL；该切片不代表 Rift 其他动作已脱离 legacy repository。下一步回到
-`docs/full_refactor_progress.md` 的 6.2 目标 5，只读审计 Rift 的真实默认 composition、剩余请求期 schema 写入与 transaction owner，
-确认一个明确缺口后再做单动作切片；不要将 facade 调用或静态路由当成底层 cutover。更广范围仍需按 6.2 逐个审计特殊道具、宠物、
-任务/修炼、洞府、地图、宗门、副本、世界事件和 Boss handler；追捕令 `20015` 的随机 offer 仍由旧领域逻辑生成，不能把既有扣除/快照
-边界解释成 work 领域整体完成。
+最近完成 `rift world generation and startup-schema boundary`：手动/定时生成、startup/shutdown 读取及历史 JSON 首次导入统一接到
+`RiftApplication -> RiftGenerationSqlRepository`，新增 game-only `rift.005` 并移除世界路径对旧 entry service 的依赖；玩家 entry 读取和
+termination、key event、普通 settlement 等仍是分开的兼容边界。下一步在本轮缓存清理与磁盘复核后，回到
+`docs/full_refactor_progress.md` 的 6.2 目标 5，只读审计一个剩余真实 Rift handler 的 composition、请求期 schema 写入与 transaction owner，
+再选择单动作切片；不要将 facade 调用或静态路由当成底层 cutover。更广范围仍需按 6.2 逐个审计特殊道具、宠物、任务/修炼、洞府、地图、宗门、
+副本、世界事件和 Boss handler；追捕令 `20015` 的随机 offer 仍由旧领域逻辑生成，不能把既有扣除/快照边界解释成 work 领域整体完成。
 已切换的 partner cultivation、partner token、背包通用 item-use Web、宠物蛋、饰品礼包、炼丹两阶段领取、斩妖令、祈愿石、挑战券事务、
-love-sand schema 边界和 Rift speedup schema 边界不重复迁移。
+love-sand schema 边界、Rift speedup 和 Rift world-generation schema 边界不重复迁移。

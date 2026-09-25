@@ -8,15 +8,16 @@ NoneBot handler 预滚；资产、探索次数、统计和奖励结算经 `RiftA
 `POST /api/v1/rift/{generate,enter,terminate,event_settle,speedup,settle}`，权限 `user`。
 ## 数据模型与迁移
 迁移 `rift.001` 保留既有裂隙 feature marker；`rift.002` 在 game DB 建斩妖令兼容 operation 表，
-`rift.003` 在 player DB 预建/补齐探索计数和统计列；`rift.004` 在 game DB 预建加速 replay 表，并补齐旧表缺列。
-迁移使用 `IF NOT EXISTS` 与缺列探测保留现有行。
-历史裂隙状态继续通过兼容仓储投影。
+`rift.003` 在 player DB 预建/补齐探索计数和统计列；`rift.004` 在 game DB 预建加速 replay 表，并补齐旧表缺列；
+`rift.005` 在 game DB 预建世界状态与生成 replay 表。迁移使用 `IF NOT EXISTS` 与缺列探测保留现有行。
+秘境世界生成、当前世界读取和历史 JSON 首次导入经 `RiftApplication` 与 SQL repository；玩家 entry JSON 兼容读取仍保留旧仓储。
 ## 事务与失败回滚
 斩妖令在 attached game/player UoW 内校验秘境、角色资源、道具数量与探索快照，再提交背包、战斗资产、奖励、
 探索次数、统计、秘境状态和旧格式 operation payload；异常回滚两库。默认 handler 不走旧
 `RiftDemonTokenBattleSettlementService`，该 service 保留给兼容对照。其他裂隙兼容边界仍需分片迁移。
 加速默认经 `RiftSpeedupSqlRepository` 原子消耗加速券、缩短秘境与冷却时间，并保留旧 payload replay；
-缺少 `rift.004` 时返回 `schema_missing`，请求不建表。
+缺少 `rift.004` 时返回 `schema_missing`，请求不建表。世界生成使用稳定 operation ID、递增 revision 与旧 payload replay；
+缺少 `rift.005` 时拒绝生成，generation/current-world/bootstrap 请求路径均不建表。
 ## 定时任务
 世界生成继续由兼容 scheduler 触发。
 ## 配置项

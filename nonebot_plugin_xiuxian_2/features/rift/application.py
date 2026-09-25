@@ -5,6 +5,7 @@ from typing import Any
 
 from .._legacy_application import LegacyApplication
 from .demon_token_repository import RiftDemonTokenBattleSqlRepository
+from .generation_repository import RiftGenerationSqlRepository
 from .repository import LegacyRiftRepository, RiftRepository
 from .speedup_repository import RiftSpeedupSqlRepository
 
@@ -41,7 +42,46 @@ class RiftApplication(LegacyApplication):
             call=lambda: repository.invoke(action, operation_id, user_id, **kwargs),
         )
 
-    def generate(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("generate", operation_id=operation_id, user_id=user_id, **kwargs)
+    def generate(
+        self,
+        *,
+        operation_id: str,
+        rift_key: str,
+        rift_plan: dict[str, Any],
+        user_id: str = "rift-world",
+    ):
+        if self.repository is not None:
+            return self._action(
+                "generate",
+                operation_id=operation_id,
+                user_id=user_id,
+                rift_key=rift_key,
+                rift_plan=rift_plan,
+            )
+        repository = RiftGenerationSqlRepository(self.database)
+        normalized_plan, _ = repository.normalize_plan(rift_plan)
+        return self._execute(
+            operation_id=operation_id,
+            user_id=user_id,
+            action="rift.generate",
+            payload={
+                "user_id": user_id,
+                "rift_key": rift_key,
+                "rift_plan": rift_plan,
+            },
+            call=lambda: repository.generate(
+                operation_id, rift_key, normalized_plan
+            ),
+        )
+
+    def current_world(self, *, rift_key: str):
+        return RiftGenerationSqlRepository(self.database).get_current(rift_key)
+
+    def bootstrap_world(self, *, rift_key: str, legacy_snapshot: dict[str, Any]):
+        return RiftGenerationSqlRepository(self.database).bootstrap(
+            rift_key, legacy_snapshot
+        )
+
     def enter(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("enter", operation_id=operation_id, user_id=user_id, **kwargs)
     def terminate(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("terminate", operation_id=operation_id, user_id=user_id, **kwargs)
     def event_settle(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("event_settle", operation_id=operation_id, user_id=user_id, **kwargs)

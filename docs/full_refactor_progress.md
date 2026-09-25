@@ -4265,3 +4265,15 @@ health 六项 ready 和 `git diff --check` 通过。隔离五库 recovery 完成
 `game/player/trade/impart/message = 132/31/7/1/1`，`rift.004` 仅 game；backup/restore dry-run 与 restore 覆盖五库，
 reconcile `clean=true` 且 operations/outbox/dead_events 均为 `0`。未运行根目录全量回归或真实 live/P7；本轮 pytest cache provider 与
 字节码生成关闭，专用测试/recovery 临时目录将在本片验收后清理，保留 `.venv`、`.git`、`data/`、运行数据库/备份及用户 Boss JSON 改动。
+
+2026-09-25 rift world generation and startup-schema boundary：手动 `create_rift`、定时生成、startup/shutdown 世界读取及历史 JSON 首次导入改走
+`RiftApplication -> RiftGenerationSqlRepository`；移除 `xiuxian_rift` 世界路径对 `RiftEntryService.generate/get_current/bootstrap` 的调用，
+玩家 entry 读取和其他尚未迁移事务仍保留独立兼容 service。默认 repository 复用旧世界规范化、legacy bootstrap generation ID、operation payload 和 revision 语义；
+应用账本保留旧 `user_id + rift_plan` payload 结构，兼容既有 Web generation replay。新增 game-only `rift.005`，预建世界及 generation operation 表；
+缺迁移时 generate 返回 `schema_missing`，current-world/bootstrap 不建表。覆盖默认 composition、旧应用账本与旧 generation payload replay、
+重复/冲突/superseded、revision、bootstrap identity、无 DDL、事务回滚、Web `user_id` 形态、手动/定时入口和 migration routing 的 Rift 聚焦回归 `90 passed`；
+compileall、architecture、progress、inventory `--check`、`git diff --check` 通过。隔离五库 recovery 完成 `168` 项 migration，路由
+`game/player/trade/impart/message = 133/31/7/1/1`，`rift.005` 仅 game；五库 backup/restore dry-run/restore、migration dry-run（五库 pending 为空）、
+health 六项 readiness 全绿，reconcile `clean=true` 且 operations/outbox/dead_events 均为 `0`。未运行根目录全量回归或真实 live/P7；测试禁用 pytest cache provider
+和字节码生成，专属 basetemp、recovery 数据/receipt、compileall 字节码缓存已清理并复核磁盘/RAM；`.venv`、`.git`、`data/`、运行数据库、备份
+和用户原有 Boss JSON 改动保留。

@@ -81,6 +81,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     world_events_facade = (PACKAGE / "xiuxian" / "xiuxian_world_events" / "__init__.py").read_text(encoding="utf-8")
     rift_facade = (PACKAGE / "xiuxian" / "xiuxian_rift" / "__init__.py").read_text(encoding="utf-8")
     rift_application = (PACKAGE / "features" / "rift" / "application.py").read_text(encoding="utf-8")
+    rift_generation_repository = (PACKAGE / "features" / "rift" / "generation_repository.py").read_text(encoding="utf-8")
     rift_speedup_repository = (PACKAGE / "features" / "rift" / "speedup_repository.py").read_text(encoding="utf-8")
     rift_migrations = (PACKAGE / "features" / "rift" / "migrations.py").read_text(encoding="utf-8")
     back_facade = (PACKAGE / "xiuxian" / "xiuxian_back" / "__init__.py").read_text(encoding="utf-8")
@@ -360,8 +361,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "speedup_default_repository_owned": "repository=repository" in rift_application and "if self.repository is None" in rift_application and "RiftSpeedupSqlRepository(self.database).apply" in rift_application,
             "speedup_migrations_registered": "rift.004" in plugin and "apply_rift_speedup_operations" in plugin and "rift_speedup_operations" in rift_migrations,
             "speedup_request_path_has_no_ddl": "CREATE TABLE" not in rift_speedup_repository and "ALTER TABLE" not in rift_speedup_repository and "schema_missing" in rift_speedup_repository,
+            "generation_application_owned": all(token in rift_facade for token in ("rift_application.generate(", "rift_application.current_world(", "rift_application.bootstrap_world(")),
+            "legacy_generation_disabled": "_rift_entry_service()" not in rift_facade and "RiftEntryService" not in rift_facade,
+            "generation_migrations_registered": "rift.005" in plugin and "apply_rift_world_generation" in plugin and "rift_world_state" in rift_migrations and "rift_generation_operations" in rift_migrations,
+            "generation_request_path_has_no_ddl": "CREATE TABLE" not in rift_generation_repository and "ALTER TABLE" not in rift_generation_repository and "schema_missing" in rift_generation_repository,
             "legacy_entry_disabled": "_rift_entry_service().enter(" not in rift_facade,
-            "status": "entry_key_event_speedup_settlement_demon_token_cutover_with_remaining_rift_compatibility",
+            "status": "world_generation_entry_key_event_speedup_settlement_demon_token_cutover_with_remaining_rift_compatibility",
         },
         "back": {
             "cultivation_item_application_owned": "back_application.cultivation_item(" in back_facade and "_cultivation_item_application().apply(" in back_util_facade,

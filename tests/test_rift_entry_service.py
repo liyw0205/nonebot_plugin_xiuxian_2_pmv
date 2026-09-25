@@ -21,8 +21,8 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift.transaction_service import (
 from tests.test_db_backend import db_backend
 
 
-def test_rift_facades_defer_entry_service_construction():
-    assert rift_module._rift_entry_service_instance is None
+def test_rift_world_lifecycle_is_application_owned_and_entry_reader_is_lazy():
+    assert not hasattr(rift_module, "_rift_entry_service_instance")
     assert jsondata._rift_entry_reader_instance is None
 
 
@@ -563,8 +563,10 @@ class RiftEntryServiceTests(unittest.TestCase):
         ]
         self.assertIn("rift_application.enter(", handler)
         self.assertNotIn("_rift_entry_service().enter(", handler)
-        self.assertIn("_rift_entry_service_instance = None", source)
-        self.assertIn("def _rift_entry_service(", source)
+        self.assertNotIn("_rift_entry_service_instance", source)
+        self.assertNotIn("def _rift_entry_service(", source)
+        self.assertIn("rift_application.generate(", source)
+        self.assertIn("rift_application.bootstrap_world(", source)
         self.assertIn("expected_generation_id=", handler)
         self.assertIn("expected_revision=", handler)
         self.assertIn("stamina_cost=stamina_cost", handler)

@@ -21,9 +21,6 @@ class BackAlchemyWiringTests(unittest.TestCase):
             nonebot.init()
 
     def test_lifecycle_binds_feature_back_application_to_legacy_handler(self) -> None:
-        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_rift
-
-        previous_rift_entry_service = xiuxian_rift._rift_entry_service_instance
         with tempfile.TemporaryDirectory() as directory:
             data_dir = Path(directory) / "data"
             copy_static_data(Path(__file__).resolve().parents[1] / "data" / "xiuxian", data_dir)
@@ -52,7 +49,6 @@ class BackAlchemyWiringTests(unittest.TestCase):
                 self.assertTrue(callable(context.services["back"].accessory_package))
             finally:
                 asyncio.run(lifecycle.shutdown())
-                xiuxian_rift._rift_entry_service_instance = previous_rift_entry_service
 
 
 if __name__ == "__main__":
