@@ -109,7 +109,7 @@ def test_rift_boss_player_snapshot_wires_item_lookup_provider():
     player_fight = Path(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/player_fight.py"
     ).read_text(encoding="utf-8")
-    assert "item_provider=items.get_data_by_item_id" in source
+    assert "item_provider=get_rift_battle_item_data" in source
     assert "pet_provider=get_user_pet_for_battle" in source
     assert "attribute_provider=None" in player_fight
     assert "item_data = item_provider(item_id)" in player_fight
@@ -120,6 +120,18 @@ def test_rift_boss_player_snapshot_wires_item_lookup_provider():
     assert "accessory_provider=get_rift_battle_accessory_data" in source
     assert "tianti_provider=get_rift_battle_tianti_data" in source
     assert "base_provider=get_rift_battle_base_attributes" in source
+
+
+def test_rift_boss_item_provider_is_on_demand_and_cache_free():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_rift/riftmake.py"
+    ).read_text(encoding="utf-8")
+    provider_start = source.index("def get_rift_battle_item_data")
+    provider = source[provider_start:source.index("def get_rift_battle_boss_skill_data", provider_start)]
+    assert "item_path.open" in provider
+    assert "_RIFT_BATTLE_ITEM_SOURCES" in provider
+    assert "ITEMS_CACHE" not in provider
+    assert "items.get_data_by_item_id" not in provider
 
 
 def test_rift_boss_player_snapshot_wires_read_only_natal_provider():

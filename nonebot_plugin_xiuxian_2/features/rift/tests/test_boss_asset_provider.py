@@ -109,6 +109,48 @@ def test_rift_boss_skill_provider_degrades_for_missing_or_invalid_json(tmp_path)
         assert riftmake.get_rift_battle_boss_skill_data() == {}
 
 
+def test_rift_battle_item_provider_reads_one_item_without_global_cache(tmp_path):
+    skill_dir = tmp_path / "功法"
+    equipment_dir = tmp_path / "装备"
+    skill_dir.mkdir()
+    equipment_dir.mkdir()
+    main_path = skill_dir / "主功法.json"
+    main_path.write_text(
+        json.dumps({"7": {"name": "功法", "level": 3, "rank": 2}}),
+        encoding="utf-8",
+    )
+    (equipment_dir / "法器.json").write_text(
+        json.dumps({"8": {"name": "法器", "atk_buff": 0.1}}),
+        encoding="utf-8",
+    )
+
+    with patch.object(riftmake, "get_paths", return_value=SimpleNamespace(data=tmp_path)):
+        main = riftmake.get_rift_battle_item_data("7")
+        weapon = riftmake.get_rift_battle_item_data(8)
+        missing = riftmake.get_rift_battle_item_data("999")
+
+    assert main["item_type"] == "功法"
+    assert main["type"] == "技能"
+    assert main["rank"] == 3
+    assert main["level"] == 2
+    assert weapon["item_type"] == "法器"
+    assert missing is None
+
+
+def test_rift_battle_item_provider_does_not_retain_file_cache(tmp_path):
+    skill_dir = tmp_path / "功法"
+    skill_dir.mkdir()
+    path = skill_dir / "主功法.json"
+    path.write_text(json.dumps({"7": {"name": "first"}}), encoding="utf-8")
+
+    with patch.object(riftmake, "get_paths", return_value=SimpleNamespace(data=tmp_path)):
+        first = riftmake.get_rift_battle_item_data(7)
+        path.write_text(json.dumps({"7": {"name": "second"}}), encoding="utf-8")
+        second = riftmake.get_rift_battle_item_data(7)
+
+    assert first["name"] == "first"
+    assert second["name"] == "second"
+
 def test_boss_buff_generation_uses_injected_random_source():
     class FixedRandom:
         def __init__(self):
@@ -216,7 +258,7 @@ def test_rift_attribute_provider_injects_read_only_impart_provider():
         include_current=True,
         impart_provider=riftmake.get_rift_battle_impart_data,
         buff_info_provider=riftmake.get_rift_battle_buff_info,
-        item_provider=riftmake.items.get_data_by_item_id,
+        item_provider=riftmake.get_rift_battle_item_data,
         accessory_provider=riftmake.get_rift_battle_accessory_data,
         tianti_provider=riftmake.get_rift_battle_tianti_data,
         base_provider=riftmake.get_rift_battle_base_attributes,
@@ -371,7 +413,7 @@ def test_rift_final_attributes_passes_buff_and_item_read_providers():
         include_current=True,
         impart_provider=riftmake.get_rift_battle_impart_data,
         buff_info_provider=riftmake.get_rift_battle_buff_info,
-        item_provider=riftmake.items.get_data_by_item_id,
+        item_provider=riftmake.get_rift_battle_item_data,
         accessory_provider=riftmake.get_rift_battle_accessory_data,
         tianti_provider=riftmake.get_rift_battle_tianti_data,
         base_provider=riftmake.get_rift_battle_base_attributes,

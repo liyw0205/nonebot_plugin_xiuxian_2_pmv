@@ -31,12 +31,51 @@ xiuxian_impart = XIUXIAN_IMPART_BUFF()
 items = Items()
 skill_data = read_f()
 
+_RIFT_BATTLE_ITEM_SOURCES = (
+    ("功法/主功法.json", "功法"),
+    ("功法/辅修功法.json", "辅修功法"),
+    ("功法/神通.json", "神通"),
+    ("功法/身法.json", "身法"),
+    ("功法/瞳术.json", "瞳术"),
+    ("装备/法器.json", "法器"),
+    ("装备/防具.json", "防具"),
+)
+
 
 def _sql_message():
     global _sql_message_instance
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
+
+
+def get_rift_battle_item_data(item_id):
+    """Read one battle item on demand without constructing the global Items cache."""
+    if item_id is None:
+        return None
+    target_id = str(item_id)
+    data_root = get_paths().data
+    for relative_path, item_type in _RIFT_BATTLE_ITEM_SOURCES:
+        item_path = data_root / relative_path
+        if not item_path.exists():
+            continue
+        try:
+            with item_path.open("r", encoding="utf-8") as handle:
+                source_data = json.load(handle)
+        except (OSError, TypeError, ValueError):
+            continue
+        if not isinstance(source_data, dict) or target_id not in source_data:
+            continue
+        item_data = source_data[target_id]
+        if not isinstance(item_data, dict):
+            return None
+        result = dict(item_data)
+        if item_type in {"功法", "辅修功法", "神通", "身法", "瞳术"}:
+            result["type"] = "技能"
+            result["rank"], result["level"] = result.get("level"), result.get("rank")
+        result["item_type"] = item_type
+        return result
+    return None
 
 
 def get_rift_battle_boss_skill_data():
@@ -262,7 +301,7 @@ def get_rift_battle_player_assets(user_id):
     """Explicit compatibility provider for the Rift Boss player snapshot."""
     return get_players_attributes(
         user_id,
-        item_provider=items.get_data_by_item_id,
+        item_provider=get_rift_battle_item_data,
         pet_provider=get_user_pet_for_battle,
         attribute_provider=get_rift_battle_final_attributes,
         natal_provider=get_rift_battle_natal_data,
@@ -340,7 +379,7 @@ def get_rift_battle_final_attributes(user_id, *, ratio, include_current):
         include_current=include_current,
         impart_provider=get_rift_battle_impart_data,
         buff_info_provider=get_rift_battle_buff_info,
-        item_provider=items.get_data_by_item_id,
+        item_provider=get_rift_battle_item_data,
         accessory_provider=get_rift_battle_accessory_data,
         tianti_provider=get_rift_battle_tianti_data,
         base_provider=get_rift_battle_base_attributes,

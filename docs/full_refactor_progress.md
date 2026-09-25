@@ -4444,3 +4444,5 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-09-26 rift Boss Buff random-source boundary：`generate_boss_buff` 增加可选 `random_source`，Rift Boss resolver 将本次操作的 RandomSource 显式传入；旧调用仍使用标准库随机 fallback，其他战斗系统随机逻辑未扩大改动范围。测试确认注入源生效且全局 `random` 不被调用，进度检查器新增 `boss_battle_buff_random_source_wired`。下一步审计 Boss 战斗状态写回和剩余兼容资产读取。
 
 2026-09-26 rift Boss status-writeback isolation：Rift Boss resolver 注入 `ignore_rift_battle_boss_status_update`，秘境战斗不再修改本地 Boss 快照；结算只消费 `status_list` 生成玩家 HP/MP delta，仍固定 `type_in=0`，不会触发玩家状态写回。世界 Boss、塔和地图等旧 `Boss_fight` 调用继续使用原状态更新 fallback。本片新增状态快照不变测试和进度门禁，下一步处理 Boss 战斗剩余兼容资产读取。
+
+2026-09-26 rift Boss item read provider：新增 `get_rift_battle_item_data`，仅按需读取 BuffInfo 战斗所需的主功法、辅修功法、神通、身法、瞳术、法器和防具 JSON，并复现旧 `Items` 的 `item_type/type/rank/level` 归一化；不构造或读取全局 `ITEMS_CACHE`，不写回文件，也不保留文件级缓存。旧 `Items` 查询仍保留给宝物等其他兼容路径；Boss 玩家快照和最终属性计算已切换该 provider。新增命中、缺失、重读和 source/inventory 门禁，下一步审计属性公式内部仍存在的旧兼容读取。
