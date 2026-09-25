@@ -182,3 +182,7 @@ compileall、architecture、progress、inventory 和 diff check 通过；无新�
 `rift Boss item lookup provider`：Rift 玩家战斗快照 provider 将 `Items.get_data_by_item_id` 作为显式
 `item_provider` 传入 `get_players_attributes`；未注入时保留旧全局 Items fallback。该切片只拆出一个只读查询边界，
 不改变 `get_final_attributes`、宠物、本命法宝或资产文件的兼容读取，也不新增 migration。
+
+`rift Boss pet lookup provider`：Rift 玩家战斗快照 provider 同样显式注入
+`get_user_pet_for_battle` 作为 `pet_provider`；未注入时保留旧宠物读取 fallback。该切片只拆出宠物只读查询边界，
+不改变宠物数据模型、战斗状态写入或其他玩家资产读取。

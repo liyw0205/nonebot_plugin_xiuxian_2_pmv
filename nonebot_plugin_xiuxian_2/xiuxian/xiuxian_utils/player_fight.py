@@ -190,8 +190,9 @@ async def Boss_fight(
     return play_list, suc, boss
 
 
-def get_players_attributes(user_id, level_ratios=None, *, item_provider=None):
+def get_players_attributes(user_id, level_ratios=None, *, item_provider=None, pet_provider=None):
     item_provider = item_provider or items.get_data_by_item_id
+    pet_provider = pet_provider or get_user_pet_for_battle
     buff_data_info = UserBuffDate(user_id).BuffInfo
     buffs = {}
     ratio = 1
@@ -267,7 +268,7 @@ def get_players_attributes(user_id, level_ratios=None, *, item_provider=None):
     natal_data = natal_treasure.get_data() if natal_treasure.exists() else None
 
     buffs["本命法宝"] = natal_data
-    buffs["宠物"] = get_user_pet_for_battle(user_id)
+    buffs["宠物"] = pet_provider(user_id)
     buffs["属性"] = attributes
     buffs["其他"] = buff_data_info
     attributes["pet"] = buffs["宠物"]

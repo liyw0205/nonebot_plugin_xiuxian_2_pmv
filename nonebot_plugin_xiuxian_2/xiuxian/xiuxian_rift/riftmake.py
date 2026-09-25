@@ -3,7 +3,7 @@ from .riftconfig import get_rift_config
 from ..xiuxian_utils.utils import number_to
 from .jsondata import read_f
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, XIUXIAN_IMPART_BUFF, OtherSet
-from ..xiuxian_utils.player_fight import Boss_fight, get_players_attributes
+from ..xiuxian_utils.player_fight import Boss_fight, get_players_attributes, get_user_pet_for_battle
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig, convert_rank, base_rank
 from ..xiuxian_utils.data_source import jsondata
@@ -217,7 +217,11 @@ def _boss_battle_resolver() -> RiftBossBattleResolver:
 
 def get_rift_battle_player_assets(user_id):
     """Explicit compatibility provider for the Rift Boss player snapshot."""
-    return get_players_attributes(user_id, item_provider=items.get_data_by_item_id)
+    return get_players_attributes(
+        user_id,
+        item_provider=items.get_data_by_item_id,
+        pet_provider=get_user_pet_for_battle,
+    )
 
 
 async def get_boss_battle_info(user_info, rift_rank, bot_id, persist=True):
