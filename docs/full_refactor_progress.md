@@ -4416,3 +4416,8 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 `xiuxian_impart.db.xiuxian_impart` 只读读取传承属性；缺表、缺用户和只读错误返回空兼容结果，不创建用户、不补字段。
 默认其他调用仍使用旧 `XIUXIAN_IMPART_BUFF` fallback。本片只拆出传承查询边界，属性公式、BuffInfo、功法/装备、饰品与炼体读取仍未迁移；
 新增 provider 透传、只读行读取和 schema 不变测试，下一步继续审计 `UserBuffDate`/BuffInfo 读取边界。
+
+2026-09-26 rift Boss BuffInfo read provider：`get_players_attributes` 与 `get_final_attributes` 增加可选
+`buff_info_provider`/`item_provider`，Rift Boss 通过 `get_rift_battle_buff_info` 从既有 game DB 的 `BuffInfo` 表只读读取功法/装备编号，
+并由显式 `Items.get_data_by_item_id` 解析资产；缺表、缺用户和只读错误返回空兼容结果，不触发旧 `get_user_buff` 的建表/补列逻辑。
+默认其他调用仍构造旧 `UserBuffDate`，因此本片只建立 BuffInfo 查询边界，功法/装备 JSON 资产和属性公式仍未迁移；新增 provider 透传与 schema 不变测试。

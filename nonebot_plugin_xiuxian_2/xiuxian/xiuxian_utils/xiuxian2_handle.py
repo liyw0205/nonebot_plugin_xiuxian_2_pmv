@@ -4244,6 +4244,8 @@ def get_final_attributes(
     include_current: bool = True,
     *,
     impart_provider=None,
+    buff_info_provider=None,
+    item_provider=None,
 ) -> dict | None:
     """获取buff加成后的最终属性（统一口径）"""
     base = get_base_attributes(user_id)
@@ -4251,13 +4253,26 @@ def get_final_attributes(
         return None
 
     # buff数据
-    user_buff = UserBuffDate(user_id)
-    buff_info = user_buff.BuffInfo or {}
+    item_provider = item_provider or items.get_data_by_item_id
+    if buff_info_provider is None:
+        user_buff = UserBuffDate(user_id)
+        buff_info = user_buff.BuffInfo or {}
 
-    main = user_buff.get_user_main_buff_data() or {}
-    sub = user_buff.get_user_sub_buff_data() or {}
-    weapon = user_buff.get_user_weapon_data() or {}
-    armor = user_buff.get_user_armor_buff_data() or {}
+        main = user_buff.get_user_main_buff_data() or {}
+        sub = user_buff.get_user_sub_buff_data() or {}
+        weapon = user_buff.get_user_weapon_data() or {}
+        armor = user_buff.get_user_armor_buff_data() or {}
+    else:
+        buff_info = buff_info_provider(user_id) or {}
+
+        def _item_for(slot):
+            item_id = buff_info.get(slot, 0)
+            return item_provider(item_id) if item_id else None
+
+        main = _item_for("main_buff") or {}
+        sub = _item_for("sub_buff") or {}
+        weapon = _item_for("faqi_buff") or {}
+        armor = _item_for("armor_buff") or {}
 
     impart_provider = impart_provider or xiuxian_impart.get_user_impart_info_with_id
     impart = impart_provider(user_id) or {}
