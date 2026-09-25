@@ -413,7 +413,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "boss_battle_resolver_owned": "class RiftBossBattleResolver" in rift_domain and "RiftBossBattleResolver" in rift_application,
             "boss_battle_is_persistence_free": "update_exp" not in rift_domain and "update_ls" not in rift_domain and "battle_mode=0" in rift_application,
             "legacy_boss_battle_disabled": all("get_boss_battle_info(" not in handler for handler in (rift_event_handler, rift_boss_handler)),
-            "status": "world_generation_termination_key_event_settlement_entry_speedup_demon_token_damage_event_boss_battle_cutover_with_remaining_rift_compatibility",
+            "treasure_application_owned": "rift_application.roll_treasure(" in rift_event_handler,
+            "treasure_resolver_owned": "class RiftTreasureResolver" in rift_domain and "RiftTreasureResolver" in rift_application,
+            "treasure_is_persistence_free": "update_exp" not in rift_domain and "update_ls" not in rift_domain and "update_ls" not in rift_application,
+            "legacy_treasure_disabled": "get_treasure_info(" not in rift_event_handler,
+            "status": "world_generation_termination_key_event_settlement_entry_speedup_demon_token_damage_event_boss_battle_treasure_cutover_with_remaining_rift_compatibility",
         },
         "back": {
             "cultivation_item_application_owned": "back_application.cultivation_item(" in back_facade and "_cultivation_item_application().apply(" in back_util_facade,

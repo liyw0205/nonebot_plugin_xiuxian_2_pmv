@@ -6,7 +6,7 @@ from typing import Any
 from .._legacy_application import LegacyApplication
 from .demon_token_repository import RiftDemonTokenBattleSqlRepository
 from .cooldown_repository import RiftCooldownSqlRepository
-from .domain import RiftBossBattleResolver, RiftDamageEventResolver
+from .domain import RiftBossBattleResolver, RiftDamageEventResolver, RiftTreasureResolver
 from .entry_repository import RiftEntrySqlRepository
 from .generation_repository import RiftGenerationSqlRepository
 from .key_event_repository import RiftKeyEventSqlRepository
@@ -30,6 +30,7 @@ class RiftApplication(LegacyApplication):
         cooldown_repository: Any | None = None,
         damage_event_resolver: RiftDamageEventResolver | None = None,
         boss_battle_resolver: RiftBossBattleResolver | None = None,
+        treasure_resolver: RiftTreasureResolver | None = None,
         clock: Any | None = None,
     ) -> None:
         self.game_database = str(game_database)
@@ -49,6 +50,7 @@ class RiftApplication(LegacyApplication):
         self.cooldown_repository = cooldown_repository or RiftCooldownSqlRepository(game_database)
         self.damage_event_resolver = damage_event_resolver
         self.boss_battle_resolver = boss_battle_resolver
+        self.treasure_resolver = treasure_resolver
 
     @property
     def legacy_repository(self):
@@ -142,6 +144,22 @@ class RiftApplication(LegacyApplication):
             battle_mode=0,
         )
         return event.battle_result, event.message, event.outcome
+
+    def roll_treasure(
+        self,
+        user_info: dict[str, Any],
+        rift_rank: int,
+        *,
+        random_source: Any,
+    ) -> tuple[str | None, str, dict[str, Any]]:
+        if self.treasure_resolver is None:
+            raise RuntimeError("rift treasure resolver is not configured")
+        event = self.treasure_resolver.roll(
+            user_info,
+            rift_rank,
+            random_source=random_source,
+        )
+        return event.item_name, event.message, event.outcome
 
     def bootstrap_world(self, *, rift_key: str, legacy_snapshot: dict[str, Any]):
         return RiftGenerationSqlRepository(self.database).bootstrap(

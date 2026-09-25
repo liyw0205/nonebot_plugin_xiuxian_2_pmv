@@ -168,3 +168,8 @@ damage domain/application/source 与 Rift 回归 `122 passed`，compileall、arc
 固定以 `type_in=0` 运行并只返回战斗结果及 delta/message outcome。旧 `get_boss_battle_info(persist=True)` 仅保留兼容适配和显式经验/灵石写入；
 不迁移 Boss/宝物资产读取或 `Items` provider。Boss/domain/application/source 与 Rift 回归 `125 passed`，compileall、architecture、progress、inventory、
 diff check 均通过；无新增 migration。下一片审计 Boss battle runner 的资产查询边界或宝物 resolver，继续保持旧战斗实现为显式 provider。
+
+`rift treasure outcome`：真实普通秘境宝物事件改经
+`RiftApplication.roll_treasure -> RiftTreasureResolver`；resolver 只编排随机类型、奖励消息和可结算 outcome，
+`Items`、功法/装备查询保持显式兼容 provider，不把 provider 注入误算为底层资产迁移。旧 `get_treasure_info` 仅保留兼容适配；
+本片不新增 migration，验收覆盖 treasure/domain/application/source 与 Rift 聚焦回归。

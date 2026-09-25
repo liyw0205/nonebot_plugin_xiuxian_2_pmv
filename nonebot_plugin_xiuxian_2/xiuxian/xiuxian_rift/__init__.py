@@ -32,7 +32,11 @@ from ..xiuxian_utils.utils import (
 from .riftconfig import get_rift_config
 from .jsondata import save_rift_data, read_rift_data
 from ...features.rift.application import RiftApplication
-from ...features.rift.domain import RiftBossBattleResolver, RiftDamageEventResolver
+from ...features.rift.domain import (
+    RiftBossBattleResolver,
+    RiftDamageEventResolver,
+    RiftTreasureResolver,
+)
 
 from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_map import (
@@ -44,7 +48,9 @@ from ..xiuxian_utils.player_fight import Boss_fight
 from . import jsondata
 from .riftmake import (
     STORY, Rift, get_rift_type, get_story_type, NONEMSG, get_battle_type,
-    get_treasure_info
+    TREASUREMSG, TREASUREMSG_1, TREASUREMSG_2, TREASUREMSG_3, TREASUREMSG_4,
+    TREASUREMSG_5, get_armor, get_main_info, get_sec_info, get_sub_info,
+    get_weapon, items,
 )
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 
@@ -64,6 +70,24 @@ rift_application = RiftApplication(
         level_power=lambda level: jsondata.level_data()[level]["power"],
         max_exp_factor=XiuConfig().closing_exp_upper_limit * 0.1,
         exp_reward=percent_exp_reward,
+        format_number=number_to,
+    ),
+    treasure_resolver=RiftTreasureResolver(
+        treasure_config=STORY["宝物"],
+        messages={
+            "法器": TREASUREMSG,
+            "防具": TREASUREMSG_1,
+            "功法": TREASUREMSG_2,
+            "神通": TREASUREMSG_3,
+            "灵石": TREASUREMSG_4,
+            "辅修功法": TREASUREMSG_5,
+        },
+        weapon_provider=get_weapon,
+        armor_provider=get_armor,
+        main_provider=get_main_info,
+        secondary_provider=get_sec_info,
+        sub_provider=get_sub_info,
+        item_lookup=items.get_data_by_item_id,
         format_number=number_to,
     ),
     clock=runtime_clock,
@@ -727,8 +751,8 @@ async def _roll_rift_event(user_info, rift_info, bot_id, operation_id=""):
                     user_info, rift_rank, bot_id, random_source=random
                 )
         elif rift_type == "宝物":
-            result_name, result_msg, outcome = get_treasure_info(
-                user_info, rift_rank
+            result_name, result_msg, outcome = rift_application.roll_treasure(
+                user_info, rift_rank, random_source=random
             )
         outcome["message"] = result_msg
         return battle_result, result_name, outcome

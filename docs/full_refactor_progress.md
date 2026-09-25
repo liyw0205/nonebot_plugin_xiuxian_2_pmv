@@ -4375,3 +4375,9 @@ reconcile clean（operations/outbox/dead events 均为 `0`）。本轮 pytest ba
 `get_boss_battle_info(persist=True)` 仅保留兼容适配和显式经验/灵石写入，Boss/宝物资产读取与 `Items` provider 尚未迁移。Boss/domain/application/source
 与 Rift 聚焦回归 `125 passed`；compileall、architecture、progress、inventory `--check` 与 `git diff --check` 通过，无新增 migration。隔离五库
 recovery 将在本片验收后执行并清理临时产物；下一步继续审计 Boss battle runner 的资产查询边界或宝物 resolver，不把 provider 注入误算为底层资产迁移完成。
+
+2026-09-26 rift treasure outcome cutover：真实普通秘境宝物事件改经
+`RiftApplication.roll_treasure -> RiftTreasureResolver`；resolver 接收显式随机源、消息配置和
+Boss/宝物资产查询 provider，只返回物品/灵石 delta 与 message outcome，真实事务仍由 settlement/key-event repositories 提交。
+旧 `get_treasure_info` 仅保留兼容适配；`Items`、功法/装备查询与资产文件仍未迁移，显式 provider 不计作底层资产迁移。Boss/treasure/domain/application/source
+与 Rift 回归将在本片验收后记录；下一步继续审计 Boss_fight 的资产查询边界或迁移其他 Rift 兼容资产读取。

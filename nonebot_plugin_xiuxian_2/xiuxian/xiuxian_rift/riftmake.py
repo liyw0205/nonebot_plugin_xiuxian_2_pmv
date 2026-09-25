@@ -8,7 +8,11 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig, convert_rank, base_rank
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
-from ...features.rift.domain import RiftBossBattleResolver, RiftDamageEventResolver
+from ...features.rift.domain import (
+    RiftBossBattleResolver,
+    RiftDamageEventResolver,
+    RiftTreasureResolver,
+)
 
 _sql_message_instance = None
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
@@ -238,76 +242,31 @@ def get_dxsj_info(rift_type, user_info):
     return event.message, event.as_outcome()
 
 
+def _treasure_resolver() -> RiftTreasureResolver:
+    return RiftTreasureResolver(
+        treasure_config=STORY["宝物"],
+        messages={
+            "法器": TREASUREMSG,
+            "防具": TREASUREMSG_1,
+            "功法": TREASUREMSG_2,
+            "神通": TREASUREMSG_3,
+            "灵石": TREASUREMSG_4,
+            "辅修功法": TREASUREMSG_5,
+        },
+        weapon_provider=get_weapon,
+        armor_provider=get_armor,
+        main_provider=get_main_info,
+        secondary_provider=get_sec_info,
+        sub_provider=get_sub_info,
+        item_lookup=items.get_data_by_item_id,
+        format_number=number_to,
+    )
+
+
 def get_treasure_info(user_info, rift_rank):
-    rift_type = get_goods_type()  # 功法、神通、法器、防具、法宝#todo
-    msg = None
-    item_name = None
-    outcome = {"delta": {}, "items": []}
-    if rift_type == "法器":
-        weapon_info = get_weapon(user_info, rift_rank)
-        temp_msg = f"{weapon_info[1]['name']}!"
-        msg = random.choice(TREASUREMSG).format(temp_msg)
-        item_name = weapon_info[1]['name']
-        outcome["items"].append({"id": weapon_info[0], "name": weapon_info[1]['name'], "type": weapon_info[1]['type'], "amount": 1})
-        # 背包sql
-
-    elif rift_type == "防具":  # todo
-        armor_info = get_armor(user_info, rift_rank)
-        temp_msg = f"{armor_info[1]['name']}!"
-        msg = random.choice(TREASUREMSG_1).format(temp_msg)
-        item_name = armor_info[1]['name']
-        outcome["items"].append({"id": armor_info[0], "name": armor_info[1]['name'], "type": armor_info[1]['type'], "amount": 1})
-        # 背包sql
-
-    elif rift_type == "功法":
-        give_main_info = get_main_info(user_info['level'], rift_rank)
-        if give_main_info[0]:  # 获得了
-            main_buff_id = give_main_info[1]
-            main_buff = items.get_data_by_item_id(main_buff_id)
-            temp_msg = f"{main_buff['name']}"
-            msg = random.choice(TREASUREMSG_2).format(temp_msg)
-            item_name = main_buff['name']
-            outcome["items"].append({"id": main_buff_id, "name": main_buff['name'], "type": main_buff['type'], "amount": 1})
-        else:
-            msg = '道友在秘境中获得一本书籍，翻开一看居然是绿野仙踪...'
-
-    elif rift_type == "神通":
-        give_sec_info = get_sec_info(user_info['level'], rift_rank)
-        if give_sec_info[0]:  # 获得了
-            sec_buff_id = give_sec_info[1]
-            sec_buff = items.get_data_by_item_id(sec_buff_id)
-            temp_msg = f"{sec_buff['name']}!"
-            msg = random.choice(TREASUREMSG_3).format(temp_msg)
-            item_name = sec_buff['name']
-            outcome["items"].append({"id": sec_buff_id, "name": sec_buff['name'], "type": sec_buff['type'], "amount": 1})
-            # 背包sql
-        else:
-            msg = '道友在秘境中获得一本书籍，翻开一看居然是戏书...'
-
-    elif rift_type == "辅修功法":
-        give_sub_info = get_sub_info(user_info['level'], rift_rank)
-        if give_sub_info[0]:  # 获得了
-            sub_buff_id = give_sub_info[1]
-            sub_buff = items.get_data_by_item_id(sub_buff_id)
-            temp_msg = f"{sub_buff['name']}!"
-            msg = random.choice(TREASUREMSG_5).format(temp_msg)
-            item_name = sub_buff['name']
-            outcome["items"].append({"id": sub_buff_id, "name": sub_buff['name'], "type": sub_buff['type'], "amount": 1})
-            # 背包sql
-        else:
-            msg = '道友在秘境中获得一本书籍，翻开一看居然是四库全书...'
-
-    
-    elif rift_type == "灵石":
-        stone_base = STORY['宝物']['灵石']['stone']
-        user_rank = random.randint(1, 3)  # 随机等级
-        give_stone = (rift_rank + user_rank) * stone_base
-        outcome["delta"] = {"stone": give_stone}
-        temp_msg = f"灵石：{number_to(give_stone)}枚！"
-        msg = random.choice(TREASUREMSG_4).format(temp_msg)
-
-    outcome["message"] = msg
-    return item_name, msg, outcome
+    """Compatibility adapter for the feature-owned treasure resolver."""
+    event = _treasure_resolver().roll(user_info, rift_rank, random_source=random)
+    return event.item_name, event.message, event.outcome
 
 
 
@@ -346,18 +305,19 @@ def get_goods_type():
     return get_dict_type_rate(data_dict)
 
 
-def get_id_by_rank(dict_data, user_level, rift_rank=0):
+def get_id_by_rank(dict_data, user_level, rift_rank=0, random_source=None):
     """根据字典的rank、用户等级、秘境等级随机获取key"""
+    random_source = random_source or random
     l_temp = []
     zx_rank = base_rank(user_level, 5, up=rift_rank + 10)
     for k, v in dict_data.items():
         if zx_rank <= v['rank']:
             l_temp.append(k)
 
-    return random.choice(l_temp)
+    return random_source.choice(l_temp)
 
 
-def get_weapon(user_info, rift_rank=0):
+def get_weapon(user_info, rift_rank=0, random_source=None):
     """
     随机获取一个法器
     :param user_info:用户信息类
@@ -365,12 +325,14 @@ def get_weapon(user_info, rift_rank=0):
     :return 法器ID, 法器信息json
     """
     weapon_data = items.get_data_by_item_type(['法器'])
-    weapon_id = get_id_by_rank(weapon_data, user_info['level'], rift_rank)
+    weapon_id = get_id_by_rank(
+        weapon_data, user_info['level'], rift_rank, random_source=random_source
+    )
     weapon_info = items.get_data_by_item_id(weapon_id)
     return weapon_id, weapon_info
 
 
-def get_armor(user_info, rift_rank=0):
+def get_armor(user_info, rift_rank=0, random_source=None):
     """
     随机获取一个防具
     :param user_info:用户信息类
@@ -378,65 +340,79 @@ def get_armor(user_info, rift_rank=0):
     :return 防具ID, 防具信息json
     """
     armor_data = items.get_data_by_item_type(['防具'])
-    armor_id = get_id_by_rank(armor_data, user_info['level'], rift_rank)
+    armor_id = get_id_by_rank(
+        armor_data, user_info['level'], rift_rank, random_source=random_source
+    )
     armor_info = items.get_data_by_item_id(armor_id)
     return armor_id, armor_info
 
 
-def get_main_info(user_level, rift_rank):
+def get_main_info(user_level, rift_rank, random_source=None):
     """获取功法的信息"""
-    main_buff_type = get_skill_by_rank(user_level, rift_rank)  # 天地玄黄
+    random_source = random_source or random
+    main_buff_type = get_skill_by_rank(
+        user_level, rift_rank, random_source=random_source
+    )  # 天地玄黄
     main_buff_id_list = skill_data[main_buff_type]['gf_list']
     init_rate = 70  # 初始概率为70
     finall_rate = init_rate + rift_rank * 5
     finall_rate = finall_rate if finall_rate <= 100 else 100
     is_success = False
     main_buff_id = 0
-    if random.randint(0, 100) <= finall_rate:  # 成功
+    if random_source.randint(0, 100) <= finall_rate:  # 成功
         is_success = True
-        main_buff_id = random.choice(main_buff_id_list)
+        main_buff_id = random_source.choice(main_buff_id_list)
         return is_success, main_buff_id
     return is_success, main_buff_id
 
 
-def get_sec_info(user_level, rift_rank):
+def get_sec_info(user_level, rift_rank, random_source=None):
     """获取神通的信息"""
-    sec_buff_type = get_skill_by_rank(user_level, rift_rank)  # 天地玄黄
+    random_source = random_source or random
+    sec_buff_type = get_skill_by_rank(
+        user_level, rift_rank, random_source=random_source
+    )  # 天地玄黄
     sec_buff_id_list = skill_data[sec_buff_type]['st_list']
     init_rate = 70  # 初始概率为70
     finall_rate = init_rate + rift_rank * 5
     finall_rate = finall_rate if finall_rate <= 100 else 100
     is_success = False
     sec_buff_id = 0
-    if random.randint(0, 100) <= finall_rate:  # 成功
+    if random_source.randint(0, 100) <= finall_rate:  # 成功
         is_success = True
-        sec_buff_id = random.choice(sec_buff_id_list)
+        sec_buff_id = random_source.choice(sec_buff_id_list)
         return is_success, sec_buff_id
     return is_success, sec_buff_id
 
-def get_sub_info(user_level, rift_rank):
+
+def get_sub_info(user_level, rift_rank, random_source=None):
     """获取辅修功法的信息"""
-    sub_buff_type = get_skill_by_rank(user_level, rift_rank)  # 天地玄黄
+    random_source = random_source or random
+    sub_buff_type = get_skill_by_rank(
+        user_level, rift_rank, random_source=random_source
+    )  # 天地玄黄
     sub_buff_id_list = skill_data[sub_buff_type]['fx_list']
     init_rate = 70  # 初始概率为70
     finall_rate = init_rate + rift_rank * 5
     finall_rate = finall_rate if finall_rate <= 100 else 100
     is_success = False
     sub_buff_id = 0
-    if random.randint(0, 100) <= finall_rate:  # 成功
+    if random_source.randint(0, 100) <= finall_rate:  # 成功
         is_success = True
-        sub_buff_id = random.choice(sub_buff_id_list)
+        sub_buff_id = random_source.choice(sub_buff_id_list)
         return is_success, sub_buff_id
     return is_success, sub_buff_id
 
-def get_skill_by_rank(user_level, rift_rank):
+
+def get_skill_by_rank(user_level, rift_rank, random_source=None):
     """根据用户等级、秘境等级随机获取一个技能"""
+    random_source = random_source or random
     zx_rank = base_rank(user_level, 5, up=rift_rank + 10)
     temp_dict = []
     for k, v in skill_data.items():
         if zx_rank <= v['rank']:
             temp_dict.append(k)
-    return random.choice(temp_dict)
+    return random_source.choice(temp_dict)
 
 
 class Rift:
