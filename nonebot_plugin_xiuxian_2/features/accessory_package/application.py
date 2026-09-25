@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -13,6 +14,22 @@ from .domain import normalize_accessories
 from ..package_reward.domain import PackageReward, normalize_rewards
 from .repository import AccessoryPackageGameRepository, AccessoryPackagePlayerRepository
 from .schemas import AccessoryPackageRequest
+
+
+@dataclass(frozen=True)
+class AccessoryPackageResult:
+    """Stable result shape consumed by the historical back command."""
+
+    status: str
+    user_id: str
+    package_id: int
+    quantity: int
+    rewards: tuple[PackageReward, ...]
+    accessories: tuple[dict[str, Any], ...]
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status in {"applied", "duplicate", "replayed"}
 
 
 class AccessoryPackageApplication:
@@ -244,4 +261,4 @@ class AccessoryPackageApplication:
         return ReplyPlan(outcome.message or outcome.data, reference=True)
 
 
-__all__ = ["AccessoryPackageApplication"]
+__all__ = ["AccessoryPackageApplication", "AccessoryPackageResult"]

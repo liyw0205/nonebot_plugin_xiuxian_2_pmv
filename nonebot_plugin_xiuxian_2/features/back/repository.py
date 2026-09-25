@@ -15,10 +15,11 @@ class LegacyBackRepository:
 
     def invoke(self, action: str, operation_id: str, user_id: str, **kwargs: Any) -> Any:
         from ...xiuxian.xiuxian_back.transaction_service import (
-            AccessoryPackageService, AccessoryTransactionService, AlchemyService,
+            AccessoryTransactionService, AlchemyService,
             BackpackRepairService, BatchItemUseService, EquipmentService,
             PackageRewardService, SkillLearningService, UnbindItemService,
         )
+        from ...xiuxian.xiuxian_back.accessory_package_service import AccessoryPackageService
         mapping = {
             "open_package": (PackageRewardService, "apply"),
             "use_item": (BatchItemUseService, "use_pet_eggs"),

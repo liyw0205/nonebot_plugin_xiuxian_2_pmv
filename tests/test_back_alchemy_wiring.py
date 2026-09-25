@@ -48,6 +48,8 @@ class BackAlchemyWiringTests(unittest.TestCase):
                 self.assertEqual(context.services["back"].equipment_application.__class__.__name__, "EquipmentApplication")
                 self.assertEqual(context.services["back"].repair_application.__class__.__name__, "BackpackRepairApplication")
                 self.assertEqual(context.services["back"].pet_egg_application.__class__.__name__, "PetEggApplication")
+                self.assertEqual(context.services["back"].accessory_package_application.__class__.__name__, "AccessoryPackageApplication")
+                self.assertTrue(callable(context.services["back"].accessory_package))
             finally:
                 asyncio.run(lifecycle.shutdown())
                 xiuxian_rift._rift_entry_service_instance = previous_rift_entry_service

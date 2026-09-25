@@ -2,31 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 import warnings
 
-from ...features.accessory_package.application import AccessoryPackageApplication
-from ...features.accessory_package.domain import AccessoryReward
-from ...features.package_reward.domain import PackageReward
+from ...features.accessory_package.application import AccessoryPackageApplication, AccessoryPackageResult
 
 # The implementation owns ATTACH DATABASE and BEGIN IMMEDIATE for this boundary.
 OPERATION_TABLE = "accessory_package_operations"
-
-@dataclass(frozen=True)
-class AccessoryPackageResult:
-    status: str
-    user_id: str
-    package_id: int
-    quantity: int
-    rewards: tuple[PackageReward, ...]
-    accessories: tuple[dict[str, Any], ...]
-
-    @property
-    def succeeded(self) -> bool:
-        return self.status in {"applied", "duplicate", "replayed"}
-
 
 class AccessoryPackageService:
     """Keep the historical synchronous API while using the new protocol."""

@@ -20,6 +20,7 @@ from .blessed_flag_replace_application import BlessedFlagReplaceApplication
 from .equipment_application import EquipmentApplication
 from .repair_application import BackpackRepairApplication
 from .pet_egg_application import PetEggApplication
+from ..accessory_package.application import AccessoryPackageApplication, AccessoryPackageResult
 
 
 class BackApplication(LegacyApplication):
@@ -39,6 +40,10 @@ class BackApplication(LegacyApplication):
         self.equipment_application = EquipmentApplication(database)
         self.repair_application = BackpackRepairApplication(database)
         self.pet_egg_application = PetEggApplication(database, player_database or database)
+        self.accessory_package_application = AccessoryPackageApplication(
+            database,
+            player_database or database,
+        )
         super().__init__(database, repository=repository or LegacyBackRepository(database, player_database), feature="back")
 
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):
@@ -65,6 +70,38 @@ class BackApplication(LegacyApplication):
         if self._explicit_repository is None:
             return self.pet_egg_application.use(operation_id, user_id, **kwargs)
         return self._action("use_pet_eggs", operation_id=operation_id, user_id=user_id, **kwargs)
+    def accessory_package(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        if self._explicit_repository is None:
+            # Keep the legacy handler's result shape while routing the actual
+            # state transition through the cross-database application.
+            request = dict(kwargs)
+            package_value = request.pop("item_id", None)
+            if package_value is None:
+                package_value = request.pop("package_id")
+            package_id = int(package_value)
+            rewards = tuple(request.get("rewards", ()))
+            accessories = tuple(request.get("accessories", ()))
+            request["rewards"] = rewards
+            request["accessories"] = accessories
+            outcome = self.accessory_package_application.open_package(
+                operation_id=operation_id,
+                user_id=user_id,
+                package_id=package_id,
+                **request,
+            )
+            data = outcome.data if isinstance(outcome.data, dict) else {}
+            status = "duplicate" if outcome.status == "replayed" else (
+                outcome.code if outcome.status in {"rejected", "failed"} else outcome.status
+            )
+            return AccessoryPackageResult(
+                status=status,
+                user_id=str(data.get("user_id", user_id)),
+                package_id=int(data.get("package_id", package_id)),
+                quantity=int(data.get("quantity", request.get("quantity", 0))),
+                rewards=rewards,
+                accessories=tuple(data.get("accessories", accessories)),
+            )
+        return self._action("accessory_package", operation_id=operation_id, user_id=user_id, **kwargs)
     def cultivation_item(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:
             return self.cultivation_item_application.apply(operation_id, user_id, **kwargs)
