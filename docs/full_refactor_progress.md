@@ -4037,3 +4037,12 @@ ThreeCultivationPillSqlRepository`；随机修为仍由 handler 预滚，旧 `Th
 路由为 game/player/trade/impart/message `114/24/7/1/1`，`back.008` 仅路由到 game DB，attached
 accessory 两项，backup/restore dry-run/restore 与 reconcile clean（operations/outbox/dead events
 均为 0）；临时数据和缓存已清理。
+
+2026-09-25 back breakthrough-rate-item feature-owned cutover：突破率丹真实调用路径已切换到
+`back_util.check_use_elixir -> BreakthroughRateItemApplication -> BreakthroughRateItemSqlRepository`；
+旧 `BreakthroughRateItemService` 仅保留显式兼容回滚。`back.009` 在 game DB 启动迁移创建幂等表，
+请求路径不再执行 DDL；突破率增加、耐药 `day_num/all_num`、绑定数量扣除、重复请求、库存/用户缺失和
+事务回滚语义保持原子一致。新增 application/repository、wiring、source/progress 回归；聚焦回归与
+突破率丹旧语义测试通过，顶层全量测试与 recovery smoke 均通过。五库 recovery 完成 `143` 项迁移，
+路由为 game/player/trade/impart/message `115/24/7/1/1`，`back.009` 仅路由到 game DB，
+reconcile clean（operations/outbox/dead events 均为 0）；临时数据和缓存已清理。

@@ -26,6 +26,7 @@ items = Items()
 _sql_message_instance = None
 _cultivation_item_service_instance = None
 _cultivation_item_application_instance = None
+_breakthrough_rate_item_application_instance = None
 _breakthrough_rate_item_service_instance = None
 _recovery_item_service_instance = None
 _permanent_atk_item_service_instance = None
@@ -58,6 +59,20 @@ def _cultivation_item_application():
 def configure_cultivation_item_application(application) -> None:
     global _cultivation_item_application_instance
     _cultivation_item_application_instance = application
+
+
+def _breakthrough_rate_item_application():
+    global _breakthrough_rate_item_application_instance
+    if _breakthrough_rate_item_application_instance is None:
+        from ...features.back.breakthrough_rate_item_application import BreakthroughRateItemApplication
+
+        _breakthrough_rate_item_application_instance = BreakthroughRateItemApplication(get_paths().game_db)
+    return _breakthrough_rate_item_application_instance
+
+
+def configure_breakthrough_rate_item_application(application) -> None:
+    global _breakthrough_rate_item_application_instance
+    _breakthrough_rate_item_application_instance = application
 
 def _blessed_flag_replace_service():
     global _blessed_flag_replace_service_instance
@@ -928,7 +943,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
         else:  # 检查完毕
             level_up_rate = True
         if level_up_rate:
-            result = _breakthrough_rate_item_service().apply(
+            result = _breakthrough_rate_item_application().apply(
                 operation_id or f"elixir-rate:{user_id}:{goods_id}:{datetime.now().timestamp()}",
                 user_id,
                 goods_id,
@@ -955,7 +970,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
                 else:
                     msg = f"道友成功使用丹药：{goods_name}{num}颗, 下一次突破的成功概率提高{goods_info['buff'] * num}%!"
 
-                result = _breakthrough_rate_item_service().apply(
+                result = _breakthrough_rate_item_application().apply(
                     operation_id or f"elixir-rate:{user_id}:{goods_id}:{datetime.now().timestamp()}",
                     user_id,
                     goods_id,

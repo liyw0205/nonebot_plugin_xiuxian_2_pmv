@@ -173,6 +173,7 @@ def configure_back_application(application: BackApplication) -> None:
     global back_application
     back_application = application
     configure_cultivation_item_application(application.cultivation_item_application)
+    configure_breakthrough_rate_item_application(application.breakthrough_rate_item_application)
 
 
 def _package_open_result(outcome, user_id, package_id, quantity, rewards):

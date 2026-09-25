@@ -12,6 +12,7 @@ from .skill_learning_application import SkillLearningApplication
 from .lottery_talisman_application import LotteryTalismanApplication
 from .stone_reward_application import StoneRewardApplication
 from .three_cultivation_pill_application import ThreeCultivationPillApplication
+from .breakthrough_rate_item_application import BreakthroughRateItemApplication
 from .unbind_application import UnbindApplication
 
 
@@ -24,6 +25,7 @@ class BackApplication(LegacyApplication):
         self.lottery_talisman_application = LotteryTalismanApplication(database)
         self.stone_reward_application = StoneRewardApplication(database)
         self.three_cultivation_pill_application = ThreeCultivationPillApplication(database)
+        self.breakthrough_rate_item_application = BreakthroughRateItemApplication(database)
         self.unbind_application = UnbindApplication(database)
         super().__init__(database, repository=repository or LegacyBackRepository(database, player_database), feature="back")
 
@@ -58,6 +60,10 @@ class BackApplication(LegacyApplication):
         if self._explicit_repository is None:
             return self.three_cultivation_pill_application.apply(operation_id, user_id, **kwargs)
         return self._action("three_cultivation_pill", operation_id=operation_id, user_id=user_id, **kwargs)
+    def breakthrough_rate_item(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        if self._explicit_repository is None:
+            return self.breakthrough_rate_item_application.apply(operation_id, user_id, **kwargs)
+        return self._action("breakthrough_rate_item", operation_id=operation_id, user_id=user_id, **kwargs)
     def alchemy(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:
             return self.alchemy_application.apply(operation_id, user_id, **kwargs)
