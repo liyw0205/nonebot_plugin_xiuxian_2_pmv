@@ -95,10 +95,16 @@ game `impart.002`、player `impart.003` 启动迁移准备 schema，请求不建
 diff check 通过。五库 recovery 完成 `164` 项 migration，路由 `130/30/7/1/1`，backup/restore dry-run/restore 与 reconcile clean。
 本切片未做 live/P7 或根目录全量回归；专用测试、恢复数据、receipt 和字节码缓存已清理，保留运行数据与 Boss JSON 用户改动。
 
+`impart love-sand request-schema boundary`：`20016` handler 继续预滚奖励，repository 移除请求期 DDL；新增 game
+`impart.004` replay table 与 player `impart.005` statistics columns startup migrations，缺 migration 返回 `schema_missing`，
+已有 replay/统计数据保留。focused `22 passed`（1 条既有 compatibility warning）；五库 recovery `166` 项、路由
+`131/31/7/1/1`，`.004` game-only、`.005` player-only，reconcile clean；没有运行根目录全量测试或真实 live/P7。
+恢复数据、receipt、pytest basetemp 和字节码缓存已清理。
+
 ## 当前切片与下一切片选择
 
-最近完成 `arena challenge-ticket legacy service removal`；这只清除了默认入口已绕开的旧 service 和死回退，没有扩大为竞技场整体完成。下一步回到
+最近完成 `impart love-sand request-schema boundary`；它只移除了请求期 schema 写入，不代表 love-sand 兼容 service 已删除。下一步回到
 `docs/full_refactor_progress.md` 的 6.2 目标 5，对剩余真实注册的 NoneBot 特殊道具及宠物、任务/修炼、洞府、地图、宗门、
 副本、世界事件和 Boss handler 做只读调用图审计，再选一个有明确事务缺口的单一动作；不要按目录整体迁移。追捕令 `20015` 的随机 offer
 仍由旧领域逻辑生成，不能把已迁移的扣除/快照边界解释成 work 领域整体完成。不可把惰性 facade、静态 manifest、仅测试通过视为完成。
-已切换的 partner cultivation、partner token、背包通用 item-use Web、宠物蛋、饰品礼包、炼丹两阶段领取、斩妖令、祈愿石和挑战券事务边界不重复迁移。
+已切换的 partner cultivation、partner token、背包通用 item-use Web、宠物蛋、饰品礼包、炼丹两阶段领取、斩妖令、祈愿石、挑战券事务和 love-sand schema 边界不重复迁移。

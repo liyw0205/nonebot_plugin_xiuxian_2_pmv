@@ -4242,3 +4242,14 @@ application replay 与 SQL 事务回归 `11 passed`；同时修正 arena applica
 restore dry-run/restore 与全量 `164` 项 migration，路由 `game/player/trade/impart/message = 130/30/7/1/1`；reconcile
 `clean=true` 且 operations/outbox/dead_events 均为 `0`。未运行根目录全量套件或真实 live/P7 验证；恢复数据/receipt、pytest basetemp
 和字节码缓存已清理，保留 `.venv`、`.git`、`data/`、运行数据库、备份及用户原有 Boss JSON 改动。
+
+2026-09-25 impart love-sand request-schema boundary：`20016` handler 仍在 adapter 预滚结晶奖励并调用
+`ImpartApplication.love_sand -> LoveSandSqlRepository`；移除 repository 中请求期创建 `love_sand_operations`、
+创建 player `statistics` 和补列逻辑，缺少三库文件或 schema 时返回 `schema_missing`。新增 game DB `impart.004`
+operation migration 和 player DB `impart.005` statistics migration；`CREATE IF NOT EXISTS`/缺列补齐保留旧账本与统计数据，
+operation payload/replay、库存/结晶快照、统计增量和 attached game/impart/player 原子回滚语义不变。Love-sand、impart application、
+prayer 邻接及路由聚焦 `22 passed`（1 条既有兼容 service deprecation warning）；compileall、architecture、progress、inventory
+`--check` 和 `git diff --check` 通过。隔离五库 recovery 完成 `166` 项 migration，路由
+`game/player/trade/impart/message = 131/31/7/1/1`；`impart.004` 仅 game、`.005` 仅 player，backup/restore dry-run/restore
+及 reconcile clean，operations/outbox/dead_events 均为 `0`。未运行根目录全量套件或真实 live/P7 验证；专用 pytest basetemp、
+recovery 数据/receipt 与 compileall 字节码缓存已清理，`.venv`、`.git`、`data/`、运行数据库/备份和用户原有 Boss JSON 均保留。

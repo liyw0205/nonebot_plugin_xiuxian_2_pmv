@@ -31,8 +31,12 @@ class ImpartPrayerSettlementTests(unittest.TestCase):
         }
         self.assertIn("impart.002", routed["game_db"])
         self.assertIn("impart.003", routed["player_db"])
+        self.assertIn("impart.004", routed["game_db"])
+        self.assertIn("impart.005", routed["player_db"])
         self.assertNotIn("impart.002", routed["player_db"])
         self.assertNotIn("impart.003", routed["game_db"])
+        self.assertNotIn("impart.004", routed["player_db"])
+        self.assertNotIn("impart.005", routed["game_db"])
 
     def test_impart_facade_defers_prayer_service_construction(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_impart
