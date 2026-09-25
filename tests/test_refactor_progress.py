@@ -72,6 +72,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(back["legacy_three_cultivation_pill_disabled"])
         self.assertTrue(back["breakthrough_rate_item_application_owned"])
         self.assertTrue(back["legacy_breakthrough_rate_item_disabled"])
+        self.assertTrue(back["recovery_item_application_owned"])
+        self.assertTrue(back["legacy_recovery_item_disabled"])
         self.assertTrue(back["alchemy_application_owned"])
         self.assertTrue(back["legacy_alchemy_disabled"])
         self.assertTrue(back["unbind_application_owned"])

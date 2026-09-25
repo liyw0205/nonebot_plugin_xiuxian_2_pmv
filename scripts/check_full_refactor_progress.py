@@ -338,6 +338,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_three_cultivation_pill_disabled": "_three_cultivation_pill_service().apply(" not in back_facade,
             "breakthrough_rate_item_application_owned": "_breakthrough_rate_item_application().apply(" in back_util_facade,
             "legacy_breakthrough_rate_item_disabled": "_breakthrough_rate_item_service().apply(" not in back_util_facade,
+            "recovery_item_application_owned": "_recovery_item_application().apply(" in back_util_facade,
+            "legacy_recovery_item_disabled": "_recovery_item_service().apply(" not in back_util_facade,
             "alchemy_application_owned": back_facade.count("back_application.alchemy(") >= 3,
             "legacy_alchemy_disabled": "_alchemy_service().apply(" not in back_facade,
             "unbind_application_owned": "back_application.unbind(" in back_facade,

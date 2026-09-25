@@ -81,4 +81,15 @@ def apply_breakthrough_rate_item(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_alchemy", "apply_back", "apply_breakthrough_rate_item", "apply_cultivation_item", "apply_lottery_talisman", "apply_skill_learning", "apply_stone_reward", "apply_three_cultivation_pill", "apply_unbind"]
+def apply_recovery_item(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS recovery_item_operations("
+        "operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,item_id INTEGER NOT NULL,"
+        "quantity INTEGER NOT NULL,mode TEXT NOT NULL,hp_before INTEGER NOT NULL,"
+        "hp_after INTEGER NOT NULL,mp_before INTEGER NOT NULL,mp_after INTEGER NOT NULL,"
+        "stamina_before INTEGER NOT NULL,stamina_after INTEGER NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+__all__ = ["apply_alchemy", "apply_back", "apply_breakthrough_rate_item", "apply_cultivation_item", "apply_lottery_talisman", "apply_recovery_item", "apply_skill_learning", "apply_stone_reward", "apply_three_cultivation_pill", "apply_unbind"]
