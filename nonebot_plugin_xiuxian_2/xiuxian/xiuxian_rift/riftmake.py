@@ -6,7 +6,7 @@ from ...paths import get_paths
 from .riftconfig import get_rift_config
 from ..xiuxian_utils.utils import number_to
 from .jsondata import read_f
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, XIUXIAN_IMPART_BUFF, OtherSet
+from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet
 from ..xiuxian_utils.player_fight import (
     Boss_fight,
     generate_boss_buff,
@@ -27,7 +27,6 @@ from ...features.rift.domain import (
 )
 
 _sql_message_instance = None
-xiuxian_impart = XIUXIAN_IMPART_BUFF()
 _items_instance = None
 
 

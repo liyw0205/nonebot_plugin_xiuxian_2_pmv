@@ -4,7 +4,7 @@ from nonebot.log import logger
 from ...paths import get_paths
 
 from .xiuxian2_handle import (
-    XiuxianDateManage, UserBuffDate, XIUXIAN_IMPART_BUFF,
+    XiuxianDateManage, UserBuffDate,
     calc_realm_base_speed,
     get_final_attributes
 )
@@ -87,7 +87,6 @@ class _LazyItemsProxy:
 
 items = _LazyItemsProxy()
 _sql_message_instance = None
-xiuxian_impart = XIUXIAN_IMPART_BUFF()
 
 
 def _sql_message():
