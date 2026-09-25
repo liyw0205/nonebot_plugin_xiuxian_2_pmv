@@ -32,6 +32,31 @@ class RiftEntrySqlRepository:
     def __init__(self, database: str | Path) -> None:
         self.database = Path(database)
 
+    def read_entry(self, user_id: str, *, active_only: bool = False) -> dict[str, Any] | None:
+        """Read an entry projection without creating or upgrading its schema."""
+        user_id = str(user_id).strip()
+        if not user_id or not self.database.is_file():
+            return None
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if self.entry_table not in self._tables(uow):
+                return None
+            columns = {
+                str(row["name"])
+                for row in uow.query_all(f"PRAGMA table_info({self.entry_table})")
+            }
+            if not {"rift_data", "status"}.issubset(columns):
+                return None
+            row = uow.query_one(
+                f"SELECT rift_data,status FROM {self.entry_table} WHERE user_id=?",
+                (user_id,),
+            )
+        if row is None or (active_only and str(row["status"]) != "active"):
+            return None
+        value = json.loads(str(row["rift_data"]))
+        if not isinstance(value, dict):
+            raise ValueError("stored rift entry must be an object")
+        return value
+
     @staticmethod
     def _tables(uow: DatabaseUnitOfWork) -> set[str]:
         return {

@@ -26,6 +26,30 @@ def test_rift_world_lifecycle_is_application_owned_and_entry_reader_is_lazy():
     assert jsondata._rift_entry_reader_instance is None
 
 
+def test_rift_entry_reader_uses_feature_projection_before_legacy_json():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_rift/jsondata.py"
+    ).read_text(encoding="utf-8")
+    assert "RiftEntrySqlRepository" in source
+    assert "RiftEntryService" not in source
+
+
+def test_rift_entry_reader_falls_back_to_legacy_json_when_projection_is_empty():
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        player_dir = root / "u"
+        player_dir.mkdir()
+        expected = {"name": "legacy", "time": 60}
+        (player_dir / "riftinfo.json").write_text(
+            jsondata.json.dumps(expected), encoding="utf-8"
+        )
+        reader = type("Reader", (), {"read_entry": lambda self, user_id, active_only=False: None})()
+        with patch.object(jsondata, "PLAYERSDATA", root), patch.object(
+            jsondata, "_rift_entry_reader_instance", reader
+        ):
+            assert jsondata.read_rift_data("u") == expected
+
+
 def test_rift_make_defers_legacy_writer_construction():
     source = Path(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_rift/riftmake.py"

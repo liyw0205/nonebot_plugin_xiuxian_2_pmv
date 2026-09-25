@@ -80,6 +80,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     natal_facade = (PACKAGE / "xiuxian" / "xiuxian_natal_treasure" / "__init__.py").read_text(encoding="utf-8")
     world_events_facade = (PACKAGE / "xiuxian" / "xiuxian_world_events" / "__init__.py").read_text(encoding="utf-8")
     rift_facade = (PACKAGE / "xiuxian" / "xiuxian_rift" / "__init__.py").read_text(encoding="utf-8")
+    rift_jsondata = (PACKAGE / "xiuxian" / "xiuxian_rift" / "jsondata.py").read_text(encoding="utf-8")
     rift_application = (PACKAGE / "features" / "rift" / "application.py").read_text(encoding="utf-8")
     rift_generation_repository = (PACKAGE / "features" / "rift" / "generation_repository.py").read_text(encoding="utf-8")
     rift_key_event_repository = (PACKAGE / "features" / "rift" / "key_event_repository.py").read_text(encoding="utf-8")
@@ -385,6 +386,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "entry_migrations_registered": "rift.009" in plugin and "apply_rift_entry_schema" in plugin and all(token in rift_migrations for token in ("rift_entries", "rift_entry_counts", "rift_entry_operations")),
             "entry_request_path_has_no_ddl": "CREATE TABLE" not in rift_entry_repository and "ALTER TABLE" not in rift_entry_repository,
             "legacy_entry_disabled": "_rift_entry_service().enter(" not in rift_facade,
+            "entry_read_projection_repository_owned": "RiftEntrySqlRepository" in rift_jsondata and "read_entry" in rift_jsondata,
+            "entry_read_projection_has_no_ddl": "CREATE TABLE" not in rift_jsondata and "ALTER TABLE" not in rift_jsondata,
+            "legacy_entry_read_disabled": "RiftEntryService" not in rift_jsondata,
             "status": "world_generation_termination_key_event_settlement_entry_speedup_demon_token_cutover_with_remaining_rift_compatibility",
         },
         "back": {

@@ -63,6 +63,32 @@ class RiftEntryRepositoryTests(unittest.TestCase):
             self.assertEqual(conn.execute("SELECT status FROM rift_entries WHERE user_id='u'").fetchone()[0], "active")
             self.assertEqual(conn.execute("SELECT entry_count FROM rift_entry_counts WHERE user_id='u'").fetchone()[0], 1)
 
+    def test_read_entry_projection_is_read_only_and_respects_active_filter(self) -> None:
+        self.assertIsNone(self.repository.read_entry("u", active_only=True))
+        self.enter()
+        self.assertEqual(self.repository.read_entry("u", active_only=True), self.plan)
+        with db_backend.transaction(self.database) as conn:
+            conn.execute("UPDATE rift_entries SET status='terminated' WHERE user_id='u'")
+        self.assertIsNone(self.repository.read_entry("u", active_only=True))
+        self.assertEqual(self.repository.read_entry("u"), self.plan)
+
+    def test_read_entry_missing_schema_does_not_create_tables(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute("DROP TABLE rift_entries")
+        self.assertIsNone(self.repository.read_entry("u", active_only=True))
+        with db_backend.connection(self.database) as conn:
+            self.assertFalse(conn.table_exists("rift_entries"))
+
+    def test_read_entry_legacy_columns_fall_back_without_request_ddl(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute("DROP TABLE rift_entries")
+            conn.execute("CREATE TABLE rift_entries(user_id TEXT PRIMARY KEY,rift_data TEXT NOT NULL)")
+            conn.execute("INSERT INTO rift_entries(user_id,rift_data) VALUES('u',?)", (json.dumps(self.plan),))
+        self.assertIsNone(self.repository.read_entry("u", active_only=True))
+        with db_backend.connection(self.database) as conn:
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(rift_entries)")}
+            self.assertEqual(columns, {"user_id", "rift_data"})
+
     def test_ticket_entry_consumes_item_and_merges_participants(self) -> None:
         first = self.enter("entry-u", "u", stamina_cost=0, expected_stamina=None)
         second = self.enter("entry-v", "v", ticket_id=7, expected_revision=2, stamina_cost=0, expected_stamina=None)

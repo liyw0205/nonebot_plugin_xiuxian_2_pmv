@@ -4325,3 +4325,12 @@ inventory `--check` 与 `git diff --check` 通过。隔离五库 recovery 完成
 health 六项 readiness 全绿，reconcile `clean=true` 且 operations/outbox/dead_events 均为 `0`。未运行根目录全量回归或真实 live/P7；专用
 pytest/recovery/receipt 与 compileall 缓存已清理，复核约 `24 GB` 磁盘可用、`1.3 GB` RAM 可用，保留 `.venv`、`.git`、`data/`、运行数据库/备份
 和用户原有 Boss JSON 改动。下一步审计 Rift 剩余兼容只读路径，不将 Rift 整体宣告完成。
+
+2026-09-26 rift active-entry read projection：真实秘境结算、终止和钥匙事件前置读取使用的
+`xiuxian_rift.jsondata.read_rift_data` 不再导入旧 `RiftEntryService`，改经
+`RiftEntrySqlRepository.read_entry` 的 game DB read-only UoW；active/inactive、缺表、历史缺列和非法对象均有明确边界，
+不在请求路径建表或补列，数据库没有 active entry 时才回退玩家 `riftinfo.json` 兼容投影。只读 repository、legacy JSON fallback、
+progress/source contract 聚焦回归 `113 passed`（含 progress contract 后为 `114 passed`）；compileall、architecture、progress、inventory、diff check 通过。隔离五库 recovery
+完成 `172` 项迁移，路由 `game/player/trade/impart/message = 137/31/7/1/1`，`rift.009` 仅 game；backup/restore dry-run/restore、
+readiness、migration dry-run 和 reconcile clean（operations/outbox/dead events 均为 `0`）。本轮测试/recovery/receipt/字节码缓存已清理，
+保留 `.venv`、`.git`、`data/`、运行数据库/备份和用户原有 Boss JSON 改动。下一步继续审计 Rift 的 cooldown 只读边界，不将 Rift 整体宣告完成。

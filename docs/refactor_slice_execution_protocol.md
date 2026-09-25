@@ -132,10 +132,14 @@ schema，请求路径不建表/补列；重复、world 冲突、资源不足和�
 progress、inventory、diff check 与五库 recovery；recovery 共 `172` 项 migration，路由 `137/31/7/1/1`，`rift.009` 仅 game，reconcile clean。专用
 测试/recovery/receipt/字节码缓存已清理，约 `24 GB` 磁盘可用、`1.3 GB` RAM 可用；下一步审计 Rift 剩余兼容只读边界。
 
+`rift active-entry read projection`：`jsondata.read_rift_data` 改经 `RiftEntrySqlRepository.read_entry` 的 read-only UoW；表/历史列缺失不执行 DDL，
+仅在没有 active entry 时回退玩家 JSON。覆盖 active/inactive、缺表/缺列、对象校验和旧 fallback；Rift 聚焦 `113 passed`，compileall、architecture、progress、
+inventory、diff check 与五库 recovery 均通过，recovery `172` 项、路由 `137/31/7/1/1`、reconcile clean。专用产物已清理；下一步审计 Rift cooldown 只读边界。
+
 ## 当前切片与下一切片选择
 
-最近完成 `rift entry feature-owned cutover`：秘境普通/秘藏令进入统一接到
-`RiftApplication -> RiftEntrySqlRepository`，新增 game-only `rift.009` 并移除真实 handler 对旧 entry service 的依赖；剩余兼容只读边界仍是
+最近完成 `rift active-entry read projection`：entry 写入和 active 读取分别统一接到
+`RiftApplication -> RiftEntrySqlRepository` / `RiftEntrySqlRepository.read_entry`，旧 entry service 只保留显式兼容对照；剩余 cooldown 只读边界仍是
 分开的路径。下一步在本轮缓存清理与磁盘复核后，回到
 `docs/full_refactor_progress.md` 的 6.2 目标 5，只读审计一个剩余真实 Rift handler 的 composition、请求期 schema 写入与 transaction owner，
 再选择单动作切片；不要将 facade 调用或静态路由当成底层 cutover。更广范围仍需按 6.2 逐个审计特殊道具、宠物、任务/修炼、洞府、地图、宗门、

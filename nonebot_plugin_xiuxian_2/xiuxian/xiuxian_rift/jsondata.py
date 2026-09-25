@@ -6,8 +6,8 @@ import os
 from pathlib import Path
 from nonebot.log import logger
 from ...paths import get_paths
+from ...features.rift.entry_repository import RiftEntrySqlRepository
 from ..xiuxian_utils.json_store import save_json_file
-from .transaction_service import RiftEntryService
 
 SKILLPATH = get_paths().data / "功法" / "功法概率设置.json"
 PLAYERSDATA = get_paths().players
@@ -17,7 +17,7 @@ _rift_entry_reader_instance = None
 def _rift_entry_reader():
     global _rift_entry_reader_instance
     if _rift_entry_reader_instance is None:
-        _rift_entry_reader_instance = RiftEntryService(get_paths().game_db)
+        _rift_entry_reader_instance = RiftEntrySqlRepository(get_paths().game_db)
     return _rift_entry_reader_instance
 
 
