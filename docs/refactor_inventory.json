@@ -2963,6 +2963,7 @@
     "reward_claim_counters",
     "reward_claims",
     "rift",
+    "rift_demon_token_battle_operations",
     "rift_entries",
     "rift_entry_counts",
     "rift_entry_operations",

@@ -70,7 +70,7 @@ from .features.trade.migrations import (
 from .features.map.manifest import FEATURE as MAP_FEATURE
 from .features.map.migrations import apply_map, apply_map_combat_plan, apply_map_combat_player, apply_map_combat_start, apply_map_dongfu_build, apply_map_dongfu_player, apply_map_explore_player, apply_map_explore_settlement, apply_map_explore_start, apply_map_home_return, apply_map_interactive_player, apply_map_interactive_start, apply_map_mission_claim, apply_map_movement, apply_map_resource_reward, apply_map_seed_purchase
 from .features.rift.manifest import FEATURE as RIFT_FEATURE
-from .features.rift.migrations import apply_rift
+from .features.rift.migrations import apply_rift, apply_rift_demon_token_operations, apply_rift_demon_token_player_schema
 from .features.accessory_package.manifest import FEATURE as ACCESSORY_PACKAGE_FEATURE
 from .features.accessory_package.migrations import apply_accessory_package
 from .features.arena.manifest import FEATURE as ARENA_FEATURE
@@ -247,6 +247,8 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("platform.001", "operation_ledger_outbox", apply_platform_schema),
         Migration("puppet.001", "puppet_feature_migrations", apply_puppet),
         Migration("rift.001", "rift_feature_migrations", apply_rift),
+        Migration("rift.002", "rift_demon_token_battle_operations", apply_rift_demon_token_operations),
+        Migration("rift.003", "rift_demon_token_player_schema", apply_rift_demon_token_player_schema),
         Migration("sect.001", "sect_feature_migrations", apply_sect),
         Migration("sect.002", "sect_rename_operations", apply_sect_rename),
         Migration("sect.003", "sect_member_join_operations", apply_sect_join),
@@ -334,6 +336,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "buff.003",
         "buff.005",
         "mixelixir.003",
+        "rift.003",
     }
 )
 _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
@@ -366,6 +369,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "buff.003",
         "buff.005",
         "mixelixir.003",
+        "rift.003",
     }
 )
 _TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "auction.004"})

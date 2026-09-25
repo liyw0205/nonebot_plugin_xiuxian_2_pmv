@@ -75,6 +75,20 @@ focused/source/progress/architecture/inventory 回归 `255 passed, 4 subtests`�
 health 六项全绿和 reconcile clean 均通过，operations/outbox/dead events 为 `0`。本轮临时测试、recovery、receipt 和字节码缓存
 清理并复核后，下一步只做 6.2 目标 5 的单项真实入口审计。
 
+`rift demon-token battle`：真实注册的 `道具使用` matcher 对 `20018` 的 replay/结算改走
+`RiftApplication -> RiftDemonTokenBattleSqlRepository`；outcome 保持 handler 预滚，repository 在 attached game/player UoW
+内提交道具、战斗资产、奖励、探索次数、统计与秘境状态。旧 operation payload 和 replay 兼容；新增 game `rift.002` 与 player
+`rift.003` schema migration，请求路径不建表/补列。application、旧 service 互操作、真实 matcher、裂隙相邻/source/progress 回归
+`71 passed`；compileall、architecture、inventory、progress 和 diff check 通过。五库 recovery 完成 `162` 项迁移，路由
+`129/29/7/1/1`；backup/restore dry-run/restore、migration dry-run（pending 为空）、health 六项和 reconcile clean 均通过。
+专用测试、recovery、receipt 和字节码缓存已清理，资源复核后仍有约 `24 GB` 磁盘和 `1.4 GB` 可用 RAM。
+
 ## 下一切片选择
 
-回到 `docs/full_refactor_progress.md` 的 6.2 目标 5，下一片优先审计并迁移秘境斩妖令 `20018` 的真实 `use_rift_boss` handler：目前它直接调用旧 `RiftDemonTokenBattleSettlementService`，而 `RiftApplication` 尚无对应 action；已有回归覆盖资产、探索次数、统计、幂等和跨库回滚，可作为行为基线。该片只处理斩妖令结算，不扩大到整个秘境目录。追捕令 `20015` 已切换，但随机 offer 仍由旧领域逻辑生成；不能把现有 application 边界扩大解释成 work 领域整体完成。随后再核实其他 NoneBot 特殊道具、宠物、任务/修炼、洞府、地图、宗门、竞技场/副本、世界事件和 Boss handler。不可按目录整体迁移或把惰性 facade、静态 manifest、仅测试通过视为完成。已切换的 partner cultivation、partner token、背包通用 item-use Web、宠物蛋、饰品礼包和炼丹两阶段领取不重复迁移。
+回到 `docs/full_refactor_progress.md` 的 6.2 目标 5。下一片锁定祈愿石 `20005` 的真实 `use_wishing_stone` handler：matcher 已进入
+`ImpartApplication.prayer_settle -> ImpartPrayerSqlRepository`，但 repository 仍在请求时创建 `impart_prayer_operations`，handler 也在结算提交后
+另行写 player `祈愿石使用`、`传承新卡`、`传承重复卡` 统计，统计失败不能随原子操作重放修复。该片只把祈愿 replay schema 移至 game 启动迁移，并把三项统计
+放进 game/impart/player attached transaction；不重做抽卡随机逻辑、不扩大到其他传承动作。追捕令 `20015` 的随机 offer 仍由旧领域逻辑生成；
+不能把已迁移的 `use_work_capture_order` 扣除/快照边界解释成 work 领域整体完成。随后继续核实其他 NoneBot 特殊道具、宠物、任务/修炼、洞府、地图、
+宗门、竞技场/副本、世界事件和 Boss handler。不可按目录整体迁移或把惰性 facade、静态 manifest、仅测试通过视为完成。已切换的 partner cultivation、
+partner token、背包通用 item-use Web、宠物蛋、饰品礼包和炼丹两阶段领取不重复迁移。

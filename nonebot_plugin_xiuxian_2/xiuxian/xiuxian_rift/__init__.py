@@ -34,7 +34,6 @@ from .jsondata import save_rift_data, read_rift_data
 from .transaction_service import RiftEntryService
 from .transaction_service import RiftTerminationService
 from .transaction_service import RiftKeyEventSettlementService
-from .transaction_service import RiftDemonTokenBattleSettlementService
 from .transaction_service import RiftSpeedupService
 from .transaction_service import RiftSettlementService
 from ...features.rift.application import RiftApplication
@@ -54,18 +53,18 @@ _sql_message_instance = None
 _rift_entry_service_instance = None
 _rift_termination_service_instance = None
 _rift_key_event_settlement_service_instance = None
-_rift_demon_token_battle_settlement_service_instance = None
 _rift_speedup_service_instance = None
 _rift_settlement_service_instance = None
+runtime_clock = SystemClock()
 rift_application = RiftApplication(
     get_paths().game_db,
     get_paths().player_db,
+    clock=runtime_clock,
 )
 cache_help = {}
 group_rift = {}  # dict
 config = get_rift_config() # 获取秘境配置
 runtime_ids = UUIDGenerator()
-runtime_clock = SystemClock()
 groups = config['open']  # list
 
 
@@ -97,15 +96,6 @@ def _rift_key_event_settlement_service():
             get_paths().game_db, get_paths().player_db
         )
     return _rift_key_event_settlement_service_instance
-
-
-def _rift_demon_token_battle_settlement_service():
-    global _rift_demon_token_battle_settlement_service_instance
-    if _rift_demon_token_battle_settlement_service_instance is None:
-        _rift_demon_token_battle_settlement_service_instance = RiftDemonTokenBattleSettlementService(
-            get_paths().game_db, get_paths().player_db
-        )
-    return _rift_demon_token_battle_settlement_service_instance
 
 
 def _rift_speedup_service():
@@ -1028,9 +1018,7 @@ async def use_rift_boss(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         f"rift-demon-token-battle:{event_id or runtime_ids.new_id()}:{user_id}"
     )
     if event_id:
-        replay = _rift_demon_token_battle_settlement_service().replay(
-            operation_id
-        )
+        replay = rift_application.replay_demon_token_battle(operation_id=operation_id)
         if replay is not None:
             await handle_send(bot, event, replay.message)
             return
@@ -1066,13 +1054,18 @@ async def use_rift_boss(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             f"秘境 {rift_info['name']} 已使用斩妖令结算！\n"
             f"战斗结果：{result_msg}{progress_msg}"
         )
-        settlement = _rift_demon_token_battle_settlement_service().settle(
-            operation_id, user_id, item_id, rift_info,
-            {
+        settlement = rift_application.settle_demon_token_battle(
+            operation_id=operation_id,
+            user_id=str(user_id),
+            item_id=item_id,
+            expected_rift=rift_info,
+            expected_user={
                 key: int(user_info.get(key, 0))
                 for key in ("stone", "exp", "hp", "mp")
             },
-            explore_count, outcome, XiuConfig().max_goods_num,
+            expected_explore_count=explore_count,
+            outcome=outcome,
+            max_goods_num=XiuConfig().max_goods_num,
         )
     except Exception as exc:
         logger.opt(exception=exc).error("斩妖令结算事务执行失败")

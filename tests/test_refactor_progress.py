@@ -65,6 +65,9 @@ class RefactorProgressTests(unittest.TestCase):
         rift = slices["rift"]
         self.assertTrue(rift["entry_application_owned"])
         self.assertTrue(rift["legacy_entry_disabled"])
+        self.assertTrue(rift["demon_token_application_owned"])
+        self.assertTrue(rift["legacy_demon_token_disabled"])
+        self.assertTrue(rift["demon_token_migrations_registered"])
         back = slices["back"]
         self.assertTrue(back["cultivation_item_application_owned"])
         self.assertTrue(back["legacy_cultivation_item_disabled"])

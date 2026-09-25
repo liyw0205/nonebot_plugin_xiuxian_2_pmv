@@ -4209,3 +4209,15 @@ progress/source-quality 聚焦 `235 passed`；compileall、architecture、invent
 全绿、reconcile `clean=true` 且 operations/outbox/dead_events 均为 `0`。本轮 pytest basetemp、recovery 数据、receipt 与
 compileall 字节码缓存清理后复核磁盘；`.venv`、`.git`、`data/`、运行数据库和备份保留。根目录全量测试未运行，避免无关
 旧测试 hang 和 RAM 峰值风险。下一步仅在清理复核后，按 6.2 目标 5 对剩余真实入口做单项审计并选择下一片。
+
+2026-09-25 rift demon-token feature-owned cutover：真实注册的 `道具使用` matcher 对斩妖令 `20018` 的 replay 与战斗结算改经
+`RiftApplication -> RiftDemonTokenBattleSqlRepository`；战斗 outcome 仍由 handler 预滚。repository 在 attached game/player UoW 内
+校验秘境、角色资产、道具和探索次数快照，并提交背包消耗/奖励、战斗资产、探索次数、`秘境打怪`/`秘境次数`统计、秘境状态及 operation 记录。
+旧 `RiftDemonTokenBattleSettlementService` 保留作兼容对照；新路径不调用通用 `LegacyApplication` ledger，不在请求时建表/补列，且沿用旧
+operation payload，已存在的旧记录可原样 replay。新增 game DB `rift.002` operation 表迁移和 player DB `rift.003` 探索次数/统计 schema 迁移，
+对既有表只补缺列并保留现有行。真实 matcher、repository（含旧账本互操作、十次奖励、无 DDL、回滚）、裂隙相邻回归、progress 和 application
+契约聚焦 `71 passed`；compileall、architecture、inventory、progress、`git diff --check` 通过。隔离五库 recovery 完成 `162` 项 migration，
+路由 `game/player/trade/impart/message = 129/29/7/1/1`，`.002` 仅 game、`.003` 仅 player；五库 backup/restore dry-run/restore 完成，
+migrate dry-run 五库 pending 均为空，health 六项 readiness 全绿，reconcile `clean=true` 且 operations/outbox/dead_events 均为 `0`。
+根目录全量回归未运行，以控制 RAM 峰值并避开既有无关 startup hang。指定 pytest basetemp、recovery 数据、receipt 和字节码缓存清理并复核后，
+`.venv`、`.git`、`data/`、运行数据库与备份保留；用户原有 Boss JSON 改动未纳入本片。
