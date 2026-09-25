@@ -42,6 +42,7 @@ class BackAlchemyWiringTests(unittest.TestCase):
                 self.assertEqual(context.services["back"].three_cultivation_pill_application.__class__.__name__, "ThreeCultivationPillApplication")
                 self.assertEqual(context.services["back"].breakthrough_rate_item_application.__class__.__name__, "BreakthroughRateItemApplication")
                 self.assertEqual(context.services["back"].recovery_item_application.__class__.__name__, "RecoveryItemApplication")
+                self.assertEqual(context.services["back"].permanent_atk_item_application.__class__.__name__, "PermanentAtkItemApplication")
                 self.assertEqual(context.services["back"].unbind_application.__class__.__name__, "UnbindApplication")
             finally:
                 asyncio.run(lifecycle.shutdown())

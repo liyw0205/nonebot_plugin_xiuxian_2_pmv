@@ -4055,3 +4055,12 @@ DDL；`hp_mp`、`full`、`stamina` 三种模式的状态上限、攻击/体力�
 聚焦回归与恢复丹旧语义测试通过，顶层全量测试与 recovery smoke 均通过。五库 recovery 完成 `144` 项
 迁移，路由为 game/player/trade/impart/message `116/24/7/1/1`，`back.010` 仅路由到 game DB，
 reconcile clean（operations/outbox/dead events 均为 0）；临时数据和缓存已清理。
+
+2026-09-25 back permanent-atk-item feature-owned cutover：永久攻击丹真实调用路径已切换到
+`back_util.check_use_elixir -> PermanentAtkItemApplication -> PermanentAtkItemSqlRepository`；旧
+`PermanentAtkItemService` 仅保留显式兼容回滚。`back.011` 在 game DB 启动迁移创建幂等表，请求路径不再
+执行 DDL；攻击力增加、道具扣除/绑定数、耐药计数、重复请求、BuffInfo/库存缺失和事务回滚语义保持
+原子一致。新增 application/repository、wiring、source/progress 回归；聚焦回归与永久攻击丹旧语义测试
+通过，顶层全量测试与 recovery smoke 均通过。五库 recovery 完成 `145` 项迁移，路由为
+game/player/trade/impart/message `117/24/7/1/1`，`back.011` 仅路由到 game DB，reconcile clean
+（operations/outbox/dead events 均为 0）；临时数据和缓存已清理。

@@ -30,6 +30,7 @@ _breakthrough_rate_item_application_instance = None
 _breakthrough_rate_item_service_instance = None
 _recovery_item_application_instance = None
 _recovery_item_service_instance = None
+_permanent_atk_item_application_instance = None
 _permanent_atk_item_service_instance = None
 _blessed_flag_replace_service_instance = None
 ADDED_RANKS = get_added_ranks()
@@ -88,6 +89,20 @@ def _recovery_item_application():
 def configure_recovery_item_application(application) -> None:
     global _recovery_item_application_instance
     _recovery_item_application_instance = application
+
+
+def _permanent_atk_item_application():
+    global _permanent_atk_item_application_instance
+    if _permanent_atk_item_application_instance is None:
+        from ...features.back.permanent_atk_item_application import PermanentAtkItemApplication
+
+        _permanent_atk_item_application_instance = PermanentAtkItemApplication(get_paths().game_db)
+    return _permanent_atk_item_application_instance
+
+
+def configure_permanent_atk_item_application(application) -> None:
+    global _permanent_atk_item_application_instance
+    _permanent_atk_item_application_instance = application
 
 def _blessed_flag_replace_service():
     global _blessed_flag_replace_service_instance
@@ -1136,7 +1151,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
     elif goods_info['buff_type'] == "atk_buff":  # 永久加攻击buff的丹药
         if user_info['root'] == "凡人":
             buff = goods_info['buff'] * num
-            result = _permanent_atk_item_service().apply(
+            result = _permanent_atk_item_application().apply(
                 operation_id or f"elixir-atk:{user_id}:{goods_id}:{datetime.now().timestamp()}",
                 user_id, goods_id, num, buff,
             )
@@ -1150,7 +1165,7 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
                 msg = f"丹药：{goods_name}的使用境界为{goods_info['境界']}以上，道友不满足使用条件！"
             else:
                 buff = goods_info['buff'] * num
-                result = _permanent_atk_item_service().apply(
+                result = _permanent_atk_item_application().apply(
                     operation_id or f"elixir-atk:{user_id}:{goods_id}:{datetime.now().timestamp()}",
                     user_id, goods_id, num, buff,
                 )

@@ -14,6 +14,7 @@ from .stone_reward_application import StoneRewardApplication
 from .three_cultivation_pill_application import ThreeCultivationPillApplication
 from .breakthrough_rate_item_application import BreakthroughRateItemApplication
 from .recovery_item_application import RecoveryItemApplication
+from .permanent_atk_item_application import PermanentAtkItemApplication
 from .unbind_application import UnbindApplication
 
 
@@ -28,6 +29,7 @@ class BackApplication(LegacyApplication):
         self.three_cultivation_pill_application = ThreeCultivationPillApplication(database)
         self.breakthrough_rate_item_application = BreakthroughRateItemApplication(database)
         self.recovery_item_application = RecoveryItemApplication(database)
+        self.permanent_atk_item_application = PermanentAtkItemApplication(database)
         self.unbind_application = UnbindApplication(database)
         super().__init__(database, repository=repository or LegacyBackRepository(database, player_database), feature="back")
 
@@ -70,6 +72,10 @@ class BackApplication(LegacyApplication):
         if self._explicit_repository is None:
             return self.recovery_item_application.apply(operation_id, user_id, **kwargs)
         return self._action("recovery_item", operation_id=operation_id, user_id=user_id, **kwargs)
+    def permanent_atk_item(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        if self._explicit_repository is None:
+            return self.permanent_atk_item_application.apply(operation_id, user_id, **kwargs)
+        return self._action("permanent_atk_item", operation_id=operation_id, user_id=user_id, **kwargs)
     def alchemy(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:
             return self.alchemy_application.apply(operation_id, user_id, **kwargs)

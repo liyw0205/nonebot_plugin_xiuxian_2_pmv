@@ -175,6 +175,7 @@ def configure_back_application(application: BackApplication) -> None:
     configure_cultivation_item_application(application.cultivation_item_application)
     configure_breakthrough_rate_item_application(application.breakthrough_rate_item_application)
     configure_recovery_item_application(application.recovery_item_application)
+    configure_permanent_atk_item_application(application.permanent_atk_item_application)
 
 
 def _package_open_result(outcome, user_id, package_id, quantity, rewards):

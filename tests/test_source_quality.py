@@ -1188,18 +1188,19 @@ class SourceQualityTests(unittest.TestCase):
     def test_permanent_attack_elixir_use_is_atomic_and_idempotent(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         utility_source = (back_root / "back_util.py").read_text(encoding="utf-8")
-        service_source = (back_root / "permanent_atk_item_service.py").read_text(
+        repository_source = (SOURCE_ROOT / "features" / "back" / "permanent_atk_item_repository.py").read_text(
             encoding="utf-8"
         )
         start = utility_source.index('elif goods_info[\'buff_type\'] == "atk_buff"')
         end = utility_source.index('elif goods_info[\'buff_type\'] == "exp_up"', start)
         command = utility_source[start:end]
 
-        self.assertGreaterEqual(command.count("_permanent_atk_item_service().apply("), 2)
+        self.assertGreaterEqual(command.count("_permanent_atk_item_application().apply("), 2)
         self.assertNotIn("sql_message.updata_user_atk_buff(", command)
         self.assertNotIn("sql_message.update_back_j(", command)
-        self.assertIn("BEGIN IMMEDIATE", service_source)
-        self.assertIn("permanent_atk_item_operations", service_source)
+        self.assertIn("immediate=True", repository_source)
+        self.assertIn("permanent_atk_item_operations", repository_source)
+        self.assertNotIn("CREATE TABLE", repository_source)
 
     def test_unbind_charm_use_is_atomic_and_idempotent(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
