@@ -1730,15 +1730,15 @@ async def use_spirit_stone_bag(bot: Bot, event: GroupMessageEvent | PrivateMessa
         )[0]
         for _ in range(num)
     ]
-    reward = _stone_reward_service().apply(
-        _stone_reward_operation_id(event, "spirit_stone_bag", user_id),
-        user_id,
+    reward = back_application.stone_reward(
+        operation_id=_stone_reward_operation_id(event, "spirit_stone_bag", user_id),
+        user_id=user_id,
         reward_type="spirit_stone_bag",
         item_id=item_id,
         rewards=rolled_rewards,
     )
     if not reward.succeeded:
-        await handle_send(bot, event, _back_op_fail_msg(result, action="使用灵石福袋"))
+        await handle_send(bot, event, _back_op_fail_msg(reward, action="使用灵石福袋"))
         return
 
     results = [
@@ -1769,15 +1769,15 @@ async def use_tianji_stone_trigger(bot: Bot, event: GroupMessageEvent | PrivateM
     MIN_STONE = 10_000_000
     MAX_STONE = 100_000_000
     rolled_rewards = [random.randint(MIN_STONE, MAX_STONE) for _ in range(num)]
-    reward = _stone_reward_service().apply(
-        _stone_reward_operation_id(event, "tianji_stone_trigger", user_id),
-        user_id,
+    reward = back_application.stone_reward(
+        operation_id=_stone_reward_operation_id(event, "tianji_stone_trigger", user_id),
+        user_id=user_id,
         reward_type="tianji_stone_trigger",
         item_id=item_id,
         rewards=rolled_rewards,
     )
     if not reward.succeeded:
-        await handle_send(bot, event, _back_op_fail_msg(result, action="使用天机灵石引"))
+        await handle_send(bot, event, _back_op_fail_msg(reward, action="使用天机灵石引"))
         return
 
     results = []

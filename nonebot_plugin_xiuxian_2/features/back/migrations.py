@@ -52,4 +52,13 @@ def apply_lottery_talisman(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_alchemy", "apply_back", "apply_cultivation_item", "apply_lottery_talisman", "apply_skill_learning", "apply_unbind"]
+def apply_stone_reward(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS stone_item_reward_operations("
+        "operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,reward_type TEXT NOT NULL,"
+        "item_id INTEGER NOT NULL,quantity INTEGER NOT NULL,rewards_json TEXT NOT NULL,"
+        "total_stone INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+__all__ = ["apply_alchemy", "apply_back", "apply_cultivation_item", "apply_lottery_talisman", "apply_skill_learning", "apply_stone_reward", "apply_unbind"]

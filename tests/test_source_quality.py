@@ -1038,18 +1038,18 @@ class SourceQualityTests(unittest.TestCase):
     def test_stone_rewards_use_transactional_service(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         command_source = (back_root / "__init__.py").read_text(encoding="utf-8")
-        service_source = (back_root / "transaction_service.py").read_text(encoding="utf-8")
+        repository_source = (SOURCE_ROOT / "features" / "back" / "stone_reward_repository.py").read_text(encoding="utf-8")
         spirit_start = command_source.index("async def use_spirit_stone_bag(")
         spirit_handler = command_source[spirit_start:command_source.index("async def use_tianji_stone_trigger(", spirit_start)]
         tianji_start = command_source.index("async def use_tianji_stone_trigger(")
         tianji_handler = command_source[tianji_start:command_source.index("async def use_three_cultivation_pill(", tianji_start)]
 
-        self.assertIn("_stone_reward_service().apply(", spirit_handler)
-        self.assertIn("_stone_reward_service().apply(", tianji_handler)
-        self.assertNotIn("stone_reward_service.apply(", command_source)
+        self.assertIn("back_application.stone_reward(", spirit_handler)
+        self.assertIn("back_application.stone_reward(", tianji_handler)
+        self.assertNotIn("_stone_reward_service().apply(", command_source)
         self.assertNotIn("sql_message.update_ls(", spirit_handler + tianji_handler)
-        self.assertIn("BEGIN IMMEDIATE", service_source)
-        self.assertIn("stone_item_reward_operations", service_source)
+        self.assertIn("immediate=True", repository_source)
+        self.assertIn("stone_item_reward_operations", repository_source)
 
     def test_alchemy_uses_feature_application(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"

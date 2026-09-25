@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from contextlib import redirect_stdout
+from datetime import datetime, timezone
 from io import StringIO
 from pathlib import Path
 
@@ -61,7 +62,7 @@ class AuctionBidWebReconcileTests(unittest.TestCase):
                     'SELECT "拍卖出价次数","拍卖出价灵石" FROM statistics WHERE user_id=?',
                     ("u1",),
                 )
-            log_file = context.paths.players / "u1" / "logs" / "260924.log"
+            log_file = context.paths.players / "u1" / "logs" / f"{datetime.now(timezone.utc):%y%m%d}.log"
             self.assertEqual((stats["拍卖出价次数"], stats["拍卖出价灵石"]), (1, 300))
             self.assertTrue(log_file.exists())
 

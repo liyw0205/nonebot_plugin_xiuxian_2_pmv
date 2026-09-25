@@ -4016,3 +4016,14 @@ events 均为 0）；临时数据和缓存已清理。
 五库 recovery 完成 `140` 项迁移，路由为 game/player/trade/impart/message `110/24/7/1/1`，
 `back.006` 仅路由到 game DB，attached accessory 两项，backup/restore dry-run/restore 与
 reconcile clean（operations/outbox/dead events 均为 0）；临时数据和缓存已清理。
+
+2026-09-25 back stone-reward feature-owned cutover：灵石福袋和天机灵石引两个真实 handler 已切换到
+`BackApplication.stone_reward -> StoneRewardApplication -> StoneRewardSqlRepository`；随机奖励仍由
+handler 预滚，旧 `StoneItemRewardService` 仅保留显式兼容回滚。`back.007` 在 game DB 启动迁移创建
+幂等表，请求路径不再执行 DDL；两种 `reward_type`、奖励数量、道具扣除/绑定数、重复请求和事务回滚
+语义保持原子一致，并修复失败分支未定义结果变量。聚焦回归 `224 passed`。顶层 `tests/` 全量执行
+`2656 passed, 16 warnings, 25 subtests`；同时修正拍卖 Web 实时日志测试的日期硬编码，避免跨日
+后失效。五库 recovery 完成 `141` 项迁移，
+路由为 game/player/trade/impart/message `113/24/7/1/1`，`back.007` 仅路由到 game DB，attached
+accessory 两项，backup/restore dry-run/restore 与 reconcile clean（operations/outbox/dead events
+均为 0）；临时数据和缓存已清理。

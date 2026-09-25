@@ -332,6 +332,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_skill_learning_disabled": "_skill_learning_service().learn(" not in back_facade,
             "lottery_talisman_application_owned": "back_application.lottery_talisman(" in back_facade,
             "legacy_lottery_talisman_disabled": "_lottery_talisman_service().apply(" not in back_facade,
+            "stone_reward_application_owned": back_facade.count("back_application.stone_reward(") >= 2,
+            "legacy_stone_reward_disabled": "_stone_reward_service().apply(" not in back_facade,
             "alchemy_application_owned": back_facade.count("back_application.alchemy(") >= 3,
             "legacy_alchemy_disabled": "_alchemy_service().apply(" not in back_facade,
             "unbind_application_owned": "back_application.unbind(" in back_facade,
@@ -346,7 +348,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "accessory_package_application_owned": "back_application.accessory_package(" in back_facade,
             "legacy_repair_disabled": "_backpack_repair_service().run(" not in back_facade,
-            "status": "cultivation_item_skill_learning_lottery_talisman_alchemy_unbind_repair_equipment_equip_unequip_pet_egg_package_accessory_package_cutover_with_other_back_compatibility",
+            "status": "cultivation_item_skill_learning_lottery_talisman_stone_reward_alchemy_unbind_repair_equipment_equip_unequip_pet_egg_package_accessory_package_cutover_with_other_back_compatibility",
         },
         "past_life": {
             "final_settlement_application_owned": "_past_life_application.final_settle(" in past_life_events_facade,

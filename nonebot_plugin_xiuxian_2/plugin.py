@@ -44,7 +44,7 @@ from .features.buff.migrations import apply_buff
 from .features.base.manifest import FEATURE as BASE_FEATURE
 from .features.base.migrations import apply_base
 from .features.back.manifest import FEATURE as BACK_FEATURE
-from .features.back.migrations import apply_alchemy, apply_back, apply_cultivation_item, apply_lottery_talisman, apply_skill_learning, apply_unbind
+from .features.back.migrations import apply_alchemy, apply_back, apply_cultivation_item, apply_lottery_talisman, apply_skill_learning, apply_stone_reward, apply_unbind
 from .features.trade.manifest import FEATURE as TRADE_FEATURE
 from .features.trade.migrations import (
     apply_trade,
@@ -166,6 +166,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("back.004", "cultivation_item_operations", apply_cultivation_item),
         Migration("back.005", "skill_learning_operations", apply_skill_learning),
         Migration("back.006", "lottery_talisman_operations", apply_lottery_talisman),
+        Migration("back.007", "stone_item_reward_operations", apply_stone_reward),
         Migration("bank.001", "bank_feature_migrations", apply_bank),
         Migration("bank.002", "bank_accounts", apply_bank_accounts),
         Migration("base.001", "base_feature_migrations", apply_base),
