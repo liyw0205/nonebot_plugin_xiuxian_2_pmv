@@ -4249,9 +4249,11 @@ def get_final_attributes(
     item_provider=None,
     accessory_provider=None,
     tianti_provider=None,
+    base_provider=None,
 ) -> dict | None:
     """获取buff加成后的最终属性（统一口径）"""
-    base = get_base_attributes(user_id)
+    base_provider = base_provider or get_base_attributes
+    base = base_provider(user_id)
     if not base:
         return None
 

@@ -4431,3 +4431,8 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 通过 `get_rift_battle_tianti_data` 从既有 `player.db.tianti_info` 只读读取 `tianti_hp`；缺表、缺用户和只读错误按 0 HP 兼容，
 不调用旧 `TiantiDataManager.get_user_tianti_info` 的默认记录创建/清洗回写。默认其他调用仍保留旧炼体 reader；本片只拆出炼体查询边界，
 炼体状态写入、窍穴/药浴逻辑和 schema 对账仍未迁移，新增 provider 与 schema 不变测试。
+
+2026-09-26 rift Boss base-profile read provider：`get_final_attributes` 增加可选 `base_provider`，Rift Boss
+通过 `get_rift_battle_base_attributes` 从 game DB `user_xiuxian` 只读读取战斗所需基础字段并做数值归一；缺表、缺列、缺用户和只读错误返回 `None`，
+不会构造 `XiuxianDateManage` 或执行旧 schema 兼容写入。默认其他调用仍走 `get_base_attributes` fallback；本片只拆出基础 profile 查询边界，
+用户主表迁移和其他非战斗字段读取仍未迁移，新增 provider 与 schema 不变测试。

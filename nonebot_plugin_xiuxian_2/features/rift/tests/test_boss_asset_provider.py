@@ -152,6 +152,7 @@ def test_rift_attribute_provider_injects_read_only_impart_provider():
         item_provider=riftmake.items.get_data_by_item_id,
         accessory_provider=riftmake.get_rift_battle_accessory_data,
         tianti_provider=riftmake.get_rift_battle_tianti_data,
+        base_provider=riftmake.get_rift_battle_base_attributes,
     )
 
 
@@ -203,6 +204,35 @@ def test_rift_tianti_provider_reads_existing_hp_without_schema_mutation(tmp_path
             "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
         ).fetchall()
     assert result["tianti_hp"] == "123"
+    assert missing is None
+    assert before == after
+
+
+def test_rift_base_provider_reads_existing_profile_without_schema_mutation(tmp_path):
+    database = tmp_path / "xiuxian.db"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "CREATE TABLE user_xiuxian (user_id TEXT PRIMARY KEY, user_name TEXT, level TEXT, exp TEXT, stone TEXT, hp TEXT, mp TEXT, atk TEXT, atkpractice TEXT, hppractice TEXT, mppractice TEXT)"
+        )
+        connection.execute(
+            "INSERT INTO user_xiuxian VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("u", "道友", "练气境", "100", "200", "80", "70", "30", "2", "3", "4"),
+        )
+        before = connection.execute(
+            "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
+        ).fetchall()
+
+    with patch.object(riftmake, "get_paths", return_value=SimpleNamespace(game_db=database)):
+        result = riftmake.get_rift_battle_base_attributes("u")
+        missing = riftmake.get_rift_battle_base_attributes("missing")
+
+    with sqlite3.connect(database) as connection:
+        after = connection.execute(
+            "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
+        ).fetchall()
+    assert result["nickname"] == "道友"
+    assert result["base_hp"] == 80
+    assert result["atkpractice"] == 2
     assert missing is None
     assert before == after
 
@@ -277,4 +307,5 @@ def test_rift_final_attributes_passes_buff_and_item_read_providers():
         item_provider=riftmake.items.get_data_by_item_id,
         accessory_provider=riftmake.get_rift_battle_accessory_data,
         tianti_provider=riftmake.get_rift_battle_tianti_data,
+        base_provider=riftmake.get_rift_battle_base_attributes,
     )

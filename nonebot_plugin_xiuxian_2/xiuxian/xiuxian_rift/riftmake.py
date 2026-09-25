@@ -309,6 +309,7 @@ def get_rift_battle_final_attributes(user_id, *, ratio, include_current):
         item_provider=items.get_data_by_item_id,
         accessory_provider=get_rift_battle_accessory_data,
         tianti_provider=get_rift_battle_tianti_data,
+        base_provider=get_rift_battle_base_attributes,
     )
 
 
@@ -404,6 +405,59 @@ def get_rift_battle_tianti_data(user_id):
     except (OSError, ValueError, sqlite3.Error):
         return None
     return dict(row) if row is not None else None
+
+
+def get_rift_battle_base_attributes(user_id):
+    """Read the battle base profile without constructing the legacy SQL manager."""
+    database = get_paths().game_db
+    if not database.exists():
+        return None
+    required = {
+        "user_id", "user_name", "level", "exp", "stone", "hp", "mp", "atk",
+        "atkpractice", "hppractice", "mppractice",
+    }
+    try:
+        with DatabaseUnitOfWork(database, read_only=True) as uow:
+            table = uow.query_one(
+                "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='user_xiuxian'"
+            )
+            if table is None:
+                return None
+            columns = {
+                str(row["name"])
+                for row in uow.query_all("PRAGMA table_info(user_xiuxian)")
+            }
+            if not required.issubset(columns):
+                return None
+            row = uow.query_one(
+                "SELECT user_id,user_name,level,exp,stone,hp,mp,atk,atkpractice,hppractice,mppractice "
+                "FROM user_xiuxian WHERE user_id=?",
+                (str(user_id),),
+            )
+    except (OSError, ValueError, sqlite3.Error):
+        return None
+    if row is None:
+        return None
+
+    def _as_int(value):
+        try:
+            return int(float(value or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    return {
+        "user_id": str(row["user_id"]),
+        "nickname": row["user_name"],
+        "level": row["level"],
+        "exp": _as_int(row["exp"]),
+        "stone": _as_int(row["stone"]),
+        "base_hp": _as_int(row["hp"]),
+        "base_mp": _as_int(row["mp"]),
+        "base_atk": _as_int(row["atk"]),
+        "atkpractice": _as_int(row["atkpractice"]),
+        "hppractice": _as_int(row["hppractice"]),
+        "mppractice": _as_int(row["mppractice"]),
+    }
 
 
 async def get_boss_battle_info(user_info, rift_rank, bot_id, persist=True):
