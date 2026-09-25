@@ -77,4 +77,4 @@ health 六项全绿和 reconcile clean 均通过，operations/outbox/dead events
 
 ## 下一切片选择
 
-清理并复核磁盘后，回到 `docs/full_refactor_progress.md` 的 6.2 目标 5，对尚未 feature-owned 的真实 NoneBot 特殊道具效果逐项审计 handler、service 和状态写入，再决定是否切片。追捕令 `20015` 已切换，但随机 offer 仍由旧领域逻辑生成；不能把本次 application 边界扩大解释成 work 领域整体完成。随后再核实宠物、任务/修炼、洞府、地图、宗门、竞技场/副本、世界事件和 Boss handler。不可按目录整体迁移或把惰性 facade、静态 manifest、仅测试通过视为完成。已切换的 partner cultivation、partner token、背包通用 item-use Web、宠物蛋、饰品礼包和炼丹两阶段领取不重复迁移。
+回到 `docs/full_refactor_progress.md` 的 6.2 目标 5，下一片优先审计并迁移秘境斩妖令 `20018` 的真实 `use_rift_boss` handler：目前它直接调用旧 `RiftDemonTokenBattleSettlementService`，而 `RiftApplication` 尚无对应 action；已有回归覆盖资产、探索次数、统计、幂等和跨库回滚，可作为行为基线。该片只处理斩妖令结算，不扩大到整个秘境目录。追捕令 `20015` 已切换，但随机 offer 仍由旧领域逻辑生成；不能把现有 application 边界扩大解释成 work 领域整体完成。随后再核实其他 NoneBot 特殊道具、宠物、任务/修炼、洞府、地图、宗门、竞技场/副本、世界事件和 Boss handler。不可按目录整体迁移或把惰性 facade、静态 manifest、仅测试通过视为完成。已切换的 partner cultivation、partner token、背包通用 item-use Web、宠物蛋、饰品礼包和炼丹两阶段领取不重复迁移。
