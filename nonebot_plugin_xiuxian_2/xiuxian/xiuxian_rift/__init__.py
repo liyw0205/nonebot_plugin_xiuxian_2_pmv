@@ -44,7 +44,13 @@ from ..xiuxian_map import (
     get_random_trial_node,
     get_random_trial_nodes_by_realm,
 )
-from ..xiuxian_utils.player_fight import Boss_fight
+from ..xiuxian_utils.player_fight import (
+    Boss_fight,
+    generate_boss_buff,
+    generate_boss_skill,
+    get_boss_attributes,
+    update_data_boss_status,
+)
 from . import jsondata
 from .riftmake import (
     STORY, Rift, get_rift_type, get_story_type, NONEMSG, get_battle_type,
@@ -67,6 +73,10 @@ rift_application = RiftApplication(
         boss_config=STORY['战斗']['Boss战斗'],
         battle_runner=Boss_fight,
         player_asset_provider=get_rift_battle_player_assets,
+        boss_attribute_provider=get_boss_attributes,
+        boss_buff_provider=generate_boss_buff,
+        boss_skill_provider=generate_boss_skill,
+        boss_status_updater=update_data_boss_status,
         rank_score=lambda level: convert_rank(level)[0],
         level_power=lambda level: jsondata.level_data()[level]["power"],
         max_exp_factor=XiuConfig().closing_exp_upper_limit * 0.1,

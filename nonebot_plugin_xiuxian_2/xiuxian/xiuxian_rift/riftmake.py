@@ -9,9 +9,13 @@ from .jsondata import read_f
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, XIUXIAN_IMPART_BUFF, OtherSet
 from ..xiuxian_utils.player_fight import (
     Boss_fight,
+    generate_boss_buff,
+    generate_boss_skill,
     get_final_attributes,
+    get_boss_attributes,
     get_players_attributes,
     get_user_pet_for_battle,
+    update_data_boss_status,
 )
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig, convert_rank, base_rank
@@ -216,6 +220,10 @@ def _boss_battle_resolver() -> RiftBossBattleResolver:
         boss_config=STORY['战斗']['Boss战斗'],
         battle_runner=Boss_fight,
         player_asset_provider=get_rift_battle_player_assets,
+        boss_attribute_provider=get_boss_attributes,
+        boss_buff_provider=generate_boss_buff,
+        boss_skill_provider=generate_boss_skill,
+        boss_status_updater=update_data_boss_status,
         rank_score=lambda level: convert_rank(level)[0],
         level_power=lambda level: jsondata.level_data()[level]["power"],
         max_exp_factor=XiuConfig().closing_exp_upper_limit * 0.1,

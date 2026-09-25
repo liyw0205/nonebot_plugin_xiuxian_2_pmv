@@ -4436,3 +4436,5 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 通过 `get_rift_battle_base_attributes` 从 game DB `user_xiuxian` 只读读取战斗所需基础字段并做数值归一；缺表、缺列、缺用户和只读错误返回 `None`，
 不会构造 `XiuxianDateManage` 或执行旧 schema 兼容写入。默认其他调用仍走 `get_base_attributes` fallback；本片只拆出基础 profile 查询边界，
 用户主表迁移和其他非战斗字段读取仍未迁移，新增 provider 与 schema 不变测试。
+
+2026-09-26 rift Boss battle-engine provider boundary：`RiftBossBattleResolver` 显式向 `Boss_fight` 传递 Boss 属性构造、Boss Buff 生成、Boss 技能加载和 Boss 状态更新 provider；`Boss_fight` 保留旧调用的 fallback。该边界只隔离战斗引擎依赖，尚未迁移 Boss 技能 JSON、随机 Buff 规则或玩家状态写入；秘境 resolver 仍固定 `type_in=0`，真实资产结算继续由 feature repositories 负责。新增 provider 透传与 source contract 测试，聚焦回归 `24 passed`；下一步审计技能 JSON/随机源及其他 Boss 兼容资产读取，不把显式 provider 注入误算为底层资产迁移完成。

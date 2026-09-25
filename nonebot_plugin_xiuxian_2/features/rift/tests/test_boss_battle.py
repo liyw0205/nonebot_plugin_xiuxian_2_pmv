@@ -61,6 +61,30 @@ class RiftBossBattleTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual("u", calls[0][1]["player_data"]["属性"]["user_id"])
 
+    async def test_boss_engine_providers_are_passed_to_the_runner(self):
+        calls = []
+        providers = {
+            "boss_attribute_provider": lambda boss, bot_id: {"属性": {"user_id": bot_id}},
+            "boss_buff_provider": lambda boss: [],
+            "boss_skill_provider": lambda enemy, skills: None,
+            "boss_status_updater": lambda boss, status: None,
+        }
+        resolver = self._resolver(calls)
+        resolver.boss_attribute_provider = providers["boss_attribute_provider"]
+        resolver.boss_buff_provider = providers["boss_buff_provider"]
+        resolver.boss_skill_provider = providers["boss_skill_provider"]
+        resolver.boss_status_updater = providers["boss_status_updater"]
+
+        await resolver.roll(
+            {"user_id": "u", "exp": 100, "hp": 100, "mp": 50, "level": "练气境"},
+            2,
+            "bot",
+            random_source=FixedRandom(),
+        )
+
+        for name, provider in providers.items():
+            self.assertIs(provider, calls[0][1][name])
+
     async def test_application_uses_the_feature_resolver(self):
         calls = []
         app = RiftApplication(

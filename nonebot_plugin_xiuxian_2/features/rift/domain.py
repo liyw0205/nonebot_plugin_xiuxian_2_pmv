@@ -145,6 +145,10 @@ class RiftBossBattleResolver:
         exp_reward: Callable[..., int],
         format_number: Callable[[Any], str],
         player_asset_provider: RiftBossBattleAssetProvider | None = None,
+        boss_attribute_provider: Callable[[Mapping[str, Any], Any], Mapping[str, Any]] | None = None,
+        boss_buff_provider: Callable[[Mapping[str, Any]], Sequence[Mapping[str, Any]]] | None = None,
+        boss_skill_provider: Callable[[Any, Sequence[int]], Any] | None = None,
+        boss_status_updater: Callable[[dict[str, Any], Sequence[Mapping[str, Any]]], Any] | None = None,
     ) -> None:
         self.boss_config = boss_config
         self.battle_runner = battle_runner
@@ -154,6 +158,10 @@ class RiftBossBattleResolver:
         self.exp_reward = exp_reward
         self.format_number = format_number
         self.player_asset_provider = player_asset_provider
+        self.boss_attribute_provider = boss_attribute_provider
+        self.boss_buff_provider = boss_buff_provider
+        self.boss_skill_provider = boss_skill_provider
+        self.boss_status_updater = boss_status_updater
 
     async def roll(
         self,
@@ -188,6 +196,14 @@ class RiftBossBattleResolver:
             if not isinstance(player_data, Mapping):
                 raise ValueError("rift Boss player asset provider returned invalid data")
             runner_kwargs["player_data"] = player_data
+        if self.boss_attribute_provider is not None:
+            runner_kwargs["boss_attribute_provider"] = self.boss_attribute_provider
+        if self.boss_buff_provider is not None:
+            runner_kwargs["boss_buff_provider"] = self.boss_buff_provider
+        if self.boss_skill_provider is not None:
+            runner_kwargs["boss_skill_provider"] = self.boss_skill_provider
+        if self.boss_status_updater is not None:
+            runner_kwargs["boss_status_updater"] = self.boss_status_updater
         result, victor, _, status_list = await self.battle_runner(
             user_info["user_id"], boss_info, **runner_kwargs
         )

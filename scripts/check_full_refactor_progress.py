@@ -418,6 +418,30 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_boss_battle_disabled": all("get_boss_battle_info(" not in handler for handler in (rift_event_handler, rift_boss_handler)),
             "boss_battle_asset_provider_wired": "player_asset_provider=get_rift_battle_player_assets" in rift_facade and "player_asset_provider=get_rift_battle_player_assets" in rift_make,
             "boss_battle_asset_snapshot_boundary": "class RiftBossBattleAssetProvider" in rift_domain and "runner_kwargs[\"player_data\"] = player_data" in rift_domain and "player1_data = player_data if" in rift_player_fight,
+            "boss_battle_engine_provider_wired": all(
+                token in rift_make and token in rift_facade
+                for token in (
+                    "boss_attribute_provider=get_boss_attributes",
+                    "boss_buff_provider=generate_boss_buff",
+                    "boss_skill_provider=generate_boss_skill",
+                    "boss_status_updater=update_data_boss_status",
+                )
+            ) and all(
+                token in rift_domain and token in rift_player_fight
+                for token in (
+                    "boss_attribute_provider",
+                    "boss_buff_provider",
+                    "boss_skill_provider",
+                    "boss_status_updater",
+                )
+            ) and all(
+                token in rift_domain for token in (
+                    'runner_kwargs["boss_attribute_provider"] = self.boss_attribute_provider',
+                    'runner_kwargs["boss_buff_provider"] = self.boss_buff_provider',
+                    'runner_kwargs["boss_skill_provider"] = self.boss_skill_provider',
+                    'runner_kwargs["boss_status_updater"] = self.boss_status_updater',
+                )
+            ),
             "boss_battle_legacy_asset_provider_explicit": "def get_rift_battle_player_assets" in rift_make and "get_players_attributes(" in rift_make and "item_provider=items.get_data_by_item_id" in rift_make,
             "boss_battle_item_provider_wired": "item_provider=items.get_data_by_item_id" in rift_make and "item_data = item_provider(item_id)" in rift_player_fight,
             "boss_battle_pet_provider_wired": "pet_provider=get_user_pet_for_battle" in rift_make and "buffs[\"宠物\"] = pet_provider(user_id)" in rift_player_fight,
@@ -438,7 +462,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "treasure_resolver_owned": "class RiftTreasureResolver" in rift_domain and "RiftTreasureResolver" in rift_application,
             "treasure_is_persistence_free": "update_exp" not in rift_domain and "update_ls" not in rift_domain and "update_ls" not in rift_application,
             "legacy_treasure_disabled": "get_treasure_info(" not in rift_event_handler,
-            "status": "world_generation_termination_key_event_settlement_entry_speedup_demon_token_damage_event_boss_battle_asset_boundary_treasure_cutover_with_natal_impart_buff_info_accessory_tianti_and_base_provider_boundaries_and_remaining_rift_compatibility",
+            "status": "world_generation_termination_key_event_settlement_entry_speedup_demon_token_damage_event_boss_battle_asset_boundary_engine_provider_boundary_treasure_cutover_with_natal_impart_buff_info_accessory_tianti_and_base_provider_boundaries_and_remaining_rift_compatibility",
         },
         "back": {
             "cultivation_item_application_owned": "back_application.cultivation_item(" in back_facade and "_cultivation_item_application().apply(" in back_util_facade,

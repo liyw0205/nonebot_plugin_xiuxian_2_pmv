@@ -37,6 +37,30 @@ def test_rift_boss_asset_snapshot_is_an_explicit_engine_boundary():
     assert 'runner_kwargs["player_data"] = player_data' in resolver
 
 
+def test_rift_boss_engine_dependencies_are_explicitly_injected():
+    resolver = Path(
+        "nonebot_plugin_xiuxian_2/features/rift/domain.py"
+    ).read_text(encoding="utf-8")
+    battle = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/player_fight.py"
+    ).read_text(encoding="utf-8")
+    facade = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_rift/riftmake.py"
+    ).read_text(encoding="utf-8")
+    assert "boss_attribute_provider=None" in battle
+    assert "boss_buff_provider=None" in battle
+    assert "boss_skill_provider=None" in battle
+    assert "boss_status_updater=None" in battle
+    assert 'runner_kwargs["boss_attribute_provider"] = self.boss_attribute_provider' in resolver
+    assert 'runner_kwargs["boss_buff_provider"] = self.boss_buff_provider' in resolver
+    assert 'runner_kwargs["boss_skill_provider"] = self.boss_skill_provider' in resolver
+    assert 'runner_kwargs["boss_status_updater"] = self.boss_status_updater' in resolver
+    assert "boss_attribute_provider=get_boss_attributes" in facade
+    assert "boss_buff_provider=generate_boss_buff" in facade
+    assert "boss_skill_provider=generate_boss_skill" in facade
+    assert "boss_status_updater=update_data_boss_status" in facade
+
+
 def test_rift_boss_player_snapshot_wires_item_lookup_provider():
     source = Path(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_rift/riftmake.py"

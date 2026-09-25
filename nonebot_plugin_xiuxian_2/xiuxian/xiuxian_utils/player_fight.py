@@ -153,6 +153,10 @@ async def Boss_fight(
     return_status=False,
     *,
     player_data=None,
+    boss_attribute_provider=None,
+    boss_buff_provider=None,
+    boss_skill_provider=None,
+    boss_status_updater=None,
 ):
     """Run a Boss battle, optionally using a pre-resolved player snapshot.
 
@@ -160,7 +164,11 @@ async def Boss_fight(
     applications to own the asset lookup boundary before entering the engine.
     """
     player1_data = player_data if player_data is not None else get_players_attributes(user1)
-    boss_data = get_boss_attributes(boss, bot_id)
+    boss_attribute_provider = boss_attribute_provider or get_boss_attributes
+    boss_buff_provider = boss_buff_provider or generate_boss_buff
+    boss_skill_provider = boss_skill_provider or generate_boss_skill
+    boss_status_updater = boss_status_updater or update_data_boss_status
+    boss_data = boss_attribute_provider(boss, bot_id)
     is_scarecrow = is_scarecrow_boss(boss)
 
     player1_attr = player1_data["属性"]
@@ -171,13 +179,13 @@ async def Boss_fight(
     apply_player_buffs(player1, player1_data)
 
     if not is_scarecrow:
-        boss1.start_skills.extend(generate_boss_buff(boss))
-        generate_boss_skill(boss1, [14501, 14502])
+        boss1.start_skills.extend(boss_buff_provider(boss))
+        boss_skill_provider(boss1, [14501, 14502])
 
     battle = BattleSystem([player1], [boss1], bot_id)
     play_list, winner, status_list = battle.run_battle()
 
-    update_data_boss_status(boss, status_list)
+    boss_status_updater(boss, status_list)
 
     suc = "群友赢了" if winner == 0 else "Boss赢了"
 
