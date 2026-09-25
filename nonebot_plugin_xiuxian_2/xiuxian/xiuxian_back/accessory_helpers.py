@@ -4,6 +4,7 @@ from urllib.parse import quote
 
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
+from ..xiuxian_utils.accessory_rules import AFFIX_KEY_MAP, SET_BONUS
 
 items = Items()
 _player_data_manager_instance = None
@@ -70,45 +71,6 @@ WASH_RANGE = {
 }
 
 SLOTS = ["手镯", "戒指", "手环", "项链"]
-
-# 你的饰品词条中文 -> 统一属性键
-AFFIX_KEY_MAP = {
-    "气血": "hp_pct",              # 最大生命百分比
-    "抗暴": "crit_resist",         # 抗暴
-    "防御": "dmg_reduction",       # 伤害减免
-    "会心": "crit_rate",           # 会心率
-    "会心伤害": "crit_damage",     # 会心伤害
-    "攻击": "atk_pct",             # 攻击百分比
-    "速度": "speed",               # 固定速度
-}
-
-# 套装效果（2件 / 4件）
-SET_BONUS = {
-    "烈阳": {
-        2: {"type": "attack", "value": 0.08},
-        4: {"type": "true_damage", "value": 0.06},
-    },
-    "玄渊": {
-        2: {"type": "shield", "value": 0.12},
-        4: {"type": "reflect", "value": 0.12},
-    },
-    "天衡": {
-        2: {"type": "armor_pen", "value": 0.08},
-        4: {"type": "dmg_reduction", "value": 0.10},
-    },
-    "星痕": {
-        2: {"type": "crit_rate", "value": 0.06},
-        4: {"type": "dodge", "value": 12},
-    },
-    "龙魄": {
-        2: {"type": "attack", "value": 0.06},
-        4: {"type": "shield_break", "value": 0.10},
-    },
-    "踏风": {
-        2: {"type": "speed_pct", "value": 0.08},
-        4: {"type": "speed_pct", "value": 0.18},
-    },
-}
 
 def quality_to_cn(q) -> str:
     try:

@@ -4089,7 +4089,7 @@ def calc_accessory_effects(user_id: str | int, *, accessory_provider=None) -> di
         "set_bonus": []
     }
 
-    from ..xiuxian_back import AFFIX_KEY_MAP, SET_BONUS
+    from .accessory_rules import AFFIX_KEY_MAP, SET_BONUS
     accessory_provider = accessory_provider or get_user_accessory_data
     acc_data = accessory_provider(user_id) or {}
     equipped = acc_data.get("equipped", {})
