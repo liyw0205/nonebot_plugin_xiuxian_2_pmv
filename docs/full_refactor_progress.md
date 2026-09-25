@@ -4077,3 +4077,13 @@ reconcile clean（operations/outbox/dead events 均为 0）；临时数据和缓
 通过，顶层全量测试与 recovery smoke 均通过。五库 recovery 完成 `145` 项迁移，路由为
 game/player/trade/impart/message `117/24/7/1/1`，`back.011` 仅路由到 game DB，reconcile clean
 （operations/outbox/dead events 均为 0）；临时数据和缓存已清理。
+
+2026-09-25 back equipment feature-owned cutover：装备穿戴/卸下默认路径已切换到
+`BackApplication.change_equipment -> EquipmentApplication -> EquipmentSqlRepository`；旧
+`EquipmentService` 仅保留显式兼容回滚。新增 `back.013` game DB 启动迁移创建/兼容
+`equipment_operations`，装备类型槽位、库存状态、重复请求、payload 冲突、缺失状态和事务回滚语义保持
+原子一致，请求路径不再执行 DDL。新增 application/repository、wiring、source/progress 回归；装备聚焦
+测试 `227 passed`，顶层 `tests/` 全量 `2693 passed, 16 warnings, 25 subtests`。五库 recovery
+完成 `147` 项迁移，`back.013` 仅路由到 game DB；backup/restore dry-run/restore、reconcile 均通过，
+`clean=true` 且 operations/outbox/dead_events 均为 `0`。临时 recovery 数据、pytest cache、`.pyc`
+和 `__pycache__` 已清理。`repair` 仍经兼容 `BackpackRepairService`，后续继续处理背包动作切片。

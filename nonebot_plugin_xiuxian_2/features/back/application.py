@@ -17,6 +17,7 @@ from .recovery_item_application import RecoveryItemApplication
 from .permanent_atk_item_application import PermanentAtkItemApplication
 from .unbind_application import UnbindApplication
 from .blessed_flag_replace_application import BlessedFlagReplaceApplication
+from .equipment_application import EquipmentApplication
 
 
 class BackApplication(LegacyApplication):
@@ -33,6 +34,7 @@ class BackApplication(LegacyApplication):
         self.permanent_atk_item_application = PermanentAtkItemApplication(database)
         self.unbind_application = UnbindApplication(database)
         self.blessed_flag_replace_application = BlessedFlagReplaceApplication(database, player_database or database)
+        self.equipment_application = EquipmentApplication(database)
         super().__init__(database, repository=repository or LegacyBackRepository(database, player_database), feature="back")
 
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):
@@ -43,7 +45,10 @@ class BackApplication(LegacyApplication):
             return PackageRewardApplication(self.database).open_package(operation_id=operation_id, user_id=user_id, **kwargs)
         return self._action("open_package", operation_id=operation_id, user_id=user_id, **kwargs)
     def use_item(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("use_item", operation_id=operation_id, user_id=user_id, **kwargs)
-    def change_equipment(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("change_equipment", operation_id=operation_id, user_id=user_id, **kwargs)
+    def change_equipment(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        if self._explicit_repository is None:
+            return self.equipment_application.change(operation_id, user_id, **kwargs)
+        return self._action("change_equipment", operation_id=operation_id, user_id=user_id, **kwargs)
     def learn_skill(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:
             return self.skill_learning_application.learn(operation_id, user_id, **kwargs)

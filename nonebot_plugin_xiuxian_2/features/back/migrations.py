@@ -109,4 +109,16 @@ def apply_blessed_flag_replace(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_alchemy", "apply_back", "apply_blessed_flag_replace", "apply_breakthrough_rate_item", "apply_cultivation_item", "apply_lottery_talisman", "apply_permanent_atk_item", "apply_recovery_item", "apply_skill_learning", "apply_stone_reward", "apply_three_cultivation_pill", "apply_unbind"]
+def apply_equipment(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS equipment_operations("
+        "operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,goods_id INTEGER NOT NULL,"
+        "action TEXT NOT NULL,previous_id INTEGER NOT NULL DEFAULT 0,"
+        "payload TEXT NOT NULL DEFAULT '',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(equipment_operations)")}
+    if "payload" not in columns:
+        uow.execute("ALTER TABLE equipment_operations ADD COLUMN payload TEXT NOT NULL DEFAULT ''")
+
+
+__all__ = ["apply_alchemy", "apply_back", "apply_blessed_flag_replace", "apply_breakthrough_rate_item", "apply_cultivation_item", "apply_equipment", "apply_lottery_talisman", "apply_permanent_atk_item", "apply_recovery_item", "apply_skill_learning", "apply_stone_reward", "apply_three_cultivation_pill", "apply_unbind"]

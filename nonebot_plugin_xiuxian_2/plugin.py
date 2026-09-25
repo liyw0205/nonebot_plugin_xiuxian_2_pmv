@@ -44,7 +44,7 @@ from .features.buff.migrations import apply_buff
 from .features.base.manifest import FEATURE as BASE_FEATURE
 from .features.base.migrations import apply_base
 from .features.back.manifest import FEATURE as BACK_FEATURE
-from .features.back.migrations import apply_alchemy, apply_back, apply_blessed_flag_replace, apply_breakthrough_rate_item, apply_cultivation_item, apply_lottery_talisman, apply_permanent_atk_item, apply_recovery_item, apply_skill_learning, apply_stone_reward, apply_three_cultivation_pill, apply_unbind
+from .features.back.migrations import apply_alchemy, apply_back, apply_blessed_flag_replace, apply_breakthrough_rate_item, apply_cultivation_item, apply_equipment, apply_lottery_talisman, apply_permanent_atk_item, apply_recovery_item, apply_skill_learning, apply_stone_reward, apply_three_cultivation_pill, apply_unbind
 from .features.trade.manifest import FEATURE as TRADE_FEATURE
 from .features.trade.migrations import (
     apply_trade,
@@ -172,6 +172,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("back.010", "recovery_item_operations", apply_recovery_item),
         Migration("back.011", "permanent_atk_item_operations", apply_permanent_atk_item),
         Migration("back.012", "blessed_flag_replace_operations", apply_blessed_flag_replace),
+        Migration("back.013", "equipment_operations", apply_equipment),
         Migration("bank.001", "bank_feature_migrations", apply_bank),
         Migration("bank.002", "bank_accounts", apply_bank_accounts),
         Migration("base.001", "base_feature_migrations", apply_base),
