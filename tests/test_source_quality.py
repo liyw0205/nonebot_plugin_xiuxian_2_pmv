@@ -1134,19 +1134,20 @@ class SourceQualityTests(unittest.TestCase):
     def test_three_cultivation_pill_use_is_atomic_and_idempotent(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         command_source = (back_root / "__init__.py").read_text(encoding="utf-8")
-        service_source = (back_root / "three_cultivation_pill_service.py").read_text(
+        repository_source = (SOURCE_ROOT / "features" / "back" / "three_cultivation_pill_repository.py").read_text(
             encoding="utf-8"
         )
         start = command_source.index("async def use_three_cultivation_pill(")
         end = command_source.index("\n\n@chakan_wupin.handle", start)
         command = command_source[start:end]
 
-        self.assertIn("_three_cultivation_pill_service().apply(", command)
+        self.assertIn("back_application.three_cultivation_pill(", command)
+        self.assertIn("operation_id=_cultivation_item_operation_id(", command)
         self.assertNotIn("sql_message.update_exp(", command)
         self.assertNotIn("sql_message.update_user_attribute(", command)
         self.assertNotIn("sql_message.update_back_j(", command)
-        self.assertIn("BEGIN IMMEDIATE", service_source)
-        self.assertIn("three_cultivation_pill_operations", service_source)
+        self.assertIn("immediate=True", repository_source)
+        self.assertIn("three_cultivation_pill_operations", repository_source)
 
     def test_breakthrough_rate_elixir_use_is_atomic_and_idempotent(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"

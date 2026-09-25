@@ -1849,12 +1849,12 @@ async def use_three_cultivation_pill(bot: Bot, event: GroupMessageEvent | Privat
     max_exp_for_level_up = OtherSet().set_closing_type(level) 
     max_exp = max_exp_for_level_up * XiuConfig().closing_exp_upper_limit # 境界上限
 
-    result = _three_cultivation_pill_service().apply(
-        _cultivation_item_operation_id(event, user_id, item_id),
-        user_id,
-        item_id,
-        num,
-        total_exp_gain,
+    result = back_application.three_cultivation_pill(
+        operation_id=_cultivation_item_operation_id(event, user_id, item_id),
+        user_id=user_id,
+        item_id=item_id,
+        quantity=num,
+        requested_exp=total_exp_gain,
         max_exp=max_exp,
         power_multiplier=float(level_rate) * float(realm_rate),
     )

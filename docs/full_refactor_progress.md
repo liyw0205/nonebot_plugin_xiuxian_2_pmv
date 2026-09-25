@@ -4027,3 +4027,13 @@ handler 预滚，旧 `StoneItemRewardService` 仅保留显式兼容回滚。`bac
 路由为 game/player/trade/impart/message `113/24/7/1/1`，`back.007` 仅路由到 game DB，attached
 accessory 两项，backup/restore dry-run/restore 与 reconcile clean（operations/outbox/dead events
 均为 0）；临时数据和缓存已清理。
+
+2026-09-25 back three-cultivation-pill feature-owned cutover：三转玄丹真实 handler 已切换到
+`BackApplication.three_cultivation_pill -> ThreeCultivationPillApplication ->
+ThreeCultivationPillSqlRepository`；随机修为仍由 handler 预滚，旧 `ThreeCultivationPillService` 仅保留
+显式兼容回滚。`back.008` 在 game DB 启动迁移创建幂等表，请求路径不再执行 DDL；修为上限截断、气血/真元
+恢复、power 更新、丹药扣除/绑定数、重复请求和事务回滚语义保持原子一致。聚焦回归 `227 passed`，
+顶层 `tests/` 全量 `2662 passed, 16 warnings, 25 subtests`。五库 recovery 完成 `142` 项迁移，
+路由为 game/player/trade/impart/message `114/24/7/1/1`，`back.008` 仅路由到 game DB，attached
+accessory 两项，backup/restore dry-run/restore 与 reconcile clean（operations/outbox/dead events
+均为 0）；临时数据和缓存已清理。
