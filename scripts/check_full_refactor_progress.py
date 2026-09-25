@@ -420,6 +420,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "boss_battle_legacy_asset_provider_explicit": "def get_rift_battle_player_assets" in rift_make and "get_players_attributes(" in rift_make and "item_provider=items.get_data_by_item_id" in rift_make,
             "boss_battle_item_provider_wired": "item_provider=items.get_data_by_item_id" in rift_make and "item_data = item_provider(item_id)" in rift_player_fight,
             "boss_battle_pet_provider_wired": "pet_provider=get_user_pet_for_battle" in rift_make and "buffs[\"宠物\"] = pet_provider(user_id)" in rift_player_fight,
+            "boss_battle_attribute_provider_wired": "attribute_provider=get_final_attributes" in rift_make and "final_attr = attribute_provider(user_id, ratio=ratio, include_current=True)" in rift_player_fight,
             "treasure_application_owned": "rift_application.roll_treasure(" in rift_event_handler,
             "treasure_resolver_owned": "class RiftTreasureResolver" in rift_domain and "RiftTreasureResolver" in rift_application,
             "treasure_is_persistence_free": "update_exp" not in rift_domain and "update_ls" not in rift_domain and "update_ls" not in rift_application,

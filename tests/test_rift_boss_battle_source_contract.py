@@ -46,6 +46,8 @@ def test_rift_boss_player_snapshot_wires_item_lookup_provider():
     ).read_text(encoding="utf-8")
     assert "item_provider=items.get_data_by_item_id" in source
     assert "pet_provider=get_user_pet_for_battle" in source
-    assert "def get_players_attributes(user_id, level_ratios=None, *, item_provider=None, pet_provider=None)" in player_fight
+    assert "attribute_provider=None" in player_fight
     assert "item_data = item_provider(item_id)" in player_fight
     assert "buffs[\"宠物\"] = pet_provider(user_id)" in player_fight
+    assert "final_attr = attribute_provider(user_id, ratio=ratio, include_current=True)" in player_fight
+    assert "attribute_provider=get_final_attributes" in source

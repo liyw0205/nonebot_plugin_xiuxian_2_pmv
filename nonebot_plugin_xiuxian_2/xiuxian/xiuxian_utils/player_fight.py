@@ -190,9 +190,17 @@ async def Boss_fight(
     return play_list, suc, boss
 
 
-def get_players_attributes(user_id, level_ratios=None, *, item_provider=None, pet_provider=None):
+def get_players_attributes(
+    user_id,
+    level_ratios=None,
+    *,
+    item_provider=None,
+    pet_provider=None,
+    attribute_provider=None,
+):
     item_provider = item_provider or items.get_data_by_item_id
     pet_provider = pet_provider or get_user_pet_for_battle
+    attribute_provider = attribute_provider or get_final_attributes
     buff_data_info = UserBuffDate(user_id).BuffInfo
     buffs = {}
     ratio = 1
@@ -217,7 +225,7 @@ def get_players_attributes(user_id, level_ratios=None, *, item_provider=None, pe
 
     weapon_data = buffs.get('法器', {})
 
-    final_attr = get_final_attributes(user_id, ratio=ratio, include_current=True)
+    final_attr = attribute_provider(user_id, ratio=ratio, include_current=True)
     if not final_attr:
         return {"属性": {}, "其他": buff_data_info, "本命法宝": None}
 

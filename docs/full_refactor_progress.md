@@ -4398,3 +4398,8 @@ Boss/宝物资产查询 provider，只返回物品/灵石 delta 与 message outc
 `get_user_pet_for_battle` 作为 `pet_provider`；未注入时保留旧宠物读取 fallback。本片只拆出宠物只读查询边界，
 不改变宠物数据模型、战斗状态写入或其他玩家资产读取。Rift/Boss asset/source 聚焦回归 `132 passed`；compileall、architecture、progress、inventory
 `--check` 与 `git diff --check` 通过，无新增 migration。下一步继续拆出下一个可验证的玩家资产只读 provider。
+
+2026-09-26 rift Boss final-attribute provider：Rift 玩家战斗快照 provider 显式注入
+`get_final_attributes` 作为 `attribute_provider`，并透传 `ratio` 与 `include_current=True`；未注入时保留旧属性计算 fallback。
+本片只拆出最终属性只读查询边界，其内部 buff/传承读取仍是兼容 provider，不新增 migration。Rift/Boss asset/source 聚焦回归 `132 passed`；
+compileall、architecture、progress、inventory `--check` 与 `git diff --check` 通过。下一步继续拆出下一个可验证的玩家资产只读 provider。

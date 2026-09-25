@@ -3,7 +3,12 @@ from .riftconfig import get_rift_config
 from ..xiuxian_utils.utils import number_to
 from .jsondata import read_f
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, XIUXIAN_IMPART_BUFF, OtherSet
-from ..xiuxian_utils.player_fight import Boss_fight, get_players_attributes, get_user_pet_for_battle
+from ..xiuxian_utils.player_fight import (
+    Boss_fight,
+    get_final_attributes,
+    get_players_attributes,
+    get_user_pet_for_battle,
+)
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig, convert_rank, base_rank
 from ..xiuxian_utils.data_source import jsondata
@@ -221,6 +226,7 @@ def get_rift_battle_player_assets(user_id):
         user_id,
         item_provider=items.get_data_by_item_id,
         pet_provider=get_user_pet_for_battle,
+        attribute_provider=get_final_attributes,
     )
 
 

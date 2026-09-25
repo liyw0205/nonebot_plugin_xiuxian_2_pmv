@@ -38,6 +38,7 @@ def test_player_attribute_builder_uses_explicit_item_provider():
     }
     calls = []
     pet_calls = []
+    attribute_calls = []
 
     def lookup(item_id):
         calls.append(item_id)
@@ -47,16 +48,25 @@ def test_player_attribute_builder_uses_explicit_item_provider():
         pet_calls.append(user_id)
         return {"name": "灵宠"}
 
+    def attribute_lookup(user_id, *, ratio, include_current):
+        attribute_calls.append((user_id, ratio, include_current))
+        return final
+
     with patch.object(player_fight, "UserBuffDate", Buffs), patch.object(
         player_fight, "get_final_attributes", return_value=final
     ), patch.object(player_fight, "NatalTreasure", Natal), patch.object(
         player_fight, "get_user_pet_for_battle", return_value=None
     ):
         result = player_fight.get_players_attributes(
-            "u", item_provider=lookup, pet_provider=pet_lookup
+            "u",
+            level_ratios={"u": 0.5},
+            item_provider=lookup,
+            pet_provider=pet_lookup,
+            attribute_provider=attribute_lookup,
         )
 
     assert calls == [7]
     assert pet_calls == ["u"]
+    assert attribute_calls == [("u", 0.5, True)]
     assert result["宠物"]["name"] == "灵宠"
     assert result["法器"]["mp_buff"] == 3
