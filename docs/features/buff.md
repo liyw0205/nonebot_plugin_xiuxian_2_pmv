@@ -6,7 +6,7 @@
 ## Web API
 `POST /api/v1/buff/{open,upgrade_field,rename,training_start,training_complete,stone_training,pvp_settle}`，权限 `user`，要求幂等键。
 ## 数据模型与迁移
-迁移 `buff.001` 至 `buff.003`；双修令牌 operation 在 game DB，次数 projection 在 player DB，分别由 `buff.002`/`buff.003` 创建。
+迁移 `buff.001` 至 `buff.005`；双修令牌 operation 在 game DB，次数 projection 在 player DB，分别由 `buff.002`/`buff.003` 创建。双修结算 operation 由 game DB `buff.004` 创建；`buff.005` 在 player DB 补齐关系、保护、邀请与统计 schema。
 ## 事务与失败回滚
 统一 operation ledger 和审计，旧事务异常可重试。
 ## 定时任务
@@ -18,7 +18,7 @@
 ## 测试与手工验收
 覆盖 fake repository 成功、拒绝、重复和异常路径。
 ## 灰度开关、回滚和已知限制
-关闭开关后使用旧功法入口；双修令牌默认经 `PartnerTokenUseApplication` 原子消费库存并更新次数，具体双修规则仍由领域 handler 持有。
+关闭开关后使用旧功法入口；双修令牌默认经 `PartnerTokenUseApplication` 原子消费库存并更新次数。双修结算默认经 `PartnerCultivationApplication`，把修为、属性、次数、统计、亲密度和邀请状态置于同一 attached UoW；随机计算仍由领域 handler 预滚。
 
 ## Manifest 清单
 - `route: POST /api/v1/buff/open`

@@ -82,6 +82,13 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(back["legacy_unbind_disabled"])
         self.assertTrue(back["repair_application_owned"])
         self.assertTrue(back["legacy_repair_disabled"])
+        partner_cultivation = slices["partner_cultivation"]
+        self.assertTrue(partner_cultivation["application_owned"])
+        self.assertTrue(partner_cultivation["repository_owned"])
+        self.assertTrue(partner_cultivation["legacy_default_disabled"])
+        self.assertTrue(partner_cultivation["usage_settled_atomically"])
+        self.assertTrue(partner_cultivation["migration_owned"])
+        self.assertTrue(partner_cultivation["request_path_has_no_ddl"])
         past_life = slices["past_life"]
         self.assertTrue(past_life["reset_one_application_owned"])
         self.assertTrue(past_life["legacy_reset_one_disabled"])

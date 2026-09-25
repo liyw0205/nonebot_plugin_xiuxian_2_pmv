@@ -2643,14 +2643,18 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn('expected_target_protection="off"', invite_handler)
 
         invite_service = (root / "transaction_service.py").read_text(encoding="utf-8")
-        cultivation_service = (root / "partner_cultivation_service.py").read_text(encoding="utf-8")
+        cultivation_service = (
+            SOURCE_ROOT / "features" / "buff" / "partner_cultivation_repository.py"
+        ).read_text(encoding="utf-8")
         protection_service = (root / "partner_protection_service.py").read_text(encoding="utf-8")
-        self.assertIn("_partner_cultivation_service_instance = None", source)
-        self.assertIn("def _partner_cultivation_service(", source)
-        self.assertIn("_partner_cultivation_service().apply(", source)
-        self.assertNotIn("partner_cultivation_service.apply(", source)
+        self.assertIn("_partner_cultivation_application_instance = None", source)
+        self.assertIn("def _partner_cultivation_application(", source)
+        self.assertIn("_partner_cultivation_application().apply(", source)
+        self.assertNotIn("PartnerCultivationService", source)
+        direct = source[source.index("async def direct_two_exp("):source.index("@two_exp_invite.handle")]
+        self.assertNotIn("two_exp_cd.add_user(", direct)
         self.assertIn("BEGIN IMMEDIATE", invite_service)
-        self.assertIn("BEGIN IMMEDIATE", cultivation_service)
+        self.assertIn("AttachedDatabaseUnitOfWork", cultivation_service)
         self.assertIn("BEGIN IMMEDIATE", protection_service)
         self.assertIn("partner_protection_operations", protection_service)
 

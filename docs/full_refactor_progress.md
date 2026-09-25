@@ -4151,3 +4151,20 @@ recovery 数据、receipt、pytest cache、`.pyc` 和 `__pycache__` 在提交前
 仅 player；backup/restore dry-run/restore、reconcile clean（operations/outbox/dead_events 均为 `0`）及
 隔离启动 health readiness 六项全绿。recovery 数据、receipt 与测试/字节码缓存已清理；剩余道侣双修结算
 仍直接调用 `PartnerCultivationService`，作为下一条独立边界评估，不与本切片合并。
+
+2026-09-25 buff partner-cultivation feature-owned cutover：`xiuxian_buff.partner::direct_two_exp` 默认结算已从
+`PartnerCultivationService.apply` 切换到 `PartnerCultivationApplication -> PartnerCultivationSqlRepository`。
+随机双修结果仍在 handler 预滚；repository 在 game/player attached UoW 中校验修为、次数、互绑/affection、保护与邀请快照，
+原子更新双方修为/属性、`双修次数` 统计、usage projection、亲密度、邀请接受状态和 operation ledger。直接双修成功次数
+不再在提交后逐次调用 `two_exp_cd.add_user`；`find_user` 仍支持缺失 projection 从旧 JSON 首次导入，但请求路径仅读/插入记录，
+不再建表。非邀请 payload 格式保持兼容，旧 operation replay 不会重复增加次数。新增 game DB `buff.004`
+operation migration 和 player DB `buff.005` 关系/保护/邀请/统计 schema migration，缺失 migration 时 repository 拒绝请求，
+无请求时 DDL。聚焦测试覆盖 replay/conflict、旧账本兼容、过期/保护、超大 combat 值、快照拒绝和跨库异常回滚；
+progress/source 门禁同步加入。partner/source/progress/inventory/architecture 回归 `255 passed, 4 subtests`；compileall、
+architecture、inventory、progress、`git diff --check` 均通过。五库 recovery 完成 `157` 项 migration，`.004` 仅 game DB、`.005`
+仅 player DB；backup/restore dry-run/restore、五库 migration dry-run（pending 均为空）、health 六项全绿、reconcile
+`clean=true` 且 operations/outbox/dead_events 均为 `0`。根目录 `tests/` 全量隔离回归未完成：运行至 `1950 passed` 时记录到 5 个
+不相关的 blessed-flag legacy service 测试失败（`BlessedFlagReplaceResult() takes no arguments`），随后卡在
+`test_sign_in_effects_wiring::test_legacy_runtime_wires_feature_effects_with_legacy_lottery_port` 的 lifecycle startup 等待并中断；
+这两个位置不在本切片改动范围内。指定 pytest basetemp、五库 recovery 数据、receipt 和 compileall 源码缓存已清理，
+`.venv`、`.git`、`data/`、运行数据库与备份保留。下一片仍从 6.2 目标 5 按真实入口调用图选择一个旧 service 资产动作。

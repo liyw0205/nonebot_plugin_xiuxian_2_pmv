@@ -36,6 +36,10 @@
 
 ## 最近完成切片
 
+`buff partner cultivation`：`xiuxian_buff.partner::direct_two_exp` 默认结算改为调用
+`PartnerCultivationApplication -> PartnerCultivationSqlRepository`；修为/属性、双修次数、统计、亲密度、邀请接受与 operation ledger 在 attached UoW 内提交。新增 game DB `buff.004` 和 player DB `buff.005`，次数读取保留旧 JSON 一次性导入但不再请求时建表；非邀请 operation payload 与旧 ledger 保持兼容。聚焦回归覆盖回放、冲突、过期/保护、超大数、快照拒绝和跨库异常回滚；旧 `PartnerCultivationService` 仅留作兼容对照。
+focused/source/progress/architecture/inventory 回归 `255 passed, 4 subtests`；compileall、architecture、inventory、progress 和 diff check 均通过。五库 recovery 完成 `157` 项迁移，`.004` 仅 game、`.005` 仅 player；backup/restore dry-run/restore、migration dry-run（五库 pending 为空）、health 六项和 reconcile clean 均通过，operations/outbox/dead events 为 `0`。根目录全量测试已启动但未完成：`1950 passed` 后有 5 个与本切片无关的 blessed-flag legacy service `TypeError`，并停在 legacy sign-in startup 测试；该进程已中断。指定 basetemp、recovery 数据、receipt 和源码字节码缓存均已清理。
+
 `buff partner-token`：`道具使用 双修令牌` 默认 handler 调用
 `PartnerTokenUseApplication -> PartnerTokenUseSqlRepository`；`buff.002` 在 game DB 创建 operation 表，
 `buff.003` 在 player DB 创建次数 projection，跨库写入使用 attached UoW，不在请求时建表。旧
@@ -44,8 +48,4 @@
 
 ## 下一切片选择
 
-清理并复核磁盘后，回到 `docs/full_refactor_progress.md` 的 6.2 目标 5，优先评估
-`xiuxian_buff/partner.py` 道侣双修结算 handler 对 `PartnerCultivationService.apply` 的真实默认调用；保留
-随机结果预滚、双方修为/属性、affection、次数与保护状态快照、operation replay 和跨库回滚语义。不得把
-惰性 facade、静态 manifest 或仅测试通过视为切片完成。背包通用 item-use Web、宠物蛋和饰品礼包的真实
-入口已有独立 application 边界，不应重复迁移；NoneBot 特殊道具效果仍需按领域逐个审计。
+清理并复核磁盘后，回到 `docs/full_refactor_progress.md` 的 6.2 目标 5，按真实入口调用图选择下一个仍由旧 service 承载的高频资产动作。优先核实 NoneBot 特殊道具效果、宠物、任务/修炼、洞府、地图、宗门、竞技场/副本、世界事件和 Boss 的具体 handler；不可按目录整体迁移或把惰性 facade、静态 manifest、仅测试通过视为完成。已切换的 partner cultivation、partner token、背包通用 item-use Web、宠物蛋和饰品礼包入口不重复迁移。

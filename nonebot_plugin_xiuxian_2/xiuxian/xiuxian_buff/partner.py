@@ -36,10 +36,10 @@ from .transaction_service import ApprenticeLeaveService
 from .transaction_service import MentorGraduationService
 from .transaction_service import MentorTransmissionService
 from .transaction_service import PartnerBreakthroughService
-from .transaction_service import PartnerCultivationService
 from .transaction_service import PartnerInviteService
 from .transaction_service import PartnerProtectionService
 from ...features.buff.partner_token_application import PartnerTokenUseApplication
+from ...features.buff.partner_cultivation_application import PartnerCultivationApplication
 from .transaction_service import PartnerBindService
 from .transaction_service import PartnerUnbindService
 from .partner_storage import (
@@ -73,7 +73,7 @@ runtime_random = SystemRandom()
 _sql_message_instance = None
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
 _player_data_manager_instance = None
-_partner_cultivation_service_instance = None
+_partner_cultivation_application_instance = None
 _partner_token_application_instance = None
 _partner_bind_service_instance = None
 _partner_unbind_service_instance = None
@@ -173,13 +173,13 @@ def _partner_protection_service():
     return _partner_protection_service_instance
 
 
-def _partner_cultivation_service():
-    global _partner_cultivation_service_instance
-    if _partner_cultivation_service_instance is None:
-        _partner_cultivation_service_instance = PartnerCultivationService(
+def _partner_cultivation_application():
+    global _partner_cultivation_application_instance
+    if _partner_cultivation_application_instance is None:
+        _partner_cultivation_application_instance = PartnerCultivationApplication(
             get_paths().game_db, get_paths().player_db
         )
-    return _partner_cultivation_service_instance
+    return _partner_cultivation_application_instance
 
 
 def _partner_bind_service():
@@ -690,7 +690,7 @@ async def direct_two_exp(
     hp_1, mp_1, atk_1 = _recovered_attributes(user_1, new_exp_1)
     hp_2, mp_2, atk_2 = _recovered_attributes(user_2, new_exp_2)
     special_count = sum("天降异象" in desc for desc in event_descriptions)
-    settlement = _partner_cultivation_service().apply(
+    settlement = _partner_cultivation_application().apply(
         _relation_operation_id(event, "cultivation", user_id_1, user_id_2),
         user_id_1, user_id_2,
         expected_exp_1=safe_int(user_1["exp"]), expected_exp_2=safe_int(user_2["exp"]),
@@ -702,8 +702,8 @@ async def direct_two_exp(
         expected_affection_2=safe_int(partner_data_2.get("affection"), 0) if valid_partner else None,
         affection_1=add_affection_1, affection_2=add_affection_2,
         invite_id=invite_id,
-        expected_used_count_1=limt_1 if invite_id else None,
-        expected_used_count_2=limt_2 if invite_id else None,
+        expected_used_count_1=limt_1,
+        expected_used_count_2=limt_2,
         expected_target_protection=expected_target_protection,
     )
     if not settlement.succeeded:
@@ -717,11 +717,6 @@ async def direct_two_exp(
             k3="修为", v3="我的修为",
         )
         return
-    if settlement.status == "applied" and not invite_id:
-        for _ in range(actual_used_count):
-            two_exp_cd.add_user(user_id_1)
-            two_exp_cd.add_user(user_id_2)
-
     user_1_info = _sql_message().get_user_real_info(user_id_1)
     user_2_info = _sql_message().get_user_real_info(user_id_2)
 

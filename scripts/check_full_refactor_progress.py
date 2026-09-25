@@ -66,6 +66,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sect_facade = (PACKAGE / "xiuxian" / "xiuxian_sect" / "__init__.py").read_text(encoding="utf-8")
     entertainment_facade = (PACKAGE / "xiuxian" / "xiuxian_entertainment" / "mod" / "newapi_store.py").read_text(encoding="utf-8")
     partner_facade = (PACKAGE / "xiuxian" / "xiuxian_buff" / "partner.py").read_text(encoding="utf-8")
+    partner_cultivation_application = (PACKAGE / "features" / "buff" / "partner_cultivation_application.py").read_text(encoding="utf-8")
+    partner_cultivation_repository = (PACKAGE / "features" / "buff" / "partner_cultivation_repository.py").read_text(encoding="utf-8")
+    buff_migrations = (PACKAGE / "features" / "buff" / "migrations.py").read_text(encoding="utf-8")
     natal_facade = (PACKAGE / "xiuxian" / "xiuxian_natal_treasure" / "__init__.py").read_text(encoding="utf-8")
     world_events_facade = (PACKAGE / "xiuxian" / "xiuxian_world_events" / "__init__.py").read_text(encoding="utf-8")
     rift_facade = (PACKAGE / "xiuxian" / "xiuxian_rift" / "__init__.py").read_text(encoding="utf-8")
@@ -541,7 +544,28 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "legacy_partner_token_disabled": "_partner_token_service().apply(" not in partner_facade,
             "legacy_blessed_upgrade_disabled": "_blessed_spot_service().upgrade_field(" not in buff_facade,
-            "status": "blessed_spot_open_rename_upgrade_stone_training_lifecycle_closing_settlement_pvp_partner_token_cutover_with_other_buff_compatibility",
+            "status": "blessed_spot_open_rename_upgrade_stone_training_lifecycle_closing_settlement_pvp_partner_token_partner_cultivation_cutover_with_other_buff_compatibility",
+        },
+        "partner_cultivation": {
+            "application_owned": (
+                "_partner_cultivation_application().apply(" in partner_facade
+                and "class PartnerCultivationApplication" in partner_cultivation_application
+            ),
+            "repository_owned": "class PartnerCultivationSqlRepository" in partner_cultivation_repository,
+            "legacy_default_disabled": "PartnerCultivationService" not in partner_facade,
+            "usage_settled_atomically": (
+                "expected_used_count_1=limt_1" in partner_facade
+                and "used_count=used_count+?" in partner_cultivation_repository
+                and "two_exp_cd.add_user(" not in partner_facade
+            ),
+            "migration_owned": (
+                '"buff.004"' in plugin
+                and '"buff.005"' in plugin
+                and "def apply_partner_cultivation_operations(" in buff_migrations
+                and "def apply_partner_cultivation_player_schema(" in buff_migrations
+            ),
+            "request_path_has_no_ddl": "CREATE TABLE" not in partner_cultivation_repository,
+            "status": "cultivation_settlement_cutover_with_legacy_transaction_service_retained_as_compatibility_reference",
         },
         "impart": {
             "love_sand_application_owned": "impart_application.love_sand(" in impart_facade,

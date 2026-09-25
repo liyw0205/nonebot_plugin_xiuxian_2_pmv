@@ -18,11 +18,11 @@ class TWO_EXP_CD:
     def find_user(self, user_id):
         user_id = str(user_id)
         with db_backend.transaction(get_paths().player_db) as conn:
-            conn.execute(
-                "CREATE TABLE IF NOT EXISTS partner_two_exp_usage ("
-                "user_id TEXT PRIMARY KEY,used_count INTEGER NOT NULL DEFAULT 0,"
-                "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-            )
+            table = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='partner_two_exp_usage'"
+            ).fetchone()
+            if table is None:
+                raise RuntimeError("required migration table is missing: partner_two_exp_usage")
             row = conn.execute(
                 "SELECT used_count FROM partner_two_exp_usage WHERE user_id=%s", (user_id,)
             ).fetchone()
