@@ -44,7 +44,7 @@ from .features.buff.migrations import apply_buff
 from .features.base.manifest import FEATURE as BASE_FEATURE
 from .features.base.migrations import apply_base
 from .features.back.manifest import FEATURE as BACK_FEATURE
-from .features.back.migrations import apply_alchemy, apply_back, apply_backpack_repair, apply_blessed_flag_replace, apply_breakthrough_rate_item, apply_cultivation_item, apply_equipment, apply_lottery_talisman, apply_permanent_atk_item, apply_pet_egg_use, apply_recovery_item, apply_skill_learning, apply_stone_reward, apply_three_cultivation_pill, apply_unbind
+from .features.back.migrations import apply_alchemy, apply_back, apply_backpack_repair, apply_blessed_flag_replace, apply_breakthrough_rate_item, apply_cultivation_item, apply_equipment, apply_item_use, apply_lottery_talisman, apply_permanent_atk_item, apply_pet_egg_use, apply_recovery_item, apply_skill_learning, apply_stone_reward, apply_three_cultivation_pill, apply_unbind
 from .features.trade.manifest import FEATURE as TRADE_FEATURE
 from .features.trade.migrations import (
     apply_trade,
@@ -175,6 +175,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("back.013", "equipment_operations", apply_equipment),
         Migration("back.014", "backpack_repair_tasks", apply_backpack_repair),
         Migration("back.015", "batch_pet_egg_use_operations", apply_pet_egg_use),
+        Migration("back.016", "back_item_use_operations", apply_item_use),
         Migration("bank.001", "bank_feature_migrations", apply_bank),
         Migration("bank.002", "bank_accounts", apply_bank_accounts),
         Migration("base.001", "base_feature_migrations", apply_base),

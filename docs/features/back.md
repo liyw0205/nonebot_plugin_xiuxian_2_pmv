@@ -6,7 +6,7 @@
 ## Web API
 `POST /api/v1/back/{open_package,use_item,change_equipment,learn_skill,repair,use_pet_eggs,alchemy,unbind}`，权限 `user`。
 ## 数据模型与迁移
-迁移 `back.001` 至 `back.015`；聚灵旗替换、装备 operation、背包修复任务和宠物蛋 operation 位于 game DB，player DB 仅作为显式 attached
+迁移 `back.001` 至 `back.016`；通用物品批处理、聚灵旗替换、装备 operation、背包修复任务和宠物蛋 operation 位于 game DB，player DB 仅作为显式 attached
 事务参与方；历史背包字段通过兼容服务读取。
 ## 事务与失败回滚
 操作 ledger、审计和异常重试由应用层统一提供。
@@ -19,7 +19,7 @@ Web 和命令适配器不直接写库存。
 ## 测试与手工验收
 覆盖重复提交、库存上限、物品不足和异常回滚。
 ## 灰度开关、回滚和已知限制
-关闭开关回退旧背包入口；具体物品规则仍由兼容仓储维护。
+关闭开关回退旧背包入口；通用 Web 批处理只负责原子扣除背包物品，具体物品效果仍由各领域 handler/application 维护。
 
 ## Manifest 清单
 - `route: POST /api/v1/back/open_package`

@@ -70,6 +70,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     rift_facade = (PACKAGE / "xiuxian" / "xiuxian_rift" / "__init__.py").read_text(encoding="utf-8")
     back_facade = (PACKAGE / "xiuxian" / "xiuxian_back" / "__init__.py").read_text(encoding="utf-8")
     back_util_facade = (PACKAGE / "xiuxian" / "xiuxian_back" / "back_util.py").read_text(encoding="utf-8")
+    back_application_source = (PACKAGE / "features" / "back" / "application.py").read_text(encoding="utf-8")
     past_life_events_facade = (PACKAGE / "xiuxian" / "xiuxian_past_life" / "past_life_events.py").read_text(encoding="utf-8")
     past_life_command_facade = (PACKAGE / "xiuxian" / "xiuxian_past_life" / "__init__.py").read_text(encoding="utf-8")
     dufang_facade = (PACKAGE / "xiuxian" / "xiuxian_dufang" / "__init__.py").read_text(encoding="utf-8")
@@ -350,13 +351,17 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "equipment_unequip_application_owned": "back_application.change_equipment(" in back_facade,
             "equipment_equip_application_owned": back_facade.count("back_application.change_equipment(") >= 2,
             "pet_egg_application_owned": "back_application.use_pet_eggs(" in back_facade,
+            "generic_item_use_application_owned": "self.item_use_application.apply(" in back_application_source,
+            "legacy_generic_item_use_default_disabled": (
+                "if self._explicit_repository is None:\n            if \"item_id\"" in back_application_source
+            ),
             "package_application_owned": (
                 "package_reward_application.open_package(" in back_facade
                 and "back_application.open_package(" not in back_facade
             ),
             "accessory_package_application_owned": "back_application.accessory_package(" in back_facade,
             "legacy_repair_disabled": "_backpack_repair_service().run(" not in back_facade,
-            "status": "cultivation_item_skill_learning_lottery_talisman_stone_reward_three_cultivation_pill_alchemy_unbind_repair_equipment_equip_unequip_pet_egg_package_accessory_package_cutover_with_other_back_compatibility",
+            "status": "cultivation_item_skill_learning_lottery_talisman_stone_reward_three_cultivation_pill_alchemy_unbind_repair_equipment_equip_unequip_pet_egg_package_accessory_package_generic_item_use_cutover_with_other_back_compatibility",
         },
         "past_life": {
             "final_settlement_application_owned": "_past_life_application.final_settle(" in past_life_events_facade,

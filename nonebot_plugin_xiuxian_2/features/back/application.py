@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from .._legacy_application import LegacyApplication
+from ...core.errors import ValidationError
 from .repository import BackRepository, LegacyBackRepository
 from ..package_reward.application import PackageRewardApplication
 from .alchemy_application import AlchemyApplication
@@ -20,6 +21,7 @@ from .blessed_flag_replace_application import BlessedFlagReplaceApplication
 from .equipment_application import EquipmentApplication
 from .repair_application import BackpackRepairApplication
 from .pet_egg_application import PetEggApplication
+from .item_use_application import ItemUseApplication
 from ..accessory_package.application import AccessoryPackageApplication, AccessoryPackageResult
 
 
@@ -40,6 +42,7 @@ class BackApplication(LegacyApplication):
         self.equipment_application = EquipmentApplication(database)
         self.repair_application = BackpackRepairApplication(database)
         self.pet_egg_application = PetEggApplication(database, player_database or database)
+        self.item_use_application = ItemUseApplication(database)
         self.accessory_package_application = AccessoryPackageApplication(
             database,
             player_database or database,
@@ -53,7 +56,18 @@ class BackApplication(LegacyApplication):
         if self._explicit_repository is None:
             return PackageRewardApplication(self.database).open_package(operation_id=operation_id, user_id=user_id, **kwargs)
         return self._action("open_package", operation_id=operation_id, user_id=user_id, **kwargs)
-    def use_item(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("use_item", operation_id=operation_id, user_id=user_id, **kwargs)
+    def use_item(self, *, operation_id: str, user_id: str, **kwargs: Any):
+        if self._explicit_repository is None:
+            if "item_id" not in kwargs or "quantity" not in kwargs:
+                raise ValidationError("item_id and quantity are required")
+            return self.item_use_application.apply(
+                operation_id,
+                user_id,
+                item_id=kwargs["item_id"],
+                quantity=kwargs["quantity"],
+                expected_item_count=kwargs.get("expected_item_count"),
+            )
+        return self._action("use_item", operation_id=operation_id, user_id=user_id, **kwargs)
     def change_equipment(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:
             return self.equipment_application.change(operation_id, user_id, **kwargs)

@@ -4126,3 +4126,17 @@ game/player/trade/impart/message `117/24/7/1/1`，`back.011` 仅路由到 game D
 聚焦 `224 passed`。五库 recovery 完成 `149` 项迁移，`back.015` 仅路由到 game DB；backup/restore
 dry-run/restore、reconcile 均通过，`clean=true` 且 operations/outbox/dead_events 均为 `0`。临时 recovery 数据、
 pytest cache、`.pyc` 和 `__pycache__` 已清理。背包剩余重点为通用物品批处理及 accessory 兼容边界。
+
+2026-09-25 back generic item-use Web cutover：审计确认 `BatchItemUseService` 只是宠物蛋
+兼容包装，NoneBot `道具使用` 通过各领域 handler 分派，不能把它误当成通用物品服务。
+真实 Web `POST /api/v1/back/use_item` 原先却把有效请求映射到宠物蛋方法并返回内部错误；现切换到
+`BackApplication.use_item -> ItemUseApplication -> ItemUseSqlRepository`，在 game DB 原子扣除普通
+物品批次，支持可选库存快照、绑定数量截断、duplicate/operation_conflict/state_changed/
+item_insufficient 和异常回滚。新增 `back.016` 启动迁移创建 `back_item_use_operations`，请求路径不再
+调用 `BatchItemUseService`；宠物蛋仍由 `use_pet_eggs` 独立 application 承载。新增 item-use application/
+repository、迁移路由、Web 500 回归和 source/progress 检查；NoneBot 各特殊物品效果继续按领域切片，
+不在本切片复制或吞并礼包、宠物蛋逻辑。新增 item-use 聚焦回归 `7 passed`，compileall、架构门禁、
+progress/inventory 和 `git diff --check` 均通过。五库 recovery 完成 `152` 项迁移，路由为
+`game/player/trade/impart/message = 123/25/7/1/1`，`back.016` 仅路由到 game DB；backup/restore
+dry-run/restore、reconcile 均通过，`clean=true` 且 operations/outbox/dead_events 均为 `0`。临时
+recovery 数据、receipt、pytest cache、`.pyc` 和 `__pycache__` 在提交前清理。

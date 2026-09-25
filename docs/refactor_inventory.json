@@ -2674,6 +2674,7 @@
     "audit_exc",
     "back",
     "back_feature_migrations",
+    "back_item_use_operations",
     "backpack_repair_tasks",
     "bank_account_operations",
     "bank_accounts",
