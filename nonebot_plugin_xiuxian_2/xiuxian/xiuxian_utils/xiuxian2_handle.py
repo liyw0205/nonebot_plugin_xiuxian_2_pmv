@@ -4248,6 +4248,7 @@ def get_final_attributes(
     buff_info_provider=None,
     item_provider=None,
     accessory_provider=None,
+    tianti_provider=None,
 ) -> dict | None:
     """获取buff加成后的最终属性（统一口径）"""
     base = get_base_attributes(user_id)
@@ -4435,9 +4436,11 @@ def get_final_attributes(
     _tianti_add_hp = 0
     _tianti_add_atk = 0
     try:
-        from ..xiuxian_tianti.tianti_data import TiantiDataManager
-        _tm = TiantiDataManager()
-        _tdata = _tm.get_user_tianti_info(user_id)
+        if tianti_provider is None:
+            from ..xiuxian_tianti.tianti_data import TiantiDataManager
+            _tdata = TiantiDataManager().get_user_tianti_info(user_id)
+        else:
+            _tdata = tianti_provider(user_id) or {}
         _tianti_hp = int(_tdata.get("tianti_hp", 0))
 
         # 规则：1炼体气血 = 1hp；100炼体气血 = 1攻击

@@ -53,6 +53,7 @@ def test_rift_boss_player_snapshot_wires_item_lookup_provider():
     assert "attribute_provider=get_rift_battle_final_attributes" in source
     assert "buff_info_provider=get_rift_battle_buff_info" in source
     assert "accessory_provider=get_rift_battle_accessory_data" in source
+    assert "tianti_provider=get_rift_battle_tianti_data" in source
 
 
 def test_rift_boss_player_snapshot_wires_read_only_natal_provider():
@@ -121,6 +122,22 @@ def test_rift_boss_accessory_provider_is_read_only():
     provider = source[provider_start:source.index("async def get_boss_battle_info", provider_start)]
     assert "accessory_provider=None" in attributes
     assert "calc_accessory_effects(user_id, accessory_provider=accessory_provider)" in attributes
+    assert "DatabaseUnitOfWork(database, read_only=True)" in provider
+    assert "CREATE TABLE" not in provider
+    assert "ALTER TABLE" not in provider
+
+
+def test_rift_boss_tianti_provider_is_read_only():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_rift/riftmake.py"
+    ).read_text(encoding="utf-8")
+    attributes = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/xiuxian2_handle.py"
+    ).read_text(encoding="utf-8")
+    provider_start = source.index("def get_rift_battle_tianti_data")
+    provider = source[provider_start:source.index("async def get_boss_battle_info", provider_start)]
+    assert "tianti_provider=None" in attributes
+    assert "_tdata = tianti_provider(user_id) or {}" in attributes
     assert "DatabaseUnitOfWork(database, read_only=True)" in provider
     assert "CREATE TABLE" not in provider
     assert "ALTER TABLE" not in provider

@@ -308,6 +308,7 @@ def get_rift_battle_final_attributes(user_id, *, ratio, include_current):
         buff_info_provider=get_rift_battle_buff_info,
         item_provider=items.get_data_by_item_id,
         accessory_provider=get_rift_battle_accessory_data,
+        tianti_provider=get_rift_battle_tianti_data,
     )
 
 
@@ -377,6 +378,32 @@ def get_rift_battle_accessory_data(user_id):
     if not isinstance(result.get("bag"), list):
         result["bag"] = []
     return result
+
+
+def get_rift_battle_tianti_data(user_id):
+    """Read the existing tianti profile without creating a default row."""
+    database = get_paths().player_db
+    if not database.exists():
+        return None
+    try:
+        with DatabaseUnitOfWork(database, read_only=True) as uow:
+            table = uow.query_one(
+                "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='tianti_info'"
+            )
+            if table is None:
+                return None
+            columns = {
+                str(row["name"])
+                for row in uow.query_all("PRAGMA table_info(tianti_info)")
+            }
+            if not {"user_id", "tianti_hp"}.issubset(columns):
+                return None
+            row = uow.query_one(
+                "SELECT tianti_hp FROM tianti_info WHERE user_id=?", (str(user_id),)
+            )
+    except (OSError, ValueError, sqlite3.Error):
+        return None
+    return dict(row) if row is not None else None
 
 
 async def get_boss_battle_info(user_info, rift_rank, bot_id, persist=True):

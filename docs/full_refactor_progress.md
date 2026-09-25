@@ -4426,3 +4426,8 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 `accessory_provider`，Rift Boss 通过 `get_rift_battle_accessory_data` 从既有 `player.db.player_accessory` 只读读取 equipped/bag JSON；
 缺表、缺用户、坏 JSON 和只读错误均降级为空饰品，不触发 `PlayerDataManager` 建表或补列。默认其他调用仍走旧 accessor fallback；
 本片只拆出饰品查询边界，饰品 JSON 规则/套装计算和 attached namespace 对账仍未迁移，新增 provider 与 schema 不变测试。
+
+2026-09-26 rift Boss tianti read provider：`get_final_attributes` 增加可选 `tianti_provider`，Rift Boss
+通过 `get_rift_battle_tianti_data` 从既有 `player.db.tianti_info` 只读读取 `tianti_hp`；缺表、缺用户和只读错误按 0 HP 兼容，
+不调用旧 `TiantiDataManager.get_user_tianti_info` 的默认记录创建/清洗回写。默认其他调用仍保留旧炼体 reader；本片只拆出炼体查询边界，
+炼体状态写入、窍穴/药浴逻辑和 schema 对账仍未迁移，新增 provider 与 schema 不变测试。
