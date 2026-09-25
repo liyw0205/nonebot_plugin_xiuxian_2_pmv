@@ -57,8 +57,24 @@ def test_rift_boss_engine_dependencies_are_explicitly_injected():
     assert 'runner_kwargs["boss_status_updater"] = self.boss_status_updater' in resolver
     assert "boss_attribute_provider=get_boss_attributes" in facade
     assert "boss_buff_provider=generate_boss_buff" in facade
-    assert "boss_skill_provider=generate_boss_skill" in facade
+    assert "boss_skill_provider=get_rift_battle_boss_skill_provider" in facade
     assert "boss_status_updater=update_data_boss_status" in facade
+
+
+def test_rift_boss_skill_asset_provider_avoids_legacy_global_cache():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_rift/riftmake.py"
+    ).read_text(encoding="utf-8")
+    battle = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/player_fight.py"
+    ).read_text(encoding="utf-8")
+    provider_start = source.index("def get_rift_battle_boss_skill_data")
+    provider = source[provider_start:source.index("async def get_boss_battle_info", provider_start)]
+    assert "get_rift_battle_boss_skill_provider" in source
+    assert "boss_skill_provider=get_rift_battle_boss_skill_provider" in source
+    assert "skill_data = skill_data_provider() or {}" in battle
+    assert "skill_path.open" in provider
+    assert "skill_data_cache" not in provider
 
 
 def test_rift_boss_player_snapshot_wires_item_lookup_provider():

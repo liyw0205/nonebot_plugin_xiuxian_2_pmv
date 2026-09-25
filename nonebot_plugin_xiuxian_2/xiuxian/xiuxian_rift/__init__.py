@@ -47,7 +47,6 @@ from ..xiuxian_map import (
 from ..xiuxian_utils.player_fight import (
     Boss_fight,
     generate_boss_buff,
-    generate_boss_skill,
     get_boss_attributes,
     update_data_boss_status,
 )
@@ -56,7 +55,8 @@ from .riftmake import (
     STORY, Rift, get_rift_type, get_story_type, NONEMSG, get_battle_type,
     TREASUREMSG, TREASUREMSG_1, TREASUREMSG_2, TREASUREMSG_3, TREASUREMSG_4,
     TREASUREMSG_5, get_armor, get_main_info, get_rift_battle_player_assets,
-    get_sec_info, get_sub_info, get_weapon, items,
+    get_rift_battle_boss_skill_provider, get_sec_info, get_sub_info, get_weapon,
+    items,
 )
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 
@@ -75,7 +75,7 @@ rift_application = RiftApplication(
         player_asset_provider=get_rift_battle_player_assets,
         boss_attribute_provider=get_boss_attributes,
         boss_buff_provider=generate_boss_buff,
-        boss_skill_provider=generate_boss_skill,
+        boss_skill_provider=get_rift_battle_boss_skill_provider,
         boss_status_updater=update_data_boss_status,
         rank_score=lambda level: convert_rank(level)[0],
         level_power=lambda level: jsondata.level_data()[level]["power"],

@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -81,6 +82,31 @@ def test_player_attribute_builder_uses_explicit_item_provider():
     assert result["本命法宝"]["name"] == "本命法宝"
     assert result["宠物"]["name"] == "灵宠"
     assert result["法器"]["mp_buff"] == 3
+
+
+def test_rift_boss_skill_provider_reads_current_json_without_cache(tmp_path):
+    skill_dir = tmp_path / "功法"
+    skill_dir.mkdir()
+    skill_path = skill_dir / "boss神通.json"
+    skill_path.write_text(json.dumps({"14501": {"name": "first"}}), encoding="utf-8")
+
+    with patch.object(riftmake, "get_paths", return_value=SimpleNamespace(data=tmp_path)):
+        first = riftmake.get_rift_battle_boss_skill_data()
+        skill_path.write_text(json.dumps({"14502": {"name": "second"}}), encoding="utf-8")
+        second = riftmake.get_rift_battle_boss_skill_data()
+
+    assert first == {"14501": {"name": "first"}}
+    assert second == {"14502": {"name": "second"}}
+
+
+def test_rift_boss_skill_provider_degrades_for_missing_or_invalid_json(tmp_path):
+    with patch.object(riftmake, "get_paths", return_value=SimpleNamespace(data=tmp_path)):
+        assert riftmake.get_rift_battle_boss_skill_data() == {}
+
+        skill_dir = tmp_path / "功法"
+        skill_dir.mkdir()
+        (skill_dir / "boss神通.json").write_text("not-json", encoding="utf-8")
+        assert riftmake.get_rift_battle_boss_skill_data() == {}
 
 
 def test_rift_natal_provider_reads_awakened_row_without_schema_mutation(tmp_path):

@@ -39,6 +39,28 @@ def _sql_message():
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
 
+
+def get_rift_battle_boss_skill_data():
+    """Read Boss skills for Rift battles without using the legacy module cache."""
+    skill_path = get_paths().data / "功法" / "boss神通.json"
+    if not skill_path.exists():
+        return {}
+    try:
+        with skill_path.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, TypeError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def get_rift_battle_boss_skill_provider(enemy, skills):
+    """Attach only the skills present in the current read-only asset snapshot."""
+    return generate_boss_skill(
+        enemy,
+        skills,
+        skill_data_provider=get_rift_battle_boss_skill_data,
+    )
+
 NONEMSG = [
     "道友在秘境中晕头转向，等到清醒时已被秘境踢出，毫无所获！",
     "道友进入秘境发现此地烟雾缭绕，无法前行，只能空手而归！",
@@ -222,7 +244,7 @@ def _boss_battle_resolver() -> RiftBossBattleResolver:
         player_asset_provider=get_rift_battle_player_assets,
         boss_attribute_provider=get_boss_attributes,
         boss_buff_provider=generate_boss_buff,
-        boss_skill_provider=generate_boss_skill,
+        boss_skill_provider=get_rift_battle_boss_skill_provider,
         boss_status_updater=update_data_boss_status,
         rank_score=lambda level: convert_rank(level)[0],
         level_power=lambda level: jsondata.level_data()[level]["power"],

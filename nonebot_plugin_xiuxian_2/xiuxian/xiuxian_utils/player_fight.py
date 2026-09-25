@@ -660,8 +660,11 @@ def get_skill_data():
     return skill_data_cache
 
 
-def generate_boss_skill(enemy, skills):
-    skill_data = get_skill_data()
+def generate_boss_skill(enemy, skills, *, skill_data_provider=None):
+    skill_data_provider = skill_data_provider or get_skill_data
+    skill_data = skill_data_provider() or {}
+    if not isinstance(skill_data, dict):
+        return
     for skill in skills:
         skill_str = str(skill)
         if skill_str not in skill_data:
