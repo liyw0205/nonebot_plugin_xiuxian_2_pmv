@@ -101,10 +101,18 @@ diff check 通过。五库 recovery 完成 `164` 项 migration，路由 `130/30/
 `131/31/7/1/1`，`.004` game-only、`.005` player-only，reconcile clean；没有运行根目录全量测试或真实 live/P7。
 恢复数据、receipt、pytest basetemp 和字节码缓存已清理。
 
+`rift speedup default-repository and startup-schema boundary`：默认 `RiftApplication.speedup` 改走
+`RiftSpeedupSqlRepository`，其他 Rift actions 仍使用 legacy compatibility repository。新增 game-only `rift.004`，
+迁移创建/补齐 replay 表；repository 缺迁移时返回 `schema_missing`，请求路径不建表/补列，旧 compact/rich payload 均兼容。
+默认 composition、缺迁移拒绝、compact/rich 旧 payload replay、绑定数量不变量、无绑定列兼容、事务回滚和路由聚焦测试通过；未运行根目录全量回归或真实 live/P7。
+
 ## 当前切片与下一切片选择
 
-最近完成 `impart love-sand request-schema boundary`；它只移除了请求期 schema 写入，不代表 love-sand 兼容 service 已删除。下一步回到
-`docs/full_refactor_progress.md` 的 6.2 目标 5，对剩余真实注册的 NoneBot 特殊道具及宠物、任务/修炼、洞府、地图、宗门、
-副本、世界事件和 Boss handler 做只读调用图审计，再选一个有明确事务缺口的单一动作；不要按目录整体迁移。追捕令 `20015` 的随机 offer
-仍由旧领域逻辑生成，不能把已迁移的扣除/快照边界解释成 work 领域整体完成。不可把惰性 facade、静态 manifest、仅测试通过视为完成。
-已切换的 partner cultivation、partner token、背包通用 item-use Web、宠物蛋、饰品礼包、炼丹两阶段领取、斩妖令、祈愿石、挑战券事务和 love-sand schema 边界不重复迁移。
+最近完成 `rift speedup default-repository and startup-schema boundary`：默认加速转至 feature SQL repository，新增 game-only
+`rift.004` 并移除请求期 DDL；该切片不代表 Rift 其他动作已脱离 legacy repository。下一步回到
+`docs/full_refactor_progress.md` 的 6.2 目标 5，只读审计 Rift 的真实默认 composition、剩余请求期 schema 写入与 transaction owner，
+确认一个明确缺口后再做单动作切片；不要将 facade 调用或静态路由当成底层 cutover。更广范围仍需按 6.2 逐个审计特殊道具、宠物、
+任务/修炼、洞府、地图、宗门、副本、世界事件和 Boss handler；追捕令 `20015` 的随机 offer 仍由旧领域逻辑生成，不能把既有扣除/快照
+边界解释成 work 领域整体完成。
+已切换的 partner cultivation、partner token、背包通用 item-use Web、宠物蛋、饰品礼包、炼丹两阶段领取、斩妖令、祈愿石、挑战券事务、
+love-sand schema 边界和 Rift speedup schema 边界不重复迁移。

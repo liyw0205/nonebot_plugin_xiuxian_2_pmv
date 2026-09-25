@@ -21,13 +21,25 @@ class RiftApplication(LegacyApplication):
     ) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
-        super().__init__(game_database, repository=repository or LegacyRiftRepository(game_database, player_database), feature="rift")
+        super().__init__(game_database, repository=repository, feature="rift")
+        self.legacy_repository = (
+            repository
+            if repository is not None
+            else LegacyRiftRepository(game_database, player_database)
+        )
         self.demon_token_repository = demon_token_repository or RiftDemonTokenBattleSqlRepository(
             game_database, player_database, clock=clock
         )
 
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):
-        return self._execute(operation_id=operation_id, user_id=user_id, action=f"rift.{action}", payload={"user_id": user_id, **kwargs}, call=lambda: self.repository.invoke(action, operation_id, user_id, **kwargs))
+        repository = self.repository or self.legacy_repository
+        return self._execute(
+            operation_id=operation_id,
+            user_id=user_id,
+            action=f"rift.{action}",
+            payload={"user_id": user_id, **kwargs},
+            call=lambda: repository.invoke(action, operation_id, user_id, **kwargs),
+        )
 
     def generate(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("generate", operation_id=operation_id, user_id=user_id, **kwargs)
     def enter(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("enter", operation_id=operation_id, user_id=user_id, **kwargs)

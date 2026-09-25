@@ -29,4 +29,29 @@ def apply_rift_demon_token_player_schema(uow: DatabaseUnitOfWork) -> None:
             uow.execute(f'ALTER TABLE statistics ADD COLUMN "{name}" INTEGER DEFAULT 0')
 
 
-__all__ = ["apply_rift", "apply_rift_demon_token_operations", "apply_rift_demon_token_player_schema"]
+def apply_rift_speedup_operations(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS rift_speedup_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,new_time INTEGER NOT NULL,"
+        "rift_data TEXT NOT NULL DEFAULT '{}',create_time TEXT,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    columns = {
+        str(row["name"])
+        for row in uow.query_all("PRAGMA table_info(rift_speedup_operations)")
+    }
+    if "rift_data" not in columns:
+        uow.execute(
+            "ALTER TABLE rift_speedup_operations "
+            "ADD COLUMN rift_data TEXT NOT NULL DEFAULT '{}'"
+        )
+    if "create_time" not in columns:
+        uow.execute("ALTER TABLE rift_speedup_operations ADD COLUMN create_time TEXT")
+
+
+__all__ = [
+    "apply_rift",
+    "apply_rift_demon_token_operations",
+    "apply_rift_demon_token_player_schema",
+    "apply_rift_speedup_operations",
+]

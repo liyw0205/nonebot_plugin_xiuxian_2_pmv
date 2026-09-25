@@ -68,6 +68,9 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(rift["demon_token_application_owned"])
         self.assertTrue(rift["legacy_demon_token_disabled"])
         self.assertTrue(rift["demon_token_migrations_registered"])
+        self.assertTrue(rift["speedup_default_repository_owned"])
+        self.assertTrue(rift["speedup_migrations_registered"])
+        self.assertTrue(rift["speedup_request_path_has_no_ddl"])
         back = slices["back"]
         self.assertTrue(back["cultivation_item_application_owned"])
         self.assertTrue(back["legacy_cultivation_item_disabled"])

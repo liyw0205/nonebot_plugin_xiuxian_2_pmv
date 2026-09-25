@@ -4253,3 +4253,15 @@ prayer 邻接及路由聚焦 `22 passed`（1 条既有兼容 service deprecation
 `game/player/trade/impart/message = 131/31/7/1/1`；`impart.004` 仅 game、`.005` 仅 player，backup/restore dry-run/restore
 及 reconcile clean，operations/outbox/dead_events 均为 `0`。未运行根目录全量套件或真实 live/P7 验证；专用 pytest basetemp、
 recovery 数据/receipt 与 compileall 字节码缓存已清理，`.venv`、`.git`、`data/`、运行数据库/备份和用户原有 Boss JSON 均保留。
+
+2026-09-25 rift speedup default-repository and startup-schema boundary：修复 `RiftApplication` 默认总注入
+`LegacyRiftRepository` 导致 `speedup` feature SQL 分支不可达的问题；默认加速改走 `RiftSpeedupSqlRepository`，其他 Rift actions
+仍沿 legacy compatibility repository。新增 game-only `rift.004`，启动时创建 replay table 并为旧表补 `rift_data`/`create_time` 列，
+保留既有 operation 行；repository 请求路径移除建表 DDL，缺 migration 返回 `schema_missing`。compact 默认 payload 与历史默认 service 字节级一致，
+rich snapshot payload 也沿用旧 service 序列化约定；道具扣除、秘境 duration/rift_data、cooldown 与 operation row 仍处于单库事务。
+默认 composition/legacy 调用拒绝、缺迁移不建表、compact/rich 旧 payload replay、旧表补列保数、晚期 SQL 错误全状态回滚、绑定数量不变量、
+无绑定列兼容和 game-only migration 路由聚焦/source/architecture 回归 `25 passed`；architecture、progress、inventory `--check`、migration dry-run 五库 pending 为空、
+health 六项 ready 和 `git diff --check` 通过。隔离五库 recovery 完成 `167` 项迁移，路由
+`game/player/trade/impart/message = 132/31/7/1/1`，`rift.004` 仅 game；backup/restore dry-run 与 restore 覆盖五库，
+reconcile `clean=true` 且 operations/outbox/dead_events 均为 `0`。未运行根目录全量回归或真实 live/P7；本轮 pytest cache provider 与
+字节码生成关闭，专用测试/recovery 临时目录将在本片验收后清理，保留 `.venv`、`.git`、`data/`、运行数据库/备份及用户 Boss JSON 改动。
