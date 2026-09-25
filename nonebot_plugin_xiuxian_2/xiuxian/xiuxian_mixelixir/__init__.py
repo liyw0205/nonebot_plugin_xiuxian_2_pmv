@@ -3,6 +3,7 @@ import asyncio
 import re
 import json
 import time
+from types import SimpleNamespace
 from ..on_compat import on_command
 from nonebot.params import EventPlainText, CommandArg
 from ..adapter_compat import (
@@ -50,6 +51,14 @@ def _sql_message():
     return _sql_message_instance
 
 
+def _mixelixir_result(outcome):
+    data = dict(outcome.data or {})
+    data["status"] = str(data.get("status", outcome.status))
+    data["succeeded"] = outcome.ok
+    data["replayed"] = outcome.replayed
+    return SimpleNamespace(**data)
+
+
 mixelixir_application = MixelixirApplication(
     get_paths().game_db,
     get_paths().player_db,
@@ -87,9 +96,7 @@ def _mixelixir_recipe_service():
 def _mixelixir_refine_cost_service():
     global _mixelixir_refine_cost_service_instance
     if _mixelixir_refine_cost_service_instance is None:
-        _mixelixir_refine_cost_service_instance = MixelixirRefineCostService(
-            get_paths().game_db
-        )
+        _mixelixir_refine_cost_service_instance = MixelixirRefineCostService(get_paths().game_db)
     return _mixelixir_refine_cost_service_instance
 
 
@@ -655,7 +662,9 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
 
             # 优先补领此前同配方已扣材未发的任务（不依赖保存表）
             event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-            ready_task_id = _mixelixir_refine_reward_service().latest_ready_task(user_id, recipe_key)
+            ready_task_id = mixelixir_application.latest_ready_refine_task(
+                user_id=user_id, recipe_key=recipe_key
+            )
             if ready_task_id:
                 claim_operation = (
                     f"mixelixir-reward-recover:{event_id}:{user_id}:{ready_task_id}"
@@ -663,7 +672,7 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                     else f"mixelixir-reward-recover:{user_id}:{ready_task_id}:{runtime_ids.new_id()}"
                 )
                 claimed_outcome = mixelixir_application.refine_reward(operation_id=claim_operation, user_id=user_id, task_id=ready_task_id, max_goods_num=XiuConfig().max_goods_num)
-                claimed = SimpleNamespace(**dict(claimed_outcome.data or {})); claimed.status = claimed_outcome.status; claimed.succeeded = claimed_outcome.ok
+                claimed = _mixelixir_result(claimed_outcome)
                 if claimed.succeeded:
                     msg = (
                         f"**炼丹结果**\n---\n✅ 补领成功\n"
@@ -720,13 +729,27 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                 updated_mix_state["炼丹经验"] = int(updated_mix_state["炼丹经验"] or 0) + exp_gain
 
                 operation_id = f"mixelixir-cost:{event_id}:{user_id}" if event_id else f"mixelixir-cost:{user_id}:{runtime_ids.new_id()}"
-                outcome = mixelixir_application.refine_cost(operation_id=operation_id, user_id=user_id, recipe_set_id="custom", daily_count=int(user_info.get("mixelixir_num", 0) or 0), expected_snapshot=expected_mix_state, updated_mix_state=updated_mix_state, max_goods_num=XiuConfig().max_goods_num)
-                started = SimpleNamespace(**dict(outcome.data or {})); started.status = outcome.status; started.succeeded = outcome.ok; started.task_id = str(getattr(started, "task_id", ""))
-                if started.status == "duplicate":
+                outcome = mixelixir_application.refine_cost(
+                    operation_id=operation_id,
+                    user_id=user_id,
+                    recipe_set_id="custom",
+                    daily_count=int(user_info.get("mixelixir_num", 0) or 0),
+                    expected_snapshot=expected_mix_state,
+                    updated_mix_state=updated_mix_state,
+                    max_goods_num=XiuConfig().max_goods_num,
+                    recipe_key=recipe_key,
+                    materials=material_counts,
+                    furnace_id=furnace_id,
+                    reward_id=int(id),
+                    reward_name=str(goods_info["name"]),
+                    reward_quantity=int(num),
+                )
+                started = _mixelixir_result(outcome)
+                started.task_id = str(getattr(started, "task_id", ""))
+                if started.status == "duplicate" or started.replayed:
                     claim_operation = f"mixelixir-reward:{event_id}:{user_id}" if event_id else f"mixelixir-reward:{user_id}:{runtime_ids.new_id()}"
-                    claimed = _mixelixir_refine_reward_service().claim(
-                        claim_operation, user_id, started.task_id, XiuConfig().max_goods_num
-                    )
+                    claimed_outcome = mixelixir_application.refine_reward(operation_id=claim_operation, user_id=user_id, task_id=started.task_id, max_goods_num=XiuConfig().max_goods_num)
+                    claimed = _mixelixir_result(claimed_outcome)
                     if claimed.succeeded:
                         msg = f"恭喜道友成功炼成丹药：{claimed.reward_name}{claimed.reward_quantity}枚\n该炼丹请求已经处理，无需重复提交。"
                         await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
@@ -738,9 +761,9 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                     # statuses: "item_insufficient", "state_changed", "user_missing", "duplicate"
                     # )
                     # 扣材失败时再尝试补领任意 ready（兼容旧任务）
-                    ready_task_id = _mixelixir_refine_reward_service().latest_ready_task(
-                        user_id, recipe_key
-                    ) or _mixelixir_refine_reward_service().latest_ready_task(user_id)
+                    ready_task_id = mixelixir_application.latest_ready_refine_task(
+                        user_id=user_id, recipe_key=recipe_key
+                    ) or mixelixir_application.latest_ready_refine_task(user_id=user_id)
                     if ready_task_id:
                         claim_operation = (
                             f"mixelixir-reward-recover:{event_id}:{user_id}:{ready_task_id}"
@@ -748,7 +771,7 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                             else f"mixelixir-reward-recover:{user_id}:{ready_task_id}:{runtime_ids.new_id()}"
                         )
                         claimed_outcome = mixelixir_application.refine_reward(operation_id=claim_operation, user_id=user_id, task_id=ready_task_id, max_goods_num=XiuConfig().max_goods_num)
-                        claimed = SimpleNamespace(**dict(claimed_outcome.data or {})); claimed.status = claimed_outcome.status; claimed.succeeded = claimed_outcome.ok
+                        claimed = _mixelixir_result(claimed_outcome)
                         if claimed.succeeded:
                             msg = (
                                 f"恭喜道友成功炼成丹药：{claimed.reward_name}{claimed.reward_quantity}枚\n"
@@ -774,10 +797,9 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                     await mix_make.finish()
 
                 claim_operation = f"mixelixir-reward:{event_id}:{user_id}" if event_id else f"mixelixir-reward:{user_id}:{runtime_ids.new_id()}"
-                claimed = _mixelixir_refine_reward_service().claim(
-                    claim_operation, user_id, started.task_id, XiuConfig().max_goods_num
-                )
-                if claimed.status == "duplicate":
+                claimed_outcome = mixelixir_application.refine_reward(operation_id=claim_operation, user_id=user_id, task_id=started.task_id, max_goods_num=XiuConfig().max_goods_num)
+                claimed = _mixelixir_result(claimed_outcome)
+                if claimed.status == "duplicate" or claimed.replayed:
                     msg = f"恭喜道友成功炼成丹药：{claimed.reward_name}{claimed.reward_quantity}枚\n该炼丹请求已经处理，无需重复提交。"
                     await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
                     await mix_make.finish()

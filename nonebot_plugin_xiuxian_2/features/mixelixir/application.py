@@ -116,13 +116,41 @@ class MixelixirApplication:
             normalize=lambda data: data,
         )
 
-    def refine_cost(self, *, operation_id: str, user_id: str, recipe_set_id: str, daily_count: int, expected_snapshot: dict, updated_mix_state: dict, max_goods_num: int):
+    def refine_cost(
+        self,
+        *,
+        operation_id: str,
+        user_id: str,
+        recipe_set_id: str,
+        daily_count: int,
+        expected_snapshot: dict,
+        updated_mix_state: dict,
+        max_goods_num: int,
+        recipe_key: str,
+        materials: Mapping[int, int],
+        furnace_id: int,
+        reward_id: int,
+        reward_name: str,
+        reward_quantity: int,
+    ):
         return self._execute(
             operation_id=operation_id, user_id=user_id, action="mixelixir.refine_cost",
-            payload={"recipe_set_id": recipe_set_id, "daily_count": daily_count},
-            call=lambda: MixelixirRefineCostSqlRepository(self.game_database).start(operation_id, user_id, recipe_set_id, daily_count, expected_snapshot, updated_mix_state, max_goods_num),
+            payload={"recipe_set_id": recipe_set_id, "recipe_key": recipe_key},
+            call=lambda: MixelixirRefineCostSqlRepository(self.game_database).start(
+                operation_id, user_id, recipe_set_id, daily_count, expected_snapshot,
+                updated_mix_state, max_goods_num, recipe_key=recipe_key, materials=materials,
+                furnace_id=furnace_id, reward_id=reward_id, reward_name=reward_name,
+                reward_quantity=reward_quantity,
+            ),
             success_statuses={"applied", "duplicate"},
-            messages={"item_insufficient": "炼丹材料不足。", "state_changed": "炼丹配方状态已更新，请重新提交。"},
+            messages={
+                "item_insufficient": "炼丹材料不足。",
+                "limit_reached": "道友今日炼丹已达上限，请明日再来！",
+                "operation_conflict": "炼丹请求冲突，请重新提交。",
+                "schema_missing": "炼丹数据尚未就绪，请稍后重试。",
+                "state_changed": "炼丹配方状态已更新，请重新提交。",
+                "user_missing": "未找到修仙数据。",
+            },
             normalize=lambda data: data,
         )
 
@@ -132,9 +160,26 @@ class MixelixirApplication:
             payload={"task_id": task_id},
             call=lambda: MixelixirRefineRewardSqlRepository(self.game_database, self.player_database).claim(operation_id, user_id, task_id, max_goods_num),
             success_statuses={"applied", "duplicate"},
-            messages={"inventory_full": "丹药背包已满。", "task_missing": "炼丹任务不存在。", "state_changed": "炼丹任务状态已更新。"},
-            normalize=lambda data: data,
+            messages={
+                "inventory_full": "丹药背包已满。",
+                "operation_conflict": "炼丹领取请求冲突。",
+                "schema_missing": "炼丹数据尚未就绪，请稍后重试。",
+                "task_missing": "炼丹任务不存在。",
+                "state_changed": "炼丹任务状态已更新。",
+                "user_missing": "未找到修仙数据。",
+            },
+            normalize=lambda data: {
+                **data,
+                "granted": {"elixir": int(data.get("reward_quantity", 0) or 0)}
+                if data.get("status") in {"applied", "duplicate"}
+                else {},
+            },
         )
+
+    def latest_ready_refine_task(self, *, user_id: str, recipe_key: str | None = None) -> str | None:
+        return MixelixirRefineRewardSqlRepository(
+            self.game_database, self.player_database
+        ).latest_ready_task(user_id, recipe_key)
 
     def reply(self, **kwargs: Any):
         action = str(kwargs.pop("action", "harvest"))

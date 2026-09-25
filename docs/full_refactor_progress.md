@@ -4168,3 +4168,18 @@ architecture、inventory、progress、`git diff --check` 均通过。五库 reco
 `test_sign_in_effects_wiring::test_legacy_runtime_wires_feature_effects_with_legacy_lottery_port` 的 lifecycle startup 等待并中断；
 这两个位置不在本切片改动范围内。指定 pytest basetemp、五库 recovery 数据、receipt 和 compileall 源码缓存已清理，
 `.venv`、`.git`、`data/`、运行数据库与备份保留。下一片仍从 6.2 目标 5 按真实入口调用图选择一个旧 service 资产动作。
+
+2026-09-25 mixelixir two-phase refine claim feature-owned completion：修正默认 `配方` handler 的两阶段
+炼丹数据契约，扣材仓储现在接收并持久化材料、丹炉、奖励和完整 `mix_elixir_info` 快照，同时在 game DB
+CAS 更新每日炼丹次数；补领查询、重复分支、主领取和失败恢复均统一走 `MixelixirApplication`。领取仓储在
+attached game/player UoW 内语义比较控火/炼丹记录/经验快照，检查容量后发放丹药、更新玩家炼丹状态、增加
+`statistics."炼丹次数"`、标记任务及写入 operation result；请求路径无 DDL，事务后异常会回滚两库状态。
+新增 game `mixelixir.002` 任务/幂等表 schema migration 和 player `mixelixir.003` 统计列 migration，并为
+已存在的不完整任务表添加兼容列。新增真实注册 `配方` matcher 集成回归，从 matcher handlers 进入实际解析流程，
+并验证临时 game/player DB 的扣材、入包、炼丹记录/经验/统计及旧 service 未调用。feature、显式旧 service
+对照、application/source/registered matcher 回归 `26 passed, 2 subtests`；compileall、architecture、inventory、
+progress 和 `git diff --check` 通过。隔离五库 recovery 完成 `158` 项迁移，路由命中数
+`game/player/trade/impart/message=126/28/7/1/1`；五库 backup/restore dry-run/restore、migration apply、health
+六项 readiness、migrate dry-run（五库 pending 为空）和 reconcile clean 均通过，operations/outbox/dead events
+为 `0`。本片 pytest basetemp、recovery 数据、receipt 和生成的 `__pycache__`/compile cache 已清理；`.venv`、
+`.git`、`data/`、运行数据库和备份保留。未启动根目录全量测试，以保持 RAM 峰值和磁盘产物受控。

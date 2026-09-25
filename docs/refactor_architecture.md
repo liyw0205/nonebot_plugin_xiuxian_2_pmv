@@ -637,7 +637,7 @@ PR 描述必须包含：影响 feature、数据迁移、兼容入口、权限变
 - `nonebot_plugin_xiuxian_2/features/sect_fairyland/`：宗门炼体堂领取切片，统一 application、请求/响应 DTO、operation ledger、审计、幂等重放、Web/命令契约、迁移标记和灰度开关；旧宗门跨表事务服务仅通过惰性 repository adapter 调用。
 - `nonebot_plugin_xiuxian_2/features/world_events/`：魔修入侵奖励领取切片，统一跨库领奖 application、请求/响应 DTO、operation ledger、审计、幂等重放、Web/命令契约、迁移标记和灰度开关；贡献和随机奖励计算仍由兼容命令适配器提供，旧 `DemonClaimService` 仅作为惰性跨库仓储。
 - `nonebot_plugin_xiuxian_2/features/work/`：悬赏令接取和结算切片，统一请求/响应 DTO、operation ledger、审计、幂等重放、Web/命令契约、迁移标记和灰度开关；旧 `WorkClaimService`、`WorkSettlementService` 仅作为惰性仓储，刷新/终止继续由兼容服务负责。
-- `nonebot_plugin_xiuxian_2/features/mixelixir/`：炼丹灵田收取与统一结算切片，统一请求/响应 DTO、operation ledger、审计、幂等重放、Web/命令契约、迁移标记和灰度开关；旧灵田跨库事务服务仅作为惰性仓储适配器，旧配方两阶段扣材/补领奖励流程仍由兼容服务维护。
+- `nonebot_plugin_xiuxian_2/features/mixelixir/`：炼丹灵田收取、统一结算和两阶段炼丹任务切片，统一 application、operation ledger、审计、幂等重放、Web/命令契约与启动迁移；旧配方文本解析和奖励计算留在命令适配器，扣材与跨库补领奖励由 feature-owned SQL repositories 原子提交。
 - `nonebot_plugin_xiuxian_2/features/{activity,admin,beg,compensation,dongfu,dufang,entertainment,fusion,impart,impart_pk,info,lunhui,past_life,simulator,status,tasks,tianti,title,training}/`：剩余旧包的统一迁移边界；每个切片都有独立 manifest、DTO、application、repository、迁移、适配器、测试和文档，旧算法继续通过惰性兼容仓储提供，避免导入期打开数据库或注册 matcher。`illusion` 与 `interactive` 已从该集合提升为真实领域仓储切片，旧 import 仅保留兼容 facade。
 - `nonebot_plugin_xiuxian_2/adapters/web/`：统一 API 响应、request_id、CSRF/权限边界和 Flask app factory；旧 Web app 保持兼容，旧 URL 的 308 转发命中会写入数据目录的 `compatibility_hits.json`。
 - `nonebot_plugin_xiuxian_2/compatibility/release_gate.py` 与 `scripts/check_compatibility_release.py`：记录发布起点的兼容命中基线，校验后续版本、旧 import/URL 日志、历史迁移覆盖和备份恢复回执；未通过时禁止关闭兼容周期。
@@ -653,7 +653,7 @@ PR 描述必须包含：影响 feature、数据迁移、兼容入口、权限变
 
 - 组合根在 `filesystem -> database -> migrations -> repositories -> jobs -> web -> ready` 阶段执行真实 wiring；`install_driver_hooks` 对同一 NoneBot driver 幂等。
 - 所有新适配器路由、平台配置和兼容调度任务均有 manifest；架构脚本会用 Flask `url_map` 反查未声明端点。
-- 启动、CLI 迁移和恢复演练共用 `plugin.build_migrations()` 的完整迁移清单（当前 145 项）；新 adapter 模板禁止页面级可执行内联脚本，旧模板仅作为兼容资产保留一个发布周期。
+- 启动、CLI 迁移和恢复演练共用 `plugin.build_migrations()` 的完整迁移清单（当前 158 项）；新 adapter 模板禁止页面级可执行内联脚本，旧模板仅作为兼容资产保留一个发布周期。
 - `operation_ledger` 同时写入 `operation_audit`；异常在业务事务回滚后以 `failed` 记录，`ReconcileService.run` 支持重试和 dead 事件可见性。
 - `BackupService` 和 `scripts/recovery_smoke.py` 提供带 SHA-256 manifest 的备份、校验和恢复演练；`--evidence` 回执可由兼容周期 gate 校验；CLI 提供 `manifest/health/migrate/reconcile/backup/restore`，其中 `migrate --dry-run` 只读预览待执行版本。
 - `scripts/remote_smoke.sh` 提供受控远端后端冒烟；必须显式提供远端项目/数据目录、停机/启动、可逆写和回滚 hook，缺少安全前置条件时拒绝执行，不复制 SSH wrapper 凭据。

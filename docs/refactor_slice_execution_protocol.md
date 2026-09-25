@@ -36,6 +36,16 @@
 
 ## 最近完成切片
 
+`mixelixir two-phase refine claim`：真实 `配方` handler 的扣材、补领查询和奖励领取统一经
+`MixelixirApplication -> MixelixirRefineCostSqlRepository/MixelixirRefineRewardSqlRepository`。扣材时校验
+每日次数、材料和丹炉并保存完整奖励及炼丹状态快照；领取时 CAS 校验修为状态和背包容量，在 attached UoW
+中发放丹药、更新 `mix_elixir_info`、增加炼丹统计、完成任务并写入幂等结果。新增 game DB `mixelixir.002`
+和 player DB `mixelixir.003`，请求路径不再建表；旧 transaction services 留作显式兼容对照。炼丹 feature/兼容/source
+回归（含真实注册 matcher 端到端）`26 passed, 2 subtests`，compileall、architecture、inventory、progress 和 diff
+check 通过。五库 recovery 完成 `158` 项迁移，路由命中数 `126/28/7/1/1`；backup/restore dry-run/restore、health
+六项 readiness、migration dry-run（五库 pending 为空）、reconcile clean（operations/outbox/dead events 均为 `0`）。
+专用 basetemp、recovery 数据、receipt 和字节码缓存已清理。
+
 `buff partner cultivation`：`xiuxian_buff.partner::direct_two_exp` 默认结算改为调用
 `PartnerCultivationApplication -> PartnerCultivationSqlRepository`；修为/属性、双修次数、统计、亲密度、邀请接受与 operation ledger 在 attached UoW 内提交。新增 game DB `buff.004` 和 player DB `buff.005`，次数读取保留旧 JSON 一次性导入但不再请求时建表；非邀请 operation payload 与旧 ledger 保持兼容。聚焦回归覆盖回放、冲突、过期/保护、超大数、快照拒绝和跨库异常回滚；旧 `PartnerCultivationService` 仅留作兼容对照。
 focused/source/progress/architecture/inventory 回归 `255 passed, 4 subtests`；compileall、architecture、inventory、progress 和 diff check 均通过。五库 recovery 完成 `157` 项迁移，`.004` 仅 game、`.005` 仅 player；backup/restore dry-run/restore、migration dry-run（五库 pending 为空）、health 六项和 reconcile clean 均通过，operations/outbox/dead events 为 `0`。根目录全量测试已启动但未完成：`1950 passed` 后有 5 个与本切片无关的 blessed-flag legacy service `TypeError`，并停在 legacy sign-in startup 测试；该进程已中断。指定 basetemp、recovery 数据、receipt 和源码字节码缓存均已清理。
@@ -48,4 +58,4 @@ focused/source/progress/architecture/inventory 回归 `255 passed, 4 subtests`�
 
 ## 下一切片选择
 
-清理并复核磁盘后，回到 `docs/full_refactor_progress.md` 的 6.2 目标 5，按真实入口调用图选择下一个仍由旧 service 承载的高频资产动作。优先核实 NoneBot 特殊道具效果、宠物、任务/修炼、洞府、地图、宗门、竞技场/副本、世界事件和 Boss 的具体 handler；不可按目录整体迁移或把惰性 facade、静态 manifest、仅测试通过视为完成。已切换的 partner cultivation、partner token、背包通用 item-use Web、宠物蛋和饰品礼包入口不重复迁移。
+清理并复核磁盘后，回到 `docs/full_refactor_progress.md` 的 6.2 目标 5，按真实入口调用图选择下一个仍由旧 service 承载的高频资产动作。优先核实 NoneBot 特殊道具效果、宠物、任务/修炼、洞府、地图、宗门、竞技场/副本、世界事件和 Boss 的具体 handler；不可按目录整体迁移或把惰性 facade、静态 manifest、仅测试通过视为完成。已切换的 partner cultivation、partner token、背包通用 item-use Web、宠物蛋、饰品礼包和炼丹两阶段领取不重复迁移。

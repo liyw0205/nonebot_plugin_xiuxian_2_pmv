@@ -98,7 +98,11 @@ from .features.world_events.migrations import apply_world_events
 from .features.work.manifest import FEATURE as WORK_FEATURE
 from .features.work.migrations import apply_work, apply_work_daily_refresh_reset
 from .features.mixelixir.manifest import FEATURE as MIXELIXIR_FEATURE
-from .features.mixelixir.migrations import apply_mixelixir
+from .features.mixelixir.migrations import (
+    apply_mixelixir,
+    apply_mixelixir_refine_claim,
+    apply_mixelixir_refine_claim_player,
+)
 from .features.puppet.manifest import FEATURE as PUPPET_FEATURE
 from .features.puppet.migrations import apply_puppet
 from .features.boss.manifest import FEATURE as BOSS_FEATURE
@@ -228,6 +232,8 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("map.015", "map_combat_player", apply_map_combat_player),
         Migration("map.016", "map_combat_plan_operations", apply_map_combat_plan),
         Migration("mixelixir.001", "mixelixir_feature_migrations", apply_mixelixir),
+        Migration("mixelixir.002", "mixelixir_refine_claim", apply_mixelixir_refine_claim),
+        Migration("mixelixir.003", "mixelixir_refine_claim_player", apply_mixelixir_refine_claim_player),
         Migration("natal_treasure.001", "natal_treasure_feature_migrations", apply_natal_treasure),
         Migration("package_reward.001", "package_reward_operations", apply_package_reward),
         Migration("pet.001", "pet_feature_migrations", apply_pet),
@@ -320,6 +326,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "pet.003",
         "buff.003",
         "buff.005",
+        "mixelixir.003",
     }
 )
 _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
@@ -351,6 +358,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "pet.003",
         "buff.003",
         "buff.005",
+        "mixelixir.003",
     }
 )
 _TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "auction.004"})
