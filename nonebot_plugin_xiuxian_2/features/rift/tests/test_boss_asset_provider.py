@@ -1,3 +1,5 @@
+import sqlite3
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import nonebot
@@ -5,6 +7,7 @@ import nonebot
 nonebot.init()
 
 from ....xiuxian.xiuxian_utils import player_fight
+from ....xiuxian.xiuxian_rift import riftmake
 
 
 def test_player_attribute_builder_uses_explicit_item_provider():
@@ -39,6 +42,7 @@ def test_player_attribute_builder_uses_explicit_item_provider():
     calls = []
     pet_calls = []
     attribute_calls = []
+    natal_calls = []
 
     def lookup(item_id):
         calls.append(item_id)
@@ -52,6 +56,10 @@ def test_player_attribute_builder_uses_explicit_item_provider():
         attribute_calls.append((user_id, ratio, include_current))
         return final
 
+    def natal_lookup(user_id):
+        natal_calls.append(user_id)
+        return {"name": "本命法宝"}
+
     with patch.object(player_fight, "UserBuffDate", Buffs), patch.object(
         player_fight, "get_final_attributes", return_value=final
     ), patch.object(player_fight, "NatalTreasure", Natal), patch.object(
@@ -63,10 +71,65 @@ def test_player_attribute_builder_uses_explicit_item_provider():
             item_provider=lookup,
             pet_provider=pet_lookup,
             attribute_provider=attribute_lookup,
+            natal_provider=natal_lookup,
         )
 
     assert calls == [7]
     assert pet_calls == ["u"]
     assert attribute_calls == [("u", 0.5, True)]
+    assert natal_calls == ["u"]
+    assert result["本命法宝"]["name"] == "本命法宝"
     assert result["宠物"]["name"] == "灵宠"
     assert result["法器"]["mp_buff"] == 3
+
+
+def test_rift_natal_provider_reads_awakened_row_without_schema_mutation(tmp_path):
+    database = tmp_path / "player.db"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "CREATE TABLE natal_treasure (user_id TEXT PRIMARY KEY, form INTEGER, name TEXT, level TEXT, soul_summon_count TEXT)"
+        )
+        connection.execute(
+            "INSERT INTO natal_treasure VALUES (?, ?, ?, ?, ?)",
+            ("u", 1, "玄一", "3", '{"ally": 2}'),
+        )
+        before = connection.execute(
+            "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
+        ).fetchall()
+
+    with patch.object(riftmake, "get_paths", return_value=SimpleNamespace(player_db=database)):
+        result = riftmake.get_rift_battle_natal_data("u")
+
+    with sqlite3.connect(database) as connection:
+        after = connection.execute(
+            "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
+        ).fetchall()
+    assert result["form"] == 1
+    assert result["level"] == 3
+    assert result["soul_summon_count"] == {"ally": 2}
+    assert before == after
+
+
+def test_rift_natal_provider_returns_none_for_unawakened_or_missing_table(tmp_path):
+    database = tmp_path / "player.db"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "CREATE TABLE natal_treasure (user_id TEXT PRIMARY KEY, form INTEGER)"
+        )
+        connection.execute("INSERT INTO natal_treasure VALUES (?, ?)", ("u", 0))
+
+    with patch.object(riftmake, "get_paths", return_value=SimpleNamespace(player_db=database)):
+        assert riftmake.get_rift_battle_natal_data("u") is None
+
+    missing = tmp_path / "missing.db"
+    with patch.object(riftmake, "get_paths", return_value=SimpleNamespace(player_db=missing)):
+        assert riftmake.get_rift_battle_natal_data("u") is None
+
+    empty = tmp_path / "empty.db"
+    sqlite3.connect(empty).close()
+    with patch.object(riftmake, "get_paths", return_value=SimpleNamespace(player_db=empty)):
+        assert riftmake.get_rift_battle_natal_data("u") is None
+    with sqlite3.connect(empty) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table'"
+        ).fetchone()[0] == 0

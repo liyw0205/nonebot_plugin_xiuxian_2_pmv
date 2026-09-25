@@ -4403,3 +4403,10 @@ Boss/宝物资产查询 provider，只返回物品/灵石 delta 与 message outc
 `get_final_attributes` 作为 `attribute_provider`，并透传 `ratio` 与 `include_current=True`；未注入时保留旧属性计算 fallback。
 本片只拆出最终属性只读查询边界，其内部 buff/传承读取仍是兼容 provider，不新增 migration。Rift/Boss asset/source 聚焦回归 `132 passed`；
 compileall、architecture、progress、inventory `--check` 与 `git diff --check` 通过。下一步继续拆出下一个可验证的玩家资产只读 provider。
+
+2026-09-26 rift Boss natal-treasure read provider：Rift 玩家战斗快照 provider 显式注入
+`get_rift_battle_natal_data`，从既有 `player_db.natal_treasure` 读取本命法宝快照；查询使用
+`DatabaseUnitOfWork(read_only=True)`，缺表、缺列、未觉醒记录和只读 SQLite 错误均返回 `None`，不会建表、补列或创建默认记录。
+`get_players_attributes` 保留旧 `NatalTreasure` fallback，故本片只建立可验证的本命法宝只读 provider 边界，不宣称底层本命法宝资产迁移完成；
+Rift/Boss asset/source 聚焦测试覆盖 provider 透传、已觉醒读取、未觉醒/缺表兼容和 schema 不变性。下一步审计
+`get_final_attributes` 内部残留的 buff/传承读取，继续拆分真正的只读 provider。

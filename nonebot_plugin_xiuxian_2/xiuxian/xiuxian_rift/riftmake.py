@@ -1,4 +1,8 @@
+import json
 import random
+import sqlite3
+from ...infrastructure.database import DatabaseUnitOfWork
+from ...paths import get_paths
 from .riftconfig import get_rift_config
 from ..xiuxian_utils.utils import number_to
 from .jsondata import read_f
@@ -227,7 +231,43 @@ def get_rift_battle_player_assets(user_id):
         item_provider=items.get_data_by_item_id,
         pet_provider=get_user_pet_for_battle,
         attribute_provider=get_final_attributes,
+        natal_provider=get_rift_battle_natal_data,
     )
+
+
+def get_rift_battle_natal_data(user_id):
+    """Read an existing natal treasure row without creating schema or defaults."""
+    database = get_paths().player_db
+    if not database.exists():
+        return None
+    try:
+        with DatabaseUnitOfWork(database, read_only=True) as uow:
+            table = uow.query_one(
+                "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='natal_treasure'"
+            )
+            if table is None:
+                return None
+            columns = {
+                str(row["name"])
+                for row in uow.query_all("PRAGMA table_info(natal_treasure)")
+            }
+            if not {"user_id", "form"}.issubset(columns):
+                return None
+            row = uow.query_one(
+                "SELECT * FROM natal_treasure WHERE user_id=?", (str(user_id),)
+            )
+    except (OSError, ValueError, sqlite3.Error):
+        return None
+    if row is None or int(row.get("form", 0) or 0) == 0:
+        return None
+    result = dict(row)
+    for key, value in list(result.items()):
+        if isinstance(value, str):
+            try:
+                result[key] = json.loads(value)
+            except (TypeError, ValueError):
+                pass
+    return result
 
 
 async def get_boss_battle_info(user_info, rift_rank, bot_id, persist=True):

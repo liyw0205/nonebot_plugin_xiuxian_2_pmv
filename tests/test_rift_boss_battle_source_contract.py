@@ -51,3 +51,20 @@ def test_rift_boss_player_snapshot_wires_item_lookup_provider():
     assert "buffs[\"宠物\"] = pet_provider(user_id)" in player_fight
     assert "final_attr = attribute_provider(user_id, ratio=ratio, include_current=True)" in player_fight
     assert "attribute_provider=get_final_attributes" in source
+
+
+def test_rift_boss_player_snapshot_wires_read_only_natal_provider():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_rift/riftmake.py"
+    ).read_text(encoding="utf-8")
+    player_fight = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/player_fight.py"
+    ).read_text(encoding="utf-8")
+    provider_start = source.index("def get_rift_battle_natal_data")
+    provider = source[provider_start:source.index("async def get_boss_battle_info", provider_start)]
+    assert "natal_provider=get_rift_battle_natal_data" in source
+    assert "natal_provider=None" in player_fight
+    assert "natal_data = natal_provider(user_id)" in player_fight
+    assert "DatabaseUnitOfWork(database, read_only=True)" in provider
+    assert "CREATE TABLE" not in provider
+    assert "ALTER TABLE" not in provider
