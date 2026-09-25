@@ -8,7 +8,7 @@ from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig, convert_rank, base_rank
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
-from ...features.rift.domain import RiftDamageEventResolver
+from ...features.rift.domain import RiftBossBattleResolver, RiftDamageEventResolver
 
 _sql_message_instance = None
 xiuxian_impart = XIUXIAN_IMPART_BUFF()
@@ -198,65 +198,34 @@ STORY = {
 }
 
 
-async def get_boss_battle_info(user_info, rift_rank, bot_id, persist=True):
-    """Roll a Boss battle, optionally returning a persistence-free outcome."""
-    boss_data = STORY['战斗']['Boss战斗']["Boss数据"]
-    base_exp = user_info['exp']
-    boss_hp = int(base_exp * random.choice(boss_data["hp"]) * 10)
-    boss_info = {
-        "name": random.choice(boss_data["name"]),
-        "气血": boss_hp,
-        "总血量": boss_hp,
-        "攻击": int(base_exp * random.choice(boss_data["atk"])),
-        "真元": base_exp * boss_data["mp"],
-        "jj":"遁一境",
-        'stone': 1
-    }
-
-
-    result, victor, bossinfo_new, status_list = await Boss_fight(
-        user_info['user_id'], boss_info, type_in=0 if not persist else 2,
-        bot_id=bot_id, return_status=True,
+def _boss_battle_resolver() -> RiftBossBattleResolver:
+    return RiftBossBattleResolver(
+        boss_config=STORY['战斗']['Boss战斗'],
+        battle_runner=Boss_fight,
+        rank_score=lambda level: convert_rank(level)[0],
+        level_power=lambda level: jsondata.level_data()[level]["power"],
+        max_exp_factor=XiuConfig().closing_exp_upper_limit * 0.1,
+        exp_reward=percent_exp_reward,
+        format_number=number_to,
     )
-    final_hp, final_mp = int(user_info['hp']), int(user_info['mp'])
-    for status in status_list:
-        for attr in status.values():
-            if str(attr.get("user_id")) != str(user_info['user_id']):
-                continue
-            hp_multiplier = attr.get("hp_multiplier", 1) or 1
-            mp_multiplier = attr.get("mp_multiplier", 1) or 1
-            final_hp = max(1, int(attr.get("hp", final_hp) / hp_multiplier))
-            final_mp = max(1, int(attr.get("mp", final_mp) / mp_multiplier))
-    outcome = {
-        "delta": {"hp": final_hp - int(user_info['hp']), "mp": final_mp - int(user_info['mp'])},
-        "statistics": {"秘境打怪": 1},
-    }
 
-    if victor == "群友赢了":  # 获胜
-        user_rank = convert_rank('练气境圆满')[0] - convert_rank(user_info['level'])[0]
-        success_info = STORY['战斗']['Boss战斗']['success']
-        msg = random.choice(success_info['desc']).format(boss_info['name'])
-        level = user_info['level'][:3] + '初期'
-        max_exp = int(jsondata.level_data()[level]["power"] * XiuConfig().closing_exp_upper_limit * 0.1)
-        give_exp = percent_exp_reward(
-            user_info['exp'],
-            float(random.choice(success_info["give"]["exp"])),
-            user_info.get('level'),
-            apply_rank_suppress=False,
-            anchor="gap",
-        )
-        give_exp = min(give_exp, max_exp)
-        give_stone = (rift_rank + user_rank) * success_info["give"]["stone"]
-        outcome["delta"].update({"exp": give_exp, "stone": give_stone})
-        if persist:
-            _sql_message().update_exp(user_info['user_id'], give_exp)
-            _sql_message().update_ls(user_info['user_id'], give_stone, 1)
-        msg += f"获得了修为：{number_to(give_exp)}点，灵石：{number_to(give_stone)}枚！"
-    else:  # 输了
-        fail_info = STORY['战斗']['Boss战斗']["fail"]
-        msg = random.choice(fail_info['desc']).format(boss_info['name'])
-    outcome["message"] = msg
-    return (result, msg) if persist else (result, msg, outcome)
+
+async def get_boss_battle_info(user_info, rift_rank, bot_id, persist=True):
+    """Compatibility adapter for the feature-owned Boss battle resolver."""
+    event = await _boss_battle_resolver().roll(
+        user_info,
+        rift_rank,
+        bot_id,
+        random_source=random,
+        battle_mode=2 if persist else 0,
+    )
+    if persist and event.victory:
+        delta = event.outcome["delta"]
+        _sql_message().update_exp(user_info['user_id'], delta.get("exp", 0))
+        _sql_message().update_ls(user_info['user_id'], delta.get("stone", 0), 1)
+    if persist:
+        return event.battle_result, event.message
+    return event.battle_result, event.message, event.outcome
 
 
 def get_dxsj_info(rift_type, user_info):

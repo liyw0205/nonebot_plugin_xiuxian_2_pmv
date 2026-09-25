@@ -32,7 +32,7 @@ from ..xiuxian_utils.utils import (
 from .riftconfig import get_rift_config
 from .jsondata import save_rift_data, read_rift_data
 from ...features.rift.application import RiftApplication
-from ...features.rift.domain import RiftDamageEventResolver
+from ...features.rift.domain import RiftBossBattleResolver, RiftDamageEventResolver
 
 from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_map import (
@@ -40,9 +40,11 @@ from ..xiuxian_map import (
     get_random_trial_node,
     get_random_trial_nodes_by_realm,
 )
+from ..xiuxian_utils.player_fight import Boss_fight
+from . import jsondata
 from .riftmake import (
     STORY, Rift, get_rift_type, get_story_type, NONEMSG, get_battle_type,
-    get_boss_battle_info, get_treasure_info
+    get_treasure_info
 )
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 
@@ -52,6 +54,15 @@ rift_application = RiftApplication(
     get_paths().player_db,
     damage_event_resolver=RiftDamageEventResolver(
         battle_config=STORY['战斗'],
+        exp_reward=percent_exp_reward,
+        format_number=number_to,
+    ),
+    boss_battle_resolver=RiftBossBattleResolver(
+        boss_config=STORY['战斗']['Boss战斗'],
+        battle_runner=Boss_fight,
+        rank_score=lambda level: convert_rank(level)[0],
+        level_power=lambda level: jsondata.level_data()[level]["power"],
+        max_exp_factor=XiuConfig().closing_exp_upper_limit * 0.1,
         exp_reward=percent_exp_reward,
         format_number=number_to,
     ),
@@ -712,8 +723,8 @@ async def _roll_rift_event(user_info, rift_info, bot_id, operation_id=""):
                 )
                 result_msg = outcome["message"]
             elif battle_type == "Boss战斗":
-                battle_result, result_msg, outcome = await get_boss_battle_info(
-                    user_info, rift_rank, bot_id, persist=False
+                battle_result, result_msg, outcome = await rift_application.roll_boss_battle(
+                    user_info, rift_rank, bot_id, random_source=random
                 )
         elif rift_type == "宝物":
             result_name, result_msg, outcome = get_treasure_info(
@@ -729,8 +740,8 @@ async def _roll_rift_boss_event(user_info, rift_rank, bot_id, operation_id):
     random_state = random.getstate()
     random.seed(_rift_operation_seed(operation_id, "demon-token"))
     try:
-        return await get_boss_battle_info(
-            user_info, rift_rank, bot_id, persist=False
+        return await rift_application.roll_boss_battle(
+            user_info, rift_rank, bot_id, random_source=random
         )
     finally:
         random.setstate(random_state)

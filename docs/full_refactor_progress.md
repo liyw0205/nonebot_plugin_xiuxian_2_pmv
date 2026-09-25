@@ -4368,3 +4368,10 @@ reconcile clean（operations/outbox/dead events 均为 `0`）。本轮 pytest ba
 回归后 Rift 聚焦回归 `122 passed`；compileall、architecture、progress、inventory `--check` 与 `git diff --check` 通过，无新增 migration。
 隔离五库 recovery 仍需在本片验收阶段完成；专用 pytest basetemp 与 compileall 字节码缓存会在 recovery 后清理。下一步审计 Boss battle outcome 的
 战斗资产 provider，保持 `Boss_fight` 兼容实现为显式边界。
+
+2026-09-26 rift Boss-battle outcome cutover：真实普通秘境事件和斩妖令事件改经
+`RiftApplication.roll_boss_battle -> RiftBossBattleResolver`；resolver 接收显式 `Boss_fight` runner、Boss 配置、境界/经验 provider 和 RandomSource，
+固定以 `type_in=0` 运行，只返回战斗结果及 delta/message outcome，真实事务仍由 settlement/key-event/demon-token repositories 提交。旧
+`get_boss_battle_info(persist=True)` 仅保留兼容适配和显式经验/灵石写入，Boss/宝物资产读取与 `Items` provider 尚未迁移。Boss/domain/application/source
+与 Rift 聚焦回归 `125 passed`；compileall、architecture、progress、inventory `--check` 与 `git diff --check` 通过，无新增 migration。隔离五库
+recovery 将在本片验收后执行并清理临时产物；下一步继续审计 Boss battle runner 的资产查询边界或宝物 resolver，不把 provider 注入误算为底层资产迁移完成。

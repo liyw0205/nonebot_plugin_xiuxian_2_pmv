@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping, Protocol, Sequence
+from typing import Any, Awaitable, Callable, Mapping, Protocol, Sequence
 
 
 @dataclass(frozen=True)
@@ -119,7 +119,114 @@ class RiftDamageEventResolver:
         return RiftDamageEvent(message, delta)
 
 
+@dataclass(frozen=True)
+class RiftBossBattleEvent:
+    battle_result: Any
+    message: str
+    outcome: dict[str, Any]
+    victory: bool
+
+
+class RiftBossBattleResolver:
+    """Run a Rift Boss battle and return only its settlement outcome."""
+
+    def __init__(
+        self,
+        *,
+        boss_config: Mapping[str, Any],
+        battle_runner: Callable[..., Awaitable[Any]],
+        rank_score: Callable[[str], int],
+        level_power: Callable[[str], Any],
+        max_exp_factor: float,
+        exp_reward: Callable[..., int],
+        format_number: Callable[[Any], str],
+    ) -> None:
+        self.boss_config = boss_config
+        self.battle_runner = battle_runner
+        self.rank_score = rank_score
+        self.level_power = level_power
+        self.max_exp_factor = float(max_exp_factor)
+        self.exp_reward = exp_reward
+        self.format_number = format_number
+
+    async def roll(
+        self,
+        user_info: Mapping[str, Any],
+        rift_rank: int,
+        bot_id: Any,
+        *,
+        random_source: RiftRandomSource,
+        battle_mode: int = 0,
+    ) -> RiftBossBattleEvent:
+        boss_data = self.boss_config.get("Boss数据")
+        if not isinstance(boss_data, Mapping):
+            raise ValueError("rift Boss configuration is incomplete")
+        base_exp = user_info["exp"]
+        boss_hp = int(base_exp * random_source.choice(boss_data["hp"]) * 10)
+        boss_info = {
+            "name": random_source.choice(boss_data["name"]),
+            "气血": boss_hp,
+            "总血量": boss_hp,
+            "攻击": int(base_exp * random_source.choice(boss_data["atk"])),
+            "真元": base_exp * boss_data["mp"],
+            "jj": "遁一境",
+            "stone": 1,
+        }
+        result, victor, _, status_list = await self.battle_runner(
+            user_info["user_id"],
+            boss_info,
+            type_in=int(battle_mode),
+            bot_id=bot_id,
+            return_status=True,
+        )
+        final_hp, final_mp = int(user_info["hp"]), int(user_info["mp"])
+        for status in status_list:
+            for attr in status.values():
+                if str(attr.get("user_id")) != str(user_info["user_id"]):
+                    continue
+                hp_multiplier = attr.get("hp_multiplier", 1) or 1
+                mp_multiplier = attr.get("mp_multiplier", 1) or 1
+                final_hp = max(1, int(attr.get("hp", final_hp) / hp_multiplier))
+                final_mp = max(1, int(attr.get("mp", final_mp) / mp_multiplier))
+        outcome: dict[str, Any] = {
+            "delta": {
+                "hp": final_hp - int(user_info["hp"]),
+                "mp": final_mp - int(user_info["mp"]),
+            },
+            "statistics": {"秘境打怪": 1},
+        }
+        victory = victor == "群友赢了"
+        if victory:
+            user_rank = self.rank_score("练气境圆满") - self.rank_score(str(user_info["level"]))
+            success_info = self.boss_config["success"]
+            boss_name = str(boss_info["name"])
+            message = str(random_source.choice(success_info["desc"])).format(boss_name)
+            level = str(user_info["level"])[:3] + "初期"
+            max_exp = int(self.level_power(level) * self.max_exp_factor)
+            give_exp = self.exp_reward(
+                user_info["exp"],
+                float(random_source.choice(success_info["give"]["exp"])),
+                user_info.get("level"),
+                apply_rank_suppress=False,
+                anchor="gap",
+            )
+            give_exp = min(give_exp, max_exp)
+            give_stone = (int(rift_rank) + user_rank) * int(success_info["give"]["stone"])
+            outcome["delta"].update({"exp": give_exp, "stone": give_stone})
+            message += (
+                f"获得了修为：{self.format_number(give_exp)}点，"
+                f"灵石：{self.format_number(give_stone)}枚！"
+            )
+        else:
+            fail_info = self.boss_config["fail"]
+            message = str(random_source.choice(fail_info["desc"])).format(boss_info["name"])
+        outcome["message"] = message
+        return RiftBossBattleEvent(result, message, outcome, victory)
+
+
 __all__ = [
+    "RiftBossBattleEvent",
+    "RiftBossBattleResolver",
     "RiftDamageEvent",
     "RiftDamageEventResolver",
     "RiftOperation",

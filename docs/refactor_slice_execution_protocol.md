@@ -162,3 +162,9 @@ love-sand schema 边界、Rift speedup 和 Rift world-generation schema 边界�
 返回可持久化的 delta/message DTO，不读取或写入用户状态。旧 `get_dxsj_info` 仅保留兼容适配，Boss/宝物随机与资产解析不在本片迁移。
 damage domain/application/source 与 Rift 回归 `122 passed`，compileall、architecture、progress、inventory、diff check 均通过；无新增 migration。
 下一片继续审计 Boss battle outcome 的战斗资产 provider，避免把 `Boss_fight` 或宝物 `Items` 读取误算成 feature-owned。
+
+`rift Boss-battle outcome`：真实普通秘境事件和斩妖令事件改经
+`RiftApplication.roll_boss_battle -> RiftBossBattleResolver`；resolver 接收显式 `Boss_fight` runner、Boss 配置、境界/经验 provider 与 RandomSource，
+固定以 `type_in=0` 运行并只返回战斗结果及 delta/message outcome。旧 `get_boss_battle_info(persist=True)` 仅保留兼容适配和显式经验/灵石写入；
+不迁移 Boss/宝物资产读取或 `Items` provider。Boss/domain/application/source 与 Rift 回归 `125 passed`，compileall、architecture、progress、inventory、
+diff check 均通过；无新增 migration。下一片审计 Boss battle runner 的资产查询边界或宝物 resolver，继续保持旧战斗实现为显式 provider。

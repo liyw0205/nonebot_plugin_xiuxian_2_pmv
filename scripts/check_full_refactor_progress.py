@@ -85,6 +85,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "async def _roll_rift_boss_event", rift_facade.index("async def _roll_rift_event")
         )
     ]
+    rift_boss_handler = rift_facade[
+        rift_facade.index("async def _roll_rift_boss_event") : rift_facade.index(
+            "@complete_rift.handle", rift_facade.index("async def _roll_rift_boss_event")
+        )
+    ]
     rift_jsondata = (PACKAGE / "xiuxian" / "xiuxian_rift" / "jsondata.py").read_text(encoding="utf-8")
     rift_application = (PACKAGE / "features" / "rift" / "application.py").read_text(encoding="utf-8")
     rift_domain = (PACKAGE / "features" / "rift" / "domain.py").read_text(encoding="utf-8")
@@ -404,7 +409,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "damage_event_resolver_owned": "class RiftDamageEventResolver" in rift_domain and "RiftDamageEventResolver" in rift_application,
             "damage_event_is_persistence_free": "update_exp" not in rift_domain and "update_ls" not in rift_domain,
             "legacy_damage_event_disabled": "get_dxsj_info(" not in rift_event_handler,
-            "status": "world_generation_termination_key_event_settlement_entry_speedup_demon_token_damage_event_cutover_with_remaining_rift_compatibility",
+            "boss_battle_application_owned": "rift_application.roll_boss_battle(" in rift_event_handler and "rift_application.roll_boss_battle(" in rift_boss_handler,
+            "boss_battle_resolver_owned": "class RiftBossBattleResolver" in rift_domain and "RiftBossBattleResolver" in rift_application,
+            "boss_battle_is_persistence_free": "update_exp" not in rift_domain and "update_ls" not in rift_domain and "battle_mode=0" in rift_application,
+            "legacy_boss_battle_disabled": all("get_boss_battle_info(" not in handler for handler in (rift_event_handler, rift_boss_handler)),
+            "status": "world_generation_termination_key_event_settlement_entry_speedup_demon_token_damage_event_boss_battle_cutover_with_remaining_rift_compatibility",
         },
         "back": {
             "cultivation_item_application_owned": "back_application.cultivation_item(" in back_facade and "_cultivation_item_application().apply(" in back_util_facade,
