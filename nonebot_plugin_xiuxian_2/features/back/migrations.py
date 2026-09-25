@@ -25,6 +25,15 @@ def apply_backpack_repair(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_pet_egg_use(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS batch_pet_egg_use_operations("
+        "operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,item_id INTEGER NOT NULL,"
+        "quantity INTEGER NOT NULL,pets_json TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
 def apply_alchemy(uow: DatabaseUnitOfWork) -> None:
     uow.execute(
         "CREATE TABLE IF NOT EXISTS alchemy_operations("
@@ -140,4 +149,4 @@ def apply_equipment(uow: DatabaseUnitOfWork) -> None:
         uow.execute("ALTER TABLE equipment_operations ADD COLUMN payload TEXT NOT NULL DEFAULT ''")
 
 
-__all__ = ["apply_alchemy", "apply_back", "apply_backpack_repair", "apply_blessed_flag_replace", "apply_breakthrough_rate_item", "apply_cultivation_item", "apply_equipment", "apply_lottery_talisman", "apply_permanent_atk_item", "apply_recovery_item", "apply_skill_learning", "apply_stone_reward", "apply_three_cultivation_pill", "apply_unbind"]
+__all__ = ["apply_alchemy", "apply_back", "apply_backpack_repair", "apply_blessed_flag_replace", "apply_breakthrough_rate_item", "apply_cultivation_item", "apply_equipment", "apply_lottery_talisman", "apply_permanent_atk_item", "apply_pet_egg_use", "apply_recovery_item", "apply_skill_learning", "apply_stone_reward", "apply_three_cultivation_pill", "apply_unbind"]

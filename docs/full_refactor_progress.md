@@ -4097,3 +4097,13 @@ game/player/trade/impart/message `117/24/7/1/1`，`back.011` 仅路由到 game D
 完成 `148` 项迁移，`back.014` 仅路由到 game DB；backup/restore dry-run/restore、reconcile 均通过，
 `clean=true` 且 operations/outbox/dead_events 均为 `0`。临时 recovery 数据、pytest cache、`.pyc`
 和 `__pycache__` 已清理。背包动作剩余重点为宠物蛋、通用物品批处理及 accessory 兼容边界。
+
+2026-09-25 back pet-egg feature-owned cutover：宠物蛋真实 handler 已切换到
+`BackApplication.use_pet_eggs -> PetEggApplication -> PetEggUseSqlRepository`；旧
+`BatchItemUseService` 仅保留显式兼容包装。新增 `back.015` game DB 启动迁移创建
+`batch_pet_egg_use_operations`，跨 game/player 的 attached UoW 原子扣蛋、快照校验、宠物写入、活动宠物更新、
+重复请求、operation conflict、容量拒绝和异常回滚保持一致；同时修正 handler 向 application 传递
+`pets=rolled_pets` 的参数契约。新增 application/repository、缺表拒绝、迁移路由和 wiring 回归；背包/宠物/source
+聚焦 `224 passed`。五库 recovery 完成 `149` 项迁移，`back.015` 仅路由到 game DB；backup/restore
+dry-run/restore、reconcile 均通过，`clean=true` 且 operations/outbox/dead_events 均为 `0`。临时 recovery 数据、
+pytest cache、`.pyc` 和 `__pycache__` 已清理。背包剩余重点为通用物品批处理及 accessory 兼容边界。

@@ -1582,7 +1582,7 @@ async def use_pet_egg_item(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         operation_id=_batch_item_use_operation_id(event, user_id, item_id),
         user_id=str(user_id), item_id=item_id, quantity=use_num,
         expected_active_uid=expected_active_uid, expected_pet_uids=expected_pet_uids,
-        rolled_pets=rolled_pets, bag_limit=PET_BAG_LIMIT,
+        pets=rolled_pets, bag_limit=PET_BAG_LIMIT,
     )
     if not result.succeeded:
         await handle_send(bot, event, _back_op_fail_msg(result, action="使用宠物蛋"))

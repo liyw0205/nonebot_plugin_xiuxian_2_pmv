@@ -3,12 +3,17 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+import sqlite3
 
 import nonebot
 
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back.transaction_service import BatchItemUseService
+from nonebot_plugin_xiuxian_2.features.back.pet_egg_repository import PetEggUseSqlRepository
+from nonebot_plugin_xiuxian_2.features.back.migrations import apply_pet_egg_use
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.plugin import build_migrations, migrations_for_database
 from tests.test_db_backend import db_backend
 
 
@@ -22,6 +27,40 @@ class BatchItemUseServiceTests(unittest.TestCase):
         source = Path("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_back/__init__.py").read_text(encoding="utf-8")
         handler = source[source.index("async def use_pet_egg_item"):source.index("async def use_pet_eggs") if "async def use_pet_eggs" in source else len(source)]
         self.assertIn("back_application.use_pet_eggs(", handler)
+        self.assertIn("pets=rolled_pets", handler)
+
+    def test_legacy_service_is_only_a_compatibility_wrapper(self):
+        self.assertTrue(issubclass(BatchItemUseService, PetEggUseSqlRepository))
+
+    def test_default_repository_requires_startup_migration(self):
+        repository = PetEggUseSqlRepository(self.game_database, self.player_database)
+        with self.assertRaises(sqlite3.OperationalError):
+            repository.use_pet_eggs(
+                "missing-schema", "u", 9001, 2, "old", ["old"], self.pets, bag_limit=10
+            )
+        with DatabaseUnitOfWork(self.game_database) as uow:
+            self.assertIsNone(
+                uow.query_one(
+                    "SELECT name FROM sqlite_master WHERE name='batch_pet_egg_use_operations'"
+                )
+            )
+
+    def test_migration_is_routed_only_to_game_database(self):
+        with DatabaseUnitOfWork(self.game_database) as uow:
+            apply_pet_egg_use(uow)
+        result = PetEggUseSqlRepository(self.game_database, self.player_database).use_pet_eggs(
+            "migrated-operation", "u", 9001, 2, "old", ["old"], self.pets, bag_limit=10
+        )
+        self.assertEqual(result.status, "applied")
+        migrations = build_migrations()
+        routed = {
+            key: {migration.version for migration in migrations_for_database(migrations, key)}
+            for key in ("game_db", "player_db", "trade_db", "impart_db", "message_db")
+        }
+        self.assertIn("back.015", routed["game_db"])
+        for key in routed:
+            if key != "game_db":
+                self.assertNotIn("back.015", routed[key])
 
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
