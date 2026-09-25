@@ -140,6 +140,16 @@ def test_boss_buff_generation_uses_injected_random_source():
     assert source.calls
 
 
+def test_rift_boss_status_provider_does_not_mutate_boss_snapshot():
+    boss = {"name": "墨蛟", "气血": 100, "真元": 50}
+    status = [{"墨蛟": {"hp": 1, "mp": 2}}]
+
+    result = riftmake.ignore_rift_battle_boss_status_update(boss, status)
+
+    assert result is None
+    assert boss == {"name": "墨蛟", "气血": 100, "真元": 50}
+
+
 def test_rift_natal_provider_reads_awakened_row_without_schema_mutation(tmp_path):
     database = tmp_path / "player.db"
     with sqlite3.connect(database) as connection:

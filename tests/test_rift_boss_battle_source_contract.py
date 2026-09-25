@@ -60,7 +60,7 @@ def test_rift_boss_engine_dependencies_are_explicitly_injected():
     assert "boss_attribute_provider=get_boss_attributes" in facade
     assert "boss_buff_provider=generate_boss_buff" in facade
     assert "boss_skill_provider=get_rift_battle_boss_skill_provider" in facade
-    assert "boss_status_updater=update_data_boss_status" in facade
+    assert "boss_status_updater=ignore_rift_battle_boss_status_update" in facade
 
 
 def test_rift_boss_skill_asset_provider_avoids_legacy_global_cache():
@@ -77,6 +77,17 @@ def test_rift_boss_skill_asset_provider_avoids_legacy_global_cache():
     assert "skill_data = skill_data_provider() or {}" in battle
     assert "skill_path.open" in provider
     assert "skill_data_cache" not in provider
+
+
+def test_rift_boss_status_writeback_is_explicitly_disabled():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_rift/riftmake.py"
+    ).read_text(encoding="utf-8")
+    provider_start = source.index("def ignore_rift_battle_boss_status_update")
+    provider = source[provider_start:source.index("async def get_boss_battle_info", provider_start)]
+    assert "return None" in provider
+    assert "boss[" not in provider
+    assert "boss_status_updater=ignore_rift_battle_boss_status_update" in source
 
 
 def test_rift_boss_buff_generation_accepts_an_explicit_random_source():

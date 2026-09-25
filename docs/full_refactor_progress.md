@@ -4442,3 +4442,5 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-09-26 rift Boss skill JSON read provider：新增 `get_rift_battle_boss_skill_data`，Rift Boss 技能 provider 每次从当前 `data/xiuxian/功法/boss神通.json` 读取，不使用 `player_fight` 的旧全局 `skill_data_cache`；文件缺失、损坏或格式不正确时返回空映射，既不写回也不生成缓存文件。旧 `generate_boss_skill` 调用仍保留 fallback，故本片只完成技能资产的显式只读边界，尚未迁移技能规则本身或战斗随机源。provider/source/进度检查回归 `27 passed`，下一步处理 Boss Buff 随机源注入。
 
 2026-09-26 rift Boss Buff random-source boundary：`generate_boss_buff` 增加可选 `random_source`，Rift Boss resolver 将本次操作的 RandomSource 显式传入；旧调用仍使用标准库随机 fallback，其他战斗系统随机逻辑未扩大改动范围。测试确认注入源生效且全局 `random` 不被调用，进度检查器新增 `boss_battle_buff_random_source_wired`。下一步审计 Boss 战斗状态写回和剩余兼容资产读取。
+
+2026-09-26 rift Boss status-writeback isolation：Rift Boss resolver 注入 `ignore_rift_battle_boss_status_update`，秘境战斗不再修改本地 Boss 快照；结算只消费 `status_list` 生成玩家 HP/MP delta，仍固定 `type_in=0`，不会触发玩家状态写回。世界 Boss、塔和地图等旧 `Boss_fight` 调用继续使用原状态更新 fallback。本片新增状态快照不变测试和进度门禁，下一步处理 Boss 战斗剩余兼容资产读取。

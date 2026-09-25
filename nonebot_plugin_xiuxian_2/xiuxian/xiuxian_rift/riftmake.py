@@ -15,7 +15,6 @@ from ..xiuxian_utils.player_fight import (
     get_boss_attributes,
     get_players_attributes,
     get_user_pet_for_battle,
-    update_data_boss_status,
 )
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig, convert_rank, base_rank
@@ -60,6 +59,11 @@ def get_rift_battle_boss_skill_provider(enemy, skills):
         skills,
         skill_data_provider=get_rift_battle_boss_skill_data,
     )
+
+
+def ignore_rift_battle_boss_status_update(_boss, _status_list):
+    """Keep Rift battle snapshots immutable; settlement consumes status_list."""
+    return None
 
 NONEMSG = [
     "道友在秘境中晕头转向，等到清醒时已被秘境踢出，毫无所获！",
@@ -245,7 +249,7 @@ def _boss_battle_resolver() -> RiftBossBattleResolver:
         boss_attribute_provider=get_boss_attributes,
         boss_buff_provider=generate_boss_buff,
         boss_skill_provider=get_rift_battle_boss_skill_provider,
-        boss_status_updater=update_data_boss_status,
+        boss_status_updater=ignore_rift_battle_boss_status_update,
         rank_score=lambda level: convert_rank(level)[0],
         level_power=lambda level: jsondata.level_data()[level]["power"],
         max_exp_factor=XiuConfig().closing_exp_upper_limit * 0.1,
