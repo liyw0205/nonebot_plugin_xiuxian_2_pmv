@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from ....infrastructure.database import DatabaseUnitOfWork
 from ....plugin import apply_platform_schema
@@ -24,6 +25,18 @@ class CooldownRepo:
 
 
 class RiftApplicationTest(unittest.TestCase):
+    def test_default_application_lazily_constructs_legacy_repository(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch("nonebot_plugin_xiuxian_2.features.rift.repository.LegacyRiftRepository") as legacy:
+                app = RiftApplication(
+                    Path(directory) / "game.db", Path(directory) / "player.db"
+                )
+                legacy.assert_not_called()
+                assert app.legacy_repository is legacy.return_value
+                legacy.assert_called_once_with(
+                    str(Path(directory) / "game.db"), str(Path(directory) / "player.db")
+                )
+
     def test_enter_is_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:
             database = Path(directory) / "game.db"

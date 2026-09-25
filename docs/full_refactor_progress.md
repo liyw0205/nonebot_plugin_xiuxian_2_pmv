@@ -4350,3 +4350,13 @@ speedup/source/progress 与 Rift 全聚焦回归 `118 passed`；compileall、arc
 隔离五库 recovery 完成 `172` 项迁移，路由 `game/player/trade/impart/message = 137/31/7/1/1`，backup/restore dry-run/restore、readiness、
 migration dry-run 和 reconcile clean（operations/outbox/dead events 均为 `0`）。本轮测试/recovery/receipt/字节码缓存已清理，保留 `.venv`、`.git`、
 `data/`、运行数据库/备份和用户原有 Boss JSON 改动。Rift 剩余兼容边界转为显式 repository/旧 JSON 与故事/资产逻辑，不将 Rift 整体宣告完成。
+
+2026-09-26 rift application compatibility construction cleanup：`RiftApplication` 默认实例化不再无条件构造
+`LegacyRiftRepository`；兼容 repository 改为属性首次访问时惰性加载，显式注入的 repository 和既有
+`application.legacy_repository.invoke` 测试 seam 保持不变。真实默认的 generation/entry/termination/key-event/settlement/speedup/demon-token
+路径仍分别使用 feature-owned SQL repository，旧 transaction service 只保留显式兼容回退，不在启动阶段加载。Rift feature、旧 service、source
+回归共 `118 passed`；compileall、architecture、progress、inventory `--check` 与 `git diff --check` 通过。无新增 migration；隔离五库 recovery
+完成 `172` 项迁移，路由 `game/player/trade/impart/message = 137/31/7/1/1`，backup/restore dry-run/restore、migration dry-run、readiness 和
+reconcile clean（operations/outbox/dead events 均为 `0`）。本轮 pytest basetemp、recovery 数据、receipt 和独立字节码缓存已删除，磁盘仍约
+`24 GB` 可用、可用 RAM 约 `1.3 GB`；保留 `.venv`、`.git`、`data/`、运行数据库/备份和用户原有 Boss JSON 改动。下一步按 6.2 目标 5
+审计一个独立的 Rift 故事/资产只读边界，再决定是否将随机 outcome 生成移入 feature-owned domain；不把惰性 adapter cleanup 或 facade 存在解释为底层迁移完成。

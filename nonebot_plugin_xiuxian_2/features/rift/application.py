@@ -9,7 +9,7 @@ from .cooldown_repository import RiftCooldownSqlRepository
 from .entry_repository import RiftEntrySqlRepository
 from .generation_repository import RiftGenerationSqlRepository
 from .key_event_repository import RiftKeyEventSqlRepository
-from .repository import LegacyRiftRepository, RiftRepository
+from .repository import RiftRepository
 from .speedup_repository import RiftSpeedupSqlRepository
 from .termination_repository import RiftTerminationSqlRepository
 from .settlement_repository import RiftSettlementSqlRepository
@@ -32,11 +32,7 @@ class RiftApplication(LegacyApplication):
         self.game_database = str(game_database)
         self.player_database = str(player_database)
         super().__init__(game_database, repository=repository, feature="rift")
-        self.legacy_repository = (
-            repository
-            if repository is not None
-            else LegacyRiftRepository(game_database, player_database)
-        )
+        self._legacy_repository = repository
         self.demon_token_repository = demon_token_repository or RiftDemonTokenBattleSqlRepository(
             game_database, player_database, clock=clock
         )
@@ -48,6 +44,17 @@ class RiftApplication(LegacyApplication):
         )
         self.entry_repository = entry_repository or RiftEntrySqlRepository(game_database)
         self.cooldown_repository = cooldown_repository or RiftCooldownSqlRepository(game_database)
+
+    @property
+    def legacy_repository(self):
+        """Load the explicit compatibility adapter only when it is requested."""
+        if self._legacy_repository is None:
+            from .repository import LegacyRiftRepository
+
+            self._legacy_repository = LegacyRiftRepository(
+                self.game_database, self.player_database
+            )
+        return self._legacy_repository
 
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):
         repository = self.repository or self.legacy_repository
