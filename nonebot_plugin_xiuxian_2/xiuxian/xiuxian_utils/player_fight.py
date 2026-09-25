@@ -190,7 +190,8 @@ async def Boss_fight(
     return play_list, suc, boss
 
 
-def get_players_attributes(user_id, level_ratios=None):
+def get_players_attributes(user_id, level_ratios=None, *, item_provider=None):
+    item_provider = item_provider or items.get_data_by_item_id
     buff_data_info = UserBuffDate(user_id).BuffInfo
     buffs = {}
     ratio = 1
@@ -210,7 +211,7 @@ def get_players_attributes(user_id, level_ratios=None):
     for key, display_name in buff_types.items():
         item_id = buff_data_info.get(key, 0)
         if item_id != 0:
-            item_data = items.get_data_by_item_id(item_id)
+            item_data = item_provider(item_id)
             buffs[display_name] = item_data
 
     weapon_data = buffs.get('法器', {})

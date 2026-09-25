@@ -178,3 +178,7 @@ diff check 均通过；无新增 migration。下一片审计 Boss battle runner 
 `RiftBossBattleAssetProvider` 预解析玩家战斗快照，再以 `player_data` 注入 `Boss_fight`；Boss 引擎对未注入快照的旧调用仍回退
 `get_players_attributes`，因此 `Items`、功法/装备、宠物和本命法宝底层查询仍是兼容 provider，不能宣称资产迁移完成。Rift 聚焦回归 `130 passed`；
 compileall、architecture、progress、inventory 和 diff check 通过；无新增 migration。下一步继续把该 provider 的单一资产查询边界拆成可验证的只读 provider，保持 Boss 引擎与结算事务解耦。
+
+`rift Boss item lookup provider`：Rift 玩家战斗快照 provider 将 `Items.get_data_by_item_id` 作为显式
+`item_provider` 传入 `get_players_attributes`；未注入时保留旧全局 Items fallback。该切片只拆出一个只读查询边界，
+不改变 `get_final_attributes`、宠物、本命法宝或资产文件的兼容读取，也不新增 migration。

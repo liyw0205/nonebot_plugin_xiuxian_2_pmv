@@ -217,7 +217,7 @@ def _boss_battle_resolver() -> RiftBossBattleResolver:
 
 def get_rift_battle_player_assets(user_id):
     """Explicit compatibility provider for the Rift Boss player snapshot."""
-    return get_players_attributes(user_id)
+    return get_players_attributes(user_id, item_provider=items.get_data_by_item_id)
 
 
 async def get_boss_battle_info(user_info, rift_rank, bot_id, persist=True):
