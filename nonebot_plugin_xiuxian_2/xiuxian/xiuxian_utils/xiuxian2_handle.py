@@ -4055,7 +4055,7 @@ xiuxian_impart = XIUXIAN_IMPART_BUFF()
 from .buff_data import BuffJsonDate, UserBuffDate
 
 
-def calc_accessory_effects(user_id: str | int) -> dict:
+def calc_accessory_effects(user_id: str | int, *, accessory_provider=None) -> dict:
     """
     计算饰品效果：
     - 基础词条总和（气血/攻击/会心/会伤/减伤/抗暴）
@@ -4090,7 +4090,8 @@ def calc_accessory_effects(user_id: str | int) -> dict:
     }
 
     from ..xiuxian_back import AFFIX_KEY_MAP, SET_BONUS
-    acc_data = get_user_accessory_data(user_id)
+    accessory_provider = accessory_provider or get_user_accessory_data
+    acc_data = accessory_provider(user_id) or {}
     equipped = acc_data.get("equipped", {})
 
     for _, acc in equipped.items():
@@ -4246,6 +4247,7 @@ def get_final_attributes(
     impart_provider=None,
     buff_info_provider=None,
     item_provider=None,
+    accessory_provider=None,
 ) -> dict | None:
     """获取buff加成后的最终属性（统一口径）"""
     base = get_base_attributes(user_id)
@@ -4354,7 +4356,7 @@ def get_final_attributes(
     )
 
     # ===== 饰品加成 =====
-    acc_effect = calc_accessory_effects(user_id)
+    acc_effect = calc_accessory_effects(user_id, accessory_provider=accessory_provider)
 
     # 百分比型基础属性加成
     max_hp = int(max_hp * (1 + float(acc_effect.get("hp_pct", 0))))

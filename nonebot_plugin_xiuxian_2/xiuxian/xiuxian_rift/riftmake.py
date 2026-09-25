@@ -233,6 +233,7 @@ def get_rift_battle_player_assets(user_id):
         attribute_provider=get_rift_battle_final_attributes,
         natal_provider=get_rift_battle_natal_data,
         buff_info_provider=get_rift_battle_buff_info,
+        accessory_provider=get_rift_battle_accessory_data,
     )
 
 
@@ -306,6 +307,7 @@ def get_rift_battle_final_attributes(user_id, *, ratio, include_current):
         impart_provider=get_rift_battle_impart_data,
         buff_info_provider=get_rift_battle_buff_info,
         item_provider=items.get_data_by_item_id,
+        accessory_provider=get_rift_battle_accessory_data,
     )
 
 
@@ -333,6 +335,48 @@ def get_rift_battle_buff_info(user_id):
     except (OSError, ValueError, sqlite3.Error):
         return None
     return dict(row) if row is not None else None
+
+
+def get_rift_battle_accessory_data(user_id):
+    """Read an existing accessory projection without creating schema or defaults."""
+    database = get_paths().player_db
+    if not database.exists():
+        return None
+    try:
+        with DatabaseUnitOfWork(database, read_only=True) as uow:
+            table = uow.query_one(
+                "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='player_accessory'"
+            )
+            if table is None:
+                return None
+            columns = {
+                str(row["name"])
+                for row in uow.query_all("PRAGMA table_info(player_accessory)")
+            }
+            if not {"user_id", "equipped", "bag"}.issubset(columns):
+                return None
+            row = uow.query_one(
+                "SELECT equipped, bag FROM player_accessory WHERE user_id=?",
+                (str(user_id),),
+            )
+    except (OSError, ValueError, sqlite3.Error):
+        return None
+    if row is None:
+        return None
+    result = {}
+    for key in ("equipped", "bag"):
+        value = row.get(key)
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except (TypeError, ValueError):
+                value = None
+        result[key] = value
+    if not isinstance(result.get("equipped"), dict):
+        result["equipped"] = {}
+    if not isinstance(result.get("bag"), list):
+        result["bag"] = []
+    return result
 
 
 async def get_boss_battle_info(user_info, rift_rank, bot_id, persist=True):

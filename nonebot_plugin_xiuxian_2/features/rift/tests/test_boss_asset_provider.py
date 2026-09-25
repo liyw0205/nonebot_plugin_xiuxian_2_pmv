@@ -150,7 +150,36 @@ def test_rift_attribute_provider_injects_read_only_impart_provider():
         impart_provider=riftmake.get_rift_battle_impart_data,
         buff_info_provider=riftmake.get_rift_battle_buff_info,
         item_provider=riftmake.items.get_data_by_item_id,
+        accessory_provider=riftmake.get_rift_battle_accessory_data,
     )
+
+
+def test_rift_accessory_provider_reads_existing_projection_without_schema_mutation(tmp_path):
+    database = tmp_path / "player.db"
+    equipped = '{"戒指": {"set_type": "烈阳", "affixes": []}}'
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "CREATE TABLE player_accessory (user_id TEXT PRIMARY KEY, equipped TEXT, bag TEXT)"
+        )
+        connection.execute(
+            "INSERT INTO player_accessory VALUES (?, ?, ?)", ("u", equipped, "[]")
+        )
+        before = connection.execute(
+            "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
+        ).fetchall()
+
+    with patch.object(riftmake, "get_paths", return_value=SimpleNamespace(player_db=database)):
+        result = riftmake.get_rift_battle_accessory_data("u")
+        missing = riftmake.get_rift_battle_accessory_data("missing")
+
+    with sqlite3.connect(database) as connection:
+        after = connection.execute(
+            "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
+        ).fetchall()
+    assert result["equipped"]["戒指"]["set_type"] == "烈阳"
+    assert result["bag"] == []
+    assert missing is None
+    assert before == after
 
 
 def test_rift_impart_provider_reads_existing_row_without_creating_user(tmp_path):
@@ -221,4 +250,5 @@ def test_rift_final_attributes_passes_buff_and_item_read_providers():
         impart_provider=riftmake.get_rift_battle_impart_data,
         buff_info_provider=riftmake.get_rift_battle_buff_info,
         item_provider=riftmake.items.get_data_by_item_id,
+        accessory_provider=riftmake.get_rift_battle_accessory_data,
     )

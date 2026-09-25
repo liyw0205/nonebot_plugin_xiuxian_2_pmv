@@ -4421,3 +4421,8 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 `buff_info_provider`/`item_provider`，Rift Boss 通过 `get_rift_battle_buff_info` 从既有 game DB 的 `BuffInfo` 表只读读取功法/装备编号，
 并由显式 `Items.get_data_by_item_id` 解析资产；缺表、缺用户和只读错误返回空兼容结果，不触发旧 `get_user_buff` 的建表/补列逻辑。
 默认其他调用仍构造旧 `UserBuffDate`，因此本片只建立 BuffInfo 查询边界，功法/装备 JSON 资产和属性公式仍未迁移；新增 provider 透传与 schema 不变测试。
+
+2026-09-26 rift Boss accessory read provider：`calc_accessory_effects` 与 `get_final_attributes` 增加可选
+`accessory_provider`，Rift Boss 通过 `get_rift_battle_accessory_data` 从既有 `player.db.player_accessory` 只读读取 equipped/bag JSON；
+缺表、缺用户、坏 JSON 和只读错误均降级为空饰品，不触发 `PlayerDataManager` 建表或补列。默认其他调用仍走旧 accessor fallback；
+本片只拆出饰品查询边界，饰品 JSON 规则/套装计算和 attached namespace 对账仍未迁移，新增 provider 与 schema 不变测试。
