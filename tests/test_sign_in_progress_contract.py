@@ -15,5 +15,6 @@ class SignInProgressContractTests(unittest.TestCase):
         data = json.loads(result.stdout)
         self.assertFalse(data["slices"]["sign_in"]["lottery_core_default_legacy"])
         self.assertFalse(data["slices"]["sign_in"]["lottery_compatibility_fallback"])
+        self.assertTrue(data["slices"]["sign_in"]["lottery_service_isolated"])
         self.assertTrue(data["slices"]["sign_in"]["lottery_scheduler_application_owned"])
         self.assertTrue(data["slices"]["sign_in"]["legacy_lottery_scheduler_disabled"])

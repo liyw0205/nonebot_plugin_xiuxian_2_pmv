@@ -258,6 +258,12 @@ class LotterySettlementServiceTests(unittest.TestCase):
         self.assertNotIn("lottery_settlement_service =", source)
         self.assertIn("_lottery_application().snapshot(", source)
         self.assertNotIn("lottery_settlement_service.get_snapshot", source)
+        transaction_source = (base_path / "transaction_service.py").read_text(encoding="utf-8")
+        compatibility_source = (
+            base_path.parents[1] / "compatibility" / "legacy_base_lottery.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("class LotterySettlementService", transaction_source)
+        self.assertIn("class LotterySettlementService", compatibility_source)
         self.assertNotIn("random.randint", lottery_handler)
         self.assertNotIn("update_ls", lottery_handler)
         self.assertNotIn("lottery_pool", sign_handler + lottery_handler)

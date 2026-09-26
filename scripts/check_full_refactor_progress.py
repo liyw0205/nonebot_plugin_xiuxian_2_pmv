@@ -265,6 +265,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "nonebot_application_path": "_build_sign" in adapter and "application.read_limits" in adapter,
             "web_application_path": "create_sign_in_blueprint" in web and "application.claim" in web,
             "old_service_removed": "class SignInService" not in legacy_transaction and (PACKAGE / "compatibility" / "legacy_sign_in.py").is_file(),
+            "lottery_service_isolated": "class LotterySettlementService" not in legacy_transaction and (PACKAGE / "compatibility" / "legacy_base_lottery.py").is_file(),
             "effects_application_owned": "SignInApplicationEffects" in sign_effects and "SignInApplicationEffects(" in plugin,
             "effects_outbox_reconcile_owned": '"sign_in.effects"' in plugin and "reconcile_outbox_event" in sign_application,
             "task_core_legacy": "SignInTaskEffects(record_task_progress)" in plugin,
