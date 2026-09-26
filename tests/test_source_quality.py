@@ -755,6 +755,23 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("legacy_back_package_reward import", service_source)
         self.assertIn("legacy_back_package_reward import PackageRewardService", rollback_repository_source)
 
+    def test_accessory_package_compatibility_wrapper_is_isolated(self) -> None:
+        back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
+        legacy_source = (back_root / "transaction_service.py").read_text(encoding="utf-8")
+        compatibility_source = (
+            SOURCE_ROOT / "compatibility" / "legacy_back_accessory_package.py"
+        ).read_text(encoding="utf-8")
+        repository_source = (
+            SOURCE_ROOT / "features" / "back" / "repository.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("class AccessoryPackageService", legacy_source)
+        self.assertIn("class AccessoryPackageService", compatibility_source)
+        self.assertIn(
+            "legacy_back_accessory_package import AccessoryPackageService",
+            repository_source,
+        )
+
     def test_main_package_reward_handler_uses_lifecycle_application(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         command_source = (back_root / "__init__.py").read_text(encoding="utf-8")

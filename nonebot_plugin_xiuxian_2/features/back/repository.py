@@ -23,7 +23,7 @@ class LegacyBackRepository:
         from ...compatibility.legacy_back_repair import BackpackRepairService
         from ...compatibility.legacy_back_pet_egg import BatchItemUseService
         from ...compatibility.legacy_back_package_reward import PackageRewardService
-        from ...xiuxian.xiuxian_back.accessory_package_service import AccessoryPackageService
+        from ...compatibility.legacy_back_accessory_package import AccessoryPackageService
         mapping = {
             "open_package": (PackageRewardService, "apply"),
             "use_item": (BatchItemUseService, "use_pet_eggs"),
