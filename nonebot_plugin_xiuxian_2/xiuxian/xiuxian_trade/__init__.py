@@ -53,7 +53,6 @@ from .auction_utils import (
 )
 from .transaction_service import (
     bind_auction_service_dependencies,
-    end_auction_process,
     reconcile_auction_after_restart,
     place_auction_bid,
 )
@@ -197,6 +196,33 @@ def _start_auction_with_application(operation_id: str) -> bool:
     )
     logger.info(f"拍卖已开启，共 {result.items_count} 件物品参与拍卖！")
     return True
+
+
+async def _end_auction_with_application(operation_id: str | None = None) -> list[dict]:
+    """Settle the active auction through the feature application by default."""
+    current_auctions = _auction_query_application().get_current_auction() or []
+    if not current_auctions:
+        return []
+    session = _auction_session_service().get_active_session()
+    if session is None:
+        raise RuntimeError("auction items exist without an active database session")
+    item_types = {}
+    for item in current_auctions:
+        info = items.get_data_by_item_id(item["item_id"])
+        if info:
+            item_types[int(item["item_id"])] = str(info["type"])
+    stable_operation_id = operation_id or f"auction-finish:{session['session_id']}"
+    outcome = _auction_settlement_application().settle_active(
+        operation_id=stable_operation_id,
+        end_time=runtime_clock.now().timestamp(),
+        fee_rate=auction_config.get_auction_rules()["fee_rate"],
+        item_types=item_types,
+    )
+    if not outcome.ok:
+        raise ValueError(f"auction session settlement blocked: status={outcome.code}")
+    results = [dict(record) for record in (outcome.data or {}).get("results", ())]
+    logger.info("拍卖已结束，结算及副作用事件已提交！")
+    return results
 
 
 bind_auction_repository(_auction_bid_repository, _auction_session_service)
@@ -3000,8 +3026,8 @@ async def auction_end_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await handle_send(bot, event, "拍卖当前未开启！", md_type="拍卖", k1="查看", v1="拍卖查看", k2="开启", v2="开启拍卖", k3="帮助", v3="拍卖帮助")
         await auction_end.finish()
     
-    results = await end_auction_process(
-        bot, _auction_session_operation_id(event, "finish")
+    results = await _end_auction_with_application(
+        _auction_session_operation_id(event, "finish")
     )
     if not results:
         await handle_send(bot, event, "结束拍卖失败或没有拍卖品需要结算！", md_type="拍卖", k1="查看", v1="拍卖查看", k2="开启", v2="开启拍卖", k3="帮助", v3="拍卖帮助")
@@ -3126,8 +3152,8 @@ async def _check_auction_end_job_impl():
 
     if now_dt >= end_dt:
         logger.info(f"拍卖到点收尾，拍品 {n} 件，开始结算。")
-        await end_auction_process(
-            None, f"auction-session:auto-finish:{session['session_id']}"
+        await _end_auction_with_application(
+            f"auction-session:auto-finish:{session['session_id']}"
         )
         return
 

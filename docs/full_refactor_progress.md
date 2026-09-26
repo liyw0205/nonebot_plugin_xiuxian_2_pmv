@@ -4456,3 +4456,5 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-09-26 lazy impart compatibility reader：`xiuxian2_handle.py` 的旧 `xiuxian_impart` 别名改为惰性 proxy，只有未注入 `impart_provider` 的旧属性计算真正访问时才构造 `XIUXIAN_IMPART_BUFF`；Rift 的显式只读 provider 路径不会打开兼容写入连接。保留原别名方法调用和数据库 schema，不改变属性公式或写入行为。新增 source contract；下一步继续盘点 `xiuxian2_handle` 及其他 facade 的剩余模块级数据库/资产构造。
 
 2026-09-26 auction start application cutover：拍卖管理员手动开启和 scheduler 自动开启不再经过 `xiuxian_trade.transaction_service.start_auction_process`，默认路径直接调用 `AuctionSessionStartApplication`；旧函数保留为显式兼容入口。保留系统拍品抽样、持续时间、operation ID、每日自动开启标记和失败消息语义，并补齐 facade 的显式 `SystemRandom` 注入。拍卖/交易回归 `116 passed`，未新增 migration；下一步按真实调用图处理拍卖结束结算或竞价仍残留的兼容入口。
+
+2026-09-26 auction settlement application cutover：管理员结束和 scheduler 自动收尾不再经过 `xiuxian_trade.transaction_service.end_auction_process`，默认路径直接调用 `AuctionSettlementApplication`；旧函数保留为显式兼容入口。保留活动拍品读取、物品类型解析、稳定 operation ID、手续费、结算 DTO 和 effects/outbox 补偿语义。拍卖/交易聚焦回归 `118 passed`，compileall、architecture、progress、inventory 均通过，未新增 migration；下一步继续处理竞价默认入口或剩余交易兼容 adapter。
