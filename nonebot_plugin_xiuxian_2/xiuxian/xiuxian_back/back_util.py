@@ -16,7 +16,7 @@ import os
 from pathlib import Path
 from ..xiuxian_config import XiuConfig, convert_rank, added_ranks as get_added_ranks
 from ...paths import get_paths
-from .transaction_service import CultivationItemService
+from ...compatibility.legacy_back_cultivation_item import CultivationItemService
 from .transaction_service import BreakthroughRateItemService
 from .transaction_service import RecoveryItemService
 from .transaction_service import PermanentAtkItemService

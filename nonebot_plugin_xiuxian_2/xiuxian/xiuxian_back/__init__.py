@@ -56,7 +56,7 @@ from ..xiuxian_utils.pet_system import (
     _put_pet_into_doc,
 )
 from .back_util import *
-from .transaction_service import CultivationItemService
+from ...compatibility.legacy_back_cultivation_item import CultivationItemService
 from ...compatibility.legacy_back_equipment import EquipmentService
 from .package_reward_service import PackageOpenResult, PackageReward, PackageRewardService
 from ...features.package_reward.application import PackageRewardApplication
