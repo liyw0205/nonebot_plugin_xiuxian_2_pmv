@@ -56,6 +56,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     destiny_tribulation_compatibility = (PACKAGE / "compatibility" / "legacy_base_destiny_tribulation.py").read_text(encoding="utf-8")
     heart_devil_tribulation_compatibility = (PACKAGE / "compatibility" / "legacy_base_heart_devil_tribulation.py").read_text(encoding="utf-8")
     pill_fusion_compatibility = (PACKAGE / "compatibility" / "legacy_base_pill_fusion.py").read_text(encoding="utf-8")
+    tribulation_state_migration_compatibility = (PACKAGE / "compatibility" / "legacy_base_tribulation_state_migration.py").read_text(encoding="utf-8")
     adapter = (PACKAGE / "adapters" / "nonebot" / "commands.py").read_text(encoding="utf-8")
     web = (PACKAGE / "adapters" / "web" / "api.py").read_text(encoding="utf-8")
     legacy_transaction = (PACKAGE / "xiuxian" / "xiuxian_base" / "transaction_service.py").read_text(encoding="utf-8")
@@ -589,7 +590,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "destiny_tribulation_service_isolated": "class DestinyTribulationService" not in base_transaction and "class DestinyTribulationService" in destiny_tribulation_compatibility and "destiny_tribulation_operations" in destiny_tribulation_compatibility,
             "heart_devil_tribulation_service_isolated": "class HeartDevilTribulationService" not in base_transaction and "class HeartDevilTribulationService" in heart_devil_tribulation_compatibility and "heart_devil_tribulation_operations" in heart_devil_tribulation_compatibility,
             "pill_fusion_service_isolated": "class PillFusionService" not in base_transaction and "class PillFusionService" in pill_fusion_compatibility and "pill_fusion_operations" in pill_fusion_compatibility,
-            "status": "rename_stone_contest_stone_robbery_xiangyuan_breakthrough_ordinary_destiny_heart_devil_and_pill_fusion_compatibility_isolation_with_replay",
+            "tribulation_state_migration_service_isolated": "class TribulationStateMigrationService" not in base_transaction and "class TribulationStateMigrationService" in tribulation_state_migration_compatibility and "tribulation_state_migration_operations" in tribulation_state_migration_compatibility,
+            "status": "rename_stone_contest_stone_robbery_xiangyuan_breakthrough_ordinary_destiny_heart_devil_pill_fusion_and_state_migration_compatibility_isolation_with_replay",
         },
         "puppet": {
             "harvest_application_owned": "puppet_application.harvest(" in puppet_facade,

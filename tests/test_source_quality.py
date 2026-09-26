@@ -1870,7 +1870,7 @@ class SourceQualityTests(unittest.TestCase):
             encoding="utf-8"
         )
         service_source = (
-            base_root / "tribulation_state_migration_service.py"
+            SOURCE_ROOT / "compatibility" / "legacy_base_tribulation_state_migration.py"
         ).read_text(encoding="utf-8")
 
         self.assertIn(

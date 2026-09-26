@@ -29,7 +29,7 @@ from ...compatibility.legacy_base_destiny_tribulation import DestinyTribulationS
 from ...compatibility.legacy_base_heart_devil_tribulation import HeartDevilTribulationService
 from ...compatibility.legacy_base_ordinary_tribulation import OrdinaryTribulationService
 from ...compatibility.legacy_base_pill_fusion import PillFusionService
-from .transaction_service import TribulationStateMigrationService
+from ...compatibility.legacy_base_tribulation_state_migration import TribulationStateMigrationService
 
 _sql_message_instance = None
 _breakthrough_service_instance = None
