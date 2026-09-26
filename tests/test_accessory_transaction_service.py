@@ -699,7 +699,7 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
         self.assertIn("_wash_application().wash", handler)
         self.assertNotIn("_accessory_transaction_service().wash", handler)
 
-    def test_real_preset_handlers_use_transaction_service(self) -> None:
+    def test_real_preset_handlers_use_feature_application(self) -> None:
         root = Path(__file__).parents[1]
         source = (
             root / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_back/accessory.py"
@@ -713,11 +713,10 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
             / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_back/accessory_helpers.py"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("_accessory_transaction_service().save_preset(", save_handler)
+        self.assertIn("_preset_application().save", save_handler)
+        self.assertIn("_preset_application().replay", save_handler)
         self.assertNotIn("_save_accessory_preset(", save_handler)
-        self.assertIn(
-            "_accessory_transaction_service().quick_equip_preset(", equip_handler
-        )
+        self.assertIn("_accessory_transaction_service().quick_equip_preset(", equip_handler)
         self.assertNotIn("player_data_manager.patch_doc(", equip_handler)
         self.assertNotIn("def _save_accessory_preset(", helpers)
 

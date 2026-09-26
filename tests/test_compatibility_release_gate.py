@@ -62,6 +62,7 @@ class CompatibilityReleaseGateTests(unittest.TestCase):
                 {
                     "accessory_package.player_data.001",
                     "accessory_package.player_data.002",
+                    "accessory_package.player_data.003",
                 },
             )
 

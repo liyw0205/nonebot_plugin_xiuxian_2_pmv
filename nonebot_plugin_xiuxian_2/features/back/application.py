@@ -27,6 +27,7 @@ from .accessory_affix_application import AccessoryAffixApplication
 from .accessory_decompose_application import AccessoryDecomposeApplication
 from .accessory_wash_application import AccessoryWashApplication
 from .accessory_upgrade_application import AccessoryUpgradeApplication
+from .accessory_preset_application import AccessoryPresetApplication
 
 
 class BackApplication(LegacyApplication):
@@ -64,6 +65,10 @@ class BackApplication(LegacyApplication):
             player_database or database,
         )
         self.accessory_upgrade_application = AccessoryUpgradeApplication(
+            database,
+            player_database or database,
+        )
+        self.accessory_preset_application = AccessoryPresetApplication(
             database,
             player_database or database,
         )

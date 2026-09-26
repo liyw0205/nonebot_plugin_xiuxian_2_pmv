@@ -11,6 +11,8 @@ ATTACHED_SCHEMA_VERSION = "accessory_package.player_data.001"
 ATTACHED_SCHEMA_NAME = "player_accessory"
 ATTACHED_OPERATION_VERSION = "accessory_package.player_data.002"
 ATTACHED_OPERATION_NAME = "accessory_package_operations"
+ATTACHED_PRESET_VERSION = "accessory_package.player_data.003"
+ATTACHED_PRESET_NAME = "accessory_presets"
 
 
 def _checksum() -> str:
@@ -78,4 +80,46 @@ def apply_attached_player_accessory_operations(uow: AttachedDatabaseUnitOfWork, 
     return True
 
 
-__all__ = ["ATTACHED_OPERATION_VERSION", "ATTACHED_SCHEMA_VERSION", "apply_attached_player_accessory", "apply_attached_player_accessory_operations", "ensure_attached_ledger"]
+def apply_attached_player_accessory_presets(
+    uow: AttachedDatabaseUnitOfWork, *, clock: Any | None = None
+) -> bool:
+    """Add preset columns through a durable attached migration."""
+    ensure_attached_ledger(uow)
+    applied_at = (clock.now() if clock is not None else SystemClock().now()).isoformat()
+    checksum = hashlib.sha256(
+        f"{ATTACHED_PRESET_VERSION}:{ATTACHED_PRESET_NAME}:v1".encode()
+    ).hexdigest()
+    row = uow.query_one(
+        "SELECT name, checksum FROM player_data.attached_schema_migrations WHERE version = ?",
+        (ATTACHED_PRESET_VERSION,),
+    )
+    if row is not None:
+        if row["name"] != ATTACHED_PRESET_NAME or row["checksum"] != checksum:
+            raise ValueError(f"attached migration checksum changed: {ATTACHED_PRESET_VERSION}")
+        return False
+
+    columns = {
+        str(item[1])
+        for item in uow.execute("PRAGMA player_data.table_info(player_accessory)").fetchall()
+    }
+    for field_name in ("preset_1", "preset_2", "preset_3"):
+        if field_name not in columns:
+            uow.execute(
+                f"ALTER TABLE player_data.player_accessory ADD COLUMN {field_name} TEXT"
+            )
+    uow.execute(
+        "INSERT INTO player_data.attached_schema_migrations(version,name,checksum,applied_at) VALUES (?, ?, ?, ?)",
+        (ATTACHED_PRESET_VERSION, ATTACHED_PRESET_NAME, checksum, applied_at),
+    )
+    return True
+
+
+__all__ = [
+    "ATTACHED_OPERATION_VERSION",
+    "ATTACHED_PRESET_VERSION",
+    "ATTACHED_SCHEMA_VERSION",
+    "apply_attached_player_accessory",
+    "apply_attached_player_accessory_operations",
+    "apply_attached_player_accessory_presets",
+    "ensure_attached_ledger",
+]

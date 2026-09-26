@@ -603,6 +603,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 from .features.accessory_package.attached_migrations import (
                     apply_attached_player_accessory,
                     apply_attached_player_accessory_operations,
+                    apply_attached_player_accessory_presets,
                 )
                 from .infrastructure.database.attached_uow import AttachedDatabaseUnitOfWork
 
@@ -617,6 +618,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                 ) as attached_uow:
                     apply_attached_player_accessory(attached_uow, clock=context.clock)
                     apply_attached_player_accessory_operations(attached_uow, clock=context.clock)
+                    apply_attached_player_accessory_presets(attached_uow, clock=context.clock)
         phase_state["migrations"] = True
 
     def ensure_repositories() -> None:

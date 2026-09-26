@@ -35,6 +35,7 @@ from ...features.back.accessory_affix_application import AccessoryAffixApplicati
 from ...features.back.accessory_decompose_application import AccessoryDecomposeApplication
 from ...features.back.accessory_wash_application import AccessoryWashApplication
 from ...features.back.accessory_upgrade_application import AccessoryUpgradeApplication
+from ...features.back.accessory_preset_application import AccessoryPresetApplication
 
 items = Items()
 _sql_message_instance = None
@@ -44,6 +45,7 @@ _accessory_affix_application = None
 _accessory_decompose_application = None
 _accessory_wash_application = None
 _accessory_upgrade_application = None
+_accessory_preset_application = None
 runtime_ids = UUIDGenerator()
 
 
@@ -136,6 +138,20 @@ def _upgrade_application():
 def configure_upgrade_application(application: AccessoryUpgradeApplication) -> None:
     global _accessory_upgrade_application
     _accessory_upgrade_application = application
+
+
+def _preset_application():
+    global _accessory_preset_application
+    if _accessory_preset_application is None:
+        _accessory_preset_application = AccessoryPresetApplication(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _accessory_preset_application
+
+
+def configure_preset_application(application: AccessoryPresetApplication) -> None:
+    global _accessory_preset_application
+    _accessory_preset_application = application
 
 
 def _acc_fail_msg(result, *, action: str = "饰品操作") -> str:
@@ -1387,12 +1403,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     operation_id = _accessory_operation_id(
         event, "save_preset", user_id, str(preset_idx)
     )
-    save_result = _accessory_transaction_service().replay(
-        operation_id, "save_preset"
-    )
+    save_result = _preset_application().replay(operation_id)
     if save_result is None:
         data = _get_data(user_id)
-        save_result = _accessory_transaction_service().save_preset(
+        save_result = _preset_application().save(
             operation_id,
             user_id,
             preset_idx,
@@ -1401,7 +1415,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         )
         if not save_result.succeeded:
             await handle_send(
-                bot, event, _acc_fail_msg(result, action="保存预设")
+                bot, event, _acc_fail_msg(save_result, action="保存预设")
             )
             return
 

@@ -35,9 +35,11 @@ with redirect_stdout(sys.stderr):
     from nonebot_plugin_xiuxian_2.plugin import build_migrations, migrations_for_database
     from nonebot_plugin_xiuxian_2.features.accessory_package.attached_migrations import (
         ATTACHED_OPERATION_VERSION,
+        ATTACHED_PRESET_VERSION,
         ATTACHED_SCHEMA_VERSION,
         apply_attached_player_accessory,
         apply_attached_player_accessory_operations,
+        apply_attached_player_accessory_presets,
     )
     from nonebot_plugin_xiuxian_2.features.daily_fortune.repository import DailyFortuneRepository
 
@@ -77,6 +79,12 @@ def _apply_catalog_migrations(context) -> tuple[dict[str, list[str]], dict[str, 
                 (
                     ATTACHED_OPERATION_VERSION,
                     apply_attached_player_accessory_operations(
+                        attached_uow, clock=context.clock
+                    ),
+                ),
+                (
+                    ATTACHED_PRESET_VERSION,
+                    apply_attached_player_accessory_presets(
                         attached_uow, clock=context.clock
                     ),
                 ),
