@@ -5,7 +5,7 @@ from typing import Any
 
 from .._legacy_application import LegacyApplication
 from ...core.errors import ValidationError
-from .repository import BackRepository, LegacyBackRepository
+from .repository import BackRepository
 from ..package_reward.application import PackageRewardApplication
 from .alchemy_application import AlchemyApplication
 from .cultivation_item_application import CultivationItemApplication
@@ -47,7 +47,7 @@ class BackApplication(LegacyApplication):
             database,
             player_database or database,
         )
-        super().__init__(database, repository=repository or LegacyBackRepository(database, player_database), feature="back")
+        super().__init__(database, repository=repository, feature="back")
 
     def _action(self, action: str, *, operation_id: str, user_id: str, **kwargs: Any):
         return self._execute(operation_id=operation_id, user_id=user_id, action=f"back.{action}", payload={"user_id": user_id, **kwargs}, call=lambda: self.repository.invoke(action, operation_id, user_id, **kwargs))

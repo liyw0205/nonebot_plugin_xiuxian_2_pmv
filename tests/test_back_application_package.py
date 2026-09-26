@@ -24,6 +24,7 @@ class BackApplicationPackageTests(unittest.TestCase):
                 apply_platform_schema(uow)
                 apply_package_reward(uow)
             application = BackApplication(database, database)
+            self.assertIsNone(application.repository)
             rewards = (PackageReward(1001, "测试奖励", "材料", 1),)
             first = application.open_package(operation_id="back-package-1", user_id="u", package_id=20001, quantity=1, rewards=rewards, max_goods_num=99)
             replay = application.open_package(operation_id="back-package-1", user_id="u", package_id=20001, quantity=1, rewards=rewards, max_goods_num=99)
