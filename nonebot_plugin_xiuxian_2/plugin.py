@@ -35,6 +35,7 @@ from .features.title.migrations import apply_title, apply_title_schema
 from .features.title.application import TitleApplication
 from .features.sign_in.manifest import FEATURE as SIGN_IN_FEATURE
 from .features.sign_in.migrations import apply_lottery, apply_lottery_audit, apply_sign_in, apply_sign_in_statistics, apply_sign_in_tasks
+from .features.tasks.migrations import apply_task_progress
 from .features.stone_gift.manifest import FEATURE as STONE_GIFT_FEATURE
 from .features.stone_gift.migrations import apply_stone_gift, apply_stone_gift_limits
 from .features.package_reward.manifest import FEATURE as PACKAGE_REWARD_FEATURE
@@ -282,6 +283,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("sign_in.003", "sign_in_task_events", apply_sign_in_tasks),
         Migration("stone_gift.001", "stone_gift_operations", apply_stone_gift),
         Migration("stone_gift.002", "stone_gift_limits", apply_stone_gift_limits),
+        Migration("tasks.001", "task_progress_schema", apply_task_progress),
         Migration("tianti_settlement.001", "tianti_settlement_feature_migrations", apply_tianti_settlement),
         Migration("tianti_settlement.002", "tianti_settlement_operations", apply_tianti_settlement_operations),
         Migration("tianti_training.001", "tianti_training_feature_migrations", apply_tianti_training),
@@ -356,6 +358,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "impart.003",
         "impart.005",
         "rift.003",
+        "tasks.001",
     }
 )
 _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
@@ -391,6 +394,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "impart.003",
         "impart.005",
         "rift.003",
+        "tasks.001",
     }
 )
 _TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "auction.004"})

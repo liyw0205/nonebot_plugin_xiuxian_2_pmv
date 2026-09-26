@@ -2897,13 +2897,16 @@
    每次只迁一个资产转换，兼容 repository 仅在真实调用归零且回滚证据满足后移除。
 5. 清零已迁移域的 compatibility 余额：背包高频动作和签到默认副作用已由
    feature-owned application 承载；宠物旧 service 本轮已隔离，但显式
-   `LegacyPetRepository` 与旧数据 projection 仍需审计。下一项先审计任务领取/进度：
-   `features/tasks` 当前通过 `TasksRepository -> task_manager` 委托旧任务层，
-   `TaskRewardClaimService` 与 `TaskProgressEventService` 仍处于
-   `xiuxian_tasks/transaction_service.py`，而进度事件由签到及多个玩法触发；必须先画出
-   全部生产调用图、operation/replay 和周期状态边界，再逐个切换到 feature-owned application。
-   随后处理训练、洞府/地图未覆盖动作、宗门、竞技场/副本、世界事件、Boss 和交易剩余
-   adapter。每次先证明默认 handler/route/scheduler 已切换，再隔离或删除旧实现。
+   `LegacyPetRepository` 与旧数据 projection 仍需审计。通用 daily/weekly 任务进度现由
+   `TaskProgressApplication -> TasksProgressRepository` 承载；真实 `game_events`、work、buff、
+   impart 调用仍经旧 task-data adapter 组装任务映射，签到专属 projection 仍由 sign-in feature
+   单独承载。新增 player-only `tasks.001` 迁移为进度表预建 schema，生产进度读写不再请求期建表。
+   `LegacyTaskProgressEventService` 源码暂留为兼容对照，旧公开 service 名称转发到 feature repo。
+   任务奖励仍经 `TasksRepository -> task_manager -> TaskRewardClaimService`，动态 reward snapshot、
+   game/player attached transaction、请求期 DDL 和 WAL 下的跨库崩溃原子性尚未解决；下一项审计该
+   claim 边界，不将进度切片误计为任务域完成。随后处理训练、洞府/地图未覆盖动作、宗门、
+   竞技场/副本、世界事件、Boss 和交易剩余 adapter。每次先证明默认 handler/route/scheduler 已切换，
+   再隔离或删除旧实现。
 6. 单列处理复杂批处理和外部状态：赌坊投注/派奖与分块分红、全服批处理、跨库
    补偿、JSON/凭据状态、scheduler 和外部版本更新必须保留冻结快照、分块进度、
    子操作 replay、失败续跑和 reconcile；不能为追赶进度改成 facade 或一次性大
@@ -4559,3 +4562,5 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-09-27 base tribulation-state migration compatibility isolation：旧 `TribulationStateMigrationService` 与 `TribulationStateMigrationResult` 从 `xiuxian_base/transaction_service.py` 移至 `compatibility/legacy_base_tribulation_state_migration.py`；状态迁移 facade、真实旧 JSON 导入入口和 transaction import 继续 re-export/显式兼容，normalize、database-authoritative 保护、一次性 user state 写入、operation replay/conflict 与 rollback 语义保持不变。新增 `base.tribulation_state_migration_service_isolated` 进度门禁；状态迁移/融合/心魔/天命/普通/突破渡劫及进度聚焦回归 `53 passed`，来源契约 `7 passed`，`py_compile`、architecture、inventory、progress 与 `git diff --check` 通过；旧 transaction service 再减少约 `131` 行，无新增 migration。五库 recovery 的 backup/restore、全量及 attached 迁移和 reconcile 均 clean；缓存与临时产物已清理。下一步按 base transaction service 顺序处理剩余服务，全局 legacy transaction services 与 `xiuxian2_handle` blockers 仍未完成。
 
 2026-09-27 pet transaction compatibility isolation：宠物默认 matcher 已由 `PetApplication`/feature SQL repositories 承载；旧 `PetTravelClaimService`、`PetFeedService`、`PetSkillReplaceService`、`PetTravelStartService`、`PetHatchService`、`PetReleaseService`、`PetFusionBreakthroughService`、`PetSkillRerollService`、`PetActiveSwitchService` 从 `xiuxian_pet/transaction_service.py` 移至 `compatibility/legacy_pet_transactions.py`，原路径只保留 API re-export shim。默认宠物 facade 删除了无调用的 compatibility imports/lazy getters，`LegacyPetRepository` 与 `compatibility.pet` 保持显式回滚兼容。宠物行为/source/progress 聚焦回归 `310 passed`，排除 1 项已知且与本片无关的 Rift SQL-manager source assertion；architecture、inventory、进度门禁和 diff check 通过。五库隔离 recovery 完成 backup、dry-run restore、restore 和 173 项 migration，attached migration 为 3 项，reconcile `clean=true` 且 operations/outbox/dead events 均为 0；临时数据与 receipt 已清理。无新增业务 migration；旧 transaction service 行数由 `40,454` 降至 `39,481`；下一轮审计任务领取/进度事件调用图，全局 blockers 仍为 legacy transaction services 与 `xiuxian2_handle`。
+
+2026-09-27 generic task progress application cutover：默认通用任务进度/状态读写改由 `TaskProgressApplication -> TasksProgressRepository` 承载；`game_events` 及 work、buff、impart 旧入口仍通过 task-data adapter 传入事件 DTO，签到专属 projection 不变。新增 player-only `tasks.001`，增量补齐旧 `xiuxian_tasks` 周期列并预建 `task_progress_event_operations`；请求路径不再建表，事件更新与 replay receipt 在同一 player-db immediate UoW 提交。旧 `TaskProgressEventService` 公共 import 转发至新 repository，旧实现以 `LegacyTaskProgressEventService` 暂留作兼容对照。任务进度、领奖、feature task、签到 task/effects/wiring 与进度门禁聚焦回归 `26 passed`（1 条既有 ServicePort `DeprecationWarning`）；compileall、architecture、inventory、progress、diff check 通过。五库隔离 recovery 完成 backup、restore dry-run/restore、全量迁移（`tasks.001` 只路由到 player_db）及 reconcile，`clean=true`、operations/outbox/dead events 均为 0；专用 recovery 目录已清理。该证据不代表迁移已在真实发布数据上应用，也未完成动态奖励快照及 game/player 领奖事务；跨库 WAL 崩溃原子性仍待论证。下一项审计并迁移奖励领取边界，全局 blockers 仍为 legacy transaction services 与 `xiuxian2_handle`。

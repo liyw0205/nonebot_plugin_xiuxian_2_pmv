@@ -9,9 +9,12 @@ import pytest
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tasks.transaction_service import (
-    TaskProgressEventService,
-)
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.features.tasks.migrations import apply_task_progress
+from nonebot_plugin_xiuxian_2.features.tasks.progress import TasksProgressRepository
+from nonebot_plugin_xiuxian_2.features.tasks.application import TaskProgressApplication
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tasks.task_data import task_manager
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tasks.transaction_service import TaskProgressEventService
 
 
 PERIODS = {"daily": "2026-07-14", "weekly": "2026-W29"}
@@ -50,9 +53,15 @@ def read_state(database: Path):
     )
 
 
+def new_service(database: Path):
+    with DatabaseUnitOfWork(database, immediate=True) as uow:
+        apply_task_progress(uow)
+    return TasksProgressRepository(database)
+
+
 def test_event_updates_all_mappings_and_cycles_in_one_operation(tmp_path: Path) -> None:
     database = tmp_path / "player.db"
-    service = TaskProgressEventService(database)
+    service = new_service(database)
     tasks = (
         {
             "key": "daily_close",
@@ -100,7 +109,7 @@ def test_event_updates_all_mappings_and_cycles_in_one_operation(tmp_path: Path) 
 
 def test_replay_returns_first_completion_and_conflict_does_not_mutate(tmp_path: Path) -> None:
     database = tmp_path / "player.db"
-    service = TaskProgressEventService(database)
+    service = new_service(database)
 
     first = service.record("same", "u", (("sign_in", 1),), PERIODS, TASKS)
     duplicate = service.record(
@@ -135,7 +144,7 @@ def test_replay_returns_first_completion_and_conflict_does_not_mutate(tmp_path: 
 
 def test_new_event_can_finish_task_but_replay_cannot_increment_twice(tmp_path: Path) -> None:
     database = tmp_path / "player.db"
-    service = TaskProgressEventService(database)
+    service = new_service(database)
 
     service.record("first", "u", (("sign_in", 1),), PERIODS, TASKS)
     second = service.record("second", "u", (("sign_in", 1),), PERIODS, TASKS)
@@ -147,7 +156,7 @@ def test_new_event_can_finish_task_but_replay_cannot_increment_twice(tmp_path: P
 
 def test_period_rollover_resets_progress_and_claimed_together(tmp_path: Path) -> None:
     database = tmp_path / "player.db"
-    service = TaskProgressEventService(database)
+    service = new_service(database)
     service.get_states("u", PERIODS)
     with sqlite3.connect(database) as conn:
         conn.execute(
@@ -182,7 +191,7 @@ def test_period_rollover_resets_progress_and_claimed_together(tmp_path: Path) ->
 
 def test_operation_insert_failure_rolls_back_both_cycle_updates(tmp_path: Path) -> None:
     database = tmp_path / "player.db"
-    service = TaskProgressEventService(database)
+    service = new_service(database)
     service.get_states("u", PERIODS)
     with sqlite3.connect(database) as conn:
         conn.execute(
@@ -217,13 +226,37 @@ def test_operation_insert_failure_rolls_back_both_cycle_updates(tmp_path: Path) 
 
 def test_event_without_matching_task_still_gets_an_idempotency_record(tmp_path: Path) -> None:
     database = tmp_path / "player.db"
-    service = TaskProgressEventService(database)
+    service = new_service(database)
 
     first = service.record("unknown", "u", (("unknown", 1),), {}, ())
     duplicate = service.record("unknown", "u", (("unknown", 1),), {}, ())
 
     assert (first.status, duplicate.status) == ("applied", "duplicate")
     assert first.completed == duplicate.completed == ()
+
+
+def test_task_manager_event_path_uses_feature_application(tmp_path: Path) -> None:
+    assert TaskProgressEventService is TasksProgressRepository
+    database = tmp_path / "player.db"
+    with DatabaseUnitOfWork(database, immediate=True) as uow:
+        apply_task_progress(uow)
+    previous_application = task_manager.progress_application
+    task_manager.progress_application = TaskProgressApplication(database)
+    try:
+        result = task_manager.record_progress_event("u", (("work", 1),), "work-op")
+    finally:
+        task_manager.progress_application = previous_application
+
+    assert result.status == "applied"
+    states = TasksProgressRepository(database).get_states(
+        "u",
+        {
+            "daily": task_manager._period_key("daily"),
+            "weekly": task_manager._period_key("weekly"),
+        },
+    )
+    assert states["daily"][0] == {"daily_work": 1}
+    assert states["weekly"][0] == {"weekly_work": 1}
 
 
 def test_production_entries_use_batched_idempotent_task_events() -> None:
@@ -237,13 +270,17 @@ def test_production_entries_use_batched_idempotent_task_events() -> None:
     pet_source = (root / "xiuxian_pet/__init__.py").read_text(encoding="utf-8")
     task_repository_source = (root.parent / "features/sign_in/tasks.py").read_text(encoding="utf-8")
     task_effects_source = (root.parent / "features/sign_in/task_effects.py").read_text(encoding="utf-8")
+    progress_repository_source = (root.parent / "features/tasks/progress.py").read_text(encoding="utf-8")
 
-    assert "TaskProgressEventService(get_paths().player_db)" in task_source
+    assert "TaskProgressApplication(get_paths().player_db)" in task_source
+    assert "TaskProgressEventService(" not in task_source
     assert "update_or_write_data" not in task_source
     assert "record_task_progress_event(user_id, updates, operation_id)" in event_source
     assert "completed.extend(record_task_progress(" not in event_source
     assert "self.repository.record(user_id=str(user_id), operation_id=str(operation_id), occurred_at=now)" in task_effects_source
     assert "ON CONFLICT(operation_id) DO NOTHING" in task_repository_source
+    assert "task_progress_event_operations" in progress_repository_source
+    assert "CREATE TABLE" not in progress_repository_source
     assert "record_task_progress" not in base_source
     for source in (buff_source, impart_source, work_source):
         assert "operation_id=f\"task-progress:" in source

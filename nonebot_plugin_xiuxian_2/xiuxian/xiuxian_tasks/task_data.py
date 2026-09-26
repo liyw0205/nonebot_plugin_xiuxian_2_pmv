@@ -9,11 +9,9 @@ from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import number_to
-from .transaction_service import (
-    TaskProgressEventResult,
-    TaskProgressEventService,
-    TaskRewardClaimService,
-)
+from ...features.tasks.application import TaskProgressApplication
+from ...features.tasks.progress import TaskProgressEventResult
+from .transaction_service import TaskRewardClaimService
 
 
 @dataclass(frozen=True)
@@ -199,7 +197,7 @@ class XiuxianTaskManager:
 
     def __init__(self):
         self.items = Items()
-        self.progress_event_service = TaskProgressEventService(get_paths().player_db)
+        self.progress_application = TaskProgressApplication(get_paths().player_db)
         self.reward_claim_service = TaskRewardClaimService(
             get_paths().game_db, get_paths().player_db
         )
@@ -277,7 +275,7 @@ class XiuxianTaskManager:
         task_updates = self._task_updates(normalized_events)
         cycles = {task["cycle"] for task in task_updates}
         periods = {cycle: self._period_key(cycle) for cycle in cycles}
-        return self.progress_event_service.record(
+        return self.progress_application.record(
             operation_id,
             str(user_id),
             normalized_events,
@@ -303,7 +301,7 @@ class XiuxianTaskManager:
         title = "修仙任务" if cycle is None else ("每日任务" if cycle == "daily" else "周常任务")
         msg_lines = [f"【{title}】"]
 
-        states = self.progress_event_service.get_states(
+        states = self.progress_application.get_states(
             str(user_id), {item_cycle: self._period_key(item_cycle) for item_cycle in cycles}
         )
         for item_cycle in cycles:

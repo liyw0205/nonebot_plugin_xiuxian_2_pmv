@@ -14,6 +14,7 @@ import json
 
 from ..xiuxian_utils import db_backend
 from ..xiuxian_utils.numeric_bind import operation_payload_matches
+from ...features.tasks.progress import TaskProgressEventResult, TasksProgressRepository
 
 @dataclass(frozen=True)
 class TaskRewardClaimResult:
@@ -422,16 +423,7 @@ class TaskRewardClaimService:
                 if attached:
                     conn.execute("DETACH DATABASE player_data")
 
-@dataclass(frozen=True)
-class TaskProgressEventResult:
-    status: str
-    completed: tuple[str, ...] = ()
-
-    @property
-    def succeeded(self) -> bool:
-        return self.status in {"applied", "duplicate"}
-
-class TaskProgressEventService:
+class LegacyTaskProgressEventService:
     """Apply one gameplay event to every matching daily/weekly task atomically."""
 
     _cycles = ("daily", "weekly")
@@ -710,6 +702,8 @@ class TaskProgressEventService:
             except Exception:
                 conn.rollback()
                 raise
+
+TaskProgressEventService = TasksProgressRepository
 
 __all__ = [
     "TaskRewardClaimResult",

@@ -17,6 +17,12 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(arena["legacy_daily_reward_disabled"])
         self.assertFalse(slices["sign_in"]["lottery_compatibility_fallback"])
         self.assertTrue(slices["sign_in"]["effects_outbox_reconcile_owned"])
+        tasks = slices["tasks"]
+        self.assertTrue(tasks["progress_application_owned"])
+        self.assertTrue(tasks["progress_repository_owned"])
+        self.assertTrue(tasks["progress_request_path_has_no_ddl"])
+        self.assertTrue(tasks["progress_migration_registered"])
+        self.assertTrue(tasks["reward_claim_legacy_boundary"])
         tower = slices["tower"]
         self.assertTrue(tower["state_application_owned"])
         self.assertTrue(tower["legacy_state_owner_disabled"])
