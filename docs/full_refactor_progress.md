@@ -2822,12 +2822,12 @@
 - 架构/交付基础门禁 P0-P6 已就绪；P7 仍未就绪，缺少一次真实发布周期的
   `--data-dir`、当前 release 和发布证据。隔离 recovery smoke 不能替代 P7。
 - 全面底层重构尚未达到退出条件：仍有 33 个
-  `xiuxian/*/transaction_service.py`（39,481 行）以及
+  `xiuxian/*/transaction_service.py`（39,430 行）以及
   `xiuxian2_handle.py`（181,665 bytes）的旧执行路径。它们不能因已有 facade、
   application 或静态标记而计作完成。
-- 当前静态审计命中：`transaction_service.py` 33 个/39,481 行，旧服务 import 文件
-  104 个，`xiuxian2_handle` import 文件 80 个，直接 `db_backend.connect` 命中 107 个，
-  `sqlite3.connect` 命中 19 个，直接全局 random 命中 67 个，`datetime.now` 命中
+- 当前静态审计命中：`transaction_service.py` 33 个/39,430 行，旧服务 import 文件
+  103 个，`xiuxian2_handle` import 文件 80 个，直接 `db_backend.connect` 命中 107 个，
+  `sqlite3.connect` 命中 21 个，直接全局 random 命中 67 个，`datetime.now` 命中
   67 个，`time.time` 命中 25 个。计数只作趋势，不替代逐条真实调用图审计。
 - 已切换的功能仍可能保留显式 compatibility/rollback adapter；只有默认真实
   handler/route/scheduler 已改走 feature-owned application，且旧实现不再承载该
@@ -2897,17 +2897,13 @@
    每次只迁一个资产转换，兼容 repository 仅在真实调用归零且回滚证据满足后移除。
 5. 清零已迁移域的 compatibility 余额：背包高频动作和签到默认副作用已由
    feature-owned application 承载；宠物旧 service 本轮已隔离，但显式
-   `LegacyPetRepository` 与旧数据 projection 仍需审计。通用 daily/weekly 任务进度现由
-   `TaskProgressApplication -> TasksProgressRepository` 承载；真实 `game_events`、work、buff、
-   impart 调用仍经旧 task-data adapter 组装任务映射，签到专属 projection 仍由 sign-in feature
-   单独承载。新增 player-only `tasks.001` 迁移为进度表预建 schema，生产进度读写不再请求期建表。
-   `LegacyTaskProgressEventService` 源码暂留为兼容对照，旧公开 service 名称转发到 feature repo。
-   任务奖励仍经 `TasksRepository -> task_manager -> TaskRewardClaimService`；本轮已用 game-only
-   `tasks.002` 迁出领奖操作/economy-log schema DDL，player-only `tasks.001` 管理任务状态列，生产领奖
-   请求不再建表。动态 reward snapshot、game/player attached transaction、WAL 下的跨库崩溃原子性和
-   外层 operation ledger 卡在 started 后的续跑仍未解决；下一项重做 claim transaction/recovery ownership，
-   不将任务进度或 schema 边界误计为任务域完成。随后处理训练、洞府/地图未覆盖动作、宗门、
-   竞技场/副本、世界事件、Boss 和交易剩余 adapter。每次先证明默认 handler/route/scheduler 已切换，
+   `LegacyPetRepository` 与旧数据 projection 仍需审计。通用 daily/weekly 任务进度和领奖
+   现由 `TaskProgressApplication`、`TaskClaimApplication` 及 game/player repositories 承载；
+   `tasks.003`/`.004` 已分别路由 game/player，started/granted operation 可由 reconcile 续跑，
+   不再使用请求期 DDL 或 WAL 下不具备崩溃原子性的 attached transaction。任务 definitions、Items
+   元数据解析和奖励 snapshot 仍由 `task_data` adapter 提供，`LegacyTaskProgressEventService` 与
+   `TaskRewardClaimService` 源码仍作 compatibility 对照。下一项按真实调用图处理训练、洞府/地图未覆盖动作、
+   宗门、竞技场/副本、世界事件、Boss 和交易剩余 adapter；每次先证明默认 handler/route/scheduler 已切换，
    再隔离或删除旧实现。
 6. 单列处理复杂批处理和外部状态：赌坊投注/派奖与分块分红、全服批处理、跨库
    补偿、JSON/凭据状态、scheduler 和外部版本更新必须保留冻结快照、分块进度、
