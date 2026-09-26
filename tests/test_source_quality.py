@@ -1251,6 +1251,21 @@ class SourceQualityTests(unittest.TestCase):
             "legacy_back_stone_reward import StoneItemRewardService", facade_source
         )
 
+    def test_three_cultivation_pill_compatibility_wrapper_is_isolated(self) -> None:
+        back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
+        legacy_source = (back_root / "transaction_service.py").read_text(encoding="utf-8")
+        compatibility_source = (
+            SOURCE_ROOT / "compatibility" / "legacy_back_three_cultivation_pill.py"
+        ).read_text(encoding="utf-8")
+        facade_source = (back_root / "__init__.py").read_text(encoding="utf-8")
+
+        self.assertNotIn("class ThreeCultivationPillService", legacy_source)
+        self.assertIn("class ThreeCultivationPillService", compatibility_source)
+        self.assertIn(
+            "legacy_back_three_cultivation_pill import ThreeCultivationPillService",
+            facade_source,
+        )
+
     def test_cultivation_item_use_is_atomic_and_idempotent(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         command_source = (back_root / "__init__.py").read_text(encoding="utf-8")
