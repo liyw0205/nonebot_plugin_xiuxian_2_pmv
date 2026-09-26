@@ -13,11 +13,9 @@ class LegacyBaseRepository:
         self.game_database, self.player_database = str(game_database), str(player_database)
 
     def invoke(self, action: str, operation_id: str, user_id: str, **kwargs: Any) -> Any:
-        from ...xiuxian.xiuxian_base.transaction_service import (
-            DestinyTribulationService,
-            PlayerRenameService,
-        )
+        from ...xiuxian.xiuxian_base.transaction_service import PlayerRenameService
         from ...compatibility.legacy_base_breakthrough import BreakthroughService
+        from ...compatibility.legacy_base_destiny_tribulation import DestinyTribulationService
         from ...compatibility.legacy_base_ordinary_tribulation import OrdinaryTribulationService
         from ...compatibility.legacy_base_stone_contest import StoneContestService
         from ...compatibility.legacy_base_stone_robbery import StoneRobberySettlementService

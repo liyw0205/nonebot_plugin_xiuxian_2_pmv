@@ -1955,7 +1955,7 @@ class SourceQualityTests(unittest.TestCase):
 
         for service_path in (
             SOURCE_ROOT / "compatibility" / "legacy_base_ordinary_tribulation.py",
-            base_root / "destiny_tribulation_service.py",
+            SOURCE_ROOT / "compatibility" / "legacy_base_destiny_tribulation.py",
             base_root / "heart_devil_tribulation_service.py",
         ):
             service_source = service_path.read_text(encoding="utf-8")

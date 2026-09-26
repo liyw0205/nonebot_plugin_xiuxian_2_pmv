@@ -25,7 +25,7 @@ from ..xiuxian_utils.utils import (
 from ..xiuxian_utils.xiuxian2_handle import OtherSet, UserBuffDate, XiuxianDateManage
 from ..xiuxian_title.title_data import check_and_unlock_titles
 from ...compatibility.legacy_base_breakthrough import BreakthroughService
-from .transaction_service import DestinyTribulationService
+from ...compatibility.legacy_base_destiny_tribulation import DestinyTribulationService
 from .transaction_service import HeartDevilTribulationService
 from ...compatibility.legacy_base_ordinary_tribulation import OrdinaryTribulationService
 from .transaction_service import PillFusionService
