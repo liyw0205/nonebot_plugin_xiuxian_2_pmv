@@ -1856,7 +1856,7 @@ class SourceQualityTests(unittest.TestCase):
         command_source = (base_root / "breakthrough_tribulation.py").read_text(
             encoding="utf-8"
         )
-        service_source = (base_root / "breakthrough_service.py").read_text(
+        service_source = (SOURCE_ROOT / "compatibility" / "legacy_base_breakthrough.py").read_text(
             encoding="utf-8"
         )
         self.assertIn("_breakthrough_service().apply_failure(", command_source)
@@ -1966,7 +1966,7 @@ class SourceQualityTests(unittest.TestCase):
         command_source = (base_root / "breakthrough_tribulation.py").read_text(
             encoding="utf-8"
         )
-        service_source = (base_root / "breakthrough_service.py").read_text(
+        service_source = (SOURCE_ROOT / "compatibility" / "legacy_base_breakthrough.py").read_text(
             encoding="utf-8"
         )
         self.assertIn(
@@ -1983,7 +1983,7 @@ class SourceQualityTests(unittest.TestCase):
         command_source = (base_root / "breakthrough_tribulation.py").read_text(
             encoding="utf-8"
         )
-        service_source = (base_root / "breakthrough_service.py").read_text(
+        service_source = (SOURCE_ROOT / "compatibility" / "legacy_base_breakthrough.py").read_text(
             encoding="utf-8"
         )
         self.assertIn("_breakthrough_service().apply_continuous(", command_source)
@@ -1995,7 +1995,7 @@ class SourceQualityTests(unittest.TestCase):
         command_source = (base_root / "breakthrough_tribulation.py").read_text(
             encoding="utf-8"
         )
-        service_source = (base_root / "breakthrough_service.py").read_text(
+        service_source = (SOURCE_ROOT / "compatibility" / "legacy_base_breakthrough.py").read_text(
             encoding="utf-8"
         )
         self.assertIn(

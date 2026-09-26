@@ -51,6 +51,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     stone_contest_compatibility = (PACKAGE / "compatibility" / "legacy_base_stone_contest.py").read_text(encoding="utf-8")
     stone_robbery_compatibility = (PACKAGE / "compatibility" / "legacy_base_stone_robbery.py").read_text(encoding="utf-8")
     xiangyuan_compatibility = (PACKAGE / "compatibility" / "legacy_base_xiangyuan.py").read_text(encoding="utf-8")
+    breakthrough_compatibility = (PACKAGE / "compatibility" / "legacy_base_breakthrough.py").read_text(encoding="utf-8")
     adapter = (PACKAGE / "adapters" / "nonebot" / "commands.py").read_text(encoding="utf-8")
     web = (PACKAGE / "adapters" / "web" / "api.py").read_text(encoding="utf-8")
     legacy_transaction = (PACKAGE / "xiuxian" / "xiuxian_base" / "transaction_service.py").read_text(encoding="utf-8")
@@ -579,7 +580,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "stone_contest_service_isolated": "class StoneContestService" not in base_transaction and "class StoneContestService" in stone_contest_compatibility and "stone_contest_operations" in stone_contest_compatibility,
             "stone_robbery_service_isolated": "class StoneRobberySettlementService" not in base_transaction and "class StoneRobberySettlementService" in stone_robbery_compatibility and "stone_robbery_operations" in stone_robbery_compatibility,
             "xiangyuan_service_isolated": "class XiangyuanSettlementService" not in base_transaction and "class XiangyuanSettlementService" in xiangyuan_compatibility and "xiangyuan_create_operations" in xiangyuan_compatibility and "xiangyuan_claim_operations" in xiangyuan_compatibility,
-            "status": "rename_stone_contest_stone_robbery_and_xiangyuan_compatibility_isolation_with_replay",
+            "breakthrough_service_isolated": "class BreakthroughService" not in base_transaction and "class BreakthroughService" in breakthrough_compatibility and all(token in breakthrough_compatibility for token in ("direct_breakthrough_operations", "continuous_breakthrough_operations", "tribulation_breakthrough_operations", "continuous_tribulation_operations")),
+            "status": "rename_stone_contest_stone_robbery_xiangyuan_and_breakthrough_compatibility_isolation_with_replay",
         },
         "puppet": {
             "harvest_application_owned": "puppet_application.harvest(" in puppet_facade,

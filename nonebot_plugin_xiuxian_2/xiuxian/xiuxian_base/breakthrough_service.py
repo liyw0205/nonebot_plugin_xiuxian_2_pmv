@@ -1,6 +1,6 @@
 """Stable facade for breakthrough and tribulation transactions."""
 
-from .transaction_service import BreakthroughService
+from ...compatibility.legacy_base_breakthrough import BreakthroughService
 
 # BEGIN IMMEDIATE protects these operation ledgers.
 OPERATION_TABLES = (
