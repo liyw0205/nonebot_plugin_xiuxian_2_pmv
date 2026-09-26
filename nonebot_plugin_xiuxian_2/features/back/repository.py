@@ -17,9 +17,10 @@ class LegacyBackRepository:
         from ...xiuxian.xiuxian_back.transaction_service import (
             AccessoryTransactionService,
             BackpackRepairService, BatchItemUseService, EquipmentService,
-            PackageRewardService, SkillLearningService, UnbindItemService,
+            SkillLearningService, UnbindItemService,
         )
         from ...compatibility.legacy_back_alchemy import AlchemyService
+        from ...compatibility.legacy_back_package_reward import PackageRewardService
         from ...xiuxian.xiuxian_back.accessory_package_service import AccessoryPackageService
         mapping = {
             "open_package": (PackageRewardService, "apply"),

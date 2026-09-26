@@ -732,9 +732,16 @@ class SourceQualityTests(unittest.TestCase):
     def test_main_database_package_rewards_use_transactional_service(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         command_source = (back_root / "__init__.py").read_text(encoding="utf-8")
+        legacy_source = (back_root / "transaction_service.py").read_text(encoding="utf-8")
         service_source = (back_root / "package_reward_service.py").read_text(
             encoding="utf-8"
         )
+        compatibility_source = (
+            SOURCE_ROOT / "compatibility" / "legacy_back_package_reward.py"
+        ).read_text(encoding="utf-8")
+        rollback_repository_source = (
+            SOURCE_ROOT / "features" / "back" / "repository.py"
+        ).read_text(encoding="utf-8")
         start = command_source.index("if goods_type == \"礼包\":")
         end = command_source.index("elif goods_type == \"装备\":", start)
         command = command_source[start:end]
@@ -743,6 +750,10 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("if accessory_need == 0:", command)
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("package_reward_operations", service_source)
+        self.assertNotIn("class PackageRewardService", legacy_source)
+        self.assertIn("class PackageRewardService", compatibility_source)
+        self.assertIn("legacy_back_package_reward import", service_source)
+        self.assertIn("legacy_back_package_reward import PackageRewardService", rollback_repository_source)
 
     def test_main_package_reward_handler_uses_lifecycle_application(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"

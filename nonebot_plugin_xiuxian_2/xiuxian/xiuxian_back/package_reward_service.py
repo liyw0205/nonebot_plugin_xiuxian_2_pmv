@@ -39,7 +39,9 @@ class PackageRewardService:
         enabled = os.environ.get("XIUXIAN_PACKAGE_REWARD_ENABLED", "true").strip().lower()
         self._legacy = None
         if enabled in {"0", "false", "no", "off"}:
-            from .transaction_service import PackageRewardService as LegacyPackageRewardService
+            from ...compatibility.legacy_back_package_reward import (
+                PackageRewardService as LegacyPackageRewardService,
+            )
 
             self._legacy = LegacyPackageRewardService(database)
 
