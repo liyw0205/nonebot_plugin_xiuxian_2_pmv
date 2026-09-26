@@ -2814,7 +2814,7 @@
 
 ## 6. 下一步
 
-### 6.1 当前权威状态（2026-09-25）
+### 6.1 当前权威状态（2026-09-26）
 
 本节以 `scripts/refactor_completion_audit.py` 和
 `scripts/check_full_refactor_progress.py` 的当前输出为准；前文及下方的日期记录仅保留当时的实施证据，不应被当作当前待办状态。
@@ -2822,8 +2822,8 @@
 - 架构/交付基础门禁 P0-P6 已就绪；P7 仍未就绪，缺少一次真实发布周期的
   `--data-dir`、当前 release 和发布证据。隔离 recovery smoke 不能替代 P7。
 - 全面底层重构尚未达到退出条件：仍有 33 个
-  `xiuxian/*/transaction_service.py`（47,428 行）以及
-  `xiuxian2_handle.py`（180,302 bytes）的旧执行路径。它们不能因已有 facade、
+  `xiuxian/*/transaction_service.py`（45,824 行）以及
+  `xiuxian2_handle.py`（181,665 bytes）的旧执行路径。它们不能因已有 facade、
   application 或静态标记而计作完成。
 - 已切换的功能仍可能保留显式 compatibility/rollback adapter；只有默认真实
   handler/route/scheduler 已改走 feature-owned application，且旧实现不再承载该
@@ -2852,6 +2852,11 @@
 - 背包解绑符真实 handler 已切换到 `BackApplication.unbind -> UnbindApplication ->
   UnbindSqlRepository`；旧 `UnbindItemService` 仅保留显式兼容回滚。`back.003` 在 game DB
   启动迁移创建幂等表，请求路径不再执行 DDL；数量截断、重复请求和事务回滚语义保持不变。
+- 背包饰品礼包真实 handler 已由 `BackApplication.accessory_package ->
+  AccessoryPackageApplication` 承载；旧 `AccessoryPackageService` 已移至
+  `compatibility/legacy_back_accessory_package.py`，旧 import 仅作 re-export，显式回滚
+  repository 直接引用 compatibility-only 实现。attached player namespace、容量检查、
+  operation replay/conflict 和跨库回滚语义保持不变；饰品礼包兼容窄回归 11 passed。
 
 ### 6.2 优先目标
 
@@ -2881,10 +2886,13 @@
    和竞价前拍品查询均已迁至 feature-owned application 与无 DDL 的只读 repository。下一步是
    处理旧拍卖 session/竞价 fallback 的显式兼容 adapter；检查仙肆/鬼市剩余 handler 的真实调用图，
    每次只迁一个资产转换，兼容 repository 仅在真实调用归零且回滚证据满足后移除。
-5. 清零已迁移域的 compatibility 余额：优先处理仍由旧 service 承载的高频资产
-   路径，包括签到显式旧安装回滚、背包通用物品/礼包余项、宠物、任务/修炼、洞府和
-   地图未覆盖动作、宗门、竞技场/副本、世界事件、Boss 与拍卖。先用真实入口
-   调用图确定一个动作，再迁移，不按文件或目录整体宣布完成。
+5. 清零已迁移域的 compatibility 余额：按真实调用图逐项推进，下一批优先级为：
+   `AccessoryTransactionService`（饰品锁定/洗练/分解/升阶/预设，仍有旧命令真实调用）、
+   `SkillLearningService`、`LotteryTalismanService`、`StoneItemRewardService`、
+   `ThreeCultivationPillService`、`UnbindItemService` 等背包兼容服务；随后处理签到
+   副作用、宠物/任务/修炼、洞府/地图未覆盖动作、宗门、竞技场/副本、世界事件、Boss
+   与拍卖剩余 adapter。每次先证明默认 handler/route/scheduler 已由 feature-owned
+   application 承载，再隔离或删除旧实现，不按文件或目录整体宣布完成。
 6. 单列处理复杂批处理和外部状态：赌坊投注/派奖与分块分红、全服批处理、跨库
    补偿、JSON/凭据状态、scheduler 和外部版本更新必须保留冻结快照、分块进度、
    子操作 replay、失败续跑和 reconcile；不能为追赶进度改成 facade 或一次性大
@@ -4474,3 +4482,5 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-09-26 back repair compatibility isolation：旧 `BackpackRepairService` 包装从 `xiuxian_back/transaction_service.py` 移至 `compatibility/legacy_back_repair.py`，旧 import 保持 re-export 兼容；`xiuxian_back` facade 与 `LegacyBackRepository` 显式回滚路径直接引用 compatibility-only 包装。保留修复 repository 的请求期 schema、管理员批量修复、CAS、operation replay 和 rollback 语义；真实背包检查 handler 继续只调用 `BackApplication.repair`。修复/背包窄回归 `13 passed`，compileall、architecture、progress、inventory 和 diff check 通过；本阶段未新增 migration，缓存与临时目录已清理。下一步继续处理背包 accessory 兼容边界或签到副作用，并保留全局 legacy transaction service/`xiuxian2_handle` 未完成状态。
 
 2026-09-26 back equipment compatibility isolation：旧 `EquipmentService` 与 `EquipmentChange` 从 `xiuxian_back/transaction_service.py` 移至 `compatibility/legacy_back_equipment.py`，旧 import 与 `equipment_service.py` facade 保持兼容；`LegacyBackRepository` 显式回滚分支直接引用 compatibility-only 服务。保留装备槽位、BuffInfo/库存状态 CAS、replacement、duplicate/state_changed 和 rollback 语义；真实穿戴/卸下 handler 继续只调用 `BackApplication.change_equipment`。装备/背包窄回归 `16 passed`，compileall、architecture、progress、inventory 和 diff check 通过；本阶段未新增 migration，缓存与临时目录已清理。下一步继续处理背包 accessory 兼容边界或签到副作用，并保留全局 legacy transaction service/`xiuxian2_handle` 未完成状态。
+
+2026-09-26 back accessory-package compatibility isolation：旧 `AccessoryPackageService` 与结果 DTO 从 `xiuxian_back/transaction_service.py` 移至 `compatibility/legacy_back_accessory_package.py`，旧 import 保持 re-export 兼容；`LegacyBackRepository` 显式回滚分支直接引用 compatibility-only 服务。保留 attached player namespace、容量检查、灵石/物品奖励、operation replay/conflict、CAS 和跨库 rollback 语义；真实饰品礼包 handler 继续只调用 `BackApplication.accessory_package`。饰品礼包窄回归 `11 passed`，compileall、architecture、progress、inventory 和 diff check 通过；本阶段未新增 migration，项目/虚拟环境缓存、SQLite sidecar 和临时目录已清理。下一步优先处理仍被饰品旧命令调用的 `AccessoryTransactionService`，并保留全局 legacy transaction service/`xiuxian2_handle` 未完成状态。
