@@ -177,6 +177,7 @@ def configure_back_application(application: BackApplication) -> None:
     configure_permanent_atk_item_application(application.permanent_atk_item_application)
     configure_blessed_flag_replace_application(application.blessed_flag_replace_application)
     _accessory.configure_affix_application(application.accessory_affix_application)
+    _accessory.configure_decompose_application(application.accessory_decompose_application)
 
 
 def _package_open_result(outcome, user_id, package_id, quantity, rewards):

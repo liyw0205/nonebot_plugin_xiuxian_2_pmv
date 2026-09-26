@@ -32,12 +32,14 @@ from .accessory_helpers import (  # noqa: F401
 )
 from ...compatibility.legacy_back_accessory_transaction import AccessoryTransactionService
 from ...features.back.accessory_affix_application import AccessoryAffixApplication
+from ...features.back.accessory_decompose_application import AccessoryDecomposeApplication
 
 items = Items()
 _sql_message_instance = None
 _player_data_manager_instance = None
 _accessory_transaction_service_instance = None
 _accessory_affix_application = None
+_accessory_decompose_application = None
 runtime_ids = UUIDGenerator()
 
 
@@ -88,6 +90,20 @@ def _affix_application():
 def configure_affix_application(application: AccessoryAffixApplication) -> None:
     global _accessory_affix_application
     _accessory_affix_application = application
+
+
+def _decompose_application():
+    global _accessory_decompose_application
+    if _accessory_decompose_application is None:
+        _accessory_decompose_application = AccessoryDecomposeApplication(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _accessory_decompose_application
+
+
+def configure_decompose_application(application: AccessoryDecomposeApplication) -> None:
+    global _accessory_decompose_application
+    _accessory_decompose_application = application
 
 
 def _acc_fail_msg(result, *, action: str = "饰品操作") -> str:
@@ -1093,7 +1109,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     user_id = str(user_info["user_id"])
     operation_id = _accessory_operation_id(event, "decompose", user_id, uid)
-    replay = _accessory_transaction_service().replay(operation_id, "decompose")
+    replay = _decompose_application().replay(operation_id)
     if replay is not None and replay.accessory is not None:
         decomposed = replay.accessory
         q = max(1, min(5, int(decomposed.get("quality", 1))))
@@ -1110,7 +1126,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
     q = max(1, min(5, int(target.get("quality", 1))))
     gain = ACCESSORY_DECOMPOSE_GAIN.get(q, 1)
-    result = _accessory_transaction_service().decompose(
+    result = _decompose_application().decompose(
         operation_id,
         user_id,
         uid,

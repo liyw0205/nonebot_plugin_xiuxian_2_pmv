@@ -24,6 +24,7 @@ from .pet_egg_application import PetEggApplication
 from .item_use_application import ItemUseApplication
 from ..accessory_package.application import AccessoryPackageApplication, AccessoryPackageResult
 from .accessory_affix_application import AccessoryAffixApplication
+from .accessory_decompose_application import AccessoryDecomposeApplication
 
 
 class BackApplication(LegacyApplication):
@@ -49,6 +50,10 @@ class BackApplication(LegacyApplication):
             player_database or database,
         )
         self.accessory_affix_application = AccessoryAffixApplication(
+            database,
+            player_database or database,
+        )
+        self.accessory_decompose_application = AccessoryDecomposeApplication(
             database,
             player_database or database,
         )
