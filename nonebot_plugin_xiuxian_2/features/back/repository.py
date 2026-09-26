@@ -16,6 +16,7 @@ class LegacyBackRepository:
     def invoke(self, action: str, operation_id: str, user_id: str, **kwargs: Any) -> Any:
         from ...compatibility.legacy_back_unbind import UnbindItemService
         from ...compatibility.legacy_back_cultivation_item import CultivationItemService
+        from ...compatibility.legacy_back_breakthrough_rate_item import BreakthroughRateItemService
         from ...compatibility.legacy_back_alchemy import AlchemyService
         from ...compatibility.legacy_back_equipment import EquipmentService
         from ...compatibility.legacy_back_repair import BackpackRepairService
@@ -33,6 +34,7 @@ class LegacyBackRepository:
             "use_pet_eggs": (BatchItemUseService, "use_pet_eggs"),
             "alchemy": (AlchemyService, "apply"),
             "unbind": (UnbindItemService, "apply"),
+            "breakthrough_rate_item": (BreakthroughRateItemService, "apply"),
             "accessory_package": (AccessoryPackageService, "apply"),
             "accessory": (AccessoryTransactionService, "upgrade"),
         }

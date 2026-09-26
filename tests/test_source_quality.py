@@ -1319,6 +1319,39 @@ class SourceQualityTests(unittest.TestCase):
             "legacy_back_cultivation_item import CultivationItemService", repository_source
         )
 
+    def test_breakthrough_rate_item_compatibility_wrapper_is_isolated(self) -> None:
+        back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
+        legacy_source = (back_root / "transaction_service.py").read_text(encoding="utf-8")
+        compatibility_source = (
+            SOURCE_ROOT / "compatibility" / "legacy_back_breakthrough_rate_item.py"
+        ).read_text(encoding="utf-8")
+        utility_source = (back_root / "back_util.py").read_text(encoding="utf-8")
+        service_facade_source = (back_root / "breakthrough_rate_item_service.py").read_text(
+            encoding="utf-8"
+        )
+        repository_source = (
+            SOURCE_ROOT / "features" / "back" / "repository.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("class BreakthroughRateItemService", legacy_source)
+        self.assertIn("class BreakthroughRateItemService", compatibility_source)
+        self.assertIn(
+            "legacy_back_breakthrough_rate_item import BreakthroughRateItemService",
+            utility_source,
+        )
+        self.assertIn(
+            "legacy_back_breakthrough_rate_item import BreakthroughRateItemService",
+            service_facade_source,
+        )
+        self.assertIn(
+            "legacy_back_breakthrough_rate_item import BreakthroughRateItemService",
+            repository_source,
+        )
+        self.assertIn(
+            '"breakthrough_rate_item": (BreakthroughRateItemService, "apply")',
+            repository_source,
+        )
+
     def test_cultivation_item_use_is_atomic_and_idempotent(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         command_source = (back_root / "__init__.py").read_text(encoding="utf-8")

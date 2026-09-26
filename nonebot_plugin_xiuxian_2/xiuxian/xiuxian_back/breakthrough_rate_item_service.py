@@ -1,6 +1,6 @@
 """Stable facade for breakthrough-rate item transactions."""
 
-from .transaction_service import BreakthroughRateItemService
+from ...compatibility.legacy_back_breakthrough_rate_item import BreakthroughRateItemService
 
 # BEGIN IMMEDIATE protects the idempotent breakthrough_rate_item_operations ledger.
 OPERATION_TABLE = "breakthrough_rate_item_operations"
