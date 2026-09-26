@@ -10,8 +10,8 @@ import pytest
 from ..event_repository import TrainingEventSqlRepository
 from ..migrations import apply_training_event_operations, apply_training_event_player
 from ..application import TrainingApplication
-from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
-from nonebot_plugin_xiuxian_2.plugin import build_migrations, migrations_for_database
+from ....infrastructure.database import DatabaseUnitOfWork
+from ....plugin import build_migrations, migrations_for_database
 
 
 def _databases(tmp_path: Path) -> tuple[Path, Path]:
@@ -173,5 +173,5 @@ def test_application_routes_event_apply_to_feature_repository(tmp_path: Path) ->
 
 def test_training_migrations_are_routed_to_their_own_databases() -> None:
     migrations = build_migrations()
-    assert [item.version for item in migrations_for_database(migrations, "game_db") if item.version.startswith("training.")] == ["training.001"]
+    assert [item.version for item in migrations_for_database(migrations, "game_db") if item.version.startswith("training.")] == ["training.001", "training.003"]
     assert [item.version for item in migrations_for_database(migrations, "player_db") if item.version.startswith("training.")] == ["training.002"]

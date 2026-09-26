@@ -219,3 +219,5 @@ compileall、architecture、progress、inventory 和 diff check 通过；无新�
 （1 条既有 ServicePort `DeprecationWarning`）；compileall、architecture、progress、inventory 和 diff check 通过。五库 recovery 覆盖 177 个
 migration version，路由计数 `140/33/7/1/1`，`.003` 仅 game、`.004` 仅 player；backup/restore dry-run/restore、五库 migration dry-run
 （pending 为空）、health 六项和 reconcile clean 均通过。专用 recovery 数据、receipt、pytest cache 与字节码缓存已清理；真实发布数据迁移和 P7 仍未完成。
+
+`training shop purchase`：`历练兑换` 默认路径切换至 feature-owned `TrainingPurchaseSqlRepository`；新增 game-only `training.003`，attached transaction 负责积分/weekly、背包容量与绑定数量、operation replay/conflict，旧 payload 可语义兼容读取。聚焦回归覆盖 applied/duplicate/conflict、拒绝不变更、晚失败 rollback、缺 schema 不建表和 application route；管理员 reset 继续作为明确 compatibility 边界。恢复演练应验证 `training.003` 只进入 game_db，完成后清理 basetemp、字节码、pytest cache、receipt 和临时数据库，并复核 `df -h`/`free -h`。

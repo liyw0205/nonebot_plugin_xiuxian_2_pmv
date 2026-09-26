@@ -43,6 +43,11 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(training["event_repository_atomic"])
         self.assertTrue(training["event_request_path_has_no_ddl"])
         self.assertTrue(training["event_migrations_registered"])
+        self.assertTrue(training["purchase_application_owned"])
+        self.assertTrue(training["purchase_default_entry_owned"])
+        self.assertTrue(training["purchase_repository_atomic"])
+        self.assertTrue(training["purchase_request_path_has_no_ddl"])
+        self.assertTrue(training["purchase_migrations_registered"])
         self.assertTrue(training["purchase_reset_compatibility_retained"])
         work = slices["work"]
         self.assertTrue(work["daily_refresh_application_owned"])

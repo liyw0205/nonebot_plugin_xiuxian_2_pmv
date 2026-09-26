@@ -84,6 +84,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     training_application = (PACKAGE / "features" / "training" / "application.py").read_text(encoding="utf-8")
     training_repository = (PACKAGE / "features" / "training" / "repository.py").read_text(encoding="utf-8")
     training_event_repository = (PACKAGE / "features" / "training" / "event_repository.py").read_text(encoding="utf-8")
+    training_purchase_repository = (PACKAGE / "features" / "training" / "purchase_repository.py").read_text(encoding="utf-8")
     training_migrations = (PACKAGE / "features" / "training" / "migrations.py").read_text(encoding="utf-8")
     work_facade = (PACKAGE / "xiuxian" / "xiuxian_work" / "__init__.py").read_text(encoding="utf-8")
     work_accelerate_handler = work_facade[
@@ -352,8 +353,16 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def apply_training_event_operations(" in training_migrations
                 and "def apply_training_event_player(" in training_migrations
             ),
+            "purchase_application_owned": "TrainingPurchaseSqlRepository" in training_repository and "purchase" in training_repository,
+            "purchase_default_entry_owned": "training_application.execute(" in training_facade and '"purchase"' in training_facade[training_facade.index("def _run_training_action"):],
+            "purchase_repository_atomic": "AttachedDatabaseUnitOfWork" in training_purchase_repository and "player_data" in training_purchase_repository,
+            "purchase_request_path_has_no_ddl": "CREATE TABLE" not in training_purchase_repository and "ALTER TABLE" not in training_purchase_repository,
+            "purchase_migrations_registered": (
+                'Migration("training.003", "training_purchase_operations", apply_training_purchase_operations)' in plugin
+                and "def apply_training_purchase_operations(" in training_migrations
+            ),
             "purchase_reset_compatibility_retained": "training_purchase_service" in training_repository and "training_reset_service" in training_repository,
-            "status": "event_settlement_cutover_with_purchase_reset_compatibility",
+            "status": "event_and_purchase_cutover_with_reset_compatibility",
         },
         "work": {
             "daily_refresh_application_owned": "work_daily_refresh_application.reset(" in work_facade,

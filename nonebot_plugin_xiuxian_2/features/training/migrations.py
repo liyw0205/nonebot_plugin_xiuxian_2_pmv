@@ -60,9 +60,37 @@ def apply_training_event_player(uow: DatabaseUnitOfWork) -> None:
         uow.execute('ALTER TABLE statistics ADD COLUMN "历练次数" INTEGER DEFAULT 0')
 
 
+def apply_training_purchase_operations(uow: DatabaseUnitOfWork) -> None:
+    """Prepare the game-side idempotency ledger before purchase traffic."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS training_purchase_operations ("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
+        "quantity INTEGER NOT NULL,cost INTEGER NOT NULL,points INTEGER NOT NULL,"
+        "purchased INTEGER NOT NULL,inventory INTEGER NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    columns = {
+        str(row["name"])
+        for row in uow.query_all("PRAGMA table_info(training_purchase_operations)")
+    }
+    for name, definition in {
+        "payload": "TEXT NOT NULL DEFAULT ''",
+        "quantity": "INTEGER NOT NULL DEFAULT 0",
+        "cost": "INTEGER NOT NULL DEFAULT 0",
+        "points": "INTEGER NOT NULL DEFAULT 0",
+        "purchased": "INTEGER NOT NULL DEFAULT 0",
+        "inventory": "INTEGER NOT NULL DEFAULT 0",
+    }.items():
+        if name not in columns:
+            uow.execute(
+                f'ALTER TABLE training_purchase_operations ADD COLUMN "{name}" {definition}'
+            )
+
+
 __all__ = [
     "apply_training",
     "apply_training_event_operations",
     "apply_training_event_player",
+    "apply_training_purchase_operations",
     "apply_training_state",
 ]
