@@ -15,9 +15,10 @@ class LegacyBaseRepository:
     def invoke(self, action: str, operation_id: str, user_id: str, **kwargs: Any) -> Any:
         from ...xiuxian.xiuxian_base.transaction_service import (
             BreakthroughService, DestinyTribulationService, OrdinaryTribulationService,
-            PlayerRenameService, StoneRobberySettlementService,
+            PlayerRenameService,
         )
         from ...compatibility.legacy_base_stone_contest import StoneContestService
+        from ...compatibility.legacy_base_stone_robbery import StoneRobberySettlementService
         from ...compatibility.legacy_sign_in import SignInService
         mapping = {
             "breakthrough": (BreakthroughService, "apply_success", (self.game_database,)),

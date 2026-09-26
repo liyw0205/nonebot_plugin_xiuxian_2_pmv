@@ -2133,9 +2133,13 @@ class SourceQualityTests(unittest.TestCase):
             handler.index("OtherSet().player_fight("),
         )
         service = (base_root / "stone_robbery_service.py").read_text(encoding="utf-8")
-        self.assertIn("BEGIN IMMEDIATE", service)
-        self.assertIn("ATTACH DATABASE", service)
-        self.assertIn("stone_robbery_operations", service)
+        implementation = (
+            SOURCE_ROOT / "compatibility" / "legacy_base_stone_robbery.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("legacy_base_stone_robbery", service)
+        self.assertIn("BEGIN IMMEDIATE", implementation)
+        self.assertIn("ATTACH DATABASE", implementation)
+        self.assertIn("stone_robbery_operations", implementation)
         fight_source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_utils" / "xiuxian_json_config.py"
         ).read_text(encoding="utf-8")
