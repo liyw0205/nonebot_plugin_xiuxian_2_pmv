@@ -36,6 +36,7 @@ from ...features.back.accessory_decompose_application import AccessoryDecomposeA
 from ...features.back.accessory_wash_application import AccessoryWashApplication
 from ...features.back.accessory_upgrade_application import AccessoryUpgradeApplication
 from ...features.back.accessory_preset_application import AccessoryPresetApplication
+from ...features.back.accessory_quick_equip_application import AccessoryQuickEquipApplication
 
 items = Items()
 _sql_message_instance = None
@@ -46,6 +47,7 @@ _accessory_decompose_application = None
 _accessory_wash_application = None
 _accessory_upgrade_application = None
 _accessory_preset_application = None
+_accessory_quick_equip_application = None
 runtime_ids = UUIDGenerator()
 
 
@@ -152,6 +154,20 @@ def _preset_application():
 def configure_preset_application(application: AccessoryPresetApplication) -> None:
     global _accessory_preset_application
     _accessory_preset_application = application
+
+
+def _quick_equip_application():
+    global _accessory_quick_equip_application
+    if _accessory_quick_equip_application is None:
+        _accessory_quick_equip_application = AccessoryQuickEquipApplication(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _accessory_quick_equip_application
+
+
+def configure_quick_equip_application(application: AccessoryQuickEquipApplication) -> None:
+    global _accessory_quick_equip_application
+    _accessory_quick_equip_application = application
 
 
 def _acc_fail_msg(result, *, action: str = "饰品操作") -> str:
@@ -1454,16 +1470,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     operation_id = _accessory_operation_id(
         event, "quick_equip_preset", user_id, str(preset_idx)
     )
-    equip_result = _accessory_transaction_service().replay(
-        operation_id, "quick_equip_preset"
-    )
+    equip_result = _quick_equip_application().replay(operation_id)
     if equip_result is None:
         data = _get_data(user_id)
         preset = _get_accessory_preset(user_id, preset_idx)
         if not any(preset.get(slot) for slot in SLOTS):
             await handle_send(bot, event, f"饰品预设{preset_idx}为空，无法快速装备。")
             return
-        equip_result = _accessory_transaction_service().quick_equip_preset(
+        equip_result = _quick_equip_application().equip(
             operation_id,
             user_id,
             preset_idx,
@@ -1474,7 +1488,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         if not equip_result.succeeded:
             messages = {
                 "preset_empty": f"饰品预设{preset_idx}为空，无法快速装备。",
-                "state_changed": _acc_fail_msg(result, action="切换预设"),
+                "state_changed": _acc_fail_msg(equip_result, action="切换预设"),
             }
             await handle_send(
                 bot,

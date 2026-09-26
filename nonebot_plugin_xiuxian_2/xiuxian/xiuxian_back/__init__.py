@@ -181,6 +181,7 @@ def configure_back_application(application: BackApplication) -> None:
     _accessory.configure_wash_application(application.accessory_wash_application)
     _accessory.configure_upgrade_application(application.accessory_upgrade_application)
     _accessory.configure_preset_application(application.accessory_preset_application)
+    _accessory.configure_quick_equip_application(application.accessory_quick_equip_application)
 
 
 def _package_open_result(outcome, user_id, package_id, quantity, rewards):

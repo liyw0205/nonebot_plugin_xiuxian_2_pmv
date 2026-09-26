@@ -716,7 +716,9 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
         self.assertIn("_preset_application().save", save_handler)
         self.assertIn("_preset_application().replay", save_handler)
         self.assertNotIn("_save_accessory_preset(", save_handler)
-        self.assertIn("_accessory_transaction_service().quick_equip_preset(", equip_handler)
+        self.assertIn("_quick_equip_application().equip", equip_handler)
+        self.assertIn("_quick_equip_application().replay", equip_handler)
+        self.assertNotIn("_accessory_transaction_service().quick_equip_preset", equip_handler)
         self.assertNotIn("player_data_manager.patch_doc(", equip_handler)
         self.assertNotIn("def _save_accessory_preset(", helpers)
 

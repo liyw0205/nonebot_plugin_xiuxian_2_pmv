@@ -522,8 +522,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_accessory_upgrade_disabled": "_accessory_transaction_service().upgrade" not in back_accessory_facade,
             "accessory_preset_application_owned": "_preset_application().save" in back_accessory_facade and "_preset_application().replay" in back_accessory_facade,
             "legacy_accessory_preset_disabled": "_accessory_transaction_service().save_preset" not in back_accessory_facade,
+            "accessory_quick_equip_application_owned": "_quick_equip_application().equip" in back_accessory_facade and "_quick_equip_application().replay" in back_accessory_facade,
+            "legacy_accessory_quick_equip_disabled": "_accessory_transaction_service().quick_equip_preset" not in back_accessory_facade,
             "legacy_repair_disabled": "_backpack_repair_service().run(" not in back_facade,
-            "status": "cultivation_item_skill_learning_lottery_talisman_stone_reward_three_cultivation_pill_alchemy_unbind_repair_equipment_equip_unequip_pet_egg_package_accessory_package_affix_lock_unlock_decompose_batch_decompose_wash_upgrade_preset_generic_item_use_cutover_with_other_back_compatibility",
+            "status": "cultivation_item_skill_learning_lottery_talisman_stone_reward_three_cultivation_pill_alchemy_unbind_repair_equipment_equip_unequip_pet_egg_package_accessory_package_affix_lock_unlock_decompose_batch_decompose_wash_upgrade_preset_quick_equip_generic_item_use_cutover_with_other_back_compatibility",
         },
         "past_life": {
             "final_settlement_application_owned": "_past_life_application.final_settle(" in past_life_events_facade,
