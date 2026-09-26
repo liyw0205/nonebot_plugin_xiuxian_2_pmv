@@ -47,6 +47,8 @@ def _counts() -> dict[str, int]:
 
 def _slice_status() -> dict[str, dict[str, object]]:
     base = (PACKAGE / "xiuxian" / "xiuxian_base" / "__init__.py").read_text(encoding="utf-8")
+    base_transaction = (PACKAGE / "xiuxian" / "xiuxian_base" / "transaction_service.py").read_text(encoding="utf-8")
+    stone_contest_compatibility = (PACKAGE / "compatibility" / "legacy_base_stone_contest.py").read_text(encoding="utf-8")
     adapter = (PACKAGE / "adapters" / "nonebot" / "commands.py").read_text(encoding="utf-8")
     web = (PACKAGE / "adapters" / "web" / "api.py").read_text(encoding="utf-8")
     legacy_transaction = (PACKAGE / "xiuxian" / "xiuxian_base" / "transaction_service.py").read_text(encoding="utf-8")
@@ -572,7 +574,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "rename_application_owned": "base_application.rename(" in base_facade,
             "legacy_rename_disabled": "_player_rename_service().rename_user(" not in base_facade and "_player_rename_service().rename_root(" not in base_facade,
             "rename_service_isolated": "class PlayerRenameService" not in legacy_transaction and (PACKAGE / "compatibility" / "legacy_base_player_rename.py").is_file(),
-            "status": "rename_cutover_with_replay_compatibility",
+            "stone_contest_service_isolated": "class StoneContestService" not in base_transaction and "class StoneContestService" in stone_contest_compatibility and "stone_contest_operations" in stone_contest_compatibility,
+            "status": "rename_and_stone_contest_compatibility_isolation_with_replay",
         },
         "puppet": {
             "harvest_application_owned": "puppet_application.harvest(" in puppet_facade,

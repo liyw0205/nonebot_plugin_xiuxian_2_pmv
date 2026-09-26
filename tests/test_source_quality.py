@@ -2105,8 +2105,12 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("sql_message.update_user_stamina(", handler)
         self.assertNotIn("Cooldown(stamina_cost=10", handler)
         service_source = (base_root / "stone_contest_service.py").read_text(encoding="utf-8")
-        self.assertIn("BEGIN IMMEDIATE", service_source)
-        self.assertIn("stone_contest_operations", service_source)
+        implementation_source = (
+            SOURCE_ROOT / "compatibility" / "legacy_base_stone_contest.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("legacy_base_stone_contest", service_source)
+        self.assertIn("BEGIN IMMEDIATE", implementation_source)
+        self.assertIn("stone_contest_operations", implementation_source)
 
     def test_stone_robbery_uses_transactional_transfer_service(self) -> None:
         base_root = SOURCE_ROOT / "xiuxian" / "xiuxian_base"
