@@ -1056,6 +1056,13 @@ class SourceQualityTests(unittest.TestCase):
     def test_alchemy_uses_feature_application(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         command_source = (back_root / "__init__.py").read_text(encoding="utf-8")
+        legacy_source = (back_root / "transaction_service.py").read_text(encoding="utf-8")
+        compatibility_source = (
+            SOURCE_ROOT / "compatibility" / "legacy_back_alchemy.py"
+        ).read_text(encoding="utf-8")
+        rollback_repository_source = (
+            SOURCE_ROOT / "features" / "back" / "repository.py"
+        ).read_text(encoding="utf-8")
         repository_source = (SOURCE_ROOT / "features" / "back" / "alchemy_repository.py").read_text(encoding="utf-8")
         single_start = command_source.index("async def goods_re_root_(")
         single_handler = command_source[single_start:command_source.index("@fast_alchemy.handle", single_start)]
@@ -1071,6 +1078,10 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("alchemy_service.apply(", command_source)
         self.assertNotIn("sql_message.update_ls(", single_handler + fast_handler)
         self.assertIn("configure_back_application", command_source)
+        self.assertNotIn("class AlchemyService", legacy_source)
+        self.assertIn("class AlchemyService", compatibility_source)
+        self.assertIn("legacy_back_alchemy import AlchemyService", command_source)
+        self.assertIn("legacy_back_alchemy import AlchemyService", rollback_repository_source)
         self.assertIn("immediate=True", repository_source)
         self.assertIn("alchemy_operations", repository_source)
 
