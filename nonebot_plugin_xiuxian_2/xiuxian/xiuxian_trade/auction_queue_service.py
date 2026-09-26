@@ -1,6 +1,6 @@
 """Stable facade for cross-database auction queue operations."""
 
-from .transaction_service import AuctionQueueService
+from ...compatibility.legacy_trade_auction_queue import AuctionQueueService
 
 # The implementation uses ATTACH DATABASE and BEGIN IMMEDIATE.
 OPERATION_TABLE = "auction_queue_operations"

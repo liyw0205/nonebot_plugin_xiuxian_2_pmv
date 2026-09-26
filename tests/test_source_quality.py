@@ -607,6 +607,9 @@ class SourceQualityTests(unittest.TestCase):
             SOURCE_ROOT / "features" / "auction" / "queue_repository.py"
         ).read_text(encoding="utf-8")
         legacy_source = (trade_root / "transaction_service.py").read_text(encoding="utf-8")
+        compatibility_source = (
+            SOURCE_ROOT / "compatibility" / "legacy_trade_auction_queue.py"
+        ).read_text(encoding="utf-8")
         start = command_source.index("async def auction_add_(")
         end = command_source.index("@my_auction.handle", start)
         command = command_source[start:end]
@@ -622,9 +625,8 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("attach_database", repository_source)
         self.assertIn("immediate=True", repository_source)
         self.assertIn("auction_queue_operations", repository_source)
-        service_start = legacy_source.index("class AuctionQueueService:")
-        service_end = legacy_source.index("__all__", service_start)
-        compatibility_service = legacy_source[service_start:service_end]
+        self.assertNotIn("class AuctionQueueService:", legacy_source)
+        compatibility_service = compatibility_source
         self.assertIn("AuctionQueueSqlRepository", compatibility_service)
         self.assertNotIn("CREATE TABLE", compatibility_service)
         self.assertNotIn("ATTACH DATABASE", compatibility_service)
