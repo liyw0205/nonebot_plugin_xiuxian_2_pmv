@@ -987,23 +987,8 @@ from ...compatibility.legacy_back_package_reward import (
     PackageReward,
     PackageRewardService,
 )
+from ...compatibility.legacy_back_pet_egg import BatchItemUseService
 
-
-class BatchItemUseService(PetEggUseSqlRepository):
-    """Compatibility wrapper that preserves request-time schema setup."""
-
-    def __init__(
-        self,
-        game_database: str | Path,
-        player_database: str | Path,
-        lock: RLock | None = None,
-    ) -> None:
-        super().__init__(
-            game_database,
-            player_database,
-            lock=lock,
-            ensure_schema=True,
-        )
 
 class BlessedFlagReplaceResult:
     status: str

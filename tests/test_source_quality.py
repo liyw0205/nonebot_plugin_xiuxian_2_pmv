@@ -768,6 +768,22 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("back_application.open_package(", handler)
         self.assertNotIn("_package_reward_service()", handler)
 
+    def test_pet_egg_compatibility_wrapper_is_isolated(self) -> None:
+        back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
+        legacy_source = (back_root / "transaction_service.py").read_text(encoding="utf-8")
+        compatibility_source = (
+            SOURCE_ROOT / "compatibility" / "legacy_back_pet_egg.py"
+        ).read_text(encoding="utf-8")
+        repository_source = (
+            SOURCE_ROOT / "features" / "back" / "repository.py"
+        ).read_text(encoding="utf-8")
+        facade_source = (back_root / "__init__.py").read_text(encoding="utf-8")
+
+        self.assertNotIn("class BatchItemUseService", legacy_source)
+        self.assertIn("class BatchItemUseService", compatibility_source)
+        self.assertIn("legacy_back_pet_egg import BatchItemUseService", repository_source)
+        self.assertIn("legacy_back_pet_egg import BatchItemUseService", facade_source)
+
     def test_back_facade_does_not_construct_unused_player_manager(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_back" / "__init__.py").read_text(
             encoding="utf-8"
