@@ -102,6 +102,7 @@ from .features.tianti_settlement.manifest import FEATURE as TIANTI_SETTLEMENT_FE
 from .features.tianti_settlement.migrations import apply_tianti_settlement, apply_tianti_settlement_operations
 from .features.tianti_training.manifest import FEATURE as TIANTI_TRAINING_FEATURE
 from .features.tianti_training.migrations import apply_tianti_breakthrough_operations, apply_tianti_item_reward_operations, apply_tianti_medicine_bath_operations, apply_tianti_player_info, apply_tianti_qiaoxue_operations, apply_tianti_training, apply_tianti_training_operations, apply_training_state
+from .features.training.migrations import apply_training_event_operations, apply_training_event_player
 from .features.tower.manifest import FEATURE as TOWER_FEATURE
 from .features.tower.migrations import apply_tower, apply_tower_purchase, apply_tower_settlement, apply_tower_state
 from .features.sect_fairyland.manifest import FEATURE as SECT_FAIRYLAND_FEATURE
@@ -322,6 +323,8 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("trade.011", "xianshi_plan_listing_operations", apply_trade_xianshi_plan_listing),
         Migration("trade.012", "xianshi_removal_operations", apply_trade_xianshi_removal),
         Migration("trade.013", "xianshi_operations", apply_trade_xianshi_purchase),
+        Migration("training.001", "training_event_operations", apply_training_event_operations),
+        Migration("training.002", "training_event_player_schema", apply_training_event_player),
         Migration("work.001", "work_feature_migrations", apply_work),
         Migration("work.002", "work_daily_refresh_reset_operations", apply_work_daily_refresh_reset),
         Migration("work.003", "work_item_use_operations", apply_work_item_use),
@@ -369,6 +372,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "rift.003",
         "tasks.001",
         "tasks.004",
+        "training.002",
     }
 )
 _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
@@ -406,6 +410,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "rift.003",
         "tasks.001",
         "tasks.004",
+        "training.002",
     }
 )
 _TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "auction.004"})
@@ -658,6 +663,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.admin_asset.repository import LegacyAdminStoneRepository
         from .features.tianti_settlement.application import TiantiSettlementApplication
         from .features.tianti_training.application import TiantiTrainingApplication
+        from .features.training.application import TrainingApplication
         from .features.tower.application import TowerApplication
         from .features.sect_fairyland.application import SectFairylandApplication
         from .features.sect_fairyland.repository import LegacySectFairylandRepository
@@ -884,7 +890,13 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
 
                 context.services["bank_first_use_info"] = BankAccountInfoApplication(str(context.database.path("game_db")))
         for feature_key, application_type in LEGACY_MIGRATED_APPLICATIONS.items():
+            if feature_key == "training":
+                continue
             context.services[feature_key] = application_type(str(context.database.path("game_db")))
+        context.services["training"] = TrainingApplication(
+            str(context.database.path("game_db")),
+            str(context.database.path("player_db")),
+        )
         try:
             from nonebot import get_driver
 
@@ -895,11 +907,13 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             from .xiuxian.xiuxian_base import configure_lottery_application, configure_sign_in_application
             from .xiuxian.xiuxian_back import configure_back_application, configure_package_reward_application
             from .xiuxian.xiuxian_tasks.task_data import configure_task_claim_application
+            from .xiuxian.xiuxian_training import configure_training_application
 
             configure_sign_in_application(context.services["sign_in"])
             configure_back_application(context.services["back"])
             configure_package_reward_application(context.services["package_reward"])
             configure_task_claim_application(context.services["task_claim"])
+            configure_training_application(context.services["training"])
             if lottery_application_type is not None and lottery_service is not None and isinstance(lottery_service, lottery_application_type):
                 configure_lottery_application(lottery_service)
         context.reconcile_handlers = {

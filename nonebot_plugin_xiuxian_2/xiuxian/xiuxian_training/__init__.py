@@ -28,9 +28,15 @@ from ..xiuxian_utils.utils import number_to
 _player_data_manager_instance = None
 _sql_message_instance = None
 items = Items()
-training_application = TrainingApplication(get_paths().game_db)
+training_application = TrainingApplication(get_paths().game_db, get_paths().player_db)
 runtime_clock = SystemClock()
 runtime_ids = UUIDGenerator()
+
+
+def configure_training_application(application: TrainingApplication) -> None:
+    """Inject the composition-root application used by command handlers."""
+    global training_application
+    training_application = application
 
 
 def _resolve_player_data_manager():
@@ -547,4 +553,7 @@ def training_reset_limits(operation_id, operator_id, *, chunk_size=500):
         operator_id=operator_id,
         chunk_size=chunk_size,
     )
+
+
+__all__ = ["configure_training_application", "make_choice", "training_reset_limits"]
     

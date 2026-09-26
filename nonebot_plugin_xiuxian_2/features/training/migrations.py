@@ -30,4 +30,39 @@ def apply_training_state(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_training", "apply_training_state"]
+def apply_training_event_operations(uow: DatabaseUnitOfWork) -> None:
+    """Create the game-side idempotency projection before traffic arrives."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS training_event_operations ("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL DEFAULT '',"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    columns = {
+        str(row["name"])
+        for row in uow.query_all("PRAGMA table_info(training_event_operations)")
+    }
+    if "result_json" not in columns:
+        uow.execute(
+            "ALTER TABLE training_event_operations "
+            "ADD COLUMN result_json TEXT NOT NULL DEFAULT ''"
+        )
+
+
+def apply_training_event_player(uow: DatabaseUnitOfWork) -> None:
+    """Prepare player-owned training state and statistics without request DDL."""
+    apply_training_state(uow)
+    uow.execute("CREATE TABLE IF NOT EXISTS statistics(user_id TEXT PRIMARY KEY)")
+    columns = {
+        str(row["name"])
+        for row in uow.query_all("PRAGMA table_info(statistics)")
+    }
+    if "历练次数" not in columns:
+        uow.execute('ALTER TABLE statistics ADD COLUMN "历练次数" INTEGER DEFAULT 0')
+
+
+__all__ = [
+    "apply_training",
+    "apply_training_event_operations",
+    "apply_training_event_player",
+    "apply_training_state",
+]

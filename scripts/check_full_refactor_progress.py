@@ -80,6 +80,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
     arena_limit = (PACKAGE / "xiuxian" / "xiuxian_arena" / "arena_limit.py").read_text(encoding="utf-8")
     tower_limit = (PACKAGE / "xiuxian" / "xiuxian_tower" / "tower_limit.py").read_text(encoding="utf-8")
     training_limit = (PACKAGE / "xiuxian" / "xiuxian_training" / "training_limit.py").read_text(encoding="utf-8")
+    training_facade = (PACKAGE / "xiuxian" / "xiuxian_training" / "__init__.py").read_text(encoding="utf-8")
+    training_application = (PACKAGE / "features" / "training" / "application.py").read_text(encoding="utf-8")
+    training_repository = (PACKAGE / "features" / "training" / "repository.py").read_text(encoding="utf-8")
+    training_event_repository = (PACKAGE / "features" / "training" / "event_repository.py").read_text(encoding="utf-8")
+    training_migrations = (PACKAGE / "features" / "training" / "migrations.py").read_text(encoding="utf-8")
     work_facade = (PACKAGE / "xiuxian" / "xiuxian_work" / "__init__.py").read_text(encoding="utf-8")
     work_accelerate_handler = work_facade[
         work_facade.index("async def use_work_order") : work_facade.index(
@@ -337,7 +342,18 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "training": {
             "state_application_owned": "TrainingStateApplication" in training_limit,
             "legacy_state_owner_disabled": "TrainingStateService" not in training_limit,
-            "status": "state_cutover_with_legacy_service_retained_for_compatibility",
+            "event_application_owned": "TrainingEventSqlRepository" in training_repository and "event_apply" in training_repository,
+            "event_default_entry_owned": "training_application.execute(" in training_facade and "TrainingApplication(get_paths().game_db, get_paths().player_db)" in training_facade,
+            "event_repository_atomic": "AttachedDatabaseUnitOfWork" in training_event_repository and "player_data" in training_event_repository,
+            "event_request_path_has_no_ddl": "CREATE TABLE" not in training_event_repository and "ALTER TABLE" not in training_event_repository,
+            "event_migrations_registered": (
+                'Migration("training.001", "training_event_operations", apply_training_event_operations)' in plugin
+                and 'Migration("training.002", "training_event_player_schema", apply_training_event_player)' in plugin
+                and "def apply_training_event_operations(" in training_migrations
+                and "def apply_training_event_player(" in training_migrations
+            ),
+            "purchase_reset_compatibility_retained": "training_purchase_service" in training_repository and "training_reset_service" in training_repository,
+            "status": "event_settlement_cutover_with_purchase_reset_compatibility",
         },
         "work": {
             "daily_refresh_application_owned": "work_daily_refresh_application.reset(" in work_facade,
