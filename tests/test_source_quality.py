@@ -772,6 +772,28 @@ class SourceQualityTests(unittest.TestCase):
             repository_source,
         )
 
+    def test_accessory_transaction_compatibility_wrapper_is_isolated(self) -> None:
+        back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
+        legacy_source = (back_root / "transaction_service.py").read_text(encoding="utf-8")
+        compatibility_source = (
+            SOURCE_ROOT / "compatibility" / "legacy_back_accessory_transaction.py"
+        ).read_text(encoding="utf-8")
+        accessory_source = (back_root / "accessory.py").read_text(encoding="utf-8")
+        repository_source = (
+            SOURCE_ROOT / "features" / "back" / "repository.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("class AccessoryTransactionService", legacy_source)
+        self.assertIn("class AccessoryTransactionService", compatibility_source)
+        self.assertIn(
+            "legacy_back_accessory_transaction import AccessoryTransactionService",
+            accessory_source,
+        )
+        self.assertIn(
+            "legacy_back_accessory_transaction import AccessoryTransactionService",
+            repository_source,
+        )
+
     def test_main_package_reward_handler_uses_lifecycle_application(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         command_source = (back_root / "__init__.py").read_text(encoding="utf-8")

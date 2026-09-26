@@ -2887,7 +2887,6 @@
    处理旧拍卖 session/竞价 fallback 的显式兼容 adapter；检查仙肆/鬼市剩余 handler 的真实调用图，
    每次只迁一个资产转换，兼容 repository 仅在真实调用归零且回滚证据满足后移除。
 5. 清零已迁移域的 compatibility 余额：按真实调用图逐项推进，下一批优先级为：
-   `AccessoryTransactionService`（饰品锁定/洗练/分解/升阶/预设，仍有旧命令真实调用）、
    `SkillLearningService`、`LotteryTalismanService`、`StoneItemRewardService`、
    `ThreeCultivationPillService`、`UnbindItemService` 等背包兼容服务；随后处理签到
    副作用、宠物/任务/修炼、洞府/地图未覆盖动作、宗门、竞技场/副本、世界事件、Boss
@@ -4484,3 +4483,5 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-09-26 back equipment compatibility isolation：旧 `EquipmentService` 与 `EquipmentChange` 从 `xiuxian_back/transaction_service.py` 移至 `compatibility/legacy_back_equipment.py`，旧 import 与 `equipment_service.py` facade 保持兼容；`LegacyBackRepository` 显式回滚分支直接引用 compatibility-only 服务。保留装备槽位、BuffInfo/库存状态 CAS、replacement、duplicate/state_changed 和 rollback 语义；真实穿戴/卸下 handler 继续只调用 `BackApplication.change_equipment`。装备/背包窄回归 `16 passed`，compileall、architecture、progress、inventory 和 diff check 通过；本阶段未新增 migration，缓存与临时目录已清理。下一步继续处理背包 accessory 兼容边界或签到副作用，并保留全局 legacy transaction service/`xiuxian2_handle` 未完成状态。
 
 2026-09-26 back accessory-package compatibility isolation：旧 `AccessoryPackageService` 与结果 DTO 从 `xiuxian_back/transaction_service.py` 移至 `compatibility/legacy_back_accessory_package.py`，旧 import 保持 re-export 兼容；`LegacyBackRepository` 显式回滚分支直接引用 compatibility-only 服务。保留 attached player namespace、容量检查、灵石/物品奖励、operation replay/conflict、CAS 和跨库 rollback 语义；真实饰品礼包 handler 继续只调用 `BackApplication.accessory_package`。饰品礼包窄回归 `11 passed`，compileall、architecture、progress、inventory 和 diff check 通过；本阶段未新增 migration，项目/虚拟环境缓存、SQLite sidecar 和临时目录已清理。下一步优先处理仍被饰品旧命令调用的 `AccessoryTransactionService`，并保留全局 legacy transaction service/`xiuxian2_handle` 未完成状态。
+
+2026-09-26 back accessory-transaction compatibility isolation：旧 `AccessoryTransactionService` 与结果 DTO 从 `xiuxian_back/transaction_service.py` 移至 `compatibility/legacy_back_accessory_transaction.py`，旧 import 保持 re-export 兼容；饰品旧命令与 `LegacyBackRepository` 显式回滚分支直接引用 compatibility-only 服务。保留锁定/解锁词条、洗练、分解、批量分解、升阶、预设保存/快速装备的 attached transaction、CAS、operation replay/conflict 和 rollback 语义；该阶段只隔离旧实现，饰品命令尚未切换到 feature-owned transaction application。饰品/礼包窄回归 `35 passed`，compileall、architecture、progress、inventory 和 diff check 通过；本阶段未新增 migration，缓存与临时目录已清理。下一步按优先级处理 `SkillLearningService`，并保留全局 legacy transaction service/`xiuxian2_handle` 未完成状态。

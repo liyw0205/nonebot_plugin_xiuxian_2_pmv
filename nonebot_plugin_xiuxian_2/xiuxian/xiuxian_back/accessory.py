@@ -30,7 +30,7 @@ from .accessory_helpers import (  # noqa: F401
     create_accessory_instance,
     quality_to_cn,
 )
-from .transaction_service import AccessoryTransactionService
+from ...compatibility.legacy_back_accessory_transaction import AccessoryTransactionService
 
 items = Items()
 _sql_message_instance = None
