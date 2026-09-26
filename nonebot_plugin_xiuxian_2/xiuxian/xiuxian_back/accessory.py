@@ -33,6 +33,7 @@ from .accessory_helpers import (  # noqa: F401
 from ...compatibility.legacy_back_accessory_transaction import AccessoryTransactionService
 from ...features.back.accessory_affix_application import AccessoryAffixApplication
 from ...features.back.accessory_decompose_application import AccessoryDecomposeApplication
+from ...features.back.accessory_wash_application import AccessoryWashApplication
 
 items = Items()
 _sql_message_instance = None
@@ -40,6 +41,7 @@ _player_data_manager_instance = None
 _accessory_transaction_service_instance = None
 _accessory_affix_application = None
 _accessory_decompose_application = None
+_accessory_wash_application = None
 runtime_ids = UUIDGenerator()
 
 
@@ -104,6 +106,20 @@ def _decompose_application():
 def configure_decompose_application(application: AccessoryDecomposeApplication) -> None:
     global _accessory_decompose_application
     _accessory_decompose_application = application
+
+
+def _wash_application():
+    global _accessory_wash_application
+    if _accessory_wash_application is None:
+        _accessory_wash_application = AccessoryWashApplication(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _accessory_wash_application
+
+
+def configure_wash_application(application: AccessoryWashApplication) -> None:
+    global _accessory_wash_application
+    _accessory_wash_application = application
 
 
 def _acc_fail_msg(result, *, action: str = "饰品操作") -> str:
@@ -990,7 +1006,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     user_id = str(user_info["user_id"])
     operation_id = _accessory_operation_id(event, "wash", user_id, uid)
-    replay = _accessory_transaction_service().replay(operation_id, "wash")
+    replay = _wash_application().replay(operation_id)
     if replay is not None and replay.accessory is not None:
         updated = replay.accessory
         q2 = max(1, min(5, int(updated.get("quality", 1))))
@@ -1037,30 +1053,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     expected_accessory = deepcopy(target)
 
-    def _reroll(t):
-        q2 = max(1, min(5, int(t.get("quality", 1))))
-        old_affixes = t.get("affixes", [])
-        if not isinstance(old_affixes, list):
-            old_affixes = []
-        locked = _normalize_locked_affixes(t, len(old_affixes))
-        target_cnt = _target_affix_count_for_quality(q2)
-        if len(locked) >= target_cnt:
-            raise ValueError("all affixes are locked")
-
-        wash_count = int(t.get("wash_count", 0)) + 1
-        t["wash_count"] = wash_count
-
-        pity_reached = wash_count >= 150
-        t["affixes"] = _reroll_affixes_preserving_locked(
-            q2,
-            old_affixes,
-            locked,
-            pity_reached=pity_reached
-        )
-        _set_locked_affixes(t, _normalize_locked_affixes(t, len(t["affixes"])))
-        return t
-
-    result = _accessory_transaction_service().wash(
+    result = _wash_application().wash(
         operation_id,
         user_id,
         uid,
@@ -1068,7 +1061,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         have,
         WASH_STONE_ID,
         need,
-        _reroll,
     )
 
     if result.status == "item_insufficient":

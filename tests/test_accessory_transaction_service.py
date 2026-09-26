@@ -686,6 +686,18 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
         self.assertIn("_decompose_application().batch_decompose", handler)
         self.assertNotIn("_accessory_transaction_service().batch_decompose", handler)
 
+    def test_real_wash_handler_uses_feature_application(self) -> None:
+        source = (
+            Path(__file__).parents[1]
+            / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_back/accessory.py"
+        ).read_text(encoding="utf-8")
+        handler = source.split("@wash_accessory.handle", 1)[1].split(
+            "@decompose_accessory.handle", 1
+        )[0]
+        self.assertIn("_wash_application().replay", handler)
+        self.assertIn("_wash_application().wash", handler)
+        self.assertNotIn("_accessory_transaction_service().wash", handler)
+
     def test_real_preset_handlers_use_transaction_service(self) -> None:
         root = Path(__file__).parents[1]
         source = (
