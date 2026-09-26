@@ -18,7 +18,7 @@ from ..xiuxian_config import XiuConfig, convert_rank, added_ranks as get_added_r
 from ...paths import get_paths
 from ...compatibility.legacy_back_cultivation_item import CultivationItemService
 from ...compatibility.legacy_back_breakthrough_rate_item import BreakthroughRateItemService
-from .transaction_service import RecoveryItemService
+from ...compatibility.legacy_back_recovery_item import RecoveryItemService
 from ...compatibility.legacy_back_permanent_atk_item import PermanentAtkItemService
 from .transaction_service import BlessedFlagReplaceService
 from nonebot.log import logger

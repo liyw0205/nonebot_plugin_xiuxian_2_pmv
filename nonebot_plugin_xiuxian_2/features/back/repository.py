@@ -18,6 +18,7 @@ class LegacyBackRepository:
         from ...compatibility.legacy_back_cultivation_item import CultivationItemService
         from ...compatibility.legacy_back_breakthrough_rate_item import BreakthroughRateItemService
         from ...compatibility.legacy_back_permanent_atk_item import PermanentAtkItemService
+        from ...compatibility.legacy_back_recovery_item import RecoveryItemService
         from ...compatibility.legacy_back_alchemy import AlchemyService
         from ...compatibility.legacy_back_equipment import EquipmentService
         from ...compatibility.legacy_back_repair import BackpackRepairService
@@ -37,6 +38,7 @@ class LegacyBackRepository:
             "unbind": (UnbindItemService, "apply"),
             "breakthrough_rate_item": (BreakthroughRateItemService, "apply"),
             "permanent_atk_item": (PermanentAtkItemService, "apply"),
+            "recovery_item": (RecoveryItemService, "apply"),
             "accessory_package": (AccessoryPackageService, "apply"),
             "accessory": (AccessoryTransactionService, "upgrade"),
         }
