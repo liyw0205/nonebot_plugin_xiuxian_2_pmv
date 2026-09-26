@@ -2902,9 +2902,11 @@
    impart 调用仍经旧 task-data adapter 组装任务映射，签到专属 projection 仍由 sign-in feature
    单独承载。新增 player-only `tasks.001` 迁移为进度表预建 schema，生产进度读写不再请求期建表。
    `LegacyTaskProgressEventService` 源码暂留为兼容对照，旧公开 service 名称转发到 feature repo。
-   任务奖励仍经 `TasksRepository -> task_manager -> TaskRewardClaimService`，动态 reward snapshot、
-   game/player attached transaction、请求期 DDL 和 WAL 下的跨库崩溃原子性尚未解决；下一项审计该
-   claim 边界，不将进度切片误计为任务域完成。随后处理训练、洞府/地图未覆盖动作、宗门、
+   任务奖励仍经 `TasksRepository -> task_manager -> TaskRewardClaimService`；本轮已用 game-only
+   `tasks.002` 迁出领奖操作/economy-log schema DDL，player-only `tasks.001` 管理任务状态列，生产领奖
+   请求不再建表。动态 reward snapshot、game/player attached transaction、WAL 下的跨库崩溃原子性和
+   外层 operation ledger 卡在 started 后的续跑仍未解决；下一项重做 claim transaction/recovery ownership，
+   不将任务进度或 schema 边界误计为任务域完成。随后处理训练、洞府/地图未覆盖动作、宗门、
    竞技场/副本、世界事件、Boss 和交易剩余 adapter。每次先证明默认 handler/route/scheduler 已切换，
    再隔离或删除旧实现。
 6. 单列处理复杂批处理和外部状态：赌坊投注/派奖与分块分红、全服批处理、跨库

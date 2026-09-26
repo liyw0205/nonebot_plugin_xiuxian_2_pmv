@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import tempfile
 import unittest
 from datetime import date
@@ -10,6 +11,8 @@ import nonebot
 
 nonebot.init()
 
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.features.tasks.migrations import apply_task_claim, apply_task_progress
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tasks.transaction_service import (
     TaskRewardClaimService,
 )
@@ -50,6 +53,10 @@ class TaskRewardClaimTests(unittest.TestCase):
                     "[]",
                 ),
             )
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            apply_task_claim(uow)
+        with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+            apply_task_progress(uow)
         self.service = TaskRewardClaimService(
             self.game_database, self.player_database
         )
@@ -183,7 +190,6 @@ class TaskRewardClaimTests(unittest.TestCase):
 
     def test_operation_failure_rolls_back_items_and_claimed_state(self) -> None:
         with db_backend.transaction(self.game_database) as conn:
-            self.service._ensure_game_schema(conn)
             conn.execute(
                 "CREATE TRIGGER fail_task_claim_operation BEFORE INSERT ON "
                 "task_reward_claim_operations "
@@ -196,6 +202,31 @@ class TaskRewardClaimTests(unittest.TestCase):
         self.assertEqual((self.quantity(10), self.quantity(11)), (0, 0))
         self.assertEqual(self.claimed("daily"), [])
         self.assertEqual(self.claimed("weekly"), [])
+
+    def test_claim_request_does_not_create_missing_schema(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            game_database = Path(directory) / "unmigrated-game.db"
+            player_database = Path(directory) / "unmigrated-player.db"
+            service = TaskRewardClaimService(game_database, player_database)
+            with self.assertRaises(sqlite3.OperationalError):
+                service.claim(
+                    "missing-schema",
+                    "u",
+                    ("daily",),
+                    {"daily": "2026-07-14"},
+                    (self.tasks()[0],),
+                    10,
+                )
+
+            for database in (game_database, player_database):
+                with sqlite3.connect(database) as conn:
+                    tables = {
+                        row[0]
+                        for row in conn.execute(
+                            "SELECT name FROM sqlite_master WHERE type='table'"
+                        )
+                    }
+                self.assertEqual(tables, set())
 
     def test_production_claim_entry_uses_cross_database_service(self) -> None:
         root = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2/xiuxian"

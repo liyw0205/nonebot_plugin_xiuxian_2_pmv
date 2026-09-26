@@ -162,9 +162,17 @@ impart 仍保留旧 task-data adapter 作为事件 DTO/任务映射边界，签�
 通过；隔离五库 backup/restore、迁移和 reconcile clean，恢复目录已清理。旧 service import 为兼容转发，但旧实现仍留在
 `LegacyTaskProgressEventService`，不宣称其源码已隔离。真实发布应用和 P7 证据仍缺失。
 
-下一片是任务奖励领取：`TasksRepository -> task_manager -> TaskRewardClaimService` 仍负责动态奖励快照、奖励库存、
-economy log、claimed 状态与 game/player attached transaction；需先验证 operation replay/conflict 和失败续跑，并明确 WAL
-环境下跨库崩溃原子性的真实保证，再选窄入口迁移。不可通过保留 facade 或单纯移动旧类把领奖标成完成。之后继续按
+`task reward claim startup-schema boundary` 已完成：新增 game-only `tasks.002`，启动迁移预建领奖 operation 表并补齐旧
+`economy_log` 缺失列；player-only `tasks.001` 继续负责任务周期状态列，领奖生产请求不再创建/补充 schema。任务领奖、进度、
+feature tasks 与签到 effects/wiring 聚焦回归 `29 passed`（1 条既有 ServicePort `DeprecationWarning`）；compileall、architecture、
+progress、inventory freshness 和 `git diff --check` 通过。隔离 recovery 的五库 backup/restore dry-run/restore 均成功，
+共覆盖 175 个不同 migration version，路由计数 `139/32/7/1/1`；`tasks.001` 仅路由到 player、`tasks.002` 仅路由到 game，
+reconcile clean（operations/outbox/dead events 均为 `0`）。专用 pytest basetemp、恢复数据、receipt 和 compileall 字节码缓存
+已清理；`.venv`、`.git`、`data/`、运行数据及 Boss JSON 用户修改保留。此切片只完成 schema 启动化，
+`TasksRepository -> task_manager -> TaskRewardClaimService` 仍负责动态奖励快照、奖励库存、economy log、claimed 状态与
+game/player attached transaction。下一片先审计 operation replay/conflict、外层 operation ledger 卡在 started 后的续跑，
+并明确 WAL 环境下跨库崩溃原子性的真实保证，再迁移领奖事务 ownership；不可通过保留 facade 或单纯移动旧类把领奖标成完成。
+之后继续按
 6.2 逐项覆盖训练、洞府、地图、宗门、竞技场/副本、世界事件、Boss 和交易剩余 adapter；追捕令 `20015` 的随机 offer
 仍由旧领域逻辑生成，不能把既有扣除/快照边界解释成 work 领域整体完成。
 已切换的 partner cultivation、partner token、背包通用 item-use Web、宠物蛋、饰品礼包、炼丹两阶段领取、斩妖令、祈愿石、

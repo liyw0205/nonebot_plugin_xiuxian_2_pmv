@@ -9,11 +9,11 @@ from pathlib import Path
 from ....infrastructure.database import DatabaseUnitOfWork
 from ....plugin import build_migrations, migrations_for_database
 from ..application import TaskProgressApplication
-from ..migrations import apply_task_progress
+from ..migrations import apply_task_claim, apply_task_progress
 
 
 class TaskProgressApplicationTest(unittest.TestCase):
-    def test_progress_schema_migration_runs_only_on_player_database(self) -> None:
+    def test_task_schema_migrations_are_routed_to_their_owning_databases(self) -> None:
         migrations = build_migrations()
         game_versions = {
             item.version for item in migrations_for_database(migrations, "game_db")
@@ -23,6 +23,43 @@ class TaskProgressApplicationTest(unittest.TestCase):
         }
         self.assertNotIn("tasks.001", game_versions)
         self.assertIn("tasks.001", player_versions)
+        self.assertIn("tasks.002", game_versions)
+        self.assertNotIn("tasks.002", player_versions)
+
+    def test_claim_migration_extends_existing_economy_log_without_losing_rows(self) -> None:
+        database = Path(self.temp.name) / "game.db"
+        with sqlite3.connect(database) as conn:
+            conn.execute(
+                "CREATE TABLE economy_log("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT,user_id TEXT,"
+                "source TEXT NOT NULL,action TEXT NOT NULL,"
+                "stone_delta INTEGER NOT NULL DEFAULT 0,"
+                "item_delta TEXT NOT NULL DEFAULT '[]',detail TEXT NOT NULL DEFAULT '{}',"
+                "trace_id TEXT,created_at TEXT NOT NULL)"
+            )
+            conn.execute(
+                "INSERT INTO economy_log(user_id,source,action,created_at) "
+                "VALUES('u','legacy','keep','2026-09-27')"
+            )
+
+        with DatabaseUnitOfWork(database, immediate=True) as uow:
+            apply_task_claim(uow)
+
+        with sqlite3.connect(database) as conn:
+            columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(economy_log)")
+            }
+            row = conn.execute(
+                "SELECT user_id,source,action FROM economy_log WHERE id=1"
+            ).fetchone()
+            operation_table = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' "
+                "AND name='task_reward_claim_operations'"
+            ).fetchone()
+        self.assertIn("exp_delta", columns)
+        self.assertIn("sect_contribution_delta", columns)
+        self.assertEqual(row, ("u", "legacy", "keep"))
+        self.assertIsNotNone(operation_table)
 
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()

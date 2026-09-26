@@ -22,6 +22,9 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(tasks["progress_repository_owned"])
         self.assertTrue(tasks["progress_request_path_has_no_ddl"])
         self.assertTrue(tasks["progress_migration_registered"])
+        self.assertTrue(tasks["claim_schema_migration_registered"])
+        self.assertTrue(tasks["claim_request_path_has_no_ddl"])
+        self.assertTrue(tasks["claim_schema_migrations_owned"])
         self.assertTrue(tasks["reward_claim_legacy_boundary"])
         tower = slices["tower"]
         self.assertTrue(tower["state_application_owned"])

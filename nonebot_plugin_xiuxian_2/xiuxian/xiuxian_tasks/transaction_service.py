@@ -41,48 +41,6 @@ class TaskRewardClaimService:
         self._lock = lock or RLock()
 
     @staticmethod
-    def _ensure_game_schema(conn) -> None:
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS task_reward_claim_operations("
-            "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,"
-            "result_json TEXT NOT NULL,"
-            "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-        )
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS economy_log("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT,user_id TEXT,sect_id INTEGER,"
-            "source TEXT NOT NULL,action TEXT NOT NULL,"
-            "stone_delta INTEGER NOT NULL DEFAULT 0,"
-            "exp_delta INTEGER NOT NULL DEFAULT 0,"
-            "sect_contribution_delta INTEGER NOT NULL DEFAULT 0,"
-            "sect_scale_delta INTEGER NOT NULL DEFAULT 0,"
-            "sect_materials_delta INTEGER NOT NULL DEFAULT 0,"
-            "item_delta TEXT NOT NULL DEFAULT '[]',detail TEXT NOT NULL DEFAULT '{}',"
-            "trace_id TEXT,created_at TEXT NOT NULL)"
-        )
-
-    @classmethod
-    def _ensure_player_schema(cls, conn) -> None:
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS player_data.xiuxian_tasks("
-            "user_id TEXT PRIMARY KEY)"
-        )
-        columns = {
-            str(row[1])
-            for row in conn.execute(
-                "PRAGMA player_data.table_info(xiuxian_tasks)"
-            ).fetchall()
-        }
-        for cycle in cls._cycles:
-            for suffix in ("period", "progress", "claimed"):
-                field = f"{cycle}_{suffix}"
-                if field not in columns:
-                    conn.execute(
-                        f"ALTER TABLE player_data.xiuxian_tasks "
-                        f"ADD COLUMN {field} TEXT"
-                    )
-
-    @staticmethod
     def _decode(value, default):
         if value in (None, ""):
             return default
@@ -215,7 +173,6 @@ class TaskRewardClaimService:
         if not operation_id:
             return None
         with self._lock, closing(db_backend.connect(self._game_database)) as conn:
-            self._ensure_game_schema(conn)
             previous = conn.execute(
                 "SELECT result_json FROM task_reward_claim_operations WHERE operation_id=%s",
                 (operation_id,),
@@ -266,8 +223,6 @@ class TaskRewardClaimService:
                 )
                 attached = True
                 conn.execute("BEGIN IMMEDIATE")
-                self._ensure_game_schema(conn)
-                self._ensure_player_schema(conn)
                 previous = conn.execute(
                     "SELECT payload,result_json FROM task_reward_claim_operations "
                     "WHERE operation_id=%s",

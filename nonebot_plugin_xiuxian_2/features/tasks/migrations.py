@@ -24,4 +24,45 @@ def apply_task_progress(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_tasks", "apply_task_progress"]
+def apply_task_claim(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS task_reward_claim_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS economy_log("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,user_id TEXT,sect_id INTEGER,"
+        "source TEXT NOT NULL,action TEXT NOT NULL,"
+        "stone_delta INTEGER NOT NULL DEFAULT 0,exp_delta INTEGER NOT NULL DEFAULT 0,"
+        "sect_contribution_delta INTEGER NOT NULL DEFAULT 0,"
+        "sect_scale_delta INTEGER NOT NULL DEFAULT 0,"
+        "sect_materials_delta INTEGER NOT NULL DEFAULT 0,"
+        "item_delta TEXT NOT NULL DEFAULT '[]',detail TEXT NOT NULL DEFAULT '{}',"
+        "trace_id TEXT,created_at TEXT NOT NULL)"
+    )
+    columns = {
+        str(row["name"])
+        for row in uow.query_all("PRAGMA table_info(economy_log)")
+    }
+    definitions = {
+        "user_id": "TEXT",
+        "sect_id": "INTEGER",
+        "source": "TEXT NOT NULL DEFAULT ''",
+        "action": "TEXT NOT NULL DEFAULT ''",
+        "stone_delta": "INTEGER NOT NULL DEFAULT 0",
+        "exp_delta": "INTEGER NOT NULL DEFAULT 0",
+        "sect_contribution_delta": "INTEGER NOT NULL DEFAULT 0",
+        "sect_scale_delta": "INTEGER NOT NULL DEFAULT 0",
+        "sect_materials_delta": "INTEGER NOT NULL DEFAULT 0",
+        "item_delta": "TEXT NOT NULL DEFAULT '[]'",
+        "detail": "TEXT NOT NULL DEFAULT '{}'",
+        "trace_id": "TEXT",
+        "created_at": "TEXT NOT NULL DEFAULT ''",
+    }
+    for field, definition in definitions.items():
+        if field not in columns:
+            uow.execute(f'ALTER TABLE economy_log ADD COLUMN "{field}" {definition}')
+
+
+__all__ = ["apply_tasks", "apply_task_progress", "apply_task_claim"]
