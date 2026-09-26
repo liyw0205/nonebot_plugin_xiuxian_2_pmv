@@ -13,10 +13,10 @@ from tests.test_db_backend import db_backend
 
 
 class PetReleaseServiceTests(unittest.TestCase):
-    def test_pet_facade_defers_release_service_construction(self):
+    def test_pet_facade_has_no_default_release_service(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_pet
 
-        self.assertIsNone(xiuxian_pet._pet_release_service_instance)
+        self.assertFalse(hasattr(xiuxian_pet, "_pet_release_service_instance"))
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

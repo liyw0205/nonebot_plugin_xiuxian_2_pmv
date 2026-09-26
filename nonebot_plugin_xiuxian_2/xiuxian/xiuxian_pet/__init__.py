@@ -65,23 +65,11 @@ from ...features.pet.application import PetApplication
 from ...features.pet.repository import PetHatchResult
 from ...core.result import OperationOutcome
 from ...infrastructure.ids import UUIDGenerator
-from .transaction_service import PetSkillReplaceService
-from ...compatibility.pet import PetHatchService
-from .transaction_service import PetReleaseService
-from .transaction_service import PetFusionBreakthroughService
-from .transaction_service import PetSkillRerollService
-from .transaction_service import PetActiveSwitchService
 
 items = Items()
 _sql_message_instance = None
 pet_application = PetApplication(get_paths().game_db, get_paths().player_db)
 runtime_ids = UUIDGenerator()
-_pet_skill_replace_service_instance = None
-_pet_hatch_service_instance = None
-_pet_release_service_instance = None
-_pet_fusion_breakthrough_service_instance = None
-_pet_skill_reroll_service_instance = None
-_pet_active_switch_service_instance = None
 
 
 def _sql_message():
@@ -115,22 +103,6 @@ PET_SKILL_REPLACE_CACHE = {}
 PET_SKILL_REPLACE_EXPIRE = 300
 
 
-def _pet_skill_replace_service():
-    global _pet_skill_replace_service_instance
-    if _pet_skill_replace_service_instance is None:
-        _pet_skill_replace_service_instance = PetSkillReplaceService(get_paths().player_db)
-    return _pet_skill_replace_service_instance
-
-
-def _pet_hatch_service():
-    global _pet_hatch_service_instance
-    if _pet_hatch_service_instance is None:
-        _pet_hatch_service_instance = PetHatchService(
-            get_paths().game_db, get_paths().player_db
-        )
-    return _pet_hatch_service_instance
-
-
 def _pet_hatch_result_from_outcome(
     outcome: OperationOutcome,
     *,
@@ -157,40 +129,6 @@ def _pet_hatch_result_from_outcome(
         tuple(updated_meta),
         int(data.get("bag_limit", fallback_bag_limit) or 0),
     )
-
-
-def _pet_release_service():
-    global _pet_release_service_instance
-    if _pet_release_service_instance is None:
-        _pet_release_service_instance = PetReleaseService(
-            get_paths().game_db, get_paths().player_db
-        )
-    return _pet_release_service_instance
-
-
-def _pet_fusion_breakthrough_service():
-    global _pet_fusion_breakthrough_service_instance
-    if _pet_fusion_breakthrough_service_instance is None:
-        _pet_fusion_breakthrough_service_instance = PetFusionBreakthroughService(
-            get_paths().player_db
-        )
-    return _pet_fusion_breakthrough_service_instance
-
-
-def _pet_skill_reroll_service():
-    global _pet_skill_reroll_service_instance
-    if _pet_skill_reroll_service_instance is None:
-        _pet_skill_reroll_service_instance = PetSkillRerollService(
-            get_paths().game_db, get_paths().player_db
-        )
-    return _pet_skill_reroll_service_instance
-
-
-def _pet_active_switch_service():
-    global _pet_active_switch_service_instance
-    if _pet_active_switch_service_instance is None:
-        _pet_active_switch_service_instance = PetActiveSwitchService(get_paths().player_db)
-    return _pet_active_switch_service_instance
 
 
 def _split_args(text: str):

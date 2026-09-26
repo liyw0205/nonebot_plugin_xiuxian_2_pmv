@@ -603,7 +603,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_active_switch_disabled": "_pet_active_switch_service().switch(" not in pet_facade,
             "skill_replace_application_owned": "pet_application.skill_replace(" in pet_facade,
             "legacy_skill_replace_disabled": "_pet_skill_replace_service().replace(" not in pet_facade,
-            "status": "active_switch_and_skill_replace_cutover_with_other_pet_compatibility",
+            "pet_transaction_compatibility_isolated": (
+                "class PetTravelClaimService" not in (PACKAGE / "xiuxian" / "xiuxian_pet" / "transaction_service.py").read_text(encoding="utf-8")
+                and "class PetTravelClaimService" in (PACKAGE / "compatibility" / "legacy_pet_transactions.py").read_text(encoding="utf-8")
+                and "transaction_service" not in pet_facade
+            ),
+            "status": "feature_owned_pet_actions_with_legacy_transaction_services_isolated",
         },
         "trade": {
             "xianshi_listing_application_owned": "trade_application.xianshi_list_items(" in xianshi_listing_handler and "class XianshiListingSqlRepository" in trade_xianshi_transactions,

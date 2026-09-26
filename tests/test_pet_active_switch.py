@@ -16,10 +16,10 @@ class PetActiveSwitchServiceTest(unittest.TestCase):
         text = source.read_text(encoding="utf-8")
         self.assertIn("pet_application.switch(", text)
         self.assertNotIn("_pet_active_switch_service().switch(", text)
-    def test_pet_facade_defers_active_switch_service_construction(self):
+    def test_pet_facade_has_no_default_active_switch_service(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_pet
 
-        self.assertIsNone(xiuxian_pet._pet_active_switch_service_instance)
+        self.assertFalse(hasattr(xiuxian_pet, "_pet_active_switch_service_instance"))
 
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()

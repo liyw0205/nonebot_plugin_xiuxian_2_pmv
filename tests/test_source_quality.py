@@ -2592,10 +2592,36 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("sql_message.send_back(", handler)
         for status in ("inventory_full", "state_changed", "user_missing"):
             self.assertIn(f'"{status}"', handler)
-        service = (pet_root / "transaction_service.py").read_text(encoding="utf-8")
+        service = (
+            SOURCE_ROOT / "compatibility" / "legacy_pet_transactions.py"
+        ).read_text(encoding="utf-8")
         self.assertIn("ATTACH DATABASE", service)
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("pet_travel_claim_operations", service)
+
+    def test_pet_legacy_transaction_services_are_isolated_from_runtime_facade(self) -> None:
+        pet_root = SOURCE_ROOT / "xiuxian" / "xiuxian_pet"
+        facade = (pet_root / "__init__.py").read_text(encoding="utf-8")
+        shim = (pet_root / "transaction_service.py").read_text(encoding="utf-8")
+        compatibility = (
+            SOURCE_ROOT / "compatibility" / "legacy_pet_transactions.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("class PetTravelClaimService", shim)
+        self.assertIn("legacy_pet_transactions import", shim)
+        for service in (
+            "PetTravelClaimService",
+            "PetFeedService",
+            "PetSkillReplaceService",
+            "PetTravelStartService",
+            "PetHatchService",
+            "PetReleaseService",
+            "PetFusionBreakthroughService",
+            "PetSkillRerollService",
+            "PetActiveSwitchService",
+        ):
+            self.assertIn(f"class {service}", compatibility)
+            self.assertNotIn(service, facade)
 
     def test_pet_default_application_does_not_construct_legacy_repository(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_pet" / "__init__.py").read_text(encoding="utf-8")

@@ -22,7 +22,7 @@ class PetTravelClaimService:
 
     def claim(self, *args: Any, **kwargs: Any):
         _warn("PetTravelClaimService")
-        from ..xiuxian.xiuxian_pet.transaction_service import PetTravelClaimResult
+        from .legacy_pet_transactions import PetTravelClaimResult
 
         names = ("operation_id", "user_id", "expected_travel", "stone", "exp", "items", "max_goods_num")
         values = dict(zip(names, args)); values.update(kwargs)
@@ -37,7 +37,7 @@ class PetFeedService:
 
     def feed(self, *args: Any, **kwargs: Any):
         _warn("PetFeedService")
-        from ..xiuxian.xiuxian_pet.transaction_service import PetFeedResult
+        from .legacy_pet_transactions import PetFeedResult
 
         names = ("operation_id", "user_id", "uid", "item_id", "count", "expected", "updated")
         values = dict(zip(names, args)); values.update(kwargs)
@@ -52,7 +52,7 @@ class PetTravelStartService:
 
     def start(self, *args: Any, **kwargs: Any):
         _warn("PetTravelStartService")
-        from ..xiuxian.xiuxian_pet.transaction_service import PetTravelStartResult
+        from .legacy_pet_transactions import PetTravelStartResult
 
         names = ("operation_id", "user_id", "pet_uid", "expected_travel", "travel")
         values = dict(zip(names, args)); values.update(kwargs)
@@ -70,7 +70,7 @@ class PetHatchService:
 
     def hatch(self, *args: Any, **kwargs: Any):
         _warn("PetHatchService")
-        from ..xiuxian.xiuxian_pet.transaction_service import PetHatchResult
+        from .legacy_pet_transactions import PetHatchResult
 
         names = ("operation_id", "user_id", "expected_stone", "cost", "expected_meta", "pets", "updated_meta", "bag_limit")
         values = dict(zip(names, args)); values.update(kwargs)

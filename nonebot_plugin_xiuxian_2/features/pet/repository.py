@@ -564,7 +564,12 @@ class LegacyPetRepository:
         self.player_database = str(player_database)
 
     def _services(self):
-        from ...xiuxian.xiuxian_pet.transaction_service import PetTravelClaimService, PetTravelStartService, PetFeedService, PetHatchService
+        from ...compatibility.legacy_pet_transactions import (
+            PetFeedService,
+            PetHatchService,
+            PetTravelClaimService,
+            PetTravelStartService,
+        )
 
         return (PetTravelClaimService(self.game_database, self.player_database), PetTravelStartService(self.player_database), PetFeedService(self.game_database, self.player_database), PetHatchService(self.game_database, self.player_database))
 
@@ -584,7 +589,7 @@ class LegacyPetRepository:
         return self._services()[3].get_result(*args, **kwargs)
 
     def switch(self, *args: Any, **kwargs: Any) -> Any:
-        from ...xiuxian.xiuxian_pet.transaction_service import PetActiveSwitchService
+        from ...compatibility.legacy_pet_transactions import PetActiveSwitchService
 
         return PetActiveSwitchService(self.player_database).switch(*args, **kwargs)
 

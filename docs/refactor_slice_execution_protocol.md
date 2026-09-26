@@ -148,14 +148,17 @@ compileall、architecture、inventory、diff check 与五库 recovery 通过；�
 
 ## 当前切片与下一切片选择
 
-最近完成 `rift speedup legacy-construction cleanup`：entry 写入、active 读取、cooldown 读取和 speedup handler 分别统一接到
-`RiftApplication -> RiftEntrySqlRepository` / `RiftEntrySqlRepository.read_entry` / `RiftCooldownSqlRepository` / `RiftSpeedupSqlRepository`，旧 entry service、SQL manager 与 speedup getter 已从真实 facade 移除；剩余显式 compatibility repository 与故事/资产只读边界仍是
-分开的路径。下一步在本轮缓存清理与磁盘复核后，回到
-`docs/full_refactor_progress.md` 的 6.2 目标 5，只读审计一个剩余真实 Rift handler 的 composition、请求期 schema 写入与 transaction owner，
-再选择单动作切片；不要将 facade 调用或静态路由当成底层 cutover。更广范围仍需按 6.2 逐个审计特殊道具、宠物、任务/修炼、洞府、地图、宗门、
-副本、世界事件和 Boss handler；追捕令 `20015` 的随机 offer 仍由旧领域逻辑生成，不能把既有扣除/快照边界解释成 work 领域整体完成。
-已切换的 partner cultivation、partner token、背包通用 item-use Web、宠物蛋、饰品礼包、炼丹两阶段领取、斩妖令、祈愿石、挑战券事务、
-love-sand schema 边界、Rift speedup 和 Rift world-generation schema 边界不重复迁移。
+最近完成 `pet transaction compatibility isolation`：宠物默认 handler 经 `PetApplication` 使用 feature SQL repositories；旧 `Pet*Service` 实现已移入
+`compatibility/legacy_pet_transactions.py`，`xiuxian_pet/transaction_service.py` 只保留历史 API re-export，默认宠物 facade 不再导入未调用的旧 service/lazy getter。
+`LegacyPetRepository` 仍保留显式回滚路径，宠物 JSON projection/read path 也未因此整体关闭。宠物/source/progress 聚焦回归 `310 passed`，排除一项已知无关的 Rift source assertion；
+architecture、inventory、progress 与 diff check 均通过。五库隔离 recovery 的 173 项 migration、backup/restore 和 3 项 attached migration 均通过，reconcile clean；
+临时数据与 receipt 已清理。本片无新增业务 migration。
+
+下一步在清理本轮测试产物并复核资源后，执行 `docs/full_refactor_progress.md` 6.2 目标 5：先只读审计
+`xiuxian_tasks` 的 `TaskRewardClaimService`、`TaskProgressEventService` 及其真实 handler、scheduler、签到和玩法事件调用图，确认请求期 DDL、周期快照、operation/replay、奖励跨库边界与失败续跑；
+然后只迁一个窄动作到 feature-owned application/repository。任务进度事件由多个玩法触发，未完成调用图前不直接改表或扩大事务。后续仍需按 6.2 逐项覆盖训练、洞府、地图、宗门、竞技场/副本、世界事件、Boss 和交易剩余 adapter；
+追捕令 `20015` 的随机 offer 仍由旧领域逻辑生成，不能把既有扣除/快照边界解释成 work 领域整体完成。
+已切换的 partner cultivation、partner token、背包通用 item-use Web、宠物蛋、饰品礼包、炼丹两阶段领取、斩妖令、祈愿石、挑战券事务、love-sand schema 边界、Rift speedup 和 Rift world-generation schema 边界不重复迁移。
 
 `rift damage-event outcome`：真实 `_roll_rift_event` 的掉血事件改经
 `RiftApplication.roll_damage_event -> RiftDamageEventResolver`；resolver 只接收显式 battle config、经验计算器、数字格式化器和 RandomSource，

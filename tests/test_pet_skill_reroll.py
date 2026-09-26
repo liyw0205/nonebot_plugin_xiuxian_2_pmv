@@ -16,10 +16,10 @@ from tests.test_db_backend import db_backend  # noqa: E402
 
 
 class PetSkillRerollTests(unittest.TestCase):
-    def test_pet_facade_defers_skill_reroll_service_construction(self):
+    def test_pet_facade_has_no_default_skill_reroll_service(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_pet
 
-        self.assertIsNone(xiuxian_pet._pet_skill_reroll_service_instance)
+        self.assertFalse(hasattr(xiuxian_pet, "_pet_skill_reroll_service_instance"))
 
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()

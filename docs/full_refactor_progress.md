@@ -2814,7 +2814,7 @@
 
 ## 6. 下一步
 
-### 6.1 当前权威状态（2026-09-26）
+### 6.1 当前权威状态（2026-09-27）
 
 本节以 `scripts/refactor_completion_audit.py` 和
 `scripts/check_full_refactor_progress.py` 的当前输出为准；前文及下方的日期记录仅保留当时的实施证据，不应被当作当前待办状态。
@@ -2822,9 +2822,13 @@
 - 架构/交付基础门禁 P0-P6 已就绪；P7 仍未就绪，缺少一次真实发布周期的
   `--data-dir`、当前 release 和发布证据。隔离 recovery smoke 不能替代 P7。
 - 全面底层重构尚未达到退出条件：仍有 33 个
-  `xiuxian/*/transaction_service.py`（45,824 行）以及
+  `xiuxian/*/transaction_service.py`（39,481 行）以及
   `xiuxian2_handle.py`（181,665 bytes）的旧执行路径。它们不能因已有 facade、
   application 或静态标记而计作完成。
+- 当前静态审计命中：`transaction_service.py` 33 个/39,481 行，旧服务 import 文件
+  104 个，`xiuxian2_handle` import 文件 80 个，直接 `db_backend.connect` 命中 107 个，
+  `sqlite3.connect` 命中 19 个，直接全局 random 命中 67 个，`datetime.now` 命中
+  67 个，`time.time` 命中 25 个。计数只作趋势，不替代逐条真实调用图审计。
 - 已切换的功能仍可能保留显式 compatibility/rollback adapter；只有默认真实
   handler/route/scheduler 已改走 feature-owned application，且旧实现不再承载该
   用例，才可逐项从遗留服务移除。
@@ -2857,6 +2861,11 @@
   `compatibility/legacy_back_accessory_package.py`，旧 import 仅作 re-export，显式回滚
   repository 直接引用 compatibility-only 实现。attached player namespace、容量检查、
   operation replay/conflict 和跨库回滚语义保持不变；饰品礼包兼容窄回归 11 passed。
+- 宠物默认 handler 已经通过 `PetApplication` 使用 feature SQL repositories；本轮把旧
+  `Pet*Service` 实现从 `xiuxian_pet/transaction_service.py` 隔离至
+  `compatibility/legacy_pet_transactions.py`，旧 import 仅保留 re-export shim，默认宠物
+  facade 不再导入未调用的旧 service/getter。显式 `LegacyPetRepository` 仍可作为回滚入口，
+  所以这只关闭实现归属与默认 facade 依赖，不代表所有宠物数据读取/JSON projection 已迁完。
 
 ### 6.2 优先目标
 
@@ -2886,12 +2895,15 @@
    和竞价前拍品查询均已迁至 feature-owned application 与无 DDL 的只读 repository。下一步是
    处理旧拍卖 session/竞价 fallback 的显式兼容 adapter；检查仙肆/鬼市剩余 handler 的真实调用图，
    每次只迁一个资产转换，兼容 repository 仅在真实调用归零且回滚证据满足后移除。
-5. 清零已迁移域的 compatibility 余额：按真实调用图逐项推进，下一批优先级为：
-   `SkillLearningService`、`LotteryTalismanService`、`StoneItemRewardService`、
-   `ThreeCultivationPillService`、`UnbindItemService` 等背包兼容服务；随后处理签到
-   副作用、宠物/任务/修炼、洞府/地图未覆盖动作、宗门、竞技场/副本、世界事件、Boss
-   与拍卖剩余 adapter。每次先证明默认 handler/route/scheduler 已由 feature-owned
-   application 承载，再隔离或删除旧实现，不按文件或目录整体宣布完成。
+5. 清零已迁移域的 compatibility 余额：背包高频动作和签到默认副作用已由
+   feature-owned application 承载；宠物旧 service 本轮已隔离，但显式
+   `LegacyPetRepository` 与旧数据 projection 仍需审计。下一项先审计任务领取/进度：
+   `features/tasks` 当前通过 `TasksRepository -> task_manager` 委托旧任务层，
+   `TaskRewardClaimService` 与 `TaskProgressEventService` 仍处于
+   `xiuxian_tasks/transaction_service.py`，而进度事件由签到及多个玩法触发；必须先画出
+   全部生产调用图、operation/replay 和周期状态边界，再逐个切换到 feature-owned application。
+   随后处理训练、洞府/地图未覆盖动作、宗门、竞技场/副本、世界事件、Boss 和交易剩余
+   adapter。每次先证明默认 handler/route/scheduler 已切换，再隔离或删除旧实现。
 6. 单列处理复杂批处理和外部状态：赌坊投注/派奖与分块分红、全服批处理、跨库
    补偿、JSON/凭据状态、scheduler 和外部版本更新必须保留冻结快照、分块进度、
    子操作 replay、失败续跑和 reconcile；不能为追赶进度改成 facade 或一次性大
@@ -4545,3 +4557,5 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-09-27 base pill-fusion compatibility isolation：旧 `PillFusionService` 与 `PillFusionResult` 从 `xiuxian_base/transaction_service.py` 移至 `compatibility/legacy_base_pill_fusion.py`；丹药融合 facade、真实突破 handler 和旧 transaction import 继续 re-export/显式兼容，材料与绑定数量扣除、目标库存上限、失败结果、operation replay/conflict 与事务 rollback 语义保持不变。新增 `base.pill_fusion_service_isolated` 进度门禁；融合/心魔/天命/普通/突破渡劫及进度聚焦回归 `47 passed`，来源契约 `7 passed`，`py_compile`、architecture、inventory、progress 与 `git diff --check` 通过；旧 transaction service 再减少约 `151` 行，无新增 migration。五库 recovery 的 backup/restore、全量及 attached 迁移和 reconcile 均 clean；缓存与临时产物已清理。下一步继续处理 `TribulationStateMigrationService`，全局 legacy transaction services 与 `xiuxian2_handle` blockers 仍未完成。
 
 2026-09-27 base tribulation-state migration compatibility isolation：旧 `TribulationStateMigrationService` 与 `TribulationStateMigrationResult` 从 `xiuxian_base/transaction_service.py` 移至 `compatibility/legacy_base_tribulation_state_migration.py`；状态迁移 facade、真实旧 JSON 导入入口和 transaction import 继续 re-export/显式兼容，normalize、database-authoritative 保护、一次性 user state 写入、operation replay/conflict 与 rollback 语义保持不变。新增 `base.tribulation_state_migration_service_isolated` 进度门禁；状态迁移/融合/心魔/天命/普通/突破渡劫及进度聚焦回归 `53 passed`，来源契约 `7 passed`，`py_compile`、architecture、inventory、progress 与 `git diff --check` 通过；旧 transaction service 再减少约 `131` 行，无新增 migration。五库 recovery 的 backup/restore、全量及 attached 迁移和 reconcile 均 clean；缓存与临时产物已清理。下一步按 base transaction service 顺序处理剩余服务，全局 legacy transaction services 与 `xiuxian2_handle` blockers 仍未完成。
+
+2026-09-27 pet transaction compatibility isolation：宠物默认 matcher 已由 `PetApplication`/feature SQL repositories 承载；旧 `PetTravelClaimService`、`PetFeedService`、`PetSkillReplaceService`、`PetTravelStartService`、`PetHatchService`、`PetReleaseService`、`PetFusionBreakthroughService`、`PetSkillRerollService`、`PetActiveSwitchService` 从 `xiuxian_pet/transaction_service.py` 移至 `compatibility/legacy_pet_transactions.py`，原路径只保留 API re-export shim。默认宠物 facade 删除了无调用的 compatibility imports/lazy getters，`LegacyPetRepository` 与 `compatibility.pet` 保持显式回滚兼容。宠物行为/source/progress 聚焦回归 `310 passed`，排除 1 项已知且与本片无关的 Rift SQL-manager source assertion；architecture、inventory、进度门禁和 diff check 通过。五库隔离 recovery 完成 backup、dry-run restore、restore 和 173 项 migration，attached migration 为 3 项，reconcile `clean=true` 且 operations/outbox/dead events 均为 0；临时数据与 receipt 已清理。无新增业务 migration；旧 transaction service 行数由 `40,454` 降至 `39,481`；下一轮审计任务领取/进度事件调用图，全局 blockers 仍为 legacy transaction services 与 `xiuxian2_handle`。
