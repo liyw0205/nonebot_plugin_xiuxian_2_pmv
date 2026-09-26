@@ -57,7 +57,7 @@ from ..xiuxian_utils.pet_system import (
 )
 from .back_util import *
 from .transaction_service import CultivationItemService
-from .transaction_service import EquipmentService
+from ...compatibility.legacy_back_equipment import EquipmentService
 from .transaction_service import LotteryTalismanService
 from .package_reward_service import PackageOpenResult, PackageReward, PackageRewardService
 from ...features.package_reward.application import PackageRewardApplication

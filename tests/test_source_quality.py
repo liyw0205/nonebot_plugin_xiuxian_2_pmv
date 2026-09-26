@@ -1075,10 +1075,21 @@ class SourceQualityTests(unittest.TestCase):
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         command_source = (back_root / "__init__.py").read_text(encoding="utf-8")
         service_source = (back_root / "equipment_service.py").read_text(encoding="utf-8")
+        legacy_source = (back_root / "transaction_service.py").read_text(encoding="utf-8")
+        compatibility_source = (
+            SOURCE_ROOT / "compatibility" / "legacy_back_equipment.py"
+        ).read_text(encoding="utf-8")
+        repository_source = (
+            SOURCE_ROOT / "features" / "back" / "repository.py"
+        ).read_text(encoding="utf-8")
         self.assertEqual(command_source.count("_equipment_service().change("), 0)
         self.assertGreaterEqual(command_source.count("back_application.change_equipment("), 2)
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("equipment_operations", service_source)
+        self.assertNotIn("class EquipmentService", legacy_source)
+        self.assertIn("class EquipmentService", compatibility_source)
+        self.assertIn("legacy_back_equipment import EquipmentService", service_source)
+        self.assertIn("legacy_back_equipment import EquipmentService", repository_source)
 
     def test_stone_rewards_use_transactional_service(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
