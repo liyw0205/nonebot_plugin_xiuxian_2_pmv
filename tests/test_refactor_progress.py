@@ -158,6 +158,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(base["rename_service_isolated"])
         self.assertTrue(base["stone_contest_service_isolated"])
         self.assertTrue(base["stone_robbery_service_isolated"])
+        self.assertTrue(base["xiangyuan_service_isolated"])
         puppet = slices["puppet"]
         self.assertTrue(puppet["harvest_application_owned"])
         self.assertTrue(puppet["legacy_harvest_disabled"])

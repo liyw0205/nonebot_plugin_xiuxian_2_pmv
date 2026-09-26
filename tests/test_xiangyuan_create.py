@@ -29,6 +29,7 @@ def test_xiangyuan_facade_uses_lazy_dual_database_service():
     assert "_xiangyuan_settlement_service_instance = None" in source
     assert "def _xiangyuan_settlement_service(" in source
     assert "get_paths().game_db, get_paths().player_db" in source
+    assert "legacy_base_xiangyuan" in source
     assert "_xiangyuan_settlement_service().get_group(" in source
     assert "_xiangyuan_settlement_service().create(" in source
     assert "_xiangyuan_settlement_service().claim(" in source
