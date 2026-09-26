@@ -270,6 +270,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "task_core_legacy": "SignInTaskEffects(record_task_progress)" in plugin,
             "lottery_core_default_legacy": "LotteryApplication(" not in plugin or "LotterySettlementService" in plugin,
             "lottery_compatibility_fallback": "XIUXIAN_SIGN_IN_LEGACY_LOTTERY" in plugin and "LotterySettlementService" in plugin,
+            "lottery_scheduler_application_owned": "_lottery_application().snapshot(" in base and "lottery_settlement_service" not in base,
+            "legacy_lottery_scheduler_disabled": "lottery_settlement_service" not in base,
             "status": "cutover_with_compatibility_rollback_side_effects_retained",
         },
         "entertainment": {

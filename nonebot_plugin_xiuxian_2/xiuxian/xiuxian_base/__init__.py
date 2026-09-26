@@ -77,6 +77,18 @@ def configure_lottery_application(application: Any) -> None:
     global lottery_application
     lottery_application = application
 
+
+def _lottery_application() -> LotteryApplication:
+    """Return the lifecycle-owned lottery reader used by scheduled resets."""
+    global lottery_application
+    if lottery_application is None:
+        lottery_application = LotteryApplication(
+            str(get_paths().game_db),
+            clock=runtime_clock,
+            random_source=runtime_random,
+        )
+    return lottery_application
+
 _player_rename_service_instance = None
 base_application = BaseApplication(get_paths().game_db, get_paths().player_db)
 _stone_gift_service_instance = None
@@ -1806,10 +1818,11 @@ def generate_daohao(random_source=None):
 
 async def reset_lottery_participants():
     business_date = runtime_clock.now().date().isoformat()
-    lottery_settlement_service.get_snapshot(business_date)
+    snapshot = _lottery_application().snapshot(business_date)
     logger.opt(colors=True).info(
-        f"<green>鸿运业务日已切换：{business_date}</green>"
+        f"<green>鸿运业务日已切换：{business_date}，参与人数：{snapshot.participants}</green>"
     )
+    return snapshot
     
 async def reset_stone_limits():
     stone_limit.reset_limits()
