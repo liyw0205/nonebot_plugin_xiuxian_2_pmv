@@ -1,6 +1,6 @@
 """Stable facade for destiny pill fusion transactions."""
 
-from .transaction_service import PillFusionService
+from ...compatibility.legacy_base_pill_fusion import PillFusionService
 
 # BEGIN IMMEDIATE protects the idempotent pill_fusion_operations ledger.
 OPERATION_TABLE = "pill_fusion_operations"

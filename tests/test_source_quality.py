@@ -2010,7 +2010,7 @@ class SourceQualityTests(unittest.TestCase):
         command_source = (base_root / "breakthrough_tribulation.py").read_text(
             encoding="utf-8"
         )
-        service_source = (base_root / "pill_fusion_service.py").read_text(
+        service_source = (SOURCE_ROOT / "compatibility" / "legacy_base_pill_fusion.py").read_text(
             encoding="utf-8"
         )
         start = command_source.index("@fusion_destiny_pill.handle")
