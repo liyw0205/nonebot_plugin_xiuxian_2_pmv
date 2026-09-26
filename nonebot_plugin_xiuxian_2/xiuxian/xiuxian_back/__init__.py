@@ -64,7 +64,7 @@ from ...features.package_reward.resolver import PackageRewardResolver
 from .accessory_package_service import AccessoryPackageService
 from ...compatibility.legacy_back_alchemy import AlchemyService
 from ...compatibility.legacy_back_skill_learning import SkillLearningService
-from .transaction_service import StoneItemRewardService
+from ...compatibility.legacy_back_stone_reward import StoneItemRewardService
 from .transaction_service import ThreeCultivationPillService
 from .transaction_service import UnbindItemService
 from ...compatibility.legacy_back_pet_egg import BatchItemUseService
