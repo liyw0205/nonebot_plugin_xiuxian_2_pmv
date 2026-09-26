@@ -4458,3 +4458,5 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-09-26 auction start application cutover：拍卖管理员手动开启和 scheduler 自动开启不再经过 `xiuxian_trade.transaction_service.start_auction_process`，默认路径直接调用 `AuctionSessionStartApplication`；旧函数保留为显式兼容入口。保留系统拍品抽样、持续时间、operation ID、每日自动开启标记和失败消息语义，并补齐 facade 的显式 `SystemRandom` 注入。拍卖/交易回归 `116 passed`，未新增 migration；下一步按真实调用图处理拍卖结束结算或竞价仍残留的兼容入口。
 
 2026-09-26 auction settlement application cutover：管理员结束和 scheduler 自动收尾不再经过 `xiuxian_trade.transaction_service.end_auction_process`，默认路径直接调用 `AuctionSettlementApplication`；旧函数保留为显式兼容入口。保留活动拍品读取、物品类型解析、稳定 operation ID、手续费、结算 DTO 和 effects/outbox 补偿语义。拍卖/交易聚焦回归 `118 passed`，compileall、architecture、progress、inventory 均通过，未新增 migration；下一步继续处理竞价默认入口或剩余交易兼容 adapter。
+
+2026-09-26 auction bid application cutover：`拍卖竞拍` 默认 handler 不再调用 `xiuxian_trade.transaction_service.place_auction_bid`，校验拍品快照、最低加价、用户余额和稳定 operation ID 后直接调用 `AuctionBidApplication.place_bid`；旧函数保留为显式兼容入口。保留竞价/重复请求/状态冲突/余额不足消息、前一出价者退款提示和 bid effects/outbox 幂等。拍卖/交易聚焦回归 `120 passed`，未新增 migration；下一步继续处理剩余交易 facade/兼容入口。
