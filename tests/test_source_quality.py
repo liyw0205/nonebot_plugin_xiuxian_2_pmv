@@ -1886,6 +1886,13 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("tribulation_state_migration_operations", service_source)
         self.assertIn("BEGIN IMMEDIATE", service_source)
 
+    def test_base_transaction_compatibility_exports_are_bound(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_base" / "transaction_service.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("from ...compatibility.sign_in import SignInResult, SignInService", source)
+        self.assertIn("from ...compatibility.stone_gift import StoneGiftResult, StoneGiftService", source)
+
     def test_tribulation_events_replay_before_resolution(self) -> None:
         base_root = SOURCE_ROOT / "xiuxian" / "xiuxian_base"
         command_source = (base_root / "breakthrough_tribulation.py").read_text(

@@ -55,6 +55,8 @@ from ...compatibility.legacy_base_tribulation_state_migration import (
     TribulationStateMigrationResult,
     TribulationStateMigrationService,
 )
+from ...compatibility.sign_in import SignInResult, SignInService
+from ...compatibility.stone_gift import StoneGiftResult, StoneGiftService
 from datetime import date, datetime
 from datetime import datetime
 
