@@ -631,7 +631,7 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
             )
         self.assertEqual(self.state(), before)
 
-    def test_real_lock_and_unlock_handlers_use_transaction_service(self) -> None:
+    def test_real_lock_and_unlock_handlers_use_feature_application(self) -> None:
         source = (
             Path(__file__).parents[1]
             / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_back/accessory.py"
@@ -643,8 +643,10 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
             "@wash_accessory.handle", 1
         )[0]
 
-        self.assertIn("_accessory_transaction_service().set_affix_locks", lock_handler)
-        self.assertIn("_accessory_transaction_service().set_affix_locks", unlock_handler)
+        self.assertIn("_affix_application().set_locks", lock_handler)
+        self.assertIn("_affix_application().set_locks", unlock_handler)
+        self.assertNotIn("_accessory_transaction_service()", lock_handler)
+        self.assertNotIn("_accessory_transaction_service()", unlock_handler)
         self.assertNotIn("player_data_manager.patch_doc", lock_handler)
         self.assertNotIn("player_data_manager.patch_doc", unlock_handler)
 

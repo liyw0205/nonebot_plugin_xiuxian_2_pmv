@@ -23,6 +23,7 @@ from .repair_application import BackpackRepairApplication
 from .pet_egg_application import PetEggApplication
 from .item_use_application import ItemUseApplication
 from ..accessory_package.application import AccessoryPackageApplication, AccessoryPackageResult
+from .accessory_affix_application import AccessoryAffixApplication
 
 
 class BackApplication(LegacyApplication):
@@ -44,6 +45,10 @@ class BackApplication(LegacyApplication):
         self.pet_egg_application = PetEggApplication(database, player_database or database)
         self.item_use_application = ItemUseApplication(database)
         self.accessory_package_application = AccessoryPackageApplication(
+            database,
+            player_database or database,
+        )
+        self.accessory_affix_application = AccessoryAffixApplication(
             database,
             player_database or database,
         )

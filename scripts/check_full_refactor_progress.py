@@ -105,6 +105,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     rift_speedup_repository = (PACKAGE / "features" / "rift" / "speedup_repository.py").read_text(encoding="utf-8")
     rift_migrations = (PACKAGE / "features" / "rift" / "migrations.py").read_text(encoding="utf-8")
     back_facade = (PACKAGE / "xiuxian" / "xiuxian_back" / "__init__.py").read_text(encoding="utf-8")
+    back_accessory_facade = (PACKAGE / "xiuxian" / "xiuxian_back" / "accessory.py").read_text(encoding="utf-8")
     back_util_facade = (PACKAGE / "xiuxian" / "xiuxian_back" / "back_util.py").read_text(encoding="utf-8")
     back_application_source = (PACKAGE / "features" / "back" / "application.py").read_text(encoding="utf-8")
     past_life_events_facade = (PACKAGE / "xiuxian" / "xiuxian_past_life" / "past_life_events.py").read_text(encoding="utf-8")
@@ -503,8 +504,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "back_application.open_package(" not in back_facade
             ),
             "accessory_package_application_owned": "back_application.accessory_package(" in back_facade,
+            "accessory_affix_application_owned": (
+                back_accessory_facade.count("_affix_application().set_locks") >= 2
+                and "_affix_application().replay" in back_accessory_facade
+            ),
+            "legacy_accessory_affix_disabled": "_accessory_transaction_service().set_affix_locks" not in back_accessory_facade,
             "legacy_repair_disabled": "_backpack_repair_service().run(" not in back_facade,
-            "status": "cultivation_item_skill_learning_lottery_talisman_stone_reward_three_cultivation_pill_alchemy_unbind_repair_equipment_equip_unequip_pet_egg_package_accessory_package_generic_item_use_cutover_with_other_back_compatibility",
+            "status": "cultivation_item_skill_learning_lottery_talisman_stone_reward_three_cultivation_pill_alchemy_unbind_repair_equipment_equip_unequip_pet_egg_package_accessory_package_affix_lock_unlock_generic_item_use_cutover_with_other_back_compatibility",
         },
         "past_life": {
             "final_settlement_application_owned": "_past_life_application.final_settle(" in past_life_events_facade,

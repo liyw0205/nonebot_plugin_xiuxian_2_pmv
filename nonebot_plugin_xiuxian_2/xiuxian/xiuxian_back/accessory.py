@@ -31,11 +31,13 @@ from .accessory_helpers import (  # noqa: F401
     quality_to_cn,
 )
 from ...compatibility.legacy_back_accessory_transaction import AccessoryTransactionService
+from ...features.back.accessory_affix_application import AccessoryAffixApplication
 
 items = Items()
 _sql_message_instance = None
 _player_data_manager_instance = None
 _accessory_transaction_service_instance = None
+_accessory_affix_application = None
 runtime_ids = UUIDGenerator()
 
 
@@ -72,6 +74,20 @@ def _accessory_transaction_service():
             get_paths().game_db, get_paths().player_db
         )
     return _accessory_transaction_service_instance
+
+
+def _affix_application():
+    global _accessory_affix_application
+    if _accessory_affix_application is None:
+        _accessory_affix_application = AccessoryAffixApplication(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _accessory_affix_application
+
+
+def configure_affix_application(application: AccessoryAffixApplication) -> None:
+    global _accessory_affix_application
+    _accessory_affix_application = application
 
 
 def _acc_fail_msg(result, *, action: str = "饰品操作") -> str:
@@ -824,7 +840,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     index_tokens = parts[1:]
     user_id = str(user_info["user_id"])
     operation_id = _accessory_operation_id(event, "lock", user_id, uid)
-    replay = _accessory_transaction_service().replay(operation_id, "lock")
+    replay = _affix_application().replay(operation_id, "lock")
     if replay is not None and replay.accessory is not None:
         target = replay.accessory
         q = max(1, min(5, int(target.get("quality", 1))))
@@ -856,9 +872,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
                     if len(new_locked) >= target_count:
                         result_msg = f"锁定失败：{quality_to_cn(q)}最多锁定{target_count - 1}条，至少保留1条参与洗练"
                     else:
-                        result = _accessory_transaction_service().set_affix_locks(
+                        result = _affix_application().set_locks(
                             operation_id, "lock", user_id, uid,
-                            deepcopy(target), new_locked,
+                            deepcopy(target), tuple(new_locked),
                         )
                         if not result.succeeded or result.accessory is None:
                             result_msg = _acc_fail_msg(result, action="锁定")
@@ -892,7 +908,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     unlock_all = any(str(token).strip() in {"全部", "全解", "all", "ALL"} for token in index_tokens)
     user_id = str(user_info["user_id"])
     operation_id = _accessory_operation_id(event, "unlock", user_id, uid)
-    replay = _accessory_transaction_service().replay(operation_id, "unlock")
+    replay = _affix_application().replay(operation_id, "unlock")
     if replay is not None and replay.accessory is not None:
         target = replay.accessory
         q = max(1, min(5, int(target.get("quality", 1))))
@@ -924,9 +940,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
                 if err:
                     result_msg = f"解锁失败：{err}"
                 else:
-                    result = _accessory_transaction_service().set_affix_locks(
+                    result = _affix_application().set_locks(
                         operation_id, "unlock", user_id, uid,
-                        deepcopy(target), new_locked,
+                        deepcopy(target), tuple(new_locked),
                     )
                     if not result.succeeded or result.accessory is None:
                         result_msg = _acc_fail_msg(result, action="解锁")

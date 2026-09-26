@@ -69,9 +69,11 @@ class BackItemUseApplicationTests(unittest.TestCase):
             for key in ("game_db", "player_db", "trade_db", "impart_db", "message_db")
         }
         self.assertIn("back.016", routed["game_db"])
+        self.assertIn("back.017", routed["game_db"])
         for key in routed:
             if key != "game_db":
                 self.assertNotIn("back.016", routed[key])
+                self.assertNotIn("back.017", routed[key])
 
 
 if __name__ == "__main__":
