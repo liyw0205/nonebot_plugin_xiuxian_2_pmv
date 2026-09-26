@@ -3041,6 +3041,8 @@
     "stored",
     "task_progress_event_operations",
     "task_reward_claim_operations",
+    "task_reward_claim_player_operations",
+    "task_reward_claim_reservations",
     "tasks_feature_migrations",
     "team_cd",
     "teams",

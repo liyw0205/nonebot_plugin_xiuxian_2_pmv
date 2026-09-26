@@ -69,9 +69,13 @@ class ReconcileService:
         """
         handlers = handlers or {}
         operation_handlers = operation_handlers or {}
+        pending_operations = self.ledger.list_pending(uow, limit=1000)
+        # Callbacks may need to write the primary database. Release this
+        # connection's snapshot before invoking them to avoid self-blocking.
+        uow.commit()
         # A failed cross-database operation is retried only by an explicit
         # action handler.  Unknown actions remain visible for manual repair.
-        for row in self.ledger.list_pending(uow, limit=1000):
+        for row in pending_operations:
             action = str(row.get("action", ""))
             handler = operation_handlers.get(action)
             if handler is None:
@@ -96,9 +100,12 @@ class ReconcileService:
                 self.ledger.finish(uow, outcome)
                 event_id = f"{row['operation_id']}:{action}"
                 self.outbox.mark_sent(uow, event_id)
+                uow.commit()
             except Exception:
                 continue
-        for row in self.outbox.pending(uow, limit=1000):
+        pending_events = self.outbox.pending(uow, limit=1000)
+        uow.commit()
+        for row in pending_events:
             handler = handlers.get(str(row["event_type"]))
             if handler is None:
                 continue
@@ -110,8 +117,10 @@ class ReconcileService:
                     self.outbox.mark_dead(uow, str(row["event_id"]))
                 else:
                     self.outbox.mark_failed(uow, str(row["event_id"]))
+                uow.commit()
             else:
                 self.outbox.mark_sent(uow, str(row["event_id"]))
+                uow.commit()
         return self.inspect(uow)
 
 

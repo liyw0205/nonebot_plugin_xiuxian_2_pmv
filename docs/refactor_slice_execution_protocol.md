@@ -211,3 +211,11 @@ compileall、architecture、progress、inventory 和 diff check 通过；无新�
 `rift Boss final-attribute provider`：Rift 玩家战斗快照 provider 显式注入
 `get_final_attributes` 作为 `attribute_provider`，并透传 `ratio` 与 `include_current=True`；未注入时保留旧属性计算 fallback。
 该切片只拆出最终属性只读查询边界，其内部 buff/传承读取仍是兼容 provider，不新增 migration。
+
+`task reward claim game/player saga`：默认领奖 matcher 改走
+`TaskClaimApplication -> TaskClaimGameRepository/TaskClaimPlayerRepository`；player reservation、game item grant/checkpoint、player claim receipt
+分阶段提交，复用同一 operation 可从中断阶段恢复。新增 game-only `tasks.003` 和 player-only `tasks.004`，请求不建表且不依赖 WAL 跨库 `ATTACH`。
+静态任务定义、Items 查找和奖励快照仍由 `task_data` adapter 提供，旧 `TaskRewardClaimService` 保留为兼容对照。聚焦回归 `37 passed`
+（1 条既有 ServicePort `DeprecationWarning`）；compileall、architecture、progress、inventory 和 diff check 通过。五库 recovery 覆盖 177 个
+migration version，路由计数 `140/33/7/1/1`，`.003` 仅 game、`.004` 仅 player；backup/restore dry-run/restore、五库 migration dry-run
+（pending 为空）、health 六项和 reconcile clean 均通过。专用 recovery 数据、receipt、pytest cache 与字节码缓存已清理；真实发布数据迁移和 P7 仍未完成。

@@ -228,14 +228,15 @@ class TaskRewardClaimTests(unittest.TestCase):
                     }
                 self.assertEqual(tables, set())
 
-    def test_production_claim_entry_uses_cross_database_service(self) -> None:
+    def test_production_claim_entry_uses_feature_claim_application(self) -> None:
         root = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2/xiuxian"
         manager_source = (root / "xiuxian_tasks/task_data.py").read_text(encoding="utf-8")
         entry_source = (root / "xiuxian_tasks/__init__.py").read_text(encoding="utf-8")
-        self.assertIn("self.reward_claim_service.claim(", manager_source)
+        self.assertIn("self.claim_application.claim_rewards(", manager_source)
+        self.assertNotIn("TaskRewardClaimService", manager_source)
         self.assertNotIn("grant_reward(", manager_source)
-        self.assertIn("tasks_application.execute(", entry_source)
-        self.assertNotIn("task_manager.claim_rewards(operation_id, user_id, cycle)", entry_source)
+        self.assertIn("task_manager.claim_rewards(operation_id, user_id, cycle)", entry_source)
+        self.assertNotIn("tasks_application.execute(", entry_source)
 
 
 if __name__ == "__main__":

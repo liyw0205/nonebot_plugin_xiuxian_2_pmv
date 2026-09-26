@@ -65,4 +65,49 @@ def apply_task_claim(uow: DatabaseUnitOfWork) -> None:
             uow.execute(f'ALTER TABLE economy_log ADD COLUMN "{field}" {definition}')
 
 
-__all__ = ["apply_tasks", "apply_task_progress", "apply_task_claim"]
+def apply_task_claim_recovery(uow: DatabaseUnitOfWork) -> None:
+    columns = {
+        str(row["name"])
+        for row in uow.query_all("PRAGMA table_info(task_reward_claim_operations)")
+    }
+    additions = {
+        "request_json": "TEXT NOT NULL DEFAULT '{}'",
+        "prepared_json": "TEXT NOT NULL DEFAULT '{}'",
+        "result_status": "TEXT NOT NULL DEFAULT 'applied'",
+        "status": "TEXT NOT NULL DEFAULT 'applied'",
+        "updated_at": "TEXT NOT NULL DEFAULT ''",
+    }
+    for field, definition in additions.items():
+        if field not in columns:
+            uow.execute(
+                f'ALTER TABLE task_reward_claim_operations ADD COLUMN "{field}" {definition}'
+            )
+
+
+def apply_task_claim_player(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS task_reward_claim_player_operations("
+        "operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,payload TEXT NOT NULL,"
+        "prepared_json TEXT NOT NULL,status TEXT NOT NULL,result_status TEXT NOT NULL,"
+        "result_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+        "updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS task_reward_claim_reservations("
+        "user_id TEXT NOT NULL,cycle TEXT NOT NULL,period TEXT NOT NULL,task_key TEXT NOT NULL,"
+        "operation_id TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+        "PRIMARY KEY(user_id,cycle,period,task_key),UNIQUE(operation_id,cycle,task_key))"
+    )
+    uow.execute(
+        "CREATE INDEX IF NOT EXISTS idx_task_reward_claim_reservations_operation "
+        "ON task_reward_claim_reservations(operation_id)"
+    )
+
+
+__all__ = [
+    "apply_tasks",
+    "apply_task_progress",
+    "apply_task_claim",
+    "apply_task_claim_recovery",
+    "apply_task_claim_player",
+]

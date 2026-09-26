@@ -9,7 +9,12 @@ from pathlib import Path
 from ....infrastructure.database import DatabaseUnitOfWork
 from ....plugin import build_migrations, migrations_for_database
 from ..application import TaskProgressApplication
-from ..migrations import apply_task_claim, apply_task_progress
+from ..migrations import (
+    apply_task_claim,
+    apply_task_claim_player,
+    apply_task_claim_recovery,
+    apply_task_progress,
+)
 
 
 class TaskProgressApplicationTest(unittest.TestCase):
@@ -25,6 +30,10 @@ class TaskProgressApplicationTest(unittest.TestCase):
         self.assertIn("tasks.001", player_versions)
         self.assertIn("tasks.002", game_versions)
         self.assertNotIn("tasks.002", player_versions)
+        self.assertIn("tasks.003", game_versions)
+        self.assertNotIn("tasks.003", player_versions)
+        self.assertNotIn("tasks.004", game_versions)
+        self.assertIn("tasks.004", player_versions)
 
     def test_claim_migration_extends_existing_economy_log_without_losing_rows(self) -> None:
         database = Path(self.temp.name) / "game.db"
@@ -60,6 +69,33 @@ class TaskProgressApplicationTest(unittest.TestCase):
         self.assertIn("sect_contribution_delta", columns)
         self.assertEqual(row, ("u", "legacy", "keep"))
         self.assertIsNotNone(operation_table)
+
+    def test_recovery_migrations_preserve_legacy_rows_and_are_idempotent(self) -> None:
+        game_database = Path(self.temp.name) / "legacy-game.db"
+        with sqlite3.connect(game_database) as conn:
+            conn.execute(
+                "CREATE TABLE task_reward_claim_operations("
+                "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+            conn.execute(
+                "INSERT INTO task_reward_claim_operations(operation_id,payload,result_json) "
+                "VALUES('legacy','[\"u\",[\"daily\"]]','[]')"
+            )
+
+        with DatabaseUnitOfWork(game_database, immediate=True) as uow:
+            apply_task_claim_recovery(uow)
+            apply_task_claim_recovery(uow)
+        with DatabaseUnitOfWork(Path(self.temp.name) / "legacy-player.db", immediate=True) as uow:
+            apply_task_claim_player(uow)
+            apply_task_claim_player(uow)
+
+        with sqlite3.connect(game_database) as conn:
+            row = conn.execute(
+                "SELECT payload,result_json,status,result_status,request_json "
+                "FROM task_reward_claim_operations WHERE operation_id='legacy'"
+            ).fetchone()
+        self.assertEqual(row, ('["u",["daily"]]', "[]", "applied", "applied", "{}"))
 
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()

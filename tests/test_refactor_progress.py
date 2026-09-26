@@ -23,7 +23,13 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(tasks["progress_request_path_has_no_ddl"])
         self.assertTrue(tasks["progress_migration_registered"])
         self.assertTrue(tasks["claim_schema_migration_registered"])
+        self.assertTrue(tasks["claim_recovery_migrations_registered"])
+        self.assertTrue(tasks["claim_application_owned"])
+        self.assertTrue(tasks["claim_default_entry_owned"])
+        self.assertTrue(tasks["claim_task_definition_compatibility"])
+        self.assertTrue(tasks["claim_started_operation_recoverable"])
         self.assertTrue(tasks["claim_request_path_has_no_ddl"])
+        self.assertTrue(tasks["claim_request_path_avoids_attached_transaction"])
         self.assertTrue(tasks["claim_schema_migrations_owned"])
         self.assertTrue(tasks["reward_claim_legacy_boundary"])
         tower = slices["tower"]

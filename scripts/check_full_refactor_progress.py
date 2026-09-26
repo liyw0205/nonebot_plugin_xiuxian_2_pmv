@@ -69,6 +69,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "class LegacyTaskProgressEventService"
         )
     ]
+    tasks_claim_application = (PACKAGE / "features" / "tasks" / "application.py").read_text(encoding="utf-8")
+    tasks_claim_repository = (PACKAGE / "features" / "tasks" / "claim_repository.py").read_text(encoding="utf-8")
+    tasks_entry = (PACKAGE / "xiuxian" / "xiuxian_tasks" / "task_data.py").read_text(encoding="utf-8")
+    tasks_command = (PACKAGE / "xiuxian" / "xiuxian_tasks" / "__init__.py").read_text(encoding="utf-8")
     tasks_progress = (PACKAGE / "features" / "tasks" / "progress.py").read_text(encoding="utf-8")
     tasks_migrations = (PACKAGE / "features" / "tasks" / "migrations.py").read_text(encoding="utf-8")
     plugin = (PACKAGE / "plugin.py").read_text(encoding="utf-8")
@@ -300,11 +304,17 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "progress_request_path_has_no_ddl": "CREATE TABLE" not in tasks_progress and "ALTER TABLE" not in tasks_progress and "TaskProgressEventService(" not in tasks_entry,
             "progress_migration_registered": 'Migration("tasks.001", "task_progress_schema", apply_task_progress)' in plugin and "def apply_task_progress(" in tasks_migrations,
             "claim_schema_migration_registered": 'Migration("tasks.002", "task_reward_claim_schema", apply_task_claim)' in plugin and "def apply_task_claim(" in tasks_migrations,
-            "claim_request_path_has_no_ddl": "CREATE TABLE" not in tasks_claim and "ALTER TABLE" not in tasks_claim,
+            "claim_recovery_migrations_registered": 'Migration("tasks.003", "task_reward_claim_recovery_schema", apply_task_claim_recovery)' in plugin and 'Migration("tasks.004", "task_reward_claim_player_schema", apply_task_claim_player)' in plugin,
+            "claim_application_owned": "class TaskClaimApplication" in tasks_claim_application and "TaskClaimGameRepository" in tasks_claim_application and "TaskClaimPlayerRepository" in tasks_claim_application,
+            "claim_default_entry_owned": "task_manager.claim_rewards(operation_id, user_id, cycle)" in tasks_command and "self.claim_application.claim_rewards(" in tasks_entry and "TaskRewardClaimService" not in tasks_entry,
+            "claim_task_definition_compatibility": "def _claim_task_snapshots(" in tasks_entry and "self.items.get_data_by_item_id(item_id)" in tasks_entry,
+            "claim_started_operation_recoverable": "def reconcile(" in tasks_claim_application and '"tasks.claim_rewards": context.services["task_claim"].reconcile' in plugin,
+            "claim_request_path_has_no_ddl": "CREATE TABLE" not in tasks_claim and "ALTER TABLE" not in tasks_claim and "CREATE TABLE" not in tasks_claim_repository and "ALTER TABLE" not in tasks_claim_repository,
+            "claim_request_path_avoids_attached_transaction": "ATTACH DATABASE" not in tasks_claim_application and "ATTACH DATABASE" not in tasks_claim_repository,
             "claim_schema_migrations_owned": "task_reward_claim_operations" in tasks_migrations and "sect_contribution_delta" in tasks_migrations,
-            "reward_claim_legacy_boundary": "TaskRewardClaimService" in tasks_entry and "class TaskRewardClaimService" in tasks_transaction,
+            "reward_claim_legacy_boundary": "class TaskRewardClaimService" in tasks_transaction,
             "legacy_progress_implementation_retained": "class LegacyTaskProgressEventService" in tasks_transaction,
-            "status": "daily_weekly_progress_feature_owned; reward_claim_request_schema_migrated; cross_database_service_compatibility_retained",
+            "status": "daily_weekly_progress_and_claim_saga_cutover; task_definition_adapter_and_legacy_service_retained_for_compatibility",
         },
         "entertainment": {
             "account_delete_application_owned": "entertainment_application.delete_accounts(" in entertainment_facade and "_run_entertainment_write(" not in entertainment_facade[entertainment_facade.index("def delete_accounts("):entertainment_facade.index("def resolve_targets(")],

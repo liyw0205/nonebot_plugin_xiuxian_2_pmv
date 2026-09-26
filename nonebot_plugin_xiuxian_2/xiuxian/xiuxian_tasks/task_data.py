@@ -9,9 +9,8 @@ from ...paths import get_paths
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.utils import number_to
-from ...features.tasks.application import TaskProgressApplication
+from ...features.tasks.application import TaskClaimApplication, TaskProgressApplication
 from ...features.tasks.progress import TaskProgressEventResult
-from .transaction_service import TaskRewardClaimService
 
 
 @dataclass(frozen=True)
@@ -198,7 +197,7 @@ class XiuxianTaskManager:
     def __init__(self):
         self.items = Items()
         self.progress_application = TaskProgressApplication(get_paths().player_db)
-        self.reward_claim_service = TaskRewardClaimService(
+        self.claim_application = TaskClaimApplication(
             get_paths().game_db, get_paths().player_db
         )
 
@@ -363,13 +362,13 @@ class XiuxianTaskManager:
     ) -> str:
         user_id = str(user_id)
         cycles = [cycle] if cycle in TASKS_BY_CYCLE else ["daily", "weekly"]
-        result = self.reward_claim_service.claim(
-            operation_id,
-            user_id,
-            cycles,
-            {item_cycle: self._period_key(item_cycle) for item_cycle in cycles},
-            self._claim_task_snapshots(cycles),
-            XiuConfig().max_goods_num,
+        result = self.claim_application.claim_rewards(
+            operation_id=operation_id,
+            user_id=user_id,
+            cycle=cycle if cycle in TASKS_BY_CYCLE else None,
+            periods={item_cycle: self._period_key(item_cycle) for item_cycle in cycles},
+            tasks=self._claim_task_snapshots(cycles),
+            max_goods_num=XiuConfig().max_goods_num,
         )
         if result.status == "operation_conflict":
             return "本次任务领奖与已记录事件冲突，请重新执行指令。"
@@ -377,6 +376,10 @@ class XiuxianTaskManager:
             return "背包容量不足，任务奖励尚未领取。"
         if result.status == "user_missing":
             return "未找到角色信息，无法领取任务奖励。"
+        if result.status == "claim_in_progress":
+            return "任务奖励正在处理中，请稍后再试。"
+        if result.message and not result.tasks:
+            return result.message
         if not result.tasks:
             return "当前没有可领取的任务奖励。"
 
@@ -395,6 +398,10 @@ class XiuxianTaskManager:
 
 
 task_manager = XiuxianTaskManager()
+
+
+def configure_task_claim_application(application: TaskClaimApplication) -> None:
+    task_manager.claim_application = application
 
 
 def record_task_progress_event(
