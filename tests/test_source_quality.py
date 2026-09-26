@@ -1956,7 +1956,7 @@ class SourceQualityTests(unittest.TestCase):
         for service_path in (
             SOURCE_ROOT / "compatibility" / "legacy_base_ordinary_tribulation.py",
             SOURCE_ROOT / "compatibility" / "legacy_base_destiny_tribulation.py",
-            base_root / "heart_devil_tribulation_service.py",
+            SOURCE_ROOT / "compatibility" / "legacy_base_heart_devil_tribulation.py",
         ):
             service_source = service_path.read_text(encoding="utf-8")
             self.assertIn("def replay(", service_source)

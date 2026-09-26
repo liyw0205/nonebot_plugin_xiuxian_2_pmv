@@ -54,6 +54,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     breakthrough_compatibility = (PACKAGE / "compatibility" / "legacy_base_breakthrough.py").read_text(encoding="utf-8")
     ordinary_tribulation_compatibility = (PACKAGE / "compatibility" / "legacy_base_ordinary_tribulation.py").read_text(encoding="utf-8")
     destiny_tribulation_compatibility = (PACKAGE / "compatibility" / "legacy_base_destiny_tribulation.py").read_text(encoding="utf-8")
+    heart_devil_tribulation_compatibility = (PACKAGE / "compatibility" / "legacy_base_heart_devil_tribulation.py").read_text(encoding="utf-8")
     adapter = (PACKAGE / "adapters" / "nonebot" / "commands.py").read_text(encoding="utf-8")
     web = (PACKAGE / "adapters" / "web" / "api.py").read_text(encoding="utf-8")
     legacy_transaction = (PACKAGE / "xiuxian" / "xiuxian_base" / "transaction_service.py").read_text(encoding="utf-8")
@@ -585,7 +586,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "breakthrough_service_isolated": "class BreakthroughService" not in base_transaction and "class BreakthroughService" in breakthrough_compatibility and all(token in breakthrough_compatibility for token in ("direct_breakthrough_operations", "continuous_breakthrough_operations", "tribulation_breakthrough_operations", "continuous_tribulation_operations")),
             "ordinary_tribulation_service_isolated": "class OrdinaryTribulationService" not in base_transaction and "class OrdinaryTribulationService" in ordinary_tribulation_compatibility and "ordinary_tribulation_operations" in ordinary_tribulation_compatibility,
             "destiny_tribulation_service_isolated": "class DestinyTribulationService" not in base_transaction and "class DestinyTribulationService" in destiny_tribulation_compatibility and "destiny_tribulation_operations" in destiny_tribulation_compatibility,
-            "status": "rename_stone_contest_stone_robbery_xiangyuan_breakthrough_ordinary_and_destiny_tribulation_compatibility_isolation_with_replay",
+            "heart_devil_tribulation_service_isolated": "class HeartDevilTribulationService" not in base_transaction and "class HeartDevilTribulationService" in heart_devil_tribulation_compatibility and "heart_devil_tribulation_operations" in heart_devil_tribulation_compatibility,
+            "status": "rename_stone_contest_stone_robbery_xiangyuan_breakthrough_ordinary_destiny_and_heart_devil_tribulation_compatibility_isolation_with_replay",
         },
         "puppet": {
             "harvest_application_owned": "puppet_application.harvest(" in puppet_facade,
