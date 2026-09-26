@@ -27,7 +27,7 @@ from ..xiuxian_title.title_data import check_and_unlock_titles
 from ...compatibility.legacy_base_breakthrough import BreakthroughService
 from .transaction_service import DestinyTribulationService
 from .transaction_service import HeartDevilTribulationService
-from .transaction_service import OrdinaryTribulationService
+from ...compatibility.legacy_base_ordinary_tribulation import OrdinaryTribulationService
 from .transaction_service import PillFusionService
 from .transaction_service import TribulationStateMigrationService
 

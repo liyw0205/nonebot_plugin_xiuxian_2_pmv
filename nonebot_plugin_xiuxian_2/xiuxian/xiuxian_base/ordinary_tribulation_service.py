@@ -1,6 +1,6 @@
 """Stable facade for ordinary tribulation settlement."""
 
-from .transaction_service import OrdinaryTribulationService
+from ...compatibility.legacy_base_ordinary_tribulation import OrdinaryTribulationService
 
 # BEGIN IMMEDIATE and replay protect ordinary tribulation operations.
 OPERATION_TABLE = "ordinary_tribulation_operations"

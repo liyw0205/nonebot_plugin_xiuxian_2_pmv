@@ -1953,12 +1953,12 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("heart_devil_tribulation_service.settle(", heart_devil)
         self.assertIn("battle_messages=result", heart_devil)
 
-        for filename in (
-            "ordinary_tribulation_service.py",
-            "destiny_tribulation_service.py",
-            "heart_devil_tribulation_service.py",
+        for service_path in (
+            SOURCE_ROOT / "compatibility" / "legacy_base_ordinary_tribulation.py",
+            base_root / "destiny_tribulation_service.py",
+            base_root / "heart_devil_tribulation_service.py",
         ):
-            service_source = (base_root / filename).read_text(encoding="utf-8")
+            service_source = service_path.read_text(encoding="utf-8")
             self.assertIn("def replay(", service_source)
 
     def test_tribulation_breakthrough_uses_transactional_service(self) -> None:
