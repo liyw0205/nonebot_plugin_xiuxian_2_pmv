@@ -69,7 +69,7 @@ from .transaction_service import StoneItemRewardService
 from .transaction_service import ThreeCultivationPillService
 from .transaction_service import UnbindItemService
 from ...compatibility.legacy_back_pet_egg import BatchItemUseService
-from .transaction_service import BackpackRepairService, BackpackRepairResult
+from ...compatibility.legacy_back_repair import BackpackRepairService, BackpackRepairResult
 from . import accessory as _accessory  # noqa: F401
 from .accessory_helpers import AFFIX_KEY_MAP, SET_BONUS, ACCESSORY_BAG_LIMIT, add_accessory_to_bag, can_add_accessories, create_accessory_instance, quality_to_cn  # noqa: F401
 from .backpack_render import (

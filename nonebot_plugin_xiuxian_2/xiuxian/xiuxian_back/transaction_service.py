@@ -970,17 +970,8 @@ class AccessoryTransactionService:
 
         return self._run(operation_id, "batch_decompose", payload, apply)
 
-from ...features.back.repair_repository import BackpackRepairResult, BackpackRepairSqlRepository
-
-
-class BackpackRepairService(BackpackRepairSqlRepository):
-    """Compatibility wrapper that preserves the historical request-time schema setup."""
-
-    def __init__(self, database: str | Path, lock: RLock | None = None) -> None:
-        super().__init__(database, lock=lock, ensure_schema=True)
-
-
 from ...features.back.pet_egg_repository import BatchPetEggUseResult, PetEggUseSqlRepository
+from ...compatibility.legacy_back_repair import BackpackRepairResult, BackpackRepairService
 from ...compatibility.legacy_back_alchemy import AlchemyResult, AlchemyService
 from ...compatibility.legacy_back_package_reward import (
     PackageOpenResult,
