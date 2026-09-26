@@ -571,6 +571,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "base": {
             "rename_application_owned": "base_application.rename(" in base_facade,
             "legacy_rename_disabled": "_player_rename_service().rename_user(" not in base_facade and "_player_rename_service().rename_root(" not in base_facade,
+            "rename_service_isolated": "class PlayerRenameService" not in legacy_transaction and (PACKAGE / "compatibility" / "legacy_base_player_rename.py").is_file(),
             "status": "rename_cutover_with_replay_compatibility",
         },
         "puppet": {

@@ -42,6 +42,14 @@ def test_player_rename_handlers_use_feature_application():
     assert "base_application.rename(" in text
 
 
+def test_player_rename_compatibility_implementation_is_isolated():
+    root = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2"
+    transaction_source = (root / "xiuxian/xiuxian_base/transaction_service.py").read_text(encoding="utf-8")
+    compatibility_source = (root / "compatibility/legacy_base_player_rename.py").read_text(encoding="utf-8")
+    assert "class PlayerRenameService" not in transaction_source
+    assert "class PlayerRenameService" in compatibility_source
+
+
 class PlayerRenameServiceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
