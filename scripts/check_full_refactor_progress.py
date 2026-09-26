@@ -514,8 +514,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "_decompose_application().replay" in back_accessory_facade
             ),
             "legacy_accessory_decompose_disabled": "_accessory_transaction_service().decompose" not in back_accessory_facade,
+            "accessory_batch_decompose_application_owned": "_decompose_application().batch_decompose" in back_accessory_facade,
+            "legacy_accessory_batch_decompose_disabled": "_accessory_transaction_service().batch_decompose" not in back_accessory_facade,
             "legacy_repair_disabled": "_backpack_repair_service().run(" not in back_facade,
-            "status": "cultivation_item_skill_learning_lottery_talisman_stone_reward_three_cultivation_pill_alchemy_unbind_repair_equipment_equip_unequip_pet_egg_package_accessory_package_affix_lock_unlock_decompose_generic_item_use_cutover_with_other_back_compatibility",
+            "status": "cultivation_item_skill_learning_lottery_talisman_stone_reward_three_cultivation_pill_alchemy_unbind_repair_equipment_equip_unequip_pet_egg_package_accessory_package_affix_lock_unlock_decompose_batch_decompose_generic_item_use_cutover_with_other_back_compatibility",
         },
         "past_life": {
             "final_settlement_application_owned": "_past_life_application.final_settle(" in past_life_events_facade,

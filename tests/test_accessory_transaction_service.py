@@ -675,6 +675,17 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
         self.assertIn("_decompose_application().decompose", handler)
         self.assertNotIn("_accessory_transaction_service().decompose", handler)
 
+    def test_real_batch_decompose_handler_uses_feature_application(self) -> None:
+        source = (
+            Path(__file__).parents[1]
+            / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_back/accessory.py"
+        ).read_text(encoding="utf-8")
+        handler = source.split("@quick_decompose_accessory.handle", 1)[1].split(
+            "@upgrade_accessory.handle", 1
+        )[0]
+        self.assertIn("_decompose_application().batch_decompose", handler)
+        self.assertNotIn("_accessory_transaction_service().batch_decompose", handler)
+
     def test_real_preset_handlers_use_transaction_service(self) -> None:
         root = Path(__file__).parents[1]
         source = (

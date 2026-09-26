@@ -1217,7 +1217,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     selected_uids = [str(acc.get("uid", "")) for acc in hit]
     target_key = f"{t}:{q_text}:{','.join(selected_uids)}"
-    result = _accessory_transaction_service().batch_decompose(
+    result = _decompose_application().batch_decompose(
         _accessory_operation_id(event, "batch-decompose", user_id, target_key),
         user_id,
         deepcopy(bag),

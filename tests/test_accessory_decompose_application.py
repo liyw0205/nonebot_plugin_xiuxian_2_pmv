@@ -103,6 +103,49 @@ class AccessoryDecomposeApplicationTests(unittest.TestCase):
                     ).fetchone()
                 )
 
+    def test_batch_decompose_uses_whole_bag_snapshot_and_replays(self) -> None:
+        second = dict(self.accessory, uid="acc-2", quality=2)
+        expected_bag = [self.accessory, second]
+        with sqlite3.connect(self.player) as conn:
+            conn.execute(
+                "UPDATE player_accessory SET bag=? WHERE user_id='u'",
+                (json.dumps(expected_bag, ensure_ascii=False),),
+            )
+        first = self.application.batch_decompose(
+            "batch-1", "u", expected_bag, ("acc-1", "acc-2"), 20023, "洗练石", 5, 100
+        )
+        duplicate = self.application.batch_decompose(
+            "batch-1", "u", expected_bag, ("acc-1", "acc-2"), 20023, "洗练石", 5, 100
+        )
+        self.assertEqual((first.status, duplicate.status), ("applied", "duplicate"))
+        self.assertEqual((first.affected, duplicate.affected, first.stone_delta), (2, 2, 5))
+        self.assertEqual(self.state()[0], (10, 10))
+        self.assertEqual(self.state()[1], [])
+
+    def test_batch_decompose_rejects_stale_snapshot_and_inventory_full(self) -> None:
+        second = dict(self.accessory, uid="acc-2", quality=2)
+        expected_bag = [self.accessory, second]
+        with sqlite3.connect(self.player) as conn:
+            conn.execute(
+                "UPDATE player_accessory SET bag=? WHERE user_id='u'",
+                (json.dumps(expected_bag, ensure_ascii=False),),
+            )
+        stale = list(reversed(expected_bag))
+        self.assertEqual(
+            self.application.batch_decompose(
+                "stale-batch", "u", stale, ("acc-1", "acc-2"), 20023, "洗练石", 5, 100
+            ).status,
+            "state_changed",
+        )
+        self.assertEqual(
+            self.application.batch_decompose(
+                "full-batch", "u", expected_bag, ("acc-1", "acc-2"), 20023, "洗练石", 5, 9
+            ).status,
+            "inventory_full",
+        )
+        self.assertEqual(self.state()[0], (5, 5))
+        self.assertEqual(self.state()[1], expected_bag)
+
 
 if __name__ == "__main__":
     unittest.main()

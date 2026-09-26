@@ -44,5 +44,27 @@ class AccessoryDecomposeApplication:
             max_goods_num,
         )
 
+    def batch_decompose(
+        self,
+        operation_id: str,
+        user_id: str,
+        expected_bag: list[dict[str, Any]],
+        selected_uids: tuple[str, ...],
+        stone_id: int,
+        stone_name: str,
+        total_gain: int,
+        max_goods_num: int,
+    ) -> AccessoryDecomposeChange:
+        return self.repository.batch_decompose(
+            operation_id,
+            user_id,
+            expected_bag,
+            selected_uids,
+            stone_id,
+            stone_name,
+            total_gain,
+            max_goods_num,
+        )
+
 
 __all__ = ["AccessoryDecomposeApplication", "AccessoryDecomposeChange"]
