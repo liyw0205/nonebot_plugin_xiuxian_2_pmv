@@ -66,7 +66,7 @@ from ...compatibility.legacy_back_alchemy import AlchemyService
 from ...compatibility.legacy_back_skill_learning import SkillLearningService
 from ...compatibility.legacy_back_stone_reward import StoneItemRewardService
 from ...compatibility.legacy_back_three_cultivation_pill import ThreeCultivationPillService
-from .transaction_service import UnbindItemService
+from ...compatibility.legacy_back_unbind import UnbindItemService
 from ...compatibility.legacy_back_pet_egg import BatchItemUseService
 from ...compatibility.legacy_back_repair import BackpackRepairService, BackpackRepairResult
 from . import accessory as _accessory  # noqa: F401

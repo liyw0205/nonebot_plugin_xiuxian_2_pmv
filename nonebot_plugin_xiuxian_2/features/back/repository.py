@@ -14,9 +14,7 @@ class LegacyBackRepository:
         self.player_database = str(player_database or database)
 
     def invoke(self, action: str, operation_id: str, user_id: str, **kwargs: Any) -> Any:
-        from ...xiuxian.xiuxian_back.transaction_service import (
-            UnbindItemService,
-        )
+        from ...compatibility.legacy_back_unbind import UnbindItemService
         from ...compatibility.legacy_back_alchemy import AlchemyService
         from ...compatibility.legacy_back_equipment import EquipmentService
         from ...compatibility.legacy_back_repair import BackpackRepairService
