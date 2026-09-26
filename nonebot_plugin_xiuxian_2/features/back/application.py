@@ -26,6 +26,7 @@ from ..accessory_package.application import AccessoryPackageApplication, Accesso
 from .accessory_affix_application import AccessoryAffixApplication
 from .accessory_decompose_application import AccessoryDecomposeApplication
 from .accessory_wash_application import AccessoryWashApplication
+from .accessory_upgrade_application import AccessoryUpgradeApplication
 
 
 class BackApplication(LegacyApplication):
@@ -59,6 +60,10 @@ class BackApplication(LegacyApplication):
             player_database or database,
         )
         self.accessory_wash_application = AccessoryWashApplication(
+            database,
+            player_database or database,
+        )
+        self.accessory_upgrade_application = AccessoryUpgradeApplication(
             database,
             player_database or database,
         )

@@ -34,6 +34,7 @@ from ...compatibility.legacy_back_accessory_transaction import AccessoryTransact
 from ...features.back.accessory_affix_application import AccessoryAffixApplication
 from ...features.back.accessory_decompose_application import AccessoryDecomposeApplication
 from ...features.back.accessory_wash_application import AccessoryWashApplication
+from ...features.back.accessory_upgrade_application import AccessoryUpgradeApplication
 
 items = Items()
 _sql_message_instance = None
@@ -42,6 +43,7 @@ _accessory_transaction_service_instance = None
 _accessory_affix_application = None
 _accessory_decompose_application = None
 _accessory_wash_application = None
+_accessory_upgrade_application = None
 runtime_ids = UUIDGenerator()
 
 
@@ -120,6 +122,20 @@ def _wash_application():
 def configure_wash_application(application: AccessoryWashApplication) -> None:
     global _accessory_wash_application
     _accessory_wash_application = application
+
+
+def _upgrade_application():
+    global _accessory_upgrade_application
+    if _accessory_upgrade_application is None:
+        _accessory_upgrade_application = AccessoryUpgradeApplication(
+            get_paths().game_db, get_paths().player_db
+        )
+    return _accessory_upgrade_application
+
+
+def configure_upgrade_application(application: AccessoryUpgradeApplication) -> None:
+    global _accessory_upgrade_application
+    _accessory_upgrade_application = application
 
 
 def _acc_fail_msg(result, *, action: str = "饰品操作") -> str:
@@ -1262,7 +1278,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         user_id,
         f"{part}:{','.join(material_uids)}",
     )
-    result = _accessory_transaction_service().replay(operation_id, "upgrade")
+    result = _upgrade_application().replay(operation_id)
     if result is None:
         data = _get_data(user_id)
         equipped = data.get("equipped", {})
@@ -1294,26 +1310,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
                 return
 
         selected_uids = material_uids[:need_cnt]
-        upgraded = deepcopy(main_acc)
-        upgraded["quality"] = main_q + 1
-        upgraded["wash_count"] = 0
-        upgraded["affixes"] = _fit_affixes_to_quality(
-            main_q + 1, upgraded.get("affixes", [])
-        )
-        _set_locked_affixes(
-            upgraded,
-            _normalize_locked_affixes(
-                upgraded, len(upgraded.get("affixes", []))
-            ),
-        )
-        result = _accessory_transaction_service().upgrade(
+        result = _upgrade_application().upgrade(
             operation_id,
             user_id,
             part,
             deepcopy(equipped),
             deepcopy(bag),
-            selected_uids,
-            upgraded,
+            tuple(selected_uids),
         )
         if not result.succeeded:
             messages = {

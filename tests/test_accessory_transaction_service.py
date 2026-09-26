@@ -650,7 +650,7 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
         self.assertNotIn("player_data_manager.patch_doc", lock_handler)
         self.assertNotIn("player_data_manager.patch_doc", unlock_handler)
 
-    def test_real_upgrade_handler_uses_transaction_service(self) -> None:
+    def test_real_upgrade_handler_uses_feature_application(self) -> None:
         source = (
             Path(__file__).parents[1]
             / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_back/accessory.py"
@@ -658,8 +658,9 @@ class AccessoryTransactionServiceTests(unittest.TestCase):
         handler = source.split("@upgrade_accessory.handle", 1)[1].split(
             "@accessory_preset.handle", 1
         )[0]
-        self.assertIn("_accessory_transaction_service().replay(", handler)
-        self.assertIn("_accessory_transaction_service().upgrade(", handler)
+        self.assertIn("_upgrade_application().replay", handler)
+        self.assertIn("_upgrade_application().upgrade", handler)
+        self.assertNotIn("_accessory_transaction_service().upgrade", handler)
         self.assertNotIn("_save_data(", handler)
         self.assertNotIn("del bag[", handler)
 
