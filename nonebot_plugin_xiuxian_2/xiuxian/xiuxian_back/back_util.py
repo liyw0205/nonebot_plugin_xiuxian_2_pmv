@@ -20,7 +20,7 @@ from ...compatibility.legacy_back_cultivation_item import CultivationItemService
 from ...compatibility.legacy_back_breakthrough_rate_item import BreakthroughRateItemService
 from ...compatibility.legacy_back_recovery_item import RecoveryItemService
 from ...compatibility.legacy_back_permanent_atk_item import PermanentAtkItemService
-from .transaction_service import BlessedFlagReplaceService
+from ...compatibility.legacy_back_blessed_flag_replace import BlessedFlagReplaceService
 from nonebot.log import logger
 items = Items()
 _sql_message_instance = None

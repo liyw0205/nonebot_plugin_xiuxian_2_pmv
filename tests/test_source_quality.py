@@ -1412,6 +1412,42 @@ class SourceQualityTests(unittest.TestCase):
         )
         self.assertIn('"recovery_item": (RecoveryItemService, "apply")', repository_source)
 
+    def test_blessed_flag_replace_compatibility_wrapper_is_isolated(self) -> None:
+        back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
+        legacy_source = (back_root / "transaction_service.py").read_text(encoding="utf-8")
+        compatibility_source = (
+            SOURCE_ROOT / "compatibility" / "legacy_back_blessed_flag_replace.py"
+        ).read_text(encoding="utf-8")
+        utility_source = (back_root / "back_util.py").read_text(encoding="utf-8")
+        repository_source = (
+            SOURCE_ROOT / "features" / "back" / "repository.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("class BlessedFlagReplaceService", legacy_source)
+        self.assertIn("class BlessedFlagReplaceService", compatibility_source)
+        self.assertIn(
+            "@dataclass(frozen=True)\nclass BlessedFlagReplaceResult", compatibility_source
+        )
+        self.assertIn(
+            "legacy_back_blessed_flag_replace import BlessedFlagReplaceService",
+            utility_source,
+        )
+        self.assertIn(
+            "legacy_back_blessed_flag_replace import BlessedFlagReplaceService",
+            repository_source,
+        )
+        self.assertIn(
+            '"blessed_flag_replace": (BlessedFlagReplaceService, "replace")',
+            repository_source,
+        )
+        self.assertIn("BlessedFlagReplaceService,", repository_source)
+
+        handler_start = utility_source.index("def get_use_jlq_msg(")
+        handler_end = utility_source.index("\nPATH = Path(__file__).parent", handler_start)
+        handler = utility_source[handler_start:handler_end]
+        self.assertIn("_blessed_flag_replace_application().replace(", handler)
+        self.assertNotIn("_blessed_flag_replace_service().replace(", handler)
+
     def test_cultivation_item_use_is_atomic_and_idempotent(self) -> None:
         back_root = SOURCE_ROOT / "xiuxian" / "xiuxian_back"
         command_source = (back_root / "__init__.py").read_text(encoding="utf-8")

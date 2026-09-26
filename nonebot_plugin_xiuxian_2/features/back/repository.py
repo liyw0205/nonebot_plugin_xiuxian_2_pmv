@@ -19,6 +19,7 @@ class LegacyBackRepository:
         from ...compatibility.legacy_back_breakthrough_rate_item import BreakthroughRateItemService
         from ...compatibility.legacy_back_permanent_atk_item import PermanentAtkItemService
         from ...compatibility.legacy_back_recovery_item import RecoveryItemService
+        from ...compatibility.legacy_back_blessed_flag_replace import BlessedFlagReplaceService
         from ...compatibility.legacy_back_alchemy import AlchemyService
         from ...compatibility.legacy_back_equipment import EquipmentService
         from ...compatibility.legacy_back_repair import BackpackRepairService
@@ -39,13 +40,19 @@ class LegacyBackRepository:
             "breakthrough_rate_item": (BreakthroughRateItemService, "apply"),
             "permanent_atk_item": (PermanentAtkItemService, "apply"),
             "recovery_item": (RecoveryItemService, "apply"),
+            "blessed_flag_replace": (BlessedFlagReplaceService, "replace"),
             "accessory_package": (AccessoryPackageService, "apply"),
             "accessory": (AccessoryTransactionService, "upgrade"),
         }
         if action == "repair":
             return BackpackRepairService(self.database).run(operation_id, **kwargs)
         cls, method = mapping[action]
-        service = cls(self.database, self.player_database) if cls in {BatchItemUseService, AccessoryPackageService, AccessoryTransactionService} else cls(self.database)
+        service = cls(self.database, self.player_database) if cls in {
+            BatchItemUseService,
+            AccessoryPackageService,
+            AccessoryTransactionService,
+            BlessedFlagReplaceService,
+        } else cls(self.database)
         return getattr(service, method)(operation_id, user_id, **kwargs)
 
 
