@@ -42,7 +42,7 @@ from ..xiuxian_arena import use_arena_challenge_ticket
 
 from ..xiuxian_config import XiuConfig, convert_rank, added_ranks
 from ...features.back.application import BackApplication
-from ...features.back.lottery_talisman_application import LotteryReward
+from ...compatibility.legacy_back_lottery_talisman import LotteryReward, LotteryTalismanService
 from ...paths import get_paths
 from ...infrastructure.ids import UUIDGenerator
 from ..xiuxian_utils.pet_system import (
@@ -58,7 +58,6 @@ from ..xiuxian_utils.pet_system import (
 from .back_util import *
 from .transaction_service import CultivationItemService
 from ...compatibility.legacy_back_equipment import EquipmentService
-from .transaction_service import LotteryTalismanService
 from .package_reward_service import PackageOpenResult, PackageReward, PackageRewardService
 from ...features.package_reward.application import PackageRewardApplication
 from ...features.package_reward.resolver import PackageRewardResolver
