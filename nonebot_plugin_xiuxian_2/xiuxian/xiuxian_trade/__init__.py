@@ -53,7 +53,6 @@ from .auction_utils import (
 )
 from .transaction_service import (
     bind_auction_service_dependencies,
-    reconcile_auction_after_restart,
 )
 from .auction_jobs import run_auction_job
 from ...paths import get_paths
@@ -3251,10 +3250,38 @@ async def _check_auction_end_job_impl():
         logger.info(f"拍卖进行中，距结束约 {remaining_minutes} 分钟。")
 
 
+async def _reconcile_auction_with_application():
+    """Reconcile an active auction through the feature-owned applications."""
+    current_auctions = _auction_query_application().get_current_auction() or []
+    if not current_auctions:
+        return
+
+    session = _auction_session_service().get_active_session()
+    if session is None:
+        raise RuntimeError("auction items exist without an active database session")
+
+    now_dt = runtime_clock.now()
+    end_dt = datetime.fromtimestamp(float(session["end_time"]), tz=now_dt.tzinfo)
+    item_count = len(current_auctions)
+    if now_dt >= end_dt:
+        logger.info(
+            f"拍卖重启后对账：已过结束时间（{end_dt.strftime('%m-%d %H:%M')}），"
+            f"开始收尾，拍品 {item_count} 件。"
+        )
+        await _end_auction_with_application(f"auction-finish:{session['session_id']}")
+        return
+
+    left_min = max(int((end_dt - now_dt).total_seconds()) // 60, 0)
+    logger.info(
+        f"拍卖重启后继续本场，预计 {end_dt.strftime('%H:%M')} 结束，"
+        f"剩余约 {left_min} 分钟，拍品 {item_count} 件。"
+    )
+
+
 @register_legacy_startup
 async def recover_orphan_auction_on_startup():
     await run_auction_job(
         "startup_reconcile",
-        reconcile_auction_after_restart,
+        _reconcile_auction_with_application,
         suppress=True,
     )
