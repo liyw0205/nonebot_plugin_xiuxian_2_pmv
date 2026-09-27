@@ -553,7 +553,7 @@ async def auto_handle_inactive_sect_owners():
                     continue
                     
                 # 获取宗主信息
-                user_info = _sql_message().get_user_info_with_id(owner_id)
+                user_info = sect_application.get_inactive_owner_user_profile(owner_id)
                 if not user_info:
                     logger.error(f"获取宗主信息失败：{owner_id}")
                     continue

@@ -26,5 +26,13 @@ class SectInactiveOwnerSqlRepository:
             )
             return [normalize_user_row(row) for row in rows]
 
+    def get_owner_profile(self, owner_id: str) -> dict[str, Any] | None:
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            return uow.query_one(
+                "SELECT user_name FROM user_xiuxian "
+                "WHERE user_id=? ORDER BY rowid ASC LIMIT 1",
+                (owner_id,),
+            )
+
 
 __all__ = ["SectInactiveOwnerSqlRepository"]
