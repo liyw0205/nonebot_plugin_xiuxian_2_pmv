@@ -259,3 +259,5 @@ migration version，路由计数 `140/33/7/1/1`，`.003` 仅 game、`.004` 仅 p
 `sect inactive-owner member snapshot read ownership`：scheduler 的两次成员查询改经 Sect application/read repository，保留 `SELECT *` 行结构、原数值归一化、列表顺序与候选选择逻辑，无 migration/DDL。纯数值转换/row normalization 移入 `core.numeric`，旧 `numeric_bind` 导出兼容；core numeric、兼容 helper、Sect repository、progress/inventory/migration-count/architecture `40 passed`，pytest/pyc 缓存禁用且专用 basetemp 已清理。宗主用户资料仍是下一个同场景读取边界。
 
 `sect inactive-owner profile read ownership`：scheduler 的宗主读取改经 Sect feature，只选 `user_name`，保留重复 id 首行和用户缺失处理；该 handler 中 manager DB reads 均已移除。repository/progress/inventory/migration-count/architecture/core numeric `41 passed`，测试缓存和临时目录已清理，无运行库访问。下一片审计其余宗门命令的重复 `get_sect_info` 读取。
+
+`sect info read ownership`：facade 中 25 个宗门详情读取改经 Sect application/repository，保留完整字典、缺失行与 sect numeric normalization，无 migration/DDL。相关 repository、core numeric、progress/inventory/migration-count/architecture `43 passed`，pytest/pyc cache 已清理；继续迁移其他 manager 读模型。

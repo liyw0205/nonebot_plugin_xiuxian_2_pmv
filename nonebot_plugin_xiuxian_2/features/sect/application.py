@@ -29,6 +29,7 @@ from .manual_disband_repository import SectManualDisbandSqlRepository
 from .activity_repository import SectActivitySqlRepository
 from .directory_repository import SectDirectorySqlRepository
 from .inactive_owner_repository import SectInactiveOwnerSqlRepository
+from .sect_info_repository import SectInfoSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -66,10 +67,14 @@ class SectApplication:
         self.activity_repository = SectActivitySqlRepository(self.database)
         self.directory_repository = SectDirectorySqlRepository(self.database)
         self.inactive_owner_repository = SectInactiveOwnerSqlRepository(self.database)
+        self.sect_info_repository = SectInfoSqlRepository(self.database)
         self.scheduled_material_repository = SectScheduledMaterialSqlRepository(self.database)
 
     def list_sects_with_member_count(self) -> list[tuple[Any, ...]]:
         return self.directory_repository.list_with_member_count()
+
+    def get_sect_info(self, sect_id: int | str) -> dict[str, Any] | None:
+        return self.sect_info_repository.get_by_id(sect_id)
 
     def get_inactive_owner_sect_state(self, sect_id: int) -> dict[str, Any] | None:
         return self.inactive_owner_repository.get_sect_state(sect_id)

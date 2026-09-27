@@ -144,6 +144,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sect_activity_repository = (PACKAGE / "features" / "sect" / "activity_repository.py").read_text(encoding="utf-8")
     sect_directory_repository = (PACKAGE / "features" / "sect" / "directory_repository.py").read_text(encoding="utf-8")
     sect_inactive_owner_repository = (PACKAGE / "features" / "sect" / "inactive_owner_repository.py").read_text(encoding="utf-8")
+    sect_info_repository = (PACKAGE / "features" / "sect" / "sect_info_repository.py").read_text(encoding="utf-8")
     sect_disband_repository = (PACKAGE / "features" / "sect" / "disband_repository.py").read_text(encoding="utf-8")
     sect_scheduled_repository = (PACKAGE / "features" / "sect" / "scheduled_material_repository.py").read_text(encoding="utf-8")
     sect_weekly_repository = (PACKAGE / "features" / "sect" / "weekly_reward_repository.py").read_text(encoding="utf-8")
@@ -514,6 +515,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "sect_directory_application_owned": "sect_application.list_sects_with_member_count()" in sect_inactive_owner_handler and "sect_application.list_sects_with_member_count()" in sect_list_handler and "get_all_sects_with_member_count" not in sect_inactive_owner_handler + sect_list_handler,
             "sect_directory_repository_owned": "SectDirectorySqlRepository" in sect_application and "def list_with_member_count(" in sect_directory_repository,
             "sect_directory_query_read_only": "read_only=True" in sect_directory_repository and "CREATE TABLE" not in sect_directory_repository,
+            "sect_info_application_owned": "_sql_message().get_sect_info(" not in sect_facade and sect_facade.count("sect_application.get_sect_info(") >= 20,
+            "sect_info_repository_owned": "SectInfoSqlRepository" in sect_application and "def get_by_id(" in sect_info_repository,
+            "sect_info_repository_read_only": "read_only=True" in sect_info_repository and "normalize_sect_row(row)" in sect_info_repository,
             "inactive_owner_sect_state_application_owned": "sect_application.get_inactive_owner_sect_state(sect_id)" in sect_inactive_owner_handler and "_sql_message().get_sect_info(sect_id)" not in sect_inactive_owner_handler,
             "inactive_owner_sect_state_repository_owned": "SectInactiveOwnerSqlRepository" in sect_application and "def get_sect_state(" in sect_inactive_owner_repository,
             "inactive_owner_sect_state_read_only": "read_only=True" in sect_inactive_owner_repository and "CREATE TABLE" not in sect_inactive_owner_repository,
