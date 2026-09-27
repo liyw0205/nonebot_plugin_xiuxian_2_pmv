@@ -70,8 +70,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(activity["claim_all_application_owned"])
         self.assertTrue(activity["legacy_claim_all_disabled"])
         dungeon_team = slices["dungeon_team"]
-        self.assertTrue(dungeon_team["create_invite_application_owned"])
-        self.assertTrue(dungeon_team["legacy_create_invite_disabled"])
+        self.assertTrue(dungeon_team["team_commands_application_owned"])
+        self.assertTrue(dungeon_team["legacy_team_service_factories_removed"])
         bank = slices["bank"]
         self.assertTrue(bank["deposit_application_owned"])
         self.assertTrue(bank["withdrawal_application_owned"])

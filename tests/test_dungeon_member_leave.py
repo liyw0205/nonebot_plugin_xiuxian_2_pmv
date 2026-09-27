@@ -16,10 +16,11 @@ from tests.test_db_backend import db_backend
 
 
 class DungeonMemberLeaveTests(unittest.TestCase):
-    def test_dungeon_facade_defers_team_exit_service_construction(self):
+    def test_dungeon_facade_has_no_legacy_team_service_factories(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dungeon as dungeon_plugin
 
-        self.assertIsNone(dungeon_plugin._dungeon_team_exit_service_instance)
+        self.assertFalse(hasattr(dungeon_plugin, "_dungeon_team_transaction_service"))
+        self.assertFalse(hasattr(dungeon_plugin, "_dungeon_team_exit_service"))
 
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()

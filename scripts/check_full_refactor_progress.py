@@ -484,11 +484,22 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "status": "claim_all_cutover_with_legacy_service_retained_for_compatibility",
         },
         "dungeon_team": {
-            "create_invite_application_owned": "dungeon_team_application.create(" in dungeon_facade and "dungeon_team_application.invite(" in dungeon_facade,
-            "legacy_create_invite_disabled": "_dungeon_team_transaction_service().create(" not in dungeon_facade and "_dungeon_team_transaction_service().invite(" not in dungeon_facade,
+            "team_commands_application_owned": all(
+                f"dungeon_team_application.{action}(" in dungeon_facade
+                for action in ("create", "invite", "join", "reject", "leave", "kick", "disband", "transfer")
+            ),
+            "legacy_team_service_factories_removed": all(
+                name not in dungeon_facade
+                for name in (
+                    "DungeonTeamTransactionService",
+                    "DungeonTeamExitService",
+                    "_dungeon_team_transaction_service",
+                    "_dungeon_team_exit_service",
+                )
+            ),
             "explore_settlement_application_owned": "dungeon_application.settle(" in dungeon_facade and "_dungeon_explore_operation_service().settle(" not in dungeon_facade,
             "reset_application_owned": "self.dungeon_application = DungeonApplication(" in dungeon_manager and "self._reset_application().reset(" in dungeon_manager and "self.reset_service.reset(" not in dungeon_manager,
-            "status": "create_invite_cutover_with_legacy_join_exit_compatibility",
+            "status": "team_commands_application_owned_with_invite_projection_compatibility_retained",
         },
         "bank": {
             "deposit_application_owned": "BankDepositApplication" in bank_facade and "bank_application.deposit(" not in bank_facade,

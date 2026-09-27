@@ -48,12 +48,10 @@ from .transaction_service import DungeonSessionResult
 from ...compatibility.dungeon import DungeonExploreOperationService
 from .transaction_service import DungeonExploreOperationResult
 from .transaction_service import (
-    DungeonTeamTransactionService,
     TeamExitResult,
     TeamMutationResult,
     TeamStateSnapshot,
 )
-from .transaction_service import DungeonTeamExitService
 from ...paths import get_paths
 from ...features.dungeon.application import DungeonApplication
 from ...features.dungeon.team_application import DungeonTeamApplication
@@ -67,8 +65,6 @@ dungeon_team_application = DungeonTeamApplication(get_paths().player_db)
 dungeon_ids = UUIDGenerator()
 runtime_clock = SystemClock()
 _dungeon_explore_operation_service_instance = None
-_dungeon_team_transaction_service_instance = None
-_dungeon_team_exit_service_instance = None
 
 
 def _sql_message():
@@ -85,24 +81,6 @@ def _dungeon_explore_operation_service():
             get_paths().game_db, get_paths().player_db
         )
     return _dungeon_explore_operation_service_instance
-
-
-def _dungeon_team_transaction_service():
-    global _dungeon_team_transaction_service_instance
-    if _dungeon_team_transaction_service_instance is None:
-        _dungeon_team_transaction_service_instance = DungeonTeamTransactionService(
-            get_paths().player_db
-        )
-    return _dungeon_team_transaction_service_instance
-
-
-def _dungeon_team_exit_service():
-    global _dungeon_team_exit_service_instance
-    if _dungeon_team_exit_service_instance is None:
-        _dungeon_team_exit_service_instance = DungeonTeamExitService(
-            get_paths().player_db
-        )
-    return _dungeon_team_exit_service_instance
 
 
 DUNGEON_SHOP = {
