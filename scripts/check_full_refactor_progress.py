@@ -117,6 +117,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dungeon_facade = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "__init__.py").read_text(encoding="utf-8")
     dungeon_team_manager = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "team_manager.py").read_text(encoding="utf-8")
     dungeon_invite_compatibility = (PACKAGE / "compatibility" / "legacy_dungeon_team_invite_mapping.py").read_text(encoding="utf-8")
+    dungeon_transaction_shim = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "transaction_service.py").read_text(encoding="utf-8")
+    dungeon_team_legacy_transactions = (PACKAGE / "compatibility" / "legacy_dungeon_team_transactions.py").read_text(encoding="utf-8")
     dungeon_manager = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "dungeon_manager.py").read_text(encoding="utf-8")
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
     map_facade = (PACKAGE / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
@@ -516,6 +518,17 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 "class PersistentTeamInviteMapping" not in dungeon_team_manager
                 and "class PersistentTeamInviteMapping" in dungeon_invite_compatibility
                 and "legacy_dungeon_team_invite_mapping import" in dungeon_team_manager
+            ),
+            "legacy_team_transaction_service_isolated": (
+                "class DungeonTeamTransactionService" in dungeon_team_legacy_transactions
+                and "class DungeonTeamExitService" in dungeon_team_legacy_transactions
+                and "class DungeonTeamTransactionService" not in dungeon_transaction_shim
+                and "class DungeonTeamExitService" not in dungeon_transaction_shim
+            ),
+            "legacy_team_transaction_imports_explicit": (
+                "legacy_dungeon_team_transactions import" in dungeon_transaction_shim
+                and "legacy_dungeon_team_transactions import" in dungeon_invite_compatibility
+                and "xiuxian_dungeon.transaction_service import" not in dungeon_invite_compatibility
             ),
             "explore_settlement_application_owned": "dungeon_application.settle(" in dungeon_facade and "_dungeon_explore_operation_service().settle(" not in dungeon_facade,
             "reset_application_owned": "self.dungeon_application = DungeonApplication(" in dungeon_manager and "self._reset_application().reset(" in dungeon_manager and "self.reset_service.reset(" not in dungeon_manager,

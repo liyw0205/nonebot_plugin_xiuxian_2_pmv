@@ -45,14 +45,10 @@ from .transaction_service import (
 from .transaction_service import DungeonSessionResult
 from ...compatibility.dungeon import DungeonExploreOperationService
 from .transaction_service import DungeonExploreOperationResult
-from .transaction_service import (
-    TeamExitResult,
-    TeamMutationResult,
-    TeamStateSnapshot,
-)
 from ...paths import get_paths
 from ...features.dungeon.application import DungeonApplication
 from ...features.dungeon.team_application import DungeonTeamApplication
+from ...features.dungeon.team_repository import TeamExitResult, TeamMutationResult, TeamStateSnapshot
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 
@@ -138,7 +134,7 @@ def format_seconds(sec: int):
 
 
 def _missing_team_snapshot(team_id: str = "") -> TeamStateSnapshot:
-    return TeamStateSnapshot(str(team_id), "", "", (), (), (), 0)
+    return TeamStateSnapshot(str(team_id), "", "", (), 0)
 
 
 def _team_mutation_message(action: str, result: TeamMutationResult) -> str:

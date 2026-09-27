@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 from ..paths import get_paths
 
 if TYPE_CHECKING:
-    from ..xiuxian.xiuxian_dungeon.transaction_service import (
+    from .legacy_dungeon_team_transactions import (
         DungeonTeamTransactionService,
         TeamInviteSnapshot,
     )
@@ -29,7 +29,7 @@ class PersistentTeamInviteMapping(MutableMapping[str, dict[str, Any]]):
     def _service(self) -> DungeonTeamTransactionService:
         if self._service_override is not None:
             return self._service_override
-        from ..xiuxian.xiuxian_dungeon.transaction_service import DungeonTeamTransactionService
+        from .legacy_dungeon_team_transactions import DungeonTeamTransactionService
 
         return DungeonTeamTransactionService(self._database or get_paths().player_db)
 

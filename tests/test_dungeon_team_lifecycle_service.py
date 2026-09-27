@@ -17,10 +17,28 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.team_manager import (
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.transaction_service import (
     DungeonTeamTransactionService,
 )
+from nonebot_plugin_xiuxian_2.compatibility.legacy_dungeon_team_transactions import (
+    DungeonTeamExitService as LegacyDungeonTeamExitService,
+    DungeonTeamTransactionService as LegacyDungeonTeamTransactionService,
+    TeamExitResult as LegacyTeamExitResult,
+    TeamInviteSnapshot as LegacyTeamInviteSnapshot,
+    TeamMutationResult as LegacyTeamMutationResult,
+    TeamStateSnapshot as LegacyTeamStateSnapshot,
+)
 from tests.test_db_backend import db_backend
 
 
 class DungeonTeamLifecycleServiceTests(unittest.TestCase):
+    def test_transaction_service_and_dtos_keep_legacy_import_identity(self) -> None:
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon import transaction_service
+
+        self.assertIs(DungeonTeamTransactionService, LegacyDungeonTeamTransactionService)
+        self.assertIs(transaction_service.DungeonTeamExitService, LegacyDungeonTeamExitService)
+        self.assertIs(transaction_service.TeamMutationResult, LegacyTeamMutationResult)
+        self.assertIs(transaction_service.TeamInviteSnapshot, LegacyTeamInviteSnapshot)
+        self.assertIs(transaction_service.TeamStateSnapshot, LegacyTeamStateSnapshot)
+        self.assertIs(transaction_service.TeamExitResult, LegacyTeamExitResult)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "player.sqlite3"
