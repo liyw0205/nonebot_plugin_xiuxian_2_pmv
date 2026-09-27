@@ -1045,6 +1045,16 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("tianti_settlement_operations", service_source)
 
+    def test_tianti_profile_display_commands_are_read_only(self) -> None:
+        source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_tianti" / "__init__.py"
+        ).read_text(encoding="utf-8")
+        status = source[source.index("@tianti_info.handle"):source.index("@tianti_chongqiao.handle")]
+        qiaoxue = source[source.index("@tiqiao_info.handle"):source.index("@tianti_level_help.handle")]
+        for handler in (status, qiaoxue):
+            self.assertIn("tianti_training_application.read_profile(user_id)", handler)
+            self.assertNotIn("tianti_manager.get_user_tianti_info(user_id)", handler)
+
     def test_tianti_facade_does_not_construct_legacy_sql_manager(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_tianti" / "__init__.py").read_text(
             encoding="utf-8"

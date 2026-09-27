@@ -21,6 +21,7 @@ from .repository import (
     StoneTrainingSqlRepository,
     TiantiBreakthroughSqlRepository,
     TiantiMedicineBathSqlRepository,
+    TiantiProfileSqlReader,
     TiantiQiaoxueSqlRepository,
     TiantiTrainingRepository,
 )
@@ -51,6 +52,13 @@ class TiantiTrainingApplication:
         self.repository = repository
         self.ledger = ledger or OperationLedger()
         self.clock = clock or SystemClock()
+        self.profile_reader = TiantiProfileSqlReader(self.player_database)
+
+    def read_profile(self, user_id: str) -> dict[str, Any]:
+        normalized_user_id = str(user_id).strip()
+        if not normalized_user_id:
+            raise ValidationError("user_id is required")
+        return self.profile_reader.read(normalized_user_id)
 
     def _execute(
         self,

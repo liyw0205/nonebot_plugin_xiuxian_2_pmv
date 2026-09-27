@@ -4449,7 +4449,7 @@ def get_final_attributes(
     try:
         if tianti_provider is None:
             from ..xiuxian_tianti.tianti_data import TiantiDataManager
-            _tdata = TiantiDataManager().get_user_tianti_info(user_id)
+            _tdata = TiantiDataManager().read_user_tianti_info(user_id)
         else:
             _tdata = tianti_provider(user_id) or {}
         _tianti_hp = int(_tdata.get("tianti_hp", 0))

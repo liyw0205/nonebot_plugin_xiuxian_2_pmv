@@ -79,6 +79,35 @@ class TiantiProfileReader:
         return [dict(item) for item in pool if isinstance(item, dict) and item.get("name")]
 
 
+class TiantiProfileSqlReader:
+    """Read an existing tianti profile without creating or normalizing rows."""
+
+    def __init__(self, player_database: str | Path, *, profile_reader: TiantiProfileReader | None = None) -> None:
+        self.player_database = str(player_database)
+        self.profile = profile_reader or TiantiProfileReader(Path(player_database).parent / "xiuxian")
+
+    def read(self, user_id: str) -> dict[str, Any]:
+        fields = tuple(self.profile.default_data().keys())
+        with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
+            table = uow.query_one("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='tianti_info'")
+            columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(tianti_info)")}
+            if table is None or not set(fields).issubset(columns):
+                raise RuntimeError("tianti profile schema is not ready; run migrations first")
+            row = uow.query_one("SELECT * FROM tianti_info WHERE user_id=?", (str(user_id),))
+        data = self.profile.clean(row or {})
+        for field, default in (
+            ("opened_qiaoxue", []),
+            ("opened_qiaoxue_detail", []),
+            ("qiaoxue_stage_opened", {}),
+        ):
+            if isinstance(data.get(field), str):
+                try:
+                    data[field] = json.loads(data[field])
+                except json.JSONDecodeError:
+                    data[field] = default
+        return data
+
+
 class TiantiProfile(Protocol):
     def default_data(self) -> dict[str, Any]: ...
     def levels(self) -> Mapping[str, Mapping[str, Any]]: ...
@@ -537,6 +566,7 @@ __all__ = [
     "StoneTrainingPersistenceResult",
     "StoneTrainingSqlRepository",
     "TiantiMedicineBathSqlRepository",
+    "TiantiProfileSqlReader",
     "TiantiBreakthroughSqlRepository",
     "TiantiProfileReader",
     "TiantiQiaoxueSqlRepository",

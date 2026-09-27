@@ -595,7 +595,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     user_id = str(user_info["user_id"])
-    data = tianti_manager.get_user_tianti_info(user_id)
+    data = tianti_training_application.read_profile(user_id)
     lvl = data["tianti_level"]
     hp = int(data["tianti_hp"])
     opened = get_opened_qiaoxue_count(data)
@@ -732,7 +732,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     user_id = str(user_info["user_id"])
-    data = tianti_manager.get_user_tianti_info(user_id)
+    data = tianti_training_application.read_profile(user_id)
     opened = set(data.get("opened_qiaoxue", []))
     qpool = get_qiaoxue_pool()
     qmap = get_qiaoxue_map()

@@ -313,19 +313,18 @@ class TiantiDataManager:
 
         return data
 
-    def get_user_tianti_info(self, user_id: str):
+    def read_user_tianti_info(self, user_id: str):
         user_id = str(user_id)
         row = _player_data_manager().get_fields(user_id, self.TABLE)
 
         if not row:
-            data = self._default()
-            self.save_user_tianti_info(user_id, data)
-            return data
+            return self._default()
 
-        data = self._clean_user_data(row)
+        return self._clean_user_data(row)
 
-        # 如果清洗后和原始数据明显不一致，可选择回写一次，防止以后继续脏
-        # 这里直接回写，保证后续读取都是干净数据
+    def get_user_tianti_info(self, user_id: str):
+        data = self.read_user_tianti_info(user_id)
+        # Legacy callers still depend on read-time normalization and default-row creation.
         self.save_user_tianti_info(user_id, data)
         return data
 
