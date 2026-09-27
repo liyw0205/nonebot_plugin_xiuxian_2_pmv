@@ -1,7 +1,7 @@
 # Cave dwelling
 
 ## 用户流程
-The compatibility command remains available while the new application boundary is enabled.
+The historical command package remains the transport adapter. Mutating actions enter `DongfuApplication` and its feature-owned repositories.
 
 ## 命令与别名
 The historical package owns command names during the compatibility release. New names are added only through this feature manifest.
@@ -10,10 +10,10 @@ The historical package owns command names during the compatibility release. New 
 No new HTTP route is exposed in this migration slice. Existing URLs remain served by the legacy web adapter.
 
 ## 数据模型与迁移
-`legacy.dongfu.001` remains the original feature marker in `game_db`. `dongfu.002` and `dongfu.003` create the successful- and failed-infiltration operation ledgers. Both `潜入洞府` settlement outcomes now use feature repositories directly, while the other cave-dwelling actions retain their independent compatibility paths.
+`legacy.dongfu.001` remains the original feature marker in `game_db`. `dongfu.002` and `dongfu.003` create the successful- and failed-infiltration operation ledgers. Planting, harvest, fertilizing, acceleration, patrol, expansion, visit rewards, array upgrades, and both infiltration outcomes use feature repositories. No migration was added in the transaction compatibility-isolation slice.
 
 ## 事务与失败回滚
-Mutating calls carry an `operation_id` and are recorded in the operation ledger. Disable the feature flag or restore the pre-migration backup to roll back.
+Feature repositories retain per-action operation replay and transactional rollback. Historical service classes are isolated in `compatibility/legacy_dongfu_transactions.py`; `xiuxian/xiuxian_dongfu/transaction_service.py` only re-exports their old names. The default command facade no longer imports or constructs those services. Reverting the code can restore the prior facade wiring; schema rollback is not required for this slice.
 
 ## 定时任务
 No new scheduled jobs. Legacy jobs stay registered through the compatibility scheduler.
@@ -28,7 +28,7 @@ Command and web adapters translate transport input into the application DTO; bus
 Run the feature application test and the full architecture gate. Repeat the same operation ID to verify replay.
 
 ## 灰度开关、回滚和已知限制
-Other cave-dwelling algorithms and schemas remain behind compatibility adapters for one complete release cycle; the compatibility hit counter determines when removal is safe. A code rollback can keep the infiltration operation ledgers. Removing `dongfu.002` or `dongfu.003`, if ever required, needs restoration from the pre-migration database backup.
+Read-only cave-dwelling displays and legacy player-data projections still use compatibility managers and JSON state; they are separate migration work and are not covered by the transaction-service isolation. The legacy classes remain importable through the shim for external callers. Removing `dongfu.002` or `dongfu.003`, if ever required, needs restoration from the pre-migration database backup.
 
 ## Manifest 清单
 - `command: 我的洞府`

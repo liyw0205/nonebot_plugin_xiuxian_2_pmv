@@ -17,7 +17,7 @@ class DongfuPlantServiceTests(unittest.TestCase):
     def test_dongfu_facade_defers_plant_service_construction(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dongfu
 
-        self.assertIsNone(xiuxian_dongfu._dongfu_plant_service_instance)
+        self.assertFalse(hasattr(xiuxian_dongfu, "_dongfu_plant_service_instance"))
 
     def test_dongfu_plant_replay_uses_feature_application(self):
         source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py"

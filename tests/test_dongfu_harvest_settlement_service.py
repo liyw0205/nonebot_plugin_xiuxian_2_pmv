@@ -23,7 +23,7 @@ class DongfuHarvestSettlementTests(unittest.TestCase):
     def test_dongfu_facade_defers_harvest_service_construction(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dongfu
 
-        self.assertIsNone(xiuxian_dongfu._dongfu_harvest_settlement_service_instance)
+        self.assertFalse(hasattr(xiuxian_dongfu, "_dongfu_harvest_settlement_service_instance"))
 
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()

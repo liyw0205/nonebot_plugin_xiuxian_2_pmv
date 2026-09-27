@@ -24,7 +24,7 @@ class DongfuArrayUpgradeServiceTests(unittest.TestCase):
   self.assertIn("_player_data_manager().update_or_write_data(",source)
  def test_dongfu_facade_defers_array_upgrade_service_construction(self):
   from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dongfu
-  self.assertIsNone(xiuxian_dongfu._dongfu_array_upgrade_service_instance)
+  self.assertFalse(hasattr(xiuxian_dongfu, "_dongfu_array_upgrade_service_instance"))
 
  def test_dongfu_array_upgrade_uses_feature_application(self):
   source=Path("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py").read_text(encoding="utf-8")

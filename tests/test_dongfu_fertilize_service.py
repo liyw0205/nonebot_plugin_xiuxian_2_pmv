@@ -11,7 +11,7 @@ from tests.test_db_backend import db_backend
 class DongfuFertilizeServiceTests(unittest.TestCase):
  def test_dongfu_facade_defers_fertilize_service_construction(self):
   from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dongfu
-  self.assertIsNone(xiuxian_dongfu._dongfu_fertilize_service_instance)
+  self.assertFalse(hasattr(xiuxian_dongfu, "_dongfu_fertilize_service_instance"))
 
  def test_dongfu_fertilize_uses_feature_application(self):
   source=Path(__file__).resolve().parents[1]/"nonebot_plugin_xiuxian_2/xiuxian/xiuxian_dongfu/__init__.py"; text=source.read_text(encoding="utf-8"); handler=text[text.index('operation_id = f"dongfu-fertilize:'):text.index("@dongfu_accelerate.handle")]; self.assertIn("dongfu_application.fertilize(",handler); self.assertNotIn("_dongfu_fertilize_service().get_result(",handler)

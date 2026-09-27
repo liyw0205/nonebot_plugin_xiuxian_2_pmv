@@ -11,7 +11,7 @@ from tests.test_db_backend import db_backend
 class InfiltrateSuccessServiceTests(unittest.TestCase):
  def test_dongfu_facade_defers_infiltrate_success_service_construction(self):
   from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dongfu
-  self.assertIsNone(xiuxian_dongfu._dongfu_infiltrate_success_service_instance)
+  self.assertFalse(hasattr(xiuxian_dongfu, "_dongfu_infiltrate_success_service_instance"))
 
  def setUp(self):
   self.temp=tempfile.TemporaryDirectory();root=Path(self.temp.name);self.game,self.player=root/"g.db",root/"p.db";self.slots=[{"slot":1,"seed_id":21001,"plant_finish":"2026-07-13 12:00:00"}];self.expected=json.dumps(self.slots)

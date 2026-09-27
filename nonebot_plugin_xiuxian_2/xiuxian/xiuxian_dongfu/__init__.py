@@ -5,7 +5,6 @@ except ImportError:
 
 import random
 import time
-from types import SimpleNamespace
 from datetime import datetime, timedelta
 from pathlib import Path
 from ...paths import get_paths
@@ -23,30 +22,9 @@ from ..xiuxian_utils.utils import check_user, handle_send, number_to, send_help_
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import XiuConfig
-from .transaction_service import DongfuExpansionService
-from .transaction_service import DongfuHarvestSettlementService
-from .transaction_service import DongfuPlantService
-from .transaction_service import DongfuAccelerateService
-from .transaction_service import DongfuPatrolService
-from .transaction_service import DongfuArrayUpgradeService
-from .transaction_service import DongfuVisitRewardService
-from .transaction_service import DongfuFertilizeService
-from .transaction_service import InfiltrateFailureService
-from .transaction_service import InfiltrateSuccessService
-
 _sql_message_instance = None
 _player_data_manager_instance = None
 items = Items()
-_dongfu_expansion_service_instance = None
-_dongfu_plant_service_instance = None
-_dongfu_accelerate_service_instance = None
-_dongfu_patrol_service_instance = None
-_dongfu_array_upgrade_service_instance = None
-_dongfu_visit_reward_service_instance = None
-_dongfu_fertilize_service_instance = None
-_dongfu_infiltrate_failure_service_instance = None
-_dongfu_infiltrate_success_service_instance = None
-_dongfu_harvest_settlement_service_instance = None
 dongfu_application = DongfuApplication(get_paths().game_db, get_paths().player_db)
 runtime_ids = UUIDGenerator()
 runtime_random = SystemRandom()
@@ -78,109 +56,6 @@ def _sql_message():
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
 
-
-def _dongfu_expansion_service():
-    global _dongfu_expansion_service_instance
-    if _dongfu_expansion_service_instance is None:
-        _dongfu_expansion_service_instance = DongfuExpansionService(
-            get_paths().game_db, get_paths().player_db
-        )
-    return _dongfu_expansion_service_instance
-
-
-def _dongfu_plant_service():
-    global _dongfu_plant_service_instance
-    if _dongfu_plant_service_instance is None:
-        _dongfu_plant_service_instance = DongfuPlantService(
-            get_paths().game_db, get_paths().player_db
-        )
-    return _dongfu_plant_service_instance
-
-
-def _dongfu_accelerate_service():
-    global _dongfu_accelerate_service_instance
-    if _dongfu_accelerate_service_instance is None:
-        _dongfu_accelerate_service_instance = DongfuAccelerateService(
-            get_paths().game_db, get_paths().player_db
-        )
-    return _dongfu_accelerate_service_instance
-
-
-def _dongfu_patrol_service():
-    global _dongfu_patrol_service_instance
-    if _dongfu_patrol_service_instance is None:
-        _dongfu_patrol_service_instance = DongfuPatrolService(
-            get_paths().game_db, get_paths().player_db
-        )
-    return _dongfu_patrol_service_instance
-
-
-def _dongfu_array_upgrade_service():
-    global _dongfu_array_upgrade_service_instance
-    if _dongfu_array_upgrade_service_instance is None:
-        _dongfu_array_upgrade_service_instance = DongfuArrayUpgradeService(
-            get_paths().game_db, get_paths().player_db
-        )
-    return _dongfu_array_upgrade_service_instance
-
-
-def _dongfu_visit_reward_service():
-    global _dongfu_visit_reward_service_instance
-    if _dongfu_visit_reward_service_instance is None:
-        _dongfu_visit_reward_service_instance = DongfuVisitRewardService(
-            get_paths().game_db, get_paths().player_db
-        )
-    return _dongfu_visit_reward_service_instance
-
-
-def _dongfu_infiltrate_failure_service():
-    global _dongfu_infiltrate_failure_service_instance
-    if _dongfu_infiltrate_failure_service_instance is None:
-        _dongfu_infiltrate_failure_service_instance = InfiltrateFailureService(
-            get_paths().game_db, get_paths().player_db
-        )
-    return _dongfu_infiltrate_failure_service_instance
-
-
-def _dongfu_infiltrate_success_service():
-    global _dongfu_infiltrate_success_service_instance
-    if _dongfu_infiltrate_success_service_instance is None:
-        _dongfu_infiltrate_success_service_instance = InfiltrateSuccessService(
-            get_paths().game_db, get_paths().player_db
-        )
-    return _dongfu_infiltrate_success_service_instance
-
-
-def _dongfu_harvest_settlement_service():
-    global _dongfu_harvest_settlement_service_instance
-    if _dongfu_harvest_settlement_service_instance is None:
-        _dongfu_harvest_settlement_service_instance = DongfuHarvestSettlementService(
-            get_paths().game_db, get_paths().player_db
-        )
-    return _dongfu_harvest_settlement_service_instance
-
-
-def _dongfu_fertilize_service():
-    global _dongfu_fertilize_service_instance
-    if _dongfu_fertilize_service_instance is None:
-        _dongfu_fertilize_service_instance = DongfuFertilizeService(
-            get_paths().game_db, get_paths().player_db
-        )
-    return _dongfu_fertilize_service_instance
-
-
-def _run_dongfu_action(action, operation_id, user_id, call, **payload):
-    outcome = dongfu_application.execute_legacy_call(
-        operation_id=operation_id,
-        user_id=str(user_id),
-        action=action,
-        payload=payload,
-        call=call,
-    )
-    data = dict(outcome.data or {})
-    data.setdefault("status", outcome.status)
-    data["succeeded"] = outcome.ok
-    return SimpleNamespace(**data)
 
 MAP_TABLE = "map_status"
 DONGFU_TABLE = "dongfu_status"
