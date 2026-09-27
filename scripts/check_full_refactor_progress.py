@@ -165,6 +165,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sect_owner_inherit_legacy_service = (PACKAGE / "compatibility" / "legacy_sect_owner_inherit.py").read_text(encoding="utf-8")
     sect_close_mountain_legacy_service = (PACKAGE / "compatibility" / "legacy_sect_close_mountain.py").read_text(encoding="utf-8")
     sect_join_state_legacy_service = (PACKAGE / "compatibility" / "legacy_sect_join_state.py").read_text(encoding="utf-8")
+    sect_disband_legacy_service = (PACKAGE / "compatibility" / "legacy_sect_disband.py").read_text(encoding="utf-8")
+    sect_daily_maintenance_legacy_service = (PACKAGE / "compatibility" / "legacy_sect_daily_maintenance.py").read_text(encoding="utf-8")
+    sect_weekly_claim_legacy_service = (PACKAGE / "compatibility" / "legacy_sect_weekly_reward_claim.py").read_text(encoding="utf-8")
     sect_fairyland_migrations = (PACKAGE / "features" / "sect_fairyland" / "migrations.py").read_text(encoding="utf-8")
     sect_application = (PACKAGE / "features" / "sect" / "application.py").read_text(encoding="utf-8")
     sect_feature_repository = (PACKAGE / "features" / "sect" / "repository.py").read_text(encoding="utf-8")
@@ -580,6 +583,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "membership_application_owned": all(f"sect_application.{name}(" in sect_facade for name in ("join", "leave", "kick", "change_position")),
             "economy_application_owned": all(f"sect_application.{name}(" in sect_facade for name in ("rename", "donate", "purchase")),
             "daily_maintenance_application_owned": "sect_application.reset_daily_maintenance(" in sect_facade,
+            "daily_maintenance_service_isolated": all(name not in sect_transaction_service for name in ("class SectMaintenanceOutcome", "class SectDailyResetResult", "class SectDailyResetMaintenanceService")) and "from ...compatibility.legacy_sect_daily_maintenance import" in sect_transaction_service and all(name in sect_daily_maintenance_legacy_service for name in ("class SectMaintenanceOutcome", "class SectDailyResetResult", "class SectDailyResetMaintenanceService")),
+            "daily_maintenance_rollback_import_isolated": "from ...compatibility.legacy_sect_daily_maintenance import" in sect_transaction_service and "SectDailyResetMaintenanceService" in sect_transaction_service and "SectDailyResetMaintenanceService" in sect_daily_maintenance_legacy_service,
             "close_mountain_application_owned": sect_facade.count("sect_application.close_mountain(") >= 2,
             "close_mountain_service_isolated": "class SectCloseMountainService" not in sect_transaction_service and "from ...compatibility.legacy_sect_close_mountain import" in sect_transaction_service and "class SectCloseMountainService" in sect_close_mountain_legacy_service,
             "owner_inherit_application_owned": "sect_application.inherit_owner(" in sect_facade,
@@ -587,6 +592,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "join_state_application_owned": "sect_application.open_join(" in sect_facade and "sect_application.close_join(" in sect_facade,
             "join_state_services_isolated": all(name not in sect_transaction_service for name in ("class SectOpenJoinService", "class SectCloseJoinService")) and "from ...compatibility.legacy_sect_join_state import" in sect_transaction_service and all(name in sect_join_state_legacy_service for name in ("class SectOpenJoinService", "class SectCloseJoinService")),
             "disband_application_owned": sect_facade.count("sect_application.disband_inactive(") >= 3,
+            "disband_services_isolated": all(name not in sect_transaction_service for name in ("class SectDisbandService", "class SectDisbandResult", "class SectInactiveDisbandResult")) and "from ...compatibility.legacy_sect_disband import" in sect_transaction_service and all(name in sect_disband_legacy_service for name in ("class SectDisbandService", "class SectDisbandResult", "class SectInactiveDisbandResult")),
+            "disband_rollback_import_isolated": "from ...compatibility.legacy_sect_disband import" in sect_transaction_service and "SectDisbandService" in sect_transaction_service and "SectDisbandService" in sect_disband_legacy_service,
             "disband_confirmation_application_owned": "sect_application.disband(" in sect_facade[sect_facade.index("async def sect_disband2_confirm"):sect_facade.index("@sect_power_top.handle")] and "_sect_disband_service().disband(" not in sect_facade,
             "disband_confirmation_repository_owned": "class SectManualDisbandSqlRepository" in sect_manual_disband_repository and "SectManualDisbandSqlRepository" in sect_application,
             "disband_confirmation_request_path_has_no_ddl": "CREATE TABLE" not in sect_manual_disband_repository and "schema_missing" in sect_manual_disband_repository,
@@ -696,6 +703,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "weekly_claim_migrations_registered": all(token in plugin for token in ("sect.011", "sect.012", "apply_sect_weekly", "apply_sect_weekly_player")) and "sect_weekly_reward_operations" in sect_migrations,
             "weekly_claim_player_migration_routed": '"sect.012"' in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")] and '"sect.012"' in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")],
             "weekly_claim_default_has_no_legacy_service": "_legacy_sect_weekly_reward_service" not in sect_weekly_commands and "SectWeeklyRewardClaimService" not in sect_weekly_commands and "XiuxianDateManage" not in sect_weekly_commands,
+            "weekly_claim_legacy_service_isolated": all(name not in sect_transaction_service for name in ("class SectWeeklyRewardClaimResult", "class SectWeeklyRewardClaimService")) and "from ...compatibility.legacy_sect_weekly_reward_claim import" in sect_transaction_service and all(name in sect_weekly_claim_legacy_service for name in ("class SectWeeklyRewardClaimResult", "class SectWeeklyRewardClaimService")),
+            "weekly_claim_rollback_import_isolated": "from ...compatibility.legacy_sect_weekly_reward_claim import" in sect_transaction_service and "SectWeeklyRewardClaimService" in sect_transaction_service and "SectWeeklyRewardClaimService" in sect_weekly_claim_legacy_service,
             "fairyland_claim_application_owned": "sect_fairyland_application.claim(" in sect_facade and "repository=LegacySectFairylandRepository" not in sect_facade,
             "fairyland_claim_repository_owned": "class SectFairylandSqlRepository" in sect_fairyland_repository and "SectFairylandSqlRepository" in sect_fairyland_application,
             "fairyland_claim_request_path_has_no_ddl": all(token not in sect_fairyland_repository for token in ("CREATE TABLE", "ALTER TABLE")) and "schema_missing" in sect_fairyland_repository,

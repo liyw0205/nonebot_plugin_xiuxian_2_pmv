@@ -8,12 +8,24 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.transaction_service import SectWeeklyRewardClaimService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.transaction_service import (
+    SectWeeklyRewardClaimResult,
+    SectWeeklyRewardClaimService,
+)
+from nonebot_plugin_xiuxian_2.compatibility.legacy_sect_weekly_reward_claim import (
+    SectWeeklyRewardClaimResult as CompatibilitySectWeeklyRewardClaimResult,
+    SectWeeklyRewardClaimService as CompatibilitySectWeeklyRewardClaimService,
+)
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.sect_weekly import SectWeeklyGoalManager
 from nonebot_plugin_xiuxian_2.features.sect.application import SectApplication
 from nonebot_plugin_xiuxian_2.features.sect.weekly_progress_repository import SectWeeklyProgressSqlRepository
 from scripts.check_full_refactor_progress import _slice_status
 from tests.test_db_backend import db_backend
+
+
+def test_transaction_service_reexports_compatibility_implementation():
+    assert SectWeeklyRewardClaimResult is CompatibilitySectWeeklyRewardClaimResult
+    assert SectWeeklyRewardClaimService is CompatibilitySectWeeklyRewardClaimService
 
 
 def test_sect_weekly_facade_has_no_legacy_claim_service_dependency():

@@ -9,12 +9,24 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.transaction_service import (
+    SectDisbandResult,
     SectDisbandService,
+    SectInactiveDisbandResult,
+)
+from nonebot_plugin_xiuxian_2.compatibility.legacy_sect_disband import (
+    SectDisbandResult as CompatibilitySectDisbandResult,
+    SectDisbandService as CompatibilitySectDisbandService,
+    SectInactiveDisbandResult as CompatibilitySectInactiveDisbandResult,
 )
 from tests.test_db_backend import db_backend
 
 
 class SectDisbandServiceTests(unittest.TestCase):
+    def test_transaction_service_reexports_compatibility_implementation(self):
+        self.assertIs(SectDisbandService, CompatibilitySectDisbandService)
+        self.assertIs(SectDisbandResult, CompatibilitySectDisbandResult)
+        self.assertIs(SectInactiveDisbandResult, CompatibilitySectInactiveDisbandResult)
+
     def test_sect_facade_no_longer_constructs_disband_service(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_sect as sect_plugin
 

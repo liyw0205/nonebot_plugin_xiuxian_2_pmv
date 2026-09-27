@@ -9,12 +9,24 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.transaction_service import (
+    SectDailyResetResult,
     SectDailyResetMaintenanceService,
+    SectMaintenanceOutcome,
+)
+from nonebot_plugin_xiuxian_2.compatibility.legacy_sect_daily_maintenance import (
+    SectDailyResetResult as CompatibilitySectDailyResetResult,
+    SectDailyResetMaintenanceService as CompatibilitySectDailyResetMaintenanceService,
+    SectMaintenanceOutcome as CompatibilitySectMaintenanceOutcome,
 )
 from tests.test_db_backend import db_backend
 
 
 class SectDailyResetMaintenanceTests(unittest.TestCase):
+    def test_transaction_service_reexports_compatibility_implementation(self):
+        self.assertIs(SectDailyResetResult, CompatibilitySectDailyResetResult)
+        self.assertIs(SectDailyResetMaintenanceService, CompatibilitySectDailyResetMaintenanceService)
+        self.assertIs(SectMaintenanceOutcome, CompatibilitySectMaintenanceOutcome)
+
     def test_sect_facade_does_not_wire_daily_reset_legacy_service(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_sect as sect_plugin
 
