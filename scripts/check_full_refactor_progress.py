@@ -106,6 +106,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sect_weekly_manager = (PACKAGE / "xiuxian" / "xiuxian_sect" / "sect_weekly.py").read_text(encoding="utf-8")
     sect_application = (PACKAGE / "features" / "sect" / "application.py").read_text(encoding="utf-8")
     sect_weekly_repository = (PACKAGE / "features" / "sect" / "weekly_reward_repository.py").read_text(encoding="utf-8")
+    sect_manual_disband_repository = (PACKAGE / "features" / "sect" / "manual_disband_repository.py").read_text(encoding="utf-8")
     sect_migrations = (PACKAGE / "features" / "sect" / "migrations.py").read_text(encoding="utf-8")
     entertainment_facade = (PACKAGE / "xiuxian" / "xiuxian_entertainment" / "mod" / "newapi_store.py").read_text(encoding="utf-8")
     partner_facade = (PACKAGE / "xiuxian" / "xiuxian_buff" / "partner.py").read_text(encoding="utf-8")
@@ -431,6 +432,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "owner_inherit_application_owned": "sect_application.inherit_owner(" in sect_facade,
             "join_state_application_owned": "sect_application.open_join(" in sect_facade and "sect_application.close_join(" in sect_facade,
             "disband_application_owned": sect_facade.count("sect_application.disband_inactive(") >= 3,
+            "disband_confirmation_application_owned": "sect_application.disband(" in sect_facade[sect_facade.index("async def sect_disband2_confirm"):sect_facade.index("@sect_power_top.handle")] and "_sect_disband_service().disband(" not in sect_facade,
+            "disband_confirmation_repository_owned": "class SectManualDisbandSqlRepository" in sect_manual_disband_repository and "SectManualDisbandSqlRepository" in sect_application,
+            "disband_confirmation_request_path_has_no_ddl": "CREATE TABLE" not in sect_manual_disband_repository and "schema_missing" in sect_manual_disband_repository,
+            "disband_confirmation_migration_registered": all(token in plugin for token in ("sect.013", "apply_sect_manual_disband")) and "sect_disband_operations" in sect_migrations,
+            "disband_confirmation_migration_game_only": '"sect.013"' not in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")] and '"sect.013"' not in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")],
             "owner_transfer_application_owned": "sect_application.transfer_owner(" in sect_facade,
             "scheduled_grant_application_owned": "sect_application.grant_scheduled_materials(" in sect_facade,
             "fairyland_upgrade_application_owned": "sect_application.upgrade_fairyland(" in sect_facade,

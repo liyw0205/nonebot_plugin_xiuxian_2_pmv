@@ -25,6 +25,7 @@ from .task_settlement_repository import SectTaskSettlementSqlRepository
 from .creation_repository import SectCreationSqlRepository
 from .name_refresh_repository import SectNameRefreshSqlRepository
 from .weekly_reward_repository import SectWeeklyRewardRepository, SectWeeklyRewardSqlRepository
+from .manual_disband_repository import SectManualDisbandSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -42,7 +43,7 @@ class SectMutationResult(dict):
 
     @property
     def applied(self) -> bool:
-        return self.status in {"closed", "inherited", "duplicate"}
+        return self.status in {"closed", "inherited", "disbanded", "duplicate"}
 
     def __getattr__(self, name: str) -> Any:
         try:
@@ -100,6 +101,9 @@ class SectApplication:
 
     def disband_inactive(self, operation_id: str, sect_id: int, reason: str, *, expected_sect_name: str, expected_owner_id: str | None, expected_closed: bool, expected_member_ids, expected_active_candidate_ids, checked_at, inactivity_days: int):
         return SectMutationResult(SectDisbandSqlRepository(self.database).disband_inactive(operation_id, sect_id, reason, expected_sect_name=expected_sect_name, expected_owner_id=expected_owner_id, expected_closed=expected_closed, expected_member_ids=expected_member_ids, expected_active_candidate_ids=expected_active_candidate_ids, checked_at=checked_at, inactivity_days=inactivity_days))
+
+    def disband(self, operation_id: str, actor_id: str, *, expected_sect_id: int | None = None, owner_position: int = 0):
+        return SectMutationResult(SectManualDisbandSqlRepository(self.database).disband(operation_id, actor_id, expected_sect_id=expected_sect_id, owner_position=owner_position))
 
     def transfer_owner(self, operation_id: str, actor_id: str, target_id: str, *, owner_position: int = 0, former_owner_position: int | None = None):
         return SectMutationResult(SectOwnerTransferSqlRepository(self.database).transfer(operation_id, actor_id, target_id, owner_position=owner_position, former_owner_position=former_owner_position))

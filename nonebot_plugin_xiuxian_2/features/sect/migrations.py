@@ -78,6 +78,15 @@ def apply_sect_weekly_player(uow: DatabaseUnitOfWork) -> None:
         uow.execute("ALTER TABLE boss_limit ADD COLUMN integral INTEGER DEFAULT 0")
 
 
+def apply_sect_manual_disband(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS sect_disband_operations("
+        "operation_id TEXT PRIMARY KEY,actor_id TEXT NOT NULL,sect_id INTEGER NOT NULL,"
+        "sect_name TEXT NOT NULL DEFAULT '',member_count INTEGER NOT NULL DEFAULT 0,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
 __all__ = [
     "apply_sect",
     "apply_sect_rename",
@@ -91,4 +100,5 @@ __all__ = [
     "apply_sect_elixir",
     "apply_sect_weekly",
     "apply_sect_weekly_player",
+    "apply_sect_manual_disband",
 ]

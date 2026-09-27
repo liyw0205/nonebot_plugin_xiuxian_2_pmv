@@ -221,3 +221,7 @@ migration version，路由计数 `140/33/7/1/1`，`.003` 仅 game、`.004` 仅 p
 （pending 为空）、health 六项和 reconcile clean 均通过。专用 recovery 数据、receipt、pytest cache 与字节码缓存已清理；真实发布数据迁移和 P7 仍未完成。
 
 `training administrator reset`：`重置历练` 默认后台分块路径切换至 feature-owned `TrainingResetSqlRepository`；新增 game-only `training.004`，首次 chunk 冻结用户集合，后续以同一 operation id 续跑 pending targets，保留 duplicate/conflict/skipped、previous state 和晚失败 rollback。请求路径只读已迁移 schema，普通 application ledger 不承载跨 chunk replay；兼容服务仅在缺少 player database 时保留。聚焦回归覆盖分块冻结、删除用户、重复 user id、空集合、旧 schema 补列、缺 schema 不建表、晚失败 rollback、Clock 注入和真实入口 source contract。恢复演练应验证 `training.001/.003/.004` 只进入 game_db、`training.002` 只进入 player_db，完成后清理 basetemp、字节码、pytest cache、receipt 和临时数据库，并复核 `df -h`/`free -h`。真实发布数据迁移/P7 仍需单独记录。
+
+`sect weekly reward application cutover`：默认周常领取经 `SectApplication.claim_weekly -> SectWeeklyRewardSqlRepository`；game-only `sect.011`、player-only `sect.012` 启动预建 schema，operation receipt 与资产/领取标记在同一 attached transaction 提交。聚焦回归 `48 passed`，progress/inventory/architecture `18 passed`，recovery 路由和 reconcile clean；SQLite WAL 多库崩溃原子性仍不作保证。
+
+`sect confirmed-disband application cutover`：`确认解散宗门` 经 `SectApplication.disband -> SectManualDisbandSqlRepository`；game-only `sect.013` 预建旧格式兼容回执，保留宗主复核、成员解绑、宗门删除、replay 和事务回滚。宗门筛选回归 `65 passed`，progress/inventory/architecture `18 passed`；隔离五库 backup/restore、migration routing 与 reconcile clean。用户原有 `boss_info.json` 修改保持未提交，仓库 Python/pytest 缓存和本片 recovery 临时数据已清理。下一片按宗门剩余边界审计 Fairyland claim 及其 Tianti profile/settlement 依赖；真实发布数据/P7 和全局 legacy blockers 继续开放。

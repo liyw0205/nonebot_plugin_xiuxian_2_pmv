@@ -2,7 +2,7 @@
 
 ## 用户流程
 
-宗门成员加入、宗门商店兑换、主/副功法学习、炼体堂领奖和 `领取宗门周常` 通过 `SectApplication` 进入 feature-owned application/repository。周常可单项领取或一次领取所有已完成目标。
+宗门成员加入、宗门商店兑换、主/副功法学习、炼体堂领奖、`领取宗门周常` 和确认解散宗门通过 `SectApplication` 进入 feature-owned application/repository。周常可单项领取或一次领取所有已完成目标。
 
 ## 命令与 Web API
 
@@ -12,12 +12,13 @@
 - `POST /api/v1/sect/learn-secondary`
 - `领取宗门炼体堂` -> `POST /api/v1/sect/elixir/claim`
 - `领取宗门周常 [目标名]`（命令入口）
+- `确认解散宗门`（命令入口）
 
 所有接口权限为 `user`，写请求支持 `Idempotency-Key`，业务拒绝返回统一错误码。
 
 ## 数据、回滚与限制
 
-`sect.011` 在 game DB 创建/补齐 `sect_weekly_goal` 和 `sect_weekly_reward_operations`；`sect.012` 仅在 player DB 创建/补齐 `boss_limit.integral`，保留已有周常进度与玩家记录。请求路径只检查 schema，不建表或补列。周常奖励由 `SectWeeklyRewardSqlRepository` 使用 attached game/player transaction 校验宗门归属、目标进度、重复领取与背包容量，再更新玩家、宗门、背包、BOSS 积分及领取标记。晚期 SQL 异常会回滚两个库；SQLite WAL 下 attached 多库事务不承诺进程/主机崩溃时的跨库原子性。旧 `SectWeeklyRewardClaimService` 只保留显式兼容 fallback。关闭 `XIUXIAN_SECT_ENABLED` 即回退旧实现；宗门维护、任务及其他未迁移动作仍在兼容层。
+`sect.011` 在 game DB 创建/补齐 `sect_weekly_goal` 和 `sect_weekly_reward_operations`；`sect.012` 仅在 player DB 创建/补齐 `boss_limit.integral`，保留已有周常进度与玩家记录；`sect.013` 在 game DB 预建手动解散回执并保留已有操作记录。请求路径只检查 schema，不建表或补列。周常奖励由 `SectWeeklyRewardSqlRepository` 使用 attached game/player transaction 校验宗门归属、目标进度、重复领取与背包容量，再更新玩家、宗门、背包、BOSS 积分及领取标记。晚期 SQL 异常会回滚两个库；SQLite WAL 下 attached 多库事务不承诺进程/主机崩溃时的跨库原子性。手动解散由 `SectManualDisbandSqlRepository` 在 game-db immediate UoW 内重验宗主身份、解绑全部成员、删除宗门并写幂等回执；旧 `SectDisbandService` 仅保留兼容对照。关闭 `XIUXIAN_SECT_ENABLED` 即回退旧实现；宗门维护、任务及其他未迁移动作仍在兼容层。
 
 ## 命令与别名
 
@@ -29,7 +30,7 @@
 
 ## 数据模型与迁移
 
-`sect.001` 写迁移标记和统一 ledger；`sect.011` 属于 game DB，`sect.012` 属于 player DB。历史周常进度由迁移增量补列保留。
+`sect.001` 写迁移标记和统一 ledger；`sect.011`、`sect.013` 属于 game DB，`sect.012` 属于 player DB。历史周常进度和已有手动解散回执由迁移保留。
 
 ## 事务与失败回滚
 
@@ -49,8 +50,8 @@
 
 ## 测试与手工验收
 
-覆盖加入、兑换、功法学习、炼体堂和周常领奖的成功、拒绝、异常回滚和重复请求；周常测试还检查 game/player migration 路由、旧数据保留及请求期不建表。
+覆盖加入、兑换、功法学习、炼体堂、周常领奖和手动解散的成功、拒绝、异常回滚和重复请求；事务测试还检查 migration 路由、旧数据保留及请求期不建表。
 
 ## 灰度开关、回滚和已知限制
 
-关闭开关即回到兼容入口；宗门维护、事件进度写入、传位和解散仍有旧实现边界。周常跨库请求事务能回滚 SQL 异常，但 attached SQLite WAL 的崩溃原子性不作保证。
+关闭开关即回到兼容入口；宗门维护、事件进度写入和任务结算仍有旧实现边界。周常跨库请求事务能回滚 SQL 异常，但 attached SQLite WAL 的崩溃原子性不作保证。

@@ -78,7 +78,6 @@ from .transaction_service import SectOwnerInheritService
 from .transaction_service import SectOpenJoinService
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from .transaction_service import SectCloseJoinService
-from .transaction_service import SectDisbandService
 from .transaction_service import SectDailyResetMaintenanceService
 from ...features.sect_fairyland.application import SectFairylandApplication
 
@@ -106,7 +105,6 @@ _sect_close_mountain_service_instance = None
 _sect_owner_inherit_service_instance = None
 _sect_open_join_service_instance = None
 _sect_close_join_service_instance = None
-_sect_disband_service_instance = None
 _sect_daily_reset_maintenance_service_instance = None
 
 
@@ -160,15 +158,6 @@ def _sect_close_join_service():
             get_paths().game_db
         )
     return _sect_close_join_service_instance
-
-
-def _sect_disband_service():
-    global _sect_disband_service_instance
-    if _sect_disband_service_instance is None:
-        _sect_disband_service_instance = SectDisbandService(
-            get_paths().game_db
-        )
-    return _sect_disband_service_instance
 
 
 def _sect_daily_reset_maintenance_service():
@@ -3375,7 +3364,7 @@ async def sect_disband2_confirm(bot: Bot, event: GroupMessageEvent | PrivateMess
     owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
     owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
 
-    result = _sect_disband_service().disband(
+    result = sect_application.disband(
         _sect_operation_id(event, "disband", sect_id),
         user_info['user_id'],
         expected_sect_id=sect_id,

@@ -15,10 +15,10 @@ from tests.test_db_backend import db_backend
 
 
 class SectDisbandServiceTests(unittest.TestCase):
-    def test_sect_facade_defers_disband_service_construction(self):
+    def test_sect_facade_no_longer_constructs_disband_service(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_sect as sect_plugin
 
-        self.assertIsNone(sect_plugin._sect_disband_service_instance)
+        self.assertFalse(hasattr(sect_plugin, "_sect_disband_service"))
 
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -110,7 +110,7 @@ class SectDisbandServiceTests(unittest.TestCase):
             (1, 0, 100),
         )
 
-    def test_confirm_entry_uses_service_without_legacy_delete(self) -> None:
+    def test_confirm_entry_uses_feature_application_without_legacy_service(self) -> None:
         source = (
             Path(__file__).parents[1]
             / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_sect/__init__.py"
@@ -119,9 +119,9 @@ class SectDisbandServiceTests(unittest.TestCase):
         end = source.index("@sect_power_top.handle", start)
         handler = source[start:end]
 
-        self.assertIn("_sect_disband_service().disband(", handler)
-        self.assertIn("_sect_disband_service_instance = None", source)
-        self.assertIn("def _sect_disband_service(", source)
+        self.assertIn("sect_application.disband(", handler)
+        self.assertNotIn("_sect_disband_service().disband(", handler)
+        self.assertNotIn("def _sect_disband_service(", source)
         self.assertNotIn("sql_message.delete_sect(", handler)
 
 
