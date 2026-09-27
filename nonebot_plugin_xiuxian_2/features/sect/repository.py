@@ -47,9 +47,9 @@ class LegacySectRepository:
         return self._service("claim_elixir").claim(*args, **kwargs)
 
 
-class SectRenameSqlRepository(LegacySectRepository):
+class SectRenameSqlRepository:
     def __init__(self, database: str | Path, *, clock=None) -> None:
-        super().__init__(database)
+        self.database = str(database)
         self.clock = clock or SystemClock()
 
     def claim_elixir(self, operation_id, user_id, sect_id, contribution_required, materials_required, rewards, max_goods_num):

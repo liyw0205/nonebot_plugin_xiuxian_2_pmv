@@ -144,6 +144,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sect_fairyland_compatibility = (PACKAGE / "features" / "sect_fairyland" / "repository.py").read_text(encoding="utf-8")
     sect_fairyland_migrations = (PACKAGE / "features" / "sect_fairyland" / "migrations.py").read_text(encoding="utf-8")
     sect_application = (PACKAGE / "features" / "sect" / "application.py").read_text(encoding="utf-8")
+    sect_feature_repository = (PACKAGE / "features" / "sect" / "repository.py").read_text(encoding="utf-8")
     sect_activity_repository = (PACKAGE / "features" / "sect" / "activity_repository.py").read_text(encoding="utf-8")
     sect_directory_repository = (PACKAGE / "features" / "sect" / "directory_repository.py").read_text(encoding="utf-8")
     sect_inactive_owner_repository = (PACKAGE / "features" / "sect" / "inactive_owner_repository.py").read_text(encoding="utf-8")
@@ -571,6 +572,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "fairyland_claim_status_repository_owned": "def get_last_claim_day(" in sect_fairyland_repository and "sect_fairyland_claim_days" in sect_fairyland_repository,
             "fairyland_claim_status_read_only": "DatabaseUnitOfWork(self.player_database, read_only=True)" in sect_fairyland_repository,
             "fairyland_claim_status_no_player_manager": "PlayerDataManager" not in sect_fairyland_legacy_state and "def _get_fairyland_last_claim(" not in sect_fairyland_legacy_state,
+            "sect_default_repository_has_no_legacy_fallback": "class SectRenameSqlRepository:" in sect_feature_repository and "class SectRenameSqlRepository(LegacySectRepository)" not in sect_feature_repository and "self._service(" not in sect_feature_repository[sect_feature_repository.index("class SectRenameSqlRepository:"):],
             "elixir_room_upgrade_application_owned": "sect_application.upgrade_elixir_room(" in sect_facade,
             "activity_timestamp_application_owned": "sect_application.update_last_check_info_time(user_id)" in sect_elixir_claim_handler and "_sql_message().update_last_check_info_time(" not in sect_elixir_claim_handler,
             "activity_timestamp_repository_owned": "SectActivitySqlRepository" in sect_application and "class SectActivitySqlRepository" in sect_activity_repository,

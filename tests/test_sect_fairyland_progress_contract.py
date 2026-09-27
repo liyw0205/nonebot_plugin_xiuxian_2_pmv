@@ -17,3 +17,4 @@ class SectFairylandProgressContractTests(unittest.TestCase):
         self.assertTrue(sect["fairyland_claim_status_repository_owned"])
         self.assertTrue(sect["fairyland_claim_status_read_only"])
         self.assertTrue(sect["fairyland_claim_status_no_player_manager"])
+        self.assertTrue(sect["sect_default_repository_has_no_legacy_fallback"])
