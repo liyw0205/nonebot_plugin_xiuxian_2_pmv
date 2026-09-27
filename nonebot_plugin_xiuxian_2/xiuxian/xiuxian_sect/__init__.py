@@ -2529,7 +2529,7 @@ async def sect_kick_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     
     # 获取目标用户信息
     nick_name = arg_list[0]  # 道号
-    give_user = _sql_message().get_user_info_with_name(nick_name)
+    give_user = sect_application.get_user_profile_by_name(nick_name)
     
     if not give_user:
         msg = f"修仙界没有名为【{nick_name}】的道友，请检查道号是否正确！"
@@ -2770,7 +2770,7 @@ async def sect_position_update_(bot: Bot, event: GroupMessageEvent | PrivateMess
         await sect_position_update.finish()
     
     # 获取目标用户信息
-    give_user = _sql_message().get_user_info_with_name(nick_name)
+    give_user = sect_application.get_user_profile_by_name(nick_name)
     if not give_user:
         msg = f"修仙界没有名为【{nick_name}】的道友，请检查道号是否正确！"
         await handle_send(bot, event, msg, md_type="宗门", k1="变更", v1="宗门职位变更", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")

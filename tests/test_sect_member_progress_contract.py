@@ -20,6 +20,8 @@ class SectMemberProgressContractTests(unittest.TestCase):
         self.assertTrue(sect["sect_user_profile_repository_owned"])
         self.assertTrue(sect["sect_user_profile_facade_owned"])
         self.assertTrue(sect["sect_user_profile_helper_default_owned"])
+        self.assertTrue(sect["sect_user_name_profile_repository_owned"])
+        self.assertTrue(sect["sect_user_name_profile_facade_owned"])
         self.assertTrue(sect["sect_weekly_progress_profile_application_owned"])
 
 

@@ -2847,8 +2847,9 @@
   恢复演练，不能用于跨库切片或 P7 的最终证据；后续统一以五库 receipt 为准。
 - 宗门默认只读路径已迁移宗门目录、25 处宗门详情、闲置宗主 scheduler 状态/成员/宗主资料、
   facade 常用成员列表、按 user_id 的用户资料及周常状态展示详情到 `SectApplication` 和只读
-  SQL repositories。未绑定的 `sect_member_utils` 仍保留显式 manager fallback；后续应审计
-  按用户名/宗门名读取及周常进度 helper 的剩余 manager I/O。
+  SQL repositories。道号目标用户查询也已迁移；未绑定的 `sect_member_utils` 仍保留显式
+  manager fallback。后续应审计按宗门名/编号读取、名称去重查询及周常进度 helper 的剩余
+  manager I/O。
 - 签到默认资产、lottery、statistics 和 task 路径已由 feature-owned application 承载；
   本轮补齐 `sign_in.effects` outbox。副作用事件与签到资产事务同库提交，统计/任务投影
   失败后由请求重放或 `reconcile` 续跑，投影仍按 operation ID 幂等。`LegacySignInEffects`
@@ -4608,3 +4609,5 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-09-27 sect weekly status detail query ownership：`宗门周常` 默认展示 handler 的宗门名称读取改经 `_sect_weekly_application().get_sect_info`，不再通过 `XiuxianDateManage`；manager lazy getter 与 lock 仅留在显式 legacy claim fallback，不移除兼容边界。无 migration/DDL。周常领取/展示、progress contract、Sect member/info contract 与 source-quality 回归 `243 passed`；inventory、progress、隔离数据目录下的 architecture CLI、compileall 和 diff check 通过。pytest/pyc/architecture 专用临时目录已清理，未访问运行数据库。接下来盘点多个 Sect handler 与 `sect_weekly.py` 中的 user-profile reads；全局 legacy transaction services 与 `xiuxian2_handle` blockers、真实发布迁移/P7 仍未完成。
 
 2026-09-27 sect user profile read ownership：新增 `SectMemberSqlRepository.get_user_profile` 与 `SectApplication.get_user_profile`，按 user_id 只读取完整用户行，保留重复 id 时最小 rowid、缺失返回 `None` 和 `normalize_user_row`；Sect facade 的六处资料读取、`sect_member_utils` 默认 task helper 与周常进度缺省 sect_id 查找均改走 application。未绑定 helper fallback 保留；周常 manager 对目标表的写入/锁定仍是遗留边界。无 migration/DDL。member repository、Sect 创建/商店/任务、weekly、progress/source-quality 回归 `267 passed`；inventory/progress、隔离数据目录下 architecture CLI、compileall、diff check 通过。pytest/pyc/architecture 专用临时目录已清理，未访问运行数据库。接下来审计 Sect 按用户名/宗门名读取及周常进度 helper 的剩余 manager I/O；全局 legacy transaction services、`xiuxian2_handle` 与真实发布迁移/P7 blockers 仍未完成。
+
+2026-09-27 sect user-name profile read ownership：新增 `SectMemberSqlRepository.get_user_profile_by_name` 与 application API，按 `user_name` 查询完整资料并保留重复道号最早 rowid、缺失 `None` 和 numeric normalization；踢出成员与职位变更两个入口不再读取 legacy manager。无 migration/DDL。member repository、成员移除/职位变更、progress/source-quality 回归 `255 passed`；inventory/progress、隔离数据目录下 architecture CLI、compileall、diff check 通过。pytest/pyc/architecture 临时目录已清理，未访问运行数据库。后续审计宗门名/编号查询与名称去重读取；全局 legacy transaction services、`xiuxian2_handle` 与真实发布迁移/P7 blockers 仍未完成。

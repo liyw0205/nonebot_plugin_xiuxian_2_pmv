@@ -51,6 +51,23 @@ class SectMemberRepositoryTests(unittest.TestCase):
             self.assertEqual(2**70, profile["sect_contribution"])
             self.assertIsNone(application.get_user_profile("missing"))
 
+    def test_user_profile_by_name_preserves_first_duplicate_row_and_missing_behavior(self):
+        with tempfile.TemporaryDirectory() as temp:
+            database = Path(temp) / "sect.db"
+            with DatabaseUnitOfWork(database) as uow:
+                uow.execute(
+                    "CREATE TABLE user_xiuxian(user_id TEXT,user_name TEXT,sect_id INTEGER)"
+                )
+                uow.execute("INSERT INTO user_xiuxian VALUES('first','same',1)")
+                uow.execute("INSERT INTO user_xiuxian VALUES('second','same',2)")
+
+            application = SectApplication(database)
+
+            self.assertEqual(
+                "first", application.get_user_profile_by_name("same")["user_id"]
+            )
+            self.assertIsNone(application.get_user_profile_by_name("missing"))
+
 
 if __name__ == "__main__":
     unittest.main()

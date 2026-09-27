@@ -535,6 +535,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "sect_user_profile_repository_owned": "def get_user_profile(" in sect_member_repository and "ORDER BY rowid ASC LIMIT 1" in sect_member_repository and "normalize_user_row(row)" in sect_member_repository,
             "sect_user_profile_facade_owned": sect_facade.count("sect_application.get_user_profile(") >= 6 and "_sql_message().get_user_info_with_id(" not in sect_facade,
             "sect_user_profile_helper_default_owned": "sect_application.get_user_profile(user_id)" in sect_member_utils and "_sql_message().get_user_info_with_id(user_id)" in sect_member_utils,
+            "sect_user_name_profile_repository_owned": "def get_user_profile_by_name(" in sect_member_repository and "WHERE user_name=?" in sect_member_repository and "ORDER BY rowid ASC LIMIT 1" in sect_member_repository and "normalize_user_row(row)" in sect_member_repository,
+            "sect_user_name_profile_facade_owned": sect_facade.count("sect_application.get_user_profile_by_name(") == 2 and "_sql_message().get_user_info_with_name(" not in sect_facade,
             "sect_weekly_progress_profile_application_owned": "_sect_application().get_user_profile(str(user_id))" in sect_weekly_manager and "self._sql_message().get_user_info_with_id(" not in sect_weekly_manager,
             "fairyland_upgrade_application_owned": "sect_application.upgrade_fairyland(" in sect_facade,
             "fairyland_upgrade_repository_owned": "class SectFairylandSqlRepository" in sect_fairyland_upgrade_repository and "SectFairylandSqlRepository" in sect_application,
