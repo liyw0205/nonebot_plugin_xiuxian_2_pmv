@@ -6,6 +6,7 @@ from typing import Any, Protocol
 
 class SectFairylandRepository(Protocol):
     def claim(self, operation_id: str, user_id: str, sect_id: str, day: str, level: int, minutes: int) -> Any: ...
+    def get_last_claim_day(self, user_id: str, sect_id: str) -> str: ...
 
 
 class LegacySectFairylandRepository:
@@ -18,6 +19,11 @@ class LegacySectFairylandRepository:
         return FairylandClaimService(self.player_database).claim(
             operation_id, user_id, sect_id, day, level, minutes
         )
+
+    def get_last_claim_day(self, user_id: str, sect_id: str) -> str:
+        from .claim_repository import SectFairylandSqlRepository
+
+        return SectFairylandSqlRepository(self.player_database).get_last_claim_day(user_id, sect_id)
 
 
 __all__ = ["LegacySectFairylandRepository", "SectFairylandRepository"]

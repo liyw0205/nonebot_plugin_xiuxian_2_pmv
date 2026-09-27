@@ -73,6 +73,7 @@ class SectFairylandSqlRepositoryTests(unittest.TestCase):
             return uow.query_one(sql, params)
 
     def test_claim_replay_and_daily_marker_share_tianti_transaction(self):
+        self.assertEqual(self.repository.get_last_claim_day("user", "7"), "")
         first = self.repository.claim("op", "user", "7", "2026-09-27", 2, 30)
         duplicate = self.repository.claim("op", "user", "7", "2026-09-27", 2, 30)
         already = self.repository.claim("another", "user", "7", "2026-09-27", 2, 30)
@@ -83,6 +84,8 @@ class SectFairylandSqlRepositoryTests(unittest.TestCase):
         self.assertEqual(self.query("SELECT claim_day FROM sect_fairyland_claim_days WHERE user_id='user' AND sect_id='7'")["claim_day"], "2026-09-27")
         self.assertTrue(first.detail["bath"])
         self.assertEqual(first.detail, duplicate.detail)
+        self.assertEqual(self.repository.get_last_claim_day("user", "7"), "2026-09-27")
+        self.assertEqual(self.repository.get_last_claim_day("user", "8"), "")
 
     def test_aware_clock_uses_local_wall_time_for_legacy_bath_timestamp(self):
         with DatabaseUnitOfWork(self.player) as uow:
@@ -126,6 +129,7 @@ class SectFairylandSqlRepositoryTests(unittest.TestCase):
         repo = SectFairylandSqlRepository(other, profile_reader=_Profile(), clock=_Clock())
         result = repo.claim("op", "user", "7", "2026-09-27", 2, 30)
         self.assertEqual(result.status, "schema_missing")
+        self.assertEqual(repo.get_last_claim_day("user", "7"), "")
         self.assertIsNone(self.query_on(other, "SELECT 1 FROM sqlite_master WHERE name='sect_fairyland_claim_operations'"))
 
     def test_player_migration_backfills_dynamic_claim_columns_and_preserves_receipts(self):
@@ -145,6 +149,8 @@ class SectFairylandSqlRepositoryTests(unittest.TestCase):
             receipt = uow.query_one("SELECT claim_day FROM sect_fairyland_claim_operations WHERE operation_id='old'")
         self.assertEqual(marker["claim_day"], "2026-09-26")
         self.assertEqual(receipt["claim_day"], "2026-09-25")
+        repo = SectFairylandSqlRepository(other, profile_reader=_Profile(), clock=_Clock())
+        self.assertEqual(repo.get_last_claim_day("user", "7"), "2026-09-26")
 
     @staticmethod
     def query_on(database, sql):

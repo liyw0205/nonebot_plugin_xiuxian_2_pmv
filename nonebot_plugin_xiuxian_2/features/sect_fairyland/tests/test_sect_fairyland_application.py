@@ -11,6 +11,7 @@ class _Repository:
     def __init__(self, status="claimed"):
         self.status = status
         self.calls = 0
+        self.last_claim_day = "2026-09-12"
 
     def claim(self, operation_id, user_id, sect_id, day, level, minutes):
         self.calls += 1
@@ -21,6 +22,10 @@ class _Repository:
             "sect_id": sect_id,
             "detail": {"real_gain": 20, "new_hp": 120, "sect_bonus": 0.1},
         }
+
+    def get_last_claim_day(self, user_id, sect_id):
+        self.status_query = (user_id, sect_id)
+        return self.last_claim_day
 
 
 class SectFairylandApplicationTests(unittest.TestCase):
@@ -54,6 +59,13 @@ class SectFairylandApplicationTests(unittest.TestCase):
             self.assertEqual(first.code, "already_claimed")
             self.assertEqual(second.code, "already_claimed")
             self.assertEqual(repository.calls, 2)
+
+    def test_status_read_is_delegated_with_normalized_ids(self):
+        repository = _Repository()
+        app = SectFairylandApplication(Path("unused.db"), repository=repository)
+
+        self.assertEqual(app.get_last_claim_day(" u ", " 1 "), "2026-09-12")
+        self.assertEqual(repository.status_query, ("u", "1"))
 
 
 if __name__ == "__main__":

@@ -102,6 +102,12 @@ class SectFairylandApplication:
                 clock=self.clock,
             )
 
+    def get_last_claim_day(self, user_id: str, sect_id: str) -> str:
+        user_id, sect_id = str(user_id).strip(), str(sect_id).strip()
+        if not user_id or not sect_id:
+            return ""
+        return self._repository().get_last_claim_day(user_id, sect_id)
+
     def reply(self, **kwargs: Any) -> ReplyPlan:
         outcome = self.claim(**kwargs)
         return ReplyPlan(outcome.message or outcome.data, reference=True)

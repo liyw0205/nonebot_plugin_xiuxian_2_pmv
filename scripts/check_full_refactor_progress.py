@@ -139,6 +139,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sect_weekly_progress_repository = (PACKAGE / "features" / "sect" / "weekly_progress_repository.py").read_text(encoding="utf-8")
     sect_fairyland_application = (PACKAGE / "features" / "sect_fairyland" / "application.py").read_text(encoding="utf-8")
     sect_fairyland_repository = (PACKAGE / "features" / "sect_fairyland" / "claim_repository.py").read_text(encoding="utf-8")
+    sect_fairyland_legacy_state = (PACKAGE / "xiuxian" / "xiuxian_sect" / "sect_fairyland.py").read_text(encoding="utf-8")
     sect_fairyland_upgrade_repository = (PACKAGE / "features" / "sect" / "fairyland_repository.py").read_text(encoding="utf-8")
     sect_fairyland_compatibility = (PACKAGE / "features" / "sect_fairyland" / "repository.py").read_text(encoding="utf-8")
     sect_fairyland_migrations = (PACKAGE / "features" / "sect_fairyland" / "migrations.py").read_text(encoding="utf-8")
@@ -566,6 +567,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "fairyland_upgrade_migration_game_only": '"sect.014"' not in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")] and '"sect.014"' not in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")],
             "fairyland_upgrade_success_result_owned": '"upgraded"' in sect_application[sect_application.index("class SectMutationResult"):sect_application.index("class SectApplication")],
             "fairyland_upgrade_duplicate_handled_before_effects": sect_fairyland_upgrade_handler.index('if result.status == "duplicate"') < sect_fairyland_upgrade_handler.index("safe_log_economy_change("),
+            "fairyland_claim_status_application_owned": "sect_fairyland_application.get_last_claim_day(" in sect_facade and "_get_fairyland_last_claim(" not in sect_facade,
+            "fairyland_claim_status_repository_owned": "def get_last_claim_day(" in sect_fairyland_repository and "sect_fairyland_claim_days" in sect_fairyland_repository,
+            "fairyland_claim_status_read_only": "DatabaseUnitOfWork(self.player_database, read_only=True)" in sect_fairyland_repository,
+            "fairyland_claim_status_no_player_manager": "PlayerDataManager" not in sect_fairyland_legacy_state and "def _get_fairyland_last_claim(" not in sect_fairyland_legacy_state,
             "elixir_room_upgrade_application_owned": "sect_application.upgrade_elixir_room(" in sect_facade,
             "activity_timestamp_application_owned": "sect_application.update_last_check_info_time(user_id)" in sect_elixir_claim_handler and "_sql_message().update_last_check_info_time(" not in sect_elixir_claim_handler,
             "activity_timestamp_repository_owned": "SectActivitySqlRepository" in sect_application and "class SectActivitySqlRepository" in sect_activity_repository,

@@ -58,11 +58,8 @@ from ..xiuxian_utils.utils import (
 from ..xiuxian_utils.item_json import Items
 from ...features.tianti_training.presentation import get_sect_fairyland_bonus
 from .sect_fairyland import (
-    SECT_FAIRYLAND_CLAIM_TABLE,
     SECT_FAIRYLAND_CONFIG,
     SECT_FAIRYLAND_MAX_LEVEL,
-    _fairyland_claim_key,
-    _get_fairyland_last_claim,
     _get_sect_fairyland_config,
     _get_sect_fairyland_level,
     _to_int,
@@ -660,7 +657,7 @@ async def sect_fairyland_info_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     level = _get_sect_fairyland_level(sect_info)
     cur_conf = _get_sect_fairyland_config(level)
     today = runtime_clock.now().strftime("%Y-%m-%d")
-    claimed = _get_fairyland_last_claim(user_info["user_id"], sect_id) == today
+    claimed = sect_fairyland_application.get_last_claim_day(user_info["user_id"], sect_id) == today
 
     next_msg = "已达最高等级"
     if level < SECT_FAIRYLAND_MAX_LEVEL:

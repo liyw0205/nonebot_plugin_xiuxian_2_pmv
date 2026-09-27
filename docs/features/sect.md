@@ -30,7 +30,7 @@
 
 ## 数据模型与迁移
 
-`sect.001` 写迁移标记和统一 ledger；`sect.011`、`sect.013` 属于 game DB，`sect.012` 属于 player DB。历史周常进度和已有手动解散回执由迁移保留。
+`sect.001` 写迁移标记和统一 ledger；`sect.011`、`sect.013` 属于 game DB，`sect.012` 属于 player DB。历史周常进度和已有手动解散回执由迁移保留。`sect_fairyland.002` 在 player DB 预建炼体堂领取回执与每日状态表，并将旧按宗门展开的领取日期回填到 `sect_fairyland_claim_days`；信息查询和领奖均读取/更新该 feature-owned 状态，不在请求期建表。
 
 ## 事务与失败回滚
 

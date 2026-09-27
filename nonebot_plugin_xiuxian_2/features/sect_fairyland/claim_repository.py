@@ -235,5 +235,27 @@ class SectFairylandSqlRepository:
             )
             return result("claimed", json.loads(detail_json))
 
+    def get_last_claim_day(self, user_id: str, sect_id: str) -> str:
+        user_id, sect_id = str(user_id).strip(), str(sect_id).strip()
+        if not user_id or not sect_id:
+            return ""
+        with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
+            table = uow.query_one(
+                "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='sect_fairyland_claim_days'"
+            )
+            if table is None:
+                return ""
+            columns = {
+                str(row["name"])
+                for row in uow.query_all("PRAGMA table_info(sect_fairyland_claim_days)")
+            }
+            if not self._CLAIM_COLUMNS.issubset(columns):
+                return ""
+            row = uow.query_one(
+                "SELECT claim_day FROM sect_fairyland_claim_days WHERE user_id=? AND sect_id=?",
+                (user_id, sect_id),
+            )
+        return str(row["claim_day"] or "") if row else ""
+
 
 __all__ = ["SectFairylandClaimResult", "SectFairylandSqlRepository", "TiantiProfile"]

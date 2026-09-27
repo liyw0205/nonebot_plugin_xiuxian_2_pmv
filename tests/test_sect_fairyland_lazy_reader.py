@@ -3,16 +3,15 @@ import unittest
 
 
 class SectFairylandLazyReaderTests(unittest.TestCase):
-    def test_fairyland_defers_player_data_manager_construction(self):
+    def test_fairyland_claim_status_is_feature_owned_without_player_manager(self):
+        package = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2"
         source = (
-            Path(__file__).parents[1]
-            / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_sect/sect_fairyland.py"
+            package / "xiuxian/xiuxian_sect/sect_fairyland.py"
         ).read_text(encoding="utf-8")
-        self.assertIn("_player_data_manager_instance = None", source)
-        self.assertIn("def _player_data_manager(", source)
-        self.assertNotIn("_player_data_manager = PlayerDataManager()", source)
-        self.assertIn("_player_data_manager().get_fields(", source)
-        self.assertIn("_player_data_manager().update_or_write_data(", source)
+        facade = (package / "xiuxian/xiuxian_sect/__init__.py").read_text(encoding="utf-8")
+        self.assertNotIn("PlayerDataManager", source)
+        self.assertNotIn("_get_fairyland_last_claim", facade)
+        self.assertIn("sect_fairyland_application.get_last_claim_day(", facade)
 
 
 if __name__ == "__main__":

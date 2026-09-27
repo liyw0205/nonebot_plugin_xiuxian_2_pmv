@@ -1,6 +1,3 @@
-from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
-
-
 SECT_FAIRYLAND_MAX_LEVEL = 10
 SECT_FAIRYLAND_CLAIM_TABLE = "sect_fairyland_claim"
 SECT_FAIRYLAND_CONFIG = {
@@ -16,16 +13,6 @@ SECT_FAIRYLAND_CONFIG = {
     9: {"name": "鸿蒙淬体台", "minutes": 300, "bonus": 0.45, "stone": 6400000000, "materials": 64000000000},
     10: {"name": "永恒炼体堂", "minutes": 360, "bonus": 0.50, "stone": 12800000000, "materials": 128000000000},
 }
-
-_player_data_manager_instance = None
-
-
-def _player_data_manager():
-    global _player_data_manager_instance
-    if _player_data_manager_instance is None:
-        _player_data_manager_instance = PlayerDataManager()
-    return _player_data_manager_instance
-
 
 def _to_int(value, default: int = 0) -> int:
     try:
@@ -47,19 +34,3 @@ def _get_sect_fairyland_config(level: int) -> dict:
 
 def _fairyland_claim_key(sect_id) -> str:
     return f"last_claim_{sect_id}"
-
-
-def _get_fairyland_last_claim(user_id, sect_id) -> str:
-    data = _player_data_manager().get_fields(str(user_id), SECT_FAIRYLAND_CLAIM_TABLE) or {}
-    value = data.get(_fairyland_claim_key(sect_id), "")
-    return str(value or "")
-
-
-def _set_fairyland_last_claim(user_id, sect_id, day: str):
-    _player_data_manager().update_or_write_data(
-        str(user_id),
-        SECT_FAIRYLAND_CLAIM_TABLE,
-        _fairyland_claim_key(sect_id),
-        day,
-        data_type="TEXT",
-    )
