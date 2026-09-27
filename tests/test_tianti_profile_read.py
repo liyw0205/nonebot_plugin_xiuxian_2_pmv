@@ -26,6 +26,7 @@ class TiantiProfileReadTests(unittest.TestCase):
         self.assertTrue(tianti["sect_bonus_display_is_feature_owned"])
         self.assertTrue(tianti["legacy_profile_write_through_is_named"])
         self.assertTrue(tianti["legacy_transaction_adapters_remain_explicit"])
+        self.assertTrue(tianti["legacy_training_adapter_is_per_operation"])
 
     def test_read_only_profile_lookup_does_not_persist_missing_default(self):
         manager = TiantiDataManager()

@@ -593,7 +593,7 @@ class LegacyTiantiTrainingRepository:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
 
-    def _services(self):
+    def _service(self, operation: str):
         from ...xiuxian.xiuxian_tianti.transaction_service import (
             MedicineBathService,
             QiaoxueService,
@@ -601,15 +601,19 @@ class LegacyTiantiTrainingRepository:
             TiantiBreakthroughService,
         )
 
-        return (
-            StoneTrainingService(self.game_database, self.player_database),
-            MedicineBathService(self.game_database, self.player_database),
-            TiantiBreakthroughService(self.player_database),
-            QiaoxueService(self.player_database),
-        )
+        factories = {
+            "train": lambda: StoneTrainingService(self.game_database, self.player_database),
+            "apply_bath": lambda: MedicineBathService(self.game_database, self.player_database),
+            "breakthrough": lambda: TiantiBreakthroughService(self.player_database),
+            "open_qiaoxue": lambda: QiaoxueService(self.player_database),
+        }
+        try:
+            return factories[operation]()
+        except KeyError as exc:
+            raise ValueError(f"unsupported legacy Tianti operation: {operation}") from exc
 
     def train(self, operation_id: str, user_id: str, requested_stone: int) -> Any:
-        return self._services()[0].train(operation_id, user_id, requested_stone)
+        return self._service("train").train(operation_id, user_id, requested_stone)
 
     def apply_bath(
         self,
@@ -623,7 +627,7 @@ class LegacyTiantiTrainingRepository:
         *,
         sect_fairyland_level: int = 0,
     ) -> Any:
-        return self._services()[1].apply(
+        return self._service("apply_bath").apply(
             operation_id,
             user_id,
             consume_plan,
@@ -635,7 +639,7 @@ class LegacyTiantiTrainingRepository:
         )
 
     def breakthrough(self, operation_id: str, user_id: str, *, cultivation_rank: int, roll_success: bool) -> Any:
-        return self._services()[2].attempt(
+        return self._service("breakthrough").attempt(
             operation_id,
             user_id,
             cultivation_rank=cultivation_rank,
@@ -643,7 +647,7 @@ class LegacyTiantiTrainingRepository:
         )
 
     def open_qiaoxue(self, operation_id: str, user_id: str, roll: int) -> Any:
-        return self._services()[3].open(operation_id, user_id, roll)
+        return self._service("open_qiaoxue").open(operation_id, user_id, roll)
 
 
 __all__ = [

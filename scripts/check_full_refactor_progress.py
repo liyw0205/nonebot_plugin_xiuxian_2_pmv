@@ -470,7 +470,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "sect_bonus_display_is_feature_owned": "from ...features.tianti_training.presentation import get_sect_fairyland_bonus" in sect_facade,
             "legacy_profile_write_through_is_named": "Legacy write-through getter" in tianti_data,
             "legacy_transaction_adapters_remain_explicit": "class LegacyTiantiTrainingRepository" in tianti_training_repository and "class LegacyTiantiSettlementRepository" in tianti_settlement_repository,
-            "status": "feature_profile_writer_and_gain_rules_shared; legacy_transaction_services_and_adapters_retained_for_compatibility",
+            "legacy_training_adapter_is_per_operation": "def _service(self, operation: str)" in tianti_training_repository and "def _services(" not in tianti_training_repository,
+            "status": "feature_profile_writer_and_gain_rules_shared; legacy_training_adapter_constructs_only_requested_service",
         },
         "sect": {
             "membership_application_owned": all(f"sect_application.{name}(" in sect_facade for name in ("join", "leave", "kick", "change_position")),
