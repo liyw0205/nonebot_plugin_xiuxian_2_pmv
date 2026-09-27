@@ -20,6 +20,7 @@ from .guishi_qiugou_repository import GuishiQiugouSqlRepository
 from .guishi_match_repository import GuishiOrderMatchSqlRepository
 from .guishi_expired_repository import GuishiExpiredOrderSqlRepository
 from .guishi_take_repository import GuishiStoredItemTakeSqlRepository
+from .guishi_query_repository import GuishiQueryRepository, GuishiQuerySqlRepository
 from .xianshi_listing_repository import XianshiListingSqlRepository
 from .xianshi_plan_listing_repository import XianshiPlanListingSqlRepository
 from .xianshi_removal_repository import XianshiRemovalSqlRepository
@@ -45,6 +46,7 @@ class TradeApplication(LegacyApplication):
         auction_max_goods_num: int = 1000,
         auction_max_user_items: int = 3,
         xianshi_query_repository: XianshiQueryRepository | None = None,
+        guishi_query_repository: GuishiQueryRepository | None = None,
     ) -> None:
         self.game_database = str(game_database)
         self.trade_database = str(trade_database)
@@ -102,6 +104,9 @@ class TradeApplication(LegacyApplication):
         self.xianshi_query_repository = xianshi_query_repository or XianshiQuerySqlRepository(
             self.game_database
         )
+        self.guishi_query_repository = guishi_query_repository or GuishiQuerySqlRepository(
+            self.trade_database
+        )
         super().__init__(game_database, repository=repository, feature="trade")
 
     def xianshi_get_items(
@@ -118,6 +123,24 @@ class TradeApplication(LegacyApplication):
             listing_id=listing_id,
             name=name,
         )
+
+    def guishi_get_orders(
+        self,
+        *,
+        user_id: str | None = None,
+        name: str | None = None,
+        order_type: str | None = None,
+        order_id: str | None = None,
+    ) -> list[dict[str, Any]] | None:
+        return self.guishi_query_repository.get_orders(
+            user_id=user_id,
+            name=name,
+            order_type=order_type,
+            order_id=order_id,
+        )
+
+    def guishi_get_account(self, user_id: str) -> tuple[int, dict[str, Any]]:
+        return self.guishi_query_repository.get_account(user_id)
 
     def xianshi_list_items(
         self,

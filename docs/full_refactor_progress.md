@@ -2898,10 +2898,10 @@
    真实 Flask 回归覆盖 payload、CSRF、operation replay、队列资产变化、结算 effects 单次分发。
    旧 `AuctionSessionService` 已移到 `compatibility/legacy_trade_auction_sessions.py`，只从显式注入的
    rollback repository 延迟加载；本切片不新增 migration。
-4. **继续清理交易兼容余额**：拍卖查看、拍卖信息、活动展示、个人等待区、scheduler、重启对账
-   和竞价前拍品查询均已迁至 feature-owned application 与无 DDL 的只读 repository。下一步是
-   处理旧拍卖 session/竞价 fallback 的显式兼容 adapter；检查仙肆/鬼市剩余 handler 的真实调用图，
-   每次只迁一个资产转换，兼容 repository 仅在真实调用归零且回滚证据满足后移除。
+4. **继续清理交易兼容余额**：拍卖查看、拍卖信息、活动展示、个人等待区、scheduler、重启对账、
+   竞价前拍品查询，以及鬼市订单/账户投影读取均已迁至 feature-owned application 与无 DDL 的
+   只读 repository。下一步是处理旧拍卖 session/竞价 fallback 的显式兼容 adapter；继续按真实调用图
+   检查仙肆/鬼市剩余入口，每次只迁一个资产转换，兼容 repository 仅在真实调用归零且回滚证据满足后移除。
 5. 清零已迁移域的 compatibility 余额：背包高频动作和签到默认副作用已由
    feature-owned application 承载；宠物旧 service 本轮已隔离，但显式
    `LegacyPetRepository` 与旧数据 projection 仍需审计。通用 daily/weekly 任务进度和领奖
@@ -4633,3 +4633,5 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-09-27 sect default repository fallback isolation：调用图确认 `SectRenameSqlRepository` 完整实现 `SectRepository` 十个操作，但此前仍继承仅供显式回滚的 `LegacySectRepository`，令默认仓储表面上带有旧 transaction-service fallback。解除两者继承关系，保留 `LegacySectRepository` 原实现与导出作为 rollback API；十个操作和 schema 均不变。新增 default-vs-rollback source contract 与 progress ownership 门禁；Sect/炼体堂、source-quality、progress 聚焦回归 `453 passed`。pytest cache/字节码关闭、临时目录清理；用户 `boss_info.json` 修改保留。全局 legacy transaction services、`xiuxian2_handle` 和真实发布迁移/P7 blockers 仍未完成。
 
 2026-09-27 sect task claim/refresh transaction cutover：新增 game-only `sect.017` 回执迁移；`SectTaskStateSqlRepository` 在单一 immediate UoW 内验证用户宗门归属、宗门存在、每日上限、当前任务状态并提交任务状态与幂等回执，刷新还会校验预期旧状态；重复 operation 可重放，回执写入失败回滚状态变更。默认宗门任务接取/刷新入口切换到 `SectApplication`，移除两个 helper 对未定义 membership service 的引用；临时任务 cache 在无任务时清除并按新日过期。新增 migration 保留、缺 schema 不触发请求期 DDL、状态冲突、幂等和事务回滚测试。全 Sect feature、`test_sect_*`、source-quality 和 refactor-progress 聚焦回归 `510 passed`；inventory、compileall、隔离数据目录 architecture CLI 与 diff check 通过，Sect task-claim application/repository/migration/no-request-DDL 进度项均为 `true`。pytest cache 禁用，测试/编译/架构数据位于自动回收临时目录；未访问运行数据库，用户 `boss_info.json` 修改保留。全局 `exit_ready=false` 仍受旧 transaction services 与 `xiuxian2_handle` 执行路径阻塞，真实发布迁移/P7 证据也未完成。
+
+2026-09-27 trade Guishi read-only projection cutover：鬼市订单列表、账户余额与暂存物品读取从真实命令/清理/scheduler 入口切换到 `TradeApplication -> GuishiQuerySqlRepository`，仅以短生命周期只读 UoW 查询 `trade_db`；缺数据库或投影表返回旧接口空值，不执行请求期建表，也不持有连接缓存。保留 `qiugou/求购`、`baitan/摆摊` 类型别名、精确名称/用户/订单筛选、原始行形状和账户 JSON 容错；`_trade_manager` 仍仅作为旧拍卖 fallback 的显式依赖，不在本切片删除。无 migration/业务数据访问。Guishi/trade 聚焦回归 `140 passed`，query/application/lazy-reader/source-quality 回归 `239 passed`；隔离 pycache 下 compileall、inventory `--check`、progress CLI、NoneBot 初始化后的 architecture CLI（`ok=true`）和 diff check 通过。整体 progress `exit_ready=false`，33 个旧 transaction service 与 `xiuxian2_handle` blockers 仍在。pytest/pyc/architecture 临时目录已清理，未访问运行数据库；用户 `boss_info.json` 修改保留。下一片继续按 6.2.4 调查拍卖 session/竞价 fallback 的真实调用图。

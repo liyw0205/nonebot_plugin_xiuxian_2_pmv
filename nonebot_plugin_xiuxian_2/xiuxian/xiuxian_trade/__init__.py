@@ -2019,7 +2019,7 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await guishi_baitan.finish()
     
     # 检查订单数量限制
-    baitan_orders = _trade_manager().get_guishi_orders(user_id=user_id, type="baitan")
+    baitan_orders = trade_application.guishi_get_orders(user_id=user_id, order_type="baitan")
     
     if baitan_orders and len(baitan_orders) >= MAX_BAITAN_ORDERS:
         msg = f"您的摆摊订单已达上限({MAX_BAITAN_ORDERS})，请先收摊部分订单！"
@@ -2106,7 +2106,7 @@ async def guishi_shoutan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     user_id = user_info['user_id']
     
     # 获取用户的摆摊订单
-    baitan_orders = _trade_manager().get_guishi_orders(user_id=user_id, type="baitan")
+    baitan_orders = trade_application.guishi_get_orders(user_id=user_id, order_type="baitan")
     
     if not baitan_orders:
         msg = "您当前没有摆摊订单！"
@@ -2233,8 +2233,7 @@ async def guishi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     user_id = user_info['user_id']
     
     # 获取用户的鬼市账户信息
-    stored_stone = _trade_manager().get_stored_stone(user_id)
-    stored_items = _trade_manager().get_stored_items(user_id)
+    stored_stone, stored_items = trade_application.guishi_get_account(user_id)
     
     msg_parts = [f"【鬼市账户信息】\n"]
     msg_parts.append(f"账户余额：{number_to(stored_stone)}\n")
@@ -2247,7 +2246,7 @@ async def guishi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                 msg_parts.append(f"  {item_info['name']} x{quantity}\n")
 
     # 获取用户的求购订单
-    qiugou_orders = _trade_manager().get_guishi_orders(user_id=user_id, type="qiugou")
+    qiugou_orders = trade_application.guishi_get_orders(user_id=user_id, order_type="qiugou")
     if qiugou_orders:
         msg_parts.append(f"\n☆------求购列表------☆\n")
         for order in qiugou_orders:
@@ -2255,7 +2254,7 @@ async def guishi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             msg_parts.append(f"ID:{order['id']} {order['item_name']} {number_to(order['price'])}灵石 x{order['quantity']} (待购:{unfilled_quantity})\n")
 
     # 获取用户的摆摊订单
-    baitan_orders = _trade_manager().get_guishi_orders(user_id=user_id, type="baitan")
+    baitan_orders = trade_application.guishi_get_orders(user_id=user_id, order_type="baitan")
     if baitan_orders:
         msg_parts.append(f"\n☆------摆摊列表------☆\n")
         for order in baitan_orders:
@@ -2277,7 +2276,7 @@ async def clear_all_guishi_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     msg = "正在清空全服鬼市，请稍候..."
     await handle_send(bot, event, msg)
     
-    all_guishi_orders = _trade_manager().get_guishi_orders() # 获取所有鬼市订单
+    all_guishi_orders = trade_application.guishi_get_orders() # 获取所有鬼市订单
     
     if not all_guishi_orders:
         msg = "鬼市中没有订单可供清空！"
@@ -2348,10 +2347,10 @@ async def process_guishi_transactions(user_id: str = None) -> str:
     :return: 如果user_id指定，返回交易匹配的消息；否则返回空字符串。
     """
     if user_id: # 如果是单个用户触发，只处理该用户的求购订单
-        qiugou_orders = _trade_manager().get_guishi_orders(user_id=user_id, type="qiugou")
+        qiugou_orders = trade_application.guishi_get_orders(user_id=user_id, order_type="qiugou")
         transaction_log = "开始处理您的鬼市交易...\n"
     else: # 否则处理所有求购订单
-        qiugou_orders = _trade_manager().get_guishi_orders(type="qiugou")
+        qiugou_orders = trade_application.guishi_get_orders(order_type="qiugou")
         transaction_log = "开始处理鬼市交易...\n"
 
     if not qiugou_orders:
@@ -2374,7 +2373,9 @@ async def process_guishi_transactions(user_id: str = None) -> str:
             continue
         
         # 获取所有符合条件的摆摊订单（物品名称相同，价格低于或等于求购价，且非自己的摆摊）
-        baitan_orders = _trade_manager().get_guishi_orders(type="baitan", name=qiugou_item_name)
+        baitan_orders = trade_application.guishi_get_orders(
+            order_type="baitan", name=qiugou_item_name
+        )
         
         if not baitan_orders:
             if user_id: transaction_log += f"【{qiugou_item_name}】没有匹配的摆摊订单。\n"
@@ -2465,7 +2466,7 @@ async def clear_expired_baitan_orders_job():
     """每天摆摊时间结束后，自动清空所有未售罄的摆摊订单，并退还未售出的物品。"""
     logger.info("开始检查并清理超时鬼市摆摊订单...")
     
-    all_baitan_orders = _trade_manager().get_guishi_orders(type="baitan")
+    all_baitan_orders = trade_application.guishi_get_orders(order_type="baitan")
     if not all_baitan_orders:
         logger.info("没有鬼市摆摊订单可供清理。")
         return

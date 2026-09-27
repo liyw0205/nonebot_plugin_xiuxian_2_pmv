@@ -655,6 +655,22 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("GuishiStoredItemTakeSqlRepository", compatibility_method)
         self.assertNotIn("CREATE TABLE", compatibility_method)
 
+    def test_guishi_projection_reads_use_feature_owned_read_only_repository(self) -> None:
+        command_source = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_trade" / "__init__.py"
+        ).read_text(encoding="utf-8")
+        repository_source = (
+            SOURCE_ROOT / "features" / "trade" / "guishi_query_repository.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("trade_application.guishi_get_orders(", command_source)
+        self.assertIn("trade_application.guishi_get_account(", command_source)
+        self.assertNotIn("_trade_manager().get_guishi_orders(", command_source)
+        self.assertNotIn("_trade_manager().get_stored_stone(", command_source)
+        self.assertNotIn("_trade_manager().get_stored_items(", command_source)
+        self.assertIn("DatabaseUnitOfWork(self.database, read_only=True)", repository_source)
+        self.assertNotIn("CREATE TABLE", repository_source)
+
     def test_guishi_expired_cleanup_uses_feature_application(self) -> None:
         trade_root = SOURCE_ROOT / "xiuxian" / "xiuxian_trade"
         command_source = (trade_root / "__init__.py").read_text(encoding="utf-8")

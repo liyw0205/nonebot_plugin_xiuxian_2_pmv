@@ -11,6 +11,9 @@ feature-owned use case 结算。存取操作记录在 game DB 的
 按数据库路由建立 schema。取出规则由注入 `Clock` 的 application 决定周末开放窗口，
 并保留历史动态手续费公式。
 
+鬼市订单列表与账户信息读取由 `TradeApplication` 的只读 query repository 承载，短生命周期
+打开 `trade_db`，不保留缓存连接，也不在请求中补建 schema；数据库或投影表缺失时维持历史空结果。
+
 普通、自动、快速和系统 `仙肆上架` 已通过 `TradeApplication` 结算。game DB immediate transaction
 原子创建 listing 并写入 operation；普通/快速上架还会扣除手续费和可交易库存，自动上架会先
 校验并扣除 30 点体力及整份计划的费用/库存，快速上架会先校验并扣除 10 点体力。普通/快速操作记录在
@@ -37,7 +40,7 @@ payload 中的 `operation_id`。
 取出 operation 表；`trade.003` 只在 trade DB 创建或补齐 `guishi_info`；`trade.005`/
 `trade.006` 只在 trade DB 创建求购创建/订单撤销 operation 表；`trade.010`/`trade.011` 只在
 game DB 创建或升级仙肆普通、自动、快速、系统上架 operation 表，`trade.012` 只在 game DB
-创建仙肆撤架 operation 表。生产请求路径不隐式建表。
+创建仙肆撤架 operation 表。鬼市只读查询不拥有 schema migration。生产请求路径不隐式建表。
 ## 事务与失败回滚
 鬼市存取使用 game DB 主事务附加 trade DB，玩家钱包、余额投影和 operation
 写入要么全部提交、要么全部回滚。已迁移操作均保留 canonical payload replay/conflict
