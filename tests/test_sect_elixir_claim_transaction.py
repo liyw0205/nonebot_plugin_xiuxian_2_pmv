@@ -5,6 +5,13 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.transaction_service import SectElixirClaimService
+from nonebot_plugin_xiuxian_2.compatibility.legacy_sect_elixir_claim import (
+    SectElixirClaimService as CompatibilitySectElixirClaimService,
+)
+
+
+def test_transaction_service_import_remains_a_compatibility_shim():
+    assert SectElixirClaimService is CompatibilitySectElixirClaimService
 
 
 def make_database(path):

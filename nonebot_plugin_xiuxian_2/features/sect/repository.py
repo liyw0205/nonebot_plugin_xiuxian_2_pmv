@@ -25,9 +25,10 @@ class LegacySectRepository:
         self.database = str(database)
 
     def _service(self, name: str):
+        from ...compatibility.legacy_sect_elixir_claim import SectElixirClaimService
         from ...xiuxian.xiuxian_sect.transaction_service import (
             SectMemberJoinService, SectShopPurchaseService, SectMainBuffLearnService,
-            SectSecBuffLearnService, SectElixirClaimService,
+            SectSecBuffLearnService,
         )
         return {"join": SectMemberJoinService, "purchase": SectShopPurchaseService, "learn_main": SectMainBuffLearnService, "learn_secondary": SectSecBuffLearnService, "claim_elixir": SectElixirClaimService}[name](self.database)
 
