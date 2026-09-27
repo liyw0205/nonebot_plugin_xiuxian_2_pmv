@@ -47,9 +47,96 @@ class TiantiProfileReader:
         for key in data:
             if row and row.get(key) is not None:
                 data[key] = row[key]
-        data["tianti_level"] = data["tianti_level"] if data["tianti_level"] in self.levels() else self.default_data()["tianti_level"]
-        data["tianti_hp"] = max(0, int(data.get("tianti_hp", 0) or 0))
+
+        if not isinstance(data["tianti_level"], str) or data["tianti_level"] not in self.levels():
+            data["tianti_level"] = self.default_data()["tianti_level"]
+        try:
+            data["tianti_hp"] = max(0, int(data.get("tianti_hp", 0) or 0))
+        except (TypeError, ValueError, OverflowError):
+            data["tianti_hp"] = 0
+
+        for field in ("last_settle_time", "medicine_last_time", "medicine_end_time"):
+            if data[field] in ("", "null", "None", "none", 0):
+                data[field] = None
+        if data["medicine_name"] in (None, "null", "None", "none", 0):
+            data["medicine_name"] = ""
+        try:
+            data["medicine_effect"] = float(data.get("medicine_effect", 0) or 0)
+        except (TypeError, ValueError, OverflowError):
+            data["medicine_effect"] = 0.0
+
+        pool = self.qiaoxue_pool()
+        qiaoxue_by_name = {item["name"]: item for item in pool}
+        opened = self._json_value(data["opened_qiaoxue"], [])
+        if not isinstance(opened, list):
+            opened = []
+        opened_clean = []
+        for name in opened:
+            if isinstance(name, str) and name in qiaoxue_by_name and name not in opened_clean:
+                opened_clean.append(name)
+
+        details = self._json_value(data["opened_qiaoxue_detail"], [])
+        if not isinstance(details, list):
+            details = []
+        details_by_name: dict[str, dict[str, Any]] = {}
+        for item in details:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name")
+            if not isinstance(name, str) or name not in qiaoxue_by_name or name in details_by_name:
+                continue
+            config = qiaoxue_by_name[name]
+            effect_value = item.get("effect_value", config.get("effect_value"))
+            try:
+                effect_value = float(effect_value)
+            except (TypeError, ValueError, OverflowError):
+                effect_value = float(config.get("effect_value", 0))
+            details_by_name[name] = {
+                "name": name,
+                "group": item.get("group", config.get("group")),
+                "effect_type": item.get("effect_type", config.get("effect_type")),
+                "effect_value": effect_value,
+            }
+
+        rebuilt_details = []
+        for name in opened_clean:
+            detail = details_by_name.get(name)
+            if detail is None:
+                config = qiaoxue_by_name[name]
+                detail = {
+                    "name": name,
+                    "group": config.get("group"),
+                    "effect_type": config.get("effect_type"),
+                    "effect_value": float(config.get("effect_value", 0)),
+                }
+            rebuilt_details.append(detail)
+        data["opened_qiaoxue"] = opened_clean
+        data["opened_qiaoxue_detail"] = rebuilt_details
+
+        stages = self._json_value(data["qiaoxue_stage_opened"], {})
+        if not isinstance(stages, dict):
+            stages = {}
+        cleaned_stages = {}
+        for key, value in stages.items():
+            if not isinstance(key, str):
+                continue
+            try:
+                cleaned_stages[key] = max(0, int(value))
+            except (TypeError, ValueError, OverflowError):
+                cleaned_stages[key] = 0
+        data["qiaoxue_stage_opened"] = cleaned_stages
         return data
+
+    @staticmethod
+    def _json_value(value: Any, default: Any) -> Any:
+        if isinstance(value, (list, dict)):
+            return value
+        if not isinstance(value, str) or value.strip().lower() in {"", "none", "null"}:
+            return default
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return default
 
     def cap(self, data: Mapping[str, Any]) -> int:
         current = self.levels()[str(data["tianti_level"])]
@@ -73,10 +160,17 @@ class TiantiProfileReader:
         return len(ranks) - ranks.index(level) - 1
 
     def qiaoxue_pool(self) -> list[dict[str, Any]]:
-        with (self.path.parent / "炼体窍穴.json").open("r", encoding="utf-8") as stream:
-            loaded = json.load(stream)
+        try:
+            with (self.path.parent / "炼体窍穴.json").open("r", encoding="utf-8") as stream:
+                loaded = json.load(stream)
+        except (OSError, json.JSONDecodeError):
+            loaded = {}
         pool = loaded.get("窍穴", []) if isinstance(loaded, dict) else []
-        return [dict(item) for item in pool if isinstance(item, dict) and item.get("name")]
+        return [
+            dict(item)
+            for item in pool
+            if isinstance(item, dict) and isinstance(item.get("name"), str) and item.get("name")
+        ]
 
 
 class TiantiProfileSqlReader:
@@ -94,18 +188,18 @@ class TiantiProfileSqlReader:
             if table is None or not set(fields).issubset(columns):
                 raise RuntimeError("tianti profile schema is not ready; run migrations first")
             row = uow.query_one("SELECT * FROM tianti_info WHERE user_id=?", (str(user_id),))
-        data = self.profile.clean(row or {})
+        decoded_row = dict(row or {})
         for field, default in (
             ("opened_qiaoxue", []),
             ("opened_qiaoxue_detail", []),
             ("qiaoxue_stage_opened", {}),
         ):
-            if isinstance(data.get(field), str):
+            if isinstance(decoded_row.get(field), str):
                 try:
-                    data[field] = json.loads(data[field])
+                    decoded_row[field] = json.loads(decoded_row[field])
                 except json.JSONDecodeError:
-                    data[field] = default
-        return data
+                    decoded_row[field] = default
+        return self.profile.clean(decoded_row)
 
 
 class TiantiProfile(Protocol):
