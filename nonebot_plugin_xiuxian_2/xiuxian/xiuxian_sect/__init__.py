@@ -81,14 +81,16 @@ from ...infrastructure.random_source import SystemRandom
 
 items = Items()
 _sql_message_instance = None
+sect_ids = UUIDGenerator()
+runtime_clock = SystemClock()
+runtime_random = SystemRandom()
 sect_application = SectApplication(
     get_paths().game_db,
     player_database=get_paths().player_db,
     repository=SectRenameSqlRepository(get_paths().game_db),
+    clock=runtime_clock,
+    random_source=runtime_random,
 )
-sect_ids = UUIDGenerator()
-runtime_clock = SystemClock()
-runtime_random = SystemRandom()
 
 
 def _spirit_vein_tianti_multiplier() -> float:
@@ -2082,7 +2084,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 f"资材\n> +{number_to(sect_stone * 10)}\n"
                 f"贡献度\n> +{int(sect_stone)}"
             )
-            userstask[user_id] = {}
+            userstask.pop(user_id, None)
             if settlement.status == "settled":
                 update_statistics_value(user_id, "宗门任务")
                 safe_record_game_event(
@@ -2165,7 +2167,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 f"资材\n> +{number_to(sect_stone * 10)}\n"
                 f"贡献度\n> +{int(sect_stone)}"
             )
-            userstask[user_id] = {}
+            userstask.pop(user_id, None)
             if settlement.status == "settled":
                 update_statistics_value(user_id, "宗门任务")
                 safe_record_game_event(
@@ -3026,7 +3028,7 @@ async def sect_buildings_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     fairyland_level = _get_sect_fairyland_level(sect_info)
     fairyland_conf = _get_sect_fairyland_config(fairyland_level)
     fairyland_name = "未建设" if fairyland_level <= 0 else f"{fairyland_level}级【{fairyland_conf['name']}】"
-    task = sect_task_state_manager.get_active_task(user_info["user_id"])
+    task = sect_application.get_active_task(user_info["user_id"])
     task_msg = "未接取，发送【宗门任务】获取" if not task else f"{task['任务名称']}：{task['任务内容'].get('desc', '')}"
     members = sect_application.list_sect_members(sect_id)
     max_members = get_sect_member_limit(sect_info["sect_scale"])

@@ -13,11 +13,18 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect import sect_member_utils
 class _TaskManager:
     def __init__(self, task):
         self.task = task
+        self.period = task["period"]
 
     def accept_task(self, user_id, sect_id, task_config):
         return dict(self.task)
 
     def get_active_task(self, user_id):
+        return dict(self.task) if self.task is not None else None
+
+    def current_task_period(self):
+        return self.period
+
+    def accept_task(self, user_id, sect_id, task_config):
         return dict(self.task)
 
 
@@ -34,7 +41,7 @@ class SectTaskCacheTests(unittest.TestCase):
         }
         self.cache = {}
         self.patches = (
-            patch.object(sect_member_utils, "sect_task_state_manager", _TaskManager(self.task)),
+            patch.object(sect_member_utils, "sect_application", _TaskManager(self.task)),
             patch.object(sect_member_utils, "userstask", self.cache),
             patch.object(
                 sect_member_utils,
@@ -58,6 +65,23 @@ class SectTaskCacheTests(unittest.TestCase):
     def test_database_restore_caches_period_required_by_settlement(self) -> None:
         self.assertTrue(sect_member_utils.isUserTask("user"))
         self.assertEqual(self.cache["user"]["period"], "2026-07-11")
+
+    def test_missing_task_drops_empty_cache_entry(self) -> None:
+        manager = _TaskManager(self.task)
+        manager.task = None
+        with patch.object(sect_member_utils, "sect_application", manager):
+            self.cache["user"] = {}
+            self.assertFalse(sect_member_utils.isUserTask("user"))
+        self.assertNotIn("user", self.cache)
+
+    def test_new_period_expires_other_users_cached_tasks(self) -> None:
+        manager = _TaskManager(self.task)
+        manager.period = "2026-07-12"
+        manager.task = None
+        with patch.object(sect_member_utils, "sect_application", manager):
+            self.cache["old-user"] = dict(self.task)
+            self.assertFalse(sect_member_utils.isUserTask("user"))
+        self.assertEqual({}, self.cache)
 
 
 if __name__ == "__main__":

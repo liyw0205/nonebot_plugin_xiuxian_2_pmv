@@ -105,6 +105,21 @@ def apply_sect_scheduled_materials(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_sect_task_state(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS sect_task_state("
+        "user_id TEXT NOT NULL,sect_id INTEGER NOT NULL,task_key TEXT NOT NULL,"
+        "task_data TEXT NOT NULL,period TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'accepted',"
+        "progress INTEGER NOT NULL DEFAULT 0,target INTEGER NOT NULL DEFAULT 1,"
+        "accepted_at TEXT NOT NULL,updated_at TEXT NOT NULL,completed_at TEXT,"
+        "PRIMARY KEY(user_id,period))"
+    )
+    uow.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sect_task_state_sect_period "
+        "ON sect_task_state(sect_id,period,status)"
+    )
+
+
 __all__ = [
     "apply_sect",
     "apply_sect_rename",
@@ -121,4 +136,5 @@ __all__ = [
     "apply_sect_manual_disband",
     "apply_sect_fairyland_upgrade",
     "apply_sect_scheduled_materials",
+    "apply_sect_task_state",
 ]

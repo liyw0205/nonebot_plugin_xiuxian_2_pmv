@@ -13,6 +13,7 @@ sql_message = None
 sect_application = None
 config = get_config()
 userstask = {}
+_userstask_period = None
 
 
 def _sql_message():
@@ -31,9 +32,11 @@ def bind_sect_member_dependencies(
 ):
     """绑定 __init__.py 中已有的共享对象，保持迁移前的运行状态。"""
     global userstask, sql_message, _sql_message_instance, items, config, sect_application
+    global _userstask_period
 
     if task_store is not None:
         userstask = task_store
+        _userstask_period = None
     if sql_manager is not None:
         sql_message = sql_manager
         _sql_message_instance = None if callable(sql_manager) else sql_manager
@@ -43,11 +46,24 @@ def bind_sect_member_dependencies(
         config = sect_config
     if sect_app is not None:
         sect_application = sect_app
+        sect_task_state_manager.bind_application(sect_app)
 
 
 def _md_cmd_link(text: str, cmd: str) -> str:
     """生成 QQ 原生 Markdown 快捷指令链接"""
     return f"[{text}](mqqapi://aio/inlinecmd?command={quote(cmd)}&enter=false&reply=false)"
+
+
+def _expire_task_cache_for_period() -> None:
+    global _userstask_period
+    period = (
+        sect_application.current_task_period()
+        if sect_application is not None
+        else sect_task_state_manager._period()
+    )
+    if _userstask_period != period:
+        userstask.clear()
+    _userstask_period = period
 
 
 def create_user_sect_task(user_id, sect_id=None, operation_id=None, replace_existing=False,
@@ -63,7 +79,12 @@ def create_user_sect_task(user_id, sect_id=None, operation_id=None, replace_exis
     if sect_id and membership_service is not None:
         key = random.choice(list(tasklist))
         claim = membership_service.claim_task(
-            operation_id, user_id, sect_id, sect_task_state_manager._period(),
+            operation_id, user_id, sect_id,
+            (
+                sect_application.current_task_period()
+                if sect_application is not None
+                else sect_task_state_manager._period()
+            ),
             key, tasklist[key], config["每日宗门任务次上限"], replace_existing,
         )
         if not claim.applied:
@@ -72,7 +93,11 @@ def create_user_sect_task(user_id, sect_id=None, operation_id=None, replace_exis
                 "sect_id": claim.sect_id, "period": claim.period, "status": "accepted",
                 "progress": 0, "target": 1}
     elif sect_id:
-        task = sect_task_state_manager.accept_task(user_id, sect_id, tasklist)
+        task = (
+            sect_application.accept_task(user_id, sect_id, tasklist)
+            if sect_application is not None
+            else sect_task_state_manager.accept_task(user_id, sect_id, tasklist)
+        )
     else:
         key = random.choices(list(tasklist))[0]
         task = {"任务名称": key, "任务内容": tasklist[key]}
@@ -82,13 +107,22 @@ def create_user_sect_task(user_id, sect_id=None, operation_id=None, replace_exis
 
 
 def refresh_user_sect_task(user_id, sect_id, operation_id, membership_service):
-    current = sect_task_state_manager.get_active_task(user_id)
+    current = (
+        sect_application.get_active_task(user_id)
+        if sect_application is not None
+        else sect_task_state_manager.get_active_task(user_id)
+    )
     if not current:
         return None
     tasklist = config["宗门任务"]
     key = random.choice(list(tasklist))
     refreshed = membership_service.refresh_task(
-        operation_id, user_id, sect_id, sect_task_state_manager._period(),
+        operation_id, user_id, sect_id,
+        (
+            sect_application.current_task_period()
+            if sect_application is not None
+            else sect_task_state_manager._period()
+        ),
         current["任务名称"], current["任务内容"], key, tasklist[key],
         config["每日宗门任务次上限"],
     )
@@ -102,14 +136,18 @@ def refresh_user_sect_task(user_id, sect_id, operation_id, membership_service):
 
 def isUserTask(user_id):
     """判断用户是否已有任务 True:有任务"""
-    task = sect_task_state_manager.get_active_task(user_id)
+    _expire_task_cache_for_period()
+    task = (
+        sect_application.get_active_task(user_id)
+        if sect_application is not None
+        else sect_task_state_manager.get_active_task(user_id)
+    )
     if task:
         userstask[user_id] = dict(task)
         return True
 
-    if user_id not in userstask:
-        userstask[user_id] = {}
-    return userstask[user_id] != {}
+    userstask.pop(user_id, None)
+    return False
 
 
 def get_sect_mainbuff_id_list(sect_id):

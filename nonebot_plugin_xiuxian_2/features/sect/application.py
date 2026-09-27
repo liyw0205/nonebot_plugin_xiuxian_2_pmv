@@ -8,6 +8,7 @@ from ...core.errors import ConflictError, DomainError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.clock import SystemClock
+from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.observability import trace_context
 from .repository import SectRenameSqlRepository, SectRepository
 from .daily_maintenance_repository import SectDailyMaintenanceSqlRepository
@@ -32,6 +33,7 @@ from .directory_repository import SectDirectorySqlRepository
 from .inactive_owner_repository import SectInactiveOwnerSqlRepository
 from .sect_info_repository import SectInfoSqlRepository
 from .member_repository import SectMemberSqlRepository
+from .task_state_repository import SectTaskStateSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -66,9 +68,11 @@ class SectApplication:
         repository: SectRepository | None = None,
         weekly_repository: SectWeeklyRewardRepository | None = None,
         weekly_progress_repository: SectWeeklyProgressSqlRepository | None = None,
+        task_state_repository: SectTaskStateSqlRepository | None = None,
         player_database: str | Path | None = None,
         ledger: OperationLedger | None = None,
         clock=None,
+        random_source=None,
     ) -> None:
         self.database = str(database)
         self.player_database = str(player_database) if player_database is not None else None
@@ -77,12 +81,16 @@ class SectApplication:
         self.weekly_progress_repository = weekly_progress_repository
         self.ledger = ledger or OperationLedger()
         self.clock = clock or SystemClock()
+        self.random = random_source or SystemRandom()
         self.activity_repository = SectActivitySqlRepository(self.database)
         self.directory_repository = SectDirectorySqlRepository(self.database)
         self.inactive_owner_repository = SectInactiveOwnerSqlRepository(self.database)
         self.sect_info_repository = SectInfoSqlRepository(self.database)
         self.member_repository = SectMemberSqlRepository(self.database)
         self.scheduled_material_repository = SectScheduledMaterialSqlRepository(self.database)
+        self.task_state_repository = task_state_repository or SectTaskStateSqlRepository(
+            self.database
+        )
 
     def list_sects_with_member_count(self) -> list[tuple[Any, ...]]:
         return self.directory_repository.list_with_member_count()
@@ -107,6 +115,47 @@ class SectApplication:
 
     def get_user_profile_by_name(self, user_name: str) -> dict[str, Any] | None:
         return self.member_repository.get_user_profile_by_name(user_name)
+
+    def _task_now(self):
+        value = self.clock.now()
+        return value.astimezone() if value.tzinfo is not None else value
+
+    def current_task_period(self) -> str:
+        return self._task_now().strftime("%Y-%m-%d")
+
+    def get_active_task(self, user_id: str | int) -> dict[str, Any] | None:
+        return self.task_state_repository.get_active_task(
+            user_id, self.current_task_period()
+        )
+
+    def accept_task(
+        self,
+        user_id: str | int,
+        sect_id: str | int,
+        task_config: Mapping[str, Mapping[str, Any]],
+    ) -> dict[str, Any]:
+        task_key = self.random.choice(list(task_config))
+        task_data = dict(task_config[task_key])
+        now = self._task_now()
+        return self.task_state_repository.accept_task(
+            user_id,
+            sect_id,
+            task_key,
+            task_data,
+            now.strftime("%Y-%m-%d"),
+            now.strftime("%Y-%m-%d %H:%M:%S"),
+        )
+
+    def complete_task(self, user_id: str | int) -> None:
+        now = self._task_now()
+        self.task_state_repository.complete_task(
+            user_id,
+            now.strftime("%Y-%m-%d"),
+            now.strftime("%Y-%m-%d %H:%M:%S"),
+        )
+
+    def clear_task(self, user_id: str | int) -> None:
+        self.task_state_repository.clear_task(user_id, self.current_task_period())
 
     def _weekly_progress_repository(self) -> SectWeeklyProgressSqlRepository:
         if self.weekly_progress_repository is None:
