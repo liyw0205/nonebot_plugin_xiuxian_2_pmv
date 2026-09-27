@@ -51,6 +51,7 @@ from .features.pet.migrations import apply_pet, apply_pet_hatch, apply_pet_skill
 from .features.sect.manifest import FEATURE as SECT_FEATURE
 from .features.sect.migrations import apply_sect, apply_sect_rename, apply_sect_join, apply_sect_removal, apply_sect_position, apply_sect_donation, apply_sect_shop, apply_sect_mainbuff, apply_sect_secbuff, apply_sect_elixir, apply_sect_weekly, apply_sect_weekly_player, apply_sect_manual_disband
 from .features.sect.migrations import apply_sect_fairyland_upgrade
+from .features.sect.migrations import apply_sect_scheduled_materials
 from .features.natal_treasure.manifest import FEATURE as NATAL_TREASURE_FEATURE
 from .features.natal_treasure.migrations import apply_natal_treasure
 from .features.buff.manifest import FEATURE as BUFF_FEATURE
@@ -289,6 +290,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("sect.012", "sect_weekly_reward_player_schema", apply_sect_weekly_player),
         Migration("sect.013", "sect_manual_disband_operations", apply_sect_manual_disband),
         Migration("sect.014", "sect_fairyland_upgrade_operations", apply_sect_fairyland_upgrade),
+        Migration("sect.015", "sect_scheduled_material_grants", apply_sect_scheduled_materials),
         Migration("sect_fairyland.001", "sect_fairyland_feature_migrations", apply_sect_fairyland),
         Migration("sect_fairyland.002", "sect_fairyland_claim_player_schema", apply_sect_fairyland_player),
         Migration("sign_in.001", "sign_in_operations", apply_sign_in),

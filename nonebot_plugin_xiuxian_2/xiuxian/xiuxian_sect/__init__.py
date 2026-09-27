@@ -339,7 +339,7 @@ __sect_manage_help__ = """
 )
 async def materialsupdate_():
     grant_key = f"sect-materials:{runtime_clock.now().date().isoformat()}"
-    all_sects = _sql_message().get_all_sects_id_scale()
+    all_sects = sect_application.list_scheduled_material_targets()
     granted = 0
     for s in all_sects:
         result = sect_application.grant_scheduled_materials(

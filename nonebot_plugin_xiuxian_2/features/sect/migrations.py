@@ -96,6 +96,15 @@ def apply_sect_fairyland_upgrade(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_sect_scheduled_materials(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS sect_scheduled_material_grants("
+        "grant_key TEXT NOT NULL,sect_id INTEGER NOT NULL,materials INTEGER NOT NULL,"
+        "combat_power INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        "PRIMARY KEY(grant_key,sect_id))"
+    )
+
+
 __all__ = [
     "apply_sect",
     "apply_sect_rename",
@@ -111,4 +120,5 @@ __all__ = [
     "apply_sect_weekly_player",
     "apply_sect_manual_disband",
     "apply_sect_fairyland_upgrade",
+    "apply_sect_scheduled_materials",
 ]

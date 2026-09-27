@@ -44,7 +44,7 @@ class SectMutationResult(dict):
 
     @property
     def applied(self) -> bool:
-        return self.status in {"closed", "inherited", "disbanded", "duplicate", "upgraded"}
+        return self.status in {"closed", "inherited", "disbanded", "duplicate", "upgraded", "granted"}
 
     def __getattr__(self, name: str) -> Any:
         try:
@@ -62,6 +62,7 @@ class SectApplication:
         self.ledger = ledger or OperationLedger()
         self.clock = clock or SystemClock()
         self.activity_repository = SectActivitySqlRepository(self.database)
+        self.scheduled_material_repository = SectScheduledMaterialSqlRepository(self.database)
 
     def update_last_check_info_time(self, user_id: str) -> int:
         occurred_at = self.clock.now()
@@ -123,7 +124,10 @@ class SectApplication:
         return SectMutationResult(SectOwnerTransferSqlRepository(self.database).transfer(operation_id, actor_id, target_id, owner_position=owner_position, former_owner_position=former_owner_position))
 
     def grant_scheduled_materials(self, operation_id: str, sect_id: int, multiplier: int):
-        return SectMutationResult(SectScheduledMaterialSqlRepository(self.database).grant(operation_id, sect_id, multiplier))
+        return SectMutationResult(self.scheduled_material_repository.grant(operation_id, sect_id, multiplier))
+
+    def list_scheduled_material_targets(self) -> list[tuple[Any, ...]]:
+        return self.scheduled_material_repository.list_targets()
 
     def upgrade_fairyland(self, operation_id: str, actor_id: str, sect_id: int, expected_level: int, next_level: int, stone_cost: int, materials_cost: int, *, owner_position: int = 0):
         return SectMutationResult(SectFairylandSqlRepository(self.database).upgrade(operation_id, actor_id, sect_id, expected_level, next_level, stone_cost, materials_cost, owner_position=owner_position))
