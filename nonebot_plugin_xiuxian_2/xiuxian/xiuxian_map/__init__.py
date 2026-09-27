@@ -37,6 +37,7 @@ from ...features.combat_settlement.application import CombatSettlementApplicatio
 from ...features.map.application import MapApplication
 from ...features.map.domain import decide_interactive_action, decide_interactive_reward
 from ...features.map.rewards import MapRewardResolver
+from ...features.map.static_data import MapStaticDataProvider
 from ...compatibility.legacy_map_battle import build_legacy_map_battle_runner
 from ...features._legacy_application import result_data
 from ...infrastructure.clock import SystemClock
@@ -61,7 +62,6 @@ dao_battle_application = CombatSettlementApplication(
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
-map_document_reader = JsonDocumentReader()
 
 
 class _LazyMapItemCatalog:
@@ -106,6 +106,10 @@ def _finish_interactive_failure(operation_id, user_id, action_id, outcome, coold
     )
 
 MAP_FILE = get_paths().data / "地图.json"
+map_data_provider = MapStaticDataProvider(
+    reader=JsonDocumentReader(),
+    path=MAP_FILE,
+)
 MAP_TABLE = "map_status"
 MAP_MISSION_TABLE = "map_mission"
 DONGFU_TABLE = "dongfu_status"
@@ -583,7 +587,7 @@ def _get_mission_desc(mission_data: dict):
 # =========================================
 def _load_map_data():
     try:
-        return map_document_reader.read_object(MAP_FILE)
+        return map_data_provider.load()
     except FileNotFoundError as exc:
         raise FileNotFoundError(f"未找到地图文件：{MAP_FILE}") from exc
 

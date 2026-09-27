@@ -117,6 +117,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     map_facade = (PACKAGE / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
     map_application = (PACKAGE / "features" / "map" / "application.py").read_text(encoding="utf-8")
     map_reward_resolver = (PACKAGE / "features" / "map" / "rewards.py").read_text(encoding="utf-8")
+    map_static_data = (PACKAGE / "features" / "map" / "static_data.py").read_text(encoding="utf-8")
     map_battle_adapter = (PACKAGE / "compatibility" / "legacy_map_battle.py").read_text(encoding="utf-8")
     player_fight = (PACKAGE / "xiuxian" / "xiuxian_utils" / "player_fight.py").read_text(encoding="utf-8")
     map_combat_handler = map_facade[
@@ -520,6 +521,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "self._catalog = Items()" in map_facade
                 and "items = Items()" not in map_facade
                 and "item_catalog=map_item_catalog" in map_facade
+            ),
+            "static_json_provider_owned": (
+                "map_data_provider = MapStaticDataProvider(" in map_facade
+                and "map_data_provider.load()" in map_facade
+                and "class MapStaticDataProvider:" in map_static_data
+                and "self.reader.read_object(self.path)" in map_static_data
             ),
             "legacy_interactive_disabled": "map_interactive_action_service.save_settlement(" not in map_facade and "map_interactive_action_service.start(" not in map_facade,
             "legacy_resource_disabled": "map_resource_reward_service.settle(" not in map_facade,

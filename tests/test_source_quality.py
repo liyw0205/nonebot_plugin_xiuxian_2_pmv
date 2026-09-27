@@ -3628,10 +3628,14 @@ class SourceQualityTests(unittest.TestCase):
 
     def test_map_json_io_uses_infrastructure_adapter(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
+        provider = (SOURCE_ROOT / "features" / "map" / "static_data.py").read_text(encoding="utf-8")
         start = source.index("def _load_map_data")
         end = source.index("def _all_realms", start)
         loader = source[start:end]
-        self.assertIn("map_document_reader.read_object(MAP_FILE)", loader)
+        self.assertIn("map_data_provider.load()", loader)
+        self.assertIn("map_data_provider = MapStaticDataProvider(", source)
+        self.assertIn("path=MAP_FILE", source)
+        self.assertIn("self.reader.read_object(self.path)", provider)
         self.assertNotIn("open(", loader)
         self.assertNotIn("json.load(", loader)
 
