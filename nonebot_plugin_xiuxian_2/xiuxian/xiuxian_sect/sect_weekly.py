@@ -6,7 +6,6 @@ from typing import Any
 
 from ..xiuxian_utils.json_store import safe_json_loads
 from ..xiuxian_utils.periods import get_weekly_key
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 
 
 @dataclass(frozen=True)
@@ -89,13 +88,6 @@ class SectWeeklyGoalManager:
 
     def __init__(self):
         self.sql_message = None
-        self._sql_message_instance = None
-
-    def _sql_message(self):
-        if self._sql_message_instance is None:
-            self._sql_message_instance = XiuxianDateManage()
-            self.sql_message = self._sql_message_instance
-        return self._sql_message_instance
 
     @staticmethod
     def current_week_key() -> str:

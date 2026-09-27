@@ -558,6 +558,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 for token in ("CREATE TABLE", "ALTER TABLE")
             ) and "_assert_schema_ready" in sect_weekly_progress_repository,
             "sect_weekly_progress_manager_no_legacy_writes": "self._sql_message().lock" not in sect_weekly_manager and "self._sql_message().conn" not in sect_weekly_manager,
+            "sect_weekly_progress_manager_no_legacy_manager": "XiuxianDateManage" not in sect_weekly_manager and "def _sql_message(" not in sect_weekly_manager,
             "fairyland_upgrade_application_owned": "sect_application.upgrade_fairyland(" in sect_facade,
             "fairyland_upgrade_repository_owned": "class SectFairylandSqlRepository" in sect_fairyland_upgrade_repository and "SectFairylandSqlRepository" in sect_application,
             "fairyland_upgrade_request_path_has_no_ddl": all(token not in sect_fairyland_upgrade_repository for token in ("CREATE TABLE", "ALTER TABLE")) and "schema_missing" in sect_fairyland_upgrade_repository,

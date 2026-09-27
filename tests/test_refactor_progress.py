@@ -134,6 +134,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(sect["sect_user_name_profile_repository_owned"])
         self.assertTrue(sect["sect_user_name_profile_facade_owned"])
         self.assertTrue(sect["sect_weekly_progress_profile_application_owned"])
+        self.assertTrue(sect["sect_weekly_progress_manager_no_legacy_manager"])
         self.assertTrue(sect["activity_timestamp_application_owned"])
         self.assertTrue(sect["activity_timestamp_repository_owned"])
         self.assertTrue(sect["activity_timestamp_clock_injected"])
