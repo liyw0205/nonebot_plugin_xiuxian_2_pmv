@@ -121,6 +121,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(sect["elixir_claim_application_owned"])
         self.assertTrue(sect["elixir_claim_service_isolated"])
         self.assertTrue(sect["elixir_claim_rollback_import_isolated"])
+        self.assertTrue(sect["member_join_service_isolated"])
+        self.assertTrue(sect["member_join_rollback_import_isolated"])
         self.assertTrue(sect["sect_default_repository_has_no_legacy_fallback"])
         self.assertTrue(sect["sect_task_claim_application_owned"])
         self.assertTrue(sect["sect_task_claim_repository_owned"])

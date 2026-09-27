@@ -3085,6 +3085,7 @@
     "training_feature_migrations",
     "training_purchase_operations",
     "training_state_operations",
+    "transaction",
     "tribulation_breakthrough_operations",
     "tribulation_state_migration_operations",
     "tv",

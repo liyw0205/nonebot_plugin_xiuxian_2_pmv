@@ -9,10 +9,16 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.transaction_service import (
     SectMemberJoinService,
 )
+from nonebot_plugin_xiuxian_2.compatibility.legacy_sect_member_join import (
+    SectMemberJoinService as CompatibilitySectMemberJoinService,
+)
 from tests.test_db_backend import db_backend
 
 
 class SectMemberJoinServiceTests(unittest.TestCase):
+    def test_transaction_service_import_remains_a_compatibility_shim(self) -> None:
+        self.assertIs(SectMemberJoinService, CompatibilitySectMemberJoinService)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "sect.sqlite3"

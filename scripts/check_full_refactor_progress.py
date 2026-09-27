@@ -158,6 +158,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sect_fairyland_legacy_service = (PACKAGE / "compatibility" / "legacy_sect_fairyland_claim.py").read_text(encoding="utf-8")
     sect_fairyland_legacy_shim = (PACKAGE / "xiuxian" / "xiuxian_sect" / "fairyland_claim_service.py").read_text(encoding="utf-8")
     sect_elixir_legacy_service = (PACKAGE / "compatibility" / "legacy_sect_elixir_claim.py").read_text(encoding="utf-8")
+    sect_member_join_legacy_service = (PACKAGE / "compatibility" / "legacy_sect_member_join.py").read_text(encoding="utf-8")
     sect_fairyland_migrations = (PACKAGE / "features" / "sect_fairyland" / "migrations.py").read_text(encoding="utf-8")
     sect_application = (PACKAGE / "features" / "sect" / "application.py").read_text(encoding="utf-8")
     sect_feature_repository = (PACKAGE / "features" / "sect" / "repository.py").read_text(encoding="utf-8")
@@ -697,6 +698,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "elixir_claim_application_owned": "sect_application.claim_elixir(" in sect_elixir_claim_handler and "sect_elixir_claim_service.claim(" not in sect_elixir_claim_handler,
             "elixir_claim_service_isolated": "class SectElixirClaimService" not in sect_transaction_service and "from ...compatibility.legacy_sect_elixir_claim import" in sect_transaction_service and "class SectElixirClaimService" in sect_elixir_legacy_service,
             "elixir_claim_rollback_import_isolated": "from ...compatibility.legacy_sect_elixir_claim import SectElixirClaimService" in sect_feature_repository and "SectElixirClaimService" in sect_feature_repository,
+            "member_join_service_isolated": "class SectMemberJoinService" not in sect_transaction_service and "from ...compatibility.legacy_sect_member_join import" in sect_transaction_service and "class SectMemberJoinService" in sect_member_join_legacy_service,
+            "member_join_rollback_import_isolated": "from ...compatibility.legacy_sect_member_join import SectMemberJoinService" in sect_feature_repository,
             "status": "weekly_progress_and_claim_application_owned; fairyland_claim_application_owned; disconnected_facade_legacy_getters_removed",
         },
         "natal_treasure": {
