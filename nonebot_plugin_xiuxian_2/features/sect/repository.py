@@ -28,9 +28,8 @@ class LegacySectRepository:
         from ...compatibility.legacy_sect_elixir_claim import SectElixirClaimService
         from ...compatibility.legacy_sect_member_join import SectMemberJoinService
         from ...compatibility.legacy_sect_shop_purchase import SectShopPurchaseService
-        from ...xiuxian.xiuxian_sect.transaction_service import (
-            SectMainBuffLearnService, SectSecBuffLearnService,
-        )
+        from ...compatibility.legacy_sect_main_buff_learn import SectMainBuffLearnService
+        from ...xiuxian.xiuxian_sect.transaction_service import SectSecBuffLearnService
         return {"join": SectMemberJoinService, "purchase": SectShopPurchaseService, "learn_main": SectMainBuffLearnService, "learn_secondary": SectSecBuffLearnService, "claim_elixir": SectElixirClaimService}[name](self.database)
 
     def join(self, *args: Any, **kwargs: Any) -> Any:
