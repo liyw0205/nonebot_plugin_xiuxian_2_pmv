@@ -4665,3 +4665,5 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-09-28 sect secondary-buff learn compatibility isolation：默认神通学习入口使用 `SectApplication.learn_secondary`；旧 `SectSecBuffLearnService` 仅通过 `LegacySectRepository` 显式回滚映射构造。将旧实现移至 `compatibility/legacy_sect_secondary_buff_learn.py`，保留 `transaction_service` import shim；成员/职位和目录快照校验、宗门资材与 BuffInfo 原子更新、重复请求及失败回滚保持不变。更新 source/progress ownership 与隔离门禁；无 migration。接下来审计 Sect rollback mapping 是否已有剩余真实调用，再转 arena/dungeon slice。
 
 2026-09-28 sect owner-inherit compatibility isolation：调用图和既有门禁确认手动/自动继任均走 `SectApplication.inherit_owner`，旧 `SectOwnerInheritService` 没有 runtime 构造点。将历史事务实现移至 `compatibility/legacy_sect_owner_inherit.py`，保留 `transaction_service` import shim 和直接事务回归覆盖；继任候选优先级、active-member 筛选、CAS/幂等和双表 rollback 语义不变。无 migration；继续审计宗门剩余旧服务与默认调用图。
+
+2026-09-28 sect close-mountain compatibility isolation：自动维护与手动确认入口均由 `SectApplication.close_mountain` 处理，旧 `SectCloseMountainService` 没有 runtime 构造点。将事务实现移至 `compatibility/legacy_sect_close_mountain.py`，保留历史 transaction import shim 和旧行为测试；宗主校验、close/join 状态更新、operation replay、异常回滚不变。无 migration；继续清点宗门剩余独立 compatibility services。
