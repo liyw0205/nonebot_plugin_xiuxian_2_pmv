@@ -85,6 +85,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     training_repository = (PACKAGE / "features" / "training" / "repository.py").read_text(encoding="utf-8")
     training_event_repository = (PACKAGE / "features" / "training" / "event_repository.py").read_text(encoding="utf-8")
     training_purchase_repository = (PACKAGE / "features" / "training" / "purchase_repository.py").read_text(encoding="utf-8")
+    training_reset_repository = (PACKAGE / "features" / "training" / "reset_repository.py").read_text(encoding="utf-8")
     training_migrations = (PACKAGE / "features" / "training" / "migrations.py").read_text(encoding="utf-8")
     work_facade = (PACKAGE / "xiuxian" / "xiuxian_work" / "__init__.py").read_text(encoding="utf-8")
     work_accelerate_handler = work_facade[
@@ -361,8 +362,17 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 'Migration("training.003", "training_purchase_operations", apply_training_purchase_operations)' in plugin
                 and "def apply_training_purchase_operations(" in training_migrations
             ),
+            "reset_application_owned": "TrainingResetSqlRepository" in training_repository and "reset_limits" in training_application,
+            "reset_default_entry_owned": "training_application.reset_limits(" in training_facade,
+            "reset_repository_atomic": "AttachedDatabaseUnitOfWork" in training_reset_repository and "player_data" in training_reset_repository,
+            "reset_request_path_has_no_ddl": "CREATE TABLE" not in training_reset_repository and "ALTER TABLE" not in training_reset_repository,
+            "reset_clock_injected": "clock=self.clock" in training_repository and "self.clock.now()" in training_reset_repository,
+            "reset_migrations_registered": (
+                'Migration("training.004", "training_reset_operations", apply_training_reset_operations)' in plugin
+                and "def apply_training_reset_operations(" in training_migrations
+            ),
             "purchase_reset_compatibility_retained": "training_purchase_service" in training_repository and "training_reset_service" in training_repository,
-            "status": "event_and_purchase_cutover_with_reset_compatibility",
+            "status": "event_purchase_and_reset_cutover_with_legacy_fallback",
         },
         "work": {
             "daily_refresh_application_owned": "work_daily_refresh_application.reset(" in work_facade,

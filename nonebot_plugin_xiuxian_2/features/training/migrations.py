@@ -87,10 +87,60 @@ def apply_training_purchase_operations(uow: DatabaseUnitOfWork) -> None:
             )
 
 
+def apply_training_reset_operations(uow: DatabaseUnitOfWork) -> None:
+    """Prepare the game-owned resumable administrator reset tables."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_training_reset_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,reset_date TEXT NOT NULL,"
+        "total INTEGER NOT NULL,completed INTEGER NOT NULL DEFAULT 0,"
+        "changed INTEGER NOT NULL DEFAULT 0,skipped INTEGER NOT NULL DEFAULT 0,"
+        "status TEXT NOT NULL DEFAULT 'running',created_at TEXT NOT NULL,updated_at TEXT NOT NULL)"
+    )
+    operation_columns = {
+        str(row["name"])
+        for row in uow.query_all("PRAGMA table_info(admin_training_reset_operations)")
+    }
+    for name, definition in {
+        "payload": "TEXT NOT NULL DEFAULT ''",
+        "reset_date": "TEXT NOT NULL DEFAULT ''",
+        "total": "INTEGER NOT NULL DEFAULT 0",
+        "completed": "INTEGER NOT NULL DEFAULT 0",
+        "changed": "INTEGER NOT NULL DEFAULT 0",
+        "skipped": "INTEGER NOT NULL DEFAULT 0",
+        "status": "TEXT NOT NULL DEFAULT 'running'",
+        "created_at": "TEXT NOT NULL DEFAULT ''",
+        "updated_at": "TEXT NOT NULL DEFAULT ''",
+    }.items():
+        if name not in operation_columns:
+            uow.execute(
+                f'ALTER TABLE admin_training_reset_operations ADD COLUMN "{name}" {definition}'
+            )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS admin_training_reset_targets("
+        "operation_id TEXT NOT NULL,user_id TEXT NOT NULL,"
+        "status TEXT NOT NULL DEFAULT 'pending',previous_state TEXT,updated_at TEXT NOT NULL,"
+        "PRIMARY KEY(operation_id,user_id))"
+    )
+    target_columns = {
+        str(row["name"])
+        for row in uow.query_all("PRAGMA table_info(admin_training_reset_targets)")
+    }
+    for name, definition in {
+        "status": "TEXT NOT NULL DEFAULT 'pending'",
+        "previous_state": "TEXT",
+        "updated_at": "TEXT NOT NULL DEFAULT ''",
+    }.items():
+        if name not in target_columns:
+            uow.execute(
+                f'ALTER TABLE admin_training_reset_targets ADD COLUMN "{name}" {definition}'
+            )
+
+
 __all__ = [
     "apply_training",
     "apply_training_event_operations",
     "apply_training_event_player",
     "apply_training_purchase_operations",
+    "apply_training_reset_operations",
     "apply_training_state",
 ]

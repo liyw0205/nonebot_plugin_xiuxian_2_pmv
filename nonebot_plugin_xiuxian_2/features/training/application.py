@@ -31,5 +31,19 @@ class TrainingApplication(MigratedFeatureApplication):
         with DatabaseUnitOfWork(self.database) as uow:
             self.ledger.ensure_schema(uow)
 
+    def reset_limits(self, *, operation_id: str, operator_id: str, chunk_size: int = 500, **kwargs: Any):
+        """Process one administrator reset chunk.
+
+        Reset owns a resumable operation row and is intentionally outside the
+        regular per-request operation ledger: the admin worker calls the same
+        operation id once per chunk until the target table is complete.
+        """
+        return self.repository.reset_limits(
+            operation_id=operation_id,
+            operator_id=operator_id,
+            chunk_size=chunk_size,
+            **kwargs,
+        )
+
 
 __all__ = ["TrainingApplication"]

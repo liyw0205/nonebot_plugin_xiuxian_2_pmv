@@ -546,10 +546,8 @@ def make_choice(user_id, operation_id):
     return training_info["last_event"]
 
 def training_reset_limits(operation_id, operator_id, *, chunk_size=500):
-    return _run_training_action(
-        "reset",
-        operation_id,
-        operator_id,
+    return training_application.reset_limits(
+        operation_id=operation_id,
         operator_id=operator_id,
         chunk_size=chunk_size,
     )

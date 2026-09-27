@@ -173,5 +173,5 @@ def test_application_routes_event_apply_to_feature_repository(tmp_path: Path) ->
 
 def test_training_migrations_are_routed_to_their_own_databases() -> None:
     migrations = build_migrations()
-    assert [item.version for item in migrations_for_database(migrations, "game_db") if item.version.startswith("training.")] == ["training.001", "training.003"]
+    assert [item.version for item in migrations_for_database(migrations, "game_db") if item.version.startswith("training.")] == ["training.001", "training.003", "training.004"]
     assert [item.version for item in migrations_for_database(migrations, "player_db") if item.version.startswith("training.")] == ["training.002"]

@@ -186,7 +186,7 @@ def test_application_default_purchase_uses_feature_repository(tmp_path: Path) ->
 def test_training_purchase_migration_is_game_only() -> None:
     migrations = build_migrations()
     assert [item.version for item in migrations_for_database(migrations, "game_db") if item.version.startswith("training.")] == [
-        "training.001", "training.003"
+        "training.001", "training.003", "training.004"
     ]
     assert [item.version for item in migrations_for_database(migrations, "player_db") if item.version.startswith("training.")] == [
         "training.002"
