@@ -66,6 +66,12 @@ def test_sect_weekly_goal_manager_does_not_create_schema_during_requests():
     assert "ALTER TABLE" not in source
 
 
+def test_sect_weekly_progress_profile_read_uses_application():
+    source = Path("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_sect/sect_weekly.py").read_text(encoding="utf-8")
+    assert "_sect_application().get_user_profile(str(user_id))" in source
+    assert "self._sql_message().get_user_info_with_id(" not in source
+
+
 class SectWeeklyRewardClaimTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

@@ -15,6 +15,8 @@ class SectMemberUtilsLazyReaderTests(unittest.TestCase):
         self.assertIn("sql_message = sql_manager", source)
         self.assertIn("if sect_app is not None:", source)
         self.assertIn("sect_application = sect_app", source)
+        self.assertIn("sect_application.get_user_profile(user_id)", source)
+        self.assertIn("_sql_message().get_user_info_with_id(user_id)", source)
 
 
 if __name__ == "__main__":

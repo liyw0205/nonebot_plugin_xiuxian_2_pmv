@@ -84,6 +84,9 @@ class SectApplication:
     def list_sect_members(self, sect_id: int | str) -> list[dict[str, Any]]:
         return self.member_repository.list_by_sect_id(sect_id)
 
+    def get_user_profile(self, user_id: int | str) -> dict[str, Any] | None:
+        return self.member_repository.get_user_profile(user_id)
+
     def get_inactive_owner_user_profile(self, owner_id: str) -> dict[str, Any] | None:
         return self.inactive_owner_repository.get_owner_profile(owner_id)
 

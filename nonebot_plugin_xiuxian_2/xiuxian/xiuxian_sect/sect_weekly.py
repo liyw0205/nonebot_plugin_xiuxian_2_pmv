@@ -79,6 +79,12 @@ def _json_loads(text: str | None, default: Any):
     return safe_json_loads(text, default, type(default))
 
 
+def _sect_application():
+    from . import sect_application
+
+    return sect_application
+
+
 class SectWeeklyGoalManager:
     table_name = "sect_weekly_goal"
 
@@ -207,7 +213,7 @@ class SectWeeklyGoalManager:
         meta = meta or {}
         sect_id = meta.get("sect_id")
         if not sect_id:
-            user_info = self._sql_message().get_user_info_with_id(str(user_id)) or {}
+            user_info = _sect_application().get_user_profile(str(user_id)) or {}
             sect_id = user_info.get("sect_id")
         if not sect_id:
             return []

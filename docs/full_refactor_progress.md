@@ -2846,9 +2846,9 @@
   `game_db` 应用完整目录。因此此前没有独立五库回执的隔离 smoke 只能作为单库
   恢复演练，不能用于跨库切片或 P7 的最终证据；后续统一以五库 receipt 为准。
 - 宗门默认只读路径已迁移宗门目录、25 处宗门详情、闲置宗主 scheduler 状态/成员/宗主资料、
-  facade 常用成员列表及周常状态展示详情到 `SectApplication` 和只读 SQL repositories。仍有
-  多个入口及 `sect_weekly.py` 任务 helper 的用户资料 manager 读取，应逐一按调用场景迁移；
-  兼容 helper 的未绑定 fallback 不算默认入口完成。
+  facade 常用成员列表、按 user_id 的用户资料及周常状态展示详情到 `SectApplication` 和只读
+  SQL repositories。未绑定的 `sect_member_utils` 仍保留显式 manager fallback；后续应审计
+  按用户名/宗门名读取及周常进度 helper 的剩余 manager I/O。
 - 签到默认资产、lottery、statistics 和 task 路径已由 feature-owned application 承载；
   本轮补齐 `sign_in.effects` outbox。副作用事件与签到资产事务同库提交，统计/任务投影
   失败后由请求重放或 `reconcile` 续跑，投影仍按 operation ID 幂等。`LegacySignInEffects`
@@ -4606,3 +4606,5 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-09-27 sect member list read ownership：默认 facade 的成员列表、人数上限、宗门成员展示及闲置宗主 scheduler 快照统一经 `SectApplication -> SectMemberSqlRepository` 只读查询；保留 `SELECT *` 行结构、无显式排序的旧结果顺序、空列表语义和 `core.numeric.normalize_user_row`。`sect_member_utils` 由 facade 注入 Sect application，默认详情/成员数读取不再经 `XiuxianDateManage`；未绑定时保留独立兼容 fallback。无 migration/DDL。宗门 repositories、Sect 入口与进度契约、core numeric、source-quality、architecture、inventory/progress 聚焦回归 `509 passed`；compileall、inventory、progress、隔离数据目录下的 architecture CLI 和 diff check 通过。pytest/pyc 专用目录已清理；未访问运行数据库，用户 `boss_info.json` 修改保留。下一片审计 `sect_weekly_commands.py` 宗门详情及其余用户资料 manager reads；全局 legacy transaction services 与 `xiuxian2_handle` blockers、真实发布迁移/P7 仍未完成。
 
 2026-09-27 sect weekly status detail query ownership：`宗门周常` 默认展示 handler 的宗门名称读取改经 `_sect_weekly_application().get_sect_info`，不再通过 `XiuxianDateManage`；manager lazy getter 与 lock 仅留在显式 legacy claim fallback，不移除兼容边界。无 migration/DDL。周常领取/展示、progress contract、Sect member/info contract 与 source-quality 回归 `243 passed`；inventory、progress、隔离数据目录下的 architecture CLI、compileall 和 diff check 通过。pytest/pyc/architecture 专用临时目录已清理，未访问运行数据库。接下来盘点多个 Sect handler 与 `sect_weekly.py` 中的 user-profile reads；全局 legacy transaction services 与 `xiuxian2_handle` blockers、真实发布迁移/P7 仍未完成。
+
+2026-09-27 sect user profile read ownership：新增 `SectMemberSqlRepository.get_user_profile` 与 `SectApplication.get_user_profile`，按 user_id 只读取完整用户行，保留重复 id 时最小 rowid、缺失返回 `None` 和 `normalize_user_row`；Sect facade 的六处资料读取、`sect_member_utils` 默认 task helper 与周常进度缺省 sect_id 查找均改走 application。未绑定 helper fallback 保留；周常 manager 对目标表的写入/锁定仍是遗留边界。无 migration/DDL。member repository、Sect 创建/商店/任务、weekly、progress/source-quality 回归 `267 passed`；inventory/progress、隔离数据目录下 architecture CLI、compileall、diff check 通过。pytest/pyc/architecture 专用临时目录已清理，未访问运行数据库。接下来审计 Sect 按用户名/宗门名读取及周常进度 helper 的剩余 manager I/O；全局 legacy transaction services、`xiuxian2_handle` 与真实发布迁移/P7 blockers 仍未完成。

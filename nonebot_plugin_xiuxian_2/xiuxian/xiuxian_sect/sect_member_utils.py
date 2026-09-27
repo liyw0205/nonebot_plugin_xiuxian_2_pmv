@@ -54,7 +54,11 @@ def create_user_sect_task(user_id, sect_id=None, operation_id=None, replace_exis
                           membership_service=None):
     tasklist = config["宗门任务"]
     if sect_id is None:
-        user_info = _sql_message().get_user_info_with_id(user_id) or {}
+        user_info = (
+            sect_application.get_user_profile(user_id)
+            if sect_application is not None
+            else _sql_message().get_user_info_with_id(user_id)
+        ) or {}
         sect_id = user_info.get("sect_id")
     if sect_id and membership_service is not None:
         key = random.choice(list(tasklist))

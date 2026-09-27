@@ -2378,7 +2378,7 @@ async def create_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             await create_sect.finish()
 
         # 获取用户信息
-        user_info = _sql_message().get_user_info_with_id(user_id)
+        user_info = sect_application.get_user_profile(user_id)
 
         msg = (
             f"恭喜{user_info['user_name']}道友创建宗门——{sect_name}，"
@@ -2421,7 +2421,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_S
     stone_cost = state["stone_cost"]
     refresh_count = state["refresh_count"]
     
-    user_info = _sql_message().get_user_info_with_id(user_id)
+    user_info = sect_application.get_user_profile(user_id)
     
     # 0 - 取消创建
     if user_choice == "0":
@@ -2495,7 +2495,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_S
         await create_sect.finish()
     
     # 获取用户信息
-    user_info = _sql_message().get_user_info_with_id(user_id)
+    user_info = sect_application.get_user_profile(user_id)
     
     msg = (
         f"恭喜{user_info['user_name']}道友创建宗门——{sect_name}，"
@@ -2963,7 +2963,7 @@ async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 宗门编号
 > {sect_id}
 宗主
-> {_sql_message().get_user_info_with_id(sect_info['sect_owner'])['user_name'] if sect_info['sect_owner'] else "暂无"}
+> {sect_application.get_user_profile(sect_info['sect_owner'])['user_name'] if sect_info['sect_owner'] else "暂无"}
 道友职位
 > {jsondata.sect_config_data()[f"{sect_position}"]["title"]}
 宗门状态
@@ -3348,7 +3348,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await sect_shop.finish()
     
     user_id = user_info['user_id']
-    sect_id = _sql_message().get_user_info_with_id(user_id)['sect_id']
+    sect_id = sect_application.get_user_profile(user_id)['sect_id']
     if not sect_id:
         msg = f"道友尚未加入宗门！"
         await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
@@ -3426,7 +3426,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     shop_id = shop_info[0][0]
     quantity = int(shop_info[0][1]) if shop_info[0][1] else 1
 
-    sect_info = sect_application.get_sect_info(_sql_message().get_user_info_with_id(user_id)['sect_id'])
+    sect_info = sect_application.get_sect_info(sect_application.get_user_profile(user_id)['sect_id'])
     if not sect_info:
         msg = "宗门信息不存在！"
         await handle_send(bot, event, msg)

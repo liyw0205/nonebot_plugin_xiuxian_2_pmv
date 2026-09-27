@@ -15,6 +15,13 @@ class SectMemberProgressContractTests(unittest.TestCase):
         self.assertTrue(sect["sect_member_utils_info_reads_feature_owned"])
         self.assertTrue(sect["sect_member_utils_join_count_feature_owned"])
 
+    def test_sect_user_profile_reads_are_feature_owned_by_default(self):
+        sect = _slice_status()["sect"]
+        self.assertTrue(sect["sect_user_profile_repository_owned"])
+        self.assertTrue(sect["sect_user_profile_facade_owned"])
+        self.assertTrue(sect["sect_user_profile_helper_default_owned"])
+        self.assertTrue(sect["sect_weekly_progress_profile_application_owned"])
+
 
 if __name__ == "__main__":
     unittest.main()

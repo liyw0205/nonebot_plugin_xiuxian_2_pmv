@@ -19,5 +19,14 @@ class SectMemberSqlRepository:
             )
             return [normalize_user_row(row) for row in rows]
 
+    def get_user_profile(self, user_id: int | str) -> dict[str, Any] | None:
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            row = uow.query_one(
+                "SELECT * FROM user_xiuxian WHERE user_id=? "
+                "ORDER BY rowid ASC LIMIT 1",
+                (user_id,),
+            )
+            return normalize_user_row(row)
+
 
 __all__ = ["SectMemberSqlRepository"]
