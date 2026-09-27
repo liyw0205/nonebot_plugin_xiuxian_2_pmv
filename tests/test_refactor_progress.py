@@ -98,6 +98,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(sect["legacy_membership_getter_removed"])
         self.assertTrue(sect["legacy_transaction_service_import_removed"])
         self.assertTrue(sect["stale_legacy_service_getters_removed"])
+        self.assertTrue(sect["owner_inherit_application_owned"])
+        self.assertTrue(sect["owner_inherit_service_isolated"])
         self.assertTrue(sect["weekly_claim_application_owned"])
         self.assertTrue(sect["weekly_status_sect_info_application_owned"])
         self.assertTrue(sect["weekly_claim_repository_owned"])

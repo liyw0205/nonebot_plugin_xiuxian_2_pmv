@@ -162,6 +162,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sect_shop_legacy_service = (PACKAGE / "compatibility" / "legacy_sect_shop_purchase.py").read_text(encoding="utf-8")
     sect_main_buff_legacy_service = (PACKAGE / "compatibility" / "legacy_sect_main_buff_learn.py").read_text(encoding="utf-8")
     sect_secondary_buff_legacy_service = (PACKAGE / "compatibility" / "legacy_sect_secondary_buff_learn.py").read_text(encoding="utf-8")
+    sect_owner_inherit_legacy_service = (PACKAGE / "compatibility" / "legacy_sect_owner_inherit.py").read_text(encoding="utf-8")
     sect_fairyland_migrations = (PACKAGE / "features" / "sect_fairyland" / "migrations.py").read_text(encoding="utf-8")
     sect_application = (PACKAGE / "features" / "sect" / "application.py").read_text(encoding="utf-8")
     sect_feature_repository = (PACKAGE / "features" / "sect" / "repository.py").read_text(encoding="utf-8")
@@ -579,6 +580,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "daily_maintenance_application_owned": "sect_application.reset_daily_maintenance(" in sect_facade,
             "close_mountain_application_owned": sect_facade.count("sect_application.close_mountain(") >= 2,
             "owner_inherit_application_owned": "sect_application.inherit_owner(" in sect_facade,
+            "owner_inherit_service_isolated": "class SectOwnerInheritService" not in sect_transaction_service and "from ...compatibility.legacy_sect_owner_inherit import" in sect_transaction_service and "class SectOwnerInheritService" in sect_owner_inherit_legacy_service,
             "join_state_application_owned": "sect_application.open_join(" in sect_facade and "sect_application.close_join(" in sect_facade,
             "disband_application_owned": sect_facade.count("sect_application.disband_inactive(") >= 3,
             "disband_confirmation_application_owned": "sect_application.disband(" in sect_facade[sect_facade.index("async def sect_disband2_confirm"):sect_facade.index("@sect_power_top.handle")] and "_sect_disband_service().disband(" not in sect_facade,

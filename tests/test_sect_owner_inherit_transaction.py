@@ -11,10 +11,16 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.transaction_service import (
     SectOwnerInheritService,
 )
+from nonebot_plugin_xiuxian_2.compatibility.legacy_sect_owner_inherit import (
+    SectOwnerInheritService as CompatibilitySectOwnerInheritService,
+)
 from tests.test_db_backend import db_backend
 
 
 class SectOwnerInheritServiceTests(unittest.TestCase):
+    def test_transaction_service_import_remains_a_compatibility_shim(self) -> None:
+        self.assertIs(SectOwnerInheritService, CompatibilitySectOwnerInheritService)
+
     def test_sect_facade_does_not_wire_owner_inherit_legacy_service(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_sect as sect_plugin
 
