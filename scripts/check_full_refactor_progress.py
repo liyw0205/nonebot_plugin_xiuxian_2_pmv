@@ -64,6 +64,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     tianti_data = (PACKAGE / "xiuxian" / "xiuxian_tianti" / "tianti_data.py").read_text(encoding="utf-8")
     tianti_presentation = (PACKAGE / "features" / "tianti_training" / "presentation.py").read_text(encoding="utf-8")
     tianti_training_repository = (PACKAGE / "features" / "tianti_training" / "repository.py").read_text(encoding="utf-8")
+    tianti_training_application = (PACKAGE / "features" / "tianti_training" / "application.py").read_text(encoding="utf-8")
     tianti_training_stone_repository = tianti_training_repository[
         tianti_training_repository.index("class StoneTrainingSqlRepository") : tianti_training_repository.index(
             "class TiantiMedicineBathSqlRepository"
@@ -465,6 +466,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 name in tianti_settlement_repository and name in tianti_presentation
                 for name in ("calc_qiaoxue_bonus", "get_active_medicine_bath", "get_sect_fairyland_bonus", "parse_tianti_time")
             ) and "_parse_tianti_time" in tianti_training_repository and "_get_sect_fairyland_bonus" in tianti_training_repository,
+            "profile_cap_query_feature_owned": "tianti_training_application.profile_cap(data)" in tianti_facade and "transaction_service import" not in tianti_facade and "def profile_cap(" in tianti_training_application,
             "sect_bonus_display_is_feature_owned": "from ...features.tianti_training.presentation import get_sect_fairyland_bonus" in sect_facade,
             "legacy_profile_write_through_is_named": "Legacy write-through getter" in tianti_data,
             "legacy_transaction_adapters_remain_explicit": "class LegacyTiantiTrainingRepository" in tianti_training_repository and "class LegacyTiantiSettlementRepository" in tianti_settlement_repository,

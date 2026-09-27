@@ -19,10 +19,6 @@ from .tianti_data import (
     get_qiaoxue_pool,
     get_qiaoxue_map,
 )
-from .transaction_service import (
-    get_tianti_cap,
-)
-
 from ...features.tianti_settlement.application import TiantiSettlementApplication
 from ...features.tianti_training.application import TiantiTrainingApplication
 from ...features.tianti_training.presentation import (
@@ -98,7 +94,7 @@ MEDICINE_BATH_TIME_CONFIG = [
 
 
 def _get_tianti_cap(data: dict) -> int:
-    return get_tianti_cap(data)
+    return tianti_training_application.profile_cap(data)
 
 
 def _get_active_medicine_bath(data: dict, now_t: datetime):

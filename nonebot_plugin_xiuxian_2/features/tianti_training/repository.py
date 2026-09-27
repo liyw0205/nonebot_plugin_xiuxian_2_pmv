@@ -204,6 +204,9 @@ class TiantiProfileSqlReader:
                     decoded_row[field] = default
         return self.profile.clean(decoded_row)
 
+    def cap(self, data: Mapping[str, Any]) -> int:
+        return self.profile.cap(data)
+
 
 class TiantiProfile(Protocol):
     def default_data(self) -> dict[str, Any]: ...

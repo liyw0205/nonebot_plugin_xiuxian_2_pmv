@@ -60,6 +60,9 @@ class TiantiTrainingApplication:
             raise ValidationError("user_id is required")
         return self.profile_reader.read(normalized_user_id)
 
+    def profile_cap(self, data: Mapping[str, Any]) -> int:
+        return self.profile_reader.cap(data)
+
     def _execute(
         self,
         *,

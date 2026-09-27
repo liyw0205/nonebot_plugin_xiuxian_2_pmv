@@ -22,6 +22,7 @@ class TiantiProfileReadTests(unittest.TestCase):
         self.assertTrue(tianti["settlement_default_repository_is_feature_owned"])
         self.assertTrue(tianti["gain_display_rules_are_feature_owned"])
         self.assertTrue(tianti["settlement_and_display_share_rules"])
+        self.assertTrue(tianti["profile_cap_query_feature_owned"])
         self.assertTrue(tianti["sect_bonus_display_is_feature_owned"])
         self.assertTrue(tianti["legacy_profile_write_through_is_named"])
         self.assertTrue(tianti["legacy_transaction_adapters_remain_explicit"])

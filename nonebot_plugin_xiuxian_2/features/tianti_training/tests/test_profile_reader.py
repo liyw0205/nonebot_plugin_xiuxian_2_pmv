@@ -126,6 +126,24 @@ class TiantiProfileSqlReaderTests(unittest.TestCase):
         with sqlite3.connect(self.database) as conn:
             self.assertEqual(conn.execute("SELECT tianti_hp FROM tianti_info WHERE user_id='legacy'").fetchone()[0], "bad")
 
+    def test_profile_cap_uses_the_next_rank_and_closing_multiplier(self):
+        data_directory = Path(self.tmp.name) / "cap-xiuxian"
+        training_directory = data_directory / "炼体"
+        training_directory.mkdir(parents=True)
+        (training_directory / "炼体境界.json").write_text(
+            json.dumps({
+                "凡体": {"rank": 1, "need_hp": 0},
+                "炼体境": {"rank": 2, "need_hp": 100},
+            }, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        (training_directory / "炼体窍穴.json").write_text("{\"窍穴\": []}", encoding="utf-8")
+        profile = TiantiProfileReader(data_directory, closing_multiplier=2.0)
+        reader = TiantiProfileSqlReader(self.database, profile_reader=profile)
+
+        self.assertEqual(reader.cap({"tianti_level": "凡体"}), 200)
+        self.assertEqual(reader.cap({"tianti_level": "炼体境"}), 10**30)
+
 
 if __name__ == "__main__":
     unittest.main()
