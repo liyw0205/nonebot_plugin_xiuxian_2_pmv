@@ -211,6 +211,27 @@ class TiantiTrainingRepository(Protocol):
     def open_qiaoxue(self, operation_id: str, user_id: str, roll: int) -> Any: ...
 
 
+def _persist_tianti_profile(
+    uow: DatabaseUnitOfWork,
+    user_id: str,
+    fields: Sequence[str],
+    data: Mapping[str, Any],
+) -> None:
+    values = [
+        json.dumps(data[field], ensure_ascii=False)
+        if isinstance(data[field], (list, dict)) else data[field]
+        for field in fields
+    ]
+    columns_sql = ", ".join(["user_id", *fields])
+    placeholders = ", ".join("?" for _ in range(len(values) + 1))
+    updates = ", ".join(f'"{field}"=excluded."{field}"' for field in fields)
+    uow.execute(
+        f'INSERT INTO tianti_info ({columns_sql}) VALUES ({placeholders}) '
+        f'ON CONFLICT(user_id) DO UPDATE SET {updates}',
+        (user_id, *values),
+    )
+
+
 class StoneTrainingSqlRepository:
     """Feature-owned stone training persistence on the catalogued databases."""
 
@@ -408,6 +429,18 @@ class TiantiBreakthroughSqlRepository:
         self.player_database = str(player_database)
         self.profile = profile_reader or TiantiProfileReader(Path(player_database).parent / "xiuxian")
 
+    def ensure_profile(self, user_id: str) -> None:
+        user_id = str(user_id)
+        fields = tuple(self.profile.default_data().keys())
+        with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+            player_table = uow.query_one("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='tianti_info'")
+            columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(tianti_info)")}
+            if player_table is None or not set(fields).issubset(columns):
+                raise RuntimeError("tianti training schema is not ready; run migrations first")
+            row = uow.query_one("SELECT 1 AS present FROM tianti_info WHERE user_id=?", (user_id,))
+            if row is None:
+                _persist_tianti_profile(uow, user_id, fields, self.profile.clean({}))
+
     def breakthrough(self, operation_id: str, user_id: str, *, cultivation_rank: int, roll_success: bool) -> Any:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         if not operation_id:
@@ -435,11 +468,7 @@ class TiantiBreakthroughSqlRepository:
             if decision.status != "completed":
                 return BreakthroughPersistenceResult(decision.status, user_id, old_level, old_level, 0, decision.new_hp, False)
             data["tianti_level"], data["tianti_hp"] = decision.new_level, decision.new_hp
-            values = [json.dumps(data[field], ensure_ascii=False) if isinstance(data[field], (list, dict)) else data[field] for field in fields]
-            columns_sql = ", ".join(["user_id", *fields])
-            placeholders = ", ".join("?" for _ in range(len(values) + 1))
-            updates = ", ".join(f'"{field}"=excluded."{field}"' for field in fields)
-            uow.execute(f'INSERT INTO tianti_info ({columns_sql}) VALUES ({placeholders}) ON CONFLICT(user_id) DO UPDATE SET {updates}', (user_id, *values))
+            _persist_tianti_profile(uow, user_id, fields, data)
             uow.execute("INSERT INTO tianti_breakthrough_operations(operation_id,user_id,cultivation_rank,roll_success,old_level,new_level,hp_cost,new_hp,success) VALUES(?,?,?,?,?,?,?,?,?)", (operation_id, user_id, int(cultivation_rank), int(bool(roll_success)), decision.old_level, decision.new_level, decision.hp_cost, decision.new_hp, int(decision.new_level != decision.old_level)))
             return BreakthroughPersistenceResult("completed", user_id, decision.old_level, decision.new_level, decision.hp_cost, decision.new_hp, decision.new_level != decision.old_level)
 

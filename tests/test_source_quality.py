@@ -1015,7 +1015,9 @@ class SourceQualityTests(unittest.TestCase):
         source = (tianti_root / "__init__.py").read_text(encoding="utf-8")
         handler = source[source.index("@tianti_break.handle"):source.index("@tianti_info.handle")]
         self.assertIn("tianti_training_application.breakthrough(", handler)
+        self.assertIn("tianti_training_application.read_profile(user_id)", handler)
         self.assertNotIn("\n    result = tianti_breakthrough_service.attempt(", handler)
+        self.assertNotIn("tianti_manager.get_user_tianti_info(user_id)", handler)
         self.assertNotIn("tianti_manager.save_user_tianti_info(", handler)
 
         service_source = (tianti_root / "breakthrough_service.py").read_text(encoding="utf-8")

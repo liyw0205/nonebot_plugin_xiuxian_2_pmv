@@ -31,6 +31,19 @@ class _Repository:
         return {"status": "opened", "user_id": user_id, "qiaoxue": {"name": "窍一", "effect_type": "hp_gain_pct", "effect_value": 0.01}, "hp_cost": 10, "new_hp": 90, "opened_count": 1, "unlock_limit": 3}
 
 
+class _InitializingRepository(_Repository):
+    def __init__(self):
+        super().__init__()
+        self.order = []
+
+    def ensure_profile(self, user_id):
+        self.order.append(("ensure", user_id))
+
+    def breakthrough(self, operation_id, user_id, *, cultivation_rank, roll_success):
+        self.order.append(("breakthrough", user_id))
+        return {"status": "hp_insufficient", "user_id": user_id}
+
+
 class TiantiTrainingApplicationTests(unittest.TestCase):
     @staticmethod
     def _application(root, repository):
@@ -74,6 +87,19 @@ class TiantiTrainingApplicationTests(unittest.TestCase):
             self.assertFalse(first.ok)
             self.assertEqual(second.code, "stone_insufficient")
             self.assertEqual(repository.calls, [("train", "reject-1")])
+
+    def test_breakthrough_initializes_profile_before_starting_operation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository = _InitializingRepository()
+            app = self._application(Path(directory), repository)
+            result = app.breakthrough(
+                operation_id="break-init",
+                user_id="u",
+                cultivation_rank=1,
+                roll_success=True,
+            )
+            self.assertFalse(result.ok)
+            self.assertEqual(repository.order, [("ensure", "u"), ("breakthrough", "u")])
 
 
 if __name__ == "__main__":

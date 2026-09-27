@@ -529,7 +529,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         f"tianti-break:{event_id}:{user_id}" if event_id
         else f"tianti-break:{user_id}:{runtime_ids.new_id()}"
     )
-    data = tianti_manager.get_user_tianti_info(user_id)
+    data = tianti_training_application.read_profile(user_id)
     next_name = get_next_tianti_level_name(data["tianti_level"])
     if not next_name:
         await handle_send(bot, event, "你的炼体已达最高境界。")
@@ -553,6 +553,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
     if status == "hp_insufficient":
         await handle_send(bot, event, f"突破失败：炼体气血不足，需{number_to(int(next_cfg['need_hp']))}。")
+        return
+    if status == "user_missing":
+        await handle_send(bot, event, "炼体档案已变化，请重新执行。")
         return
     if outcome.replayed or status == "duplicate":
         if result.get("success"):

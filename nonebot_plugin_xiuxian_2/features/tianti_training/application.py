@@ -293,13 +293,17 @@ class TiantiTrainingApplication:
             request.validate()
         except (TypeError, ValueError) as exc:
             raise ValidationError(str(exc)) from exc
+        repository = self._breakthrough_repository()
+        ensure_profile = getattr(repository, "ensure_profile", None)
+        if callable(ensure_profile):
+            ensure_profile(request.user_id)
         return self._execute(
             operation_id=request.operation_id,
             user_id=request.user_id,
             action="tianti.breakthrough",
             payload=request.payload(),
             ledger_database=self.player_database,
-            call=lambda: self._breakthrough_repository().breakthrough(
+            call=lambda: repository.breakthrough(
                 request.operation_id,
                 request.user_id,
                 cultivation_rank=request.cultivation_rank,
@@ -311,6 +315,7 @@ class TiantiTrainingApplication:
                 "cultivation_insufficient": "修仙境界不足。",
                 "hp_insufficient": "炼体气血不足。",
                 "state_changed": "炼体状态已变化，请重新执行。",
+                "user_missing": "炼体档案已变化，请重新执行。",
             },
         )
 

@@ -8,7 +8,7 @@ from ..repository import TiantiBreakthroughSqlRepository
 
 class _Profile:
     def default_data(self):
-        return {"tianti_level": "one", "tianti_hp": 100, "last_settle_time": None, "medicine_last_time": None, "medicine_end_time": None, "medicine_effect": 0.0, "medicine_name": "", "opened_qiaoxue": [], "opened_qiaoxue_detail": [], "qiaoxue_stage_opened": {}}
+        return {"tianti_level": "one", "tianti_hp": 0, "last_settle_time": None, "medicine_last_time": None, "medicine_end_time": None, "medicine_effect": 0.0, "medicine_name": "", "opened_qiaoxue": [], "opened_qiaoxue_detail": [], "qiaoxue_stage_opened": {}}
 
     def clean(self, row):
         data = self.default_data()
@@ -48,6 +48,20 @@ class BreakthroughRepositoryTests(unittest.TestCase):
         self.assertEqual(result.status, "hp_insufficient")
         with sqlite3.connect(self.database) as conn:
             self.assertEqual(conn.execute("SELECT count(*) FROM tianti_breakthrough_operations").fetchone()[0], 0)
+
+    def test_missing_profile_is_initialized_before_rejection(self):
+        self.repo.ensure_profile("new-user")
+        result = self.repo.breakthrough("new-user", "new-user", cultivation_rank=1, roll_success=True)
+        self.assertEqual(result.status, "hp_insufficient")
+        with sqlite3.connect(self.database) as conn:
+            row = conn.execute(
+                "SELECT tianti_level, tianti_hp FROM tianti_info WHERE user_id='new-user'"
+            ).fetchone()
+            operation_count = conn.execute(
+                "SELECT count(*) FROM tianti_breakthrough_operations WHERE operation_id='new-user'"
+            ).fetchone()[0]
+        self.assertEqual(row, ("one", "0"))
+        self.assertEqual(operation_count, 0)
 
 
 if __name__ == "__main__":
