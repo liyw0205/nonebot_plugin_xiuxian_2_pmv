@@ -3525,6 +3525,8 @@ class SourceQualityTests(unittest.TestCase):
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_map"
         source = (root / "__init__.py").read_text(encoding="utf-8")
         application = (SOURCE_ROOT / "features" / "map" / "application.py").read_text(encoding="utf-8")
+        battle_adapter = (SOURCE_ROOT / "compatibility" / "legacy_map_battle.py").read_text(encoding="utf-8")
+        player_fight = (SOURCE_ROOT / "xiuxian" / "xiuxian_utils" / "player_fight.py").read_text(encoding="utf-8")
         lifecycle = (root / "combat_lifecycle_service.py").read_text(
             encoding="utf-8"
         )
@@ -3548,7 +3550,18 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", lifecycle)
         self.assertIn("combat_cd_until=EXCLUDED.combat_cd_until", lifecycle)
         self.assertIn("async def combat_battle(", application)
-        self.assertIn("combat_runner=Boss_fight", source)
+        self.assertIn("combat_runner=build_legacy_map_battle_runner()", source)
+        self.assertNotIn("from ..xiuxian_utils.player_fight import Boss_fight", source)
+        for provider in (
+            "player_data_provider=get_players_attributes",
+            "boss_attribute_provider=get_boss_attributes",
+            "boss_buff_provider=generate_boss_buff",
+            "boss_skill_provider=generate_boss_skill",
+            "boss_status_updater=update_data_boss_status",
+            "player_status_updater=update_all_user_status",
+        ):
+            self.assertIn(provider, battle_adapter)
+        self.assertIn("player_status_updater=None", player_fight)
 
     def test_map_explore_start_uses_feature_repository(self) -> None:
         source = (

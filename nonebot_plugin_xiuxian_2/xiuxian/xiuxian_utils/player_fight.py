@@ -172,6 +172,7 @@ async def Boss_fight(
     boss_buff_random_source=None,
     boss_skill_provider=None,
     boss_status_updater=None,
+    player_status_updater=None,
 ):
     """Run a Boss battle, optionally using a pre-resolved player snapshot.
 
@@ -212,7 +213,8 @@ async def Boss_fight(
     suc = "群友赢了" if winner == 0 else "Boss赢了"
 
     if type_in == 2:
-        update_all_user_status(status_list, bot_id)
+        status_updater = player_status_updater or update_all_user_status
+        status_updater(status_list, bot_id)
 
     if return_status:
         return play_list, suc, boss, status_list

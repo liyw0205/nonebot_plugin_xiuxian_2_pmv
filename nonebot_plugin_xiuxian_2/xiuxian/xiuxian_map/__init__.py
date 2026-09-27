@@ -22,7 +22,6 @@ from ..xiuxian_utils.utils import (
     send_help_message,
 )
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_utils.player_fight import Boss_fight
 from ..xiuxian_config import XiuConfig, base_rank
 from ...features.map.schemas import (
     MapCombatLifecycleResult,
@@ -38,6 +37,7 @@ from ...features.combat_settlement.application import CombatSettlementApplicatio
 from ...features.map.application import MapApplication
 from ...features.map.domain import decide_interactive_action, decide_interactive_reward
 from ...features.map.rewards import MapRewardResolver
+from ...compatibility.legacy_map_battle import build_legacy_map_battle_runner
 from ...features._legacy_application import result_data
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
@@ -51,7 +51,7 @@ combat_settlement_application = CombatSettlementApplication(
 map_application = MapApplication(
     get_paths().game_db,
     get_paths().player_db,
-    combat_runner=Boss_fight,
+    combat_runner=build_legacy_map_battle_runner(),
 )
 dao_battle_application = CombatSettlementApplication(
     get_paths().game_db,

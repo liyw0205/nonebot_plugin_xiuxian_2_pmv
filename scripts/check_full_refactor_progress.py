@@ -117,6 +117,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
     map_facade = (PACKAGE / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
     map_application = (PACKAGE / "features" / "map" / "application.py").read_text(encoding="utf-8")
     map_reward_resolver = (PACKAGE / "features" / "map" / "rewards.py").read_text(encoding="utf-8")
+    map_battle_adapter = (PACKAGE / "compatibility" / "legacy_map_battle.py").read_text(encoding="utf-8")
+    player_fight = (PACKAGE / "xiuxian" / "xiuxian_utils" / "player_fight.py").read_text(encoding="utf-8")
     map_combat_handler = map_facade[
         map_facade.index("async def _process_node_combat") : map_facade.index("def _get_explore_status")
     ]
@@ -483,8 +485,20 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "combat_engine_injected": (
                 "await map_application.combat_battle(" in map_combat_handler
                 and "Boss_fight(" not in map_combat_handler
-                and "combat_runner=Boss_fight" in map_facade
+                and "combat_runner=build_legacy_map_battle_runner()" in map_facade
                 and "async def combat_battle(" in map_application
+                and all(
+                    name in map_battle_adapter
+                    for name in (
+                        "player_data_provider=get_players_attributes",
+                        "boss_attribute_provider=get_boss_attributes",
+                        "boss_buff_provider=generate_boss_buff",
+                        "boss_skill_provider=generate_boss_skill",
+                        "boss_status_updater=update_data_boss_status",
+                        "player_status_updater=update_all_user_status",
+                    )
+                )
+                and "player_status_updater=None" in player_fight
             ),
             "reward_resolver_feature_owned": (
                 "map_reward_resolver = MapRewardResolver(" in map_facade
