@@ -1,3 +1,4 @@
+import asyncio
 import json
 import tempfile
 import unittest
@@ -19,6 +20,15 @@ class CombatApplication:
     def settle(self, **kwargs):
         self.kwargs = kwargs
         return "combat-settlement"
+
+
+class CombatRunner:
+    def __init__(self):
+        self.arguments = None
+
+    async def __call__(self, user_id, enemy, *, bot_id):
+        self.arguments = (user_id, enemy, bot_id)
+        return ["battle"], "群友赢了", {"群友": {"剩余气血": 100}}
 
 
 class MapApplicationTest(unittest.TestCase):
@@ -124,6 +134,44 @@ class MapApplicationTest(unittest.TestCase):
 
             self.assertEqual(application.combat_settle(**values), "combat-settlement")
             self.assertEqual(combat.kwargs, values)
+
+    def test_combat_battle_uses_injected_runner_and_preserves_result(self):
+        runner = CombatRunner()
+        application = MapApplication(
+            "game.db",
+            "player.db",
+            combat_runner=runner,
+        )
+        enemy = {"name": "守关石傀", "气血": 1000, "攻击": 200}
+
+        result = asyncio.run(
+            application.combat_battle(
+                user_id="u",
+                enemy=enemy,
+                bot_id="bot-1",
+            )
+        )
+
+        self.assertEqual(("u", enemy, "bot-1"), runner.arguments)
+        self.assertEqual(
+            (["battle"], "群友赢了", {"群友": {"剩余气血": 100}}),
+            result,
+        )
+
+    def test_combat_battle_propagates_runner_failure(self):
+        async def fail(*args, **kwargs):
+            raise LookupError("battle engine unavailable")
+
+        application = MapApplication("game.db", "player.db", combat_runner=fail)
+
+        with self.assertRaisesRegex(LookupError, "battle engine unavailable"):
+            asyncio.run(
+                application.combat_battle(
+                    user_id="u",
+                    enemy={"name": "守关石傀"},
+                    bot_id="bot-1",
+                )
+            )
 
 
 if __name__ == "__main__": unittest.main()

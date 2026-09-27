@@ -115,6 +115,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dungeon_manager = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "dungeon_manager.py").read_text(encoding="utf-8")
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
     map_facade = (PACKAGE / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
+    map_application = (PACKAGE / "features" / "map" / "application.py").read_text(encoding="utf-8")
+    map_combat_handler = map_facade[
+        map_facade.index("async def _process_node_combat") : map_facade.index("def _get_explore_status")
+    ]
     map_legacy_shim = (PACKAGE / "xiuxian" / "xiuxian_map" / "transaction_service.py").read_text(encoding="utf-8")
     map_compatibility = (PACKAGE / "compatibility" / "legacy_map_transactions.py").read_text(encoding="utf-8")
     map_repository = (PACKAGE / "features" / "map" / "repository.py").read_text(encoding="utf-8")
@@ -475,6 +479,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "map": {
             "interactive_application_owned": "map_application.interactive_settlement(" in map_facade and "map_application.interactive_start(" in map_facade,
             "resource_application_owned": "map_application.resource_reward(" in map_facade,
+            "combat_engine_injected": "await map_application.combat_battle(" in map_combat_handler and "Boss_fight(" not in map_combat_handler and "combat_runner=Boss_fight" in map_facade and "async def combat_battle(" in map_application,
             "legacy_interactive_disabled": "map_interactive_action_service.save_settlement(" not in map_facade and "map_interactive_action_service.start(" not in map_facade,
             "legacy_resource_disabled": "map_resource_reward_service.settle(" not in map_facade,
             "legacy_transactions_isolated": "transaction_service" not in map_facade and all(name not in map_facade for name in ("PlayerDataManager", "XiuxianDateManage", "_sql_message()", "_player_data_manager()")),

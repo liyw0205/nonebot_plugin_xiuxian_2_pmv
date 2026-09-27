@@ -47,7 +47,11 @@ combat_settlement_application = CombatSettlementApplication(
     get_paths().game_db,
     get_paths().player_db,
 )
-map_application = MapApplication(get_paths().game_db, get_paths().player_db)
+map_application = MapApplication(
+    get_paths().game_db,
+    get_paths().player_db,
+    combat_runner=Boss_fight,
+)
 dao_battle_application = CombatSettlementApplication(
     get_paths().game_db,
     get_paths().player_db,
@@ -1931,8 +1935,10 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
     if snapshot.get("status") == "running":
         ntype = str(snapshot["node_type"])
         conf = COMBAT_CONFIG[ntype]
-        battle_result, victor, bossinfo_new = await Boss_fight(
-            uid, snapshot["enemy"], bot_id=bot.self_id
+        battle_result, victor, bossinfo_new = await map_application.combat_battle(
+            user_id=uid,
+            enemy=snapshot["enemy"],
+            bot_id=bot.self_id,
         )
         await send_msg_handler(bot, event, battle_result)
         rewards, reward_items, stone = [], [], 0

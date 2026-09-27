@@ -1,19 +1,37 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from .._legacy_application import LegacyApplication
 from ..combat_settlement.application import CombatSettlementApplication
 from .repository import LegacyMapRepository, MapCombatLifecyclePlanSqlRepository, MapCombatLifecycleQueryRepository, MapCombatLifecycleStartSqlRepository, MapDongfuBuildSqlRepository, MapDongfuSqlQueryRepository, MapExploreSettlementSqlRepository, MapExploreStartSqlRepository, MapExploreStatusSqlQueryRepository, MapExploreStatusSqlWriteRepository, MapMissionClaimSqlRepository, MapMissionSqlQueryRepository, MapMissionSqlWriteRepository, MapNearbyPlayersSqlQueryRepository, MapProjectionSqlRepository, MapProjectionSqlWriteRepository, MapSeedPurchaseSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapStatusSqlQueryRepository, MapStatusSqlWriteRepository, MapRepository
 
+class MapCombatRunner(Protocol):
+    def __call__(
+        self,
+        user_id: str,
+        enemy: dict[str, Any],
+        *,
+        bot_id: Any,
+    ) -> Awaitable[tuple[Any, str, dict[str, Any]]]: ...
+
 
 class MapApplication(LegacyApplication):
-    def __init__(self, game_database: str | Path, player_database: str | Path, *, repository: MapRepository | None = None) -> None:
+    def __init__(
+        self,
+        game_database: str | Path,
+        player_database: str | Path,
+        *,
+        repository: MapRepository | None = None,
+        combat_runner: MapCombatRunner | None = None,
+    ) -> None:
         super().__init__(game_database, repository=repository, feature="map")
         self._explicit_repository = repository
         self.game_database = str(game_database)
         self.player_database = str(player_database)
+        self._combat_runner = combat_runner
         self._combat_settlement_application = CombatSettlementApplication(
             self.game_database,
             self.player_database,
@@ -130,6 +148,16 @@ class MapApplication(LegacyApplication):
         )
     def combat_pending(self, user_id: str): return MapCombatLifecycleQueryRepository(self.game_database,self.player_database).get_pending(user_id)
     def combat_replay(self, operation_id: str, user_id: str): return MapCombatLifecycleQueryRepository(self.game_database,self.player_database).replay_start(operation_id,user_id)
+    async def combat_battle(
+        self,
+        *,
+        user_id: str,
+        enemy: dict[str, Any],
+        bot_id: Any,
+    ) -> tuple[Any, str, dict[str, Any]]:
+        if self._combat_runner is None:
+            raise RuntimeError("MapApplication requires a combat runner to execute battles")
+        return await self._combat_runner(user_id, enemy, bot_id=bot_id)
     def combat_save_plan(self, *, operation_id: str, user_id: str, task_id: str, plan: dict[str, Any]):
         if self._explicit_repository is None:
             return self._execute(operation_id=operation_id,user_id=user_id,action="map.combat_save_plan",payload={"user_id":user_id,"task_id":task_id,"plan":plan},call=lambda:MapCombatLifecyclePlanSqlRepository(self.player_database).save_plan(operation_id,user_id,task_id,plan))

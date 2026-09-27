@@ -3524,6 +3524,7 @@ class SourceQualityTests(unittest.TestCase):
     def test_map_node_combat_uses_persistent_start_task(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_map"
         source = (root / "__init__.py").read_text(encoding="utf-8")
+        application = (SOURCE_ROOT / "features" / "map" / "application.py").read_text(encoding="utf-8")
         lifecycle = (root / "combat_lifecycle_service.py").read_text(
             encoding="utf-8"
         )
@@ -3535,6 +3536,8 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("map_application.combat_replay(", handler)
         self.assertIn("map_application.combat_start(", handler)
         self.assertIn("map_application.combat_save_plan(", handler)
+        self.assertIn("await map_application.combat_battle(", handler)
+        self.assertNotIn("Boss_fight(", handler)
         self.assertIn("random_source=runtime_random", handler)
         self.assertNotIn("= random.random()", handler)
         self.assertNotIn("map_combat_lifecycle_service.save_plan(", handler)
@@ -3544,6 +3547,8 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("map_combat_start_operations", lifecycle)
         self.assertIn("BEGIN IMMEDIATE", lifecycle)
         self.assertIn("combat_cd_until=EXCLUDED.combat_cd_until", lifecycle)
+        self.assertIn("async def combat_battle(", application)
+        self.assertIn("combat_runner=Boss_fight", source)
 
     def test_map_explore_start_uses_feature_repository(self) -> None:
         source = (
