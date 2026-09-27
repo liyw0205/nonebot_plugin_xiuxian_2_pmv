@@ -2899,8 +2899,10 @@
    rollback repository 延迟加载；本切片不新增 migration。
 4. **继续清理交易兼容余额**：拍卖查看、拍卖信息、活动展示、个人等待区、scheduler、重启对账、
    竞价前拍品查询，以及鬼市订单/账户投影读取均已迁至 feature-owned application 与无 DDL 的
-   只读 repository。下一步是处理旧拍卖 session/竞价 fallback 的显式兼容 adapter；继续按真实调用图
-   检查仙肆/鬼市剩余入口，每次只迁一个资产转换，兼容 repository 仅在真实调用归零且回滚证据满足后移除。
+   只读 repository。旧拍卖 session/bid fallback 已于 2026-09-25 收口为显式兼容 adapter：默认路径
+   使用 feature-owned application/repository，旧 session API 仅由 `LegacyTradeFeatureRepository`
+   明确注入时调用。下一步继续按真实调用图检查仙肆/鬼市和拍卖策略的剩余入口，每次只迁一个资产转换，
+   兼容 repository 仅在真实调用归零且回滚证据满足后移除。
 5. 清零已迁移域的 compatibility 余额：背包高频动作和签到默认副作用已由
    feature-owned application 承载；宠物旧 service 本轮已隔离，但显式
    `LegacyPetRepository` 与旧数据 projection 仍需审计。通用 daily/weekly 任务进度和领奖
@@ -2908,8 +2910,9 @@
    `tasks.003`/`.004` 已分别路由 game/player，started/granted operation 可由 reconcile 续跑，
    不再使用请求期 DDL 或 WAL 下不具备崩溃原子性的 attached transaction。任务 definitions、Items
    元数据解析和奖励 snapshot 仍由 `task_data` adapter 提供，`LegacyTaskProgressEventService` 与
-   `TaskRewardClaimService` 源码仍作 compatibility 对照。下一项按真实调用图处理训练、洞府/地图未覆盖动作、
-   宗门、竞技场/副本、世界事件、Boss 和交易剩余 adapter；每次先证明默认 handler/route/scheduler 已切换，
+   `TaskRewardClaimService` 源码仍作 compatibility 对照。训练的历练结算、商店兑换与管理员重置已切换到
+   feature-owned application/repository，并登记 `training.001` 至 `.004`；下一项按列表顺序审计洞府、地图未覆盖动作，
+   再处理宗门、竞技场/副本、世界事件、Boss 和交易剩余 adapter。每次先证明默认 handler/route/scheduler 已切换，
    再隔离或删除旧实现。
 6. 单列处理复杂批处理和外部状态：赌坊投注/派奖与分块分红、全服批处理、跨库
    补偿、JSON/凭据状态、scheduler 和外部版本更新必须保留冻结快照、分块进度、
@@ -4635,4 +4638,4 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 
 2026-09-27 trade Guishi read-only projection cutover：鬼市订单列表、账户余额与暂存物品读取从真实命令/清理/scheduler 入口切换到 `TradeApplication -> GuishiQuerySqlRepository`，仅以短生命周期只读 UoW 查询 `trade_db`；缺数据库或投影表返回旧接口空值，不执行请求期建表，也不持有连接缓存。保留 `qiugou/求购`、`baitan/摆摊` 类型别名、精确名称/用户/订单筛选、原始行形状和账户 JSON 容错；`_trade_manager` 仍仅作为旧拍卖 fallback 的显式依赖，不在本切片删除。无 migration/业务数据访问。Guishi/trade 聚焦回归 `140 passed`，query/application/lazy-reader/source-quality 回归 `239 passed`；隔离 pycache 下 compileall、inventory `--check`、progress CLI、NoneBot 初始化后的 architecture CLI（`ok=true`）和 diff check 通过。整体 progress `exit_ready=false`，33 个旧 transaction service 与 `xiuxian2_handle` blockers 仍在。pytest/pyc/architecture 临时目录已清理，未访问运行数据库；用户 `boss_info.json` 修改保留。下一片继续按 6.2.4 调查拍卖 session/竞价 fallback 的真实调用图。
 
-2026-09-27 sect task-settlement startup-schema and clock cutover：新增 game-only `sect.018` 幂等创建结算回执表；`SectTaskSettlementSqlRepository` 不再请求期建表，缺 schema 返回 `schema_missing`，`SectApplication.settle_task` 将注入 Clock 传入 repository，并保留结算原子性、重放与任务快照检查。更新 Sect feature 文档及 progress gate；覆盖 migration 路由/保留、缺 schema 无 DDL、HP/灵石结算、operation replay、固定时间与回执失败回滚。仓储/progress focused tests `7 passed`，Sect feature、`test_sect_*`、source-quality、refactor-progress 与 architecture contracts `531 passed`；compile、inventory `--check`、progress CLI 条件、architecture CLI (`ok=true`) 与 diff check 均通过。测试与 CLI 使用隔离临时数据目录，pytest cache/字节码 cache 禁用；本轮 basetemp 清理后复核。下一片按 6.2.4 检查拍卖 session/竞价 fallback 的真实调用图；全局旧 transaction services、`xiuxian2_handle` 与真实发布迁移/P7 证据仍是整体完成 blockers。
+2026-09-27 sect task-settlement startup-schema and clock cutover：新增 game-only `sect.018` 幂等创建结算回执表；`SectTaskSettlementSqlRepository` 不再请求期建表，缺 schema 返回 `schema_missing`，`SectApplication.settle_task` 将注入 Clock 传入 repository，并保留结算原子性、重放与任务快照检查。更新 Sect feature 文档及 progress gate；覆盖 migration 路由/保留、缺 schema 无 DDL、HP/灵石结算、operation replay、固定时间与回执失败回滚。仓储/progress focused tests `7 passed`，Sect feature、`test_sect_*`、source-quality、refactor-progress 与 architecture contracts `531 passed`；compile、inventory `--check`、progress CLI 条件、architecture CLI (`ok=true`) 与 diff check 均通过。测试与 CLI 使用隔离临时数据目录，pytest cache/字节码 cache 禁用；本轮 basetemp 清理后复核。拍卖 session/bid fallback 已于 2026-09-25 收口为显式 adapter；下一片按 6.2.5 顺序审计洞府/地图未覆盖动作，先从洞府开始。全局旧 transaction services、`xiuxian2_handle` 与真实发布迁移/P7 证据仍是整体完成 blockers。
