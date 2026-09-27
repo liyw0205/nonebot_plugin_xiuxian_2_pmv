@@ -120,7 +120,7 @@ class LegacyCombatSettlementRepository:
     def settle(self, operation_id: str, user_id: str, expected_daily: dict[str, Any], snapshot: str,
                daily_limit: int, stone: int, items: tuple[dict[str, Any], ...], max_goods_num: int) -> Any:
         try:
-            from ...xiuxian.xiuxian_map.transaction_service import MapCombatSettlementService
+            from ...compatibility.legacy_map_transactions import MapCombatSettlementService
         except (ImportError, RuntimeError, ValueError):
             return {"status": "not_ready", "stone": 0, "rewards": ()}
         return MapCombatSettlementService(self.game_database, self.player_database).settle(

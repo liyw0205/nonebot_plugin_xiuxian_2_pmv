@@ -115,6 +115,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dungeon_manager = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "dungeon_manager.py").read_text(encoding="utf-8")
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
     map_facade = (PACKAGE / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
+    map_legacy_shim = (PACKAGE / "xiuxian" / "xiuxian_map" / "transaction_service.py").read_text(encoding="utf-8")
+    map_compatibility = (PACKAGE / "compatibility" / "legacy_map_transactions.py").read_text(encoding="utf-8")
+    map_repository = (PACKAGE / "features" / "map" / "repository.py").read_text(encoding="utf-8")
+    combat_settlement_repository = (PACKAGE / "features" / "combat_settlement" / "repository.py").read_text(encoding="utf-8")
     sect_facade = (PACKAGE / "xiuxian" / "xiuxian_sect" / "__init__.py").read_text(encoding="utf-8")
     sect_member_utils = (PACKAGE / "xiuxian" / "xiuxian_sect" / "sect_member_utils.py").read_text(encoding="utf-8")
     sect_elixir_claim_handler = sect_facade[
@@ -473,7 +477,15 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "resource_application_owned": "map_application.resource_reward(" in map_facade,
             "legacy_interactive_disabled": "map_interactive_action_service.save_settlement(" not in map_facade and "map_interactive_action_service.start(" not in map_facade,
             "legacy_resource_disabled": "map_resource_reward_service.settle(" not in map_facade,
-            "status": "interactive_resource_cutover_with_legacy_services_retained_for_compatibility",
+            "legacy_transactions_isolated": "transaction_service" not in map_facade and all(name not in map_facade for name in ("PlayerDataManager", "XiuxianDateManage", "_sql_message()", "_player_data_manager()")),
+            "legacy_transaction_compatibility_explicit": (
+                "legacy_map_transactions import *" in map_legacy_shim
+                and "...compatibility.legacy_map_transactions" in map_repository
+                and "...compatibility.legacy_map_transactions" in combat_settlement_repository
+                and "class MapInteractiveActionService" in map_compatibility
+            ),
+            "map_dtos_feature_owned": "features.map.schemas import" in map_facade and "class MapInteractiveActionResult" in (PACKAGE / "features" / "map" / "schemas.py").read_text(encoding="utf-8"),
+            "status": "default_map_actions_feature_owned_legacy_transactions_isolated_with_explicit_rollback_adapters",
         },
         "tianti": {
             "settlement_command_application_owned": "tianti_settlement_application.settle(" in tianti_facade,

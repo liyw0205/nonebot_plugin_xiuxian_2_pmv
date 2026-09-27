@@ -1,6 +1,6 @@
 """Stable facade for persistent map resource rewards."""
 
-from .transaction_service import MapResourceRewardService
+from ...compatibility.legacy_map_transactions import MapResourceRewardService
 
 # BEGIN IMMEDIATE protects resource reward settlement and its operation ledger.
 OPERATION_TABLE = "map_resource_reward_operations"

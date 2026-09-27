@@ -1,6 +1,6 @@
 """Stable facade for persistent map interactive actions."""
 
-from .transaction_service import MapInteractiveActionService
+from ...compatibility.legacy_map_transactions import MapInteractiveActionService
 
 # BEGIN IMMEDIATE protects map_interactive_start_operations and
 # map_interactive_terminal_operations.

@@ -84,6 +84,9 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(map_slice["resource_application_owned"])
         self.assertTrue(map_slice["legacy_interactive_disabled"])
         self.assertTrue(map_slice["legacy_resource_disabled"])
+        self.assertTrue(map_slice["legacy_transactions_isolated"])
+        self.assertTrue(map_slice["legacy_transaction_compatibility_explicit"])
+        self.assertTrue(map_slice["map_dtos_feature_owned"])
         sect = slices["sect"]
         self.assertTrue(sect["membership_application_owned"])
         self.assertTrue(sect["economy_application_owned"])

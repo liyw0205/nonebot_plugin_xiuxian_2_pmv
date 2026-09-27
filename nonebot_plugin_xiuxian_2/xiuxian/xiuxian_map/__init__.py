@@ -21,16 +21,18 @@ from ..xiuxian_utils.utils import (
     send_msg_handler,
     send_help_message,
 )
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, PlayerDataManager
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.player_fight import Boss_fight
 from ..xiuxian_config import XiuConfig, base_rank
-from .transaction_service import MapCombatLifecycleResult
-from .transaction_service import MapDongfuBuildResult
-from .transaction_service import MapExploreStartResult
-from .transaction_service import MapExploreSettlementResult
-from .transaction_service import MapMissionClaimResult
-from .transaction_service import SeedPurchaseResult
+from ...features.map.schemas import (
+    MapCombatLifecycleResult,
+    MapDongfuBuildResult,
+    MapExploreSettlementResult,
+    MapExploreStartResult,
+    MapInteractiveActionResult,
+    MapMissionClaimResult,
+    SeedPurchaseResult,
+)
 
 from ...features.combat_settlement.application import CombatSettlementApplication
 from ...features.map.application import MapApplication
@@ -40,9 +42,6 @@ from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.json_document import JsonDocumentReader
 from ...infrastructure.ids import UUIDGenerator
-
-_sql_message_instance = None
-_player_data_manager_instance = None
 
 combat_settlement_application = CombatSettlementApplication(
     get_paths().game_db,
@@ -59,32 +58,6 @@ runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
 map_document_reader = JsonDocumentReader()
-
-
-def _resolve_player_data_manager():
-    global _player_data_manager_instance
-    if _player_data_manager_instance is None:
-        _player_data_manager_instance = PlayerDataManager()
-    return _player_data_manager_instance
-
-
-class _LazyPlayerDataManager:
-    def __getattr__(self, name):
-        return getattr(_resolve_player_data_manager(), name)
-
-
-player_data_manager = _LazyPlayerDataManager()
-
-
-def _player_data_manager():
-    return player_data_manager
-
-
-def _sql_message():
-    global _sql_message_instance
-    if _sql_message_instance is None:
-        _sql_message_instance = XiuxianDateManage()
-    return _sql_message_instance
 
 
 def _combat_lifecycle_result(data):

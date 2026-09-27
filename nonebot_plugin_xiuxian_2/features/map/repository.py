@@ -992,7 +992,7 @@ class LegacyMapRepository:
         self.game_database, self.player_database = str(game_database), str(player_database)
 
     def invoke(self, action: str, operation_id: str, user_id: str, **kwargs: Any) -> Any:
-        from ...xiuxian.xiuxian_map.transaction_service import (
+        from ...compatibility.legacy_map_transactions import (
             MapCombatLifecycleService, MapCombatSettlementService, MapDongfuBuildService,
             MapExploreSettlementService, MapExploreStartService, MapHomeReturnService,
             MapInteractiveActionService, MapMissionClaimService, MapMovementSettlementService,

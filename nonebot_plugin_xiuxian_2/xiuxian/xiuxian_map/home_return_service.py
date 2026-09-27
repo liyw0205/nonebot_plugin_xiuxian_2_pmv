@@ -1,6 +1,6 @@
 """Stable facade for map home-return transactions."""
 
-from .transaction_service import MapHomeReturnService
+from ...compatibility.legacy_map_transactions import MapHomeReturnService
 
 # BEGIN IMMEDIATE protects map_home_return_operations.
 OPERATION_TABLE = "map_home_return_operations"

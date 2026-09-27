@@ -13,18 +13,15 @@ from tests.test_db_backend import db_backend
 
 
 class MapResourceRewardServiceTests(unittest.TestCase):
-    def test_map_facade_defers_sql_manager_construction(self):
+    def test_map_facade_does_not_import_legacy_managers_or_transactions(self):
         source = (
             Path(__file__).parents[1]
             / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_map/__init__.py"
         ).read_text(encoding="utf-8")
-        self.assertIn("_sql_message_instance = None", source)
-        self.assertIn("def _sql_message(", source)
+        self.assertNotIn("XiuxianDateManage", source)
+        self.assertNotIn("PlayerDataManager", source)
+        self.assertNotIn("transaction_service", source)
         self.assertIn("map_application.nearby_players(", source)
-        self.assertNotIn("sql_message = XiuxianDateManage()", source)
-        self.assertIn("_player_data_manager_instance = None", source)
-        self.assertIn("def _player_data_manager(", source)
-        self.assertNotIn("player_data_manager = PlayerDataManager()", source)
         self.assertIn("map_application.map_status(", source)
         self.assertIn("map_application.save_status(", source)
 
