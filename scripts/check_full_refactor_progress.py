@@ -60,6 +60,18 @@ def _slice_status() -> dict[str, dict[str, object]]:
     adapter = (PACKAGE / "adapters" / "nonebot" / "commands.py").read_text(encoding="utf-8")
     web = (PACKAGE / "adapters" / "web" / "api.py").read_text(encoding="utf-8")
     legacy_transaction = (PACKAGE / "xiuxian" / "xiuxian_base" / "transaction_service.py").read_text(encoding="utf-8")
+    tianti_facade = (PACKAGE / "xiuxian" / "xiuxian_tianti" / "__init__.py").read_text(encoding="utf-8")
+    tianti_data = (PACKAGE / "xiuxian" / "xiuxian_tianti" / "tianti_data.py").read_text(encoding="utf-8")
+    tianti_training_repository = (PACKAGE / "features" / "tianti_training" / "repository.py").read_text(encoding="utf-8")
+    tianti_training_stone_repository = tianti_training_repository[
+        tianti_training_repository.index("class StoneTrainingSqlRepository") : tianti_training_repository.index(
+            "class TiantiMedicineBathSqlRepository"
+        )
+    ]
+    tianti_training_writer = (PACKAGE / "features" / "tianti_training" / "profile_persistence.py").read_text(encoding="utf-8")
+    tianti_settlement_repository = (PACKAGE / "features" / "tianti_settlement" / "repository.py").read_text(encoding="utf-8")
+    tianti_settlement_application = (PACKAGE / "features" / "tianti_settlement" / "application.py").read_text(encoding="utf-8")
+    sect_fairyland_claim_repository = (PACKAGE / "features" / "sect_fairyland" / "claim_repository.py").read_text(encoding="utf-8")
     sign_effects = (PACKAGE / "features" / "sign_in" / "application_effects.py").read_text(encoding="utf-8")
     sign_application = (PACKAGE / "features" / "sign_in" / "application.py").read_text(encoding="utf-8")
     tasks_entry = (PACKAGE / "xiuxian" / "xiuxian_tasks" / "task_data.py").read_text(encoding="utf-8")
@@ -433,6 +445,23 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_interactive_disabled": "map_interactive_action_service.save_settlement(" not in map_facade and "map_interactive_action_service.start(" not in map_facade,
             "legacy_resource_disabled": "map_resource_reward_service.settle(" not in map_facade,
             "status": "interactive_resource_cutover_with_legacy_services_retained_for_compatibility",
+        },
+        "tianti": {
+            "settlement_command_application_owned": "tianti_settlement_application.settle(" in tianti_facade,
+            "training_command_application_owned": all(
+                f"tianti_training_application.{method}(" in tianti_facade
+                for method in ("train", "apply_bath", "breakthrough", "open_qiaoxue", "read_profile")
+            ),
+            "default_facade_has_no_profile_manager": "TiantiDataManager" not in tianti_facade and "tianti_manager" not in tianti_facade,
+            "stone_repository_has_no_legacy_manager_injection": "data_manager" not in tianti_training_stone_repository and "_manager" not in tianti_training_stone_repository,
+            "profile_upserts_share_feature_writer": all(
+                "upsert_tianti_profile" in source
+                for source in (tianti_training_repository, tianti_settlement_repository, sect_fairyland_claim_repository)
+            ) and "INSERT INTO" in tianti_training_writer,
+            "settlement_default_repository_is_feature_owned": "TiantiSettlementSqlRepository(" in tianti_settlement_application and "LegacyTiantiSettlementRepository" not in tianti_settlement_application,
+            "legacy_profile_write_through_is_named": "Legacy write-through getter" in tianti_data,
+            "legacy_transaction_adapters_remain_explicit": "class LegacyTiantiTrainingRepository" in tianti_training_repository and "class LegacyTiantiSettlementRepository" in tianti_settlement_repository,
+            "status": "feature_profile_writer_shared_within_command_owned_transactions; legacy_manager_api_and_transaction_adapters_retained_for_compatibility",
         },
         "sect": {
             "membership_application_owned": all(f"sect_application.{name}(" in sect_facade for name in ("join", "leave", "kick", "change_position")),

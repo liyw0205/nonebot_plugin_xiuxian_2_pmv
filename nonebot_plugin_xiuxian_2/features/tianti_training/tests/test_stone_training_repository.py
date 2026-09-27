@@ -26,18 +26,8 @@ class StoneTrainingSqlRepositoryTests(unittest.TestCase):
         with sqlite3.connect(self.player) as conn:
             conn.execute("CREATE TABLE tianti_info (user_id TEXT PRIMARY KEY, tianti_level TEXT, tianti_hp TEXT, last_settle_time TEXT, medicine_last_time TEXT, medicine_end_time TEXT, medicine_effect TEXT, medicine_name TEXT, opened_qiaoxue TEXT, opened_qiaoxue_detail TEXT, qiaoxue_stage_opened TEXT)")
 
-        self.default = {
-            "tianti_level": "初境", "tianti_hp": 10, "last_settle_time": None,
-            "medicine_last_time": None, "medicine_end_time": None,
-            "medicine_effect": 0.0, "medicine_name": "", "opened_qiaoxue": [],
-            "opened_qiaoxue_detail": [], "qiaoxue_stage_opened": {},
-        }
-        manager = type("Manager", (), {
-            "_default": lambda _self: dict(self.default),
-            "_clean_user_data": lambda _self, data: {**self.default, **data},
-        })()
         self.repository = StoneTrainingSqlRepository(
-            self.game, self.player, data_manager=manager,
+            self.game, self.player,
             cap_provider=lambda _data: 1000,
             profile_reader=TiantiProfileReader(root),
         )

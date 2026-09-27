@@ -323,6 +323,7 @@ class TiantiDataManager:
         return self._clean_user_data(row)
 
     def get_user_tianti_info(self, user_id: str):
+        """Legacy write-through getter retained for compatibility callers."""
         data = self.read_user_tianti_info(user_id)
         # Legacy callers still depend on read-time normalization and default-row creation.
         self.save_user_tianti_info(user_id, data)

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from .profile_persistence import upsert_tianti_profile
 from .domain import (
     decide_breakthrough,
     decide_medicine_bath_activation,
@@ -305,41 +306,23 @@ class TiantiTrainingRepository(Protocol):
     def open_qiaoxue(self, operation_id: str, user_id: str, roll: int) -> Any: ...
 
 
-def _persist_tianti_profile(
-    uow: DatabaseUnitOfWork,
-    user_id: str,
-    fields: Sequence[str],
-    data: Mapping[str, Any],
-) -> None:
-    values = [
-        json.dumps(data[field], ensure_ascii=False)
-        if isinstance(data[field], (list, dict)) else data[field]
-        for field in fields
-    ]
-    columns_sql = ", ".join(["user_id", *fields])
-    placeholders = ", ".join("?" for _ in range(len(values) + 1))
-    updates = ", ".join(f'"{field}"=excluded."{field}"' for field in fields)
-    uow.execute(
-        f'INSERT INTO tianti_info ({columns_sql}) VALUES ({placeholders}) '
-        f'ON CONFLICT(user_id) DO UPDATE SET {updates}',
-        (user_id, *values),
-    )
-
-
 class StoneTrainingSqlRepository:
     """Feature-owned stone training persistence on the catalogued databases."""
 
-    def __init__(self, game_database: str | Path, player_database: str | Path, *, data_manager: Any = None, cap_provider: Callable[[dict[str, Any]], int] | None = None, profile_reader: TiantiProfileReader | None = None) -> None:
+    def __init__(
+        self,
+        game_database: str | Path,
+        player_database: str | Path,
+        *,
+        cap_provider: Callable[[dict[str, Any]], int] | None = None,
+        profile_reader: TiantiProfileReader | None = None,
+    ) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
-        self._manager = data_manager
         self._cap_provider = cap_provider
         self._profile_reader = profile_reader or TiantiProfileReader(Path(player_database).parent / "xiuxian")
 
     def train(self, operation_id: str, user_id: str, requested_stone: int) -> Any:
-        if self._manager is None:
-            self._manager = self._profile_reader
-
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         requested_stone = int(requested_stone)
         if not operation_id or requested_stone <= 0:
@@ -375,11 +358,7 @@ class StoneTrainingSqlRepository:
             if charged.rowcount != 1:
                 return StoneTrainingPersistenceResult("stone_changed", user_id, requested_stone, 0, 0, int(data["tianti_hp"]))
             data["tianti_hp"] = decision.new_hp
-            values = [json.dumps(data[field], ensure_ascii=False) if isinstance(data[field], (list, dict)) else data[field] for field in fields]
-            columns = ", ".join(["user_id", *fields])
-            placeholders = ", ".join("?" for _ in values)
-            updates = ", ".join(f'"{field}"=excluded."{field}"' for field in fields)
-            uow.execute(f'INSERT INTO player_data.tianti_info ({columns}) VALUES ({", ".join("?" for _ in range(len(values) + 1))}) ON CONFLICT(user_id) DO UPDATE SET {updates}', (user_id, *values))
+            upsert_tianti_profile(uow, user_id, fields, data, database_alias="player_data")
             uow.execute("INSERT INTO tianti_stone_training_operations(operation_id,user_id,requested_stone,stone_cost,hp_gain,new_hp) VALUES(?,?,?,?,?,?)", (operation_id, user_id, requested_stone, decision.stone_cost, decision.hp_gain, decision.new_hp))
             return StoneTrainingPersistenceResult("trained", user_id, requested_stone, decision.stone_cost, decision.hp_gain, decision.new_hp)
 
@@ -446,11 +425,7 @@ class TiantiMedicineBathSqlRepository:
                 changed = uow.execute("UPDATE back SET goods_num=goods_num-?, bind_num=MIN(COALESCE(bind_num,0), goods_num-?) WHERE user_id=? AND goods_id=? AND goods_num>=?", (item["amount"], item["amount"], user_id, item["item_id"], item["amount"]))
                 if changed.rowcount != 1:
                     return MedicineBathPersistenceResult("item_changed", user_id)
-            values = [json.dumps(data[field], ensure_ascii=False) if isinstance(data[field], (list, dict)) else data[field] for field in fields]
-            columns_sql = ", ".join(["user_id", *fields])
-            placeholders = ", ".join("?" for _ in range(len(values) + 1))
-            updates = ", ".join(f'"{field}"=excluded."{field}"' for field in fields)
-            uow.execute(f'INSERT INTO player_data.tianti_info ({columns_sql}) VALUES ({placeholders}) ON CONFLICT(user_id) DO UPDATE SET {updates}', (user_id, *values))
+            upsert_tianti_profile(uow, user_id, fields, data, database_alias="player_data")
             payload = {"consumed": list(plan), "effect": float(effect), "bath_name": bath_name, "end_time": data["medicine_end_time"], "settlement": settlement}
             uow.execute("INSERT INTO tianti_medicine_bath_operations(operation_id,user_id,request_json,result_json) VALUES(?,?,?,?)", (operation_id, user_id, json.dumps({"plan": list(plan), "effect": effect}, ensure_ascii=False), json.dumps(payload, ensure_ascii=False, default=str)))
             return MedicineBathPersistenceResult("applied", user_id, tuple(plan), float(effect), bath_name, data["medicine_end_time"], settlement)
@@ -503,11 +478,7 @@ class TiantiItemRewardSqlRepository:
             if consumed.rowcount != 1:
                 return ItemRewardPersistenceResult("item_insufficient", user_id, item_id, quantity, total_minutes, {})
             data["tianti_hp"] = gain.new_hp
-            values = [json.dumps(data[field], ensure_ascii=False) if isinstance(data[field], (list, dict)) else data[field] for field in fields]
-            columns_sql = ", ".join(["user_id", *fields])
-            placeholders = ", ".join("?" for _ in range(len(values) + 1))
-            updates = ", ".join(f'"{field}"=excluded."{field}"' for field in fields)
-            uow.execute(f'INSERT INTO player_data.tianti_info ({columns_sql}) VALUES ({placeholders}) ON CONFLICT(user_id) DO UPDATE SET {updates}', (user_id, *values))
+            upsert_tianti_profile(uow, user_id, fields, data, database_alias="player_data")
             detail = {"status": "ok", "real_gain": gain.real_gain, "new_hp": gain.new_hp, "bath": None, "bath_expired": False, "sect_bonus": _sect_bonus(sect_fairyland_level), "spirit_vein_bonus": float(self.spirit_vein_multiplier()) - 1}
             uow.execute("INSERT INTO tianti_item_reward_operations(operation_id,user_id,item_id,quantity,minutes,detail_json) VALUES(?,?,?,?,?,?)", (operation_id, user_id, item_id, quantity, total_minutes, json.dumps(detail, ensure_ascii=False)))
             return ItemRewardPersistenceResult("applied", user_id, item_id, quantity, total_minutes, detail)
@@ -533,7 +504,7 @@ class TiantiBreakthroughSqlRepository:
                 raise RuntimeError("tianti training schema is not ready; run migrations first")
             row = uow.query_one("SELECT 1 AS present FROM tianti_info WHERE user_id=?", (user_id,))
             if row is None:
-                _persist_tianti_profile(uow, user_id, fields, self.profile.clean({}))
+                upsert_tianti_profile(uow, user_id, fields, self.profile.clean({}))
 
     def breakthrough(self, operation_id: str, user_id: str, *, cultivation_rank: int, roll_success: bool) -> Any:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
@@ -562,7 +533,7 @@ class TiantiBreakthroughSqlRepository:
             if decision.status != "completed":
                 return BreakthroughPersistenceResult(decision.status, user_id, old_level, old_level, 0, decision.new_hp, False)
             data["tianti_level"], data["tianti_hp"] = decision.new_level, decision.new_hp
-            _persist_tianti_profile(uow, user_id, fields, data)
+            upsert_tianti_profile(uow, user_id, fields, data)
             uow.execute("INSERT INTO tianti_breakthrough_operations(operation_id,user_id,cultivation_rank,roll_success,old_level,new_level,hp_cost,new_hp,success) VALUES(?,?,?,?,?,?,?,?,?)", (operation_id, user_id, int(cultivation_rank), int(bool(roll_success)), decision.old_level, decision.new_level, decision.hp_cost, decision.new_hp, int(decision.new_level != decision.old_level)))
             return BreakthroughPersistenceResult("completed", user_id, decision.old_level, decision.new_level, decision.hp_cost, decision.new_hp, decision.new_level != decision.old_level)
 
@@ -610,11 +581,7 @@ class TiantiQiaoxueSqlRepository:
             data["tianti_hp"] = old_hp - hp_cost
             data["opened_qiaoxue"] = opened + [chosen["name"]]
             data["opened_qiaoxue_detail"] = detail
-            values = [json.dumps(data[field], ensure_ascii=False) if isinstance(data[field], (list, dict)) else data[field] for field in fields]
-            columns_sql = ", ".join(["user_id", *fields])
-            placeholders = ", ".join("?" for _ in range(len(values) + 1))
-            updates = ", ".join(f'"{field}"=excluded."{field}"' for field in fields)
-            uow.execute(f'INSERT INTO tianti_info ({columns_sql}) VALUES ({placeholders}) ON CONFLICT(user_id) DO UPDATE SET {updates}', (user_id, *values))
+            upsert_tianti_profile(uow, user_id, fields, data)
             new_count = opened_count + 1
             uow.execute("INSERT INTO tianti_qiaoxue_operations(operation_id,user_id,roll,qiaoxue_json,hp_cost,new_hp,opened_count,unlock_limit) VALUES(?,?,?,?,?,?,?,?)", (operation_id, user_id, roll, json.dumps(chosen, ensure_ascii=False), hp_cost, data["tianti_hp"], new_count, unlock_limit))
             return QiaoxuePersistenceResult("opened", user_id, chosen, hp_cost, int(data["tianti_hp"]), new_count, unlock_limit)

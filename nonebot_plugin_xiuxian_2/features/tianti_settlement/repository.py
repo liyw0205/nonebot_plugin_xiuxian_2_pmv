@@ -8,6 +8,7 @@ from typing import Any, Callable, Mapping, Protocol
 from ...features.tianti_training.repository import TiantiProfileReader
 from ...features.tianti_training.repository import _parse_time, _sect_bonus
 from ...features.tianti_training.domain import decide_tianti_gain, decide_tianti_settlement_window
+from ...features.tianti_training.profile_persistence import upsert_tianti_profile
 from ...infrastructure.database import DatabaseUnitOfWork
 
 
@@ -131,11 +132,7 @@ class TiantiSettlementSqlRepository:
             })
         elif window.status == "init":
             data["last_settle_time"] = settled_at.strftime("%Y-%m-%d %H:%M:%S")
-        values = [json.dumps(data[field], ensure_ascii=False) if isinstance(data[field], (list, dict)) else data[field] for field in fields]
-        columns_sql = ", ".join(["user_id", *fields])
-        placeholders = ", ".join("?" for _ in range(len(values) + 1))
-        updates = ", ".join(f'"{field}"=excluded."{field}"' for field in fields)
-        uow.execute(f'INSERT INTO tianti_info ({columns_sql}) VALUES ({placeholders}) ON CONFLICT(user_id) DO UPDATE SET {updates}', (user_id, *values))
+        upsert_tianti_profile(uow, user_id, fields, data)
         uow.execute("INSERT INTO tianti_settlement_operations(operation_id,user_id,sect_level,result_status,detail_json) VALUES(?,?,?,?,?)", (operation_id, user_id, int(sect_fairyland_level), str(detail["status"]), json.dumps(detail, ensure_ascii=False, default=str)))
         return {"status": "settled", "user_id": user_id, "detail": detail}
 

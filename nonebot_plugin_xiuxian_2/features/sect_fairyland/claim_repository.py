@@ -9,6 +9,7 @@ from typing import Any, Callable, Mapping, Protocol
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork
 from ...features.tianti_training.domain import decide_tianti_gain
+from ...features.tianti_training.profile_persistence import upsert_tianti_profile
 from ...features.tianti_training.repository import TiantiProfileReader
 
 
@@ -112,21 +113,7 @@ class SectFairylandSqlRepository:
 
     def _write_profile(self, uow: DatabaseUnitOfWork, user_id: str, data: Mapping[str, Any]) -> None:
         fields = tuple(self.profile.default_data())
-        columns = ["user_id", *fields]
-        quoted = ",".join(self._identifier(field) for field in columns)
-        placeholders = ",".join("?" for _ in columns)
-        updates = ",".join(
-            f"{self._identifier(field)}=excluded.{self._identifier(field)}" for field in fields
-        )
-        values = [
-            json.dumps(data[field], ensure_ascii=False) if isinstance(data[field], (list, dict)) else data[field]
-            for field in fields
-        ]
-        uow.execute(
-            f"INSERT INTO tianti_info ({quoted}) VALUES ({placeholders}) "
-            f"ON CONFLICT(user_id) DO UPDATE SET {updates}",
-            (user_id, *values),
-        )
+        upsert_tianti_profile(uow, user_id, fields, data)
 
     def _write_legacy_projection(self, uow: DatabaseUnitOfWork, user_id: str, sect_id: str, day: str) -> None:
         table = uow.query_one(

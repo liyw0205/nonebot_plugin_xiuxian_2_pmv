@@ -8,9 +8,21 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tianti.tianti_data import TiantiDataManager
+from scripts.check_full_refactor_progress import _slice_status
 
 
 class TiantiProfileReadTests(unittest.TestCase):
+    def test_default_profile_paths_have_a_shared_feature_writer(self):
+        tianti = _slice_status()["tianti"]
+        self.assertTrue(tianti["settlement_command_application_owned"])
+        self.assertTrue(tianti["training_command_application_owned"])
+        self.assertTrue(tianti["default_facade_has_no_profile_manager"])
+        self.assertTrue(tianti["stone_repository_has_no_legacy_manager_injection"])
+        self.assertTrue(tianti["profile_upserts_share_feature_writer"])
+        self.assertTrue(tianti["settlement_default_repository_is_feature_owned"])
+        self.assertTrue(tianti["legacy_profile_write_through_is_named"])
+        self.assertTrue(tianti["legacy_transaction_adapters_remain_explicit"])
+
     def test_read_only_profile_lookup_does_not_persist_missing_default(self):
         manager = TiantiDataManager()
         store = Mock()
