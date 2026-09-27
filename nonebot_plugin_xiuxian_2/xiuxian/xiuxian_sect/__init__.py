@@ -1734,7 +1734,9 @@ async def sect_task_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     sect_id = user_info['sect_id']
     if sect_id:
         if isUserTask(user_id):
-            refreshed_task = refresh_user_sect_task(user_id, sect_id, _sect_operation_id(event, "task_refresh", user_id), sect_membership_service)
+            refreshed_task = refresh_user_sect_task(
+                user_id, sect_id, _sect_operation_id(event, "task_refresh", user_id)
+            )
             if refreshed_task is None:
                 await handle_send(bot, event, "宗门任务刷新未完成：任务列表已更新，请重新查看宗门任务。")
                 await sect_task_refresh.finish()
@@ -1971,7 +1973,7 @@ async def sect_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
         claimed_task = create_user_sect_task(
             user_id, sect_id, _sect_operation_id(event, "task_claim", user_id),
-            False, sect_membership_service,
+            False,
         )
         if claimed_task is None:
             await handle_send(bot, event, "宗门任务状态或角色信息已发生变化，请刷新后重试。")

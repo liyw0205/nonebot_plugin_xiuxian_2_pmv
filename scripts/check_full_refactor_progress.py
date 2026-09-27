@@ -146,6 +146,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sect_application = (PACKAGE / "features" / "sect" / "application.py").read_text(encoding="utf-8")
     sect_feature_repository = (PACKAGE / "features" / "sect" / "repository.py").read_text(encoding="utf-8")
     sect_activity_repository = (PACKAGE / "features" / "sect" / "activity_repository.py").read_text(encoding="utf-8")
+    sect_task_state_repository = (PACKAGE / "features" / "sect" / "task_state_repository.py").read_text(encoding="utf-8")
     sect_directory_repository = (PACKAGE / "features" / "sect" / "directory_repository.py").read_text(encoding="utf-8")
     sect_inactive_owner_repository = (PACKAGE / "features" / "sect" / "inactive_owner_repository.py").read_text(encoding="utf-8")
     sect_info_repository = (PACKAGE / "features" / "sect" / "sect_info_repository.py").read_text(encoding="utf-8")
@@ -573,6 +574,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "fairyland_claim_status_read_only": "DatabaseUnitOfWork(self.player_database, read_only=True)" in sect_fairyland_repository,
             "fairyland_claim_status_no_player_manager": "PlayerDataManager" not in sect_fairyland_legacy_state and "def _get_fairyland_last_claim(" not in sect_fairyland_legacy_state,
             "sect_default_repository_has_no_legacy_fallback": "class SectRenameSqlRepository:" in sect_feature_repository and "class SectRenameSqlRepository(LegacySectRepository)" not in sect_feature_repository and "self._service(" not in sect_feature_repository[sect_feature_repository.index("class SectRenameSqlRepository:"):],
+            "sect_task_claim_application_owned": "sect_application.claim_task(" in sect_member_utils and "sect_application.refresh_task(" in sect_member_utils and "sect_membership_service" not in sect_facade + sect_member_utils,
+            "sect_task_claim_repository_owned": all(f"def {name}(" in sect_task_state_repository for name in ("claim_task", "refresh_task")) and "sect_task_claim_operations" in sect_task_state_repository,
+            "sect_task_claim_request_path_has_no_ddl": "CREATE TABLE" not in sect_task_state_repository and "_assert_claim_schema_ready" in sect_task_state_repository,
+            "sect_task_claim_migration_registered": all(token in plugin for token in ("sect.017", "apply_sect_task_claim_operations")) and "def apply_sect_task_claim_operations(" in sect_migrations,
+            "sect_task_claim_migration_game_only": '"sect.017"' not in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")] and '"sect.017"' not in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")],
             "elixir_room_upgrade_application_owned": "sect_application.upgrade_elixir_room(" in sect_facade,
             "activity_timestamp_application_owned": "sect_application.update_last_check_info_time(user_id)" in sect_elixir_claim_handler and "_sql_message().update_last_check_info_time(" not in sect_elixir_claim_handler,
             "activity_timestamp_repository_owned": "SectActivitySqlRepository" in sect_application and "class SectActivitySqlRepository" in sect_activity_repository,

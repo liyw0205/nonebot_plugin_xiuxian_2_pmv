@@ -2845,11 +2845,13 @@
 - `recovery_smoke.py` 在 2026-09-24 修复为五库按路由迁移前，旧脚本只对
   `game_db` 应用完整目录。因此此前没有独立五库回执的隔离 smoke 只能作为单库
   恢复演练，不能用于跨库切片或 P7 的最终证据；后续统一以五库 receipt 为准。
-- 宗门默认只读路径已迁移宗门目录、25 处宗门详情、闲置宗主 scheduler 状态/成员/宗主资料、
-  facade 常用成员列表、按 user_id 的用户资料及周常状态展示详情到 `SectApplication` 和只读
-  SQL repositories。道号目标用户、宗门名到 ID 和名称生成用的活跃宗门名查询也已迁移；
-  未绑定的 `sect_member_utils` 仍保留显式 manager fallback。周常进度 helper 的 manager
-  写入/锁仍未 feature-own，后续按其事件事务边界审计。
+- 宗门目录、25 处宗门详情、闲置宗主 scheduler 状态/成员/宗主资料、facade 成员列表、
+  按 user_id/道号的资料、宗门名到 ID/活跃宗名、周常详情与周常进度均由
+  `SectApplication` 和 SQL repositories 承载；`sect_member_utils` 的 manager fallback 已移除。
+  任务状态查询及接取/刷新也经 application/repository，`sect.016`/`.017` 启动迁移与
+  no-request-DDL 已覆盖。仍未完成的是任务结算：`SectTaskSettlementSqlRepository` 当前在请求内
+  `CREATE TABLE` 且默认使用系统时间，尚无独立启动迁移/注入 Clock；宗门其他遗留事务边界仍需按
+  后续优先级逐片处理。
 - 签到默认资产、lottery、statistics 和 task 路径已由 feature-owned application 承载；
   本轮补齐 `sign_in.effects` outbox。副作用事件与签到资产事务同库提交，统计/任务投影
   失败后由请求重放或 `reconcile` 续跑，投影仍按 operation ID 幂等。`LegacySignInEffects`
@@ -4629,3 +4631,5 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-09-27 sect fairyland claim-status read cutover：炼体堂信息 handler 的“今日领取”状态改由 `SectFairylandApplication -> SectFairylandSqlRepository` 只读查询 `sect_fairyland_claim_days`；迁移缺失时返回空状态，不建表。移除已无调用的 `PlayerDataManager` getter/setter 包装，保留旧事务服务所需的 legacy table/key 常量；领取 transaction 与 migration 不变。旧日期回填、领取后读取、缺 schema 无 DDL、application 参数归一化均有回归覆盖；Sect/炼体堂、source-quality 与 progress 聚焦集 `452 passed`，inventory `--check` 通过，progress gate 全部相关 ownership 项通过。pytest cache/字节码关闭且临时目录已清理，未访问运行数据库；用户 `boss_info.json` 修改保留。全局 legacy transaction services、`xiuxian2_handle` 和真实发布迁移/P7 blockers 仍未完成。
 
 2026-09-27 sect default repository fallback isolation：调用图确认 `SectRenameSqlRepository` 完整实现 `SectRepository` 十个操作，但此前仍继承仅供显式回滚的 `LegacySectRepository`，令默认仓储表面上带有旧 transaction-service fallback。解除两者继承关系，保留 `LegacySectRepository` 原实现与导出作为 rollback API；十个操作和 schema 均不变。新增 default-vs-rollback source contract 与 progress ownership 门禁；Sect/炼体堂、source-quality、progress 聚焦回归 `453 passed`。pytest cache/字节码关闭、临时目录清理；用户 `boss_info.json` 修改保留。全局 legacy transaction services、`xiuxian2_handle` 和真实发布迁移/P7 blockers 仍未完成。
+
+2026-09-27 sect task claim/refresh transaction cutover：新增 game-only `sect.017` 回执迁移；`SectTaskStateSqlRepository` 在单一 immediate UoW 内验证用户宗门归属、宗门存在、每日上限、当前任务状态并提交任务状态与幂等回执，刷新还会校验预期旧状态；重复 operation 可重放，回执写入失败回滚状态变更。默认宗门任务接取/刷新入口切换到 `SectApplication`，移除两个 helper 对未定义 membership service 的引用；临时任务 cache 在无任务时清除并按新日过期。新增 migration 保留、缺 schema 不触发请求期 DDL、状态冲突、幂等和事务回滚测试。全 Sect feature、`test_sect_*`、source-quality 和 refactor-progress 聚焦回归 `510 passed`；inventory、compileall、隔离数据目录 architecture CLI 与 diff check 通过，Sect task-claim application/repository/migration/no-request-DDL 进度项均为 `true`。pytest cache 禁用，测试/编译/架构数据位于自动回收临时目录；未访问运行数据库，用户 `boss_info.json` 修改保留。全局 `exit_ready=false` 仍受旧 transaction services 与 `xiuxian2_handle` 执行路径阻塞，真实发布迁移/P7 证据也未完成。

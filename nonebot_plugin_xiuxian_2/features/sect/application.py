@@ -51,7 +51,7 @@ class SectMutationResult(dict):
 
     @property
     def applied(self) -> bool:
-        return self.status in {"closed", "inherited", "disbanded", "duplicate", "upgraded", "granted"}
+        return self.status in {"claimed", "closed", "inherited", "disbanded", "duplicate", "upgraded", "granted"}
 
     def __getattr__(self, name: str) -> Any:
         try:
@@ -150,6 +150,72 @@ class SectApplication:
             task_data,
             now.strftime("%Y-%m-%d"),
             now.strftime("%Y-%m-%d %H:%M:%S"),
+        )
+
+    def claim_task(
+        self,
+        operation_id: str,
+        user_id: str | int,
+        sect_id: str | int,
+        task_config: Mapping[str, Mapping[str, Any]],
+        daily_limit: int,
+        *,
+        replace_existing: bool = False,
+    ) -> SectMutationResult:
+        operation_id, user_id = str(operation_id).strip(), str(user_id).strip()
+        try:
+            sect_id, daily_limit = int(sect_id), int(daily_limit)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("sect_id and daily_limit must be integers") from exc
+        if not operation_id or not user_id or sect_id <= 0 or not task_config:
+            raise ValidationError("operation_id, user_id, sect_id and task_config are required")
+        task_key = self.random.choice(list(task_config))
+        task_data = dict(task_config[task_key])
+        now = self._task_now()
+        return SectMutationResult(
+            self.task_state_repository.claim_task(
+                operation_id,
+                user_id,
+                sect_id,
+                task_key,
+                task_data,
+                now.strftime("%Y-%m-%d"),
+                daily_limit,
+                now.strftime("%Y-%m-%d %H:%M:%S"),
+                replace_existing=replace_existing,
+            )
+        )
+
+    def refresh_task(
+        self,
+        operation_id: str,
+        user_id: str | int,
+        sect_id: str | int,
+        current_task: Mapping[str, Any],
+        task_config: Mapping[str, Mapping[str, Any]],
+        daily_limit: int,
+    ) -> SectMutationResult:
+        operation_id, user_id = str(operation_id).strip(), str(user_id).strip()
+        try:
+            sect_id, daily_limit = int(sect_id), int(daily_limit)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("sect_id and daily_limit must be integers") from exc
+        task_key = self.random.choice(list(task_config))
+        task_data = dict(task_config[task_key])
+        now = self._task_now()
+        return SectMutationResult(
+            self.task_state_repository.refresh_task(
+                operation_id,
+                user_id,
+                sect_id,
+                str(current_task.get("period") or now.strftime("%Y-%m-%d")),
+                str(current_task.get("任务名称") or ""),
+                dict(current_task.get("任务内容") or {}),
+                task_key,
+                task_data,
+                daily_limit,
+                now.strftime("%Y-%m-%d %H:%M:%S"),
+            )
         )
 
     def complete_task(self, user_id: str | int) -> None:

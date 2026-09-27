@@ -45,17 +45,19 @@ def _expire_task_cache_for_period() -> None:
     _userstask_period = period
 
 
-def create_user_sect_task(user_id, sect_id=None, operation_id=None, replace_existing=False,
-                          membership_service=None):
+def create_user_sect_task(user_id, sect_id=None, operation_id=None, replace_existing=False):
     tasklist = config["宗门任务"]
     if sect_id is None:
         user_info = sect_application.get_user_profile(user_id) or {}
         sect_id = user_info.get("sect_id")
-    if sect_id and membership_service is not None:
-        key = random.choice(list(tasklist))
-        claim = membership_service.claim_task(
-            operation_id, user_id, sect_id, sect_application.current_task_period(),
-            key, tasklist[key], config["每日宗门任务次上限"], replace_existing,
+    if sect_id and operation_id:
+        claim = sect_application.claim_task(
+            operation_id,
+            user_id,
+            sect_id,
+            tasklist,
+            config["每日宗门任务次上限"],
+            replace_existing=replace_existing,
         )
         if not claim.applied:
             return None
@@ -72,15 +74,17 @@ def create_user_sect_task(user_id, sect_id=None, operation_id=None, replace_exis
 
 
 
-def refresh_user_sect_task(user_id, sect_id, operation_id, membership_service):
+def refresh_user_sect_task(user_id, sect_id, operation_id):
     current = sect_application.get_active_task(user_id)
     if not current:
         return None
     tasklist = config["宗门任务"]
-    key = random.choice(list(tasklist))
-    refreshed = membership_service.refresh_task(
-        operation_id, user_id, sect_id, sect_application.current_task_period(),
-        current["任务名称"], current["任务内容"], key, tasklist[key],
+    refreshed = sect_application.refresh_task(
+        operation_id,
+        user_id,
+        sect_id,
+        current,
+        tasklist,
         config["每日宗门任务次上限"],
     )
     if not refreshed.applied:
