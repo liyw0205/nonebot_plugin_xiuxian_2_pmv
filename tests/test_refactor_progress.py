@@ -97,6 +97,11 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(sect["weekly_claim_migrations_registered"])
         self.assertTrue(sect["weekly_claim_player_migration_routed"])
         self.assertTrue(sect["weekly_claim_legacy_fallback_retained"])
+        self.assertTrue(sect["activity_timestamp_application_owned"])
+        self.assertTrue(sect["activity_timestamp_repository_owned"])
+        self.assertTrue(sect["activity_timestamp_clock_injected"])
+        self.assertTrue(sect["activity_timestamp_legacy_format_preserved"])
+        self.assertTrue(sect["activity_timestamp_order_preserved"])
         natal = slices["natal_treasure"]
         self.assertTrue(natal["awaken_application_owned"])
         self.assertTrue(natal["legacy_awaken_disabled"])

@@ -26,6 +26,7 @@ from .creation_repository import SectCreationSqlRepository
 from .name_refresh_repository import SectNameRefreshSqlRepository
 from .weekly_reward_repository import SectWeeklyRewardRepository, SectWeeklyRewardSqlRepository
 from .manual_disband_repository import SectManualDisbandSqlRepository
+from .activity_repository import SectActivitySqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -60,6 +61,16 @@ class SectApplication:
         self.weekly_repository = weekly_repository
         self.ledger = ledger or OperationLedger()
         self.clock = clock or SystemClock()
+        self.activity_repository = SectActivitySqlRepository(self.database)
+
+    def update_last_check_info_time(self, user_id: str) -> int:
+        occurred_at = self.clock.now()
+        if occurred_at.tzinfo is not None:
+            # Legacy activity readers only accept local, timezone-naive timestamps.
+            occurred_at = occurred_at.astimezone().replace(tzinfo=None)
+        return self.activity_repository.update_last_check_info_time(
+            str(user_id), occurred_at.isoformat(sep=" ")
+        )
 
     def _repository(self) -> SectRepository:
         return self.repository or SectRenameSqlRepository(self.database, clock=self.clock)

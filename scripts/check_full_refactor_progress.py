@@ -116,6 +116,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
     map_facade = (PACKAGE / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
     sect_facade = (PACKAGE / "xiuxian" / "xiuxian_sect" / "__init__.py").read_text(encoding="utf-8")
+    sect_elixir_claim_handler = sect_facade[
+        sect_facade.index("async def sect_elixir_get_") : sect_facade.index("@sect_buff_info.handle")
+    ]
     sect_fairyland_upgrade_handler = sect_facade[
         sect_facade.index("async def sect_fairyland_upgrade_") : sect_facade.index(
             "@sect_fairyland_claim.handle", sect_facade.index("async def sect_fairyland_upgrade_")
@@ -129,6 +132,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sect_fairyland_compatibility = (PACKAGE / "features" / "sect_fairyland" / "repository.py").read_text(encoding="utf-8")
     sect_fairyland_migrations = (PACKAGE / "features" / "sect_fairyland" / "migrations.py").read_text(encoding="utf-8")
     sect_application = (PACKAGE / "features" / "sect" / "application.py").read_text(encoding="utf-8")
+    sect_activity_repository = (PACKAGE / "features" / "sect" / "activity_repository.py").read_text(encoding="utf-8")
     sect_weekly_repository = (PACKAGE / "features" / "sect" / "weekly_reward_repository.py").read_text(encoding="utf-8")
     sect_manual_disband_repository = (PACKAGE / "features" / "sect" / "manual_disband_repository.py").read_text(encoding="utf-8")
     sect_migrations = (PACKAGE / "features" / "sect" / "migrations.py").read_text(encoding="utf-8")
@@ -496,6 +500,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "fairyland_upgrade_success_result_owned": '"upgraded"' in sect_application[sect_application.index("class SectMutationResult"):sect_application.index("class SectApplication")],
             "fairyland_upgrade_duplicate_handled_before_effects": sect_fairyland_upgrade_handler.index('if result.status == "duplicate"') < sect_fairyland_upgrade_handler.index("safe_log_economy_change("),
             "elixir_room_upgrade_application_owned": "sect_application.upgrade_elixir_room(" in sect_facade,
+            "activity_timestamp_application_owned": "sect_application.update_last_check_info_time(user_id)" in sect_elixir_claim_handler and "_sql_message().update_last_check_info_time(" not in sect_elixir_claim_handler,
+            "activity_timestamp_repository_owned": "SectActivitySqlRepository" in sect_application and "class SectActivitySqlRepository" in sect_activity_repository,
+            "activity_timestamp_clock_injected": "self.clock.now()" in sect_application and "UPDATE user_cd SET last_check_info_time=? WHERE user_id=?" in sect_activity_repository,
+            "activity_timestamp_legacy_format_preserved": "astimezone().replace(tzinfo=None)" in sect_application and "isoformat(sep=\" \")" in sect_application,
+            "activity_timestamp_order_preserved": sect_elixir_claim_handler.index("sect_application.update_last_check_info_time(user_id)") < sect_elixir_claim_handler.index("if sect_id:"),
             "buff_search_application_owned": sect_facade.count("sect_application.apply_buff_search(") >= 2,
             "practice_application_owned": sect_facade.count("sect_application.upgrade_practice(") >= 3,
             "task_settlement_application_owned": sect_facade.count("sect_application.settle_task(") >= 2,
