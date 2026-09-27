@@ -26,29 +26,6 @@ class SectInactiveOwnerRepositoryTests(unittest.TestCase):
             )
             self.assertIsNone(application.get_inactive_owner_sect_state(2))
 
-    def test_lists_member_rows_with_legacy_numeric_normalization(self):
-        with tempfile.TemporaryDirectory() as temp:
-            database = Path(temp) / "sect.db"
-            with DatabaseUnitOfWork(database) as uow:
-                uow.execute(
-                    "CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,user_name TEXT,"
-                    "sect_id INTEGER,sect_position INTEGER,sect_contribution TEXT,stone TEXT)"
-                )
-                uow.execute(
-                    "INSERT INTO user_xiuxian VALUES('member','弟子',1,2,?,?)",
-                    (str(2**70), str(2**70 + 1)),
-                )
-
-            application = SectApplication(database)
-            members = application.list_inactive_owner_sect_members(1)
-
-            self.assertEqual(1, len(members))
-            self.assertEqual("member", members[0]["user_id"])
-            self.assertEqual(2, members[0]["sect_position"])
-            self.assertEqual(2**70, members[0]["sect_contribution"])
-            self.assertEqual(2**70 + 1, members[0]["stone"])
-            self.assertEqual([], application.list_inactive_owner_sect_members(2))
-
     def test_owner_profile_preserves_first_row_and_missing_behavior(self):
         with tempfile.TemporaryDirectory() as temp:
             database = Path(temp) / "sect.db"

@@ -30,6 +30,7 @@ from .activity_repository import SectActivitySqlRepository
 from .directory_repository import SectDirectorySqlRepository
 from .inactive_owner_repository import SectInactiveOwnerSqlRepository
 from .sect_info_repository import SectInfoSqlRepository
+from .member_repository import SectMemberSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -68,6 +69,7 @@ class SectApplication:
         self.directory_repository = SectDirectorySqlRepository(self.database)
         self.inactive_owner_repository = SectInactiveOwnerSqlRepository(self.database)
         self.sect_info_repository = SectInfoSqlRepository(self.database)
+        self.member_repository = SectMemberSqlRepository(self.database)
         self.scheduled_material_repository = SectScheduledMaterialSqlRepository(self.database)
 
     def list_sects_with_member_count(self) -> list[tuple[Any, ...]]:
@@ -79,8 +81,8 @@ class SectApplication:
     def get_inactive_owner_sect_state(self, sect_id: int) -> dict[str, Any] | None:
         return self.inactive_owner_repository.get_sect_state(sect_id)
 
-    def list_inactive_owner_sect_members(self, sect_id: int) -> list[dict[str, Any]]:
-        return self.inactive_owner_repository.list_members(sect_id)
+    def list_sect_members(self, sect_id: int | str) -> list[dict[str, Any]]:
+        return self.member_repository.list_by_sect_id(sect_id)
 
     def get_inactive_owner_user_profile(self, owner_id: str) -> dict[str, Any] | None:
         return self.inactive_owner_repository.get_owner_profile(owner_id)

@@ -26,7 +26,20 @@ from decimal import Decimal, InvalidOperation
 import json
 from typing import Any
 
-import nonebot_plugin_xiuxian_2.core.numeric as _core_numeric
+try:
+    from ...core import numeric as _core_numeric
+except ImportError:  # source-file loading has no package context
+    import importlib.util
+    from pathlib import Path
+
+    _core_numeric_path = Path(__file__).resolve().parents[2] / "core" / "numeric.py"
+    _core_numeric_spec = importlib.util.spec_from_file_location(
+        "_xiuxian_core_numeric", _core_numeric_path
+    )
+    if _core_numeric_spec is None or _core_numeric_spec.loader is None:
+        raise ImportError(f"无法加载数值模块: {_core_numeric_path}")
+    _core_numeric = importlib.util.module_from_spec(_core_numeric_spec)
+    _core_numeric_spec.loader.exec_module(_core_numeric)
 
 OVERFLOW_NUM_FIELDS = _core_numeric.OVERFLOW_NUM_FIELDS
 as_int_like = _core_numeric.as_int_like

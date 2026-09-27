@@ -123,6 +123,7 @@ _bind_sect_member_dependencies(
     sql_manager=_sql_message,
     item_manager=items,
     sect_config=config,
+    sect_app=sect_application,
 )
 
 buffrankkey = {
@@ -416,7 +417,7 @@ async def auto_handle_inactive_sect_owners():
                     logger.info("处理封闭山门的宗门（继承流程）")
                     
                     # 获取所有成员
-                    members = sect_application.list_inactive_owner_sect_members(sect_id)
+                    members = sect_application.list_sect_members(sect_id)
                     logger.info(f"宗门成员数量：{len(members)}人")
                     
                     if not members:
@@ -529,7 +530,7 @@ async def auto_handle_inactive_sect_owners():
                     continue
                 
                 # 获取所有成员
-                members = sect_application.list_inactive_owner_sect_members(sect_id)
+                members = sect_application.list_sect_members(sect_id)
                 logger.info(f"宗门成员总数：{len(members)}人")
                 
                 # 检查宗门成员数量
@@ -1804,7 +1805,7 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         sect_id = user_info['sect_id']
         if sect_id:
             sect_info = sect_application.get_sect_info(sect_id)
-            userlist = _sql_message().get_all_users_by_sect_id(sect_id)
+            userlist = sect_application.list_sect_members(sect_id)
 
             if not userlist:
                 msg = "宗门目前没有成员！"
@@ -2940,7 +2941,7 @@ async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         max_members = get_sect_member_limit(sect_info['sect_scale'])
         
         # 获取当前宗门人数
-        current_members = len(_sql_message().get_all_users_by_sect_id(sect_id))
+        current_members = len(sect_application.list_sect_members(sect_id))
         
         fairyland_level = _get_sect_fairyland_level(sect_info)
         fairyland_conf = _get_sect_fairyland_config(fairyland_level)
@@ -3027,7 +3028,7 @@ async def sect_buildings_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     fairyland_name = "未建设" if fairyland_level <= 0 else f"{fairyland_level}级【{fairyland_conf['name']}】"
     task = sect_task_state_manager.get_active_task(user_info["user_id"])
     task_msg = "未接取，发送【宗门任务】获取" if not task else f"{task['任务名称']}：{task['任务内容'].get('desc', '')}"
-    members = _sql_message().get_all_users_by_sect_id(sect_id)
+    members = sect_application.list_sect_members(sect_id)
     max_members = get_sect_member_limit(sect_info["sect_scale"])
 
     msg = (
@@ -3230,7 +3231,7 @@ async def sect_inherit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await sect_inherit.finish()
     
     # 检查是否有更高优先级的继承人
-    members = _sql_message().get_all_users_by_sect_id(sect_id)
+    members = sect_application.list_sect_members(sect_id)
     higher_priority = [
         m for m in members 
         if m['sect_position'] < user_info['sect_position'] 

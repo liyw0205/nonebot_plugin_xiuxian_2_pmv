@@ -13,6 +13,8 @@ class SectMemberUtilsLazyReaderTests(unittest.TestCase):
         self.assertNotIn("sql_message = XiuxianDateManage()", source)
         self.assertIn("if sql_manager is not None:", source)
         self.assertIn("sql_message = sql_manager", source)
+        self.assertIn("if sect_app is not None:", source)
+        self.assertIn("sect_application = sect_app", source)
 
 
 if __name__ == "__main__":

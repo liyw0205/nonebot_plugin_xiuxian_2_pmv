@@ -116,6 +116,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
     map_facade = (PACKAGE / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
     sect_facade = (PACKAGE / "xiuxian" / "xiuxian_sect" / "__init__.py").read_text(encoding="utf-8")
+    sect_member_utils = (PACKAGE / "xiuxian" / "xiuxian_sect" / "sect_member_utils.py").read_text(encoding="utf-8")
     sect_elixir_claim_handler = sect_facade[
         sect_facade.index("async def sect_elixir_get_") : sect_facade.index("@sect_buff_info.handle")
     ]
@@ -145,6 +146,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sect_directory_repository = (PACKAGE / "features" / "sect" / "directory_repository.py").read_text(encoding="utf-8")
     sect_inactive_owner_repository = (PACKAGE / "features" / "sect" / "inactive_owner_repository.py").read_text(encoding="utf-8")
     sect_info_repository = (PACKAGE / "features" / "sect" / "sect_info_repository.py").read_text(encoding="utf-8")
+    sect_member_repository = (PACKAGE / "features" / "sect" / "member_repository.py").read_text(encoding="utf-8")
     sect_disband_repository = (PACKAGE / "features" / "sect" / "disband_repository.py").read_text(encoding="utf-8")
     sect_scheduled_repository = (PACKAGE / "features" / "sect" / "scheduled_material_repository.py").read_text(encoding="utf-8")
     sect_weekly_repository = (PACKAGE / "features" / "sect" / "weekly_reward_repository.py").read_text(encoding="utf-8")
@@ -521,11 +523,15 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "inactive_owner_sect_state_application_owned": "sect_application.get_inactive_owner_sect_state(sect_id)" in sect_inactive_owner_handler and "_sql_message().get_sect_info(sect_id)" not in sect_inactive_owner_handler,
             "inactive_owner_sect_state_repository_owned": "SectInactiveOwnerSqlRepository" in sect_application and "def get_sect_state(" in sect_inactive_owner_repository,
             "inactive_owner_sect_state_read_only": "read_only=True" in sect_inactive_owner_repository and "CREATE TABLE" not in sect_inactive_owner_repository,
-            "inactive_owner_members_application_owned": sect_inactive_owner_handler.count("sect_application.list_inactive_owner_sect_members(sect_id)") == 2 and "_sql_message().get_all_users_by_sect_id(sect_id)" not in sect_inactive_owner_handler,
-            "inactive_owner_members_repository_owned": "def list_members(" in sect_inactive_owner_repository and "normalize_user_row(row)" in sect_inactive_owner_repository,
             "inactive_owner_profile_application_owned": "sect_application.get_inactive_owner_user_profile(owner_id)" in sect_inactive_owner_handler and "_sql_message().get_user_info_with_id(owner_id)" not in sect_inactive_owner_handler,
             "inactive_owner_profile_repository_owned": "def get_owner_profile(" in sect_inactive_owner_repository and "ORDER BY rowid ASC LIMIT 1" in sect_inactive_owner_repository,
             "inactive_owner_reads_fully_feature_owned": "_sql_message()" not in sect_inactive_owner_handler,
+            "sect_member_list_application_owned": "_sql_message().get_all_users_by_sect_id(" not in sect_facade and sect_facade.count("sect_application.list_sect_members(") >= 6,
+            "sect_member_list_repository_owned": "SectMemberSqlRepository" in sect_application and "def list_by_sect_id(" in sect_member_repository and "normalize_user_row(row)" in sect_member_repository,
+            "sect_member_list_read_only": "read_only=True" in sect_member_repository and "CREATE TABLE" not in sect_member_repository,
+            "sect_member_utils_application_injected": "sect_app=sect_application" in sect_facade and "if sect_app is not None:" in sect_member_utils,
+            "sect_member_utils_info_reads_feature_owned": sect_member_utils.count("sect_application.get_sect_info(") >= 4,
+            "sect_member_utils_join_count_feature_owned": "sect_application.list_sect_members(sect_id)" in sect_member_utils,
             "fairyland_upgrade_application_owned": "sect_application.upgrade_fairyland(" in sect_facade,
             "fairyland_upgrade_repository_owned": "class SectFairylandSqlRepository" in sect_fairyland_upgrade_repository and "SectFairylandSqlRepository" in sect_application,
             "fairyland_upgrade_request_path_has_no_ddl": all(token not in sect_fairyland_upgrade_repository for token in ("CREATE TABLE", "ALTER TABLE")) and "schema_missing" in sect_fairyland_upgrade_repository,

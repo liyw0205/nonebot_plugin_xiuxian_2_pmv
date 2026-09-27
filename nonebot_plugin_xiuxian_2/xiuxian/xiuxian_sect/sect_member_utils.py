@@ -10,6 +10,7 @@ from .sect_tasks import sect_task_state_manager
 items = Items()
 _sql_message_instance = None
 sql_message = None
+sect_application = None
 config = get_config()
 userstask = {}
 
@@ -25,9 +26,11 @@ def _sql_message():
     return _sql_message_instance
 
 
-def bind_sect_member_dependencies(task_store=None, sql_manager=None, item_manager=None, sect_config=None):
+def bind_sect_member_dependencies(
+    task_store=None, sql_manager=None, item_manager=None, sect_config=None, sect_app=None
+):
     """绑定 __init__.py 中已有的共享对象，保持迁移前的运行状态。"""
-    global userstask, sql_message, _sql_message_instance, items, config
+    global userstask, sql_message, _sql_message_instance, items, config, sect_application
 
     if task_store is not None:
         userstask = task_store
@@ -38,6 +41,8 @@ def bind_sect_member_dependencies(task_store=None, sql_manager=None, item_manage
         items = item_manager
     if sect_config is not None:
         config = sect_config
+    if sect_app is not None:
+        sect_application = sect_app
 
 
 def _md_cmd_link(text: str, cmd: str) -> str:
@@ -105,14 +110,22 @@ def isUserTask(user_id):
 
 def get_sect_mainbuff_id_list(sect_id):
     """获取宗门功法id列表"""
-    sect_info = _sql_message().get_sect_info(sect_id)
+    sect_info = (
+        sect_application.get_sect_info(sect_id)
+        if sect_application is not None
+        else _sql_message().get_sect_info(sect_id)
+    )
     mainbufflist = str(sect_info['mainbuff'])[1:-1].split(',')
     return mainbufflist
 
 
 def get_sect_secbuff_id_list(sect_id):
     """获取宗门神通id列表"""
-    sect_info = _sql_message().get_sect_info(sect_id)
+    sect_info = (
+        sect_application.get_sect_info(sect_id)
+        if sect_application is not None
+        else _sql_message().get_sect_info(sect_id)
+    )
     secbufflist = str(sect_info['secbuff'])[1:-1].split(',')
     return secbufflist
 
@@ -220,7 +233,11 @@ def get_sectbufftxt(sect_scale, config_):
 
 
 def get_sect_level(sect_id):
-    sect = _sql_message().get_sect_info(sect_id)
+    sect = (
+        sect_application.get_sect_info(sect_id)
+        if sect_application is not None
+        else _sql_message().get_sect_info(sect_id)
+    )
     return divmod(sect['sect_scale'], config["等级建设度"])
 
 
@@ -403,7 +420,11 @@ def get_sect_member_limit(sect_scale):
 
 def can_join_sect(sect_id):
     """检查宗门是否可以加入"""
-    sect_info = _sql_message().get_sect_info(sect_id)
+    sect_info = (
+        sect_application.get_sect_info(sect_id)
+        if sect_application is not None
+        else _sql_message().get_sect_info(sect_id)
+    )
     if not sect_info:
         return False, "宗门不存在"
 
@@ -415,7 +436,11 @@ def can_join_sect(sect_id):
 
     # 检查人数上限
     max_members = get_sect_member_limit(sect_info['sect_scale'])
-    current_members = len(_sql_message().get_all_users_by_sect_id(sect_id))
+    current_members = len(
+        sect_application.list_sect_members(sect_id)
+        if sect_application is not None
+        else _sql_message().get_all_users_by_sect_id(sect_id)
+    )
 
     if current_members >= max_members:
         return False, f"人数已满 ({current_members}/{max_members})"

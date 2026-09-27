@@ -2822,12 +2822,12 @@
 - 架构/交付基础门禁 P0-P6 已就绪；P7 仍未就绪，缺少一次真实发布周期的
   `--data-dir`、当前 release 和发布证据。隔离 recovery smoke 不能替代 P7。
 - 全面底层重构尚未达到退出条件：仍有 33 个
-  `xiuxian/*/transaction_service.py`（39,430 行）以及
-  `xiuxian2_handle.py`（181,665 bytes）的旧执行路径。它们不能因已有 facade、
+  `xiuxian/*/transaction_service.py`（39,396 行）以及
+  `xiuxian2_handle.py`（181,666 bytes）的旧执行路径。它们不能因已有 facade、
   application 或静态标记而计作完成。
-- 当前静态审计命中：`transaction_service.py` 33 个/39,430 行，旧服务 import 文件
+- 当前静态审计命中：`transaction_service.py` 33 个/39,396 行，旧服务 import 文件
   103 个，`xiuxian2_handle` import 文件 80 个，直接 `db_backend.connect` 命中 107 个，
-  `sqlite3.connect` 命中 21 个，直接全局 random 命中 67 个，`datetime.now` 命中
+  `sqlite3.connect` 命中 29 个，直接全局 random 命中 67 个，`datetime.now` 命中
   67 个，`time.time` 命中 25 个。计数只作趋势，不替代逐条真实调用图审计。
 - 已切换的功能仍可能保留显式 compatibility/rollback adapter；只有默认真实
   handler/route/scheduler 已改走 feature-owned application，且旧实现不再承载该
@@ -2845,6 +2845,10 @@
 - `recovery_smoke.py` 在 2026-09-24 修复为五库按路由迁移前，旧脚本只对
   `game_db` 应用完整目录。因此此前没有独立五库回执的隔离 smoke 只能作为单库
   恢复演练，不能用于跨库切片或 P7 的最终证据；后续统一以五库 receipt 为准。
+- 宗门默认只读路径已迁移宗门目录、25 处宗门详情、闲置宗主 scheduler 状态/成员/宗主资料，
+  以及 facade 常用成员列表到 `SectApplication` 和只读 SQL repositories。仍有
+  `sect_weekly_commands.py` 的宗门详情读取及多个入口/任务 helper 的用户资料 manager 读取，
+  应逐一按调用场景迁移；兼容 helper 的未绑定 fallback 不算默认入口完成。
 - 签到默认资产、lottery、statistics 和 task 路径已由 feature-owned application 承载；
   本轮补齐 `sign_in.effects` outbox。副作用事件与签到资产事务同库提交，统计/任务投影
   失败后由请求重放或 `reconcile` 续跑，投影仍按 operation ID 幂等。`LegacySignInEffects`
@@ -4598,3 +4602,5 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-09-27 sect inactive-owner profile read ownership：scheduler 的宗主信息读取改经 `SectApplication -> SectInactiveOwnerSqlRepository`，只查 `user_name`，保留重复 user_id 按最小 rowid 取首行、缺失用户继续跳过；该 handler 的 `_sql_message()` 数据读取现全部 feature-owned。repository/progress/inventory/migration-count/architecture 与 core numeric 回归 `41 passed`，pytest/pyc 缓存禁用、basetemp 清理，未访问运行数据库；其他宗门命令的 manager 查询仍待按场景迁移。
 
 2026-09-27 sect info read ownership：`xiuxian_sect` facade 的 25 个 `get_sect_info` 调用改经 `SectApplication -> SectInfoSqlRepository`；repository 保留 `SELECT *`、完整 dict、missing `None` 和 `core.numeric.normalize_sect_row` 行为，使用 read-only UoW，无 migration/DDL。Sect repository 与 core numeric、progress/inventory/migration-count/architecture 聚焦回归 `43 passed`，pytest/pyc cache 禁用且专用 basetemp 已清理；成员/user manager 读仍有其他命令待迁移。
+
+2026-09-27 sect member list read ownership：默认 facade 的成员列表、人数上限、宗门成员展示及闲置宗主 scheduler 快照统一经 `SectApplication -> SectMemberSqlRepository` 只读查询；保留 `SELECT *` 行结构、无显式排序的旧结果顺序、空列表语义和 `core.numeric.normalize_user_row`。`sect_member_utils` 由 facade 注入 Sect application，默认详情/成员数读取不再经 `XiuxianDateManage`；未绑定时保留独立兼容 fallback。无 migration/DDL。宗门 repositories、Sect 入口与进度契约、core numeric、source-quality、architecture、inventory/progress 聚焦回归 `509 passed`；compileall、inventory、progress、隔离数据目录下的 architecture CLI 和 diff check 通过。pytest/pyc 专用目录已清理；未访问运行数据库，用户 `boss_info.json` 修改保留。下一片审计 `sect_weekly_commands.py` 宗门详情及其余用户资料 manager reads；全局 legacy transaction services 与 `xiuxian2_handle` blockers、真实发布迁移/P7 仍未完成。
