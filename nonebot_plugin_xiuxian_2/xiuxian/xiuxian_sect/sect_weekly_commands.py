@@ -139,7 +139,7 @@ async def sect_weekly_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 
     goals = sect_weekly_goal_manager.list_goals(sect_id)
     week_key = sect_weekly_goal_manager.current_week_key()
-    sect_info = _sql_message().get_sect_info(sect_id) or {}
+    sect_info = _sect_weekly_application().get_sect_info(sect_id) or {}
     lines = [
         "【宗门周常】",
         f"宗门：{sect_info.get('sect_name', sect_id)}",

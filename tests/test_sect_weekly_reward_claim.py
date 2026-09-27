@@ -24,7 +24,8 @@ def test_sect_weekly_facade_defers_sql_manager_construction():
     ).read_text(encoding="utf-8")
     assert "_sql_message_instance = None" in source
     assert "def _sql_message(" in source
-    assert "_sql_message().get_sect_info(" in source
+    assert "_sect_weekly_application().get_sect_info(sect_id)" in source
+    assert "_sql_message().get_sect_info(sect_id)" not in source
     assert "_sql_message().lock" in source
     assert "sql_message = XiuxianDateManage()" not in source
 

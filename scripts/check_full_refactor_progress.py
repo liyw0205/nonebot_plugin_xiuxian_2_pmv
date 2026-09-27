@@ -563,6 +563,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 "SectDailyResetMaintenanceService",
             )),
             "weekly_claim_application_owned": "_sect_weekly_application().claim_weekly(" in sect_weekly_commands and "_legacy_sect_weekly_reward_service().claim(" not in sect_weekly_commands,
+            "weekly_status_sect_info_application_owned": "_sect_weekly_application().get_sect_info(sect_id)" in sect_weekly_commands and "_sql_message().get_sect_info(sect_id)" not in sect_weekly_commands,
             "weekly_claim_repository_owned": "class SectWeeklyRewardSqlRepository" in sect_weekly_repository and "SectWeeklyRewardSqlRepository" in sect_application,
             "weekly_claim_request_path_has_no_ddl": all(token not in sect_weekly_repository for token in ("CREATE TABLE", "ALTER TABLE")) and all(token not in sect_weekly_manager for token in ("CREATE TABLE", "ALTER TABLE")) and "schema_missing" in sect_weekly_repository,
             "weekly_claim_migrations_registered": all(token in plugin for token in ("sect.011", "sect.012", "apply_sect_weekly", "apply_sect_weekly_player")) and "sect_weekly_reward_operations" in sect_migrations,
