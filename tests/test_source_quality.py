@@ -1082,9 +1082,9 @@ class SourceQualityTests(unittest.TestCase):
     def test_sect_fairyland_claim_uses_transactional_service(self) -> None:
         sect_root = SOURCE_ROOT / "xiuxian" / "xiuxian_sect"
         command_source = (sect_root / "__init__.py").read_text(encoding="utf-8")
-        service_source = (sect_root / "fairyland_claim_service.py").read_text(
-            encoding="utf-8"
-        )
+        service_source = (
+            SOURCE_ROOT / "compatibility" / "legacy_sect_fairyland_claim.py"
+        ).read_text(encoding="utf-8")
         repository_source = (
             SOURCE_ROOT / "features" / "sect_fairyland" / "claim_repository.py"
         ).read_text(encoding="utf-8")

@@ -154,6 +154,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sect_fairyland_legacy_state = (PACKAGE / "xiuxian" / "xiuxian_sect" / "sect_fairyland.py").read_text(encoding="utf-8")
     sect_fairyland_upgrade_repository = (PACKAGE / "features" / "sect" / "fairyland_repository.py").read_text(encoding="utf-8")
     sect_fairyland_compatibility = (PACKAGE / "features" / "sect_fairyland" / "repository.py").read_text(encoding="utf-8")
+    sect_transaction_service = (PACKAGE / "xiuxian" / "xiuxian_sect" / "transaction_service.py").read_text(encoding="utf-8")
+    sect_fairyland_legacy_service = (PACKAGE / "compatibility" / "legacy_sect_fairyland_claim.py").read_text(encoding="utf-8")
+    sect_fairyland_legacy_shim = (PACKAGE / "xiuxian" / "xiuxian_sect" / "fairyland_claim_service.py").read_text(encoding="utf-8")
     sect_fairyland_migrations = (PACKAGE / "features" / "sect_fairyland" / "migrations.py").read_text(encoding="utf-8")
     sect_application = (PACKAGE / "features" / "sect" / "application.py").read_text(encoding="utf-8")
     sect_feature_repository = (PACKAGE / "features" / "sect" / "repository.py").read_text(encoding="utf-8")
@@ -688,6 +691,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "fairyland_claim_migration_registered": all(token in plugin for token in ("sect_fairyland.002", "apply_sect_fairyland_player")) and "sect_fairyland_claim_days" in sect_fairyland_migrations,
             "fairyland_claim_player_migration_routed": '"sect_fairyland.002"' in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")] and '"sect_fairyland.002"' in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")],
             "fairyland_claim_legacy_fallback_retained": "LegacySectFairylandRepository" in sect_fairyland_compatibility,
+            "fairyland_claim_service_isolated": "class FairylandClaimService" not in sect_transaction_service and "from ...compatibility.legacy_sect_fairyland_claim import" in sect_transaction_service and "class FairylandClaimService" in sect_fairyland_legacy_service,
+            "fairyland_claim_rollback_import_isolated": "from ...compatibility.legacy_sect_fairyland_claim import FairylandClaimService" in sect_fairyland_compatibility and "FairylandClaimService(self.player_database)" in sect_fairyland_compatibility and "from ...compatibility.legacy_sect_fairyland_claim import FairylandClaimService" in sect_fairyland_legacy_shim,
             "status": "weekly_progress_and_claim_application_owned; fairyland_claim_application_owned; disconnected_facade_legacy_getters_removed",
         },
         "natal_treasure": {

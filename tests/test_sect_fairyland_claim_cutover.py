@@ -13,6 +13,25 @@ def test_fairyland_claim_is_feature_owned_and_keeps_lazy_legacy_fallback():
     assert status["fairyland_claim_legacy_fallback_retained"]
 
 
+def test_fairyland_claim_legacy_service_isolated_behind_compatibility_imports():
+    status = _slice_status()["sect"]
+    assert status["fairyland_claim_service_isolated"]
+    assert status["fairyland_claim_rollback_import_isolated"]
+
+    from nonebot_plugin_xiuxian_2.compatibility.legacy_sect_fairyland_claim import (
+        FairylandClaimService as CompatibilityService,
+    )
+    from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.fairyland_claim_service import (
+        FairylandClaimService as LegacyModuleService,
+    )
+    from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.transaction_service import (
+        FairylandClaimService as TransactionService,
+    )
+
+    assert LegacyModuleService is CompatibilityService
+    assert TransactionService is CompatibilityService
+
+
 def test_fairyland_claim_schema_migration_is_player_only():
     migrations = build_migrations()
     game = {migration.version for migration in migrations_for_database(migrations, "game_db")}

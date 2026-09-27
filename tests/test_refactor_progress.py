@@ -116,6 +116,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(sect["fairyland_claim_status_repository_owned"])
         self.assertTrue(sect["fairyland_claim_status_read_only"])
         self.assertTrue(sect["fairyland_claim_status_no_player_manager"])
+        self.assertTrue(sect["fairyland_claim_service_isolated"])
+        self.assertTrue(sect["fairyland_claim_rollback_import_isolated"])
         self.assertTrue(sect["sect_default_repository_has_no_legacy_fallback"])
         self.assertTrue(sect["sect_task_claim_application_owned"])
         self.assertTrue(sect["sect_task_claim_repository_owned"])

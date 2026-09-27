@@ -39,7 +39,7 @@ class FairylandClaimServiceTests(unittest.TestCase):
 
     def claim(self, operation_id="claim-1", day="2026-07-12", level=2, minutes=45):
         with patch(
-            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.transaction_service.grant_tianti_settle_minutes",
+            "nonebot_plugin_xiuxian_2.compatibility.legacy_sect_fairyland_claim.grant_tianti_settle_minutes",
             side_effect=self.grant,
         ):
             return self.service.claim(operation_id, "user", "sect", day, level, minutes)

@@ -14,7 +14,7 @@ class LegacySectFairylandRepository:
         self.player_database = str(player_database)
 
     def claim(self, operation_id: str, user_id: str, sect_id: str, day: str, level: int, minutes: int) -> Any:
-        from ...xiuxian.xiuxian_sect.transaction_service import FairylandClaimService
+        from ...compatibility.legacy_sect_fairyland_claim import FairylandClaimService
 
         return FairylandClaimService(self.player_database).claim(
             operation_id, user_id, sect_id, day, level, minutes

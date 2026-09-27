@@ -2912,7 +2912,7 @@
    元数据解析和奖励 snapshot 仍由 `task_data` adapter 提供，`LegacyTaskProgressEventService` 与
    `TaskRewardClaimService` 源码仍作 compatibility 对照。训练的历练结算、商店兑换与管理员重置已切换到
    feature-owned application/repository，并登记 `training.001` 至 `.004`；洞府资产动作已由 feature application 承载、旧 transaction service 已隔离；地图默认资产/状态事务也已切换至 feature applications，旧实现隔离为显式 rollback adapter。下一项按真实调用图审计地图战斗资产与静态数据 provider，
-   再继续宗门、竞技场/副本、世界事件、Boss 和交易剩余 adapter。每次先证明默认 handler/route/scheduler 已切换，
+  再继续宗门、竞技场/副本、世界事件、Boss 和交易剩余 adapter。地图战斗 provider 与静态 JSON provider 已完成；宗门下一项审计 Fairyland claim 的显式 rollback service，并按调用图继续处理其余兼容边界。每次先证明默认 handler/route/scheduler 已切换，
    再隔离或删除旧实现。
 6. 单列处理复杂批处理和外部状态：赌坊投注/派奖与分块分红、全服批处理、跨库
    补偿、JSON/凭据状态、scheduler 和外部版本更新必须保留冻结快照、分块进度、
@@ -4651,3 +4651,5 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-09-28 map battle state-provider isolation：`LegacyMapBattleRunner` 从 `compatibility/legacy_map_battle.py` 显式组合玩家 battle snapshot provider、Boss attribute/buff/skill providers、Boss snapshot updater 与玩家 HP/MP updater；地图 facade 不再直接导入 `Boss_fight`，而只注入兼容 runner。`Boss_fight` 新增可选 `player_status_updater` port，默认仍委托原 `update_all_user_status`，其它旧调用行为不变；map adapter 显式注入同一 updater，确保 status list、bot_id、Boss 快照 mutation 和异常传播不变。fake engine/provider、真实 `Boss_fight` provider injection、map application、progress/source contracts `11 passed`；测试进程通过 `tests/__init__.py` 将静态数据复制到隔离临时目录，没有使用默认运行数据。无 migration；后续继续审计静态地图 JSON 的路径/provider 边界和无缓存读取语义。
 
 2026-09-28 map static JSON provider：新增 `MapStaticDataProvider`，由组合层显式传入 `JsonDocumentReader` 与部署数据路径；facade 保留既有缺文件错误文本，读取仍逐次解析且不持有 map document/cache。临时 JSON 行为、source 与 progress contracts `4 passed`，验证两次 load 之间替换文件后立即看到新内容、缺失文件透传且真实 map loader 使用 provider；inventory freshness、map progress gate、目标文件 compileall 和 diff check 通过。未把静态地图 JSON 复制进内存或修改数据文件；本轮 unittest 未创建 pytest cache、Python 字节码位于隔离前缀并已清理。下一阶段按 6.2 顺序离开地图切片，继续处理后续未完成的玩法/交易兼容路径。
+
+2026-09-28 sect Fairyland claim compatibility isolation：调用图确认默认领取 handler 使用 `SectFairylandApplication -> SectFairylandSqlRepository`；旧 `FairylandClaimService` 仅由显式 `LegacySectFairylandRepository` 回滚路径构造。将旧实现移至 `compatibility/legacy_sect_fairyland_claim.py`，宗门 `transaction_service.py` 与历史 `fairyland_claim_service.py` 继续 re-export，旧行为/字段与事务语义保持不变；更新 source/progress 门禁和 import identity 回归。默认路径及 player-only `sect_fairyland.002` 不变；下一步继续按宗门剩余兼容调用图审计，随后进入竞技场/副本、世界事件与 Boss。全局旧 transaction services、`xiuxian2_handle`、真实发布迁移/P7 证据仍未完成。
