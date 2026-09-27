@@ -3,50 +3,33 @@ from typing import List
 from urllib.parse import quote
 
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from .sectconfig import get_config
-from .sect_tasks import sect_task_state_manager
 
 items = Items()
-_sql_message_instance = None
-sql_message = None
 sect_application = None
 config = get_config()
 userstask = {}
 _userstask_period = None
 
 
-def _sql_message():
-    global _sql_message_instance
-    if callable(sql_message):
-        return sql_message()
-    if sql_message is not None:
-        return sql_message
-    if _sql_message_instance is None:
-        _sql_message_instance = XiuxianDateManage()
-    return _sql_message_instance
-
-
 def bind_sect_member_dependencies(
-    task_store=None, sql_manager=None, item_manager=None, sect_config=None, sect_app=None
+    task_store=None, item_manager=None, sect_config=None, sect_app=None
 ):
-    """绑定 __init__.py 中已有的共享对象，保持迁移前的运行状态。"""
-    global userstask, sql_message, _sql_message_instance, items, config, sect_application
+    """Bind shared runtime objects before Sect commands are registered."""
+    global userstask, items, config, sect_application
     global _userstask_period
+
+    if sect_app is None:
+        raise ValueError("sect_app is required")
 
     if task_store is not None:
         userstask = task_store
         _userstask_period = None
-    if sql_manager is not None:
-        sql_message = sql_manager
-        _sql_message_instance = None if callable(sql_manager) else sql_manager
     if item_manager is not None:
         items = item_manager
     if sect_config is not None:
         config = sect_config
-    if sect_app is not None:
-        sect_application = sect_app
-        sect_task_state_manager.bind_application(sect_app)
+    sect_application = sect_app
 
 
 def _md_cmd_link(text: str, cmd: str) -> str:
@@ -56,11 +39,7 @@ def _md_cmd_link(text: str, cmd: str) -> str:
 
 def _expire_task_cache_for_period() -> None:
     global _userstask_period
-    period = (
-        sect_application.current_task_period()
-        if sect_application is not None
-        else sect_task_state_manager._period()
-    )
+    period = sect_application.current_task_period()
     if _userstask_period != period:
         userstask.clear()
     _userstask_period = period
@@ -70,21 +49,12 @@ def create_user_sect_task(user_id, sect_id=None, operation_id=None, replace_exis
                           membership_service=None):
     tasklist = config["宗门任务"]
     if sect_id is None:
-        user_info = (
-            sect_application.get_user_profile(user_id)
-            if sect_application is not None
-            else _sql_message().get_user_info_with_id(user_id)
-        ) or {}
+        user_info = sect_application.get_user_profile(user_id) or {}
         sect_id = user_info.get("sect_id")
     if sect_id and membership_service is not None:
         key = random.choice(list(tasklist))
         claim = membership_service.claim_task(
-            operation_id, user_id, sect_id,
-            (
-                sect_application.current_task_period()
-                if sect_application is not None
-                else sect_task_state_manager._period()
-            ),
+            operation_id, user_id, sect_id, sect_application.current_task_period(),
             key, tasklist[key], config["每日宗门任务次上限"], replace_existing,
         )
         if not claim.applied:
@@ -93,11 +63,7 @@ def create_user_sect_task(user_id, sect_id=None, operation_id=None, replace_exis
                 "sect_id": claim.sect_id, "period": claim.period, "status": "accepted",
                 "progress": 0, "target": 1}
     elif sect_id:
-        task = (
-            sect_application.accept_task(user_id, sect_id, tasklist)
-            if sect_application is not None
-            else sect_task_state_manager.accept_task(user_id, sect_id, tasklist)
-        )
+        task = sect_application.accept_task(user_id, sect_id, tasklist)
     else:
         key = random.choices(list(tasklist))[0]
         task = {"任务名称": key, "任务内容": tasklist[key]}
@@ -107,22 +73,13 @@ def create_user_sect_task(user_id, sect_id=None, operation_id=None, replace_exis
 
 
 def refresh_user_sect_task(user_id, sect_id, operation_id, membership_service):
-    current = (
-        sect_application.get_active_task(user_id)
-        if sect_application is not None
-        else sect_task_state_manager.get_active_task(user_id)
-    )
+    current = sect_application.get_active_task(user_id)
     if not current:
         return None
     tasklist = config["宗门任务"]
     key = random.choice(list(tasklist))
     refreshed = membership_service.refresh_task(
-        operation_id, user_id, sect_id,
-        (
-            sect_application.current_task_period()
-            if sect_application is not None
-            else sect_task_state_manager._period()
-        ),
+        operation_id, user_id, sect_id, sect_application.current_task_period(),
         current["任务名称"], current["任务内容"], key, tasklist[key],
         config["每日宗门任务次上限"],
     )
@@ -137,11 +94,7 @@ def refresh_user_sect_task(user_id, sect_id, operation_id, membership_service):
 def isUserTask(user_id):
     """判断用户是否已有任务 True:有任务"""
     _expire_task_cache_for_period()
-    task = (
-        sect_application.get_active_task(user_id)
-        if sect_application is not None
-        else sect_task_state_manager.get_active_task(user_id)
-    )
+    task = sect_application.get_active_task(user_id)
     if task:
         userstask[user_id] = dict(task)
         return True
@@ -152,22 +105,14 @@ def isUserTask(user_id):
 
 def get_sect_mainbuff_id_list(sect_id):
     """获取宗门功法id列表"""
-    sect_info = (
-        sect_application.get_sect_info(sect_id)
-        if sect_application is not None
-        else _sql_message().get_sect_info(sect_id)
-    )
+    sect_info = sect_application.get_sect_info(sect_id)
     mainbufflist = str(sect_info['mainbuff'])[1:-1].split(',')
     return mainbufflist
 
 
 def get_sect_secbuff_id_list(sect_id):
     """获取宗门神通id列表"""
-    sect_info = (
-        sect_application.get_sect_info(sect_id)
-        if sect_application is not None
-        else _sql_message().get_sect_info(sect_id)
-    )
+    sect_info = sect_application.get_sect_info(sect_id)
     secbufflist = str(sect_info['secbuff'])[1:-1].split(',')
     return secbufflist
 
@@ -275,11 +220,7 @@ def get_sectbufftxt(sect_scale, config_):
 
 
 def get_sect_level(sect_id):
-    sect = (
-        sect_application.get_sect_info(sect_id)
-        if sect_application is not None
-        else _sql_message().get_sect_info(sect_id)
-    )
+    sect = sect_application.get_sect_info(sect_id)
     return divmod(sect['sect_scale'], config["等级建设度"])
 
 
@@ -400,11 +341,7 @@ def generate_random_sect_name(count: int = 1) -> List[str]:
     type_weights = [0.4, 0.3, 0.2, 0.1]
 
     # 获取已有宗门名称避免重复
-    used_names = (
-        set(sect_application.list_active_sect_names())
-        if sect_application is not None
-        else {sect['sect_name'] for sect in _sql_message().get_all_sects()}
-    )
+    used_names = set(sect_application.list_active_sect_names())
     options = []
 
     while len(options) < count:
@@ -466,11 +403,7 @@ def get_sect_member_limit(sect_scale):
 
 def can_join_sect(sect_id):
     """检查宗门是否可以加入"""
-    sect_info = (
-        sect_application.get_sect_info(sect_id)
-        if sect_application is not None
-        else _sql_message().get_sect_info(sect_id)
-    )
+    sect_info = sect_application.get_sect_info(sect_id)
     if not sect_info:
         return False, "宗门不存在"
 
@@ -482,11 +415,7 @@ def can_join_sect(sect_id):
 
     # 检查人数上限
     max_members = get_sect_member_limit(sect_info['sect_scale'])
-    current_members = len(
-        sect_application.list_sect_members(sect_id)
-        if sect_application is not None
-        else _sql_message().get_all_users_by_sect_id(sect_id)
-    )
+    current_members = len(sect_application.list_sect_members(sect_id))
 
     if current_members >= max_members:
         return False, f"人数已满 ({current_members}/{max_members})"

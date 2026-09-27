@@ -3,7 +3,7 @@ import random
 import time
 from nonebot.typing import T_State
 from ..xiuxian_utils.xiuxian2_handle import (
-    XiuxianDateManage, OtherSet, BuffJsonDate,
+    OtherSet, BuffJsonDate,
     get_main_info_msg, UserBuffDate, get_sec_msg
 )
 from nonebot import require
@@ -80,7 +80,6 @@ from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
 
 items = Items()
-_sql_message_instance = None
 sect_ids = UUIDGenerator()
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
@@ -91,6 +90,7 @@ sect_application = SectApplication(
     clock=runtime_clock,
     random_source=runtime_random,
 )
+sect_task_state_manager.bind_application(sect_application)
 
 
 def _spirit_vein_tianti_multiplier() -> float:
@@ -104,14 +104,6 @@ sect_fairyland_application = SectFairylandApplication(
     clock=runtime_clock,
     spirit_vein_multiplier=_spirit_vein_tianti_multiplier,
 )
-
-
-def _sql_message():
-    global _sql_message_instance
-    if _sql_message_instance is None:
-        _sql_message_instance = XiuxianDateManage()
-    return _sql_message_instance
-
 config = get_config()
 SECT_RENAME_CARD_ID = 20026
 SECT_RENAME_CARD_NAME = "宗门易名符"
@@ -121,7 +113,6 @@ cache_help = {}
 userstask = {}
 _bind_sect_member_dependencies(
     task_store=userstask,
-    sql_manager=_sql_message,
     item_manager=items,
     sect_config=config,
     sect_app=sect_application,
