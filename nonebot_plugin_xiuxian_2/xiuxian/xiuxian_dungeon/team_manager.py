@@ -1,8 +1,6 @@
 import asyncio
 import json
 import time
-from collections.abc import Iterator, MutableMapping
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 from nonebot import Bot
@@ -10,7 +8,10 @@ from nonebot import Bot
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
 from ..xiuxian_utils.utils import handle_send
 from ...paths import get_paths
-from .transaction_service import DungeonTeamTransactionService, TeamInviteSnapshot
+from ...compatibility.legacy_dungeon_team_invite_mapping import (
+    PersistentTeamInviteMapping,
+    team_invite_cache,
+)
 
 _player_data_manager_instance = None
 
@@ -36,74 +37,6 @@ def _player_data_manager():
 # 表名常量
 TEAM_TABLE = "teams" # 队伍信息表
 # TEAM_MEMBER_TABLE = "team_members" # 如果需要独立成员表，但目前成员列表会直接存入 TEAM_TABLE
-
-
-class PersistentTeamInviteMapping(MutableMapping[str, Dict[str, Any]]):
-    """Compatibility mapping whose authoritative state is the invite table."""
-
-    def __init__(
-        self,
-        database: str | Path | None = None,
-        *,
-        service: DungeonTeamTransactionService | None = None,
-    ) -> None:
-        self._database = Path(database) if database is not None else None
-        self._service_override = service
-
-    def _service(self) -> DungeonTeamTransactionService:
-        if self._service_override is not None:
-            return self._service_override
-        return DungeonTeamTransactionService(self._database or get_paths().player_db)
-
-    @staticmethod
-    def _as_dict(invite: TeamInviteSnapshot) -> Dict[str, Any]:
-        return {
-            "team_id": invite.team_id,
-            "inviter": invite.inviter_id,
-            "timestamp": invite.created_at,
-            "invite_id": invite.invite_id,
-            "group_id": invite.group_id,
-            "expires_at": invite.expires_at,
-        }
-
-    def __getitem__(self, user_id: str) -> Dict[str, Any]:
-        invite = self._service().pending_invite(str(user_id), time.time())
-        if invite is None:
-            raise KeyError(str(user_id))
-        return self._as_dict(invite)
-
-    def __setitem__(self, user_id: str, value: Dict[str, Any]) -> None:
-        created_at = float(value.get("timestamp", time.time()))
-        invite_id = str(value["invite_id"])
-        self._service().record_invite(
-            invite_id,
-            str(value["team_id"]),
-            str(value["inviter"]),
-            str(user_id),
-            str(value["group_id"]),
-            float(value.get("expires_at", created_at + 60)),
-        )
-
-    def __delitem__(self, user_id: str) -> None:
-        service = self._service()
-        invite = service.pending_invite(str(user_id), time.time())
-        if invite is None:
-            return
-        service.reject(
-            f"dungeon-team-reject-compat:{invite.invite_id}",
-            invite.invite_id,
-            invite.invitee_id,
-        )
-
-    def __iter__(self) -> Iterator[str]:
-        invites = self._service().list_pending_invites(time.time())
-        return iter(tuple(invite.invitee_id for invite in invites))
-
-    def __len__(self) -> int:
-        return len(self._service().list_pending_invites(time.time()))
-
-
-team_invite_cache: MutableMapping[str, Dict[str, Any]] = PersistentTeamInviteMapping()
 
 
 def _normalize_team_record(record: Dict[str, Any]) -> Dict[str, Any]:

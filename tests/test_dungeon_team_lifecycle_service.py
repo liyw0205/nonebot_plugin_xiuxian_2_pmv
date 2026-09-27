@@ -146,6 +146,19 @@ class DungeonTeamLifecycleServiceTests(unittest.TestCase):
             "rejected",
         )
 
+    def test_team_manager_reexports_legacy_mapping_identity(self) -> None:
+        from nonebot_plugin_xiuxian_2.compatibility import legacy_dungeon_team_invite_mapping
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon import team_manager
+
+        self.assertIs(
+            team_manager.PersistentTeamInviteMapping,
+            legacy_dungeon_team_invite_mapping.PersistentTeamInviteMapping,
+        )
+        self.assertIs(
+            team_manager.team_invite_cache,
+            legacy_dungeon_team_invite_mapping.team_invite_cache,
+        )
+
     def test_reject_and_expire_have_stable_operations(self) -> None:
         self.invite("invite-reject", "reject-1", "member")
         rejected = self.service.reject("reject-op", "reject-1", "member", "100", 101)

@@ -116,6 +116,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     activity_service = (PACKAGE / "xiuxian" / "xiuxian_activity" / "service.py").read_text(encoding="utf-8")
     dungeon_facade = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "__init__.py").read_text(encoding="utf-8")
     dungeon_team_manager = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "team_manager.py").read_text(encoding="utf-8")
+    dungeon_invite_compatibility = (PACKAGE / "compatibility" / "legacy_dungeon_team_invite_mapping.py").read_text(encoding="utf-8")
     dungeon_manager = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "dungeon_manager.py").read_text(encoding="utf-8")
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
     map_facade = (PACKAGE / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
@@ -510,6 +511,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 "application.invite_by_id(invite_id)" in dungeon_team_manager
                 and "application.expire(" in dungeon_team_manager
                 and "service.invite_by_id(" not in dungeon_team_manager
+            ),
+            "invite_mapping_isolated": (
+                "class PersistentTeamInviteMapping" not in dungeon_team_manager
+                and "class PersistentTeamInviteMapping" in dungeon_invite_compatibility
+                and "legacy_dungeon_team_invite_mapping import" in dungeon_team_manager
             ),
             "explore_settlement_application_owned": "dungeon_application.settle(" in dungeon_facade and "_dungeon_explore_operation_service().settle(" not in dungeon_facade,
             "reset_application_owned": "self.dungeon_application = DungeonApplication(" in dungeon_manager and "self._reset_application().reset(" in dungeon_manager and "self.reset_service.reset(" not in dungeon_manager,

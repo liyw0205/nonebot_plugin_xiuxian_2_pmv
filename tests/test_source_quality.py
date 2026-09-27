@@ -1738,6 +1738,9 @@ class SourceQualityTests(unittest.TestCase):
         team_manager_source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_dungeon" / "team_manager.py"
         ).read_text(encoding="utf-8")
+        invite_compatibility_source = (
+            SOURCE_ROOT / "compatibility" / "legacy_dungeon_team_invite_mapping.py"
+        ).read_text(encoding="utf-8")
         presenter_source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_dungeon" / "transaction_service.py"
         ).read_text(encoding="utf-8")
@@ -1764,6 +1767,8 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("application.invite_by_id(invite_id)", team_manager_source)
         self.assertIn("application.expire(", team_manager_source)
         self.assertNotIn("service.invite_by_id(", team_manager_source)
+        self.assertNotIn("class PersistentTeamInviteMapping", team_manager_source)
+        self.assertIn("class PersistentTeamInviteMapping", invite_compatibility_source)
         self.assertNotIn("DungeonTeamTransactionService", source)
         self.assertNotIn("DungeonTeamExitService", source)
         self.assertNotIn("_dungeon_team_transaction_service", source)
