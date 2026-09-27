@@ -97,7 +97,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(sect["weekly_claim_request_path_has_no_ddl"])
         self.assertTrue(sect["weekly_claim_migrations_registered"])
         self.assertTrue(sect["weekly_claim_player_migration_routed"])
-        self.assertTrue(sect["weekly_claim_legacy_fallback_retained"])
+        self.assertTrue(sect["weekly_claim_default_has_no_legacy_service"])
         self.assertTrue(sect["scheduled_grant_application_owned"])
         self.assertTrue(sect["scheduled_grant_target_query_application_owned"])
         self.assertTrue(sect["scheduled_grant_repository_owned"])

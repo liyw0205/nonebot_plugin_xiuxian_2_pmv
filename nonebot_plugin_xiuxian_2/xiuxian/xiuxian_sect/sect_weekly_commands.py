@@ -2,7 +2,6 @@ import time
 
 from nonebot.params import CommandArg
 
-from ...paths import get_paths
 from ...infrastructure.ids import UUIDGenerator
 from ..adapter_compat import Bot, GroupMessageEvent, Message, PrivateMessageEvent
 from ..on_compat import on_command
@@ -10,33 +9,11 @@ from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_utils.lay_out import Cooldown, assign_bot
 from ..xiuxian_utils.utils import check_user, handle_send, number_to
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 from .sect_weekly import sect_weekly_goal_manager
-from .transaction_service import SectWeeklyRewardClaimService
 
 
 items = Items()
-_sql_message_instance = None
-_legacy_sect_weekly_reward_service_instance = None
 runtime_ids = UUIDGenerator()
-
-
-def _sql_message():
-    global _sql_message_instance
-    if _sql_message_instance is None:
-        _sql_message_instance = XiuxianDateManage()
-    return _sql_message_instance
-
-
-def _legacy_sect_weekly_reward_service():
-    global _legacy_sect_weekly_reward_service_instance
-    if _legacy_sect_weekly_reward_service_instance is None:
-        _legacy_sect_weekly_reward_service_instance = SectWeeklyRewardClaimService(
-            get_paths().game_db,
-            get_paths().player_db,
-            _sql_message().lock,
-        )
-    return _legacy_sect_weekly_reward_service_instance
 
 
 def _sect_weekly_application():

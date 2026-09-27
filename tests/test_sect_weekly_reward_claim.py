@@ -16,26 +16,28 @@ from scripts.check_full_refactor_progress import _slice_status
 from tests.test_db_backend import db_backend
 
 
-def test_sect_weekly_facade_defers_reward_claim_service_construction():
+def test_sect_weekly_facade_has_no_legacy_claim_service_dependency():
     weekly = importlib.import_module(
         "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.sect_weekly_commands"
     )
-    assert weekly._legacy_sect_weekly_reward_service_instance is None
-
-
-def test_sect_weekly_facade_defers_sql_manager_construction():
     source = Path(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_sect/sect_weekly_commands.py"
     ).read_text(encoding="utf-8")
-    assert "_sql_message_instance = None" in source
-    assert "def _sql_message(" in source
+    assert not hasattr(weekly, "_legacy_sect_weekly_reward_service")
+    assert "SectWeeklyRewardClaimService" not in source
+    assert "_legacy_sect_weekly_reward_service" not in source
+
+
+def test_sect_weekly_facade_does_not_construct_a_legacy_sql_manager():
+    source = Path(
+        "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_sect/sect_weekly_commands.py"
+    ).read_text(encoding="utf-8")
     assert "_sect_weekly_application().get_sect_info(sect_id)" in source
-    assert "_sql_message().get_sect_info(sect_id)" not in source
-    assert "_sql_message().lock" in source
-    assert "sql_message = XiuxianDateManage()" not in source
+    assert "_sql_message" not in source
+    assert "XiuxianDateManage" not in source
 
 
-def test_sect_weekly_claim_uses_feature_application_and_keeps_legacy_fallback_lazy():
+def test_sect_weekly_claim_uses_feature_application_without_legacy_fallback():
     source = Path(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_sect/sect_weekly_commands.py"
     ).read_text(encoding="utf-8")
@@ -43,11 +45,8 @@ def test_sect_weekly_claim_uses_feature_application_and_keeps_legacy_fallback_la
         source.index("@sect_weekly_claim.handle"):
         source.index("@sect_weekly_rank.handle")
     ]
-    assert "_legacy_sect_weekly_reward_service_instance = None" in source
-    assert "def _legacy_sect_weekly_reward_service(" in source
-    assert "get_paths().game_db" in source
-    assert "get_paths().player_db" in source
-    assert "_sql_message().lock" in source
+    assert "SectWeeklyRewardClaimService" not in source
+    assert "_legacy_sect_weekly_reward_service" not in source
     assert "_sect_weekly_application().claim_weekly(" in handler
     assert "_legacy_sect_weekly_reward_service().claim(" not in handler
 
