@@ -120,6 +120,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dungeon_transaction_shim = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "transaction_service.py").read_text(encoding="utf-8")
     dungeon_team_legacy_transactions = (PACKAGE / "compatibility" / "legacy_dungeon_team_transactions.py").read_text(encoding="utf-8")
     dungeon_team_presentation = (PACKAGE / "features" / "dungeon" / "team_presentation.py").read_text(encoding="utf-8")
+    dungeon_reset_compatibility = (PACKAGE / "compatibility" / "legacy_dungeon_reset.py").read_text(encoding="utf-8")
     dungeon_manager = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "dungeon_manager.py").read_text(encoding="utf-8")
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
     map_facade = (PACKAGE / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
@@ -540,6 +541,15 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "team_presentation_legacy_identity_preserved": (
                 "from ...features.dungeon.team_presentation import" in dungeon_transaction_shim
                 and "TeamInviteResponseResult" in dungeon_transaction_shim
+            ),
+            "legacy_dungeon_reset_service_isolated": (
+                "class DungeonResetService" in dungeon_reset_compatibility
+                and "class DungeonResetResult" in dungeon_reset_compatibility
+                and "class DungeonResetService" not in dungeon_transaction_shim
+            ),
+            "legacy_dungeon_reset_construction_removed": (
+                "DungeonResetService" not in dungeon_manager
+                and "_legacy_reset_service" not in dungeon_manager
             ),
             "explore_settlement_application_owned": "dungeon_application.settle(" in dungeon_facade and "_dungeon_explore_operation_service().settle(" not in dungeon_facade,
             "reset_application_owned": "self.dungeon_application = DungeonApplication(" in dungeon_manager and "self._reset_application().reset(" in dungeon_manager and "self.reset_service.reset(" not in dungeon_manager,

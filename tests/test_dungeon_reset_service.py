@@ -13,6 +13,10 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.transaction_service import
     DungeonResetResult,
     DungeonResetService,
 )
+from nonebot_plugin_xiuxian_2.compatibility.legacy_dungeon_reset import (
+    DungeonResetResult as LegacyDungeonResetResult,
+    DungeonResetService as LegacyDungeonResetService,
+)
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.dungeon_manager import (
     DungeonManager,
     DungeonTemplate,
@@ -44,6 +48,11 @@ def create_database(tmp_path):
             ),
         )
     return database
+
+
+def test_reset_service_and_result_keep_legacy_import_identity():
+    assert DungeonResetService is LegacyDungeonResetService
+    assert DungeonResetResult is LegacyDungeonResetResult
 
 
 def dungeon(number=1):

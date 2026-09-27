@@ -16,7 +16,6 @@ from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import convert_rank
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
-from .transaction_service import DungeonResetService
 from ...features.dungeon.application import DungeonApplication
 from ...features.dungeon.reset_repository import DungeonResetSqlRepository
 
@@ -247,7 +246,6 @@ class DungeonManager:
 
             self.dungeon_templates = self._load_dungeon_templates()
             self._init_dungeon_tables()
-            self._legacy_reset_service = DungeonResetService(get_paths().player_db)
             self.dungeon_application = DungeonApplication(get_paths().game_db, get_paths().player_db)
 
             self.current_dungeon: Optional[DungeonTemplate] = None
