@@ -5,6 +5,13 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.transaction_service import SectShopPurchaseService
+from nonebot_plugin_xiuxian_2.compatibility.legacy_sect_shop_purchase import (
+    SectShopPurchaseService as CompatibilitySectShopPurchaseService,
+)
+
+
+def test_transaction_service_import_remains_a_compatibility_shim():
+    assert SectShopPurchaseService is CompatibilitySectShopPurchaseService
 
 
 def make_database(path):
