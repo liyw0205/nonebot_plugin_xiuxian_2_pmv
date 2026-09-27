@@ -30,5 +30,12 @@ class SectDirectorySqlRepository:
                 for row in rows
             ]
 
+    def list_active_sect_names(self) -> list[str | None]:
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            rows = uow.query_all(
+                "SELECT sect_name FROM sects WHERE sect_owner IS NOT NULL"
+            )
+            return [row["sect_name"] for row in rows]
+
 
 __all__ = ["SectDirectorySqlRepository"]

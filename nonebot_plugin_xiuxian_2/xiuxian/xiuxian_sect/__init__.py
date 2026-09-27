@@ -2569,7 +2569,7 @@ async def sect_kick_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     elif result.status in {"kicked", "duplicate"}:
         actor_position = result.actor_position if result.actor_position is not None else user_info['sect_position']
         actor_title = jsondata.sect_config_data()[f"{actor_position}"]['title']
-        sect_name = result.sect_name or (_sql_message().get_sect_info_by_id(user_info['sect_id']) or {}).get('sect_name', '')
+        sect_name = result.sect_name or (sect_application.get_sect_info(user_info['sect_id']) or {}).get('sect_name', '')
         msg = f"""传{actor_title}{result.actor_name or user_info['user_name']}法旨，即日起{result.target_name or give_user['user_name']}被{sect_name}除名"""
     elif result.status == "target_not_found":
         msg = f"修仙界没有名为【{nick_name}】的道友，请检查道号是否正确！"
@@ -2606,7 +2606,7 @@ async def sect_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         msg = f"宗主无法直接退出宗门，如确有需要，请完成宗主传位后另行尝试。"
         await handle_send(bot, event, msg, md_type="宗门", k1="传位", v1="宗主传位", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_out.finish()
-    sect_name = result.sect_name or (_sql_message().get_sect_info_by_id(int(user_info['sect_id'])) or {}).get('sect_name', '')
+    sect_name = result.sect_name or (sect_application.get_sect_info(int(user_info['sect_id'])) or {}).get('sect_name', '')
     msg = f"道友已退出{sect_name}，今后就是自由散修，是福是祸，犹未可知。"
     await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
     await sect_out.finish()
@@ -2864,7 +2864,7 @@ async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
             target_sect_name = sect_info['sect_name']
     else:
         # 输入的是字符串，按宗门名处理
-        target_sect_id = _sql_message().get_sect_name(sect_input)
+        target_sect_id = sect_application.get_sect_id_by_name(sect_input)
         if target_sect_id:
             sect_info = sect_application.get_sect_info(target_sect_id)
             target_sect_name = sect_info['sect_name'] if sect_info else None

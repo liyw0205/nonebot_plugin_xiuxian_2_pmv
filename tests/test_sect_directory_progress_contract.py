@@ -11,6 +11,8 @@ class SectDirectoryProgressContractTests(unittest.TestCase):
         self.assertTrue(sect["sect_directory_application_owned"])
         self.assertTrue(sect["sect_directory_repository_owned"])
         self.assertTrue(sect["sect_directory_query_read_only"])
+        self.assertTrue(sect["sect_active_names_repository_owned"])
+        self.assertTrue(sect["sect_active_names_application_owned"])
 
 
 if __name__ == "__main__":

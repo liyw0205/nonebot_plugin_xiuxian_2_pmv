@@ -19,5 +19,13 @@ class SectInfoSqlRepository:
             )
             return normalize_sect_row(row)
 
+    def get_id_by_name(self, sect_name: str) -> int | str | None:
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            row = uow.query_one(
+                "SELECT sect_id FROM sects WHERE sect_name=?",
+                (sect_name,),
+            )
+            return row["sect_id"] if row else None
+
 
 __all__ = ["SectInfoSqlRepository"]

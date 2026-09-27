@@ -75,8 +75,14 @@ class SectApplication:
     def list_sects_with_member_count(self) -> list[tuple[Any, ...]]:
         return self.directory_repository.list_with_member_count()
 
+    def list_active_sect_names(self) -> list[str | None]:
+        return self.directory_repository.list_active_sect_names()
+
     def get_sect_info(self, sect_id: int | str) -> dict[str, Any] | None:
         return self.sect_info_repository.get_by_id(sect_id)
+
+    def get_sect_id_by_name(self, sect_name: str) -> int | str | None:
+        return self.sect_info_repository.get_id_by_name(sect_name)
 
     def get_inactive_owner_sect_state(self, sect_id: int) -> dict[str, Any] | None:
         return self.inactive_owner_repository.get_sect_state(sect_id)

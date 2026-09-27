@@ -25,7 +25,9 @@ class SectDirectoryRepositoryTests(unittest.TestCase):
                 uow.execute("INSERT INTO user_xiuxian VALUES('owner','掌门',1)")
                 uow.execute("INSERT INTO user_xiuxian VALUES('member','弟子',1)")
 
-            result = SectApplication(database).list_sects_with_member_count()
+            application = SectApplication(database)
+            result = application.list_sects_with_member_count()
+            active_names = application.list_active_sect_names()
 
             self.assertEqual(
                 [
@@ -34,6 +36,7 @@ class SectDirectoryRepositoryTests(unittest.TestCase):
                 ],
                 result,
             )
+            self.assertEqual(["青云"], active_names)
 
 
 if __name__ == "__main__":

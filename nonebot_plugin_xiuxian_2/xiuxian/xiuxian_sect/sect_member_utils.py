@@ -362,7 +362,11 @@ def generate_random_sect_name(count: int = 1) -> List[str]:
     type_weights = [0.4, 0.3, 0.2, 0.1]
 
     # 获取已有宗门名称避免重复
-    used_names = {sect['sect_name'] for sect in _sql_message().get_all_sects()}
+    used_names = (
+        set(sect_application.list_active_sect_names())
+        if sect_application is not None
+        else {sect['sect_name'] for sect in _sql_message().get_all_sects()}
+    )
     options = []
 
     while len(options) < count:
