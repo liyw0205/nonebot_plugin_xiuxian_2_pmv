@@ -112,7 +112,6 @@ def _sql_message():
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
 
-
 config = get_config()
 SECT_RENAME_CARD_ID = 20026
 SECT_RENAME_CARD_NAME = "宗门易名符"
@@ -2927,7 +2926,7 @@ async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
     
     if sect_id:
-        sql_res = _sql_message().scale_top()
+        sql_res = sect_application.list_sect_scale_rank()
         top_idx_list = [_[0] for _ in sql_res]
         if int(sect_info['elixir_room_level']) == 0:
             elixir_room_name = "暂无"
@@ -3331,7 +3330,7 @@ async def sect_power_top_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     """宗门战力排行榜"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     
-    top_list = _sql_message().combat_power_top()
+    top_list = sect_application.list_sect_combat_power_rank()
     
     msg_list = ["【宗门战力排行】"]
     for i, (sect_id, sect_name, power) in enumerate(top_list, 1):

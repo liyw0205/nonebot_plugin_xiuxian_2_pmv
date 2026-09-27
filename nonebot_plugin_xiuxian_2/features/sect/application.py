@@ -98,6 +98,12 @@ class SectApplication:
     def list_active_sect_names(self) -> list[str | None]:
         return self.directory_repository.list_active_sect_names()
 
+    def list_sect_scale_rank(self) -> list[tuple[Any, ...]]:
+        return self.directory_repository.list_scale_rank()
+
+    def list_sect_combat_power_rank(self) -> list[tuple[Any, ...]]:
+        return self.directory_repository.list_combat_power_rank()
+
     def get_sect_info(self, sect_id: int | str) -> dict[str, Any] | None:
         return self.sect_info_repository.get_by_id(sect_id)
 

@@ -37,5 +37,23 @@ class SectDirectorySqlRepository:
             )
             return [row["sect_name"] for row in rows]
 
+    def list_scale_rank(self) -> list[tuple[Any, ...]]:
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            rows = uow.query_all(
+                "SELECT sect_id,sect_name,sect_scale FROM sects "
+                "WHERE sect_owner IS NOT NULL ORDER BY sect_scale DESC"
+            )
+        return [(row["sect_id"], row["sect_name"], row["sect_scale"]) for row in rows]
+
+    def list_combat_power_rank(self) -> list[tuple[Any, ...]]:
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            rows = uow.query_all(
+                "SELECT sect_id,sect_name,combat_power FROM sects "
+                "WHERE sect_owner IS NOT NULL ORDER BY combat_power DESC LIMIT 50"
+            )
+        return [
+            (row["sect_id"], row["sect_name"], row["combat_power"]) for row in rows
+        ]
+
 
 __all__ = ["SectDirectorySqlRepository"]
