@@ -253,3 +253,5 @@ migration version，路由计数 `140/33/7/1/1`，`.003` 仅 game、`.004` 仅 p
 `sect scheduled material startup-schema cutover`：定时发放目标集合改由 `SectApplication -> SectScheduledMaterialSqlRepository.list_targets` 只读获取，grant repository 不再请求时建表；新增 game-only `sect.015` 启动迁移预建回执表，既有表/回执由 `IF NOT EXISTS` 保留，缺 migration 不写资产且不 DDL。成功状态 `granted` 现在计入 application `.applied`。scheduled grant、progress、inventory、migration count 与 architecture contract `28 passed`；无运行数据迁移，本轮测试只使用临时 SQLite。pytest/pyc 缓存禁用，basetemp 清理后复核；下一片继续审计宗门 facade 的其他 manager 只读入口。
 
 `sect directory query ownership`：定时状态任务和宗门列表命令的共用全量查询改由 `SectApplication -> SectDirectorySqlRepository` 只读执行，旧 tuple 顺序及全部宗门/成员计数语义保留，无 migration 与 DDL。repository 行为与 progress/inventory/migration-count/architecture contract `26 passed`，pytest/pyc 缓存禁用且专用 basetemp 已清理，未读取运行数据库；下一片继续审计宗门 facade 的其他 manager 只读入口。
+
+`sect inactive-owner state read ownership`：自动状态任务用到的 `closed` 与 `sect_owner` 改由 `SectApplication -> SectInactiveOwnerSqlRepository` 只读读取，保留缺失宗门返回 `None`，无 migration 与 DDL。repository 行为与 progress/inventory/migration-count/architecture `27 passed`；pytest/pyc 缓存禁用且专用 basetemp 已清理，未访问运行数据库。成员和用户快照仍待后续迁移。

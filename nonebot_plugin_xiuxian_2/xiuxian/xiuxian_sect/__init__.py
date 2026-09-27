@@ -406,7 +406,7 @@ async def auto_handle_inactive_sect_owners():
                 logger.info(f"处理宗门：{sect_name}(ID:{sect_id})")
                 
                 # 获取宗门详细信息
-                sect_info = _sql_message().get_sect_info(sect_id)
+                sect_info = sect_application.get_inactive_owner_sect_state(sect_id)
                 if not sect_info:
                     logger.error(f"获取宗门详细信息失败，跳过处理")
                     continue
