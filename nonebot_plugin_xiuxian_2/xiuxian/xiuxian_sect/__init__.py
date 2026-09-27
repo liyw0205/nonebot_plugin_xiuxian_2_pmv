@@ -70,12 +70,7 @@ from .sect_fairyland import (
 from ..adapter_compat import is_channel_event
 from ...paths import get_paths
 
-from .transaction_service import SectCloseMountainService
-from .transaction_service import SectOwnerInheritService
-from .transaction_service import SectOpenJoinService
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
-from .transaction_service import SectCloseJoinService
-from .transaction_service import SectDailyResetMaintenanceService
 from ...features.sect_fairyland.application import SectFairylandApplication
 
 from ...features.sect.application import SectApplication
@@ -107,11 +102,6 @@ sect_fairyland_application = SectFairylandApplication(
     clock=runtime_clock,
     spirit_vein_multiplier=_spirit_vein_tianti_multiplier,
 )
-_sect_close_mountain_service_instance = None
-_sect_owner_inherit_service_instance = None
-_sect_open_join_service_instance = None
-_sect_close_join_service_instance = None
-_sect_daily_reset_maintenance_service_instance = None
 
 
 def _sql_message():
@@ -119,51 +109,6 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
-
-
-def _sect_close_mountain_service():
-    global _sect_close_mountain_service_instance
-    if _sect_close_mountain_service_instance is None:
-        _sect_close_mountain_service_instance = SectCloseMountainService(
-            get_paths().game_db
-        )
-    return _sect_close_mountain_service_instance
-
-
-def _sect_owner_inherit_service():
-    global _sect_owner_inherit_service_instance
-    if _sect_owner_inherit_service_instance is None:
-        _sect_owner_inherit_service_instance = SectOwnerInheritService(
-            get_paths().game_db
-        )
-    return _sect_owner_inherit_service_instance
-
-
-def _sect_open_join_service():
-    global _sect_open_join_service_instance
-    if _sect_open_join_service_instance is None:
-        _sect_open_join_service_instance = SectOpenJoinService(
-            get_paths().game_db
-        )
-    return _sect_open_join_service_instance
-
-
-def _sect_close_join_service():
-    global _sect_close_join_service_instance
-    if _sect_close_join_service_instance is None:
-        _sect_close_join_service_instance = SectCloseJoinService(
-            get_paths().game_db
-        )
-    return _sect_close_join_service_instance
-
-
-def _sect_daily_reset_maintenance_service():
-    global _sect_daily_reset_maintenance_service_instance
-    if _sect_daily_reset_maintenance_service_instance is None:
-        _sect_daily_reset_maintenance_service_instance = SectDailyResetMaintenanceService(
-            get_paths().game_db
-        )
-    return _sect_daily_reset_maintenance_service_instance
 
 
 config = get_config()

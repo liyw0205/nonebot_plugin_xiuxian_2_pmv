@@ -15,10 +15,11 @@ from tests.test_db_backend import db_backend
 
 
 class SectDailyResetMaintenanceTests(unittest.TestCase):
-    def test_sect_facade_defers_daily_reset_maintenance_service_construction(self):
+    def test_sect_facade_does_not_wire_daily_reset_legacy_service(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_sect as sect_plugin
 
-        self.assertIsNone(sect_plugin._sect_daily_reset_maintenance_service_instance)
+        self.assertFalse(hasattr(sect_plugin, "_sect_daily_reset_maintenance_service_instance"))
+        self.assertFalse(hasattr(sect_plugin, "_sect_daily_reset_maintenance_service"))
 
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -138,8 +139,8 @@ class SectDailyResetMaintenanceTests(unittest.TestCase):
             "async def auto_handle_inactive_sect_owners"
         )]
         self.assertIn("sect_application.reset_daily_maintenance(", handler)
-        self.assertIn("_sect_daily_reset_maintenance_service_instance = None", source)
-        self.assertIn("def _sect_daily_reset_maintenance_service(", source)
+        self.assertNotIn("_sect_daily_reset_maintenance_service_instance", source)
+        self.assertNotIn("def _sect_daily_reset_maintenance_service(", source)
         self.assertNotIn("sect_task_reset()", handler)
         self.assertNotIn("sect_elixir_get_num_reset()", handler)
         self.assertNotIn("charge_elixir_room_maintenance", handler)

@@ -503,6 +503,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "name_refresh_application_owned": "sect_application.charge_name_refresh(" in sect_facade,
             "legacy_membership_disabled": all(token not in sect_facade for token in ("sect_membership_service.join", "sect_membership_service.leave_sect", "sect_membership_service.kick_member", "sect_membership_service.change_position")),
             "legacy_membership_getter_removed": "_sect_membership_service" not in sect_facade and "SectMembershipService" not in sect_facade,
+            "stale_legacy_service_getters_removed": all(token not in sect_facade for token in (
+                "_sect_close_mountain_service", "_sect_owner_inherit_service", "_sect_open_join_service",
+                "_sect_close_join_service", "_sect_daily_reset_maintenance_service", "SectCloseMountainService",
+                "SectOwnerInheritService", "SectOpenJoinService", "SectCloseJoinService",
+                "SectDailyResetMaintenanceService",
+            )),
             "weekly_claim_application_owned": "_sect_weekly_application().claim_weekly(" in sect_weekly_commands and "_legacy_sect_weekly_reward_service().claim(" not in sect_weekly_commands,
             "weekly_claim_repository_owned": "class SectWeeklyRewardSqlRepository" in sect_weekly_repository and "SectWeeklyRewardSqlRepository" in sect_application,
             "weekly_claim_request_path_has_no_ddl": all(token not in sect_weekly_repository for token in ("CREATE TABLE", "ALTER TABLE")) and all(token not in sect_weekly_manager for token in ("CREATE TABLE", "ALTER TABLE")) and "schema_missing" in sect_weekly_repository,
@@ -515,7 +521,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "fairyland_claim_migration_registered": all(token in plugin for token in ("sect_fairyland.002", "apply_sect_fairyland_player")) and "sect_fairyland_claim_days" in sect_fairyland_migrations,
             "fairyland_claim_player_migration_routed": '"sect_fairyland.002"' in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")] and '"sect_fairyland.002"' in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")],
             "fairyland_claim_legacy_fallback_retained": "LegacySectFairylandRepository" in sect_fairyland_compatibility,
-            "status": "weekly_and_fairyland_claim_application_owned_with_other_sect_compatibility_paths",
+            "status": "weekly_and_fairyland_claim_application_owned; disconnected_facade_legacy_getters_removed",
         },
         "natal_treasure": {
             "awaken_application_owned": "natal_treasure_application.awaken(" in natal_facade,

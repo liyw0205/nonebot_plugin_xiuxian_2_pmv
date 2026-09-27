@@ -15,10 +15,11 @@ from tests.test_db_backend import db_backend
 
 
 class SectCloseMountainServiceTests(unittest.TestCase):
-    def test_sect_facade_defers_close_mountain_service_construction(self):
+    def test_sect_facade_does_not_wire_close_mountain_legacy_service(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_sect as sect_plugin
 
-        self.assertIsNone(sect_plugin._sect_close_mountain_service_instance)
+        self.assertFalse(hasattr(sect_plugin, "_sect_close_mountain_service_instance"))
+        self.assertFalse(hasattr(sect_plugin, "_sect_close_mountain_service"))
 
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -125,8 +126,8 @@ class SectCloseMountainServiceTests(unittest.TestCase):
 
         self.assertIn("sect_application.close_mountain(", auto_handler)
         self.assertIn("sect_application.close_mountain(", manual_handler)
-        self.assertIn("_sect_close_mountain_service_instance = None", source)
-        self.assertIn("def _sect_close_mountain_service(", source)
+        self.assertNotIn("_sect_close_mountain_service_instance", source)
+        self.assertNotIn("def _sect_close_mountain_service(", source)
         for old_call in (
             "sql_message.update_sect_closed_status(",
             "sql_message.update_usr_sect(",

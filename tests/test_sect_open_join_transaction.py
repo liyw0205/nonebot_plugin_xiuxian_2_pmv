@@ -13,10 +13,11 @@ from tests.test_db_backend import db_backend
 
 
 class SectOpenJoinServiceTests(unittest.TestCase):
-    def test_sect_facade_defers_open_join_service_construction(self):
+    def test_sect_facade_does_not_wire_open_join_legacy_service(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_sect as sect_plugin
 
-        self.assertIsNone(sect_plugin._sect_open_join_service_instance)
+        self.assertFalse(hasattr(sect_plugin, "_sect_open_join_service_instance"))
+        self.assertFalse(hasattr(sect_plugin, "_sect_open_join_service"))
 
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -84,8 +85,8 @@ class SectOpenJoinServiceTests(unittest.TestCase):
         end = source.index("@sect_close_mountain.handle", start)
         handler = source[start:end]
         self.assertIn("sect_application.open_join(", handler)
-        self.assertIn("_sect_open_join_service_instance = None", source)
-        self.assertIn("def _sect_open_join_service(", source)
+        self.assertNotIn("_sect_open_join_service_instance", source)
+        self.assertNotIn("def _sect_open_join_service(", source)
         self.assertNotIn("sql_message.update_sect_join_status(", handler)
 
 
