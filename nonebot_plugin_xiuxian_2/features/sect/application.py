@@ -352,7 +352,21 @@ class SectApplication:
         return SectMutationResult(SectPracticeSqlRepository(self.database).upgrade(operation_id, user_id, sect_id, practice_type, expected_level, next_level, stone_cost, materials_cost))
 
     def settle_task(self, operation_id: str, user_id: str, sect_id: int, period: str, cost_type: str, cost: int, exp_reward: int, sect_reward: int, expected_task_key=None, expected_task_data=None):
-        return SectMutationResult(SectTaskSettlementSqlRepository(self.database).settle(operation_id, user_id, sect_id, period, cost_type, cost, exp_reward, sect_reward, expected_task_key, expected_task_data))
+        repository = SectTaskSettlementSqlRepository(self.database, clock=self.clock)
+        return SectMutationResult(
+            repository.settle(
+                operation_id,
+                user_id,
+                sect_id,
+                period,
+                cost_type,
+                cost,
+                exp_reward,
+                sect_reward,
+                expected_task_key,
+                expected_task_data,
+            )
+        )
 
     def create_sect(self, operation_id: str, user_id: str, sect_name: str, stone_cost: int, owner_position: int):
         return SectMutationResult(SectCreationSqlRepository(self.database).create(operation_id, user_id, sect_name, stone_cost, owner_position))

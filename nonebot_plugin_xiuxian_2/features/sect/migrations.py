@@ -129,6 +129,16 @@ def apply_sect_task_claim_operations(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_sect_task_settlement_operations(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS sect_task_settlement_operations("
+        "operation_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,sect_id INTEGER NOT NULL,"
+        "period TEXT NOT NULL,cost_type TEXT NOT NULL,cost INTEGER NOT NULL,"
+        "exp_reward INTEGER NOT NULL,sect_reward INTEGER NOT NULL,"
+        "materials_reward INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
 __all__ = [
     "apply_sect",
     "apply_sect_rename",
@@ -147,4 +157,5 @@ __all__ = [
     "apply_sect_scheduled_materials",
     "apply_sect_task_state",
     "apply_sect_task_claim_operations",
+    "apply_sect_task_settlement_operations",
 ]

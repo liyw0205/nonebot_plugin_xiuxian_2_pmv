@@ -2826,9 +2826,9 @@
   `xiuxian2_handle.py`（181,666 bytes）的旧执行路径。它们不能因已有 facade、
   application 或静态标记而计作完成。
 - 当前静态审计命中：`transaction_service.py` 33 个/39,396 行，旧服务 import 文件
-  103 个，`xiuxian2_handle` import 文件 80 个，直接 `db_backend.connect` 命中 107 个，
-  `sqlite3.connect` 命中 29 个，直接全局 random 命中 67 个，`datetime.now` 命中
-  67 个，`time.time` 命中 25 个。计数只作趋势，不替代逐条真实调用图审计。
+  102 个，`xiuxian2_handle` import 文件 75 个，直接 `db_backend.connect` 命中 107 个，
+  `sqlite3.connect` 命中 32 个，直接全局 random 命中 67 个，`datetime.now` 命中
+  65 个，`time.time` 命中 25 个。计数只作趋势，不替代逐条真实调用图审计。
 - 已切换的功能仍可能保留显式 compatibility/rollback adapter；只有默认真实
   handler/route/scheduler 已改走 feature-owned application，且旧实现不再承载该
   用例，才可逐项从遗留服务移除。
@@ -2848,10 +2848,9 @@
 - 宗门目录、25 处宗门详情、闲置宗主 scheduler 状态/成员/宗主资料、facade 成员列表、
   按 user_id/道号的资料、宗门名到 ID/活跃宗名、周常详情与周常进度均由
   `SectApplication` 和 SQL repositories 承载；`sect_member_utils` 的 manager fallback 已移除。
-  任务状态查询及接取/刷新也经 application/repository，`sect.016`/`.017` 启动迁移与
-  no-request-DDL 已覆盖。仍未完成的是任务结算：`SectTaskSettlementSqlRepository` 当前在请求内
-  `CREATE TABLE` 且默认使用系统时间，尚无独立启动迁移/注入 Clock；宗门其他遗留事务边界仍需按
-  后续优先级逐片处理。
+  任务状态查询、接取/刷新和 HP/灵石结算也经 application/repository；`sect.016` 至 `.018`
+  在 game DB 启动迁移预建任务状态及操作回执表，相关请求路径只校验 schema、不执行 DDL，
+  结算时间使用注入的 Clock。宗门其他遗留事务边界仍需按后续优先级逐片处理。
 - 签到默认资产、lottery、statistics 和 task 路径已由 feature-owned application 承载；
   本轮补齐 `sign_in.effects` outbox。副作用事件与签到资产事务同库提交，统计/任务投影
   失败后由请求重放或 `reconcile` 续跑，投影仍按 operation ID 幂等。`LegacySignInEffects`
@@ -4635,3 +4634,5 @@ Boss 通过 `get_rift_battle_final_attributes` 注入 `get_rift_battle_impart_da
 2026-09-27 sect task claim/refresh transaction cutover：新增 game-only `sect.017` 回执迁移；`SectTaskStateSqlRepository` 在单一 immediate UoW 内验证用户宗门归属、宗门存在、每日上限、当前任务状态并提交任务状态与幂等回执，刷新还会校验预期旧状态；重复 operation 可重放，回执写入失败回滚状态变更。默认宗门任务接取/刷新入口切换到 `SectApplication`，移除两个 helper 对未定义 membership service 的引用；临时任务 cache 在无任务时清除并按新日过期。新增 migration 保留、缺 schema 不触发请求期 DDL、状态冲突、幂等和事务回滚测试。全 Sect feature、`test_sect_*`、source-quality 和 refactor-progress 聚焦回归 `510 passed`；inventory、compileall、隔离数据目录 architecture CLI 与 diff check 通过，Sect task-claim application/repository/migration/no-request-DDL 进度项均为 `true`。pytest cache 禁用，测试/编译/架构数据位于自动回收临时目录；未访问运行数据库，用户 `boss_info.json` 修改保留。全局 `exit_ready=false` 仍受旧 transaction services 与 `xiuxian2_handle` 执行路径阻塞，真实发布迁移/P7 证据也未完成。
 
 2026-09-27 trade Guishi read-only projection cutover：鬼市订单列表、账户余额与暂存物品读取从真实命令/清理/scheduler 入口切换到 `TradeApplication -> GuishiQuerySqlRepository`，仅以短生命周期只读 UoW 查询 `trade_db`；缺数据库或投影表返回旧接口空值，不执行请求期建表，也不持有连接缓存。保留 `qiugou/求购`、`baitan/摆摊` 类型别名、精确名称/用户/订单筛选、原始行形状和账户 JSON 容错；`_trade_manager` 仍仅作为旧拍卖 fallback 的显式依赖，不在本切片删除。无 migration/业务数据访问。Guishi/trade 聚焦回归 `140 passed`，query/application/lazy-reader/source-quality 回归 `239 passed`；隔离 pycache 下 compileall、inventory `--check`、progress CLI、NoneBot 初始化后的 architecture CLI（`ok=true`）和 diff check 通过。整体 progress `exit_ready=false`，33 个旧 transaction service 与 `xiuxian2_handle` blockers 仍在。pytest/pyc/architecture 临时目录已清理，未访问运行数据库；用户 `boss_info.json` 修改保留。下一片继续按 6.2.4 调查拍卖 session/竞价 fallback 的真实调用图。
+
+2026-09-27 sect task-settlement startup-schema and clock cutover：新增 game-only `sect.018` 幂等创建结算回执表；`SectTaskSettlementSqlRepository` 不再请求期建表，缺 schema 返回 `schema_missing`，`SectApplication.settle_task` 将注入 Clock 传入 repository，并保留结算原子性、重放与任务快照检查。更新 Sect feature 文档及 progress gate；覆盖 migration 路由/保留、缺 schema 无 DDL、HP/灵石结算、operation replay、固定时间与回执失败回滚。仓储/progress focused tests `7 passed`，Sect feature、`test_sect_*`、source-quality、refactor-progress 与 architecture contracts `531 passed`；compile、inventory `--check`、progress CLI 条件、architecture CLI (`ok=true`) 与 diff check 均通过。测试与 CLI 使用隔离临时数据目录，pytest cache/字节码 cache 禁用；本轮 basetemp 清理后复核。下一片按 6.2.4 检查拍卖 session/竞价 fallback 的真实调用图；全局旧 transaction services、`xiuxian2_handle` 与真实发布迁移/P7 证据仍是整体完成 blockers。

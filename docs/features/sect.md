@@ -18,7 +18,7 @@
 
 ## 数据、回滚与限制
 
-`sect.011` 在 game DB 创建/补齐 `sect_weekly_goal` 和 `sect_weekly_reward_operations`；`sect.012` 仅在 player DB 创建/补齐 `boss_limit.integral`，保留已有周常进度与玩家记录；`sect.013` 在 game DB 预建手动解散回执并保留已有操作记录；`sect.016` 预建宗门任务状态表；`sect.017` 在 game DB 预建接取/刷新幂等回执。周常、手动解散及任务状态查询/接取/刷新请求只检查已登记 schema，不建表或补列。周常奖励由 `SectWeeklyRewardSqlRepository` 使用 attached game/player transaction 校验宗门归属、目标进度、重复领取与背包容量，再更新玩家、宗门、背包、BOSS 积分及领取标记。晚期 SQL 异常会回滚两个库；SQLite WAL 下 attached 多库事务不承诺进程/主机崩溃时的跨库原子性。手动解散由 `SectManualDisbandSqlRepository` 在 game-db immediate UoW 内重验宗主身份、解绑全部成员、删除宗门并写幂等回执；旧 `SectDisbandService` 仅保留兼容对照。**任务结算仍是待迁移边界**：`SectTaskSettlementSqlRepository` 目前在请求内创建回执表并使用系统时间，尚未接入启动迁移与注入 Clock。关闭 `XIUXIAN_SECT_ENABLED` 即回退兼容入口。
+`sect.011` 在 game DB 创建/补齐 `sect_weekly_goal` 和 `sect_weekly_reward_operations`；`sect.012` 仅在 player DB 创建/补齐 `boss_limit.integral`，保留已有周常进度与玩家记录；`sect.013` 在 game DB 预建手动解散回执并保留已有操作记录；`sect.016` 预建宗门任务状态表；`sect.017` 在 game DB 预建接取/刷新幂等回执；`sect.018` 在 game DB 预建任务结算回执。周常、手动解散及任务状态/接取/刷新/结算请求只检查已登记 schema，不建表或补列。任务结算时间由注入的 Clock 提供。周常奖励由 `SectWeeklyRewardSqlRepository` 使用 attached game/player transaction 校验宗门归属、目标进度、重复领取与背包容量，再更新玩家、宗门、背包、BOSS 积分及领取标记。晚期 SQL 异常会回滚两个库；SQLite WAL 下 attached 多库事务不承诺进程/主机崩溃时的跨库原子性。手动解散由 `SectManualDisbandSqlRepository` 在 game-db immediate UoW 内重验宗主身份、解绑全部成员、删除宗门并写幂等回执；旧 `SectDisbandService` 仅保留兼容对照。关闭 `XIUXIAN_SECT_ENABLED` 即回退兼容入口。
 
 ## 命令与别名
 
@@ -30,7 +30,7 @@
 
 ## 数据模型与迁移
 
-`sect.001` 写迁移标记和统一 ledger；`sect.011`、`sect.013`、`sect.016`、`sect.017` 属于 game DB，`sect.012` 属于 player DB。历史周常进度、已有手动解散回执和任务操作回执由幂等迁移保留。`sect_fairyland.002` 在 player DB 预建炼体堂领取回执与每日状态表，并将旧按宗门展开的领取日期回填到 `sect_fairyland_claim_days`；信息查询和领奖均读取/更新该 feature-owned 状态，不在请求期建表。
+`sect.001` 写迁移标记和统一 ledger；`sect.011`、`sect.013`、`sect.016`、`sect.017`、`sect.018` 属于 game DB，`sect.012` 属于 player DB。历史周常进度、已有手动解散回执和任务操作回执由幂等迁移保留。`sect_fairyland.002` 在 player DB 预建炼体堂领取回执与每日状态表，并将旧按宗门展开的领取日期回填到 `sect_fairyland_claim_days`；信息查询和领奖均读取/更新该 feature-owned 状态，不在请求期建表。
 
 ## 事务与失败回滚
 
@@ -54,4 +54,4 @@
 
 ## 灰度开关、回滚和已知限制
 
-关闭开关即回到兼容入口；宗门任务结算仍有请求期 DDL/系统时间边界，其他未迁移事务也保留兼容实现。周常跨库请求事务能回滚 SQL 异常，但 attached SQLite WAL 的崩溃原子性不作保证。
+关闭开关即回到兼容入口；其他未迁移事务仍保留兼容实现。周常跨库请求事务能回滚 SQL 异常，但 attached SQLite WAL 的崩溃原子性不作保证。
