@@ -11,10 +11,16 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.transaction_service import (
     SectSecBuffLearnService,
 )
+from nonebot_plugin_xiuxian_2.compatibility.legacy_sect_secondary_buff_learn import (
+    SectSecBuffLearnService as CompatibilitySectSecBuffLearnService,
+)
 from tests.test_db_backend import db_backend
 
 
 class SectSecBuffLearnServiceTests(unittest.TestCase):
+    def test_transaction_service_import_remains_a_compatibility_shim(self) -> None:
+        self.assertIs(SectSecBuffLearnService, CompatibilitySectSecBuffLearnService)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "game.sqlite3"

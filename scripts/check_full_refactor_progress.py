@@ -161,6 +161,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sect_member_join_legacy_service = (PACKAGE / "compatibility" / "legacy_sect_member_join.py").read_text(encoding="utf-8")
     sect_shop_legacy_service = (PACKAGE / "compatibility" / "legacy_sect_shop_purchase.py").read_text(encoding="utf-8")
     sect_main_buff_legacy_service = (PACKAGE / "compatibility" / "legacy_sect_main_buff_learn.py").read_text(encoding="utf-8")
+    sect_secondary_buff_legacy_service = (PACKAGE / "compatibility" / "legacy_sect_secondary_buff_learn.py").read_text(encoding="utf-8")
     sect_fairyland_migrations = (PACKAGE / "features" / "sect_fairyland" / "migrations.py").read_text(encoding="utf-8")
     sect_application = (PACKAGE / "features" / "sect" / "application.py").read_text(encoding="utf-8")
     sect_feature_repository = (PACKAGE / "features" / "sect" / "repository.py").read_text(encoding="utf-8")
@@ -708,6 +709,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "main_buff_learn_application_owned": "sect_application.learn_main(" in sect_facade,
             "main_buff_learn_service_isolated": "class SectMainBuffLearnService" not in sect_transaction_service and "from ...compatibility.legacy_sect_main_buff_learn import" in sect_transaction_service and "class SectMainBuffLearnService" in sect_main_buff_legacy_service,
             "main_buff_learn_rollback_import_isolated": "from ...compatibility.legacy_sect_main_buff_learn import SectMainBuffLearnService" in sect_feature_repository,
+            "secondary_buff_learn_application_owned": "sect_application.learn_secondary(" in sect_facade,
+            "secondary_buff_learn_service_isolated": "class SectSecBuffLearnService" not in sect_transaction_service and "from ...compatibility.legacy_sect_secondary_buff_learn import" in sect_transaction_service and "class SectSecBuffLearnService" in sect_secondary_buff_legacy_service,
+            "secondary_buff_learn_rollback_import_isolated": "from ...compatibility.legacy_sect_secondary_buff_learn import SectSecBuffLearnService" in sect_feature_repository,
             "status": "weekly_progress_and_claim_application_owned; fairyland_claim_application_owned; disconnected_facade_legacy_getters_removed",
         },
         "natal_treasure": {
