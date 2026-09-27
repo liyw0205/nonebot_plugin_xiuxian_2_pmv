@@ -102,6 +102,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(sect["owner_inherit_service_isolated"])
         self.assertTrue(sect["close_mountain_application_owned"])
         self.assertTrue(sect["close_mountain_service_isolated"])
+        self.assertTrue(sect["join_state_application_owned"])
+        self.assertTrue(sect["join_state_services_isolated"])
         self.assertTrue(sect["weekly_claim_application_owned"])
         self.assertTrue(sect["weekly_status_sect_info_application_owned"])
         self.assertTrue(sect["weekly_claim_repository_owned"])

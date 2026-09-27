@@ -9,10 +9,16 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.transaction_service import (
     SectOpenJoinService,
 )
+from nonebot_plugin_xiuxian_2.compatibility.legacy_sect_join_state import (
+    SectOpenJoinService as CompatibilitySectOpenJoinService,
+)
 from tests.test_db_backend import db_backend
 
 
 class SectOpenJoinServiceTests(unittest.TestCase):
+    def test_transaction_service_import_remains_a_compatibility_shim(self) -> None:
+        self.assertIs(SectOpenJoinService, CompatibilitySectOpenJoinService)
+
     def test_sect_facade_does_not_wire_open_join_legacy_service(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_sect as sect_plugin
 
