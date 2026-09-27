@@ -119,6 +119,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sect_elixir_claim_handler = sect_facade[
         sect_facade.index("async def sect_elixir_get_") : sect_facade.index("@sect_buff_info.handle")
     ]
+    sect_inactive_owner_handler = sect_facade[
+        sect_facade.index("async def auto_handle_inactive_sect_owners") : sect_facade.index("@sect_help.handle")
+    ]
     sect_fairyland_upgrade_handler = sect_facade[
         sect_facade.index("async def sect_fairyland_upgrade_") : sect_facade.index(
             "@sect_fairyland_claim.handle", sect_facade.index("async def sect_fairyland_upgrade_")
@@ -133,6 +136,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sect_fairyland_migrations = (PACKAGE / "features" / "sect_fairyland" / "migrations.py").read_text(encoding="utf-8")
     sect_application = (PACKAGE / "features" / "sect" / "application.py").read_text(encoding="utf-8")
     sect_activity_repository = (PACKAGE / "features" / "sect" / "activity_repository.py").read_text(encoding="utf-8")
+    sect_disband_repository = (PACKAGE / "features" / "sect" / "disband_repository.py").read_text(encoding="utf-8")
     sect_weekly_repository = (PACKAGE / "features" / "sect" / "weekly_reward_repository.py").read_text(encoding="utf-8")
     sect_manual_disband_repository = (PACKAGE / "features" / "sect" / "manual_disband_repository.py").read_text(encoding="utf-8")
     sect_migrations = (PACKAGE / "features" / "sect" / "migrations.py").read_text(encoding="utf-8")
@@ -505,6 +509,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "activity_timestamp_clock_injected": "self.clock.now()" in sect_application and "UPDATE user_cd SET last_check_info_time=? WHERE user_id=?" in sect_activity_repository,
             "activity_timestamp_legacy_format_preserved": "astimezone().replace(tzinfo=None)" in sect_application and "isoformat(sep=\" \")" in sect_application,
             "activity_timestamp_order_preserved": sect_elixir_claim_handler.index("sect_application.update_last_check_info_time(user_id)") < sect_elixir_claim_handler.index("if sect_id:"),
+            "activity_timestamp_read_application_owned": sect_inactive_owner_handler.count("sect_application.get_last_check_info_time(") == 2 and "_sql_message().get_last_check_info_time(" not in sect_inactive_owner_handler,
+            "activity_timestamp_read_repository_owned": "def get_last_check_info_time(" in sect_activity_repository,
+            "activity_timestamp_legacy_timezone_safe": "def _elapsed_days(" in sect_disband_repository and "occurred_at.astimezone()" in sect_disband_repository,
             "buff_search_application_owned": sect_facade.count("sect_application.apply_buff_search(") >= 2,
             "practice_application_owned": sect_facade.count("sect_application.upgrade_practice(") >= 3,
             "task_settlement_application_owned": sect_facade.count("sect_application.settle_task(") >= 2,

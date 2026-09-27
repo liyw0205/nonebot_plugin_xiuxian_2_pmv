@@ -18,6 +18,14 @@ class SectDisbandSqlRepository:
         try: return datetime.fromisoformat(str(value or '').replace('Z','+00:00'))
         except ValueError: return None
 
+    @staticmethod
+    def _elapsed_days(checked: datetime, occurred_at: datetime) -> int:
+        if checked.tzinfo is None:
+            checked = checked.astimezone()
+        if occurred_at.tzinfo is None:
+            occurred_at = occurred_at.astimezone()
+        return (checked - occurred_at).days
+
     def disband_inactive(self, operation_id: str, sect_id: int, reason: str, *, expected_sect_name: str, expected_owner_id: str | None, expected_closed: bool, expected_member_ids: Iterable[str], expected_active_candidate_ids: Iterable[str], checked_at: Any, inactivity_days: int) -> dict[str, Any]:
         operation_id, sect_id, reason = str(operation_id).strip(), int(sect_id), str(reason).strip()
         checked = self._time(checked_at)
@@ -45,12 +53,12 @@ class SectDisbandSqlRepository:
                 if row['sect_position'] is None or int(row['sect_position']) == 0: continue
                 cd=uow.query_one('SELECT last_check_info_time FROM user_cd WHERE user_id=?',(str(row['user_id']),))
                 last=self._time(cd['last_check_info_time']) if cd else None
-                if last is not None and (checked-last).days <= int(inactivity_days): active.append(str(row['user_id']))
+                if last is not None and self._elapsed_days(checked,last) <= int(inactivity_days): active.append(str(row['user_id']))
             if tuple(sorted(active)) != candidates: return {'status':'candidates_changed',**base,'member_count':len(rows)}
             if reason == 'empty': valid=closed and not rows
             elif reason == 'no_active_successor': valid=closed and bool(rows) and not active
             else:
-                valid=(not closed and owner is not None and len(rows)==1 and str(rows[0]['user_id'])==owner and int(rows[0]['sect_position'])==0 and (lambda last: last is not None and (checked-last).days >= int(inactivity_days))(self._time((uow.query_one('SELECT last_check_info_time FROM user_cd WHERE user_id=?',(owner,)) or {}).get('last_check_info_time'))))
+                valid=(not closed and owner is not None and len(rows)==1 and str(rows[0]['user_id'])==owner and int(rows[0]['sect_position'])==0 and (lambda last: last is not None and self._elapsed_days(checked,last) >= int(inactivity_days))(self._time((uow.query_one('SELECT last_check_info_time FROM user_cd WHERE user_id=?',(owner,)) or {}).get('last_check_info_time'))))
             if not valid: return {'status':'condition_changed',**base,'member_count':len(rows)}
             cleared=uow.execute('UPDATE user_xiuxian SET sect_id=NULL,sect_position=NULL,sect_contribution=0 WHERE sect_id=?',(sect_id,)); deleted=uow.execute('DELETE FROM sects WHERE sect_id=?',(sect_id,))
             if cleared.rowcount != len(rows) or deleted.rowcount != 1: raise RuntimeError('inactive sect snapshot changed')

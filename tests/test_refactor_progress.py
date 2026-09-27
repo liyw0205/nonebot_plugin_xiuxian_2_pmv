@@ -102,6 +102,9 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(sect["activity_timestamp_clock_injected"])
         self.assertTrue(sect["activity_timestamp_legacy_format_preserved"])
         self.assertTrue(sect["activity_timestamp_order_preserved"])
+        self.assertTrue(sect["activity_timestamp_read_application_owned"])
+        self.assertTrue(sect["activity_timestamp_read_repository_owned"])
+        self.assertTrue(sect["activity_timestamp_legacy_timezone_safe"])
         natal = slices["natal_treasure"]
         self.assertTrue(natal["awaken_application_owned"])
         self.assertTrue(natal["legacy_awaken_disabled"])

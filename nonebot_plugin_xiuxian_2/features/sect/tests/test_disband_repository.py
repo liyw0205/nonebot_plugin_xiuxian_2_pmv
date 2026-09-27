@@ -1,11 +1,31 @@
 import tempfile
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from ..disband_repository import SectDisbandSqlRepository
 from tests.test_db_backend import db_backend
 
 class SectDisbandRepositoryTests(unittest.TestCase):
+    def test_legacy_naive_activity_time_compares_with_aware_clock(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db = Path(temp) / 'sect.db'
+            checked = datetime(2026, 7, 14, 12, tzinfo=timezone.utc)
+            last_active = checked.astimezone().replace(tzinfo=None).isoformat(sep=' ')
+            with db_backend.transaction(db) as c:
+                c.execute('CREATE TABLE sects(sect_id INTEGER PRIMARY KEY,sect_name TEXT,sect_owner TEXT,closed INTEGER)')
+                c.execute("INSERT INTO sects VALUES(1,'活跃宗',NULL,1)")
+                c.execute('CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,sect_id INTEGER,sect_position INTEGER,sect_contribution INTEGER)')
+                c.execute("INSERT INTO user_xiuxian VALUES('candidate',1,1,10)")
+                c.execute('CREATE TABLE user_cd(user_id TEXT PRIMARY KEY,last_check_info_time TEXT)')
+                c.execute('INSERT INTO user_cd VALUES(?,?)', ('candidate', last_active))
+            result = SectDisbandSqlRepository(db).disband_inactive(
+                'op', 1, 'no_active_successor',
+                expected_sect_name='活跃宗', expected_owner_id=None, expected_closed=True,
+                expected_member_ids=('candidate',), expected_active_candidate_ids=('candidate',),
+                checked_at=checked, inactivity_days=30,
+            )
+            self.assertEqual('condition_changed', result['status'])
+
     def test_inactive_sole_owner_disbands_and_replays(self):
         with tempfile.TemporaryDirectory() as temp:
             db=Path(temp)/'sect.db'; checked=datetime(2026,7,14)

@@ -452,7 +452,7 @@ async def auto_handle_inactive_sect_owners():
                     # 检查候选人活跃状态：必须最近30天内有活跃
                     active_candidates = []
                     for candidate in candidates:
-                        last_active = _sql_message().get_last_check_info_time(candidate['user_id'])
+                        last_active = sect_application.get_last_check_info_time(candidate['user_id'])
                         if last_active and (maintenance_checked_at - last_active).days <= auto_change_sect_owner_cd:
                             active_candidates.append(candidate)
                     
@@ -516,7 +516,7 @@ async def auto_handle_inactive_sect_owners():
                     continue
                     
                 # 获取最后活跃时间
-                last_check_time = _sql_message().get_last_check_info_time(owner_id)
+                last_check_time = sect_application.get_last_check_info_time(owner_id)
                 if not last_check_time:
                     logger.info(f"宗主 {owner_id} 没有最后活跃时间记录，跳过检测")
                     continue

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 from ...infrastructure.database import DatabaseUnitOfWork
@@ -16,6 +17,29 @@ class SectActivitySqlRepository:
                 (str(occurred_at), str(user_id)),
             )
             return int(cursor.rowcount)
+
+    def get_last_check_info_time(self, user_id: str) -> datetime | None:
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            row = uow.query_one(
+                "SELECT last_check_info_time FROM user_cd WHERE user_id=?",
+                (str(user_id),),
+            )
+        if row is None or not row["last_check_info_time"]:
+            return None
+        value = row["last_check_info_time"]
+        if isinstance(value, datetime):
+            occurred_at = value
+        else:
+            occurred_at = None
+            for timestamp_format in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
+                try:
+                    occurred_at = datetime.strptime(str(value), timestamp_format)
+                    break
+                except ValueError:
+                    continue
+        if occurred_at is not None and occurred_at.tzinfo is None:
+            return occurred_at.astimezone()
+        return occurred_at
 
 
 __all__ = ["SectActivitySqlRepository"]

@@ -72,6 +72,9 @@ class SectApplication:
             str(user_id), occurred_at.isoformat(sep=" ")
         )
 
+    def get_last_check_info_time(self, user_id: str):
+        return self.activity_repository.get_last_check_info_time(str(user_id))
+
     def _repository(self) -> SectRepository:
         return self.repository or SectRenameSqlRepository(self.database, clock=self.clock)
 

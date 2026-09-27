@@ -27,6 +27,9 @@ class SectActivityRepositoryTests(unittest.TestCase):
             application = SectApplication(database, clock=_Clock())
             self.assertEqual(1, application.update_last_check_info_time("u"))
             self.assertEqual(0, application.update_last_check_info_time("missing"))
+            last_check = application.get_last_check_info_time("u")
+            self.assertEqual(_Clock().now().astimezone(), last_check)
+            self.assertIsNone(application.get_last_check_info_time("missing"))
 
             with DatabaseUnitOfWork(database, read_only=True) as uow:
                 rows = uow.query_all(
