@@ -87,6 +87,15 @@ def apply_sect_manual_disband(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_sect_fairyland_upgrade(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS sect_fairyland_operations("
+        "operation_id TEXT PRIMARY KEY,actor_id TEXT NOT NULL,sect_id INTEGER NOT NULL,"
+        "from_level INTEGER NOT NULL,to_level INTEGER NOT NULL,stone_cost INTEGER NOT NULL,"
+        "materials_cost INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
 __all__ = [
     "apply_sect",
     "apply_sect_rename",
@@ -101,4 +110,5 @@ __all__ = [
     "apply_sect_weekly",
     "apply_sect_weekly_player",
     "apply_sect_manual_disband",
+    "apply_sect_fairyland_upgrade",
 ]

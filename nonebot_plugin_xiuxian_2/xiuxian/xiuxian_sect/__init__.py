@@ -809,11 +809,11 @@ async def sect_fairyland_upgrade_(bot: Bot, event: GroupMessageEvent | PrivateMe
         need_stone,
         need_materials,
     )
+    if result.status == "duplicate":
+        await handle_send(bot, event, "本次炼体堂升级已经完成，请刷新宗门信息。")
+        await sect_fairyland_upgrade.finish()
     if not result.applied:
-        if result.status == "duplicate":
-            await handle_send(bot, event, "本次炼体堂升级已经完成，请刷新宗门信息。")
-        else:
-            await handle_send(bot, event, "宗门建设未完成：宗门资财或建设进度已更新，请先查看宗门信息。")
+        await handle_send(bot, event, "宗门建设未完成：宗门资财或建设进度已更新，请先查看宗门信息。")
         await sect_fairyland_upgrade.finish()
     safe_log_economy_change(
         user_id=user_info["user_id"],

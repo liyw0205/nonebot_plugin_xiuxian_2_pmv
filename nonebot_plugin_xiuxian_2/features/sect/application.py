@@ -43,7 +43,7 @@ class SectMutationResult(dict):
 
     @property
     def applied(self) -> bool:
-        return self.status in {"closed", "inherited", "disbanded", "duplicate"}
+        return self.status in {"closed", "inherited", "disbanded", "duplicate", "upgraded"}
 
     def __getattr__(self, name: str) -> Any:
         try:

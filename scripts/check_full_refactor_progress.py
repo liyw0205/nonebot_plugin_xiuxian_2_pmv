@@ -102,10 +102,16 @@ def _slice_status() -> dict[str, dict[str, object]]:
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
     map_facade = (PACKAGE / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
     sect_facade = (PACKAGE / "xiuxian" / "xiuxian_sect" / "__init__.py").read_text(encoding="utf-8")
+    sect_fairyland_upgrade_handler = sect_facade[
+        sect_facade.index("async def sect_fairyland_upgrade_") : sect_facade.index(
+            "@sect_fairyland_claim.handle", sect_facade.index("async def sect_fairyland_upgrade_")
+        )
+    ]
     sect_weekly_commands = (PACKAGE / "xiuxian" / "xiuxian_sect" / "sect_weekly_commands.py").read_text(encoding="utf-8")
     sect_weekly_manager = (PACKAGE / "xiuxian" / "xiuxian_sect" / "sect_weekly.py").read_text(encoding="utf-8")
     sect_fairyland_application = (PACKAGE / "features" / "sect_fairyland" / "application.py").read_text(encoding="utf-8")
     sect_fairyland_repository = (PACKAGE / "features" / "sect_fairyland" / "claim_repository.py").read_text(encoding="utf-8")
+    sect_fairyland_upgrade_repository = (PACKAGE / "features" / "sect" / "fairyland_repository.py").read_text(encoding="utf-8")
     sect_fairyland_compatibility = (PACKAGE / "features" / "sect_fairyland" / "repository.py").read_text(encoding="utf-8")
     sect_fairyland_migrations = (PACKAGE / "features" / "sect_fairyland" / "migrations.py").read_text(encoding="utf-8")
     sect_application = (PACKAGE / "features" / "sect" / "application.py").read_text(encoding="utf-8")
@@ -444,6 +450,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "owner_transfer_application_owned": "sect_application.transfer_owner(" in sect_facade,
             "scheduled_grant_application_owned": "sect_application.grant_scheduled_materials(" in sect_facade,
             "fairyland_upgrade_application_owned": "sect_application.upgrade_fairyland(" in sect_facade,
+            "fairyland_upgrade_repository_owned": "class SectFairylandSqlRepository" in sect_fairyland_upgrade_repository and "SectFairylandSqlRepository" in sect_application,
+            "fairyland_upgrade_request_path_has_no_ddl": all(token not in sect_fairyland_upgrade_repository for token in ("CREATE TABLE", "ALTER TABLE")) and "schema_missing" in sect_fairyland_upgrade_repository,
+            "fairyland_upgrade_migration_registered": all(token in plugin for token in ("sect.014", "apply_sect_fairyland_upgrade")) and "sect_fairyland_operations" in sect_migrations,
+            "fairyland_upgrade_migration_game_only": '"sect.014"' not in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")] and '"sect.014"' not in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")],
+            "fairyland_upgrade_success_result_owned": '"upgraded"' in sect_application[sect_application.index("class SectMutationResult"):sect_application.index("class SectApplication")],
+            "fairyland_upgrade_duplicate_handled_before_effects": sect_fairyland_upgrade_handler.index('if result.status == "duplicate"') < sect_fairyland_upgrade_handler.index("safe_log_economy_change("),
             "elixir_room_upgrade_application_owned": "sect_application.upgrade_elixir_room(" in sect_facade,
             "buff_search_application_owned": sect_facade.count("sect_application.apply_buff_search(") >= 2,
             "practice_application_owned": sect_facade.count("sect_application.upgrade_practice(") >= 3,
