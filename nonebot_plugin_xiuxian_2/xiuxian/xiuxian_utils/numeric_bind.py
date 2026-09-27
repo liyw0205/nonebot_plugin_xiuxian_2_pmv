@@ -24,69 +24,21 @@ from __future__ import annotations
 import re
 from decimal import Decimal, InvalidOperation
 import json
-from typing import Any, Iterable
+from typing import Any
+
+import nonebot_plugin_xiuxian_2.core.numeric as _core_numeric
+
+OVERFLOW_NUM_FIELDS = _core_numeric.OVERFLOW_NUM_FIELDS
+as_int_like = _core_numeric.as_int_like
+normalize_numeric_row = _core_numeric.normalize_numeric_row
+normalize_sect_row = _core_numeric.normalize_sect_row
+normalize_user_row = _core_numeric.normalize_user_row
 
 SQLITE_MAX_INT = 2**63 - 1  # 9_223_372_036_854_775_807
 SQLITE_MIN_INT = -(2**63)  # -9_223_372_036_854_775_808
 
 _NUM_LIKE_RE = re.compile(
     r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$"
-)
-
-# Columns that historically exceed SQLite INTEGER after high-realm play.
-# Write path is covered globally by bind_sqlite_param; this set is for READ
-# normalization so entry code can keep using int(row["stone"]) safely.
-OVERFLOW_NUM_FIELDS = frozenset(
-    {
-        # combat / cultivation
-        "exp",
-        "power",
-        "combat_power",
-        "hp",
-        "mp",
-        "atk",
-        "max_hp",
-        "max_mp",
-        "base_hp",
-        "base_mp",
-        "base_atk",
-        "final_atk",
-        "current_hp",
-        "current_mp",
-        "tianti_hp",
-        "hp_left",
-        "total_exp",
-        "max_exp",
-        "final_exp",
-        "exp_day",
-        # spirit stones / bank / wallet
-        "stone",
-        "stone_num",
-        "wallet_stone",
-        "saved_stone",
-        "savestone",
-        "stored_stone",
-        "remaining_stone",
-        "deducted_stone",
-        "wishing_stones",
-        "boss_stone",
-        "previous_stone",
-        "stone_cost",
-        "stone_delta",
-        "sect_used_stone",
-        "sect_materials",
-        "sect_scale",
-        # contribution / points / scores / honor
-        "sect_contribution",
-        "contribution",
-        "score",
-        "points",
-        "total_points",
-        "honor_points",
-        "integral",
-        "boss_integral",
-        "previous_integral",
-    }
 )
 
 # backward-compatible alias
@@ -392,31 +344,6 @@ def bind_sqlite_param(value: Any) -> Any:
     return value
 
 
-def as_int_like(value: Any, default: int = 0) -> int:
-    """Parse int-like values including scientific TEXT (may lose huge precision)."""
-    try:
-        if value is None:
-            return default
-        if isinstance(value, bool):
-            return int(value)
-        if isinstance(value, int):
-            return value
-        if isinstance(value, float):
-            return int(value)
-        text = str(value).strip()
-        if not text:
-            return default
-        if any(ch in text for ch in (".", "e", "E")):
-            # Prefer Decimal for scientific TEXT so huge realm values stay usable.
-            try:
-                return int(Decimal(text))
-            except (InvalidOperation, ValueError, OverflowError):
-                return int(float(text))
-        return int(text)
-    except (TypeError, ValueError, OverflowError):
-        return default
-
-
 def format_plain_number(value: Any) -> str:
     """Web/UI display: scientific TEXT/float/int → plain decimal digits (no e+).
 
@@ -477,64 +404,6 @@ def parse_web_number(value: Any) -> Any:
         except (InvalidOperation, ValueError, OverflowError):
             return text
     return text
-
-
-def _coerce_field(value: Any) -> Any:
-    if value is None or isinstance(value, bool):
-        return value
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        try:
-            return int(value)
-        except (OverflowError, ValueError):
-            return as_int_like(value)
-    text = str(value).strip()
-    if not text:
-        return value
-    if any(ch in text for ch in (".", "e", "E")):
-        return as_int_like(text)
-    try:
-        return int(text)
-    except (TypeError, ValueError):
-        return as_int_like(text)
-
-
-def normalize_numeric_row(row: Any, fields: Iterable[str] | None = None) -> Any:
-    """Coerce overflow-normalized fields on any dict row (user / sect / wallet)."""
-    if not isinstance(row, dict):
-        return row
-    keys = OVERFLOW_NUM_FIELDS if fields is None else frozenset(fields)
-    out = dict(row)
-    for key in keys:
-        if key not in out:
-            continue
-        out[key] = _coerce_field(out[key])
-    return out
-
-
-def normalize_user_row(row: Any) -> Any:
-    """Coerce overflow-normalized user fields so callers can safely int() them.
-
-    Covers exp / power / hp / mp / atk / stone / sect_contribution / scores, …
-    Scientific TEXT from ``number_count`` / ``bind_sqlite_param`` becomes int via
-    float parse (precision may drop for huge values — same as display path).
-    """
-    return normalize_numeric_row(row)
-
-
-def normalize_sect_row(row: Any) -> Any:
-    """Sect treasury / scale / combat power may also overflow."""
-    return normalize_numeric_row(
-        row,
-        fields=(
-            "sect_materials",
-            "sect_used_stone",
-            "sect_scale",
-            "combat_power",
-            "stone",
-        ),
-    )
 
 
 def _semantic_leaf(value: Any) -> Any:

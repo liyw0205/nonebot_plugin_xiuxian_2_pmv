@@ -416,7 +416,7 @@ async def auto_handle_inactive_sect_owners():
                     logger.info("处理封闭山门的宗门（继承流程）")
                     
                     # 获取所有成员
-                    members = _sql_message().get_all_users_by_sect_id(sect_id)
+                    members = sect_application.list_inactive_owner_sect_members(sect_id)
                     logger.info(f"宗门成员数量：{len(members)}人")
                     
                     if not members:
@@ -529,7 +529,7 @@ async def auto_handle_inactive_sect_owners():
                     continue
                 
                 # 获取所有成员
-                members = _sql_message().get_all_users_by_sect_id(sect_id)
+                members = sect_application.list_inactive_owner_sect_members(sect_id)
                 logger.info(f"宗门成员总数：{len(members)}人")
                 
                 # 检查宗门成员数量

@@ -517,6 +517,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "inactive_owner_sect_state_application_owned": "sect_application.get_inactive_owner_sect_state(sect_id)" in sect_inactive_owner_handler and "_sql_message().get_sect_info(sect_id)" not in sect_inactive_owner_handler,
             "inactive_owner_sect_state_repository_owned": "SectInactiveOwnerSqlRepository" in sect_application and "def get_sect_state(" in sect_inactive_owner_repository,
             "inactive_owner_sect_state_read_only": "read_only=True" in sect_inactive_owner_repository and "CREATE TABLE" not in sect_inactive_owner_repository,
+            "inactive_owner_members_application_owned": sect_inactive_owner_handler.count("sect_application.list_inactive_owner_sect_members(sect_id)") == 2 and "_sql_message().get_all_users_by_sect_id(sect_id)" not in sect_inactive_owner_handler,
+            "inactive_owner_members_repository_owned": "def list_members(" in sect_inactive_owner_repository and "normalize_user_row(row)" in sect_inactive_owner_repository,
             "fairyland_upgrade_application_owned": "sect_application.upgrade_fairyland(" in sect_facade,
             "fairyland_upgrade_repository_owned": "class SectFairylandSqlRepository" in sect_fairyland_upgrade_repository and "SectFairylandSqlRepository" in sect_application,
             "fairyland_upgrade_request_path_has_no_ddl": all(token not in sect_fairyland_upgrade_repository for token in ("CREATE TABLE", "ALTER TABLE")) and "schema_missing" in sect_fairyland_upgrade_repository,

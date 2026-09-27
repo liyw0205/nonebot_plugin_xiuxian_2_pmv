@@ -74,6 +74,9 @@ class SectApplication:
     def get_inactive_owner_sect_state(self, sect_id: int) -> dict[str, Any] | None:
         return self.inactive_owner_repository.get_sect_state(sect_id)
 
+    def list_inactive_owner_sect_members(self, sect_id: int) -> list[dict[str, Any]]:
+        return self.inactive_owner_repository.list_members(sect_id)
+
     def update_last_check_info_time(self, user_id: str) -> int:
         occurred_at = self.clock.now()
         if occurred_at.tzinfo is not None:

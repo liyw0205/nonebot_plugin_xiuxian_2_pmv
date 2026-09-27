@@ -255,3 +255,5 @@ migration version，路由计数 `140/33/7/1/1`，`.003` 仅 game、`.004` 仅 p
 `sect directory query ownership`：定时状态任务和宗门列表命令的共用全量查询改由 `SectApplication -> SectDirectorySqlRepository` 只读执行，旧 tuple 顺序及全部宗门/成员计数语义保留，无 migration 与 DDL。repository 行为与 progress/inventory/migration-count/architecture contract `26 passed`，pytest/pyc 缓存禁用且专用 basetemp 已清理，未读取运行数据库；下一片继续审计宗门 facade 的其他 manager 只读入口。
 
 `sect inactive-owner state read ownership`：自动状态任务用到的 `closed` 与 `sect_owner` 改由 `SectApplication -> SectInactiveOwnerSqlRepository` 只读读取，保留缺失宗门返回 `None`，无 migration 与 DDL。repository 行为与 progress/inventory/migration-count/architecture `27 passed`；pytest/pyc 缓存禁用且专用 basetemp 已清理，未访问运行数据库。成员和用户快照仍待后续迁移。
+
+`sect inactive-owner member snapshot read ownership`：scheduler 的两次成员查询改经 Sect application/read repository，保留 `SELECT *` 行结构、原数值归一化、列表顺序与候选选择逻辑，无 migration/DDL。纯数值转换/row normalization 移入 `core.numeric`，旧 `numeric_bind` 导出兼容；core numeric、兼容 helper、Sect repository、progress/inventory/migration-count/architecture `40 passed`，pytest/pyc 缓存禁用且专用 basetemp 已清理。宗主用户资料仍是下一个同场景读取边界。

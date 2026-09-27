@@ -11,6 +11,8 @@ class SectInactiveOwnerProgressContractTests(unittest.TestCase):
         self.assertTrue(sect["inactive_owner_sect_state_application_owned"])
         self.assertTrue(sect["inactive_owner_sect_state_repository_owned"])
         self.assertTrue(sect["inactive_owner_sect_state_read_only"])
+        self.assertTrue(sect["inactive_owner_members_application_owned"])
+        self.assertTrue(sect["inactive_owner_members_repository_owned"])
 
 
 if __name__ == "__main__":

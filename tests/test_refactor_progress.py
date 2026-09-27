@@ -110,6 +110,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(sect["inactive_owner_sect_state_application_owned"])
         self.assertTrue(sect["inactive_owner_sect_state_repository_owned"])
         self.assertTrue(sect["inactive_owner_sect_state_read_only"])
+        self.assertTrue(sect["inactive_owner_members_application_owned"])
+        self.assertTrue(sect["inactive_owner_members_repository_owned"])
         self.assertTrue(sect["activity_timestamp_application_owned"])
         self.assertTrue(sect["activity_timestamp_repository_owned"])
         self.assertTrue(sect["activity_timestamp_clock_injected"])
