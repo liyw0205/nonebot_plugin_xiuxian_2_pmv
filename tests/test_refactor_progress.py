@@ -93,6 +93,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(map_slice["map_dtos_feature_owned"])
         sect = slices["sect"]
         self.assertTrue(sect["membership_application_owned"])
+        self.assertTrue(sect["membership_service_isolated"])
+        self.assertTrue(sect["membership_compatibility_import_isolated"])
         self.assertTrue(sect["economy_application_owned"])
         self.assertTrue(sect["daily_maintenance_application_owned"])
         self.assertTrue(sect["daily_maintenance_service_isolated"])

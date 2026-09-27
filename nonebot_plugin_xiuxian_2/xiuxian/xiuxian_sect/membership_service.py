@@ -1,6 +1,6 @@
 """Stable facade for sect membership transactions."""
 
-from .transaction_service import SectMembershipService
+from ...compatibility.legacy_sect_membership import SectMembershipService
 
 # BEGIN IMMEDIATE protects all membership operation ledgers.
 OPERATION_TABLES = (

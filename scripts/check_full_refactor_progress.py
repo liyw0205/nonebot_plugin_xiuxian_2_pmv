@@ -155,6 +155,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sect_fairyland_upgrade_repository = (PACKAGE / "features" / "sect" / "fairyland_repository.py").read_text(encoding="utf-8")
     sect_fairyland_compatibility = (PACKAGE / "features" / "sect_fairyland" / "repository.py").read_text(encoding="utf-8")
     sect_transaction_service = (PACKAGE / "xiuxian" / "xiuxian_sect" / "transaction_service.py").read_text(encoding="utf-8")
+    sect_membership_legacy_service = (PACKAGE / "compatibility" / "legacy_sect_membership.py").read_text(encoding="utf-8")
+    sect_membership_legacy_shim = (PACKAGE / "xiuxian" / "xiuxian_sect" / "membership_service.py").read_text(encoding="utf-8")
     sect_fairyland_legacy_service = (PACKAGE / "compatibility" / "legacy_sect_fairyland_claim.py").read_text(encoding="utf-8")
     sect_fairyland_legacy_shim = (PACKAGE / "xiuxian" / "xiuxian_sect" / "fairyland_claim_service.py").read_text(encoding="utf-8")
     sect_elixir_legacy_service = (PACKAGE / "compatibility" / "legacy_sect_elixir_claim.py").read_text(encoding="utf-8")
@@ -581,6 +583,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
         },
         "sect": {
             "membership_application_owned": all(f"sect_application.{name}(" in sect_facade for name in ("join", "leave", "kick", "change_position")),
+            "membership_service_isolated": all(f"class {name}" not in sect_transaction_service for name in ("SectOwnerTransfer", "SectFairylandUpgrade", "SectElixirRoomUpgrade", "SectBuffSearch", "SectPracticeUpgrade", "SectScheduledMaterialGrant", "SectElixirRoomMaintenance", "SectDonation", "SectTaskSettlement", "SectTaskClaim", "SectCreation", "SectNameRefresh", "SectRename", "SectMemberRemoval", "SectPositionChange", "SectMembershipService")) and "from ...compatibility.legacy_sect_membership import" in sect_transaction_service and all(f"class {name}" in sect_membership_legacy_service for name in ("SectOwnerTransfer", "SectFairylandUpgrade", "SectElixirRoomUpgrade", "SectBuffSearch", "SectPracticeUpgrade", "SectScheduledMaterialGrant", "SectElixirRoomMaintenance", "SectDonation", "SectTaskSettlement", "SectTaskClaim", "SectCreation", "SectNameRefresh", "SectRename", "SectMemberRemoval", "SectPositionChange", "SectMembershipService")),
+            "membership_compatibility_import_isolated": "SectMembershipService" in sect_transaction_service and "from ...compatibility.legacy_sect_membership import SectMembershipService" in sect_membership_legacy_shim,
             "economy_application_owned": all(f"sect_application.{name}(" in sect_facade for name in ("rename", "donate", "purchase")),
             "daily_maintenance_application_owned": "sect_application.reset_daily_maintenance(" in sect_facade,
             "daily_maintenance_service_isolated": all(name not in sect_transaction_service for name in ("class SectMaintenanceOutcome", "class SectDailyResetResult", "class SectDailyResetMaintenanceService")) and "from ...compatibility.legacy_sect_daily_maintenance import" in sect_transaction_service and all(name in sect_daily_maintenance_legacy_service for name in ("class SectMaintenanceOutcome", "class SectDailyResetResult", "class SectDailyResetMaintenanceService")),

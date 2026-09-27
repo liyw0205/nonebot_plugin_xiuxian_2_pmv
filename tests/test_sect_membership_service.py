@@ -24,6 +24,22 @@ def test_sect_facade_does_not_wire_the_legacy_membership_service():
 
 
 class SectMembershipServiceTests(unittest.TestCase):
+    def test_legacy_modules_reexport_the_compatibility_service_identity(self) -> None:
+        from nonebot_plugin_xiuxian_2.compatibility.legacy_sect_membership import (
+            SectMemberRemoval as CompatibilityResult,
+            SectMembershipService as CompatibilityService,
+        )
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.membership_service import (
+            SectMembershipService as MembershipModuleService,
+        )
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.transaction_service import (
+            SectMemberRemoval as TransactionResult,
+        )
+
+        self.assertIs(SectMembershipService, CompatibilityService)
+        self.assertIs(MembershipModuleService, CompatibilityService)
+        self.assertIs(TransactionResult, CompatibilityResult)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "sect.sqlite3"
