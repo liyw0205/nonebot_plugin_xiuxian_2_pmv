@@ -6,6 +6,7 @@ import nonebot
 
 nonebot.init()
 
+from nonebot_plugin_xiuxian_2.features.dungeon import team_presentation
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.transaction_service import (
     TeamInviteResponseResult,
     build_invite_response_message,
@@ -28,6 +29,36 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.transaction_service import
 
 
 class DungeonTeamCommandServiceTests(unittest.TestCase):
+    def test_presenters_keep_legacy_import_identity(self) -> None:
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon import transaction_service
+
+        for name in (
+            "TeamInviteResponseResult",
+            "TeamInviteResult",
+            "TeamKickResult",
+            "TeamLeaveResult",
+            "TeamMemberView",
+            "TeamTransferResult",
+            "TeamViewResult",
+            "build_invite_response_message",
+            "build_kick_team_message",
+            "build_kick_team_result",
+            "build_leave_team_message",
+            "build_leave_team_result",
+            "build_team_invite_message",
+            "build_team_invite_private_message",
+            "build_team_view",
+            "build_team_view_message",
+            "build_transfer_team_not_member_message",
+            "build_transfer_team_self_message",
+            "build_transfer_team_success_message",
+            "resolve_invite_response",
+            "resolve_kick_target",
+            "resolve_team_invite",
+            "resolve_transfer_target",
+        ):
+            self.assertIs(getattr(transaction_service, name), getattr(team_presentation, name))
+
     def test_build_team_view_collects_members_and_marks_leader(self) -> None:
         team_info = {
             "team_name": "试炼小队",

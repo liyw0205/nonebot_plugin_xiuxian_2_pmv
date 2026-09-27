@@ -119,6 +119,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dungeon_invite_compatibility = (PACKAGE / "compatibility" / "legacy_dungeon_team_invite_mapping.py").read_text(encoding="utf-8")
     dungeon_transaction_shim = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "transaction_service.py").read_text(encoding="utf-8")
     dungeon_team_legacy_transactions = (PACKAGE / "compatibility" / "legacy_dungeon_team_transactions.py").read_text(encoding="utf-8")
+    dungeon_team_presentation = (PACKAGE / "features" / "dungeon" / "team_presentation.py").read_text(encoding="utf-8")
     dungeon_manager = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "dungeon_manager.py").read_text(encoding="utf-8")
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
     map_facade = (PACKAGE / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
@@ -529,6 +530,16 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 "legacy_dungeon_team_transactions import" in dungeon_transaction_shim
                 and "legacy_dungeon_team_transactions import" in dungeon_invite_compatibility
                 and "xiuxian_dungeon.transaction_service import" not in dungeon_invite_compatibility
+            ),
+            "team_presentation_feature_owned": (
+                "from ...features.dungeon.team_presentation import" in dungeon_facade
+                and "class TeamViewResult" in dungeon_team_presentation
+                and "def build_team_view_message" in dungeon_team_presentation
+                and "class TeamViewResult" not in dungeon_transaction_shim
+            ),
+            "team_presentation_legacy_identity_preserved": (
+                "from ...features.dungeon.team_presentation import" in dungeon_transaction_shim
+                and "TeamInviteResponseResult" in dungeon_transaction_shim
             ),
             "explore_settlement_application_owned": "dungeon_application.settle(" in dungeon_facade and "_dungeon_explore_operation_service().settle(" not in dungeon_facade,
             "reset_application_owned": "self.dungeon_application = DungeonApplication(" in dungeon_manager and "self._reset_application().reset(" in dungeon_manager and "self.reset_service.reset(" not in dungeon_manager,

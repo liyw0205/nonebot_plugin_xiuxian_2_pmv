@@ -32,7 +32,7 @@ from ..xiuxian_utils.data_source import jsondata
 
 from .dungeon_manager import DungeonManager
 from .team_manager import expire_team_invite
-from .transaction_service import (
+from ...features.dungeon.team_presentation import (
     TeamInviteResponseResult,
     build_invite_response_message,
     build_team_view,

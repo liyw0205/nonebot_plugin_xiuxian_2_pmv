@@ -78,6 +78,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(dungeon_team["invite_mapping_isolated"])
         self.assertTrue(dungeon_team["legacy_team_transaction_service_isolated"])
         self.assertTrue(dungeon_team["legacy_team_transaction_imports_explicit"])
+        self.assertTrue(dungeon_team["team_presentation_feature_owned"])
+        self.assertTrue(dungeon_team["team_presentation_legacy_identity_preserved"])
         bank = slices["bank"]
         self.assertTrue(bank["deposit_application_owned"])
         self.assertTrue(bank["withdrawal_application_owned"])

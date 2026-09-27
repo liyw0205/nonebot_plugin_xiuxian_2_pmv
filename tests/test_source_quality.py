@@ -1747,6 +1747,9 @@ class SourceQualityTests(unittest.TestCase):
         presenter_source = (
             SOURCE_ROOT / "xiuxian" / "xiuxian_dungeon" / "transaction_service.py"
         ).read_text(encoding="utf-8")
+        team_presentation_source = (
+            SOURCE_ROOT / "features" / "dungeon" / "team_presentation.py"
+        ).read_text(encoding="utf-8")
         self.assertIn("build_team_view_message(", source)
         self.assertIn("build_team_view(", source)
         self.assertIn("def _team_mutation_message", source)
@@ -1777,6 +1780,7 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("class DungeonTeamTransactionService", team_legacy_transactions)
         self.assertIn("class DungeonTeamExitService", team_legacy_transactions)
         self.assertIn("legacy_dungeon_team_transactions import", presenter_source)
+        self.assertIn("features.dungeon.team_presentation import", presenter_source)
         self.assertIn("from ...features.dungeon.team_repository import TeamExitResult", source)
         self.assertNotIn("DungeonTeamTransactionService", source)
         self.assertNotIn("DungeonTeamExitService", source)
@@ -1787,18 +1791,18 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("build_transfer_team_success_message(", source)
         self.assertIn("build_transfer_team_self_message(", source)
         self.assertIn("build_transfer_team_not_member_message(", source)
-        self.assertIn("class TeamInviteResult", presenter_source)
-        self.assertIn("class TeamInviteResponseResult", presenter_source)
-        self.assertIn("def resolve_team_invite", presenter_source)
-        self.assertIn("def build_team_invite_message", presenter_source)
-        self.assertIn("def resolve_invite_response", presenter_source)
-        self.assertIn("def build_invite_response_message", presenter_source)
-        self.assertIn("class TeamViewResult", presenter_source)
-        self.assertIn("class TeamTransferResult", presenter_source)
-        self.assertIn("def build_team_view", presenter_source)
-        self.assertIn("def resolve_transfer_target", presenter_source)
-        self.assertIn("def build_transfer_team_self_message", presenter_source)
-        self.assertIn("def build_transfer_team_not_member_message", presenter_source)
+        self.assertIn("class TeamInviteResult", team_presentation_source)
+        self.assertIn("class TeamInviteResponseResult", team_presentation_source)
+        self.assertIn("def resolve_team_invite", team_presentation_source)
+        self.assertIn("def build_team_invite_message", team_presentation_source)
+        self.assertIn("def resolve_invite_response", team_presentation_source)
+        self.assertIn("def build_invite_response_message", team_presentation_source)
+        self.assertIn("class TeamViewResult", team_presentation_source)
+        self.assertIn("class TeamTransferResult", team_presentation_source)
+        self.assertIn("def build_team_view", team_presentation_source)
+        self.assertIn("def resolve_transfer_target", team_presentation_source)
+        self.assertIn("def build_transfer_team_self_message", team_presentation_source)
+        self.assertIn("def build_transfer_team_not_member_message", team_presentation_source)
 
     def test_adapter_compat_uses_explicit_message_record_hooks(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "adapter_compat.py").read_text(
