@@ -19,6 +19,13 @@ from .tianti_data import (
 )
 from .tianti_data import TiantiDataManager, get_qiaoxue_pool, get_tianti_level_data
 from ...features.tianti_training.domain import decide_breakthrough, decide_medicine_bath_activation, decide_stone_training, decide_tianti_gain, decide_tianti_settlement_window
+from ...features.tianti_training.presentation import (
+    calc_qiaoxue_bonus as _calc_qiaoxue_bonus,
+    calculate_tianti_gain_rate,
+    get_active_medicine_bath as _get_active_medicine_bath,
+    get_sect_fairyland_bonus as _get_sect_fairyland_bonus,
+    parse_tianti_time as _parse_tianti_time,
+)
 from datetime import datetime, timedelta
 
 def get_tianti_cap(data: dict) -> int:
@@ -35,29 +42,10 @@ def calc_qiaoxue_bonus(data: dict):
     """
     统计已开窍穴总加成
     """
-    base_ratio = 0.0
-    gain_pct = 0.0
-    detail_list = data.get("opened_qiaoxue_detail", [])
-    for q in detail_list:
-        et = q["effect_type"]
-        ev = float(q["effect_value"])
-        if et == "base_per_min_ratio":
-            base_ratio += ev
-        elif et == "hp_gain_pct":
-            gain_pct += ev
-    return base_ratio, gain_pct
+    return _calc_qiaoxue_bonus(data)
 
 def parse_tianti_time(value):
-    if not value:
-        return None
-    if isinstance(value, datetime):
-        return value
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
-        try:
-            return datetime.strptime(str(value), fmt)
-        except ValueError:
-            continue
-    return None
+    return _parse_tianti_time(value)
 
 def clear_medicine_bath(data: dict):
     data["medicine_last_time"] = None
@@ -66,27 +54,10 @@ def clear_medicine_bath(data: dict):
     data["medicine_name"] = ""
 
 def get_active_medicine_bath(data: dict, now_t: datetime):
-    end_t = parse_tianti_time(data.get("medicine_end_time"))
-    if not end_t or now_t > end_t:
-        return None
-    try:
-        effect = float(data.get("medicine_effect", 0) or 0)
-    except Exception:
-        effect = 0.0
-    if effect <= 1:
-        return None
-    return {
-        "name": data.get("medicine_name") or "未知药材",
-        "effect": effect,
-        "end_time": end_t,
-    }
+    return _get_active_medicine_bath(data, now_t)
 
 def get_sect_fairyland_bonus(level: int) -> float:
-    try:
-        level = int(level or 0)
-    except Exception:
-        level = 0
-    return max(0, min(level, 10)) * 0.05
+    return _get_sect_fairyland_bonus(level)
 
 def _apply_tianti_minutes(data: dict, mins: int, now_t: datetime, sect_fairyland_level: int = 0):
     lvl_data = get_tianti_level_data(data["tianti_level"])
@@ -129,27 +100,13 @@ def calc_tianti_gain_rate(data: dict, now_t: datetime | None = None, sect_fairyl
     """
     now_t = now_t or datetime.now()
     lvl_data = get_tianti_level_data(data["tianti_level"])
-    base_per_min = int(lvl_data["hp_gain_per_min"])
-    base_ratio, gain_pct = calc_qiaoxue_bonus(data)
-    real_per_min = int(base_per_min * (1 + base_ratio))
-
-    bath = get_active_medicine_bath(data, now_t)
-    bath_effect = bath["effect"] if bath else 1.0
-    sect_bonus = get_sect_fairyland_bonus(sect_fairyland_level)
-    spirit_vein_multiplier = get_spirit_vein_tianti_multiplier()
-    per_min = int(real_per_min * (1 + gain_pct) * bath_effect * (1 + sect_bonus) * spirit_vein_multiplier)
-
-    return {
-        "base_per_min": base_per_min,
-        "base_ratio": base_ratio,
-        "gain_pct": gain_pct,
-        "bath": bath,
-        "bath_effect": bath_effect,
-        "sect_bonus": sect_bonus,
-        "spirit_vein_bonus": spirit_vein_multiplier - 1,
-        "per_min": per_min,
-        "efficiency": (per_min / base_per_min) if base_per_min > 0 else 0,
-    }
+    return calculate_tianti_gain_rate(
+        data,
+        base_per_min=int(lvl_data["hp_gain_per_min"]),
+        now=now_t,
+        sect_fairyland_level=sect_fairyland_level,
+        spirit_vein_multiplier=get_spirit_vein_tianti_multiplier(),
+    )
 
 def settle_tianti_gain(data: dict, now_t: datetime, sect_fairyland_level: int = 0):
     last_t = parse_tianti_time(data.get("last_settle_time"))

@@ -20,6 +20,9 @@ class TiantiProfileReadTests(unittest.TestCase):
         self.assertTrue(tianti["stone_repository_has_no_legacy_manager_injection"])
         self.assertTrue(tianti["profile_upserts_share_feature_writer"])
         self.assertTrue(tianti["settlement_default_repository_is_feature_owned"])
+        self.assertTrue(tianti["gain_display_rules_are_feature_owned"])
+        self.assertTrue(tianti["settlement_and_display_share_rules"])
+        self.assertTrue(tianti["sect_bonus_display_is_feature_owned"])
         self.assertTrue(tianti["legacy_profile_write_through_is_named"])
         self.assertTrue(tianti["legacy_transaction_adapters_remain_explicit"])
 

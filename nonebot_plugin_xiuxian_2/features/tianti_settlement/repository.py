@@ -6,9 +6,14 @@ import json
 from typing import Any, Callable, Mapping, Protocol
 
 from ...features.tianti_training.repository import TiantiProfileReader
-from ...features.tianti_training.repository import _parse_time, _sect_bonus
 from ...features.tianti_training.domain import decide_tianti_gain, decide_tianti_settlement_window
 from ...features.tianti_training.profile_persistence import upsert_tianti_profile
+from ...features.tianti_training.presentation import (
+    calc_qiaoxue_bonus,
+    get_active_medicine_bath,
+    get_sect_fairyland_bonus,
+    parse_tianti_time,
+)
 from ...infrastructure.database import DatabaseUnitOfWork
 
 
@@ -86,26 +91,17 @@ class TiantiSettlementSqlRepository:
                     data[field] = json.loads(data[field])
                 except json.JSONDecodeError:
                     data[field] = [] if field != "qiaoxue_stage_opened" else {}
-        window = decide_tianti_settlement_window(last_settlement=_parse_time(data.get("last_settle_time")), now=settled_at)
+        window = decide_tianti_settlement_window(last_settlement=parse_tianti_time(data.get("last_settle_time")), now=settled_at)
         detail: dict[str, Any] = {"status": window.status, "mins": window.minutes}
         if window.status == "settle":
             level = self.profile.levels()[str(data["tianti_level"])]
-            details = list(data.get("opened_qiaoxue_detail", []) or [])
-            base_ratio = sum(float(item.get("effect_value", 0)) for item in details if item.get("effect_type") == "base_per_min_ratio")
-            gain_pct = sum(float(item.get("effect_value", 0)) for item in details if item.get("effect_type") == "hp_gain_pct")
-            bath_end = _parse_time(data.get("medicine_end_time"))
-            try:
-                bath_effect = float(data.get("medicine_effect", 0) or 0)
-            except (TypeError, ValueError):
-                bath_effect = 0.0
-            bath = None
-            if bath_end and settled_at <= bath_end and bath_effect > 1:
-                bath = {"name": data.get("medicine_name") or "未知药材", "effect": bath_effect, "end_time": bath_end}
+            base_ratio, gain_pct = calc_qiaoxue_bonus(data)
+            bath = get_active_medicine_bath(data, settled_at)
             bath_expired = False
             if bath is None and data.get("medicine_end_time"):
                 data.update({"medicine_last_time": None, "medicine_end_time": None, "medicine_effect": 0.0, "medicine_name": ""})
                 bath_expired = True
-            sect_bonus = _sect_bonus(sect_fairyland_level)
+            sect_bonus = get_sect_fairyland_bonus(sect_fairyland_level)
             spirit_vein_multiplier = float(self.spirit_vein_multiplier())
             gain = decide_tianti_gain(
                 minutes=window.minutes,

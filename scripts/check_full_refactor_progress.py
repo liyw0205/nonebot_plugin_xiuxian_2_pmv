@@ -62,6 +62,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     legacy_transaction = (PACKAGE / "xiuxian" / "xiuxian_base" / "transaction_service.py").read_text(encoding="utf-8")
     tianti_facade = (PACKAGE / "xiuxian" / "xiuxian_tianti" / "__init__.py").read_text(encoding="utf-8")
     tianti_data = (PACKAGE / "xiuxian" / "xiuxian_tianti" / "tianti_data.py").read_text(encoding="utf-8")
+    tianti_presentation = (PACKAGE / "features" / "tianti_training" / "presentation.py").read_text(encoding="utf-8")
     tianti_training_repository = (PACKAGE / "features" / "tianti_training" / "repository.py").read_text(encoding="utf-8")
     tianti_training_stone_repository = tianti_training_repository[
         tianti_training_repository.index("class StoneTrainingSqlRepository") : tianti_training_repository.index(
@@ -459,9 +460,15 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 for source in (tianti_training_repository, tianti_settlement_repository, sect_fairyland_claim_repository)
             ) and "INSERT INTO" in tianti_training_writer,
             "settlement_default_repository_is_feature_owned": "TiantiSettlementSqlRepository(" in tianti_settlement_application and "LegacyTiantiSettlementRepository" not in tianti_settlement_application,
+            "gain_display_rules_are_feature_owned": "from ...features.tianti_training.presentation import" in tianti_facade and "calc_tianti_gain_rate" not in tianti_facade,
+            "settlement_and_display_share_rules": all(
+                name in tianti_settlement_repository and name in tianti_presentation
+                for name in ("calc_qiaoxue_bonus", "get_active_medicine_bath", "get_sect_fairyland_bonus", "parse_tianti_time")
+            ) and "_parse_tianti_time" in tianti_training_repository and "_get_sect_fairyland_bonus" in tianti_training_repository,
+            "sect_bonus_display_is_feature_owned": "from ...features.tianti_training.presentation import get_sect_fairyland_bonus" in sect_facade,
             "legacy_profile_write_through_is_named": "Legacy write-through getter" in tianti_data,
             "legacy_transaction_adapters_remain_explicit": "class LegacyTiantiTrainingRepository" in tianti_training_repository and "class LegacyTiantiSettlementRepository" in tianti_settlement_repository,
-            "status": "feature_profile_writer_shared_within_command_owned_transactions; legacy_manager_api_and_transaction_adapters_retained_for_compatibility",
+            "status": "feature_profile_writer_and_gain_rules_shared; legacy_transaction_services_and_adapters_retained_for_compatibility",
         },
         "sect": {
             "membership_application_owned": all(f"sect_application.{name}(" in sect_facade for name in ("join", "leave", "kick", "change_position")),

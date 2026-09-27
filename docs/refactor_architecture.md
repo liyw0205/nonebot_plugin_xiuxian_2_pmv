@@ -618,8 +618,8 @@ PR 描述必须包含：影响 feature、数据迁移、兼容入口、权限变
 - `nonebot_plugin_xiuxian_2/features/bank/`：灵庄存入、取出、会员升级和结息切片，统一跨库 application、operation ledger、审计、幂等重放、Web/命令契约、迁移标记和灰度开关；旧 `Bank*Service` 仅作为惰性仓储适配器。
 - `nonebot_plugin_xiuxian_2/features/combat_settlement/`：地图战斗结算切片，包装旧附加数据库事务，统一战斗快照、每日额度、背包容量的拒绝结果、operation ledger、审计和 Web 契约；旧地图 handler 已转发到应用层。
 - `nonebot_plugin_xiuxian_2/features/admin_asset/`：管理员单人灵石调整切片，统一 admin 权限、条件余额更新、operation ledger、审计、幂等和 Web API；全服、物品、修为等其他管理员动作仍保留兼容服务。
-- `nonebot_plugin_xiuxian_2/features/tianti_settlement/`：炼体按时间结算气血切片，统一 operation ledger、审计、幂等重放、Web/命令契约、迁移标记和灰度开关；profile 持久化使用共享 Tianti writer，但事务由 settlement repository 在同一 player UoW 内拥有；旧 `TiantiSettlementService` 只保留为显式惰性兼容 adapter。
-- `nonebot_plugin_xiuxian_2/features/tianti_training/`：灵石炼体、药浴、炼体突破和冲窍切片，统一 application、operation ledger、审计、幂等重放、四个 Web API、迁移标记和灰度开关；Tianti Training、Settlement 与宗门炼体堂领取共用事务内 profile writer，业务 UoW 仍归各自 feature repository；默认 command facade 不构造 `TiantiDataManager`，旧跨库事务服务仅通过显式惰性 repository adapter 调用。
+- `nonebot_plugin_xiuxian_2/features/tianti_settlement/`：炼体按时间结算气血切片，统一 operation ledger、审计、幂等重放、Web/命令契约、迁移标记和灰度开关；profile 持久化使用共享 Tianti writer，药浴/窍穴/宗门收益规则复用 training presentation，但事务由 settlement repository 在同一 player UoW 内拥有；旧 `TiantiSettlementService` 只保留为显式惰性兼容 adapter。
+- `nonebot_plugin_xiuxian_2/features/tianti_training/`：灵石炼体、药浴、炼体突破和冲窍切片，统一 application、operation ledger、审计、幂等重放、四个 Web API、迁移标记和灰度开关；Tianti Training、Settlement 与宗门炼体堂领取共用事务内 profile writer，业务 UoW 仍归各自 feature repository；药浴时点、窍穴收益、宗门加成和收益预览由 `presentation.py` 持有，旧 `transaction_service.py` 只保留兼容包装/其他 legacy API，状态页气血上限仍待迁移。
 - `nonebot_plugin_xiuxian_2/features/tower/`：通天塔积分兑换、单层挑战和连续挑战结算切片，统一 application、operation ledger、审计、幂等重放、Web/命令契约、迁移标记和灰度开关；战斗算法与读模型仍由兼容命令适配器提供，旧跨库事务服务仅作为惰性仓储适配器。
 - `nonebot_plugin_xiuxian_2/features/arena/`：竞技场荣誉兑换、购买挑战次数和挑战结算切片，统一 application、operation ledger、审计、幂等重放、Web/命令契约、迁移标记和灰度开关；战斗匹配、排行榜、挑战券和赛季任务仍由兼容适配器提供。
 - `nonebot_plugin_xiuxian_2/features/puppet/`：灵田傀儡购买和升级切片，统一 application、operation ledger、审计、幂等重放、Web/命令契约、迁移标记和灰度开关；开启/关闭、自动收取和灵田读模型仍由兼容适配器提供。

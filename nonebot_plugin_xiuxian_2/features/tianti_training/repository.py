@@ -8,6 +8,8 @@ from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from .profile_persistence import upsert_tianti_profile
+from .presentation import get_sect_fairyland_bonus as _get_sect_fairyland_bonus
+from .presentation import parse_tianti_time as _parse_tianti_time
 from .domain import (
     decide_breakthrough,
     decide_medicine_bath_activation,
@@ -269,20 +271,11 @@ class ItemRewardPersistenceResult:
 
 
 def _parse_time(value: Any) -> datetime | None:
-    if not value:
-        return None
-    if isinstance(value, datetime):
-        return value
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
-        try:
-            return datetime.strptime(str(value), fmt)
-        except ValueError:
-            continue
-    return None
+    return _parse_tianti_time(value)
 
 
 def _sect_bonus(level: int) -> float:
-    return max(0, min(int(level or 0), 10)) * 0.05
+    return _get_sect_fairyland_bonus(level)
 
 
 class TiantiTrainingRepository(Protocol):

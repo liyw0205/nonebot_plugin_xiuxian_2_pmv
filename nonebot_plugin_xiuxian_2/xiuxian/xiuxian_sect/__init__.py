@@ -56,9 +56,7 @@ from ..xiuxian_utils.utils import (
     parse_page_arg, paginate_text_blocks, build_pagination_buttons
 )
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_tianti.transaction_service import (
-    get_sect_fairyland_bonus,
-)
+from ...features.tianti_training.presentation import get_sect_fairyland_bonus
 from .sect_fairyland import (
     SECT_FAIRYLAND_CLAIM_TABLE,
     SECT_FAIRYLAND_CONFIG,

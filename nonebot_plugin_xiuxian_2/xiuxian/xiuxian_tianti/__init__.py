@@ -20,15 +20,16 @@ from .tianti_data import (
     get_qiaoxue_map,
 )
 from .transaction_service import (
-    calc_tianti_gain_rate,
-    get_active_medicine_bath,
-    get_sect_fairyland_bonus,
     get_tianti_cap,
-    settle_tianti_gain,
 )
 
 from ...features.tianti_settlement.application import TiantiSettlementApplication
 from ...features.tianti_training.application import TiantiTrainingApplication
+from ...features.tianti_training.presentation import (
+    calculate_tianti_gain_rate,
+    get_active_medicine_bath,
+    get_sect_fairyland_bonus,
+)
 from ...paths import get_paths
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
@@ -154,10 +155,6 @@ def _format_medicine_bath_plan(plan, limit: int = 6):
 
 def _format_medicine_bath_percent(effect: float):
     return f"{effect * 100:.2f}".rstrip("0").rstrip(".")
-
-
-def _settle_tianti_gain(data: dict, now_t: datetime, sect_fairyland_level: int = 0):
-    return settle_tianti_gain(data, now_t, sect_fairyland_level)
 
 
 def _format_sect_fairyland_msg(result: dict) -> str:
@@ -619,7 +616,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bath = _get_active_medicine_bath(data, now_t)
     sect_fairyland_level = _get_user_sect_fairyland_level(user_info)
     sect_bonus = get_sect_fairyland_bonus(sect_fairyland_level)
-    rate_info = calc_tianti_gain_rate(data, now_t, sect_fairyland_level)
+    rate_info = calculate_tianti_gain_rate(
+        data,
+        base_per_min=int(get_tianti_level_data(lvl)["hp_gain_per_min"]),
+        now=now_t,
+        sect_fairyland_level=sect_fairyland_level,
+        spirit_vein_multiplier=get_spirit_vein_tianti_multiplier(),
+    )
     efficiency_percent = int(rate_info["efficiency"] * 100)
     if bath:
         bath_msg = (
