@@ -88,6 +88,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(sect["membership_application_owned"])
         self.assertTrue(sect["economy_application_owned"])
         self.assertTrue(sect["legacy_membership_disabled"])
+        self.assertTrue(sect["legacy_membership_getter_removed"])
         self.assertTrue(sect["weekly_claim_application_owned"])
         self.assertTrue(sect["weekly_claim_repository_owned"])
         self.assertTrue(sect["weekly_claim_request_path_has_no_ddl"])

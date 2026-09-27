@@ -69,7 +69,6 @@ from .sect_fairyland import (
 )
 from ..adapter_compat import is_channel_event
 from ...paths import get_paths
-from .transaction_service import SectMembershipService
 
 from .transaction_service import SectCloseMountainService
 from .transaction_service import SectOwnerInheritService
@@ -87,7 +86,6 @@ from ...infrastructure.random_source import SystemRandom
 
 items = Items()
 _sql_message_instance = None
-_sect_membership_service_instance = None
 sect_application = SectApplication(
     get_paths().game_db,
     player_database=get_paths().player_db,
@@ -121,15 +119,6 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
-
-
-def _sect_membership_service():
-    global _sect_membership_service_instance
-    if _sect_membership_service_instance is None:
-        _sect_membership_service_instance = SectMembershipService(
-            get_paths().game_db
-        )
-    return _sect_membership_service_instance
 
 
 def _sect_close_mountain_service():

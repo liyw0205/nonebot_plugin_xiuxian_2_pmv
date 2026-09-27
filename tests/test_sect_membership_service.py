@@ -15,11 +15,12 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.transaction_service import (
 from tests.test_db_backend import db_backend
 
 
-def test_sect_facade_defers_membership_service_construction():
+def test_sect_facade_does_not_wire_the_legacy_membership_service():
     sect = importlib.import_module(
         "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect"
     )
-    assert sect._sect_membership_service_instance is None
+    assert not hasattr(sect, "_sect_membership_service")
+    assert not hasattr(sect, "_sect_membership_service_instance")
 
 
 class SectMembershipServiceTests(unittest.TestCase):
