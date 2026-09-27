@@ -389,8 +389,7 @@ async def auto_handle_inactive_sect_owners():
     )
     
     try:
-        # 使用新的方法获取宗门列表（包含成员数量）
-        all_sects = _sql_message().get_all_sects_with_member_count()
+        all_sects = sect_application.list_sects_with_member_count()
         auto_change_sect_owner_cd = XiuConfig().auto_change_sect_owner_cd
         logger.info(f"获取到宗门总数：{len(all_sects)}个")
         
@@ -1771,7 +1770,7 @@ async def sect_task_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessage
 async def sect_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """宗门列表：显示宗门人数信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    sect_lists_with_members = _sql_message().get_all_sects_with_member_count()
+    sect_lists_with_members = sect_application.list_sects_with_member_count()
 
     msg_list = []
     for sect in sect_lists_with_members:

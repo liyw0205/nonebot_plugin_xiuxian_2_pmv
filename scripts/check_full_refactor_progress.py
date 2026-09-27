@@ -122,6 +122,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sect_inactive_owner_handler = sect_facade[
         sect_facade.index("async def auto_handle_inactive_sect_owners") : sect_facade.index("@sect_help.handle")
     ]
+    sect_list_handler = sect_facade[
+        sect_facade.index("async def sect_list_") : sect_facade.index("@sect_users.handle")
+    ]
     sect_materials_grant_handler = sect_facade[
         sect_facade.index("async def materialsupdate_") : sect_facade.index("# 重置用户宗门任务次数")
     ]
@@ -139,6 +142,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sect_fairyland_migrations = (PACKAGE / "features" / "sect_fairyland" / "migrations.py").read_text(encoding="utf-8")
     sect_application = (PACKAGE / "features" / "sect" / "application.py").read_text(encoding="utf-8")
     sect_activity_repository = (PACKAGE / "features" / "sect" / "activity_repository.py").read_text(encoding="utf-8")
+    sect_directory_repository = (PACKAGE / "features" / "sect" / "directory_repository.py").read_text(encoding="utf-8")
     sect_disband_repository = (PACKAGE / "features" / "sect" / "disband_repository.py").read_text(encoding="utf-8")
     sect_scheduled_repository = (PACKAGE / "features" / "sect" / "scheduled_material_repository.py").read_text(encoding="utf-8")
     sect_weekly_repository = (PACKAGE / "features" / "sect" / "weekly_reward_repository.py").read_text(encoding="utf-8")
@@ -506,6 +510,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "scheduled_grant_success_result_owned": '"granted"' in sect_application[sect_application.index("class SectMutationResult"):sect_application.index("class SectApplication")],
             "scheduled_grant_migration_registered": all(token in plugin for token in ("sect.015", "apply_sect_scheduled_materials")) and "sect_scheduled_material_grants" in sect_migrations,
             "scheduled_grant_migration_game_only": '"sect.015"' not in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")] and '"sect.015"' not in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")],
+            "sect_directory_application_owned": "sect_application.list_sects_with_member_count()" in sect_inactive_owner_handler and "sect_application.list_sects_with_member_count()" in sect_list_handler and "get_all_sects_with_member_count" not in sect_inactive_owner_handler + sect_list_handler,
+            "sect_directory_repository_owned": "SectDirectorySqlRepository" in sect_application and "def list_with_member_count(" in sect_directory_repository,
+            "sect_directory_query_read_only": "read_only=True" in sect_directory_repository and "CREATE TABLE" not in sect_directory_repository,
             "fairyland_upgrade_application_owned": "sect_application.upgrade_fairyland(" in sect_facade,
             "fairyland_upgrade_repository_owned": "class SectFairylandSqlRepository" in sect_fairyland_upgrade_repository and "SectFairylandSqlRepository" in sect_application,
             "fairyland_upgrade_request_path_has_no_ddl": all(token not in sect_fairyland_upgrade_repository for token in ("CREATE TABLE", "ALTER TABLE")) and "schema_missing" in sect_fairyland_upgrade_repository,

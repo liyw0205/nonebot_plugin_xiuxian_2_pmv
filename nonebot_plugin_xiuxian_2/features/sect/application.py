@@ -27,6 +27,7 @@ from .name_refresh_repository import SectNameRefreshSqlRepository
 from .weekly_reward_repository import SectWeeklyRewardRepository, SectWeeklyRewardSqlRepository
 from .manual_disband_repository import SectManualDisbandSqlRepository
 from .activity_repository import SectActivitySqlRepository
+from .directory_repository import SectDirectorySqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -62,7 +63,11 @@ class SectApplication:
         self.ledger = ledger or OperationLedger()
         self.clock = clock or SystemClock()
         self.activity_repository = SectActivitySqlRepository(self.database)
+        self.directory_repository = SectDirectorySqlRepository(self.database)
         self.scheduled_material_repository = SectScheduledMaterialSqlRepository(self.database)
+
+    def list_sects_with_member_count(self) -> list[tuple[Any, ...]]:
+        return self.directory_repository.list_with_member_count()
 
     def update_last_check_info_time(self, user_id: str) -> int:
         occurred_at = self.clock.now()
