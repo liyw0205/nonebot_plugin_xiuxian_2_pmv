@@ -24,6 +24,7 @@ from .practice_repository import SectPracticeSqlRepository
 from .task_settlement_repository import SectTaskSettlementSqlRepository
 from .creation_repository import SectCreationSqlRepository
 from .name_refresh_repository import SectNameRefreshSqlRepository
+from .weekly_reward_repository import SectWeeklyRewardRepository, SectWeeklyRewardSqlRepository
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -51,9 +52,11 @@ class SectMutationResult(dict):
 
 
 class SectApplication:
-    def __init__(self, database: str | Path, *, repository: SectRepository | None = None, ledger: OperationLedger | None = None, clock=None) -> None:
+    def __init__(self, database: str | Path, *, repository: SectRepository | None = None, weekly_repository: SectWeeklyRewardRepository | None = None, player_database: str | Path | None = None, ledger: OperationLedger | None = None, clock=None) -> None:
         self.database = str(database)
+        self.player_database = str(player_database) if player_database is not None else None
         self.repository = repository
+        self.weekly_repository = weekly_repository
         self.ledger = ledger or OperationLedger()
         self.clock = clock or SystemClock()
 
@@ -180,6 +183,75 @@ class SectApplication:
             raise ValidationError("operation_id and user_id are required")
         payload = {"user_id": str(user_id), **kwargs}
         return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.claim_elixir", payload=payload, call=lambda: self._repository().claim_elixir(operation_id, user_id, **kwargs))
+
+    def claim_weekly(
+        self,
+        *,
+        operation_id: str,
+        user_id: str,
+        sect_id: int,
+        week_key: str,
+        goals: Any,
+        max_goods_num: int,
+    ) -> OperationOutcome[dict[str, Any]]:
+        operation_id = str(operation_id).strip()
+        user_id = str(user_id).strip()
+        try:
+            sect_id = int(sect_id)
+            week_key = str(week_key).strip()
+            max_goods_num = int(max_goods_num)
+            goals = [dict(goal) for goal in (goals or ())]
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("weekly reward claim values are invalid") from exc
+        if not operation_id or not user_id or sect_id <= 0 or not week_key or not goals or max_goods_num < 0:
+            raise ValidationError("operation_id, user_id, sect_id and week_key are required")
+        payload = {
+            "user_id": user_id,
+            "sect_id": sect_id,
+            "week_key": week_key,
+            "goals": goals,
+            "max_goods_num": max_goods_num,
+        }
+        repository = self.weekly_repository
+        if repository is None:
+            if self.player_database is None:
+                raise ValidationError("player_database is required for weekly reward claims")
+            repository = SectWeeklyRewardSqlRepository(self.database, self.player_database, clock=self.clock)
+            self.weekly_repository = repository
+        # The repository receipt commits with both databases; an outer ledger could strand "started" after a crash.
+        action = "sect.weekly_reward_claim"
+        with trace_context(operation_id=operation_id, user_scope=user_id):
+            raw = _data(
+                repository.claim(
+                    operation_id,
+                    user_id,
+                    sect_id,
+                    week_key,
+                    payload["goals"],
+                    max_goods_num,
+                )
+            )
+            status = str(raw.get("status", "failed"))
+            data = {"status": status, **raw}
+            if status in {"applied", "duplicate"}:
+                return OperationOutcome.applied(
+                    operation_id,
+                    action,
+                    data=data,
+                    granted={"rewards": data.get("rewards", ())},
+                    audit_category="sect",
+                    replayed=status == "duplicate",
+                    clock=self.clock,
+                )
+            return OperationOutcome.rejected(
+                operation_id,
+                action,
+                "宗门周常奖励未完成。",
+                code=status,
+                data=data,
+                audit_category="sect",
+                clock=self.clock,
+            )
 
     def reply(self, **kwargs: Any) -> ReplyPlan:
         action = str(kwargs.pop("action", "join"))

@@ -17,7 +17,7 @@ from .transaction_service import SectWeeklyRewardClaimService
 
 items = Items()
 _sql_message_instance = None
-_sect_weekly_reward_service_instance = None
+_legacy_sect_weekly_reward_service_instance = None
 runtime_ids = UUIDGenerator()
 
 
@@ -28,15 +28,21 @@ def _sql_message():
     return _sql_message_instance
 
 
-def _sect_weekly_reward_service():
-    global _sect_weekly_reward_service_instance
-    if _sect_weekly_reward_service_instance is None:
-        _sect_weekly_reward_service_instance = SectWeeklyRewardClaimService(
+def _legacy_sect_weekly_reward_service():
+    global _legacy_sect_weekly_reward_service_instance
+    if _legacy_sect_weekly_reward_service_instance is None:
+        _legacy_sect_weekly_reward_service_instance = SectWeeklyRewardClaimService(
             get_paths().game_db,
             get_paths().player_db,
             _sql_message().lock,
         )
-    return _sect_weekly_reward_service_instance
+    return _legacy_sect_weekly_reward_service_instance
+
+
+def _sect_weekly_application():
+    from . import sect_application
+
+    return sect_application
 
 
 sect_weekly = on_command("宗门周常", priority=7, block=True)
@@ -243,13 +249,13 @@ async def sect_weekly_claim_(
 
     week_key = sect_weekly_goal_manager.current_week_key()
     goal_scope = claimable[0]["key"] if len(claimable) == 1 else "all"
-    result = _sect_weekly_reward_service().claim(
-        _sect_weekly_operation_id(event, user_id, goal_scope),
-        user_id,
-        sect_id,
-        week_key,
-        _prepare_claim_goals(claimable),
-        XiuConfig().max_goods_num,
+    outcome = _sect_weekly_application().claim_weekly(
+        operation_id=_sect_weekly_operation_id(event, user_id, goal_scope),
+        user_id=user_id,
+        sect_id=sect_id,
+        week_key=week_key,
+        goals=_prepare_claim_goals(claimable),
+        max_goods_num=XiuConfig().max_goods_num,
     )
     status_messages = {
         "not_completed": "宗门周常目标尚未完成，无法领取。",
@@ -260,12 +266,14 @@ async def sect_weekly_claim_(
         "user_missing": "未找到道友数据，宗门周常奖励尚未领取。",
         "operation_conflict": "领取请求状态冲突，请重新发送命令。",
     }
-    if result.succeeded:
+    result = outcome.data or {}
+    if outcome.ok:
         msg = "领取成功：\n" + "\n".join(
-            f"{name}：{reward_text}" for name, reward_text in result.rewards
+            f"{name}：{reward_text}" for name, reward_text in result.get("rewards", ())
         )
     else:
-        msg = status_messages.get(result.status, f"宗门周常奖励领取失败（{result.status}）。")
+        status = str(outcome.code or result.get("status", "failed"))
+        msg = status_messages.get(status, f"宗门周常奖励领取失败（{status}）。")
     await handle_send(
         bot,
         event,

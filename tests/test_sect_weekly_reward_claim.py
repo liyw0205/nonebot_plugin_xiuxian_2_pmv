@@ -15,7 +15,7 @@ def test_sect_weekly_facade_defers_reward_claim_service_construction():
     weekly = importlib.import_module(
         "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.sect_weekly_commands"
     )
-    assert weekly._sect_weekly_reward_service_instance is None
+    assert weekly._legacy_sect_weekly_reward_service_instance is None
 
 
 def test_sect_weekly_facade_defers_sql_manager_construction():
@@ -29,7 +29,7 @@ def test_sect_weekly_facade_defers_sql_manager_construction():
     assert "sql_message = XiuxianDateManage()" not in source
 
 
-def test_sect_weekly_claim_uses_lazy_dual_database_service():
+def test_sect_weekly_claim_uses_feature_application_and_keeps_legacy_fallback_lazy():
     source = Path(
         "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_sect/sect_weekly_commands.py"
     ).read_text(encoding="utf-8")
@@ -37,13 +37,32 @@ def test_sect_weekly_claim_uses_lazy_dual_database_service():
         source.index("@sect_weekly_claim.handle"):
         source.index("@sect_weekly_rank.handle")
     ]
-    assert "_sect_weekly_reward_service_instance = None" in source
-    assert "def _sect_weekly_reward_service(" in source
+    assert "_legacy_sect_weekly_reward_service_instance = None" in source
+    assert "def _legacy_sect_weekly_reward_service(" in source
     assert "get_paths().game_db" in source
     assert "get_paths().player_db" in source
     assert "_sql_message().lock" in source
-    assert "_sect_weekly_reward_service().claim(" in handler
-    assert "sect_weekly_reward_service.claim(" not in handler
+    assert "_sect_weekly_application().claim_weekly(" in handler
+    assert "_legacy_sect_weekly_reward_service().claim(" not in handler
+
+
+def test_sect_weekly_migrations_route_game_and_player_schema_separately():
+    from nonebot_plugin_xiuxian_2.plugin import build_migrations, migrations_for_database
+
+    migrations = build_migrations()
+    game = {migration.version for migration in migrations_for_database(migrations, "game_db")}
+    player = {migration.version for migration in migrations_for_database(migrations, "player_db")}
+    assert "sect.011" in game
+    assert "sect.011" not in player
+    assert "sect.012" in player
+    assert "sect.012" not in game
+
+
+def test_sect_weekly_goal_manager_does_not_create_schema_during_requests():
+    source = Path("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_sect/sect_weekly.py").read_text(encoding="utf-8")
+    assert "schema is not ready; run migrations first" in source
+    assert "CREATE TABLE" not in source
+    assert "ALTER TABLE" not in source
 
 
 class SectWeeklyRewardClaimTests(unittest.TestCase):

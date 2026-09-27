@@ -93,6 +93,7 @@ _sql_message_instance = None
 _sect_membership_service_instance = None
 sect_application = SectApplication(
     get_paths().game_db,
+    player_database=get_paths().player_db,
     repository=SectRenameSqlRepository(get_paths().game_db),
 )
 sect_ids = UUIDGenerator()

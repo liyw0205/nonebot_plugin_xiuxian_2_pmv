@@ -101,25 +101,19 @@ class SectWeeklyGoalManager:
         with sql_message.lock:
             cur = sql_message.conn.cursor()
             cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS sect_weekly_goal (
-                    sect_id INTEGER NOT NULL,
-                    week_key TEXT NOT NULL,
-                    goal_key TEXT NOT NULL,
-                    progress INTEGER NOT NULL DEFAULT 0,
-                    target INTEGER NOT NULL,
-                    participants TEXT NOT NULL DEFAULT '{}',
-                    claimed_users TEXT NOT NULL DEFAULT '[]',
-                    updated_at TEXT NOT NULL,
-                    PRIMARY KEY (sect_id, week_key, goal_key)
-                )
-                """
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=%s",
+                (self.table_name,),
             )
-            cur.execute(
-                "CREATE INDEX IF NOT EXISTS idx_sect_weekly_goal_week "
-                "ON sect_weekly_goal(week_key, goal_key, progress)"
-            )
-            self._sql_message()._commit_write()
+            if cur.fetchone() is None:
+                raise RuntimeError("sect_weekly_goal schema is not ready; run migrations first")
+            cur.execute("PRAGMA table_info(sect_weekly_goal)")
+            columns = {str(row[1]) for row in cur.fetchall()}
+            required = {
+                "sect_id", "week_key", "goal_key", "progress", "target",
+                "participants", "claimed_users", "updated_at",
+            }
+            if not required.issubset(columns):
+                raise RuntimeError("sect_weekly_goal schema is not ready; run migrations first")
 
     def ensure_goals(self, sect_id: int | str, week_key: str | None = None) -> None:
         self.ensure_table()

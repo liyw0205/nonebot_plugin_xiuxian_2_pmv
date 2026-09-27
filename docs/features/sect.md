@@ -2,7 +2,7 @@
 
 ## 用户流程
 
-宗门成员加入、宗门商店兑换、主/副功法学习和炼体堂领奖通过 `SectApplication` 统一登记 operation ledger。旧命令通过兼容门面调用新 application。
+宗门成员加入、宗门商店兑换、主/副功法学习、炼体堂领奖和 `领取宗门周常` 通过 `SectApplication` 进入 feature-owned application/repository。周常可单项领取或一次领取所有已完成目标。
 
 ## 命令与 Web API
 
@@ -11,16 +11,17 @@
 - `学习宗门功法` -> `POST /api/v1/sect/learn-main`
 - `POST /api/v1/sect/learn-secondary`
 - `领取宗门炼体堂` -> `POST /api/v1/sect/elixir/claim`
+- `领取宗门周常 [目标名]`（命令入口）
 
 所有接口权限为 `user`，写请求支持 `Idempotency-Key`，业务拒绝返回统一错误码。
 
 ## 数据、回滚与限制
 
-`sect.001` 创建 feature 迁移标记；宗门历史表继续由兼容 repository 维护。关闭 `XIUXIAN_SECT_ENABLED` 即回退旧实现。宗门建设、任务、传位和解散等剩余动作仍在兼容层，待后续垂直切片迁移。
+`sect.011` 在 game DB 创建/补齐 `sect_weekly_goal` 和 `sect_weekly_reward_operations`；`sect.012` 仅在 player DB 创建/补齐 `boss_limit.integral`，保留已有周常进度与玩家记录。请求路径只检查 schema，不建表或补列。周常奖励由 `SectWeeklyRewardSqlRepository` 使用 attached game/player transaction 校验宗门归属、目标进度、重复领取与背包容量，再更新玩家、宗门、背包、BOSS 积分及领取标记。晚期 SQL 异常会回滚两个库；SQLite WAL 下 attached 多库事务不承诺进程/主机崩溃时的跨库原子性。旧 `SectWeeklyRewardClaimService` 只保留显式兼容 fallback。关闭 `XIUXIAN_SECT_ENABLED` 即回退旧实现；宗门维护、任务及其他未迁移动作仍在兼容层。
 
 ## 命令与别名
 
-保留 `加入宗门`、`宗门商店兑换`、`学习宗门功法`、`领取宗门炼体堂` 及历史别名。
+保留 `加入宗门`、`宗门商店兑换`、`学习宗门功法`、`领取宗门炼体堂`、`领取宗门周常` 及历史别名。
 
 ## Web API
 
@@ -28,11 +29,11 @@
 
 ## 数据模型与迁移
 
-`sect.001` 只写迁移标记和统一 ledger；历史宗门表由兼容 repository 持有。
+`sect.001` 写迁移标记和统一 ledger；`sect.011` 属于 game DB，`sect.012` 属于 player DB。历史周常进度由迁移增量补列保留。
 
 ## 事务与失败回滚
 
-每个动作在 operation ledger 中记录请求哈希；失败和拒绝不修改成员、物品或灵石。
+周常领取以 `sect_weekly_reward_operations` 作为唯一幂等回执，并与奖励状态在同一 attached transaction 提交；不额外写入会跨事务留下 started 状态的通用 ledger。重复领取可重放奖励摘要，operation 冲突、进度变化、库存不足和晚期 SQL 异常不发放部分奖励。
 
 ## 定时任务
 
@@ -48,8 +49,8 @@
 
 ## 测试与手工验收
 
-覆盖加入、兑换、功法学习、领奖的成功、拒绝、异常回滚和重复请求，并执行 Web client 与恢复冒烟。
+覆盖加入、兑换、功法学习、炼体堂和周常领奖的成功、拒绝、异常回滚和重复请求；周常测试还检查 game/player migration 路由、旧数据保留及请求期不建表。
 
 ## 灰度开关、回滚和已知限制
 
-关闭开关即回到兼容入口；宗门建设、任务、传位和解散仍属于旧实现。
+关闭开关即回到兼容入口；宗门维护、事件进度写入、传位和解散仍有旧实现边界。周常跨库请求事务能回滚 SQL 异常，但 attached SQLite WAL 的崩溃原子性不作保证。

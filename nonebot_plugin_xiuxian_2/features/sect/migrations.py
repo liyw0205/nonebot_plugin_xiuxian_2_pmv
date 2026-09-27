@@ -43,4 +43,52 @@ def apply_sect_elixir(uow: DatabaseUnitOfWork) -> None:
     uow.execute("CREATE TABLE IF NOT EXISTS sect_elixir_claim_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,rewards TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
 
 
-__all__ = ["apply_sect", "apply_sect_rename", "apply_sect_join", "apply_sect_removal", "apply_sect_position", "apply_sect_donation", "apply_sect_shop", "apply_sect_mainbuff", "apply_sect_secbuff", "apply_sect_elixir"]
+def apply_sect_weekly(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS sect_weekly_goal("
+        "sect_id INTEGER NOT NULL,week_key TEXT NOT NULL,goal_key TEXT NOT NULL,"
+        "progress INTEGER NOT NULL DEFAULT 0,target INTEGER NOT NULL,"
+        "participants TEXT NOT NULL DEFAULT '{}',claimed_users TEXT NOT NULL DEFAULT '[]',"
+        "updated_at TEXT NOT NULL DEFAULT '',PRIMARY KEY(sect_id,week_key,goal_key))"
+    )
+    columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(sect_weekly_goal)")}
+    additions = {
+        "participants": "TEXT NOT NULL DEFAULT '{}'",
+        "claimed_users": "TEXT NOT NULL DEFAULT '[]'",
+        "updated_at": "TEXT NOT NULL DEFAULT ''",
+    }
+    for field, definition in additions.items():
+        if field not in columns:
+            uow.execute(f'ALTER TABLE sect_weekly_goal ADD COLUMN "{field}" {definition}')
+    uow.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sect_weekly_goal_week "
+        "ON sect_weekly_goal(week_key,goal_key,progress)"
+    )
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS sect_weekly_reward_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+        "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
+def apply_sect_weekly_player(uow: DatabaseUnitOfWork) -> None:
+    uow.execute("CREATE TABLE IF NOT EXISTS boss_limit(user_id TEXT PRIMARY KEY,integral INTEGER DEFAULT 0)")
+    columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(boss_limit)")}
+    if "integral" not in columns:
+        uow.execute("ALTER TABLE boss_limit ADD COLUMN integral INTEGER DEFAULT 0")
+
+
+__all__ = [
+    "apply_sect",
+    "apply_sect_rename",
+    "apply_sect_join",
+    "apply_sect_removal",
+    "apply_sect_position",
+    "apply_sect_donation",
+    "apply_sect_shop",
+    "apply_sect_mainbuff",
+    "apply_sect_secbuff",
+    "apply_sect_elixir",
+    "apply_sect_weekly",
+    "apply_sect_weekly_player",
+]

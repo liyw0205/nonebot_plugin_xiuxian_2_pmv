@@ -102,6 +102,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
     map_facade = (PACKAGE / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
     sect_facade = (PACKAGE / "xiuxian" / "xiuxian_sect" / "__init__.py").read_text(encoding="utf-8")
+    sect_weekly_commands = (PACKAGE / "xiuxian" / "xiuxian_sect" / "sect_weekly_commands.py").read_text(encoding="utf-8")
+    sect_weekly_manager = (PACKAGE / "xiuxian" / "xiuxian_sect" / "sect_weekly.py").read_text(encoding="utf-8")
+    sect_application = (PACKAGE / "features" / "sect" / "application.py").read_text(encoding="utf-8")
+    sect_weekly_repository = (PACKAGE / "features" / "sect" / "weekly_reward_repository.py").read_text(encoding="utf-8")
+    sect_migrations = (PACKAGE / "features" / "sect" / "migrations.py").read_text(encoding="utf-8")
     entertainment_facade = (PACKAGE / "xiuxian" / "xiuxian_entertainment" / "mod" / "newapi_store.py").read_text(encoding="utf-8")
     partner_facade = (PACKAGE / "xiuxian" / "xiuxian_buff" / "partner.py").read_text(encoding="utf-8")
     partner_cultivation_application = (PACKAGE / "features" / "buff" / "partner_cultivation_application.py").read_text(encoding="utf-8")
@@ -436,7 +441,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "creation_application_owned": sect_facade.count("sect_application.create_sect(") >= 2,
             "name_refresh_application_owned": "sect_application.charge_name_refresh(" in sect_facade,
             "legacy_membership_disabled": all(token not in sect_facade for token in ("sect_membership_service.join", "sect_membership_service.leave_sect", "sect_membership_service.kick_member", "sect_membership_service.change_position")),
-            "status": "membership_economy_daily_maintenance_cutover_with_other_sect_compatibility_paths",
+            "weekly_claim_application_owned": "_sect_weekly_application().claim_weekly(" in sect_weekly_commands and "_legacy_sect_weekly_reward_service().claim(" not in sect_weekly_commands,
+            "weekly_claim_repository_owned": "class SectWeeklyRewardSqlRepository" in sect_weekly_repository and "SectWeeklyRewardSqlRepository" in sect_application,
+            "weekly_claim_request_path_has_no_ddl": all(token not in sect_weekly_repository for token in ("CREATE TABLE", "ALTER TABLE")) and all(token not in sect_weekly_manager for token in ("CREATE TABLE", "ALTER TABLE")) and "schema_missing" in sect_weekly_repository,
+            "weekly_claim_migrations_registered": all(token in plugin for token in ("sect.011", "sect.012", "apply_sect_weekly", "apply_sect_weekly_player")) and "sect_weekly_reward_operations" in sect_migrations,
+            "weekly_claim_player_migration_routed": '"sect.012"' in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")] and '"sect.012"' in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")],
+            "weekly_claim_legacy_fallback_retained": "def _legacy_sect_weekly_reward_service(" in sect_weekly_commands and "SectWeeklyRewardClaimService" in sect_weekly_commands,
+            "status": "weekly_claim_application_owned_with_other_sect_compatibility_paths",
         },
         "natal_treasure": {
             "awaken_application_owned": "natal_treasure_application.awaken(" in natal_facade,

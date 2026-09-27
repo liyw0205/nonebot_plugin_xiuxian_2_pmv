@@ -88,6 +88,12 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(sect["membership_application_owned"])
         self.assertTrue(sect["economy_application_owned"])
         self.assertTrue(sect["legacy_membership_disabled"])
+        self.assertTrue(sect["weekly_claim_application_owned"])
+        self.assertTrue(sect["weekly_claim_repository_owned"])
+        self.assertTrue(sect["weekly_claim_request_path_has_no_ddl"])
+        self.assertTrue(sect["weekly_claim_migrations_registered"])
+        self.assertTrue(sect["weekly_claim_player_migration_routed"])
+        self.assertTrue(sect["weekly_claim_legacy_fallback_retained"])
         natal = slices["natal_treasure"]
         self.assertTrue(natal["awaken_application_owned"])
         self.assertTrue(natal["legacy_awaken_disabled"])
