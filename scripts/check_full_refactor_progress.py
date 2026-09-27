@@ -497,9 +497,17 @@ def _slice_status() -> dict[str, dict[str, object]]:
                     "_dungeon_team_exit_service",
                 )
             ),
+            "team_reads_application_owned": (
+                "dungeon_team_application.team_id_for_user(" in dungeon_facade
+                and "dungeon_team_application.team_info(" in dungeon_facade
+            ),
+            "legacy_team_read_helpers_disabled": (
+                "get_user_team(" not in dungeon_facade
+                and "get_team_info(" not in dungeon_facade
+            ),
             "explore_settlement_application_owned": "dungeon_application.settle(" in dungeon_facade and "_dungeon_explore_operation_service().settle(" not in dungeon_facade,
             "reset_application_owned": "self.dungeon_application = DungeonApplication(" in dungeon_manager and "self._reset_application().reset(" in dungeon_manager and "self.reset_service.reset(" not in dungeon_manager,
-            "status": "team_commands_application_owned_with_invite_projection_compatibility_retained",
+            "status": "team_commands_and_reads_application_owned_with_invite_projection_compatibility_retained",
         },
         "bank": {
             "deposit_application_owned": "BankDepositApplication" in bank_facade and "bank_application.deposit(" not in bank_facade,

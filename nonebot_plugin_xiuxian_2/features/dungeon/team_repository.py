@@ -69,7 +69,7 @@ class DungeonTeamRepository:
         return json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
 
     @classmethod
-    def ensure_schema(cls, uow: DatabaseUnitOfWork) -> None:
+    def ensure_team_schema(cls, uow: DatabaseUnitOfWork) -> None:
         uow.execute("CREATE TABLE IF NOT EXISTS teams(user_id TEXT PRIMARY KEY)")
         columns = {row["name"] for row in uow.query_all("PRAGMA table_info(teams)")}
         for name, definition in {
@@ -79,6 +79,10 @@ class DungeonTeamRepository:
         }.items():
             if name not in columns:
                 uow.execute(f'ALTER TABLE teams ADD COLUMN "{name}" {definition}')
+
+    @classmethod
+    def ensure_schema(cls, uow: DatabaseUnitOfWork) -> None:
+        cls.ensure_team_schema(uow)
         uow.execute("CREATE TABLE IF NOT EXISTS dungeon_team_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_status TEXT NOT NULL,team_id TEXT NOT NULL,result_json TEXT NOT NULL DEFAULT '',action TEXT NOT NULL DEFAULT '',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
         uow.execute("CREATE TABLE IF NOT EXISTS dungeon_team_invites(invite_id TEXT PRIMARY KEY,team_id TEXT NOT NULL,inviter_id TEXT NOT NULL,invitee_id TEXT NOT NULL,group_id TEXT NOT NULL,expires_at REAL NOT NULL,consumed_at TIMESTAMP DEFAULT NULL,status TEXT NOT NULL DEFAULT 'pending',created_at REAL NOT NULL DEFAULT 0,resolved_operation_id TEXT DEFAULT NULL)")
         uow.execute("CREATE INDEX IF NOT EXISTS idx_dungeon_team_invites_pending ON dungeon_team_invites(invitee_id,status,expires_at)")
@@ -91,6 +95,68 @@ class DungeonTeamRepository:
         except (TypeError, ValueError):
             return []
         return [str(item) for item in value] if isinstance(value, list) else []
+
+    @staticmethod
+    def _decode_team_record(record: dict[str, Any]) -> dict[str, Any]:
+        decoded = {}
+        for key, value in record.items():
+            if isinstance(value, str):
+                try:
+                    decoded[key] = json.loads(value)
+                except json.JSONDecodeError:
+                    decoded[key] = value
+            else:
+                decoded[key] = value
+        return decoded
+
+    @classmethod
+    def _normalize_team_record(cls, record: dict[str, Any]) -> dict[str, Any]:
+        team = cls._decode_team_record(record)
+        members = team.get("members", [])
+        if not isinstance(members, list):
+            try:
+                members = json.loads(members or "[]")
+            except (json.JSONDecodeError, TypeError, ValueError):
+                members = []
+        if not isinstance(members, list):
+            members = []
+        team["members"] = [
+            str(member)
+            for member in members
+            if isinstance(member, (str, int)) and str(member).strip()
+        ]
+
+        leader = team.get("leader")
+        if leader is None or isinstance(leader, (dict, list)):
+            leader = team["members"][0] if team["members"] else ""
+        team["leader"] = str(leader)
+
+        try:
+            team["max_members"] = max(int(team.get("max_members", 4)), 1)
+        except (TypeError, ValueError):
+            team["max_members"] = 4
+        try:
+            team["version"] = max(int(team.get("version", 0)), 0)
+        except (TypeError, ValueError):
+            team["version"] = 0
+        return team
+
+    def team_info(self, team_id: str) -> dict[str, Any] | None:
+        with DatabaseUnitOfWork(self.database) as uow:
+            self.ensure_team_schema(uow)
+            record = uow.query_one("SELECT * FROM teams WHERE user_id=?", (str(team_id),))
+        return None if record is None else self._normalize_team_record(record)
+
+    def team_id_for_user(self, user_id: str) -> str | None:
+        with DatabaseUnitOfWork(self.database) as uow:
+            self.ensure_team_schema(uow)
+            records = uow.query_all("SELECT * FROM teams")
+        for record in records:
+            team = self._normalize_team_record(record)
+            team_id = team.get("user_id")
+            if team_id and str(user_id) in team["members"]:
+                return str(team_id)
+        return None
 
     @classmethod
     def _user_team(cls, uow: DatabaseUnitOfWork, user_id: str) -> str:

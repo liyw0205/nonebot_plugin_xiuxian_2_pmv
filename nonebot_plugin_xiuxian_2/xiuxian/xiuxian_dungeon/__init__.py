@@ -31,9 +31,7 @@ from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 
 from .dungeon_manager import DungeonManager
-from .team_manager import (
-    get_user_team, get_team_info, expire_team_invite,
-)
+from .team_manager import expire_team_invite
 from .transaction_service import (
     TeamInviteResponseResult,
     build_invite_response_message,
@@ -392,7 +390,7 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
         if target_db_info:
             target_user_id = str(target_db_info['user_id'])
     target_user_id = str(target_user_id or "")
-    team_id = get_user_team(user_id) or ""
+    team_id = dungeon_team_application.team_id_for_user(user_id) or ""
     group_id = str(getattr(event, "group_id", "") or "")
     now = runtime_clock.now().timestamp()
     invite_id = f"{operation_id}:{target_user_id or 'missing'}"
@@ -510,7 +508,7 @@ async def leave_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
         await handle_send(bot, event, _team_exit_message("leave", replay), md_type="team", k1="创建队伍", v1="创建队伍", k2="队伍帮助", v2="队伍帮助")
         await leave_team_cmd.finish()
 
-    team_id = get_user_team(user_id) or f"missing:{user_id}"
+    team_id = dungeon_team_application.team_id_for_user(user_id) or f"missing:{user_id}"
     team_snapshot = dungeon_team_application.snapshot(team_id)
     exit_result = dungeon_team_application.leave(
         operation_id,
@@ -546,7 +544,7 @@ async def kick_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
         if target_db_info:
             target_user_id = str(target_db_info['user_id'])
     target_user_id = str(target_user_id or "")
-    team_id = get_user_team(user_id) or f"missing:{user_id}"
+    team_id = dungeon_team_application.team_id_for_user(user_id) or f"missing:{user_id}"
     team_snapshot = dungeon_team_application.snapshot(team_id)
     exit_result = dungeon_team_application.kick(
         operation_id,
@@ -576,7 +574,7 @@ async def disband_team_handler(bot: Bot, event: Union[GroupMessageEvent, Private
         await handle_send(bot, event, _team_exit_message("disband", replay), md_type="team", k1="创建队伍", v1="创建队伍", k2="队伍帮助", v2="队伍帮助")
         await disband_team_cmd.finish()
 
-    team_id = get_user_team(user_id) or f"missing:{user_id}"
+    team_id = dungeon_team_application.team_id_for_user(user_id) or f"missing:{user_id}"
     team_snapshot = dungeon_team_application.snapshot(team_id)
     exit_result = dungeon_team_application.disband(
         operation_id,
@@ -598,13 +596,13 @@ async def view_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
 
     user_id = str(user_info['user_id'])
 
-    team_id = get_user_team(user_id)
+    team_id = dungeon_team_application.team_id_for_user(user_id)
     if not team_id:
         msg = "你不在任何队伍中！\n📢 使用【创建队伍 队伍名】来创建队伍！"
         await handle_send(bot, event, msg, md_type="team", k1="创建队伍", v1="创建队伍", k2="队伍帮助", v2="队伍帮助")
         await view_team_cmd.finish()
 
-    team_info = get_team_info(team_id)
+    team_info = dungeon_team_application.team_info(team_id)
     if not team_info:
         msg = "队伍信息异常！"
         await handle_send(bot, event, msg, md_type="team", k1="队伍帮助", v1="队伍帮助")
@@ -646,7 +644,7 @@ async def transfer_team_handler(bot: Bot, event: Union[GroupMessageEvent, Privat
         if target_db_info:
             target_user_id = str(target_db_info['user_id'])
     target_user_id = str(target_user_id or "")
-    team_id = get_user_team(user_id) or f"missing:{user_id}"
+    team_id = dungeon_team_application.team_id_for_user(user_id) or f"missing:{user_id}"
     snapshot = dungeon_team_application.snapshot(team_id)
     result = dungeon_team_application.transfer(
         operation_id,
@@ -1195,11 +1193,11 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
     mentor_attack_buffs = {}
     mentor_buff_msg = ""
 
-    team_id = get_user_team(user_id)
+    team_id = dungeon_team_application.team_id_for_user(user_id)
     team_snapshot = None
     members_info = [user_info]
     if team_id:
-        team_info = get_team_info(team_id)
+        team_info = dungeon_team_application.team_info(team_id)
         if not team_info:
             await reject("team_missing", "队伍信息异常，请先处理队伍状态。", player_status)
             await explore_dungeon.finish()

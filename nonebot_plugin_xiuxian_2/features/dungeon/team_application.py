@@ -28,6 +28,12 @@ class DungeonTeamApplication:
     def snapshot(self, team_id: str) -> TeamStateSnapshot | None:
         return self.repository.snapshot(team_id)
 
+    def team_id_for_user(self, user_id: str) -> str | None:
+        return self.repository.team_id_for_user(user_id)
+
+    def team_info(self, team_id: str) -> dict[str, Any] | None:
+        return self.repository.team_info(team_id)
+
     def transfer(self, operation_id: str, actor_id: str, target_id: str, expected: TeamStateSnapshot | None) -> TeamMutationResult:
         return self.repository.transfer(operation_id, actor_id, target_id, expected)
 

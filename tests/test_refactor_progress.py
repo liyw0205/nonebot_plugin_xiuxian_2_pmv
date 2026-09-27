@@ -72,6 +72,8 @@ class RefactorProgressTests(unittest.TestCase):
         dungeon_team = slices["dungeon_team"]
         self.assertTrue(dungeon_team["team_commands_application_owned"])
         self.assertTrue(dungeon_team["legacy_team_service_factories_removed"])
+        self.assertTrue(dungeon_team["team_reads_application_owned"])
+        self.assertTrue(dungeon_team["legacy_team_read_helpers_disabled"])
         bank = slices["bank"]
         self.assertTrue(bank["deposit_application_owned"])
         self.assertTrue(bank["withdrawal_application_owned"])
