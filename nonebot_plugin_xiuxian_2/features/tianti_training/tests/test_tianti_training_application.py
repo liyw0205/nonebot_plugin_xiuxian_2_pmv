@@ -5,6 +5,8 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 
+from ....infrastructure.database import DatabaseUnitOfWork
+from ....plugin import apply_platform_schema
 from ..application import TiantiTrainingApplication
 
 
@@ -30,11 +32,20 @@ class _Repository:
 
 
 class TiantiTrainingApplicationTests(unittest.TestCase):
+    @staticmethod
+    def _application(root, repository):
+        game_database = root / "game.db"
+        player_database = root / "player.db"
+        for database in (game_database, player_database):
+            with DatabaseUnitOfWork(database, immediate=True) as uow:
+                apply_platform_schema(uow)
+        return TiantiTrainingApplication(game_database, player_database, repository=repository)
+
     def test_all_actions_are_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             repository = _Repository()
-            app = TiantiTrainingApplication(root / "game.db", root / "player.db", repository=repository)
+            app = self._application(root, repository)
             first = app.train(operation_id="train-1", user_id="u", requested_stone=100)
             replay = app.train(operation_id="train-1", user_id="u", requested_stone=100)
             self.assertTrue(first.ok)
@@ -57,7 +68,7 @@ class TiantiTrainingApplicationTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             repository = Rejecting()
-            app = TiantiTrainingApplication(Path(directory) / "game.db", Path(directory) / "player.db", repository=repository)
+            app = self._application(Path(directory), repository)
             first = app.train(operation_id="reject-1", user_id="u", requested_stone=100)
             second = app.train(operation_id="reject-1", user_id="u", requested_stone=100)
             self.assertFalse(first.ok)

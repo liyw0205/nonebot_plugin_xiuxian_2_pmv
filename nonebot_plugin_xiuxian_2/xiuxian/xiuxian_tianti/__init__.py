@@ -10,7 +10,7 @@ from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, num
 from ..xiuxian_utils.sect_utils import get_user_sect_fairyland_level as _get_user_sect_fairyland_level
 
 from ..xiuxian_utils.item_json import Items
-from ..xiuxian_world_events import get_spirit_vein_tianti_bonus_msg
+from ..xiuxian_world_events import get_spirit_vein_tianti_bonus_msg, get_spirit_vein_tianti_multiplier
 from .tianti_data import (
     TiantiDataManager,
     get_tianti_level_data,
@@ -37,6 +37,7 @@ from ...infrastructure.clock import SystemClock
 tianti_manager = TiantiDataManager()
 tianti_settlement_application = TiantiSettlementApplication(
     get_paths().player_db,
+    spirit_vein_multiplier=get_spirit_vein_tianti_multiplier,
 )
 tianti_training_application = TiantiTrainingApplication(
     get_paths().game_db,

@@ -40,7 +40,56 @@ class SettlementRepositoryTests(unittest.TestCase):
         first = self.repo.settle("op", "u", datetime(2026, 9, 14, 10), sect_fairyland_level=0)
         second = self.repo.settle("op", "u", datetime(2026, 9, 14, 10), sect_fairyland_level=0)
         self.assertEqual((first["status"], first["detail"]["mins"], first["detail"]["real_gain"]), ("settled", 60, 120))
+        self.assertEqual(first["detail"]["status"], "ok")
         self.assertEqual(second["status"], "duplicate")
+
+    def test_active_bath_and_bonus_details_match_command_contract(self):
+        with sqlite3.connect(self.database) as conn:
+            conn.execute(
+                "UPDATE tianti_info SET medicine_end_time=?, medicine_effect=?, medicine_name=? WHERE user_id='u'",
+                ("2026-09-14 10:30:00", "1.5", "灵药浴"),
+            )
+        repo = TiantiSettlementSqlRepository(
+            self.database,
+            profile_reader=Profile(),
+            spirit_vein_multiplier=lambda: 1.2,
+        )
+        result = repo.settle("active-bath", "u", datetime(2026, 9, 14, 10), sect_fairyland_level=2)
+        detail = result["detail"]
+        self.assertEqual(detail["status"], "ok")
+        self.assertEqual(detail["real_gain"], 237)
+        self.assertEqual(detail["bath"]["name"], "灵药浴")
+        self.assertEqual(detail["bath"]["effect"], 1.5)
+        self.assertFalse(detail["bath_expired"])
+        self.assertEqual(detail["sect_bonus"], 0.1)
+        self.assertAlmostEqual(detail["spirit_vein_bonus"], 0.2)
+
+    def test_expired_bath_is_cleared_and_reported(self):
+        with sqlite3.connect(self.database) as conn:
+            conn.execute(
+                "UPDATE tianti_info SET medicine_last_time=?, medicine_end_time=?, medicine_effect=?, medicine_name=? WHERE user_id='u'",
+                ("2026-09-14 03:30:00", "2026-09-14 09:30:00", "1.5", "过期药浴"),
+            )
+        result = self.repo.settle("expired-bath", "u", datetime(2026, 9, 14, 10))
+        self.assertTrue(result["detail"]["bath_expired"])
+        self.assertIsNone(result["detail"]["bath"])
+        with sqlite3.connect(self.database) as conn:
+            row = conn.execute(
+                "SELECT medicine_last_time, medicine_end_time, medicine_effect, medicine_name FROM tianti_info WHERE user_id='u'"
+            ).fetchone()
+        self.assertEqual(row, (None, None, "0.0", ""))
+
+    def test_first_settlement_initializes_missing_profile_and_empty_window_does_not_advance(self):
+        now = datetime(2026, 9, 14, 10)
+        first = self.repo.settle("first", "new-user", now)
+        self.assertEqual((first["status"], first["detail"]["status"]), ("settled", "init"))
+        second = self.repo.settle("too-soon", "new-user", now.replace(second=30))
+        self.assertEqual((second["status"], second["detail"]["status"]), ("settled", "empty"))
+        with sqlite3.connect(self.database) as conn:
+            last_time = conn.execute(
+                "SELECT last_settle_time FROM tianti_info WHERE user_id='new-user'"
+            ).fetchone()[0]
+        self.assertEqual(last_time, "2026-09-14 10:00:00")
 
     def test_missing_schema_fails_without_state_change(self):
         with tempfile.TemporaryDirectory() as directory:

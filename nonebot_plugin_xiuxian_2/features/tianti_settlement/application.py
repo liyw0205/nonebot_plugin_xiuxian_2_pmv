@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from ...core.errors import ConflictError, DomainError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
@@ -17,10 +17,12 @@ class TiantiSettlementApplication:
     action = "tianti.settle"
 
     def __init__(self, player_database: str | Path, *, repository: TiantiSettlementRepository | None = None,
-                 ledger: OperationLedger | None = None) -> None:
+                 ledger: OperationLedger | None = None,
+                 spirit_vein_multiplier: Callable[[], float] | None = None) -> None:
         self.player_database = str(player_database)
         self.repository = repository
         self.ledger = ledger or OperationLedger()
+        self.spirit_vein_multiplier = spirit_vein_multiplier
 
     def settle(
         self,
@@ -42,6 +44,33 @@ class TiantiSettlementApplication:
         payload = request.payload()
         with trace_context(operation_id=request.operation_id, user_scope=request.user_id):
             try:
+                repository = self.repository or TiantiSettlementSqlRepository(
+                    self.player_database,
+                    spirit_vein_multiplier=self.spirit_vein_multiplier,
+                )
+                settle_in_uow = getattr(repository, "settle_in_uow", None)
+                if callable(settle_in_uow):
+                    with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+                        existing = self.ledger.begin(uow, request.operation_id, self.action, payload)
+                        if existing is not None:
+                            previous = existing.outcome()
+                            if previous is not None:
+                                return previous.replay()
+                            if existing.status != "started":
+                                raise ConflictError("操作正在处理中")
+                            # A prior version could commit the profile before its ledger.
+                            # The repository receipt makes a started request recoverable.
+                        raw = settle_in_uow(
+                            uow,
+                            request.operation_id,
+                            request.user_id,
+                            request.settled_at,
+                            sect_fairyland_level=request.sect_fairyland_level,
+                        )
+                        outcome = self._outcome(request, raw)
+                        self.ledger.finish(uow, outcome)
+                    return outcome
+
                 with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
                     existing = self.ledger.begin(uow, request.operation_id, self.action, payload)
                     if existing is not None:
@@ -49,43 +78,13 @@ class TiantiSettlementApplication:
                         if previous is not None:
                             return previous.replay()
                         raise ConflictError("操作正在处理中")
-                repository = self.repository or TiantiSettlementSqlRepository(self.player_database)
                 raw = repository.settle(
                     request.operation_id,
                     request.user_id,
                     request.settled_at,
                     sect_fairyland_level=request.sect_fairyland_level,
                 )
-                status = str(getattr(raw, "status", None) or (raw.get("status") if isinstance(raw, dict) else "failed"))
-                detail = getattr(raw, "detail", None)
-                if detail is None and isinstance(raw, dict):
-                    detail = raw.get("detail", {})
-                detail = dict(detail or {})
-                data = TiantiSettlementResult(status, request.operation_id, request.user_id, detail).to_dict()
-                if status in {"settled", "duplicate"}:
-                    outcome = OperationOutcome.applied(
-                        request.operation_id,
-                        self.action,
-                        data=data,
-                        granted={
-                            "tianti_hp": int(detail.get("real_gain", 0) or 0),
-                        },
-                        after={"tianti_hp": int(detail.get("new_hp", 0) or 0)},
-                        audit_category="tianti_settlement",
-                    )
-                else:
-                    messages = {
-                        "state_changed": "炼体结算状态已变化，请重新执行。",
-                        "not_ready": "炼体结算服务尚未就绪。",
-                    }
-                    outcome = OperationOutcome.rejected(
-                        request.operation_id,
-                        self.action,
-                        messages.get(status, "炼体结算未完成。"),
-                        code=status,
-                        data=data,
-                        audit_category="tianti_settlement",
-                    )
+                outcome = self._outcome(request, raw)
                 with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
                     self.ledger.finish(uow, outcome)
                 return outcome
@@ -94,6 +93,35 @@ class TiantiSettlementApplication:
             except Exception as exc:
                 self.ledger.record_failure(self.player_database, request.operation_id, self.action, payload, str(exc))
                 raise
+
+    def _outcome(self, request: TiantiSettlementRequest, raw: Any) -> OperationOutcome[dict[str, Any]]:
+        status = str(getattr(raw, "status", None) or (raw.get("status") if isinstance(raw, dict) else "failed"))
+        detail = getattr(raw, "detail", None)
+        if detail is None and isinstance(raw, dict):
+            detail = raw.get("detail", {})
+        detail = dict(detail or {})
+        data = TiantiSettlementResult(status, request.operation_id, request.user_id, detail).to_dict()
+        if status in {"settled", "duplicate"}:
+            return OperationOutcome.applied(
+                request.operation_id,
+                self.action,
+                data=data,
+                granted={"tianti_hp": int(detail.get("real_gain", 0) or 0)},
+                after={"tianti_hp": int(detail.get("new_hp", 0) or 0)},
+                audit_category="tianti_settlement",
+            )
+        messages = {
+            "state_changed": "炼体结算状态已变化，请重新执行。",
+            "not_ready": "炼体结算服务尚未就绪。",
+        }
+        return OperationOutcome.rejected(
+            request.operation_id,
+            self.action,
+            messages.get(status, "炼体结算未完成。"),
+            code=status,
+            data=data,
+            audit_category="tianti_settlement",
+        )
 
     def reply(self, **kwargs: Any) -> ReplyPlan:
         outcome = self.settle(**kwargs)

@@ -805,6 +805,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             ),
             "tianti_settlement": TiantiSettlementApplication(
                 str(context.database.path("player_db")),
+                spirit_vein_multiplier=spirit_vein_tianti_multiplier,
             ),
             "tianti_training": TiantiTrainingApplication(
                 str(context.database.path("game_db")),

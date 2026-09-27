@@ -322,9 +322,11 @@ def create_app(
         app.register_blueprint(admin_asset_blueprint(admin_asset, permission=has_permission))
     if any(feature.key == "tianti_settlement" for feature in registry.features):
         from ...features.tianti_settlement.application import TiantiSettlementApplication
+        from ...xiuxian.xiuxian_world_events import get_spirit_vein_tianti_multiplier
 
         tianti_settlement = (context.services or {}).get("tianti_settlement") or TiantiSettlementApplication(
-            str(context.database.path("player_db"))
+            str(context.database.path("player_db")),
+            spirit_vein_multiplier=get_spirit_vein_tianti_multiplier,
         )
         app.register_blueprint(tianti_settlement_blueprint(tianti_settlement, permission=has_permission))
     if any(feature.key == "tianti_training" for feature in registry.features):
