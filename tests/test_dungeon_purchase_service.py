@@ -14,8 +14,13 @@ from nonebot.exception import FinishedException
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.transaction_service import (
+from nonebot_plugin_xiuxian_2.compatibility.legacy_dungeon_purchase import (
+    DungeonPurchaseResult,
     DungeonPurchaseService,
+)
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.transaction_service import (
+    DungeonPurchaseResult as ShimDungeonPurchaseResult,
+    DungeonPurchaseService as ShimDungeonPurchaseService,
 )
 from nonebot_plugin_xiuxian_2.features.dungeon.application import DungeonApplication
 from tests.test_db_backend import db_backend
@@ -26,6 +31,10 @@ dungeon_plugin = importlib.import_module(
 
 
 class DungeonPurchaseServiceTests(unittest.TestCase):
+    def test_legacy_transaction_imports_preserve_object_identity(self) -> None:
+        self.assertIs(ShimDungeonPurchaseService, DungeonPurchaseService)
+        self.assertIs(ShimDungeonPurchaseResult, DungeonPurchaseResult)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "game.sqlite3"

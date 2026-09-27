@@ -26,7 +26,7 @@ class LegacyDungeonRepository:
         self.player_database = str(player_database)
 
     def _purchase_service(self):
-        from ...xiuxian.xiuxian_dungeon.transaction_service import DungeonPurchaseService
+        from ...compatibility.legacy_dungeon_purchase import DungeonPurchaseService
 
         return DungeonPurchaseService(self.game_database)
 

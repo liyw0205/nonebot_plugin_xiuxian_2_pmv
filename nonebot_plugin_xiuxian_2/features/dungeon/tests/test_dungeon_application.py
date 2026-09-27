@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from ..application import DungeonApplication
+from ....infrastructure.database import DatabaseUnitOfWork, OperationLedger
 
 
 class _Repository:
@@ -41,6 +42,8 @@ class DungeonApplicationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             repository = _Repository()
             app = DungeonApplication(Path(directory) / "game.db", Path(directory) / "player.db", repository=repository)
+            with DatabaseUnitOfWork(app.game_database) as uow:
+                OperationLedger().ensure_schema(uow)
             request = dict(operation_id="dungeon-buy-1", user_id="u", item_id=1999, item_name="渡厄丹", item_type="丹药", quantity=1, unit_cost=10, expected_stone=100, max_goods=99)
             first = app.purchase(**request)
             replay = app.purchase(**request)

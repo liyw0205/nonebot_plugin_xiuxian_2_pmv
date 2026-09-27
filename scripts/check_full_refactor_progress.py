@@ -122,6 +122,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dungeon_team_presentation = (PACKAGE / "features" / "dungeon" / "team_presentation.py").read_text(encoding="utf-8")
     dungeon_reset_compatibility = (PACKAGE / "compatibility" / "legacy_dungeon_reset.py").read_text(encoding="utf-8")
     dungeon_session_compatibility = (PACKAGE / "compatibility" / "legacy_dungeon_session.py").read_text(encoding="utf-8")
+    dungeon_purchase_compatibility = (PACKAGE / "compatibility" / "legacy_dungeon_purchase.py").read_text(encoding="utf-8")
+    dungeon_compatibility_facade = (PACKAGE / "compatibility" / "dungeon.py").read_text(encoding="utf-8")
     dungeon_repository = (PACKAGE / "features" / "dungeon" / "repository.py").read_text(encoding="utf-8")
     dungeon_manager = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "dungeon_manager.py").read_text(encoding="utf-8")
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
@@ -566,6 +568,22 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 "dungeon_application.session_operation(" in dungeon_facade
                 and "dungeon_application.session_transition(" in dungeon_facade
                 and "DungeonSessionResult" not in dungeon_facade
+            ),
+            "dungeon_purchase_application_owned": (
+                "dungeon_application.purchase(" in dungeon_facade
+                and "dungeon_purchase_service.purchase(" not in dungeon_facade
+            ),
+            "legacy_dungeon_purchase_service_isolated": (
+                "class DungeonPurchaseService" in dungeon_purchase_compatibility
+                and "class DungeonPurchaseResult" in dungeon_purchase_compatibility
+                and "class DungeonPurchaseService" not in dungeon_transaction_shim
+                and "class DungeonPurchaseResult" not in dungeon_transaction_shim
+                and "legacy_dungeon_purchase import DungeonPurchaseResult, DungeonPurchaseService" in dungeon_transaction_shim
+            ),
+            "legacy_dungeon_purchase_imports_explicit": (
+                "from ...compatibility.legacy_dungeon_purchase import DungeonPurchaseService" in dungeon_repository
+                and "from ...xiuxian.xiuxian_dungeon.transaction_service import DungeonPurchaseService" not in dungeon_repository
+                and "from .legacy_dungeon_purchase import DungeonPurchaseResult" in dungeon_compatibility_facade
             ),
             "explore_settlement_application_owned": "dungeon_application.settle(" in dungeon_facade and "_dungeon_explore_operation_service().settle(" not in dungeon_facade,
             "reset_application_owned": "self.dungeon_application = DungeonApplication(" in dungeon_manager and "self._reset_application().reset(" in dungeon_manager and "self.reset_service.reset(" not in dungeon_manager,

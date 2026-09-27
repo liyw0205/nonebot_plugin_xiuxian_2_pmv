@@ -26,7 +26,7 @@ class DungeonPurchaseService:
 
     def purchase(self, *args: Any, **kwargs: Any):
         _warn("DungeonPurchaseService")
-        from ..xiuxian.xiuxian_dungeon.transaction_service import DungeonPurchaseResult
+        from .legacy_dungeon_purchase import DungeonPurchaseResult
 
         names = ("operation_id", "user_id", "item_id", "item_name", "item_type", "quantity", "unit_cost", "expected_stone", "max_goods", "bind_flag")
         values = dict(zip(names, args))
