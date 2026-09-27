@@ -503,6 +503,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "name_refresh_application_owned": "sect_application.charge_name_refresh(" in sect_facade,
             "legacy_membership_disabled": all(token not in sect_facade for token in ("sect_membership_service.join", "sect_membership_service.leave_sect", "sect_membership_service.kick_member", "sect_membership_service.change_position")),
             "legacy_membership_getter_removed": "_sect_membership_service" not in sect_facade and "SectMembershipService" not in sect_facade,
+            "legacy_transaction_service_import_removed": "transaction_service" not in sect_facade,
             "stale_legacy_service_getters_removed": all(token not in sect_facade for token in (
                 "_sect_close_mountain_service", "_sect_owner_inherit_service", "_sect_open_join_service",
                 "_sect_close_join_service", "_sect_daily_reset_maintenance_service", "SectCloseMountainService",

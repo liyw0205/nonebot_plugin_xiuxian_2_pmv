@@ -626,7 +626,7 @@ PR 描述必须包含：影响 feature、数据迁移、兼容入口、权限变
 - `nonebot_plugin_xiuxian_2/features/boss/`：世界BOSS积分兑换和讨伐结算切片，统一 application、operation ledger、审计、幂等重放、Web/命令契约、迁移标记和灰度开关；刷新、天罚、排行榜和活动首领读模型仍由兼容适配器提供。
 - `nonebot_plugin_xiuxian_2/features/dungeon/`：副本商店兑换及探索准备/结算/重放边界，统一 application、operation ledger、审计、幂等重放、Web/命令契约、迁移标记和灰度开关；战斗算法、队伍管理和奖励计划仍由兼容适配器提供。
 - `nonebot_plugin_xiuxian_2/features/pet/`：宠物游历派遣/领取、喂食和孵化切片，统一 application、operation ledger、审计、幂等重放、Web/命令契约、迁移标记和灰度开关；融合、放生和技能动作仍由兼容适配器提供。
-- `nonebot_plugin_xiuxian_2/features/sect/`：宗门成员加入、商店兑换、主/副功法学习和炼体堂领奖切片，统一 application、operation ledger、审计、幂等重放、Web/命令契约、迁移标记和灰度开关；宗门建设、任务、传位和解散仍由兼容适配器提供；已移除成员、宗门关闭/传位、开放/关闭加入及日维护的断开 facade getter/import，legacy service 类保留直接兼容 API。
+- `nonebot_plugin_xiuxian_2/features/sect/`：宗门成员加入、商店兑换、主/副功法学习和炼体堂领奖切片，统一 application、operation ledger、审计、幂等重放、Web/命令契约、迁移标记和灰度开关；宗门建设、任务、传位和解散仍由兼容适配器提供；默认 sect facade 不再导入 `transaction_service.py`，已移除成员、宗门关闭/传位、开放/关闭加入及日维护的断开 getter，legacy service 类保留直接兼容 API。
 - `nonebot_plugin_xiuxian_2/features/natal_treasure/`：本命法宝觉醒、重塑、养成、道纹升级、铭刻和遗忘切片；旧法宝事务服务通过惰性仓储适配器调用，应用层统一 operation ledger、审计、Web/命令契约、迁移标记和灰度开关。
 - `nonebot_plugin_xiuxian_2/features/buff/`：功法、洞天福地、闭关和切磋结算切片；历史 Buff/玩家表仍由兼容仓储维护，所有新入口统一幂等和失败重试。
 - `nonebot_plugin_xiuxian_2/features/base/`：突破、渡劫、改名、灵石争夺/抢夺和签到基础动作边界；旧数值算法只位于 repository，应用层负责操作号、审计和回滚。
