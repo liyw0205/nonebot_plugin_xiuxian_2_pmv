@@ -106,7 +106,7 @@ from .features.training.migrations import apply_training_event_operations, apply
 from .features.tower.manifest import FEATURE as TOWER_FEATURE
 from .features.tower.migrations import apply_tower, apply_tower_purchase, apply_tower_settlement, apply_tower_state
 from .features.sect_fairyland.manifest import FEATURE as SECT_FAIRYLAND_FEATURE
-from .features.sect_fairyland.migrations import apply_sect_fairyland
+from .features.sect_fairyland.migrations import apply_sect_fairyland, apply_sect_fairyland_player
 from .features.world_events.manifest import FEATURE as WORLD_EVENTS_FEATURE
 from .features.world_events.migrations import apply_world_events
 from .features.work.manifest import FEATURE as WORK_FEATURE
@@ -288,6 +288,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("sect.012", "sect_weekly_reward_player_schema", apply_sect_weekly_player),
         Migration("sect.013", "sect_manual_disband_operations", apply_sect_manual_disband),
         Migration("sect_fairyland.001", "sect_fairyland_feature_migrations", apply_sect_fairyland),
+        Migration("sect_fairyland.002", "sect_fairyland_claim_player_schema", apply_sect_fairyland_player),
         Migration("sign_in.001", "sign_in_operations", apply_sign_in),
         Migration("sign_in.002", "sign_in_statistics_events", apply_sign_in_statistics),
         Migration("sign_in.003", "sign_in_task_events", apply_sign_in_tasks),
@@ -376,6 +377,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "impart.005",
         "rift.003",
         "sect.012",
+        "sect_fairyland.002",
         "tasks.001",
         "tasks.004",
         "training.002",
@@ -415,6 +417,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "impart.005",
         "rift.003",
         "sect.012",
+        "sect_fairyland.002",
         "tasks.001",
         "tasks.004",
         "training.002",
@@ -673,7 +676,6 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from .features.training.application import TrainingApplication
         from .features.tower.application import TowerApplication
         from .features.sect_fairyland.application import SectFairylandApplication
-        from .features.sect_fairyland.repository import LegacySectFairylandRepository
         from .features.world_events.application import DemonClaimApplication
         from .features.world_events.repository import LegacyWorldEventClaimRepository
         from .features.work.application import WorkClaimApplication
@@ -733,6 +735,12 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
                     statistics=SignInStatisticsRepository(str(context.database.path("game_db"))),
                     tasks=ApplicationSignInTaskEffects(SignInTaskRepository(str(context.database.path("game_db"))), context.clock),
                 )
+
+        def spirit_vein_tianti_multiplier() -> float:
+            from .xiuxian.xiuxian_world_events import get_spirit_vein_tianti_multiplier
+
+            return get_spirit_vein_tianti_multiplier()
+
         context.services = {
             "task_claim": TaskClaimApplication(
                 str(context.database.path("game_db")),
@@ -810,7 +818,8 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             ),
             "sect_fairyland": SectFairylandApplication(
                 str(context.database.path("player_db")),
-                repository=LegacySectFairylandRepository(str(context.database.path("player_db"))),
+                clock=context.clock,
+                spirit_vein_multiplier=spirit_vein_tianti_multiplier,
             ),
             "world_events": DemonClaimApplication(
                 str(context.database.path("game_db")),

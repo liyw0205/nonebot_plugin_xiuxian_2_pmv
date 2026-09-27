@@ -104,6 +104,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sect_facade = (PACKAGE / "xiuxian" / "xiuxian_sect" / "__init__.py").read_text(encoding="utf-8")
     sect_weekly_commands = (PACKAGE / "xiuxian" / "xiuxian_sect" / "sect_weekly_commands.py").read_text(encoding="utf-8")
     sect_weekly_manager = (PACKAGE / "xiuxian" / "xiuxian_sect" / "sect_weekly.py").read_text(encoding="utf-8")
+    sect_fairyland_application = (PACKAGE / "features" / "sect_fairyland" / "application.py").read_text(encoding="utf-8")
+    sect_fairyland_repository = (PACKAGE / "features" / "sect_fairyland" / "claim_repository.py").read_text(encoding="utf-8")
+    sect_fairyland_compatibility = (PACKAGE / "features" / "sect_fairyland" / "repository.py").read_text(encoding="utf-8")
+    sect_fairyland_migrations = (PACKAGE / "features" / "sect_fairyland" / "migrations.py").read_text(encoding="utf-8")
     sect_application = (PACKAGE / "features" / "sect" / "application.py").read_text(encoding="utf-8")
     sect_weekly_repository = (PACKAGE / "features" / "sect" / "weekly_reward_repository.py").read_text(encoding="utf-8")
     sect_manual_disband_repository = (PACKAGE / "features" / "sect" / "manual_disband_repository.py").read_text(encoding="utf-8")
@@ -453,7 +457,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "weekly_claim_migrations_registered": all(token in plugin for token in ("sect.011", "sect.012", "apply_sect_weekly", "apply_sect_weekly_player")) and "sect_weekly_reward_operations" in sect_migrations,
             "weekly_claim_player_migration_routed": '"sect.012"' in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")] and '"sect.012"' in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")],
             "weekly_claim_legacy_fallback_retained": "def _legacy_sect_weekly_reward_service(" in sect_weekly_commands and "SectWeeklyRewardClaimService" in sect_weekly_commands,
-            "status": "weekly_claim_application_owned_with_other_sect_compatibility_paths",
+            "fairyland_claim_application_owned": "sect_fairyland_application.claim(" in sect_facade and "repository=LegacySectFairylandRepository" not in sect_facade,
+            "fairyland_claim_repository_owned": "class SectFairylandSqlRepository" in sect_fairyland_repository and "SectFairylandSqlRepository" in sect_fairyland_application,
+            "fairyland_claim_request_path_has_no_ddl": all(token not in sect_fairyland_repository for token in ("CREATE TABLE", "ALTER TABLE")) and "schema_missing" in sect_fairyland_repository,
+            "fairyland_claim_migration_registered": all(token in plugin for token in ("sect_fairyland.002", "apply_sect_fairyland_player")) and "sect_fairyland_claim_days" in sect_fairyland_migrations,
+            "fairyland_claim_player_migration_routed": '"sect_fairyland.002"' in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")] and '"sect_fairyland.002"' in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")],
+            "fairyland_claim_legacy_fallback_retained": "LegacySectFairylandRepository" in sect_fairyland_compatibility,
+            "status": "weekly_and_fairyland_claim_application_owned_with_other_sect_compatibility_paths",
         },
         "natal_treasure": {
             "awaken_application_owned": "natal_treasure_application.awaken(" in natal_facade,

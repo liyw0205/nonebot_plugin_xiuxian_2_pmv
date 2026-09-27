@@ -2990,6 +2990,8 @@
     "sect_elixir_claim_operations",
     "sect_elixir_room_maintenance",
     "sect_elixir_room_operations",
+    "sect_fairyland_claim",
+    "sect_fairyland_claim_days",
     "sect_fairyland_claim_operations",
     "sect_fairyland_feature_migrations",
     "sect_fairyland_operations",

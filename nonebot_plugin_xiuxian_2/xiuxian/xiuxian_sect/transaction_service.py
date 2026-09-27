@@ -2443,6 +2443,15 @@ class FairylandClaimService:
                         return result("state_changed")
                     return result("duplicate", json.loads(previous[5]), previous[3], previous[4])
 
+                if conn.table_exists("sect_fairyland_claim_days"):
+                    normalized_claim = conn.execute(
+                        "SELECT claim_day FROM sect_fairyland_claim_days WHERE user_id=%s AND sect_id=%s",
+                        (user_id, sect_id),
+                    ).fetchone()
+                    if normalized_claim is not None and str(normalized_claim[0] or "") == day:
+                        conn.rollback()
+                        return result("already_claimed")
+
                 prior_claim = conn.execute(
                     f"SELECT {db_backend.quote_ident(claim_field)} FROM "
                     f"{db_backend.quote_ident(SECT_FAIRYLAND_CLAIM_TABLE)} WHERE user_id=%s",

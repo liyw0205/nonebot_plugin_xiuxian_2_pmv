@@ -1058,6 +1058,9 @@ class SourceQualityTests(unittest.TestCase):
         service_source = (sect_root / "fairyland_claim_service.py").read_text(
             encoding="utf-8"
         )
+        repository_source = (
+            SOURCE_ROOT / "features" / "sect_fairyland" / "claim_repository.py"
+        ).read_text(encoding="utf-8")
         start = command_source.index("async def sect_fairyland_claim_(")
         end = command_source.index("@sect_elixir_room_make.handle", start)
         command = command_source[start:end]
@@ -1068,6 +1071,10 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("_set_fairyland_last_claim(", command)
         self.assertIn("BEGIN IMMEDIATE", service_source)
         self.assertIn("sect_fairyland_claim_operations", service_source)
+        self.assertIn("DatabaseUnitOfWork(self.player_database, immediate=True)", repository_source)
+        self.assertIn("sect_fairyland_claim_days", repository_source)
+        self.assertNotIn("CREATE TABLE", repository_source)
+        self.assertNotIn("ALTER TABLE", repository_source)
 
     def test_sect_fairyland_default_application_does_not_construct_legacy_repository(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_sect" / "__init__.py").read_text(encoding="utf-8")

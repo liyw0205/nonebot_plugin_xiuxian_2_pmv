@@ -345,9 +345,12 @@ def create_app(
         app.register_blueprint(tower_blueprint(tower, permission=has_permission))
     if any(feature.key == "sect_fairyland" for feature in registry.features):
         from ...features.sect_fairyland.application import SectFairylandApplication
+        from ...xiuxian.xiuxian_world_events import get_spirit_vein_tianti_multiplier
 
         sect_fairyland = (context.services or {}).get("sect_fairyland") or SectFairylandApplication(
-            str(context.database.path("player_db"))
+            str(context.database.path("player_db")),
+            clock=context.clock,
+            spirit_vein_multiplier=get_spirit_vein_tianti_multiplier,
         )
         app.register_blueprint(sect_fairyland_blueprint(sect_fairyland, permission=has_permission))
     if any(feature.key == "world_events" for feature in registry.features):

@@ -634,7 +634,7 @@ PR 描述必须包含：影响 feature、数据迁移、兼容入口、权限变
 - `nonebot_plugin_xiuxian_2/features/trade/`：鬼市存取、拍卖队列、场次和现世购买切片；交易库由兼容 repository 持有，Web/命令只解析 DTO。
 - `nonebot_plugin_xiuxian_2/features/map/`：地图移动、回城、交互、战斗、探索、任务和资源奖励切片；地图算法和掉落计划仍由兼容适配器提供，统一 ledger 记录跨库结果。
 - `nonebot_plugin_xiuxian_2/features/rift/`：裂隙生成、进入、终止、事件、加速和结算切片；世界状态及历史数据通过惰性 repository 适配，支持幂等重放和灰度回滚。
-- `nonebot_plugin_xiuxian_2/features/sect_fairyland/`：宗门炼体堂领取切片，统一 application、请求/响应 DTO、operation ledger、审计、幂等重放、Web/命令契约、迁移标记和灰度开关；旧宗门跨表事务服务仅通过惰性 repository adapter 调用。
+- `nonebot_plugin_xiuxian_2/features/sect_fairyland/`：宗门炼体堂领取由 feature-owned SQL repository 在 player DB 单事务中更新炼体气血、规范化每日标记和 operation receipt；统一 application、请求/响应 DTO、幂等重放、Web/命令契约、player-only migration 和灰度开关。旧宗门领取事务仅通过显式兼容 repository adapter 保留。
 - `nonebot_plugin_xiuxian_2/features/world_events/`：魔修入侵奖励领取切片，统一跨库领奖 application、请求/响应 DTO、operation ledger、审计、幂等重放、Web/命令契约、迁移标记和灰度开关；贡献和随机奖励计算仍由兼容命令适配器提供，旧 `DemonClaimService` 仅作为惰性跨库仓储。
 - `nonebot_plugin_xiuxian_2/features/work/`：悬赏令接取和结算切片，统一请求/响应 DTO、operation ledger、审计、幂等重放、Web/命令契约、迁移标记和灰度开关；旧 `WorkClaimService`、`WorkSettlementService` 仅作为惰性仓储，刷新/终止继续由兼容服务负责。
 - `nonebot_plugin_xiuxian_2/features/mixelixir/`：炼丹灵田收取、统一结算和两阶段炼丹任务切片，统一 application、operation ledger、审计、幂等重放、Web/命令契约与启动迁移；旧配方文本解析和奖励计算留在命令适配器，扣材与跨库补领奖励由 feature-owned SQL repositories 原子提交。

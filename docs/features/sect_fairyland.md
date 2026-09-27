@@ -33,11 +33,13 @@
 
 ## 数据模型与迁移
 
-`sect_fairyland.001` 在 `game_db` 写入功能迁移标记。历史宗门状态仍由兼容仓储从 `player_db` 的宗门/炼体表读取，现阶段不搬迁玩家资产字段。
+`sect_fairyland.001` 在 `game_db` 写入功能迁移标记。`sect_fairyland.002` 只路由到 `player_db`，预建领取回执与按用户/宗门规范化的每日领取标记，并从旧 `sect_fairyland_claim.last_claim_{sect_id}` 回填日标记。历史炼体档案继续保存在 `tianti_info`，本切片不搬迁玩家资产字段。
 
 ## 事务与失败回滚
 
-应用层先在 `player_db.operation_ledger` 记录请求，再调用惰性旧仓储。旧仓储在同一个事务中校验宗门状态、日期和修行时长并更新炼体气血；拒绝或异常会回滚资产，应用层将拒绝/失败写入 ledger 和审计记录。
+默认 application 调用 feature-owned SQL repository。repository 在同一 `player_db` immediate UoW 中校验幂等回执和当日标记、计算炼体收益、更新 `tianti_info`、写每日标记及操作回执；异常会同时回滚气血与领取状态，请求路径不执行 DDL。重复操作从 repository 回执重放，不另起一个可能卡在 `started` 的外层 operation ledger。显式 `LegacySectFairylandRepository` 仍保留作回滚边界，旧 service 在发现新规范化日标记时也会拒绝当天重复领取。
+
+计算使用运行时 Clock、炼体配置和天降灵脉倍率；过期药浴清理、窍穴加成、炼体堂加成、气血上限及旧 `last_claim_{sect_id}` 投影均保持兼容。
 
 ## 定时任务
 
@@ -45,7 +47,7 @@
 
 ## 配置项
 
-- `sect_fairyland_enabled` / `XIUXIAN_SECT_FAIRYLAND_ENABLED`：默认启用，可热切换灰度；关闭后保留旧兼容入口。
+- `sect_fairyland_enabled` / `XIUXIAN_SECT_FAIRYLAND_ENABLED`：控制 feature registry 中的 Web/API 接入。NoneBot 宗门 matcher 由旧插件模块注册，关闭该开关不会自动把命令重接到 legacy repository；命令回滚需显式将 application 注入 `LegacySectFairylandRepository`。
 
 ## 适配器差异
 
@@ -55,8 +57,9 @@ NoneBot 命令适配器负责解析事件和生成 `ReplyPlan`；Flask blueprint
 
 - `python -m unittest nonebot_plugin_xiuxian_2.features.sect_fairyland.tests.test_sect_fairyland_application -q`
 - `python scripts/check_architecture.py`
-- 使用隔离数据目录调用 `POST /api/v1/sect/fairyland/claim`，重复相同 `operation_id` 应返回 replay，不重复调用仓储。
+- `pytest -q nonebot_plugin_xiuxian_2/features/sect_fairyland/tests tests/test_fairyland_claim_service.py tests/test_sect_fairyland_claim_cutover.py`
+- 使用隔离数据目录调用 `POST /api/v1/sect/fairyland/claim`；重复相同 `operation_id` 应从 feature receipt 重放且不重复发放气血。
 
 ## 灰度开关、回滚和已知限制
 
-关闭 `sect_fairyland_enabled` 即停止新 application 的组合根接入，可恢复旧处理路径。回滚前先备份数据库和 operation ledger；跨旧表的历史数据仍依赖兼容仓储，待完整发布周期和运行数据满足 P7 后再删除 shim。
+回滚前先备份 player DB；迁移回填、规范化标记读取和旧列投影共同保持新旧实现兼容。`.002` 只新增表并回填，不删除旧列或回执。真实发布迁移和 P7 验证完成前，不删除 compatibility shim。

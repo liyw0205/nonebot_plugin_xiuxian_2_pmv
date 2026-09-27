@@ -65,6 +65,22 @@ class FairylandClaimServiceTests(unittest.TestCase):
                          ("claimed", "duplicate", "already_claimed"))
         self.assertEqual(self.scalar("SELECT tianti_hp FROM tianti_info"), "55")
 
+    def test_legacy_fallback_honors_feature_owned_daily_marker(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "CREATE TABLE sect_fairyland_claim_days (user_id TEXT,sect_id TEXT,claim_day TEXT,"
+                "updated_at TEXT DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(user_id,sect_id))"
+            )
+            conn.execute(
+                "INSERT INTO sect_fairyland_claim_days(user_id,sect_id,claim_day) VALUES('user','sect','2026-07-12')"
+            )
+
+        result = self.claim("claim-after-cutover")
+
+        self.assertEqual(result.status, "already_claimed")
+        with db_backend.connection(self.database) as conn:
+            self.assertFalse(conn.table_exists("tianti_info"))
+
     def test_changed_level_or_minutes_is_state_conflict(self) -> None:
         self.claim("claim-conflict")
         conflict = self.claim("claim-conflict", level=3, minutes=60)

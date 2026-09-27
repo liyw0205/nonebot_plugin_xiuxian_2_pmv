@@ -98,8 +98,18 @@ sect_application = SectApplication(
 sect_ids = UUIDGenerator()
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
+
+
+def _spirit_vein_tianti_multiplier() -> float:
+    from ..xiuxian_world_events import get_spirit_vein_tianti_multiplier
+
+    return get_spirit_vein_tianti_multiplier()
+
+
 sect_fairyland_application = SectFairylandApplication(
     get_paths().player_db,
+    clock=runtime_clock,
+    spirit_vein_multiplier=_spirit_vein_tianti_multiplier,
 )
 _sect_close_mountain_service_instance = None
 _sect_owner_inherit_service_instance = None
