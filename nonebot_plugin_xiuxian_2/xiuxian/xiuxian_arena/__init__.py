@@ -22,10 +22,12 @@ _sql_message_instance = None
 
 from .arena_limit import arena_limit
 from .arena_shop import arena_shop_data
-from .transaction_service import ArenaPurchaseResult
-from .transaction_service import ArenaChallengePurchaseResult
-from .transaction_service import ArenaChallengeTicketResult
-from .transaction_service import ArenaChallengeSettlementResult
+from ...compatibility.legacy_arena_transactions import (
+    ArenaPurchaseResult,
+    ArenaChallengePurchaseResult,
+    ArenaChallengeTicketResult,
+    ArenaChallengeSettlementResult,
+)
 from ...features.arena.application import ArenaApplication
 from ...features.arena.repository import ArenaChallengePurchaseSqlRepository
 from ...features.arena.season_reward_application import ArenaSeasonRewardApplication

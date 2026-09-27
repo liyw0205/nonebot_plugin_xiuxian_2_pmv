@@ -31,6 +31,31 @@ class ArenaChallengeTicketCutoverTests(unittest.TestCase):
         self.assertNotIn("class ArenaChallengeTicketService", source)
         self.assertNotIn('CREATE TABLE IF NOT EXISTS arena_challenge_ticket_operations', source)
 
+    def test_transaction_shim_reexports_compatibility_service_identity(self) -> None:
+        from nonebot_plugin_xiuxian_2.compatibility.legacy_arena_transactions import (
+            ArenaChallengeSettlementService as CompatibilityService,
+            ArenaPurchaseResult as CompatibilityResult,
+        )
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_arena.transaction_service import (
+            ArenaChallengeSettlementService as LegacyService,
+            ArenaPurchaseResult as LegacyResult,
+        )
+
+        self.assertIs(LegacyService, CompatibilityService)
+        self.assertIs(LegacyResult, CompatibilityResult)
+
+    def test_default_facade_and_rollback_repository_import_compatibility_module(self) -> None:
+        facade = (ROOT / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_arena/__init__.py").read_text(
+            encoding="utf-8"
+        )
+        repository = (ROOT / "nonebot_plugin_xiuxian_2/features/arena/repository.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("legacy_arena_transactions", facade)
+        self.assertNotIn(".transaction_service import", facade)
+        self.assertIn("legacy_arena_transactions", repository)
+        self.assertNotIn("xiuxian_arena.transaction_service", repository)
+
     def test_ticket_schema_is_registered_as_game_startup_migration(self) -> None:
         source = (ROOT / "nonebot_plugin_xiuxian_2/plugin.py").read_text(encoding="utf-8")
         self.assertIn(

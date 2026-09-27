@@ -23,7 +23,7 @@ class LegacyArenaRepository:
         self.player_database = str(player_database)
 
     def _services(self):
-        from ...xiuxian.xiuxian_arena.transaction_service import (
+        from ...compatibility.legacy_arena_transactions import (
             ArenaPurchaseService,
             ArenaChallengePurchaseService,
             ArenaChallengeSettlementService,
@@ -41,7 +41,7 @@ class LegacyArenaRepository:
         return self._services()[2].settle(*args, **kwargs)
 
     def settlement_result(self, operation_id: str, challenger_id: str) -> Any:
-        from ...xiuxian.xiuxian_arena.transaction_service import ArenaChallengeSettlementService
+        from ...compatibility.legacy_arena_transactions import ArenaChallengeSettlementService
         return ArenaChallengeSettlementService(self.game_database, self.player_database).get_result(operation_id, challenger_id)
 
 

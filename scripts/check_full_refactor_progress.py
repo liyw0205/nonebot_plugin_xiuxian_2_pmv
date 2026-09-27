@@ -91,6 +91,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     tasks_migrations = (PACKAGE / "features" / "tasks" / "migrations.py").read_text(encoding="utf-8")
     plugin = (PACKAGE / "plugin.py").read_text(encoding="utf-8")
     arena = (PACKAGE / "xiuxian" / "xiuxian_arena" / "__init__.py").read_text(encoding="utf-8")
+    arena_transaction_service = (PACKAGE / "xiuxian" / "xiuxian_arena" / "transaction_service.py").read_text(encoding="utf-8")
+    arena_legacy_transaction_service = (PACKAGE / "compatibility" / "legacy_arena_transactions.py").read_text(encoding="utf-8")
+    arena_repository = (PACKAGE / "features" / "arena" / "repository.py").read_text(encoding="utf-8")
     arena_limit = (PACKAGE / "xiuxian" / "xiuxian_arena" / "arena_limit.py").read_text(encoding="utf-8")
     tower_limit = (PACKAGE / "xiuxian" / "xiuxian_tower" / "tower_limit.py").read_text(encoding="utf-8")
     training_limit = (PACKAGE / "xiuxian" / "xiuxian_training" / "training_limit.py").read_text(encoding="utf-8")
@@ -415,11 +418,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "arena": {
             "state_application_owned": "ArenaStateApplication" in arena_limit,
             "legacy_state_owner_disabled": "ArenaStateService" not in arena_limit,
+            "legacy_transaction_service_isolated": all(f"class {name}" not in arena_transaction_service for name in ("ArenaStateService", "ArenaPurchaseService", "ArenaChallengePurchaseService", "ArenaChallengeSettlementService", "ArenaBattleSettlementService", "ArenaWeeklyRankReductionService", "ArenaSeasonRewardService")) and "from ...compatibility.legacy_arena_transactions import" in arena_transaction_service and all(f"class {name}" in arena_legacy_transaction_service for name in ("ArenaStateService", "ArenaPurchaseService", "ArenaChallengePurchaseService", "ArenaChallengeSettlementService", "ArenaBattleSettlementService", "ArenaWeeklyRankReductionService", "ArenaSeasonRewardService")),
+            "legacy_transaction_imports_explicit": "legacy_arena_transactions" in arena and ".transaction_service import" not in arena and "legacy_arena_transactions" in arena_repository and "xiuxian_arena.transaction_service" not in arena_repository,
             "weekly_rank_application_owned": "arena_weekly_rank_application.reduce(" in arena,
             "legacy_scheduler_disabled": "ArenaWeeklyRankReductionService" not in arena and "_arena_weekly_rank_reduction_service" not in arena,
             "daily_reward_application_owned": "arena_season_reward_application.reset_daily()" in arena,
             "legacy_daily_reward_disabled": "ArenaSeasonRewardService" not in arena and "_arena_season_reward_service" not in arena,
-            "status": "state_weekly_rank_and_daily_reward_cutover_with_legacy_service_retained_for_compatibility",
+            "status": "state_weekly_rank_and_daily_reward_cutover_with_legacy_transaction_implementation_isolated_for_compatibility",
         },
         "tower": {
             "state_application_owned": "TowerStateApplication" in tower_limit,

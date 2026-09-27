@@ -11,6 +11,8 @@ class RefactorProgressTests(unittest.TestCase):
         arena = slices["arena"]
         self.assertTrue(arena["state_application_owned"])
         self.assertTrue(arena["legacy_state_owner_disabled"])
+        self.assertTrue(arena["legacy_transaction_service_isolated"])
+        self.assertTrue(arena["legacy_transaction_imports_explicit"])
         self.assertTrue(arena["weekly_rank_application_owned"])
         self.assertTrue(arena["legacy_scheduler_disabled"])
         self.assertTrue(arena["daily_reward_application_owned"])
