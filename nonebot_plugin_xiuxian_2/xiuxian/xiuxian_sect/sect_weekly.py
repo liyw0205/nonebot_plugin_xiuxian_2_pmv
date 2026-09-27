@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from ..xiuxian_utils.json_store import safe_json_dumps as _json_dumps
 from ..xiuxian_utils.json_store import safe_json_loads
 from ..xiuxian_utils.periods import get_weekly_key
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
@@ -103,69 +102,22 @@ class SectWeeklyGoalManager:
         return get_weekly_key()
 
     def ensure_table(self) -> None:
-        sql_message = self._sql_message()
-        with sql_message.lock:
-            cur = sql_message.conn.cursor()
-            cur.execute(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=%s",
-                (self.table_name,),
-            )
-            if cur.fetchone() is None:
-                raise RuntimeError("sect_weekly_goal schema is not ready; run migrations first")
-            cur.execute("PRAGMA table_info(sect_weekly_goal)")
-            columns = {str(row[1]) for row in cur.fetchall()}
-            required = {
-                "sect_id", "week_key", "goal_key", "progress", "target",
-                "participants", "claimed_users", "updated_at",
-            }
-            if not required.issubset(columns):
-                raise RuntimeError("sect_weekly_goal schema is not ready; run migrations first")
+        _sect_application().assert_weekly_progress_schema()
+
+    @staticmethod
+    def _goal_rows() -> tuple[dict[str, Any], ...]:
+        return tuple({"key": goal.key, "target": goal.target} for goal in SECT_WEEKLY_GOALS)
 
     def ensure_goals(self, sect_id: int | str, week_key: str | None = None) -> None:
-        self.ensure_table()
         week_key = week_key or self.current_week_key()
-        now = _now_text()
-        with self._sql_message().lock:
-            cur = self._sql_message().conn.cursor()
-            for goal in SECT_WEEKLY_GOALS:
-                cur.execute(
-                    """
-                    INSERT OR IGNORE INTO sect_weekly_goal (
-                        sect_id, week_key, goal_key, progress, target,
-                        participants, claimed_users, updated_at
-                    )
-                    VALUES (%s, %s, %s, 0, %s, '{}', '[]', %s)
-                    """,
-                    (int(sect_id), week_key, goal.key, goal.target, now),
-                )
-            self._sql_message()._commit_write()
-
-    def _get_goal_row(self, sect_id: int | str, goal_key: str, week_key: str | None = None):
-        self.ensure_goals(sect_id, week_key)
-        week_key = week_key or self.current_week_key()
-        return self._sql_message()._read_query(
-            """
-            SELECT *
-            FROM sect_weekly_goal
-            WHERE sect_id = %s AND week_key = %s AND goal_key = %s
-            """,
-            (int(sect_id), week_key, goal_key),
-            one=True,
-            dict_row=True,
+        _sect_application().ensure_weekly_goals(
+            sect_id, week_key, self._goal_rows(), _now_text()
         )
 
     def list_goals(self, sect_id: int | str, week_key: str | None = None) -> list[dict[str, Any]]:
-        self.ensure_goals(sect_id, week_key)
         week_key = week_key or self.current_week_key()
-        rows = self._sql_message()._read_query(
-            """
-            SELECT *
-            FROM sect_weekly_goal
-            WHERE sect_id = %s AND week_key = %s
-            ORDER BY goal_key
-            """,
-            (int(sect_id), week_key),
-            dict_row=True,
+        rows = _sect_application().list_weekly_goal_rows(
+            sect_id, week_key, self._goal_rows(), _now_text()
         )
         row_map = {row["goal_key"]: row for row in rows or []}
         result = []
@@ -222,69 +174,22 @@ class SectWeeklyGoalManager:
         if amount <= 0:
             return []
 
-        self.ensure_goals(sect_id)
         week_key = self.current_week_key()
-        now = _now_text()
-        updated = []
-        with self._sql_message().lock:
-            cur = self._sql_message().conn.cursor()
-            for goal in goals:
-                row = self._get_goal_row(sect_id, goal.key, week_key)
-                old_progress = int(row.get("progress", 0) or 0)
-                participants = _json_loads(row.get("participants"), {})
-                participants[str(user_id)] = int(participants.get(str(user_id), 0) or 0) + amount
-                new_progress = min(old_progress + amount, goal.target)
-                cur.execute(
-                    """
-                    UPDATE sect_weekly_goal
-                    SET progress = %s,
-                        participants = %s,
-                        updated_at = %s
-                    WHERE sect_id = %s AND week_key = %s AND goal_key = %s
-                    """,
-                    (
-                        new_progress,
-                        _json_dumps(participants),
-                        now,
-                        int(sect_id),
-                        week_key,
-                        goal.key,
-                    ),
-                )
-                updated.append(
-                    {
-                        "goal_key": goal.key,
-                        "name": goal.name,
-                        "old_progress": old_progress,
-                        "progress": new_progress,
-                        "target": goal.target,
-                        "completed": old_progress < goal.target <= new_progress,
-                    }
-                )
-            self._sql_message()._commit_write()
-        return updated
+        rows = _sect_application().record_weekly_progress(
+            sect_id,
+            week_key,
+            user_id,
+            amount,
+            ({"key": goal.key, "target": goal.target} for goal in goals),
+            _now_text(),
+        )
+        goal_by_key = {goal.key: goal for goal in goals}
+        return [{**row, "name": goal_by_key[row["goal_key"]].name} for row in rows]
 
     def weekly_rank(self, limit: int = 10, week_key: str | None = None) -> list[dict[str, Any]]:
-        self.ensure_table()
         week_key = week_key or self.current_week_key()
         limit = max(1, min(int(limit or 10), 50))
-        rows = self._sql_message()._read_query(
-            """
-            SELECT
-                g.sect_id,
-                COALESCE(s.sect_name, g.sect_id) AS sect_name,
-                SUM(g.progress) AS total_progress
-            FROM sect_weekly_goal AS g
-            LEFT JOIN sects AS s ON s.sect_id = g.sect_id
-            WHERE g.week_key = %s
-            GROUP BY g.sect_id, s.sect_name
-            ORDER BY total_progress DESC
-            LIMIT %s
-            """,
-            (week_key, limit),
-            dict_row=True,
-        )
-        return rows or []
+        return _sect_application().weekly_rank(limit, week_key)
 
 
 sect_weekly_goal_manager = SectWeeklyGoalManager()

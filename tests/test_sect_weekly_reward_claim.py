@@ -2,12 +2,17 @@ import tempfile
 import unittest
 import importlib
 from pathlib import Path
+from unittest.mock import patch
 
 import nonebot
 
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.transaction_service import SectWeeklyRewardClaimService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.sect_weekly import SectWeeklyGoalManager
+from nonebot_plugin_xiuxian_2.features.sect.application import SectApplication
+from nonebot_plugin_xiuxian_2.features.sect.weekly_progress_repository import SectWeeklyProgressSqlRepository
+from scripts.check_full_refactor_progress import _slice_status
 from tests.test_db_backend import db_backend
 
 
@@ -61,15 +66,58 @@ def test_sect_weekly_migrations_route_game_and_player_schema_separately():
 
 def test_sect_weekly_goal_manager_does_not_create_schema_during_requests():
     source = Path("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_sect/sect_weekly.py").read_text(encoding="utf-8")
-    assert "schema is not ready; run migrations first" in source
     assert "CREATE TABLE" not in source
     assert "ALTER TABLE" not in source
+    repository = Path("nonebot_plugin_xiuxian_2/features/sect/weekly_progress_repository.py").read_text(encoding="utf-8")
+    assert "schema is not ready; run migrations first" in repository
+    assert "CREATE TABLE" not in repository
+    assert "ALTER TABLE" not in repository
 
 
 def test_sect_weekly_progress_profile_read_uses_application():
     source = Path("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_sect/sect_weekly.py").read_text(encoding="utf-8")
     assert "_sect_application().get_user_profile(str(user_id))" in source
     assert "self._sql_message().get_user_info_with_id(" not in source
+
+
+def test_sect_weekly_progress_persistence_is_feature_owned():
+    sect = _slice_status()["sect"]
+    assert sect["sect_weekly_progress_application_owned"]
+    assert sect["sect_weekly_progress_repository_owned"]
+    assert sect["sect_weekly_progress_request_path_has_no_ddl"]
+    assert sect["sect_weekly_progress_manager_no_legacy_writes"]
+
+
+def test_sect_weekly_manager_delegates_progress_to_feature_application():
+    with tempfile.TemporaryDirectory() as temp:
+        game = Path(temp) / "game.db"
+        with db_backend.transaction(game) as conn:
+            conn.execute(
+                "CREATE TABLE sect_weekly_goal(sect_id INTEGER NOT NULL,week_key TEXT NOT NULL,"
+                "goal_key TEXT NOT NULL,progress INTEGER NOT NULL DEFAULT 0,target INTEGER NOT NULL,"
+                "participants TEXT NOT NULL DEFAULT '{}',claimed_users TEXT NOT NULL DEFAULT '[]',"
+                "updated_at TEXT NOT NULL DEFAULT '',PRIMARY KEY(sect_id,week_key,goal_key))"
+            )
+            conn.execute("CREATE TABLE sects(sect_id INTEGER PRIMARY KEY,sect_name TEXT)")
+            conn.execute("INSERT INTO sects VALUES(1,'青云宗')")
+        application = SectApplication(
+            game,
+            weekly_progress_repository=SectWeeklyProgressSqlRepository(game),
+        )
+        manager = SectWeeklyGoalManager()
+        with patch(
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect.sect_weekly._sect_application",
+            return_value=application,
+        ):
+            first = manager.record_event("u", "sect_task_complete", 14, {"sect_id": 1})
+            second = manager.record_event("u", "sect_task_complete", 1, {"sect_id": 1})
+            goals = manager.list_goals(1)
+            rank = manager.weekly_rank(week_key=manager.current_week_key())
+        assert ("sect_diligence", 14, False) == (first[0]["goal_key"], first[0]["progress"], first[0]["completed"])
+        assert ("同门勤务", 15, True) == (second[0]["name"], second[0]["progress"], second[0]["completed"])
+        diligence = next(goal for goal in goals if goal["key"] == "sect_diligence")
+        assert (15, 15, True) == (diligence["progress"], diligence["raw_progress"], diligence["completed"])
+        assert 15 == rank[0]["total_progress"]
 
 
 class SectWeeklyRewardClaimTests(unittest.TestCase):

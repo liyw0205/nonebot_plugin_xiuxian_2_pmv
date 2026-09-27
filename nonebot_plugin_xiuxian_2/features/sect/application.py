@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from ...core.errors import ConflictError, DomainError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
@@ -25,6 +25,7 @@ from .task_settlement_repository import SectTaskSettlementSqlRepository
 from .creation_repository import SectCreationSqlRepository
 from .name_refresh_repository import SectNameRefreshSqlRepository
 from .weekly_reward_repository import SectWeeklyRewardRepository, SectWeeklyRewardSqlRepository
+from .weekly_progress_repository import SectWeeklyProgressSqlRepository
 from .manual_disband_repository import SectManualDisbandSqlRepository
 from .activity_repository import SectActivitySqlRepository
 from .directory_repository import SectDirectorySqlRepository
@@ -58,11 +59,22 @@ class SectMutationResult(dict):
 
 
 class SectApplication:
-    def __init__(self, database: str | Path, *, repository: SectRepository | None = None, weekly_repository: SectWeeklyRewardRepository | None = None, player_database: str | Path | None = None, ledger: OperationLedger | None = None, clock=None) -> None:
+    def __init__(
+        self,
+        database: str | Path,
+        *,
+        repository: SectRepository | None = None,
+        weekly_repository: SectWeeklyRewardRepository | None = None,
+        weekly_progress_repository: SectWeeklyProgressSqlRepository | None = None,
+        player_database: str | Path | None = None,
+        ledger: OperationLedger | None = None,
+        clock=None,
+    ) -> None:
         self.database = str(database)
         self.player_database = str(player_database) if player_database is not None else None
         self.repository = repository
         self.weekly_repository = weekly_repository
+        self.weekly_progress_repository = weekly_progress_repository
         self.ledger = ledger or OperationLedger()
         self.clock = clock or SystemClock()
         self.activity_repository = SectActivitySqlRepository(self.database)
@@ -95,6 +107,48 @@ class SectApplication:
 
     def get_user_profile_by_name(self, user_name: str) -> dict[str, Any] | None:
         return self.member_repository.get_user_profile_by_name(user_name)
+
+    def _weekly_progress_repository(self) -> SectWeeklyProgressSqlRepository:
+        if self.weekly_progress_repository is None:
+            self.weekly_progress_repository = SectWeeklyProgressSqlRepository(self.database)
+        return self.weekly_progress_repository
+
+    def assert_weekly_progress_schema(self) -> None:
+        self._weekly_progress_repository().assert_schema_ready()
+
+    def ensure_weekly_goals(
+        self,
+        sect_id: int | str,
+        week_key: str,
+        goals: Iterable[Mapping[str, Any]],
+        updated_at: str,
+    ) -> None:
+        self._weekly_progress_repository().ensure_goals(sect_id, week_key, goals, updated_at)
+
+    def list_weekly_goal_rows(
+        self,
+        sect_id: int | str,
+        week_key: str,
+        goals: Iterable[Mapping[str, Any]],
+        updated_at: str,
+    ) -> list[dict[str, Any]]:
+        return self._weekly_progress_repository().list_goals(sect_id, week_key, goals, updated_at)
+
+    def record_weekly_progress(
+        self,
+        sect_id: int | str,
+        week_key: str,
+        user_id: int | str,
+        amount: int,
+        goals: Iterable[Mapping[str, Any]],
+        updated_at: str,
+    ) -> list[dict[str, Any]]:
+        return self._weekly_progress_repository().record_progress(
+            sect_id, week_key, user_id, amount, goals, updated_at
+        )
+
+    def weekly_rank(self, limit: int, week_key: str) -> list[dict[str, Any]]:
+        return self._weekly_progress_repository().weekly_rank(limit, week_key)
 
     def get_inactive_owner_user_profile(self, owner_id: str) -> dict[str, Any] | None:
         return self.inactive_owner_repository.get_owner_profile(owner_id)

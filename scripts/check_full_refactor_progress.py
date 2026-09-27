@@ -136,6 +136,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     ]
     sect_weekly_commands = (PACKAGE / "xiuxian" / "xiuxian_sect" / "sect_weekly_commands.py").read_text(encoding="utf-8")
     sect_weekly_manager = (PACKAGE / "xiuxian" / "xiuxian_sect" / "sect_weekly.py").read_text(encoding="utf-8")
+    sect_weekly_progress_repository = (PACKAGE / "features" / "sect" / "weekly_progress_repository.py").read_text(encoding="utf-8")
     sect_fairyland_application = (PACKAGE / "features" / "sect_fairyland" / "application.py").read_text(encoding="utf-8")
     sect_fairyland_repository = (PACKAGE / "features" / "sect_fairyland" / "claim_repository.py").read_text(encoding="utf-8")
     sect_fairyland_upgrade_repository = (PACKAGE / "features" / "sect" / "fairyland_repository.py").read_text(encoding="utf-8")
@@ -542,6 +543,20 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "sect_user_name_profile_repository_owned": "def get_user_profile_by_name(" in sect_member_repository and "WHERE user_name=?" in sect_member_repository and "ORDER BY rowid ASC LIMIT 1" in sect_member_repository and "normalize_user_row(row)" in sect_member_repository,
             "sect_user_name_profile_facade_owned": sect_facade.count("sect_application.get_user_profile_by_name(") == 2 and "_sql_message().get_user_info_with_name(" not in sect_facade,
             "sect_weekly_progress_profile_application_owned": "_sect_application().get_user_profile(str(user_id))" in sect_weekly_manager and "self._sql_message().get_user_info_with_id(" not in sect_weekly_manager,
+            "sect_weekly_progress_application_owned": all(
+                f"def {name}(" in sect_application
+                for name in ("ensure_weekly_goals", "list_weekly_goal_rows", "record_weekly_progress", "weekly_rank")
+            ) and all(
+                f"_sect_application().{name}(" in sect_weekly_manager
+                for name in ("ensure_weekly_goals", "list_weekly_goal_rows", "record_weekly_progress", "weekly_rank")
+            ),
+            "sect_weekly_progress_repository_owned": "class SectWeeklyProgressSqlRepository" in sect_weekly_progress_repository and "DatabaseUnitOfWork" in sect_weekly_progress_repository and "def record_progress(" in sect_weekly_progress_repository,
+            "sect_weekly_progress_request_path_has_no_ddl": all(
+                token not in source
+                for source in (sect_weekly_manager, sect_weekly_progress_repository)
+                for token in ("CREATE TABLE", "ALTER TABLE")
+            ) and "_assert_schema_ready" in sect_weekly_progress_repository,
+            "sect_weekly_progress_manager_no_legacy_writes": "self._sql_message().lock" not in sect_weekly_manager and "self._sql_message().conn" not in sect_weekly_manager,
             "fairyland_upgrade_application_owned": "sect_application.upgrade_fairyland(" in sect_facade,
             "fairyland_upgrade_repository_owned": "class SectFairylandSqlRepository" in sect_fairyland_upgrade_repository and "SectFairylandSqlRepository" in sect_application,
             "fairyland_upgrade_request_path_has_no_ddl": all(token not in sect_fairyland_upgrade_repository for token in ("CREATE TABLE", "ALTER TABLE")) and "schema_missing" in sect_fairyland_upgrade_repository,
@@ -585,7 +600,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "fairyland_claim_migration_registered": all(token in plugin for token in ("sect_fairyland.002", "apply_sect_fairyland_player")) and "sect_fairyland_claim_days" in sect_fairyland_migrations,
             "fairyland_claim_player_migration_routed": '"sect_fairyland.002"' in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")] and '"sect_fairyland.002"' in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")],
             "fairyland_claim_legacy_fallback_retained": "LegacySectFairylandRepository" in sect_fairyland_compatibility,
-            "status": "weekly_and_fairyland_claim_application_owned; disconnected_facade_legacy_getters_removed",
+            "status": "weekly_progress_and_claim_application_owned; fairyland_claim_application_owned; disconnected_facade_legacy_getters_removed",
         },
         "natal_treasure": {
             "awaken_application_owned": "natal_treasure_application.awaken(" in natal_facade,
