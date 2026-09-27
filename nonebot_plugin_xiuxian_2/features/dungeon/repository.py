@@ -54,11 +54,11 @@ class LegacyDungeonRepository:
         return self._explore_service().resolve_rejection(*args, **kwargs)
 
     def operation_session_result(self, operation_id: str, user_id: str, action: str) -> Any:
-        from ...xiuxian.xiuxian_dungeon.transaction_service import DungeonSessionService
+        from ...compatibility.legacy_dungeon_session import DungeonSessionService
         return DungeonSessionService(self.player_database).operation_result(operation_id, user_id, action)
 
     def session_transition(self, operation_id: str, user_id: str, expected: dict[str, Any], dungeon: dict[str, Any], action: str) -> Any:
-        from ...xiuxian.xiuxian_dungeon.transaction_service import DungeonSessionService
+        from ...compatibility.legacy_dungeon_session import DungeonSessionService
         service = DungeonSessionService(self.player_database)
         return getattr(service, action)(operation_id, user_id, expected, dungeon)
 

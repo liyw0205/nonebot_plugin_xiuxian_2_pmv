@@ -6,11 +6,21 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.transaction_service import DungeonSessionService
+from nonebot_plugin_xiuxian_2.compatibility.legacy_dungeon_session import DungeonSessionService
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.transaction_service import (
+    DungeonSessionResult as ShimDungeonSessionResult,
+    DungeonSessionService as ShimDungeonSessionService,
+)
 from tests.test_db_backend import db_backend
 
 
 class DungeonSessionServiceTests(unittest.TestCase):
+    def test_legacy_transaction_imports_preserve_object_identity(self):
+        from nonebot_plugin_xiuxian_2.compatibility.legacy_dungeon_session import DungeonSessionResult
+
+        self.assertIs(ShimDungeonSessionService, DungeonSessionService)
+        self.assertIs(ShimDungeonSessionResult, DungeonSessionResult)
+
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "player.sqlite3"

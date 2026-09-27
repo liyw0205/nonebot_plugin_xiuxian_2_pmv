@@ -42,7 +42,6 @@ from ...features.dungeon.team_presentation import (
     build_transfer_team_success_message,
     build_team_invite_private_message,
 )
-from .transaction_service import DungeonSessionResult
 from ...compatibility.dungeon import DungeonExploreOperationService
 from .transaction_service import DungeonExploreOperationResult
 from ...paths import get_paths
@@ -1068,8 +1067,7 @@ async def handle_dungeon_exit(bot: Bot, event: GroupMessageEvent | PrivateMessag
     user_id = user_info["user_id"]
     event_id = getattr(event, "message_id", None)
     operation_id = f"dungeon-exit:{event_id or dungeon_ids.new_id()}:{user_id}"
-    raw_result = dungeon_application.session_operation(operation_id=operation_id, user_id=user_id, action="exit")
-    result = None if raw_result is None else DungeonSessionResult(str(raw_result.get("status")), str(raw_result.get("dungeon_status", "")))
+    result = dungeon_application.session_operation(operation_id=operation_id, user_id=user_id, action="exit")
     if result is None:
         status = dungeon_manager.get_player_status(user_id)
         dungeon = dungeon_manager.get_dungeon_progress()
@@ -1080,12 +1078,13 @@ async def handle_dungeon_exit(bot: Bot, event: GroupMessageEvent | PrivateMessag
             dungeon={"dungeon_id": status["dungeon_id"], "date": dungeon["date"]},
             action="exit",
         )
-        result = DungeonSessionResult(str(raw_result.get("status")), str(raw_result.get("dungeon_status", "")))
-    if result.status == "not_exploring":
+        result = raw_result
+    result_status = str(result.get("status", "state_changed"))
+    if result_status == "not_exploring":
         await handle_send(bot, event, "当前未在副本探索中。")
-    elif result.status == "completed":
+    elif result_status == "completed":
         await handle_send(bot, event, "今日副本已完成，无需退出。")
-    elif result.status == "state_changed":
+    elif result_status == "state_changed":
         await handle_send(bot, event, "副本操作未结算：副本进度当前状态已更新，请重新发起。")
     else:
         await handle_send(bot, event, "已退出当前副本，进度将保留。")
