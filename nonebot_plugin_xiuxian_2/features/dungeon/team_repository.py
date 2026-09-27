@@ -158,6 +158,30 @@ class DungeonTeamRepository:
                 return str(team_id)
         return None
 
+    @staticmethod
+    def _invite_snapshot(row: dict[str, Any]) -> TeamInviteSnapshot:
+        expires_at = float(row["expires_at"])
+        return TeamInviteSnapshot(
+            invite_id=str(row["invite_id"]),
+            team_id=str(row["team_id"]),
+            inviter_id=str(row["inviter_id"]),
+            invitee_id=str(row["invitee_id"]),
+            group_id=str(row["group_id"]),
+            created_at=float(row["created_at"] or expires_at - 60),
+            expires_at=expires_at,
+            status=str(row["status"] or "pending"),
+        )
+
+    def invite_by_id(self, invite_id: str) -> TeamInviteSnapshot | None:
+        with DatabaseUnitOfWork(self.database) as uow:
+            self.ensure_schema(uow)
+            row = uow.query_one(
+                "SELECT invite_id,team_id,inviter_id,invitee_id,group_id,"
+                "created_at,expires_at,status FROM dungeon_team_invites WHERE invite_id=?",
+                (str(invite_id),),
+            )
+        return None if row is None else self._invite_snapshot(row)
+
     @classmethod
     def _user_team(cls, uow: DatabaseUnitOfWork, user_id: str) -> str:
         for row in uow.query_all("SELECT user_id,members FROM teams"):
@@ -399,7 +423,7 @@ class DungeonTeamRepository:
         with DatabaseUnitOfWork(self.database) as uow:
             self.ensure_schema(uow)
             row = uow.query_one("SELECT invite_id,team_id,inviter_id,invitee_id,group_id,created_at,expires_at,status FROM dungeon_team_invites WHERE invitee_id=? AND status='pending' AND expires_at>? ORDER BY created_at DESC LIMIT 1", (str(user_id), float(now_timestamp)))
-        return None if row is None else TeamInviteSnapshot(str(row["invite_id"]),str(row["team_id"]),str(row["inviter_id"]),str(row["invitee_id"]),str(row["group_id"]),float(row["created_at"]),float(row["expires_at"]),str(row["status"]))
+        return None if row is None else self._invite_snapshot(row)
 
 
 __all__ = ["DungeonTeamRepository", "TeamInviteSnapshot", "TeamMutationResult"]

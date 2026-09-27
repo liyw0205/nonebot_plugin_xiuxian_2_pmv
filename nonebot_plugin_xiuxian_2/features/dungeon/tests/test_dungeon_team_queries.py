@@ -55,6 +55,37 @@ class DungeonTeamQueryTests(unittest.TestCase):
         self.assertNotIn("dungeon_team_invites", tables)
         self.assertNotIn("team_cd", tables)
 
+    def test_invite_by_id_returns_persisted_snapshot(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "CREATE TABLE dungeon_team_invites ("
+                "invite_id TEXT PRIMARY KEY, team_id TEXT, inviter_id TEXT, "
+                "invitee_id TEXT, group_id TEXT, expires_at REAL, consumed_at TEXT, "
+                "status TEXT, created_at REAL, resolved_operation_id TEXT)"
+            )
+            conn.execute(
+                "INSERT INTO dungeon_team_invites VALUES (%s, %s, %s, %s, %s, %s, NULL, %s, %s, NULL)",
+                ("invite-1", "team-2", "leader", "1001", "100", 160, "pending", 100),
+            )
+
+        invite = self.application.invite_by_id("invite-1")
+
+        self.assertIsNotNone(invite)
+        self.assertEqual(
+            (
+                invite.invite_id,
+                invite.team_id,
+                invite.inviter_id,
+                invite.invitee_id,
+                invite.group_id,
+                invite.created_at,
+                invite.expires_at,
+                invite.status,
+            ),
+            ("invite-1", "team-2", "leader", "1001", "100", 100, 160, "pending"),
+        )
+        self.assertIsNone(self.application.invite_by_id("missing"))
+
 
 if __name__ == "__main__":
     unittest.main()

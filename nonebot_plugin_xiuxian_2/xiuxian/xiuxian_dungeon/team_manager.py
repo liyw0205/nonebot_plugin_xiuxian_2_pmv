@@ -191,18 +191,13 @@ async def expire_team_invite(user_id: str, invite_id: str, bot: Bot, event):
     """
     await asyncio.sleep(60)
 
-    service = (
-        team_invite_cache._service()
-        if isinstance(team_invite_cache, PersistentTeamInviteMapping)
-        else DungeonTeamTransactionService(get_paths().player_db)
-    )
-    invite = service.invite_by_id(invite_id)
+    from ...features.dungeon.team_application import DungeonTeamApplication
+
+    application = DungeonTeamApplication(get_paths().player_db)
+    invite = application.invite_by_id(invite_id)
     if invite is None or invite.invitee_id != str(user_id):
         return
-    from ...features.dungeon.team_application import DungeonTeamApplication
-    result = DungeonTeamApplication(get_paths().player_db).expire(
-        f"dungeon-team-expire:{invite_id}", invite_id, time.time()
-    )
+    result = application.expire(f"dungeon-team-expire:{invite_id}", invite_id, time.time())
     if result.status == "applied":
         msg = "组队邀请已过期！"
         await handle_send(bot, event, msg)

@@ -55,5 +55,8 @@ class DungeonTeamApplication:
     def pending_invite(self, user_id: str, now_timestamp: float) -> TeamInviteSnapshot | None:
         return self.repository.pending_invite(user_id, now_timestamp)
 
+    def invite_by_id(self, invite_id: str) -> TeamInviteSnapshot | None:
+        return self.repository.invite_by_id(invite_id)
+
 
 __all__ = ["DungeonTeamApplication"]
