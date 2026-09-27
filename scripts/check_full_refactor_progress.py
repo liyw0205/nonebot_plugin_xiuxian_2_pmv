@@ -116,6 +116,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
     map_facade = (PACKAGE / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
     map_application = (PACKAGE / "features" / "map" / "application.py").read_text(encoding="utf-8")
+    map_reward_resolver = (PACKAGE / "features" / "map" / "rewards.py").read_text(encoding="utf-8")
     map_combat_handler = map_facade[
         map_facade.index("async def _process_node_combat") : map_facade.index("def _get_explore_status")
     ]
@@ -479,7 +480,33 @@ def _slice_status() -> dict[str, dict[str, object]]:
         "map": {
             "interactive_application_owned": "map_application.interactive_settlement(" in map_facade and "map_application.interactive_start(" in map_facade,
             "resource_application_owned": "map_application.resource_reward(" in map_facade,
-            "combat_engine_injected": "await map_application.combat_battle(" in map_combat_handler and "Boss_fight(" not in map_combat_handler and "combat_runner=Boss_fight" in map_facade and "async def combat_battle(" in map_application,
+            "combat_engine_injected": (
+                "await map_application.combat_battle(" in map_combat_handler
+                and "Boss_fight(" not in map_combat_handler
+                and "combat_runner=Boss_fight" in map_facade
+                and "async def combat_battle(" in map_application
+            ),
+            "reward_resolver_feature_owned": (
+                "map_reward_resolver = MapRewardResolver(" in map_facade
+                and all(
+                    f"map_reward_resolver.{method}(" in map_facade
+                    for method in (
+                        "roll_rewards",
+                        "roll_dongfu_material",
+                        "roll_skill_equip_drop",
+                        "roll_mission_reward",
+                    )
+                )
+                and "class MapRewardResolver:" in map_reward_resolver
+                and "def _roll_rewards(" not in map_facade
+            ),
+            "map_item_catalog_lazy": (
+                "class _LazyMapItemCatalog:" in map_facade
+                and "self._catalog = None" in map_facade
+                and "self._catalog = Items()" in map_facade
+                and "items = Items()" not in map_facade
+                and "item_catalog=map_item_catalog" in map_facade
+            ),
             "legacy_interactive_disabled": "map_interactive_action_service.save_settlement(" not in map_facade and "map_interactive_action_service.start(" not in map_facade,
             "legacy_resource_disabled": "map_resource_reward_service.settle(" not in map_facade,
             "legacy_transactions_isolated": "transaction_service" not in map_facade and all(name not in map_facade for name in ("PlayerDataManager", "XiuxianDateManage", "_sql_message()", "_player_data_manager()")),
@@ -490,7 +517,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "class MapInteractiveActionService" in map_compatibility
             ),
             "map_dtos_feature_owned": "features.map.schemas import" in map_facade and "class MapInteractiveActionResult" in (PACKAGE / "features" / "map" / "schemas.py").read_text(encoding="utf-8"),
-            "status": "default_map_actions_feature_owned_legacy_transactions_isolated_with_explicit_rollback_adapters",
+            "status": "map_actions_combat_runner_and_reward_resolution_feature_owned_with_explicit_legacy_adapters",
         },
         "tianti": {
             "settlement_command_application_owned": "tianti_settlement_application.settle(" in tianti_facade,

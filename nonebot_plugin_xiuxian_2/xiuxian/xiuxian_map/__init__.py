@@ -37,6 +37,7 @@ from ...features.map.schemas import (
 from ...features.combat_settlement.application import CombatSettlementApplication
 from ...features.map.application import MapApplication
 from ...features.map.domain import decide_interactive_action, decide_interactive_reward
+from ...features.map.rewards import MapRewardResolver
 from ...features._legacy_application import result_data
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
@@ -57,11 +58,32 @@ dao_battle_application = CombatSettlementApplication(
     get_paths().player_db,
 )
 
-items = Items()
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 runtime_ids = UUIDGenerator()
 map_document_reader = JsonDocumentReader()
+
+
+class _LazyMapItemCatalog:
+    def __init__(self):
+        self._catalog = None
+
+    def _get_catalog(self):
+        if self._catalog is None:
+            self._catalog = Items()
+        return self._catalog
+
+    def get_data_by_item_id(self, item_id):
+        return self._get_catalog().get_data_by_item_id(item_id)
+
+    def get_random_id_list_by_rank_and_item_type(self, rank, item_type):
+        return self._get_catalog().get_random_id_list_by_rank_and_item_type(
+            rank,
+            item_type,
+        )
+
+
+map_item_catalog = _LazyMapItemCatalog()
 
 
 def _combat_lifecycle_result(data):
@@ -247,6 +269,15 @@ MAP_EXTRA_DROP_RATE = {
 }
 
 ARENA_TICKET_DROP_RATIO = 0.30
+
+map_reward_resolver = MapRewardResolver(
+    reward_pools=ACTION_ITEM_POOLS,
+    item_catalog=map_item_catalog,
+    rank_for_level=base_rank,
+    format_number=number_to,
+    skill_equip_types=SKILL_EQUIP_TYPES,
+    arena_ticket_drop_ratio=ARENA_TICKET_DROP_RATIO,
+)
 
 # =========================================
 # 交互采集玩法
@@ -547,28 +578,6 @@ def _get_mission_desc(mission_data: dict):
     return MAP_MISSION_CONFIG[mission_type]["desc"](target)
 
 
-def _roll_map_mission_reward(*, random_source=None):
-    random_source = random_source or runtime_random
-    rewards = []
-    reward_meta = {"stone_delta": 0, "item_delta": []}
-    stone_pool = ACTION_ITEM_POOLS.get("stone_high", [])
-    if stone_pool:
-        stone_pick = random_source.choice(stone_pool)
-        if isinstance(stone_pick, str) and stone_pick.startswith("LS_"):
-            stone_num = int(stone_pick.split("_")[1])
-            rewards.append(f"灵石x{number_to(stone_num)}")
-            reward_meta["stone_delta"] += stone_num
-    extra_pool_key = random_source.choice(["acc_pack_low", "god_frag", "token_rare"])
-    extra_pool = ACTION_ITEM_POOLS.get(extra_pool_key, [])
-    if extra_pool:
-        gid = random_source.choice(extra_pool)
-        info = items.get_data_by_item_id(str(gid))
-        if info:
-            rewards.append(f"{info['name']}x1")
-            reward_meta["item_delta"].append({
-                "id": int(gid), "name": info["name"], "type": info.get("type", "材料"), "amount": 1,
-            })
-    return rewards, reward_meta
 # =========================================
 # 地图工具
 # =========================================
@@ -780,85 +789,6 @@ def get_random_trial_nodes_by_realm(*, random_source=None) -> list[dict]:
 
 def _build_go_link(name: str) -> str:
     return build_md_command_link(name, f"前往 {name}")
-
-# =========================================
-# 奖励工具
-# =========================================
-def _expand_reward_plan(reward_plan):
-    expanded = []
-    for pool_key, cmin, cmax, chance in reward_plan:
-        if pool_key == "arena_ticket_low":
-            continue
-        expanded.append((pool_key, cmin, cmax, chance))
-        if pool_key == "wash_stone_low":
-            expanded.append(("arena_ticket_low", 1, 1, round(float(chance) * ARENA_TICKET_DROP_RATIO, 4)))
-        if pool_key == "acc_pack_low":
-            expanded.append(("pet_resource_low", cmin, cmax, chance))
-    return expanded
-
-
-def _roll_rewards(reward_plan, decay_ratio: float = 1.0, *, random_source=None):
-    """Resolve map reward randomness before entering a transaction."""
-    rewards = []
-    stone = 0
-    items_to_add = []
-    random_source = random_source or runtime_random
-    for pool_key, cmin, cmax, chance in _expand_reward_plan(reward_plan):
-        if random_source.random() > chance:
-            continue
-        pool_ids = ACTION_ITEM_POOLS.get(pool_key, [])
-        if not pool_ids:
-            continue
-        count = max(1, int(round(random_source.randint(cmin, cmax) * decay_ratio)))
-        for _ in range(count):
-            reward_id = random_source.choice(pool_ids)
-            if isinstance(reward_id, str) and reward_id.startswith("LS_"):
-                amount = max(1, int(round(int(reward_id.split("_")[1]) * decay_ratio)))
-                stone += amount
-                rewards.append(f"灵石x{number_to(amount)}")
-                continue
-            info = items.get_data_by_item_id(str(reward_id))
-            if not info:
-                continue
-            items_to_add.append({
-                "id": int(reward_id), "name": info["name"],
-                "type": info.get("type", "材料"), "amount": 1,
-            })
-            rewards.append(f"{info['name']}x1")
-    return rewards, stone, items_to_add
-
-
-def _roll_map_dongfu_material(node_type: str, chance_multiplier: float = 1.0, *, random_source=None):
-    plan = {
-        "水域": ("dongfu_water", 0.16), "灵林": ("dongfu_soil", 0.16),
-        "仙山": ("dongfu_soil", 0.22), "矿脉": ("dongfu_array", 0.16),
-    }
-    if node_type not in plan:
-        return [], 0, []
-    random_source = random_source or runtime_random
-    pool_key, chance = plan[node_type]
-    if random_source.random() > min(0.80, chance * chance_multiplier):
-        return [], 0, []
-    return _roll_rewards([(pool_key, 1, 1, 1.0)], random_source=random_source)
-
-
-def _roll_skill_equip_drop(user_info: dict, drop_rate: float = 0.1, *, random_source=None):
-    random_source = random_source or runtime_random
-    if random_source.random() > drop_rate:
-        return None, None
-    item_type = random_source.choice(SKILL_EQUIP_TYPES)
-    user_level = user_info.get("level", "江湖好手")
-    rank = base_rank(user_level, 16 if item_type in ["法器", "防具", "辅修功法", "身法", "瞳术"] else 5)
-    item_ids = items.get_random_id_list_by_rank_and_item_type(rank, item_type)
-    if not item_ids:
-        return None, None
-    item_id = random_source.choice(item_ids)
-    info = items.get_data_by_item_id(item_id)
-    if not info:
-        return None, None
-    return f"{info.get('level', '未知品级')}:{info['name']}x1", {
-        "id": int(item_id), "name": info["name"], "type": info.get("type", item_type), "amount": 1,
-    }
 
 def _merge_reward_text(rewards: list[str]) -> str:
     if not rewards:
@@ -1705,11 +1635,11 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
         daily = _get_daily_limit(uid)
         decay = _get_reward_decay(uid)
         reward_decision = decide_interactive_reward(runtime_random.random(), st["pool_key"])
-        rewards, stone, reward_items = _roll_rewards(
+        rewards, stone, reward_items = map_reward_resolver.roll_rewards(
             reward_decision.plan, decay, random_source=runtime_random
         )
         extra_msg = reward_decision.message
-        material_rewards, material_stone, material_items = _roll_map_dongfu_material(
+        material_rewards, material_stone, material_items = map_reward_resolver.roll_dongfu_material(
             st.get("node_type", ""), random_source=runtime_random
         )
         settlement = {
@@ -1720,7 +1650,7 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
             "items": reward_items + material_items,
             "extra_msg": extra_msg,
         }
-        extra_text, extra_item = _roll_skill_equip_drop(
+        extra_text, extra_item = map_reward_resolver.roll_skill_equip_drop(
             user_info, MAP_EXTRA_DROP_RATE["gather"], random_source=runtime_random
         )
         if extra_item:
@@ -1956,13 +1886,13 @@ async def _process_node_combat(bot: Bot, event: GroupMessageEvent | PrivateMessa
             except Exception:
                 big_win = False
             plan = conf["reward_plan_big_win"] if big_win else conf["reward_plan_win"]
-            rewards, stone, reward_items = _roll_rewards(plan, decay, random_source=runtime_random)
+            rewards, stone, reward_items = map_reward_resolver.roll_rewards(plan, decay, random_source=runtime_random)
             drop_rate = MAP_EXTRA_DROP_RATE["combat_trial"] if ntype == "试炼" else MAP_EXTRA_DROP_RATE["combat_risk"]
-            extra_text, extra_item = _roll_skill_equip_drop(user_info, drop_rate, random_source=runtime_random)
+            extra_text, extra_item = map_reward_resolver.roll_skill_equip_drop(user_info, drop_rate, random_source=runtime_random)
             if extra_item:
                 rewards.append(extra_text)
                 reward_items.append(extra_item)
-            material_rewards, material_stone, material_items = _roll_map_dongfu_material(ntype, 1.35 if big_win else 1.0, random_source=runtime_random)
+            material_rewards, material_stone, material_items = map_reward_resolver.roll_dongfu_material(ntype, 1.35 if big_win else 1.0, random_source=runtime_random)
             rewards.extend(material_rewards)
             stone += material_stone
             reward_items.extend(material_items)
@@ -2095,19 +2025,19 @@ def _roll_explore_event(user_info: dict, node_type: str, node_name: str, decay: 
         "battle": [("stone_mid", 1, 2, 1.0), ("wash_stone_low", 1, 2, 0.30), ("token_common", 1, 1, 0.15)],
     }
     event_type = event_type if event_type in plans else "battle"
-    rewards, stone, reward_items = _roll_rewards(plans[event_type], decay, random_source=random_source)
+    rewards, stone, reward_items = map_reward_resolver.roll_rewards(plans[event_type], decay, random_source=random_source)
     drop_rate = MAP_EXTRA_DROP_RATE["explore_rare"] if event_type == "rare" else MAP_EXTRA_DROP_RATE["explore_normal"]
-    extra_text, extra_item = _roll_skill_equip_drop(user_info, drop_rate, random_source=random_source)
+    extra_text, extra_item = map_reward_resolver.roll_skill_equip_drop(user_info, drop_rate, random_source=random_source)
     if extra_item:
         rewards.append(extra_text)
         reward_items.append(extra_item)
     multiplier = {"normal": 1.2, "good": 1.5, "rare": 2.5, "battle": 1.3}[event_type]
-    material_rewards, material_stone, material_items = _roll_map_dongfu_material(node_type, multiplier, random_source=random_source)
+    material_rewards, material_stone, material_items = map_reward_resolver.roll_dongfu_material(node_type, multiplier, random_source=random_source)
     rewards.extend(material_rewards)
     stone += material_stone
     reward_items.extend(material_items)
     if event_type == "rare" and random_source.random() < 0.12:
-        deed_rewards, deed_stone, deed_items = _roll_rewards([("dongfu_deed", 1, 1, 1.0)], decay, random_source=random_source)
+        deed_rewards, deed_stone, deed_items = map_reward_resolver.roll_rewards([("dongfu_deed", 1, 1, 1.0)], decay, random_source=random_source)
         rewards.extend(deed_rewards)
         stone += deed_stone
         reward_items.extend(deed_items)
@@ -2522,7 +2452,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await handle_send(bot, event, "委托结算数据异常，请联系管理员处理。")
             return
     if snapshot is None:
-        rewards, reward_meta = _roll_map_mission_reward(random_source=runtime_random)
+        rewards, reward_meta = map_reward_resolver.roll_mission_reward(
+            random_source=runtime_random
+        )
         snapshot = {"rewards": rewards, "reward_meta": reward_meta}
         mission["settlement"] = json.dumps(snapshot, ensure_ascii=False, sort_keys=True)
         _save_map_mission(uid, mission)

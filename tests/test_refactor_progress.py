@@ -83,6 +83,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(map_slice["interactive_application_owned"])
         self.assertTrue(map_slice["resource_application_owned"])
         self.assertTrue(map_slice["combat_engine_injected"])
+        self.assertTrue(map_slice["reward_resolver_feature_owned"])
+        self.assertTrue(map_slice["map_item_catalog_lazy"])
         self.assertTrue(map_slice["legacy_interactive_disabled"])
         self.assertTrue(map_slice["legacy_resource_disabled"])
         self.assertTrue(map_slice["legacy_transactions_isolated"])

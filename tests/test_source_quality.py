@@ -3622,6 +3622,21 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("open(", loader)
         self.assertNotIn("json.load(", loader)
 
+    def test_map_reward_resolution_uses_injected_feature_resolver(self) -> None:
+        facade = (SOURCE_ROOT / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
+        resolver = (SOURCE_ROOT / "features" / "map" / "rewards.py").read_text(encoding="utf-8")
+
+        self.assertIn("map_reward_resolver = MapRewardResolver(", facade)
+        self.assertIn("item_catalog=map_item_catalog", facade)
+        self.assertIn("self._catalog = None", facade)
+        self.assertIn("self._catalog = Items()", facade)
+        for method in ("roll_rewards", "roll_dongfu_material", "roll_skill_equip_drop", "roll_mission_reward"):
+            self.assertIn(f"map_reward_resolver.{method}(", facade)
+            self.assertIn(f"def {method}(", resolver)
+        self.assertNotIn("items = Items()", facade)
+        self.assertNotIn("def _roll_rewards(", facade)
+        self.assertNotIn("def _roll_skill_equip_drop(", facade)
+
     def test_dungeon_purchase_uses_sql_application(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_dungeon" / "__init__.py").read_text(encoding="utf-8")
         start = source.index("async def handle_dungeon_purchase")
