@@ -9,10 +9,16 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_work.transaction_service import WorkSettlementService
+from nonebot_plugin_xiuxian_2.compatibility.legacy_work_settlement import (
+    WorkSettlementService as LegacyWorkSettlementService,
+)
 from tests.test_db_backend import db_backend
 
 
 class WorkSettlementServiceTests(unittest.TestCase):
+    def test_transaction_module_reexports_legacy_service_identity(self):
+        self.assertIs(WorkSettlementService, LegacyWorkSettlementService)
+
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "game.sqlite3"

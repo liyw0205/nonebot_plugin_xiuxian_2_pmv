@@ -36,6 +36,8 @@
 
 ## 最近完成切片
 
+`work settlement transaction ownership`：悬赏结算默认入口已由 `WorkSettlementApplication -> WorkSettlementSqlRepository` 承担；`work.008` 启动迁移预建 operation 表并补齐历史 `result_json`，请求路径只读校验 schema。仓储在单一 game-db `BEGIN IMMEDIATE` 中校验 operation payload、冷却快照和用户，按真实奖励字段写背包，处理背包上限，原子更新修为、背包和 `user_cd`，并保存成功类型/消息/任务名供 replay；晚期 SQL 异常回滚，旧 `WorkSettlementService` 移至 compatibility-only 模块并保留历史 import identity。结算 repository/application/source-quality/progress 聚焦回归 `76 passed`、source-quality `8 passed`、progress `1 passed`；隔离 architecture、inventory、全量 migration recovery、reconcile 与 diff check 通过。测试与恢复只使用专用临时目录，pytest/pyc/compile 缓存已清理，未触碰 `.venv`、`.git`、运行数据库或用户 `boss_info.json`。下一片审计 `WorkItemUseService` 请求期 DDL 与 legacy service 可达性；全局旧 transaction services、`xiuxian2_handle`、真实发布迁移/P7 仍是未完成 blocker。
+
 `demon wave refresh application cutover`：定时 wave refresh 改经
 `DemonWaveRefreshApplication -> DemonWaveRefreshSqlRepository`；共享事件状态 codec/read/write 从 lifecycle repository
 抽至 feature-owned `event_state.py`。将旧 `DemonWaveRefreshResult/Service` 移至

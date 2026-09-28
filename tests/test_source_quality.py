@@ -999,6 +999,21 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("def apply_work_settlement_operations(", migrations)
         self.assertIn('Migration("work.008", "work_settlement_operations", apply_work_settlement_operations)', plugin)
 
+    def test_work_settlement_legacy_service_is_compatibility_only(self) -> None:
+        transaction = (SOURCE_ROOT / "xiuxian" / "xiuxian_work" / "transaction_service.py").read_text(
+            encoding="utf-8"
+        )
+        legacy = (SOURCE_ROOT / "compatibility" / "legacy_work_settlement.py").read_text(
+            encoding="utf-8"
+        )
+        facade = (SOURCE_ROOT / "xiuxian" / "xiuxian_work" / "__init__.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("WorkSettlementService", facade)
+        self.assertNotIn("class WorkSettlementService", transaction)
+        self.assertIn("legacy_work_settlement import", transaction)
+        self.assertIn("class WorkSettlementService", legacy)
+
     def test_impart_facade_defers_sql_manager_construction(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_impart" / "__init__.py").read_text(
             encoding="utf-8"

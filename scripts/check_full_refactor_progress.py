@@ -124,6 +124,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     work_reward_source = (PACKAGE / "xiuxian" / "xiuxian_work" / "reward_data_source.py").read_text(encoding="utf-8")
     work_claim_repository = (PACKAGE / "features" / "work" / "claim_repository.py").read_text(encoding="utf-8")
     work_settlement_repository = (PACKAGE / "features" / "work" / "settlement_repository.py").read_text(encoding="utf-8")
+    work_legacy_settlement = (PACKAGE / "compatibility" / "legacy_work_settlement.py").read_text(encoding="utf-8")
     work_refresh_repository = (PACKAGE / "features" / "work" / "refresh_repository.py").read_text(encoding="utf-8")
     work_abort_repository = (PACKAGE / "features" / "work" / "abort_cleanup_repository.py").read_text(encoding="utf-8")
     work_migrations = (PACKAGE / "features" / "work" / "migrations.py").read_text(encoding="utf-8")
@@ -565,11 +566,22 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 'Migration("work.008", "work_settlement_operations", apply_work_settlement_operations)' in plugin
                 and "def apply_work_settlement_operations(" in work_migrations
             ),
+            "settlement_application_owned": "work_settlement_application.settle(" in work_facade,
+            "settlement_transaction_owned": (
+                "class WorkSettlementSqlRepository" in work_settlement_repository
+                and "with DatabaseUnitOfWork(self.database, immediate=True)" in work_settlement_repository
+                and "UPDATE user_cd SET type=0,create_time=0,scheduled_time=NULL" in work_settlement_repository
+            ),
+            "legacy_settlement_isolated_with_compatibility_export": (
+                "class WorkSettlementService" in work_legacy_settlement
+                and "class WorkSettlementService" not in work_transaction_shim
+                and "legacy_work_settlement import" in work_transaction_shim
+            ),
             "item_use_migrations_registered": (
                 'Migration("work.003", "work_item_use_operations", apply_work_item_use)' in plugin
                 and 'Migration("work.004", "work_offer_snapshots", apply_work_offer_snapshots)' in plugin
             ),
-            "status": "daily_refresh_accelerate_capture_offer_refresh_abort_cleanup_claim_and_settlement_schema_cutover",
+            "status": "daily_refresh_accelerate_capture_offer_refresh_abort_cleanup_claim_and_settlement_cutover",
         },
         "activity_reward": {
             "claim_all_application_owned": "activity_claim_all_application.run(" in activity_service,

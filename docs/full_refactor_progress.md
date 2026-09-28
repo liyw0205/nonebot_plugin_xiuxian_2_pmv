@@ -45,6 +45,10 @@
 
 ## 3. “真实迁移”定义
 
+### 当前切片摘要
+
+`work settlement transaction ownership`：悬赏结算默认入口已切到 `WorkSettlementApplication -> WorkSettlementSqlRepository`；`work.008` 启动迁移预建 operation 表并补齐历史 `result_json`，请求路径只读校验 schema。仓储在单一 game-db immediate UoW 中校验 operation payload、冷却快照和用户，按真实 `id/name/type` 写奖励并校验背包上限，原子更新修为、背包和 `user_cd` 清理，同时保存 replay metadata；旧 `WorkSettlementService` 已移至 compatibility-only 模块并由历史 shim 保持 import identity。聚焦回归 `76 passed`、source-quality `8 passed`、progress `1 passed`，隔离 architecture/inventory/recovery/reconcile/diff check 通过。下一片审计 `WorkItemUseService` 请求期 DDL 与 compatibility 可达性；全局旧 transaction services、`xiuxian2_handle`、真实发布迁移/P7 仍未完成。
+
 一个切片只有同时满足以下条件才计入完成：
 
 1. 至少一个真实 NoneBot handler 和一个真实 Web route 从事件/请求进入新 application；测试必须通过真实注册表或 Flask app 调用，而不是直接实例化 facade。
