@@ -49,7 +49,7 @@ class _TaskManager:
         return dict(self.task)
 
 
-class SectTaskCacheTests(unittest.TestCase):
+class SectTaskProjectionTests(unittest.TestCase):
     def setUp(self) -> None:
         self.task = {
             "任务名称": "试炼",
@@ -60,10 +60,9 @@ class SectTaskCacheTests(unittest.TestCase):
             "progress": 0,
             "target": 1,
         }
-        self.cache = {}
+        self.manager = _TaskManager(self.task)
         self.patches = (
-            patch.object(sect_member_utils, "sect_application", _TaskManager(self.task)),
-            patch.object(sect_member_utils, "userstask", self.cache),
+            patch.object(sect_member_utils, "sect_application", self.manager),
             patch.object(
                 sect_member_utils,
                 "config",
@@ -77,11 +76,12 @@ class SectTaskCacheTests(unittest.TestCase):
         for current_patch in reversed(self.patches):
             current_patch.stop()
 
-    def test_accept_caches_period_required_by_settlement(self) -> None:
+    def test_accept_returns_task_without_retaining_process_state(self) -> None:
         task = sect_member_utils.create_user_sect_task("user", 1)
 
         self.assertEqual(task["period"], "2026-07-11")
         self.assertEqual(task["sect_id"], 1)
+        self.assertFalse(hasattr(sect_member_utils, "userstask"))
 
     def test_operation_aware_accept_uses_application_claim(self) -> None:
         task = sect_member_utils.create_user_sect_task("user", 1, "claim-op")
@@ -105,26 +105,16 @@ class SectTaskCacheTests(unittest.TestCase):
         self.assertIn("sect_application.claim_task(", helpers)
         self.assertIn("sect_application.refresh_task(", helpers)
 
-    def test_database_restore_caches_period_required_by_settlement(self) -> None:
+    def test_task_query_returns_fresh_projection_without_retaining_it(self) -> None:
         self.assertTrue(sect_member_utils.isUserTask("user"))
-        self.assertEqual(self.cache["user"]["period"], "2026-07-11")
-
-    def test_missing_task_drops_empty_cache_entry(self) -> None:
-        manager = _TaskManager(self.task)
-        manager.task = None
-        with patch.object(sect_member_utils, "sect_application", manager):
-            self.cache["user"] = {}
-            self.assertFalse(sect_member_utils.isUserTask("user"))
-        self.assertNotIn("user", self.cache)
-
-    def test_new_period_expires_other_users_cached_tasks(self) -> None:
-        manager = _TaskManager(self.task)
-        manager.period = "2026-07-12"
-        manager.task = None
-        with patch.object(sect_member_utils, "sect_application", manager):
-            self.cache["old-user"] = dict(self.task)
-            self.assertFalse(sect_member_utils.isUserTask("user"))
-        self.assertEqual({}, self.cache)
+        self.assertEqual(
+            self.task,
+            sect_member_utils.get_user_sect_task("user"),
+        )
+        self.manager.task = None
+        self.assertFalse(sect_member_utils.isUserTask("user"))
+        self.assertIsNone(sect_member_utils.get_user_sect_task("user"))
+        self.assertFalse(hasattr(sect_member_utils, "userstask"))
 
 
 if __name__ == "__main__":

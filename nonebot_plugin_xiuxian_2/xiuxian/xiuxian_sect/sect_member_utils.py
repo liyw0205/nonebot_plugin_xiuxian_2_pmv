@@ -8,23 +8,17 @@ from .sectconfig import get_config
 items = Items()
 sect_application = None
 config = get_config()
-userstask = {}
-_userstask_period = None
 
 
 def bind_sect_member_dependencies(
-    task_store=None, item_manager=None, sect_config=None, sect_app=None
+    item_manager=None, sect_config=None, sect_app=None
 ):
     """Bind shared runtime objects before Sect commands are registered."""
-    global userstask, items, config, sect_application
-    global _userstask_period
+    global items, config, sect_application
 
     if sect_app is None:
         raise ValueError("sect_app is required")
 
-    if task_store is not None:
-        userstask = task_store
-        _userstask_period = None
     if item_manager is not None:
         items = item_manager
     if sect_config is not None:
@@ -35,14 +29,6 @@ def bind_sect_member_dependencies(
 def _md_cmd_link(text: str, cmd: str) -> str:
     """生成 QQ 原生 Markdown 快捷指令链接"""
     return f"[{text}](mqqapi://aio/inlinecmd?command={quote(cmd)}&enter=false&reply=false)"
-
-
-def _expire_task_cache_for_period() -> None:
-    global _userstask_period
-    period = sect_application.current_task_period()
-    if _userstask_period != period:
-        userstask.clear()
-    _userstask_period = period
 
 
 def create_user_sect_task(user_id, sect_id=None, operation_id=None, replace_existing=False):
@@ -69,8 +55,7 @@ def create_user_sect_task(user_id, sect_id=None, operation_id=None, replace_exis
     else:
         key = random.choices(list(tasklist))[0]
         task = {"任务名称": key, "任务内容": tasklist[key]}
-    userstask[user_id] = dict(task)
-    return userstask[user_id]
+    return task
 
 
 
@@ -92,19 +77,16 @@ def refresh_user_sect_task(user_id, sect_id, operation_id):
     task = {"任务名称": refreshed.task_key, "任务内容": dict(refreshed.task_data or {}),
             "sect_id": refreshed.sect_id, "period": refreshed.period, "status": "accepted",
             "progress": 0, "target": 1}
-    userstask[user_id] = task
     return task
 
-def isUserTask(user_id):
-    """判断用户是否已有任务 True:有任务"""
-    _expire_task_cache_for_period()
-    task = sect_application.get_active_task(user_id)
-    if task:
-        userstask[user_id] = dict(task)
-        return True
 
-    userstask.pop(user_id, None)
-    return False
+def get_user_sect_task(user_id):
+    return sect_application.get_active_task(user_id)
+
+
+def isUserTask(user_id):
+    """Compatibility predicate for checking whether a task is active."""
+    return get_user_sect_task(user_id) is not None
 
 
 def get_sect_mainbuff_id_list(sect_id):

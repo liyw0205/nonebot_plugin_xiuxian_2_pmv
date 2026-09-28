@@ -3012,13 +3012,19 @@ class SourceQualityTests(unittest.TestCase):
         sect_root = SOURCE_ROOT / "xiuxian" / "xiuxian_sect"
         member_utils = (sect_root / "sect_member_utils.py").read_text(encoding="utf-8")
         source = (sect_root / "__init__.py").read_text(encoding="utf-8")
+        buff = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_buff" / "__init__.py"
+        ).read_text(encoding="utf-8")
         start = source.index("async def sect_task_complete_")
         end = source.index("@sect_owner_change.handle", start)
         command = source[start:end]
 
-        self.assertIn("userstask[user_id] = dict(task)", member_utils)
+        self.assertIn("def get_user_sect_task(user_id):", member_utils)
+        self.assertNotIn("userstask", member_utils)
+        self.assertIn("from ..xiuxian_sect import get_user_sect_task", buff)
+        self.assertNotIn("userstask", buff)
         self.assertIn('msg = ""', command)
-        self.assertIn('userstask[user_id]["period"]', command)
+        self.assertIn('active_task["period"]', command)
 
     def test_entertainment_network_calls_use_io_runtime(self) -> None:
         entertainment = SOURCE_ROOT / "xiuxian" / "xiuxian_entertainment"

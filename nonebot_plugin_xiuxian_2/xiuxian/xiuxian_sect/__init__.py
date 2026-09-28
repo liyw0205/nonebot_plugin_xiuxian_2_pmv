@@ -46,6 +46,7 @@ from .sect_member_utils import (
     get_sect_member_limit,
     get_sect_secbuff_id_list,
     get_sectbufftxt,
+    get_user_sect_task,
     isUserTask,
     set_sect_list,
 )
@@ -107,9 +108,7 @@ SECT_RENAME_CARD_NAME = "宗门易名符"
 LEVLECOST = config["LEVLECOST"]
 added_rank = added_ranks()
 cache_help = {}
-userstask = {}
 _bind_sect_member_dependencies(
-    task_store=userstask,
     item_manager=items,
     sect_config=config,
     sect_app=sect_application,
@@ -1733,18 +1732,18 @@ async def sect_task_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     user_id = user_info['user_id']
     sect_id = user_info['sect_id']
     if sect_id:
-        if isUserTask(user_id):
+        if get_user_sect_task(user_id):
             refreshed_task = refresh_user_sect_task(
                 user_id, sect_id, _sect_operation_id(event, "task_refresh", user_id)
             )
             if refreshed_task is None:
                 await handle_send(bot, event, "宗门任务刷新未完成：任务列表已更新，请重新查看宗门任务。")
                 await sect_task_refresh.finish()
-            if userstask[user_id]['任务内容']['type'] == 1:
+            if refreshed_task['任务内容']['type'] == 1:
                 task_type = "⚔️"
             else:
                 task_type = "💰"
-            msg = f"已刷新，道友当前接取的任务：{task_type} {userstask[user_id]['任务名称']}\n{userstask[user_id]['任务内容']['desc']}"
+            msg = f"已刷新，道友当前接取的任务：{task_type} {refreshed_task['任务名称']}\n{refreshed_task['任务内容']['desc']}"
             await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
             await sect_task_refresh.finish()
         else:
@@ -1962,12 +1961,13 @@ async def sect_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await handle_send(bot, event, msg)
             await sect_task.finish()
 
-        if isUserTask(user_id):  # 已有任务
-            if userstask[user_id]['任务内容']['type'] == 1:
+        active_task = get_user_sect_task(user_id)
+        if active_task:  # 已有任务
+            if active_task['任务内容']['type'] == 1:
                 task_type = "⚔️"
             else:
                 task_type = "💰"
-            msg = f"道友当前已接取了任务：{task_type} {userstask[user_id]['任务名称']}\n{userstask[user_id]['任务内容']['desc']}"
+            msg = f"道友当前已接取了任务：{task_type} {active_task['任务名称']}\n{active_task['任务内容']['desc']}"
             await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
             await sect_task.finish()
 
@@ -1978,11 +1978,11 @@ async def sect_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         if claimed_task is None:
             await handle_send(bot, event, "宗门任务状态或角色信息已发生变化，请刷新后重试。")
             await sect_task.finish()
-        if userstask[user_id]['任务内容']['type'] == 1:
+        if claimed_task['任务内容']['type'] == 1:
             task_type = "⚔️"
         else:
             task_type = "💰"
-        msg = f"{task_type} {userstask[user_id]['任务内容']['desc']}"
+        msg = f"{task_type} {claimed_task['任务内容']['desc']}"
         await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取")
         await sect_task.finish()
     else:
@@ -2002,14 +2002,15 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
     user_id = user_info['user_id']
     sect_id = user_info['sect_id']
     if sect_id:
-        if not isUserTask(user_id):
+        active_task = get_user_sect_task(user_id)
+        if not active_task:
             msg = f"道友当前没有接取宗门任务哦！"
             await handle_send(bot, event, msg, md_type="宗门", k1="接取", v1="宗门任务接取", k2="完成", v2="宗门任务完成", k3="刷新", v3="宗门任务刷新")
             await sect_task_complete.finish()
             
         sect_info = sect_application.get_sect_info(sect_id)
-        if userstask[user_id]['任务内容']['type'] == 1:  # type=1：需要扣气血，type=2：需要扣灵石
-            costhp = int((user_info['exp'] / 2) * userstask[user_id]['任务内容']['cost'])
+        if active_task['任务内容']['type'] == 1:  # type=1：需要扣气血，type=2：需要扣灵石
+            costhp = int((user_info['exp'] / 2) * active_task['任务内容']['cost'])
             if user_info['hp'] < user_info['exp'] / 10 or costhp >= user_info['hp']:
                 msg = (
                     f"道友兴高采烈的出门做任务，结果状态欠佳，没过两招就力不从心，坚持不住了，"
@@ -2020,7 +2021,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
 
             get_exp = percent_exp_reward(
                 user_info['exp'],
-                userstask[user_id]['任务内容']['give'],
+                active_task['任务内容']['give'],
                 user_info['level'],
                 apply_rank_suppress=False,
                 anchor='gap',
@@ -2043,7 +2044,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             if int(get_exp + user_info['exp']) > max_exp_next:
                 get_exp = 1
                 exp_cap_note = "⚠️ 修为已近当前境界上限，本次所得修为收束为1点！\n"
-            sect_stone = int(userstask[user_id]['任务内容']['sect'])
+            sect_stone = int(active_task['任务内容']['sect'])
             task_operation_id = _sect_operation_id(
                 event, "task_complete", user_id
             )
@@ -2051,19 +2052,19 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 task_operation_id,
                 user_id,
                 sect_id,
-                userstask[user_id]["period"],
+                active_task["period"],
                 "hp",
                 costhp,
                 get_exp,
                 sect_stone,
-                userstask[user_id]["任务名称"],
-                userstask[user_id]["任务内容"],
+                active_task["任务名称"],
+                active_task["任务内容"],
             )
             if not settlement.applied:
                 msg = "**宗门任务**\n---\n⚠️ 宗门任务状态或角色资产已发生变化，请重新确认后再完成任务。"
                 await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取", k4="日常", v4="日常")
                 await sect_task_complete.finish()
-            task_type_value = userstask[user_id]['任务内容']['type']
+            task_type_value = active_task['任务内容']['type']
             msg = (
                 f"**宗门任务**\n---\n✅ 任务完成\n"
                 f"{exp_cap_note}"
@@ -2073,7 +2074,6 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 f"资材\n> +{number_to(sect_stone * 10)}\n"
                 f"贡献度\n> +{int(sect_stone)}"
             )
-            userstask.pop(user_id, None)
             if settlement.status == "settled":
                 update_statistics_value(user_id, "宗门任务")
                 safe_record_game_event(
@@ -2092,8 +2092,8 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             await handle_send(bot, event, msg, md_type="宗门", k1="接取", v1="宗门任务接取", k2="完成", v2="宗门任务完成", k3="信息", v3="我的宗门", k4="日常", v4="日常")
             await sect_task_complete.finish()
 
-        elif userstask[user_id]['任务内容']['type'] == 2:  # type=1：需要扣气血，type=2：需要扣灵石
-            costls = userstask[user_id]['任务内容']['cost']
+        elif active_task['任务内容']['type'] == 2:  # type=1：需要扣气血，type=2：需要扣灵石
+            costls = active_task['任务内容']['cost']
 
             if costls > int(user_info['stone']):
                 msg = (
@@ -2104,7 +2104,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
 
             get_exp = percent_exp_reward(
                 user_info['exp'],
-                userstask[user_id]['任务内容']['give'],
+                active_task['任务内容']['give'],
                 user_info['level'],
                 apply_rank_suppress=False,
                 anchor='gap',
@@ -2126,7 +2126,7 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
             if int(get_exp + user_info['exp']) > max_exp_next:
                 get_exp = 1
                 exp_cap_note = "⚠️ 修为已近当前境界上限，本次所得修为收束为1点！\n"
-            sect_stone = int(userstask[user_id]['任务内容']['sect'])
+            sect_stone = int(active_task['任务内容']['sect'])
             task_operation_id = _sect_operation_id(
                 event, "task_complete", user_id
             )
@@ -2134,19 +2134,19 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 task_operation_id,
                 user_id,
                 sect_id,
-                userstask[user_id]["period"],
+                active_task["period"],
                 "stone",
                 costls,
                 get_exp,
                 sect_stone,
-                userstask[user_id]["任务名称"],
-                userstask[user_id]["任务内容"],
+                active_task["任务名称"],
+                active_task["任务内容"],
             )
             if not settlement.applied:
                 msg = "**宗门任务**\n---\n⚠️ 宗门任务状态或角色资产已发生变化，请重新确认后再完成任务。"
                 await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取", k4="日常", v4="日常")
                 await sect_task_complete.finish()
-            task_type_value = userstask[user_id]['任务内容']['type']
+            task_type_value = active_task['任务内容']['type']
             msg = (
                 f"**宗门任务**\n---\n✅ 任务完成\n"
                 f"{exp_cap_note}"
@@ -2156,7 +2156,6 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 f"资材\n> +{number_to(sect_stone * 10)}\n"
                 f"贡献度\n> +{int(sect_stone)}"
             )
-            userstask.pop(user_id, None)
             if settlement.status == "settled":
                 update_statistics_value(user_id, "宗门任务")
                 safe_record_game_event(

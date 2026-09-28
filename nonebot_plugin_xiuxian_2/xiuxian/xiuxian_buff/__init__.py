@@ -44,7 +44,7 @@ from ..xiuxian_impart_pk.impart_pk_uitls import impart_pk_check
 from ..xiuxian_impart_pk.xu_world import xu_world
 from ..xiuxian_impart_pk.impart_pk import impart_pk
 from ..xiuxian_boss.boss_limit import boss_limit, DAILY_BATTLE_COUNT
-from ..xiuxian_sect import isUserTask, userstask
+from ..xiuxian_sect import get_user_sect_task
 from ..xiuxian_sect.sectconfig import get_config
 from ..xiuxian_rift import GLOBAL_RIFT_KEY, group_rift
 from ..xiuxian_rift.jsondata import read_rift_data
@@ -1234,8 +1234,9 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         remaining_task = max(max_task_num - user_now_num, 0)
         
         # 检查是否有未完成的任务
-        if isUserTask(user_id):
-            task_name = userstask[user_id]['任务名称']
+        active_sect_task = get_user_sect_task(user_id)
+        if active_sect_task:
+            task_name = active_sect_task['任务名称']
             sect_task_msg = f"🔄 进行中({task_name}) {remaining_task}/{max_task_num}"
         elif remaining_task <= 0:
             sect_task_msg = f"✅ 已完成 0/{max_task_num}"
