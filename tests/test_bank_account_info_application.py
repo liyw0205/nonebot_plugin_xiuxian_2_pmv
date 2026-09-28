@@ -17,17 +17,39 @@ class BankAccountInfoApplicationTests(unittest.TestCase):
             connection.execute("INSERT INTO user_xiuxian VALUES ('u1', 80)")
             connection.execute("CREATE TABLE bank_accounts(user_id TEXT PRIMARY KEY, saved_stone INTEGER, bank_level TEXT, updated_at TEXT)")
             connection.execute("INSERT INTO bank_accounts VALUES ('u1', 20, '1', 't')")
+            connection.execute(
+                "CREATE TABLE bank_account_operations("
+                "operation_id TEXT PRIMARY KEY, user_id TEXT, payload TEXT, deposited INTEGER, "
+                "interest INTEGER, wallet_after INTEGER, saved_after INTEGER, created_at TEXT)"
+            )
 
     def tearDown(self) -> None:
         self.temp.cleanup()
 
     def test_reads_account_without_writing(self) -> None:
+        with sqlite3.connect(self.database) as connection:
+            tables_before = {
+                row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            }
         result = BankAccountInfoApplication(self.database).get_info(user_id="u1")
         self.assertEqual(result["status"], "ok")
         self.assertEqual(result["saved_stone"], 20)
         with sqlite3.connect(self.database) as connection:
             tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        self.assertNotIn("bank_account_operations", tables)
+        self.assertEqual(tables, tables_before)
+
+    def test_missing_migration_fails_without_creating_account_schema(self) -> None:
+        database = Path(self.temp.name) / "unmigrated.db"
+        with sqlite3.connect(database) as connection:
+            connection.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY, stone INTEGER)")
+            connection.execute("INSERT INTO user_xiuxian VALUES ('u1', 80)")
+
+        with self.assertRaisesRegex(RuntimeError, r"bank\.002 schema_missing: bank_accounts"):
+            BankAccountInfoApplication(database).get_info(user_id="u1")
+
+        with sqlite3.connect(database) as connection:
+            tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        self.assertEqual(tables, {"user_xiuxian"})
 
     def test_missing_account_is_explicit(self) -> None:
         with sqlite3.connect(self.database) as connection:

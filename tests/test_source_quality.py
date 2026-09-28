@@ -2743,6 +2743,18 @@ class SourceQualityTests(unittest.TestCase):
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
         self.assertEqual(source.count("BankAccountInfoApplication(get_paths().game_db, player_database=get_paths().player_db)"), 5)
 
+    def test_bank_request_bootstrap_requires_startup_schema(self) -> None:
+        bootstrap = (SOURCE_ROOT / "features" / "bank" / "account_bootstrap_application.py").read_text(
+            encoding="utf-8"
+        )
+        repository = (SOURCE_ROOT / "features" / "bank" / "account_repository.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("assert_schema_ready(uow)", bootstrap)
+        self.assertNotIn("CREATE TABLE", bootstrap)
+        self.assertNotIn("CREATE TABLE", repository)
+        self.assertIn("bank.002 schema_missing", repository)
+
     def test_world_boss_rewards_use_cross_database_transaction(self) -> None:
         boss_root = SOURCE_ROOT / "xiuxian" / "xiuxian_boss"
         source = (boss_root / "__init__.py").read_text(encoding="utf-8")

@@ -50,6 +50,30 @@ class BankAccountBootstrapApplicationTests(unittest.TestCase):
             "legacy_missing",
         )
 
+    def test_missing_migration_rejects_import_without_creating_tables(self):
+        with DatabaseUnitOfWork(self.game) as uow:
+            uow.execute("DROP TABLE bank_account_operations")
+            uow.execute("DROP TABLE bank_accounts")
+
+        application = BankAccountBootstrapApplication(self.game, self.player)
+        with self.assertRaisesRegex(RuntimeError, r"bank\.002 schema_missing: bank_accounts"):
+            application.ensure_account(user_id="u", default_level="1")
+
+        with DatabaseUnitOfWork(self.game) as uow:
+            tables = {row["name"] for row in uow.query_all("SELECT name FROM sqlite_master WHERE type='table'")}
+        self.assertEqual(tables, {"user_xiuxian"})
+
+    def test_partial_migration_rejects_import_without_writing_account(self):
+        with DatabaseUnitOfWork(self.game) as uow:
+            uow.execute("DROP TABLE bank_account_operations")
+
+        application = BankAccountBootstrapApplication(self.game, self.player)
+        with self.assertRaisesRegex(RuntimeError, r"bank\.002 schema_missing: bank_account_operations"):
+            application.ensure_account(user_id="u", default_level="1")
+
+        with DatabaseUnitOfWork(self.game) as uow:
+            self.assertIsNone(uow.query_one("SELECT user_id FROM bank_accounts WHERE user_id='u'"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -18,7 +18,7 @@ class BankAccountBootstrapApplication:
         if not user_id:
             raise ValueError("user_id is required")
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
-            self.repository.ensure_schema(uow)
+            self.repository.assert_schema_ready(uow)
             existing = self.repository.existing_account(uow, user_id)
             if existing is not None:
                 return {"status": "existing", "user_id": user_id, "saved_stone": int(existing["saved_stone"]), "bank_level": str(existing["bank_level"])}

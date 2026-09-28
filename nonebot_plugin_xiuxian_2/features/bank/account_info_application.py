@@ -42,6 +42,7 @@ class BankAccountInfoApplication:
         if not user_id:
             raise ValueError("user_id is required")
         with DatabaseUnitOfWork(self.database, immediate=False) as uow:
+            self.repository.assert_schema_ready(uow)
             wallet = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
             account = self.repository.existing_account(uow, user_id)
         if wallet is None:

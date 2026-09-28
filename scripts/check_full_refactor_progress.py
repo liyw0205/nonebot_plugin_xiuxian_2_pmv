@@ -159,6 +159,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
     bank_handler = bank_facade[bank_facade.index("async def bank_") : bank_facade.index("def get_give_stone")]
     bank_account_info_application = (PACKAGE / "features" / "bank" / "account_info_application.py").read_text(encoding="utf-8")
+    bank_account_bootstrap = (PACKAGE / "features" / "bank" / "account_bootstrap_application.py").read_text(encoding="utf-8")
+    bank_account_repository = (PACKAGE / "features" / "bank" / "account_repository.py").read_text(encoding="utf-8")
+    bank_migrations = (PACKAGE / "features" / "bank" / "migrations.py").read_text(encoding="utf-8")
     bank_legacy_account_repository = (PACKAGE / "features" / "bank" / "legacy_account_repository.py").read_text(encoding="utf-8")
     bank_legacy_receipts = (PACKAGE / "compatibility" / "legacy_bank_operation_receipts.py").read_text(encoding="utf-8")
     bank_legacy_account_storage = (PACKAGE / "compatibility" / "legacy_bank_account_storage.py").read_text(encoding="utf-8")
@@ -766,7 +769,15 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def savef(" in bank_legacy_account_storage
                 and "update_or_write_data(" in bank_legacy_account_storage
             ),
-            "status": "bank_legacy_receipts_read_only_account_reads_feature_owned_and_writer_compatibility_isolated",
+            "account_schema_migration_required": (
+                "self.repository.assert_schema_ready(uow)" in bank_account_bootstrap
+                and "self.repository.assert_schema_ready(uow)" in bank_account_info_application
+                and "def assert_schema_ready(" in bank_account_repository
+                and "CREATE TABLE" not in bank_account_repository
+                and 'Migration("bank.002", "bank_accounts", apply_bank_accounts)' in plugin
+                and all(table in bank_migrations for table in ("bank_accounts", "bank_account_operations"))
+            ),
+            "status": "bank_legacy_reads_and_writer_isolated_with_account_schema_startup_owned",
         },
         "map": {
             "interactive_application_owned": "map_application.interactive_settlement(" in map_facade and "map_application.interactive_start(" in map_facade,

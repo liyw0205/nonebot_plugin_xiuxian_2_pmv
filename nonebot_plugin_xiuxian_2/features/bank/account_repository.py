@@ -10,9 +10,18 @@ from .interest_rules import BankInterestDecision
 
 
 class BankAccountRepository:
-    def ensure_schema(self, uow: DatabaseUnitOfWork) -> None:
-        uow.execute("CREATE TABLE IF NOT EXISTS bank_accounts (user_id TEXT PRIMARY KEY, saved_stone INTEGER NOT NULL, bank_level TEXT NOT NULL, updated_at TEXT NOT NULL)")
-        uow.execute("CREATE TABLE IF NOT EXISTS bank_account_operations (operation_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, payload TEXT NOT NULL, deposited INTEGER NOT NULL, interest INTEGER NOT NULL, wallet_after INTEGER NOT NULL, saved_after INTEGER NOT NULL, created_at TEXT NOT NULL)")
+    def assert_schema_ready(self, uow: DatabaseUnitOfWork) -> None:
+        required_columns = {
+            "bank_accounts": {"user_id", "saved_stone", "bank_level", "updated_at"},
+            "bank_account_operations": {
+                "operation_id", "user_id", "payload", "deposited", "interest",
+                "wallet_after", "saved_after", "created_at",
+            },
+        }
+        for table, required in required_columns.items():
+            columns = {str(row["name"]) for row in uow.query_all(f"PRAGMA table_info({table})")}
+            if not required.issubset(columns):
+                raise RuntimeError(f"bank.002 schema_missing: {table}")
 
     def account(self, uow: DatabaseUnitOfWork, user_id: str) -> dict[str, Any] | None:
         return self.existing_account(uow, user_id)
