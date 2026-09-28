@@ -91,6 +91,19 @@ def _slice_status() -> dict[str, dict[str, object]]:
     tasks_progress = (PACKAGE / "features" / "tasks" / "progress.py").read_text(encoding="utf-8")
     tasks_migrations = (PACKAGE / "features" / "tasks" / "migrations.py").read_text(encoding="utf-8")
     plugin = (PACKAGE / "plugin.py").read_text(encoding="utf-8")
+    title_data_source = (PACKAGE / "xiuxian" / "xiuxian_title" / "title_data.py").read_text(encoding="utf-8")
+    title_application_source = (PACKAGE / "features" / "title" / "application.py").read_text(encoding="utf-8")
+    title_repository_source = (PACKAGE / "features" / "title" / "repository.py").read_text(encoding="utf-8")
+    title_state_readers = title_data_source[
+        title_data_source.index("def get_user_unlocked_titles") : title_data_source.index(
+            "def grant_title_to_user"
+        )
+    ]
+    title_repository_state_reader = title_repository_source[
+        title_repository_source.index("    def get_state(") : title_repository_source.index(
+            "    def ensure_schema("
+        )
+    ]
     arena = (PACKAGE / "xiuxian" / "xiuxian_arena" / "__init__.py").read_text(encoding="utf-8")
     arena_transaction_service = (PACKAGE / "xiuxian" / "xiuxian_arena" / "transaction_service.py").read_text(encoding="utf-8")
     arena_legacy_transaction_service = (PACKAGE / "compatibility" / "legacy_arena_transactions.py").read_text(encoding="utf-8")
@@ -1109,6 +1122,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_unequip_replay_disabled": "operation_id = _title_operation_id(event, \"unequip\", str(user_id))\n    prior = _title_transaction_service().get_result(" not in title_facade,
             "unlock_batch_application_owned": "title_application.execute(" in (PACKAGE / "xiuxian" / "xiuxian_title" / "title_data.py").read_text(encoding="utf-8"),
             "legacy_unlock_batch_disabled": "_title_transaction_service().unlock_batch(" not in (PACKAGE / "xiuxian" / "xiuxian_title" / "title_data.py").read_text(encoding="utf-8"),
+            "title_state_read_application_owned": (
+                "title_application.get_state(" in title_state_readers
+                and "def get_state(" in title_application_source
+                and "def get_state(" in title_repository_state_reader
+            ),
+            "title_state_read_legacy_disabled": "xiuxian2_handle" not in title_state_readers and "player_data_manager" not in title_state_readers,
+            "title_state_read_has_no_ddl": "CREATE TABLE" not in title_repository_state_reader and "ALTER TABLE" not in title_repository_state_reader,
             "status": "equip_unequip_unlock_cutover",
         },
         "base": {

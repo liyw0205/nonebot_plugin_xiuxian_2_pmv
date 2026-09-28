@@ -24,6 +24,15 @@ def _payload(parts: Any) -> str:
 class TitleRepository:
     """Owns the historical title projection in ``player_db``."""
 
+    def get_state(
+        self, uow: DatabaseUnitOfWork, user_id: str
+    ) -> dict[str, Any] | None:
+        row = uow.query_one(
+            "SELECT unlocked,equipped FROM title WHERE user_id = ?",
+            (str(user_id),),
+        )
+        return dict(row) if row is not None else None
+
     def ensure_schema(self, uow: DatabaseUnitOfWork) -> None:
         uow.execute("CREATE TABLE IF NOT EXISTS title(user_id TEXT PRIMARY KEY)")
         columns = {str(row[1]) for row in uow.execute("PRAGMA table_info(title)").fetchall()}

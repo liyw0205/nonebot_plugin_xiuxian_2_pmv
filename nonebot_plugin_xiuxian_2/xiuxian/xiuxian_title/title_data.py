@@ -458,9 +458,10 @@ def check_and_unlock_titles(user_id: str) -> List[dict]:
 
 def get_user_unlocked_titles(user_id: str) -> List[str]:
     """获取用户已解锁的称号ID列表"""
-    from ..xiuxian_utils.xiuxian2_handle import player_data_manager
+    from . import title_application
 
-    unlocked_str = player_data_manager.get_field_data(str(user_id), "title", "unlocked")
+    state = title_application.get_state(str(user_id)) or {}
+    unlocked_str = state.get("unlocked")
     if not unlocked_str:
         return []
     if isinstance(unlocked_str, str):
@@ -475,9 +476,15 @@ def get_user_unlocked_titles(user_id: str) -> List[str]:
 
 def get_user_equipped_title(user_id: str) -> Optional[str]:
     """获取用户当前装备的称号ID"""
-    from ..xiuxian_utils.xiuxian2_handle import player_data_manager
+    from . import title_application
 
-    equipped = player_data_manager.get_field_data(str(user_id), "title", "equipped")
+    state = title_application.get_state(str(user_id)) or {}
+    equipped = state.get("equipped")
+    if isinstance(equipped, str):
+        try:
+            equipped = json.loads(equipped)
+        except (TypeError, ValueError):
+            pass
     return str(equipped) if equipped else None
 
 

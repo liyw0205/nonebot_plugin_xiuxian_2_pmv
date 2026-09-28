@@ -32,6 +32,10 @@ class TitleApplication:
         with DatabaseUnitOfWork(self.database) as uow:
             return self.repository.get_result(uow, operation_id)
 
+    def get_state(self, user_id: str) -> dict[str, Any] | None:
+        with DatabaseUnitOfWork(self.database) as uow:
+            return self.repository.get_state(uow, user_id)
+
     def execute(
         self,
         *,
