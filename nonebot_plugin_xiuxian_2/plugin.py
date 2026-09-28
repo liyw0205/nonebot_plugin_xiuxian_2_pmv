@@ -132,6 +132,7 @@ from .features.work.migrations import (
     apply_work_refresh_operations,
     apply_work_abort_cleanup,
     apply_work_claim_operations,
+    apply_work_settlement_operations,
 )
 from .features.mixelixir.manifest import FEATURE as MIXELIXIR_FEATURE
 from .features.mixelixir.migrations import (
@@ -360,6 +361,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("work.005", "work_refresh_operations", apply_work_refresh_operations),
         Migration("work.006", "work_abort_cleanup_operations", apply_work_abort_cleanup),
         Migration("work.007", "work_claim_operations", apply_work_claim_operations),
+        Migration("work.008", "work_settlement_operations", apply_work_settlement_operations),
         Migration("world_events.001", "world_events_feature_migrations", apply_world_events),
         Migration("world_events.002", "world_events_player_attack_settlement", apply_world_events_player),
         Migration("world_events.003", "demon_claim_operations", apply_world_events_claim),

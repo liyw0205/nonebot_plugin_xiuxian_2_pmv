@@ -227,6 +227,7 @@ class WorkSettlementApplication:
                         "inventory_full": "背包物品已达上限，悬赏奖励尚未结算。",
                         "user_missing": "悬赏结算失败：未找到角色数据。",
                         "state_changed": "悬赏结算未完成：悬赏进度已更新，请重新查看悬赏。",
+                        "schema_missing": "悬赏数据结构尚未完成升级，请联系管理员。",
                     }
                     outcome = OperationOutcome.rejected(
                         request.operation_id,

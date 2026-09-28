@@ -19,12 +19,28 @@ class WorkSettlementSqlRepository:
     def __init__(self, database: str | Path) -> None:
         self.database = str(database)
 
+    @staticmethod
+    def _schema_ready(uow: DatabaseUnitOfWork) -> bool:
+        table = uow.query_one(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='work_settlement_operations'"
+        )
+        if table is None:
+            return False
+        columns = {
+            str(row["name"])
+            for row in uow.query_all("PRAGMA table_info(work_settlement_operations)")
+        }
+        return {"operation_id", "payload", "exp", "item_awarded", "result_json"}.issubset(columns)
+
     def settle(self, operation_id: str, user_id: str, expected_work: Mapping[str, object], exp_gain: int, item: Mapping[str, object] | None, max_exp: int, max_goods_num: int = 0, **kwargs) -> WorkSettlementResult:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         exp_gain, max_exp = int(exp_gain), int(max_exp)
         payload = json.dumps([user_id], ensure_ascii=False, separators=(",", ":"))
+        if not Path(self.database).is_file():
+            return WorkSettlementResult("schema_missing")
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            uow.execute("CREATE TABLE IF NOT EXISTS work_settlement_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,exp INTEGER NOT NULL,item_awarded INTEGER NOT NULL,result_json TEXT,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            if not self._schema_ready(uow):
+                return WorkSettlementResult("schema_missing")
             previous = uow.query_one("SELECT payload,exp,item_awarded,result_json FROM work_settlement_operations WHERE operation_id=?", (operation_id,))
             if previous is not None:
                 if str(previous["payload"]) != payload:

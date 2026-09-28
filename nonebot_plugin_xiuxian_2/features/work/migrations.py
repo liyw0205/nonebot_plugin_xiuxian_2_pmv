@@ -71,10 +71,27 @@ def apply_work_claim_operations(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_work_settlement_operations(uow: DatabaseUnitOfWork) -> None:
+    """Prepare settlement replay receipts and upgrade the legacy result column."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS work_settlement_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,exp INTEGER NOT NULL,"
+        "item_awarded INTEGER NOT NULL,result_json TEXT,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    columns = {
+        str(row["name"])
+        for row in uow.query_all("PRAGMA table_info(work_settlement_operations)")
+    }
+    if "result_json" not in columns:
+        uow.execute("ALTER TABLE work_settlement_operations ADD COLUMN result_json TEXT")
+
+
 __all__ = [
     "apply_work",
     "apply_work_abort_cleanup",
     "apply_work_claim_operations",
+    "apply_work_settlement_operations",
     "apply_work_daily_refresh_reset",
     "apply_work_item_use",
     "apply_work_offer_snapshots",

@@ -986,6 +986,19 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("def apply_work_claim_operations(", migrations)
         self.assertIn('Migration("work.007", "work_claim_operations", apply_work_claim_operations)', plugin)
 
+    def test_work_settlement_schema_is_prepared_by_startup_migration(self) -> None:
+        repository = (SOURCE_ROOT / "features" / "work" / "settlement_repository.py").read_text(
+            encoding="utf-8"
+        )
+        migrations = (SOURCE_ROOT / "features" / "work" / "migrations.py").read_text(
+            encoding="utf-8"
+        )
+        plugin = (SOURCE_ROOT / "plugin.py").read_text(encoding="utf-8")
+        self.assertNotIn("CREATE TABLE", repository)
+        self.assertNotIn("ALTER TABLE", repository)
+        self.assertIn("def apply_work_settlement_operations(", migrations)
+        self.assertIn('Migration("work.008", "work_settlement_operations", apply_work_settlement_operations)', plugin)
+
     def test_impart_facade_defers_sql_manager_construction(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_impart" / "__init__.py").read_text(
             encoding="utf-8"

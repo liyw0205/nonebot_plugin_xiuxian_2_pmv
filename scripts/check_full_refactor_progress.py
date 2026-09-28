@@ -123,6 +123,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     workmake_source = (PACKAGE / "xiuxian" / "xiuxian_work" / "workmake.py").read_text(encoding="utf-8")
     work_reward_source = (PACKAGE / "xiuxian" / "xiuxian_work" / "reward_data_source.py").read_text(encoding="utf-8")
     work_claim_repository = (PACKAGE / "features" / "work" / "claim_repository.py").read_text(encoding="utf-8")
+    work_settlement_repository = (PACKAGE / "features" / "work" / "settlement_repository.py").read_text(encoding="utf-8")
     work_refresh_repository = (PACKAGE / "features" / "work" / "refresh_repository.py").read_text(encoding="utf-8")
     work_abort_repository = (PACKAGE / "features" / "work" / "abort_cleanup_repository.py").read_text(encoding="utf-8")
     work_migrations = (PACKAGE / "features" / "work" / "migrations.py").read_text(encoding="utf-8")
@@ -559,11 +560,16 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 'Migration("work.007", "work_claim_operations", apply_work_claim_operations)' in plugin
                 and "def apply_work_claim_operations(" in work_migrations
             ),
+            "settlement_repository_has_no_request_ddl": "CREATE TABLE" not in work_settlement_repository and "ALTER TABLE" not in work_settlement_repository,
+            "settlement_migration_registered": (
+                'Migration("work.008", "work_settlement_operations", apply_work_settlement_operations)' in plugin
+                and "def apply_work_settlement_operations(" in work_migrations
+            ),
             "item_use_migrations_registered": (
                 'Migration("work.003", "work_item_use_operations", apply_work_item_use)' in plugin
                 and 'Migration("work.004", "work_offer_snapshots", apply_work_offer_snapshots)' in plugin
             ),
-            "status": "daily_refresh_accelerate_capture_offer_refresh_abort_cleanup_and_claim_schema_cutover",
+            "status": "daily_refresh_accelerate_capture_offer_refresh_abort_cleanup_claim_and_settlement_schema_cutover",
         },
         "activity_reward": {
             "claim_all_application_owned": "activity_claim_all_application.run(" in activity_service,
