@@ -121,6 +121,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
     work_facade = (PACKAGE / "xiuxian" / "xiuxian_work" / "__init__.py").read_text(encoding="utf-8")
     work_handle_source = (PACKAGE / "xiuxian" / "xiuxian_work" / "work_handle.py").read_text(encoding="utf-8")
     workmake_source = (PACKAGE / "xiuxian" / "xiuxian_work" / "workmake.py").read_text(encoding="utf-8")
+    work_reward_source = (PACKAGE / "xiuxian" / "xiuxian_work" / "reward_data_source.py").read_text(encoding="utf-8")
+    work_refresh_repository = (PACKAGE / "features" / "work" / "refresh_repository.py").read_text(encoding="utf-8")
+    work_migrations = (PACKAGE / "features" / "work" / "migrations.py").read_text(encoding="utf-8")
+    work_legacy_refresh = (PACKAGE / "compatibility" / "legacy_work_refresh.py").read_text(encoding="utf-8")
+    work_transaction_shim = (PACKAGE / "xiuxian" / "xiuxian_work" / "transaction_service.py").read_text(encoding="utf-8")
     work_accelerate_handler = work_facade[
         work_facade.index("async def use_work_order") : work_facade.index(
             "async def use_work_capture_order", work_facade.index("async def use_work_order")
@@ -518,11 +523,24 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "offer_generation_reuses_profile_snapshot": "workmake(level, exp, level," in work_handle_source,
             "offer_generation_has_no_legacy_handle_import": "xiuxian2_handle" not in work_handle_source and "xiuxian2_handle" not in workmake_source,
             "unused_item_cache_not_constructed": "items = Items()" not in work_handle_source and "from ..xiuxian_utils.item_json import Items" not in work_handle_source,
+            "refresh_application_owned": "work_refresh_application.refresh(" in work_facade and "work_refresh_application.get_result(" in work_facade,
+            "legacy_refresh_default_path_disabled": "WorkRefreshSettlementService" not in work_facade and "_work_refresh_service(" not in work_facade,
+            "refresh_repository_has_no_request_ddl": "CREATE TABLE" not in work_refresh_repository and "ALTER TABLE" not in work_refresh_repository,
+            "offer_projection_has_no_request_ddl": "CREATE TABLE" not in work_reward_source and "ALTER TABLE" not in work_reward_source,
+            "refresh_migration_registered": (
+                'Migration("work.005", "work_refresh_operations", apply_work_refresh_operations)' in plugin
+                and "def apply_work_refresh_operations(" in work_migrations
+            ),
+            "legacy_refresh_isolated_with_compatibility_export": (
+                "class WorkRefreshSettlementService" in work_legacy_refresh
+                and "class WorkRefreshSettlementService" not in work_transaction_shim
+                and "legacy_work_refresh import" in work_transaction_shim
+            ),
             "item_use_migrations_registered": (
                 'Migration("work.003", "work_item_use_operations", apply_work_item_use)' in plugin
                 and 'Migration("work.004", "work_offer_snapshots", apply_work_offer_snapshots)' in plugin
             ),
-            "status": "daily_refresh_accelerate_and_capture_cutover_with_other_work_compatibility",
+            "status": "daily_refresh_accelerate_capture_and_offer_refresh_cutover_with_abort_compatibility",
         },
         "activity_reward": {
             "claim_all_application_owned": "activity_claim_all_application.run(" in activity_service,

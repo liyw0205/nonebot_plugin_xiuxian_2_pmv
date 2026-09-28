@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import tempfile
+import json
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import nonebot
@@ -16,10 +18,62 @@ from tests.test_db_backend import db_backend
 
 
 class WorkRefreshSettlementTests(unittest.TestCase):
-    def test_work_facade_defers_refresh_service_construction(self):
+    def test_work_facade_uses_feature_refresh_application(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_work
 
-        self.assertIsNone(xiuxian_work._work_refresh_service_instance)
+        self.assertTrue(hasattr(xiuxian_work, "work_refresh_application"))
+        self.assertFalse(hasattr(xiuxian_work, "_work_refresh_service_instance"))
+
+    def test_offer_projection_read_without_migration_does_not_create_schema(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_work import reward_data_source
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            database = root / "game.sqlite3"
+            players = root / "players"
+            player_dir = players / "u"
+            player_dir.mkdir(parents=True)
+            offer = {"tasks": {"采药": {"time": 5}}, "status": 1}
+            (player_dir / "workinfo.json").write_text(
+                json.dumps(offer), encoding="utf-8"
+            )
+            paths = SimpleNamespace(game_db=database)
+            with patch.object(reward_data_source, "PLAYERSDATA", players), patch.object(
+                reward_data_source, "get_paths", return_value=paths
+            ):
+                self.assertEqual(reward_data_source.readf("u"), offer)
+
+            with db_backend.connection(database) as conn:
+                tables = {
+                    row[0]
+                    for row in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    ).fetchall()
+                }
+        self.assertNotIn("work_offer_snapshots", tables)
+
+    def test_offer_projection_write_without_migration_fails_without_creating_schema(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_work import reward_data_source
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            database = root / "game.sqlite3"
+            players = root / "players"
+            paths = SimpleNamespace(game_db=database)
+            with patch.object(reward_data_source, "PLAYERSDATA", players), patch.object(
+                reward_data_source, "get_paths", return_value=paths
+            ):
+                with self.assertRaisesRegex(RuntimeError, "work_offer_snapshots"):
+                    reward_data_source.savef(
+                        "u", {"tasks": {"采药": {"time": 5}}, "status": 1}
+                    )
+            self.assertFalse((players / "u" / "workinfo.json").exists())
+            if database.exists():
+                with db_backend.connection(database) as conn:
+                    tables = conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    ).fetchall()
+                self.assertEqual(tables, [])
 
     def test_offer_generation_uses_supplied_profile_without_eager_item_cache(self):
         from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_work import work_handle

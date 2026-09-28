@@ -165,6 +165,8 @@ compileall、architecture、inventory、diff check 与五库 recovery 通过；�
 
 ## 当前切片与下一切片选择
 
+最近完成 `work refresh settlement application cutover`：默认普通/强制刷新经 `WorkRefreshApplication -> WorkRefreshSqlRepository`，旧刷新 service 实现移入 compatibility 模块并保留 transaction API re-export；game-only `work.005` 在启动阶段预建刷新回执表，请求路径不建表。`reward_data_source` 缺 migration 时回退只读旧 JSON，数据库写入明确失败。聚焦回归 `61 passed`、source-quality `4 passed`、progress `1 passed`；compileall、inventory、progress、隔离 architecture (`ok=true`) 和 diff check 通过。五库 recovery 覆盖 196 项 migration，backup/restore 成功，pending 为空，`work.005` 仅路由 game DB，reconcile clean。测试、恢复与架构数据位于本轮专用 `/tmp`，收尾时清理；一次未隔离 NoneBot 初始化曾更新 `data/xiuxian/compatibility_hits.json` 和 `data/xiuxian/xiuxian_impart.db-shm` 的时间戳，文件原样保留，隔离重跑的 architecture 检查通过。下一片审计并迁移 `WorkAbortCleanupService` 的 abort/reset 默认调用、replay 与 schema 边界；全局 legacy transaction services、`xiuxian2_handle` 和真实发布迁移/P7 仍未完成。
+
 最近完成 `pet transaction compatibility isolation`：宠物默认 handler 经 `PetApplication` 使用 feature SQL repositories；旧 `Pet*Service` 实现已移入
 `compatibility/legacy_pet_transactions.py`，`xiuxian_pet/transaction_service.py` 只保留历史 API re-export，默认宠物 facade 不再导入未调用的旧 service/lazy getter。
 `LegacyPetRepository` 仍保留显式回滚路径，宠物 JSON projection/read path 也未因此整体关闭。宠物/source/progress 聚焦回归 `310 passed`，排除一项已知无关的 Rift source assertion；

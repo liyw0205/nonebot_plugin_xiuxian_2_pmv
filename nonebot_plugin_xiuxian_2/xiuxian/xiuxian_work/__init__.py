@@ -34,10 +34,10 @@ from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.ids import UUIDGenerator
 from ...features.work.application import WorkClaimApplication, WorkSettlementApplication
+from ...features.work.refresh_application import WorkRefreshApplication
 from ...features.work.work_item_use_application import WorkItemUseApplication
 from ...features.work.maintenance_application import WorkDailyRefreshResetApplication
 
-from .transaction_service import WorkRefreshSettlementService
 from .transaction_service import WorkAbortCleanupService
 
 
@@ -47,8 +47,8 @@ work_claim_application = WorkClaimApplication(
 work_settlement_application = WorkSettlementApplication(
     get_paths().game_db,
 )
+work_refresh_application = WorkRefreshApplication(get_paths().game_db)
 work_item_use_application = WorkItemUseApplication(get_paths().game_db)
-_work_refresh_service_instance = None
 _work_abort_cleanup_service_instance = None
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
@@ -69,13 +69,6 @@ def _sql_message():
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
 
-
-
-def _work_refresh_service():
-    global _work_refresh_service_instance
-    if _work_refresh_service_instance is None:
-        _work_refresh_service_instance = WorkRefreshSettlementService(get_paths().game_db)
-    return _work_refresh_service_instance
 
 
 def _work_abort_cleanup_service():
@@ -549,7 +542,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
     elif mode == "刷新":
         # 先回放：成功后已有未接取悬赏/次数变化，前置拦截会挡住同事件重放。
         operation_id = _work_operation_id(event, "refresh", user_id)
-        prior = _work_refresh_service().get_result(operation_id)
+        prior = work_refresh_application.get_result(operation_id)
         if prior is not None and prior.succeeded:
             msg = _refresh_replay_msg(prior.offer, prior.remaining_count)
             await send_work_message(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3", k4="刷新", v4="悬赏令确认刷新")
@@ -606,17 +599,20 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             work_msg, new_offer = _prepare_work_offer(
                 operation_id, user_id, user_level, user_info['exp']
             )
-            result = _work_refresh_service().refresh(
-                operation_id,
-                user_id,
-                usernums,
-                _work_cd_snapshot(user_id),
-                work_data,
-                new_offer,
+            result = work_refresh_application.refresh(
+                operation_id=operation_id,
+                user_id=user_id,
+                expected_count=usernums,
+                expected_cd=_work_cd_snapshot(user_id),
+                expected_offer=work_data,
+                new_offer=new_offer,
             )
             if result.status == "duplicate":
                 msg = _refresh_replay_msg(result.offer, result.remaining_count, work_msg)
                 await send_work_message(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3", k4="刷新", v4="悬赏令确认刷新")
+                await do_work.finish()
+            if result.status == "schema_missing":
+                await handle_send(bot, event, "悬赏数据结构尚未完成升级，请联系管理员。")
                 await do_work.finish()
             if result.status in {"state_changed", "user_missing", "offer_exists"}:
                 await handle_send(bot, event, result_card("悬赏令", kind="warn", summary="悬赏信息已更新，请先发送【悬赏令】再操作。"), **nav_kwargs("work", md_type="悬赏令"))
@@ -647,7 +643,7 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 
     elif mode == "确认刷新":
         operation_id = _work_operation_id(event, "force-refresh", user_id)
-        prior = _work_refresh_service().get_result(operation_id)
+        prior = work_refresh_application.get_result(operation_id)
         if prior is not None and prior.succeeded:
             msg = _refresh_replay_msg(prior.offer, prior.remaining_count)
             await send_work_message(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3", k4="刷新", v4="悬赏令确认刷新")
@@ -673,18 +669,21 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         work_msg, new_offer = _prepare_work_offer(
             operation_id, user_id, user_level, user_info['exp']
         )
-        result = _work_refresh_service().refresh(
-            operation_id,
-            user_id,
-            usernums,
-            _work_cd_snapshot(user_id),
-            expected_offer,
-            new_offer,
+        result = work_refresh_application.refresh(
+            operation_id=operation_id,
+            user_id=user_id,
+            expected_count=usernums,
+            expected_cd=_work_cd_snapshot(user_id),
+            expected_offer=expected_offer,
+            new_offer=new_offer,
             force=True,
         )
         if result.status == "duplicate":
             msg = _refresh_replay_msg(result.offer, result.remaining_count, work_msg)
             await send_work_message(bot, event, msg, md_type="悬赏令", k1="悬赏壹", v1="悬赏令接取 1", k2="悬赏贰", v2="悬赏令接取 2", k3="悬赏叁", v3="悬赏令接取 3", k4="刷新", v4="悬赏令确认刷新")
+            await do_work.finish()
+        if result.status == "schema_missing":
+            await handle_send(bot, event, "悬赏数据结构尚未完成升级，请联系管理员。")
             await do_work.finish()
         if result.status in {"state_changed", "user_missing"}:
             await handle_send(bot, event, result_card("悬赏令", kind="warn", summary="悬赏信息已更新，请先发送【悬赏令】再操作。"), **nav_kwargs("work", md_type="悬赏令"))

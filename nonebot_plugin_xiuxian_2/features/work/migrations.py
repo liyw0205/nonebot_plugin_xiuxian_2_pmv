@@ -38,9 +38,19 @@ def apply_work_offer_snapshots(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_work_refresh_operations(uow: DatabaseUnitOfWork) -> None:
+    """Pre-create the refresh ledger while preserving existing receipts."""
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS work_refresh_operations("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,remaining_count INTEGER NOT NULL,"
+        "offer_snapshot TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+
+
 __all__ = [
     "apply_work",
     "apply_work_daily_refresh_reset",
     "apply_work_item_use",
     "apply_work_offer_snapshots",
+    "apply_work_refresh_operations",
 ]

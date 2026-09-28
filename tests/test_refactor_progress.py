@@ -70,6 +70,12 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(work["offer_generation_reuses_profile_snapshot"])
         self.assertTrue(work["offer_generation_has_no_legacy_handle_import"])
         self.assertTrue(work["unused_item_cache_not_constructed"])
+        self.assertTrue(work["refresh_application_owned"])
+        self.assertTrue(work["legacy_refresh_default_path_disabled"])
+        self.assertTrue(work["refresh_repository_has_no_request_ddl"])
+        self.assertTrue(work["offer_projection_has_no_request_ddl"])
+        self.assertTrue(work["refresh_migration_registered"])
+        self.assertTrue(work["legacy_refresh_isolated_with_compatibility_export"])
         self.assertTrue(work["item_use_migrations_registered"])
         activity = slices["activity_reward"]
         self.assertTrue(activity["claim_all_application_owned"])

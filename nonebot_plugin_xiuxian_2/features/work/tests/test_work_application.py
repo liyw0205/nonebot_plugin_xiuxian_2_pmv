@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from ..application import WorkClaimApplication, WorkSettlementApplication
+from ....infrastructure.database import DatabaseUnitOfWork, OperationLedger
 
 
 class _Repository:
@@ -29,10 +30,18 @@ class _Repository:
 
 
 class WorkClaimApplicationTests(unittest.TestCase):
+    @staticmethod
+    def _application(application_type, database, repository):
+        with DatabaseUnitOfWork(database) as uow:
+            OperationLedger().ensure_schema(uow)
+        return application_type(database, repository=repository)
+
     def test_claim_replays_without_repeating_repository(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = _Repository()
-            app = WorkClaimApplication(Path(directory) / "game.db", repository=repository)
+            app = self._application(
+                WorkClaimApplication, Path(directory) / "game.db", repository
+            )
             kwargs = {
                 "operation_id": "work-1", "user_id": "u", "expected_count": 3,
                 "expected_offer": {"tasks": {"采药": {"time": 5}}}, "task_index": 1,
@@ -47,7 +56,9 @@ class WorkClaimApplicationTests(unittest.TestCase):
     def test_settlement_replays_without_repeating_repository(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = _Repository()
-            app = WorkSettlementApplication(Path(directory) / "game.db", repository=repository)
+            app = self._application(
+                WorkSettlementApplication, Path(directory) / "game.db", repository
+            )
             kwargs = {
                 "operation_id": "work-settle-1", "user_id": "u",
                 "expected_work": {"create_time": "2026-09-12 10:00:00", "scheduled_time": "采药"},
@@ -64,7 +75,9 @@ class WorkClaimApplicationTests(unittest.TestCase):
     def test_state_rejection_is_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = _Repository("state_changed")
-            app = WorkClaimApplication(Path(directory) / "game.db", repository=repository)
+            app = self._application(
+                WorkClaimApplication, Path(directory) / "game.db", repository
+            )
             kwargs = {
                 "operation_id": "work-2", "user_id": "u", "expected_count": 0,
                 "expected_offer": {"tasks": {}}, "task_index": 1, "started_at": "2026-09-12 10:00:00",

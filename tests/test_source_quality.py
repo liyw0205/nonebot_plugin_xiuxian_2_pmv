@@ -930,6 +930,24 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("XiuxianDateManage", source)
         self.assertNotIn("get_user_info_with_id", source)
 
+    def test_work_refresh_defaults_to_feature_repository_without_request_ddl(self) -> None:
+        facade = (SOURCE_ROOT / "xiuxian" / "xiuxian_work" / "__init__.py").read_text(
+            encoding="utf-8"
+        )
+        repository = (SOURCE_ROOT / "features" / "work" / "refresh_repository.py").read_text(
+            encoding="utf-8"
+        )
+        projection = (
+            SOURCE_ROOT / "xiuxian" / "xiuxian_work" / "reward_data_source.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("work_refresh_application.refresh(", facade)
+        self.assertIn("work_refresh_application.get_result(", facade)
+        self.assertNotIn("WorkRefreshSettlementService", facade)
+        self.assertNotIn("CREATE TABLE", repository)
+        self.assertNotIn("ALTER TABLE", repository)
+        self.assertNotIn("CREATE TABLE", projection)
+        self.assertNotIn("ALTER TABLE", projection)
+
     def test_impart_facade_defers_sql_manager_construction(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_impart" / "__init__.py").read_text(
             encoding="utf-8"

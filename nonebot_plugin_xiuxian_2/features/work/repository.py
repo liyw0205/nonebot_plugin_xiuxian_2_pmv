@@ -32,6 +32,21 @@ class WorkSettlementRepository(Protocol):
     ) -> Any: ...
 
 
+class WorkRefreshRepository(Protocol):
+    def get_result(self, operation_id: str) -> Any: ...
+
+    def refresh(
+        self,
+        operation_id: str,
+        user_id: str,
+        expected_count: int,
+        expected_cd: Mapping[str, Any],
+        expected_offer: Mapping[str, Any] | None,
+        new_offer: Mapping[str, Any],
+        force: bool = False,
+    ) -> Any: ...
+
+
 class LegacyWorkClaimRepository:
     def __init__(self, database: str | Path) -> None:
         self.database = str(database)
@@ -84,9 +99,27 @@ class LegacyWorkSettlementRepository:
         )
 
 
+class LegacyWorkRefreshRepository:
+    def __init__(self, database: str | Path) -> None:
+        self.database = str(database)
+
+    def _service(self):
+        from ...compatibility.legacy_work_refresh import WorkRefreshSettlementService
+
+        return WorkRefreshSettlementService(self.database)
+
+    def get_result(self, operation_id: str) -> Any:
+        return self._service().get_result(operation_id)
+
+    def refresh(self, *args: Any, **kwargs: Any) -> Any:
+        return self._service().refresh(*args, **kwargs)
+
+
 __all__ = [
     "LegacyWorkClaimRepository",
     "LegacyWorkSettlementRepository",
+    "LegacyWorkRefreshRepository",
     "WorkClaimRepository",
     "WorkSettlementRepository",
+    "WorkRefreshRepository",
 ]

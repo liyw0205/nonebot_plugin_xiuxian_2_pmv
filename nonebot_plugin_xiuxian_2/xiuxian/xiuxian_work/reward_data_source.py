@@ -13,6 +13,12 @@ from ..xiuxian_utils import db_backend
 WORKDATA = get_paths().work
 PLAYERSDATA = get_paths().players
 
+
+def _has_offer_snapshot_table(conn):
+    return conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='work_offer_snapshots'"
+    ).fetchone() is not None
+
 class reward(JsonDate):
     def __init__(self):
         super().__init__()
@@ -52,9 +58,6 @@ class reward(JsonDate):
 def savef(user_id, data, sync_snapshot=True):
     """保存兼容 JSON 投影，并同步数据库悬赏快照。"""
     user_id = str(user_id)
-    if not os.path.exists(PLAYERSDATA / user_id):
-        os.makedirs(PLAYERSDATA / user_id)
-    
     FILEPATH = PLAYERSDATA / user_id / "workinfo.json"
     # 保留 task_order，保证「悬赏编号」与接取一致（避免 sort_keys 打乱 dict 顺序）
     task_order = data.get("task_order")
@@ -67,59 +70,62 @@ def savef(user_id, data, sync_snapshot=True):
         "refresh_time": data.get("refresh_time", datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')),
         "user_level": data.get("user_level")
     }
+    if sync_snapshot:
+        database = get_paths().game_db
+        if not database.is_file():
+            raise RuntimeError("work_offer_snapshots schema is not migrated")
+        with closing(db_backend.connect(database)) as conn:
+            if not _has_offer_snapshot_table(conn):
+                raise RuntimeError("work_offer_snapshots schema is not migrated")
+            conn.execute(
+                "INSERT INTO work_offer_snapshots(user_id,snapshot,updated_at) VALUES(%s,%s,%s) "
+                "ON CONFLICT(user_id) DO UPDATE SET snapshot=EXCLUDED.snapshot,updated_at=EXCLUDED.updated_at",
+                (user_id, json.dumps(save_data, ensure_ascii=True, sort_keys=True), save_data["refresh_time"]),
+            )
+            conn.commit()
+    if not os.path.exists(PLAYERSDATA / user_id):
+        os.makedirs(PLAYERSDATA / user_id)
     save_json_file(FILEPATH, save_data)
-    if not sync_snapshot:
-        return
-    with closing(db_backend.connect(get_paths().game_db)) as conn:
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS work_offer_snapshots("
-            "user_id TEXT PRIMARY KEY,snapshot TEXT NOT NULL,updated_at TEXT NOT NULL)"
-        )
-        conn.execute(
-            "INSERT INTO work_offer_snapshots(user_id,snapshot,updated_at) VALUES(%s,%s,%s) "
-            "ON CONFLICT(user_id) DO UPDATE SET snapshot=EXCLUDED.snapshot,updated_at=EXCLUDED.updated_at",
-            (user_id, json.dumps(save_data, ensure_ascii=True, sort_keys=True), save_data["refresh_time"]),
-        )
-        conn.commit()
 
 def readf(user_id):
     """优先读取数据库权威快照，并兼容迁移旧 JSON。"""
     user_id = str(user_id)
     FILEPATH = PLAYERSDATA / user_id / "workinfo.json"
-    with closing(db_backend.connect(get_paths().game_db)) as conn:
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS work_offer_snapshots("
-            "user_id TEXT PRIMARY KEY,snapshot TEXT NOT NULL,updated_at TEXT NOT NULL)"
-        )
-        row = conn.execute(
-            "SELECT snapshot FROM work_offer_snapshots WHERE user_id=%s", (user_id,)
-        ).fetchone()
-        if row is not None:
-            return json.loads(str(row[0]))
-        if not os.path.exists(FILEPATH):
-            return None
-        data = load_json_file(FILEPATH, {}, dict)
-        if not data:
-            return None
-        conn.execute(
-            "INSERT INTO work_offer_snapshots(user_id,snapshot,updated_at) VALUES(%s,%s,%s)",
-            (user_id, json.dumps(data, ensure_ascii=True, sort_keys=True), str(data.get("refresh_time", ""))),
-        )
-        conn.commit()
-        return data
+    database = get_paths().game_db
+    if database.is_file():
+        with closing(db_backend.connect(database)) as conn:
+            if _has_offer_snapshot_table(conn):
+                row = conn.execute(
+                    "SELECT snapshot FROM work_offer_snapshots WHERE user_id=%s", (user_id,)
+                ).fetchone()
+                if row is not None:
+                    return json.loads(str(row[0]))
+                if not os.path.exists(FILEPATH):
+                    return None
+                data = load_json_file(FILEPATH, {}, dict)
+                if not data:
+                    return None
+                conn.execute(
+                    "INSERT INTO work_offer_snapshots(user_id,snapshot,updated_at) VALUES(%s,%s,%s)",
+                    (user_id, json.dumps(data, ensure_ascii=True, sort_keys=True), str(data.get("refresh_time", ""))),
+                )
+                conn.commit()
+                return data
+    if not os.path.exists(FILEPATH):
+        return None
+    data = load_json_file(FILEPATH, {}, dict)
+    return data or None
 
 def delete_work_file(user_id, delete_snapshot=True):
     """删除数据库悬赏快照及兼容 JSON。"""
     user_id = str(user_id)
     FILEPATH = PLAYERSDATA / user_id / "workinfo.json"
-    if delete_snapshot:
-        with closing(db_backend.connect(get_paths().game_db)) as conn:
-            conn.execute(
-                "CREATE TABLE IF NOT EXISTS work_offer_snapshots("
-                "user_id TEXT PRIMARY KEY,snapshot TEXT NOT NULL,updated_at TEXT NOT NULL)"
-            )
-            conn.execute("DELETE FROM work_offer_snapshots WHERE user_id=%s", (user_id,))
-            conn.commit()
+    database = get_paths().game_db
+    if delete_snapshot and database.is_file():
+        with closing(db_backend.connect(database)) as conn:
+            if _has_offer_snapshot_table(conn):
+                conn.execute("DELETE FROM work_offer_snapshots WHERE user_id=%s", (user_id,))
+                conn.commit()
     if os.path.exists(FILEPATH):
         try:
             os.remove(FILEPATH)
