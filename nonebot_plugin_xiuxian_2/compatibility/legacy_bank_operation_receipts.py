@@ -36,6 +36,40 @@ class LegacyBankOperationReceiptRepository:
             ).fetchone()
             return None if row is None else dict(row)
 
+    def get_deposit_result(self, operation_id: str) -> dict[str, Any] | None:
+        row = self._read(
+            "bank_deposit_operations",
+            operation_id,
+            ("operation_id", "deposited", "interest", "wallet_stone", "saved_stone", "saved_at"),
+        )
+        if row is None:
+            return None
+        return {
+            "status": "duplicate",
+            "deposited": int(row["deposited"]),
+            "interest": int(row["interest"]),
+            "wallet_stone": int(row["wallet_stone"]),
+            "saved_stone": int(row["saved_stone"]),
+            "saved_at": str(row["saved_at"]),
+        }
+
+    def get_withdrawal_result(self, operation_id: str) -> dict[str, Any] | None:
+        row = self._read(
+            "bank_withdrawal_operations",
+            operation_id,
+            ("operation_id", "withdrawn", "interest", "wallet_stone", "saved_stone", "saved_at"),
+        )
+        if row is None:
+            return None
+        return {
+            "status": "duplicate",
+            "withdrawn": int(row["withdrawn"]),
+            "interest": int(row["interest"]),
+            "wallet_stone": int(row["wallet_stone"]),
+            "saved_stone": int(row["saved_stone"]),
+            "saved_at": str(row["saved_at"]),
+        }
+
     def get_upgrade_result(self, operation_id: str) -> dict[str, Any] | None:
         row = self._read(
             "bank_upgrade_operations",

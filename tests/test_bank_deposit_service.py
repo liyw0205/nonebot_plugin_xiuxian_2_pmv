@@ -13,7 +13,7 @@ from tests.test_db_backend import db_backend
 
 
 class BankDepositServiceTests(unittest.TestCase):
-    def test_bank_facade_defers_replay_service_construction(self) -> None:
+    def test_bank_facade_does_not_import_legacy_replay_services(self) -> None:
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_bank
 
         source = Path(xiuxian_bank.__file__).read_text(encoding="utf-8")
@@ -22,9 +22,10 @@ class BankDepositServiceTests(unittest.TestCase):
         )[0]
         self.assertIn("BankDepositApplication", handler)
         self.assertNotIn("bank_application.deposit(", handler)
-        self.assertIsNone(xiuxian_bank._bank_withdrawal_service_instance)
-        self.assertFalse(hasattr(xiuxian_bank, "_bank_upgrade_service"))
-        self.assertFalse(hasattr(xiuxian_bank, "_bank_interest_service"))
+        self.assertNotIn("BankDepositService", source)
+        self.assertNotIn("BankWithdrawalService", source)
+        self.assertNotIn("_bank_deposit_service", source)
+        self.assertNotIn("_bank_withdrawal_service", source)
 
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()

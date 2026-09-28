@@ -732,9 +732,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_withdrawal_disabled": "bank_withdrawal_service.withdraw(" not in bank_facade,
             "legacy_upgrade_disabled": "bank_upgrade_service.upgrade(" not in bank_facade,
             "legacy_interest_disabled": "bank_interest_service.settle(" not in bank_facade,
-            "upgrade_interest_receipts_read_only": (
-                "get_upgrade_result(operation_id)" in bank_facade
+            "legacy_operation_receipts_read_only": (
+                "get_deposit_result(operation_id)" in bank_facade
+                and "get_withdrawal_result(operation_id)" in bank_facade
+                and "get_upgrade_result(operation_id)" in bank_facade
                 and "get_interest_result(operation_id)" in bank_facade
+                and "_bank_deposit_service().get_result" not in bank_facade
+                and "_bank_withdrawal_service().get_result" not in bank_facade
                 and "_bank_upgrade_service().get_result" not in bank_facade
                 and "_bank_interest_service().get_result" not in bank_facade
                 and "mode=ro" in bank_legacy_receipts
@@ -744,7 +748,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 "bankinfo = readf(user_id)" not in bank_facade
                 and bank_facade.count("_read_legacy_bankinfo(user_id)") == 5
             ),
-            "status": "deposit_withdrawal_upgrade_interest_cutover_with_legacy_reads_deferred",
+            "status": "deposit_withdrawal_upgrade_interest_cutover_with_read_only_legacy_receipts_and_deferred_legacy_reads",
         },
         "map": {
             "interactive_application_owned": "map_application.interactive_settlement(" in map_facade and "map_application.interactive_start(" in map_facade,

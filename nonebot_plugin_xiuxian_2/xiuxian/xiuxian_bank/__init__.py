@@ -25,15 +25,12 @@ from datetime import datetime
 from .bankconfig import get_config
 from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, send_help_message
 from ..xiuxian_config import XiuConfig
-from .transaction_service import BankDepositService, BankWithdrawalService
 from ...features.bank.application import BankApplication
 
 
 config = get_config()
 BANKLEVEL = config["BANKLEVEL"]
 _player_data_manager_instance = None
-_bank_deposit_service_instance = None
-_bank_withdrawal_service_instance = None
 bank_application = BankApplication(
     get_paths().game_db,
     get_paths().player_db,
@@ -60,20 +57,6 @@ player_data_manager = _LazyPlayerDataManager()
 
 def _player_data_manager():
     return player_data_manager
-
-
-def _bank_deposit_service():
-    global _bank_deposit_service_instance
-    if _bank_deposit_service_instance is None:
-        _bank_deposit_service_instance = BankDepositService(get_paths().game_db, get_paths().player_db)
-    return _bank_deposit_service_instance
-
-
-def _bank_withdrawal_service():
-    global _bank_withdrawal_service_instance
-    if _bank_withdrawal_service_instance is None:
-        _bank_withdrawal_service_instance = BankWithdrawalService(get_paths().game_db, get_paths().player_db)
-    return _bank_withdrawal_service_instance
 
 
 bank = on_regex(
@@ -161,11 +144,13 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await handle_send(bot, event, messages.get(str(result.get("status")), "新存款未结算。"), md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
         # 先回放：成功后余额/额度变化会挡住“灵石不足/额度不足”前置检查。
-        prior = _bank_deposit_service().get_result(operation_id)
-        if prior is not None and prior.succeeded:
+        from ...compatibility.legacy_bank_operation_receipts import LegacyBankOperationReceiptRepository
+
+        prior = LegacyBankOperationReceiptRepository(get_paths().game_db).get_deposit_result(operation_id)
+        if prior is not None:
             msg = (
-                f"道友本次结息时间为：已处理，获得灵石：{prior.interest}枚!\n"
-                f"道友存入灵石{prior.deposited}枚，当前所拥有灵石{prior.wallet_stone}枚，灵庄存有灵石{prior.saved_stone}枚\n"
+                f"道友本次结息时间为：已处理，获得灵石：{prior['interest']}枚!\n"
+                f"道友存入灵石{prior['deposited']}枚，当前所拥有灵石{prior['wallet_stone']}枚，灵庄存有灵石{prior['saved_stone']}枚\n"
                 "该存款请求已经处理，无需重复提交。"
             )
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
@@ -255,11 +240,13 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             }
             await handle_send(bot, event, messages.get(str(result.get("status")), "新取款未结算。"), md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
-        prior = _bank_withdrawal_service().get_result(operation_id)
-        if prior is not None and prior.succeeded:
+        from ...compatibility.legacy_bank_operation_receipts import LegacyBankOperationReceiptRepository
+
+        prior = LegacyBankOperationReceiptRepository(get_paths().game_db).get_withdrawal_result(operation_id)
+        if prior is not None:
             msg = (
-                f"道友本次结息时间为：已处理，获得灵石：{prior.interest}枚!\n"
-                f"取出灵石{prior.withdrawn}枚，当前所拥有灵石{prior.wallet_stone}枚，灵庄存有灵石{prior.saved_stone}枚!\n"
+                f"道友本次结息时间为：已处理，获得灵石：{prior['interest']}枚!\n"
+                f"取出灵石{prior['withdrawn']}枚，当前所拥有灵石{prior['wallet_stone']}枚，灵庄存有灵石{prior['saved_stone']}枚!\n"
                 "该取款请求已经处理，无需重复提交。"
             )
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")

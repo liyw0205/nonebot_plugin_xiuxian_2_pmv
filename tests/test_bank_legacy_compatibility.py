@@ -50,10 +50,16 @@ def test_transaction_import_identity_is_preserved() -> None:
     assert BankInterestService is CompatibilityInterestService
 
 
-def test_upgrade_and_interest_handlers_use_read_only_legacy_receipt_boundary() -> None:
+def test_bank_handlers_use_read_only_legacy_receipt_boundary() -> None:
     source = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
+    deposit = source.split("if mode == '存灵石'", 1)[1].split("elif mode == '取灵石'", 1)[0]
+    withdrawal = source.split("elif mode == '取灵石'", 1)[1].split("elif mode == '升级会员'", 1)[0]
     upgrade = source.split("elif mode == '升级会员'", 1)[1].split("elif mode == '信息'", 1)[0]
     interest = source.split("elif mode == '结算'", 1)[1].split("def get_give_stone", 1)[0]
+    assert "get_deposit_result(operation_id)" in deposit
+    assert "_bank_deposit_service().get_result" not in deposit
+    assert "get_withdrawal_result(operation_id)" in withdrawal
+    assert "_bank_withdrawal_service().get_result" not in withdrawal
     assert "get_upgrade_result(operation_id)" in upgrade
     assert "_bank_upgrade_service().get_result" not in upgrade
     assert "get_interest_result(operation_id)" in interest
@@ -71,6 +77,8 @@ def test_legacy_bank_receipt_lookup_is_read_only_and_tolerates_missing_tables() 
             connection.execute("CREATE TABLE unrelated (id INTEGER PRIMARY KEY)")
 
         repository = LegacyBankOperationReceiptRepository(database)
+        assert repository.get_deposit_result("old-op") is None
+        assert repository.get_withdrawal_result("old-op") is None
         assert repository.get_upgrade_result("old-op") is None
         assert repository.get_interest_result("old-op") is None
         with sqlite3.connect(database) as connection:
@@ -100,8 +108,40 @@ def test_legacy_bank_receipt_lookup_reads_existing_upgrade_and_interest_rows() -
             connection.execute(
                 "INSERT INTO bank_interest_operations VALUES ('int-1', '[]', 12, 162, 'then', 'now')"
             )
+            connection.execute(
+                "CREATE TABLE bank_deposit_operations (operation_id TEXT PRIMARY KEY, payload TEXT, "
+                "deposited INTEGER, interest INTEGER, wallet_stone INTEGER, saved_stone INTEGER, "
+                "saved_at TEXT, created_at TEXT)"
+            )
+            connection.execute(
+                "INSERT INTO bank_deposit_operations VALUES ('dep-1', '[]', 30, 4, 74, 90, 'then', 'now')"
+            )
+            connection.execute(
+                "CREATE TABLE bank_withdrawal_operations (operation_id TEXT PRIMARY KEY, payload TEXT, "
+                "withdrawn INTEGER, interest INTEGER, wallet_stone INTEGER, saved_stone INTEGER, "
+                "saved_at TEXT, created_at TEXT)"
+            )
+            connection.execute(
+                "INSERT INTO bank_withdrawal_operations VALUES ('wd-1', '[]', 20, 3, 97, 70, 'then', 'now')"
+            )
 
         repository = LegacyBankOperationReceiptRepository(database)
+        assert repository.get_deposit_result("dep-1") == {
+            "status": "duplicate",
+            "deposited": 30,
+            "interest": 4,
+            "wallet_stone": 74,
+            "saved_stone": 90,
+            "saved_at": "then",
+        }
+        assert repository.get_withdrawal_result("wd-1") == {
+            "status": "duplicate",
+            "withdrawn": 20,
+            "interest": 3,
+            "wallet_stone": 97,
+            "saved_stone": 70,
+            "saved_at": "then",
+        }
         assert repository.get_upgrade_result("up-1") == {
             "status": "duplicate",
             "cost": 50,
@@ -113,4 +153,33 @@ def test_legacy_bank_receipt_lookup_reads_existing_upgrade_and_interest_rows() -
             "interest": 12,
             "wallet_stone": 162,
             "saved_at": "then",
+        }
+
+
+def test_legacy_bank_receipt_lookup_ignores_incomplete_tables_without_mutation() -> None:
+    from nonebot_plugin_xiuxian_2.compatibility.legacy_bank_operation_receipts import (
+        LegacyBankOperationReceiptRepository,
+    )
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        database = Path(temp_dir) / "game.sqlite3"
+        with sqlite3.connect(database) as connection:
+            connection.execute(
+                "CREATE TABLE bank_deposit_operations (operation_id TEXT PRIMARY KEY, deposited INTEGER)"
+            )
+            connection.execute(
+                "CREATE TABLE bank_withdrawal_operations (operation_id TEXT PRIMARY KEY, withdrawn INTEGER)"
+            )
+
+        repository = LegacyBankOperationReceiptRepository(database)
+        assert repository.get_deposit_result("dep-1") is None
+        assert repository.get_withdrawal_result("wd-1") is None
+        with sqlite3.connect(database) as connection:
+            schemas = {
+                row[0]: tuple(item[1] for item in connection.execute(f'PRAGMA table_info("{row[0]}")'))
+                for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            }
+        assert schemas == {
+            "bank_deposit_operations": ("operation_id", "deposited"),
+            "bank_withdrawal_operations": ("operation_id", "withdrawn"),
         }

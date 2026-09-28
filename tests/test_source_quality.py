@@ -2710,10 +2710,12 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", service)
         self.assertIn("bank_interest_operations", service)
 
-    def test_bank_replay_services_are_lazy_compatibility_boundaries(self) -> None:
+    def test_bank_replay_services_are_absent_from_default_facade(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
-        self.assertIn("_bank_deposit_service_instance = None", source)
-        self.assertNotIn("bank_deposit_service = BankDepositService", source)
+        self.assertNotIn("BankDepositService", source)
+        self.assertNotIn("BankWithdrawalService", source)
+        self.assertNotIn("_bank_deposit_service", source)
+        self.assertNotIn("_bank_withdrawal_service", source)
 
     def test_bank_facade_does_not_construct_unused_legacy_sql_manager(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(
@@ -2721,8 +2723,10 @@ class SourceQualityTests(unittest.TestCase):
         )
         self.assertNotIn("XiuxianDateManage", source)
         self.assertNotIn("sql_message =", source)
-        self.assertIn("_bank_deposit_service().get_result", source)
-        self.assertIn("_bank_withdrawal_service().get_result", source)
+        self.assertIn("get_deposit_result(operation_id)", source)
+        self.assertIn("get_withdrawal_result(operation_id)", source)
+        self.assertNotIn("_bank_deposit_service().get_result", source)
+        self.assertNotIn("_bank_withdrawal_service().get_result", source)
         self.assertNotIn("_bank_upgrade_service().get_result", source)
         self.assertNotIn("_bank_interest_service().get_result", source)
         self.assertIn("LegacyBankOperationReceiptRepository", source)
