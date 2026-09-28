@@ -2,7 +2,7 @@ from .reward_data_source import reward
 import random
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import convert_rank, base_rank
-from ..xiuxian_utils.xiuxian2_handle import OtherSet
+from ..xiuxian_utils.xiuxian_json_config import OtherSet
 from datetime import datetime
 
 def workmake(work_level, exp, user_level, random_source=None):

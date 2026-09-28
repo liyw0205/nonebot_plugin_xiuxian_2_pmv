@@ -922,14 +922,13 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("rift_application.read_cooldown(", source)
         self.assertNotIn("XiuxianDateManage()", source)
 
-    def test_work_handle_defers_sql_manager_construction(self) -> None:
+    def test_work_handle_uses_supplied_profile_snapshot(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_work" / "work_handle.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn("_sql_message_instance = None", source)
-        self.assertIn("def _sql_message(", source)
-        self.assertIn("_sql_message().get_user_info_with_id(", source)
-        self.assertNotIn("sql_message = XiuxianDateManage()", source)
+        self.assertIn("workmake(level, exp, level,", source)
+        self.assertNotIn("XiuxianDateManage", source)
+        self.assertNotIn("get_user_info_with_id", source)
 
     def test_impart_facade_defers_sql_manager_construction(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_impart" / "__init__.py").read_text(

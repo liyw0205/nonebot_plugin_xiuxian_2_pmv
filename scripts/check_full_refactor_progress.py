@@ -119,6 +119,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
     training_reset_repository = (PACKAGE / "features" / "training" / "reset_repository.py").read_text(encoding="utf-8")
     training_migrations = (PACKAGE / "features" / "training" / "migrations.py").read_text(encoding="utf-8")
     work_facade = (PACKAGE / "xiuxian" / "xiuxian_work" / "__init__.py").read_text(encoding="utf-8")
+    work_handle_source = (PACKAGE / "xiuxian" / "xiuxian_work" / "work_handle.py").read_text(encoding="utf-8")
+    workmake_source = (PACKAGE / "xiuxian" / "xiuxian_work" / "workmake.py").read_text(encoding="utf-8")
     work_accelerate_handler = work_facade[
         work_facade.index("async def use_work_order") : work_facade.index(
             "async def use_work_capture_order", work_facade.index("async def use_work_order")
@@ -513,6 +515,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "capture_application_owned": "work_item_use_application.capture(" in work_capture_handler,
             "legacy_item_capture_disabled": "_work_item_use_service().capture(" not in work_capture_handler,
             "capture_json_projection_only": "savef(user_id, work_data, sync_snapshot=False)" in work_capture_handler,
+            "offer_generation_reuses_profile_snapshot": "workmake(level, exp, level," in work_handle_source,
+            "offer_generation_has_no_legacy_handle_import": "xiuxian2_handle" not in work_handle_source and "xiuxian2_handle" not in workmake_source,
+            "unused_item_cache_not_constructed": "items = Items()" not in work_handle_source and "from ..xiuxian_utils.item_json import Items" not in work_handle_source,
             "item_use_migrations_registered": (
                 'Migration("work.003", "work_item_use_operations", apply_work_item_use)' in plugin
                 and 'Migration("work.004", "work_offer_snapshots", apply_work_offer_snapshots)' in plugin

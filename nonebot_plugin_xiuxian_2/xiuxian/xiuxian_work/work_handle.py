@@ -1,25 +1,8 @@
-from ..xiuxian_utils.xiuxian2_handle import *
 from .workmake import workmake
 from .reward_data_source import savef, readf
-from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
-from ..xiuxian_utils.item_json import Items
-from ..xiuxian_utils.utils import number_to
-from datetime import datetime
+from ..xiuxian_utils.xiuxian_json_config import XiuxianJsonDate
 from ...infrastructure.clock import SystemClock
-import json
-import os
-from pathlib import Path
 import random
-
-_sql_message_instance = None
-items = Items()
-
-
-def _sql_message():
-    global _sql_message_instance
-    if _sql_message_instance is None:
-        _sql_message_instance = XiuxianDateManage()
-    return _sql_message_instance
 
 class workhandle(XiuxianJsonDate):
     def do_work(self, key, work_list=None, name=None, level="江湖好手", exp=None, user_id=None, persist=True, random_source=None, clock=None):
@@ -38,13 +21,8 @@ class workhandle(XiuxianJsonDate):
             user_id: 用户ID
         """
         if key == 0:  # 生成新悬赏令
-            # 获取用户信息
-            user_info = _sql_message().get_user_info_with_id(user_id)
-            if not user_info:
-                return []
-                
-            # 生成悬赏令数据
-            data = workmake(level, exp, user_info['level'], random_source=random_source)
+            # The caller's profile snapshot supplies both generation and reward-rank levels.
+            data = workmake(level, exp, level, random_source=random_source)
             get_work_list = []
             
             # 构建悬赏令数据结构（task_order 固定展示/接取编号，避免 JSON sort_keys 打乱顺序）

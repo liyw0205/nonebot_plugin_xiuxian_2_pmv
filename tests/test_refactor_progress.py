@@ -67,6 +67,9 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(work["capture_application_owned"])
         self.assertTrue(work["legacy_item_capture_disabled"])
         self.assertTrue(work["capture_json_projection_only"])
+        self.assertTrue(work["offer_generation_reuses_profile_snapshot"])
+        self.assertTrue(work["offer_generation_has_no_legacy_handle_import"])
+        self.assertTrue(work["unused_item_cache_not_constructed"])
         self.assertTrue(work["item_use_migrations_registered"])
         activity = slices["activity_reward"]
         self.assertTrue(activity["claim_all_application_owned"])

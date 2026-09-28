@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import nonebot
 
@@ -19,6 +20,33 @@ class WorkRefreshSettlementTests(unittest.TestCase):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_work
 
         self.assertIsNone(xiuxian_work._work_refresh_service_instance)
+
+    def test_offer_generation_uses_supplied_profile_without_eager_item_cache(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_work import work_handle
+
+        observed = {}
+
+        def build_offer(work_level, exp, user_level, **kwargs):
+            observed.update(work_level=work_level, exp=exp, user_level=user_level)
+            return {"采药": [80, 12, 5, 101, "成功", "失败"]}
+
+        with patch.object(work_handle, "workmake", side_effect=build_offer):
+            handler = object.__new__(work_handle.workhandle)
+            task_list, offer = handler.do_work(
+                0,
+                level="筑基",
+                exp=100,
+                user_id="u",
+                persist=False,
+            )
+
+        self.assertEqual(
+            observed,
+            {"work_level": "筑基", "exp": 100, "user_level": "筑基"},
+        )
+        self.assertEqual(task_list[0][0], "采药")
+        self.assertEqual(offer["user_level"], "筑基")
+        self.assertFalse(hasattr(work_handle, "items"))
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
