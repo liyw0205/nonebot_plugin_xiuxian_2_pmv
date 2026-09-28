@@ -2968,6 +2968,15 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("def _world_boss_punishment_service(", source)
         self.assertNotIn("world_boss_punishment_service.punish(", helper)
 
+    def test_world_boss_item_catalog_is_lazy(self) -> None:
+        source = (SOURCE_ROOT / "xiuxian" / "xiuxian_boss" / "__init__.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("_items_instance = None", source)
+        self.assertIn("def _items(", source)
+        self.assertNotIn("items = Items()", source)
+        self.assertIn("_items().get_data_by_item_id(", source)
+
     def test_activity_config_uses_lazy_event_service(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_activity"
         source = (root / "activity_config.py").read_text(encoding="utf-8")

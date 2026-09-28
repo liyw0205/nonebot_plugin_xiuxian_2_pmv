@@ -55,6 +55,8 @@
 
 2026-09-28 fusion legacy-factory and item-catalog cleanup：默认合成/批量合成已由 `FusionApplication` 承载，调用图确认 facade 中旧 `FusionService` getter 与通用 legacy wrapper 无生产调用；移除旧 service import/实例工厂，保留 `fusion_service.py` 与 feature repository 的显式兼容路径。同步将 facade 的 module-level `Items()` 改为 `_items()` 按需加载，合成命令或可合成物品列表真正访问目录时才读取全量 JSON；不复制或主动清空共享 `ITEMS_CACHE`。新增 source/progress 门禁与 facade/行为回归；无 migration、默认事务和数据路径不变。全局旧 transaction services、`xiuxian2_handle`、真实发布迁移/P7 仍未完成 blocker。
 
+2026-09-28 boss item catalog lazy boundary：世界 BOSS facade 删除 module-level `Items()` 构造，商店列表与积分兑换真正访问物品详情时才通过 `_items()` 加载共享目录；不复制或主动清空 `ITEMS_CACHE`，BOSS purchase/settlement、旧兼容 service 和数据路径不变。新增 source/progress 门禁；无 migration、无数据库写入，目标 compileall、inventory、架构和 diff check 通过。全局旧 transaction services、`xiuxian2_handle`、真实发布迁移/P7 仍未完成 blocker。
+
 `work settlement transaction ownership`：悬赏结算默认入口已切到 `WorkSettlementApplication -> WorkSettlementSqlRepository`；`work.008` 启动迁移预建 operation 表并补齐历史 `result_json`，请求路径只读校验 schema。仓储在单一 game-db immediate UoW 中校验 operation payload、冷却快照和用户，按真实 `id/name/type` 写奖励并校验背包上限，原子更新修为、背包和 `user_cd` 清理，同时保存 replay metadata；旧 `WorkSettlementService` 已移至 compatibility-only 模块并由历史 shim 保持 import identity。聚焦回归 `76 passed`、source-quality `8 passed`、progress `1 passed`，隔离 architecture/inventory/recovery/reconcile/diff check 通过。下一片审计 `WorkItemUseService` 请求期 DDL 与 compatibility 可达性；全局旧 transaction services、`xiuxian2_handle`、真实发布迁移/P7 仍未完成。
 
 一个切片只有同时满足以下条件才计入完成：

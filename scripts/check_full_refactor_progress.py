@@ -1355,6 +1355,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "manual_spawn_application_owned": "boss_application.spawn(" in boss_facade,
             "daily_limit_application_owned": "boss_application.reset_daily_limit(" in boss_facade,
             "punishment_application_owned": "boss_application.punish(" in boss_facade and "boss_application.punishment_snapshot(" in boss_facade,
+            "item_catalog_lazy": (
+                "_items_instance = None" in boss_facade
+                and "def _items(" in boss_facade
+                and "items = Items()" not in boss_facade
+                and "_items().get_data_by_item_id(" in boss_facade
+            ),
             "legacy_manual_spawn_disabled": "_spawn_world_boss(" not in boss_facade or "boss_application.spawn(" in boss_facade,
             "status": "manual_spawn_daily_limit_punishment_cutover_with_other_boss_compatibility",
         },

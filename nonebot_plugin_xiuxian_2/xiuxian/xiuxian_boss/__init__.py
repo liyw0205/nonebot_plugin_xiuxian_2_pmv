@@ -38,7 +38,7 @@ from .bossconfig import get_boss_config
 from .old_boss_info import GLOBAL_BOSS_KEY, old_boss_info
 from ..xiuxian_utils.player_fight import Boss_fight
 from ..xiuxian_utils.item_json import Items
-items = Items()
+_items_instance = None
 from ..xiuxian_utils.utils import (
     number_to, check_user, check_user_type,
     get_msg_pic,
@@ -90,6 +90,14 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
+
+
+def _items():
+    """Load the shared item catalog only when a boss shop needs it."""
+    global _items_instance
+    if _items_instance is None:
+        _items_instance = Items()
+    return _items_instance
 
 
 def _world_boss_battle_settlement_service():
@@ -1342,7 +1350,7 @@ async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         shop_items = list(boss_integral_shop.items())[start_index:end_index]
         
         for item_id, item_info in shop_items:
-            item_data = items.get_data_by_item_id(item_id)
+            item_data = _items().get_data_by_item_id(item_id)
             weekly_limit = item_info.get('weekly_limit', 1)
             already_purchased = boss_limit.get_weekly_purchases(user_id, item_id)
             msg = f"编号:{item_id}\n"
@@ -1427,7 +1435,7 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             cost = boss_integral_shop[str(shop_id)]['cost']
             weekly_limit = boss_integral_shop[str(shop_id)].get('weekly_limit', 1)
             item_id = shop_id
-            item_info = Items().get_data_by_item_id(item_id)
+            item_info = _items().get_data_by_item_id(item_id)
     else:
         msg = f"世界积分商店内空空如也！"
         await handle_send(bot, event, msg)
