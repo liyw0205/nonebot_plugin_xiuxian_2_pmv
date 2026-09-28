@@ -81,6 +81,9 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(work["abort_cleanup_repository_has_no_request_ddl"])
         self.assertTrue(work["abort_cleanup_migration_registered"])
         self.assertTrue(work["legacy_abort_cleanup_isolated_with_compatibility_export"])
+        self.assertTrue(work["claim_default_entry_owned"])
+        self.assertTrue(work["claim_repository_has_no_request_ddl"])
+        self.assertTrue(work["claim_migration_registered"])
         self.assertTrue(work["item_use_migrations_registered"])
         activity = slices["activity_reward"]
         self.assertTrue(activity["claim_all_application_owned"])

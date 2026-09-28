@@ -969,6 +969,23 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("class WorkAbortCleanupService", transaction)
         self.assertIn("class WorkAbortCleanupService", legacy)
 
+    def test_work_claim_schema_is_prepared_by_startup_migration(self) -> None:
+        repository = (SOURCE_ROOT / "features" / "work" / "claim_repository.py").read_text(
+            encoding="utf-8"
+        )
+        migrations = (SOURCE_ROOT / "features" / "work" / "migrations.py").read_text(
+            encoding="utf-8"
+        )
+        plugin = (SOURCE_ROOT / "plugin.py").read_text(encoding="utf-8")
+        facade = (SOURCE_ROOT / "xiuxian" / "xiuxian_work" / "__init__.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("work_claim_application.claim(", facade)
+        self.assertNotIn("CREATE TABLE", repository)
+        self.assertNotIn("ALTER TABLE", repository)
+        self.assertIn("def apply_work_claim_operations(", migrations)
+        self.assertIn('Migration("work.007", "work_claim_operations", apply_work_claim_operations)', plugin)
+
     def test_impart_facade_defers_sql_manager_construction(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_impart" / "__init__.py").read_text(
             encoding="utf-8"

@@ -19,6 +19,17 @@ class WorkClaimSqlRepository:
     def __init__(self, database: str | Path) -> None:
         self.database = str(database)
 
+    @staticmethod
+    def _schema_ready(uow: DatabaseUnitOfWork) -> bool:
+        tables = {
+            str(row["name"])
+            for row in uow.query_all(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name IN ('work_claim_operations','work_active_snapshots')"
+            )
+        }
+        return tables == {"work_claim_operations", "work_active_snapshots"}
+
     def claim(self, operation_id: str, user_id: str, expected_count: int, expected_offer: Mapping, task_index: int, started_at: str) -> WorkClaimResult:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         expected_count, task_index = int(expected_count), int(task_index)
@@ -28,9 +39,11 @@ class WorkClaimSqlRepository:
         names = list(tasks)
         task_name = names[task_index - 1]
         payload = json.dumps([user_id, task_index], ensure_ascii=False, separators=(",", ":"))
+        if not Path(self.database).is_file():
+            return WorkClaimResult("schema_missing")
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            uow.execute("CREATE TABLE IF NOT EXISTS work_claim_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,task_name TEXT NOT NULL,started_at TEXT NOT NULL,remaining_count INTEGER NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
-            uow.execute("CREATE TABLE IF NOT EXISTS work_active_snapshots(user_id TEXT PRIMARY KEY,snapshot TEXT NOT NULL,updated_at TEXT NOT NULL)")
+            if not self._schema_ready(uow):
+                return WorkClaimResult("schema_missing")
             previous = uow.query_one("SELECT payload,task_name,started_at,remaining_count FROM work_claim_operations WHERE operation_id=?", (operation_id,))
             if previous is not None:
                 if str(previous["payload"]) != payload:

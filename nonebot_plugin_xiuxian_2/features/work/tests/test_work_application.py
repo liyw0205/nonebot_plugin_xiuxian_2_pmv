@@ -88,6 +88,35 @@ class WorkClaimApplicationTests(unittest.TestCase):
             self.assertEqual(second.code, "state_changed")
             self.assertEqual(repository.calls, 1)
 
+    def test_claim_schema_missing_is_explicit_without_request_ddl(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "game.db"
+            with DatabaseUnitOfWork(database) as uow:
+                uow.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,work_num INTEGER)")
+                uow.execute("CREATE TABLE user_cd(user_id TEXT PRIMARY KEY,type INTEGER,create_time TEXT,scheduled_time TEXT)")
+                uow.execute("INSERT INTO user_xiuxian VALUES('u',3)")
+                uow.execute("INSERT INTO user_cd VALUES('u',0,'0',NULL)")
+                OperationLedger().ensure_schema(uow)
+
+            outcome = WorkClaimApplication(database).claim(
+                operation_id="missing-schema",
+                user_id="u",
+                expected_count=3,
+                expected_offer={"tasks": {"采药": {"time": 5}}},
+                task_index=1,
+                started_at="2026-09-28 10:00:00",
+            )
+
+            self.assertEqual(outcome.code, "schema_missing")
+            self.assertIn("尚未完成升级", outcome.message)
+            with DatabaseUnitOfWork(database, read_only=True) as uow:
+                tables = {
+                    str(row["name"])
+                    for row in uow.query_all("SELECT name FROM sqlite_master WHERE type='table'")
+                }
+            self.assertNotIn("work_claim_operations", tables)
+            self.assertNotIn("work_active_snapshots", tables)
+
 
 if __name__ == "__main__":
     unittest.main()

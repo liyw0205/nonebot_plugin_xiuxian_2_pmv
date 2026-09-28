@@ -18,12 +18,12 @@
 
 ## 数据模型与迁移
 
-`work.001` 写入功能迁移标记；`work.003` 在 game DB 创建 `work_item_use_operations`，`work.004` 用 `CREATE TABLE IF NOT EXISTS` 建立兼容现有数据的 `work_offer_snapshots`，`work.005` 预建 `work_refresh_operations` 并保留已有刷新回执，`work.006` 预建 `work_active_snapshots` 和 `work_abort_cleanup_operations`，保留已有快照与清理回执。
+`work.001` 写入功能迁移标记；`work.003` 在 game DB 创建 `work_item_use_operations`，`work.004` 用 `CREATE TABLE IF NOT EXISTS` 建立兼容现有数据的 `work_offer_snapshots`，`work.005` 预建 `work_refresh_operations` 并保留已有刷新回执，`work.006` 预建 `work_active_snapshots` 和 `work_abort_cleanup_operations`，保留已有快照与清理回执，`work.007` 预建 `work_claim_operations` 并保留已有接取回执。
 悬赏令加速道具与追捕令都经 `WorkItemUseApplication -> WorkItemUseSqlRepository`；加速原子扣除一个道具并将已接取悬赏的开始时间置为立即可结算，追捕令原子扣除道具并保存随机 offer 与首次奖励倍率。两种动作都按库存快照校验，捕获令重放返回首次保存的 offer 和倍率。`work.002` 负责每日刷新重置；接取/结算兼容仓储维护 `work_claim_operations`、`work_active_snapshots` 与结算操作表，历史 JSON 仅作为兼容读取/展示投影。
 
 ## 事务与失败回滚
 
-接取、结算 application 在 `game_db.operation_ledger` 记录请求；物品 repository 以一个 `BEGIN IMMEDIATE` 事务校验用户、道具库存和工作状态，再原子更新背包、`user_cd.create_time` 或 offer 快照及 operation 结果。刷新由 `WorkRefreshApplication -> WorkRefreshSqlRepository` 在一个 `BEGIN IMMEDIATE` 事务中校验刷新次数、冷却和旧 offer，原子更新次数、固定快照与刷新回执；`work.005` 缺失时返回 `schema_missing`，请求路径不建表。终止/过期清理/重置由 `WorkAbortCleanupApplication -> WorkAbortCleanupSqlRepository` 在 game DB 的 `BEGIN IMMEDIATE` 中校验冷却、offer 和灵石快照，再原子应用惩罚、清除 cooldown/active/offer projection 并写清理回执；`work.006` 缺失时返回 `schema_missing`，请求路径不建表。惩罚不超过当前灵石，重复操作重放首次结果，状态冲突不改资产，晚期 SQL 错误完整回滚。追捕令随机结果与倍率只在首次请求持久化，随机重抽不破坏同 operation 重放；随后仅更新旧 JSON 展示投影。`reward_data_source` 不再请求期创建 `work_offer_snapshots`；有 schema 时可将历史 JSON 导入数据库，无 schema 时只读旧 JSON，写入需先完成迁移。
+接取、结算 application 在 `game_db.operation_ledger` 记录请求；接取 repository 以一个 `BEGIN IMMEDIATE` 事务校验用户、冷却和 offer，更新 active snapshot 并写接取回执；`work.007` 缺失时返回 `schema_missing`，请求路径不建表。物品 repository 以一个 `BEGIN IMMEDIATE` 事务校验用户、道具库存和工作状态，再原子更新背包、`user_cd.create_time` 或 offer 快照及 operation 结果。刷新由 `WorkRefreshApplication -> WorkRefreshSqlRepository` 在一个 `BEGIN IMMEDIATE` 事务中校验刷新次数、冷却和旧 offer，原子更新次数、固定快照与刷新回执；`work.005` 缺失时返回 `schema_missing`，请求路径不建表。终止/过期清理/重置由 `WorkAbortCleanupApplication -> WorkAbortCleanupSqlRepository` 在 game DB 的 `BEGIN IMMEDIATE` 中校验冷却、offer 和灵石快照，再原子应用惩罚、清除 cooldown/active/offer projection 并写清理回执；`work.006` 缺失时返回 `schema_missing`，请求路径不建表。惩罚不超过当前灵石，重复操作重放首次结果，状态冲突不改资产，晚期 SQL 错误完整回滚。追捕令随机结果与倍率只在首次请求持久化，随机重抽不破坏同 operation 重放；随后仅更新旧 JSON 展示投影。`reward_data_source` 不再请求期创建 `work_offer_snapshots`；有 schema 时可将历史 JSON 导入数据库，无 schema 时只读旧 JSON，写入需先完成迁移。
 
 ## 定时任务
 

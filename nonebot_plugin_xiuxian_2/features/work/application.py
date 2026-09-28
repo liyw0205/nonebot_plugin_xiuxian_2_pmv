@@ -91,6 +91,7 @@ class WorkClaimApplication:
                         "state_changed": "悬赏次数或列表已更新，请先发送【悬赏令】再操作。",
                         "user_missing": "未找到修仙数据。",
                         "operation_conflict": "接取请求已失效，请重新接取悬赏。",
+                        "schema_missing": "悬赏数据结构尚未完成升级，请联系管理员。",
                     }
                     outcome = OperationOutcome.rejected(
                         request.operation_id,
