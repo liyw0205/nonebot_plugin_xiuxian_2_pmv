@@ -131,14 +131,6 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
     user_id = user_info['user_id']
-    try:
-        bankinfo = readf(user_id)
-    except Exception:
-        bankinfo = {
-            'savestone': 0,
-            'savetime': str(runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')),
-            'banklevel': '1',
-        }
 
     if mode == '存灵石':  # 存灵石逻辑
         event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
@@ -184,6 +176,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
 
+        bankinfo = _read_legacy_bankinfo(user_id)
         max = BANKLEVEL[bankinfo['banklevel']]['savemax']
         nowmax = max - bankinfo['savestone']
 
@@ -272,6 +265,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
 
+        bankinfo = _read_legacy_bankinfo(user_id)
         if int(bankinfo['savestone']) < num:
             msg = f"道友当前灵庄所存有的灵石为{bankinfo['savestone']}枚，金额不足，请重新输入！"
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
@@ -361,6 +355,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await handle_send(bot, event, msg, md_type="灵庄", k1="升级", v1="灵庄升级会员", k2="信息", v2="灵庄信息", k3="帮助", v3="灵庄帮助")
             await bank.finish()
 
+        bankinfo = _read_legacy_bankinfo(user_id)
         userlevel = bankinfo["banklevel"]
         if userlevel == str(len(BANKLEVEL)):
             msg = f"道友已经是本灵庄最大的会员啦！"
@@ -429,6 +424,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
 '''
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="结算", v3="灵庄结算")
             await bank.finish()
+        bankinfo = _read_legacy_bankinfo(user_id)
         msg = f'''**灵庄信息**
 ---
 已存
@@ -489,6 +485,7 @@ async def bank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: 
             await handle_send(bot, event, msg, md_type="灵庄", k1="存灵石", v1="灵庄存灵石", k2="取灵石", v2="灵庄取灵石", k3="信息", v3="灵庄信息")
             await bank.finish()
 
+        bankinfo = _read_legacy_bankinfo(user_id)
         expected_saved_stone = bankinfo['savestone']
         expected_saved_at = bankinfo['savetime']
         bankinfo, give_stone, timedeff = get_give_stone(bankinfo)
@@ -560,6 +557,17 @@ def readf(user_id):
         "savetime": str(savetime),
         "banklevel": banklevel,
     }
+
+
+def _read_legacy_bankinfo(user_id):
+    try:
+        return readf(user_id)
+    except Exception:
+        return {
+            'savestone': 0,
+            'savetime': str(runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')),
+            'banklevel': '1',
+        }
 
 
 def savef(user_id, data):

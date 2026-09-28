@@ -740,7 +740,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "mode=ro" in bank_legacy_receipts
                 and "CREATE TABLE" not in bank_legacy_receipts
             ),
-            "status": "deposit_withdrawal_upgrade_interest_cutover_with_legacy_receipt_read_only",
+            "legacy_account_read_deferred": (
+                "bankinfo = readf(user_id)" not in bank_facade
+                and bank_facade.count("_read_legacy_bankinfo(user_id)") == 5
+            ),
+            "status": "deposit_withdrawal_upgrade_interest_cutover_with_legacy_reads_deferred",
         },
         "map": {
             "interactive_application_owned": "map_application.interactive_settlement(" in map_facade and "map_application.interactive_start(" in map_facade,
