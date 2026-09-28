@@ -171,6 +171,8 @@ compileall、architecture、inventory、diff check 与五库 recovery 通过；�
 
 ## 当前切片与下一切片选择
 
+当前执行基线（2026-09-29）：最近完成 bank 升级/结息历史回执只读边界。默认 fallback 以短生命周期只读连接查既有旧回执，缺表不再请求期建表；兼容 API 与 duplicate 结果保留。该切片没有 migration 或业务写入，不代表 bank 的旧账户/存取款 fallback 已完成迁移。下一项按实时调用图审计仍可达的 `xiuxian2_handle`/legacy transaction 默认路径，选一个窄边界；真实发布数据 migration、recovery/reconcile 和 P7 证据仍是全局退出 blocker。
+
 最近完成 `work abort cleanup application cutover`：终止、未接/过期悬赏清理与重置改经 `WorkAbortCleanupApplication -> WorkAbortCleanupSqlRepository`；旧 service 移至 compatibility 模块并保留 transaction API re-export。game-only `work.006` 预建 active snapshot 与 cleanup ledger，缺 migration 时拒绝写入且不在请求期建表。聚焦回归 `68 passed`、source-quality `5 passed`、progress `1 passed`；compileall、inventory、progress、隔离 architecture (`ok=true`) 与 diff check 通过。五库 recovery 覆盖 197 项 migration，全部 applied、pending 为空，`work.006` 仅路由 game DB，reconcile clean。pytest、字节码、recovery 和 architecture 临时产物收尾时清理，未触碰仓库 `data/`、运行数据库或用户 `boss_info.json`。下一片迁移 `WorkClaimSqlRepository` 的 claim/active-snapshot 请求期 schema 到启动 migration；settlement schema、全局 legacy transaction services、`xiuxian2_handle` 与真实发布迁移/P7 仍开放。
 
 最近完成 `work claim startup-schema boundary`：默认接取继续经 `WorkClaimApplication -> WorkClaimSqlRepository`，请求路径不再创建 claim operation/active snapshot 表；新增 game-only `work.007` 启动迁移并保留历史回执，缺 schema 返回 `schema_missing`。聚焦回归 `71 passed`、source-quality `6 passed`、progress `1 passed`；compileall、inventory、progress、隔离 architecture (`ok=true`) 与 diff check 通过。五库 recovery 覆盖 198 项 migration，全部 applied、pending 为空，`work.007` 仅路由 game DB，backup/restore 与 reconcile clean。测试、恢复和字节码临时产物收尾时清理，未触碰仓库 `data/`、运行数据库或用户 `boss_info.json`。下一片审计 `WorkSettlementSqlRepository` 的请求期 schema/历史列补齐；settlement 事务 ownership、全局 legacy transaction services、`xiuxian2_handle` 和真实发布迁移/P7 仍开放。

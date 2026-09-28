@@ -23,8 +23,8 @@ class BankDepositServiceTests(unittest.TestCase):
         self.assertIn("BankDepositApplication", handler)
         self.assertNotIn("bank_application.deposit(", handler)
         self.assertIsNone(xiuxian_bank._bank_withdrawal_service_instance)
-        self.assertIsNone(xiuxian_bank._bank_upgrade_service_instance)
-        self.assertIsNone(xiuxian_bank._bank_interest_service_instance)
+        self.assertFalse(hasattr(xiuxian_bank, "_bank_upgrade_service"))
+        self.assertFalse(hasattr(xiuxian_bank, "_bank_interest_service"))
 
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()

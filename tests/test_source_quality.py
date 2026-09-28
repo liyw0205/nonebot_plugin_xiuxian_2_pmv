@@ -2723,8 +2723,9 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("sql_message =", source)
         self.assertIn("_bank_deposit_service().get_result", source)
         self.assertIn("_bank_withdrawal_service().get_result", source)
-        self.assertIn("_bank_upgrade_service().get_result", source)
-        self.assertIn("_bank_interest_service().get_result", source)
+        self.assertNotIn("_bank_upgrade_service().get_result", source)
+        self.assertNotIn("_bank_interest_service().get_result", source)
+        self.assertIn("LegacyBankOperationReceiptRepository", source)
 
     def test_bank_default_application_does_not_construct_legacy_repository(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")

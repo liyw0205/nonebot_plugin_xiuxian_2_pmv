@@ -157,6 +157,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dungeon_repository = (PACKAGE / "features" / "dungeon" / "repository.py").read_text(encoding="utf-8")
     dungeon_manager = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "dungeon_manager.py").read_text(encoding="utf-8")
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
+    bank_legacy_receipts = (PACKAGE / "compatibility" / "legacy_bank_operation_receipts.py").read_text(encoding="utf-8")
     map_facade = (PACKAGE / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
     map_application = (PACKAGE / "features" / "map" / "application.py").read_text(encoding="utf-8")
     map_reward_resolver = (PACKAGE / "features" / "map" / "rewards.py").read_text(encoding="utf-8")
@@ -731,7 +732,15 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_withdrawal_disabled": "bank_withdrawal_service.withdraw(" not in bank_facade,
             "legacy_upgrade_disabled": "bank_upgrade_service.upgrade(" not in bank_facade,
             "legacy_interest_disabled": "bank_interest_service.settle(" not in bank_facade,
-            "status": "deposit_withdrawal_upgrade_interest_cutover",
+            "upgrade_interest_receipts_read_only": (
+                "get_upgrade_result(operation_id)" in bank_facade
+                and "get_interest_result(operation_id)" in bank_facade
+                and "_bank_upgrade_service().get_result" not in bank_facade
+                and "_bank_interest_service().get_result" not in bank_facade
+                and "mode=ro" in bank_legacy_receipts
+                and "CREATE TABLE" not in bank_legacy_receipts
+            ),
+            "status": "deposit_withdrawal_upgrade_interest_cutover_with_legacy_receipt_read_only",
         },
         "map": {
             "interactive_application_owned": "map_application.interactive_settlement(" in map_facade and "map_application.interactive_start(" in map_facade,
