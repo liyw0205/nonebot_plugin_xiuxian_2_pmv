@@ -2721,6 +2721,8 @@ class SourceQualityTests(unittest.TestCase):
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(
             encoding="utf-8"
         )
+        self.assertNotIn("PlayerDataManager", source)
+        self.assertNotIn("_player_data_manager", source)
         self.assertNotIn("XiuxianDateManage", source)
         self.assertNotIn("sql_message =", source)
         self.assertIn("get_deposit_result(operation_id)", source)

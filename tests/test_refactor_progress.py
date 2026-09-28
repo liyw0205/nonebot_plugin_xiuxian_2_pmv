@@ -116,7 +116,9 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(bank["legacy_upgrade_disabled"])
         self.assertTrue(bank["legacy_interest_disabled"])
         self.assertTrue(bank["legacy_operation_receipts_read_only"])
+        self.assertTrue(bank["legacy_account_read_deferred"])
         self.assertTrue(bank["legacy_account_read_feature_owned"])
+        self.assertTrue(bank["legacy_account_write_compatibility_isolated"])
         map_slice = slices["map"]
         self.assertTrue(map_slice["interactive_application_owned"])
         self.assertTrue(map_slice["resource_application_owned"])

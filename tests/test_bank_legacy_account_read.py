@@ -66,5 +66,39 @@ class BankLegacyAccountReadTests(unittest.TestCase):
         )
 
 
+class LegacyBankAccountStorageCompatibilityTests(unittest.TestCase):
+    def test_savef_keeps_legacy_field_updates_behind_compatibility_module(self) -> None:
+        import nonebot
+        from unittest.mock import patch
+
+        try:
+            nonebot.get_driver()
+        except ValueError:
+            nonebot.init()
+
+        from nonebot_plugin_xiuxian_2.compatibility import legacy_bank_account_storage
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_bank import savef
+
+        class Manager:
+            def __init__(self) -> None:
+                self.updates = []
+
+            def update_or_write_data(self, *args, **kwargs) -> None:
+                self.updates.append((args, kwargs))
+
+        manager = Manager()
+        with patch.object(legacy_bank_account_storage, "_resolve_player_data_manager", return_value=manager):
+            self.assertTrue(savef("u", {"savestone": 8, "savetime": "then", "banklevel": "2"}))
+
+        self.assertEqual(
+            manager.updates,
+            [
+                (("u", "bankinfo", "savestone", 8), {"data_type": "INTEGER"}),
+                (("u", "bankinfo", "savetime", "then"), {"data_type": "TEXT"}),
+                (("u", "bankinfo", "banklevel", "2"), {"data_type": "TEXT"}),
+            ],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

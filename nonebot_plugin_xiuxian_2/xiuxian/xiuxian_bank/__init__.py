@@ -20,7 +20,6 @@ from ..adapter_compat import (
     MessageSegment,
 )
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
-from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
 from datetime import datetime
 from .bankconfig import get_config
 from ..xiuxian_utils.utils import check_user, get_msg_pic, handle_send, send_help_message
@@ -30,7 +29,6 @@ from ...features.bank.application import BankApplication
 
 config = get_config()
 BANKLEVEL = config["BANKLEVEL"]
-_player_data_manager_instance = None
 bank_application = BankApplication(
     get_paths().game_db,
     get_paths().player_db,
@@ -38,25 +36,6 @@ bank_application = BankApplication(
 runtime_clock = SystemClock()
 runtime_ids = UUIDGenerator()
 PLAYERSDATA = get_paths().players
-
-
-def _resolve_player_data_manager():
-    global _player_data_manager_instance
-    if _player_data_manager_instance is None:
-        _player_data_manager_instance = PlayerDataManager()
-    return _player_data_manager_instance
-
-
-class _LazyPlayerDataManager:
-    def __getattr__(self, name):
-        return getattr(_resolve_player_data_manager(), name)
-
-
-player_data_manager = _LazyPlayerDataManager()
-
-
-def _player_data_manager():
-    return player_data_manager
 
 
 bank = on_regex(
@@ -543,9 +522,6 @@ def _read_legacy_bankinfo(user_id):
 
 
 def savef(user_id, data):
-    """保存灵庄信息到动态数据库"""
-    user_id = str(user_id)
-    _player_data_manager().update_or_write_data(user_id, "bankinfo", "savestone", int(data.get("savestone", 0)), data_type="INTEGER")
-    _player_data_manager().update_or_write_data(user_id, "bankinfo", "savetime", str(data.get("savetime", runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S'))), data_type="TEXT")
-    _player_data_manager().update_or_write_data(user_id, "bankinfo", "banklevel", str(data.get("banklevel", "1")), data_type="TEXT")
-    return True
+    from ...compatibility.legacy_bank_account_storage import savef as legacy_savef
+
+    return legacy_savef(user_id, data)

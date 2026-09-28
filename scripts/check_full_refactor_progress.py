@@ -157,9 +157,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dungeon_repository = (PACKAGE / "features" / "dungeon" / "repository.py").read_text(encoding="utf-8")
     dungeon_manager = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "dungeon_manager.py").read_text(encoding="utf-8")
     bank_facade = (PACKAGE / "xiuxian" / "xiuxian_bank" / "__init__.py").read_text(encoding="utf-8")
+    bank_handler = bank_facade[bank_facade.index("async def bank_") : bank_facade.index("def get_give_stone")]
     bank_account_info_application = (PACKAGE / "features" / "bank" / "account_info_application.py").read_text(encoding="utf-8")
     bank_legacy_account_repository = (PACKAGE / "features" / "bank" / "legacy_account_repository.py").read_text(encoding="utf-8")
     bank_legacy_receipts = (PACKAGE / "compatibility" / "legacy_bank_operation_receipts.py").read_text(encoding="utf-8")
+    bank_legacy_account_storage = (PACKAGE / "compatibility" / "legacy_bank_account_storage.py").read_text(encoding="utf-8")
     map_facade = (PACKAGE / "xiuxian" / "xiuxian_map" / "__init__.py").read_text(encoding="utf-8")
     map_application = (PACKAGE / "features" / "map" / "application.py").read_text(encoding="utf-8")
     map_reward_resolver = (PACKAGE / "features" / "map" / "rewards.py").read_text(encoding="utf-8")
@@ -748,7 +750,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "legacy_account_read_deferred": (
                 "bankinfo = readf(user_id)" not in bank_facade
-                and bank_facade.count("_read_legacy_bankinfo(user_id)") == 5
+                and bank_handler.count("_read_legacy_bankinfo(user_id)") == 5
             ),
             "legacy_account_read_feature_owned": (
                 "_player_data_manager().get_fields(" not in bank_facade
@@ -758,7 +760,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "SELECT * FROM \"bankinfo\" WHERE user_id=?" in bank_legacy_account_repository
                 and "CREATE TABLE" not in bank_legacy_account_repository
             ),
-            "status": "bank_legacy_receipts_read_only_and_legacy_account_reads_feature_owned",
+            "legacy_account_write_compatibility_isolated": (
+                "PlayerDataManager" not in bank_facade
+                and "legacy_bank_account_storage" in bank_facade
+                and "def savef(" in bank_legacy_account_storage
+                and "update_or_write_data(" in bank_legacy_account_storage
+            ),
+            "status": "bank_legacy_receipts_read_only_account_reads_feature_owned_and_writer_compatibility_isolated",
         },
         "map": {
             "interactive_application_owned": "map_application.interactive_settlement(" in map_facade and "map_application.interactive_start(" in map_facade,

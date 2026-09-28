@@ -8,11 +8,10 @@ class BankStorageLazyReaderTests(unittest.TestCase):
             Path(__file__).parents[1]
             / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_bank/__init__.py"
         ).read_text(encoding="utf-8")
-        self.assertIn("_player_data_manager_instance = None", source)
-        self.assertIn("def _player_data_manager(", source)
-        self.assertNotIn("player_data_manager = PlayerDataManager()", source)
+        self.assertNotIn("PlayerDataManager", source)
+        self.assertNotIn("_player_data_manager", source)
         self.assertNotIn("_player_data_manager().get_fields(", source)
-        self.assertIn("_player_data_manager().update_or_write_data(", source)
+        self.assertIn("legacy_bank_account_storage", source)
         self.assertIn("get_legacy_info(", source)
 
     def test_bank_reads_legacy_account_only_after_new_account_path(self):
