@@ -20,6 +20,19 @@ from tests.test_db_backend import db_backend
 
 
 class TaskRewardClaimTests(unittest.TestCase):
+    def test_transaction_module_reexports_compatibility_objects_by_identity(self) -> None:
+        from nonebot_plugin_xiuxian_2.compatibility.legacy_task_transactions import (
+            TaskRewardClaimResult as CompatibilityResult,
+            TaskRewardClaimService as CompatibilityService,
+        )
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tasks.transaction_service import (
+            TaskRewardClaimResult as LegacyResult,
+            TaskRewardClaimService as LegacyService,
+        )
+
+        self.assertIs(LegacyService, CompatibilityService)
+        self.assertIs(LegacyResult, CompatibilityResult)
+
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         root = Path(self.temp.name)

@@ -78,8 +78,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     sign_application = (PACKAGE / "features" / "sign_in" / "application.py").read_text(encoding="utf-8")
     tasks_entry = (PACKAGE / "xiuxian" / "xiuxian_tasks" / "task_data.py").read_text(encoding="utf-8")
     tasks_transaction = (PACKAGE / "xiuxian" / "xiuxian_tasks" / "transaction_service.py").read_text(encoding="utf-8")
-    tasks_claim = tasks_transaction[
-        tasks_transaction.index("class TaskRewardClaimService") : tasks_transaction.index(
+    tasks_legacy_transactions = (PACKAGE / "compatibility" / "legacy_task_transactions.py").read_text(encoding="utf-8")
+    tasks_claim = tasks_legacy_transactions[
+        tasks_legacy_transactions.index("class TaskRewardClaimService") : tasks_legacy_transactions.index(
             "class LegacyTaskProgressEventService"
         )
     ]
@@ -433,8 +434,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "claim_request_path_has_no_ddl": "CREATE TABLE" not in tasks_claim and "ALTER TABLE" not in tasks_claim and "CREATE TABLE" not in tasks_claim_repository and "ALTER TABLE" not in tasks_claim_repository,
             "claim_request_path_avoids_attached_transaction": "ATTACH DATABASE" not in tasks_claim_application and "ATTACH DATABASE" not in tasks_claim_repository,
             "claim_schema_migrations_owned": "task_reward_claim_operations" in tasks_migrations and "sect_contribution_delta" in tasks_migrations,
-            "reward_claim_legacy_boundary": "class TaskRewardClaimService" in tasks_transaction,
-            "legacy_progress_implementation_retained": "class LegacyTaskProgressEventService" in tasks_transaction,
+            "reward_claim_legacy_boundary": "class TaskRewardClaimService" not in tasks_transaction and "class TaskRewardClaimService" in tasks_legacy_transactions and "from ...compatibility.legacy_task_transactions import" in tasks_transaction,
+            "legacy_progress_implementation_retained": "class LegacyTaskProgressEventService" not in tasks_transaction and "class LegacyTaskProgressEventService" in tasks_legacy_transactions,
+            "legacy_transaction_reexports_explicit": "from ...compatibility.legacy_task_transactions import" in tasks_transaction and "TaskProgressEventService = TasksProgressRepository" in tasks_transaction,
             "status": "daily_weekly_progress_and_claim_saga_cutover; task_definition_adapter_and_legacy_service_retained_for_compatibility",
         },
         "entertainment": {

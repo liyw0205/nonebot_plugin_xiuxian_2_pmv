@@ -259,6 +259,18 @@ def test_task_manager_event_path_uses_feature_application(tmp_path: Path) -> Non
     assert states["weekly"][0] == {"weekly_work": 1}
 
 
+def test_legacy_transaction_module_reexports_compatibility_identity() -> None:
+    from nonebot_plugin_xiuxian_2.compatibility.legacy_task_transactions import (
+        LegacyTaskProgressEventService as CompatibilityService,
+    )
+    from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_tasks.transaction_service import (
+        LegacyTaskProgressEventService as LegacyService,
+    )
+
+    assert LegacyService is CompatibilityService
+    assert TaskProgressEventService is TasksProgressRepository
+
+
 def test_production_entries_use_batched_idempotent_task_events() -> None:
     root = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2/xiuxian"
     task_source = (root / "xiuxian_tasks/task_data.py").read_text(encoding="utf-8")

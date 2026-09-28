@@ -34,6 +34,8 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(tasks["claim_request_path_avoids_attached_transaction"])
         self.assertTrue(tasks["claim_schema_migrations_owned"])
         self.assertTrue(tasks["reward_claim_legacy_boundary"])
+        self.assertTrue(tasks["legacy_progress_implementation_retained"])
+        self.assertTrue(tasks["legacy_transaction_reexports_explicit"])
         tower = slices["tower"]
         self.assertTrue(tower["state_application_owned"])
         self.assertTrue(tower["legacy_state_owner_disabled"])
