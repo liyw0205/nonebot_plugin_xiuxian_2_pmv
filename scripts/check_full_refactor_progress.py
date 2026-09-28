@@ -161,6 +161,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
     bank_account_info_application = (PACKAGE / "features" / "bank" / "account_info_application.py").read_text(encoding="utf-8")
     bank_account_bootstrap = (PACKAGE / "features" / "bank" / "account_bootstrap_application.py").read_text(encoding="utf-8")
     bank_account_repository = (PACKAGE / "features" / "bank" / "account_repository.py").read_text(encoding="utf-8")
+    bank_account_applications = "\n".join(
+        (PACKAGE / "features" / "bank" / name).read_text(encoding="utf-8")
+        for name in ("account_application.py", "account_withdrawal_application.py", "account_upgrade_application.py", "account_interest_application.py")
+    )
     bank_migrations = (PACKAGE / "features" / "bank" / "migrations.py").read_text(encoding="utf-8")
     bank_legacy_account_repository = (PACKAGE / "features" / "bank" / "legacy_account_repository.py").read_text(encoding="utf-8")
     bank_legacy_receipts = (PACKAGE / "compatibility" / "legacy_bank_operation_receipts.py").read_text(encoding="utf-8")
@@ -776,6 +780,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "CREATE TABLE" not in bank_account_repository
                 and 'Migration("bank.002", "bank_accounts", apply_bank_accounts)' in plugin
                 and all(table in bank_migrations for table in ("bank_accounts", "bank_account_operations"))
+            ),
+            "account_writes_require_startup_schema": (
+                bank_account_applications.count("self.repository.assert_schema_ready(uow)") == 4
+                and "CREATE TABLE" not in bank_account_applications
             ),
             "status": "bank_legacy_reads_and_writer_isolated_with_account_schema_startup_owned",
         },

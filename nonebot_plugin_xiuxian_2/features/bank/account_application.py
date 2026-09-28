@@ -23,6 +23,7 @@ class BankDepositApplication:
             raise ValueError("operation_id and user_id are required")
         payload = json.dumps([user_id, int(amount), int(interest), int(limit), str(bank_level)], separators=(",", ":"), sort_keys=False)
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            self.repository.assert_schema_ready(uow)
             previous = self.repository.operation(uow, operation_id)
             if previous is not None:
                 if previous["payload"] != payload:

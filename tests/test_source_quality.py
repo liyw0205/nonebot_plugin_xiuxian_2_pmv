@@ -2755,6 +2755,17 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("CREATE TABLE", repository)
         self.assertIn("bank.002 schema_missing", repository)
 
+    def test_bank_account_writes_require_startup_schema(self) -> None:
+        for filename in (
+            "account_application.py",
+            "account_withdrawal_application.py",
+            "account_upgrade_application.py",
+            "account_interest_application.py",
+        ):
+            source = (SOURCE_ROOT / "features" / "bank" / filename).read_text(encoding="utf-8")
+            self.assertIn("self.repository.assert_schema_ready(uow)", source)
+            self.assertNotIn("CREATE TABLE", source)
+
     def test_world_boss_rewards_use_cross_database_transaction(self) -> None:
         boss_root = SOURCE_ROOT / "xiuxian" / "xiuxian_boss"
         source = (boss_root / "__init__.py").read_text(encoding="utf-8")

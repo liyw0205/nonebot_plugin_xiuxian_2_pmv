@@ -39,6 +39,8 @@ def create_first_use_blueprint(*, application: Any, permission) -> Blueprint:
             return api_error("validation_error", str(exc), status=400)
         except DomainError as exc:
             return api_error(exc.code, exc.message, details=exc.details, status=400)
+        except RuntimeError as exc:
+            return api_error("schema_missing", str(exc), status=503)
         return api_success(outcome, status=200 if outcome.get("status") in {"applied", "duplicate"} else 409)
 
     return router
@@ -65,6 +67,8 @@ def create_upgrade_blueprint(*, application: Any, permission) -> Blueprint:
             )
         except (TypeError, ValueError) as exc:
             return api_error("validation_error", str(exc), status=400)
+        except RuntimeError as exc:
+            return api_error("schema_missing", str(exc), status=503)
         status = 200 if outcome.get("status") in {"applied", "duplicate"} else 409
         return api_success(outcome, status=status)
 
@@ -88,6 +92,8 @@ def create_interest_blueprint(*, application: Any, permission) -> Blueprint:
             outcome = application.settle_interest(operation_id=operation_id, user_id=str(payload.get("user_id", "")), interest=int(str(value)), bank_level=str(payload.get("bank_level", "1")), settled_at=str(payload.get("settled_at", "")))
         except (TypeError, ValueError) as exc:
             return api_error("validation_error", str(exc), status=400)
+        except RuntimeError as exc:
+            return api_error("schema_missing", str(exc), status=503)
         status = 200 if outcome.get("status") in {"applied", "duplicate"} else 409
         return api_success(outcome, status=status)
 
@@ -105,6 +111,8 @@ def create_info_blueprint(*, application: Any, permission) -> Blueprint:
             outcome = application.get_info(user_id=user_id)
         except (TypeError, ValueError) as exc:
             return api_error("validation_error", str(exc), status=400)
+        except RuntimeError as exc:
+            return api_error("schema_missing", str(exc), status=503)
         return api_success(outcome, status=200 if outcome.get("status") == "ok" else 404)
 
     return router
