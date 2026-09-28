@@ -7,13 +7,17 @@ from typing import Any, Mapping, Protocol
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from .domain import DemonEventLifecycleResult
-
-STATE_FIELDS = (
-    "active", "status", "event_id", "event_type", "name", "period", "manual",
-    "bosses", "participants", "claimed", "started_at", "ends_at", "last_result",
+from .event_state import (
+    INTEGER_FIELDS,
+    JSON_FIELDS,
+    STATE_FIELDS,
+    decode_event_state_value,
+    encode_event_state_value,
+    event_state_schema_ready,
+    read_event_state,
+    verify_event_state,
+    write_event_state,
 )
-JSON_FIELDS = {"bosses", "participants", "claimed"}
-INTEGER_FIELDS = {"active", "manual"}
 
 
 class DemonEventLifecycleRepository(Protocol):
@@ -33,27 +37,11 @@ class DemonEventLifecycleSqlRepository:
 
     @staticmethod
     def _decode(field: str, value: Any) -> Any:
-        if field in JSON_FIELDS:
-            if isinstance(value, (dict, list)):
-                return value
-            try:
-                return json.loads(value or "{}")
-            except (TypeError, ValueError, json.JSONDecodeError):
-                return {}
-        if field in INTEGER_FIELDS:
-            try:
-                return int(value or 0)
-            except (TypeError, ValueError):
-                return 0
-        return str(value or "")
+        return decode_event_state_value(field, value)
 
     @staticmethod
     def _encode(field: str, value: Any) -> Any:
-        if field in JSON_FIELDS:
-            return json.dumps(value or {}, ensure_ascii=False, sort_keys=True)
-        if field in INTEGER_FIELDS:
-            return int(value or 0)
-        return str(value or "")
+        return encode_event_state_value(field, value)
 
     @staticmethod
     def _schema_ready(uow: DatabaseUnitOfWork) -> bool:
@@ -61,48 +49,27 @@ class DemonEventLifecycleSqlRepository:
             row["name"]
             for row in uow.query_all("SELECT name FROM sqlite_master WHERE type='table'")
         }
-        if not {"world_event_state", "demon_event_lifecycle_operations"}.issubset(tables):
-            return False
-        columns = {
-            row["name"] for row in uow.query_all("PRAGMA table_info(world_event_state)")
-        }
-        return {"user_id", *STATE_FIELDS}.issubset(columns)
+        return (
+            "demon_event_lifecycle_operations" in tables
+            and event_state_schema_ready(uow)
+        )
 
     @classmethod
     def _read_state(cls, uow: DatabaseUnitOfWork, event_key: str) -> dict[str, Any] | None:
-        fields = ",".join(f'"{field}"' for field in STATE_FIELDS)
-        row = uow.query_one(
-            f"SELECT {fields} FROM world_event_state WHERE user_id=?", (event_key,)
-        )
-        if row is None:
-            return None
-        return {
-            field: cls._decode(field, row[field])
-            for field in STATE_FIELDS
-        }
+        return read_event_state(uow, event_key)
 
     @classmethod
     def _write_state(cls, uow: DatabaseUnitOfWork, event_key: str, state: Mapping[str, Any]) -> None:
-        assignments = ",".join(f'"{field}"=?' for field in STATE_FIELDS)
-        values = [cls._encode(field, state.get(field)) for field in STATE_FIELDS]
-        changed = uow.execute(
-            f"UPDATE world_event_state SET {assignments} WHERE user_id=?",
-            (*values, event_key),
-        )
-        if changed.rowcount == 0:
-            fields = ",".join(["user_id", *[f'"{field}"' for field in STATE_FIELDS]])
-            marks = ",".join("?" for _ in range(len(STATE_FIELDS) + 1))
-            uow.execute(
-                f"INSERT INTO world_event_state ({fields}) VALUES ({marks})",
-                (event_key, *values),
-            )
+        write_event_state(uow, event_key, state)
 
     @classmethod
     def _verify_state(
         cls, uow: DatabaseUnitOfWork, event_key: str, expected: Mapping[str, Any]
     ) -> None:
-        if cls._read_state(uow, event_key) != dict(expected):
-            raise RuntimeError("demon lifecycle state verification failed")
+        try:
+            verify_event_state(uow, event_key, expected)
+        except RuntimeError as exc:
+            raise RuntimeError("demon lifecycle state verification failed") from exc
 
     def replay(self, operation_id: str) -> DemonEventLifecycleResult | None:
         operation_id = str(operation_id)

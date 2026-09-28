@@ -25,6 +25,13 @@ class DemonEventLifecycleResult:
 
 
 @dataclass(frozen=True)
+class DemonWaveRefreshResult:
+    status: str
+    refreshed_realms: tuple[str, ...] = ()
+    state: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
 class WorldEventClaimResult:
     status: str
     stone: int = 0
@@ -91,6 +98,7 @@ def normalize_items(items: Sequence[Mapping[str, Any]]) -> tuple[dict[str, Any],
 __all__ = [
     "DemonAttackSettlementResult",
     "DemonEventLifecycleResult",
+    "DemonWaveRefreshResult",
     "DemonClaimRequest",
     "WorldEventClaimResult",
     "normalize_items",

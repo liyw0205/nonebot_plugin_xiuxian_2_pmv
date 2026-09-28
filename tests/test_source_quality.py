@@ -2788,14 +2788,17 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("class DemonEventLifecycleService", transaction)
         self.assertIn("class DemonEventLifecycleService", compatibility)
 
-    def test_demon_wave_refresh_uses_lazy_service(self) -> None:
+    def test_demon_wave_refresh_uses_feature_application(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_world_events"
         source = (root / "__init__.py").read_text(encoding="utf-8")
-        self.assertIn("_demon_wave_refresh_service_instance = None", source)
-        self.assertIn("def _demon_wave_refresh_service(", source)
-        self.assertIn("_demon_wave_refresh_service().replay(", source)
-        self.assertIn("_demon_wave_refresh_service().refresh(", source)
-        self.assertNotIn("demon_wave_refresh_service.refresh(", source)
+        self.assertIn("demon_wave_refresh_application = DemonWaveRefreshApplication(", source)
+        self.assertIn("demon_wave_refresh_application.replay(", source)
+        self.assertIn("demon_wave_refresh_application.refresh(", source)
+        self.assertNotIn("DemonWaveRefreshService", source)
+        transaction = (root / "transaction_service.py").read_text(encoding="utf-8")
+        compatibility = (SOURCE_ROOT / "compatibility" / "legacy_demon_wave_refresh.py").read_text(encoding="utf-8")
+        self.assertNotIn("class DemonWaveRefreshService", transaction)
+        self.assertIn("class DemonWaveRefreshService", compatibility)
 
     def test_world_boss_manual_spawn_uses_lazy_service(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_boss"

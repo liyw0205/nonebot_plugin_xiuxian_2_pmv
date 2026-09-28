@@ -8,7 +8,16 @@ from ...core.errors import ConflictError, DomainError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
-from .domain import DemonClaimRequest, DemonEventLifecycleResult, normalize_items
+from .domain import (
+    DemonClaimRequest,
+    DemonEventLifecycleResult,
+    DemonWaveRefreshResult,
+    normalize_items,
+)
+from .wave_refresh_repository import (
+    DemonWaveRefreshRepository,
+    DemonWaveRefreshSqlRepository,
+)
 from .repository import WorldEventClaimRepository, WorldEventClaimSqlRepository
 from .lifecycle_repository import (
     DemonEventLifecycleRepository,
@@ -204,4 +213,39 @@ class DemonEventLifecycleApplication:
         )
 
 
-__all__ = ["DemonClaimApplication", "DemonEventLifecycleApplication"]
+class DemonWaveRefreshApplication:
+    """Feature boundary for replayable demon wave refreshes."""
+
+    def __init__(
+        self,
+        player_database: str | Path,
+        *,
+        repository: DemonWaveRefreshRepository | None = None,
+    ) -> None:
+        self.repository = repository or DemonWaveRefreshSqlRepository(player_database)
+
+    def replay(self, operation_id: str) -> DemonWaveRefreshResult | None:
+        return self.repository.replay(operation_id)
+
+    def refresh(
+        self,
+        operation_id: str,
+        event_key: str,
+        expected_state: Mapping[str, Any],
+        next_bosses: Mapping[str, Mapping[str, Any]],
+        last_result: str,
+    ) -> DemonWaveRefreshResult:
+        return self.repository.refresh(
+            operation_id,
+            event_key,
+            expected_state,
+            next_bosses,
+            last_result,
+        )
+
+
+__all__ = [
+    "DemonClaimApplication",
+    "DemonEventLifecycleApplication",
+    "DemonWaveRefreshApplication",
+]

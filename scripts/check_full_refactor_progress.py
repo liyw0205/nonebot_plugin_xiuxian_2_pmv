@@ -213,10 +213,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
     world_events_attack_application = (PACKAGE / "features" / "world_events" / "attack_application.py").read_text(encoding="utf-8")
     world_events_attack_repository = (PACKAGE / "features" / "world_events" / "attack_repository.py").read_text(encoding="utf-8")
     world_events_lifecycle_repository = (PACKAGE / "features" / "world_events" / "lifecycle_repository.py").read_text(encoding="utf-8")
+    world_events_wave_repository = (PACKAGE / "features" / "world_events" / "wave_refresh_repository.py").read_text(encoding="utf-8")
     world_events_migrations = (PACKAGE / "features" / "world_events" / "migrations.py").read_text(encoding="utf-8")
     world_events_transaction = (PACKAGE / "xiuxian" / "xiuxian_world_events" / "transaction_service.py").read_text(encoding="utf-8")
     world_events_attack_compatibility = (PACKAGE / "compatibility" / "legacy_demon_attack_settlement.py").read_text(encoding="utf-8")
     world_events_lifecycle_compatibility = (PACKAGE / "compatibility" / "legacy_demon_event_lifecycle.py").read_text(encoding="utf-8")
+    world_events_wave_compatibility = (PACKAGE / "compatibility" / "legacy_demon_wave_refresh.py").read_text(encoding="utf-8")
     world_events_claim_compatibility = (PACKAGE / "compatibility" / "legacy_demon_claim.py").read_text(encoding="utf-8")
     rift_facade = (PACKAGE / "xiuxian" / "xiuxian_rift" / "__init__.py").read_text(encoding="utf-8")
     rift_event_handler = rift_facade[
@@ -897,8 +899,14 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "lifecycle_request_path_has_no_ddl": all(token not in world_events_lifecycle_repository for token in ("CREATE TABLE", "ALTER TABLE")),
             "lifecycle_player_migration_registered": 'Migration("world_events.004"' in plugin and "demon_event_lifecycle_operations" in world_events_migrations,
             "lifecycle_player_migration_routed": '"world_events.004"' in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")] and '"world_events.004"' in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")],
+            "wave_refresh_application_owned": "demon_wave_refresh_application.replay(" in world_events_facade and "demon_wave_refresh_application.refresh(" in world_events_facade and "class DemonWaveRefreshApplication" in world_events_application and "class DemonWaveRefreshSqlRepository" in world_events_wave_repository,
+            "wave_refresh_default_has_no_legacy_service": "DemonWaveRefreshService" not in world_events_facade and "_demon_wave_refresh_service" not in world_events_facade,
+            "legacy_wave_refresh_service_isolated": "class DemonWaveRefreshService" not in world_events_transaction and "from ...compatibility.legacy_demon_wave_refresh import DemonWaveRefreshResult, DemonWaveRefreshService" in world_events_transaction and "class DemonWaveRefreshService" in world_events_wave_compatibility,
+            "wave_refresh_request_path_has_no_ddl": all(token not in world_events_wave_repository for token in ("CREATE TABLE", "ALTER TABLE")),
+            "wave_refresh_player_migration_registered": 'Migration("world_events.005"' in plugin and "demon_wave_refresh_operations" in world_events_migrations,
+            "wave_refresh_player_migration_routed": '"world_events.005"' in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")] and '"world_events.005"' in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")],
             "legacy_claim_disabled": "_demon_claim_service" not in world_events_facade and "DemonClaimService" not in world_events_facade,
-            "status": "demon_attack_claim_and_event_lifecycle_feature_owned; wave_refresh_spirit_vein_remain_compatibility",
+            "status": "demon_attack_claim_event_lifecycle_and_wave_refresh_feature_owned; spirit_vein_remains_compatibility",
         },
         "rift": {
             "entry_application_owned": "rift_application.enter(" in rift_facade,

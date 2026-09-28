@@ -74,9 +74,18 @@ def apply_world_events_lifecycle(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_world_events_wave_refresh(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS demon_wave_refresh_operations ("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+        "created_at TEXT NOT NULL)"
+    )
+
+
 __all__ = [
     "apply_world_events",
     "apply_world_events_player",
     "apply_world_events_claim",
     "apply_world_events_lifecycle",
+    "apply_world_events_wave_refresh",
 ]

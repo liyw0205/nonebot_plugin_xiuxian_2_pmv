@@ -36,6 +36,15 @@
 
 ## 最近完成切片
 
+`demon wave refresh application cutover`：定时 wave refresh 改经
+`DemonWaveRefreshApplication -> DemonWaveRefreshSqlRepository`；共享事件状态 codec/read/write 从 lifecycle repository
+抽至 feature-owned `event_state.py`。将旧 `DemonWaveRefreshResult/Service` 移至
+`compatibility/legacy_demon_wave_refresh.py`，原 transaction module 保持对象身份 re-export。新增 player-only
+`world_events.005` operation migration，默认请求不建表。World Events wave/lifecycle/claim/attack/Web、source-quality、
+progress 与 architecture 聚焦回归 `69 passed`；194 项 migration 的隔离 recovery、五库/config backup/restore、
+五库 dry-run 无 pending、readiness 六项全绿、reconcile clean 均通过。缓存和临时数据已回收；Spirit Vein lifecycle
+及 live migration/P7、全局 legacy blockers 仍待处理。
+
 `demon event lifecycle application cutover`：真实自动/手动开始与结束路径改经
 `DemonEventLifecycleApplication -> DemonEventLifecycleSqlRepository`，从旧 transaction service 移除实现并移入
 `compatibility/legacy_demon_event_lifecycle.py`，原模块保持对象身份 re-export。新增 player-only

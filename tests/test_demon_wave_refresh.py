@@ -7,17 +7,23 @@ import pytest
 
 nonebot.init()
 
+from nonebot_plugin_xiuxian_2.features.world_events.application import DemonWaveRefreshApplication
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.transaction_service import (
     DemonWaveRefreshService,
     STATE_FIELDS,
 )
+from nonebot_plugin_xiuxian_2.compatibility.legacy_demon_wave_refresh import (
+    DemonWaveRefreshService as LegacyDemonWaveRefreshService,
+)
 
 
-def test_world_events_facade_defers_wave_refresh_service_construction():
+def test_world_events_facade_uses_feature_application_for_wave_refresh():
     world_events = importlib.import_module(
         "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events"
     )
-    assert world_events._demon_wave_refresh_service_instance is None
+    assert isinstance(world_events.demon_wave_refresh_application, DemonWaveRefreshApplication)
+    assert not hasattr(world_events, "_demon_wave_refresh_service")
+    assert DemonWaveRefreshService is LegacyDemonWaveRefreshService
 
 
 def state():
@@ -98,11 +104,10 @@ def test_refresh_verification_failure_rolls_back_state_and_operation(tmp_path):
     conn.close()
 
 
-def test_real_refresh_entry_uses_transaction_service():
+def test_real_refresh_entry_uses_feature_application():
     text = open("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_world_events/__init__.py", encoding="utf-8").read()
     body = text[text.index("def _refresh_defeated_demon_bosses"):text.index("@scheduler.scheduled_job", text.index("def _refresh_defeated_demon_bosses"))]
-    assert "_demon_wave_refresh_service().refresh(" in body
-    assert "_demon_wave_refresh_service().replay(" in body
-    assert "_demon_wave_refresh_service_instance = None" in text
-    assert "def _demon_wave_refresh_service(" in text
+    assert "demon_wave_refresh_application.refresh(" in body
+    assert "demon_wave_refresh_application.replay(" in body
+    assert "DemonWaveRefreshService" not in text
     assert "_save_state(state)" not in body

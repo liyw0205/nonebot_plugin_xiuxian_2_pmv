@@ -14,7 +14,7 @@
 
 ## 数据模型与迁移
 
-`world_events.001` 写入 `world_events_feature_migrations`；`world_events.002` 只在 `player_db` 建立/扩展事件状态、讨伐结算和统计 schema；`world_events.003` 只在 `game_db` 建立或扩展 `demon_claim_operations`，迁移旧表时保留记录并为缺失的 `stone`、`exp` 列补默认值；`world_events.004` 只在 `player_db` 建立 `demon_event_lifecycle_operations`。领取和 lifecycle SQL repositories 均不在请求中执行 DDL。
+`world_events.001` 写入 `world_events_feature_migrations`；`world_events.002` 只在 `player_db` 建立/扩展事件状态、讨伐结算和统计 schema；`world_events.003` 只在 `game_db` 建立或扩展 `demon_claim_operations`，迁移旧表时保留记录并为缺失的 `stone`、`exp` 列补默认值；`world_events.004` 只在 `player_db` 建立 `demon_event_lifecycle_operations`；`world_events.005` 只在 `player_db` 建立 `demon_wave_refresh_operations`。领取、lifecycle 与 wave refresh SQL repositories 均不在请求中执行 DDL。
 
 ## 事务与失败回滚
 
@@ -22,7 +22,7 @@
 
 ## 定时任务
 
-本切片不新增任务；魔修生命周期、波次刷新仍由兼容调度管理。
+本切片不新增任务；魔修生命周期与波次刷新仍由现有 scheduler 触发，状态事务由 feature application/repository 管理；灵脉调度仍走兼容路径。
 
 ## 配置项
 
@@ -40,4 +40,4 @@
 
 ## 灰度开关、回滚和已知限制
 
-关闭 `world_events_enabled` 可切回旧入口。旧 `DemonClaimService`、`DemonAttackSettlementService` 与已切换默认路径的 `DemonEventLifecycleService` 分别保留在 compatibility 模块，并由原 transaction module 身份一致地 re-export；奖励随机池和贡献计算暂未迁移到新 domain，仍由兼容命令提供。wave refresh、spirit vein 仍有兼容事务路径。live migration/recovery 与完整发布周期证据仍未完成，不能据此关闭整个 world-events 切片。
+关闭 `world_events_enabled` 可切回旧入口。旧 `DemonClaimService`、`DemonAttackSettlementService`、`DemonEventLifecycleService`、`DemonWaveRefreshService` 和 `SpiritVeinLifecycleService` 分别保留在 compatibility 模块，并由原 transaction module 身份一致地 re-export；奖励随机池和贡献计算暂未迁移到新 domain，仍由兼容命令提供。spirit vein 仍有兼容事务路径。live migration/recovery 与完整发布周期证据仍未完成，不能据此关闭整个 world-events 切片。

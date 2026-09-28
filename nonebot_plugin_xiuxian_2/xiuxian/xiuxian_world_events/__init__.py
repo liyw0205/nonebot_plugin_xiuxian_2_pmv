@@ -35,10 +35,10 @@ from ...infrastructure.random_source import SystemRandom
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from ...features.world_events.application import DemonClaimApplication
+from ...features.world_events.application import DemonWaveRefreshApplication
 from ...features.world_events.attack_application import DemonAttackApplication
 from ...features.world_events.application import DemonEventLifecycleApplication
 from ...features.world_events.repository import WorldEventClaimSqlRepository
-from .transaction_service import DemonWaveRefreshService
 from .transaction_service import SpiritVeinLifecycleService
 
 
@@ -55,17 +55,8 @@ demon_claim_application = DemonClaimApplication(
 
 demon_attack_application = DemonAttackApplication(get_paths().player_db)
 demon_event_lifecycle_application = DemonEventLifecycleApplication(get_paths().player_db)
-_demon_wave_refresh_service_instance = None
+demon_wave_refresh_application = DemonWaveRefreshApplication(get_paths().player_db)
 _spirit_vein_lifecycle_service_instance = None
-
-
-def _demon_wave_refresh_service():
-    global _demon_wave_refresh_service_instance
-    if _demon_wave_refresh_service_instance is None:
-        _demon_wave_refresh_service_instance = DemonWaveRefreshService(
-            get_paths().player_db
-        )
-    return _demon_wave_refresh_service_instance
 
 
 def _spirit_vein_lifecycle_service():
@@ -1083,7 +1074,7 @@ def _refresh_defeated_demon_bosses() -> tuple[dict, list[str]]:
 
     slot = _now().strftime("%Y%m%d%H30")
     operation_id = f"demon-wave-refresh:{state.get('event_id')}:{slot}"
-    replay = _demon_wave_refresh_service().replay(operation_id)
+    replay = demon_wave_refresh_application.replay(operation_id)
     if replay is not None:
         return replay.state or state, list(replay.refreshed_realms)
     next_bosses = {}
@@ -1092,7 +1083,9 @@ def _refresh_defeated_demon_bosses() -> tuple[dict, list[str]]:
             next_bosses[realm] = _create_demon_boss(realm, wave=max(_to_int(boss_info.get("wave"), 1), 1) + 1)
     realms = list(next_bosses)
     last_result = f"每小时30分刷新检查：{', '.join(realms)}魔修已重新入侵。"
-    result = _demon_wave_refresh_service().refresh(operation_id, EVENT_KEY, state, next_bosses, last_result)
+    result = demon_wave_refresh_application.refresh(
+        operation_id, EVENT_KEY, state, next_bosses, last_result
+    )
     return result.state or state, list(result.refreshed_realms)
 
 
