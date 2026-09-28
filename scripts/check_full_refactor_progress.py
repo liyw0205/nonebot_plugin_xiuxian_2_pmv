@@ -282,6 +282,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
     past_life_command_facade = (PACKAGE / "xiuxian" / "xiuxian_past_life" / "__init__.py").read_text(encoding="utf-8")
     dufang_facade = (PACKAGE / "xiuxian" / "xiuxian_dufang" / "__init__.py").read_text(encoding="utf-8")
     fusion_facade = (PACKAGE / "xiuxian" / "xiuxian_fusion" / "__init__.py").read_text(encoding="utf-8")
+    fusion_repository = (PACKAGE / "features" / "fusion" / "repository.py").read_text(encoding="utf-8")
+    fusion_settlement_repository = (PACKAGE / "features" / "fusion" / "settlement_repository.py").read_text(encoding="utf-8")
+    fusion_migrations = (PACKAGE / "features" / "fusion" / "migrations.py").read_text(encoding="utf-8")
+    fusion_compatibility = (PACKAGE / "xiuxian" / "xiuxian_fusion" / "fusion_service.py").read_text(encoding="utf-8")
     title_facade = (PACKAGE / "xiuxian" / "xiuxian_title" / "__init__.py").read_text(encoding="utf-8")
     base_facade = (PACKAGE / "xiuxian" / "xiuxian_base" / "__init__.py").read_text(encoding="utf-8")
     puppet_facade = (PACKAGE / "xiuxian" / "xiuxian_puppet" / "__init__.py").read_text(encoding="utf-8")
@@ -1203,6 +1207,18 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "_items().get_data_by_item_name(" in fusion_facade
             ),
             "legacy_service_factory_removed": "def _fusion_service(" not in fusion_facade,
+            "repository_transaction_owned": (
+                "from .settlement_repository import FusionService" in fusion_repository
+                and "xiuxian_fusion.fusion_service" not in fusion_repository
+            ),
+            "request_path_has_no_ddl": "CREATE TABLE" not in fusion_settlement_repository and "ALTER TABLE" not in fusion_settlement_repository,
+            "operation_schema_migration_owned": all(
+                table in fusion_migrations for table in ("fusion_operations", "fusion_batch_operations")
+            ) and "fusion.002" in plugin and "apply_fusion_operations" in plugin,
+            "legacy_import_identity_preserved": (
+                "FusionService as _FeatureFusionService" in fusion_compatibility
+                and "class FusionService(_FeatureFusionService)" in fusion_compatibility
+            ),
             "status": "single_batch_fusion_cutover",
         },
         "title": {

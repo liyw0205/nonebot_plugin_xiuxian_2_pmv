@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .._service_port import ServicePort
+from .settlement_repository import FusionService
 
 
 class FusionRepository(ServicePort):
@@ -12,8 +13,6 @@ class FusionRepository(ServicePort):
 
     def execute(self, operation_id: str, user_id: str, action: str, payload: dict):
         if str(action).casefold() == "apply_batch":
-            from ...xiuxian.xiuxian_fusion.fusion_service import FusionService
-
             return FusionService(self.database).apply_batch(
                 operation_id, user_id, payload["need_stone"], payload["needed_items"],
                 payload["equipment_id"], payload["equipment_name"], payload["equipment_type"],
@@ -22,8 +21,6 @@ class FusionRepository(ServicePort):
                 target_limit=payload.get("target_limit"),
             )
         if str(action).casefold() == "apply":
-            from ...xiuxian.xiuxian_fusion.fusion_service import FusionService
-
             return FusionService(self.database).apply(
                 operation_id, user_id, payload["need_stone"], payload["needed_items"],
                 payload["equipment_id"], payload["equipment_name"], payload["equipment_type"],
@@ -33,13 +30,9 @@ class FusionRepository(ServicePort):
         return super().execute(operation_id, user_id, action, payload)
 
     def apply_result(self, operation_id: str):
-        from ...xiuxian.xiuxian_fusion.fusion_service import FusionService
-
         return FusionService(self.database).get_result(operation_id)
 
     def batch_result(self, operation_id: str):
-        from ...xiuxian.xiuxian_fusion.fusion_service import FusionService
-
         return FusionService(self.database).get_batch_result(operation_id)
 
 
