@@ -1,23 +1,41 @@
+import asyncio
 import json
 import importlib
 import sqlite3
+from types import SimpleNamespace
 
 import nonebot
 import pytest
 
 nonebot.init()
 
+from nonebot_plugin_xiuxian_2.features.world_events.application import DemonEventLifecycleApplication
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.transaction_service import (
     DemonEventLifecycleService,
 )
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.transaction_service import STATE_FIELDS
+from nonebot_plugin_xiuxian_2.compatibility.legacy_demon_event_lifecycle import (
+    DemonEventLifecycleResult as LegacyDemonEventLifecycleResult,
+    DemonEventLifecycleService as LegacyDemonEventLifecycleService,
+)
 
 
-def test_world_events_facade_defers_event_lifecycle_service_construction():
+def test_world_events_facade_uses_feature_application_not_legacy_service():
     world_events = importlib.import_module(
         "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events"
     )
-    assert world_events._demon_event_lifecycle_service_instance is None
+    assert hasattr(world_events.demon_event_lifecycle_application, "transition")
+    assert not hasattr(world_events, "_demon_event_lifecycle_service")
+    assert DemonEventLifecycleService is LegacyDemonEventLifecycleService
+
+
+def test_legacy_event_lifecycle_result_and_service_keep_import_identity():
+    from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.transaction_service import (
+        DemonEventLifecycleResult,
+    )
+
+    assert DemonEventLifecycleService is LegacyDemonEventLifecycleService
+    assert DemonEventLifecycleResult is LegacyDemonEventLifecycleResult
 
 
 def idle():
@@ -62,6 +80,23 @@ def test_manual_finish_preserves_event_data_and_rejects_stale_cycle(tmp_path):
     assert service.transition("finish-old", "global", "auto_finish", stale, dict(target, event_id="old-event")).status == "state_changed"
 
 
+def test_feature_application_replays_and_accepts_legacy_lifecycle_operations(tmp_path):
+    db, expected, target = tmp_path / "player.db", idle(), active()
+    create_db(db, expected)
+    legacy = DemonEventLifecycleService(db)
+    original = legacy.transition("legacy-start", "global", "auto_start", expected, target)
+    application = DemonEventLifecycleApplication(db)
+
+    replay = application.replay("legacy-start")
+    repeated = application.transition("legacy-start", "global", "auto_start", expected, target)
+
+    assert original.status == replay.status == repeated.status == "applied"
+    assert replay.state == repeated.state == target
+    conn = sqlite3.connect(db)
+    assert conn.execute("SELECT COUNT(*) FROM demon_event_lifecycle_operations").fetchone()[0] == 1
+    conn.close()
+
+
 def test_lifecycle_operation_failure_rolls_back_complete_state(tmp_path):
     db, expected, target = tmp_path / "player.db", idle(), active()
     create_db(db, expected)
@@ -102,7 +137,47 @@ def test_real_auto_and_manual_entries_share_lifecycle_service():
         ("async def close_world_event_", "async def close_spirit_vein_"),
     ]:
         body = text[text.index(start):text.index(end, text.index(start))]
-        assert "_demon_event_lifecycle_service()" in body
-        assert "_demon_event_lifecycle_service_instance = None" in text
-        assert "def _demon_event_lifecycle_service(" in text
+        assert "demon_event_lifecycle_application." in body
+        assert "DemonEventLifecycleService" not in text
         assert "_save_state(state)" not in body
+
+
+def test_manual_finish_replay_skips_transition(monkeypatch):
+    from nonebot.exception import FinishedException
+
+    world_events = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events"
+    )
+    finished = active(manual=1)
+    finished.update({"active": 0, "status": "finished"})
+    replayed = LegacyDemonEventLifecycleResult(
+        status="applied", action="manual_finish", state=finished
+    )
+
+    class ReplayOnlyApplication:
+        def replay(self, operation_id):
+            assert operation_id == "demon-lifecycle:manual-finish:message-1"
+            return replayed
+
+        def transition(self, *args, **kwargs):
+            pytest.fail("replayed lifecycle operation must not transition again")
+
+    async def assign_bot(*, bot, event):
+        return bot, None
+
+    async def handle_send(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(
+        world_events, "demon_event_lifecycle_application", ReplayOnlyApplication()
+    )
+    monkeypatch.setattr(world_events, "_load_state", lambda: active())
+    monkeypatch.setattr(world_events, "assign_bot", assign_bot)
+    monkeypatch.setattr(world_events, "handle_send", handle_send)
+
+    with pytest.raises(FinishedException):
+        asyncio.run(
+            world_events.close_world_event_(
+                object(), SimpleNamespace(message_id="message-1", id="")
+            )
+        )

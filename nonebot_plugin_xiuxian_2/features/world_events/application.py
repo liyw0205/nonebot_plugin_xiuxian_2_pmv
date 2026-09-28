@@ -8,8 +8,12 @@ from ...core.errors import ConflictError, DomainError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
-from .domain import DemonClaimRequest, normalize_items
+from .domain import DemonClaimRequest, DemonEventLifecycleResult, normalize_items
 from .repository import WorldEventClaimRepository, WorldEventClaimSqlRepository
+from .lifecycle_repository import (
+    DemonEventLifecycleRepository,
+    DemonEventLifecycleSqlRepository,
+)
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -169,4 +173,35 @@ class DemonClaimApplication:
         return ReplyPlan(outcome.message or outcome.data, reference=True)
 
 
-__all__ = ["DemonClaimApplication"]
+class DemonEventLifecycleApplication:
+    """Feature boundary for replayable demon event start and finish transitions."""
+
+    def __init__(
+        self,
+        player_database: str | Path,
+        *,
+        repository: DemonEventLifecycleRepository | None = None,
+    ) -> None:
+        self.repository = repository or DemonEventLifecycleSqlRepository(player_database)
+
+    def replay(self, operation_id: str) -> DemonEventLifecycleResult | None:
+        return self.repository.replay(operation_id)
+
+    def transition(
+        self,
+        operation_id: str,
+        event_key: str,
+        action: str,
+        expected_state: Mapping[str, Any] | None,
+        target_state: Mapping[str, Any],
+    ) -> DemonEventLifecycleResult:
+        return self.repository.transition(
+            operation_id,
+            event_key,
+            action,
+            expected_state,
+            target_state,
+        )
+
+
+__all__ = ["DemonClaimApplication", "DemonEventLifecycleApplication"]

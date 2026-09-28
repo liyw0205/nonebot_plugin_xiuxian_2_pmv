@@ -66,4 +66,17 @@ def apply_world_events_claim(uow: DatabaseUnitOfWork) -> None:
             )
 
 
-__all__ = ["apply_world_events", "apply_world_events_player", "apply_world_events_claim"]
+def apply_world_events_lifecycle(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS demon_event_lifecycle_operations ("
+        "operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,result_json TEXT NOT NULL,"
+        "created_at TEXT NOT NULL)"
+    )
+
+
+__all__ = [
+    "apply_world_events",
+    "apply_world_events_player",
+    "apply_world_events_claim",
+    "apply_world_events_lifecycle",
+]

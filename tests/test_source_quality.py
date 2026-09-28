@@ -2776,14 +2776,17 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("class DemonAttackSettlementSqlRepository", repository)
         self.assertIn("DatabaseUnitOfWork(self.player_database, immediate=True)", repository)
 
-    def test_demon_event_lifecycle_uses_lazy_service(self) -> None:
+    def test_demon_event_lifecycle_uses_feature_application(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_world_events"
         source = (root / "__init__.py").read_text(encoding="utf-8")
-        self.assertIn("_demon_event_lifecycle_service_instance = None", source)
-        self.assertIn("def _demon_event_lifecycle_service(", source)
-        self.assertIn("_demon_event_lifecycle_service().replay(", source)
-        self.assertIn("_demon_event_lifecycle_service().transition(", source)
-        self.assertNotIn("demon_event_lifecycle_service.transition(", source)
+        self.assertIn("demon_event_lifecycle_application = DemonEventLifecycleApplication(", source)
+        self.assertIn("demon_event_lifecycle_application.replay(", source)
+        self.assertIn("demon_event_lifecycle_application.transition(", source)
+        self.assertNotIn("DemonEventLifecycleService", source)
+        transaction = (root / "transaction_service.py").read_text(encoding="utf-8")
+        compatibility = (SOURCE_ROOT / "compatibility" / "legacy_demon_event_lifecycle.py").read_text(encoding="utf-8")
+        self.assertNotIn("class DemonEventLifecycleService", transaction)
+        self.assertIn("class DemonEventLifecycleService", compatibility)
 
     def test_demon_wave_refresh_uses_lazy_service(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_world_events"

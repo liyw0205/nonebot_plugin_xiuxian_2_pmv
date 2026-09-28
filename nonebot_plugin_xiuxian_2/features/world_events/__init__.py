@@ -1,5 +1,5 @@
 """World event application slices."""
 
-from .application import DemonClaimApplication
+from .application import DemonClaimApplication, DemonEventLifecycleApplication
 
-__all__ = ["DemonClaimApplication"]
+__all__ = ["DemonClaimApplication", "DemonEventLifecycleApplication"]

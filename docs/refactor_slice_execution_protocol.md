@@ -36,6 +36,14 @@
 
 ## 最近完成切片
 
+`demon event lifecycle application cutover`：真实自动/手动开始与结束路径改经
+`DemonEventLifecycleApplication -> DemonEventLifecycleSqlRepository`，从旧 transaction service 移除实现并移入
+`compatibility/legacy_demon_event_lifecycle.py`，原模块保持对象身份 re-export。新增 player-only
+`world_events.004` 预建 operation 表，请求路径不建表；补齐手动结束 replay 分支回归。World Events、source-quality、
+progress 与 architecture 聚焦套件 `64 passed`；五库 recovery 覆盖 193 项 migration，backup/restore 含 config 成功，
+五库 migration dry-run 无 pending，readiness 六项全绿，reconcile clean（operations/outbox/dead events 均为 0）。
+临时数据、receipt 与字节码自动回收；wave refresh、spirit vein、live migration/P7 和全局 legacy blockers 仍开放。
+
 `mixelixir two-phase refine claim`：真实 `配方` handler 的扣材、补领查询和奖励领取统一经
 `MixelixirApplication -> MixelixirRefineCostSqlRepository/MixelixirRefineRewardSqlRepository`。扣材时校验
 每日次数、材料和丹炉并保存完整奖励及炼丹状态快照；领取时 CAS 校验修为状态和背包容量，在 attached UoW

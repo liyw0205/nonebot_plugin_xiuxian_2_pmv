@@ -18,6 +18,13 @@ class DemonAttackSettlementResult:
 
 
 @dataclass(frozen=True)
+class DemonEventLifecycleResult:
+    status: str
+    action: str = ""
+    state: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
 class WorldEventClaimResult:
     status: str
     stone: int = 0
@@ -83,6 +90,7 @@ def normalize_items(items: Sequence[Mapping[str, Any]]) -> tuple[dict[str, Any],
 
 __all__ = [
     "DemonAttackSettlementResult",
+    "DemonEventLifecycleResult",
     "DemonClaimRequest",
     "WorldEventClaimResult",
     "normalize_items",

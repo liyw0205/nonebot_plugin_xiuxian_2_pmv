@@ -36,8 +36,8 @@ from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.numeric_bind import percent_exp_reward
 from ...features.world_events.application import DemonClaimApplication
 from ...features.world_events.attack_application import DemonAttackApplication
+from ...features.world_events.application import DemonEventLifecycleApplication
 from ...features.world_events.repository import WorldEventClaimSqlRepository
-from .transaction_service import DemonEventLifecycleService
 from .transaction_service import DemonWaveRefreshService
 from .transaction_service import SpiritVeinLifecycleService
 
@@ -54,18 +54,9 @@ demon_claim_application = DemonClaimApplication(
 
 
 demon_attack_application = DemonAttackApplication(get_paths().player_db)
-_demon_event_lifecycle_service_instance = None
+demon_event_lifecycle_application = DemonEventLifecycleApplication(get_paths().player_db)
 _demon_wave_refresh_service_instance = None
 _spirit_vein_lifecycle_service_instance = None
-
-
-def _demon_event_lifecycle_service():
-    global _demon_event_lifecycle_service_instance
-    if _demon_event_lifecycle_service_instance is None:
-        _demon_event_lifecycle_service_instance = DemonEventLifecycleService(
-            get_paths().player_db
-        )
-    return _demon_event_lifecycle_service_instance
 
 
 def _demon_wave_refresh_service():
@@ -715,22 +706,22 @@ def _ensure_daily_state() -> dict:
             return state
         if state.get("status") != "active" or state.get("period") != period:
             operation_id = f"demon-lifecycle:auto-start:{period}"
-            replay = _demon_event_lifecycle_service().replay(operation_id)
+            replay = demon_event_lifecycle_application.replay(operation_id)
             if replay is not None:
                 return replay.state or state
             target = _build_active_state(period)
-            result = _demon_event_lifecycle_service().transition(operation_id, EVENT_KEY, "auto_start", state, target)
+            result = demon_event_lifecycle_application.transition(operation_id, EVENT_KEY, "auto_start", state, target)
             return result.state or state
     elif state.get("status") == "active" and not is_manual:
         operation_id = f"demon-lifecycle:auto-finish:{state.get('event_id')}"
-        replay = _demon_event_lifecycle_service().replay(operation_id)
+        replay = demon_event_lifecycle_application.replay(operation_id)
         if replay is not None:
             return replay.state or state
         target = dict(state)
         target["active"] = 0
         target["status"] = "finished"
         target["last_result"] = "今日魔修入侵已于22:00结束。"
-        result = _demon_event_lifecycle_service().transition(operation_id, EVENT_KEY, "auto_finish", state, target)
+        result = demon_event_lifecycle_application.transition(operation_id, EVENT_KEY, "auto_finish", state, target)
         return result.state or state
     return state
 
@@ -1059,12 +1050,12 @@ def _sum_reward_contribution(state: dict, records: list[tuple[str, dict]]) -> tu
 def _start_auto_demon_invasion() -> dict:
     period = _current_period()
     operation_id = f"demon-lifecycle:auto-start:{period}"
-    replay = _demon_event_lifecycle_service().replay(operation_id)
+    replay = demon_event_lifecycle_application.replay(operation_id)
     if replay is not None:
         return replay.state or _load_state()
     expected = _load_state()
     target = _build_active_state(period)
-    result = _demon_event_lifecycle_service().transition(operation_id, EVENT_KEY, "auto_start", expected, target)
+    result = demon_event_lifecycle_application.transition(operation_id, EVENT_KEY, "auto_start", expected, target)
     return result.state or expected
 
 
@@ -1074,14 +1065,14 @@ def _finish_auto_demon_invasion() -> tuple[dict, bool]:
         return state, False
 
     operation_id = f"demon-lifecycle:auto-finish:{state.get('event_id')}"
-    replay = _demon_event_lifecycle_service().replay(operation_id)
+    replay = demon_event_lifecycle_application.replay(operation_id)
     if replay is not None:
         return replay.state or state, replay.status == "applied"
     target = dict(state)
     target["active"] = 0
     target["status"] = "finished"
     target["last_result"] = "今日魔修入侵已于22:00结束。"
-    result = _demon_event_lifecycle_service().transition(operation_id, EVENT_KEY, "auto_finish", state, target)
+    result = demon_event_lifecycle_application.transition(operation_id, EVENT_KEY, "auto_finish", state, target)
     return result.state or state, result.status == "applied"
 
 
@@ -1232,12 +1223,12 @@ async def start_demon_invasion_(bot: Bot, event: GroupMessageEvent | PrivateMess
         expected = _load_state()
         message_id = getattr(event, "message_id", "") or getattr(event, "id", "") or runtime_ids.new_id()
         operation_id = f"demon-lifecycle:manual-start:{message_id}"
-        replay = _demon_event_lifecycle_service().replay(operation_id)
+        replay = demon_event_lifecycle_application.replay(operation_id)
         if replay is not None:
             state = replay.state or expected
         else:
             target = _build_active_state(_current_period(), manual=True)
-            result = _demon_event_lifecycle_service().transition(operation_id, EVENT_KEY, "manual_start", expected, target)
+            result = demon_event_lifecycle_application.transition(operation_id, EVENT_KEY, "manual_start", expected, target)
             state = result.state or expected
     if state.get("status") == "active":
         msg = (
@@ -1281,7 +1272,7 @@ async def close_world_event_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         state = _load_state()
         message_id = getattr(event, "message_id", "") or getattr(event, "id", "") or runtime_ids.new_id()
         operation_id = f"demon-lifecycle:manual-finish:{message_id}"
-        replay = _demon_event_lifecycle_service().replay(operation_id)
+        replay = demon_event_lifecycle_application.replay(operation_id)
         if replay is not None:
             result = replay
         else:
@@ -1290,7 +1281,9 @@ async def close_world_event_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             target["status"] = "finished"
             target["manual"] = 1
             target["last_result"] = "魔修入侵已手动结束。"
-            result = _demon_event_lifecycle_service().transition(operation_id, EVENT_KEY, "manual_finish", state, target)
+            result = demon_event_lifecycle_application.transition(
+                operation_id, EVENT_KEY, "manual_finish", state, target
+            )
     msg = "魔修入侵已手动结束。" if result.state and result.state.get("status") == "finished" else "当前没有进行中的魔修入侵。"
     await handle_send(bot, event, msg, md_type="世界事件", k1="状态", v1="魔修入侵状态")
     await close_world_event.finish()
