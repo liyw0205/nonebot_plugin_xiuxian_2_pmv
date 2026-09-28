@@ -41,7 +41,7 @@
 4. sect/impart/pet/trade/auction。
 5. 其余玩法、scheduler、Web 和命令入口。
 
-首个实施切片为 `stone_gift`（player/economy）：它已有新 domain/application/repository 草稿和 operation ledger，但真实 `送灵石` handler 仍位于旧 `xiuxian_base/__init__.py`，旧完整实现仍位于 `xiuxian_base/transaction_service.py`。因此当前状态标记为“壳已建、真实路径未切换”。
+`stone_gift`（player/economy）已完成真实 adapter/handler cutover、隔离 recovery smoke 和兼容回滚隔离；仍须纳入全局 transaction/`xiuxian2_handle` 趋势审计，且隔离数据恢复不能替代真实发布周期/P7 证据。当前活动目标按本节执行顺序和第 6 节权威状态推进，不将历史“首个切片”描述当作当前待办。
 
 ## 3. “真实迁移”定义
 
@@ -69,7 +69,7 @@
 
 2026-09-29 bank legacy account writer compatibility isolation：`savef` 在仓库生产代码中只有定义、没有调用点；bank facade 删除 `PlayerDataManager` 缓存/代理和直接 manager 依赖，保留同签名 wrapper 并将历史 `bankinfo` 三字段写入延迟隔离到 `compatibility/legacy_bank_account_storage.py`。旧 helper 仅在显式调用时构造 manager，不增加缓存副本或默认请求期 schema 操作；字段转换、默认值和更新顺序保持不变。新增行为回归及 progress/source-quality 隔离断言，bank/progress/inventory/architecture 测试 `92 passed`，bank source-quality `9 passed`，兼容性及门禁复验 `14 passed` 与 `3 passed`；进度 JSON bank 项全绿，隔离 architecture CLI `ok=true`、inventory freshness、全包 compileall 和 diff check 通过。pytest/pyc 与 architecture 数据仅使用本轮专用 `/tmp` 目录，收尾清理；无 migration、业务数据写入或运行库访问。下一项审计 `BankAccountBootstrapApplication.ensure_account()` 对 `ensure_schema()` 的请求期调用：核实完整 schema 已由启动 migration 注册，并检查所有调用点后，再让缺失 migration 的请求明确失败，而不在请求时执行 DDL。全局 legacy transaction services、`xiuxian2_handle` 和真实发布 migration/P7 仍未完成。
 
-2026-09-29 bank request-time account schema rejection：审计确认 `bank.002` 启动 migration 已创建 `bank_accounts` 与 `bank_account_operations` 完整 schema，唯一请求期 DDL 位于 `BankAccountBootstrapApplication.ensure_account()`，并由五个 bank handler 经账户信息 application 可达。删除该路径的 `ensure_schema()`，改由 repository 只读检查两表所需列；账户信息及 bootstrap 均在访问/导入前验证，缺表、缺列抛出明确 `bank.002 schema_missing`，阻断 handler 静默回退到旧写路径，不创建 schema 或导入账户。完整 bank、progress、inventory、architecture contract `99 passed`，schema 定向测试 `11 passed`，bank source-quality `10 passed`；进度 JSON bank 项全绿、隔离 architecture CLI `ok=true`、inventory freshness、compileall、diff check 通过。没有执行 migration、真实数据写入或运行库访问；临时 pytest/pyc/architecture 数据待本轮结束清理。下一项沿调用图审计 bank legacy fallback 的读写可达性及异常边界，再选择仍真实可达的旧 transaction/handle 路径继续隔离；全局 legacy transaction services、`xiuxian2_handle` 和真实发布 migration/P7 仍未完成。
+2026-09-29 bank request-time account schema rejection：审计确认 `bank.002` 启动 migration 已创建 `bank_accounts` 与 `bank_account_operations` 完整 schema，唯一请求期 DDL 位于 `BankAccountBootstrapApplication.ensure_account()`，并由五个 bank handler 经账户信息 application 可达。删除该路径的 `ensure_schema()`，改由 repository 只读检查两表所需列；账户信息及 bootstrap 均在访问/导入前验证，缺表、缺列抛出明确 `bank.002 schema_missing`，阻断 handler 静默回退到旧写路径，不创建 schema 或导入账户。完整 bank、progress、inventory、architecture contract `99 passed`，schema 定向测试 `11 passed`，bank source-quality `10 passed`；进度 JSON bank 项全绿、隔离 architecture CLI `ok=true`、inventory freshness、compileall、diff check 通过。没有执行 migration、真实数据写入或运行库访问；临时 pytest/pyc/architecture 数据已清理。下一项确认 account-missing/legacy-invalid 的真实 command/Web 行为及默认级别初始化语义，再依调用图挑选尚真实可达的 player/economy transaction/handle 路径；全局 legacy transaction services、`xiuxian2_handle` 和真实发布 migration/P7 仍未完成。
 
 2026-09-28 boss item catalog lazy boundary：世界 BOSS facade 删除 module-level `Items()` 构造，商店列表与积分兑换真正访问物品详情时才通过 `_items()` 加载共享目录；不复制或主动清空 `ITEMS_CACHE`，BOSS purchase/settlement、旧兼容 service 和数据路径不变。新增 source/progress 门禁；无 migration、无数据库写入，目标 compileall、inventory、架构和 diff check 通过。全局旧 transaction services、`xiuxian2_handle`、真实发布迁移/P7 仍未完成 blocker。
 
@@ -2844,7 +2844,7 @@
 
 ## 6. 下一步
 
-### 6.1 当前权威状态（2026-09-27）
+### 6.1 当前权威状态（2026-09-29）
 
 本节以 `scripts/refactor_completion_audit.py` 和
 `scripts/check_full_refactor_progress.py` 的当前输出为准；前文及下方的日期记录仅保留当时的实施证据，不应被当作当前待办状态。
@@ -2852,13 +2852,19 @@
 - 架构/交付基础门禁 P0-P6 已就绪；P7 仍未就绪，缺少一次真实发布周期的
   `--data-dir`、当前 release 和发布证据。隔离 recovery smoke 不能替代 P7。
 - 全面底层重构尚未达到退出条件：仍有 33 个
-  `xiuxian/*/transaction_service.py`（39,396 行）以及
+  `xiuxian/*/transaction_service.py`（23,774 行）以及
   `xiuxian2_handle.py`（181,666 bytes）的旧执行路径。它们不能因已有 facade、
   application 或静态标记而计作完成。
-- 当前静态审计命中：`transaction_service.py` 33 个/39,396 行，旧服务 import 文件
-  102 个，`xiuxian2_handle` import 文件 75 个，直接 `db_backend.connect` 命中 107 个，
-  `sqlite3.connect` 命中 32 个，直接全局 random 命中 67 个，`datetime.now` 命中
-  65 个，`time.time` 命中 25 个。计数只作趋势，不替代逐条真实调用图审计。
+- 2026-09-29 progress CLI 静态计数：Python 文件 1,656 个；
+  `transaction_service.py` 33 个/23,774 行，旧服务 import 文件 75 个，
+  `xiuxian2_handle` import 文件 72 个，直接 `db_backend.connect` 命中 139 个，
+  `sqlite3.connect` 命中 34 个，直接全局 random 命中 67 个，`datetime.now` 命中
+  73 个，`time.time` 命中 26 个。与早期快照相比，行数/命中数变化只代表静态计数变化；
+  每项仍须核对生产调用图，不能用减少计数代替执行路径证据。
+- Bank 本轮完成 legacy `savef` 隔离和 `bank.002` 请求期 schema 拒绝；progress CLI 的
+  deposit/withdrawal/upgrade/interest application、legacy receipt/account read、writer
+  compatibility 和 startup schema 项均为 true。Bank 不因此宣称整体切片或 live migration
+  完成，旧命令 facade 与显式 fallback 仍需按默认调用图继续审计。
 - 已切换的功能仍可能保留显式 compatibility/rollback adapter；只有默认真实
   handler/route/scheduler 已改走 feature-owned application，且旧实现不再承载该
   用例，才可逐项从遗留服务移除。
@@ -2903,7 +2909,15 @@
   facade 不再导入未调用的旧 service/getter。显式 `LegacyPetRepository` 仍可作为回滚入口，
   所以这只关闭实现归属与默认 facade 依赖，不代表所有宠物数据读取/JSON projection 已迁完。
 
-### 6.2 优先目标
+### 6.2 当前推进队列（2026-09-29）
+
+1. **闭合 bank 首用与兼容 fallback 行为**：`savef` 已无仓库生产调用点，`readf` 只用于五个 handler 的 legacy fallback，回执查询为只读，`bank.002` 缺失会被拒绝。下一步用真实 handler/Web 入口覆盖 account missing、legacy-invalid、首次升级/结息和 replay，明确默认等级何时落库；在语义和幂等证据齐备前，不将所有 bank compatibility 分支标为删除。
+2. **回到 player/economy/inventory 主序**：从实际 matcher、route、scheduler 调用图中挑下一个仍经旧 `transaction_service` 或 `xiuxian2_handle` 承载资产变化的单一纵向流程，完成 application/repository、schema migration、幂等/回滚测试和真实入口切换。不要按目录批量迁移，也不要重复处理已通过 progress gate 的 work/fusion/bank 边界。
+3. **按风险顺序推进剩余领域**：cultivation/breakthrough/training；combat/map/dungeon/arena/tower/boss；sect/impart/pet/trade/auction；最后处理 scheduler、Web、批处理、JSON/外部状态兼容。每项先证明默认真实入口和依赖，再隔离旧 service/handle。
+4. **收敛全局基础依赖**：持续降低旧 service import（75 个文件）、`xiuxian2_handle` import（72 个文件）、`db_backend.connect`（139 个文件）、`sqlite3.connect`（34 个文件）、系统时间/全局随机命中；以 progress CLI 同口径计数并逐项附真实调用证据。
+5. **最后补齐发布证据**：针对真实数据目录执行备份、migration dry-run/执行、恢复、reconcile、远端冒烟和至少一次正式发布周期；完成这些前 P7 与全面重构均保持未完成。
+
+### 6.3 既有优先事项详录
 
 1. **拍卖竞价 effects 已收口**：竞价资产事务仍由 `AuctionBidApplication` 承载；成功 ledger
    结果与 `auction.bid.effects` outbox event 同事务提交，started operation 可重放 repository
@@ -2952,7 +2966,7 @@
    `transaction_service` 与 `xiuxian2_handle` 不再在完成切片的执行图中出现；
    随后完成一次真实发布、备份、迁移、恢复和 reconcile，补齐 P7 证据。
 
-### 6.3 每个目标的完成定义与资源约束
+### 6.4 每个目标的完成定义与资源约束
 
 每个切片必须具备真实 handler/route/scheduler 切换、feature-owned
 application/repository、显式 DTO/Clock/RandomSource/IdGenerator 边界、operation
