@@ -11,8 +11,9 @@ class BankStorageLazyReaderTests(unittest.TestCase):
         self.assertIn("_player_data_manager_instance = None", source)
         self.assertIn("def _player_data_manager(", source)
         self.assertNotIn("player_data_manager = PlayerDataManager()", source)
-        self.assertIn("_player_data_manager().get_fields(", source)
+        self.assertNotIn("_player_data_manager().get_fields(", source)
         self.assertIn("_player_data_manager().update_or_write_data(", source)
+        self.assertIn("get_legacy_info(", source)
 
     def test_bank_reads_legacy_account_only_after_new_account_path(self):
         source = (

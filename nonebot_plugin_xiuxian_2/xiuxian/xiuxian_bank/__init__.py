@@ -519,31 +519,16 @@ def get_give_stone(bankinfo):
 
 
 def readf(user_id):
-    """从动态数据库读取灵庄信息（兼容默认值）"""
-    user_id = str(user_id)
-    bank_data = _player_data_manager().get_fields(user_id, "bankinfo")
-    if not bank_data:
-        return {
-            "savestone": 0,
-            "savetime": str(runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')),
-            "banklevel": "1",
-        }
+    """Read legacy bank data without the old manager's request-time schema creation."""
+    from ...features.bank.account_info_application import BankAccountInfoApplication
 
-    # 兼容缺失字段
-    savestone = bank_data.get("savestone", 0)
-    savetime = bank_data.get("savetime", str(runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')))
-    banklevel = str(bank_data.get("banklevel", "1"))
-
-    try:
-        savestone = int(savestone)
-    except Exception:
-        savestone = 0
-
-    return {
-        "savestone": savestone,
-        "savetime": str(savetime),
-        "banklevel": banklevel,
-    }
+    return BankAccountInfoApplication(
+        get_paths().game_db,
+        player_database=get_paths().player_db,
+    ).get_legacy_info(
+        user_id=str(user_id),
+        default_saved_at=str(runtime_clock.now().strftime('%Y-%m-%d %H:%M:%S')),
+    )
 
 
 def _read_legacy_bankinfo(user_id):

@@ -5,6 +5,7 @@ from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from .account_repository import BankAccountRepository
+from .legacy_account_repository import BankLegacyAccountReadRepository
 
 
 class BankAccountInfoApplication:
@@ -12,6 +13,29 @@ class BankAccountInfoApplication:
         self.database = str(database)
         self.player_database = str(player_database or database)
         self.repository = repository or BankAccountRepository()
+        self.legacy_account_reader = BankLegacyAccountReadRepository()
+
+    def get_legacy_info(self, *, user_id: str, default_saved_at: str) -> dict[str, Any]:
+        user_id = str(user_id)
+        bank_data = None
+        if Path(self.player_database).is_file():
+            with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
+                bank_data = self.legacy_account_reader.read_fields(uow, user_id)
+        if not bank_data:
+            return {"savestone": 0, "savetime": str(default_saved_at), "banklevel": "1"}
+
+        savestone = bank_data.get("savestone", 0)
+        savetime = bank_data.get("savetime", str(default_saved_at))
+        bank_level = str(bank_data.get("banklevel", "1"))
+        try:
+            savestone = int(savestone)
+        except Exception:
+            savestone = 0
+        return {
+            "savestone": savestone,
+            "savetime": str(savetime),
+            "banklevel": bank_level,
+        }
 
     def get_info(self, *, user_id: str) -> dict[str, Any]:
         user_id = str(user_id).strip()
