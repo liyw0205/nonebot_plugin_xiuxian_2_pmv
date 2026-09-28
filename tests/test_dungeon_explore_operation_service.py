@@ -12,8 +12,13 @@ from nonebot.exception import FinishedException
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.transaction_service import (
+from nonebot_plugin_xiuxian_2.compatibility.legacy_dungeon_explore import (
+    DungeonExploreOperationResult,
     DungeonExploreOperationService,
+)
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.transaction_service import (
+    DungeonExploreOperationResult as ShimDungeonExploreOperationResult,
+    DungeonExploreOperationService as ShimDungeonExploreOperationService,
 )
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.player_fight import (
     resolve_final_user_statuses,
@@ -26,8 +31,12 @@ dungeon_plugin = importlib.import_module(
 
 
 class DungeonExploreOperationServiceTests(unittest.TestCase):
-    def test_dungeon_facade_defers_explore_operation_service_construction(self):
-        self.assertIsNone(dungeon_plugin._dungeon_explore_operation_service_instance)
+    def test_legacy_transaction_imports_preserve_object_identity(self):
+        self.assertIs(ShimDungeonExploreOperationService, DungeonExploreOperationService)
+        self.assertIs(ShimDungeonExploreOperationResult, DungeonExploreOperationResult)
+
+    def test_dungeon_facade_has_no_legacy_explore_factory(self):
+        self.assertFalse(hasattr(dungeon_plugin, "_dungeon_explore_operation_service"))
 
     def test_dungeon_facade_defers_sql_manager_construction(self):
         source = (
@@ -489,6 +498,7 @@ class DungeonExploreOperationServiceTests(unittest.TestCase):
         self.assertIn("dungeon_application.prepare", handler)
         self.assertIn("dungeon_application.settle", handler)
         self.assertIn("dungeon_application.resolve_rejection", handler)
+        self.assertNotIn("DungeonExploreOperationResult", handler)
         self.assertIn("type_in=0", handler)
         self.assertNotIn("dungeon_session_service.enter", handler)
         self.assertNotIn("dungeon_battle_progress_service.settle", handler)
@@ -527,7 +537,6 @@ class DungeonExploreOperationServiceTests(unittest.TestCase):
                         "dungeon_status": "exploring",
                     }),
                 )
-                operation_service = SimpleNamespace(settle=Mock(return_value=resumed))
                 sent_response = AsyncMock()
                 sent_error = AsyncMock()
                 with (
@@ -545,11 +554,6 @@ class DungeonExploreOperationServiceTests(unittest.TestCase):
                         dungeon_plugin,
                         "dungeon_application",
                         application,
-                    ),
-                    patch.object(
-                        dungeon_plugin,
-                        "_dungeon_explore_operation_service_instance",
-                        operation_service,
                     ),
                     patch.object(
                         dungeon_plugin, "_send_explore_response", sent_response

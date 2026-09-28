@@ -31,7 +31,7 @@ class LegacyDungeonRepository:
         return DungeonPurchaseService(self.game_database)
 
     def _explore_service(self):
-        from ...xiuxian.xiuxian_dungeon.transaction_service import DungeonExploreOperationService
+        from ...compatibility.legacy_dungeon_explore import DungeonExploreOperationService
 
         return DungeonExploreOperationService(self.game_database, self.player_database)
 

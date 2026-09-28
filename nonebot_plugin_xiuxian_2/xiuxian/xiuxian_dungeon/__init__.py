@@ -42,8 +42,6 @@ from ...features.dungeon.team_presentation import (
     build_transfer_team_success_message,
     build_team_invite_private_message,
 )
-from ...compatibility.dungeon import DungeonExploreOperationService
-from .transaction_service import DungeonExploreOperationResult
 from ...paths import get_paths
 from ...features.dungeon.application import DungeonApplication
 from ...features.dungeon.team_application import DungeonTeamApplication
@@ -57,7 +55,6 @@ dungeon_application = DungeonApplication(get_paths().game_db, get_paths().player
 dungeon_team_application = DungeonTeamApplication(get_paths().player_db)
 dungeon_ids = UUIDGenerator()
 runtime_clock = SystemClock()
-_dungeon_explore_operation_service_instance = None
 
 
 def _sql_message():
@@ -65,15 +62,6 @@ def _sql_message():
     if _sql_message_instance is None:
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
-
-
-def _dungeon_explore_operation_service():
-    global _dungeon_explore_operation_service_instance
-    if _dungeon_explore_operation_service_instance is None:
-        _dungeon_explore_operation_service_instance = DungeonExploreOperationService(
-            get_paths().game_db, get_paths().player_db
-        )
-    return _dungeon_explore_operation_service_instance
 
 
 DUNGEON_SHOP = {
@@ -1113,31 +1101,31 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
 
     try:
         replay_data = dungeon_application.replay(operation_id=operation_id, user_id=user_id)
-        replay = DungeonExploreOperationResult(**replay_data)
+        replay = replay_data
     except Exception:
         logger.exception("读取副本探索 operation 失败")
         await handle_send(bot, event, "副本探索结算失败：处理过程异常。")
         await explore_dungeon.finish()
 
-    if replay.status == "operation_conflict":
+    if replay.get("status") == "operation_conflict":
         await handle_send(bot, event, "该探索事件身份冲突，无法重放。")
         await explore_dungeon.finish()
-    if replay.phase == "completed":
-        await _send_explore_response(bot, event, replay.response or {})
+    if replay.get("phase") == "completed":
+        await _send_explore_response(bot, event, replay.get("response") or {})
         await explore_dungeon.finish()
-    if replay.phase == "prepared":
+    if replay.get("phase") == "prepared":
         try:
-            resumed = DungeonExploreOperationResult(**dungeon_application.settle(
+            resumed = dungeon_application.settle(
                 operation_id=operation_id,
                 user_id=user_id,
                 max_goods_num=XiuConfig().max_goods_num,
-            ))
+            )
         except Exception:
             logger.exception("恢复副本探索 operation 失败")
             await handle_send(bot, event, "副本探索结算失败：处理过程异常。")
             await explore_dungeon.finish()
-        if resumed.phase == "completed":
-            await _send_explore_response(bot, event, resumed.response or {})
+        if resumed.get("phase") == "completed":
+            await _send_explore_response(bot, event, resumed.get("response") or {})
         else:
             await handle_send(bot, event, "副本结算任务恢复失败：结算未完成。")
         await explore_dungeon.finish()
@@ -1155,8 +1143,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
                 current_layer=int(status.get("current_layer", 0) or 0),
                 dungeon_status=str(status.get("dungeon_status", "")),
             )
-            stored = DungeonExploreOperationResult(**stored_data)
-            await _send_explore_response(bot, event, stored.response or response)
+            await _send_explore_response(bot, event, stored_data.get("response") or response)
         except Exception:
             logger.exception("持久化副本探索拒绝响应失败")
             await handle_send(bot, event, "副本探索校验失败：处理过程异常。")
@@ -1443,29 +1430,29 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         prepared_data = dungeon_application.prepare(
             operation_id=operation_id, user_id=user_id, plan=plan
         )
-        prepared = DungeonExploreOperationResult(**prepared_data)
+        prepared = prepared_data
         settled = None
-        if prepared.status != "operation_conflict" and prepared.phase != "completed":
-            settled = DungeonExploreOperationResult(**dungeon_application.settle(
+        if prepared.get("status") != "operation_conflict" and prepared.get("phase") != "completed":
+            settled = dungeon_application.settle(
                 operation_id=operation_id,
                 user_id=user_id,
                 max_goods_num=XiuConfig().max_goods_num,
-            ))
+            )
     except Exception:
         logger.exception("副本探索事务结算失败")
         await handle_send(bot, event, "副本探索结算失败：处理过程异常。")
         await explore_dungeon.finish()
 
-    if prepared.status == "operation_conflict":
+    if prepared.get("status") == "operation_conflict":
         await handle_send(bot, event, "该探索事件身份冲突，无法结算。")
         await explore_dungeon.finish()
-    if prepared.phase == "completed":
-        await _send_explore_response(bot, event, prepared.response or {})
+    if prepared.get("phase") == "completed":
+        await _send_explore_response(bot, event, prepared.get("response") or {})
         await explore_dungeon.finish()
-    if settled is None or settled.phase != "completed":
+    if settled is None or settled.get("phase") != "completed":
         await handle_send(bot, event, "副本探索结算失败：处理过程异常。")
         await explore_dungeon.finish()
-    await _send_explore_response(bot, event, settled.response or response)
+    await _send_explore_response(bot, event, settled.get("response") or response)
     await explore_dungeon.finish()
 
 
