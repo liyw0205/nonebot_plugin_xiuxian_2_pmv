@@ -19,7 +19,7 @@
 ## 数据模型与迁移
 
 `work.001` 写入功能迁移标记；`work.003` 在 game DB 创建 `work_item_use_operations`，`work.004` 用 `CREATE TABLE IF NOT EXISTS` 建立兼容现有数据的 `work_offer_snapshots`，`work.005` 预建 `work_refresh_operations` 并保留已有刷新回执，`work.006` 预建 `work_active_snapshots` 和 `work_abort_cleanup_operations`，保留已有快照与清理回执，`work.007` 预建 `work_claim_operations` 并保留已有接取回执，`work.008` 预建 `work_settlement_operations` 并为历史表补齐 `result_json`。所有 work migration 均在启动阶段注册，结算请求只校验 schema，不在请求期建表。
-悬赏令加速道具与追捕令都经 `WorkItemUseApplication -> WorkItemUseSqlRepository`；加速原子扣除一个道具并将已接取悬赏的开始时间置为立即可结算，追捕令原子扣除道具并保存随机 offer 与首次奖励倍率。两种动作都按库存快照校验，捕获令重放返回首次保存的 offer 和倍率。`work.002` 负责每日刷新重置；接取由 `WorkClaimApplication -> WorkClaimSqlRepository` 承担，结算由 `WorkSettlementApplication -> WorkSettlementSqlRepository` 承担，两个 repository 均以单一 immediate UoW 校验状态、更新资产和写 operation receipt；历史 JSON 仅作为兼容读取/展示投影。
+悬赏令加速道具与追捕令都经 `WorkItemUseApplication -> WorkItemUseSqlRepository`；加速原子扣除一个道具并将已接取悬赏的开始时间置为立即可结算，追捕令原子扣除道具并保存随机 offer 与首次奖励倍率。两种动作都按库存快照校验，捕获令重放返回首次保存的 offer 和倍率。`work.002` 负责每日刷新重置，默认 scheduler 经 `WorkDailyRefreshResetApplication -> WorkDailyRefreshResetRepository` 分块处理冻结用户集合；旧 reset service 仅保留 compatibility rollback API。接取由 `WorkClaimApplication -> WorkClaimSqlRepository` 承担，结算由 `WorkSettlementApplication -> WorkSettlementSqlRepository` 承担，两个 repository 均以单一 immediate UoW 校验状态、更新资产和写 operation receipt；历史 JSON 仅作为兼容读取/展示投影。
 
 ## 事务与失败回滚
 
@@ -48,7 +48,7 @@
 
 ## 灰度开关、回滚和已知限制
 
-关闭 `work_claim_enabled` 可恢复旧 claim/settlement 命令实现。普通/强制刷新、abort/reset cleanup、claim、settlement 和 item-use 默认路径已由 feature 边界承担；旧 refresh/cleanup/settlement/item-use service 仅通过 compatibility shim 保留。删除旧服务前需满足完整发布周期、真实数据备份恢复和 reconcile 演练要求。
+关闭 `work_claim_enabled` 可恢复旧 claim/settlement 命令实现。普通/强制刷新、abort/reset cleanup、daily reset、claim、settlement 和 item-use 默认路径已由 feature 边界承担；旧 refresh/cleanup/daily-reset/settlement/item-use service 仅通过 compatibility shim 保留。删除旧服务前需满足完整发布周期、真实数据备份恢复和 reconcile 演练要求。
 
 ## 缓存与资源
 

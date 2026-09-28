@@ -90,6 +90,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(work["settlement_transaction_owned"])
         self.assertTrue(work["legacy_settlement_isolated_with_compatibility_export"])
         self.assertTrue(work["legacy_item_use_isolated_with_compatibility_export"])
+        self.assertTrue(work["legacy_daily_refresh_isolated_with_compatibility_export"])
         self.assertTrue(work["item_use_migrations_registered"])
         activity = slices["activity_reward"]
         self.assertTrue(activity["claim_all_application_owned"])

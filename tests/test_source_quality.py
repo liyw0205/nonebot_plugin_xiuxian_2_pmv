@@ -1029,6 +1029,21 @@ class SourceQualityTests(unittest.TestCase):
         self.assertIn("legacy_work_item_use import", transaction)
         self.assertIn("class WorkItemUseService", legacy)
 
+    def test_work_daily_refresh_legacy_service_is_compatibility_only(self) -> None:
+        transaction = (SOURCE_ROOT / "xiuxian" / "xiuxian_work" / "transaction_service.py").read_text(
+            encoding="utf-8"
+        )
+        legacy = (SOURCE_ROOT / "compatibility" / "legacy_work_daily_refresh_reset.py").read_text(
+            encoding="utf-8"
+        )
+        facade = (SOURCE_ROOT / "xiuxian" / "xiuxian_work" / "__init__.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("WorkDailyRefreshResetService", facade)
+        self.assertNotIn("class WorkDailyRefreshResetService", transaction)
+        self.assertIn("legacy_work_daily_refresh_reset import", transaction)
+        self.assertIn("class WorkDailyRefreshResetService", legacy)
+
     def test_impart_facade_defers_sql_manager_construction(self) -> None:
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_impart" / "__init__.py").read_text(
             encoding="utf-8"

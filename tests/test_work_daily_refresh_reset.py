@@ -13,10 +13,19 @@ from nonebot_plugin_xiuxian_2.features.work.maintenance_application import (
 )
 from nonebot_plugin_xiuxian_2.features.work.migrations import apply_work_daily_refresh_reset
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_work.transaction_service import (
+    WorkDailyRefreshResetService,
+)
+from nonebot_plugin_xiuxian_2.compatibility.legacy_work_daily_refresh_reset import (
+    WorkDailyRefreshResetService as LegacyWorkDailyRefreshResetService,
+)
 from tests.test_db_backend import db_backend
 
 
 class WorkDailyRefreshResetTests(unittest.TestCase):
+    def test_transaction_module_reexports_legacy_service_identity(self):
+        self.assertIs(WorkDailyRefreshResetService, LegacyWorkDailyRefreshResetService)
+
     def test_work_facade_defers_daily_refresh_reset_service_construction(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_work
 
