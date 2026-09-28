@@ -124,6 +124,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dungeon_session_compatibility = (PACKAGE / "compatibility" / "legacy_dungeon_session.py").read_text(encoding="utf-8")
     dungeon_purchase_compatibility = (PACKAGE / "compatibility" / "legacy_dungeon_purchase.py").read_text(encoding="utf-8")
     dungeon_explore_compatibility = (PACKAGE / "compatibility" / "legacy_dungeon_explore.py").read_text(encoding="utf-8")
+    dungeon_reward_compatibility = (PACKAGE / "compatibility" / "legacy_dungeon_reward.py").read_text(encoding="utf-8")
     dungeon_compatibility_facade = (PACKAGE / "compatibility" / "dungeon.py").read_text(encoding="utf-8")
     dungeon_repository = (PACKAGE / "features" / "dungeon" / "repository.py").read_text(encoding="utf-8")
     dungeon_manager = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "dungeon_manager.py").read_text(encoding="utf-8")
@@ -596,6 +597,13 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_dungeon_explore_imports_explicit": (
                 "from ...compatibility.legacy_dungeon_explore import DungeonExploreOperationService" in dungeon_repository
                 and "from ...xiuxian.xiuxian_dungeon.transaction_service import DungeonExploreOperationService" not in dungeon_repository
+            ),
+            "legacy_dungeon_reward_service_isolated": (
+                "class DungeonRewardService" in dungeon_reward_compatibility
+                and "class DungeonRewardResult" in dungeon_reward_compatibility
+                and "class DungeonRewardService" not in dungeon_transaction_shim
+                and "class DungeonRewardResult" not in dungeon_transaction_shim
+                and "legacy_dungeon_reward import DungeonRewardResult, DungeonRewardService" in dungeon_transaction_shim
             ),
             "explore_settlement_application_owned": (
                 all(f"dungeon_application.{method}(" in dungeon_facade for method in ("replay", "prepare", "settle", "resolve_rejection"))

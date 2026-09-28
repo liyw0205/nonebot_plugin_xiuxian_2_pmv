@@ -6,11 +6,22 @@ import nonebot
 
 nonebot.init()
 
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.transaction_service import DungeonRewardService
+from nonebot_plugin_xiuxian_2.compatibility.legacy_dungeon_reward import (
+    DungeonRewardResult,
+    DungeonRewardService,
+)
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_dungeon.transaction_service import (
+    DungeonRewardResult as ShimDungeonRewardResult,
+    DungeonRewardService as ShimDungeonRewardService,
+)
 from tests.test_db_backend import db_backend
 
 
 class DungeonRewardServiceTests(unittest.TestCase):
+    def test_legacy_transaction_imports_preserve_object_identity(self):
+        self.assertIs(ShimDungeonRewardService, DungeonRewardService)
+        self.assertIs(ShimDungeonRewardResult, DungeonRewardResult)
+
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "game.sqlite3"

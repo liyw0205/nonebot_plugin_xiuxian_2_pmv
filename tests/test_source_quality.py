@@ -2923,12 +2923,12 @@ class SourceQualityTests(unittest.TestCase):
         self.assertNotIn("sql_message.update_ls(", handler)
         self.assertNotIn("sql_message.update_exp(", handler)
         self.assertNotIn("sql_message.send_back(", handler)
-        service = (root / "transaction_service.py").read_text(encoding="utf-8")
-        self.assertIn("ATTACH DATABASE", service)
-        self.assertIn("BEGIN IMMEDIATE", service)
-        self.assertIn("dungeon_explore_operations", service)
-        self.assertIn("UPDATE user_xiuxian SET hp=%s,mp=%s,stone=stone+%s,exp=exp+%s", service)
-        self.assertIn("UPDATE player_data.player_dungeon_status SET current_layer=%s,dungeon_status=%s", service)
+        repository = (SOURCE_ROOT / "features" / "dungeon" / "repository.py").read_text(encoding="utf-8")
+        self.assertIn("with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:", repository)
+        self.assertIn('uow.attach_database(self.player_database, "player_data")', repository)
+        self.assertIn("dungeon_explore_operations", repository)
+        self.assertIn("UPDATE user_xiuxian SET hp=?", repository)
+        self.assertIn("UPDATE player_data.player_dungeon_status SET current_layer=?", repository)
 
     def test_training_completion_uses_cross_database_transaction(self) -> None:
         root = SOURCE_ROOT / "xiuxian" / "xiuxian_training"
