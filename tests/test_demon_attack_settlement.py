@@ -12,6 +12,14 @@ from nonebot_plugin_xiuxian_2.features.world_events.domain import DemonAttackSet
 from nonebot_plugin_xiuxian_2.features.world_events.migrations import apply_world_events_player
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from nonebot_plugin_xiuxian_2.plugin import build_migrations, migrations_for_database
+from nonebot_plugin_xiuxian_2.compatibility.legacy_demon_attack_settlement import (
+    DemonAttackSettlementResult as LegacyDemonAttackSettlementResult,
+    DemonAttackSettlementService as LegacyDemonAttackSettlementService,
+)
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_world_events.transaction_service import (
+    DemonAttackSettlementResult as TransactionDemonAttackSettlementResult,
+    DemonAttackSettlementService as TransactionDemonAttackSettlementService,
+)
 
 
 def create_db(path):
@@ -89,6 +97,49 @@ def test_application_replay_is_idempotent_and_returns_settlement_fields(tmp_path
     with sqlite3.connect(db) as conn:
         participants = json.loads(conn.execute("SELECT participants FROM world_event_state").fetchone()[0])
         assert participants["练气境:1:10001"]["attacks"] == 1
+
+
+def test_legacy_settlement_is_isolated_and_transaction_imports_keep_identity(tmp_path):
+    assert TransactionDemonAttackSettlementResult is LegacyDemonAttackSettlementResult
+    assert TransactionDemonAttackSettlementService is LegacyDemonAttackSettlementService
+
+    db = tmp_path / "legacy-player.db"
+    boss = create_db(db)
+    service = LegacyDemonAttackSettlementService(db)
+    settle_args = (
+        "legacy-op",
+        "global",
+        "10001",
+        "测试道友",
+        "练气境",
+        1,
+        {"status": "active", "event_id": "event-1"},
+        boss,
+        {},
+    )
+    settle_options = {
+        "attack_limit": 3,
+        "real_hp_multiplier": 100,
+        "max_damage_ratio": 0.2,
+        "max_pursuit_ratio": 0.1,
+    }
+
+    first = service.settle(*settle_args, **settle_options)
+    replay = service.get_result("legacy-op")
+    repeated = service.settle(*settle_args, **settle_options)
+
+    assert first == LegacyDemonAttackSettlementResult("applied", 100, 900, 1000, False, False, 0.1, 1.0, 0.1)
+    assert replay is not None and replay.status == "duplicate"
+    assert replay.real_damage == 100
+    assert repeated.status == "duplicate"
+    with sqlite3.connect(db) as conn:
+        participants = json.loads(conn.execute("SELECT participants FROM world_event_state").fetchone()[0])
+        assert participants["练气境:1:10001"]["attacks"] == 1
+        assert conn.execute(
+            'SELECT "魔修入侵参与","魔修入侵伤害" FROM statistics WHERE user_id=?',
+            ("10001",),
+        ).fetchone() == (1, 100)
+        assert conn.execute("SELECT COUNT(*) FROM demon_attack_settlement_operations").fetchone()[0] == 1
 
 
 def test_operation_id_conflict_and_changed_snapshot_are_rejected(tmp_path):

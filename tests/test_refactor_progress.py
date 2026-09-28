@@ -214,6 +214,7 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(world_events["claim_application_owned"])
         self.assertTrue(world_events["attack_application_owned"])
         self.assertTrue(world_events["attack_legacy_settlement_disconnected"])
+        self.assertTrue(world_events["legacy_attack_settlement_isolated"])
         self.assertTrue(world_events["attack_request_path_has_no_ddl"])
         self.assertTrue(world_events["attack_player_migration_registered"])
         self.assertTrue(world_events["attack_player_migration_routed"])

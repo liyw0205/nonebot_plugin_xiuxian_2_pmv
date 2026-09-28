@@ -214,6 +214,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
     world_events_attack_repository = (PACKAGE / "features" / "world_events" / "attack_repository.py").read_text(encoding="utf-8")
     world_events_migrations = (PACKAGE / "features" / "world_events" / "migrations.py").read_text(encoding="utf-8")
     world_events_transaction = (PACKAGE / "xiuxian" / "xiuxian_world_events" / "transaction_service.py").read_text(encoding="utf-8")
+    world_events_attack_compatibility = (PACKAGE / "compatibility" / "legacy_demon_attack_settlement.py").read_text(encoding="utf-8")
     world_events_claim_compatibility = (PACKAGE / "compatibility" / "legacy_demon_claim.py").read_text(encoding="utf-8")
     rift_facade = (PACKAGE / "xiuxian" / "xiuxian_rift" / "__init__.py").read_text(encoding="utf-8")
     rift_event_handler = rift_facade[
@@ -884,11 +885,12 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "legacy_claim_service_isolated": "class DemonClaimService" not in world_events_transaction and "compatibility.legacy_demon_claim import" in world_events_transaction and "DemonClaimService" in world_events_transaction and "class DemonClaimService" in world_events_claim_compatibility,
             "attack_application_owned": "demon_attack_application.settle(" in world_events_facade and "demon_attack_application.get_result(" in world_events_facade and "DemonAttackSettlementSqlRepository" in world_events_attack_application and "class DemonAttackSettlementSqlRepository" in world_events_attack_repository,
             "attack_legacy_settlement_disconnected": "_demon_attack_settlement_service" not in world_events_facade and "DemonAttackSettlementService" not in world_events_facade,
+            "legacy_attack_settlement_isolated": "class DemonAttackSettlementService" not in world_events_transaction and "from ...compatibility.legacy_demon_attack_settlement import DemonAttackSettlementResult, DemonAttackSettlementService" in world_events_transaction and "class DemonAttackSettlementService" in world_events_attack_compatibility,
             "attack_request_path_has_no_ddl": all(token not in world_events_attack_repository for token in ("CREATE TABLE", "ALTER TABLE")),
             "attack_player_migration_registered": 'Migration("world_events.002"' in plugin and "demon_attack_settlement_operations" in world_events_migrations,
             "attack_player_migration_routed": '"world_events.002"' in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")] and '"world_events.002"' in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")],
             "legacy_claim_disabled": "_demon_claim_service" not in world_events_facade and "DemonClaimService" not in world_events_facade,
-            "status": "demon_attack_and_demon_claim_repositories_owned; event_lifecycle_wave_refresh_spirit_vein_remain_compatibility",
+            "status": "demon_attack_settlement_and_claim_compatibility_isolated; event_lifecycle_wave_refresh_spirit_vein_remain_compatibility",
         },
         "rift": {
             "entry_application_owned": "rift_application.enter(" in rift_facade,

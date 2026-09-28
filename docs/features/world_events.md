@@ -40,4 +40,4 @@
 
 ## 灰度开关、回滚和已知限制
 
-关闭 `world_events_enabled` 可切回旧入口。旧 `DemonClaimService` 保留在 `compatibility/legacy_demon_claim.py` 并由原 transaction module 身份一致地 re-export；奖励随机池和贡献计算暂未迁移到新 domain，仍由兼容命令提供。live migration/recovery 与完整发布周期证据仍未完成，不能据此关闭整个 world-events 切片。
+关闭 `world_events_enabled` 可切回旧入口。旧 `DemonClaimService` 与已退出默认路径的 `DemonAttackSettlementService` 分别保留在 `compatibility/legacy_demon_claim.py`、`compatibility/legacy_demon_attack_settlement.py`，并由原 transaction module 身份一致地 re-export；奖励随机池和贡献计算暂未迁移到新 domain，仍由兼容命令提供。event lifecycle、wave refresh、spirit vein 仍有兼容事务路径。live migration/recovery 与完整发布周期证据仍未完成，不能据此关闭整个 world-events 切片。
